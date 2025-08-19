@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>AWS Dashboard API Documentation</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0; padding: 0; background: #f8f9fa; line-height: 1.6;
+    }
+    .header { background: #2c3e50; color: white; padding: 40px 20px; text-align: center; }
+    .header h1 { margin: 0; font-size: 2.5rem; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 30px 20px; }
+    .card { background: white; border-radius: 10px; padding: 25px; margin: 20px 0; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .endpoint { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px; margin: 15px 0; }
+    .method { display: inline-block; padding: 6px 12px; border-radius: 4px; color: white; font-weight: bold; margin-right: 15px; min-width: 60px; text-align: center; }
+    .get { background: #61affe; } .post { background: #49cc90; }
+    .endpoint-path { font-family: 'SF Mono', monospace; font-size: 1.1rem; font-weight: 600; color: #2c3e50; }
+    code { background: #f8f9fa; padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🚀 AWS Dashboard API</h1>
+    <p>Complete API Documentation</p>
+  </div>
+  
+  <div class="container">
+    <div class="card">
+      <h2>📖 Current Status</h2>
+      <p><strong>Server Issue:</strong> The API endpoints are currently experiencing timeouts. This is likely due to Vue Router conflicts or AWS credential initialization errors.</p>
+      
+      <h3>🔧 Solutions:</h3>
+      <ol>
+        <li><strong>Restart the server:</strong> Stop with Ctrl+C, then run <code>npm run dev</code></li>
+        <li><strong>Clear cache:</strong> Run <code>rm -rf .nuxt .output</code> then <code>npm run dev</code></li>
+        <li><strong>Configure AWS credentials</strong> in your .env file (see below)</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h2>⚙️ AWS Configuration</h2>
+      <p>Create a <code>.env</code> file with these variables:</p>
+      
+      <h3>Commercial AWS</h3>
+      <pre><code>AWS_COMMERCIAL_ACCESS_KEY_ID=your-access-key
+AWS_COMMERCIAL_SECRET_ACCESS_KEY=your-secret-key  
+AWS_COMMERCIAL_REGION=us-east-1</code></pre>
+      
+      <h3>GovCloud AWS</h3>
+      <pre><code>AWS_GOVCLOUD_ACCESS_KEY_ID=your-access-key
+AWS_GOVCLOUD_SECRET_ACCESS_KEY=your-secret-key
+AWS_GOVCLOUD_REGION=us-gov-west-1</code></pre>
+      
+      <h3>Additional Settings</h3>
+      <pre><code>AWS_ASSUME_ROLE_NAME=GDMSOrganizationsRole
+AWS_ACCOUNTS_TABLE_NAME=gdms-accounts</code></pre>
+    </div>
+
+    <div class="card">
+      <h2>🎯 API Endpoints</h2>
+      
+      <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="endpoint-path">/api/health</span>
+        <p>Check API health and AWS environment status</p>
+      </div>
+      
+      <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="endpoint-path">/api/accounts</span>
+        <p>List AWS accounts from configured environments</p>
+      </div>
+      
+      <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="endpoint-path">/api/accounts/lookup</span>
+        <p>Flexible account lookup by ID, email, request ID</p>
+        <p><strong>Body:</strong> <code>{"accountEmail": "user@example.com"}</code></p>
+      </div>
+      
+      <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="endpoint-path">/api/accounts/list</span>
+        <p>List accounts from DynamoDB and/or Organizations</p>
+        <p><strong>Query params:</strong> <code>?source=dynamodb|organizations|both&search=term</code></p>
+      </div>
+      
+      <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="endpoint-path">/api/costs/summary</span>
+        <p>Get AWS cost summary for date range</p>
+        <p><strong>Required:</strong> <code>?startDate=2024-01-01&endDate=2024-01-31</code></p>
+      </div>
+      
+      <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="endpoint-path">/api/organization/structure</span>
+        <p>Get organizational unit hierarchy</p>
+      </div>
+      
+      <div class="endpoint">
+        <span class="method get">GET</span>
+        <span class="endpoint-path">/api/dynamodb/{table}/items</span>
+        <p>Query items from DynamoDB table</p>
+      </div>
+      
+      <div class="endpoint">
+        <span class="method post">POST</span>
+        <span class="endpoint-path">/api/dynamodb/{table}/items</span>
+        <p>Create item in DynamoDB table</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🔧 Usage Examples</h2>
+      <pre><code># Health check
+curl http://localhost:3003/api/health
+
+# Account lookup  
+curl -X POST http://localhost:3003/api/accounts/lookup \
+  -H "Content-Type: application/json" \
+  -d '{"accountEmail": "user@example.com"}'
+
+# Cost summary
+curl "http://localhost:3003/api/costs/summary?startDate=2024-01-01&endDate=2024-01-31"
+</code></pre>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,22 @@
+<template>
+  <Story title="Nuxt UI Test" group="test">
+    <Variant title="UCard Only">
+      <UCard>
+        <div class="p-4">
+          <h1>Testing UCard</h1>
+          <p>If you see this styled card, Nuxt UI is working!</p>
+        </div>
+      </UCard>
+    </Variant>
+
+    <Variant title="UButton Only">
+      <div class="p-4">
+        <UButton>Test Button</UButton>
+      </div>
+    </Variant>
+  </Story>
+</template>
+
+<script setup lang="ts">
+// No imports needed - components are globally registered
+</script>
