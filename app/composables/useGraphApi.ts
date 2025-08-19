@@ -1,6 +1,5 @@
 // Microsoft Graph is the official REST API for Entra ID
 // Use this to get information on groups, roles, users, etc.
-// IMPORTANT NOTE: This composable should only be needed to intially populate the AWS Account Store
 
 // Microsoft Graph API interfaces
 interface GraphGroup {
@@ -49,8 +48,8 @@ const fetchAllGroupsRaw = async (accessToken: string) => {
 // Take raw group data and parse it into AWS group and distribution group data
 const parseAwsGroups = (groups: GraphGroup[]) => {
   const parsedGroups = {
-    awsRoleGroups: new Map<string, { accountId: string; role: string; groupName: string }>(),
-    distributionGroups: new Map<string, { accountName: string; groupName: string }>()
+    awsRoleGroups: {} as Record<string, { accountId: string; role: string; groupName: string }>,
+    distributionGroups: {} as Record<string, { accountName: string; groupName: string }>
   };
 
   // Support both AWS-ID_ROLE and AWS-ID-ROLE patterns
@@ -67,11 +66,11 @@ const parseAwsGroups = (groups: GraphGroup[]) => {
       const awsMatch = groupName.match(awsGroupRegex);
       if (awsMatch) {
         const [, accountId, roleName] = awsMatch;
-        parsedGroups.awsRoleGroups.set(`${accountId}-${roleName}`, {
+        parsedGroups.awsRoleGroups[`${accountId}-${roleName}`] = {
           accountId: accountId!,
           role: roleName!,
           groupName
-        });
+        };
         return;
       }
 
@@ -79,10 +78,10 @@ const parseAwsGroups = (groups: GraphGroup[]) => {
       const distroMatch = groupName.match(distributionGroupRegex);
       if (distroMatch) {
         const [, accountName] = distroMatch;
-        parsedGroups.distributionGroups.set(accountName!.toLowerCase(), {
+        parsedGroups.distributionGroups[accountName!.toLowerCase()] = {
           accountName: accountName!,
           groupName
-        });
+        };
         return;
       }
     } catch {
@@ -91,7 +90,10 @@ const parseAwsGroups = (groups: GraphGroup[]) => {
     }
   });
 
-  console.log(`Parsed ${parsedGroups.awsRoleGroups.size} AWS role groups and ${parsedGroups.distributionGroups.size} distribution groups`);
+  const awsCount = Object.keys(parsedGroups.awsRoleGroups).length;
+  const distroCount = Object.keys(parsedGroups.distributionGroups).length;
+
+  console.log(`Parsed ${awsCount} AWS role groups and ${distroCount} distribution groups`);
   return parsedGroups;
 };
 

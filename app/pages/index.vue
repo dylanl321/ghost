@@ -10,7 +10,7 @@
     <div>Count: {{ count }}</div>
 
     <!-- <UButton class="mt-20" :onclick="handleLogout">Logout</UButton> -->
-    <button class="mt-20" :onclick="handleLogout">Logout</button>
+    <button class="mt-20 border-1 p-1 rounded-md hover:bg-emerald-600 hover:cursor-pointer" :onclick="handleLogout">Logout</button>
   </div>
 </template>
 
