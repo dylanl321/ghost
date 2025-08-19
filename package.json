@@ -1,0 +1,31 @@
+{
+  "name": "nuxt-app",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.868.0",
+    "@aws-sdk/client-organizations": "^3.866.0",
+    "@aws-sdk/client-sts": "^3.864.0",
+    "@aws-sdk/credential-providers": "^3.864.0",
+    "@aws-sdk/util-dynamodb": "^3.868.0",
+    "@nuxt/ui": "^3.3.0",
+    "@pinia/nuxt": "^0.11.2",
+    "nuxt": "^4.0.3",
+    "nuxt-oidc-auth": "^1.0.0-beta.5",
+    "pinia": "^3.0.3",
+    "vue": "^3.5.18",
+    "vue-router": "^4.5.1"
+  },
+  "devDependencies": {
+    "@nuxt/eslint": "^1.8.0",
+    "eslint": "^9.33.0",
+    "typescript": "^5.9.2"
+  }
+}
