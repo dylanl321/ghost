@@ -7,7 +7,10 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "postinstall": "nuxt prepare",
+    "story:dev": "histoire dev",
+    "story:build": "histoire build",
+    "story:preview": "histoire preview"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^8.1.0",
@@ -39,8 +42,11 @@
     "vue-router": "^4.5.1"
   },
   "devDependencies": {
+    "@histoire/plugin-nuxt": "^1.0.0-alpha.3",
+    "@histoire/plugin-vue": "^1.0.0-alpha.3",
     "@nuxt/eslint": "^1.8.0",
     "eslint": "^9.33.0",
+    "histoire": "^1.0.0-alpha.3",
     "typescript": "^5.9.2"
   }
 }
