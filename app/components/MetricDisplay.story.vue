@@ -121,6 +121,6 @@ const prefix = ref('')
 const suffix = ref('')
 const trend = ref(0)
 const description = ref('')
-const size = ref('md')
-const format = ref('number')
+const size = ref<'md' | 'sm' | 'lg'>('md')
+const format = ref<'number' | 'currency' | 'percent'>('number')
 </script>

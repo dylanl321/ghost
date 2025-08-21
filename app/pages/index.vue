@@ -9,26 +9,53 @@
     </button>
     <div>Count: {{ count }}</div>
 
+    <UserEnclaves />
+
     <!-- <UButton class="mt-20" :onclick="handleLogout">Logout</UButton> -->
-    <button class="mt-20 border-1 p-1 rounded-md hover:bg-emerald-600 hover:cursor-pointer" :onclick="handleLogout">Logout</button>
+    <button class="mt-20 border-1 p-1 rounded-md hover:bg-emerald-600 hover:cursor-pointer" @click="handleLogout">Logout</button>
   </div>
 </template>
 
 <script setup lang="ts">
-const { user, logout } = useOidcAuth();
-// console.log(user.value);
+import type { AWSEnclaveData } from '~~/shared/types/accounts'
 
-const loginTime = ref('');
+const { user, logout } = useOidcAuth()
+const enclaveStore = useEnclaveStore()
+
+const loginTime = ref('')
 
 const handleLogout = () => {
-  console.log('logging out');
-  logout();
-};
+  console.log('logging out')
+  logout()
+}
 
-onMounted(() => {
-  const temp = new Date((user?.value?.loggedInAt || 0) * 1000);
-  loginTime.value = temp.toLocaleString();
-});
+const fetchAccountData = async () => {
+  const response = await fetch('/api/accounts/list')
+  const json = await response.json()
 
-const count = ref(0);
+  const accounts: AWSEnclaveData[] = json.data
+
+  const dict: Record<string, AWSEnclaveData> = {}
+  for (const acct of accounts) {
+    const id = acct.accountId || acct.awsStandardAccountID
+    if (!id) continue // skip if neither exists
+    dict[id] = acct
+  }
+
+  enclaveStore.enclaves = dict
+
+  console.log('enclave store', enclaveStore.enclaves)
+}
+
+onMounted(async () => {
+  const temp = new Date((user?.value?.loggedInAt || 0) * 1000)
+  loginTime.value = temp.toLocaleString()
+
+  await fetchAccountData()
+
+  // use the enclaveStore's 'enclave' property to store the data
+  // const accounts: any[] = json?.data || []
+})
+
+const count = ref(0)
 </script>

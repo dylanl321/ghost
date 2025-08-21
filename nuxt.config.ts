@@ -5,7 +5,7 @@ The '@nuxt/eslint' module is a linter that does static code analysis to detect i
 
 */
 
-const entra_tenant_id = '7c5a26cf-ddf0-400c-9703-4070b4e3a54d';
+const entra_tenant_id = '7c5a26cf-ddf0-400c-9703-4070b4e3a54d'
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
@@ -13,9 +13,9 @@ export default defineNuxtConfig({
   devtools: { enabled: false },
   modules: ['@nuxt/ui', '@nuxt/eslint', 'nuxt-oidc-auth', '@pinia/nuxt'], // Modules are used to extend the functionality of Nuxt (https://nuxt.com/docs/4.x/guide/concepts/modules)
   css: ['~/assets/css/main.css'],
-  ui: {
-    fonts: false // Prevent NuxtUI from fetching fonts, which causes a certificate error
-  },
+  // ui: {
+  //   fonts: false // Prevent NuxtUI from fetching fonts, which causes a certificate error
+  // },
 
   // nitro: {
   //   compatibilityDate: '2024-12-27',
@@ -71,4 +71,4 @@ export default defineNuxtConfig({
     },
   },
 
-});
+})

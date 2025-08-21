@@ -8,6 +8,6 @@
 
 definePageMeta({
   layout: 'authentication'
-});
+})
 
 </script>

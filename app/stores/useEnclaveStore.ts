@@ -1,5 +1,5 @@
 export interface EnclaveState {
-  enclaves: Record<number, AWSEnclaveInfo>
+  enclaves: Record<number, AWSEnclaveData>
 }
 
 export const useEnclaveStore = defineStore('enclaveStore', {
@@ -14,12 +14,12 @@ export const useEnclaveStore = defineStore('enclaveStore', {
   actions: {
     async initialize() {
       if (import.meta.client) { // only run on client-side
-        const response = await fetch('/api/accounts/list');
-        const data = await response.json();
+        const response = await fetch('/api/accounts/list')
+        const data = await response.json()
         const structuredData = Object.fromEntries(
-          data.data.map((account: AWSEnclaveInfo) => [account.accountId, account])
-        );
-        this.enclaves = structuredData;
+          data.data.map((account: AWSEnclaveData) => [account.accountId, account])
+        )
+        this.enclaves = structuredData
         console.log(`Collected information for ${Object.keys(structuredData).length} enclaves.`)
       }
     },
@@ -28,4 +28,4 @@ export const useEnclaveStore = defineStore('enclaveStore', {
       this.enclaves = []
     }
   }
-});
+})

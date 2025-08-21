@@ -1,12 +1,12 @@
 // Note: This is for custom ESLint config that will get appended to the default config.
 
 // @ts-check
-import withNuxt from './.nuxt/eslint.config.mjs';
+import withNuxt from './.nuxt/eslint.config.mjs'
 
 export default withNuxt(
   {
     rules: {
-      // semi: ['error', 'always'],
+      semi: ['error', 'never'],
       eqeqeq: ['error', 'always'], // If '==' is intended, use a "// eslint-disable-line eqeqeq" comment to disable the red underline
       quotes: ['error', 'single'],
       // indent: ['error', 2],
@@ -16,4 +16,4 @@ export default withNuxt(
     }
   }
   // Your custom configs here
-);
+)

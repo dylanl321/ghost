@@ -5,42 +5,33 @@
 </template>
 
 <script setup lang="ts">
-const { user } = useOidcAuth();
-const userGroupStore = useUserGroupStore();
-const enclaveStore = useEnclaveStore();
+const { user } = useOidcAuth()
+const userGroupStore = useUserGroupStore()
+const enclaveStore = useEnclaveStore()
+const router = useRouter()
 
 onMounted(async () => {
-  const accessToken: string = user.value?.accessToken!;
+  const accessToken: string = user.value?.accessToken || ''
+
+  if (!accessToken) {
+    throw new Error('Error fetching access token. Try logging in again.')
+  }
 
   // Store user groups
-  await userGroupStore.initialize(accessToken);
+  await userGroupStore.initialize(accessToken)
 
   // Store account/enclave information for all AWS accounts
-  await enclaveStore.initialize();
+  await enclaveStore.initialize()
 
-  console.log('role groups', userGroupStore.roleGroups);
-  console.log('dist groups', userGroupStore.distributionGroups);
-  console.log('enclaves', enclaveStore.enclaves);
-
-  // const data = await fetchGroups(accessToken);
-  // console.log("fetch groups", data);
-  // this.roleGroups = data.awsRoleGroups;
-  // this.distributionGroups = data.distributionGroups;
+  // const response = await fetch('/api/accounts/list')
 
 
+  console.log('role groups', userGroupStore.roleGroups)
+  console.log('dist groups', userGroupStore.distributionGroups)
+  console.log('enclaves', enclaveStore.enclaves)
+  // console.log('list accounts', response)
 
-
-  // const groups = await fetchGroups(accessToken);
-
-  // const response = await fetch('/api/bulk-account-info');
-  // const bulkAccountInfo: FullAccountInfo[] = await response.json();
-
-  // const response = await fetch('/api/accounts/list');
-  // const listAccountInfo = await response.json();
-
-  // console.log('groups', groups);
-  // console.log('bulk account info', bulkAccountInfo);
-  // console.log("list account info", listAccountInfo);
-});
+  router.push('/')
+})
 
 </script>

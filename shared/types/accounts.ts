@@ -1,33 +1,108 @@
-export interface AWSEnclaveInfo {
-  // Primary identifier (Commercial account ID from Organizations)
-  accountId: string
+export interface AWSEnclaveData {
+  recordLink?: string;
+  dc_region?: string;
+  dc_subnet_mask?: string;
+  isolatedEnclave?: string;
+  costManagerName?: string;
+  platformType?: string;
+  departmentNumber?: string;
+  projectName?: string;
+  isDirectConnect?: boolean;
+  intendedUse?: string;
+  BAName?: string;
+  region?: string;
+  awsStandardAccountID?: string;
+  costManagerUsername_guid?: string;
+  laaSiteLeadName?: string;
+  delegateAccountAdminUsername?: string;
+  monitoringCommercialStackSet?: string;
+  primaryAccountAdminUsername?: string;
+  comments?: string;
+  delegateAccountAdminUsername_guid?: string;
+  delegateAccountAdminName?: string;
+  approvedDataType?: string;
+  requestID?: number;
+  IAUsername_guid?: string;
+  IAName?: string;
+  extCollabApproved?: boolean;
+  enclaveType?: string;
+  costManagerUsername?: string;
+  dc_cidr?: string;
+  laaSiteLeadUsername_guid?: string;
+  BAUsername?: string;
+  accountAlias?: string;
+  awsGovCloudAccountID?: string;
+  isAWSStdEnv?: boolean;
+  primaryAccountAdminUsername_guid?: string;
+  authorizingManagerUsername_guid?: string;
+  authorizingManagerName?: string;
+  provisionedWithTf?: boolean;
+  SSPtype?: string;
+  linesOfBusiness?: string;
+  taskNumber?: string;
+  dc_tgw_subnet_mask?: string;
+  extCollabDetails?: string;
+  dataType?: string;
+  projectNumber?: string;
+  primaryAccountAdminName?: string;
+  laaSiteLeadUsername?: string;
+  iamCommercialStackSet?: string;
+  BAUsername_guid?: string;
+  IAUsername?: string;
+  shortenedProjectName?: string;
+  estimatedMonthlyCharge?: string;
+  authorizingManagerUsername?: string;
+  awsAccountEmail?: string;
+  primaryAccountID?: string;
+  enclaveStatus?: string;
+  projectType?: string;
+  accountId?: string;
+  accountName?: string;
+  accountEmail?: string;
+  accountStatus?: string;
+  organizationArn?: string;
+  joinedMethod?: string;
+  joinedTimestamp?: string;
+  environment?: string;
+  govCloudAccountId?: string;
+  requestId?: number;
+  email?: string;
+  name?: string;
+  status?: string;
+  source?: string;
+};
+
+
+// export interface AWSEnclaveInfo {
+//   // Primary identifier (Commercial account ID from Organizations)
+//   accountId: string
   
-  // From Organizations (Commercial)
-  accountName?: string
-  accountEmail?: string
-  accountStatus?: string
-  organizationArn?: string
-  joinedMethod?: string
-  joinedTimestamp?: string
-  parentId?: string
-  organizationalUnit?: string
+//   // From Organizations (Commercial)
+//   accountName?: string
+//   accountEmail?: string
+//   accountStatus?: string
+//   organizationArn?: string
+//   joinedMethod?: string
+//   joinedTimestamp?: string
+//   parentId?: string
+//   organizationalUnit?: string
   
-  // From DynamoDB metadata (GovCloud)
-  govCloudAccountId?: string  // Only present if account has GovCloud pairing
-  requestID?: string
-  projectCode?: string
-  costCenter?: string
-  technicalContact?: string
-  businessContact?: string
-  environment?: string  // dev, test, prod, etc.
-  accountType?: 'commercial-only' | 'govcloud-paired'
-  createdDate?: string
-  modifiedDate?: string
-  tags?: Record<string, string>
+//   // From DynamoDB metadata (GovCloud)
+//   govCloudAccountId?: string  // Only present if account has GovCloud pairing
+//   requestID?: string
+//   projectCode?: string
+//   costCenter?: string
+//   technicalContact?: string
+//   businessContact?: string
+//   environment?: string  // dev, test, prod, etc.
+//   accountType?: 'commercial-only' | 'govcloud-paired'
+//   createdDate?: string
+//   modifiedDate?: string
+//   tags?: Record<string, string>
   
-  // Computed fields
-  hasGovCloud?: boolean  // true if govCloudAccountId is present
-}
+//   // Computed fields
+//   hasGovCloud?: boolean  // true if govCloudAccountId is present
+// }
 
 // export interface FullAccountInfo {
 //   'org_Arn': string;

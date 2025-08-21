@@ -1,15 +1,13 @@
 export default defineAppConfig({
   // https://ui.nuxt.com/getting-started/theme#design-system
   ui: {
-    colors: {
-      primary: 'emerald',
-      neutral: 'slate',
+    primary: 'emerald',
+    gray: 'slate',
+    card: {
+      background: 'bg-[#0d1422]'
     },
-    button: {
-      defaultVariants: {
-        // Set default button color to neutral
-        // color: 'neutral'
-      }
+    table: {
+      base: 'font-medium text-xs text-gray-300 uppercase tracking-wider'
     }
   }
 })
