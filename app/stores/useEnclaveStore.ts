@@ -15,12 +15,19 @@ export const useEnclaveStore = defineStore('enclaveStore', {
     async initialize() {
       if (import.meta.client) { // only run on client-side
         const response = await fetch('/api/accounts/list')
-        const data = await response.json()
-        const structuredData = Object.fromEntries(
-          data.data.map((account: AWSEnclaveData) => [account.accountId, account])
-        )
-        this.enclaves = structuredData
-        console.log(`Collected information for ${Object.keys(structuredData).length} enclaves.`)
+        const json = await response.json()
+
+        const accounts: AWSEnclaveData[] = json.data
+
+        const dict: Record<string, AWSEnclaveData> = {}
+        for (const acct of accounts) {
+          const id = acct.accountId || acct.awsStandardAccountID
+          if (!id) continue // skip if neither exists
+          dict[id] = acct
+        }
+
+        this.enclaves = dict
+        console.log(`Collected information for ${Object.keys(dict).length} enclaves.`)
       }
     },
 

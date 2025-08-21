@@ -17,10 +17,10 @@
 </template>
 
 <script setup lang="ts">
-import type { AWSEnclaveData } from '~~/shared/types/accounts'
+// import type { AWSEnclaveData } from '~~/shared/types/accounts'
 
 const { user, logout } = useOidcAuth()
-const enclaveStore = useEnclaveStore()
+// const enclaveStore = useEnclaveStore()
 
 const loginTime = ref('')
 
@@ -29,29 +29,29 @@ const handleLogout = () => {
   logout()
 }
 
-const fetchAccountData = async () => {
-  const response = await fetch('/api/accounts/list')
-  const json = await response.json()
+// const fetchAccountData = async () => {
+//   const response = await fetch('/api/accounts/list')
+//   const json = await response.json()
 
-  const accounts: AWSEnclaveData[] = json.data
+//   const accounts: AWSEnclaveData[] = json.data
 
-  const dict: Record<string, AWSEnclaveData> = {}
-  for (const acct of accounts) {
-    const id = acct.accountId || acct.awsStandardAccountID
-    if (!id) continue // skip if neither exists
-    dict[id] = acct
-  }
+//   const dict: Record<string, AWSEnclaveData> = {}
+//   for (const acct of accounts) {
+//     const id = acct.accountId || acct.awsStandardAccountID
+//     if (!id) continue // skip if neither exists
+//     dict[id] = acct
+//   }
 
-  enclaveStore.enclaves = dict
+//   enclaveStore.enclaves = dict
 
-  console.log('enclave store', enclaveStore.enclaves)
-}
+//   console.log('enclave store', enclaveStore.enclaves)
+// }
 
 onMounted(async () => {
   const temp = new Date((user?.value?.loggedInAt || 0) * 1000)
   loginTime.value = temp.toLocaleString()
 
-  await fetchAccountData()
+  // await fetchAccountData()
 
   // use the enclaveStore's 'enclave' property to store the data
   // const accounts: any[] = json?.data || []
