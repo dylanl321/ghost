@@ -67,7 +67,7 @@ export default defineNuxtConfig({
     },
     session: {
       expirationThreshold: 300, // Allow the token to be refreshed early (within 5 minutes of expiration)
-      maxAge: 60 * 60 * 24 * 5 // 5 days
+      maxAge: 60 * 60 * 24 * 1 // 1 day
     },
   },
 

@@ -26,6 +26,7 @@ export interface AWSEnclaveData {
 
   // Computed fields
   source?: string;
+  true_requestID?: string; // Special field that only shows up on accounts that were originally only in DynamoDB as a 9xxx request ID, but were later added to Appian
 
   // Other (DynamoDB)
   environment?: string // Note: this field does not seem to be accurate

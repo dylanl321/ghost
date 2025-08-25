@@ -22,6 +22,8 @@ interface AwsRoleInfo {
 }
 
 export interface UserGroupState {
+  groupsLastFetch: number | null
+  awsRolesLastFetch: number | null
   roleGroups: Record<string, RoleGroupStructure>,
   distributionGroups: Record<string, DistributionGroupStructure>,
   awsRoles: Record<string, AwsRoleInfo>
@@ -29,20 +31,36 @@ export interface UserGroupState {
 
 // ----- Store -----
 
+// Time until the data needs to be refreshed
+// This only gets checked when the user is first logged in
+// const timeToLiveSeconds = 60 * 60 * 24
+const timeToLiveSeconds = 0
+
 export const useUserGroupStore = defineStore('userGroups', {
   state: (): UserGroupState => ({
+    groupsLastFetch: null,
+    awsRolesLastFetch: null,
     roleGroups: {},
     distributionGroups: {},
     awsRoles: {}
   }),
 
   getters: {
+    groupsNeedRefresh: (state) => {
+      if (!state.groupsLastFetch) return true
+      return Date.now() - state.groupsLastFetch > timeToLiveSeconds
+    },
 
+    awsRolesNeedRefresh: (state) => {
+      if (!state.awsRolesLastFetch) return true
+      return Date.now() - state.awsRolesLastFetch > timeToLiveSeconds
+    },
   },
 
   actions: {
-    async initializeGroups(accessToken: string) {
+    async initializeGroups(accessToken: string, force: boolean = false) {
       if (!import.meta.client) return // only run on client-side (TODO: double check this does not run on server)
+      if (!this.groupsNeedRefresh && !force) return
 
       const { fetchGroups } = useGraphApi()
       const data = await fetchGroups(accessToken)
@@ -50,8 +68,9 @@ export const useUserGroupStore = defineStore('userGroups', {
       this.distributionGroups = data.distributionGroups
     },
 
-    async initializeAWSRoles(enclaveData: Record<string, AWSEnclaveData>) {
+    async initializeAWSRoles(enclaveData: Record<string, AWSEnclaveData>, force: boolean = false) {
       if (!import.meta.client) return // only run on client-side
+      if (!this.awsRolesNeedRefresh && !force) return
 
       if (!this.roleGroups || !this.distributionGroups) {
         console.error('Ensure that groups have been initialized before initializing AWS roles.')
@@ -61,24 +80,25 @@ export const useUserGroupStore = defineStore('userGroups', {
       // Clear any existing AWS roles
       this.awsRoles = {}
 
-      // TODO break into helper functions
-
       // Iterate over role groups and build AWS role info
       for (const key in this.roleGroups) {
         const { accountId, role, } = this.roleGroups[key]!
 
-        const specificEnclaveData: AWSEnclaveData | undefined = enclaveData[accountId]
+        const specificEnclaveData: AWSEnclaveData | undefined = enclaveData[accountId] ?? Object.values(enclaveData).find(data => data.awsGovCloudAccountID === accountId)
+        if (!specificEnclaveData) { // If the account no longer exists then skip it
+          return
+        }
 
-        const standardAccountId = specificEnclaveData?.accountId ?? specificEnclaveData?.awsStandardAccountID ?? ''
-        const govCloudAccountId = specificEnclaveData?.awsGovCloudAccountID ?? ''
+        const standardAccountId = specificEnclaveData.accountId ?? specificEnclaveData?.awsStandardAccountID ?? ''
+        const govCloudAccountId = specificEnclaveData.awsGovCloudAccountID ?? ''
         
         // If this account doesn’t exist yet in awsRoles, initialize it
         if (!this.awsRoles[accountId]) {
           this.awsRoles[accountId] = {
             roles: [],
-            accountName: specificEnclaveData?.accountName ?? 'Unknown Account',
-            accountStatus: specificEnclaveData?.accountStatus ?? 'Unknown',
-            isGovCloud: specificEnclaveData?.awsGovCloudAccountID !== '',
+            accountName: specificEnclaveData.accountName ?? 'Unknown Account',
+            accountStatus: specificEnclaveData.accountStatus ?? 'Unknown',
+            isGovCloud: specificEnclaveData.awsGovCloudAccountID !== '',
             standardAccountId,
             govCloudAccountId,
             distributionGroups: []
