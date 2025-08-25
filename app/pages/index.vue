@@ -21,6 +21,7 @@
 
 const { user, logout } = useOidcAuth()
 // const enclaveStore = useEnclaveStore()
+const userGroupStore = useUserGroupStore()
 
 const loginTime = ref('')
 
@@ -50,6 +51,8 @@ const handleLogout = () => {
 onMounted(async () => {
   const temp = new Date((user?.value?.loggedInAt || 0) * 1000)
   loginTime.value = temp.toLocaleString()
+
+  // console.log('aws roles', userGroupStore.awsRoles)
 
   // await fetchAccountData()
 

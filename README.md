@@ -8,11 +8,13 @@ Please read `DEVELOPER_GUIDE.md`.
 
 ## Quick start guide
 
-Install dependencies:
-`npm install`
+Install dependencies (NOTE: `--legacy-peer-deps` is required to resolve some dependency issues with the Histoire module until they update it to support Nuxt 4):
+`npm install --legacy-peer-deps`
 
 Start the development server on `http://localhost:3000`:
 `npm run dev`
+
+You can access the Swagger UI and test your endpoints at `http://localhost:3000/api/swagger-ui`
 
 ## User documentation
 

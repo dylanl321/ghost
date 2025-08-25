@@ -39,7 +39,7 @@ onMounted(async () => {
     progress.value = 30
 
     // Store user groups
-    await userGroupStore.initialize(accessToken)
+    await userGroupStore.initializeGroups(accessToken)
 
     step.value = 'Fetching AWS enclave information...'
     progress.value = 60
@@ -47,9 +47,13 @@ onMounted(async () => {
     // Store account/enclave information for all AWS accounts
     await enclaveStore.initialize()
 
+    // Store merged AWS role / enclave data in the user group store
+    await userGroupStore.initializeAWSRoles(enclaveStore.enclaves)
+
     console.log('role groups', userGroupStore.roleGroups)
     console.log('dist groups', userGroupStore.distributionGroups)
     console.log('enclaves', enclaveStore.enclaves)
+    console.log('aws roles', userGroupStore.awsRoles)
 
     step.value = 'All set! Taking you to your dashboard...'
     progress.value = 100

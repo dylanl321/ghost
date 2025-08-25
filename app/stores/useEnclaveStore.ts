@@ -1,5 +1,5 @@
 export interface EnclaveState {
-  enclaves: Record<number, AWSEnclaveData>
+  enclaves: Record<string, AWSEnclaveData>
 }
 
 export const useEnclaveStore = defineStore('enclaveStore', {
@@ -32,7 +32,7 @@ export const useEnclaveStore = defineStore('enclaveStore', {
     },
 
     clear() {
-      this.enclaves = []
+      this.enclaves = {}
     }
   }
 })
