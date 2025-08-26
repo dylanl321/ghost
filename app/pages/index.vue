@@ -9,6 +9,8 @@
     </button>
     <div>Count: {{ count }}</div>
 
+    <!-- <TestSidebar /> -->
+
     <UserEnclaves />
 
     <button class="mt-20 border-1 p-1 rounded-md hover:bg-emerald-600 hover:cursor-pointer" @click="() => logout()">Logout</button>
@@ -25,4 +27,5 @@ onMounted(async () => {
 })
 
 const count = ref(0)
+
 </script>

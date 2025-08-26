@@ -13,6 +13,12 @@ export default defineNuxtConfig({
   devtools: { enabled: false },
   modules: ['@nuxt/ui', '@nuxt/eslint', 'nuxt-oidc-auth', '@pinia/nuxt'], // Modules are used to extend the functionality of Nuxt (https://nuxt.com/docs/4.x/guide/concepts/modules)
   css: ['~/assets/css/main.css'],
+  components: [
+    {
+      path: '~/components',
+      pathPrefix: false, // Auto important components based only on name, ignoring path prefix
+    },
+  ],
   // ui: {
   //   fonts: false // Prevent NuxtUI from fetching fonts, which causes a certificate error
   // },

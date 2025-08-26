@@ -2,6 +2,10 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
+definePageMeta({
+  layout: 'authentication'
+})
+
 const router = useRouter()
 const { user, loggedIn, logout } = useOidcAuth()
 const userGroupStore = useUserGroupStore()
@@ -51,6 +55,7 @@ onMounted(async () => {
     // Store merged AWS role / enclave data in the user group store
     await userGroupStore.initializeAWSRoles(enclaveStore.enclaves)
 
+    console.log('user', user.value)
     console.log('role groups', userGroupStore.roleGroups)
     console.log('dist groups', userGroupStore.distributionGroups)
     console.log('enclaves', enclaveStore.enclaves)

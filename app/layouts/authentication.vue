@@ -1,5 +1,7 @@
 <template>
-  <div class="min-h-screen">
+  <!-- <div class="min-h-screen"> -->
+  <div>
+    <div>This is the authentication layout</div>
     <slot />
   </div>
 </template>
