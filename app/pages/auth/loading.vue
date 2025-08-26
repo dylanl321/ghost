@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
-const { user, loggedIn } = useOidcAuth()
+const { user, loggedIn, logout } = useOidcAuth()
 const userGroupStore = useUserGroupStore()
 const enclaveStore = useEnclaveStore()
 
@@ -15,7 +15,8 @@ const validateLoginState = (accessToken: string) => {
   const currentUser = user.value
 
   if (!loggedIn.value || !currentUser || !accessToken) {
-    error.value = 'Error: Authentication failed'
+    error.value = 'Error: Authentication failed. Logging you out...'
+    logout()
     return false
   }
 
