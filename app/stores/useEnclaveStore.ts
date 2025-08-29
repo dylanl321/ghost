@@ -4,7 +4,7 @@ export interface EnclaveState {
 }
 
 // const timeToLiveSeconds = 60 * 60 * 24
-const timeToLiveSeconds = 0
+const timeToLiveSeconds = 600
 
 export const useEnclaveStore = defineStore('enclaveStore', {
   state: (): EnclaveState => ({

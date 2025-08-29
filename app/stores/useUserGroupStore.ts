@@ -34,7 +34,7 @@ export interface UserGroupState {
 // Time until the data needs to be refreshed
 // This only gets checked when the user is first logged in
 // const timeToLiveSeconds = 60 * 60 * 24
-const timeToLiveSeconds = 0
+const timeToLiveSeconds = 600
 
 export const useUserGroupStore = defineStore('userGroups', {
   state: (): UserGroupState => ({

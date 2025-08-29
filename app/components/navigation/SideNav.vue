@@ -155,49 +155,49 @@ const navigationItems = [
       // }
     ]
   },
-  {
-    label: 'Reports',
-    icon: 'i-heroicons-currency-dollar',
-    children: [
-      {
-        label: 'Generator',
-        to: '/reports',
-        icon: 'i-heroicons-presentation-chart-line'
-      },
-      {
-        label: 'Saved Reports',
-        to: '/reports/saved',
-        icon: 'i-heroicons-document-magnifying-glass'
-      },
-      {
-        label: 'Scheduled Reports',
-        to: '/reports/scheduled',
-        icon: 'i-heroicons-document-chart-bar'
-      }
-    ]
-  },
-  {
-    label: 'Costs',
-    icon: 'i-heroicons-currency-dollar',
-    children: [
-      {
-        label: 'Overview',
-        to: '/costs',
-        icon: 'i-heroicons-presentation-chart-line'
-      }
-    ]
-  },
-  {
-    label: 'System',
-    icon: 'i-heroicons-cog-6-tooth',
-    children: [
-      {
-        label: 'Changelog',
-        to: '/changelog',
-        icon: 'i-heroicons-document-text'
-      }
-    ]
-  }
+  // {
+  //   label: 'Reports',
+  //   icon: 'i-heroicons-currency-dollar',
+  //   children: [
+  //     {
+  //       label: 'Generator',
+  //       to: '/reports',
+  //       icon: 'i-heroicons-presentation-chart-line'
+  //     },
+  //     {
+  //       label: 'Saved Reports',
+  //       to: '/reports/saved',
+  //       icon: 'i-heroicons-document-magnifying-glass'
+  //     },
+  //     {
+  //       label: 'Scheduled Reports',
+  //       to: '/reports/scheduled',
+  //       icon: 'i-heroicons-document-chart-bar'
+  //     }
+  //   ]
+  // },
+  // {
+  //   label: 'Costs',
+  //   icon: 'i-heroicons-currency-dollar',
+  //   children: [
+  //     {
+  //       label: 'Overview',
+  //       to: '/costs',
+  //       icon: 'i-heroicons-presentation-chart-line'
+  //     }
+  //   ]
+  // },
+  // {
+  //   label: 'System',
+  //   icon: 'i-heroicons-cog-6-tooth',
+  //   children: [
+  //     {
+  //       label: 'Changelog',
+  //       to: '/changelog',
+  //       icon: 'i-heroicons-document-text'
+  //     }
+  //   ]
+  // }
 ]
 
 

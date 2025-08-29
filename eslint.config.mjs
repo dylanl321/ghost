@@ -12,7 +12,9 @@ export default withNuxt(
       // indent: ['error', 2],
       'object-curly-spacing': ['error', 'always'],
       '@typescript-eslint/no-unsafe-function-type': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
       'vue/require-default-prop': 'off',
+      'vue/first-attribute-linebreak': 'off'
     }
   }
   // Your custom configs here

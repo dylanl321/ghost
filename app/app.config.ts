@@ -4,10 +4,15 @@ export default defineAppConfig({
     primary: 'emerald',
     gray: 'slate',
     card: {
-      background: 'bg-[#0d1422]'
+      background: 'dark:bg-[#0e1625]',
     },
     table: {
-      base: 'font-medium text-xs text-gray-300 uppercase tracking-wider'
+      base: 'font-medium text-xs text-gray-300 tracking-wider',
+      th: {
+        base: 'uppercase',
+        color: 'dark:text-gray-300',
+        size: 'text-xs'
+      }
     }
   }
 })
