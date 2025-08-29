@@ -62,6 +62,7 @@ export default defineNuxtConfig({
           'email',
           // 'Group.Read.All' // Allow user to read group membership?
         ],
+        optionalClaims: ['email', 'given_name', 'family_name'],
         exposeAccessToken: true,
         // responseMode: 'query',
         // scope: ['openid'], // scope: ['openid', 'profile', 'email'],

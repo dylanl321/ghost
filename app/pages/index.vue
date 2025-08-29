@@ -1,7 +1,8 @@
 <template>
   <div>
+    <h1 class="text-3xl mb-8">Overview</h1>
     <UserEnclaves />
-    <UButton @click="() => logout()">Logout</UButton>
+    <UButton class="mt-4" @click="() => logout()">Logout</UButton>
   </div>
   
   <!-- <button class="mt-20 border-1 p-1 rounded-md hover:bg-emerald-600 hover:cursor-pointer" @click="() => logout()">Logout</button> -->
@@ -21,7 +22,7 @@
 </template>
 
 <script setup lang="ts">
-const { logout, user } = useOidcAuth()
+const { logout } = useOidcAuth()
 const userGroupStore = useUserGroupStore()
 
 onMounted(async () => {

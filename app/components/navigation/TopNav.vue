@@ -50,7 +50,7 @@
 
 <script setup lang="ts">
 interface Props {
-  breadcrumbs: []
+  breadcrumbs: Array<object>
 }
 
 const props = defineProps<Props>()

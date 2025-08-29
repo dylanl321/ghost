@@ -47,9 +47,24 @@
 </template>
 
 <script setup lang="ts">
-const breadcrumbs = [
-  { label: 'Dashboard', to: '/' },
-  { label: 'Page', to: '/' }
-]
+
+const route = useRoute()
+
+const breadcrumbs = computed(() => {
+  const segments = route.path.split('/').filter(Boolean)
+
+  // always start with dashboard
+  const crumbs = [{ label: 'Dashboard', to: '/' }]
+
+  segments.forEach((seg, i) => {
+    crumbs.push({
+      label: seg.charAt(0).toUpperCase() + seg.slice(1),
+      to: '/' + segments.slice(0, i + 1).join('/')
+    })
+  })
+
+  return crumbs
+})
+
 
 </script>

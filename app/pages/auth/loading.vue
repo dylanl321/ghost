@@ -15,17 +15,20 @@ const step = ref('Validating login state...')
 const error = ref<string | null>(null)
 const progress = ref(0)
 
-const validateLoginState = (accessToken: string) => {
+const validateLoginState = async (accessToken: string) => {
   const currentUser = user.value
 
   if (!loggedIn.value || !currentUser || !accessToken) {
     error.value = 'Error: Authentication failed. Logging you out...'
+    await new Promise(resolve => setTimeout(resolve, 1000))
     logout()
     return false
   }
 
-  if (currentUser.claims?.given_name || currentUser.claims?.family_name) {
+  if (!currentUser.claims?.email || !currentUser.claims?.given_name) {
     error.value = 'Error: Incomplete profile'
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    logout()
     return false
   }
 
@@ -36,7 +39,8 @@ onMounted(async () => {
   try {
     step.value = 'Validating login state...'
     const accessToken: string = user.value?.accessToken || ''
-    if (!validateLoginState(accessToken)) {
+    const validLogin = await validateLoginState(accessToken)
+    if (!validLogin) {
       return
     }
 
