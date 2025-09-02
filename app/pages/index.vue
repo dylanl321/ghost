@@ -22,12 +22,15 @@
 </template>
 
 <script setup lang="ts">
-const { logout } = useOidcAuth()
+const { logout, user } = useOidcAuth()
 const userGroupStore = useUserGroupStore()
+const { searchUsers } = useGraphApi()
 
 onMounted(async () => {
   console.log('aws roles from index', userGroupStore.awsRoles)
 
+  const result = await searchUsers(user.value?.accessToken || '', 'joe', 10)
+  console.log(result)
 })
 
 // const count = ref(0)

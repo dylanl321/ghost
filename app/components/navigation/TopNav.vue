@@ -10,9 +10,9 @@
         <!-- Right side -->
         <div class="flex items-center gap-4">
           <!-- Universal Search - Compact on the right -->
-          <!-- <div class="w-80">
-            <UniversalSearch placeholder="Search users, accounts..." />
-          </div> -->
+          <div class="w-80">
+            <UniversalSearch />
+          </div>
           
           <div class="relative">
             <UDropdown
@@ -40,9 +40,6 @@
       </div>
     </div>
 
-    <!-- Universal Search Modal - Available globally from TopNav -->
-    <!-- <UniversalSearchModal /> -->
-    
     <!-- Report Issue Modal -->
     <!-- <ReportIssueModal v-model="showReportModal" /> -->
   </div>

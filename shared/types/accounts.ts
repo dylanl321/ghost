@@ -13,7 +13,7 @@ export interface AWSEnclaveData {
   organizationalUnit?: string
 
   // Important data from DynamoDB
-  requestID?: string
+  requestID?: number
   awsAccountEmail?: string;
   awsStandardAccountID?: string;
   awsGovCloudAccountID?: string;

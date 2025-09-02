@@ -107,7 +107,44 @@ export const useGraphApi = () => {
     return filteredGroups
   }
 
+  const searchUsers = async (accessToken: string, searchQuery: string, top: number = 25) => {
+    // eslint-disable-next-line quotes
+    const cleanQuery = searchQuery.trim().replace(/'/g, "''")
+    const results = new Map<string, any>()
+
+    const makeSearchCall = async (filter: string) => {
+      const url = `https://graph.microsoft.us/v1.0/users?$filter=${encodeURIComponent(filter)}&$top=${top}&$select=id,displayName,userPrincipalName,mail,jobTitle,department`
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      })
+      if (!response.ok) return []
+      const data = await response.json()
+      return data.value || []
+    }
+
+    const addResults = (users: any[]) => {
+      for (const u of users) {
+        if (!results.has(u.id)) results.set(u.id, u)
+      }
+    }
+
+    // Search by displayName, userPrincipalName, mail
+    const filters = [
+      `startswith(displayName,'${cleanQuery}')`,
+      `startswith(userPrincipalName,'${cleanQuery}')`,
+      `startswith(mail,'${cleanQuery}')`
+    ]
+
+    for (const filter of filters) {
+      const found = await makeSearchCall(filter)
+      addResults(found)
+    }
+
+    return Array.from(results.values()).slice(0, top)
+  }
+
   return {
-    fetchGroups
+    fetchGroups,
+    searchUsers
   }
 }

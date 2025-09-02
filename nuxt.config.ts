@@ -56,16 +56,16 @@ export default defineNuxtConfig({
         tokenUrl: `https://login.microsoftonline.us/${entra_tenant_id}/oauth2/v2.0/token`,
         logoutUrl: `https://login.microsoftonline.us/${entra_tenant_id}/oauth2/v2.0/logout`,
         callbackRedirectUrl: '/auth/loading', // URL to redirect to after Entra authentication is complete
-        scope: [ // 'scope' just means items you are requesting permission to access from Entra
+        scope: [ // 'scopes' just means items you are requesting permission to access from Entra (https://learn.microsoft.com/en-us/graph/permissions-reference#delegated-permissions-26)
           'openid', 
-          'profile', // TODO: remove this and compare currentUser output
+          'profile',
           'email',
-          // 'Group.Read.All' // Allow user to read group membership?
+          'offline_access', // This will give our application a refresh token for easier refreshing of credentials
+          'Directory.Read.All',
+          'Group.Read.All'
         ],
-        optionalClaims: ['email', 'given_name', 'family_name'],
+        optionalClaims: ['email', 'given_name', 'family_name'], // https://learn.microsoft.com/en-us/entra/identity-platform/optional-claims-reference
         exposeAccessToken: true,
-        // responseMode: 'query',
-        // scope: ['openid'], // scope: ['openid', 'profile', 'email'],
         // userInfoUrl: 'https://graph.microsoft.us/oidc/userinfo',
       }
     },
