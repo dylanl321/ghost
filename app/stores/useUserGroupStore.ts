@@ -32,9 +32,8 @@ export interface UserGroupState {
 // ----- Store -----
 
 // Time until the data needs to be refreshed
-// This only gets checked when the user is first logged in
-// const timeToLiveSeconds = 60 * 60 * 24
-const timeToLiveSeconds = 600
+// This only gets checked when the user first "loads" the website (e.g. first visit, hard refresh, new tab, etc.). This is done via the "init-check.client.ts" custom plugin.
+const timeToLiveSeconds = 60 * 60 * 24
 
 export const useUserGroupStore = defineStore('userGroups', {
   state: (): UserGroupState => ({
@@ -48,19 +47,21 @@ export const useUserGroupStore = defineStore('userGroups', {
   getters: {
     groupsNeedRefresh: (state) => {
       if (!state.groupsLastFetch) return true
-      return Date.now() - state.groupsLastFetch > timeToLiveSeconds
+      return Date.now() - state.groupsLastFetch > timeToLiveSeconds * 1000
     },
 
     awsRolesNeedRefresh: (state) => {
       if (!state.awsRolesLastFetch) return true
-      return Date.now() - state.awsRolesLastFetch > timeToLiveSeconds
+      return Date.now() - state.awsRolesLastFetch > timeToLiveSeconds * 1000
     },
   },
 
   actions: {
     async initializeGroups(accessToken: string, force: boolean = false) {
-      if (!import.meta.client) return // only run on client-side (TODO: double check this does not run on server)
+      if (!import.meta.client) return // only run on client-side
       if (!this.groupsNeedRefresh && !force) return
+
+      this.groupsLastFetch = Date.now()
 
       const { fetchGroups } = useGraphApi()
       const data = await fetchGroups(accessToken)
@@ -76,6 +77,8 @@ export const useUserGroupStore = defineStore('userGroups', {
         console.error('Ensure that groups have been initialized before initializing AWS roles.')
         return
       }
+
+      this.awsRolesLastFetch = Date.now()
 
       // Clear any existing AWS roles
       this.awsRoles = {}
@@ -129,5 +132,7 @@ export const useUserGroupStore = defineStore('userGroups', {
       this.distributionGroups = {}
       this.awsRoles = {}
     }
-  }
+  },
+
+  persist: true
 })

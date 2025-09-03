@@ -23,6 +23,7 @@ export interface AWSEnclaveData {
   estimatedMonthlyCharge?: string;
   linesOfBusiness?: string;
   enclaveStatus?: string;
+  projectName?: string;
 
   // Computed fields
   source?: string;
@@ -42,7 +43,6 @@ export interface AWSEnclaveData {
   costManagerName?: string;
   platformType?: string;
   departmentNumber?: string;
-  projectName?: string;
   isDirectConnect?: boolean;
   intendedUse?: string;
   BAName?: string;

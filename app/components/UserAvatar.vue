@@ -18,7 +18,7 @@ const { user } = useOidcAuth()
 const errored = ref(false)
 
 const userId = computed(() => {
-  if (!user.value?.claims.email) return null
+  if (!user.value?.claims?.email) return null
   return user.value.claims.email.split('@')[0].toLowerCase()
 })
 

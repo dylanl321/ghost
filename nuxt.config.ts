@@ -11,7 +11,7 @@ const entra_tenant_id = '7c5a26cf-ddf0-400c-9703-4070b4e3a54d'
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: false },
-  modules: ['@nuxt/ui', '@nuxt/eslint', 'nuxt-oidc-auth', '@pinia/nuxt'], // Modules are used to extend the functionality of Nuxt (https://nuxt.com/docs/4.x/guide/concepts/modules)
+  modules: ['@nuxt/ui', '@nuxt/eslint', 'nuxt-oidc-auth', '@pinia/nuxt', 'pinia-plugin-persistedstate/nuxt'], // Modules are used to extend the functionality of Nuxt (https://nuxt.com/docs/4.x/guide/concepts/modules)
   css: ['~/assets/css/main.css'],
   components: [
     {

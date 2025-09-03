@@ -3,8 +3,9 @@ export interface EnclaveState {
   enclaves: Record<string, AWSEnclaveData>
 }
 
-// const timeToLiveSeconds = 60 * 60 * 24
-const timeToLiveSeconds = 600
+// Time until the data needs to be refreshed
+// This only gets checked when the user first "loads" the website (e.g. first visit, hard refresh, new tab, etc.). This is done via the "init-check.client.ts" custom plugin.
+const timeToLiveSeconds = 60 * 60 * 24
 
 export const useEnclaveStore = defineStore('enclaveStore', {
   state: (): EnclaveState => ({
@@ -15,8 +16,8 @@ export const useEnclaveStore = defineStore('enclaveStore', {
   getters: {
     needsRefresh: (state) => {
       if (!state.lastFetch) return true
-      return Date.now() - state.lastFetch > timeToLiveSeconds
-    }
+      return Date.now() - state.lastFetch > timeToLiveSeconds * 1000
+    },
   },
 
   actions: {
@@ -55,5 +56,7 @@ export const useEnclaveStore = defineStore('enclaveStore', {
     clear() {
       this.enclaves = {}
     }
-  }
+  },
+
+  persist: true
 })
