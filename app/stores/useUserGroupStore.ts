@@ -59,26 +59,34 @@ export const useUserGroupStore = defineStore('userGroups', {
   actions: {
     async initializeGroups(accessToken: string, force: boolean = false) {
       if (!import.meta.client) return // only run on client-side
-      if (!this.groupsNeedRefresh && !force) return
-
-      this.groupsLastFetch = Date.now()
+      if (!this.groupsNeedRefresh && !force) {
+        console.log('Using cached user group data.')
+        return
+      }
 
       const { fetchGroups } = useGraphApi()
       const data = await fetchGroups(accessToken)
       this.roleGroups = data.awsRoleGroups
       this.distributionGroups = data.distributionGroups
+
+      if (this.roleGroups && this.distributionGroups) {
+        this.groupsLastFetch = Date.now()
+      } else {
+        console.error('Missing groups or roles for user.')
+      }
     },
 
     async initializeAWSRoles(enclaveData: Record<string, AWSEnclaveData>, force: boolean = false) {
       if (!import.meta.client) return // only run on client-side
-      if (!this.awsRolesNeedRefresh && !force) return
+      if (!this.awsRolesNeedRefresh && !force) {
+        console.log('Using cached user AWS roles data.')
+        return
+      }
 
       if (!this.roleGroups || !this.distributionGroups) {
         console.error('Ensure that groups have been initialized before initializing AWS roles.')
         return
       }
-
-      this.awsRolesLastFetch = Date.now()
 
       // Clear any existing AWS roles
       this.awsRoles = {}
@@ -125,12 +133,21 @@ export const useUserGroupStore = defineStore('userGroups', {
           }
         }
       }
+
+      if (this.awsRoles) {
+        this.awsRolesLastFetch = Date.now()
+      } else {
+        console.warn('Failed to fetch any AWS roles for current user.')
+      }
     },
 
     clear() {
       this.roleGroups = {}
       this.distributionGroups = {}
       this.awsRoles = {}
+      this.groupsLastFetch = null
+      this.awsRolesLastFetch = null
+      console.log('User group stored cleared')
     }
   },
 

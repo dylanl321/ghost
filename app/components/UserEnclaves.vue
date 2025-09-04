@@ -115,7 +115,6 @@ const tableData = computed(() => {
     enclaves[enclaveKey].total = enclaves[enclaveKey].roles.length
   }
 
-  console.log(Object.values(enclaves))
   return Object.values(enclaves)
 })
 

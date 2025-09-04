@@ -2,7 +2,8 @@
   <div>
     <h1 class="text-3xl mb-8">Overview</h1>
     <UserEnclaves />
-    <UButton class="mt-4" @click="() => logout()">Logout</UButton>
+    <UButton class="mt-4 mr-2" @click="() => logout()">Logout</UButton>
+    <UButton class="mt-4" @click="clear">Clear Stores</UButton>
   </div>
   
   <!-- <button class="mt-20 border-1 p-1 rounded-md hover:bg-emerald-600 hover:cursor-pointer" @click="() => logout()">Logout</button> -->
@@ -22,16 +23,14 @@
 </template>
 
 <script setup lang="ts">
-const { logout, user } = useOidcAuth()
+const { logout } = useOidcAuth()
 const userGroupStore = useUserGroupStore()
-const { searchUsers } = useGraphApi()
+const enclaveStore = useEnclaveStore()
 
-onMounted(async () => {
-  console.log('aws roles from index', userGroupStore.awsRoles)
-
-  const result = await searchUsers(user.value?.accessToken || '', 'joe', 10)
-  console.log(result)
-})
+const clear = () => {
+  enclaveStore.clear()
+  userGroupStore.clear()
+}
 
 // const count = ref(0)
 

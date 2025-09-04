@@ -6,7 +6,7 @@
         <div>
           <h1 class="text-2xl font-bold mb-1">Enclave Explorer</h1>
           <p class="text-sm text-gray-400">
-            Advanced enclave/account filtering and exploration
+            Advanced AWS enclave/account filtering and exploration
           </p>
         </div>
       </template>
@@ -67,6 +67,19 @@
 
     <!-- Table card -->
     <UCard>
+      <template #header>
+        <div class="flex items-center justify-between">
+          <div class="flex items-center">
+            <h1 class="text-xl font-bold mr-2">Results</h1>
+            <UBadge variant="subtle">{{ filteredRows.length }} accounts found</UBadge>
+          </div>
+          <div>
+            <UTooltip text="Export these results to CSV">
+              <UButton icon="i-heroicons-arrow-down-tray" @click="() => exportToCSV(filteredRows)">Export</UButton>
+            </UTooltip>
+          </div>
+        </div>
+      </template>
       <div class="max-h-[600px] overflow-y-auto">
         <UTable
           :rows="paginatedRows"
@@ -175,4 +188,5 @@ const paginatedRows = computed(() => {
   const start = (page.value - 1) * pageCount
   return filteredRows.value.slice(start, start + pageCount)
 })
+
 </script>
