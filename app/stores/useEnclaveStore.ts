@@ -28,7 +28,7 @@ export const useEnclaveStore = defineStore('enclaveStore', {
         return
       }
 
-      this.lastFetch = Date.now()
+      console.log('Initializing enclaves')
 
       const response = await fetch('/api/accounts/list')
       const json = await response.json()

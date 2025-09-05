@@ -64,6 +64,8 @@ export const useUserGroupStore = defineStore('userGroups', {
         return
       }
 
+      console.log('Initializing user groups')
+
       const { fetchGroups } = useGraphApi()
       const data = await fetchGroups(accessToken)
       this.roleGroups = data.awsRoleGroups
@@ -87,6 +89,8 @@ export const useUserGroupStore = defineStore('userGroups', {
         console.error('Ensure that groups have been initialized before initializing AWS roles.')
         return
       }
+
+      console.log('Initializing user AWS roles')
 
       // Clear any existing AWS roles
       this.awsRoles = {}

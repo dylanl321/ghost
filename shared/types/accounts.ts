@@ -3,6 +3,7 @@ export interface AWSEnclaveData {
   accountId: string
 
   // Organizations data
+  // NOTE: This may or may not be there since some deleted accounts are only recorded in DynamoDB now
   accountName?: string
   accountEmail?: string
   accountStatus?: string
@@ -13,6 +14,7 @@ export interface AWSEnclaveData {
   organizationalUnit?: string
 
   // Important data from DynamoDB
+  // NOTE: The DynamoDB data should always been there since we don't delete accounts from our DynamoDB master account table
   requestID?: number
   awsAccountEmail?: string;
   awsStandardAccountID?: string;
@@ -24,6 +26,7 @@ export interface AWSEnclaveData {
   linesOfBusiness?: string;
   enclaveStatus?: string;
   projectName?: string;
+  isAWSStdEnv?: boolean;
 
   // Computed fields
   source?: string;
@@ -62,7 +65,6 @@ export interface AWSEnclaveData {
   laaSiteLeadUsername_guid?: string;
   BAUsername?: string;
   accountAlias?: string;
-  isAWSStdEnv?: boolean;
   primaryAccountAdminUsername_guid?: string;
   authorizingManagerUsername_guid?: string;
   authorizingManagerName?: string;

@@ -15,54 +15,46 @@
     <!-- Filters card -->
     <UCard>
       <template #header>
-        <h1 class="text-xl font-bold">Filters</h1>
+        <div class="flex justify-between">
+          <h1 class="text-xl font-bold">Filters</h1>
+          <UButton icon="i-heroicons-funnel" variant="ghost" @click="resetFilters">Reset Filters</UButton>
+        </div>
       </template>
 
-      <div class="flex flex-wrap items-center gap-2 gap-y-6">
-        <!-- Search input -->
-        <UInput
-          v-model="search"
-          placeholder="Search enclaves by name, Comm ID, or Gov ID..."
-          icon="i-heroicons-magnifying-glass"
-          class="w-96"
-        />
+      <div class="flex flex-wrap items-center gap-5 gap-y-6 mb-6">
 
         <!-- Status filter -->
-        <div class="flex items-center gap-2">
-          <div class="border-l border-gray-800 h-6 mx-1" />
-          <label for="statusSelection" class="text-sm text-gray-400">Status:</label>
-          <USelect
-            id="statusSelection"
-            v-model="statusFilter"
-            :options="statusOptions"
-            class="w-40"
-          />
+        <div class="flex items-center">
+          <label for="statusSelection" class="text-sm text-gray-400 mr-2">Status:</label>
+          <USelect id="statusSelection" v-model="statusFilter" :options="statusOptions" class="w-40" />
         </div>
 
         <!-- Environment filter -->
-        <div class="flex items-center gap-2">
-          <div class="border-l border-gray-800 h-6 mx-1" />
-          <label for="envSelection" class="text-sm text-gray-400">Environment:</label>
-          <USelect
-            id="envSelection"
-            v-model="envFilter"
-            :options="envOptions"
-            class="w-40"
-          />
+        <div class="flex items-center">
+          <label for="envSelection" class="text-sm text-gray-400 mr-2">Environment:</label>
+          <USelect id="envSelection" v-model="envFilter" :options="envOptions" class="w-40" />
         </div>
 
         <!-- LOB filter -->
-        <div class="flex items-center gap-2">
-          <div class="border-l border-gray-800 h-6 mx-1" />
-          <label for="lobSelection" class="text-sm text-gray-400">LOB:</label>
-          <USelect
-            id="lobSelection"
-            v-model="lobFilter"
-            :options="lobOptions"
-            class="w-40"
-          />
+        <div class="flex items-center">
+          <label for="lobSelection" class="text-sm text-gray-400 mr-2">LOB:</label>
+          <USelect id="lobSelection" v-model="lobFilter" :options="lobOptions" class="w-40" />
+        </div>
+
+        <!-- SAWSE filter -->
+        <div class="flex items-center">
+          <label for="lobSelection" class="text-sm text-gray-400 mr-2">SAWSE:</label>
+          <USelect id="lobSelection" v-model="sawseFilter" :options="sawseOptions" class="w-40" />
         </div>
       </div>
+
+      <!-- Search -->
+      <div class="flex flex-wrap items-center">
+        <USelect v-model="searchScope" :options="searchScopeOptions" class="w-48 mr-1" />
+        <UInput v-model="search" :placeholder="`Search ${searchScope}...`" icon="i-heroicons-magnifying-glass"
+          class="w-96" />
+      </div>
+
     </UCard>
 
     <!-- Table card -->
@@ -81,20 +73,14 @@
         </div>
       </template>
       <div class="max-h-[600px] overflow-y-auto">
-        <UTable
-          :rows="paginatedRows"
-          :columns="columns"
-          :loading="loading"
-        >
+        <UTable :rows="paginatedRows" :columns="columns" :loading="loading">
           <!-- Project Name column -->
           <template #projectName-data="{ row }">
-            <div class="flex items-center gap-2">
-              <span
-                class="w-3 h-3 rounded-full"
-                :class="row.accountStatus === 'ACTIVE' ? 'bg-green-500' : 'bg-red-500'"
-              />
+            <div class="flex items-center gap-2 mb-2">
+              <span class="w-3 h-3 rounded-full" :class="row.accountStatus === 'ACTIVE' ? 'bg-green-500' : 'bg-red-500'" />
               <span>{{ row.projectName || row.accountId }}</span>
             </div>
+            <p class="text-xs">{{ row.awsAccountEmail }}</p>
           </template>
 
           <!-- Account IDs column -->
@@ -111,6 +97,18 @@
             </div>
           </template>
 
+          <!-- Platform info column -->
+          <template #platformInfo-data="{ row }">
+            <div class="flex flex-col gap-1">
+              <UTooltip :text="row.awsGovCloudAccountID ? 'GovCloud Paired' : 'Commercial Only'">
+                <p>{{ row.awsGovCloudAccountID ? "GovCloud" : "Commercial" }}</p>
+              </UTooltip>
+              <UTooltip v-if="row.isAWSStdEnv" text="Standard AWS Environment">
+                <UBadge color="orange" size="xs">SAWSE</UBadge>
+              </UTooltip>
+            </div>
+          </template>
+
           <!-- LOB column -->
           <template #lineOfBusiness-data="{ row }">
             <p>{{ row.linesOfBusiness || "IT" }}</p>
@@ -120,11 +118,7 @@
 
       <!-- Pagination -->
       <div class="flex justify-end mt-4">
-        <UPagination
-          v-model="page"
-          :page-count="pageCount"
-          :total="filteredRows.length"
-        />
+        <UPagination v-model="page" :page-count="pageCount" :total="filteredRows.length" />
       </div>
     </UCard>
   </div>
@@ -138,12 +132,16 @@ const loading = ref(false)
 
 // search + filters
 const search = ref('')
+const searchScope = ref<'All Fields' | 'Project Name' | 'Personnel' | 'Account IDs'>('All Fields')
+const searchScopeOptions = ['All Fields', 'Project Name', 'Personnel', 'Account IDs']
 const statusFilter = ref<'All' | 'Active' | 'Decommissioned'>('Active')
 const statusOptions = ['All', 'Active', 'Decommissioned']
 const envFilter = ref<'All' | 'Commercial Only' | 'GovCloud Paired'>('All')
 const envOptions = ['All', 'Commercial Only', 'GovCloud Paired']
 const lobFilter = ref<'All' | 'MSS' | 'SIS' | 'Cyber' | 'SC&I' | 'LAS' | 'IT'>('All')
 const lobOptions = ['All', 'MSS', 'SIS', 'Cyber', 'SC&I', 'LAS', 'IT']
+const sawseFilter = ref<'All' | 'true' | 'false'>('All')
+const sawseOptions = ['All', 'true', 'false']
 
 // pagination
 const page = ref(1)
@@ -152,6 +150,7 @@ const pageCount = 25
 const columns = [
   { key: 'projectName', label: 'Project Name' },
   { key: 'accountIds', label: 'Account IDs' },
+  { key: 'platformInfo', label: 'Platform Info' },
   { key: 'lineOfBusiness', label: 'LOB' }
 ]
 
@@ -159,28 +158,71 @@ const allRows = computed(() => Object.values(enclaveStore.enclaves || {}))
 
 const filteredRows = computed(() => {
   const query = search.value.toLowerCase()
+
   return allRows.value.filter(e => {
-    const matchesSearch =
-      !query ||
-      (e.projectName || '').toLowerCase().includes(query) ||
-      (e.awsStandardAccountID || '').includes(query) ||
-      (e.awsGovCloudAccountID || '').includes(query)
+    let valuesToSearch: (string | undefined)[] = []
+
+    if (searchScope.value === 'All Fields') {
+      valuesToSearch = [
+        e.projectName,
+        e.awsStandardAccountID,
+        e.awsGovCloudAccountID,
+        e.linesOfBusiness,
+        e.accountStatus,
+        e.primaryAccountAdminName,
+        e.primaryAccountAdminUsername,
+        e.delegateAccountAdminName,
+        e.delegateAccountAdminUsername,
+        e.costManagerName,
+        e.costManagerUsername
+      ]
+    }
+
+    if (searchScope.value === 'Project Name') {
+      valuesToSearch = [
+        e.projectName
+      ]
+    }
+
+    if (searchScope.value === 'Personnel') {
+      valuesToSearch = [
+        e.primaryAccountAdminName,
+        e.primaryAccountAdminUsername,
+        e.delegateAccountAdminName,
+        e.delegateAccountAdminUsername,
+        e.costManagerName,
+        e.costManagerUsername
+      ]
+    }
+
+    if (searchScope.value === 'Account IDs') {
+      valuesToSearch = [
+        e.awsStandardAccountID,
+        e.awsGovCloudAccountID
+      ]
+    }
+
+    const matchesSearch = !query || valuesToSearch.some(val => String(val || '').toLowerCase().includes(query))
 
     const matchesStatus =
       statusFilter.value === 'All' ||
       (statusFilter.value === 'Active' && e.accountStatus === 'ACTIVE') ||
       (statusFilter.value === 'Decommissioned' && e.accountStatus !== 'ACTIVE')
-    
+
     const matchesEnvironment =
       envFilter.value === 'All' ||
       (envFilter.value === 'GovCloud Paired' && e.awsGovCloudAccountID !== '') ||
       (envFilter.value === 'Commercial Only' && e.awsGovCloudAccountID === '')
-    
+
     const matchesLOB =
       lobFilter.value === 'All' ||
       (lobFilter.value === (e.linesOfBusiness ?? 'IT'))
     
-    return matchesSearch && matchesStatus && matchesEnvironment && matchesLOB
+    const matchesSAWSE =
+      sawseFilter.value === 'All' ||
+      (sawseFilter.value === (e.isAWSStdEnv ?? '').toString())
+
+    return matchesSearch && matchesStatus && matchesEnvironment && matchesLOB && matchesSAWSE
   })
 })
 
@@ -188,5 +230,14 @@ const paginatedRows = computed(() => {
   const start = (page.value - 1) * pageCount
   return filteredRows.value.slice(start, start + pageCount)
 })
+
+function resetFilters() {
+  search.value = ''
+  searchScope.value = 'All Fields'
+  statusFilter.value = 'Active'
+  envFilter.value = 'All'
+  lobFilter.value = 'All'
+  sawseFilter.value = 'All'
+}
 
 </script>
