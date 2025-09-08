@@ -46,6 +46,12 @@
           <label for="lobSelection" class="text-sm text-gray-400 mr-2">SAWSE:</label>
           <USelect id="lobSelection" v-model="sawseFilter" :options="sawseOptions" class="w-40" />
         </div>
+
+        <!-- My Accounts filter -->
+        <div class="flex items-center">
+          <label for="lobSelection" class="text-sm text-gray-400 mr-2">My Enclaves:</label>
+          <UCheckbox v-model="myEnclavesFilter"/>
+        </div>
       </div>
 
       <!-- Search -->
@@ -77,7 +83,8 @@
           <!-- Project Name column -->
           <template #projectName-data="{ row }">
             <div class="flex items-center gap-2 mb-2">
-              <span class="w-3 h-3 rounded-full" :class="row.accountStatus === 'ACTIVE' ? 'bg-green-500' : 'bg-red-500'" />
+              <span class="w-3 h-3 rounded-full"
+                :class="row.accountStatus === 'ACTIVE' ? 'bg-green-500' : 'bg-red-500'" />
               <span>{{ row.projectName || row.accountId }}</span>
             </div>
             <p class="text-xs">{{ row.awsAccountEmail }}</p>
@@ -113,6 +120,20 @@
           <template #lineOfBusiness-data="{ row }">
             <p>{{ row.linesOfBusiness || "IT" }}</p>
           </template>
+
+          <!-- Actions column -->
+          <template #actions-data="{ row }">
+            <UDropdown :items="getActionItems(row)">
+              <UButton color="gray" variant="ghost" icon="i-heroicons-ellipsis-vertical" />
+              <template #items>
+                <ULink :to="`/account/${row.accountId}`"
+                  class="block px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-800">
+                  Account Details
+                </ULink>
+              </template>
+            </UDropdown>
+          </template>
+
         </UTable>
       </div>
 
@@ -128,6 +149,7 @@
 import { ref, computed } from 'vue'
 
 const enclaveStore = useEnclaveStore()
+const userGroupStore = useUserGroupStore()
 const loading = ref(false)
 
 // search + filters
@@ -142,6 +164,7 @@ const lobFilter = ref<'All' | 'MSS' | 'SIS' | 'Cyber' | 'SC&I' | 'LAS' | 'IT'>('
 const lobOptions = ['All', 'MSS', 'SIS', 'Cyber', 'SC&I', 'LAS', 'IT']
 const sawseFilter = ref<'All' | 'true' | 'false'>('All')
 const sawseOptions = ['All', 'true', 'false']
+const myEnclavesFilter = ref<boolean>(false)
 
 // pagination
 const page = ref(1)
@@ -151,8 +174,43 @@ const columns = [
   { key: 'projectName', label: 'Project Name' },
   { key: 'accountIds', label: 'Account IDs' },
   { key: 'platformInfo', label: 'Platform Info' },
-  { key: 'lineOfBusiness', label: 'LOB' }
+  { key: 'lineOfBusiness', label: 'LOB' },
+  { key: 'actions', label: '' }
 ]
+
+const getActionItems = (account: AWSEnclaveData) => {
+  // Always use commercial account ID for navigation (primary identifier)
+  const accountId = account.awsStandardAccountID
+
+  const actionItems: any = [
+    [
+      {
+        label: 'Account Details',
+        icon: 'i-heroicons-document-text',
+        to: `/account/${accountId}`,
+        description: 'View full account details and overview'
+      },
+    ],
+  ]
+
+  // Add utility actions
+  const utilityActions = []
+  
+  if (account.recordLink) {
+    utilityActions.push({
+      label: 'View Record',
+      icon: 'i-heroicons-arrow-top-right-on-square',
+      click: () => window.open(account.recordLink, '_blank'),
+      description: 'Open source record in new tab'
+    })
+  }
+
+  if (utilityActions.length > 0) {
+    actionItems.push(utilityActions)
+  }
+
+  return actionItems
+}
 
 const allRows = computed(() => Object.values(enclaveStore.enclaves || {}))
 
@@ -217,12 +275,16 @@ const filteredRows = computed(() => {
     const matchesLOB =
       lobFilter.value === 'All' ||
       (lobFilter.value === (e.linesOfBusiness ?? 'IT'))
-    
+
     const matchesSAWSE =
       sawseFilter.value === 'All' ||
       (sawseFilter.value === (e.isAWSStdEnv ?? '').toString())
+    
+    const matchesMyEnclaves = 
+      myEnclavesFilter.value === false ||
+      Object.keys(userGroupStore.myEnclaves).some(accountId => accountId === e.awsStandardAccountID)
 
-    return matchesSearch && matchesStatus && matchesEnvironment && matchesLOB && matchesSAWSE
+    return matchesSearch && matchesStatus && matchesEnvironment && matchesLOB && matchesSAWSE && matchesMyEnclaves
   })
 })
 
@@ -238,6 +300,7 @@ function resetFilters() {
   envFilter.value = 'All'
   lobFilter.value = 'All'
   sawseFilter.value = 'All'
+  myEnclavesFilter.value = false
 }
 
 </script>

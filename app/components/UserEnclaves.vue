@@ -8,10 +8,10 @@
       <UTable :rows="tableData" :columns="columns" :ui="{ thead: 'bg-gray-800 text-xs' }">
         <template #enclave-data="{ row }">
           <div>
-            <div class="text-white text-sm font-sm max-w-120 truncate">{{ row.enclave.name }}</div>
+            <div class="text-white text-sm font-sm max-w-120 truncate">{{ row.projectName }}</div>
             <div class="text-gray-400 text-xs">
-              <span class="text-blue-300">{{ row.enclave.id }}</span>, <span class="text-orange-300">{{
-                row.enclave.govId }}</span>
+              <span class="text-blue-300">{{ row.standardId }}</span>, <span class="text-orange-300">{{
+                row.govcloudId }}</span>
             </div>
           </div>
         </template>
@@ -41,9 +41,9 @@
         <template #actions-data="{ row }">
           <div class="flex gap-2">
             <UButton size="xs" icon="i-heroicons-user" color="primary" variant="soft"
-              @click="router.push(`/account/${row.accountId}`)">Account Details</UButton>
+              @click="router.push(`/account/${row.standardId}`)">Account Details</UButton>
             <UButton size="xs" icon="i-heroicons-users" color="primary" variant="soft"
-              @click="router.push(`/group/${row.accountId}`)">
+              @click="router.push(`/group/${row.standardId}`)">
               Groups</UButton>
           </div>
         </template>
@@ -70,11 +70,11 @@ const columns = [
 const expanded = ref<Set<string>>(new Set())
 
 function isExpanded(row: any) {
-  return expanded.value.has(row.enclave.id)
+  return expanded.value.has(row.standardId)
 }
 
 function setExpanded(row: any) {
-  expanded.value.add(row.enclave.id)
+  expanded.value.add(row.standardId)
 }
 
 function visibleRoles(row: any) {
@@ -85,37 +85,6 @@ function visibleRoles(row: any) {
 const GOV_IDENTIFIER = ' | gov'
 const COMM_IDENTIFIER = ' | comm'
 
-const tableData = computed(() => {
-  const enclaves: Record<string, {
-    enclave: object,
-    environment: string,
-    roles: Array<string>,
-    total: number
-  }> = {}
-
-  // Build Enclave rows out of individual account objects
-  for (const [accountId, roleData] of Object.entries(userGroupStore.awsRoles)) {
-    if (roleData.accountName === 'Unknown Account') {
-      continue
-    }
-
-    const enclaveKey = roleData.standardAccountId
-
-    if (!enclaves[enclaveKey]) {
-      enclaves[enclaveKey] = {
-        enclave: { name: roleData.accountName, id: roleData.standardAccountId, govId: roleData.govCloudAccountId },
-        environment: roleData.isGovCloud ? 'GovCloud Paired' : 'Commercial Only',
-        roles: [],
-        total: 0
-      }
-    }
-
-    const identifier = accountId === roleData.standardAccountId ? COMM_IDENTIFIER : GOV_IDENTIFIER
-    enclaves[enclaveKey].roles.push(...roleData.roles.map(r => `${r}${identifier}`)) // Add environment to end of each role string
-    enclaves[enclaveKey].total = enclaves[enclaveKey].roles.length
-  }
-
-  return Object.values(enclaves)
-})
+const tableData = Object.values(userGroupStore.myEnclaves)
 
 </script>

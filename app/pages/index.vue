@@ -32,6 +32,10 @@ const clear = () => {
   userGroupStore.clear()
 }
 
+onMounted(() => {
+  console.log('my enclaves', userGroupStore.myEnclaves)
+})
+
 // const count = ref(0)
 
 </script>

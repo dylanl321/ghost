@@ -29,6 +29,9 @@ export interface UserGroupState {
   awsRoles: Record<string, AwsRoleInfo>
 }
 
+const GOV_IDENTIFIER = ' | gov'
+const COMM_IDENTIFIER = ' | comm'
+
 // ----- Store -----
 
 // Time until the data needs to be refreshed
@@ -54,6 +57,48 @@ export const useUserGroupStore = defineStore('userGroups', {
       if (!state.awsRolesLastFetch) return true
       return Date.now() - state.awsRolesLastFetch > timeToLiveSeconds * 1000
     },
+
+    myEnclaves: (state) => {
+      if (!state.awsRoles) {
+        console.error('Initialize awsRoles before accessing myEnclaves')
+        return {}
+      }
+
+      const enclaves: Record<string, {
+        projectName: string,
+        standardId: string,
+        govcloudId: string,
+        environment: string,
+        roles: Array<string>,
+        total: number
+      }> = {}
+
+      for (const [accountId, roleData] of Object.entries(state.awsRoles)) {
+        if (roleData.accountName === 'Unknown Account') {
+          continue
+        }
+
+        const enclaveKey = roleData.standardAccountId
+
+        if (!enclaves[enclaveKey]) {
+          enclaves[enclaveKey] = {
+            projectName: roleData.accountName,
+            standardId: roleData.standardAccountId,
+            govcloudId: roleData.govCloudAccountId,
+            environment: roleData.isGovCloud ? 'GovCloud Paired' : 'Commercial Only',
+            roles: [],
+            total: 0
+          }
+        }
+
+        const identifier = accountId === roleData.standardAccountId ? COMM_IDENTIFIER : GOV_IDENTIFIER
+        enclaves[enclaveKey].roles.push(...roleData.roles.map(r => `${r}${identifier}`)) // Add environment to end of each role string
+        enclaves[enclaveKey].total = enclaves[enclaveKey].roles.length
+      }
+
+      // return Object.values(enclaves)
+      return enclaves
+    }
   },
 
   actions: {
