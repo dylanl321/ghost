@@ -30,7 +30,7 @@ export const useEnclaveStore = defineStore('enclaveStore', {
 
       console.log('Initializing enclaves')
 
-      const response = await fetch('/api/accounts/list')
+      const response = await fetch('/api/accounts/list?includeDecommissioned=true')
       const json = await response.json()
 
       const accounts: AWSEnclaveData[] = json.data

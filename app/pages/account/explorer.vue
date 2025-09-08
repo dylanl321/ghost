@@ -22,35 +22,50 @@
       </template>
 
       <div class="flex flex-wrap items-center gap-5 gap-y-6 mb-6">
-
-        <!-- Status filter -->
-        <div class="flex items-center">
-          <label for="statusSelection" class="text-sm text-gray-400 mr-2">Status:</label>
-          <USelect id="statusSelection" v-model="statusFilter" :options="statusOptions" class="w-40" />
-        </div>
-
-        <!-- Environment filter -->
-        <div class="flex items-center">
-          <label for="envSelection" class="text-sm text-gray-400 mr-2">Environment:</label>
-          <USelect id="envSelection" v-model="envFilter" :options="envOptions" class="w-40" />
-        </div>
-
         <!-- LOB filter -->
         <div class="flex items-center">
           <label for="lobSelection" class="text-sm text-gray-400 mr-2">LOB:</label>
           <USelect id="lobSelection" v-model="lobFilter" :options="lobOptions" class="w-40" />
         </div>
+      </div>
 
+      <div class="flex flex-wrap items-center gap-5 gap-y-6 mb-6">
+        <!-- Status filter -->
+        <div class="flex items-center">
+          <label for="statusSelection" class="text-sm text-gray-400 mr-2">Status:</label>
+          <div class="flex gap-1">
+            <UButton v-for="item in statusOptions" :key="item" size="xs" variant="solid"
+              :color="statusFilter === item ? 'blue' : 'gray'" @click="statusFilter = item">
+              {{ item }}
+            </UButton>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-5 gap-y-6 mb-6">
+        <!-- Environment filter -->
+        <div class="flex items-center">
+          <label for="envSelection" class="text-sm text-gray-400 mr-2">Environment:</label>
+          <div class="flex gap-1">
+            <UButton v-for="item in envOptions" :key="item" size="xs" variant="solid"
+              :color="envFilter === item ? 'blue' : 'gray'" @click="envFilter = item">
+              {{ item }}
+            </UButton>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-5 gap-y-6 mb-6">
         <!-- SAWSE filter -->
         <div class="flex items-center">
           <label for="lobSelection" class="text-sm text-gray-400 mr-2">SAWSE:</label>
-          <USelect id="lobSelection" v-model="sawseFilter" :options="sawseOptions" class="w-40" />
+          <UCheckbox v-model="sawseCheckbox" />
         </div>
 
         <!-- My Accounts filter -->
         <div class="flex items-center">
           <label for="lobSelection" class="text-sm text-gray-400 mr-2">My Enclaves:</label>
-          <UCheckbox v-model="myEnclavesFilter" />
+          <UCheckbox v-model="myEnclavesCheckbox" />
         </div>
       </div>
 
@@ -69,7 +84,7 @@
         <div class="flex items-center justify-between">
           <div class="flex items-center">
             <h1 class="text-xl font-bold mr-2">Results</h1>
-            <UBadge variant="subtle">{{ filteredRows.length }} accounts found</UBadge>
+            <UBadge variant="subtle">{{ filteredRows.length }} enclaves found</UBadge>
           </div>
           <div>
             <UTooltip text="Export these results to CSV">
@@ -85,7 +100,7 @@
           <template #projectName-data="{ row }">
             <div class="flex items-center gap-2 mb-2">
               <span class="w-3 h-3 rounded-full"
-                :class="row.accountStatus === 'ACTIVE' ? 'bg-green-500' : 'bg-red-500'" />
+                :class="row.enclaveStatus !== 'Decommissioned' ? 'bg-green-500' : 'bg-red-500'" />
               <span>{{ row.projectName || row.accountId }}</span>
             </div>
             <p class="text-xs">{{ row.awsAccountEmail }}</p>
@@ -119,11 +134,13 @@
 
           <!-- Admins column -->
           <template #admins-data="{ row }">
-            <div v-if="row.primaryAccountAdminName || row.primaryAccountAdminUsername.replace('.', ' ')" class="flex items-center">
+            <div v-if="row.primaryAccountAdminName || row.primaryAccountAdminUsername.replace('.', ' ')"
+              class="flex items-center">
               <UIcon name="i-heroicons-user" class="mr-1" />
               <span>{{ row.primaryAccountAdminName || row.primaryAccountAdminUsername.replace('.', ' ') }}</span>
             </div>
-            <div v-if="row.delegateAccountAdminName || row.delegateAccountAdminUsername.replace('.', ' ')" class="flex items-center">
+            <div v-if="row.delegateAccountAdminName || row.delegateAccountAdminUsername.replace('.', ' ')"
+              class="flex items-center">
               <UIcon name="i-heroicons-user-plus" class="mr-1" />
               <span>{{ row.delegateAccountAdminName || row.delegateAccountAdminUsername.replace('.', ' ') }}</span>
             </div>
@@ -174,14 +191,13 @@ const search = ref('')
 const searchScope = ref<'All Fields' | 'Project Name' | 'Personnel' | 'Account IDs'>('All Fields')
 const searchScopeOptions = ['All Fields', 'Project Name', 'Personnel', 'Account IDs']
 const statusFilter = ref<'All' | 'Active' | 'Decommissioned'>('Active')
-const statusOptions = ['All', 'Active', 'Decommissioned']
+const statusOptions: ('All' | 'Active' | 'Decommissioned')[] = ['All', 'Active', 'Decommissioned']
 const envFilter = ref<'All' | 'Commercial Only' | 'GovCloud Paired'>('All')
-const envOptions = ['All', 'Commercial Only', 'GovCloud Paired']
+const envOptions: ('All' | 'Commercial Only' | 'GovCloud Paired')[] = ['All', 'Commercial Only', 'GovCloud Paired']
 const lobFilter = ref<'All' | 'MSS' | 'SIS' | 'Cyber' | 'SC&I' | 'LAS' | 'IT'>('All')
 const lobOptions = ['All', 'MSS', 'SIS', 'Cyber', 'SC&I', 'LAS', 'IT']
-const sawseFilter = ref<'All' | 'true' | 'false'>('All')
-const sawseOptions = ['All', 'true', 'false']
-const myEnclavesFilter = ref<boolean>(false)
+const sawseCheckbox = ref<boolean>(false)
+const myEnclavesCheckbox = ref<boolean>(false)
 
 // pagination
 const page = ref(1)
@@ -288,8 +304,8 @@ const filteredRows = computed(() => {
 
     const matchesStatus =
       statusFilter.value === 'All' ||
-      (statusFilter.value === 'Active' && e.accountStatus === 'ACTIVE') ||
-      (statusFilter.value === 'Decommissioned' && e.accountStatus !== 'ACTIVE')
+      (statusFilter.value === 'Active' && e.enclaveStatus !== 'Decommissioned') ||
+      (statusFilter.value === 'Decommissioned' && e.enclaveStatus === 'Decommissioned')
 
     const matchesEnvironment =
       envFilter.value === 'All' ||
@@ -301,11 +317,11 @@ const filteredRows = computed(() => {
       (lobFilter.value === (e.linesOfBusiness ?? 'IT'))
 
     const matchesSAWSE =
-      sawseFilter.value === 'All' ||
-      (sawseFilter.value === (e.isAWSStdEnv ?? '').toString())
+      sawseCheckbox.value === false ||
+      e.isAWSStdEnv
 
     const matchesMyEnclaves =
-      myEnclavesFilter.value === false ||
+      myEnclavesCheckbox.value === false ||
       Object.keys(userGroupStore.myEnclaves).some(accountId => accountId === e.awsStandardAccountID)
 
     return matchesSearch && matchesStatus && matchesEnvironment && matchesLOB && matchesSAWSE && matchesMyEnclaves
@@ -323,8 +339,8 @@ function resetFilters() {
   statusFilter.value = 'Active'
   envFilter.value = 'All'
   lobFilter.value = 'All'
-  sawseFilter.value = 'All'
-  myEnclavesFilter.value = false
+  sawseCheckbox.value = false
+  myEnclavesCheckbox.value = false
 }
 
 </script>
