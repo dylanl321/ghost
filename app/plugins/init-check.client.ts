@@ -12,6 +12,8 @@ export default defineNuxtPlugin((nuxtApp) => {
     if (needsRefresh) {
       console.log('One or more pinia stores is stale. Refreshing...')
       router.replace('/auth/loading')
+    } else {
+      console.log('Pinia stores are all up to date')
     }
   })
 })

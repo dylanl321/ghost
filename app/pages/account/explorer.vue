@@ -50,7 +50,7 @@
         <!-- My Accounts filter -->
         <div class="flex items-center">
           <label for="lobSelection" class="text-sm text-gray-400 mr-2">My Enclaves:</label>
-          <UCheckbox v-model="myEnclavesFilter"/>
+          <UCheckbox v-model="myEnclavesFilter" />
         </div>
       </div>
 
@@ -80,6 +80,7 @@
       </template>
       <div class="max-h-[600px] overflow-y-auto">
         <UTable :rows="paginatedRows" :columns="columns" :loading="loading">
+
           <!-- Project Name column -->
           <template #projectName-data="{ row }">
             <div class="flex items-center gap-2 mb-2">
@@ -113,6 +114,22 @@
               <UTooltip v-if="row.isAWSStdEnv" text="Standard AWS Environment">
                 <UBadge color="orange" size="xs">SAWSE</UBadge>
               </UTooltip>
+            </div>
+          </template>
+
+          <!-- Admins column -->
+          <template #admins-data="{ row }">
+            <div v-if="row.primaryAccountAdminName || row.primaryAccountAdminUsername.replace('.', ' ')" class="flex items-center">
+              <UIcon name="i-heroicons-user" class="mr-1" />
+              <span>{{ row.primaryAccountAdminName || row.primaryAccountAdminUsername.replace('.', ' ') }}</span>
+            </div>
+            <div v-if="row.delegateAccountAdminName || row.delegateAccountAdminUsername.replace('.', ' ')" class="flex items-center">
+              <UIcon name="i-heroicons-user-plus" class="mr-1" />
+              <span>{{ row.delegateAccountAdminName || row.delegateAccountAdminUsername.replace('.', ' ') }}</span>
+            </div>
+            <div v-if="row.costManagerName || row.costManagerUsername.replace('.', ' ')" class="flex items-center">
+              <UIcon name="i-heroicons-currency-dollar" class="mr-1" />
+              <span>{{ row.costManagerName || row.costManagerUsername.replace('.', ' ') }}</span>
             </div>
           </template>
 
@@ -174,6 +191,7 @@ const columns = [
   { key: 'projectName', label: 'Project Name' },
   { key: 'accountIds', label: 'Account IDs' },
   { key: 'platformInfo', label: 'Platform Info' },
+  { key: 'admins', label: 'Admins' },
   { key: 'lineOfBusiness', label: 'LOB' },
   { key: 'actions', label: '' }
 ]
@@ -195,7 +213,7 @@ const getActionItems = (account: AWSEnclaveData) => {
 
   // Add utility actions
   const utilityActions = []
-  
+
   if (account.recordLink) {
     utilityActions.push({
       label: 'View Record',
@@ -229,10 +247,13 @@ const filteredRows = computed(() => {
         e.accountStatus,
         e.primaryAccountAdminName,
         e.primaryAccountAdminUsername,
+        e.primaryAccountAdminUsername?.replace('.', ' '),
         e.delegateAccountAdminName,
         e.delegateAccountAdminUsername,
+        e.delegateAccountAdminUsername?.replace('.', ' '),
         e.costManagerName,
-        e.costManagerUsername
+        e.costManagerUsername,
+        e.costManagerUsername?.replace('.', ' '),
       ]
     }
 
@@ -246,10 +267,13 @@ const filteredRows = computed(() => {
       valuesToSearch = [
         e.primaryAccountAdminName,
         e.primaryAccountAdminUsername,
+        e.primaryAccountAdminUsername?.replace('.', ' '),
         e.delegateAccountAdminName,
         e.delegateAccountAdminUsername,
+        e.delegateAccountAdminUsername?.replace('.', ' '),
         e.costManagerName,
-        e.costManagerUsername
+        e.costManagerUsername,
+        e.costManagerUsername?.replace('.', ' '),
       ]
     }
 
@@ -279,8 +303,8 @@ const filteredRows = computed(() => {
     const matchesSAWSE =
       sawseFilter.value === 'All' ||
       (sawseFilter.value === (e.isAWSStdEnv ?? '').toString())
-    
-    const matchesMyEnclaves = 
+
+    const matchesMyEnclaves =
       myEnclavesFilter.value === false ||
       Object.keys(userGroupStore.myEnclaves).some(accountId => accountId === e.awsStandardAccountID)
 
