@@ -1,0 +1,5 @@
+# Storybook files
+*.stories.ts
+*.stories.js
+*.stories.vue
+*.mdx
