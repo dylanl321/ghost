@@ -1,0 +1,480 @@
+/**
+ * GET /api/costs/summary
+ * Get cost summary for specified date range
+ */
+
+import { defineEventHandler, getQuery } from 'h3'
+import { getCostAndUsage, getProformaCosts, enhanceCostData } from '../../utils/cost-explorer'
+import { sendSuccess, parseQueryParams, errors, handleAsync } from '../../utils/api-response'
+import { registerEndpoint } from '../../plugins/swagger'
+import { parseAndValidateAccountFilters, getAccountIdsFromCriteria } from '../../utils/account-filters'
+import { costCache, CacheTags } from '../../utils/cache-manager'
+import { validateDateParams, getRecommendedGranularity, type RelativePeriod } from '../../utils/date-helpers'
+
+// Register OpenAPI documentation
+registerEndpoint('/api/costs/summary', 'GET', {
+  summary: 'Get cost summary',
+  description: 'Retrieve AWS cost summary for a specified date range',
+  tags: ['Costs'],
+  parameters: [
+    { $ref: '#/components/parameters/Environment' },
+    {
+      name: 'startDate',
+      in: 'query',
+      required: false,
+      schema: { type: 'string', format: 'date' },
+      description: 'Start date (YYYY-MM-DD). Required if period is not specified.'
+    },
+    {
+      name: 'endDate',
+      in: 'query',
+      required: false,
+      schema: { type: 'string', format: 'date' },
+      description: 'End date (YYYY-MM-DD). Required if period is not specified.'
+    },
+    {
+      name: 'period',
+      in: 'query',
+      required: false,
+      schema: { 
+        type: 'string',
+        enum: ['last7days', 'last30days', 'last90days', 'thisMonth', 'lastMonth', 'thisQuarter', 'lastQuarter', 'thisYear', 'lastYear', 'ytd', 'last12months']
+      },
+      description: 'Relative date period. Cannot be used with startDate/endDate.'
+    },
+    {
+      name: 'granularity',
+      in: 'query',
+      required: false,
+      schema: { 
+        type: 'string',
+        enum: ['DAILY', 'MONTHLY'],
+        default: 'MONTHLY'
+      }
+    },
+    {
+      name: 'groupBy',
+      in: 'query',
+      required: false,
+      schema: { 
+        type: 'string',
+        enum: ['SERVICE', 'LINKED_ACCOUNT', 'REGION'],
+        default: 'SERVICE'
+      }
+    },
+    {
+      name: 'proforma',
+      in: 'query',
+      required: false,
+      schema: { 
+        type: 'boolean',
+        default: false
+      },
+      description: 'Include proforma data analysis (commercial environment only)'
+    },
+    {
+      name: 'proformaAccountId',
+      in: 'query',
+      required: false,
+      schema: { 
+        type: 'string',
+        default: '253821132832'
+      },
+      description: 'Proforma account ID for cost analysis'
+    },
+    {
+      name: 'masterAccountId',
+      in: 'query',
+      required: false,
+      schema: { 
+        type: 'string',
+        default: '205950196477'
+      },
+      description: 'Master account ID for cost analysis'
+    },
+    {
+      name: 'accountIds',
+      in: 'query',
+      required: false,
+      schema: { 
+        type: 'string'
+      },
+      description: 'Comma-separated list of account IDs to filter (if not provided, returns all accounts)'
+    },
+    {
+      name: 'linesOfBusiness',
+      in: 'query',
+      required: false,
+      schema: { 
+        type: 'string'
+      },
+      description: 'Comma-separated list of lines of business to filter accounts'
+    },
+    {
+      name: 'departments',
+      in: 'query',
+      required: false,
+      schema: { 
+        type: 'string'
+      },
+      description: 'Comma-separated list of department numbers to filter accounts'
+    },
+    {
+      name: 'includeDecommissioned',
+      in: 'query',
+      required: false,
+      schema: { 
+        type: 'boolean',
+        default: false
+      },
+      description: 'Include decommissioned accounts in results (default: false)'
+    },
+    {
+      name: 'enhanced',
+      in: 'query',
+      required: false,
+      schema: { 
+        type: 'boolean',
+        default: true
+      },
+      description: 'Return enhanced format with account names and summaries (default: true)'
+    }
+  ],
+  responses: {
+    200: {
+      description: 'Cost summary data',
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: {
+                type: 'object',
+                properties: {
+                  resultsByTime: { type: 'array' },
+                  total: { type: 'object' },
+                  proformaBreakdown: {
+                    type: 'object',
+                    description: 'Only included when proforma=true',
+                    properties: {
+                      masterAccount: {
+                        type: 'object',
+                        properties: {
+                          accountId: { type: 'string' },
+                          costs: { type: 'object' }
+                        }
+                      },
+                      proformaAccount: {
+                        type: 'object',
+                        properties: {
+                          accountId: { type: 'string' },
+                          costs: { type: 'object' }
+                        }
+                      },
+                      totals: {
+                        type: 'object',
+                        properties: {
+                          master: { type: 'number' },
+                          proforma: { type: 'number' },
+                          masterOnly: { type: 'number' },
+                          grandTotal: { type: 'number' }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    400: { $ref: '#/components/schemas/Error' },
+    500: { $ref: '#/components/schemas/Error' }
+  }
+})
+
+export default defineEventHandler(handleAsync(async (event) => {
+  const startTime = Date.now()
+  const query = getQuery(event)
+  const { environment } = parseQueryParams(event)
+  
+  // Validate date parameters - either explicit dates or relative period
+  let dateRange: { startDate: string; endDate: string; description?: string }
+  try {
+    dateRange = validateDateParams({
+      startDate: query.startDate as string,
+      endDate: query.endDate as string,
+      period: query.period as RelativePeriod
+    })
+  } catch (error) {
+    return errors.badRequest(event, (error as Error).message)
+  }
+  
+  const { startDate, endDate } = dateRange
+  
+  // Auto-determine granularity based on date range if not specified
+  const granularity = (query.granularity as 'DAILY' | 'MONTHLY') || getRecommendedGranularity(startDate, endDate)
+  const groupByDimension = (query.groupBy as string) || 'SERVICE'
+  const proforma = query.proforma === 'true' || query.proforma === true
+  const proformaAccountId = (query.proformaAccountId as string) || process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832'
+  const masterAccountId = (query.masterAccountId as string) || process.env.AWS_MASTER_ACCOUNT_ID || '205950196477'
+  const includeDecommissioned = query.includeDecommissioned === 'true' || query.includeDecommissioned === true
+  const enhanced = query.enhanced !== 'false' && query.enhanced !== false // Default to true
+  
+  // Parse and validate account filtering criteria
+  const { criteria: accountFilters, errors: filterErrors } = parseAndValidateAccountFilters(query)
+  
+  // Check for validation errors
+  if (filterErrors.length > 0) {
+    return errors.badRequest(event, `Invalid account filters: ${filterErrors.join('; ')}`)
+  }
+  
+  // Ensure includeDecommissioned is consistent
+  accountFilters.includeDecommissioned = includeDecommissioned
+  
+  // Validate proforma requirements
+  if (proforma && environment !== 'commercial') {
+    return errors.badRequest(event, 'Proforma data analysis is only available for commercial environment')
+  }
+  
+  // Validate proforma account IDs
+  if (proforma) {
+    if (!/^\d{12}$/.test(proformaAccountId)) {
+      return errors.badRequest(event, 'Invalid proforma account ID format. Must be 12 digits.')
+    }
+    if (!/^\d{12}$/.test(masterAccountId)) {
+      return errors.badRequest(event, 'Invalid master account ID format. Must be 12 digits.')
+    }
+    if (proformaAccountId === masterAccountId) {
+      return errors.badRequest(event, 'Proforma and master account IDs cannot be the same')
+    }
+  }
+  
+  // Get filtered account IDs only if specific filters are provided
+  // Do NOT filter for decommissioned status alone - Cost Explorer handles that naturally
+  const filteredAccountIds = (accountFilters.accountIds || accountFilters.linesOfBusiness || accountFilters.departments)
+    ? await getAccountIdsFromCriteria(accountFilters)
+    : undefined
+  
+  // Check if any accounts were found when filters are applied
+  // If filters were applied but no accounts found, return early with a clear message
+  if (filteredAccountIds !== undefined && filteredAccountIds.length === 0) {
+    return errors.notFound(event, 'No accounts found matching the specified filters')
+  }
+  
+  // Build cost parameters
+  const costParams = {
+    startDate,
+    endDate,
+    granularity,
+    metrics: ['UnblendedCost', 'UsageQuantity'],
+    groupBy: [{
+      type: 'DIMENSION' as const,
+      key: groupByDimension
+    }],
+    // Add account filter for Cost Explorer only if we have specific accounts
+    // Never pass an empty array to AWS Cost Explorer
+    filter: filteredAccountIds && filteredAccountIds.length > 0 ? {
+      Dimensions: {
+        Key: 'LINKED_ACCOUNT',
+        Values: filteredAccountIds,
+        MatchOptions: ['EQUALS']
+      }
+    } : undefined
+  }
+  
+  // Generate cache key based on request parameters
+  const cacheKey = `costs:summary:${JSON.stringify({
+    startDate,
+    endDate,
+    granularity,
+    groupByDimension,
+    environment,
+    proforma,
+    proformaAccountId: proforma ? proformaAccountId : null,
+    masterAccountId: proforma ? masterAccountId : null,
+    enhanced,
+    includeDecommissioned,
+    filteredAccountIds: filteredAccountIds?.slice(0, 5) // Sample for uniqueness
+  })}`
+
+  // Get cost data with caching
+  const finalResult = await costCache.getOrSet(
+    cacheKey,
+    async () => {
+      console.log('Cache miss: Fetching cost summary data...')
+      
+      // When proforma is requested, we get both billable and proforma data
+      if (proforma) {
+        const proformaData = await getProformaCosts(
+          costParams,
+          proformaAccountId,
+          masterAccountId
+        )
+        
+        // Prepare result based on enhanced flag
+        if (enhanced) {
+          // Get enhanced billable data first
+          const billableEnhanced = await enhanceCostData(proformaData.billable.costs, includeDecommissioned, groupByDimension)
+          
+          // Get enhanced proforma data
+          const proformaEnhanced = await enhanceCostData(proformaData.proforma.costs, includeDecommissioned, groupByDimension)
+          
+          // Add master account unallocated cost to proforma enhanced data
+          if (proformaData.masterAccount.unallocatedCost > 0) {
+            proformaEnhanced.accounts = proformaEnhanced.accounts || []
+            proformaEnhanced.accounts.push({
+              accountId: masterAccountId,
+              accountName: 'GDMS Cloud (Master - Unallocated)',
+              organizationalUnit: null,
+              departmentNumber: null,
+              linesOfBusiness: null,
+              enclaveStatus: null,
+              estimatedMonthlyBudget: null,
+              totalCost: proformaData.masterAccount.unallocatedCost,
+              totalUsage: 0,
+              averageMonthlyCost: proformaData.masterAccount.unallocatedCost,
+              periodsWithData: 1,
+              costFormatted: `$${proformaData.masterAccount.unallocatedCost.toFixed(2)}`,
+              averageCostFormatted: `$${proformaData.masterAccount.unallocatedCost.toFixed(2)}`,
+              metadata: {
+                enterpriseSupportCost: proformaData.masterAccount.enterpriseSupportCost,
+                isUnallocated: true
+              }
+            })
+            
+            // Sort by total cost descending
+            proformaEnhanced.accounts.sort((a, b) => b.totalCost - a.totalCost)
+            
+            // Update proforma totals
+            const originalTotal = proformaEnhanced.summary.totalCost
+            proformaEnhanced.summary.totalCost = originalTotal + proformaData.masterAccount.unallocatedCost
+            proformaEnhanced.summary.totalCostFormatted = `$${(originalTotal + proformaData.masterAccount.unallocatedCost).toFixed(2)}`
+            proformaEnhanced.summary.totalAccounts = proformaEnhanced.accounts.length
+            proformaEnhanced.summary.averageCostPerAccount = proformaEnhanced.summary.totalCost / proformaEnhanced.summary.totalAccounts
+            proformaEnhanced.summary.averageCostPerAccountFormatted = `$${proformaEnhanced.summary.averageCostPerAccount.toFixed(2)}`
+          }
+          
+          return {
+            billable: billableEnhanced,
+            proforma: proformaEnhanced,
+            comparison: proformaData.comparison,
+            validation: proformaData.validation,
+            masterAccount: {
+              unallocatedCost: proformaData.masterAccount.unallocatedCost,
+              enterpriseSupportCost: proformaData.masterAccount.enterpriseSupportCost
+            }
+          }
+        } else {
+          // For non-enhanced mode, combine proforma results with master unallocated costs
+          const proformaResultsByTime = proformaData.proforma.costs.resultsByTime || []
+          const combinedProformaResultsByTime = proformaResultsByTime.map((proformaResult, index) => {
+            const masterResult = proformaData.masterAccount.proformaCosts.resultsByTime[index]
+            
+            // Combine groups from both proforma and master
+            const combinedGroups = [...(proformaResult.Groups || [])]
+            
+            // Add master account groups if they have costs
+            if (masterResult?.Groups) {
+              masterResult.Groups.forEach(masterGroup => {
+                if (parseFloat(masterGroup.Metrics?.['UnblendedCost']?.Amount || '0') > 0) {
+                  combinedGroups.push(masterGroup)
+                }
+              })
+            }
+            
+            // Calculate combined total
+            const proformaTotal = parseFloat(proformaResult.Total?.['UnblendedCost']?.Amount || '0')
+            const masterTotal = parseFloat(masterResult?.Total?.['UnblendedCost']?.Amount || '0')
+            const combinedTotal = proformaTotal + masterTotal
+            
+            return {
+              ...proformaResult,
+              Groups: combinedGroups,
+              Total: {
+                ...proformaResult.Total,
+                'UnblendedCost': {
+                  ...proformaResult.Total?.['UnblendedCost'],
+                  Amount: combinedTotal.toString()
+                }
+              }
+            }
+          })
+          
+          // Calculate combined total
+          const combinedTotal = proformaData.proforma.total + proformaData.masterAccount.unallocatedCost
+          
+          return {
+            billable: {
+              resultsByTime: proformaData.billable.costs.resultsByTime || [],
+              total: proformaData.billable.costs.total
+            },
+            proforma: {
+              resultsByTime: combinedProformaResultsByTime,
+              total: {
+                ...proformaData.proforma.costs.total,
+                'UnblendedCost': {
+                  ...proformaData.proforma.costs.total?.['UnblendedCost'],
+                  Amount: combinedTotal.toString()
+                }
+              }
+            },
+            comparison: proformaData.comparison,
+            validation: proformaData.validation,
+            masterAccount: {
+              unallocatedCost: proformaData.masterAccount.unallocatedCost,
+              enterpriseSupportCost: proformaData.masterAccount.enterpriseSupportCost
+            }
+          }
+        }
+      } else {
+        // Default: return billable costs only
+        const costData = await getCostAndUsage(costParams, environment)
+        
+        if (enhanced) {
+          return await enhanceCostData(costData, includeDecommissioned, groupByDimension)
+        } else {
+          return costData
+        }
+      }
+    },
+    {
+      ttl: 900, // 15 minutes for cost data
+      tags: [CacheTags.COSTS, environment, proforma ? 'proforma' : 'standard', enhanced ? 'enhanced' : 'raw']
+    }
+  )
+
+  // Add cache metadata
+  const cacheInfo = costCache.getEntryInfo(cacheKey)
+  const cacheStats = costCache.getStats()
+  
+  const metadata = {
+    cache: {
+      hit: !!cacheInfo,
+      age: cacheInfo?.age || null,
+      ttl: cacheInfo?.ttl || null,
+      key: cacheKey,
+      hitRate: `${cacheStats.hitRate.toFixed(1)}%`,
+      totalEntries: cacheStats.entries
+    },
+    performance: {
+      responseTimeMs: Date.now() - startTime,
+      proforma,
+      enhanced
+    },
+    dateRange: {
+      startDate,
+      endDate,
+      description: dateRange.description || null,
+      granularity,
+      isRelativePeriod: !!query.period
+    },
+    dataSource: proforma 
+      ? { type: 'proforma', accounts: [proformaAccountId, masterAccountId] }
+      : { type: 'standard', environment }
+  }
+
+  return sendSuccess(event, finalResult, metadata)
+}))

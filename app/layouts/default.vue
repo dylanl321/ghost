@@ -1,20 +1,24 @@
 <template>
-  <div class="min-h-screen bg-slate-50 dark:bg-slate-900 flex">
+  <div class="h-screen bg-slate-50 dark:bg-slate-900 flex overflow-hidden">
     <!-- Side Navigation -->
-    <SideNav />
+    <SideNav ref="sideNavRef" />
 
     <!-- Main Content Wrapper -->
-    <div class="flex-1 ml-64 flex flex-col min-h-screen">
+    <div 
+      class="flex-1 flex flex-col overflow-hidden min-h-0 transition-all duration-300 ease-in-out"
+      :style="{ marginLeft: navigationStore.contentMargin }"
+    >
       <TopNav 
-        :breadcrumbs="breadcrumbs" 
+        :breadcrumbs="breadcrumbs"
+        @toggle-mobile-menu="handleMobileMenuToggle"
       />
 
       <!-- Main Content Area -->
-      <main class="flex-1 p-6 overflow-y-auto">
+      <main class="flex-1 pt-2 md:pt-2 overflow-auto min-h-0 flex flex-col">
         <!-- Page Content -->
-        <div class="relative">
+        <div class="relative h-full min-h-0">
           <section 
-            class="transition-opacity duration-200" 
+            class="transition-opacity duration-200 h-full min-h-0" 
           >
             <slot />
           </section>
@@ -47,8 +51,18 @@
 </template>
 
 <script setup lang="ts">
+import { useNavigationStore } from '~/stores/useNavigationStore'
 
 const route = useRoute()
+const navigationStore = useNavigationStore()
+const sideNavRef = ref()
+
+// Mobile menu handler
+const handleMobileMenuToggle = () => {
+  if (sideNavRef.value) {
+    sideNavRef.value.toggleMobileMenu()
+  }
+}
 
 const breadcrumbs = computed(() => {
   const segments = route.path.split('/').filter(Boolean)

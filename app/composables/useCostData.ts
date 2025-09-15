@@ -1,0 +1,194 @@
+import { ref, computed, watch, onUnmounted } from 'vue'
+import type { Ref } from 'vue'
+import type { DataMode, NormalizedDataset, CostsQuery } from '~/types/costs'
+
+interface UseCostDataArgs {
+  selectedAccounts: Ref<string[]>
+  selectedTimeframe: Ref<string>
+  initialMode?: DataMode
+  accountsList?: Ref<any[]> // Full accounts data with metadata
+  debounceMs?: number // Debounce delay in milliseconds
+}
+
+export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode = 'billable', accountsList, debounceMs = 800 }: UseCostDataArgs) => {
+  const mode = ref<DataMode>(initialMode)
+  const isFetching = ref(false)
+  const isPending = ref(false) // True when debounce timer is active
+  const fetchError = ref<string | null>(null)
+  const dataset = ref<NormalizedDataset | null>(null)
+  let debounceTimer: NodeJS.Timeout | null = null
+
+  const query = computed<CostsQuery>(() => ({
+    accounts: selectedAccounts.value,
+    timeframe: selectedTimeframe.value,
+    mode: mode.value
+  }))
+
+  const mapUiToSummaryPeriod = (tf: string): string => {
+    // summary supports: last7days, last30days, last90days, thisMonth, lastMonth, thisQuarter, lastQuarter, thisYear, lastYear, ytd, last12months
+    const allowed = new Set(['last7days','last30days','last90days','thisMonth','lastMonth','thisQuarter','lastQuarter','thisYear','lastYear','ytd','last12months'])
+    return allowed.has(tf) ? tf : 'thisMonth'
+  }
+
+  const mapUiToHistoricalPeriod = (tf: string): string => {
+    // historical supports: last7days, last30days, last90days, lastMonth, lastQuarter, lastYear, ytd, last12months, last24months
+    // map UI's thisMonth/thisQuarter/thisYear to appropriate historical periods for trend purposes
+    // Use longer periods to ensure we have enough data for charts that need 4+ months
+    if (tf === 'thisMonth') return 'last12months'  // Changed from last30days to get more historical data
+    if (tf === 'thisQuarter') return 'last12months' // Changed from last90days to get full year context
+    if (tf === 'thisYear') return 'last12months'    // Changed from ytd to get trailing 12 months
+    const allowed = new Set(['last7days','last30days','last90days','lastMonth','lastQuarter','lastYear','ytd','last12months','last24months'])
+    return allowed.has(tf) ? tf : 'last12months'  // Default to last12months instead of last30days
+  }
+
+  const buildSummaryUrl = () => {
+    const params = new URLSearchParams()
+    const period = mapUiToSummaryPeriod(query.value.timeframe)
+    params.set('period', period)
+    // Use proforma flag
+    params.set('proforma', String(query.value.mode === 'proforma'))
+    // Group by linked account for per-account series; enhanced=true to get account details
+    params.set('groupBy', 'LINKED_ACCOUNT')
+    params.set('enhanced', 'true')
+    // IMPORTANT: Don't filter by accountIds for summary - we need all account costs for the sidebar
+    // The account selection is used for chart filtering, not data fetching
+    // if (query.value.accounts.length > 0) params.set('accountIds', query.value.accounts.join(','))
+    return `/api/costs/summary?${params.toString()}`
+  }
+
+  const buildHistoricalUrl = () => {
+    const params = new URLSearchParams()
+    const period = mapUiToHistoricalPeriod(query.value.timeframe)
+    params.set('period', period)
+    if (query.value.accounts.length > 0) params.set('accountIds', query.value.accounts.join(','))
+    return `/api/costs/historical?${params.toString()}`
+  }
+
+  const buildForecastUrl = () => {
+    const params = new URLSearchParams()
+    // Get multiple forecast periods for comprehensive analysis
+    params.set('period', 'next-month')
+    params.set('proforma', String(query.value.mode === 'proforma'))
+    return `/api/costs/forecast?${params.toString()}`
+  }
+
+  const buildExtendedForecastUrl = () => {
+    const params = new URLSearchParams()
+    // Get 3-month forecast for trend analysis
+    params.set('period', '3-months')
+    params.set('granularity', 'MONTHLY')
+    params.set('proforma', String(query.value.mode === 'proforma'))
+    return `/api/costs/forecast?${params.toString()}`
+  }
+
+  const buildAnalysisUrl = () => {
+    const params = new URLSearchParams()
+    const period = mapUiToSummaryPeriod(query.value.timeframe)
+    params.set('period', period)
+    params.set('proforma', String(query.value.mode === 'proforma'))
+    params.set('groupBy', 'LINKED_ACCOUNT')
+    params.set('granularity', 'MONTHLY')
+    params.set('includeBudget', 'true')
+    // IMPORTANT: Don't filter by accountIds for analysis - we need all account costs for the sidebar
+    // The charts will filter the data as needed based on selected accounts
+    // if (query.value.accounts.length > 0) params.set('accountIds', query.value.accounts.join(','))
+    return `/api/costs/analysis?${params.toString()}`
+  }
+
+  const buildServicesSummaryUrl = () => {
+    const params = new URLSearchParams()
+    const period = mapUiToSummaryPeriod(query.value.timeframe)
+    params.set('period', period)
+    // Use proforma flag  
+    params.set('proforma', String(query.value.mode === 'proforma'))
+    // Group by SERVICE to get service breakdown
+    params.set('groupBy', 'SERVICE')
+    params.set('enhanced', 'false') // Don't need enhanced for service data
+    if (query.value.accounts.length > 0) params.set('accountIds', query.value.accounts.join(','))
+    return `/api/costs/summary?${params.toString()}`
+  }
+
+  const fetchCosts = async () => {
+    isFetching.value = true
+    fetchError.value = null
+    try {
+      const [summaryRes, historicalRes, forecastRes, extendedForecastRes, analysisRes, servicesRes] = await Promise.all([
+        $fetch(buildSummaryUrl()),
+        $fetch(buildHistoricalUrl()),
+        $fetch(buildForecastUrl()),
+        $fetch(buildExtendedForecastUrl()),
+        $fetch(buildAnalysisUrl()),
+        $fetch(buildServicesSummaryUrl())
+      ])
+
+      dataset.value = {
+        accounts: query.value.accounts, // Selected account IDs
+        accountsList: accountsList?.value, // Full accounts list for LOB/Department mapping
+        mode: query.value.mode, // Add mode so charts know if we're in proforma
+        summary: summaryRes as any,
+        historical: historicalRes as any,
+        forecast: forecastRes as any,
+        extendedForecast: extendedForecastRes as any, // 3-month forecast for trend analysis
+        analysis: analysisRes as any,
+        services: servicesRes as any
+      }
+      
+      // Debug logging
+      console.log('Cost data fetched:', {
+        summaryHasData: !!(summaryRes as any)?.data,
+        summaryAccounts: (summaryRes as any)?.data?.accounts?.length || 0,
+        analysisHasData: !!(analysisRes as any)?.data,
+        analysisByAccount: (analysisRes as any)?.data?.budgetAnalysis?.byAccount?.length || 0,
+        forecastHasData: !!(forecastRes as any)?.data,
+        forecastTotal: (forecastRes as any)?.data?.forecast?.total?.Amount || 'N/A',
+        extendedForecastHasData: !!(extendedForecastRes as any)?.data,
+        extendedForecastPeriods: (extendedForecastRes as any)?.data?.forecast?.forecastResultsByTime?.length || 0,
+        extendedForecastTotal: (extendedForecastRes as any)?.data?.forecast?.total?.Amount || 'N/A'
+      })
+      
+      console.log('Extended forecast response structure:', extendedForecastRes)
+    } catch (e: any) {
+      fetchError.value = e?.message || 'Failed to fetch cost data'
+    } finally {
+      isFetching.value = false
+    }
+  }
+
+  // Debounced fetch function
+  const debouncedFetch = () => {
+    // Clear any existing timer
+    if (debounceTimer) {
+      clearTimeout(debounceTimer)
+    }
+    
+    // Set pending state immediately for UI feedback
+    isPending.value = true
+    
+    // Set new timer
+    debounceTimer = setTimeout(() => {
+      isPending.value = false
+      void fetchCosts()
+    }, debounceMs)
+  }
+
+  // Watch for changes to selectedAccounts with debouncing
+  watch(selectedAccounts, () => {
+    console.log('Accounts selection changed, debouncing fetch...')
+    debouncedFetch()
+  })
+
+  // Watch for changes to timeframe and mode without debouncing (immediate)
+  watch([selectedTimeframe, mode], () => {
+    console.log('Timeframe or mode changed, fetching immediately...')
+    void fetchCosts()
+  }, { immediate: true })
+
+  // Cleanup on unmount
+  onUnmounted(() => {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer)
+    }
+  })
+
+  return { mode, isFetching, isPending, fetchError, dataset, fetchCosts }
+}

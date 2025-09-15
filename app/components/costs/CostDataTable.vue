@@ -1,0 +1,820 @@
+<template>
+  <div class="space-y-4">
+    <!-- Table Controls -->
+    <div class="flex justify-between items-center">
+      <div class="flex items-center gap-4">
+        <UInput
+          v-model="searchQuery"
+          placeholder="Search accounts..."
+          icon="i-heroicons-magnifying-glass"
+          class="w-64"
+        />
+        <USelectMenu
+          v-model="selectedColumns"
+          :options="columnOptions"
+          multiple
+          placeholder="Select columns"
+          class="w-48"
+        >
+          <template #label>
+            {{ selectedColumns.length }} columns
+          </template>
+        </USelectMenu>
+      </div>
+      
+      <div class="flex items-center gap-2">
+        <UTooltip v-if="canGenerateDetailedReport" text="Generate detailed analytics report with service usage and recommendations">
+          <UButton
+            icon="i-heroicons-document-chart-bar"
+            color="green"
+            variant="solid"
+            @click="generateDetailedReport"
+          >
+            Generate Report
+          </UButton>
+        </UTooltip>
+        <UButton
+          icon="i-heroicons-document-arrow-down"
+          color="purple"
+          variant="outline"
+          @click="exportToPDFHandler"
+        >
+          Export PDF
+        </UButton>
+        <UButton
+          icon="i-heroicons-arrow-down-tray"
+          color="blue"
+          variant="outline"
+          @click="exportToCSV"
+        >
+          Export CSV
+        </UButton>
+        <UButton
+          icon="i-heroicons-arrow-path"
+          color="gray"
+          variant="ghost"
+          @click="refreshData"
+          :loading="isLoading"
+        >
+          Refresh
+        </UButton>
+      </div>
+    </div>
+
+    <!-- Data Table -->
+    <div class="border border-gray-700 rounded-lg overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full">
+          <thead class="bg-gray-800 border-b border-gray-700">
+            <tr>
+              <th
+                v-for="col in visibleColumns"
+                :key="col.key"
+                @click="sortBy(col.key)"
+                class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-750"
+              >
+                <div class="flex items-center gap-1">
+                  {{ col.label }}
+                  <Icon
+                    v-if="sortColumn === col.key"
+                    :name="sortDirection === 'asc' ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'"
+                    class="w-4 h-4"
+                  />
+                </div>
+              </th>
+            </tr>
+          </thead>
+          <tbody class="bg-gray-900 divide-y divide-gray-800">
+            <tr
+              v-for="(row, idx) in paginatedData"
+              :key="row.accountId || idx"
+              class="hover:bg-gray-800 transition-colors"
+            >
+              <td
+                v-for="col in visibleColumns"
+                :key="col.key"
+                class="px-4 py-3 text-sm"
+                :class="[col.class, { 'opacity-60': row.accountStatus === 'Decommissioned' }]"
+              >
+                <!-- Special handling for account status column -->
+                <span v-if="col.key === 'accountStatus'">
+                  <UBadge
+                    :color="row.accountStatus === 'Decommissioned' ? 'red' : 'green'"
+                    variant="subtle"
+                    size="xs"
+                  >
+                    {{ row.accountStatus || 'Active' }}
+                  </UBadge>
+                </span>
+                <!-- Special handling for account name to show if decommissioned -->
+                <span v-else-if="col.key === 'accountName'" class="flex items-center gap-2">
+                  {{ getNestedValue(row, col.key) || '-' }}
+                  <UTooltip v-if="row.accountStatus === 'Decommissioned'" text="This account has been decommissioned">
+                    <Icon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-red-500" />
+                  </UTooltip>
+                </span>
+                <!-- Standard column handling -->
+                <span v-else-if="col.format">
+                  {{ col.format(getNestedValue(row, col.key)) }}
+                </span>
+                <span v-else>
+                  {{ getNestedValue(row, col.key) || '-' }}
+                </span>
+              </td>
+            </tr>
+            <tr v-if="paginatedData.length === 0">
+              <td :colspan="visibleColumns.length" class="px-4 py-8 text-center text-gray-500">
+                No data available
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Pagination -->
+    <div class="flex justify-between items-center">
+      <div class="text-sm text-gray-400">
+        Showing {{ startIndex + 1 }} to {{ endIndex }} of {{ filteredData.length }} entries
+        <span v-if="searchQuery" class="ml-2">
+          (filtered from {{ tableData.length }} total)
+        </span>
+      </div>
+      
+      <div class="flex items-center gap-2">
+        <UButton
+          icon="i-heroicons-chevron-left"
+          color="gray"
+          variant="ghost"
+          size="sm"
+          :disabled="currentPage === 1"
+          @click="currentPage--"
+        />
+        
+        <div class="flex items-center gap-1">
+          <UButton
+            v-for="page in visiblePages"
+            :key="page"
+            :color="page === currentPage ? 'blue' : 'gray'"
+            :variant="page === currentPage ? 'solid' : 'ghost'"
+            size="sm"
+            @click="currentPage = page"
+          >
+            {{ page }}
+          </UButton>
+        </div>
+        
+        <UButton
+          icon="i-heroicons-chevron-right"
+          color="gray"
+          variant="ghost"
+          size="sm"
+          :disabled="currentPage === totalPages"
+          @click="currentPage++"
+        />
+        
+        <USelectMenu
+          v-model="pageSize"
+          :options="[10, 25, 50, 100]"
+          class="ml-4 w-20"
+        />
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, watch, onMounted } from 'vue'
+import type { NormalizedDataset } from '~/types/costs'
+import { usePDFExport } from '~/composables/usePDFExport'
+import { useAccountCosts } from '~/composables/useAccountCosts'
+
+const props = defineProps<{
+  dataset: NormalizedDataset | null
+  selectedAccounts: string[]
+  mode: 'billable' | 'proforma'
+  isLoading?: boolean
+}>()
+
+const emit = defineEmits<{
+  refresh: []
+}>()
+
+// Composables
+const { fetchAccountDetails } = useAccountCosts()
+
+// Account lookup cache
+const accountLookupCache = ref<Map<string, any>>(new Map())
+
+// Column definitions
+const availableColumns = [
+  { key: 'accountId', label: 'Account ID', default: true },
+  { key: 'accountName', label: 'Account Name', default: true },
+  { key: 'accountStatus', label: 'Account Status', default: true, format: (v: string) => v || 'Active', class: 'text-center' },
+  { key: 'actualCost', label: 'Actual Cost', default: true, format: (v: number) => formatCurrency(v), class: 'text-right' },
+  { key: 'budgetedCost', label: 'Budget', default: true, format: (v: number) => formatCurrency(v), class: 'text-right' },
+  { key: 'utilization', label: 'Utilization %', default: true, format: (v: number) => `${v.toFixed(1)}%`, class: 'text-right' },
+  { key: 'variance', label: 'Variance', default: true, format: (v: number) => formatCurrency(v), class: 'text-right' },
+  { key: 'status', label: 'Budget Status', default: true },
+  { key: 'departmentNumber', label: 'Department', default: false },
+  { key: 'linesOfBusiness', label: 'Line of Business', default: false },
+  { key: 'projectName', label: 'Project', default: false },
+  { key: 'environment', label: 'Environment', default: false },
+  { key: 'forecastedCost', label: 'Forecast', default: false, format: (v: number) => formatCurrency(v), class: 'text-right' }
+]
+
+// State
+const searchQuery = ref('')
+const selectedColumns = ref(availableColumns.filter(c => c.default).map(c => c.key))
+const sortColumn = ref('actualCost')
+const sortDirection = ref<'asc' | 'desc'>('desc')
+const currentPage = ref(1)
+const pageSize = ref(25)
+
+// Computed
+const columnOptions = computed(() => 
+  availableColumns.map(col => ({
+    label: col.label,
+    value: col.key
+  }))
+)
+
+const visibleColumns = computed(() => 
+  availableColumns.filter(col => selectedColumns.value.includes(col.key))
+)
+
+const canGenerateDetailedReport = computed(() => {
+  // Show report button when fewer than 10 accounts are selected (but at least 1)
+  return props.selectedAccounts.length > 0 && props.selectedAccounts.length < 10
+})
+
+const tableData = computed(() => {
+  if (!props.dataset) return []
+  
+  const analysis = props.dataset.analysis as any
+  const summary = props.dataset.summary as any
+  
+  // Get the correct data based on mode
+  let analysisData = analysis?.data || analysis
+  let summaryData = summary?.data || summary
+  
+  if (props.mode === 'proforma') {
+    // In proforma mode, data might be nested
+    if (analysisData?.proforma) {
+      analysisData = analysisData.proforma
+    }
+    if (summaryData?.proforma) {
+      summaryData = summaryData.proforma
+    }
+  }
+  
+  // Primary source: analysis data with budget info
+  if (analysisData?.budgetAnalysis?.byAccount) {
+    return analysisData.budgetAnalysis.byAccount.map((item: any) => {
+      const cachedAccount = accountLookupCache.value.get(item.accountId)
+      const accountStatus = cachedAccount?.enclaveStatus || cachedAccount?.status || 'Active'
+      const isDecommissioned = accountStatus === 'Decommissioned' || accountStatus === 'decommissioned'
+      
+      return {
+        ...item,
+        accountName: cachedAccount?.accountName || item.accountName || item.accountId,
+        accountStatus: isDecommissioned ? 'Decommissioned' : accountStatus,
+        utilization: item.budgetedCost > 0 ? (item.actualCost / item.budgetedCost) * 100 : 0,
+        variance: item.actualCost - item.budgetedCost,
+        status: getStatus(item)
+      }
+    })
+  }
+  
+  // Fallback: summary data
+  if (summaryData?.accounts) {
+    return summaryData.accounts.map((item: any) => {
+      const cachedAccount = accountLookupCache.value.get(item.accountId)
+      const accountStatus = cachedAccount?.enclaveStatus || cachedAccount?.status || 'Active'
+      const isDecommissioned = accountStatus === 'Decommissioned' || accountStatus === 'decommissioned'
+      
+      return {
+        accountId: item.accountId,
+        accountName: cachedAccount?.accountName || item.accountName || item.accountId,
+        accountStatus: isDecommissioned ? 'Decommissioned' : accountStatus,
+        actualCost: item.totalCost || 0,
+        budgetedCost: item.budget || 0,
+        utilization: item.budget > 0 ? (item.totalCost / item.budget) * 100 : 0,
+        variance: (item.totalCost || 0) - (item.budget || 0),
+        status: item.budget > 0 
+          ? (item.totalCost > item.budget ? 'over' : item.totalCost > item.budget * 0.9 ? 'warning' : 'under')
+          : 'no-budget',
+        departmentNumber: item.departmentNumber,
+        linesOfBusiness: item.linesOfBusiness,
+        projectName: item.projectName,
+        environment: item.environment
+      }
+    })
+  }
+  
+  return []
+})
+
+const filteredData = computed(() => {
+  let data = [...tableData.value]
+  
+  // Apply account filter if accounts are selected
+  if (props.selectedAccounts.length > 0) {
+    data = data.filter(row => props.selectedAccounts.includes(row.accountId))
+  }
+  
+  // Apply search filter
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase()
+    data = data.filter(row => 
+      Object.values(row).some(val => 
+        String(val).toLowerCase().includes(query)
+      )
+    )
+  }
+  
+  // Apply sorting
+  data.sort((a, b) => {
+    const aVal = getNestedValue(a, sortColumn.value)
+    const bVal = getNestedValue(b, sortColumn.value)
+    
+    if (typeof aVal === 'number' && typeof bVal === 'number') {
+      return sortDirection.value === 'asc' ? aVal - bVal : bVal - aVal
+    }
+    
+    const aStr = String(aVal || '')
+    const bStr = String(bVal || '')
+    return sortDirection.value === 'asc' 
+      ? aStr.localeCompare(bStr)
+      : bStr.localeCompare(aStr)
+  })
+  
+  return data
+})
+
+const totalPages = computed(() => 
+  Math.ceil(filteredData.value.length / pageSize.value)
+)
+
+const startIndex = computed(() => 
+  (currentPage.value - 1) * pageSize.value
+)
+
+const endIndex = computed(() => 
+  Math.min(startIndex.value + pageSize.value, filteredData.value.length)
+)
+
+const paginatedData = computed(() => 
+  filteredData.value.slice(startIndex.value, endIndex.value)
+)
+
+const visiblePages = computed(() => {
+  const pages: number[] = []
+  const total = totalPages.value
+  const current = currentPage.value
+  
+  if (total <= 7) {
+    for (let i = 1; i <= total; i++) {
+      pages.push(i)
+    }
+  } else {
+    if (current <= 3) {
+      for (let i = 1; i <= 5; i++) pages.push(i)
+      pages.push(total)
+    } else if (current >= total - 2) {
+      pages.push(1)
+      for (let i = total - 4; i <= total; i++) pages.push(i)
+    } else {
+      pages.push(1)
+      for (let i = current - 1; i <= current + 1; i++) pages.push(i)
+      pages.push(total)
+    }
+  }
+  
+  return pages
+})
+
+// Methods
+const getNestedValue = (obj: any, path: string) => {
+  return path.split('.').reduce((acc, part) => acc?.[part], obj)
+}
+
+const formatCurrency = (value: number) => {
+  if (typeof value !== 'number') return '-'
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value)
+}
+
+const getStatus = (item: any) => {
+  if (!item.budgetedCost || item.budgetedCost === 0) return 'no-budget'
+  const utilization = (item.actualCost / item.budgetedCost) * 100
+  if (utilization > 100) return 'over'
+  if (utilization > 90) return 'warning'
+  return 'under'
+}
+
+const sortBy = (column: string) => {
+  if (sortColumn.value === column) {
+    sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortColumn.value = column
+    sortDirection.value = 'desc'
+  }
+}
+
+const refreshData = () => {
+  emit('refresh')
+}
+
+const generateDetailedReport = () => {
+  // Get selected accounts data
+  const selectedAccountsData = filteredData.value.filter(row => 
+    props.selectedAccounts.includes(row.accountId)
+  )
+  
+  if (selectedAccountsData.length === 0) {
+    console.warn('No accounts selected for report')
+    return
+  }
+  
+  // Calculate summary statistics
+  const totalCost = selectedAccountsData.reduce((sum, acc) => sum + (acc.actualCost || 0), 0)
+  const totalBudget = selectedAccountsData.reduce((sum, acc) => sum + (acc.budgetedCost || 0), 0)
+  const averageCost = totalCost / selectedAccountsData.length
+  const averageUtilization = selectedAccountsData.reduce((sum, acc) => sum + (acc.utilization || 0), 0) / selectedAccountsData.length
+  
+  // Get service analysis
+  const serviceAnalysis = getServiceAnalysis()
+  const recommendations = generateRecommendations(selectedAccountsData)
+  
+  // Generate multi-sheet CSV report
+  let csvContent = ''
+  
+  // Sheet 1: Executive Summary
+  csvContent += '=== EXECUTIVE SUMMARY ===\n\n'
+  csvContent += 'Report Generated,' + new Date().toISOString() + '\n'
+  csvContent += 'Data Mode,' + props.mode.toUpperCase() + '\n'
+  csvContent += 'Number of Accounts,' + selectedAccountsData.length + '\n'
+  csvContent += 'Active Accounts,' + selectedAccountsData.filter(acc => acc.accountStatus !== 'Decommissioned').length + '\n'
+  csvContent += 'Decommissioned Accounts,' + selectedAccountsData.filter(acc => acc.accountStatus === 'Decommissioned').length + '\n'
+  csvContent += 'Total Cost,' + formatCurrency(totalCost) + '\n'
+  csvContent += 'Total Budget,' + formatCurrency(totalBudget) + '\n'
+  csvContent += 'Budget Utilization,' + averageUtilization.toFixed(1) + '%\n'
+  csvContent += 'Average Cost per Account,' + formatCurrency(averageCost) + '\n'
+  csvContent += 'Over Budget Accounts,' + selectedAccountsData.filter(acc => acc.status === 'over').length + '\n'
+  csvContent += 'Under Budget Accounts,' + selectedAccountsData.filter(acc => acc.status === 'under').length + '\n'
+  csvContent += '\n\n'
+  
+  // Sheet 2: Account Details
+  csvContent += '=== ACCOUNT DETAILS ===\n\n'
+  const accountHeaders = ['Account ID', 'Account Name', 'Account Status', 'Department', 'Line of Business', 'Actual Cost', 'Budget', 'Utilization %', 'Variance', 'Budget Status']
+  csvContent += accountHeaders.map(escapeCSV).join(',') + '\n'
+  
+  selectedAccountsData.forEach(acc => {
+    const row = [
+      acc.accountId,
+      acc.accountName || '',
+      acc.accountStatus || 'Active',
+      acc.departmentNumber || '',
+      acc.linesOfBusiness || '',
+      formatCurrency(acc.actualCost || 0),
+      formatCurrency(acc.budgetedCost || 0),
+      (acc.utilization || 0).toFixed(1) + '%',
+      formatCurrency(acc.variance || 0),
+      acc.status || ''
+    ]
+    csvContent += row.map(escapeCSV).join(',') + '\n'
+  })
+  csvContent += '\n\n'
+  
+  // Sheet 3: Top Services (if available)
+  if (serviceAnalysis && serviceAnalysis.length > 0) {
+    csvContent += '=== TOP 20 SERVICES BY COST ===\n\n'
+    csvContent += 'Service,Total Cost\n'
+    serviceAnalysis.forEach(service => {
+      csvContent += escapeCSV(service.service) + ',' + formatCurrency(service.totalCost) + '\n'
+    })
+    csvContent += '\n\n'
+  }
+  
+  // Sheet 4: Recommendations
+  if (recommendations.length > 0) {
+    csvContent += '=== RECOMMENDATIONS ===\n\n'
+    csvContent += 'Type,Severity,Recommendation,Affected Accounts\n'
+    recommendations.forEach(rec => {
+      const row = [
+        rec.type.replace('-', ' ').toUpperCase(),
+        rec.severity.toUpperCase(),
+        rec.message,
+        rec.accounts.join('; ')
+      ]
+      csvContent += row.map(escapeCSV).join(',') + '\n'
+    })
+  }
+  
+  // Download the comprehensive CSV report
+  const timestamp = new Date().toISOString().split('T')[0]
+  const filename = `detailed-cost-report-${props.mode}-${timestamp}.csv`
+  downloadCSV(csvContent, filename)
+  
+  // Show success notification
+  const { $toast } = useNuxtApp()
+  if ($toast) {
+    $toast.add({
+      title: 'Report Generated',
+      description: `Detailed report for ${selectedAccountsData.length} accounts has been downloaded`,
+      color: 'green',
+      timeout: 5000
+    })
+  }
+}
+
+const getServiceAnalysis = () => {
+  // Extract service costs if available
+  const services = props.dataset?.services as any
+  if (!services) return null
+  
+  const serviceData = services?.data || services
+  const serviceMap = new Map<string, number>()
+  
+  // Aggregate service costs
+  if (serviceData?.resultsByTime) {
+    serviceData.resultsByTime.forEach((bucket: any) => {
+      if (bucket.Groups) {
+        bucket.Groups.forEach((g: any) => {
+          const serviceName = g.Keys?.[0] || 'Unknown'
+          const amount = parseFloat(g.Metrics?.UnblendedCost?.Amount || '0')
+          serviceMap.set(serviceName, (serviceMap.get(serviceName) || 0) + amount)
+        })
+      }
+    })
+  }
+  
+  return Array.from(serviceMap.entries())
+    .map(([name, cost]) => ({ service: name, totalCost: cost }))
+    .sort((a, b) => b.totalCost - a.totalCost)
+    .slice(0, 20) // Top 20 services
+}
+
+const generateRecommendations = (accounts: any[]) => {
+  const recommendations = []
+  
+  // Check for underutilized budgets
+  const underutilized = accounts.filter(acc => acc.utilization < 50)
+  if (underutilized.length > 0) {
+    recommendations.push({
+      type: 'budget-optimization',
+      severity: 'medium',
+      message: `${underutilized.length} account(s) are using less than 50% of budget. Consider reallocating budget.`,
+      accounts: underutilized.map(a => a.accountName)
+    })
+  }
+  
+  // Check for over-budget accounts
+  const overBudget = accounts.filter(acc => acc.utilization > 100)
+  if (overBudget.length > 0) {
+    recommendations.push({
+      type: 'budget-alert',
+      severity: 'high',
+      message: `${overBudget.length} account(s) are over budget. Review spending immediately.`,
+      accounts: overBudget.map(a => a.accountName)
+    })
+  }
+  
+  // Check for accounts nearing budget limit
+  const nearLimit = accounts.filter(acc => acc.utilization >= 90 && acc.utilization <= 100)
+  if (nearLimit.length > 0) {
+    recommendations.push({
+      type: 'budget-warning',
+      severity: 'medium',
+      message: `${nearLimit.length} account(s) are approaching budget limit (90-100% utilized).`,
+      accounts: nearLimit.map(a => a.accountName)
+    })
+  }
+  
+  return recommendations
+}
+
+const exportToPDFHandler = async () => {
+  const { exportMultiple } = usePDFExport()
+  
+  // Get filtered data for export
+  const dataToExport = filteredData.value
+  
+  if (dataToExport.length === 0) {
+    const { $toast } = useNuxtApp()
+    if ($toast) {
+      $toast.add({
+        title: 'No Data',
+        description: 'No data available to export',
+        color: 'yellow',
+        timeout: 3000
+      })
+    }
+    return
+  }
+  
+  // Prepare summary statistics
+  const totalCost = dataToExport.reduce((sum, acc) => sum + (acc.actualCost || 0), 0)
+  const totalBudget = dataToExport.reduce((sum, acc) => sum + (acc.budgetedCost || 0), 0)
+  const averageUtilization = dataToExport.reduce((sum, acc) => sum + (acc.utilization || 0), 0) / dataToExport.length
+  
+  const summary = {
+    'Report Date': new Date().toLocaleDateString(),
+    'Data Mode': props.mode.toUpperCase(),
+    'Total Accounts': dataToExport.length,
+    'Active Accounts': dataToExport.filter(acc => acc.accountStatus !== 'Decommissioned').length,
+    'Decommissioned Accounts': dataToExport.filter(acc => acc.accountStatus === 'Decommissioned').length,
+    'Total Actual Cost': formatCurrency(totalCost),
+    'Total Budget': formatCurrency(totalBudget),
+    'Average Utilization': `${averageUtilization.toFixed(1)}%`,
+    'Over Budget Accounts': dataToExport.filter(acc => acc.status === 'over').length,
+    'Under Budget Accounts': dataToExport.filter(acc => acc.status === 'under').length,
+    'Warning Accounts': dataToExport.filter(acc => acc.status === 'warning').length
+  }
+  
+  // Prepare table data
+  const tableHeaders = visibleColumns.value.map(col => col.label)
+  const tableRows = dataToExport.map(row => 
+    visibleColumns.value.map(col => {
+      const value = getNestedValue(row, col.key)
+      if (col.format && value !== null && value !== undefined) {
+        return col.format(value)
+      }
+      return value || '-'
+    })
+  )
+  
+  // Get service analysis if available
+  const serviceAnalysis = getServiceAnalysis()
+  
+  // Generate recommendations
+  const recommendations = generateRecommendations(dataToExport)
+  
+  // Build PDF sections
+  const pdfSections = [
+    {
+      data: summary,
+      type: 'data' as const,
+      title: 'Executive Summary'
+    },
+    {
+      data: { headers: tableHeaders, rows: tableRows },
+      type: 'data' as const,
+      title: 'Account Details',
+      pageBreak: true
+    }
+  ]
+  
+  // Add service analysis if available
+  if (serviceAnalysis && serviceAnalysis.length > 0) {
+    const serviceHeaders = ['Service', 'Total Cost']
+    const serviceRows = serviceAnalysis.slice(0, 20).map(s => [
+      s.service,
+      formatCurrency(s.totalCost)
+    ])
+    
+    pdfSections.push({
+      data: { headers: serviceHeaders, rows: serviceRows },
+      type: 'data' as const,
+      title: 'Top 20 Services by Cost',
+      pageBreak: true
+    })
+  }
+  
+  // Add recommendations if any
+  if (recommendations.length > 0) {
+    const recText = recommendations.map((rec, idx) => 
+      `${idx + 1}. [${rec.severity.toUpperCase()}] ${rec.message}\n   Affected: ${rec.accounts.join(', ')}`
+    ).join('\n\n')
+    
+    pdfSections.push({
+      data: recText,
+      type: 'text' as const,
+      title: 'Recommendations',
+      pageBreak: true
+    })
+  }
+  
+  // Export to PDF
+  await exportMultiple(pdfSections, {
+    title: 'AWS Cost Analysis Report',
+    subtitle: `Generated on ${new Date().toLocaleDateString()} - ${props.mode === 'proforma' ? 'Proforma' : 'Billable'} Data`,
+    filename: `cost-report-${props.mode}-${new Date().toISOString().split('T')[0]}.pdf`,
+    orientation: dataToExport.length > 10 ? 'landscape' : 'portrait',
+    colors: {
+      primary: '#1e40af', // Blue instead of orange
+      secondary: '#64748b',
+      text: '#000000'
+    },
+    footer: `Page {page} - GHOST Cost Analysis Report`
+  })
+  
+  // Show success notification
+  const { $toast } = useNuxtApp()
+  if ($toast) {
+    $toast.add({
+      title: 'PDF Exported',
+      description: `Cost report has been exported for ${dataToExport.length} accounts`,
+      color: 'green',
+      timeout: 5000
+    })
+  }
+}
+
+const exportToCSV = () => {
+  // Prepare CSV data
+  const headers = visibleColumns.value.map(col => col.label)
+  const rows = filteredData.value.map(row => 
+    visibleColumns.value.map(col => {
+      const value = getNestedValue(row, col.key)
+      if (col.format && value !== null && value !== undefined) {
+        return col.format(value)
+      }
+      return value || ''
+    })
+  )
+  
+  // Build CSV content
+  const csvContent = [
+    headers.map(escapeCSV).join(','),
+    ...rows.map(row => row.map(escapeCSV).join(','))
+  ].join('\n')
+  
+  // Generate filename with timestamp
+  const timestamp = new Date().toISOString().split('T')[0]
+  const modeLabel = props.mode === 'proforma' ? 'proforma' : 'billable'
+  const filename = `cost-data-${modeLabel}-${timestamp}.csv`
+  
+  // Download file
+  downloadCSV(csvContent, filename)
+}
+
+// Utility functions (reused from csvExport.ts)
+const escapeCSV = (value: any): string => {
+  if (value === null || value === undefined) return ''
+  
+  const str = String(value)
+  
+  // If contains comma, newline, or quote, wrap in quotes and escape internal quotes
+  if (str.includes(',') || str.includes('\n') || str.includes('"')) {
+    return `"${str.replace(/"/g, '""')}"`
+  }
+  
+  return str
+}
+
+const downloadCSV = (content: string, filename: string) => {
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  
+  const link = document.createElement('a')
+  link.setAttribute('href', url)
+  link.setAttribute('download', filename)
+  link.style.visibility = 'hidden'
+  
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  
+  URL.revokeObjectURL(url)
+}
+
+// Fetch account details for unknown accounts
+const fetchUnknownAccounts = async () => {
+  const allData = tableData.value
+  const unknownAccounts = allData.filter(item => 
+    !item.accountName || item.accountName === item.accountId
+  )
+  
+  // Fetch details for unknown accounts
+  for (const account of unknownAccounts) {
+    if (!accountLookupCache.value.has(account.accountId)) {
+      try {
+        const details = await fetchAccountDetails(account.accountId)
+        if (details) {
+          accountLookupCache.value.set(account.accountId, details)
+        }
+      } catch (error) {
+        console.error(`Failed to fetch details for account ${account.accountId}:`, error)
+      }
+    }
+  }
+}
+
+// Watch for dataset changes and fetch unknown accounts
+watch(() => props.dataset, async (newDataset) => {
+  if (newDataset) {
+    await fetchUnknownAccounts()
+  }
+}, { immediate: true })
+
+// Reset page when filters change
+watch([searchQuery, pageSize, () => props.selectedAccounts], () => {
+  currentPage.value = 1
+})
+</script>

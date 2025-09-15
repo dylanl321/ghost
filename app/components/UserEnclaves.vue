@@ -85,6 +85,13 @@ function visibleRoles(row: any) {
 const GOV_IDENTIFIER = ' | gov'
 const COMM_IDENTIFIER = ' | comm'
 
-const tableData = Object.values(userGroupStore.myEnclaves)
+// Handle empty state gracefully
+const tableData = computed(() => {
+  if (!userGroupStore.myEnclaves) {
+    console.warn('User enclaves not loaded yet')
+    return []
+  }
+  return Object.values(userGroupStore.myEnclaves)
+})
 
 </script>
