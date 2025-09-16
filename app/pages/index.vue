@@ -1,26 +1,14 @@
 <template>
   <div class="p-6">
     <h1 class="text-3xl mb-8">Overview</h1>
-    <UserEnclaves />
-    <OrganizationCostTrends />
+    <UserEnclaves class="mb-4"/>
+
+    <div v-if="loading" class="text-gray-400">Loading...</div>
+    <OrganizationCostTrends v-else-if="overview?.costs.timeSeries" :time-series="overview.costs.timeSeries.slice(-14)"/>
+
     <UButton class="mt-4 mr-2" @click="() => logout()">Logout</UButton>
     <UButton class="mt-4" @click="clear">Clear Stores</UButton>
   </div>
-  
-  <!-- <button class="mt-20 border-1 p-1 rounded-md hover:bg-emerald-600 hover:cursor-pointer" @click="() => logout()">Logout</button> -->
-  <!-- <div class="m-8">
-    <div class="border-2 p-4 mb-4 rounded-md">Hello!</div>
-    <button
-      class="bg-primary text-black px-4 py-2 rounded-lg"
-      :onclick="() => {count += 1;}"
-    >
-      Click
-    </button>
-    <div>Count: {{ count }}</div>
-
-    
-    <button class="mt-20 border-1 p-1 rounded-md hover:bg-emerald-600 hover:cursor-pointer" @click="() => logout()">Logout</button>
-  </div> -->
 </template>
 
 <script setup lang="ts">
@@ -28,15 +16,70 @@ const { logout } = useOidcAuth()
 const userGroupStore = useUserGroupStore()
 const enclaveStore = useEnclaveStore()
 
+interface OverviewResponse {
+  costs: Costs;
+}
+
+interface Costs {
+  timeSeries: TimeSeries[];
+  topAccounts: TopAccount[];
+  topServices: TopService[];
+  budgetAnalysis: BudgetAnalysis;
+}
+
+interface TimeSeries {
+  date: string;
+  cost: number;
+}
+
+interface TopAccount {
+  accountId: string;
+  name: string;
+  cost: number;
+  trend: string;
+  percentOfTotal: number;
+}
+
+interface TopService {
+  service: string;
+  cost: number;
+  accountsUsing: number;
+  trend: string;
+}
+
+interface BudgetAnalysis {
+  analysisPeriod: string;
+  totalBudget: number;
+  actualSpend: number;
+  projectedSpend: number;
+  budgetUtilization: number;
+  projectedUtilization: number;
+  riskLevel: string;
+  periodStatus: string;
+  daysElapsed: number;
+  daysRemaining: number;
+}
+
+const overview = ref<OverviewResponse | null>(null)
+const loading = ref(true)
+
 const clear = () => {
   enclaveStore.clear()
   userGroupStore.clear()
 }
 
-onMounted(() => {
+onMounted(async () => {
+  try {
+    const response = await fetch('/api/organization/overview')
+    const json = await response.json();
+    overview.value = json.data
+  } catch (err) {
+    console.error('Failed to fetch overview:', err)
+  } finally {
+    loading.value = false
+  }
+
   console.log('my enclaves', userGroupStore.myEnclaves)
 })
-
-// const count = ref(0)
 
 </script>
