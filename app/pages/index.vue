@@ -1,7 +1,8 @@
 <template>
-  <div>
+  <div class="p-6">
     <h1 class="text-3xl mb-8">Overview</h1>
     <UserEnclaves />
+    <OrganizationCostTrends />
     <UButton class="mt-4 mr-2" @click="() => logout()">Logout</UButton>
     <UButton class="mt-4" @click="clear">Clear Stores</UButton>
   </div>
