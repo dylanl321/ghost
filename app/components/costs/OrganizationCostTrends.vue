@@ -1,9 +1,37 @@
 <template>
   <UCard>
     <template #header>
+      <div class="flex justify-between">
       <div class="text-lg font-semibold">Organization Cost Trends</div>
+      <UBadge color="gray" variant="soft" size="sm">
+        {{ dateRangeLabel }}
+      </UBadge>
+      </div>
     </template>
+
     <VChart :option="chartOptions" class="h-80" autoresize />
+
+    <!-- Summary metrics -->
+    <div class="border-t border-gray-700 mt-4 pt-4 flex">
+      <div class="w-1/3 text-left">
+        <div class="text-gray-400 text-sm">Total Cost</div>
+        <div class="text-white text-lg font-semibold">
+          ${{ totalCost.toLocaleString(undefined, { maximumFractionDigits: 2 }) }}
+        </div>
+      </div>
+      <div class="w-1/3 text-left">
+        <div class="text-gray-400 text-sm">Average Daily</div>
+        <div class="text-white text-lg font-semibold">
+          ${{ avgCost.toLocaleString(undefined, { maximumFractionDigits: 2 }) }}
+        </div>
+      </div>
+      <div class="w-1/3 text-left">
+        <div class="text-gray-400 text-sm">Peak Cost</div>
+        <div class="text-white text-lg font-semibold">
+          ${{ peakCost.toLocaleString(undefined, { maximumFractionDigits: 2 }) }}
+        </div>
+      </div>
+    </div>
   </UCard>
 </template>
 
@@ -34,6 +62,22 @@ interface TimePoint {
 const props = defineProps<{
   timeSeries: TimePoint[]
 }>()
+
+const dateRangeLabel = computed(() => {
+  if (!props.timeSeries?.length) return 'NA'
+  const start = new Date(props.timeSeries[0]!.date)
+  const end = new Date(props.timeSeries[props.timeSeries.length - 1]!.date)
+  const fmt = (d: Date) =>
+    `${d.getMonth() + 1}/${d.getDate()}`
+  return `${fmt(start)} - ${fmt(end)}`
+})
+
+const costs = computed(() => props.timeSeries.map(d => d.cost))
+
+// Summary metrics
+const totalCost = computed(() => costs.value.reduce((sum, c) => sum + c, 0))
+const avgCost = computed(() => costs.value.length ? totalCost.value / costs.value.length : 0)
+const peakCost = computed(() => Math.max(...costs.value, 0))
 
 // Create weekend mark areas
 function getWeekendMarkAreas(data: TimePoint[]) {
@@ -93,7 +137,7 @@ const chartOptions = computed(() => {
       },
       splitLine: { lineStyle: { color: '#4b5563' } }
     },
-    grid: { left: '8%', right: '8%', bottom: '10%', top: '5%' },
+    grid: { left: '2%', right: '2%', bottom: '10%', top: '5%' },
     series: [
       {
         name: 'Cost',
