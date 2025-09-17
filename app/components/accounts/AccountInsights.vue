@@ -4,31 +4,33 @@
       <div class="text-lg font-semibold">Top Accounts</div>
     </template>
 
-    <div class="space-y-4">
-      <div v-for="(acct, idx) in sortedAccounts" :key="acct.accountId" class="p-4 bg-gray-900 rounded-xl">
-        <!-- Rank -->
-        <div class="text-sm text-gray-400 mb-1">#{{ idx + 1 }}</div>
+    <div>
+      <NuxtLink v-for="(acct, idx) in sortedAccounts" :key="acct.accountId" :to="`/account/${acct.accountId}`"
+        class="block p-4 bg-gray-900 border-t border-gray-800 hover:bg-gray-700 transition-colors duration-200">
+        <div class="flex items-center justify-between">
+          <div class="flex flex-col">
+            <div class="flex gap-3 items-center">
+              <div class="text-sm text-gray-400">#{{ idx + 1 }}</div>
+              <div class="text-white text-base font-medium truncate">{{ acct.name }}</div>
+            </div>
 
-        <!-- Project name + cost -->
-        <div class="flex items-center justify-between mb-2">
-          <div class="text-white text-base font-medium truncate">{{ acct.name }}</div>
-          <UBadge color="green" variant="solid" class="text-sm">
-            ${{ formatCost(acct.cost) }}
-          </UBadge>
+            <div class="text-xs text-gray-400 mb-2">{{ acct.accountId }}</div>
+          </div>
+
+          <div class="flex gap-1 items-center">
+            <UBadge color="green" variant="solid" size="sm">
+              ${{ formatCost(acct.cost) }}
+            </UBadge>
+
+            <UIcon name="i-heroicons-chevron-right" />
+          </div>
         </div>
-
-        <!-- Account ID -->
-        <div class="text-xs text-gray-400 mb-2">{{ acct.accountId }}</div>
 
         <!-- Progress bar -->
         <div class="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
-          <div
-            class="h-full bg-green-500"
-            :style="{ width: acct.percentOfTotal.toFixed(2) + '%' }"
-          />
+          <div class="h-full bg-green-500" :style="{ width: acct.percentOfTotal.toFixed(2) + '%' }"/>
         </div>
-        <div class="text-xs text-gray-400 mt-1">{{ acct.percentOfTotal.toFixed(1) }}%</div>
-      </div>
+      </NuxtLink>
     </div>
   </UCard>
 </template>
