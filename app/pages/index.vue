@@ -4,7 +4,20 @@
     <UserEnclaves class="mb-4"/>
 
     <div v-if="loading" class="text-gray-400">Loading...</div>
-    <OrganizationCostTrends v-else-if="overview?.costs.timeSeries" :time-series="overview.costs.timeSeries.slice(-14)"/>
+
+    <div v-else class="grid grid-cols-3 gap-4">
+      <OrganizationCostTrends
+        v-if="overview?.costs.timeSeries"
+        :time-series="overview.costs.timeSeries.slice(-14)"
+        class="mb-6 col-span-2"
+      />
+
+      <AccountInsights
+        v-if="overview?.costs.topAccounts"
+        :top-accounts="overview.costs.topAccounts"
+        class="mb-6 col-span-1"
+      />
+    </div>
 
     <UButton class="mt-4 mr-2" @click="() => logout()">Logout</UButton>
     <UButton class="mt-4" @click="clear">Clear Stores</UButton>
@@ -19,19 +32,16 @@ const enclaveStore = useEnclaveStore()
 interface OverviewResponse {
   costs: Costs;
 }
-
 interface Costs {
   timeSeries: TimeSeries[];
   topAccounts: TopAccount[];
   topServices: TopService[];
   budgetAnalysis: BudgetAnalysis;
 }
-
 interface TimeSeries {
   date: string;
   cost: number;
 }
-
 interface TopAccount {
   accountId: string;
   name: string;
@@ -39,14 +49,12 @@ interface TopAccount {
   trend: string;
   percentOfTotal: number;
 }
-
 interface TopService {
   service: string;
   cost: number;
   accountsUsing: number;
   trend: string;
 }
-
 interface BudgetAnalysis {
   analysisPeriod: string;
   totalBudget: number;
