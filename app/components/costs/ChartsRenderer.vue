@@ -166,7 +166,12 @@ const isFullWidth = (chart: ChartDefinition) => {
         'historicalMonthlyTrend',
         'historicalComparison',
         'yearOverYearComparison',
-        'last24MonthsTrend'
+        'last24MonthsTrend',
+        'organizationForecastComparison', // Daily spend + forecast
+        'forecastProjectionLine',
+        'cumulativeBurnUp',
+        'monthlyTrendWithForecast',
+        'accountForecastComparison'
     ].includes(chart.id)
 }
 
@@ -182,7 +187,8 @@ const isMediumWidth = (chart: ChartDefinition) => {
         'costOptimizationOpportunities',
         'monthOverMonthComparison',
         'billableVsProforma',
-        'budgetSCurve'
+        'budgetSCurve',
+        'scenarioOverlay'
     ].includes(chart.id)
 }
 
@@ -1784,6 +1790,131 @@ const getChartOptions = (chart: ChartDefinition) => {
             }
         }
 
+        // Organization Forecast Comparison - Daily Spend + Forecast
+        if (chart.id === 'organizationForecastComparison' && data?.series && data?.dates) {
+            return {
+                ...baseOptions,
+                tooltip: {
+                    ...baseOptions.tooltip,
+                    trigger: 'axis',
+                    formatter: (params: any) => {
+                        const dateIndex = params[0].dataIndex
+                        const date = data.dates[dateIndex]
+                        let result = `${date}<br/>`
+                        
+                        params.forEach((param: any) => {
+                            if (param.value !== 0 && param.value !== null) {
+                                result += `${param.seriesName}: ${formatCurrency(param.value)}<br/>`
+                            }
+                        })
+                        
+                        // Add metadata if we're at current day
+                        if (data.metadata && dateIndex === data.metadata.currentDay - 1) {
+                            result += `<br/><b>Today (Day ${data.metadata.currentDay})</b><br/>`
+                            result += `Avg Daily Actual: ${formatCurrency(data.metadata.avgDailyActual)}<br/>`
+                            result += `Avg Daily Forecast: ${formatCurrency(data.metadata.avgDailyForecast)}<br/>`
+                            result += `Progress: ${data.metadata.percentThroughMonth.toFixed(1)}% of month`
+                        }
+                        
+                        return result
+                    }
+                },
+                legend: {
+                    data: ['Actual Daily Spend', 'Forecast Daily Spend', 'Cumulative Actual', 'Cumulative Forecast', 'Budget'],
+                    textStyle: { color: '#9ca3af' },
+                    top: 10
+                },
+                xAxis: {
+                    type: 'category',
+                    data: data.dates,
+                    axisLine: { lineStyle: { color: '#374151' } },
+                    axisLabel: { 
+                        color: '#6b7280',
+                        interval: 'auto',
+                        rotate: 45
+                    },
+                    splitLine: {
+                        show: true,
+                        interval: (index: number) => {
+                            // Show line at current day
+                            return data.metadata && index === data.metadata.currentDay - 1
+                        },
+                        lineStyle: {
+                            color: '#fbbf24',
+                            type: 'dashed',
+                            width: 2
+                        }
+                    }
+                },
+                yAxis: [
+                    {
+                        type: 'value',
+                        position: 'left',
+                        axisLine: { lineStyle: { color: '#374151' } },
+                        axisLabel: {
+                            color: '#6b7280',
+                            formatter: (value: number) => formatCurrency(value)
+                        },
+                        splitLine: { lineStyle: { color: '#1f2937' } }
+                    }
+                ],
+                series: [
+                    {
+                        name: 'Actual Daily Spend',
+                        type: 'bar',
+                        data: data.series[0].data,
+                        itemStyle: { color: '#3b82f6' },
+                        barWidth: '40%'
+                    },
+                    {
+                        name: 'Forecast Daily Spend',
+                        type: 'bar',
+                        data: data.series[1].data,
+                        itemStyle: { 
+                            color: '#10b981',
+                            opacity: 0.7
+                        },
+                        barWidth: '40%'
+                    },
+                    {
+                        name: 'Cumulative Actual',
+                        type: 'line',
+                        data: data.series[2].data,
+                        smooth: true,
+                        lineStyle: { 
+                            color: '#3b82f6',
+                            width: 3
+                        },
+                        symbol: 'circle',
+                        symbolSize: 4
+                    },
+                    {
+                        name: 'Cumulative Forecast',
+                        type: 'line',
+                        data: data.series[3].data,
+                        smooth: true,
+                        lineStyle: { 
+                            color: '#10b981',
+                            width: 2,
+                            type: 'dashed'
+                        },
+                        symbol: 'none'
+                    },
+                    {
+                        name: 'Budget',
+                        type: 'line',
+                        data: data.series[4].data,
+                        lineStyle: { 
+                            color: '#f59e0b',
+                            width: 2,
+                            type: 'dotted'
+                        },
+                        symbol: 'none'
+                    }
+                ]
+            }
+        }
+
         // Monthly trend with forecast charts
         if (chart.id === 'monthlyTrendWithForecast' && Array.isArray(data)) {
             return {
@@ -2110,7 +2241,11 @@ const getChartOptions = (chart: ChartDefinition) => {
                     }
                 },
                 legend: {
-                    data: ['Actual Spend', 'Budget Envelope', 'Forecast Projection'],
+                    data: [
+                        'Actual Spend',
+                        ...(data.budgetEnvelope ? ['Budget Envelope'] : []),
+                        ...(data.forecastProjection ? ['Forecast Projection'] : [])
+                    ],
                     textStyle: { color: '#9ca3af' }
                 },
                 xAxis: {
@@ -2235,36 +2370,11 @@ const getChartOptions = (chart: ChartDefinition) => {
 
         // Forecast with Confidence Bands
         if (chart.id === 'forecastConfidenceBands' && data?.dates && data?.forecastLine) {
-            return {
-                ...baseOptions,
-                tooltip: {
-                    ...baseOptions.tooltip,
-                    trigger: 'axis',
-                    formatter: (params: any) => {
-                        const date = params[0].name
-                        let result = `${date}<br/>`
-                        result += `Forecast: ${formatCurrency(params[0].value)}<br/>`
-                        if (params[1]) result += `Upper Bound (${data.confidenceLevel}): ${formatCurrency(params[1].value)}<br/>`
-                        if (params[2]) result += `Lower Bound (${data.confidenceLevel}): ${formatCurrency(params[2].value)}`
-                        return result
-                    }
-                },
-                xAxis: {
-                    type: 'category',
-                    data: data.dates,
-                    axisLine: { lineStyle: { color: '#374151' } },
-                    axisLabel: { color: '#6b7280' }
-                },
-                yAxis: {
-                    type: 'value',
-                    axisLine: { lineStyle: { color: '#374151' } },
-                    axisLabel: {
-                        color: '#6b7280',
-                        formatter: (value: number) => formatCurrency(value)
-                    },
-                    splitLine: { lineStyle: { color: '#1f2937' } }
-                },
-                series: [
+            const series: any[] = []
+            
+            // Only add confidence bands if we have real data from API
+            if (data.upperConfidence && data.lowerConfidence) {
+                series.push(
                     {
                         name: 'Upper Confidence',
                         type: 'line',
@@ -2283,15 +2393,61 @@ const getChartOptions = (chart: ChartDefinition) => {
                         },
                         stack: 'confidence',
                         symbol: 'none'
-                    },
-                    {
-                        name: 'Forecast',
-                        type: 'line',
-                        data: data.forecastLine,
-                        lineStyle: { color: '#10b981', width: 3 },
-                        symbol: 'circle'
                     }
-                ]
+                )
+            }
+            
+            // Always add the forecast line
+            series.push({
+                name: 'Forecast',
+                type: 'line',
+                data: data.forecastLine,
+                lineStyle: { color: '#10b981', width: 3 },
+                symbol: 'circle'
+            })
+            
+            return {
+                ...baseOptions,
+                tooltip: {
+                    ...baseOptions.tooltip,
+                    trigger: 'axis',
+                    formatter: (params: any) => {
+                        const date = params[0].name
+                        let result = `${date}<br/>`
+                        
+                        // Find the forecast value
+                        const forecastParam = params.find((p: any) => p.seriesName === 'Forecast')
+                        if (forecastParam) {
+                            result += `Forecast: ${formatCurrency(forecastParam.value)}<br/>`
+                        }
+                        
+                        // Only show confidence bands if they exist
+                        if (data.confidenceLevel) {
+                            const upperParam = params.find((p: any) => p.seriesName === 'Upper Confidence')
+                            const lowerParam = params.find((p: any) => p.seriesName === 'Lower Confidence')
+                            if (upperParam) result += `Upper Bound: ${formatCurrency(upperParam.value)}<br/>`
+                            if (lowerParam) result += `Lower Bound: ${formatCurrency(lowerParam.value)}`
+                        }
+                        
+                        return result
+                    }
+                },
+                xAxis: {
+                    type: 'category',
+                    data: data.dates,
+                    axisLine: { lineStyle: { color: '#374151' } },
+                    axisLabel: { color: '#6b7280' }
+                },
+                yAxis: {
+                    type: 'value',
+                    axisLine: { lineStyle: { color: '#374151' } },
+                    axisLabel: {
+                        color: '#6b7280',
+                        formatter: (value: number) => formatCurrency(value)
+                    },
+                    splitLine: { lineStyle: { color: '#1f2937' } }
+                },
+                series
             }
         }
 

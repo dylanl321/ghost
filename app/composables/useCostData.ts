@@ -66,10 +66,22 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
 
   const buildForecastUrl = () => {
     const params = new URLSearchParams()
-    // Get multiple forecast periods for comprehensive analysis
-    params.set('period', 'next-month')
+    // Get forecast for remaining days of current month with daily granularity
+    params.set('period', 'current-month-remainder')
+    params.set('granularity', 'DAILY')
     params.set('proforma', String(query.value.mode === 'proforma'))
-    return `/api/costs/forecast?${params.toString()}`
+    // Add account filtering
+    const accounts = query.value.accounts
+    console.log('buildForecastUrl called with accounts:', accounts, 'length:', accounts.length)
+    if (accounts.length > 0) {
+      params.set('accountIds', accounts.join(','))
+      console.log('Forecast: Adding accountIds to URL:', accounts)
+    } else {
+      console.log('Forecast: No account filtering - org-wide forecast')
+    }
+    const url = `/api/costs/forecast?${params.toString()}`
+    console.log('Final forecast URL:', url)
+    return url
   }
 
   const buildExtendedForecastUrl = () => {
@@ -78,6 +90,11 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     params.set('period', '3-months')
     params.set('granularity', 'MONTHLY')
     params.set('proforma', String(query.value.mode === 'proforma'))
+    // Add account filtering - MUST match regular forecast
+    if (query.value.accounts.length > 0) {
+      params.set('accountIds', query.value.accounts.join(','))
+      console.log('ExtendedForecast: Adding accountIds to URL:', query.value.accounts)
+    }
     return `/api/costs/forecast?${params.toString()}`
   }
 
@@ -89,9 +106,11 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     params.set('groupBy', 'LINKED_ACCOUNT')
     params.set('granularity', 'MONTHLY')
     params.set('includeBudget', 'true')
-    // IMPORTANT: Don't filter by accountIds for analysis - we need all account costs for the sidebar
-    // The charts will filter the data as needed based on selected accounts
-    // if (query.value.accounts.length > 0) params.set('accountIds', query.value.accounts.join(','))
+    // IMPORTANT: Don't filter analysis API - we need all account budget data
+    // The chart will filter as needed when summing budgets
+    // if (query.value.accounts.length > 0) {
+    //   params.set('accountIds', query.value.accounts.join(','))
+    // }
     return `/api/costs/analysis?${params.toString()}`
   }
 
@@ -111,14 +130,28 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
   const fetchCosts = async () => {
     isFetching.value = true
     fetchError.value = null
+    
+    // Log the URLs being called
+    const urls = {
+      summary: buildSummaryUrl(),
+      historical: buildHistoricalUrl(),
+      forecast: buildForecastUrl(),
+      extendedForecast: buildExtendedForecastUrl(),
+      analysis: buildAnalysisUrl(),
+      services: buildServicesSummaryUrl()
+    }
+    console.log('Fetching cost data with URLs:', urls)
+    console.log('Current selected accounts:', query.value.accounts)
+    console.log('Forecast URL specifically:', urls.forecast)
+    
     try {
       const [summaryRes, historicalRes, forecastRes, extendedForecastRes, analysisRes, servicesRes] = await Promise.all([
-        $fetch(buildSummaryUrl()),
-        $fetch(buildHistoricalUrl()),
-        $fetch(buildForecastUrl()),
-        $fetch(buildExtendedForecastUrl()),
-        $fetch(buildAnalysisUrl()),
-        $fetch(buildServicesSummaryUrl())
+        $fetch(urls.summary),
+        $fetch(urls.historical),
+        $fetch(urls.forecast),
+        $fetch(urls.extendedForecast),
+        $fetch(urls.analysis),
+        $fetch(urls.services)
       ])
 
       dataset.value = {
@@ -133,20 +166,31 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
         services: servicesRes as any
       }
       
+      // Log the forecast response to debug
+      console.log('Forecast API Response:', {
+        note: (forecastRes as any)?.data?.note || 'No note',
+        total: (forecastRes as any)?.data?.forecast?.total?.Amount || 'No total',
+        periodsCount: (forecastRes as any)?.data?.forecast?.forecastResultsByTime?.length || 0,
+        selectedAccounts: query.value.accounts
+      })
+      
       // Debug logging
       console.log('Cost data fetched:', {
+        selectedAccounts: query.value.accounts,
         summaryHasData: !!(summaryRes as any)?.data,
         summaryAccounts: (summaryRes as any)?.data?.accounts?.length || 0,
         analysisHasData: !!(analysisRes as any)?.data,
         analysisByAccount: (analysisRes as any)?.data?.budgetAnalysis?.byAccount?.length || 0,
         forecastHasData: !!(forecastRes as any)?.data,
         forecastTotal: (forecastRes as any)?.data?.forecast?.total?.Amount || 'N/A',
+        forecastNote: (forecastRes as any)?.data?.note || 'No note',
+        forecastPeriod: (forecastRes as any)?.data?.period || 'No period',
         extendedForecastHasData: !!(extendedForecastRes as any)?.data,
         extendedForecastPeriods: (extendedForecastRes as any)?.data?.forecast?.forecastResultsByTime?.length || 0,
         extendedForecastTotal: (extendedForecastRes as any)?.data?.forecast?.total?.Amount || 'N/A'
       })
       
-      console.log('Extended forecast response structure:', extendedForecastRes)
+      // URLs are already logged above
     } catch (e: any) {
       fetchError.value = e?.message || 'Failed to fetch cost data'
     } finally {
@@ -173,9 +217,9 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
 
   // Watch for changes to selectedAccounts with debouncing
   watch(selectedAccounts, () => {
-    console.log('Accounts selection changed, debouncing fetch...')
+    console.log('Accounts selection changed, debouncing fetch...', selectedAccounts.value)
     debouncedFetch()
-  })
+  }, { deep: true })
 
   // Watch for changes to timeframe and mode without debouncing (immediate)
   watch([selectedTimeframe, mode], () => {

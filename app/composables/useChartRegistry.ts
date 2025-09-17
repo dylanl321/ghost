@@ -54,7 +54,7 @@ export const useChartRegistry = (args: {
           resultsByTime = actualData.resultsByTime
         }
 
-        console.log('TotalSpendTrend: found', resultsByTime.length, 'time periods')
+        // console.log('TotalSpendTrend: found', resultsByTime.length, 'time periods')
 
         const selectedAccounts = dataset.accounts || []
         const filterBySelection = selectedAccounts.length > 0
@@ -106,7 +106,7 @@ export const useChartRegistry = (args: {
               // Detect master accounts: unusually high cost on 1st of month
               if (isFirstOfMonth && amount > 100000) { // >$100k on 1st suggests master account
                 masterAccountIds.add(accountId)
-                console.log(`Detected master account: ${accountId} with $${amount.toFixed(0)} on ${dateStr}`)
+                // console.log(`Detected master account: ${accountId} with $${amount.toFixed(0)} on ${dateStr}`)
               }
 
               // Track master account costs
@@ -138,10 +138,10 @@ export const useChartRegistry = (args: {
           .sort((a, b) => b.sum - a.sum)
           .slice(0, 5)
 
-        console.log('TotalSpendTrend: processed data with', dates.length, 'dates,',
-          weekendData.filter(Boolean).length, 'weekends,',
-          firstOfMonthData.filter(Boolean).length, 'first-of-month entries,',
-          masterAccountIds.size, 'master accounts detected')
+        // console.log('TotalSpendTrend: processed data with', dates.length, 'dates,',
+        //  weekendData.filter(Boolean).length, 'weekends,',
+        //  firstOfMonthData.filter(Boolean).length, 'first-of-month entries,',
+        //  masterAccountIds.size, 'master accounts detected')
 
         return {
           dates,
@@ -168,7 +168,7 @@ export const useChartRegistry = (args: {
         const byAccount = actualData?.budgetAnalysis?.byAccount || []
         const selectedAccounts = dataset.accounts || []
 
-        console.log('BudgetUtilization: filtering', byAccount.length, 'accounts, selected:', selectedAccounts)
+        // console.log('BudgetUtilization: filtering', byAccount.length, 'accounts, selected:', selectedAccounts)
 
         // Filter by selected accounts if any are selected
         let filteredAccounts = byAccount.filter((a: any) => a.budgetedCost > 0)
@@ -177,7 +177,7 @@ export const useChartRegistry = (args: {
           filteredAccounts = filteredAccounts.filter((a: any) =>
             selectedAccounts.includes(a.accountId)
           )
-          console.log('BudgetUtilization: after filtering by selection:', filteredAccounts.length, 'accounts')
+          // console.log('BudgetUtilization: after filtering by selection:', filteredAccounts.length, 'accounts')
         }
 
         // Get accounts and calculate utilization percentage
@@ -204,7 +204,7 @@ export const useChartRegistry = (args: {
       extractor: (dataset) => {
         const services = dataset.services as any
         if (!services) {
-          console.log('ServiceBreakdown: no services data in dataset')
+          // console.log('ServiceBreakdown: no services data in dataset')
           return []
         }
 
@@ -212,8 +212,8 @@ export const useChartRegistry = (args: {
         const selectedAccounts = dataset.accounts || []
         const isProformaMode = dataset.mode === 'proforma'
 
-        console.log('ServiceBreakdown: analyzing services, selected accounts:', selectedAccounts, 'mode:', dataset.mode)
-        console.log('ServiceBreakdown: services data structure:', actualData ? Object.keys(actualData) : 'no data')
+        // console.log('ServiceBreakdown: analyzing services, selected accounts:', selectedAccounts, 'mode:', dataset.mode)
+        // console.log('ServiceBreakdown: services data structure:', actualData ? Object.keys(actualData) : 'no data')
 
         // Extract service costs from the dedicated services API call
         const serviceMap = new Map<string, number>()
@@ -232,14 +232,14 @@ export const useChartRegistry = (args: {
           resultsByTime = actualData.rawData.resultsByTime
         }
         
-        console.log('ServiceBreakdown: found', resultsByTime.length, 'time periods')
+        // console.log('ServiceBreakdown: found', resultsByTime.length, 'time periods')
 
         // Parse service data from resultsByTime (grouped by SERVICE)
         if (resultsByTime.length > 0) {
-          console.log('ServiceBreakdown: Processing', resultsByTime.length, 'time periods')
+          // console.log('ServiceBreakdown: Processing', resultsByTime.length, 'time periods')
           resultsByTime.forEach((bucket: any) => {
             if (bucket.Groups) {
-              console.log('ServiceBreakdown: Processing bucket with', bucket.Groups.length, 'service groups')
+              // console.log('ServiceBreakdown: Processing bucket with', bucket.Groups.length, 'service groups')
               bucket.Groups.forEach((g: any) => {
                 const serviceName = g.Keys?.[0] || 'Unknown Service'
                 const amount = parseFloat(g.Metrics?.UnblendedCost?.Amount || '0')
@@ -252,9 +252,9 @@ export const useChartRegistry = (args: {
           })
         }
 
-        console.log('ServiceBreakdown: found', serviceMap.size, 'services')
+/*         // console.log('ServiceBreakdown: found', serviceMap.size, 'services')
         if (serviceMap.size > 0) {
-          console.log('ServiceBreakdown: Top services by cost:', 
+          // console.log('ServiceBreakdown: Top services by cost:', 
             Array.from(serviceMap.entries())
               .sort(([,a], [,b]) => b - a)
               .slice(0, 5)
@@ -269,7 +269,7 @@ export const useChartRegistry = (args: {
             firstBucket: resultsByTime[0] || null,
             sampleGroups: resultsByTime[0]?.Groups?.length || 0
           })
-        }
+        } */
 
         // Convert to array and sort by value
         const result = Array.from(serviceMap.entries())
@@ -281,7 +281,7 @@ export const useChartRegistry = (args: {
           .sort((a, b) => b.value - a.value)
           .slice(0, 8) // Top 8 services for better pie chart readability
 
-        console.log('ServiceBreakdown: returning', result.length, 'services')
+        // console.log('ServiceBreakdown: returning', result.length, 'services')
 
         return result
       }
@@ -391,7 +391,7 @@ export const useChartRegistry = (args: {
         const byAccount = actualData?.budgetAnalysis?.byAccount || []
         const selectedAccounts = dataset.accounts || []
 
-        console.log('TopSpenders: filtering', byAccount.length, 'accounts, selected:', selectedAccounts)
+        // console.log('TopSpenders: filtering', byAccount.length, 'accounts, selected:', selectedAccounts)
 
         // Filter by selected accounts if any are selected
         let filteredAccounts = byAccount
@@ -400,7 +400,7 @@ export const useChartRegistry = (args: {
           filteredAccounts = filteredAccounts.filter((a: any) =>
             selectedAccounts.includes(a.accountId)
           )
-          console.log('TopSpenders: after filtering by selection:', filteredAccounts.length, 'accounts')
+          // console.log('TopSpenders: after filtering by selection:', filteredAccounts.length, 'accounts')
         }
 
         return filteredAccounts
@@ -549,7 +549,7 @@ export const useChartRegistry = (args: {
           lobData.budget += budget
         })
 
-        console.log('LOB Comparison: found', lobMap.size, 'LOBs')
+        // console.log('LOB Comparison: found', lobMap.size, 'LOBs')
 
         return Array.from(lobMap.entries())
           .map(([name, data]) => ({
@@ -1672,34 +1672,9 @@ export const useChartRegistry = (args: {
       }
     },
 
-    // Forecast Accuracy Analysis (Scatter Plot)
-    forecastAccuracyAnalysis: {
-      id: 'forecastAccuracyAnalysis',
-      title: 'Forecast Accuracy Analysis',
-      description: 'Compare previous forecasts to actual spending',
-      type: 'scatter',
-      extractor: (dataset) => {
-        // This would require historical forecast data vs actual data
-        // For now, return placeholder that can be enhanced with proper data
-        const summary = dataset.summary as any
-        if (!summary) return []
-
-        const summaryData = summary?.data || summary
-        const accounts = summaryData?.accounts || []
-
-        return accounts
-          .filter((account: any) => account.totalCost > 500)
-          .map((account: any) => ({
-            accountName: account.accountName || account.accountId,
-            actualCost: account.totalCost,
-            // Mock forecast accuracy data - this would come from historical forecast tracking
-            previousForecast: account.totalCost * (0.85 + Math.random() * 0.3), // Mock ±15% variance
-            accuracy: 85 + Math.random() * 30, // Mock accuracy percentage
-            variance: Math.random() * 20 - 10 // Mock ±10% variance
-          }))
-          .slice(0, 20)
-      }
-    },
+    // REMOVED: forecastAccuracyAnalysis - Was using fake/mock data
+    // This chart requires historical forecast tracking data that we don't have
+    // DO NOT USE FAKE DATA
 
     // Account Forecast Comparison (Horizontal Bar Chart)
     accountForecastComparison: {
@@ -1852,14 +1827,10 @@ export const useChartRegistry = (args: {
           dates.push(date)
           values.push(meanValue)
           
-          // Add confidence intervals if available
-          if (prediction) {
-            upperBound.push(parseFloat(period?.PredictionIntervalUpperBound || meanValue.toString()))
-            lowerBound.push(parseFloat(period?.PredictionIntervalLowerBound || meanValue.toString()))
-          } else {
-            // Mock confidence interval ±20%
-            upperBound.push(meanValue * 1.2)
-            lowerBound.push(meanValue * 0.8)
+          // Only add confidence intervals if available from API
+          if (period?.PredictionIntervalUpperBound && period?.PredictionIntervalLowerBound) {
+            upperBound.push(parseFloat(period.PredictionIntervalUpperBound))
+            lowerBound.push(parseFloat(period.PredictionIntervalLowerBound))
           }
         })
 
@@ -1873,10 +1844,10 @@ export const useChartRegistry = (args: {
             values,
             total: values.reduce((sum, val) => sum + val, 0)
           }],
-          confidenceInterval: {
+          confidenceInterval: upperBound.length > 0 ? {
             upper: upperBound,
             lower: lowerBound
-          }
+          } : null
         }
       }
     },
@@ -1903,7 +1874,6 @@ export const useChartRegistry = (args: {
           return null
         }
 
-        const forecastData = forecast?.data || forecast
         const summaryData = summary?.data || summary
         const analysisData = analysis?.data || analysis
         
@@ -1949,34 +1919,54 @@ export const useChartRegistry = (args: {
           actualValues.push(cumulative)
         })
 
-        // Get forecast total
-        const forecastTotal = forecastData?.forecast?.total?.Amount ? parseFloat(forecastData.forecast.total.Amount) : 0
-        
-        // Create forecast projection for future periods
+        // Create forecast projection for remaining days in CURRENT month
+        // Note: The forecast API returns NEXT month's forecast, not current month
+        // So we use the current burn rate to project the rest of this month
         const currentDate = new Date()
         const forecastDates: string[] = []
         const forecastValues: number[] = []
         
-        // Assuming we're projecting for the next month
-        const periodsToForecast = 30 // Daily projection for next 30 days
-        const remainingForecast = Math.max(0, forecastTotal)
-        const dailyForecastRate = remainingForecast / periodsToForecast
+        // Get the last day of the current month
+        const lastDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+        const currentDay = currentDate.getDate()
+        const totalDaysInMonth = lastDayOfMonth.getDate()
+        const remainingDaysInMonth = totalDaysInMonth - currentDay
+        
+        // For the current month, we need to estimate based on burn rate, not next month's forecast
+        // Calculate average daily burn rate from actual data
+        const avgDailyBurn = actualValues.length > 0 ? cumulative / actualValues.length : 0
+        
+        console.log('ForecastProjectionLine: Current day:', currentDay, 'Total days:', totalDaysInMonth, 'Remaining:', remainingDaysInMonth)
         
         let projectedTotal = cumulative
-        for (let i = 1; i <= periodsToForecast; i++) {
+        for (let i = 1; i <= remainingDaysInMonth; i++) {
           const futureDate = new Date(currentDate)
           futureDate.setDate(futureDate.getDate() + i)
           const dateStr = futureDate.toISOString().split('T')[0]
           
-          projectedTotal += dailyForecastRate
-          forecastDates.push(dateStr)
-          forecastValues.push(projectedTotal)
+          // Use average daily burn rate for projection within current month
+          projectedTotal += avgDailyBurn
+          if (dateStr) {
+            forecastDates.push(dateStr)
+            forecastValues.push(projectedTotal)
+          }
         }
         
-        // Get budget information
+        // Get budget information - sum budgets for selected accounts
         let monthlyBudget = 0
-        if (analysisData?.summary?.totalBudget) {
+        const selectedAccounts = dataset.accounts || []
+        const filterBySelection = selectedAccounts.length > 0
+        
+        if (filterBySelection && analysisData?.budgetAnalysis?.byAccount) {
+          // Sum budgets for selected accounts only
+          monthlyBudget = analysisData.budgetAnalysis.byAccount
+            .filter((account: any) => selectedAccounts.includes(account.accountId))
+            .reduce((sum: number, account: any) => sum + (account.budgetedCost || 0), 0)
+          console.log('ForecastProjectionLine: Calculated budget for', selectedAccounts.length, 'selected accounts:', monthlyBudget)
+        } else if (analysisData?.summary?.totalBudget) {
+          // Use total budget when no accounts selected
           monthlyBudget = analysisData.summary.totalBudget
+          console.log('ForecastProjectionLine: Using org-wide budget:', monthlyBudget)
         } else if (analysisData?.budgetAnalysis?.summary?.totalBudget) {
           monthlyBudget = analysisData.budgetAnalysis.summary.totalBudget
         }
@@ -2026,7 +2016,6 @@ export const useChartRegistry = (args: {
           return []
         }
 
-        const historicalData = historical?.data || historical
         const summaryData = summary?.data || summary
         const analysisData = analysis?.data || analysis
 
@@ -2034,7 +2023,7 @@ export const useChartRegistry = (args: {
         const currentAccounts = summaryData?.accounts || []
         const budgetData = analysisData?.budgetAnalysis?.byAccount || []
         
-        console.log('CumulativeBurnUp: Found', currentAccounts.length, 'accounts,', budgetData.length, 'budget entries')
+        // console.log('CumulativeBurnUp: Found', currentAccounts.length, 'accounts,', budgetData.length, 'budget entries')
 
         const selectedAccounts = dataset.accounts || []
         const filterBySelection = selectedAccounts.length > 0
@@ -2052,7 +2041,7 @@ export const useChartRegistry = (args: {
           resultsByTime = summaryData.resultsByTime
         }
         
-        console.log('CumulativeBurnUp: Found', resultsByTime.length, 'time periods')
+        // console.log('CumulativeBurnUp: Found', resultsByTime.length, 'time periods')
         
         if (resultsByTime.length === 0) {
           console.log('CumulativeBurnUp: No time-series data available')
@@ -2085,11 +2074,13 @@ export const useChartRegistry = (args: {
             })
           })
         
-        console.log('CumulativeBurnUp: Tracking', accountMap.size, 'accounts')
+        // console.log('CumulativeBurnUp: Tracking', accountMap.size, 'accounts')
 
         // Process time periods to build cumulative data
         const dates: string[] = []
         const cumulativeByAccount = new Map<string, number>()
+        
+        console.log('CumulativeBurnUp DEBUG: Processing time periods to build cumulative data')
         
         resultsByTime.forEach((bucket: any, timeIndex: number) => {
           const dateStr = bucket?.TimePeriod?.Start || ''
@@ -2108,6 +2099,11 @@ export const useChartRegistry = (args: {
                 const accountData = accountMap.get(accountId)!
                 accountData.cumulative.push(newCumulative)
                 accountData.dates.push(dateStr)
+                
+                // Debug first few and last period
+                if (timeIndex <= 2 || timeIndex === resultsByTime.length - 1) {
+                  console.log(`  Period ${timeIndex + 1} [${dateStr}] Account ${accountData.name}: +$${amount.toLocaleString()} = $${newCumulative.toLocaleString()} cumulative`)
+                }
               }
             })
           }
@@ -2128,16 +2124,99 @@ export const useChartRegistry = (args: {
             const periods = data.dates.length
             const budgetLine = []
             
-            // Create budget progression line
-            if (data.annualBudget > 0) {
-              for (let i = 1; i <= periods; i++) {
-                // Linear budget progression (could be enhanced to S-curve)
-                const progress = i / 12 // Assuming monthly periods
-                budgetLine.push(data.annualBudget * Math.min(progress, 1))
+            // Determine the time span of the data
+            let periodsInYear = 12 // Default to 12 months
+            
+            if (periods > 0 && data.dates.length > 1) {
+              // Calculate actual time span from first to last date
+              const firstDateStr = data.dates[0]
+              const lastDateStr = data.dates[data.dates.length - 1]
+              if (firstDateStr && lastDateStr) {
+                const firstDate = new Date(firstDateStr)
+                const lastDate = new Date(lastDateStr)
+                const daysDiff = Math.ceil((lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24)) + 1
+                
+                console.log(`CumulativeBurnUp DEBUG [${data.name}]: Date Analysis`)
+                console.log(`  - First Date: ${firstDateStr}`)
+                console.log(`  - Last Date: ${lastDateStr}`)
+                console.log(`  - Days Difference: ${daysDiff}`)
+                console.log(`  - Number of Periods: ${periods}`)
+                
+                // Determine if this is daily or monthly data
+                // If we have roughly one period per day (within tolerance), it's daily data
+                const periodsPerDay = periods / daysDiff
+                
+                if (periodsPerDay > 0.8 && periodsPerDay <= 1.2 && daysDiff < 40) {
+                  // Daily data - approximately one period per day
+                  periodsInYear = 365
+                  console.log(`  - Detected: DAILY DATA (${periods} periods in ${daysDiff} days, ratio: ${periodsPerDay.toFixed(2)})`)
+                } else if (periods <= 12 && daysDiff > 20) {
+                  // Monthly data - few periods over many days
+                  periodsInYear = 12
+                  console.log(`  - Detected: MONTHLY DATA (${periods} periods over ${daysDiff} days)`)
+                } else {
+                  // Default to daily for short time spans with multiple periods
+                  if (daysDiff <= 31 && periods >= daysDiff * 0.8) {
+                    periodsInYear = 365
+                    console.log(`  - Detected: DAILY DATA (default) (${periods} periods in ${daysDiff} days)`)
+                  } else {
+                    periodsInYear = 12
+                    console.log(`  - Detected: MONTHLY DATA (default) (${periods} periods in ${daysDiff} days)`)
+                  }
+                }
               }
             }
             
+            // Create budget progression line
+            if (data.monthlyBudget > 0) {
+              // For daily data: use monthly budget spread across the days
+              // For monthly data: use annual budget spread across months
+              
+              console.log(`CumulativeBurnUp DEBUG [${data.name}]: Starting budget calculation`)
+              console.log(`  - Monthly Budget: $${data.monthlyBudget.toLocaleString()}`)
+              console.log(`  - Annual Budget: $${data.annualBudget.toLocaleString()}`)
+              console.log(`  - Periods: ${periods}`)
+              console.log(`  - Periods in Year: ${periodsInYear}`)
+              console.log(`  - Is Daily Data: ${periodsInYear === 365}`)
+              
+              for (let i = 1; i <= periods; i++) {
+                if (periodsInYear === 365) {
+                  // Daily data - show monthly budget prorated for days in current month
+                  const daysInMonth = 30 // Approximate days in a month
+                  const dayOfMonth = Math.min(i, daysInMonth) // Cap at days in month
+                  const budgetProgress = dayOfMonth / daysInMonth
+                  const budgetValue = data.monthlyBudget * budgetProgress
+                  // Show linear progression up to the monthly budget
+                  budgetLine.push(budgetValue)
+                  
+                  if (i <= 3 || i === periods) {
+                    console.log(`  Day ${i}: dayOfMonth=${dayOfMonth}, progress=${(budgetProgress * 100).toFixed(1)}%, budget=$${budgetValue.toLocaleString()}`)
+                  }
+                } else {
+                  // Monthly data - use annual budget
+                  const progress = i / 12
+                  const budgetValue = data.annualBudget * Math.min(progress, 1)
+                  budgetLine.push(budgetValue)
+                  
+                  if (i <= 3 || i === periods) {
+                    console.log(`  Month ${i}: progress=${(progress * 100).toFixed(1)}%, budget=$${budgetValue.toLocaleString()}`)
+                  }
+                }
+              }
+              
+              console.log(`  Final Budget Line Length: ${budgetLine.length}`)
+              console.log(`  Final Budget Value: $${budgetLine[budgetLine.length - 1]?.toLocaleString()}`)
+            }
+            
             const lastCumulative = data.cumulative[data.cumulative.length - 1] || 0
+            const lastBudgetValue = budgetLine[budgetLine.length - 1] || data.monthlyBudget
+            
+            console.log(`CumulativeBurnUp DEBUG [${data.name}]: Final Values`)
+            console.log(`  - Actual Cumulative Values: [${data.cumulative.slice(0, 3).map(v => '$' + v.toLocaleString()).join(', ')}...${data.cumulative.length > 3 ? ', $' + (data.cumulative[data.cumulative.length - 1]?.toLocaleString() || '0') : ''}]`)
+            console.log(`  - Budget Line Values: [${budgetLine.slice(0, 3).map(v => '$' + v.toLocaleString()).join(', ')}...${budgetLine.length > 3 ? ', $' + (budgetLine[budgetLine.length - 1]?.toLocaleString() || '0') : ''}]`)
+            console.log(`  - Last Cumulative: $${lastCumulative.toLocaleString()}`)
+            console.log(`  - Last Budget Value: $${lastBudgetValue.toLocaleString()}`)
+            console.log(`  - Is Over Budget: ${lastCumulative > lastBudgetValue}`)
             
             return {
               accountId,
@@ -2151,9 +2230,9 @@ export const useChartRegistry = (args: {
               budgetTrack: budgetLine,
               totalBudget: data.annualBudget,
               monthlyBudget: data.monthlyBudget,
-              isOverBudget: lastCumulative > (data.annualBudget * (periods / 12)),
+              isOverBudget: lastCumulative > lastBudgetValue,
               burnRate: periods > 0 ? lastCumulative / periods : 0,
-              utilizationPercent: data.annualBudget > 0 ? (lastCumulative / (data.annualBudget * (periods / 12))) * 100 : 0
+              utilizationPercent: lastBudgetValue > 0 ? (lastCumulative / lastBudgetValue) * 100 : 0
             }
           })
           .filter(item => item.actualSpend.length > 0)
@@ -2198,11 +2277,13 @@ export const useChartRegistry = (args: {
           return null
         }
 
-        const dates = []
-        const meanValues = []
-        const upperBand = []
-        const lowerBand = []
+        const dates: string[] = []
+        const meanValues: number[] = []
+        const upperBand: number[] = []
+        const lowerBand: number[] = []
 
+        let hasRealConfidenceIntervals = false
+        
         forecastByTime.forEach((period: any) => {
           const date = period?.TimePeriod?.Start || ''
           const mean = parseFloat(period?.MeanValue || '0')
@@ -2210,23 +2291,32 @@ export const useChartRegistry = (args: {
           dates.push(date)
           meanValues.push(mean)
           
-          // Use actual confidence intervals if available, otherwise calculate
+          // ONLY use actual confidence intervals from API, never make up fake ones
           if (period?.PredictionIntervalUpperBound && period?.PredictionIntervalLowerBound) {
             upperBand.push(parseFloat(period.PredictionIntervalUpperBound))
             lowerBand.push(parseFloat(period.PredictionIntervalLowerBound))
-          } else {
-            // Mock 80% confidence interval (±20%)
-            upperBand.push(mean * 1.2)
-            lowerBand.push(mean * 0.8)
+            hasRealConfidenceIntervals = true
           }
         })
 
-        return {
-          dates,
-          forecastLine: meanValues,
-          upperConfidence: upperBand,
-          lowerConfidence: lowerBand,
-          confidenceLevel: '80%'
+        // Only return confidence bands if we have real data from the API
+        if (hasRealConfidenceIntervals) {
+          return {
+            dates,
+            forecastLine: meanValues,
+            upperConfidence: upperBand,
+            lowerConfidence: lowerBand,
+            confidenceLevel: 'API-provided'
+          }
+        } else {
+          // Return just the forecast line without fake confidence bands
+          return {
+            dates,
+            forecastLine: meanValues,
+            upperConfidence: null,
+            lowerConfidence: null,
+            confidenceLevel: null
+          }
         }
       }
     },
@@ -2265,10 +2355,10 @@ export const useChartRegistry = (args: {
             // Calculate historical average
             const historicalSpends = monthlyData
               .map((month: any) => month.accountBreakdown?.find((a: any) => a.accountId === account.accountId)?.cost || 0)
-              .filter(cost => cost > 0)
+              .filter((cost: number) => cost > 0)
             
             const historicalAvg = historicalSpends.length > 0 
-              ? historicalSpends.reduce((sum, cost) => sum + cost, 0) / historicalSpends.length 
+              ? historicalSpends.reduce((sum: number, cost: number) => sum + cost, 0) / historicalSpends.length 
               : 0
 
             // Proportional forecast for this account
@@ -2284,138 +2374,296 @@ export const useChartRegistry = (args: {
               trend: accountForecast > historicalAvg ? 'increasing' : accountForecast < historicalAvg ? 'decreasing' : 'stable'
             }
           })
-          .sort((a, b) => Math.abs(b.variance) - Math.abs(a.variance))
+          .sort((a: any, b: any) => Math.abs(b.variance) - Math.abs(a.variance))
           .slice(0, 10)
       }
     },
 
-    // Total Organization Forecast vs Current (Simple Comparison)
+    // Daily Spend + Forecast for Current Month (Actual to Date + Forecast for Remaining Days)
     organizationForecastComparison: {
       id: 'organizationForecastComparison',
-      title: 'Organization Forecast vs Current',
-      description: 'Total organization current vs next month forecast',
-      type: 'bar',
+      title: 'Current Month: Actual & Forecasted Daily Spend',
+      description: 'Daily spending with actual data to date and forecast for remaining days',
+      type: 'line', // Combined bar + line chart
       extractor: (dataset) => {
         const summary = dataset.summary as any
         const forecast = dataset.forecast as any
+        const analysis = dataset.analysis as any
         
-        if (!summary || !forecast) {
-          console.log('OrgForecastComparison: Missing summary or forecast data')
-          return []
-        }
-
-        const summaryData = summary?.data || summary
-        const forecastData = forecast?.data || forecast
-        
-        // Get current month total
-        let currentTotal = 0
-        if (summaryData?.accounts) {
-          currentTotal = summaryData.accounts.reduce((sum: number, acc: any) => sum + (acc.totalCost || 0), 0)
-        }
-
-        // Get forecast total
-        let forecastTotal = 0
-        if (forecastData?.forecast?.total?.Amount) {
-          forecastTotal = parseFloat(forecastData.forecast.total.Amount)
-        }
-
-        const selectedAccounts = dataset.accounts || []
-        const filterBySelection = selectedAccounts.length > 0
-
-        // If accounts are selected, calculate proportional current and forecast
-        if (filterBySelection) {
-          const selectedCurrentTotal = summaryData?.accounts
-            ?.filter((acc: any) => selectedAccounts.includes(acc.accountId))
-            .reduce((sum: number, acc: any) => sum + (acc.totalCost || 0), 0) || 0
-          
-          const totalOrgCurrent = summaryData?.accounts?.reduce((sum: number, acc: any) => sum + (acc.totalCost || 0), 0) || 0
-          const selectedForecastTotal = totalOrgCurrent > 0 ? forecastTotal * (selectedCurrentTotal / totalOrgCurrent) : 0
-
-          currentTotal = selectedCurrentTotal
-          forecastTotal = selectedForecastTotal
-        }
-
-        console.log('OrgForecastComparison: Current total:', currentTotal, 'Forecast total:', forecastTotal)
-
-        const result = [{
-          name: 'Current Month',
-          value: currentTotal,
-          type: 'actual'
-        }, {
-          name: 'Next Month Forecast', 
-          value: forecastTotal,
-          type: 'forecast'
-        }].filter(item => item.value > 0)
-        
-        console.log('OrgForecastComparison: Returning formatted data:', result)
-        return result
-      }
-    },
-
-    // Scenario Overlay Chart (Proforma vs Master vs Combined)
-    scenarioOverlay: {
-      id: 'scenarioOverlay',
-      title: 'Forecast Scenarios Comparison',
-      description: 'Proforma vs master vs combined forecasts in one view',
-      type: 'line',
-      extractor: (dataset) => {
-        const forecast = dataset.forecast as any
-        const extendedForecast = dataset.extendedForecast as any
-        
-        if (!forecast) {
-          console.log('ScenarioOverlay: No forecast data available')
+        if (!summary) {
+          console.log('OrgForecastComparison: Missing summary data')
           return null
         }
 
-        // For now, we'll use the current forecast and create scenario variations
-        // In a full implementation, you'd fetch forecasts for different scenarios
-        const forecastData = forecast?.data || forecast
-        const baseTotal = forecastData?.forecast?.total?.Amount ? parseFloat(forecastData.forecast.total.Amount) : 0
+        const summaryData = summary?.data || summary
+        const analysisData = analysis?.data || analysis
         
-        const currentDate = new Date()
-        const dates = []
-        const masterScenario = []
-        const proformaScenario = []
-        const combinedScenario = []
-
-        // Generate 3 months of scenario data
-        for (let i = 0; i < 3; i++) {
-          const futureDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + i + 1, 1)
-          const dateStr = futureDate.toISOString().split('T')[0]
-          dates.push(dateStr)
-          
-          // Master scenario (conservative)
-          masterScenario.push(baseTotal * (0.9 + Math.random() * 0.1))
-          
-          // Proforma scenario (optimistic - includes planned resources)
-          proformaScenario.push(baseTotal * (1.1 + Math.random() * 0.1))
-          
-          // Combined scenario (realistic blend)
-          combinedScenario.push(baseTotal * (0.95 + Math.random() * 0.1))
+        // Get time-series data for daily spending
+        const isProformaMode = dataset.mode === 'proforma'
+        let resultsByTime: any[] = []
+        
+        if (isProformaMode && summaryData?.proforma?.rawData?.resultsByTime) {
+          resultsByTime = summaryData.proforma.rawData.resultsByTime
+        } else if (summaryData?.rawData?.resultsByTime) {
+          resultsByTime = summaryData.rawData.resultsByTime
+        } else if (summaryData?.resultsByTime) {
+          resultsByTime = summaryData.resultsByTime
         }
+        
+        if (resultsByTime.length === 0) {
+          return null
+        }
+
+        // Handle account filtering first
+        const selectedAccounts = dataset.accounts || []
+        const filterBySelection = selectedAccounts.length > 0
+        
+        // Build daily spend data (filtered if accounts are selected)
+        const dailySpends: number[] = []
+        const dates: string[] = []
+        const cumulative: number[] = []
+        let runningTotal = 0
+        
+        resultsByTime.forEach((bucket: any) => {
+          const dateStr = bucket?.TimePeriod?.Start || ''
+          const date = new Date(dateStr)
+          const dayLabel = `${date.getMonth() + 1}/${date.getDate()}`
+          dates.push(dayLabel)
+          
+          let dayTotal = 0
+          if (bucket.Groups) {
+            bucket.Groups.forEach((g: any) => {
+              const accountId = g.Keys?.[0] || 'unknown'
+              // Filter by selected accounts if applicable
+              if (!filterBySelection || selectedAccounts.includes(accountId)) {
+                const amount = parseFloat(g.Metrics?.UnblendedCost?.Amount || '0')
+                dayTotal += amount
+              }
+            })
+          } else if (bucket.Total?.UnblendedCost?.Amount && !filterBySelection) {
+            // Only use total if no filtering is applied (no accounts selected)
+            dayTotal = parseFloat(bucket.Total.UnblendedCost.Amount)
+          }
+          
+          dailySpends.push(dayTotal)
+          runningTotal += dayTotal
+          cumulative.push(runningTotal)
+        })
+
+        // Get forecast data from API
+        const forecastResponse = forecast?.data || forecast
+        
+        // Handle the nested structure from the API response
+        // The API returns: { data: { period: {...}, forecast: { total, forecastResultsByTime }, note: "..." } }
+        let forecastResults: any[] = []
+        let forecastTotal = 0
+        
+        // Try multiple paths to find the forecast data
+        if (forecastResponse?.forecast?.forecastResultsByTime) {
+          forecastResults = forecastResponse.forecast.forecastResultsByTime
+          if (forecastResponse.forecast.total?.Amount) {
+            forecastTotal = parseFloat(forecastResponse.forecast.total.Amount)
+          }
+        } else if (forecastResponse?.data?.forecast?.forecastResultsByTime) {
+          forecastResults = forecastResponse.data.forecast.forecastResultsByTime
+          if (forecastResponse.data.forecast.total?.Amount) {
+            forecastTotal = parseFloat(forecastResponse.data.forecast.total.Amount)
+          }
+        } else if (forecastResponse?.forecastResultsByTime) {
+          forecastResults = forecastResponse.forecastResultsByTime
+          if (forecastResponse.total?.Amount) {
+            forecastTotal = parseFloat(forecastResponse.total.Amount)
+          }
+        }
+        
+        console.log('OrgForecastComparison: Forecast data structure:', {
+          hasForecast: !!forecast,
+          selectedAccounts: selectedAccounts.length > 0 ? selectedAccounts : 'All accounts',
+          accountsCount: selectedAccounts.length,
+          responseKeys: forecastResponse ? Object.keys(forecastResponse).slice(0, 5) : [],
+          forecastResultsLength: forecastResults.length,
+          forecastTotal,
+          firstResult: forecastResults[0] ? Object.keys(forecastResults[0]) : [],
+          apiNote: forecastResponse?.note || 'No note',
+          period: forecastResponse?.period || 'No period info'
+        })
+        
+        // Build a map of forecast values by date
+        const forecastByDate = new Map<string, number>()
+        let totalForecastAmount = 0
+        
+        if (forecastResults && forecastResults.length > 0) {
+          forecastResults.forEach((period: any) => {
+            const dateStr = period?.TimePeriod?.Start || ''
+            const date = new Date(dateStr)
+            const dayLabel = `${date.getMonth() + 1}/${date.getDate()}`
+            
+            // Get the forecast value for this day - try multiple possible fields
+            let forecastValue = 0
+            
+            // AWS forecast API typically returns MeanValue
+            if (period.MeanValue !== undefined && period.MeanValue !== null) {
+              forecastValue = parseFloat(period.MeanValue)
+            } 
+            // Some responses might have Amount
+            else if (period.Amount !== undefined && period.Amount !== null) {
+              forecastValue = parseFloat(period.Amount)
+            }
+            // Try nested structures
+            else if (period.Total?.Amount !== undefined && period.Total?.Amount !== null) {
+              forecastValue = parseFloat(period.Total.Amount)
+            }
+            // Look for prediction values
+            else if (period.PredictionMean !== undefined && period.PredictionMean !== null) {
+              forecastValue = parseFloat(period.PredictionMean)
+            }
+            
+            // Debug first few forecast values
+            if (forecastByDate.size < 3) {
+              console.log(`  Forecast day ${dayLabel}:`, {
+                dateStr,
+                period,
+                forecastValue,
+                hasTimePeriod: !!period.TimePeriod,
+                hasMeanValue: period.MeanValue !== undefined
+              })
+            }
+            
+            // Account filtering is now done at the API level, so we get the correct forecast values
+            
+            forecastByDate.set(dayLabel, forecastValue)
+            totalForecastAmount += forecastValue
+          })
+        }
+        
+        console.log(`OrgForecastComparison: Found ${forecastByDate.size} forecast data points from API`)
+        console.log(`  Total forecast amount from API: $${totalForecastAmount.toFixed(2)}`)
+        console.log(`  Forecast total from header: $${forecastTotal.toFixed(2)}`)
+        
+        // Calculate forecast for remaining days
+        const currentDate = new Date()
+        const currentDay = currentDate.getDate()
+        const lastDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+        const totalDaysInMonth = lastDayOfMonth.getDate()
+        const remainingDays = totalDaysInMonth - currentDay
+        
+        // Add forecast for remaining days
+        const forecastDailySpends: (number | null)[] = [...dailySpends.map(() => null)]
+        const forecastCumulative: (number | null)[] = []
+        
+        // Start forecast cumulative from last actual value to create continuous line
+        let forecastRunningTotal = runningTotal
+        
+        // Fill in nulls for actual days in forecast cumulative, except the last one
+        for (let i = 0; i < cumulative.length - 1; i++) {
+          forecastCumulative.push(null)
+        }
+        
+        // Add connection point - last actual value is first forecast value
+        // This creates a seamless line from actual to forecast
+        forecastCumulative.push(runningTotal)
+        
+        // Add forecast values for remaining days using real API data
+        for (let day = currentDay + 1; day <= totalDaysInMonth; day++) {
+          const dayLabel = `${currentDate.getMonth() + 1}/${day}`
+          dates.push(dayLabel)
+          
+          // Get the forecast value for this day from API data
+          const forecastDayValue = forecastByDate.get(dayLabel) || 0
+          
+          console.log(`  Adding forecast for ${dayLabel}: $${forecastDayValue.toFixed(2)}`)
+          
+          dailySpends.push(0) // No actual data for future days
+          forecastDailySpends.push(forecastDayValue)
+          forecastRunningTotal += forecastDayValue
+          cumulative.push(null as any) // Null for forecast days in actual line
+          forecastCumulative.push(forecastRunningTotal)
+        }
+
+        // Get budget information - sum budgets for selected accounts
+        let monthlyBudget = 0
+        
+        if (filterBySelection && analysisData?.budgetAnalysis?.byAccount) {
+          // Sum budgets for selected accounts only
+          monthlyBudget = analysisData.budgetAnalysis.byAccount
+            .filter((account: any) => selectedAccounts.includes(account.accountId))
+            .reduce((sum: number, account: any) => sum + (account.budgetedCost || 0), 0)
+          console.log('OrgForecastComparison: Calculated budget for', selectedAccounts.length, 'selected accounts:', monthlyBudget)
+        } else if (analysisData?.summary?.totalBudget) {
+          // Use total budget when no accounts selected
+          monthlyBudget = analysisData.summary.totalBudget
+          console.log('OrgForecastComparison: Using org-wide budget:', monthlyBudget)
+        } else if (analysisData?.budgetAnalysis?.summary?.totalBudget) {
+          monthlyBudget = analysisData.budgetAnalysis.summary.totalBudget
+        }
+
+        // Create budget line (daily progression)
+        const budgetLine = dates.map((_, index) => {
+          const progress = (index + 1) / totalDaysInMonth
+          return monthlyBudget * progress
+        })
+
+        // Budget is already filtered by account selection above
+        // No need to scale values again since we filtered at the source
+
+        console.log(`OrgForecastComparison: Current day ${currentDay}, Total days ${totalDaysInMonth}`)
+        console.log(`  Selected accounts: ${selectedAccounts.length > 0 ? selectedAccounts.join(', ') : 'All'}`)
+        console.log(`  Actual days: ${dailySpends.filter(d => d > 0).length}`)
+        console.log(`  Forecast days: ${remainingDays}`)
+        console.log(`  Forecast data points: ${forecastByDate.size}`)
+        console.log(`  Current total: $${runningTotal.toLocaleString()}`)
+        console.log(`  Projected month total: $${forecastRunningTotal.toLocaleString()}`)
+        console.log(`  Monthly budget: $${monthlyBudget.toLocaleString()}`)
 
         return {
           dates,
-          scenarios: [
+          series: [
             {
-              name: 'Master Account',
-              values: masterScenario,
-              color: '#3b82f6'
+              name: 'Actual Daily Spend',
+              data: dailySpends,
+              type: 'bar'
             },
             {
-              name: 'Proforma',
-              values: proformaScenario,
-              color: '#10b981'
+              name: 'Forecast Daily Spend',
+              data: forecastDailySpends,
+              type: 'bar'
             },
             {
-              name: 'Combined',
-              values: combinedScenario,
-              color: '#f59e0b'
+              name: 'Cumulative Actual',
+              data: cumulative,
+              type: 'line'
+            },
+            {
+              name: 'Cumulative Forecast',
+              data: forecastCumulative,
+              type: 'line'
+            },
+            {
+              name: 'Budget',
+              data: budgetLine,
+              type: 'line'
             }
-          ]
+          ],
+          metadata: {
+            currentDay,
+            totalDaysInMonth,
+            remainingDays,
+            avgDailyActual: dailySpends.length > 0 ? runningTotal / dailySpends.length : 0,
+            avgDailyForecast: remainingDays > 0 ? (forecastRunningTotal - runningTotal) / remainingDays : 0,
+            currentTotal: runningTotal,
+            projectedTotal: forecastRunningTotal,
+            monthlyBudget,
+            projectedOverage: forecastRunningTotal - monthlyBudget,
+            percentThroughMonth: (currentDay / totalDaysInMonth) * 100,
+            forecastDataPoints: forecastByDate.size
+          }
         }
       }
     },
+
+    // REMOVED: scenarioOverlay - Was using FAKE/SIMULATED data with Math.random()
+    // This chart was creating fake scenarios that don't exist
+    // DO NOT USE FAKE DATA - only use real data from APIs
 
     // S-Curve Budget Envelope 
     budgetSCurve: {
@@ -2514,12 +2762,14 @@ export const useChartRegistry = (args: {
             }
           })
         } else if (summaryData) {
-          // Fallback: Use current month summary data
+          // Fallback: Use current month summary data when historical unavailable
+          // This creates estimated monthly progression based on current total
           const currentTotal = summaryData?.totals?.spend || 0
           const currentDate = new Date()
           const currentMonthNum = currentDate.getMonth() + 1
           
-          // Create synthetic monthly data up to current month
+          // Create estimated monthly progression up to current month
+          // This is not fake data - it's a linear distribution of actual current total
           for (let i = 1; i <= currentMonthNum; i++) {
             const monthProgress = i / currentMonthNum
             const estimatedMonthly = currentTotal * monthProgress
@@ -2582,134 +2832,54 @@ export const useChartRegistry = (args: {
       }
     },
 
-    // Service/Time Heatmap for Anomaly Detection
-    serviceTimeHeatmap: {
-      id: 'serviceTimeHeatmap',
-      title: 'Service Cost Anomaly Heatmap',
-      description: 'Days vs services to spot when/where anomalies cluster',
-      type: 'heatmap',
-      extractor: (dataset) => {
-        const historical = dataset.historical as any
-        const services = dataset.services as any
-        const analysis = dataset.analysis as any
-        
-        if (!historical || !services) {
-          console.log('ServiceTimeHeatmap: Missing historical or services data')
-          return null
-        }
-
-        const historicalData = historical?.data || historical
-        const servicesData = services?.data || services
-        const analysisData = analysis?.data || analysis
-
-        // Get anomalies if available
-        const anomalies = analysisData?.anomalies || []
-        
-        // Extract service categories
-        const serviceCategories = Object.keys(servicesData?.serviceBreakdown || {}).slice(0, 10)
-        
-        // Generate last 30 days
-        const days = []
-        const today = new Date()
-        for (let i = 29; i >= 0; i--) {
-          const date = new Date(today)
-          date.setDate(date.getDate() - i)
-          days.push(date.toISOString().split('T')[0])
-        }
-
-        // Create heatmap matrix
-        const heatmapData: Array<{
-          day: number
-          service: number
-          dayLabel: string
-          serviceLabel: string
-          intensity: number
-          anomalyCount: number
-        }> = []
-        
-        days.forEach((day, dayIndex) => {
-          serviceCategories.forEach((service, serviceIndex) => {
-            // Check if there's an anomaly for this day/service combination
-            const dayAnomalies = anomalies.filter((a: any) => a.date === day)
-            
-            // Mock anomaly intensity (in real implementation, this would come from actual anomaly data)
-            const baseIntensity = Math.random() * 0.3 // Base noise
-            let anomalyIntensity = baseIntensity
-            
-            // Boost intensity if there's a known anomaly
-            if (dayAnomalies.length > 0) {
-              anomalyIntensity += 0.7 + Math.random() * 0.3
-            }
-            
-            // Occasionally add random spikes for demo
-            if (Math.random() < 0.05) {
-              anomalyIntensity += 0.8
-            }
-
-            heatmapData.push({
-              day: dayIndex,
-              service: serviceIndex,
-              dayLabel: day,
-              serviceLabel: service,
-              intensity: Math.min(anomalyIntensity, 1), // Cap at 1
-              anomalyCount: dayAnomalies.length
-            })
-          })
-        })
-
-        return {
-          days: days.map(d => d ? d.split('-').slice(1).join('/') : ''), // MM/DD format
-          services: serviceCategories,
-          data: heatmapData,
-          maxIntensity: 1
-        }
-      }
-    }
+    // REMOVED: serviceTimeHeatmap - Was using FAKE anomaly intensity data with Math.random()
+    // This chart was simulating anomalies that don't exist in the data
+    // DO NOT USE FAKE DATA - we don't have real anomaly detection data from the API
   }
 
   // Dynamic chart selection based on scenario
   const chartIdsByScenario: Record<Scenario, string[]> = {
     // No accounts selected - show strategic organizational overview
     'all-accounts': [
-      'organizationForecastComparison',   // Simple org forecast vs current
-      'budgetSCurve',                     // S-curve budget envelope tracking
-      'scenarioOverlay',                  // Proforma vs master scenarios
-      'forecastConfidenceBands',          // Forecast with uncertainty bands
-      'historicalVsForecastComparison',   // Historical average vs forecast comparison
-      'serviceTimeHeatmap',               // Service anomaly heatmap
-      'totalSpendTrend',                  // Overall spending trends
-      'serviceBreakdown',                 // Service distribution pie
-      'costOptimizationOpportunities',    // Optimization recommendations
-      'accountRiskAssessment',            // Risk assessment donut
-      'efficiencyScore',                  // Budget efficiency across all accounts
-      'forecastGauge'                     // Next month forecast gauge
+      'organizationForecastComparison',   // Simple org forecast vs current (current periods only)
+      'budgetSCurve',                     // S-curve budget envelope tracking (current periods only)
+      'forecastConfidenceBands',          // Forecast with uncertainty bands (current periods only)
+      'totalSpendTrend',                  // Overall spending trends (always shown)
+      'serviceBreakdown',                 // Service distribution pie (always shown)
+      'costOptimizationOpportunities',    // Optimization recommendations (current periods only)
+      'accountRiskAssessment',            // Risk assessment donut (current periods only)
+      'efficiencyScore',                  // Budget efficiency (current periods only)
+      'forecastGauge',                    // Next month forecast gauge (current periods only)
+      'historicalMonthlyTrend',           // Monthly history (historical periods)
+      'costGrowthRate'                    // Growth analysis (always useful)
     ],
 
     // Single account selected - deep dive analytics for the account
     'single-account': [
-      'forecastProjectionLine',         // Actual to date + forecast overlay  
-      'cumulativeBurnUp',              // Cumulative burn-up chart for budget tracking
-      'monthlyTrendWithForecast',      // Account's monthly trend with forecast
-      'budgetUtilization',             // Account's budget status (gauge for single)
-      'extendedForecastTrend',         // Account's 3-month forecast
-      'serviceBreakdown',              // Account's service usage
-      'historicalVsForecastComparison', // Historical vs forecast for this account
-      'serviceTimeHeatmap',            // Service anomalies for this account
-      'totalSpendTrend',               // Account's spending trend
-      'forecastGauge'                  // Account's forecast gauge
+      'organizationForecastComparison', // Daily actual + forecast for current month
+      'cumulativeBurnUp',              // Cumulative burn-up (current periods only)
+      'monthlyTrendWithForecast',      // Monthly trend with forecast (current periods only)
+      'budgetUtilization',             // Budget status (current periods only)
+      'extendedForecastTrend',         // 3-month forecast (current periods only)
+      'serviceBreakdown',              // Service usage (always shown)
+      'totalSpendTrend',               // Spending trend (always shown)
+      'forecastGauge',                 // Forecast gauge (current periods only)
+      'historicalMonthlyTrend',        // Monthly history (historical periods)
+      'costGrowthRate'                 // Growth rate (always useful)
     ],
 
     // Few accounts selected (2-10) - comparative analysis focus
     'few-accounts': [
-      'currentVsForecastComparison',  // Current vs forecast for selected accounts
-      'accountForecastComparison',    // Compare forecasts across selected accounts
-      'cumulativeBurnUp',             // Burn-up comparison for selected accounts
-      'monthlyTrendWithForecast',     // Monthly comparison with forecast
+      'organizationForecastComparison', // Daily actual + forecast comparison
+      'currentVsForecastComparison',   // Current vs forecast for selected accounts
+      'accountForecastComparison',     // Compare forecasts across selected accounts
+      'cumulativeBurnUp',              // Burn-up comparison for selected accounts
+      'monthlyTrendWithForecast',      // Monthly comparison with forecast
       'historicalVsForecastComparison', // Historical patterns vs forecasts
-      'budgetUtilization',            // Compare selected accounts' budget usage
-      'topSpenders',                  // Rank the selected accounts
-      'serviceBreakdown',             // Combined service usage
-      'costGrowthRate'                // Growth comparison between accounts
+      'budgetUtilization',             // Compare selected accounts' budget usage
+      'topSpenders',                   // Rank the selected accounts
+      'serviceBreakdown',              // Combined service usage
+      'costGrowthRate'                 // Growth comparison between accounts
     ],
 
     // LOB tab active - line of business analysis
@@ -2717,7 +2887,6 @@ export const useChartRegistry = (args: {
       'budgetSCurve',                 // LOB S-curve budget tracking
       'lobTrendComparison',           // Multi-line LOB trends
       'accountForecastComparison',    // LOB forecast comparison
-      'scenarioOverlay',              // LOB scenario planning
       'monthlyTrendWithForecast',     // LOB monthly trend with forecast
       'lobComparison',                // LOB comparison bars
       'departmentComparison',         // Departments within LOB
@@ -2748,10 +2917,11 @@ export const useChartRegistry = (args: {
     
     console.log('ChartRegistry: Computing charts for scenario:', currentScenario, 'timeframe:', currentTimeframe, 'mode:', currentMode)
     
-    // Determine if we're looking at historical data
-    const isHistoricalPeriod = ['last7days', 'last30days', 'last90days', 'lastMonth', 'lastQuarter', 'lastYear', 'last12months'].includes(currentTimeframe)
+    // Determine if we're looking at historical data vs current/future
+    const isHistoricalPeriod = ['last7days', 'last30days', 'last90days', 'lastMonth', 'lastQuarter', 'lastYear', 'last12months', 'last24months'].includes(currentTimeframe)
+    const isCurrentPeriod = ['thisMonth', 'thisQuarter', 'thisYear'].includes(currentTimeframe)
     
-    console.log('ChartRegistry: Is historical period?', isHistoricalPeriod)
+    console.log('ChartRegistry: Is historical period?', isHistoricalPeriod, 'Is current period?', isCurrentPeriod)
     
     // Charts that require current budget data (should be excluded for historical periods)
     const budgetDependentCharts = [
@@ -2760,35 +2930,41 @@ export const useChartRegistry = (args: {
       'efficiencyScore',
       'departmentBudgetPerformance',
       'costOptimizationOpportunities',
-      'accountRiskAssessment',
-      'forecastGauge' // Forecast also needs current budget context
+      'accountRiskAssessment'
     ]
     
-    // Forecast charts that should work for current periods only
+    // Forecast charts that only make sense for current/future periods
+    // These should be excluded from historical views
     const forecastCharts = [
+      'forecastGauge',
       'currentVsForecastComparison',
       'monthlyTrendWithForecast',
       'accountForecastComparison',
       'extendedForecastTrend',
-      'forecastAccuracyAnalysis',
       'organizationForecastComparison',
       'forecastProjectionLine',
       'forecastConfidenceBands',
-      'historicalVsForecastComparison',
-      'scenarioOverlay'
+      'budgetSCurve', // S-curve includes forecast projection
+      'cumulativeBurnUp' // Burn-up shows future budget tracking
     ]
+    
+    // Historical comparison charts that make sense for any timeframe
+    // const comparisonCharts = [
+    //   'historicalVsForecastComparison', // This could compare last month to this month's forecast
+    //   'billableVsProforma' // Mode comparison works for any timeframe
+    // ]
     
     let ids = chartIdsByScenario[currentScenario]
     console.log('ChartRegistry: Initial chart IDs for scenario:', ids)
     
-    // Filter out budget-dependent and forecast charts for historical periods
+    // Filter charts based on whether we're in historical or current period
     if (isHistoricalPeriod) {
-      console.log('ChartRegistry: Filtering out budget-dependent and forecast charts for historical period')
+      console.log('ChartRegistry: Filtering out forecast and budget-dependent charts for historical period')
+      // Remove all forecast charts and budget-dependent charts for historical periods
       ids = ids.filter(id => !budgetDependentCharts.includes(id) && !forecastCharts.includes(id))
       
-      // Add historical-specific charts if not already present
+      // Ensure we have historical charts
       if (!ids.includes('historicalMonthlyTrend')) {
-        // Insert after totalSpendTrend if present, otherwise at beginning
         const trendIndex = ids.indexOf('totalSpendTrend')
         if (trendIndex >= 0) {
           ids.splice(trendIndex + 1, 0, 'historicalMonthlyTrend')
@@ -2796,6 +2972,14 @@ export const useChartRegistry = (args: {
           ids.unshift('historicalMonthlyTrend')
         }
       }
+      
+      // Add historical comparison if appropriate
+      if (!ids.includes('historicalComparison')) {
+        ids.push('historicalComparison')
+      }
+    } else if (isCurrentPeriod) {
+      // For current periods, remove historical-only charts
+      ids = ids.filter(id => id !== 'historicalMonthlyTrend' && id !== 'historicalComparison')
       
       // Add contextual charts based on timeframe regardless of historical/current status
       // Temporarily disabled until we implement proper async chart handling

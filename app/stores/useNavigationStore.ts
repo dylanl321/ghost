@@ -32,6 +32,7 @@ export const useNavigationStore = defineStore('navigation', () => {
   const isCollapsed = ref(false)
   const isHovered = ref(false)
   const isMobile = ref(false)
+  const userPreferredState = ref<boolean | null>(null) // Track user's manual preference (null = no preference)
   
   // Page-specific collapse rules
   const pageCollapseRules = ref<PageCollapseRule[]>([
@@ -92,6 +93,7 @@ export const useNavigationStore = defineStore('navigation', () => {
     }
     
     isCollapsed.value = !isCollapsed.value
+    userPreferredState.value = isCollapsed.value // Save user's manual preference
     return true
   }
 
@@ -134,15 +136,38 @@ export const useNavigationStore = defineStore('navigation', () => {
       return // Exit early, protected pages take priority
     }
     
-    // PRIORITY 2: If moving to a page that defaults to collapsed, collapse it
-    if (shouldDefaultCollapse(newPath) && !isCollapsed.value) {
-      collapse()
+    // PRIORITY 2: Handle default-collapsed pages (like costs page)
+    if (shouldDefaultCollapse(newPath)) {
+      // If user has a manual preference, respect it
+      if (userPreferredState.value !== null) {
+        isCollapsed.value = userPreferredState.value
+      } else {
+        // No user preference, auto-collapse for these pages
+        if (!isCollapsed.value) {
+          collapse()
+        }
+      }
       return
     }
     
-    // PRIORITY 3: If moving from a default-collapsed page to a normal page, and we're collapsed, expand
-    if (oldPath && shouldDefaultCollapse(oldPath) && !shouldDefaultCollapse(newPath) && !isPageProtected(newPath) && isCollapsed.value) {
-      expand()
+    // PRIORITY 3: For normal pages
+    // If we're coming FROM a default-collapsed page (like costs) TO a normal page
+    if (oldPath && shouldDefaultCollapse(oldPath) && !shouldDefaultCollapse(newPath) && !isPageProtected(newPath)) {
+      // If user has a manual preference, use it
+      if (userPreferredState.value !== null) {
+        isCollapsed.value = userPreferredState.value
+      } else {
+        // No user preference, auto-expand when leaving default-collapsed pages
+        if (isCollapsed.value) {
+          expand()
+        }
+      }
+      return
+    }
+    
+    // For all other normal navigation, maintain current state or user preference
+    if (userPreferredState.value !== null) {
+      isCollapsed.value = userPreferredState.value
     }
   }
 
@@ -168,12 +193,18 @@ export const useNavigationStore = defineStore('navigation', () => {
     return pageCollapseRules.value.find(rule => rule.path === path)
   }
 
+  // Method to reset user preference (useful for testing or specific scenarios)
+  const resetUserPreference = () => {
+    userPreferredState.value = null
+  }
+
   return {
     // State
     isCollapsed,
     isHovered,
     isMobile,
     pageCollapseRules,
+    userPreferredState,
     
     // Computed
     shouldShow,
@@ -191,11 +222,12 @@ export const useNavigationStore = defineStore('navigation', () => {
     handleRouteChange,
     addPageRule,
     removePageRule,
-    getPageRule
+    getPageRule,
+    resetUserPreference
   }
 }, {
   persist: {
-    // Only persist the collapsed state, not hover or mobile state
-    pick: ['isCollapsed']
+    // Persist the user's preferred state
+    pick: ['userPreferredState']
   }
 })

@@ -58,9 +58,10 @@ registerEndpoint('/api/costs/summary', 'GET', {
       required: false,
       schema: { 
         type: 'string',
-        enum: ['SERVICE', 'LINKED_ACCOUNT', 'REGION'],
+        enum: ['SERVICE', 'LINKED_ACCOUNT', 'REGION', 'NONE'],
         default: 'SERVICE'
-      }
+      },
+      description: 'Group costs by dimension. Use NONE for totals only (automatically groups by month for multi-month ranges)'
     },
     {
       name: 'proforma',
@@ -216,7 +217,23 @@ export default defineEventHandler(handleAsync(async (event) => {
   
   // Auto-determine granularity based on date range if not specified
   const granularity = (query.granularity as 'DAILY' | 'MONTHLY') || getRecommendedGranularity(startDate, endDate)
-  const groupByDimension = (query.groupBy as string) || 'SERVICE'
+  let groupByDimension = (query.groupBy as string) || 'SERVICE'
+  
+  // Handle NONE groupBy - for multi-month ranges, automatically group by month
+  const isNoGrouping = groupByDimension === 'NONE'
+  if (isNoGrouping) {
+    const start = new Date(startDate)
+    const end = new Date(endDate)
+    const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+    
+    // For multi-month ranges (>31 days), we'll use MONTHLY granularity with no additional grouping
+    // For single month or less, we'll use no grouping at all
+    if (daysDiff <= 31) {
+      groupByDimension = 'NONE' // No grouping at all, just totals
+    } else {
+      groupByDimension = 'MONTHLY_ONLY' // Special flag to indicate monthly time grouping only
+    }
+  }
   const proforma = query.proforma === 'true' || query.proforma === true
   const proformaAccountId = (query.proformaAccountId as string) || process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832'
   const masterAccountId = (query.masterAccountId as string) || process.env.AWS_MASTER_ACCOUNT_ID || '205950196477'
@@ -270,7 +287,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     endDate,
     granularity,
     metrics: ['UnblendedCost', 'UsageQuantity'],
-    groupBy: [{
+    groupBy: (groupByDimension === 'NONE' || groupByDimension === 'MONTHLY_ONLY') ? undefined : [{
       type: 'DIMENSION' as const,
       key: groupByDimension
     }],
@@ -290,7 +307,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     startDate,
     endDate,
     granularity,
-    groupByDimension,
+    groupByDimension: groupByDimension === 'MONTHLY_ONLY' ? 'NONE_MONTHLY' : groupByDimension,
     environment,
     proforma,
     proformaAccountId: proforma ? proformaAccountId : null,
@@ -317,10 +334,14 @@ export default defineEventHandler(handleAsync(async (event) => {
         // Prepare result based on enhanced flag
         if (enhanced) {
           // Get enhanced billable data first
-          const billableEnhanced = await enhanceCostData(proformaData.billable.costs, includeDecommissioned, groupByDimension)
+          const billableEnhanced = groupByDimension === 'NONE' || groupByDimension === 'MONTHLY_ONLY' 
+            ? proformaData.billable.costs // Return raw data for NONE grouping
+            : await enhanceCostData(proformaData.billable.costs, includeDecommissioned, groupByDimension)
           
           // Get enhanced proforma data
-          const proformaEnhanced = await enhanceCostData(proformaData.proforma.costs, includeDecommissioned, groupByDimension)
+          const proformaEnhanced = groupByDimension === 'NONE' || groupByDimension === 'MONTHLY_ONLY'
+            ? proformaData.proforma.costs // Return raw data for NONE grouping
+            : await enhanceCostData(proformaData.proforma.costs, includeDecommissioned, groupByDimension)
           
           // Add master account unallocated cost to proforma enhanced data
           if (proformaData.masterAccount.unallocatedCost > 0) {
@@ -434,7 +455,40 @@ export default defineEventHandler(handleAsync(async (event) => {
         const costData = await getCostAndUsage(costParams, environment)
         
         if (enhanced) {
-          return await enhanceCostData(costData, includeDecommissioned, groupByDimension)
+          // For NONE or MONTHLY_ONLY grouping, we need to handle the data differently
+          if (groupByDimension === 'NONE' || groupByDimension === 'MONTHLY_ONLY') {
+            // When there's no grouping, enhanceCostData won't find any groups
+            // So we'll create a simplified enhanced response
+            const totalCost = parseFloat(costData.total?.UnblendedCost?.Amount || '0')
+            const totalUsage = parseFloat(costData.total?.UsageQuantity?.Amount || '0')
+            
+            return {
+              resultsByTime: costData.resultsByTime || [],
+              summary: {
+                totalCost,
+                totalUsage,
+                totalCostFormatted: `$${totalCost.toFixed(2)}`,
+                isGrouped: false,
+                groupingType: 'NONE'
+              },
+              timePeriods: costData.resultsByTime?.map((result: any) => ({
+                start: result.TimePeriod?.Start,
+                end: result.TimePeriod?.End,
+                totalCost: parseFloat(result.Total?.UnblendedCost?.Amount || '0'),
+                totalUsage: parseFloat(result.Total?.UsageQuantity?.Amount || '0'),
+                estimated: result.Estimated || false
+              })) || [],
+              metadata: {
+                startDate: costData.resultsByTime?.[0]?.TimePeriod?.Start,
+                endDate: costData.resultsByTime?.[costData.resultsByTime.length - 1]?.TimePeriod?.End,
+                granularity,
+                groupBy: 'NONE',
+                includeDecommissioned
+              }
+            }
+          } else {
+            return await enhanceCostData(costData, includeDecommissioned, groupByDimension)
+          }
         } else {
           return costData
         }

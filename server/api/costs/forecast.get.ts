@@ -34,10 +34,10 @@ registerEndpoint('/api/costs/forecast', 'GET', {
       required: false,
       schema: { 
         type: 'string',
-        enum: ['next-month', '3-months', '6-months', '12-months', 'custom'],
+        enum: ['current-month-remainder', 'next-month', '3-months', '6-months', '12-months', 'custom'],
         default: 'next-month'
       },
-      description: 'Forecast period - predefined periods or custom'
+      description: 'Forecast period - current month remainder, next month, or longer periods'
     },
     {
       name: 'months',
@@ -89,6 +89,15 @@ registerEndpoint('/api/costs/forecast', 'GET', {
         default: false
       },
       description: 'Include proforma account forecast (commercial environment only)'
+    },
+    {
+      name: 'accountIds',
+      in: 'query',
+      required: false,
+      schema: { 
+        type: 'string'
+      },
+      description: 'Comma-separated list of account IDs to filter forecast'
     },
     {
       name: 'proformaAccountId',
@@ -176,44 +185,94 @@ export default defineEventHandler(handleAsync(async (event) => {
   const proforma = query.proforma === 'true' || query.proforma === true
   const proformaAccountId = (query.proformaAccountId as string) || process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832'
   const masterAccountId = (query.masterAccountId as string) || process.env.AWS_MASTER_ACCOUNT_ID || '205950196477'
+  const accountIdsParam = (query.accountIds as string) || ''
+  const accountIds = accountIdsParam ? accountIdsParam.split(',').filter(id => id.trim()) : []
+  
+  // ================================
+  // BUILD FILTER FOR ACCOUNT SELECTION
+  // ================================
+  
+  let filter: any = undefined
+  if (accountIds.length > 0) {
+    console.log(`[Forecast API] Filtering forecast for ${accountIds.length} accounts:`, accountIds)
+    // Create filter for specific accounts
+    if (accountIds.length === 1) {
+      filter = {
+        Dimensions: {
+          Key: 'LINKED_ACCOUNT',
+          Values: [accountIds[0]]
+        }
+      }
+    } else {
+      // Multiple accounts - use OR filter
+      filter = {
+        Or: accountIds.map(accountId => ({
+          Dimensions: {
+            Key: 'LINKED_ACCOUNT',
+            Values: [accountId]
+          }
+        }))
+      }
+    }
+  } else {
+    console.log('[Forecast API] No account filter - returning org-wide forecast')
+  }
   
   // ================================
   // CALCULATE FORECAST DATE RANGE
   // ================================
   
   const today = new Date()
-  const startDate = new Date(today)
-  startDate.setDate(1) // Start from first of current month
-  startDate.setMonth(startDate.getMonth() + 1) // Move to next month
+  let startDate: Date
+  let endDate: Date
+  let monthsToAdd = 1 // Default value, will be overridden for most periods
   
-  const endDate = new Date(startDate)
-  
-  // Calculate end date based on period
-  let monthsToAdd = 1
-  switch (period) {
-    case 'next-month':
-      monthsToAdd = 1
-      break
-    case '3-months':
-      monthsToAdd = 3
-      break
-    case '6-months':
-      monthsToAdd = 6
-      break
-    case '12-months':
-      monthsToAdd = 12
-      break
-    case 'custom':
-      if (customMonths < 1 || customMonths > 12) {
-        return errors.badRequest(event, 'Custom months must be between 1 and 12')
-      }
-      monthsToAdd = customMonths
-      break
-    default:
-      return errors.badRequest(event, 'Invalid period. Must be one of: next-month, 3-months, 6-months, 12-months, custom')
+  if (period === 'current-month-remainder') {
+    // For current month remainder, start from tomorrow and go to end of current month
+    startDate = new Date(today)
+    startDate.setDate(startDate.getDate() + 1) // Start from tomorrow
+    
+    endDate = new Date(today)
+    endDate.setMonth(endDate.getMonth() + 1) // Move to next month
+    endDate.setDate(1) // First day of next month
+    // No need to subtract a day since AWS API uses exclusive end date
+    
+    // For current-month-remainder, we're forecasting less than a month
+    monthsToAdd = 0 // Indicates partial month
+  } else {
+    // For all other periods, start from first of next month
+    startDate = new Date(today)
+    startDate.setDate(1) // Start from first of current month
+    startDate.setMonth(startDate.getMonth() + 1) // Move to next month
+    
+    endDate = new Date(startDate)
+    
+    // Calculate end date based on period
+    switch (period) {
+      case 'next-month':
+        monthsToAdd = 1
+        break
+      case '3-months':
+        monthsToAdd = 3
+        break
+      case '6-months':
+        monthsToAdd = 6
+        break
+      case '12-months':
+        monthsToAdd = 12
+        break
+      case 'custom':
+        if (customMonths < 1 || customMonths > 12) {
+          return errors.badRequest(event, 'Custom months must be between 1 and 12')
+        }
+        monthsToAdd = customMonths
+        break
+      default:
+        return errors.badRequest(event, 'Invalid period. Must be one of: current-month-remainder, next-month, 3-months, 6-months, 12-months, custom')
+    }
+    
+    endDate.setMonth(endDate.getMonth() + monthsToAdd)
   }
-  
-  endDate.setMonth(endDate.getMonth() + monthsToAdd)
   
   // Format dates for AWS API
   const startDateStr = startDate.toISOString().split('T')[0]
@@ -239,7 +298,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       endDateStr,
       metric,
       granularity,
-      undefined, // filter
+      filter, // Pass account filter
       proformaAccountId,
       masterAccountId
     )
@@ -277,7 +336,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       endDateStr,
       metric,
       granularity,
-      undefined,
+      filter, // Pass account filter
       environment
     )
     
@@ -285,6 +344,10 @@ export default defineEventHandler(handleAsync(async (event) => {
     if (!forecast) {
       return errors.notFound(event, 'No forecast data available for the specified period')
     }
+    
+    // Log forecast total for debugging
+    console.log('[Forecast API] Forecast total:', forecast?.total?.Amount || 'No total', 
+                'for accounts:', accountIds.length > 0 ? accountIds : 'All')
     
     const result = {
       period: {
@@ -294,7 +357,9 @@ export default defineEventHandler(handleAsync(async (event) => {
         endDate: endDateStr
       },
       forecast,
-      note: 'Forecast based on raw AWS billing data from master account'
+      note: accountIds.length > 0 
+        ? `Forecast for ${accountIds.length} selected account(s): ${accountIds.join(', ')}`
+        : 'Forecast based on raw AWS billing data from master account (all accounts)'
     }
     
     return sendSuccess(event, result)

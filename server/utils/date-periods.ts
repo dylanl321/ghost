@@ -319,7 +319,7 @@ export function formatDateRange(range: AnalysisDateRange): string {
 /**
  * Convert date range to ISO string format for API calls
  */
-export function dateRangeToISO(range: DateRange): { startDate: string, endDate: string } {
+export function dateRangeToISO(range: AnalysisDateRange): { startDate: string, endDate: string } {
   return {
     startDate: range.startDate.toISOString().split('T')[0],
     endDate: range.endDate.toISOString().split('T')[0]
@@ -327,10 +327,24 @@ export function dateRangeToISO(range: DateRange): { startDate: string, endDate: 
 }
 
 /**
+ * Convert date range to ISO string format for AWS Cost Explorer API
+ * AWS Cost Explorer uses EXCLUSIVE end dates, so we add 1 day to the end date
+ */
+export function dateRangeToISOForAWS(range: AnalysisDateRange): { startDate: string, endDate: string } {
+  const endDatePlusOne = new Date(range.endDate)
+  endDatePlusOne.setDate(endDatePlusOne.getDate() + 1)
+  
+  return {
+    startDate: range.startDate.toISOString().split('T')[0],
+    endDate: endDatePlusOne.toISOString().split('T')[0]
+  }
+}
+
+/**
  * Calculate the comparable period for the same timeframe in the previous cycle
  * Used for period-over-period comparisons
  */
-export function getComparablePeriod(timeframe: AnalysisTimeframe, referenceDate: Date = new Date()): DateRange {
+export function getComparablePeriod(timeframe: AnalysisTimeframe, referenceDate: Date = new Date()): AnalysisDateRange {
   const now = referenceDate
   
   switch (timeframe) {
