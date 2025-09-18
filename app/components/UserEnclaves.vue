@@ -4,7 +4,8 @@
       <div class="text-lg font-semibold">My Enclaves</div>
     </template>
 
-    <div class="max-h-[33vh] overflow-y-auto">
+    <CenteredLoadingSpinner v-if="props.loading" />
+    <div v-else class="max-h-[33vh] overflow-y-auto">
       <UTable :rows="tableData" :columns="columns" :ui="{ thead: 'bg-gray-800 text-xs' }">
         <template #enclave-data="{ row }">
           <div>
@@ -59,6 +60,10 @@ import { UCard, UTable, UButton } from '#components'
 
 const userGroupStore = useUserGroupStore()
 const router = useRouter()
+
+const props = defineProps<{
+  loading: boolean
+}>()
 
 const columns = [
   { key: 'enclave', label: 'Enclave' },

@@ -4,14 +4,15 @@
       <div class="text-lg font-semibold">Top Accounts</div>
     </template>
 
-    <div>
+    <CenteredLoadingSpinner v-if="props.loading" />
+    <div v-else>
       <NuxtLink v-for="(acct, idx) in sortedAccounts" :key="acct.accountId" :to="`/account/${acct.accountId}`"
         class="block p-4 bg-gray-900 border-t border-gray-800 hover:bg-gray-700 transition-colors duration-200">
         <div class="flex items-center justify-between">
           <div class="flex flex-col">
             <div class="flex gap-3 items-center">
               <div class="text-sm text-gray-400">#{{ idx + 1 }}</div>
-              <div class="text-white text-base font-medium truncate">{{ acct.name }}</div>
+              <div class="text-white text-base font-medium text-wrap">{{ acct.name }}</div>
             </div>
 
             <div class="text-xs text-gray-400 mb-2">{{ acct.accountId }}</div>
@@ -39,6 +40,7 @@
 import { UCard, UBadge } from '#components'
 
 const props = defineProps<{
+  loading: boolean
   topAccounts: {
     accountId: string
     name: string

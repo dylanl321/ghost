@@ -1,36 +1,84 @@
 <template>
-  <div class="p-6">
-    <h1 class="text-3xl mb-8">Overview</h1>
-    <UserEnclaves class="mb-4"/>
+  <div class="space-y-6 p-6">
+    <UCard>
+      <template #header>
+        <div>
+          <h1 class="text-2xl font-bold mb-1">Welcome, {{ user?.claims?.given_name }}</h1>
+          <p class="text-sm text-gray-400">
+            Organization Cloud Dashboard
+          </p>
+        </div>
+      </template>
+    </UCard>
 
-    <div v-if="loading" class="text-gray-400">Loading...</div>
+    <!-- Metric Displays -->
+    <div class="grid grid-cols-4 gap-4">
 
-    <div v-else class="grid grid-cols-3 gap-4">
-      <OrganizationCostTrends
-        v-if="overview?.costs.timeSeries"
-        :time-series="overview.costs.timeSeries.slice(-14)"
-        class="mb-6 col-span-2"
-      />
+      <!-- Month to Date -->
+      <UCard class="p-2">
+        <p class="text-sm font-medium text-gray-400">Month to Date Spend</p>
+        <p class="text-lg font-semibold">
+          {{ formatCurrencyNoDecimal(overview?.costs.budgetAnalysis.actualSpend || 0) }}
+        </p>
+      </UCard>
 
-      <AccountInsights
-        v-if="overview?.costs.topAccounts"
-        :top-accounts="overview.costs.topAccounts"
-        class="mb-6 col-span-1"
-      />
+      <!-- Projected Spend -->
+      <UCard class="p-2">
+        <p class="text-sm font-medium text-gray-400">Projected Spend</p>
+        <p class="text-lg font-semibold">
+          {{ formatCurrencyNoDecimal(overview?.costs.budgetAnalysis.projectedSpend || 0) }}
+        </p>
+      </UCard>
+
+      <!-- Previous Month -->
+      <UCard class="p-2">
+        <p class="text-sm font-medium text-gray-400">Previous Month</p>
+        <p class="text-lg font-semibold">
+          $0
+        </p>
+      </UCard>
+
+      <!-- Active Accounts -->
+      <UCard class="p-2">
+        <p class="text-sm font-medium text-gray-400">Active Accounts</p>
+        <p class="text-lg font-semibold">
+          {{ overview?.summary.activeAccounts || 0 }}
+        </p>
+      </UCard>
     </div>
 
-    <UButton class="mt-4 mr-2" @click="() => logout()">Logout</UButton>
-    <UButton class="mt-4" @click="clear">Clear Stores</UButton>
+    <UserEnclaves :loading="loading" />
+
+    <div class="grid grid-cols-3 gap-4">
+      <OrganizationCostTrends :time-series="overview?.costs.timeSeries.slice(-14) || []" :loading="loading"
+        class="col-span-2" />
+
+      <AccountInsights :top-accounts="overview?.costs.topAccounts || []" :loading="loading"
+        class="col-span-1" />
+    </div>
+
+    <UButton class="mr-2" @click="() => logout()">Logout</UButton>
+    <UButton @click="clear">Clear Stores</UButton>
   </div>
 </template>
 
 <script setup lang="ts">
-const { logout } = useOidcAuth()
+
+const { user, logout } = useOidcAuth()
 const userGroupStore = useUserGroupStore()
 const enclaveStore = useEnclaveStore()
 
 interface OverviewResponse {
+  summary: Summary;
   costs: Costs;
+}
+interface Summary {
+  totalAccounts: number,
+  activeAccounts: number,
+  totalCostCurrent: number,
+  totalCostPrevious: number,
+  costGrowthPercent: number,
+  lastUpdated: string, // ex. "2025-09-17T23:40:58.560Z"
 }
 interface Costs {
   timeSeries: TimeSeries[];
