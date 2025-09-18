@@ -57,8 +57,8 @@
         </template>
 
         <div class="space-y-2 text-sm">
-          <AccountDetailsRow label="Budget" :value="formatCurrencyNoDecimal(parseInt(enclave?.estimatedMonthlyCharge || '0'))" />
-          <AccountDetailsRow label="Current Spend" :value="formatCurrencyNoDecimal(currentSpend)" />
+          <AccountDetailsRow label="Budget" :value="formatCurrency(parseInt(enclave?.estimatedMonthlyCharge || '0'), 0)" />
+          <AccountDetailsRow label="Current Spend" :value="formatCurrency(currentSpend, 0)" />
           <AccountDetailsRow label="Utilization" :value="utilization + '%'" />
         </div>
       </UCard>
