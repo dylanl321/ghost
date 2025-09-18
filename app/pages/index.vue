@@ -136,6 +136,7 @@ onMounted(async () => {
   }
 
   console.log('my enclaves', userGroupStore.myEnclaves)
+  console.log('all enclaves', enclaveStore.enclaves)
 })
 
 </script>

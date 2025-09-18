@@ -19,6 +19,7 @@ export default defineNuxtPlugin(async (nuxtApp) => {
     const userGroupStore = useUserGroupStore()
     const enclaveStore = useEnclaveStore()
     const route = useRoute()
+    const router = useRouter()
     
     // Skip initialization on auth pages
     const authPages = ['/auth/login', '/auth/loading', '/auth/logout', '/auth/callback']
@@ -30,6 +31,7 @@ export default defineNuxtPlugin(async (nuxtApp) => {
     // Check if user is logged in
     if (!loggedIn.value || !user.value?.accessToken) {
       console.log('User not logged in, skipping store initialization')
+      router.push('/auth/loading')
       return
     }
 
