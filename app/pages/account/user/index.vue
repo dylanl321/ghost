@@ -37,7 +37,7 @@ const showOnlyAwsUsers = ref(false)
 
 // Composables
 const { user } = useOidcAuth()
-const { searchUsers, fetchUserProfile, fetchUserMemberOf } = useGraphApi()
+const { searchUsers, fetchUserMemberOf } = useGraphApi()
 const { parseAwsGroupName, sortRolesByPriority } = useAwsGroupParser()
 const { getUserTags, batchGetUserTags } = useGroupMembers()
 const awsAccountsStore = useAwsAccountsStore()
@@ -424,10 +424,10 @@ onMounted(async () => {
             />
             <UButton
               v-if="selectedRole || selectedAccount || showOnlyAwsUsers"
-              @click="clearFilters"
               icon="i-heroicons-x-mark"
               variant="ghost"
               size="sm"
+              @click="clearFilters"
             >
               Clear
             </UButton>
@@ -436,11 +436,11 @@ onMounted(async () => {
           <!-- Actions -->
           <div class="flex items-center gap-2">
             <UButton 
-              @click="handleExportCSV"
               :disabled="filteredUsers.length === 0"
               icon="i-heroicons-arrow-down-tray"
-              variant="outline" 
-              size="sm"
+              variant="outline"
+              size="sm" 
+              @click="handleExportCSV"
             >
               Export
             </UButton>
@@ -493,7 +493,7 @@ onMounted(async () => {
       <template #title>Search failed</template>
       {{ error }}
       <template #actions>
-        <UButton @click="searchForUsers(searchQuery)" variant="ghost" size="xs">
+        <UButton variant="ghost" size="xs" @click="searchForUsers(searchQuery)">
           Try Again
         </UButton>
       </template>
@@ -514,7 +514,7 @@ onMounted(async () => {
         <UIcon name="i-heroicons-funnel" class="w-12 h-12 text-gray-500 mx-auto mb-3" />
         <h4 class="text-lg font-medium text-white mb-2">No Results Found</h4>
         <p class="text-gray-400 mb-4">No users match your current filters.</p>
-        <UButton @click="clearFilters" variant="outline" size="sm">
+        <UButton variant="outline" size="sm" @click="clearFilters">
           Clear Filters
         </UButton>
       </div>
@@ -628,10 +628,10 @@ onMounted(async () => {
 
             <!-- View Details Button -->
             <UButton
-              @click="handleUserClick(user.userPrincipalName)"
               variant="outline"
               size="sm"
               icon="i-heroicons-arrow-top-right-on-square"
+              @click="handleUserClick(user.userPrincipalName)"
             >
               View Details
             </UButton>

@@ -1,12 +1,7 @@
 <template>
   <UCard>
     <template #header>
-      <div class="flex items-center justify-between px-3 py-2 bg-gray-800/70 border-b border-gray-700">
-        <div class="flex items-center gap-2">
-          <UIcon name="i-heroicons-identification" class="h-5 w-5 text-primary-400" />
-          <h3 class="font-bold">Account Details</h3>
-        </div>
-      </div>
+      <div class="text-lg font-semibold">Account Details</div>
     </template>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">

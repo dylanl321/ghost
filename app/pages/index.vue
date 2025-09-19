@@ -67,7 +67,7 @@
 
     <div class="grid grid-cols-3 gap-4 auto-rows-fr">
       <!-- Organization cost trends -->
-      <OrganizationCostTrends :time-series="overviewThisMonth?.costs.timeSeries.slice(-14) || []" :loading="loading"
+      <CostTrendChart title="Organization Cost Trends" :time-series="overviewThisMonth?.costs.timeSeries.slice(-14) || []" :loading="loading"
         class="col-span-2" />
 
       <!-- Account insights (tall) -->
@@ -164,7 +164,7 @@ const monthToDateTrend = computed(() => {
 
 const projectedSpendTrend = computed(() => {
   if (!overviewThisMonth.value || !overviewLastMonth.value) return 0
-  return (overviewThisMonth.value?.costs.budgetAnalysis.actualSpend - overviewLastMonth.value.costs.budgetAnalysis.actualSpend) / overviewLastMonth.value.costs.budgetAnalysis.actualSpend
+  return (overviewThisMonth.value?.costs.budgetAnalysis.actualSpend - overviewLastMonth.value.costs.budgetAnalysis.actualSpend) / overviewLastMonth.value.costs.budgetAnalysis.actualSpend * 100
 })
 
 const clear = () => {
@@ -188,6 +188,12 @@ onMounted(async () => {
   }
 
   console.log('my enclaves', userGroupStore.myEnclaves)
+  console.log('this month', overviewThisMonth.value)
+  console.log('last month', overviewLastMonth.value)
+
+  const groupMembers = useGroupMembers()
+  console.log('group members', await groupMembers.fetchEnclaveUsers('906234452947', '926182194632', user.value?.accessToken || ''))
+
 })
 
 </script>

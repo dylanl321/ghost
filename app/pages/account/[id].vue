@@ -8,6 +8,11 @@
     </UCard>
 
     <AccountDetails v-if="accountId" :account-id="accountId" />
+
+    <div class="grid grid-cols-3 gap-4">
+      <CostTrendChart title="Account Cost Trends" :time-series="[]" :loading="true" class="col-span-2" />
+      <ResourceUsage :columns="2" class="col-span-1"/>
+    </div>
   </div>
 </template>
 

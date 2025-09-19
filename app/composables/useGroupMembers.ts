@@ -2,6 +2,44 @@
  * Composable for managing user group memberships and tags
  */
 
+// interface GroupMember {
+//   displayName: string;
+//   userPrincipalName: string;
+//   roles: string[];
+// }
+
+// interface GroupMembersResponse {
+//   members: GroupMember[];
+//   error?: string;
+// }
+
+// interface SimpleGroupMembersResponse {
+//   members: Array<{
+//     displayName: string;
+//     userPrincipalName: string;
+//   }>;
+//   error?: string;
+// }
+
+interface GraphGroup {
+  id: string;
+  displayName: string;
+}
+
+interface GraphMembersResponse {
+  value: Array<{
+    displayName: string;
+    userPrincipalName: string;
+  }>;
+  '@odata.nextLink'?: string;
+}
+
+interface GraphUser {
+  displayName: string
+  userPrincipalName: string
+  roles: string[]
+}
+
 export interface UserTag {
   title: string
   color: string
@@ -9,14 +47,185 @@ export interface UserTag {
   description?: string
 }
 
+// --------------------------------------
+// ---------- Helper Functions ----------
+// --------------------------------------
+
+const parseAwsGroupRole = (groupName: string, accountId: string): string | null => {
+  // Support both AWS-ID_ROLE and AWS-ID-ROLE patterns
+  const awsGroupRegex = new RegExp(`^AWS-${accountId}[_-](.+)$`);
+  const match = groupName.match(awsGroupRegex);
+  return match && match[1] ? match[1] : null;
+};
+
+const fetchGroupsWithPagination = async (accountId: string, accessToken: string): Promise<GraphGroup[]> => {
+  const allGroups: GraphGroup[] = [];
+  // Use startswith filter to get relevant groups only
+  const filterQuery = `startswith(displayName,'AWS-${accountId}')`;
+  let nextUrl = `https://graph.microsoft.us/v1.0/groups?$filter=${encodeURIComponent(filterQuery)}&$top=999`;
+
+  try {
+    while (nextUrl) {
+      const response = await fetch(nextUrl, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Graph API Error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      allGroups.push(...data.value);
+
+      nextUrl = data['@odata.nextLink'] || '';
+    }
+
+    return allGroups;
+  } catch (error) {
+    console.error('Error fetching groups with pagination:', error);
+    throw error;
+  }
+};
+
+const fetchGroupMembersWithPagination = async (groupId: string, accessToken: string): Promise<Array<{ displayName: string; userPrincipalName: string }>> => {
+  const allMembers: Array<{ displayName: string; userPrincipalName: string }> = [];
+  let nextUrl = `https://graph.microsoft.us/v1.0/groups/${groupId}/members?$top=999`;
+
+  try {
+    while (nextUrl) {
+      const response = await fetch(nextUrl, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        // Enhanced error logging for debugging 401 issues
+        const errorText = await response.text();
+        console.error(`Graph API Error Details:`, {
+          status: response.status,
+          statusText: response.statusText,
+          url: nextUrl,
+          headers: response.headers,
+          body: errorText
+        });
+        throw new Error(`Failed to fetch members for group ID ${groupId}: ${response.status} ${response.statusText} - ${errorText}`);
+      }
+
+      const data: GraphMembersResponse = await response.json();
+      allMembers.push(...data.value);
+
+      nextUrl = data['@odata.nextLink'] || '';
+    }
+
+    return allMembers;
+  } catch (error) {
+    console.error(`Error fetching members for group ${groupId}:`, error);
+    throw error;
+  }
+};
+
+// ------------------------------------------------
+// ---------- useGroupMembers Composable ----------
+// ------------------------------------------------
+
 export const useGroupMembers = () => {
+
+  /**
+   * Fetch all the users associated with an AWS Enclave
+   */
+  const fetchEnclaveUsers = async (commercialId: string, govcloudId: string, accessToken: string): Promise<GraphUser[]> => {
+    try {
+      // Helper function to fetch all users (and their roles) for a given account ID
+      const fetchForAccount = async (accountId: string) => {
+        const groups = await fetchGroupsWithPagination(accountId, accessToken)
+        const memberResults = await Promise.all(
+          groups.map(async (group: GraphGroup) => {
+            const role = parseAwsGroupRole(group.displayName, accountId);
+
+            if (!role) {
+              console.debug(`Skipping group with invalid format: ${group.displayName}`);
+              return [];
+            }
+
+            const members = await fetchGroupMembersWithPagination(group.id, accessToken)
+
+            return members.map((member) => ({
+              displayName: member.displayName,
+              userPrincipalName: member.userPrincipalName,
+              role
+            }));
+          })
+        )
+        return memberResults.flat()
+      }
+
+      // Fetch users for commercial + govcloud
+      const [commercialUsers, govcloudUsers] = await Promise.all([
+        fetchForAccount(commercialId),
+        fetchForAccount(govcloudId)
+      ])
+
+      const memberMap = new Map<string, GraphUser>();
+
+      const combined = [...commercialUsers, ...govcloudUsers]
+
+      combined.forEach((member: any) => {
+        if (!member.userPrincipalName || !member.displayName) {
+          console.debug('Skipping member with missing data:', member);
+          return;
+        }
+
+        if (memberMap.has(member.userPrincipalName)) {
+          // Add role to existing member
+          const existing = memberMap.get(member.userPrincipalName)!;
+          if (!existing.roles.includes(member.role)) {
+            existing.roles.push(member.role);
+          }
+        } else {
+          // Add new member
+          memberMap.set(member.userPrincipalName, {
+            displayName: member.displayName,
+            userPrincipalName: member.userPrincipalName,
+            roles: [member.role]
+          });
+        }
+      });
+
+      const finalMembers = Array.from(memberMap.values());
+      console.log(`Found ${finalMembers.length} unique members across all groups`);
+
+      return finalMembers
+
+      // // Deduplicate by UPN
+      // const uniqueUsers = new Map<string, GraphUser>()
+      // for (const user of combined) {
+      //   if (user.userPrincipalName) {
+      //     uniqueUsers.set(user.userPrincipalName, user)
+      //   }
+      // }
+
+      // return Array.from(uniqueUsers.values())
+    } catch (error) {
+      console.error(
+        `Error fetching users for commercial ${commercialId} and govcloud ${govcloudId}:`,
+        error
+      )
+      throw error
+    }
+  }
+
   /**
    * Get tags for a user based on their group memberships and attributes
    */
   const getUserTags = async (
     userPrincipalName: string, 
     accessToken: string,
-    displayName?: string
+    // displayName?: string
   ): Promise<UserTag[]> => {
     const tags: UserTag[] = []
     
@@ -244,6 +453,7 @@ export const useGroupMembers = () => {
   }
 
   return {
+    fetchEnclaveUsers,
     getUserTags,
     batchGetUserTags,
     getUserGroupStats,

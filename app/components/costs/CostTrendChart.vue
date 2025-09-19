@@ -63,6 +63,7 @@ interface TimePoint {
 }
 
 const props = defineProps<{
+  title: string
   loading: boolean
   timeSeries: TimePoint[]
 }>()

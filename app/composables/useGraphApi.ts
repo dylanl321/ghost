@@ -1,5 +1,6 @@
 // Microsoft Graph is the official REST API for Entra ID
 // Use this to get information on groups, roles, users, etc.
+// See `useGroupMembers` for more specific group fetching functionality (like fetching users associated with an AWS account)
 
 // Microsoft Graph API interfaces
 interface GraphGroup {
@@ -98,40 +99,40 @@ const parseAwsGroups = (groups: GraphGroup[]) => {
 }
 
 export const useGraphApi = () => {
-  const fetchAllGroupsWithPagination = async (accessToken: string): Promise<GraphGroup[]> => {
-    const allGroups: GraphGroup[] = []
-    let nextUrl = 'https://graph.microsoft.us/v1.0/me/memberOf?$top=999'
+  // const fetchAllGroupsWithPagination = async (accessToken: string): Promise<GraphGroup[]> => {
+  //   const allGroups: GraphGroup[] = []
+  //   let nextUrl = 'https://graph.microsoft.us/v1.0/me/memberOf?$top=999'
 
-    console.log("in fetchAllGroupsWithPagination with access token (first 20 characters): ", accessToken.slice(0, 20))
+  //   console.log("in fetchAllGroupsWithPagination with access token (first 20 characters): ", accessToken.slice(0, 20))
 
-    try {
-      while (nextUrl) {
-        const response = await fetch(nextUrl, {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        })
+  //   try {
+  //     while (nextUrl) {
+  //       const response = await fetch(nextUrl, {
+  //         headers: {
+  //           Authorization: `Bearer ${accessToken}`,
+  //           'Content-Type': 'application/json'
+  //         }
+  //       })
 
-        if (!response.ok) {
-          throw new Error(`Graph API Error: ${response.statusText}`)
-        }
+  //       if (!response.ok) {
+  //         throw new Error(`Graph API Error: ${response.statusText}`)
+  //       }
 
-        const data: GraphMemberOfResponse = await response.json()
-        allGroups.push(...data.value)
+  //       const data: GraphMemberOfResponse = await response.json()
+  //       allGroups.push(...data.value)
 
-        nextUrl = data['@odata.nextLink'] || ''
+  //       nextUrl = data['@odata.nextLink'] || ''
 
-        console.log("here is the response from the /me/memberOf endpoint: ", data)
-      }
+  //       console.log("here is the response from the /me/memberOf endpoint: ", data)
+  //     }
 
-      console.log(`Fetched ${allGroups.length} total groups with pagination`)
-      return allGroups
-    } catch (error) {
-      console.error('Error fetching groups with pagination:', error)
-      throw error
-    }
-  }
+  //     console.log(`Fetched ${allGroups.length} total groups with pagination`)
+  //     return allGroups
+  //   } catch (error) {
+  //     console.error('Error fetching groups with pagination:', error)
+  //     throw error
+  //   }
+  // }
 
   const fetchGroups = async (accessToken: string) => {
     const allGroupsRaw = await fetchAllGroupsRaw(accessToken)
@@ -351,6 +352,6 @@ export const useGraphApi = () => {
     fetchUserMemberOf,
     fetchGroupDetails,
     fetchAllGroups,
-    fetchAllGroupsWithPagination
+    // fetchAllGroupsWithPagination
   }
 }

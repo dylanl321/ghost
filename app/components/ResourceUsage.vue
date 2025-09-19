@@ -4,9 +4,9 @@
       <div class="text-lg font-semibold">Resource Usage</div>
     </template>
 
-    <div class="flex gap-4 flex-wrap">
+    <div :class="`grid gap-4 grid-cols-${props.columns}`">
       <!-- EC2 Instances -->
-      <div class="flex-1 bg-gray-800/50 rounded-xl p-4 space-y-2">
+      <div class="bg-gray-800/50 rounded-xl p-4 space-y-2">
         <div class="flex gap-1 items-center">
           <UIcon name="i-heroicons-server" class="text-purple-400" />
           <div class="text-sm text-gray-400">EC2 Instances</div>
@@ -19,7 +19,7 @@
       </div>
 
       <!-- EBS Volumes -->
-      <div class="flex-1 bg-gray-800/50 rounded-xl p-4 space-y-2">
+      <div class="bg-gray-800/50 rounded-xl p-4 space-y-2">
         <div class="flex gap-1 items-center">
           <UIcon name="i-heroicons-circle-stack" class="text-blue-400" />
           <div class="text-sm text-gray-400">EBS Volumes</div>
@@ -33,7 +33,7 @@
       </div>
 
       <!-- Container Clusters -->
-      <div class="flex-1 bg-gray-800/50 rounded-xl p-4 space-y-2">
+      <div class="bg-gray-800/50 rounded-xl p-4 space-y-2">
         <div class="flex gap-1 items-center">
           <UIcon name="i-heroicons-cube" class="text-green-400" />
           <div class="text-sm text-gray-400">Container Clusters</div>
@@ -46,7 +46,7 @@
       </div>
 
       <!-- S3 Buckets -->
-      <div class="flex-1 bg-gray-800/50 rounded-xl p-4 space-y-2">
+      <div class="bg-gray-800/50 rounded-xl p-4 space-y-2">
         <div class="flex gap-1 items-center">
           <UIcon name="i-heroicons-circle-stack" class="text-yellow-400" />
           <div class="text-sm text-gray-400">S3 Buckets</div>
@@ -61,5 +61,11 @@
 </template>
 
 <script setup lang="ts">
+interface Props {
+  columns?: number;
+}
+const props = withDefaults(defineProps<Props>(), {
+  columns: 4
+});
 
 </script>
