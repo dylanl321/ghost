@@ -15,7 +15,7 @@ interface GraphMembersResponse {
   '@odata.nextLink'?: string;
 }
 
-interface GraphUser {
+export interface GraphUser {
   displayName: string
   userPrincipalName: string
   roles: string[]

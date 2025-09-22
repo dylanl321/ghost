@@ -2,7 +2,7 @@
   <UCard>
     <template #header>
       <div class="flex justify-between">
-        <div class="text-lg font-semibold">Organization Cost Trends</div>
+        <div class="text-lg font-semibold">{{ title }}</div>
         <UBadge color="gray" variant="soft" size="sm">
           {{ dateRangeLabel }}
         </UBadge>
