@@ -164,14 +164,18 @@ const costSameDaysLastMonth = computed(() => {
   return lastMonthSeries.reduce((sum, entry) => sum + entry.cost, 0)
 })
 
+const actualSpendThisMonth = computed<number>(() => overviewThisMonth.value?.costs.budgetAnalysis.actualSpend || 0)
+const actualSpendLastMonth = computed<number>(() => overviewLastMonth.value?.costs.budgetAnalysis.actualSpend || 0)
+const projectedSpend = computed<number>(() => overviewThisMonth.value?.costs.budgetAnalysis.projectedSpend || 0)
+
 const monthToDateTrend = computed(() => {
-  if (costSameDaysLastMonth.value === 0 || !overviewThisMonth.value) return 0
-  return ((overviewThisMonth.value.costs.budgetAnalysis.actualSpend - costSameDaysLastMonth.value) / costSameDaysLastMonth.value) * 100
+  if (!costSameDaysLastMonth.value) return 0
+  return ((actualSpendThisMonth.value - costSameDaysLastMonth.value) / costSameDaysLastMonth.value) * 100
 })
 
 const projectedSpendTrend = computed(() => {
-  if (!overviewThisMonth.value || !overviewLastMonth.value) return 0
-  return (overviewThisMonth.value?.costs.budgetAnalysis.actualSpend - overviewLastMonth.value.costs.budgetAnalysis.actualSpend) / overviewLastMonth.value.costs.budgetAnalysis.actualSpend * 100
+  if (!actualSpendLastMonth.value) return 0
+  return ((projectedSpend.value - actualSpendLastMonth.value) / actualSpendLastMonth.value) * 100
 })
 
 const clear = () => {

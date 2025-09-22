@@ -52,7 +52,7 @@
                   </span>
                 </div>
                 <UserAvatar
-                  :user-principal-name="user?.claims?.email"
+                  :user-principal-name="(user?.claims?.email as string) || ''"
                   :display-name="`${user?.claims?.given_name} ${user?.claims?.family_name}`"
                   size="sm"
                 />
@@ -73,7 +73,7 @@ import { useNavigationStore } from '~/stores/useNavigationStore'
 import UserAvatar from '~/components/ui/UserAvatar.vue'
 
 interface Props {
-  breadcrumbs: Array<object>
+  breadcrumbs: []
 }
 
 const props = defineProps<Props>()
@@ -94,7 +94,7 @@ const isMobile = computed(() => {
 })
 
 // Mobile menu handling
-const showMobileMenu = ref(false)
+// const showMobileMenu = ref(false)
 
 const toggleMobileMenu = () => {
   emit('toggle-mobile-menu')
@@ -113,14 +113,14 @@ const toggleSidebar = () => {
 // Computed property for direct user profile link
 const myAccessLink = computed(() => {
   if (user.value?.claims?.email) {
-    const username = convertToUsernameSlug(user.value.claims.email)
+    const username = convertToUsernameSlug((user.value.claims.email as string))
     return `/account/user/${username}`
   }
   return '/account/user/my-access' // Fallback to redirect page
 })
 
 // Build AWS console links section
-const awsConsoleLinks = computed(() => {
+const awsConsoleLinks = computed<any>(() => {
   const links = [
     {
       label: 'AWS Commercial Console',
@@ -141,8 +141,8 @@ const awsConsoleLinks = computed(() => {
   return links
 })
 
-const userMenuItems = computed(() => {
-  const menuItems = [
+const userMenuItems = computed<any>(() => {
+  const menuItems: any = [
     [
       {
         label: 'Profile',

@@ -4,7 +4,7 @@
     <UCard>
       <div class="flex gap-2 items-center">
         <div :class="`w-3 h-3 rounded-full ${accountStatus !== 'Decommissioned' ? 'bg-green-500' : 'bg-red-500'}`" />
-        <h1 class="font-semibold text-2xl">{{ accountName ?? "ACCOUNT NAME NOT FOUND" }}</h1>
+        <h1 class="font-semibold text-2xl">{{ accountName ?? "Loading..." }}</h1>
       </div>
     </UCard>
 
@@ -17,7 +17,7 @@
         :users="users"
         :account-id="accountId"
         :loading="loading"
-        class="col-span-1 pr-4"
+        class="col-span-1"
       />
     </div>
 
