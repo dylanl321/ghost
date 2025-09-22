@@ -1,9 +1,9 @@
 <template>
-  <div :class="containerClasses">
+  <UCard class="p-3">
     <div class="flex items-start justify-between">
       <div>
-        <p class="text-sm font-medium text-muted">{{ label }}</p>
-        <p :class="valueClasses">
+        <p class="text-sm font-medium text-gray-400">{{ label }}</p>
+        <p class="text-base">
           <span v-if="prefix">{{ prefix }}</span>
           {{ formattedValue }}
           <span v-if="suffix">{{ suffix }}</span>
@@ -14,10 +14,10 @@
         <span class="text-sm font-medium">{{ Math.abs(trend) }}%</span>
       </div>
     </div>
-    <p v-if="description" class="mt-2 text-xs text-muted">
+    <p v-if="description" class="mt-2 text-xs">
       {{ description }}
     </p>
-  </div>
+  </UCard>
 </template>
 
 <script setup lang="ts">
@@ -58,42 +58,6 @@ const formattedValue = computed(() => {
     default:
       return new Intl.NumberFormat('en-US').format(val)
   }
-})
-
-const containerClasses = computed(() => {
-  const classes = ['rounded-lg border bg-white dark:bg-neutral-900 dark:border-neutral-800']
-  
-  switch (props.size) {
-    case 'sm':
-      classes.push('p-3')
-      break
-    case 'lg':
-      classes.push('p-6')
-      break
-    case 'md':
-    default:
-      classes.push('p-4')
-  }
-  
-  return classes.join(' ')
-})
-
-const valueClasses = computed(() => {
-  const classes = ['font-semibold text-highlighted']
-  
-  switch (props.size) {
-    case 'sm':
-      classes.push('text-xl')
-      break
-    case 'lg':
-      classes.push('text-4xl')
-      break
-    case 'md':
-    default:
-      classes.push('text-2xl')
-  }
-  
-  return classes.join(' ')
 })
 
 const trendClasses = computed(() => {

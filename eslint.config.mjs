@@ -6,9 +6,9 @@ import withNuxt from './.nuxt/eslint.config.mjs'
 export default withNuxt(
   {
     rules: {
-      semi: ['error', 'never'],
+      // semi: ['error', 'never'],
       eqeqeq: ['error', 'always'], // If '==' is intended, use a "// eslint-disable-line eqeqeq" comment to disable the red underline
-      quotes: ['error', 'single'],
+      // quotes: ['error', 'single'],
       // indent: ['error', 2],
       'object-curly-spacing': ['error', 'always'],
       '@typescript-eslint/no-unsafe-function-type': 'off',

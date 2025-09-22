@@ -11,8 +11,8 @@
             color="gray"
             size="sm"
             icon="i-heroicons-bars-3"
-            @click="toggleMobileMenu"
             class="md:hidden"
+            @click="toggleMobileMenu"
           />
           
           <!-- Sidebar Toggle for Desktop -->
@@ -22,9 +22,9 @@
             color="gray"
             size="sm"
             :icon="navigationStore.isCollapsed ? 'i-heroicons-bars-3' : 'i-heroicons-bars-3-bottom-left'"
-            @click="toggleSidebar"
             class="hidden md:flex transition-all duration-200 opacity-70 hover:opacity-100"
             :title="navigationStore.isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+            @click="toggleSidebar"
           />
           
           <UBreadcrumb :links="props.breadcrumbs" class="text-sm" />
@@ -88,7 +88,7 @@ const route = useRoute()
 // Mobile detection - SSR safe
 const isMobile = computed(() => {
   // During SSR, assume desktop to avoid hydration mismatches
-  if (process.server) return false
+  if (import.meta.server) return false
   // On client, use the store value or fallback to window check
   return navigationStore.isMobile ?? (typeof window !== 'undefined' && window.innerWidth < 768)
 })

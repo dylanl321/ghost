@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6">
+  <div class="space-y-6 p-6">
     <!-- Header with Controls -->
     <UCard class="bg-gray-900 border border-gray-700">
       <div class="space-y-4">
@@ -18,7 +18,7 @@
                 {{ viewMode === 'overview' ? 'Overview' : viewMode === 'detail' ? 'Detail' : 'Minimap' }}
               </UButton>
             </UDropdown>
-            <UButton color="white" variant="ghost" icon="i-heroicons-viewfinder-circle" @click="fitChartToContainer" title="Fit to Screen" />
+            <UButton color="white" variant="ghost" icon="i-heroicons-viewfinder-circle" title="Fit to Screen" @click="fitChartToContainer" />
             <UButton color="white" variant="ghost" icon="i-heroicons-arrows-pointing-in" @click="resetZoom" />
             <UButton color="white" variant="ghost" icon="i-heroicons-plus" @click="zoomIn" />
             <UButton color="white" variant="ghost" icon="i-heroicons-minus" @click="zoomOut" />
@@ -71,8 +71,8 @@
               color="blue"
               variant="soft"
               size="sm"
-              @click="expandAll"
               :disabled="isLoading"
+              @click="expandAll"
             >
               Expand All
             </UButton>
@@ -80,8 +80,8 @@
               color="gray"
               variant="soft"
               size="sm"
-              @click="collapseAll"
               :disabled="isLoading"
+              @click="collapseAll"
             >
               Collapse
             </UButton>
@@ -335,7 +335,7 @@
 
             <!-- Loading state for details -->
             <div v-if="isLoadingDetails && selectedNode.type === 'account'" class="text-center py-2">
-              <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mx-auto"></div>
+              <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mx-auto"/>
               <p class="text-xs text-gray-400 mt-1">Loading details...</p>
             </div>
             

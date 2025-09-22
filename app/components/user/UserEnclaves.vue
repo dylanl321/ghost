@@ -4,21 +4,24 @@
       <div class="text-lg font-semibold">My Enclaves</div>
     </template>
 
-    <div class="max-h-[33vh] overflow-y-auto">
+    <CenteredLoadingSpinner v-if="props.loading" />
+    <div v-else class="max-h-[33vh] overflow-y-auto">
       <UTable :rows="tableData" :columns="columns" :ui="{ thead: 'bg-gray-800 text-xs' }">
         <template #enclave-data="{ row }">
           <div>
-            <div class="text-white text-sm font-sm max-w-120 truncate">{{ row.projectName }}</div>
-            <div class="text-gray-400 text-xs">
-              <span class="text-blue-300">{{ row.standardId }}</span>, <span class="text-orange-300">{{
-                row.govcloudId }}</span>
+            <div class="text-white text-sm font-sm text-wrap">{{ row.projectName }}</div>
+            <div class="text-gray-400 text-xs flex flex-wrap">
+              <span class="text-blue-300 mr-2">{{ row.standardId }}</span>
+              <span class="text-orange-300">{{row.govcloudId }}</span>
             </div>
           </div>
         </template>
 
         <template #environment-data="{ row }">
           <div class="flex space-x-1">
-            <span>{{ row.environment }}</span>
+            <UTooltip :text="row.environment === 'GovCloud' ? 'GovCloud Paired' : 'Commercial Only'">
+              <span>{{ row.environment }}</span>
+            </UTooltip>
           </div>
         </template>
 
@@ -57,6 +60,10 @@ import { UCard, UTable, UButton } from '#components'
 
 const userGroupStore = useUserGroupStore()
 const router = useRouter()
+
+const props = defineProps<{
+  loading: boolean
+}>()
 
 const columns = [
   { key: 'enclave', label: 'Enclave' },

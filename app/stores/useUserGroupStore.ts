@@ -85,7 +85,7 @@ export const useUserGroupStore = defineStore('userGroups', {
             projectName: roleData.accountName,
             standardId: roleData.standardAccountId,
             govcloudId: roleData.govCloudAccountId,
-            environment: roleData.isGovCloud ? 'GovCloud Paired' : 'Commercial Only',
+            environment: roleData.isGovCloud ? 'GovCloud' : 'Commercial',
             roles: [],
             total: 0
           }
