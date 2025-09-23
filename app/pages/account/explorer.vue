@@ -126,9 +126,16 @@
               <UTooltip :text="row.awsGovCloudAccountID ? 'GovCloud Paired' : 'Commercial Only'">
                 <p>{{ row.awsGovCloudAccountID ? "GovCloud" : "Commercial" }}</p>
               </UTooltip>
+
               <UTooltip v-if="row.isAWSStdEnv" text="Standard AWS Environment">
                 <UBadge color="orange" size="xs">SAWSE</UBadge>
               </UTooltip>
+
+              <UBadge v-if="row.dataType" :color="getDataTypeColor(row.dataType)" size="xs" class="w-fit">
+                <UIcon name="i-heroicons-shield-check" class="w-3 h-3" />
+                {{ row.dataType }}
+              </UBadge>
+
             </div>
           </template>
 
@@ -244,6 +251,18 @@ const getActionItems = (account: AWSEnclaveData) => {
   }
 
   return actionItems
+}
+
+const getDataTypeColor = (dataType?: string) => {
+  if (!dataType) return 'gray';
+
+  const typeLower = dataType.toLowerCase();
+  if (typeLower.includes('pii') || typeLower.includes('personal')) return 'amber';
+  if (typeLower.includes('public')) return 'green';
+  if (typeLower.includes('sensitive') || typeLower.includes('confidential')) return 'red';
+  if (typeLower.includes('internal')) return 'blue';
+
+  return 'indigo';
 }
 
 const allRows = computed(() => Object.values(enclaveStore.enclaves || {}))

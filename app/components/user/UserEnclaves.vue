@@ -11,8 +11,12 @@
           <div>
             <div class="text-white text-sm font-sm text-wrap">{{ row.projectName }}</div>
             <div class="text-gray-400 text-xs flex flex-wrap">
-              <span class="text-blue-300 mr-2">{{ row.standardId }}</span>
-              <span class="text-orange-300">{{row.govcloudId }}</span>
+              <UTooltip text="Commercial Account ID">
+                <span class="text-blue-300 mr-2">{{ row.standardId }}</span>
+              </UTooltip>
+              <UTooltip text="GovCloud Account ID">
+                <span class="text-orange-300">{{row.govcloudId }}</span>
+              </UTooltip>
             </div>
           </div>
         </template>
