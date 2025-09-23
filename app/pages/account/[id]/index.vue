@@ -8,7 +8,7 @@
       </div>
     </UCard>
 
-    <div class="grid grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 row-auto">
       <!-- Account Details -->
       <AccountDetails v-if="accountId" :account-id="accountId" class="col-span-2" />
 
@@ -19,10 +19,7 @@
         :loading="loading"
         class="col-span-1"
       />
-    </div>
 
-    <!-- Other cards -->
-    <div class="grid grid-cols-3 gap-4">
       <CostTrendChart
         title="Account Cost Trends"
         :time-series="[]"

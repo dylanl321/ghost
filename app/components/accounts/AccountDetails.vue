@@ -9,7 +9,7 @@
       <UCard class="bg-gray-800 md:row-span-2">
         <template #header>
           <div class="flex items-center gap-2">
-            <UIcon name="i-heroicons-briefcase" />
+            <UIcon name="i-heroicons-briefcase" class="text-blue-500 w-5 h-5" />
             <h4 class="font-semibold">Project Details</h4>
           </div>
         </template>
@@ -26,12 +26,12 @@
         </div>
       </UCard>
 
-      <!-- Quick Stats -->
+      <!-- Platform Info -->
       <UCard class="bg-gray-800">
         <template #header>
           <div class="flex items-center gap-2">
-            <UIcon name="i-heroicons-bolt" />
-            <h4 class="font-semibold">Quick Stats</h4>
+            <UIcon name="i-heroicons-shield-check" class="text-blue-200 w-5 h-5" />
+            <h4 class="font-semibold">Platform Info</h4>
           </div>
         </template>
 
@@ -46,7 +46,7 @@
       <UCard class="bg-gray-800">
         <template #header>
           <div class="flex items-center gap-2">
-            <UIcon name="i-heroicons-currency-dollar" />
+            <UIcon name="i-heroicons-currency-dollar" class="text-green-500 w-5 h-5" />
             <h4 class="font-semibold">Cost Details</h4>
           </div>
         </template>
@@ -62,15 +62,15 @@
       <UCard class="bg-gray-800">
         <template #header>
           <div class="flex items-center gap-2">
-            <UIcon name="i-heroicons-server" />
+            <UIcon name="i-heroicons-server" class="text-purple-500 w-5 h-5" />
             <h4 class="font-semibold">Network Configuration</h4>
           </div>
         </template>
 
         <div class="space-y-2 text-sm">
-          <AccountDetailsRow label="CIDR" :value="enclave?.dc_cidr" />
-          <AccountDetailsRow label="Subnet" :value="enclave?.dc_subnet_mask" />
-          <AccountDetailsRow label="TGW Subnet" :value="enclave?.dc_tgw_subnet_mask" />
+          <AccountDetailsRow label="Direct Connect VPC CIDR" :value="enclave?.dc_cidr" />
+          <AccountDetailsRow label="Subnet Mask" :value="'/' + enclave?.dc_subnet_mask" />
+          <AccountDetailsRow label="TGW Subnet Mask" :value="'/' + enclave?.dc_tgw_subnet_mask" />
         </div>
       </UCard>
 
@@ -78,7 +78,7 @@
       <UCard class="bg-gray-800">
         <template #header>
           <div class="flex items-center gap-2">
-            <UIcon name="i-heroicons-user-group" />
+            <UIcon name="i-heroicons-user-group" class="text-orange-500 w-5 h-5" />
             <h4 class="font-semibold">Account Admins</h4>
           </div>
         </template>

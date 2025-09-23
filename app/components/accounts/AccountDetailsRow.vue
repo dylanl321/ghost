@@ -1,7 +1,7 @@
 <template>
   <div>
     <span class="text-gray-400">{{ label }}:</span>
-    <p class="font-mono truncate">{{ value || '-' }}</p>
+    <p class="font-mono min-w-20 wrap-anywhere">{{ value || '-' }}</p>
   </div>
 </template>
 
@@ -11,3 +11,9 @@ defineProps<{
   value?: string | number
 }>()
 </script>
+
+<style>
+.wrap-anywhere {
+  word-wrap: break-word;
+}
+</style>

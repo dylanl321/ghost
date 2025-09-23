@@ -3,7 +3,7 @@
     <template #header>
       <div class="flex items-center justify-between">
         <div class="text-lg font-semibold">Account Users</div>
-        <UButton icon="i-heroicons-users" size="xs" variant="soft" color="primary" @click="goToAllUsers">
+        <UButton icon="i-heroicons-users" size="xs" variant="outline" color="primary" @click="goToAllUsers">
           View All
         </UButton>
       </div>
