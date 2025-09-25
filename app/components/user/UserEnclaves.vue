@@ -5,7 +5,7 @@
     </template>
 
     <CenteredLoadingSpinner v-if="props.loading" />
-    <div v-else class="max-h-[33vh] overflow-y-auto">
+    <div v-else class="overflow-y-auto">
       <UTable :rows="tableData" :columns="columns" :ui="{ thead: 'bg-gray-800 text-xs' }">
         <template #enclave-data="{ row }">
           <div>
@@ -50,7 +50,7 @@
             <UButton size="xs" icon="i-heroicons-user" color="primary" variant="soft"
               @click="router.push(`/account/${row.standardId}`)">Account Details</UButton>
             <UButton size="xs" icon="i-heroicons-users" color="primary" variant="soft"
-              @click="router.push(`/group/${row.standardId}`)">
+              @click="router.push(`/account/${row.standardId}/groups`)">
               Groups</UButton>
           </div>
         </template>

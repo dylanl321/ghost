@@ -70,29 +70,29 @@
       </UCard>
     </div>
 
-    <UserEnclaves :loading="loading" />
-
     <div class="grid grid-cols-3 gap-4 auto-rows-fr">
-      <!-- Organization cost trends -->
-      <CostTrendChart title="Organization Cost Trends"
-        :time-series="overviewThisMonth?.costs.timeSeries.slice(-14) || []" :loading="loading" class="col-span-2" />
+      <UserEnclaves :loading="loading" class="col-span-2" />
 
       <!-- Account insights (tall) -->
       <AccountInsights :top-accounts="overviewThisMonth?.costs.topAccounts || []" :loading="loading"
         class="col-span-1 row-span-2" />
+      
+      <!-- Organization cost trends -->
+      <CostTrendChart title="Organization Cost Trends"
+        :time-series="overviewThisMonth?.costs.timeSeries.slice(-14) || []" :loading="loading" class="col-span-2" />
 
       <!-- Resource usage under cost trends -->
-      <ResourceUsage class="col-span-2" />
+      <!-- <ResourceUsage class="col-span-2" /> -->
     </div>
 
-    <UButton class="mr-2" @click="() => logout()">Logout</UButton>
-    <UButton @click="clear">Clear Stores</UButton>
+    <!-- <UButton class="mr-2" @click="() => logout()">Logout</UButton> -->
+    <!-- <UButton @click="clear">Clear Stores</UButton> -->
   </div>
 </template>
 
 <script setup lang="ts">
 
-const { user, logout } = useOidcAuth()
+const { user } = useOidcAuth()
 const userGroupStore = useUserGroupStore()
 const enclaveStore = useEnclaveStore()
 
@@ -178,10 +178,10 @@ const projectedSpendTrend = computed(() => {
   return ((projectedSpend.value - actualSpendLastMonth.value) / actualSpendLastMonth.value) * 100
 })
 
-const clear = () => {
-  enclaveStore.clear()
-  userGroupStore.clear()
-}
+// const clear = () => {
+//   enclaveStore.clear()
+//   userGroupStore.clear()
+// }
 
 onMounted(async () => {
   try {

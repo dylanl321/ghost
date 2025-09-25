@@ -14,7 +14,7 @@
       <div
         v-for="user in visibleUsers"
         :key="user.userPrincipalName"
-        class="flex items-center justify-between px-2 py-3 hover:bg-gray-700 cursor-pointer border-b border-gray-800 gap-y-2 flex-wrap 2xl:flex-nowrap"
+        class="flex items-center justify-between px-2 py-3 cursor-pointer border-b gap-y-2 flex-wrap 2xl:flex-nowrap border-gray-800 hover:bg-gray-700 transition"
         @click="goToUser(user.userPrincipalName)"
       >
         <div class="flex items-center gap-3 min-w-0">
@@ -87,8 +87,8 @@ const maxVisible = 6
 const visibleUsers = computed(() => props.users.slice(0, maxVisible))
 
 const router = useRouter()
-function goToUser(username: string) {
-  router.push(`/account/user/${username}/index`)
+function goToUser(userPrincipalName: string) {
+  router.push(`/account/user/${convertToUsernameSlug(userPrincipalName)}`)
 }
 function goToAllUsers() {
   router.push(`/account/${props.accountId}/users`)

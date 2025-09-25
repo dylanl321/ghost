@@ -13,20 +13,12 @@
       <AccountDetails v-if="accountId" :account-id="accountId" class="col-span-2" />
 
       <!-- Account Users -->
-      <AccountUsers
-        :users="users"
-        :account-id="accountId"
-        :loading="loading"
-        class="col-span-1"
-      />
+      <AccountUsers :users="users" :account-id="accountId" :loading="loading" class="col-span-1" />
 
-      <CostTrendChart
-        title="Account Cost Trends"
-        :time-series="[]"
-        :loading="true"
-        class="col-span-2"
-      />
-      <ResourceUsage :columns="2" class="col-span-1" />
+      <CostTrendChart title="Account Cost Trends" :time-series="[]" :loading="true" class="col-span-2" />
+
+      <!-- <ResourceUsage :columns="2" class="col-span-1" /> -->
+      <EC2Usage :instance-summary="instanceData?.summary || null" :loading="loading" />
     </div>
   </div>
 </template>
@@ -44,7 +36,13 @@ const govCloudId = computed(() => enclaveStore.enclaves[accountId.value]?.awsGov
 const accountName = computed(() => enclaveStore.enclaves[accountId.value]?.projectName)
 const accountStatus = computed(() => enclaveStore.enclaves[accountId.value]?.enclaveStatus)
 
+interface InstanceResponse {
+  instances: Instance[]
+  summary: InstanceSummary
+}
+
 const users = ref<GraphUser[]>([])
+const instanceData = ref<InstanceResponse | null>(null)
 const loading = ref(true)
 
 onMounted(async () => {
@@ -52,6 +50,9 @@ onMounted(async () => {
     if (accountId.value) {
       users.value = await groupMembers.fetchEnclaveUsers(accountId.value, govCloudId.value || '', user.value?.accessToken || '')
     }
+    const response = await fetch(`/api/instances?environment=govcloud&accountIds=${accountId.value}&limit=2000`)
+    const json = await response.json()
+    instanceData.value = json.data
   } catch (err) {
     console.error('Error fetching users:', err)
   } finally {

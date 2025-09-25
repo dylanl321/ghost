@@ -50,7 +50,7 @@
 
           </div>
 
-          <UButton :to="`/user/${user.userPrincipalName}/index`" size="xs" color="primary" variant="outline">
+          <UButton :to="`/account/user/${convertToUsernameSlug(user.userPrincipalName)}`" size="xs" color="primary" variant="outline">
             View Details
           </UButton>
         </div>

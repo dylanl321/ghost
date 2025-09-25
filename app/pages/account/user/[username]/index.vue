@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, watch } from 'vue'
 import UserAccess from '~/components/accounts/UserAccess.vue'
-import RoleBadge from '~/components/ui/RoleBadge.vue'
-import { exportUsersToCSV, exportFlattenedUserAccessToCSV } from '~/utils/csvExport'
+// import { exportFlattenedUserAccessToCSV } from '~/utils/csvExport'
 import { getEmailPatternsFromSlug, getSearchTermsFromSlug, isValidUsername, convertToUsernameSlug } from '~/utils/userUtils'
 import UserAvatar from '~/components/ui/UserAvatar.vue'
 
@@ -28,7 +27,6 @@ const { setBreadcrumbs } = usePageBreadcrumbs()
 const userProfile = ref<UserProfile | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
-const showUserAccess = ref(true)
 const showInactiveAccounts = ref(false)
 
 // Refs to access UserAccess component data
@@ -79,14 +77,6 @@ const { getUserTags } = useGroupMembers()
 // User tags
 const userTags = ref<Array<{title: string, color: string, icon?: string, description?: string}>>([])
 
-// Convert username slug back to email format
-const getUserPrincipalName = (usernameSlug: string) => {
-  // This function relies on getEmailPatternsFromSlug from userUtils
-  // which handles the email domain logic properly
-  const emailPatterns = getEmailPatternsFromSlug(usernameSlug)
-  return emailPatterns.length > 0 ? emailPatterns[0] : usernameSlug
-}
-
 // Search for user by username pattern
 const findUserByUsername = async (usernameSlug: string) => {
   if (!user.value?.accessToken || !usernameSlug) return null
@@ -128,7 +118,7 @@ const findUserByUsername = async (usernameSlug: string) => {
             return partialMatch
           }
         }
-      } catch (err) {
+      } catch {
         console.debug(`No results for email pattern: ${email}`)
       }
     }
@@ -152,7 +142,7 @@ const findUserByUsername = async (usernameSlug: string) => {
             return bestMatch
           }
         }
-      } catch (err) {
+      } catch {
         console.debug(`No results for search term: ${searchTerm}`)
       }
     }
@@ -172,7 +162,7 @@ const loadUserTags = async () => {
   }
 
   try {
-    const tags = await getUserTags(userProfile.value.userPrincipalName, user.value.accessToken, userProfile.value.displayName)
+    const tags = await getUserTags(userProfile.value.userPrincipalName, user.value.accessToken)
     userTags.value = tags
   } catch (error) {
     console.error('Failed to load user tags:', error)
@@ -224,12 +214,6 @@ const loadUserProfile = async () => {
   }
 }
 
-// Check if current user is viewing their own profile
-const isMyProfile = computed(() => {
-  if (!user.value?.userInfo?.preferred_username || !userProfile.value) return false
-  return user.value.userInfo.preferred_username === userProfile.value.userPrincipalName
-})
-
 // Get inactive accounts from UserAccess component
 const inactiveAccounts = computed(() => {
   if (!userAccessRef.value?.accounts) return []
@@ -238,17 +222,6 @@ const inactiveAccounts = computed(() => {
     account.status === 'unknown' || 
     account.accountStatus === 'unknown' ||
     account.accountName === 'Unknown Account'
-  )
-})
-
-// Get only active accounts for the main display
-const activeAccounts = computed(() => {
-  if (!userAccessRef.value?.accounts) return []
-  return userAccessRef.value.accounts.filter((account: any) => 
-    account.isActive && 
-    account.status !== 'unknown' && 
-    account.accountStatus !== 'unknown' &&
-    account.accountName !== 'Unknown Account'
   )
 })
 
@@ -282,12 +255,6 @@ const handleExportCSV = () => {
 // Handle navigation back to search
 const goBackToSearch = () => {
   navigateTo('/account/user')
-}
-
-// Handle edit profile (if own profile)
-const editProfile = () => {
-  // Navigate to profile edit page or open modal
-  navigateTo('/profile/details')
 }
 
 // Page metadata
@@ -332,7 +299,7 @@ const updateBreadcrumbs = () => {
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div class="space-y-4 p-6">
     <!-- Breadcrumb Navigation -->
     <div class="flex items-center gap-2 text-sm text-gray-400">
       <NuxtLink to="/account/user" class="hover:text-white flex items-center gap-1">
@@ -354,10 +321,10 @@ const updateBreadcrumbs = () => {
       <template #title>Failed to Load User</template>
       {{ error }}
       <template #actions>
-        <UButton @click="loadUserProfile" variant="ghost" size="xs" icon="i-heroicons-arrow-path">
+        <UButton variant="ghost" size="xs" icon="i-heroicons-arrow-path" @click="loadUserProfile">
           Try Again
         </UButton>
-        <UButton @click="goBackToSearch" variant="ghost" size="xs" icon="i-heroicons-arrow-left">
+        <UButton variant="ghost" size="xs" icon="i-heroicons-arrow-left" @click="goBackToSearch">
           Back to Search
         </UButton>
       </template>
@@ -485,21 +452,21 @@ const updateBreadcrumbs = () => {
           
           <!-- View Toggle -->
           <UButton 
-            @click="userAccessRef?.toggleViewMode()"
             :icon="userAccessRef?.viewMode === 'cards' ? 'i-heroicons-table-cells' : 'i-heroicons-squares-2x2'"
             variant="outline"
             size="sm"
+            @click="userAccessRef?.toggleViewMode()"
           >
             {{ userAccessRef?.viewMode === 'cards' ? 'Table View' : 'Card View' }}
           </UButton>
           
           <!-- Refresh Button -->
           <UButton 
-            @click="userAccessRef?.loadUserAccess()" 
             :loading="userAccessRef?.loading" 
             icon="i-heroicons-arrow-path" 
             variant="ghost" 
-            size="sm"
+            size="sm" 
+            @click="userAccessRef?.loadUserAccess()"
           />
         </div>
 
@@ -563,6 +530,7 @@ const updateBreadcrumbs = () => {
         <!-- Active Accounts Section -->
         <UserAccess 
           ref="userAccessRef"
+          :key="userProfile.userPrincipalName"
           :user-principal-name="userProfile.userPrincipalName"
           :display-name="userProfile.displayName"
           :show-user-info="false"
@@ -570,7 +538,6 @@ const updateBreadcrumbs = () => {
           :show-controls="false"
           :show-stats="false"
           :show-inactive-accounts="false"
-          :key="userProfile.userPrincipalName"
         />
 
         <!-- Inactive Accounts Collapsed Section -->
@@ -578,8 +545,8 @@ const updateBreadcrumbs = () => {
           <UCard class="bg-gray-900 border border-gray-800">
             <template #header>
               <div 
-                @click="showInactiveAccounts = !showInactiveAccounts"
                 class="flex items-center justify-between cursor-pointer hover:bg-gray-800/50 -m-4 p-4 rounded-t-lg transition-colors"
+                @click="showInactiveAccounts = !showInactiveAccounts"
               >
                 <div class="flex items-center gap-3">
                   <UIcon 
@@ -624,9 +591,9 @@ const updateBreadcrumbs = () => {
                         <!-- Environment Indicators -->
                         <div class="flex gap-1">
                           <div v-if="account.environments?.includes('commercial')" 
-                               class="w-2 h-2 bg-blue-400 rounded-full opacity-60" title="Commercial"></div>
+                               class="w-2 h-2 bg-blue-400 rounded-full opacity-60" title="Commercial"/>
                           <div v-if="account.environments?.includes('govcloud')" 
-                               class="w-2 h-2 bg-orange-400 rounded-full opacity-60" title="GovCloud"></div>
+                               class="w-2 h-2 bg-orange-400 rounded-full opacity-60" title="GovCloud"/>
                         </div>
                         
                         <div class="flex-1 min-w-0">
@@ -669,20 +636,20 @@ const updateBreadcrumbs = () => {
                     <!-- Actions -->
                     <div class="flex items-center justify-between pt-2 border-t border-gray-700">
                       <UButton
-                        @click.stop="showGroupDetails(account)"
                         variant="ghost"
                         size="xs"
                         icon="i-heroicons-user-group"
                         class="text-gray-400 hover:text-white"
+                        @click.stop="showGroupDetails(account)"
                       >
                         View Groups
                       </UButton>
                       <UButton
-                        @click.stop="handleAccountClick(account)"
                         variant="ghost"
                         size="xs"
                         icon="i-heroicons-arrow-top-right-on-square"
                         class="text-gray-400 hover:text-white"
+                        @click.stop="handleAccountClick(account)"
                       >
                         Details
                       </UButton>
@@ -707,9 +674,9 @@ const updateBreadcrumbs = () => {
         
         <div class="flex flex-wrap justify-center gap-4">
           <UButton 
-            @click="goBackToSearch"
             icon="i-heroicons-arrow-left"
             variant="outline"
+            @click="goBackToSearch"
           >
             Back to Search
           </UButton>
