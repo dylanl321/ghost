@@ -31,7 +31,7 @@
  */
 
 import { getDynamoDBClient } from '../lib/aws-client-factory'
-import { getAccountFromOrganizations } from './accounts-consolidated'
+import { getAccountFromOrganizations, getAccountsTableName } from './accounts-consolidated'
 import { errors } from './api-response'
 import type { H3Event } from 'h3'
 
@@ -49,16 +49,16 @@ export interface OptimizedLookupResult {
   source: 'dynamodb' | 'organizations' | 'both'
 }
 
+const TABLE_NAME = 'gdms_aws_accounts-master'
+
 /**
  * Get account by account ID (requires scan since accountId is not the primary key)
  */
 async function getAccountByAccountId(
-  accountId: string, 
-  environment: 'commercial' | 'govcloud' = 'govcloud'
+  accountId: string
 ): Promise<any | null> {
   try {
-    const dynamoClient = await getDynamoDBClient('govcloud')
-    const tableName = process.env.AWS_ACCOUNTS_TABLE_NAME
+    const tableName = getAccountsTableName()
     
     // Since accountId is NOT the primary key (requestId is), we need to scan
     const { scanItems } = await import('./dynamodb')
@@ -130,12 +130,11 @@ async function getAccountByAccountId(
  * Get account by email using GSI or fallback to Scan
  */
 async function getAccountByEmail(
-  email: string,
-  environment: 'commercial' | 'govcloud' = 'govcloud'
+  email: string
 ): Promise<any | null> {
   try {
     const dynamoClient = await getDynamoDBClient('govcloud')
-    const tableName = process.env.AWS_ACCOUNTS_TABLE_NAME
+    const tableName = TABLE_NAME
     
     const { QueryCommand } = await import('@aws-sdk/client-dynamodb')
     const { marshall, unmarshall } = await import('@aws-sdk/util-dynamodb')
@@ -247,7 +246,7 @@ async function getAccountByRequestId(
   requestId: string
 ): Promise<any | null> {
   try {
-    const tableName = process.env.AWS_ACCOUNTS_TABLE_NAME!
+    const tableName = getAccountsTableName()
     const requestIdNumber = parseInt(requestId)
     
     // Use scan to find the account since we're not sure of the exact primary key schema
@@ -368,6 +367,8 @@ export async function findAccountByIdentifierOptimized(
   identifier: string,
   options: AccountLookupOptions = {}
 ): Promise<OptimizedLookupResult | null> {
+  console.log('running findAccountByIdentifierOptimized')
+
   if (!identifier || identifier.trim() === '') {
     return null
   }
@@ -434,6 +435,8 @@ export async function lookupAccountOptimized(
   identifier: string,
   options: AccountLookupOptions = {}
 ): Promise<OptimizedLookupResult | null> {
+  console.log('running lookupAccountOptimized')
+
   // Validate identifier format
   if (!identifier || identifier.trim() === '') {
     throw errors.badRequest(event, 'Account identifier is required')

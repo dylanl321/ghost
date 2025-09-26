@@ -63,12 +63,6 @@ const props = defineProps<{
   loading: boolean
 }>()
 
-// const totalInstances = computed(() => props.instances.length)
-// const scheduledCount = computed(() => props.instances.filter(i => i.schedulingInfo?.hasSchedule).length)
-// const unscheduledCount = computed(() => totalInstances.value - scheduledCount.value)
-// const runningCount = computed(() => props.instances.filter(i => i.instanceState === 'running').length)
-// const stoppedCount = computed(() => props.instances.filter(i => i.instanceState === 'stopped').length)
-
 const topInstanceTypes = computed(() => {
   return Object.entries(props.instanceSummary?.byType || {})
     .map(([name, count]) => ({ name, count }))

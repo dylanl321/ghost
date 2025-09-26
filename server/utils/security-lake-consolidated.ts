@@ -85,7 +85,7 @@ export function getEnvironmentConfig(environment: 'commercial' | 'govcloud'): En
       region: process.env.AWS_GOVCLOUD_SECURITY_LAKE_REGION || 'us-gov-west-1',
       database: process.env.AWS_GOVCLOUD_SECURITY_LAKE_DATABASE || 'amazon_security_lake_glue_db_us_gov_west_1',
       athenaResultsBucket: process.env.AWS_GOVCLOUD_ATHENA_RESULTS_BUCKET || 'aws-athena-query-results-us-gov-west-1',
-      monitoringAccountId: process.env.AWS_GOVCLOUD_SECURITY_LAKE_ACCOUNT || ''
+      monitoringAccountId: process.env.AWS_GOVCLOUD_SECURITY_LAKE_ACCOUNT || '083876038518'
     }
   }
   
@@ -93,7 +93,7 @@ export function getEnvironmentConfig(environment: 'commercial' | 'govcloud'): En
     region: process.env.AWS_COMMERCIAL_SECURITY_LAKE_REGION || 'us-east-1',
     database: process.env.AWS_COMMERCIAL_SECURITY_LAKE_DATABASE || 'amazon_security_lake_glue_db_us_east_1',
     athenaResultsBucket: process.env.AWS_COMMERCIAL_ATHENA_RESULTS_BUCKET || 'aws-athena-query-results-us-east-1-253821132832',
-    monitoringAccountId: process.env.AWS_COMMERCIAL_SECURITY_LAKE_ACCOUNT || ''
+    monitoringAccountId: process.env.AWS_COMMERCIAL_SECURITY_LAKE_ACCOUNT || '253821132832'
   }
 }
 

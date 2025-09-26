@@ -13,6 +13,7 @@ import { DescribeTableCommand } from '@aws-sdk/client-dynamodb'
 import { DescribeOrganizationCommand } from '@aws-sdk/client-organizations'
 import os from 'os'
 import process from 'process'
+import { getAccountsTableName } from '../utils/accounts-consolidated'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/health', 'GET', {
@@ -242,7 +243,7 @@ async function checkAWSEnvironment(environment: 'commercial' | 'govcloud') {
     // Check DynamoDB access
     try {
       const dynamoClient = await getDynamoDBClient(environment)
-      const tableName = process.env.AWS_ACCOUNTS_TABLE_NAME || 'gdms-accounts'
+      const tableName = getAccountsTableName()
       
       // Try to describe the accounts table
       const describeResponse = await dynamoClient.send(new DescribeTableCommand({ 
