@@ -97,7 +97,7 @@ registerEndpoint('/api/costs/forecast', 'GET', {
       schema: { 
         type: 'string'
       },
-      description: 'Comma-separated list of account IDs to filter forecast'
+      description: 'Comma-separated list of account identifiers to filter (supports request IDs, 12-digit account IDs, or email addresses)'
     },
     {
       name: 'proformaAccountId',
