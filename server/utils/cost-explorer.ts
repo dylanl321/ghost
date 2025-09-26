@@ -70,6 +70,33 @@ export async function getCostAndUsage(
   
   console.log(`Cost Explorer total results: ${allResultsByTime.length} time periods`)
   
+  // IMPORTANT: When using GroupBy, AWS doesn't return a root-level Total
+  // We need to make a separate call without GroupBy to get the true total
+  if (groupBy && groupBy.length > 0 && Object.keys(total).length === 0) {
+    console.log('GroupBy detected with no root Total - making separate call for total')
+    try {
+      const totalCommand = new GetCostAndUsageCommand({
+        TimePeriod: {
+          Start: params.startDate,
+          End: params.endDate
+        },
+        Granularity: params.granularity as Granularity,
+        Metrics: params.metrics,
+        Filter: params.filter
+        // Explicitly NO GroupBy to get the total
+      })
+      
+      const totalResponse: any = await client.send(totalCommand)
+      if (totalResponse.Total) {
+        total = totalResponse.Total
+        console.log('Successfully retrieved total from separate call')
+      }
+    } catch (error) {
+      console.warn('Failed to get separate total:', error)
+      // Fall back to calculating from resultsByTime
+    }
+  }
+  
   return {
     resultsByTime: allResultsByTime,
     dimensionValueAttributes: dimensionValueAttributes,
@@ -427,11 +454,37 @@ export async function getProformaCosts(
     Filter: params.filter
   })
 
-  const proformaResponse = await proformaClient.send(proformaCommand)
-  const proformaCosts = {
+  const proformaResponse: any = await proformaClient.send(proformaCommand)
+  let proformaCosts = {
     resultsByTime: proformaResponse.ResultsByTime || [],
     dimensionValueAttributes: proformaResponse.DimensionValueAttributes || [],
-    total: proformaResponse.Total
+    total: proformaResponse.Total || {}
+  }
+  
+  // IMPORTANT: When using GroupBy, AWS doesn't return a root-level Total
+  // Make a separate call without GroupBy to get the true total for proforma account
+  if (groupBy && groupBy.length > 0 && (!proformaResponse.Total || Object.keys(proformaResponse.Total).length === 0)) {
+    console.log('Proforma: GroupBy detected with no root Total - making separate call for total')
+    try {
+      const proformaTotalCommand = new GetCostAndUsageCommand({
+        TimePeriod: {
+          Start: params.startDate,
+          End: params.endDate
+        },
+        Granularity: params.granularity as Granularity,
+        Metrics: params.metrics,
+        Filter: params.filter
+        // Explicitly NO GroupBy to get the total
+      })
+      
+      const proformaTotalResponse: any = await proformaClient.send(proformaTotalCommand)
+      if (proformaTotalResponse.Total) {
+        proformaCosts.total = proformaTotalResponse.Total
+        console.log('Proforma: Successfully retrieved total from separate call')
+      }
+    } catch (error) {
+      console.warn('Proforma: Failed to get separate total:', error)
+    }
   }
   
   // Calculate totals from both accounts
@@ -443,11 +496,15 @@ export async function getProformaCosts(
     billableTotal = isNaN(cost) ? 0 : cost
   } else if (billableCosts.resultsByTime && billableCosts.resultsByTime.length > 0) {
     // Calculate total from grouped results
+    // IMPORTANT: Always use the API-provided Total when available to include unallocated costs
     billableCosts.resultsByTime.forEach((result: any) => {
+      // ALWAYS prefer the Total if available (includes unallocated costs)
       if (result.Total?.['UnblendedCost']?.Amount) {
         const cost = parseFloat(result.Total['UnblendedCost'].Amount)
         billableTotal += (isNaN(cost) ? 0 : cost)
       } else if (result.Groups) {
+        // Only fall back to summing groups if Total is not available
+        // Note: This will miss unallocated costs like support fees, tax, etc.
         result.Groups.forEach((group: any) => {
           const cost = parseFloat(group.Metrics?.['UnblendedCost']?.Amount || '0')
           billableTotal += (isNaN(cost) ? 0 : cost)
@@ -461,11 +518,15 @@ export async function getProformaCosts(
     proformaTotal = isNaN(cost) ? 0 : cost
   } else if (proformaCosts.resultsByTime && proformaCosts.resultsByTime.length > 0) {
     // Calculate total from grouped results
+    // IMPORTANT: Always use the API-provided Total when available to include unallocated costs
     proformaCosts.resultsByTime.forEach((result: any) => {
+      // ALWAYS prefer the Total if available (includes unallocated costs)
       if (result.Total?.['UnblendedCost']?.Amount) {
         const cost = parseFloat(result.Total['UnblendedCost'].Amount)
         proformaTotal += (isNaN(cost) ? 0 : cost)
       } else if (result.Groups) {
+        // Only fall back to summing groups if Total is not available
+        // Note: This will miss unallocated costs like support fees, tax, etc.
         result.Groups.forEach((group: any) => {
           const cost = parseFloat(group.Metrics?.['UnblendedCost']?.Amount || '0')
           proformaTotal += (isNaN(cost) ? 0 : cost)
@@ -475,7 +536,14 @@ export async function getProformaCosts(
   }
 
   // Master account's unallocated cost = billable total - proforma total
+  // This represents costs that remain in the master account after Billing Conductor allocation
   const masterUnallocatedCost = Math.max(0, billableTotal - proformaTotal)
+  
+  console.log(`Proforma calculation:
+    Master Account Total (billable): $${billableTotal.toFixed(2)}
+    Proforma Account Total: $${proformaTotal.toFixed(2)}
+    Master Unallocated: $${masterUnallocatedCost.toFixed(2)}
+    Formula: $${billableTotal.toFixed(2)} - $${proformaTotal.toFixed(2)} = $${masterUnallocatedCost.toFixed(2)}`)
   
   // Extract enterprise support costs if grouped by SERVICE
   let enterpriseSupportCost = 0
@@ -663,9 +731,11 @@ export function detectCostAnomalies(
   }
 
   const costs = resultsByTime.map(result => {
+    // ALWAYS prefer the Total if available (includes unallocated costs)
     let cost = parseFloat(result.Total?.['UnblendedCost']?.Amount || '0')
 
-    // If Total is not available (common with grouped data), sum from individual groups
+    // Only fall back to summing groups if Total is truly not available or is 0
+    // Note: This fallback will miss unallocated costs
     if (cost === 0 && result.Groups) {
       cost = result.Groups.reduce((sum, group) => {
         const groupCost = parseFloat(group.Metrics?.['UnblendedCost']?.Amount || '0')
@@ -718,9 +788,11 @@ export function calculateCostTrends(resultsByTime: any[]) {
   }
 
   const costs = resultsByTime.map(result => {
+    // ALWAYS prefer the Total if available (includes unallocated costs)
     let cost = parseFloat(result.Total?.['UnblendedCost']?.Amount || '0')
 
-    // If Total is not available (common with grouped data), sum from individual groups
+    // Only fall back to summing groups if Total is truly not available or is 0
+    // Note: This fallback will miss unallocated costs
     if (cost === 0 && result.Groups) {
       cost = result.Groups.reduce((sum, group) => {
         const groupCost = parseFloat(group.Metrics?.['UnblendedCost']?.Amount || '0')

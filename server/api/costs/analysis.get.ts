@@ -124,7 +124,7 @@ registerEndpoint('/api/costs/analysis', 'GET', {
       schema: { 
         type: 'string'
       },
-      description: 'Comma-separated list of account IDs to filter (if not provided, returns all accounts)'
+      description: 'Comma-separated list of account identifiers to filter (supports request IDs, 12-digit account IDs, or email addresses)'
     },
     {
       name: 'linesOfBusiness',
@@ -535,7 +535,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
   
   // Extract total cost from the appropriate data source
-  // When grouped by dimension, need to calculate total from the time series data
+  // IMPORTANT: Always use the API-provided Total when available to include unallocated costs
   let totalCostAmount = 0
 
   if (proforma && 'masterAccount' in costData) {
@@ -545,12 +545,14 @@ export default defineEventHandler(handleAsync(async (event) => {
     // Use the total if available (no grouping)
     totalCostAmount = parseFloat(costData.total['UnblendedCost'].Amount)
   } else if ('resultsByTime' in costData && costData.resultsByTime) {
-    // Calculate total from grouped results
+    // Calculate total from time series data
     costData.resultsByTime.forEach((result: any) => {
+      // ALWAYS prefer the Total if available (includes unallocated costs like support, tax, etc.)
       if (result.Total?.['UnblendedCost']?.Amount) {
         totalCostAmount += parseFloat(result.Total['UnblendedCost'].Amount)
       } else if (result.Groups) {
-        // Sum across all groups for this time period
+        // Only fall back to summing groups if Total is not available
+        // Note: This will miss unallocated costs
         result.Groups.forEach((group: any) => {
           const cost = parseFloat(group.Metrics?.['UnblendedCost']?.Amount || '0')
           totalCostAmount += cost

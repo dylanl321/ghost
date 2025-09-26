@@ -2091,14 +2091,20 @@ function combineTimeSeriesData(commercialCosts: any, govcloudCosts: any, dataTyp
       if (date) {
         const existing = timeSeriesMap.get(date) || { date, cost: 0 }
         
-        // When grouped by LINKED_ACCOUNT, total cost is NOT in result.Total
-        // Instead, we need to sum up all the groups for this time period
+        // ALWAYS prefer the API-provided Total when available (includes unallocated costs)
         let dailyCost = 0
         
-        if (result.Groups && result.Groups.length > 0) {
-          // Sum costs from all account groups for this day
+        // First, try to use the Total (includes all costs including unallocated)
+        if (result.Total?.UnblendedCost?.Amount || result.Total?.BlendedCost?.Amount) {
+          dailyCost = parseFloat(
+            result.Total?.UnblendedCost?.Amount || 
+            result.Total?.BlendedCost?.Amount || 
+            '0'
+          )
+        } else if (result.Groups && result.Groups.length > 0) {
+          // Only fall back to summing groups if Total is not available
+          // Note: This will miss unallocated costs like support fees, tax, etc.
           result.Groups.forEach((group: any) => {
-            // Use UnblendedCost as primary, BlendedCost as fallback
             const groupCost = parseFloat(
               group.Metrics?.UnblendedCost?.Amount || 
               group.Metrics?.BlendedCost?.Amount || 
@@ -2106,13 +2112,6 @@ function combineTimeSeriesData(commercialCosts: any, govcloudCosts: any, dataTyp
             )
             dailyCost += groupCost
           })
-        } else {
-          // Fallback to total if no groups (shouldn't happen with groupBy LINKED_ACCOUNT)
-          dailyCost = parseFloat(
-            result.Total?.UnblendedCost?.Amount || 
-            result.Total?.BlendedCost?.Amount || 
-            '0'
-          )
         }
         
         existing.cost += dailyCost
