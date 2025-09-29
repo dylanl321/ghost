@@ -508,6 +508,7 @@
             </div>
           </div>
 
+
         </div>
 
         <!-- Selection Summary -->
@@ -639,6 +640,7 @@ const { accounts, isLoading, error, fetchAccounts } = useAccountCosts()
 import CostsHeader from '~/components/costs/CostsHeader.vue'
 import CostsSummaryCards from '~/components/costs/CostsSummaryCards.vue'
 import ChartTabs from '~/components/costs/SimpleChartTabs.vue'
+import ForecastDataTable from '~/components/costs/ForecastDataTable.vue'
 
 // Core composables that power the chart system:
 // - useCostData: Fetches and manages cost data based on selected accounts/timeframe

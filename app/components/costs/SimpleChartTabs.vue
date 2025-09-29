@@ -61,6 +61,11 @@
           @refresh="$emit('refresh-data')"
         />
       </div>
+
+      <!-- Forecast Tab -->
+      <div v-else-if="activeTab === 'forecast'" class="animate-fadeIn">
+        <ForecastDataTable />
+      </div>
     </div>
   </div>
 </template>
@@ -71,6 +76,7 @@ import ChartsRenderer from './ChartsRenderer.vue'
 import OrganizationalCharts from './OrganizationalCharts.vue'
 import HistoricalTrends from './HistoricalTrends.vue'
 import CostDataTable from './CostDataTable.vue'
+import ForecastDataTable from './ForecastDataTable.vue'
 import type { ChartDefinition } from '~/composables/useChartRegistry'
 
 // Props
@@ -116,6 +122,11 @@ const tabs = computed(() => [
     label: 'Data Table',
     icon: 'i-heroicons-table-cells',
     badge: props.dataMode === 'proforma' ? 'Proforma' : 'Billable'
+  },
+  { 
+    id: 'forecast', 
+    label: 'Forecast Data',
+    icon: 'i-heroicons-chart-bar-square'
   }
 ])
 

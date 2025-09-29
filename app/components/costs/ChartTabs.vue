@@ -57,6 +57,11 @@
           @toggle-regression-line="$emit('toggle-regression-line')"
         />
       </template>
+
+      <!-- Forecast Tab -->
+      <template v-else-if="activeTab === 'forecast'">
+        <ForecastDataTable />
+      </template>
     </div>
   </div>
 </template>
@@ -65,6 +70,7 @@
 import { ref, computed } from 'vue'
 import ChartsRenderer from './ChartsRenderer.vue'
 import OrganizationalCharts from './OrganizationalCharts.vue'
+import ForecastDataTable from './ForecastDataTable.vue'
 import { useChartRegistry } from '~/composables/useChartRegistry'
 import type { ChartDefinition } from '~/composables/useChartRegistry'
 
@@ -102,6 +108,10 @@ const tabs = computed(() => {
     { 
       id: 'trends', 
       label: 'Historical Trends'
+    },
+    { 
+      id: 'forecast', 
+      label: 'Forecast Data'
     }
   ]
   

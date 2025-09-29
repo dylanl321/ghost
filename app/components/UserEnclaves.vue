@@ -4,28 +4,21 @@
       <div class="text-lg font-semibold">My Enclaves</div>
     </template>
 
-    <CenteredLoadingSpinner v-if="props.loading" />
-    <div v-else class="overflow-y-auto">
+    <div class="max-h-[33vh] overflow-y-auto">
       <UTable :rows="tableData" :columns="columns" :ui="{ thead: 'bg-gray-800 text-xs' }">
         <template #enclave-data="{ row }">
           <div>
-            <div class="text-white text-sm font-sm text-wrap">{{ row.projectName }}</div>
-            <div class="text-gray-400 text-xs flex flex-wrap">
-              <UTooltip text="Commercial Account ID">
-                <span class="text-blue-300 mr-2">{{ row.standardId }}</span>
-              </UTooltip>
-              <UTooltip text="GovCloud Account ID">
-                <span class="text-orange-300">{{row.govcloudId }}</span>
-              </UTooltip>
+            <div class="text-white text-sm font-sm max-w-120 truncate">{{ row.projectName }}</div>
+            <div class="text-gray-400 text-xs">
+              <span class="text-blue-300">{{ row.standardId }}</span>, <span class="text-orange-300">{{
+                row.govcloudId }}</span>
             </div>
           </div>
         </template>
 
         <template #environment-data="{ row }">
           <div class="flex space-x-1">
-            <UTooltip :text="row.environment === 'GovCloud' ? 'GovCloud Paired' : 'Commercial Only'">
-              <span>{{ row.environment }}</span>
-            </UTooltip>
+            <span>{{ row.environment }}</span>
           </div>
         </template>
 
@@ -50,7 +43,7 @@
             <UButton size="xs" icon="i-heroicons-user" color="primary" variant="soft"
               @click="router.push(`/account/${row.standardId}`)">Account Details</UButton>
             <UButton size="xs" icon="i-heroicons-users" color="primary" variant="soft"
-              @click="router.push(`/account/${row.standardId}/groups`)">
+              @click="router.push(`/group/${row.standardId}`)">
               Groups</UButton>
           </div>
         </template>
@@ -64,10 +57,6 @@ import { UCard, UTable, UButton } from '#components'
 
 const userGroupStore = useUserGroupStore()
 const router = useRouter()
-
-const props = defineProps<{
-  loading: boolean
-}>()
 
 const columns = [
   { key: 'enclave', label: 'Enclave' },

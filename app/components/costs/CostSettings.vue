@@ -25,6 +25,21 @@
           </UButton>
         </div>
 
+        <!-- Forecast Data Management -->
+        <div class="mb-4 pb-4 border-b border-gray-700">
+          <h4 class="text-xs font-medium text-gray-300 mb-2">Forecast Data</h4>
+          <UButton
+            size="xs"
+            variant="outline"
+            color="blue"
+            icon="i-heroicons-document-arrow-up"
+            @click="showForecastUpload = true"
+            class="w-full"
+          >
+            Import Forecast File
+          </UButton>
+        </div>
+
         <!-- Data Filtering Section -->
         <div class="space-y-4">
           <div>
@@ -156,11 +171,35 @@
       </div>
     </template>
   </UPopover>
+
+  <!-- Forecast Upload Modal -->
+  <UModal v-model="showForecastUpload">
+    <UCard>
+      <template #header>
+        <h3 class="text-lg font-semibold text-white">Import Forecast Data</h3>
+      </template>
+
+      <ForecastUpload @close="showForecastUpload = false" />
+
+      <template #footer>
+        <div class="flex justify-end">
+          <UButton variant="ghost" @click="showForecastUpload = false">
+            Close
+          </UButton>
+        </div>
+      </template>
+    </UCard>
+  </UModal>
 </template>
 
 <script setup lang="ts">
+import ForecastUpload from './ForecastUpload.vue'
+
 const costSettingsStore = useCostSettingsStore()
 const { formatCurrency } = useCostFilters()
+
+// State
+const showForecastUpload = ref(false)
 
 const settings = computed({
   get: () => costSettingsStore.$state,
