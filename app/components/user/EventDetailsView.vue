@@ -148,7 +148,7 @@
         <UButton
           variant="outline"
           size="sm"
-          icon="heroicons:clipboard-document"
+          icon="i-heroicons-clipboard-document"
           @click="copyEventData"
         >
           Copy JSON

@@ -175,12 +175,12 @@
       <!-- Support Link -->
       <div class="px-3 py-2">
         <NuxtLink
-          to="/support/aws-access"
+          to="/support"
           class="flex items-center px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors w-full relative group overflow-hidden"
-          :class="{ 'text-white bg-slate-800': route.path === '/support/aws-access' }"
+          :class="{ 'text-white bg-slate-800': route.path.startsWith('/support') }"
         >
           <UIcon name="i-heroicons-lifebuoy" class="flex-shrink-0 w-5 h-5" />
-          <span 
+          <span
             class="font-medium ml-3 truncate transition-all duration-300"
             :class="{
               'opacity-0 w-0': navigationStore.isCollapsed && !navigationStore.isHovered,
@@ -189,9 +189,9 @@
           >
             Support & Help
           </span>
-          
+
           <!-- Tooltip for collapsed state -->
-          <div 
+          <div
             v-if="navigationStore.isCollapsed && !navigationStore.isHovered"
             class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-slate-600"
           >

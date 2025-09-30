@@ -26,7 +26,7 @@
         </div>
 
         <!-- Forecast Data Management -->
-        <div class="mb-4 pb-4 border-b border-gray-700">
+        <div v-if="canImportForecast" class="mb-4 pb-4 border-b border-gray-700">
           <h4 class="text-xs font-medium text-gray-300 mb-2">Forecast Data</h4>
           <UButton
             size="xs"
@@ -38,6 +38,9 @@
           >
             Import Forecast File
           </UButton>
+          <div class="mt-2 text-xs text-gray-400">
+            Available for AWS-Product-Team members
+          </div>
         </div>
 
         <!-- Data Filtering Section -->
@@ -197,9 +200,13 @@ import ForecastUpload from './ForecastUpload.vue'
 
 const costSettingsStore = useCostSettingsStore()
 const { formatCurrency } = useCostFilters()
+const { can } = useUserRoles()
 
 // State
 const showForecastUpload = ref(false)
+
+// Check if user has permission to import forecast data
+const canImportForecast = computed(() => can('forecast.import'))
 
 const settings = computed({
   get: () => costSettingsStore.$state,

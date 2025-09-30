@@ -300,7 +300,16 @@
                     >
                       {{ item.accountName || 'Unknown' }}
                     </NuxtLink>
-                    <div class="text-gray-400">{{ item.accountId }}</div>
+                    <div class="flex items-center gap-1.5 text-gray-400">
+                      <UTooltip :text="getAccountStatusTooltip(item.enclaveStatus)">
+                        <Icon 
+                          :name="getAccountStatusIcon(item.enclaveStatus)" 
+                          :class="getAccountStatusClass(item.enclaveStatus)"
+                          class="w-3 h-3"
+                        />
+                      </UTooltip>
+                      <span>{{ item.accountId }}</span>
+                    </div>
                   </div>
                   <UButton
                     size="xs"
@@ -458,7 +467,16 @@
                   </td>
                   <td class="sticky left-16 bg-gray-900 px-3 py-2 text-xs text-gray-400 min-w-[200px] border-r border-gray-700">
                     <div>{{ item.accountName || 'Unknown' }}</div>
-                    <div class="text-gray-500">{{ item.accountId }}</div>
+                    <div class="flex items-center gap-1.5 text-gray-500">
+                      <UTooltip :text="getAccountStatusTooltip(item.enclaveStatus)">
+                        <Icon 
+                          :name="getAccountStatusIcon(item.enclaveStatus)" 
+                          :class="getAccountStatusClass(item.enclaveStatus)"
+                          class="w-3 h-3"
+                        />
+                      </UTooltip>
+                      <span>{{ item.accountId }}</span>
+                    </div>
                   </td>
                   <td class="px-3 py-2 text-xs text-gray-400">
                     {{ item.projectType || '-' }}
@@ -1329,6 +1347,31 @@ onUnmounted(() => {
   document.removeEventListener('mousemove', handleMouseMove)
   document.removeEventListener('mouseup', handleMouseUp)
 })
+
+// Account status helper functions
+const getAccountStatusIcon = (status: string | undefined) => {
+  // If status is 'Decommissioned', it's inactive, otherwise it's active
+  if (!status || status.toLowerCase() !== 'decommissioned') {
+    return 'i-heroicons-check-circle-solid'
+  }
+  return 'i-heroicons-x-circle-solid'
+}
+
+const getAccountStatusClass = (status: string | undefined) => {
+  // If status is 'Decommissioned', it's inactive (red), otherwise it's active (green)
+  if (!status || status.toLowerCase() !== 'decommissioned') {
+    return 'text-green-500'
+  }
+  return 'text-red-500'
+}
+
+const getAccountStatusTooltip = (status: string | undefined) => {
+  // If status is 'Decommissioned', it's inactive, otherwise it's active
+  if (!status || status.toLowerCase() !== 'decommissioned') {
+    return 'Account is active'
+  }
+  return 'Account is decommissioned'
+}
 </script>
 
 <style scoped>

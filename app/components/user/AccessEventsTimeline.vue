@@ -1,7 +1,7 @@
 <template>
   <div class="bg-white rounded-lg border border-gray-200 p-6">
     <div v-if="groupedEvents.length === 0 && !loading" class="text-center py-12">
-      <Icon name="heroicons:clock" class="w-12 h-12 text-gray-400 mx-auto mb-4" />
+      <Icon name="i-heroicons-clock" class="w-12 h-12 text-gray-400 mx-auto mb-4" />
       <h3 class="text-lg font-medium text-gray-900 mb-2">No timeline data</h3>
       <p class="text-gray-600">No events found to display in timeline view.</p>
     </div>
@@ -79,7 +79,7 @@
                     <UButton
                       variant="ghost"
                       size="sm"
-                      icon="heroicons:eye"
+                      icon="i-heroicons-eye"
                       @click="$emit('viewDetails', event)"
                     >
                       Details

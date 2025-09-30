@@ -177,11 +177,13 @@ const searchForUsers = async (query?: string) => {
 
     const usersWithGroups = await Promise.all(userPromises)
     
-    // Now batch process tags for all users
+    // Now batch process tags for all users with full context
     try {
       const usersForTagging = usersWithGroups.map(user => ({
         userPrincipalName: user.userPrincipalName,
-        displayName: user.displayName
+        displayName: user.displayName,
+        jobTitle: user.jobTitle,
+        awsAccounts: user.awsAccounts
       }))
       
       const userTagsMap = await batchGetUserTags(usersForTagging, user.value.accessToken)
@@ -200,7 +202,13 @@ const searchForUsers = async (query?: string) => {
       // Fallback to individual tag calls if batch fails
       const tagPromises = usersWithGroups.map(async (userResult) => {
         try {
-          const tags = await getUserTags(userResult.userPrincipalName, user.value!.accessToken!, userResult.displayName)
+          const tags = await getUserTags(
+            userResult.userPrincipalName, 
+            user.value!.accessToken!, 
+            userResult.displayName,
+            userResult.jobTitle,
+            userResult.awsAccounts
+          )
           return { ...userResult, tags }
         } catch (err) {
           console.warn(`Failed to get tags for user ${userResult.userPrincipalName}:`, err)

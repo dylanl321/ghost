@@ -105,7 +105,7 @@
               <UButton
                 variant="ghost"
                 size="sm"
-                icon="heroicons:eye"
+                icon="i-heroicons-eye"
                 @click="$emit('viewDetails', event)"
               >
                 Details
@@ -118,7 +118,7 @@
 
     <!-- Empty state -->
     <div v-if="!events.length && !loading" class="text-center py-12">
-      <Icon name="heroicons:document-magnifying-glass" class="w-12 h-12 text-gray-400 mx-auto mb-4" />
+      <Icon name="i-heroicons-document-magnifying-glass" class="w-12 h-12 text-gray-400 mx-auto mb-4" />
       <h3 class="text-lg font-medium text-gray-900 mb-2">No events found</h3>
       <p class="text-gray-600">No CloudTrail events match the current filters.</p>
     </div>
@@ -180,8 +180,8 @@ const toggleSort = (field: keyof AccessEvent) => {
 
 // Get sort icon
 const getSortIcon = (field: keyof AccessEvent) => {
-  if (sortField.value !== field) return 'heroicons:chevron-up-down'
-  return sortDirection.value === 'asc' ? 'heroicons:chevron-up' : 'heroicons:chevron-down'
+  if (sortField.value !== field) return 'i-heroicons-chevron-up-down'
+  return sortDirection.value === 'asc' ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'
 }
 
 // Sorted events

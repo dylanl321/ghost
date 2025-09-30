@@ -9,7 +9,10 @@
       </div>
     </template>
 
-    <CenteredLoadingSpinner v-if="loading" />
+    <div v-if="loading" class="flex items-center justify-center py-8">
+      <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-gray-400" />
+      <span class="ml-2 text-gray-400">Loading users...</span>
+    </div>
     <div v-else-if="users.length > 0">
       <div
         v-for="user in visibleUsers"
@@ -70,6 +73,7 @@
 </template>
 
 <script setup lang="ts">
+import { convertToUsernameSlug } from '~/utils/userUtils'
 
 interface GraphUser {
   displayName: string

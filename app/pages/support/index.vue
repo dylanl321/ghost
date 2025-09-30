@@ -1,0 +1,215 @@
+<template>
+  <div class="min-h-screen bg-gray-50 dark:bg-gray-900 py-12">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <!-- Header -->
+      <div class="text-center mb-12">
+        <h1 class="text-4xl font-bold text-gray-900 dark:text-white mb-4">
+          Support & Help
+        </h1>
+        <p class="text-lg text-gray-600 dark:text-gray-400">
+          Get help with GHOST features, documentation, and support
+        </p>
+      </div>
+
+      <!-- Main Actions Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+        <!-- Documentation -->
+        <UCard
+          class="hover:shadow-lg transition-shadow cursor-pointer"
+          @click="navigateTo('/support/docs')"
+        >
+          <div class="p-6">
+            <div class="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center mb-4">
+              <Icon name="i-heroicons-book-open" class="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              Documentation
+            </h3>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Guides and tutorials for using GHOST features
+            </p>
+            <UButton color="blue" variant="soft" size="sm">
+              Browse Docs
+            </UButton>
+          </div>
+        </UCard>
+
+        <!-- Roles & Permissions -->
+        <UCard
+          class="hover:shadow-lg transition-shadow cursor-pointer"
+          @click="navigateTo('/support/roles')"
+        >
+          <div class="p-6">
+            <div class="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center mb-4">
+              <Icon name="i-heroicons-shield-check" class="w-6 h-6 text-purple-600 dark:text-purple-400" />
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              Roles & Permissions
+            </h3>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Understand your access level and permissions
+            </p>
+            <UButton color="purple" variant="soft" size="sm">
+              View Roles
+            </UButton>
+          </div>
+        </UCard>
+
+        <!-- AWS Access -->
+        <UCard
+          class="hover:shadow-lg transition-shadow cursor-pointer"
+          @click="navigateTo('/support/aws-access')"
+        >
+          <div class="p-6">
+            <div class="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center mb-4">
+              <Icon name="i-heroicons-key" class="w-6 h-6 text-green-600 dark:text-green-400" />
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              Request AWS Access
+            </h3>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Request access to AWS accounts
+            </p>
+            <UButton color="green" variant="soft" size="sm">
+              Request Access
+            </UButton>
+          </div>
+        </UCard>
+      </div>
+
+      <!-- Popular Articles -->
+      <div class="mb-12">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">
+          Popular Articles
+        </h2>
+        <div class="space-y-3">
+          <UCard
+            v-for="article in popularArticles"
+            :key="article.id"
+            class="hover:shadow-md transition-shadow cursor-pointer"
+            @click="navigateTo(article.link)"
+          >
+            <div class="p-4">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                  <Icon :name="article.icon" class="w-5 h-5" :class="article.color" />
+                  <div>
+                    <h4 class="font-medium text-gray-900 dark:text-white">
+                      {{ article.title }}
+                    </h4>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">
+                      {{ article.description }}
+                    </p>
+                  </div>
+                </div>
+                <Icon name="i-heroicons-chevron-right" class="w-5 h-5 text-gray-400" />
+              </div>
+            </div>
+          </UCard>
+        </div>
+      </div>
+
+      <!-- Contact Support -->
+      <UCard class="bg-blue-50 dark:bg-blue-900/20">
+        <div class="p-8 text-center">
+          <Icon name="i-heroicons-chat-bubble-left-right" class="w-12 h-12 text-blue-600 dark:text-blue-400 mx-auto mb-4" />
+          <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">
+            Need More Help?
+          </h3>
+          <p class="text-gray-600 dark:text-gray-400 mb-6">
+            Can't find what you're looking for? Submit a support ticket or chat with our team.
+          </p>
+          <div class="flex flex-col sm:flex-row gap-3 justify-center">
+            <UButton
+              color="blue"
+              size="lg"
+              @click="openServiceNow"
+            >
+              <Icon name="i-heroicons-ticket" class="w-4 h-4 mr-2" />
+              Submit Support Ticket
+            </UButton>
+            <UButton
+              color="gray"
+              variant="soft"
+              size="lg"
+              @click="openTeamsChat"
+            >
+              <Icon name="i-heroicons-chat-bubble-left-ellipsis" class="w-4 h-4 mr-2" />
+              Teams Chat
+            </UButton>
+          </div>
+        </div>
+      </UCard>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+// Page meta
+definePageMeta({
+  title: 'Support & Help',
+  description: 'Get help with GHOST and AWS services'
+})
+
+// Popular articles
+const popularArticles = [
+  {
+    id: 'cost-dashboard',
+    title: 'Using the Cost Dashboard',
+    description: 'Learn how to track costs, use filters, and share reports',
+    icon: 'i-heroicons-currency-dollar',
+    color: 'text-blue-600 dark:text-blue-400',
+    link: '/support/docs?topic=cost-dashboard-guide'
+  },
+  {
+    id: 'universal-search',
+    title: 'Using Universal Search',
+    description: 'Find accounts, users, and resources quickly',
+    icon: 'i-heroicons-magnifying-glass',
+    color: 'text-purple-600 dark:text-purple-400',
+    link: '/support/docs?topic=universal-search'
+  },
+  {
+    id: 'sharing-links',
+    title: 'Sharing GHOST Links',
+    description: 'Share filtered views and deep links with your team',
+    icon: 'i-heroicons-share',
+    color: 'text-green-600 dark:text-green-400',
+    link: '/support/docs?topic=sharing-links'
+  },
+  {
+    id: 'roles-permissions',
+    title: 'Understanding Roles & Permissions',
+    description: 'Learn about your access level and what you can do',
+    icon: 'i-heroicons-shield-check',
+    color: 'text-orange-600 dark:text-orange-400',
+    link: '/support/docs?topic=roles-permissions'
+  },
+  {
+    id: 'request-access',
+    title: 'How to Request AWS Access',
+    description: 'Step-by-step guide to request account access',
+    icon: 'i-heroicons-key',
+    color: 'text-indigo-600 dark:text-indigo-400',
+    link: '/support/docs?topic=request-access'
+  },
+  {
+    id: 'troubleshooting',
+    title: 'Common Issues & Solutions',
+    description: 'Troubleshoot login, access, and data issues',
+    icon: 'i-heroicons-wrench-screwdriver',
+    color: 'text-red-600 dark:text-red-400',
+    link: '/support/docs?topic=common-issues'
+  }
+]
+
+// Methods
+const openServiceNow = () => {
+  window.open('https://gdms.servicenowservices.com/', '_blank', 'noopener,noreferrer')
+}
+
+const openTeamsChat = () => {
+  window.open('https://teams.microsoft.com/l/channel/19%3a7IisJL1KQL-rJj6VkSC3KshUyMz1ZMzlqTA2FfnuBEk1%40thread.tacv2/General?groupId=4c1c8dcd-30d1-4b80-8aa7-02e2a9b6bf6d&tenantId=7c5a26cf-ddf0-400c-9703-4070b4e3a54d', '_blank', 'noopener,noreferrer')
+}
+</script>

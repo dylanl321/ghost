@@ -570,6 +570,34 @@
 
         <!-- Main Content -->
         <div v-else class="space-y-6">
+          <!-- Early Month Notice -->
+          <div v-if="isEarlyInMonth" class="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
+            <div class="flex items-start gap-3">
+              <Icon name="i-heroicons-calendar" class="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
+              <div class="flex-1">
+                <div class="flex items-start justify-between">
+                  <div class="flex-1">
+                    <h4 class="text-sm font-medium text-blue-300">Limited Data Available for Current Month</h4>
+                    <p class="text-xs text-blue-400 mt-1">
+                      It's early in the month, so cost data for {{ new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) }} is still accumulating. 
+                      For a complete view of recent spending patterns, you may want to review last month's data.
+                    </p>
+                  </div>
+                  <UButton 
+                    color="blue" 
+                    variant="soft" 
+                    size="sm"
+                    class="ml-4 flex-shrink-0"
+                    @click="switchToLastMonth"
+                  >
+                    <Icon name="i-heroicons-arrow-left" class="w-4 h-4 mr-1" />
+                    View Last Month
+                  </UButton>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Historical Data Warning -->
           <div v-if="isHistoricalTimeframe" class="bg-yellow-900/20 border border-yellow-700 rounded-lg p-4">
             <div class="flex items-start gap-3">
@@ -820,6 +848,19 @@ const showRegressionLine = ref(false) // Toggle for budget variance regression l
 const isHistoricalTimeframe = computed(() => {
   return ['last7days', 'last30days', 'last90days', 'lastMonth', 'lastQuarter', 'lastYear', 'last12months'].includes(selectedTimeframe.value)
 })
+
+// Detect if we're in the early days of a new month
+const isEarlyInMonth = computed(() => {
+  const today = new Date()
+  const dayOfMonth = today.getDate()
+  // Consider days 1-5 as early in the month
+  return dayOfMonth <= 5 && selectedTimeframe.value === 'thisMonth'
+})
+
+// Helper to switch to last month view
+const switchToLastMonth = () => {
+  selectedTimeframe.value = 'lastMonth'
+}
 
 // Options
 const timeframeOptions = [

@@ -11,8 +11,8 @@
             color="gray"
             size="sm"
             icon="i-heroicons-bars-3"
-            class="md:hidden"
             @click="toggleMobileMenu"
+            class="md:hidden"
           />
           
           <!-- Sidebar Toggle for Desktop -->
@@ -22,9 +22,9 @@
             color="gray"
             size="sm"
             :icon="navigationStore.isCollapsed ? 'i-heroicons-bars-3' : 'i-heroicons-bars-3-bottom-left'"
+            @click="toggleSidebar"
             class="hidden md:flex transition-all duration-200 opacity-70 hover:opacity-100"
             :title="navigationStore.isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-            @click="toggleSidebar"
           />
           
           <UBreadcrumb :links="props.breadcrumbs" class="text-sm" />
@@ -52,7 +52,7 @@
                   </span>
                 </div>
                 <UserAvatar
-                  :user-principal-name="(user?.claims?.email as string) || ''"
+                  :user-principal-name="user?.claims?.email"
                   :display-name="`${user?.claims?.given_name} ${user?.claims?.family_name}`"
                   size="sm"
                 />
@@ -73,7 +73,7 @@ import { useNavigationStore } from '~/stores/useNavigationStore'
 import UserAvatar from '~/components/ui/UserAvatar.vue'
 
 interface Props {
-  breadcrumbs: []
+  breadcrumbs: Array<object>
 }
 
 const props = defineProps<Props>()
@@ -84,17 +84,18 @@ const emit = defineEmits<{
 const { user, logout } = useOidcAuth()
 const navigationStore = useNavigationStore()
 const route = useRoute()
+const { can, isAdmin } = useUserRoles()
 
 // Mobile detection - SSR safe
 const isMobile = computed(() => {
   // During SSR, assume desktop to avoid hydration mismatches
-  if (import.meta.server) return false
+  if (process.server) return false
   // On client, use the store value or fallback to window check
   return navigationStore.isMobile ?? (typeof window !== 'undefined' && window.innerWidth < 768)
 })
 
 // Mobile menu handling
-// const showMobileMenu = ref(false)
+const showMobileMenu = ref(false)
 
 const toggleMobileMenu = () => {
   emit('toggle-mobile-menu')
@@ -113,14 +114,14 @@ const toggleSidebar = () => {
 // Computed property for direct user profile link
 const myAccessLink = computed(() => {
   if (user.value?.claims?.email) {
-    const username = convertToUsernameSlug((user.value.claims.email as string))
+    const username = convertToUsernameSlug(user.value.claims.email)
     return `/account/user/${username}`
   }
   return '/account/user/my-access' // Fallback to redirect page
 })
 
 // Build AWS console links section
-const awsConsoleLinks = computed<any>(() => {
+const awsConsoleLinks = computed(() => {
   const links = [
     {
       label: 'AWS Commercial Console',
@@ -141,32 +142,37 @@ const awsConsoleLinks = computed<any>(() => {
   return links
 })
 
-const userMenuItems = computed<any>(() => {
-  const menuItems: any = [
-    [
-      {
-        label: 'Profile',
-        icon: 'i-heroicons-user-circle',
-        to: '/profile'
-      },
-      {
-        label: 'My Access',
-        icon: 'i-heroicons-key',
-        to: myAccessLink.value
-      },
-      {
-        label: 'Admin',
-        icon: 'i-heroicons-adjustments-horizontal',
-        to: '/admin/home'
-      }
-    ]
+const userMenuItems = computed(() => {
+  // Build main menu items
+  const mainMenuItems = [
+    {
+      label: 'Profile',
+      icon: 'i-heroicons-user-circle',
+      to: '/profile'
+    },
+    {
+      label: 'My Access',
+      icon: 'i-heroicons-key',
+      to: myAccessLink.value
+    }
   ]
-  
+
+  // Add Admin menu item only if user has admin permissions
+  if (isAdmin.value || can('admin.logs') || can('admin.issues')) {
+    mainMenuItems.push({
+      label: 'Admin',
+      icon: 'i-heroicons-adjustments-horizontal',
+      to: '/admin/home'
+    })
+  }
+
+  const menuItems = [mainMenuItems]
+
   // Add AWS console links if user has access
   if (awsConsoleLinks.value.length > 0) {
     menuItems.push(awsConsoleLinks.value)
   }
-  
+
   // Add sign out as final section
   menuItems.push([
     {
@@ -175,7 +181,7 @@ const userMenuItems = computed<any>(() => {
       click: () => logout()
     }
   ])
-  
+
   return menuItems
 })
 

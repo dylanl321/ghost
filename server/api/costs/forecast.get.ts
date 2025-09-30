@@ -228,9 +228,12 @@ export default defineEventHandler(handleAsync(async (event) => {
   let monthsToAdd = 1 // Default value, will be overridden for most periods
   
   if (period === 'current-month-remainder') {
-    // For current month remainder, start from tomorrow and go to end of current month
+    // For current month remainder, AWS forecasts can only start from today (not past dates)
+    // So we'll forecast from today through end of current month
     startDate = new Date(today)
-    startDate.setDate(startDate.getDate() + 1) // Start from tomorrow
+    // AWS forecast API requires start date to be today or future
+    // Set to today's date (keeping time at 00:00:00)
+    startDate.setHours(0, 0, 0, 0)
     
     endDate = new Date(today)
     endDate.setMonth(endDate.getMonth() + 1) // Move to next month

@@ -77,11 +77,21 @@ onMounted(async () => {
     // Store merged AWS role / enclave data in the user group store
     await userGroupStore.initializeAWSRoles(enclaveStore.enclaves);
 
+    // Initialize user roles and permissions
+    step.value = "Setting up user permissions...";
+    progress.value = 80;
+    const { debug: debugRoles } = useUserRoles();
+    
     console.log("user", user.value);
     console.log("role groups", userGroupStore.roleGroups);
     console.log("dist groups", userGroupStore.distributionGroups);
     console.log("enclaves", enclaveStore.enclaves);
     console.log("aws roles", userGroupStore.awsRoles);
+    
+    // Debug roles in development
+    if (process.dev) {
+      debugRoles();
+    }
 
     step.value = "All set! Taking you back...";
     progress.value = 100;

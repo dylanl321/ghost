@@ -206,120 +206,66 @@ export const useGroupMembers = () => {
   const getUserTags = async (
     userPrincipalName: string, 
     accessToken: string,
-    // displayName?: string
+    displayName?: string,
+    jobTitle?: string,
+    awsAccounts?: Array<{
+      accountId: string
+      accountName: string
+      roles: string[]
+      isGovCloud: boolean
+    }>
   ): Promise<UserTag[]> => {
-    const tags: UserTag[] = []
+    // Use the simple badge system
+    const { getUserBadges } = useSimpleBadges()
     
     try {
-      // Fetch user's group memberships
-      const { fetchUserMemberOf } = useGraphApi()
-      const groups = await fetchUserMemberOf(accessToken, userPrincipalName)
+      const badges = await getUserBadges(
+        userPrincipalName,
+        accessToken,
+        {
+          displayName,
+          jobTitle,
+          awsAccounts
+        }
+      )
       
-      // Analyze groups for special roles
-      const groupNames = groups.map((g: any) => g.displayName?.toLowerCase() || '')
-      
-      // Check for admin groups
-      if (groupNames.some(g => g.includes('admin') || g.includes('administrator'))) {
-        tags.push({
-          title: 'Admin',
-          color: 'red',
-          icon: 'i-heroicons-shield-exclamation',
-          description: 'Has administrative privileges'
-        })
-      }
-      
-      // Check for security groups
-      if (groupNames.some(g => g.includes('security') || g.includes('infosec'))) {
-        tags.push({
-          title: 'Security',
-          color: 'yellow',
-          icon: 'i-heroicons-lock-closed',
-          description: 'Member of security team'
-        })
-      }
-      
-      // Check for developer groups
-      if (groupNames.some(g => g.includes('developer') || g.includes('engineering'))) {
-        tags.push({
-          title: 'Developer',
-          color: 'blue',
-          icon: 'i-heroicons-code-bracket',
-          description: 'Developer access'
-        })
-      }
-      
-      // Check for AWS access
-      if (groupNames.some(g => g.toLowerCase().startsWith('aws'))) {
-        tags.push({
-          title: 'AWS',
-          color: 'orange',
-          icon: 'i-heroicons-cloud',
-          description: 'Has AWS account access'
-        })
-      }
-      
-      // Check for GovCloud access
-      if (groupNames.some(g => g.includes('govcloud'))) {
-        tags.push({
-          title: 'GovCloud',
-          color: 'purple',
-          icon: 'i-heroicons-building-library',
-          description: 'Has GovCloud access'
-        })
-      }
-      
-      // Check for contractor/external
-      if (groupNames.some(g => g.includes('contractor') || g.includes('external'))) {
-        tags.push({
-          title: 'Contractor',
-          color: 'gray',
-          icon: 'i-heroicons-user-circle',
-          description: 'External contractor'
-        })
-      }
-      
+      // Already in UserTag format
+      return badges
     } catch (error) {
       console.warn(`Failed to get tags for user ${userPrincipalName}:`, error)
+      return []
     }
-    
-    return tags
   }
 
   /**
    * Batch process tags for multiple users
    */
   const batchGetUserTags = async (
-    users: Array<{ userPrincipalName: string; displayName?: string }>,
+    users: Array<{ 
+      userPrincipalName: string
+      displayName?: string
+      jobTitle?: string
+      awsAccounts?: Array<{
+        accountId: string
+        accountName: string
+        roles: string[]
+        isGovCloud: boolean
+      }>
+    }>,
     accessToken: string
   ): Promise<Record<string, UserTag[]>> => {
-    const result: Record<string, UserTag[]> = {}
+    // Use the simple badge system
+    const { batchGetUserBadges } = useSimpleBadges()
     
-    // Process in smaller batches to avoid rate limiting
-    const batchSize = 5
-    const batches = []
-    
-    for (let i = 0; i < users.length; i += batchSize) {
-      batches.push(users.slice(i, i + batchSize))
-    }
-    
-    for (const batch of batches) {
-      const promises = batch.map(async (user) => {
-        const tags = await getUserTags(user.userPrincipalName, accessToken, user.displayName)
-        return { userPrincipalName: user.userPrincipalName, tags }
-      })
+    try {
+      const badgeResults = await batchGetUserBadges(users, accessToken)
       
-      const batchResults = await Promise.all(promises)
-      batchResults.forEach(({ userPrincipalName, tags }) => {
-        result[userPrincipalName] = tags
-      })
-      
-      // Small delay between batches to avoid rate limiting
-      if (batches.indexOf(batch) < batches.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 100))
-      }
+      // Already in correct format
+      return badgeResults
+    } catch (error) {
+      console.warn('Failed to batch get user tags:', error)
+      return {}
     }
-    
-    return result
   }
 
   /**
