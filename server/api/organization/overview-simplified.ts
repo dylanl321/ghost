@@ -11,15 +11,12 @@ const region = 'us-east-1'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/organization/overview-simplified', 'GET', {
-  summary: 'Get simplified account dashboard',
-  description: 'Data to populate the GHOST account page for a specific account',
+  summary: 'Get simplified organization overview',
+  description: 'Data to populate the GHOST home page',
   tags: ['Dashboard'],
-  // parameters: [
-  //   { $ref: '#/components/parameters/Environment' }
-  // ],
   responses: {
     200: {
-      description: 'Organizational structure',
+      description: 'Organizational info',
       content: {
         'application/json': {
           schema: {
@@ -29,40 +26,35 @@ registerEndpoint('/api/organization/overview-simplified', 'GET', {
               data: {
                 type: 'object',
                 properties: {
-                  organization: {
-                    type: 'object',
-                    properties: {
-                      activeAccounts: { type: 'integer' },
-                      suspendedAccounts: { type: 'integer' },
-                      monthToDateTotal: { type: 'number' },
-                      forecastedTotal: { type: 'number' },
-                      previousMonthTotal: { type: 'number' },
-                      previousMonthToDateTotal: { type: 'number' },
-                      topAccounts: { 
-                        type: 'array', 
-                        items: { 
-                          type: 'object',
-                          properties: {
-                            accountId: { type: 'string' },
-                            amount: { type: 'number' },
-                            // name: { type: 'string' },
-                          }
-                        } 
-                      },
-                      daily: { 
-                        type: 'array', 
-                        items: { 
-                          type: 'object',
-                          properties: {
-                            date: { type: 'string' },
-                            amount: { type: 'number' },
-                          }
-                        } 
-                      },
-                    }
+                  activeAccounts: { type: 'integer' },
+                  suspendedAccounts: { type: 'integer' },
+                  monthToDateTotal: { type: 'number' },
+                  forecastedTotal: { type: 'number' },
+                  previousMonthTotal: { type: 'number' },
+                  previousMonthToDateTotal: { type: 'number' },
+                  topAccounts: { 
+                    type: 'array', 
+                    items: { 
+                      type: 'object',
+                      properties: {
+                        accountId: { type: 'string' },
+                        amount: { type: 'number' },
+                        // name: { type: 'string' },
+                      }
+                    } 
+                  },
+                  daily: { 
+                    type: 'array', 
+                    items: { 
+                      type: 'object',
+                      properties: {
+                        date: { type: 'string' },
+                        amount: { type: 'number' },
+                      }
+                    } 
                   },
                 }
-              }
+              },
             }
           }
         }
@@ -217,7 +209,7 @@ async function getOverview() {
 export default defineEventHandler(handleAsync(async (event) => {
   const startTime = Date.now()
   
-  // Generate cache key for organization data
+  // Generate cache key
   const cacheKey = `organization:simplified-overview`
 
   const info = await organizationCache.getOrSet(
@@ -227,7 +219,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       return await getOverview()
     },
     {
-      ttl: 3600, // 1 hour - org structure changes infrequently
+      ttl: 3600, // 1 hour
       tags: [CacheTags.ORGANIZATION]
     }
   )

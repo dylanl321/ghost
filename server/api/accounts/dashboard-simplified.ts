@@ -1,0 +1,211 @@
+import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
+import { registerEndpoint } from '../../plugins/swagger'
+import { organizationCache, CacheTags } from '../../utils/cache-manager'
+import { CostExplorerClient, GetCostAndUsageCommand } from "@aws-sdk/client-cost-explorer";
+import type { GetCostAndUsageCommandInput, GetCostAndUsageCommandOutput } from "@aws-sdk/client-cost-explorer";
+import getMasterAccountCredentials from '~~/server/utils/credentials/awsAccountCredentials';
+
+const region = 'us-east-1'
+const monitoringAccountId = '253821132832'
+
+// Register OpenAPI documentation
+registerEndpoint('/api/accounts/dashboard-simplified', 'GET', {
+  summary: 'Get simplified account dashboard',
+  description: 'Data to populate GHOST account page for specific account',
+  tags: ['Accounts'],
+  parameters: [
+    {
+      name: 'account_id',
+      in: 'query',
+      required: true,
+      schema: { type: 'string' },
+      description: 'Commercial Account ID'
+    },
+  ],
+  responses: {
+    200: {
+      description: 'Account info',
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: {
+                type: 'object',
+                properties: {
+                  billableMonthToDateTotal: { type: 'number' },
+                  proformaMonthToDateTotal: { type: 'number' },
+                  billableDaily: { 
+                    type: 'array', 
+                    items: { 
+                      type: 'object',
+                      properties: {
+                        date: { type: 'string' },
+                        amount: { type: 'number' },
+                      }
+                    } 
+                  },
+                  proformaDaily: { 
+                    type: 'array', 
+                    items: { 
+                      type: 'object',
+                      properties: {
+                        date: { type: 'string' },
+                        amount: { type: 'number' },
+                      }
+                    } 
+                  },
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    404: { $ref: '#/components/schemas/Error' },
+    500: { $ref: '#/components/schemas/Error' }
+  }
+})
+
+async function fetchCostData(client: CostExplorerClient, params: GetCostAndUsageCommandInput) {
+  const command = new GetCostAndUsageCommand(params);
+  return client.send(command);
+}
+
+function sumResults(response: GetCostAndUsageCommandOutput) {
+  if (!response.ResultsByTime) return 0;
+  return response.ResultsByTime.reduce((sum, r) => {
+    const amount = parseFloat(r.Total?.BlendedCost.Amount || "0");
+    return sum + amount;
+  }, 0);
+}
+
+function mapDaily(response: GetCostAndUsageCommandOutput) {
+  if (!response.ResultsByTime) return [];
+  return response.ResultsByTime.map((r) => ({
+    date: r.TimePeriod?.Start,
+    amount: parseFloat(r.Total?.BlendedCost.Amount || "0"),
+  }));
+}
+
+// month as 0–11, day as 1–31
+function buildPaddedDate(year: number, month: number, day: number) {
+  // JS Date auto-rolls months and days (e.g., month 12 (0-index) → Jan next year)
+  const date = new Date(year, month, day);
+
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+
+  return `${y}-${m}-${d}`;
+}
+
+async function getOverview(event: any) {
+  const query = getQuery(event)
+  
+  // Required parameters
+  const accountId = query.account_id as string
+  if (!accountId) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'account_id parameter is required'
+    })
+  }
+
+  const now = new Date();
+  const today = now.getDate(); // 1-index
+  const year = now.getFullYear();
+  const month = now.getMonth(); // 1–12
+  const startOfMonth = buildPaddedDate(year, month, 1);
+  const tomorrow = buildPaddedDate(year, month, today + 1); // exclusive end
+
+  // ---- BILLABLE (master account) ----
+  const masterCreds = getMasterAccountCredentials('commercial')
+  const billableClient = new CostExplorerClient({ credentials: masterCreds, region });
+
+  // ---- PROFORMA (monitoring account) ----
+  const monitoringCreds = await assumeChildAccountRole('commercial', monitoringAccountId);
+  const proformaClient = new CostExplorerClient({ credentials: monitoringCreds, region });
+
+  const [billableMtd, billableDaily, proformaMtd, proformaDaily] = await Promise.all([
+    fetchCostData(billableClient, {
+      TimePeriod: { Start: startOfMonth, End: tomorrow },
+      Granularity: "MONTHLY",
+      Metrics: ["BlendedCost"],
+      Filter: {
+        Dimensions: {
+          Key: "LINKED_ACCOUNT",
+          Values: [accountId],
+        },
+      },
+    }),
+    fetchCostData(billableClient, {
+      TimePeriod: { Start: startOfMonth, End: tomorrow },
+      Granularity: "DAILY",
+      Metrics: ["BlendedCost"],
+      Filter: {
+        Dimensions: {
+          Key: "LINKED_ACCOUNT",
+          Values: [accountId],
+        },
+      },
+    }),
+    fetchCostData(proformaClient, {
+      TimePeriod: { Start: startOfMonth, End: tomorrow },
+      Granularity: "MONTHLY",
+      Metrics: ["BlendedCost"],
+      Filter: {
+        Dimensions: {
+          Key: "LINKED_ACCOUNT",
+          Values: [accountId],
+        },
+      },
+    }),
+    fetchCostData(proformaClient, {
+      TimePeriod: { Start: startOfMonth, End: tomorrow },
+      Granularity: "DAILY",
+      Metrics: ["BlendedCost"],
+      Filter: {
+        Dimensions: {
+          Key: "LINKED_ACCOUNT",
+          Values: [accountId],
+        },
+      },
+    }),
+  ]);
+
+  return {
+    billableMonthToDateTotal: sumResults(billableMtd),
+    proformaMonthToDateTotal: sumResults(proformaMtd),
+    billableDaily: mapDaily(billableDaily),
+    proformaDaily: mapDaily(proformaDaily),
+  };
+}
+
+export default defineEventHandler(handleAsync(async (event) => {
+  const startTime = Date.now()
+  
+  // Generate cache key
+  const cacheKey = `accounts:simplified-overview`
+
+  const info = await organizationCache.getOrSet(
+    cacheKey,
+    async () => {
+      console.log(`Cache miss: Fetching organization overview...`)
+      return await getOverview(event)
+    },
+    {
+      ttl: 3600, // 1 hour
+      tags: [CacheTags.ORGANIZATION]
+    }
+  )
+  
+  if (!info) {
+    return errors.serverError(event, 'Unable to fetch simplified organization overview')
+  }
+  
+  const metadata = { responseTimeMs: Date.now() - startTime }
+  
+  return sendSuccess(event, info, metadata)
+}))
