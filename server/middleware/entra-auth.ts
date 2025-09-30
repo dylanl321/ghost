@@ -3,10 +3,10 @@
  * Handles both OIDC user authentication and API key authentication
  */
 
-import { defineEventHandler, getHeader, createError } from 'h3'
+import { defineEventHandler, getHeader, createError, getRequestURL } from 'h3'
 import type { H3Event } from 'h3'
-import { validateApiKey } from '../utils/api-keys'
-import { getUserSession } from '../utils/entra/session'
+import { validateApiKey, recordApiKeyUsage } from '../utils/api-keys'
+import { getUserSession as getOIDCSession } from '../utils/entra/session'
 
 interface AuthContext {
   isAuthenticated: boolean
@@ -17,10 +17,28 @@ interface AuthContext {
 }
 
 /**
- * Check if request is for Entra API endpoints
+ * Check if request is for API endpoints that require authentication
  */
-function isEntraAPIRequest(url: string): boolean {
-  return url.startsWith('/api/entra/')
+function requiresAuthentication(url: string): boolean {
+  // Exclude public endpoints that don't need auth
+  const publicEndpoints = [
+    '/api/health',
+    '/api/swagger',
+    '/api/swagger-ui',
+    '/api/swagger.json',
+    '/_nuxt/',
+    '/api/_content',      // Nuxt content API
+    '/api/_auth',         // OIDC authentication endpoints
+    '/api/_nuxt_icon'     // Nuxt Icon API
+  ]
+
+  // Check if URL starts with any public endpoint
+  if (publicEndpoints.some(endpoint => url.startsWith(endpoint))) {
+    return false
+  }
+
+  // All other /api/* routes require authentication
+  return url.startsWith('/api/')
 }
 
 /**
@@ -69,27 +87,24 @@ async function validateAPIKeyAuth(event: H3Event): Promise<AuthContext | null> {
 
 /**
  * Validate OIDC user authentication
+ * Uses the project's getUserSession utility which handles OIDC sessions
  */
 async function validateOIDCAuth(event: H3Event): Promise<AuthContext | null> {
   try {
-    // This will be replaced with actual OIDC session check
-    // For now, try to get user session
-    const session = await getUserSession(event)
-    
-    if (!session?.accessToken) {
-      return null
-    }
-    
-    // Validate token is still valid (basic check)
-    if (session.user && session.accessToken) {
+    // Get the OIDC session using the project's session utility
+    const session = await getOIDCSession(event)
+
+    if (session && (session.user || session.accessToken)) {
+      // User has valid OIDC session
+      // Authenticated users get full access to all APIs
       return {
         isAuthenticated: true,
         authType: 'oidc',
-        user: session.user,
-        scopes: ['read', 'write'] // Default scopes for authenticated users
+        user: session.user || { id: 'oidc-user', email: 'unknown' }, // User object from session
+        scopes: ['*'] // Full access
       }
     }
-    
+
     return null
   } catch (error) {
     console.error('OIDC authentication check failed:', error)
@@ -117,12 +132,12 @@ function createDevAuthContext(): AuthContext {
  * Main authentication middleware
  */
 export default defineEventHandler(async (event) => {
-  // Only apply to Entra API routes
-  if (!isEntraAPIRequest(event.node.req.url || '')) {
+  // Only apply to API routes that require authentication
+  if (!requiresAuthentication(event.node.req.url || '')) {
     return
   }
-  
-  console.log(`Entra auth check for: ${event.node.req.url}`)
+
+  console.log(`API auth check for: ${event.node.req.url}`)
   
   let authContext: AuthContext | null = null
   
@@ -151,12 +166,46 @@ export default defineEventHandler(async (event) => {
       statusMessage: 'Authentication required. Please provide a valid API key or sign in with Entra ID.'
     })
   }
-  
+
+  // Special rule: Entra APIs require OIDC authentication (need user's Entra token)
+  const url = event.node.req.url || ''
+  if (url.startsWith('/api/entra/') && authContext.authType !== 'oidc') {
+    throw createError({
+      statusCode: 403,
+      statusMessage: 'Entra APIs require user authentication. API keys cannot be used for Entra endpoints.'
+    })
+  }
+
   // Add auth context to event for use in API handlers
   event.context.auth = authContext
-  
+
   // Log successful authentication
   console.log(`Authenticated via ${authContext.authType} for ${event.node.req.url}`)
+
+  // Record API key usage for audit trail (async, non-blocking)
+  if (authContext.authType === 'apikey' && authContext.apiKeyId) {
+    const url = getRequestURL(event)
+    const method = event.node.req.method || 'GET'
+    const ipAddress = event.node.req.headers['x-forwarded-for'] as string ||
+                      event.node.req.headers['x-real-ip'] as string ||
+                      event.node.req.socket?.remoteAddress
+    const userAgent = event.node.req.headers['user-agent'] as string
+
+    // Record usage after request completes
+    event.node.res.on('finish', () => {
+      const statusCode = event.node.res.statusCode
+      recordApiKeyUsage(
+        authContext.apiKeyId!,
+        url.pathname,
+        method,
+        statusCode,
+        ipAddress,
+        userAgent
+      ).catch(err => {
+        console.error('Failed to record API key usage:', err)
+      })
+    })
+  }
 })
 
 /**
@@ -167,21 +216,49 @@ export function getAuthContext(event: H3Event): AuthContext {
 }
 
 /**
- * Check if user has required scope
+ * Check if user is authenticated
+ * Simplified: authenticated users have full access (except API keys can't use Entra APIs)
  */
-export function hasScope(event: H3Event, requiredScope: string): boolean {
+export function isAuthenticated(event: H3Event): boolean {
   const auth = getAuthContext(event)
-  return auth?.scopes?.includes(requiredScope) || auth?.scopes?.includes('admin') || false
+  return auth?.isAuthenticated || false
 }
 
 /**
- * Require specific scope (throws if not authorized)
+ * Check if user is authenticated via OIDC (not API key)
+ * Use this for Entra API endpoints that require user's token
  */
-export function requireScope(event: H3Event, requiredScope: string): void {
-  if (!hasScope(event, requiredScope)) {
+export function isOIDCAuthenticated(event: H3Event): boolean {
+  const auth = getAuthContext(event)
+  return auth?.isAuthenticated && auth?.authType === 'oidc' || false
+}
+
+/**
+ * Require OIDC authentication (throws if not authenticated via OIDC)
+ * Use this for Entra API endpoints
+ */
+export function requireOIDCAuth(event: H3Event): void {
+  if (!isOIDCAuthenticated(event)) {
     throw createError({
       statusCode: 403,
-      statusMessage: `Insufficient permissions. Required scope: ${requiredScope}`
+      statusMessage: 'This endpoint requires user authentication. API keys are not supported.'
+    })
+  }
+}
+
+/**
+ * Legacy scope functions - kept for backwards compatibility
+ * Now simplified: authenticated = has all access
+ */
+export function hasScope(event: H3Event, requiredScope: string): boolean {
+  return isAuthenticated(event)
+}
+
+export function requireScope(event: H3Event, requiredScope: string): void {
+  if (!isAuthenticated(event)) {
+    throw createError({
+      statusCode: 401,
+      statusMessage: 'Authentication required'
     })
   }
 }

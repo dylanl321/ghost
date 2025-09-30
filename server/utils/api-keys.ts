@@ -48,13 +48,34 @@ export interface CreateApiKeyResponse {
  * Available scopes for API keys
  */
 export const API_KEY_SCOPES = {
+  // Entra ID scopes
   'entra:read': 'Read access to Entra ID data',
   'entra:write': 'Write access to Entra ID data',
   'entra:admin': 'Administrative access to Entra ID APIs',
+
+  // Account scopes
   'accounts:read': 'Read access to AWS account data',
+  'accounts:write': 'Modify AWS account metadata',
+
+  // Cost scopes
+  'costs:read': 'View AWS cost data and reports',
+  'costs:write': 'Import and modify cost forecasts',
+
+  // Forecast scopes
+  'forecast:read': 'View cost forecast data',
+  'forecast:write': 'Import, modify, and delete forecast data',
+
+  // Security Lake scopes
+  'security-lake:read': 'Query Security Lake data',
+  'security-lake:write': 'Execute Security Lake queries',
+
+  // User and group scopes
   'groups:read': 'Read access to group data',
   'users:read': 'Read access to user data',
-  'cache:manage': 'Manage cache operations'
+
+  // System scopes
+  'cache:manage': 'Manage cache operations',
+  'admin:all': 'Full administrative access to all APIs'
 } as const
 
 /**
@@ -87,10 +108,20 @@ function generateSalt(): string {
 const API_KEYS_TABLE = process.env.DYNAMODB_API_KEYS_TABLE || 'ghost-api-keys'
 
 /**
+ * DynamoDB table name for API key usage history
+ */
+const API_KEY_USAGE_TABLE = process.env.DYNAMODB_API_KEY_USAGE_TABLE || 'ghost-api-keys-usage'
+
+/**
  * DynamoDB environment for API keys storage
  */
-const API_KEYS_ENVIRONMENT: 'commercial' | 'govcloud' = 
+const API_KEYS_ENVIRONMENT: 'commercial' | 'govcloud' =
   (process.env.API_KEYS_STORAGE_ENV as 'commercial' | 'govcloud') || 'commercial'
+
+/**
+ * Retention period for usage history in days
+ */
+const USAGE_RETENTION_DAYS = parseInt(process.env.API_KEY_USAGE_RETENTION_DAYS || '90')
 
 /**
  * Load all API keys from DynamoDB
@@ -113,7 +144,7 @@ async function loadApiKeys(): Promise<ApiKey[]> {
       keyHash: item.keyHash,
       salt: item.salt,
       scopes: item.scopes,
-      isActive: item.isActive,
+      isActive: item.isActive === 'true' || item.isActive === true, // Convert string to boolean
       createdBy: item.createdBy,
       metadata: item.metadata,
       createdAt: new Date(item.createdAt),
@@ -141,16 +172,17 @@ async function loadApiKeys(): Promise<ApiKey[]> {
  */
 async function saveApiKey(apiKey: ApiKey): Promise<void> {
   try {
-    // Convert dates to ISO strings for DynamoDB
+    // Convert dates to ISO strings and boolean to string for DynamoDB
     const dbItem = {
       ...apiKey,
       createdAt: apiKey.createdAt.toISOString(),
       expiresAt: apiKey.expiresAt?.toISOString(),
-      lastUsedAt: apiKey.lastUsedAt?.toISOString()
+      lastUsedAt: apiKey.lastUsedAt?.toISOString(),
+      isActive: apiKey.isActive.toString() // Convert boolean to string for GSI
     }
-    
+
     await putItem(API_KEYS_TABLE, dbItem, API_KEYS_ENVIRONMENT)
-    
+
     // Invalidate cache
     await accountCache.delete('api_keys:all')
   } catch (error) {
@@ -164,7 +196,7 @@ async function saveApiKey(apiKey: ApiKey): Promise<void> {
  */
 async function updateApiKey(id: string, updates: Partial<ApiKey>): Promise<void> {
   try {
-    // Convert dates to ISO strings
+    // Convert dates to ISO strings and boolean to string
     const dbUpdates: any = { ...updates }
     if (dbUpdates.lastUsedAt) {
       dbUpdates.lastUsedAt = dbUpdates.lastUsedAt.toISOString()
@@ -172,14 +204,17 @@ async function updateApiKey(id: string, updates: Partial<ApiKey>): Promise<void>
     if (dbUpdates.expiresAt) {
       dbUpdates.expiresAt = dbUpdates.expiresAt.toISOString()
     }
-    
+    if (typeof dbUpdates.isActive === 'boolean') {
+      dbUpdates.isActive = dbUpdates.isActive.toString() // Convert boolean to string for GSI
+    }
+
     await updateItem(
       API_KEYS_TABLE,
       { id },
       dbUpdates,
       API_KEYS_ENVIRONMENT
     )
-    
+
     // Invalidate cache
     await accountCache.delete('api_keys:all')
   } catch (error) {
@@ -386,30 +421,176 @@ export async function getApiKeyStats(): Promise<{
   try {
     const apiKeys = await loadApiKeys()
     const now = new Date()
-    
+
     const stats = {
       total: apiKeys.length,
       active: 0,
       expired: 0,
       byScope: {} as Record<string, number>
     }
-    
+
     for (const key of apiKeys) {
       if (key.isActive && (!key.expiresAt || key.expiresAt > now)) {
         stats.active++
       } else {
         stats.expired++
       }
-      
+
       // Count scopes
       for (const scope of key.scopes) {
         stats.byScope[scope] = (stats.byScope[scope] || 0) + 1
       }
     }
-    
+
     return stats
   } catch (error) {
     console.error('Failed to get API key stats:', error)
     return { total: 0, active: 0, expired: 0, byScope: {} }
+  }
+}
+
+/**
+ * Record API key usage
+ */
+export async function recordApiKeyUsage(
+  keyId: string,
+  endpoint: string,
+  method: string,
+  statusCode: number,
+  ipAddress?: string,
+  userAgent?: string
+): Promise<void> {
+  try {
+    console.log(`Recording API key usage: keyId=${keyId}, endpoint=${endpoint}, method=${method}, status=${statusCode}`)
+    const now = new Date()
+    const ttl = Math.floor(now.getTime() / 1000) + (USAGE_RETENTION_DAYS * 24 * 60 * 60)
+
+    const usageRecord = {
+      keyId,
+      timestamp: now.toISOString(),
+      endpoint,
+      method,
+      statusCode,
+      ipAddress: ipAddress || 'unknown',
+      userAgent: userAgent || 'unknown',
+      ttl // Auto-delete after retention period
+    }
+
+    await putItem(API_KEY_USAGE_TABLE, usageRecord, API_KEYS_ENVIRONMENT)
+    console.log(`Successfully recorded API key usage for keyId=${keyId}`)
+  } catch (error) {
+    // Don't throw error - usage recording should not block API calls
+    console.error('Failed to record API key usage:', error)
+  }
+}
+
+/**
+ * Get API key usage history
+ */
+export async function getApiKeyUsageHistory(
+  keyId: string,
+  limit: number = 100
+): Promise<Array<{
+  timestamp: Date
+  endpoint: string
+  method: string
+  statusCode: number
+  ipAddress: string
+  userAgent: string
+}>> {
+  try {
+    // Import AWS SDK directly for Query operation
+    const { getDynamoDBClient } = await import('../lib/aws-client-factory')
+    const { QueryCommand } = await import('@aws-sdk/client-dynamodb')
+    const { unmarshall } = await import('@aws-sdk/util-dynamodb')
+
+    const client = await getDynamoDBClient(API_KEYS_ENVIRONMENT)
+
+    // Query by keyId (partition key) and get most recent records
+    const command = new QueryCommand({
+      TableName: API_KEY_USAGE_TABLE,
+      KeyConditionExpression: 'keyId = :keyId',
+      ExpressionAttributeValues: {
+        ':keyId': { S: keyId }
+      },
+      ScanIndexForward: false, // Sort by timestamp descending
+      Limit: limit
+    })
+
+    const result = await client.send(command)
+    const items = result.Items?.map(item => unmarshall(item)) || []
+
+    // Map to return type
+    const usage = items.map(item => ({
+      timestamp: new Date(item.timestamp),
+      endpoint: item.endpoint,
+      method: item.method,
+      statusCode: item.statusCode,
+      ipAddress: item.ipAddress,
+      userAgent: item.userAgent
+    }))
+
+    return usage
+  } catch (error) {
+    console.error('Failed to get API key usage history:', error)
+    return []
+  }
+}
+
+/**
+ * Get usage statistics for a specific API key
+ */
+export async function getApiKeyUsageStats(keyId: string): Promise<{
+  totalCalls: number
+  lastUsed: Date | null
+  callsByEndpoint: Record<string, number>
+  callsByStatus: Record<number, number>
+  last24Hours: number
+  last7Days: number
+  last30Days: number
+}> {
+  try {
+    const history = await getApiKeyUsageHistory(keyId, 10000) // Get more for stats
+
+    const now = new Date()
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+
+    const stats = {
+      totalCalls: history.length,
+      lastUsed: history.length > 0 ? history[0].timestamp : null,
+      callsByEndpoint: {} as Record<string, number>,
+      callsByStatus: {} as Record<number, number>,
+      last24Hours: 0,
+      last7Days: 0,
+      last30Days: 0
+    }
+
+    for (const record of history) {
+      // Count by endpoint
+      stats.callsByEndpoint[record.endpoint] = (stats.callsByEndpoint[record.endpoint] || 0) + 1
+
+      // Count by status
+      stats.callsByStatus[record.statusCode] = (stats.callsByStatus[record.statusCode] || 0) + 1
+
+      // Count by time period
+      if (record.timestamp >= oneDayAgo) stats.last24Hours++
+      if (record.timestamp >= sevenDaysAgo) stats.last7Days++
+      if (record.timestamp >= thirtyDaysAgo) stats.last30Days++
+    }
+
+    return stats
+  } catch (error) {
+    console.error('Failed to get API key usage stats:', error)
+    return {
+      totalCalls: 0,
+      lastUsed: null,
+      callsByEndpoint: {},
+      callsByStatus: {},
+      last24Hours: 0,
+      last7Days: 0,
+      last30Days: 0
+    }
   }
 }

@@ -2835,12 +2835,267 @@ export const useChartRegistry = (args: {
     // REMOVED: serviceTimeHeatmap - Was using FAKE anomaly intensity data with Math.random()
     // This chart was simulating anomalies that don't exist in the data
     // DO NOT USE FAKE DATA - we don't have real anomaly detection data from the API
+
+    // Year-End Forecast with Actuals (Contextual Chart - always shows full year)
+    yearEndForecast: {
+      id: 'yearEndForecast',
+      title: 'Year-End Projection',
+      description: 'Actual costs YTD + forecast through December with 80% confidence bands',
+      type: 'line',
+      extractor: (dataset) => {
+        console.log('YearEndForecast: Starting extraction')
+
+        const historical = dataset.historical as any
+        const yearEndForecast = dataset.yearEndForecast as any
+        const currentMonthForecast = dataset.forecast as any // Current month remainder forecast
+        const summary = dataset.summary as any
+        const mode = dataset.mode || 'billable'
+
+        if (!historical && !yearEndForecast) {
+          console.log('YearEndForecast: Missing historical or yearEndForecast data')
+          return null
+        }
+
+        const historicalData = historical?.data || historical
+
+        // Handle summary data structure difference between modes
+        const rawSummaryData = summary?.data || summary
+        let summaryData: any
+
+        if (mode === 'proforma' && rawSummaryData?.proforma) {
+          // Proforma mode: use proforma.accounts and proforma.summary
+          summaryData = rawSummaryData.proforma
+          console.log('YearEndForecast: Using proforma summary data')
+        } else if (mode === 'billable' || !rawSummaryData?.proforma) {
+          // Standard mode: use accounts and summary directly
+          summaryData = rawSummaryData
+          console.log('YearEndForecast: Using standard summary data')
+        } else {
+          // Fallback
+          summaryData = rawSummaryData
+        }
+
+        // API now always returns forecast in consistent structure for both modes
+        const forecastData = yearEndForecast?.data || yearEndForecast
+        const currentForecastData = currentMonthForecast?.data || currentMonthForecast
+
+        console.log('YearEndForecast: Data structures:', {
+          mode,
+          hasHistorical: !!historicalData,
+          hasForecast: !!forecastData?.forecast,
+          hasCurrentForecast: !!currentForecastData?.forecast,
+          hasSummary: !!summaryData,
+          forecastPeriodsCount: forecastData?.forecast?.forecastResultsByTime?.length || 0,
+          currentForecastTotal: currentForecastData?.forecast?.total?.Amount || 'N/A'
+        })
+
+        // Build arrays for chart
+        const months: string[] = []
+        const actualValues: (number | null)[] = []
+        const forecastValues: (number | null)[] = []
+        const upperBound: (number | null)[] = []
+        const lowerBound: (number | null)[] = []
+
+        // Get current month (0-indexed)
+        const today = new Date()
+        const currentMonth = today.getMonth() // 0-11
+        const currentYear = today.getFullYear()
+
+        const selectedAccounts = dataset.accounts || []
+        const filterBySelection = selectedAccounts.length > 0
+
+        // Process historical data (Jan - last complete month)
+        const monthlyBreakdown = historicalData?.monthlyBreakdown || []
+
+        // Create a map of YYYY-MM to cost for easier lookup
+        const historicalCostMap = new Map<string, number>()
+        monthlyBreakdown.forEach((month: any) => {
+          const monthKey = month.month // Format: YYYY-MM
+          const cost = month.cost || 0
+          historicalCostMap.set(monthKey, cost)
+        })
+
+        // Get current month's actual spending from summary
+        let currentMonthActual = 0
+        if (summaryData?.accounts) {
+          currentMonthActual = summaryData.accounts
+            .filter((account: any) => !filterBySelection || selectedAccounts.includes(account.accountId))
+            .reduce((sum: number, account: any) => sum + (account.totalCost || 0), 0)
+
+          console.log('YearEndForecast: Current month actual from summary:', {
+            mode,
+            currentMonthActual,
+            accountCount: summaryData.accounts?.length || 0,
+            filteredAccountCount: summaryData.accounts?.filter((account: any) =>
+              !filterBySelection || selectedAccounts.includes(account.accountId)
+            ).length || 0,
+            sampleAccountId: summaryData.accounts?.[0]?.accountId,
+            sampleTotalCost: summaryData.accounts?.[0]?.totalCost,
+            dataSource: mode === 'proforma' ? 'proforma.accounts' : 'accounts'
+          })
+        } else {
+          console.log('YearEndForecast: No summary data available for current month')
+        }
+
+        // Get current month's end-of-month forecast (actual + remainder)
+        let currentMonthEndForecast = currentMonthActual // Default to actual if no forecast
+        if (currentForecastData?.forecast?.total?.Amount) {
+          const remainderForecast = parseFloat(currentForecastData.forecast.total.Amount)
+          currentMonthEndForecast = currentMonthActual + remainderForecast
+          console.log('YearEndForecast: Current month - Actual:', currentMonthActual, 'Remainder:', remainderForecast, 'End-of-month projection:', currentMonthEndForecast)
+        } else {
+          console.log('YearEndForecast: No current month forecast available, using actual only')
+        }
+
+        // Build full year view (Jan-Dec)
+        for (let m = 0; m < 12; m++) {
+          const date = new Date(currentYear, m, 1)
+          const monthKey = `${currentYear}-${String(m + 1).padStart(2, '0')}`
+          const monthLabel = date.toLocaleDateString('en-US', { month: 'short' })
+
+          months.push(monthLabel)
+
+          if (m < currentMonth) {
+            // Past months - use historical data
+            const actualCost = historicalCostMap.get(monthKey) || 0
+            actualValues.push(actualCost)
+            forecastValues.push(null)
+            upperBound.push(null)
+            lowerBound.push(null)
+          } else if (m === currentMonth) {
+            // Current month - use summary data (actual) and forecast (end-of-month projection)
+            actualValues.push(currentMonthActual)
+            forecastValues.push(currentMonthEndForecast) // End-of-month projection
+            upperBound.push(null) // No confidence bands for current month
+            lowerBound.push(null)
+          } else {
+            // Future months - will be filled with forecast data
+            actualValues.push(null)
+            forecastValues.push(null)
+            upperBound.push(null)
+            lowerBound.push(null)
+          }
+        }
+
+        // Process forecast data (next month - December)
+        if (forecastData?.forecast?.forecastResultsByTime) {
+          const forecastByTime = forecastData.forecast.forecastResultsByTime
+
+          console.log('YearEndForecast: Processing', forecastByTime.length, 'forecast periods')
+          console.log('YearEndForecast: Current month is', currentMonth, '(', months[currentMonth], ')')
+          console.log('YearEndForecast: Current year is', currentYear)
+
+          forecastByTime.forEach((period: any, idx: number) => {
+            const dateStr = period?.TimePeriod?.Start || ''
+            if (!dateStr) {
+              console.log(`YearEndForecast: Forecast period ${idx + 1}: NO DATE`)
+              return
+            }
+
+            // Parse date using UTC to avoid timezone issues
+            // AWS returns dates as "YYYY-MM-DD" which we need to parse consistently
+            const date = new Date(dateStr + 'T00:00:00Z') // Force UTC interpretation
+            const monthIndex = date.getUTCMonth() // 0-11, use UTC to avoid timezone shift
+            const year = date.getUTCFullYear()
+            const meanValue = parseFloat(period?.MeanValue || '0')
+
+            console.log(`YearEndForecast: Forecast period ${idx + 1}:`, {
+              date: dateStr,
+              month: monthIndex,
+              monthName: months[monthIndex],
+              year,
+              meanValue,
+              isCurrentYear: year === currentYear,
+              isAfterCurrentMonth: monthIndex > currentMonth,
+              willInclude: year === currentYear && monthIndex > currentMonth
+            })
+
+            // Process all future months including December
+            if (year === currentYear && monthIndex > currentMonth) {
+              // Get confidence intervals if available (80% = p10 to p90)
+              let upper = null
+              let lower = null
+
+              if (period?.PredictionIntervalUpperBound && period?.PredictionIntervalLowerBound) {
+                upper = parseFloat(period.PredictionIntervalUpperBound)
+                lower = parseFloat(period.PredictionIntervalLowerBound)
+                console.log(`  ✓ Confidence bands: Lower=$${lower.toFixed(2)}, Upper=$${upper.toFixed(2)}`)
+              } else {
+                console.log(`  ⚠ No confidence bands available`)
+              }
+
+              console.log(`  ✓ Setting forecast for month ${monthIndex} (${months[monthIndex]}): $${meanValue.toFixed(2)}`)
+
+              forecastValues[monthIndex] = meanValue
+              upperBound[monthIndex] = upper
+              lowerBound[monthIndex] = lower
+            } else {
+              console.log(`  ✗ Skipping (year mismatch or not future month)`)
+            }
+          })
+
+          // Specifically check for December
+          const decemberHasForecast = forecastValues[11] !== null
+          console.log('YearEndForecast: December (month 11) has forecast?', decemberHasForecast)
+          if (decemberHasForecast) {
+            console.log('  December forecast value:', forecastValues[11])
+          }
+        } else {
+          console.log('YearEndForecast: NO FORECAST DATA in API response')
+        }
+
+        console.log('YearEndForecast: Final data:', {
+          months: months,
+          actualValues: actualValues.map((v, i) => `${months[i]}: ${v !== null ? '$' + v.toFixed(0) : 'null'}`),
+          forecastValues: forecastValues.map((v, i) => `${months[i]}: ${v !== null ? '$' + v.toFixed(0) : 'null'}`),
+          hasConfidenceBands: upperBound.some(v => v !== null)
+        })
+
+        return {
+          months,
+          series: [
+            {
+              name: 'Actual Costs',
+              data: actualValues,
+              type: 'bar'
+            },
+            {
+              name: 'Forecast',
+              data: forecastValues,
+              type: 'bar'
+            }
+          ],
+          confidenceBands: {
+            upper: upperBound,
+            lower: lowerBound
+          },
+          metadata: {
+            currentMonth: currentMonth + 1,
+            // Year total: sum of actuals for past months + projected total for current and future months
+            yearTotal: (() => {
+              let total = 0
+              for (let i = 0; i < 12; i++) {
+                if (i < currentMonth) {
+                  // Past months: use actual
+                  total += actualValues[i] || 0
+                } else {
+                  // Current and future months: use forecast (which includes current month projection)
+                  total += forecastValues[i] || 0
+                }
+              }
+              return total
+            })()
+          }
+        }
+      }
+    }
   }
 
   // Dynamic chart selection based on scenario
   const chartIdsByScenario: Record<Scenario, string[]> = {
     // No accounts selected - show strategic organizational overview
     'all-accounts': [
+      'yearEndForecast',                  // Year-end projection with actuals + forecast (contextual - always full year)
       'organizationForecastComparison',   // Simple org forecast vs current (current periods only)
       'budgetSCurve',                     // S-curve budget envelope tracking (current periods only)
       'forecastConfidenceBands',          // Forecast with uncertainty bands (current periods only)
@@ -2856,6 +3111,7 @@ export const useChartRegistry = (args: {
 
     // Single account selected - deep dive analytics for the account
     'single-account': [
+      'yearEndForecast',               // Year-end projection (contextual - always full year)
       'organizationForecastComparison', // Daily actual + forecast for current month
       'cumulativeBurnUp',              // Cumulative burn-up (current periods only)
       'monthlyTrendWithForecast',      // Monthly trend with forecast (current periods only)
@@ -2870,6 +3126,7 @@ export const useChartRegistry = (args: {
 
     // Few accounts selected (2-10) - comparative analysis focus
     'few-accounts': [
+      'yearEndForecast',               // Year-end projection (contextual - always full year)
       'organizationForecastComparison', // Daily actual + forecast comparison
       'currentVsForecastComparison',   // Current vs forecast for selected accounts
       'accountForecastComparison',     // Compare forecasts across selected accounts

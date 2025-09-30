@@ -171,7 +171,8 @@ const isFullWidth = (chart: ChartDefinition) => {
         'forecastProjectionLine',
         'cumulativeBurnUp',
         'monthlyTrendWithForecast',
-        'accountForecastComparison'
+        'accountForecastComparison',
+        'yearEndForecast' // Year-end projection with actuals + forecast
     ].includes(chart.id)
 }
 
@@ -2645,6 +2646,260 @@ const getChartOptions = (chart: ChartDefinition) => {
                 },
                 yAxis: {
                     type: 'value',
+                    axisLine: { lineStyle: { color: '#374151' } },
+                    axisLabel: {
+                        color: '#6b7280',
+                        formatter: (value: number) => formatCurrency(value)
+                    },
+                    splitLine: { lineStyle: { color: '#1f2937' } }
+                },
+                series
+            }
+        }
+
+        // Year-End Forecast with Actuals (Full Year View)
+        if (chart.id === 'yearEndForecast' && data?.months && data?.series) {
+            const series: any[] = []
+
+            // Check if we have confidence bands
+            const hasConfidenceBands = data.confidenceBands?.upper &&
+                                     data.confidenceBands.upper.some((v: any) => v !== null)
+
+            console.log('[Chart Render] yearEndForecast hasConfidenceBands:', hasConfidenceBands)
+            console.log('[Chart Render] Forecast data:', data.series[1]?.data)
+            console.log('[Chart Render] Upper bounds:', data.confidenceBands?.upper)
+            console.log('[Chart Render] Lower bounds:', data.confidenceBands?.lower)
+
+            // Add confidence band area using stacked area approach
+            if (hasConfidenceBands) {
+                // Calculate the area between lower and upper bounds
+                // ECharts stacked area: lower bound + (upper - lower) difference
+                const areaData = data.confidenceBands.lower.map((lower: number | null, idx: number) => {
+                    const upper = data.confidenceBands.upper[idx]
+                    if (lower !== null && upper !== null) {
+                        return upper - lower // The height of the confidence band
+                    }
+                    return null
+                })
+
+                // Lower bound line (base of the confidence area)
+                series.push({
+                    name: 'Confidence Lower',
+                    type: 'line',
+                    data: data.confidenceBands.lower,
+                    lineStyle: { opacity: 0 },
+                    symbol: 'none',
+                    stack: 'confidence',
+                    z: 0
+                })
+
+                // Confidence band (stacked on top of lower bound)
+                series.push({
+                    name: '80% Confidence Band',
+                    type: 'line',
+                    data: areaData,
+                    lineStyle: { opacity: 0 },
+                    areaStyle: {
+                        color: 'rgba(16, 185, 129, 0.15)'
+                    },
+                    stack: 'confidence',
+                    symbol: 'none',
+                    z: 0
+                })
+            }
+
+            // Build stacked bars for actual and forecast
+            // Current month shows both: actual (bottom) + forecast remainder (top)
+            const currentMonthIndex = data.metadata?.currentMonth - 1 // Convert to 0-indexed
+
+            // Actual spend series (blue bars for past + current month)
+            const actualBars = data.series[0].data.map((val: number | null) => val)
+
+            // Forecast series for future months (green bars)
+            const forecastBars = data.series[1].data.map((val: number | null, idx: number) => {
+                // For current month, show forecast remainder (end-of-month forecast minus current actual)
+                if (idx === currentMonthIndex && val !== null && actualBars[idx] !== null) {
+                    return val - actualBars[idx] // Remaining forecast to reach month-end
+                }
+                return val
+            })
+
+            // Actual costs (blue bars)
+            series.push({
+                name: 'Actual',
+                type: 'bar',
+                stack: 'total',
+                data: actualBars,
+                itemStyle: {
+                    color: '#3b82f6',
+                    borderRadius: [0, 0, 0, 0] // No radius for stacked bars
+                },
+                barWidth: '60%',
+                z: 2
+            })
+
+            // Forecast (green bars, stacked on top of actual for current month)
+            series.push({
+                name: 'Forecast',
+                type: 'bar',
+                stack: 'total',
+                data: forecastBars,
+                itemStyle: {
+                    color: '#10b981',
+                    opacity: 0.8,
+                    borderRadius: [4, 4, 0, 0] // Only top has radius
+                },
+                barWidth: '60%',
+                z: 2
+            })
+
+            // Add trend lines overlaying the bars
+            const actualLineData = data.series[0].data.map((v: number | null) => v)
+            const forecastLineData = data.series[1].data.map((v: number | null) => v)
+
+            // Actual trend line
+            series.push({
+                name: 'Actual Trend',
+                type: 'line',
+                data: actualLineData,
+                smooth: true,
+                lineStyle: {
+                    color: '#1e40af',
+                    width: 2
+                },
+                symbol: 'circle',
+                symbolSize: 6,
+                z: 3
+            })
+
+            // Forecast trend line
+            series.push({
+                name: 'Forecast Trend',
+                type: 'line',
+                data: forecastLineData,
+                smooth: true,
+                lineStyle: {
+                    color: '#059669',
+                    width: 2,
+                    type: 'dashed'
+                },
+                symbol: 'circle',
+                symbolSize: 6,
+                z: 3
+            })
+
+            // Calculate year total for subtitle
+            const yearTotal = data.metadata?.yearTotal || 0
+            const yearTotalFormatted = formatCurrency(yearTotal, false)
+
+            return {
+                ...baseOptions,
+                title: {
+                    text: `Projected Year Total: ${yearTotalFormatted}`,
+                    textStyle: {
+                        color: '#ffffff',
+                        fontSize: 16,
+                        fontWeight: 'bold'
+                    },
+                    left: 'center',
+                    top: 5
+                },
+                tooltip: {
+                    ...baseOptions.tooltip,
+                    trigger: 'axis',
+                    formatter: (params: any) => {
+                        const monthIndex = params[0].dataIndex
+                        const month = params[0].name
+                        const currentMonthIndex = data.metadata?.currentMonth - 1
+                        let result = `<b>${month} ${new Date().getFullYear()}</b><br/>`
+
+                        // Get actual and forecast values for this month
+                        const actualVal = data.series[0].data[monthIndex]
+                        const forecastVal = data.series[1].data[monthIndex]
+
+                        if (monthIndex < currentMonthIndex) {
+                            // Past month - only actual
+                            if (actualVal !== null) {
+                                result += `<span style="color: #3b82f6">● Actual: ${formatCurrency(actualVal)}</span><br/>`
+                            }
+                        } else if (monthIndex === currentMonthIndex) {
+                            // Current month - show actual + projected month-end + remainder
+                            if (actualVal !== null) {
+                                result += `<span style="color: #3b82f6">● Actual (MTD): ${formatCurrency(actualVal)}</span><br/>`
+                            }
+                            if (forecastVal !== null) {
+                                result += `<span style="color: #10b981">● Projected Month-End: ${formatCurrency(forecastVal)}</span><br/>`
+                                if (actualVal !== null) {
+                                    const remainder = forecastVal - actualVal
+                                    result += `<span style="color: #6ee7b7">  └─ Remaining: ${formatCurrency(remainder)}</span><br/>`
+                                }
+                            }
+                        } else {
+                            // Future month - only forecast
+                            if (forecastVal !== null) {
+                                result += `<span style="color: #10b981">● Forecast: ${formatCurrency(forecastVal)}</span><br/>`
+                            }
+
+                            // Show confidence band if available
+                            if (hasConfidenceBands) {
+                                const lower = data.confidenceBands.lower[monthIndex]
+                                const upper = data.confidenceBands.upper[monthIndex]
+                                if (lower !== null && upper !== null) {
+                                    result += `<span style="color: #6ee7b7">▬ 80% Range: ${formatCurrency(lower)} - ${formatCurrency(upper)}</span><br/>`
+                                }
+                            }
+                        }
+
+                        return result
+                    }
+                },
+                legend: {
+                    data: [
+                        { name: 'Actual', icon: 'rect', itemStyle: { color: '#3b82f6' } },
+                        { name: 'Forecast', icon: 'rect', itemStyle: { color: '#10b981' } },
+                        { name: 'Actual Trend', icon: 'line', itemStyle: { color: '#1e40af' } },
+                        { name: 'Forecast Trend', icon: 'line', itemStyle: { color: '#059669' } },
+                        ...(hasConfidenceBands ? [{ name: '80% Confidence Band', icon: 'rect', itemStyle: { color: 'rgba(16, 185, 129, 0.15)' } }] : [])
+                    ],
+                    textStyle: { color: '#9ca3af' },
+                    top: 35,
+                    itemGap: 15
+                },
+                grid: {
+                    left: '3%',
+                    right: '4%',
+                    bottom: '10%',
+                    top: '20%',
+                    containLabel: true
+                },
+                xAxis: {
+                    type: 'category',
+                    data: data.months,
+                    axisLine: { lineStyle: { color: '#374151' } },
+                    axisLabel: {
+                        color: '#6b7280',
+                        fontSize: 11
+                    },
+                    splitLine: {
+                        show: true,
+                        interval: (index: number) => {
+                            // Show vertical line at current month
+                            return data.metadata && index === data.metadata.currentMonth - 1
+                        },
+                        lineStyle: {
+                            color: '#fbbf24',
+                            type: 'dashed',
+                            width: 2
+                        }
+                    }
+                },
+                yAxis: {
+                    type: 'value',
+                    name: 'Monthly Cost',
+                    nameTextStyle: {
+                        color: '#9ca3af',
+                        fontSize: 12
+                    },
                     axisLine: { lineStyle: { color: '#374151' } },
                     axisLabel: {
                         color: '#6b7280',

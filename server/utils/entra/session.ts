@@ -20,7 +20,7 @@ export async function getUserSession(event: H3Event): Promise<{
   user?: any
 } | null> {
   console.log('getUserSession called - checking all sources...')
-  
+
   // Always check Authorization header first (works for both dev and prod)
   const authHeader = event.node.req.headers.authorization
   if (authHeader?.startsWith('Bearer ')) {
@@ -35,84 +35,123 @@ export async function getUserSession(event: H3Event): Promise<{
       }
     }
   }
-  
-  // Development mode - use test token or mock session
-  if (process.env.NODE_ENV === 'development') {
-    // Use environment variable for development testing
-    if (process.env.ENTRA_TEST_ACCESS_TOKEN) {
-      console.log('Using test access token from environment variable')
-      return {
-        accessToken: process.env.ENTRA_TEST_ACCESS_TOKEN,
-        user: {
-          id: 'test-user',
-          displayName: 'Test User',
-          email: process.env.ENTRA_TEST_USER_EMAIL || 'test@gd-ms.com'
-        }
+
+  // Development mode - use test token ONLY if explicitly set
+  if (process.env.NODE_ENV === 'development' && process.env.ENTRA_TEST_ACCESS_TOKEN) {
+    console.log('Using test access token from environment variable')
+    return {
+      accessToken: process.env.ENTRA_TEST_ACCESS_TOKEN,
+      user: {
+        id: 'test-user',
+        displayName: 'Test User',
+        email: process.env.ENTRA_TEST_USER_EMAIL || 'test@gd-ms.com'
       }
     }
-    
-    console.log('Development mode: No test token configured')
   }
-  
+
   // Production mode - use actual OIDC session
   try {
     console.log('Checking for OIDC session...')
     console.log('Event context keys:', Object.keys(event.context || {}))
-    console.log('Request headers:', {
-      authorization: !!event.node.req.headers.authorization,
-      cookie: !!event.node.req.headers.cookie
-    })
-    
-    // Check various places where the session might be stored
-    const session = event.context?.session || 
-                   event.context?.user || 
-                   event.context?.oidc ||
-                   event.context?.auth ||
-                   null
-    
-    console.log('Session from context:', {
-      hasSession: !!session,
-      hasAccessToken: !!session?.accessToken,
-      hasUser: !!session?.user,
-      sessionKeys: session ? Object.keys(session) : [],
-      sessionType: typeof session
-    })
-    
-    // Check Authorization header as fallback
-    const authHeader = event.node.req.headers.authorization
-    if (authHeader?.startsWith('Bearer ')) {
-      console.log('Found Bearer token in Authorization header')
-      const token = authHeader.substring(7)
-      
-      // If we don't have a session but have a token, create a minimal session
-      if (!session?.accessToken) {
-        return {
-          accessToken: token,
-          user: {
-            id: 'header-user',
-            displayName: 'Header User',
-            email: 'unknown@header'
-          }
-        }
+
+    // Try to use nuxt-oidc-auth's built-in session function
+    let oidcSession = null
+    try {
+      // Import getUserSession from nuxt-oidc-auth
+      const { getUserSession: getOIDCUserSession } = await import('nuxt-oidc-auth/runtime/server/utils/session.js')
+      oidcSession = await getOIDCUserSession(event)
+      console.log('OIDC Session from nuxt-oidc-auth:', {
+        hasSession: !!oidcSession,
+        keys: oidcSession ? Object.keys(oidcSession) : []
+      })
+    } catch (e) {
+      console.log('Could not get session from nuxt-oidc-auth:', e.message)
+
+      // Fallback to h3 session
+      try {
+        const { getSession } = await import('h3')
+        oidcSession = await getSession(event, {
+          password: process.env.NUXT_OIDC_SESSION_SECRET || process.env.NUXT_SESSION_PASSWORD || 'secret-must-be-at-least-32-characters-long'
+        })
+        console.log('OIDC Session from h3:', {
+          hasSession: !!oidcSession,
+          keys: oidcSession ? Object.keys(oidcSession) : []
+        })
+      } catch (e2) {
+        console.log('Could not get h3 session:', e2.message)
       }
     }
-    
-    // Try to get session from cookies if available
-    const cookies = event.node.req.headers.cookie
-    if (cookies && !session?.accessToken) {
-      console.log('Found cookies, but no direct session access method available')
-      console.log('Cookie names:', cookies.split(';').map(c => c.split('=')[0].trim()))
-    }
-    
-    if (!session?.accessToken) {
-      console.log('No access token found anywhere')
+
+    // Check various places where the session might be stored
+    const contextSession = event.context?.session ||
+                          event.context?.user ||
+                          event.context?.oidc ||
+                          event.context?.auth ||
+                          null
+
+    const session = oidcSession || contextSession
+
+    console.log('Session details:', {
+      hasSession: !!session,
+      hasAccessToken: !!session?.accessToken,
+      hasAccess_token: !!session?.access_token,
+      hasUser: !!session?.user,
+      hasData: !!session?.data,
+      sessionKeys: session ? Object.keys(session) : [],
+      dataKeys: session?.data ? Object.keys(session.data) : [],
+      userKeys: session?.user ? Object.keys(session.user) : [],
+      sessionType: typeof session
+    })
+
+    if (!session) {
+      console.log('No session found in any location')
       return null
     }
-    
+
+    // h3 sessions wrap data in a 'data' property
+    // Check both the top level and inside 'data'
+    const sessionData = session.data || session
+
+    console.log('Session data structure:', {
+      hasSessionData: !!sessionData,
+      dataKeys: sessionData ? Object.keys(sessionData) : [],
+      hasAccessToken: !!sessionData?.accessToken,
+      hasUser: !!sessionData?.user
+    })
+
+    // Extract user and token information from session
+    // nuxt-oidc-auth might store user in different ways
+    const user = sessionData.user || session.user
+    const accessToken = sessionData.accessToken || sessionData.access_token || session.accessToken || session.access_token
+
+    // Be more lenient: Accept if we have an access token (proves authentication)
+    // OR if we have a user object with some identifying info
+    if (!accessToken) {
+      if (!user || typeof user !== 'object') {
+        console.log('Session exists but has no valid access token or user info')
+        console.log('User value:', user)
+        return null
+      }
+      // If no access token, require user to have SOME identifying info
+      const hasIdentity = user.email || user.id || user.sub || user.preferred_username || user.name
+      if (!hasIdentity) {
+        console.log('User object exists but has no identifying information')
+        console.log('User keys:', Object.keys(user))
+        return null
+      }
+    }
+
+    console.log('Session validated successfully with:', {
+      hasToken: !!accessToken,
+      hasUser: !!user,
+      userEmail: user?.email,
+      userId: user?.id || user?.sub
+    })
+
     return {
-      accessToken: session.accessToken,
-      refreshToken: session.refreshToken,
-      user: session.user || session
+      accessToken: accessToken,
+      refreshToken: sessionData.refreshToken || sessionData.refresh_token || session.refreshToken || session.refresh_token,
+      user: user || { id: 'session-user', email: 'unknown' }
     }
   } catch (error) {
     console.error('Failed to get OIDC session:', error)

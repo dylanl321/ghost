@@ -106,10 +106,10 @@
       <div class="max-w-2xl mx-auto">
         <UIcon name="i-heroicons-book-open" class="text-6xl text-gray-400 mb-4" />
         <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-          Welcome to GHOST Documentation
+          GHOST Documentation
         </h2>
         <p class="text-gray-600 dark:text-gray-400 mb-8">
-          Browse our comprehensive documentation to learn about GHOST features, AWS best practices, and troubleshooting guides.
+          Learn how to use GHOST's key features: Universal Search, Cost Dashboard, and Organization Chart.
         </p>
         
         <!-- Quick Start Cards -->
@@ -157,28 +157,22 @@ const categories = supportCategories
 // Quick start articles for the welcome page
 const quickStartArticles = [
   {
-    id: 'welcome',
-    title: 'Getting Started with GHOST',
-    description: 'Learn the basics of GHOST and how to navigate the platform',
-    icon: 'i-heroicons-rocket-launch'
-  },
-  {
-    id: 'cost-dashboard-guide',
-    title: 'Using the Cost Dashboard',
-    description: 'Complete guide to cost tracking, settings, filters, and sharing',
-    icon: 'i-heroicons-currency-dollar'
-  },
-  {
     id: 'universal-search',
     title: 'Universal Search',
     description: 'Find accounts, users, and resources quickly with powerful search',
     icon: 'i-heroicons-magnifying-glass'
   },
   {
-    id: 'roles-permissions',
-    title: 'Roles & Permissions',
-    description: 'Understand your access level and what you can do in GHOST',
-    icon: 'i-heroicons-shield-check'
+    id: 'cost-dashboard-guide',
+    title: 'Using the Cost Dashboard',
+    description: 'Complete guide to cost tracking, settings, filters, and analysis',
+    icon: 'i-heroicons-currency-dollar'
+  },
+  {
+    id: 'org-chart-guide',
+    title: 'Organization Chart',
+    description: 'Visualize your AWS account hierarchy and organizational structure',
+    icon: 'i-heroicons-squares-2x2'
   }
 ]
 

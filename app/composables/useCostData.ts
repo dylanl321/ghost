@@ -98,6 +98,20 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     return `/api/costs/forecast?${params.toString()}`
   }
 
+  const buildYearEndForecastUrl = () => {
+    const params = new URLSearchParams()
+    // Get rest-of-year forecast for year-end projection
+    params.set('period', 'rest-of-year')
+    params.set('granularity', 'MONTHLY')
+    params.set('proforma', String(query.value.mode === 'proforma'))
+    // Add account filtering
+    if (query.value.accounts.length > 0) {
+      params.set('accountIds', query.value.accounts.join(','))
+      console.log('YearEndForecast: Adding accountIds to URL:', query.value.accounts)
+    }
+    return `/api/costs/forecast?${params.toString()}`
+  }
+
   const buildAnalysisUrl = () => {
     const params = new URLSearchParams()
     const period = mapUiToSummaryPeriod(query.value.timeframe)
@@ -130,26 +144,28 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
   const fetchCosts = async () => {
     isFetching.value = true
     fetchError.value = null
-    
+
     // Log the URLs being called
     const urls = {
       summary: buildSummaryUrl(),
       historical: buildHistoricalUrl(),
       forecast: buildForecastUrl(),
       extendedForecast: buildExtendedForecastUrl(),
+      yearEndForecast: buildYearEndForecastUrl(),
       analysis: buildAnalysisUrl(),
       services: buildServicesSummaryUrl()
     }
     console.log('Fetching cost data with URLs:', urls)
     console.log('Current selected accounts:', query.value.accounts)
     console.log('Forecast URL specifically:', urls.forecast)
-    
+
     try {
-      const [summaryRes, historicalRes, forecastRes, extendedForecastRes, analysisRes, servicesRes] = await Promise.all([
+      const [summaryRes, historicalRes, forecastRes, extendedForecastRes, yearEndForecastRes, analysisRes, servicesRes] = await Promise.all([
         $fetch(urls.summary),
         $fetch(urls.historical),
         $fetch(urls.forecast),
         $fetch(urls.extendedForecast),
+        $fetch(urls.yearEndForecast),
         $fetch(urls.analysis),
         $fetch(urls.services)
       ])
@@ -162,6 +178,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
         historical: historicalRes as any,
         forecast: forecastRes as any,
         extendedForecast: extendedForecastRes as any, // 3-month forecast for trend analysis
+        yearEndForecast: yearEndForecastRes as any, // Rest-of-year forecast for year-end projection
         analysis: analysisRes as any,
         services: servicesRes as any
       }
@@ -187,7 +204,10 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
         forecastPeriod: (forecastRes as any)?.data?.period || 'No period',
         extendedForecastHasData: !!(extendedForecastRes as any)?.data,
         extendedForecastPeriods: (extendedForecastRes as any)?.data?.forecast?.forecastResultsByTime?.length || 0,
-        extendedForecastTotal: (extendedForecastRes as any)?.data?.forecast?.total?.Amount || 'N/A'
+        extendedForecastTotal: (extendedForecastRes as any)?.data?.forecast?.total?.Amount || 'N/A',
+        yearEndForecastHasData: !!(yearEndForecastRes as any)?.data,
+        yearEndForecastPeriods: (yearEndForecastRes as any)?.data?.forecast?.forecastResultsByTime?.length || 0,
+        yearEndForecastTotal: (yearEndForecastRes as any)?.data?.forecast?.total?.Amount || 'N/A'
       })
       
       // URLs are already logged above

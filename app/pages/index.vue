@@ -185,13 +185,11 @@ const projectedSpendTrend = computed(() => {
 
 onMounted(async () => {
   try {
-    const response = await fetch('/api/organization/overview')
-    const json = await response.json();
-    overviewThisMonth.value = json.data
+    const response = await $fetch('/api/organization/overview')
+    overviewThisMonth.value = response.data
 
-    const response2 = await fetch('/api/organization/overview?analysisTimeframe=previous-month')
-    const json2 = await response2.json();
-    overviewLastMonth.value = json2.data
+    const response2 = await $fetch('/api/organization/overview?analysisTimeframe=previous-month')
+    overviewLastMonth.value = response2.data
   } catch (err) {
     console.error('Failed to fetch overview:', err)
   } finally {

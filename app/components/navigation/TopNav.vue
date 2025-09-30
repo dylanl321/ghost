@@ -162,7 +162,7 @@ const userMenuItems = computed(() => {
     mainMenuItems.push({
       label: 'Admin',
       icon: 'i-heroicons-adjustments-horizontal',
-      to: '/admin/home'
+      to: '/admin'
     })
   }
 

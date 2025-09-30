@@ -32,12 +32,12 @@ registerEndpoint('/api/costs/forecast', 'GET', {
       name: 'period',
       in: 'query',
       required: false,
-      schema: { 
+      schema: {
         type: 'string',
-        enum: ['current-month-remainder', 'next-month', '3-months', '6-months', '12-months', 'custom'],
+        enum: ['current-month-remainder', 'next-month', '3-months', '6-months', '12-months', 'rest-of-year', 'custom'],
         default: 'next-month'
       },
-      description: 'Forecast period - current month remainder, next month, or longer periods'
+      description: 'Forecast period - current month remainder, next month, rest of year, or longer periods'
     },
     {
       name: 'months',
@@ -120,44 +120,49 @@ registerEndpoint('/api/costs/forecast', 'GET', {
             properties: {
               success: { type: 'boolean' },
               data: {
-                oneOf: [
-                  {
+                type: 'object',
+                properties: {
+                  period: {
+                    type: 'object',
+                    properties: {
+                      type: { type: 'string' },
+                      months: { type: 'number' },
+                      startDate: { type: 'string' },
+                      endDate: { type: 'string' }
+                    }
+                  },
+                  forecast: {
                     type: 'object',
                     properties: {
                       total: { type: 'object' },
                       forecastResultsByTime: { type: 'array' }
                     },
-                    description: 'Standard forecast data'
+                    description: 'Normalized forecast data (works for both standard and proforma modes)'
                   },
-                  {
+                  masterAccount: {
+                    type: 'object',
+                    description: 'Master account forecast details (proforma mode only)'
+                  },
+                  proformaAccount: {
+                    type: 'object',
+                    description: 'Proforma account forecast details (proforma mode only)'
+                  },
+                  masterOnlyForecast: {
+                    type: 'object',
+                    description: 'Master-only forecast (master minus proforma, proforma mode only)'
+                  },
+                  combinedTotals: {
                     type: 'object',
                     properties: {
-                      masterForecast: {
-                        type: 'object',
-                        properties: {
-                          total: { type: 'object' },
-                          forecastResultsByTime: { type: 'array' }
-                        }
-                      },
-                      proformaForecast: {
-                        type: 'object',
-                        properties: {
-                          total: { type: 'object' },
-                          forecastResultsByTime: { type: 'array' }
-                        }
-                      },
-                      combinedTotals: {
-                        type: 'object',
-                        properties: {
-                          master: { type: 'number' },
-                          proforma: { type: 'number' },
-                          grandTotal: { type: 'number' }
-                        }
-                      }
+                      master: { type: 'number' },
+                      proforma: { type: 'number' },
+                      masterOnly: { type: 'number' },
+                      grandTotal: { type: 'number' }
                     },
-                    description: 'Proforma forecast analysis data'
-                  }
-                ]
+                    description: 'Combined totals (proforma mode only)'
+                  },
+                  note: { type: 'string' }
+                }
               }
             }
           }
@@ -264,6 +269,28 @@ export default defineEventHandler(handleAsync(async (event) => {
       case '12-months':
         monthsToAdd = 12
         break
+      case 'rest-of-year':
+        // Calculate months from next month to December
+        const currentMonth = today.getMonth() + 1 // 1-12
+        const monthsUntilDecember = 12 - currentMonth
+        monthsToAdd = Math.max(1, monthsUntilDecember) // At least 1 month
+
+        console.log('[Forecast API] rest-of-year calculation:', {
+          currentMonth,
+          monthsUntilDecember,
+          monthsToAdd,
+          today: today.toISOString()
+        })
+
+        // Override endDate to be end of current calendar year
+        endDate = new Date(today.getFullYear(), 11, 31) // Dec 31 of current year
+        endDate.setDate(endDate.getDate() + 1) // Make it Jan 1 next year for exclusive end
+
+        console.log('[Forecast API] rest-of-year date range:', {
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString()
+        })
+        break
       case 'custom':
         if (customMonths < 1 || customMonths > 12) {
           return errors.badRequest(event, 'Custom months must be between 1 and 12')
@@ -271,10 +298,13 @@ export default defineEventHandler(handleAsync(async (event) => {
         monthsToAdd = customMonths
         break
       default:
-        return errors.badRequest(event, 'Invalid period. Must be one of: current-month-remainder, next-month, 3-months, 6-months, 12-months, custom')
+        return errors.badRequest(event, 'Invalid period. Must be one of: current-month-remainder, next-month, 3-months, 6-months, 12-months, rest-of-year, custom')
     }
-    
-    endDate.setMonth(endDate.getMonth() + monthsToAdd)
+
+    // Don't adjust endDate for rest-of-year since it's already set to Dec 31
+    if (period !== 'rest-of-year') {
+      endDate.setMonth(endDate.getMonth() + monthsToAdd)
+    }
   }
   
   // Format dates for AWS API
@@ -318,13 +348,21 @@ export default defineEventHandler(handleAsync(async (event) => {
         startDate: startDateStr,
         endDate: endDateStr
       },
+      // Normalized forecast property (same structure as standard mode)
+      // For proforma mode, use proformaAccount.forecast which represents linked accounts
+      // with enterprise discounts allocated. This is the "true" cost forecast.
+      // If account filtering is applied, this will be the filtered forecast.
+      // For org-wide view, this represents total linked account costs with discounts.
+      forecast: proformaForecastData.proformaAccount.forecast,
+      // Keep all proforma-specific data for reference
       masterAccount: proformaForecastData.masterAccount,
       proformaAccount: proformaForecastData.proformaAccount,
       masterOnlyForecast: proformaForecastData.masterOnlyForecast,
       combinedTotals: proformaForecastData.totals,
-      note: 'Proforma forecast shows master account costs minus proforma account costs. ' +
-            'This represents the true forecast per account after enterprise savings plans ' +
-            'and discounts are allocated from the master account based on usage patterns.'
+      note: 'Proforma forecast represents linked account costs with enterprise savings plans ' +
+            'and discounts allocated from the master account. MasterOnlyForecast ($' +
+            Math.round(proformaForecastData.totals.masterOnly).toLocaleString() +
+            ') shows master account overhead (enterprise support, RI/SP purchases, etc.).'
     }
 
     return sendSuccess(event, result)
@@ -347,10 +385,21 @@ export default defineEventHandler(handleAsync(async (event) => {
     if (!forecast) {
       return errors.notFound(event, 'No forecast data available for the specified period')
     }
-    
-    // Log forecast total for debugging
-    console.log('[Forecast API] Forecast total:', forecast?.total?.Amount || 'No total', 
+
+    // Log forecast details for debugging
+    console.log('[Forecast API] Forecast total:', forecast?.total?.Amount || 'No total',
                 'for accounts:', accountIds.length > 0 ? accountIds : 'All')
+
+    // Log forecast periods (especially for rest-of-year to check December)
+    if (period === 'rest-of-year' && forecast?.forecastResultsByTime) {
+      console.log('[Forecast API] rest-of-year returned', forecast.forecastResultsByTime.length, 'periods:')
+      forecast.forecastResultsByTime.forEach((period: any, idx: number) => {
+        const start = period?.TimePeriod?.Start
+        const end = period?.TimePeriod?.End
+        const mean = period?.MeanValue
+        console.log(`  Period ${idx + 1}: ${start} to ${end}, Mean: $${mean}`)
+      })
+    }
     
     const result = {
       period: {
