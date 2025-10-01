@@ -116,10 +116,9 @@ build:
   tags:
     - prod-docker-shared
   image: 504885980539.dkr.ecr.us-gov-east-1.amazonaws.com/docker:24.0.5-dind
-  when: manual
-  # rules:
-  #   - if: $CI_COMMIT_REF_NAME == "dev" || $CI_COMMIT_REF_NAME == "master"
-  #     when: manual
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "dev" || $CI_COMMIT_REF_NAME == "master"
+      when: manual
   script:
     # Authenticate Docker to ECR
     - source ecr-credentials
@@ -134,10 +133,9 @@ build:
 
 plan:
   stage: terraform_plan
-  when: manual
-  # rules:
-  #   - if: $CI_COMMIT_REF_NAME == "dev" || $CI_COMMIT_REF_NAME == "master"
-  #     when: manual
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "dev" || $CI_COMMIT_REF_NAME == "master"
+      when: manual
   script:
     - cd $TF_WORKING_DIR
     - terraform init "-backend-config=./conf/$ENV.conf"
@@ -149,10 +147,9 @@ plan:
 
 apply:
   stage: terraform_apply
-  when: manual
-  # rules:
-  #   - if: $CI_COMMIT_REF_NAME == "dev" || $CI_COMMIT_REF_NAME == "master"
-  #     when: manual
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "dev" || $CI_COMMIT_REF_NAME == "master"
+      when: manual
   script:
     - cd $TF_WORKING_DIR
     - terraform init "-backend-config=./conf/$ENV.conf"
