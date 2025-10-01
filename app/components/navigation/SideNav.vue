@@ -7,8 +7,8 @@
   ></div>
   
   <!-- Sidebar -->
-  <div 
-    class="fixed inset-y-0 left-0 bg-slate-900 flex flex-col transition-all duration-300 ease-in-out overflow-hidden"
+  <div
+    class="fixed inset-y-0 left-0 bg-slate-900 flex flex-col transition-all duration-300 ease-in-out overflow-hidden shadow-xl"
     :class="{
       // Desktop collapsed/expanded states
       'w-16 z-40': !isMobile && navigationStore.isCollapsed && !navigationStore.isHovered,

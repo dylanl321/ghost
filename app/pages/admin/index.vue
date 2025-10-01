@@ -1,9 +1,7 @@
 <template>
-  <div class="min-h-screen bg-gray-50 dark:bg-gray-900 py-12">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-
-      <!-- Access Denied -->
-      <div v-if="!hasAdminAccess" class="max-w-2xl mx-auto">
+  <div class="space-y-6 p-6 max-w-[1600px] mx-auto">
+    <!-- Access Denied -->
+    <div v-if="!hasAdminAccess" class="max-w-2xl mx-auto">
         <UCard>
           <div class="p-8 text-center">
             <Icon name="i-heroicons-shield-exclamation" class="w-16 h-16 text-red-500 mx-auto mb-4" />
@@ -27,7 +25,7 @@
 
             <div class="flex flex-col sm:flex-row gap-3 justify-center">
               <UButton
-                color="blue"
+                color="emerald"
                 @click="navigateTo('/')"
               >
                 <Icon name="i-heroicons-home" class="w-4 h-4 mr-2" />
@@ -46,10 +44,11 @@
         </UCard>
       </div>
 
-      <!-- Admin Dashboard -->
-      <div v-else>
-        <!-- Header -->
-        <div class="mb-8">
+    <!-- Admin Dashboard -->
+    <div v-else>
+      <!-- Header -->
+      <UCard>
+        <div class="p-2">
           <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">
             Admin Panel
           </h1>
@@ -57,9 +56,10 @@
             Manage GHOST application settings, users, and system configuration
           </p>
         </div>
+      </UCard>
 
-        <!-- Admin Cards Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <!-- Admin Cards Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
           <!-- Role Management -->
           <UCard
@@ -251,7 +251,6 @@
           </UCard>
         </div>
       </div>
-    </div>
   </div>
 </template>
 

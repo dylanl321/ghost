@@ -1,81 +1,81 @@
 <template>
-  <div class="min-h-screen bg-gray-50 dark:bg-gray-900 py-12">
-    <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-
-      <!-- Header -->
-      <div class="text-center mb-12">
-        <h1 class="text-4xl font-bold text-gray-900 dark:text-white mb-4">
+  <div class="space-y-6 p-6 max-w-[1600px] mx-auto">
+    <!-- Header -->
+    <UCard>
+      <div class="text-center p-6">
+        <h1 class="text-4xl font-bold text-gray-900 dark:text-white mb-3">
           Support & Help
         </h1>
         <p class="text-lg text-gray-600 dark:text-gray-400">
           Get help with GHOST features, documentation, and support
         </p>
       </div>
+    </UCard>
 
-      <!-- Main Actions Grid -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-        <!-- Documentation -->
-        <UCard
-          class="hover:shadow-lg transition-shadow cursor-pointer"
-          @click="navigateTo('/support/docs')"
-        >
-          <div class="p-6">
-            <div class="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center mb-4">
-              <Icon name="i-heroicons-book-open" class="w-6 h-6 text-blue-600 dark:text-blue-400" />
-            </div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-              Documentation
-            </h3>
-            <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              Guides and tutorials for using GHOST features
-            </p>
-            <UButton color="blue" variant="soft" size="sm">
-              Browse Docs
-            </UButton>
+    <!-- Main Actions Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <!-- Documentation -->
+      <UCard
+        class="cursor-pointer"
+        @click="navigateTo('/support/docs')"
+      >
+        <div class="p-6">
+          <div class="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg flex items-center justify-center mb-4">
+            <Icon name="i-heroicons-book-open" class="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
           </div>
-        </UCard>
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+            Documentation
+          </h3>
+          <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Guides and tutorials for using GHOST features
+          </p>
+          <UButton color="emerald" variant="soft" size="sm">
+            Browse Docs
+          </UButton>
+        </div>
+      </UCard>
 
-        <!-- Roles & Permissions -->
-        <UCard
-          class="hover:shadow-lg transition-shadow cursor-pointer"
-          @click="navigateTo('/support/roles')"
-        >
-          <div class="p-6">
-            <div class="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center mb-4">
-              <Icon name="i-heroicons-shield-check" class="w-6 h-6 text-purple-600 dark:text-purple-400" />
-            </div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-              Roles & Permissions
-            </h3>
-            <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              Understand your access level and permissions
-            </p>
-            <UButton color="purple" variant="soft" size="sm">
-              View Roles
-            </UButton>
+      <!-- Roles & Permissions -->
+      <UCard
+        class="cursor-pointer"
+        @click="navigateTo('/support/roles')"
+      >
+        <div class="p-6">
+          <div class="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center mb-4">
+            <Icon name="i-heroicons-shield-check" class="w-6 h-6 text-purple-600 dark:text-purple-400" />
           </div>
-        </UCard>
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+            Roles & Permissions
+          </h3>
+          <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Understand your access level and permissions
+          </p>
+          <UButton color="purple" variant="soft" size="sm">
+            View Roles
+          </UButton>
+        </div>
+      </UCard>
 
-        <!-- AWS Access -->
-        <UCard
-          class="hover:shadow-lg transition-shadow cursor-pointer"
-          @click="navigateTo('/support/aws-access')"
-        >
-          <div class="p-6">
-            <div class="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center mb-4">
-              <Icon name="i-heroicons-key" class="w-6 h-6 text-green-600 dark:text-green-400" />
-            </div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-              Request AWS Access
-            </h3>
-            <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              Request access to AWS accounts
-            </p>
-            <UButton color="green" variant="soft" size="sm">
-              Request Access
-            </UButton>
+      <!-- AWS Access -->
+      <UCard
+        class="cursor-pointer"
+        @click="navigateTo('/support/aws-access')"
+      >
+        <div class="p-6">
+          <div class="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg flex items-center justify-center mb-4">
+            <Icon name="i-heroicons-key" class="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
           </div>
-        </UCard>
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+            Request AWS Access
+          </h3>
+          <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Request access to AWS accounts
+          </p>
+          <UButton color="emerald" variant="soft" size="sm">
+            Request Access
+          </UButton>
+        </div>
+      </UCard>
       </div>
 
       <!-- Popular Articles -->
@@ -141,7 +141,6 @@
           </div>
         </div>
       </UCard>
-    </div>
   </div>
 </template>
 

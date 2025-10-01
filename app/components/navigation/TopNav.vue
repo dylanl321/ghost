@@ -1,5 +1,5 @@
 <template>
-  <div class="bg-slate-800">
+  <div class="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 shadow-sm">
     <div class="h-16 mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex justify-between items-center h-full">
         <!-- Left side - Mobile menu toggle + Breadcrumb -->

@@ -1,13 +1,13 @@
 <template>
-  <div class="space-y-6 p-6">
+  <div class="space-y-6 p-6 max-w-[1600px] mx-auto">
     <!-- Header with Controls -->
-    <UCard class="bg-gray-900 border border-gray-700">
-      <div class="space-y-4">
+    <UCard>
+      <div class="space-y-4 p-2">
         <!-- Title and Main Controls -->
         <div class="flex justify-between items-center">
           <div>
-            <h1 class="text-2xl font-bold text-white">Account Organization Chart</h1>
-            <p class="text-gray-300 text-sm">{{ masterAccountName }}</p>
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-1">Account Organization Chart</h1>
+            <p class="text-gray-600 dark:text-gray-300 text-sm">{{ masterAccountName }}</p>
           </div>
           <div class="flex gap-2">
             <UButton color="white" variant="ghost" icon="i-heroicons-arrow-path" @click="refreshData">
@@ -49,7 +49,7 @@
               Over Budget ({{ overBudgetCount }})
             </UButton>
             <UButton
-              :color="showNoSpend ? 'yellow' : 'gray'"
+              :color="showNoSpend ? 'amber' : 'gray'"
               variant="soft"
               size="sm"
               @click="toggleBudgetFilter('none')"
@@ -62,13 +62,13 @@
           <div class="flex gap-2">
             <UToggle v-model="useProforma" :disabled="isLoading">
               <template #default="{ checked }">
-                <span class="text-sm" :class="checked ? 'text-blue-400' : 'text-gray-400'">
+                <span class="text-sm" :class="checked ? 'text-emerald-500 dark:text-emerald-400' : 'text-gray-500 dark:text-gray-400'">
                   {{ checked ? 'Proforma' : 'Billable' }}
                 </span>
               </template>
             </UToggle>
             <UButton
-              color="blue"
+              color="emerald"
               variant="soft"
               size="sm"
               :disabled="isLoading"

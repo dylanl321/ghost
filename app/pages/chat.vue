@@ -1,22 +1,22 @@
 <template>
-  <div class="chat-page">
-    <div class="page-content">
-      <div class="page-header">
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+  <div class="space-y-6 p-6 max-w-[1600px] mx-auto">
+    <UCard>
+      <div class="p-2">
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">
           AWS Assistant
         </h1>
-        <p class="text-gray-600 dark:text-gray-400 mb-6">
+        <p class="text-gray-600 dark:text-gray-400">
           Get help with AWS services, cost optimization, and cloud architecture. The chatbot will appear in the bottom right corner.
         </p>
       </div>
+    </UCard>
 
-      <!-- Help Section -->
-      <div class="help-section">
-        <UCard>
-          <template #header>
-            <div class="flex items-center gap-2">
-              <UIcon name="i-heroicons-information-circle" class="w-5 h-5 text-blue-500" />
-              <h3 class="text-lg font-semibold">How to use AWS Assistant</h3>
+    <!-- Help Section -->
+    <UCard>
+      <template #header>
+        <div class="flex items-center gap-2 p-2">
+          <UIcon name="i-heroicons-information-circle" class="w-5 h-5 text-emerald-500" />
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">How to use AWS Assistant</h3>
             </div>
           </template>
           
@@ -69,9 +69,7 @@
               </div>
             </div>
           </div>
-        </UCard>
-      </div>
-    </div>
+    </UCard>
 
     <!-- Chatbot Component -->
     <ClientOnly>

@@ -260,6 +260,227 @@ See which accounts share the same OU and organizational policies.
 
 💡 **Export the view** - Take screenshots for documentation or planning
 `
+      },
+      {
+        id: 'swagger-ui-guide',
+        title: 'Using Swagger UI for API Testing',
+        lastUpdated: '2025-01-15',
+        content: `# Using Swagger UI for API Testing
+
+Swagger UI lets you test GHOST's APIs interactively without writing any code. Just point and click.
+
+## Getting There
+
+Go to \`/api/swagger-ui\` in your browser, or click your profile icon → **API Documentation**.
+
+## How It Works
+
+When you're logged into GHOST, Swagger automatically uses your session. No need for API keys or tokens to test stuff out.
+
+**Quick test:**
+1. Pick any GET endpoint
+2. Click "Try it out"
+3. Hit "Execute"
+4. See your results
+
+That's it. No setup required.
+
+## API Categories
+
+- **Accounts** - List and manage accounts
+- **Costs** - Cost data, forecasts, analysis
+- **Admin** - Admin stuff
+- **User** - Your profile and settings
+
+## Example: Getting Cost Data
+
+Let's grab this month's costs:
+
+1. Find \`GET /api/costs/summary\` under Costs
+2. Click "Try it out"
+3. Set parameters:
+   \`\`\`
+   period: thisMonth
+   groupBy: LINKED_ACCOUNT
+   enhanced: true
+   \`\`\`
+4. Hit "Execute"
+
+You'll see the full response with all the cost data.
+
+## Common Endpoints
+
+**All accounts:**
+\`\`\`
+GET /api/accounts/list?source=full&enrichment=full
+\`\`\`
+
+**Cost analysis:**
+\`\`\`
+GET /api/costs/analysis?period=thisMonth&groupBy=LINKED_ACCOUNT&includeBudget=true
+\`\`\`
+
+**Forecast:**
+\`\`\`
+GET /api/costs/forecast?period=current-month-remainder&granularity=DAILY
+\`\`\`
+
+## Using API Keys
+
+If you have an API key, click the **Authorize** button at the top and paste it in. Then all your requests will use that key instead of your browser session.
+
+Two ways to authenticate:
+- \`x-api-key\` header (recommended)
+- \`Bearer\` token
+
+## Tips
+
+- **Copy curl commands** - Each request shows you the curl command you can run in terminal
+- **Check examples** - Click "Example Value" to see what the response looks like
+- **Start small** - Test with filters to keep responses manageable
+- **Read the descriptions** - Hover over parameters to see what they do
+
+## If Something Breaks
+
+**401 Unauthorized** - You're not logged in or your API key is wrong
+
+**400 Bad Request** - Missing or invalid parameters, check what's required
+
+**500 Server Error** - Something went wrong on our end, try again or contact support
+`
+      },
+      {
+        id: 'api-keys-guide',
+        title: 'API Keys & Programmatic Access',
+        lastUpdated: '2025-01-15',
+        content: `# API Keys & Programmatic Access
+
+Need to access GHOST from a script or automation tool? You'll need an API key.
+
+## Getting an API Key
+
+Reach out to the AWS product team to request access. They'll walk you through what they need and get you set up.
+
+## Permissions
+
+**Read-only** - View accounts, costs, analytics (most common)
+
+**Write** - Update account data, upload forecasts (needs extra approval)
+
+**Admin** - Full access (needs manager approval)
+
+Start with read-only unless you specifically need to write data.
+
+## Using Your Key
+
+Two ways to authenticate:
+
+**x-api-key header (easier):**
+\`\`\`bash
+curl -H "x-api-key: YOUR_KEY" /api/accounts/list
+\`\`\`
+
+**Bearer token:**
+\`\`\`bash
+curl -H "Authorization: Bearer YOUR_KEY" /api/accounts/list
+\`\`\`
+
+## Code Examples
+
+**Python:**
+\`\`\`python
+import requests
+import os
+
+API_KEY = os.environ["GHOST_API_KEY"]
+
+response = requests.get(
+    "/api/costs/summary",
+    headers={"x-api-key": API_KEY},
+    params={"period": "thisMonth", "groupBy": "LINKED_ACCOUNT"}
+)
+
+if response.status_code == 200:
+    data = response.json()
+    print(f"Total cost: \${data['data']['summary']['totalCost']}")
+\`\`\`
+
+**JavaScript:**
+\`\`\`javascript
+const API_KEY = process.env.GHOST_API_KEY;
+
+async function getCosts() {
+  const response = await fetch(
+    \`/api/costs/summary?period=thisMonth&groupBy=LINKED_ACCOUNT\`,
+    { headers: { "x-api-key": API_KEY } }
+  );
+
+  const data = await response.json();
+  console.log("Total cost:", data.data.summary.totalCost);
+}
+\`\`\`
+
+## Security Rules
+
+**Do:**
+- Store keys in environment variables
+- Use AWS Secrets Manager or similar
+- Request new keys every 90 days
+- Each person gets their own key
+
+**Don't:**
+- Hardcode keys in scripts
+- Commit keys to git
+- Share keys with teammates
+- Log keys in error messages
+
+## Rate Limits
+
+You get:
+- 100 requests per minute
+- 1000 requests per hour
+
+If you hit the limit, you'll get a 429 error. Wait a bit and retry. Need higher limits? Ask the team.
+
+**Handling rate limits:**
+\`\`\`python
+import time
+
+def call_api(url, headers):
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 429:
+        wait = int(response.headers.get('Retry-After', 60))
+        print(f"Rate limited, waiting {wait}s...")
+        time.sleep(wait)
+        return call_api(url, headers)  # retry
+
+    return response
+\`\`\`
+
+## If Your Key Stops Working
+
+**401 Unauthorized** - Key is wrong or expired, double-check it
+
+**403 Forbidden** - You don't have permission for that endpoint, ask for more access
+
+**429 Too Many Requests** - You're going too fast, slow down or ask for higher limits
+
+## Revoking Keys
+
+Think your key leaked? Contact the AWS team immediately. Tell them:
+- Which key (first 8 characters is enough)
+- Why you need it revoked
+- If you need a replacement
+
+Also revoke keys when someone leaves the team or when you're done with a project.
+
+## Need Help?
+
+1. Try it in Swagger UI first (\`/api/swagger-ui\`)
+2. Check you're using the right endpoint and parameters
+3. Contact AWS team with the error message and what you were trying to do
+`
       }
     ]
   }

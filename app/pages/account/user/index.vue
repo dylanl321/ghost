@@ -383,22 +383,24 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="container mx-auto px-4 py-6 space-y-6">
+  <div class="space-y-6 p-6 max-w-[1600px] mx-auto">
     <!-- Page Header -->
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-2xl font-semibold text-white">User Search</h1>
-        <p class="text-gray-400 mt-1">Search for users and view their AWS account access</p>
+    <UCard>
+      <div class="flex items-center justify-between p-2">
+        <div>
+          <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-1">User Search</h1>
+          <p class="text-gray-600 dark:text-gray-400 mt-1">Search for users and view their AWS account access</p>
+        </div>
+        <NuxtLink to="/account/user/my-access">
+          <UButton icon="i-heroicons-user" variant="outline">
+            My Access
+          </UButton>
+        </NuxtLink>
       </div>
-      <NuxtLink to="/account/user/my-access">
-        <UButton icon="i-heroicons-user" variant="outline">
-          My Access
-        </UButton>
-      </NuxtLink>
-    </div>
+    </UCard>
 
     <!-- Search and Filters -->
-    <UCard class="bg-gray-900 border border-gray-800">
+    <UCard>
       <div class="p-4">
         <div class="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
           <!-- Search and Filters -->

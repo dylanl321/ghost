@@ -1,18 +1,20 @@
 <template>
-  <div class="container mx-auto p-6 max-w-6xl">
+  <div class="space-y-6 p-6 max-w-[1600px] mx-auto">
     <!-- Page Header -->
-    <div class="mb-8">
-      <h1 class="text-3xl font-bold text-white mb-2">My Profile</h1>
-      <p class="text-gray-400">Your account information, roles, and permissions</p>
-    </div>
+    <UCard>
+      <div class="p-2">
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">My Profile</h1>
+        <p class="text-gray-600 dark:text-gray-400">Your account information, roles, and permissions</p>
+      </div>
+    </UCard>
 
     <!-- User Info Card -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
       <!-- Main Profile Info -->
       <UCard class="lg:col-span-2">
         <template #header>
-          <div class="flex items-center justify-between">
-            <h2 class="text-lg font-semibold text-white">Profile Information</h2>
+          <div class="flex items-center justify-between p-2">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Profile Information</h2>
             <UBadge v-if="isAdmin" color="red" variant="soft">
               Admin
             </UBadge>
@@ -28,35 +30,35 @@
               size="xl"
             />
             <div class="flex-1">
-              <h3 class="text-xl font-semibold text-white">{{ displayName }}</h3>
-              <p class="text-gray-400 text-sm">{{ userEmail }}</p>
-              <p v-if="username" class="text-gray-500 text-xs mt-1">@{{ username }}</p>
+              <h3 class="text-xl font-semibold text-gray-900 dark:text-white">{{ displayName }}</h3>
+              <p class="text-gray-600 dark:text-gray-400 text-sm">{{ userEmail }}</p>
+              <p v-if="username" class="text-gray-500 dark:text-gray-500 text-xs mt-1">@{{ username }}</p>
             </div>
           </div>
 
           <!-- Additional User Details -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-700">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
             <div v-if="jobTitle">
-              <div class="text-xs text-gray-500 mb-1">Job Title</div>
-              <div class="text-sm text-gray-200">{{ jobTitle }}</div>
+              <div class="text-xs text-gray-500 dark:text-gray-500 mb-1">Job Title</div>
+              <div class="text-sm text-gray-900 dark:text-gray-200">{{ jobTitle }}</div>
             </div>
             <div v-if="department">
-              <div class="text-xs text-gray-500 mb-1">Department</div>
-              <div class="text-sm text-gray-200">{{ department }}</div>
+              <div class="text-xs text-gray-500 dark:text-gray-500 mb-1">Department</div>
+              <div class="text-sm text-gray-900 dark:text-gray-200">{{ department }}</div>
             </div>
             <div v-if="officeLocation">
-              <div class="text-xs text-gray-500 mb-1">Office Location</div>
-              <div class="text-sm text-gray-200">{{ officeLocation }}</div>
+              <div class="text-xs text-gray-500 dark:text-gray-500 mb-1">Office Location</div>
+              <div class="text-sm text-gray-900 dark:text-gray-200">{{ officeLocation }}</div>
             </div>
             <div v-if="mobilePhone">
-              <div class="text-xs text-gray-500 mb-1">Mobile Phone</div>
-              <div class="text-sm text-gray-200">{{ mobilePhone }}</div>
+              <div class="text-xs text-gray-500 dark:text-gray-500 mb-1">Mobile Phone</div>
+              <div class="text-sm text-gray-900 dark:text-gray-200">{{ mobilePhone }}</div>
             </div>
           </div>
 
           <!-- User Badges -->
-          <div class="pt-4 border-t border-gray-700">
-            <h4 class="text-sm font-medium text-gray-300 mb-3">Badges</h4>
+          <div class="pt-4 border-t border-gray-200 dark:border-gray-700">
+            <h4 class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-3">Badges</h4>
             <div class="flex flex-wrap gap-2">
               <UBadge
                 v-for="badge in userBadges"

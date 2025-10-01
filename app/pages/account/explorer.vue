@@ -1,11 +1,11 @@
 <template>
-  <div class="space-y-6 p-6">
+  <div class="space-y-6 p-6 max-w-[1600px] mx-auto">
     <!-- Header card -->
     <UCard>
       <template #header>
-        <div>
-          <h1 class="text-2xl font-bold mb-1">Enclave Explorer</h1>
-          <p class="text-sm text-gray-400">
+        <div class="p-2">
+          <h1 class="text-3xl font-bold mb-2 text-gray-900 dark:text-white">Enclave Explorer</h1>
+          <p class="text-sm text-gray-500 dark:text-gray-400">
             Advanced AWS enclave/account filtering and exploration
           </p>
         </div>
@@ -15,8 +15,8 @@
     <!-- Filters card -->
     <UCard>
       <template #header>
-        <div class="flex justify-between">
-          <h1 class="text-xl font-bold">Filters</h1>
+        <div class="flex justify-between items-center p-2">
+          <h1 class="text-xl font-bold text-gray-900 dark:text-white">Filters</h1>
           <UButton icon="i-heroicons-funnel" variant="ghost" @click="resetFilters">Reset Filters</UButton>
         </div>
       </template>
@@ -24,7 +24,7 @@
       <div class="flex flex-wrap items-center gap-5 gap-y-6 mb-6">
         <!-- LOB filter -->
         <div class="flex items-center">
-          <label for="lobSelection" class="text-sm text-gray-400 mr-2">LOB:</label>
+          <label for="lobSelection" class="text-sm text-gray-600 dark:text-gray-400 mr-2">LOB:</label>
           <USelect id="lobSelection" v-model="lobFilter" :options="lobOptions" class="w-40" />
         </div>
       </div>
@@ -32,10 +32,10 @@
       <div class="flex flex-wrap items-center gap-5 gap-y-6 mb-6">
         <!-- Status filter -->
         <div class="flex items-center">
-          <label for="statusSelection" class="text-sm text-gray-400 mr-2">Status:</label>
+          <label for="statusSelection" class="text-sm text-gray-600 dark:text-gray-400 mr-2">Status:</label>
           <div class="flex gap-1">
             <UButton v-for="item in statusOptions" :key="item" size="xs" variant="solid"
-              :color="statusFilter === item ? 'blue' : 'gray'" @click="statusFilter = item">
+              :color="statusFilter === item ? 'emerald' : 'gray'" @click="statusFilter = item">
               {{ item }}
             </UButton>
           </div>
@@ -45,10 +45,10 @@
       <div class="flex flex-wrap items-center gap-5 gap-y-6 mb-6">
         <!-- Environment filter -->
         <div class="flex items-center">
-          <label for="envSelection" class="text-sm text-gray-400 mr-2">Environment:</label>
+          <label for="envSelection" class="text-sm text-gray-600 dark:text-gray-400 mr-2">Environment:</label>
           <div class="flex gap-1">
             <UButton v-for="item in envOptions" :key="item" size="xs" variant="solid"
-              :color="envFilter === item ? 'blue' : 'gray'" @click="envFilter = item">
+              :color="envFilter === item ? 'emerald' : 'gray'" @click="envFilter = item">
               {{ item }}
             </UButton>
           </div>
@@ -58,13 +58,13 @@
       <div class="flex flex-wrap items-center gap-5 gap-y-6 mb-6">
         <!-- SAWSE filter -->
         <div class="flex items-center">
-          <label for="lobSelection" class="text-sm text-gray-400 mr-2">SAWSE:</label>
+          <label for="lobSelection" class="text-sm text-gray-600 dark:text-gray-400 mr-2">SAWSE:</label>
           <UCheckbox v-model="sawseCheckbox" />
         </div>
 
         <!-- My Accounts filter -->
         <div class="flex items-center">
-          <label for="lobSelection" class="text-sm text-gray-400 mr-2">My Enclaves:</label>
+          <label for="lobSelection" class="text-sm text-gray-600 dark:text-gray-400 mr-2">My Enclaves:</label>
           <UCheckbox v-model="myEnclavesCheckbox" />
         </div>
       </div>
@@ -81,10 +81,10 @@
     <!-- Table card -->
     <UCard>
       <template #header>
-        <div class="flex items-center justify-between">
-          <div class="flex items-center">
-            <h1 class="text-xl font-bold mr-2">Results</h1>
-            <UBadge variant="subtle">{{ filteredRows.length }} enclaves found</UBadge>
+        <div class="flex items-center justify-between p-2">
+          <div class="flex items-center gap-3">
+            <h1 class="text-xl font-bold text-gray-900 dark:text-white">Results</h1>
+            <UBadge color="emerald" variant="subtle">{{ filteredRows.length }} enclaves found</UBadge>
           </div>
           <div>
             <UTooltip text="Export these results to CSV">
