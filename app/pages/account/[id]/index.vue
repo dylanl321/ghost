@@ -18,7 +18,8 @@
       <CostTrendChart title="Account Cost Trends" :time-series-billable="billableTimeSeries" :time-series-proforma="proformaTimeSeries" :loading="loading" class="col-span-2" />
 
       <!-- <ResourceUsage :columns="2" class="col-span-1" /> -->
-      <EC2Usage :instance-summary="instanceData?.summary || null" :loading="loading" />
+      <ResourceUsage :data="resourceCounts || {}" :columns="2" :loading="loading" />
+      <!-- <EC2Usage :instance-summary="instanceData?.summary || null" :loading="loading" /> -->
     </div>
   </div>
 </template>
@@ -59,6 +60,7 @@ interface CostDaily {
 const users = ref<GraphUser[]>([])
 const instanceData = ref<InstanceResponse | null>(null)
 const costResponse = ref<CostResponse | null>(null)
+const resourceCounts = ref<ResourceCounts | null>(null)
 const loading = ref(true)
 
 const currentSpend = computed(() => costResponse.value?.data.billableMonthToDateTotal || 0)
@@ -82,8 +84,13 @@ onMounted(async () => {
     const json = await response.json()
     instanceData.value = json.data
 
-    const response2 = await fetch(`/api/accounts/dashboard-simplified?account_id=${accountId.value}`)
+    const response2 = await fetch(`/api/accounts/dashboard-simplified?standard_account_id=${accountId.value}`)
     costResponse.value = await response2.json()
+
+    const response3 = await fetch(`/api/config/summary-simplified?govcloud_account_id=${govCloudId.value}`)
+    const json3 = await response3.json()
+    console.log(json3)
+    resourceCounts.value = json3.data
   } catch (err) {
     console.error('Error fetching users:', err)
   } finally {

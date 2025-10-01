@@ -4,56 +4,61 @@
       <div class="text-lg font-semibold">Resource Usage</div>
     </template>
 
-    <div :class="`grid gap-4 grid-cols-${props.columns}`">
+    <CenteredLoadingSpinner v-if="props.loading" />
+    <div v-else :class="`grid gap-4 grid-cols-${props.columns}`">
       <!-- EC2 Instances -->
-      <div class="bg-gray-800/50 rounded-xl p-4 space-y-2">
+      <div v-if="props.data.ec2" class="bg-gray-800/50 rounded-xl p-4 space-y-2">
         <div class="flex gap-1 items-center">
           <UIcon name="i-heroicons-server" class="text-purple-400" />
           <div class="text-sm text-gray-400">EC2 Instances</div>
         </div>
-        <div class="text-2xl font-bold text-white">42</div>
+        <div class="text-2xl font-bold text-white">{{ props.data.ec2.total }}</div>
         <div class="space-y-1 text-xs text-gray-400">
-          <div>Stopped: 10</div>
-          <div>Windows: 8</div>
+          <div>Stopped: {{ props.data.ec2.stopped }}</div>
+          <div>Windows: {{ props.data.ec2.windows }}</div>
         </div>
       </div>
 
       <!-- EBS Volumes -->
-      <div class="bg-gray-800/50 rounded-xl p-4 space-y-2">
+      <div v-if="props.data.volumes" class="bg-gray-800/50 rounded-xl p-4 space-y-2">
         <div class="flex gap-1 items-center">
           <UIcon name="i-heroicons-circle-stack" class="text-blue-400" />
           <div class="text-sm text-gray-400">EBS Volumes</div>
         </div>
-        <div class="text-2xl font-bold text-white">128</div>
+        <div class="text-2xl font-bold text-white">{{ props.data.volumes.total }}</div>
         <div class="space-y-1 text-xs text-gray-400">
-          <div>Total Size: 20,000 GB</div>
-          <div>GP3: 60 | GP2: 50</div>
-          <div>IO1: 18</div>
+          <div>
+            GP3: {{ props.data.volumes.gp3 || 0 }}
+            | GP2: {{ props.data.volumes.gp2 || 0 }}
+          </div>
+          <div>IO1: {{ props.data.volumes.io1 || 0 }}</div>
         </div>
       </div>
 
       <!-- Container Clusters -->
-      <div class="bg-gray-800/50 rounded-xl p-4 space-y-2">
+      <div v-if="props.data.ecsContainers || props.data.eksClusters" class="bg-gray-800/50 rounded-xl p-4 space-y-2">
         <div class="flex gap-1 items-center">
           <UIcon name="i-heroicons-cube" class="text-green-400" />
           <div class="text-sm text-gray-400">Container Clusters</div>
         </div>
-        <div class="text-2xl font-bold text-white">7</div>
+        <div class="text-2xl font-bold text-white">
+          {{ (props.data.ecsContainers?.total || 0) + (props.data.eksClusters?.total || 0) }}
+        </div>
         <div class="space-y-1 text-xs text-gray-400">
-          <div>ECS: 5</div>
-          <div>EKS: 2</div>
+          <div>ECS: {{ props.data.ecsContainers?.total }}</div>
+          <div>EKS: {{ props.data.eksClusters?.total }}</div>
         </div>
       </div>
 
       <!-- S3 Buckets -->
-      <div class="bg-gray-800/50 rounded-xl p-4 space-y-2">
+      <div v-if="props.data.buckets" class="bg-gray-800/50 rounded-xl p-4 space-y-2">
         <div class="flex gap-1 items-center">
-          <UIcon name="i-heroicons-circle-stack" class="text-yellow-400" />
+          <UIcon name="i-heroicons-archive-box" class="text-yellow-400" />
           <div class="text-sm text-gray-400">S3 Buckets</div>
         </div>
-        <div class="text-2xl font-bold text-white">55</div>
+        <div class="text-2xl font-bold text-white">{{ props.data.buckets.total }}</div>
         <div class="space-y-1 text-xs text-gray-400">
-          <div>Versioned: 22</div>
+          <div>Versioned: {{ props.data.buckets.versioned }}</div>
         </div>
       </div>
     </div>
@@ -63,35 +68,13 @@
 <script setup lang="ts">
 interface Props {
   columns?: number;
+  data: ResourceCounts;
+  loading: boolean;
 }
 const props = withDefaults(defineProps<Props>(), {
   columns: 4
-})
+});
 
 // Define interface for resource counts structure
-interface ResourceCounts {
-  ec2?: {
-    total: number;
-    stopped?: number;
-    windows?: number;
-  };
-  volumes?: {
-    total: number;
-    totalSizeGB: number;
-    gp2?: number;
-    gp3?: number;
-    io1?: number;
-  };
-  ecsContainers?: {
-    total: number;
-  };
-  eksClusters?: {
-    total: number;
-  };
-  buckets?: {
-    total: number;
-    versioned?: number;
-  };
-}
 
 </script>

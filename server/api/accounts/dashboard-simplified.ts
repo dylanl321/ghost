@@ -15,7 +15,7 @@ registerEndpoint('/api/accounts/dashboard-simplified', 'GET', {
   tags: ['Accounts'],
   parameters: [
     {
-      name: 'account_id',
+      name: 'standard_account_id',
       in: 'query',
       required: true,
       schema: { type: 'string' },
@@ -101,18 +101,7 @@ function buildPaddedDate(year: number, month: number, day: number) {
   return `${y}-${m}-${d}`;
 }
 
-async function getOverview(event: any) {
-  const query = getQuery(event)
-  
-  // Required parameters
-  const accountId = query.account_id as string
-  if (!accountId) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'account_id parameter is required'
-    })
-  }
-
+async function getOverview(accountId: string) {
   const now = new Date();
   const today = now.getDate(); // 1-index
   const year = now.getFullYear();
@@ -185,19 +174,29 @@ async function getOverview(event: any) {
 
 export default defineEventHandler(handleAsync(async (event) => {
   const startTime = Date.now()
+
+  const query = getQuery(event)
   
+  const accountId = query.standard_account_id as string
+  if (!accountId) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'standard_account_id parameter is required'
+    })
+  }
+
   // Generate cache key
-  const cacheKey = `accounts:simplified-overview`
+  const cacheKey = `accounts:simplified-overview${accountId}`
 
   const info = await organizationCache.getOrSet(
     cacheKey,
     async () => {
       console.log(`Cache miss: Fetching organization overview...`)
-      return await getOverview(event)
+      return await getOverview(accountId)
     },
     {
       ttl: 3600, // 1 hour
-      tags: [CacheTags.ORGANIZATION]
+      tags: [CacheTags.ACCOUNTS]
     }
   )
   

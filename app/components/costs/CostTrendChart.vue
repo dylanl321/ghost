@@ -110,7 +110,7 @@ function getWeekendMarkAreas(data: TimePoint[]) {
     const currentDate = new Date(dateString)
 
     // Check if this day is Saturday
-    if (currentDate.getDay() === 6) {
+    if (currentDate.getUTCDay() === 6) {
       const sunday = data[i + 1]
 
       if (sunday) {
@@ -198,7 +198,8 @@ const chartOptions = computed(() => {
           data: getWeekendMarkAreas(props.timeSeriesBillable)
         }
       },
-      props.timeSeriesProforma && {
+      // Make sure the Pro Forma sum is greater than 0 before displaying a line for it (this is specifically for the master account which does not have Pro Forma data)
+      (props.timeSeriesProforma && costsProforma.value.reduce((sum, val) => sum + val) > 0) && {
         name: 'Proforma Cost',
         type: 'line',
         smooth: true,
