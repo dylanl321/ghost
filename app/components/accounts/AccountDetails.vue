@@ -53,7 +53,7 @@
 
         <div class="space-y-2 text-sm">
           <AccountDetailsRow label="Budget" :value="formatCurrency(parseInt(enclave?.estimatedMonthlyCharge || '0'), 0)" />
-          <AccountDetailsRow label="Current Spend" :value="formatCurrency(currentSpend, 0)" />
+          <AccountDetailsRow label="Current Spend (Billable)" :value="formatCurrency(props.currentSpend, 0)" />
           <AccountDetailsRow label="Utilization" :value="utilization + '%'" />
         </div>
       </UCard>
@@ -97,15 +97,15 @@
 const enclaveStore = useEnclaveStore()
 
 // Assume accountId is passed as prop or pulled from route
-const props = defineProps<{ accountId: string }>()
+const props = defineProps<{ accountId: string, currentSpend: number }>()
 
 const enclave = computed(() => enclaveStore.enclaves[props.accountId])
 
 // Placeholder values for cost details until API is wired in
-const currentSpend = 120000
+// const currentSpend = 120000
 const utilization = computed(() => {
   const budget = Number(enclave.value?.estimatedMonthlyCharge) || 0
-  return budget > 0 ? ((currentSpend / budget) * 100).toFixed(1) : '0'
+  return budget > 0 ? ((props.currentSpend / budget) * 100).toFixed(1) : '0'
 })
 
 </script>

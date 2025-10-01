@@ -67,15 +67,35 @@ const handleMobileMenuToggle = () => {
 const breadcrumbs = computed(() => {
   const segments = route.path.split('/').filter(Boolean)
 
-  // always start with dashboard
   const crumbs = [{ label: 'Dashboard', to: '/' }]
 
-  segments.forEach((seg, i) => {
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i]
+    if (!seg) continue
+
+    // Collapse `/account/explorer` into one crumb
+    if (seg.toLowerCase() === 'account' && segments[i + 1]?.toLowerCase() === 'explorer') {
+      crumbs.push({
+        label: 'Account Explorer',
+        to: '/account/explorer',
+      })
+      break // stop after pushing, so "explorer" doesn't get added separately
+    }
+
+    // Handle `/account/{ID}` by changing "Account" to "Account Explorer"
+    if (seg.toLowerCase() === 'account' && parseInt(segments[i + 1] || "")) {
+      crumbs.push({
+        label: 'Account Explorer',
+        to: '/account/explorer',
+      })
+      continue
+    }
+
     crumbs.push({
       label: seg.charAt(0).toUpperCase() + seg.slice(1),
-      to: '/' + segments.slice(0, i + 1).join('/')
+      to: '/' + segments.slice(0, i + 1).join('/'),
     })
-  })
+  }
 
   return crumbs
 })
