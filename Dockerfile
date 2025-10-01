@@ -16,6 +16,9 @@ RUN npm install
 # Copy the application files from the build context into the image
 COPY . .
 
+# Build the application
+RUN npm run build
+
 # Build the application with more heap to avoid OOM errors
 # RUN NODE_OPTIONS=--max-old-space-size=8192 npm run build
 
@@ -28,4 +31,3 @@ EXPOSE 3000
 
 # Run the application
 CMD ["npm", "start"]
-
