@@ -1,10 +1,10 @@
 <template>
-  <div class="space-y-6 p-6">
+  <div class="space-y-6 p-6 max-w-[1600px] mx-auto">
     <UCard>
       <template #header>
-        <div>
-          <h1 class="text-2xl font-bold mb-1">Welcome, {{ user?.claims?.given_name }}</h1>
-          <p class="text-sm text-gray-400">
+        <div class="p-2">
+          <h1 class="text-3xl font-bold mb-2 text-gray-900 dark:text-white">Welcome, {{ user?.claims?.given_name }}</h1>
+          <p class="text-sm text-gray-500 dark:text-gray-400">
             Organization Cloud Dashboard
           </p>
         </div>
@@ -12,71 +12,71 @@
     </UCard>
 
     <!-- Metric Displays -->
-    <div class="grid grid-cols-4 gap-4">
+    <div class="grid grid-cols-4 gap-6">
 
       <!-- Month to Date -->
-      <UCard class="p-2">
-        <div class="flex justify-between">
-          <p class="text-sm font-medium text-gray-400">Month to Date Spend</p>
+      <UCard class="p-4">
+        <div class="flex justify-between items-start mb-3">
+          <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Month to Date Spend</p>
           <UTooltip v-if="monthToDateTrend !== 0" text="Comparison to same days last month">
-            <div :class="`flex gap-1 items-center ${monthToDateTrend > 0 ? 'text-red-500' : 'text-green-500'}`">
+            <div :class="`flex gap-1 items-center ${monthToDateTrend > 0 ? 'text-red-500' : 'text-emerald-500'}`">
               <UIcon
                 :name="`${monthToDateTrend > 0 ? 'i-heroicons-arrow-trending-up' : 'i-heroicons-arrow-trending-down'}`"
-                class="w-5 h-5" />
-              <p>{{ formatNumber(monthToDateTrend, 1) }}%</p>
+                class="w-4 h-4" />
+              <p class="text-xs font-semibold">{{ formatNumber(monthToDateTrend, 1) }}%</p>
             </div>
           </UTooltip>
         </div>
 
-        <p class="text-lg font-semibold">
+        <p class="text-2xl font-bold text-gray-900 dark:text-white">
           {{ formatCurrency(overviewThisMonth?.costs.budgetAnalysis.actualSpend || 0, 0) }}
         </p>
       </UCard>
 
       <!-- Projected Spend -->
-      <UCard class="p-2">
-        <div class="flex justify-between">
-          <p class="text-sm font-medium text-gray-400">Projected Spend</p>
+      <UCard class="p-4">
+        <div class="flex justify-between items-start mb-3">
+          <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Projected Spend</p>
           <UTooltip v-if="projectedSpendTrend !== 0" text="Comparison to previous month spend">
             <div
-              :class="`flex gap-1 items-center ${projectedSpendTrend > 0 ? 'text-red-500' : 'text-green-500'}`">
+              :class="`flex gap-1 items-center ${projectedSpendTrend > 0 ? 'text-red-500' : 'text-emerald-500'}`">
               <UIcon
                 :name="`${projectedSpendTrend > 0 ? 'i-heroicons-arrow-trending-up' : 'i-heroicons-arrow-trending-down'}`"
-                class="w-5 h-5" />
-              <p>{{ formatNumber(projectedSpendTrend, 1) }}%</p>
+                class="w-4 h-4" />
+              <p class="text-xs font-semibold">{{ formatNumber(projectedSpendTrend, 1) }}%</p>
             </div>
           </UTooltip>
         </div>
 
-        <p class="text-lg font-semibold">
+        <p class="text-2xl font-bold text-gray-900 dark:text-white">
           {{ formatCurrency(overviewThisMonth?.costs.budgetAnalysis.projectedSpend || 0, 0) }}
         </p>
       </UCard>
 
       <!-- Previous Month -->
-      <UCard class="p-2">
-        <p class="text-sm font-medium text-gray-400">Previous Month</p>
-        <p class="text-lg font-semibold">
+      <UCard class="p-4">
+        <p class="text-sm font-medium text-gray-600 dark:text-gray-400 mb-3">Previous Month</p>
+        <p class="text-2xl font-bold text-gray-900 dark:text-white">
           {{ formatCurrency(overviewLastMonth?.costs.budgetAnalysis.actualSpend || 0, 0) }}
         </p>
       </UCard>
 
       <!-- Active Accounts -->
-      <UCard class="p-2">
-        <p class="text-sm font-medium text-gray-400">Active Accounts</p>
-        <p class="text-lg font-semibold">
+      <UCard class="p-4">
+        <p class="text-sm font-medium text-gray-600 dark:text-gray-400 mb-3">Active Accounts</p>
+        <p class="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
           {{ overviewThisMonth?.summary.activeAccounts || 0 }}
         </p>
       </UCard>
     </div>
 
-    <div class="grid grid-cols-3 gap-4 auto-rows-fr">
+    <div class="grid grid-cols-3 gap-6 auto-rows-fr">
       <UserEnclaves :loading="loading" class="col-span-2" />
 
       <!-- Account insights (tall) -->
       <AccountInsights :top-accounts="overviewThisMonth?.costs.topAccounts || []" :loading="loading"
         class="col-span-1 row-span-2" />
-      
+
       <!-- Organization cost trends -->
       <CostTrendChart title="Organization Cost Trends"
         :time-series="overviewThisMonth?.costs.timeSeries.slice(-14) || []" :loading="loading" class="col-span-2" />
