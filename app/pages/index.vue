@@ -17,7 +17,7 @@
       <!-- Month to Date -->
       <UCard class="p-2">
         <div class="flex justify-between">
-          <p class="text-sm font-medium text-gray-400">Month to Date Spend</p>
+          <p class="text-sm font-medium text-gray-400">Month to Date Cost</p>
           <UTooltip v-if="monthToDateTrend !== 0" text="Comparison to same days last month">
             <div :class="`flex gap-1 items-center ${monthToDateTrend > 0 ? 'text-red-500' : 'text-green-500'}`">
               <UIcon
@@ -36,8 +36,10 @@
       <!-- Projected Spend -->
       <UCard class="p-2">
         <div class="flex justify-between">
-          <p class="text-sm font-medium text-gray-400">Projected Spend</p>
-          <UTooltip v-if="projectedSpendTrend !== 0" text="Comparison to previous month spend">
+          <UTooltip text="MTDcostSoFar + (14DailyAvgExcludingFirstOfMonth * RemainingDays)">
+            <p class="text-sm font-medium text-gray-400">Forecasted Cost</p>
+          </UTooltip>
+          <UTooltip v-if="projectedSpend !== 0 && projectedSpendTrend !== 0" text="Comparison to previous month spend">
             <div
               :class="`flex gap-1 items-center ${projectedSpendTrend > 0 ? 'text-red-500' : 'text-green-500'}`">
               <UIcon
@@ -48,9 +50,10 @@
           </UTooltip>
         </div>
 
-        <p class="text-lg font-semibold">
+        <p v-if="projectedSpend !== 0" class="text-lg font-semibold">
           {{ formatCurrency(projectedSpend, 0) }}
         </p>
+        <p v-else class="text-lg font-semibold">Not enough data</p>
       </UCard>
 
       <!-- Previous Month -->
@@ -79,7 +82,7 @@
       
       <!-- Organization cost trends -->
       <CostTrendChart title="Organization Cost Trends"
-        :time-series-billable="dailySpend" :loading="loading" class="col-span-2" />
+        :time-series-billable="last14DaysSpend" :loading="loading" class="col-span-2" />
 
       <!-- Resource usage under cost trends -->
       <!-- <ResourceUsage class="col-span-2" /> -->
@@ -108,7 +111,7 @@ interface DashboardData {
   previousMonthTotal: number;
   previousMonthToDateTotal: number;
   topAccounts: TopAccount[];
-  daily: DailyCost[];
+  rolling14Daily: DailyCost[];
 }
 interface TopAccount {
   accountId: string;
@@ -127,7 +130,7 @@ const previousMTDTotal = computed(() => orgOverview.value?.data.previousMonthToD
 const projectedSpend = computed(() => orgOverview.value?.data.forecastedTotal || 0)
 const previousMonthSpend = computed(() => orgOverview.value?.data.previousMonthTotal || 0)
 const activeAccounts = computed(() => orgOverview.value?.data.activeAccounts || 0)
-const dailySpend = computed(() => orgOverview.value?.data.daily.slice(-15, -1) || [])
+const last14DaysSpend = computed(() => orgOverview.value?.data.rolling14Daily || [])
 
 const monthToDateTrend = computed(() => {
   if (!previousMTDTotal.value) return 0

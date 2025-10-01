@@ -13,6 +13,9 @@ export default defineAppConfig({
         color: 'dark:text-gray-300',
         size: 'text-xs'
       }
+    },
+    tooltip: {
+      width: 'max-w-lg'
     }
   }
 })

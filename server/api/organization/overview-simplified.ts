@@ -9,6 +9,11 @@ import { OrganizationsClient, ListAccountsCommand } from "@aws-sdk/client-organi
 
 const region = 'us-east-1'
 
+type DailyCost = {
+  date: string; // format: "YYYY-MM-DD"
+  cost: number;
+};
+
 // Register OpenAPI documentation
 registerEndpoint('/api/organization/overview-simplified', 'GET', {
   summary: 'Get simplified organization overview',
@@ -43,7 +48,7 @@ registerEndpoint('/api/organization/overview-simplified', 'GET', {
                       }
                     } 
                   },
-                  daily: { 
+                  rolling14Daily: { 
                     type: 'array', 
                     items: { 
                       type: 'object',
@@ -108,6 +113,30 @@ function buildPaddedDate(year: number, month: number, day: number) {
   return `${y}-${m}-${d}`;
 }
 
+function calculateForecast(last14Daily: DailyCost[], mtdDaily: DailyCost[]): number {
+  // 1. Cost so far this month = sum of all MTD entries
+  const costSoFar = mtdDaily.reduce((sum, d) => sum + d.cost, 0);
+
+  // 2. Average of last 14 days, excluding any 01 days
+  const filtered = last14Daily.filter(d => !d.date.endsWith("-01"));
+  const avgDaily =
+    filtered.reduce((sum, d) => sum + d.cost, 0) / (filtered.length || 1);
+
+  // 3. Forecast = actual MTD + projection for remaining days
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const today = now.getDate();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const remainingDays = daysInMonth - today;
+
+  console.log(`Forecast Calculation: MTDcostSoFar + (avgDaily * remainingDays)`)
+  console.log(`${costSoFar} + (${avgDaily} * ${remainingDays})`)
+  const forecast = costSoFar + (avgDaily * remainingDays);
+
+  return forecast;
+}
+
 async function getOverview() {
   const now = new Date();
   const year = now.getFullYear();
@@ -126,22 +155,35 @@ async function getOverview() {
   const prevStart = buildPaddedDate(prevYear, prevMonthNum, 1);
   const prevMTDEnd = buildPaddedDate(prevYear, prevMonthNum, Math.min(today, prevMonthDays) + 1); // Handle edge case where we are on 30th day of current month, but <30 days in previous month
 
-  console.log(`Running queries with values: startOfMonth=${startOfMonth}, tomorrow=${tomorrow}, prevStart=${prevStart}, prevMTDEnd=${prevMTDEnd}`)
+  // Past 14 days (not including today)
+  const dailyEnd = buildPaddedDate(year, month, today) // exclusive
+
+  const tempStart = new Date(now);
+  tempStart.setDate(tempStart.getDate() - 14); // Go back 14 days to get the start date
+  const dailyStart = buildPaddedDate(tempStart.getFullYear(), tempStart.getMonth(), tempStart.getDate());
+
+  console.log(`Running queries with values: startOfMonth=${startOfMonth}, 
+    tomorrow=${tomorrow}, prevStart=${prevStart}, prevMTDEnd=${prevMTDEnd}, dailyEnd=${dailyEnd}, dailyStart=${dailyStart}, `)
 
   // ----- Queries -----
 
   const creds = getMasterAccountCredentials('commercial');
   const costClient = new CostExplorerClient({ region, credentials: creds });
-  // const orgClient = new OrganizationsClient({ region, credentials: creds });
 
   const [
-    mtdDaily,
+    rolling14DailyResponse,
+    mtdDailyResponse,
     mtdMonthly,
     prevMonthly,
     prevMtd,
     byAccountMonthly,
     accountCounts
   ] = await Promise.all([
+    fetchCostData(costClient, {
+      TimePeriod: { Start: dailyStart, End: dailyEnd },
+      Granularity: "DAILY",
+      Metrics: ["UnblendedCost"],
+    }),
     fetchCostData(costClient, {
       TimePeriod: { Start: startOfMonth, End: tomorrow },
       Granularity: "DAILY",
@@ -175,13 +217,12 @@ async function getOverview() {
 
   const mtdTotal = parseFloat(mtdMonthly.ResultsByTime?.[0].Total?.UnblendedCost.Amount || "0");
 
-  const daily = dailySeries(mtdDaily);
+  const rolling14Daily = dailySeries(rolling14DailyResponse)
+  const mtdDaily = dailySeries(mtdDailyResponse)
 
-  const lastDay = new Date(year, month + 1, 0).getDate();
-  const forecastBaseDays = daily.slice(1); // skip day 1
-  const forecastAvg = forecastBaseDays.reduce((sum: number, d: any) => sum + d.cost, 0) / forecastBaseDays.length;
   // This calculation is equivalent to `sum of current days + (average of current days * remaining days)`
-  const forecast = daily[0].cost + forecastAvg * (lastDay - 1);
+  // const forecast = daily[0].cost + forecastAvg * (lastDay - 1);
+  const forecast = calculateForecast(rolling14Daily, mtdDaily)
 
   const prevTotal = parseFloat(prevMonthly.ResultsByTime?.[0].Total?.UnblendedCost.Amount || "0");
 
@@ -202,7 +243,7 @@ async function getOverview() {
     previousMonthTotal: prevTotal,
     previousMonthToDateTotal: prevMtdTotal,
     topAccounts: topAccounts,
-    daily,
+    rolling14Daily,
   };
 }
 
