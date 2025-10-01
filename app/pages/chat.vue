@@ -72,9 +72,10 @@
     </UCard>
 
     <!-- Chatbot Component -->
-    <ClientOnly>
+    <!-- <ClientOnly>
       <Chatbot />
-    </ClientOnly>
+    </ClientOnly> -->
+    <ChatBot />
   </div>
 </template>
 
