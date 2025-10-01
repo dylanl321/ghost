@@ -2845,11 +2845,19 @@ export const useChartRegistry = (args: {
       extractor: (dataset) => {
         console.log('YearEndForecast: Starting extraction')
 
-        const historical = dataset.historical as any
+        // Use org-wide historical data (not filtered by selected accounts)
+        // This ensures Year-End Projection always shows full organization context
+        const historical = dataset.orgWideHistorical || dataset.historical as any
         const yearEndForecast = dataset.yearEndForecast as any
         const currentMonthForecast = dataset.forecast as any // Current month remainder forecast
         const summary = dataset.summary as any
         const mode = dataset.mode || 'billable'
+
+        console.log('YearEndForecast: Using historical source:', {
+          hasOrgWide: !!dataset.orgWideHistorical,
+          hasFiltered: !!dataset.historical,
+          usingOrgWide: !!dataset.orgWideHistorical
+        })
 
         if (!historical && !yearEndForecast) {
           console.log('YearEndForecast: Missing historical or yearEndForecast data')
@@ -2907,35 +2915,46 @@ export const useChartRegistry = (args: {
         // Process historical data (Jan - last complete month)
         const monthlyBreakdown = historicalData?.monthlyBreakdown || []
 
+        console.log('YearEndForecast: Historical data details:', {
+          hasHistoricalData: !!historicalData,
+          monthlyBreakdownLength: monthlyBreakdown.length,
+          monthlyBreakdownSample: monthlyBreakdown.slice(0, 3),
+          allMonths: monthlyBreakdown.map((m: any) => m.month),
+          historicalDataKeys: historicalData ? Object.keys(historicalData) : []
+        })
+
         // Create a map of YYYY-MM to cost for easier lookup
         const historicalCostMap = new Map<string, number>()
         monthlyBreakdown.forEach((month: any) => {
           const monthKey = month.month // Format: YYYY-MM
           const cost = month.cost || 0
           historicalCostMap.set(monthKey, cost)
+          console.log(`  Historical month: ${monthKey} = $${cost.toFixed(2)}`)
         })
 
-        // Get current month's actual spending from summary
-        let currentMonthActual = 0
-        if (summaryData?.accounts) {
-          currentMonthActual = summaryData.accounts
-            .filter((account: any) => !filterBySelection || selectedAccounts.includes(account.accountId))
-            .reduce((sum: number, account: any) => sum + (account.totalCost || 0), 0)
+        // Get current month's actual spending from dedicated current month org-wide API
+        // This is fetched separately to ensure we always have current month actuals
+        // regardless of selected timeframe or account filters
+        const currentMonthSummary = dataset.currentMonthOrgWide as any
+        const currentMonthData = currentMonthSummary?.data || currentMonthSummary
 
-          console.log('YearEndForecast: Current month actual from summary:', {
-            mode,
-            currentMonthActual,
-            accountCount: summaryData.accounts?.length || 0,
-            filteredAccountCount: summaryData.accounts?.filter((account: any) =>
-              !filterBySelection || selectedAccounts.includes(account.accountId)
-            ).length || 0,
-            sampleAccountId: summaryData.accounts?.[0]?.accountId,
-            sampleTotalCost: summaryData.accounts?.[0]?.totalCost,
-            dataSource: mode === 'proforma' ? 'proforma.accounts' : 'accounts'
-          })
-        } else {
-          console.log('YearEndForecast: No summary data available for current month')
+        let currentMonthActual = 0
+        if (mode === 'proforma' && currentMonthData?.proforma?.accounts) {
+          currentMonthActual = currentMonthData.proforma.accounts
+            .reduce((sum: number, account: any) => sum + (account.totalCost || 0), 0)
+        } else if (currentMonthData?.accounts) {
+          currentMonthActual = currentMonthData.accounts
+            .reduce((sum: number, account: any) => sum + (account.totalCost || 0), 0)
         }
+
+        console.log('YearEndForecast: Current month actual from dedicated API:', {
+          mode,
+          currentMonth: currentMonth + 1,
+          currentMonthActual,
+          hasCurrentMonthData: !!currentMonthData,
+          accountCount: (mode === 'proforma' ? currentMonthData?.proforma?.accounts?.length : currentMonthData?.accounts?.length) || 0,
+          note: 'Using dedicated currentMonthOrgWide API call'
+        })
 
         // Get current month's end-of-month forecast (actual + remainder)
         let currentMonthEndForecast = currentMonthActual // Default to actual if no forecast

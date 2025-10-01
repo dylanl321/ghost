@@ -79,12 +79,16 @@ export interface NormalizedDataset {
   accounts: string[] // Selected account IDs
   accountsList?: any[] // Full account objects with metadata for LOB/Department mapping
   mode: DataMode // Current mode (billable or proforma)
+  timeframe: string // Selected timeframe (thisMonth, lastMonth, etc.)
   summary: CostsSummaryResponse | null
   historical: CostsHistoricalResponse | null
+  orgWideHistorical?: CostsHistoricalResponse | null // Unfiltered historical data for contextual charts
+  currentMonthOrgWide?: CostsSummaryResponse | null // Current month org-wide summary for Year-End chart
   forecast: CostsForecastResponse | null
   extendedForecast: CostsForecastResponse | null // 3-month forecast for trend analysis
   analysis: CostsAnalysisResponse | null
   services: any | null // Service breakdown data from separate API call
+  yearEndForecast?: any // Rest-of-year forecast
 }
 
 
