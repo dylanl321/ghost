@@ -10,30 +10,46 @@
 
     <!-- Results dropdown -->
     <div
-      v-if="results.length && showResults"
+      v-if="(results.length || loading) && showResults"
       ref="dropdown"
-      class="absolute z-10 mt-1 w-full bg-gray-800 rounded-lg shadow-lg p-2 max-h-80 overflow-y-auto"
+      class="absolute z-10 mt-1 w-full rounded-lg shadow-lg p-2 max-h-[25rem] overflow-y-auto border border-gray-800 bg-[#0e1625]"
     >
-      <div v-for="item in results" :key="item.key"
-        class="px-2 py-1 text-sm text-white hover:bg-gray-700 cursor-pointer rounded"
+      <!-- Loading indicator -->
+      <div v-if="loading" class="px-2 py-2 text-sm text-gray-400 flex items-center gap-2">
+        <UIcon name="i-heroicons-arrow-path" class="animate-spin w-4 h-4" />
+        Searching...
+      </div>
+
+      <!-- Results -->
+      <div
+        v-for="item in results"
+        v-else
+        :key="item.key"
+        class="px-2 py-2 text-sm text-white cursor-pointer rounded border-b border-gray-800"
         @click="selectResult(item)"
       >
-        <div class="font-medium">{{ item.label }}</div>
-        <div class="text-xs text-gray-400">{{ item.subLabel }}</div>
+        <div class="flex gap-2 items-center">
+          <!-- <UserAvatar v-if="item.type === 'user'" size="sm" :user-principal-name="item.subLabel" :display-name="item.label" /> -->
+          <UIcon v-if="item.type === 'user'" name="i-heroicons-user" class="text-blue-500 w-5 h-5"/>
+          <div>
+            <div class="font-medium">{{ item.label }}</div>
+            <div class="text-xs text-gray-400">{{ item.subLabel }}</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
+
 <script setup lang="ts">
-import { ref } from 'vue'
 import { onClickOutside } from '@vueuse/core'
-// import { searchUsers } from '~/utils/searchUsers'
 
 const { user } = useOidcAuth()
 const { searchUsers } = useGraphApi()
 const enclaveStore = useEnclaveStore()
 
+const loading = ref(false)
 const query = ref('')
 const results = ref<any[]>([])
 const showResults = ref(false)
@@ -72,6 +88,9 @@ const onSearch = () => {
       return
     }
 
+    loading.value = true
+    showResults.value = true
+
     const merged_results: any[] = []
 
     // 1. Users (Graph API)
@@ -82,7 +101,7 @@ const onSearch = () => {
           key: `user-${u.id}`,
           type: 'user',
           label: u.displayName,
-          subLabel: u.mail || u.userPrincipalName
+          subLabel: u.userPrincipalName || u.mail
         }))
       )
     } catch (e) {
@@ -93,7 +112,8 @@ const onSearch = () => {
     merged_results.push(...searchAccounts())
 
     results.value = merged_results
-    showResults.value = merged_results.length > 0
+    loading.value = false
+    showResults.value = true
   }, 300)
 }
 

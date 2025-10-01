@@ -50,7 +50,7 @@ AWS_ASSUME_ROLE_NAME=GDMSOrganizationsRole
 AWS_ASSUME_ROLE_DURATION=3600
 
 # Account Management  
-AWS_ACCOUNTS_TABLE_NAME=gdms-accounts
+# AWS_ACCOUNTS_TABLE_NAME=gdms-accounts
 ```
 
 ## API Documentation

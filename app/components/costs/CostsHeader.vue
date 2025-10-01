@@ -1,0 +1,77 @@
+<template>
+  <div class="bg-gray-900 border-b border-gray-700 p-4 md:p-5 pt-0 md:pt-0">
+    <div class="flex justify-between items-center">
+      <div>
+        <h1 class="text-2xl font-bold text-white">Cost Analytics</h1>
+        <p class="text-gray-300 text-sm">Monitor and analyze account spending</p>
+      </div>
+      <div class="flex gap-2 items-center">
+        <div class="w-32">
+          <USelectMenu
+            v-model="modelMode"
+            :options="modeOptions"
+            value-attribute="value"
+            option-attribute="label"
+            size="xs"
+          />
+        </div>
+        <ShareButton
+          :selected-accounts="selectedAccounts"
+          :selected-timeframe="modelSelectedTimeframe"
+          :selected-view="modelSelectedView"
+          :active-tab="activeTab"
+          :data-mode="modelMode"
+        />
+        <CostSettings />
+        <UButton color="white" variant="ghost" icon="i-heroicons-arrow-path" @click="$emit('refresh')">
+          Refresh
+        </UButton>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap gap-3 mt-3">
+      <div class="w-full sm:w-64 md:w-72">
+        <USelectMenu
+          v-model="modelSelectedTimeframe"
+          :options="timeframeOptions"
+          placeholder="Time Period"
+          value-attribute="value"
+          option-attribute="label"
+        />
+      </div>
+      <div class="w-full sm:w-64 md:w-72">
+        <USelectMenu
+          v-model="modelSelectedView"
+          :options="viewOptions"
+          placeholder="Select View"
+          value-attribute="value"
+          option-attribute="label"
+        />
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import type { DataMode } from '~/types/costs'
+
+defineProps<{
+  timeframeOptions: Array<{ label: string, value: string }>,
+  viewOptions: Array<{ label: string, value: string }>,
+  selectedAccounts: string[],
+  activeTab: string
+}>()
+
+const modelMode = defineModel<DataMode>('mode', { default: 'billable' })
+const modelSelectedTimeframe = defineModel<string>('selectedTimeframe')
+const modelSelectedView = defineModel<string>('selectedView')
+
+const modeOptions = [
+  { label: 'Billable', value: 'billable' },
+  { label: 'Proforma', value: 'proforma' }
+]
+
+defineEmits<{ (e: 'refresh'): void }>()
+</script>
+
+
