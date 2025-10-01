@@ -61,7 +61,7 @@ resource "aws_ecs_task_definition" "main" {
           valueFrom = "${local.secret_arn}:entra_callback_redirect_url::"
         },
         {
-          name  = "AWS_COMMERCIAL_ACCESS_KEY"
+          name  = "AWS_COMMERCIAL_ACCESS_KEY_ID"
           valueFrom = "${local.secret_arn}:commercial_aws_access_key_id::"
         },
         {
@@ -73,7 +73,7 @@ resource "aws_ecs_task_definition" "main" {
           valueFrom = "${local.secret_arn}:commercial_region::"
         },
         {
-          name  = "AWS_GOVCLOUD_ACCESS_KEY"
+          name  = "AWS_GOVCLOUD_ACCESS_KEY_ID"
           valueFrom = "${local.secret_arn}:govcloud_aws_access_key_id::"
         },
         {
