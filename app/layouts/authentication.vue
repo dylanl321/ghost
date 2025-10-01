@@ -1,14 +1,9 @@
 <template>
-  <!-- <div class="min-h-screen"> -->
   <div>
     <slot />
   </div>
 </template>
 
 <script setup lang="ts">
-
-definePageMeta({
-  layout: 'authentication'
-})
-
+// Layouts don't use definePageMeta - that's for pages only
 </script>

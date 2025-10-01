@@ -21,7 +21,7 @@ import type { AccountInfo, AWSEnvironmentType, AccountLookupCriteria } from '../
 /**
  * Get the DynamoDB table name for accounts
  */
-function getAccountsTableName(): string {
+export function getAccountsTableName(): string {
   return process.env.AWS_ACCOUNTS_TABLE_NAME || 'gdms_aws_accounts-master'
 }
 

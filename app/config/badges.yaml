@@ -1,0 +1,47 @@
+# User Badge Configuration
+# Simple rules for assigning badges to users based on group names and user attributes
+
+badges:
+  # External Contractor Badge (.ex in username)
+  - id: contractor
+    title: External Contractor
+    color: gray
+    icon: i-heroicons-user-circle
+    description: External contractor account
+    priority: 1
+    rules:
+      username_ends_with:
+        - .ex@
+
+  # Microsoft Account Badge (.ms in username)  
+  - id: microsoft_account
+    title: Microsoft
+    color: blue
+    icon: i-simple-icons-microsoft
+    description: Microsoft Azure account
+    priority: 2
+    rules:
+      username_ends_with:
+        - .ms@
+
+  # Super User Badge (.su in username)
+  - id: super_user
+    title: Super User
+    color: red
+    icon: i-heroicons-bolt
+    description: Super user account with elevated privileges
+    priority: 0
+    rules:
+      username_ends_with:
+        - .su@
+
+  # Landing Zone Team Badge (AWS-Product-Team group)
+  - id: lz_team
+    title: LZ Team
+    color: purple
+    icon: i-heroicons-rocket-launch
+    description: Landing Zone team member
+    priority: 3
+    rules:
+      groups_exact:
+        - AWS-Product-Team

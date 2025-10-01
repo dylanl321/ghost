@@ -27,6 +27,7 @@ export interface UserGroupState {
   roleGroups: Record<string, RoleGroupStructure>,
   distributionGroups: Record<string, DistributionGroupStructure>,
   awsRoles: Record<string, AwsRoleInfo>
+  allEntraGroups: string[] // All Entra ID group names for role/permission evaluation
 }
 
 const GOV_IDENTIFIER = ' | gov'
@@ -44,7 +45,8 @@ export const useUserGroupStore = defineStore('userGroups', {
     awsRolesLastFetch: null,
     roleGroups: {},
     distributionGroups: {},
-    awsRoles: {}
+    awsRoles: {},
+    allEntraGroups: []
   }),
 
   getters: {
@@ -85,7 +87,7 @@ export const useUserGroupStore = defineStore('userGroups', {
             projectName: roleData.accountName,
             standardId: roleData.standardAccountId,
             govcloudId: roleData.govCloudAccountId,
-            environment: roleData.isGovCloud ? 'GovCloud Paired' : 'Commercial Only',
+            environment: roleData.isGovCloud ? 'GovCloud' : 'Commercial',
             roles: [],
             total: 0
           }
@@ -111,7 +113,17 @@ export const useUserGroupStore = defineStore('userGroups', {
 
       console.log('Initializing user groups')
 
-      const { fetchGroups } = useGraphApi()
+      const { fetchGroups, fetchAllGroupsWithPagination } = useGraphApi()
+
+      // Fetch ALL Entra ID groups (for role evaluation)
+      const allGroupsRaw = await fetchAllGroupsWithPagination(accessToken)
+      this.allEntraGroups = allGroupsRaw
+        .map((g: any) => g.displayName || '')
+        .filter((name: string) => name !== '')
+
+      console.log(`Stored ${this.allEntraGroups.length} total Entra ID groups for role evaluation`)
+
+      // Fetch AWS-specific groups (for AWS access)
       const data = await fetchGroups(accessToken)
       this.roleGroups = data.awsRoleGroups
       this.distributionGroups = data.distributionGroups
@@ -194,6 +206,7 @@ export const useUserGroupStore = defineStore('userGroups', {
       this.roleGroups = {}
       this.distributionGroups = {}
       this.awsRoles = {}
+      this.allEntraGroups = []
       this.groupsLastFetch = null
       this.awsRolesLastFetch = null
       console.log('User group stored cleared')

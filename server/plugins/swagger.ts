@@ -10,8 +10,12 @@ const openApiSpec = {
   openapi: '3.0.0',
   info: {
     title: 'AWS Dashboard API',
-    description: 'API for managing AWS resources across Commercial and GovCloud environments',
-    version: '1.0.0'
+    description: 'API for managing AWS resources across Commercial and GovCloud environments. Authentication can be done via API keys (x-api-key header or Bearer token) or Entra ID (for web browser access).',
+    version: '1.0.0',
+    contact: {
+      name: 'GHOST Dashboard',
+      url: '/admin/api-keys'
+    }
   },
   servers: [
     {
@@ -19,12 +23,29 @@ const openApiSpec = {
       description: 'API Server'
     }
   ],
+  security: [
+    { ApiKeyAuth: [] },
+    { BearerAuth: [] },
+    { OIDCAuth: [] }
+  ],
   components: {
     securitySchemes: {
       ApiKeyAuth: {
         type: 'apiKey',
         in: 'header',
-        name: 'X-API-Key'
+        name: 'x-api-key',
+        description: 'API key for programmatic access'
+      },
+      BearerAuth: {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        description: 'Bearer token authentication (can use API key as bearer token)'
+      },
+      OIDCAuth: {
+        type: 'openIdConnect',
+        openIdConnectUrl: '/.well-known/openid-configuration',
+        description: 'Entra ID / Azure AD authentication (for web browser access)'
       }
     },
     schemas: {

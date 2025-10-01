@@ -1,0 +1,1411 @@
+{
+  "environment": "govcloud",
+  "region": "us-gov-west-1",
+  "monitoring_account": "083876038518",
+  "database": "amazon_security_lake_glue_db_us_gov_west_1",
+  "generated_at": "2025-08-26T21:58:43.835524",
+  "tables": {
+    "amazon_security_lake_table_us_gov_west_1_cloud_trail_mgmt_2_0": {
+      "table_name": "amazon_security_lake_glue_db_us_gov_west_1.amazon_security_lake_table_us_gov_west_1_cloud_trail_mgmt_2_0",
+      "description": "Schema generated from Athena DESCRIBE for amazon_security_lake_table_us_gov_west_1_cloud_trail_mgmt_2_0",
+      "columns": [
+        {
+          "name": "metadata",
+          "type": "struct<product: struct<version: string, name: string, vendor_name: string, feature: struct<name: string>>, event_code: string, uid: string, profiles: array<string>, version: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "time",
+          "type": "bigint",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "time_dt",
+          "type": "timestamp",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "cloud",
+          "type": "struct<region: string, provider: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "api",
+          "type": "struct<response: struct<error: string, message: string, data: string>, operation: string, version: string, service: struct<name: string>, request: struct<data: string, uid: string>>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "dst_endpoint",
+          "type": "struct<svc_name: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "actor",
+          "type": "struct<user: struct<type: string, name: string, uid_alt: string, uid: string, account: struct<uid: string>, credential_uid: string>, session: struct<created_time_dt: timestamp, is_mfa: boolean, issuer: string>, invoked_by: string, idp: struct<name: string>>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "http_request",
+          "type": "struct<user_agent: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "src_endpoint",
+          "type": "struct<uid: string, ip: string, domain: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "session",
+          "type": "struct<uid: string, uid_alt: string, credential_uid: string, issuer: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "policy",
+          "type": "struct<uid: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "resources",
+          "type": "array<struct<uid: string, owner: struct<account: struct<uid: string>>, type: string>>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "class_name",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "class_uid",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "category_name",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "category_uid",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "severity_id",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "severity",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "user",
+          "type": "struct<uid_alt: string, uid: string, name: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "activity_name",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "activity_id",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "type_uid",
+          "type": "bigint",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "type_name",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "is_mfa",
+          "type": "boolean",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "unmapped",
+          "type": "map<string, string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "accountid",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "asl_version",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "observables",
+          "type": "array<struct<name: string, value: string, type: string, type_id: int>>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "asl_version",
+          "type": "identity",
+          "description": "asl_version",
+          "optional": true
+        },
+        {
+          "name": "region",
+          "type": "identity",
+          "description": "region",
+          "optional": true
+        },
+        {
+          "name": "accountid",
+          "type": "identity",
+          "description": "accountid",
+          "optional": true
+        },
+        {
+          "name": "time_dt_day",
+          "type": "day",
+          "description": "time_dt",
+          "optional": true
+        }
+      ],
+      "partition_keys": [],
+      "table_type": "EXTERNAL_TABLE",
+      "generated_at": "2025-08-26T21:58:29.434234",
+      "generation_method": "athena_describe"
+    },
+    "amazon_security_lake_table_us_gov_west_1_eks_audit_2_0": {
+      "table_name": "amazon_security_lake_glue_db_us_gov_west_1.amazon_security_lake_table_us_gov_west_1_eks_audit_2_0",
+      "description": "Schema generated from Athena DESCRIBE for amazon_security_lake_table_us_gov_west_1_eks_audit_2_0",
+      "columns": [
+        {
+          "name": "metadata",
+          "type": "struct<log_level: string, product: struct<version: string, vendor_name: string, name: string, feature: struct<name: string>>, profiles: array<string>, version: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "api",
+          "type": "struct<request: struct<uid: string, containers: array<struct<name: string, image: struct<name: string, path: string, uid: string>>>>, operation: string, version: string, response: struct<code: int, message: string, error: string, error_message: string, containers: array<struct<name: string, image: struct<name: string, path: string, uid: string>>>>, group: struct<name: string>>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "message",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "http_request",
+          "type": "struct<url: struct<path: string>, user_agent: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "actor",
+          "type": "struct<user: struct<name: string, uid: string, groups: array<struct<name: string>>, type_id: int>, session: struct<credential_uid: string, issuer: string, uid: string>>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "cloud",
+          "type": "struct<account: struct<uid: string>, provider: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "src_endpoint",
+          "type": "struct<ip: string, intermediate_ips: array<string>>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "resources",
+          "type": "array<struct<namespace: string, name: string, uid: string, version: string, type: string>>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "start_time_dt",
+          "type": "timestamp",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "time_dt",
+          "type": "timestamp",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "time",
+          "type": "bigint",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "severity_id",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "severity",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "class_name",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "class_uid",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "category_name",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "category_uid",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "activity_name",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "activity_id",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "type_name",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "type_uid",
+          "type": "bigint",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "unmapped",
+          "type": "map<string, string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "accountid",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "asl_version",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "observables",
+          "type": "array<struct<name: string, value: string, type: string, type_id: int>>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "asl_version",
+          "type": "identity",
+          "description": "asl_version",
+          "optional": true
+        },
+        {
+          "name": "region",
+          "type": "identity",
+          "description": "region",
+          "optional": true
+        },
+        {
+          "name": "accountid",
+          "type": "identity",
+          "description": "accountid",
+          "optional": true
+        },
+        {
+          "name": "time_dt_day",
+          "type": "day",
+          "description": "time_dt",
+          "optional": true
+        }
+      ],
+      "partition_keys": [],
+      "table_type": "EXTERNAL_TABLE",
+      "generated_at": "2025-08-26T21:58:31.842889",
+      "generation_method": "athena_describe"
+    },
+    "amazon_security_lake_table_us_gov_west_1_ext_gdms_pa_traffic": {
+      "table_name": "amazon_security_lake_glue_db_us_gov_west_1.amazon_security_lake_table_us_gov_west_1_ext_gdms_pa_traffic",
+      "description": "Schema generated from Athena DESCRIBE for amazon_security_lake_table_us_gov_west_1_ext_gdms_pa_traffic",
+      "columns": [
+        {
+          "name": "activity_id",
+          "type": "int",
+          "description": "OCSF Activity ID",
+          "optional": true
+        },
+        {
+          "name": "activity_name",
+          "type": "string",
+          "description": "OCSF Activity Name",
+          "optional": true
+        },
+        {
+          "name": "app_name",
+          "type": "string",
+          "description": "Application Name",
+          "optional": true
+        },
+        {
+          "name": "category_name",
+          "type": "string",
+          "description": "OCSF Category Name",
+          "optional": true
+        },
+        {
+          "name": "category_uid",
+          "type": "int",
+          "description": "OCSF Category UID",
+          "optional": true
+        },
+        {
+          "name": "class_name",
+          "type": "string",
+          "description": "OCSF Class Name",
+          "optional": true
+        },
+        {
+          "name": "class_uid",
+          "type": "int",
+          "description": "OCSF Class UID",
+          "optional": true
+        },
+        {
+          "name": "connection_info",
+          "type": "struct<direction:string,direction_id:int,protocol_name:string>",
+          "description": "Network Connection Information",
+          "optional": true
+        },
+        {
+          "name": "dst_endpoint",
+          "type": "struct<hostname:string,ip:string,port:int>",
+          "description": "Destination Network Endpoint",
+          "optional": true
+        },
+        {
+          "name": "enrichments",
+          "type": "array<struct<name:string,value:string,type:string,data:string>>",
+          "description": "Event Enrichments Array",
+          "optional": true
+        },
+        {
+          "name": "metadata",
+          "type": "struct<version:string,product:struct<name:string,vendor_name:string,version:string>,profiles:array<string>>",
+          "description": "OCSF Metadata",
+          "optional": true
+        },
+        {
+          "name": "severity",
+          "type": "string",
+          "description": "Event Severity",
+          "optional": true
+        },
+        {
+          "name": "severity_id",
+          "type": "int",
+          "description": "OCSF Severity ID",
+          "optional": true
+        },
+        {
+          "name": "src_endpoint",
+          "type": "struct<hostname:string,ip:string,port:int>",
+          "description": "Source Network Endpoint",
+          "optional": true
+        },
+        {
+          "name": "time",
+          "type": "bigint",
+          "description": "Event Time (Unix Timestamp)",
+          "optional": true
+        },
+        {
+          "name": "traffic",
+          "type": "struct<bytes:bigint,bytes_in:bigint,bytes_out:bigint,packets:bigint,packets_in:bigint,packets_out:bigint>",
+          "description": "Network Traffic Metrics",
+          "optional": true
+        },
+        {
+          "name": "type_name",
+          "type": "string",
+          "description": "OCSF Type Name",
+          "optional": true
+        },
+        {
+          "name": "type_uid",
+          "type": "int",
+          "description": "OCSF Type UID",
+          "optional": true
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "description": "Partition(0)",
+          "optional": true
+        },
+        {
+          "name": "accountid",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "eventday",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "description": "Partition(0)",
+          "optional": true
+        },
+        {
+          "name": "accountid",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "eventday",
+          "type": "string",
+          "description": "",
+          "optional": true
+        }
+      ],
+      "partition_keys": [],
+      "table_type": "EXTERNAL_TABLE",
+      "generated_at": "2025-08-26T21:58:34.229963",
+      "generation_method": "athena_describe"
+    },
+    "amazon_security_lake_table_us_gov_west_1_lambda_execution_2_0": {
+      "table_name": "amazon_security_lake_glue_db_us_gov_west_1.amazon_security_lake_table_us_gov_west_1_lambda_execution_2_0",
+      "description": "Schema generated from Athena DESCRIBE for amazon_security_lake_table_us_gov_west_1_lambda_execution_2_0",
+      "columns": [
+        {
+          "name": "metadata",
+          "type": "struct<product: struct<version: string, name: string, vendor_name: string, feature: struct<name: string>>, event_code: string, uid: string, profiles: array<string>, version: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "time",
+          "type": "bigint",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "time_dt",
+          "type": "timestamp",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "cloud",
+          "type": "struct<region: string, provider: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "api",
+          "type": "struct<response: struct<error: string, message: string, data: string>, operation: string, version: string, service: struct<name: string>, request: struct<data: string, uid: string>>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "dst_endpoint",
+          "type": "struct<svc_name: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "actor",
+          "type": "struct<user: struct<type: string, name: string, uid_alt: string, uid: string, account: struct<uid: string>, credential_uid: string>, session: struct<created_time_dt: timestamp, is_mfa: boolean, issuer: string>, invoked_by: string, idp: struct<name: string>>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "http_request",
+          "type": "struct<user_agent: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "src_endpoint",
+          "type": "struct<uid: string, ip: string, domain: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "session",
+          "type": "struct<uid: string, uid_alt: string, credential_uid: string, issuer: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "policy",
+          "type": "struct<uid: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "resources",
+          "type": "array<struct<uid: string, owner: struct<account: struct<uid: string>>, type: string>>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "class_name",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "class_uid",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "category_name",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "category_uid",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "severity_id",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "severity",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "user",
+          "type": "struct<uid_alt: string, uid: string, name: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "activity_name",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "activity_id",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "type_uid",
+          "type": "bigint",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "type_name",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "is_mfa",
+          "type": "boolean",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "unmapped",
+          "type": "map<string, string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "accountid",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "asl_version",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "observables",
+          "type": "array<struct<name: string, value: string, type: string, type_id: int>>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "asl_version",
+          "type": "identity",
+          "description": "asl_version",
+          "optional": true
+        },
+        {
+          "name": "region",
+          "type": "identity",
+          "description": "region",
+          "optional": true
+        },
+        {
+          "name": "accountid",
+          "type": "identity",
+          "description": "accountid",
+          "optional": true
+        },
+        {
+          "name": "time_dt_day",
+          "type": "day",
+          "description": "time_dt",
+          "optional": true
+        }
+      ],
+      "partition_keys": [],
+      "table_type": "EXTERNAL_TABLE",
+      "generated_at": "2025-08-26T21:58:36.607427",
+      "generation_method": "athena_describe"
+    },
+    "amazon_security_lake_table_us_gov_west_1_route53_2_0": {
+      "table_name": "amazon_security_lake_glue_db_us_gov_west_1.amazon_security_lake_table_us_gov_west_1_route53_2_0",
+      "description": "Schema generated from Athena DESCRIBE for amazon_security_lake_table_us_gov_west_1_route53_2_0",
+      "columns": [
+        {
+          "name": "metadata",
+          "type": "struct<product: struct<version: string, name: string, feature: struct<name: string>, vendor_name: string>, profiles: array<string>, version: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "cloud",
+          "type": "struct<account: struct<uid: string>, region: string, provider: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "src_endpoint",
+          "type": "struct<vpc_uid: string, ip: string, port: int, instance_uid: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "time",
+          "type": "bigint",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "time_dt",
+          "type": "timestamp",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "query",
+          "type": "struct<hostname: string, type: string, class: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "answers",
+          "type": "array<struct<type: string, rdata: string, class: string>>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "connection_info",
+          "type": "struct<protocol_name: string, direction: string, direction_id: int>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "dst_endpoint",
+          "type": "struct<instance_uid: string, interface_uid: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "firewall_rule",
+          "type": "struct<uid: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "severity_id",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "severity",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "class_name",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "class_uid",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "category_name",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "category_uid",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "activity_id",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "activity_name",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "type_uid",
+          "type": "bigint",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "type_name",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "rcode_id",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "rcode",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "disposition",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "action",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "action_id",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "unmapped",
+          "type": "map<string, string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "accountid",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "asl_version",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "observables",
+          "type": "array<struct<name: string, value: string, type: string, type_id: int>>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "asl_version",
+          "type": "identity",
+          "description": "asl_version",
+          "optional": true
+        },
+        {
+          "name": "region",
+          "type": "identity",
+          "description": "region",
+          "optional": true
+        },
+        {
+          "name": "accountid",
+          "type": "identity",
+          "description": "accountid",
+          "optional": true
+        },
+        {
+          "name": "time_dt_day",
+          "type": "day",
+          "description": "time_dt",
+          "optional": true
+        }
+      ],
+      "partition_keys": [],
+      "table_type": "EXTERNAL_TABLE",
+      "generated_at": "2025-08-26T21:58:39.023413",
+      "generation_method": "athena_describe"
+    },
+    "amazon_security_lake_table_us_gov_west_1_sh_findings_2_0": {
+      "table_name": "amazon_security_lake_glue_db_us_gov_west_1.amazon_security_lake_table_us_gov_west_1_sh_findings_2_0",
+      "description": "Schema generated from Athena DESCRIBE for amazon_security_lake_table_us_gov_west_1_sh_findings_2_0",
+      "columns": [
+        {
+          "name": "metadata",
+          "type": "struct<log_version: string, product: struct<feature: struct<uid: string, name: string>, uid: string, name: string, vendor_name: string, version: string>, processed_time_dt: timestamp, profiles: array<string>, version: string, extensions: array<struct<name: string, uid: string, version: string>>>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "time",
+          "type": "bigint",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "time_dt",
+          "type": "timestamp",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "confidence_score",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "message",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "cloud",
+          "type": "struct<account: struct<uid: string>, region: string, provider: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "resource",
+          "type": "struct<type: string, uid: string, cloud_partition: string, region: string, labels: array<string>, data: string, criticality: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "finding_info",
+          "type": "struct<created_time_dt: timestamp, uid: string, desc: string, title: string, modified_time_dt: timestamp, first_seen_time_dt: timestamp, last_seen_time_dt: timestamp, related_events: array<struct<product_uid: string, uid: string>>, types: array<string>, src_url: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "remediation",
+          "type": "struct<desc: string, references: array<string>>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "compliance",
+          "type": "struct<standards: array<string>, requirements: array<string>, control: string, status: string, status_detail: string, status_code: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "vulnerabilities",
+          "type": "array<struct<remediation: struct<desc: string, references: array<string>>, cve: struct<cvss: array<struct<base_score: decimal(3, 1), vector_string: string, version: string>>, uid: string, epss: struct<score: string>, references: array<string>, created_time_dt: timestamp, modified_time_dt: timestamp>, references: array<string>, related_vulnerabilities: array<string>, vendor_name: string, affected_packages: array<struct<architecture: string, epoch: int, path: string, fixed_in_version: string, name: string, package_manager: string, release: string, remediation: struct<desc: string>, version: string>>, cwe: struct<uid: string>, affected_code: array<struct<end_line: int, file: struct<name: string, path: string, uid: string, type_id: int>, start_line: int>>, is_fix_available: boolean, is_exploit_available: boolean>>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "resources",
+          "type": "array<struct<type: string, uid: string, cloud_partition: string, region: string, labels: array<string>, data: string, criticality: string, owner: struct<account: struct<uid: string>>>>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "evidences",
+          "type": "array<struct<data: string, actor: struct<process: struct<created_time_dt: timestamp, name: string, pid: int, uid: string, user: struct<name: string, uid: string>, cmd_line: string, parent_process: struct<uid: string>, file: struct<path: string, name: string, type_id: int, hashes: array<struct<value: string, algorithm_id: int, algorithm: string>>>, euid: int>>, process: struct<created_time_dt: timestamp, name: string, pid: int, uid: string, user: struct<name: string, uid: string>, cmd_line: string, parent_process: struct<uid: string>, file: struct<path: string, name: string, type_id: int, hashes: array<struct<value: string, algorithm_id: int, algorithm: string>>>, euid: int>, api: struct<operation: string, response: struct<error: string, code: int>, service: struct<name: string>>, src_endpoint: struct<ip: string, location: struct<country: string, city: string, coordinates: array<decimal(9, 6)>>, port: int>, connection_info: struct<protocol_name: string, direction_id: int, direction: string>, dst_endpoint: struct<ip: string, port: int, location: struct<city: string, country: string, coordinates: array<decimal(9, 6)>>>, query: struct<hostname: string>>>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "class_name",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "class_uid",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "category_name",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "category_uid",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "severity_id",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "severity",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "activity_name",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "activity_id",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "type_uid",
+          "type": "bigint",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "type_name",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "unmapped",
+          "type": "map<string, string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "accountid",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "asl_version",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "observables",
+          "type": "array<struct<name: string, value: string, type: string, type_id: int>>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "asl_version",
+          "type": "identity",
+          "description": "asl_version",
+          "optional": true
+        },
+        {
+          "name": "region",
+          "type": "identity",
+          "description": "region",
+          "optional": true
+        },
+        {
+          "name": "accountid",
+          "type": "identity",
+          "description": "accountid",
+          "optional": true
+        },
+        {
+          "name": "time_dt_day",
+          "type": "day",
+          "description": "time_dt",
+          "optional": true
+        }
+      ],
+      "partition_keys": [],
+      "table_type": "EXTERNAL_TABLE",
+      "generated_at": "2025-08-26T21:58:41.420173",
+      "generation_method": "athena_describe"
+    },
+    "amazon_security_lake_table_us_gov_west_1_vpc_flow_2_0": {
+      "table_name": "amazon_security_lake_glue_db_us_gov_west_1.amazon_security_lake_table_us_gov_west_1_vpc_flow_2_0",
+      "description": "Schema generated from Athena DESCRIBE for amazon_security_lake_table_us_gov_west_1_vpc_flow_2_0",
+      "columns": [
+        {
+          "name": "metadata",
+          "type": "struct<product: struct<version: string, name: string, feature: struct<name: string>, vendor_name: string>, profiles: array<string>, version: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "cloud",
+          "type": "struct<account: struct<uid: string>, region: string, zone: string, provider: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "src_endpoint",
+          "type": "struct<port: int, svc_name: string, ip: string, intermediate_ips: array<string>, interface_uid: string, vpc_uid: string, instance_uid: string, subnet_uid: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "dst_endpoint",
+          "type": "struct<port: int, svc_name: string, ip: string, intermediate_ips: array<string>, interface_uid: string, vpc_uid: string, instance_uid: string, subnet_uid: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "connection_info",
+          "type": "struct<protocol_num: int, tcp_flags: int, protocol_ver: string, boundary_id: int, boundary: string, direction_id: int, direction: string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "traffic",
+          "type": "struct<packets: bigint, bytes: bigint>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "time",
+          "type": "bigint",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "time_dt",
+          "type": "timestamp",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "start_time_dt",
+          "type": "timestamp",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "end_time_dt",
+          "type": "timestamp",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "status_code",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "severity_id",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "severity",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "class_name",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "class_uid",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "category_name",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "category_uid",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "activity_name",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "activity_id",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "action",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "action_id",
+          "type": "int",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "disposition",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "type_uid",
+          "type": "bigint",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "type_name",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "accountid",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "asl_version",
+          "type": "string",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "unmapped",
+          "type": "map<string, string>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "observables",
+          "type": "array<struct<name: string, value: string, type: string, type_id: int>>",
+          "description": "",
+          "optional": true
+        },
+        {
+          "name": "asl_version",
+          "type": "identity",
+          "description": "asl_version",
+          "optional": true
+        },
+        {
+          "name": "region",
+          "type": "identity",
+          "description": "region",
+          "optional": true
+        },
+        {
+          "name": "accountid",
+          "type": "identity",
+          "description": "accountid",
+          "optional": true
+        },
+        {
+          "name": "time_dt_day",
+          "type": "day",
+          "description": "time_dt",
+          "optional": true
+        }
+      ],
+      "partition_keys": [],
+      "table_type": "EXTERNAL_TABLE",
+      "generated_at": "2025-08-26T21:58:43.835438",
+      "generation_method": "athena_describe"
+    }
+  }
+}

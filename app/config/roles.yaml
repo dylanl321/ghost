@@ -1,0 +1,163 @@
+# User Role Configuration
+# Defines roles and permissions based on group membership and user attributes
+# This configuration is used to control access to features throughout the application
+
+roles:
+  # Admin Role - Full access to all features
+  - id: admin
+    name: Administrator
+    description: Full administrative access to all features
+    priority: 0
+    permissions:
+      - forecast.import
+      - forecast.edit
+      - forecast.delete
+      - forecast.clear
+      - costs.settings
+      - costs.export
+      - admin.logs
+      - admin.issues
+      - accounts.edit
+      - accounts.create
+      - accounts.delete
+      - users.manage
+    rules:
+      groups_exact:
+        - AWS-Product-Team
+      username_ends_with:
+        - .admin@
+  
+  # Power User Role - Enhanced features but not full admin
+  - id: power_user
+    name: Power User
+    description: Enhanced access to cost and account management features
+    priority: 1
+    permissions:
+      - forecast.import
+      - forecast.edit
+      - costs.settings
+      - costs.export
+      - accounts.edit
+    rules:
+      groups_include:
+        - AWS-Power-Users
+      groups_start_with:
+        - AWS-Managers-
+      username_ends_with:
+        - .pu@
+  
+  # Finance Role - Access to cost and forecast features
+  - id: finance
+    name: Finance User
+    description: Access to cost analysis and forecasting features
+    priority: 2
+    permissions:
+      - forecast.import
+      - forecast.edit
+      - costs.export
+    rules:
+      groups_exact:
+        - AWS-Finance-Team
+      department_includes:
+        - Finance
+        - Accounting
+  
+  # Viewer Role - Read-only access (default for all authenticated users)
+  - id: viewer
+    name: Viewer
+    description: Read-only access to dashboards and reports
+    priority: 99
+    permissions:
+      - costs.view
+      - accounts.view
+      - users.view
+    rules:
+      # This is the default role - applies to all authenticated users
+      # No specific rules needed as it's the fallback
+      default: true
+
+# Permission Definitions
+# Documents what each permission controls in the application
+permissions:
+  forecast:
+    import:
+      description: Can import forecast data files
+      affects:
+        - "Import Forecast File button in Cost Settings"
+        - "API endpoint /api/forecast/upload"
+    edit:
+      description: Can edit existing forecast entries
+      affects:
+        - "Edit buttons in forecast data table"
+        - "API endpoint /api/forecast/update"
+    delete:
+      description: Can delete forecast entries
+      affects:
+        - "Delete buttons in forecast data table"
+        - "API endpoint /api/forecast/delete"
+    clear:
+      description: Can clear all forecast data
+      affects:
+        - "Clear All button in forecast management"
+        - "API endpoint /api/forecast/clear"
+  
+  costs:
+    view:
+      description: Can view cost data and reports
+      affects:
+        - "Access to /account/costs page"
+        - "Cost charts and tables"
+    settings:
+      description: Can modify cost display settings
+      affects:
+        - "Cost Settings panel"
+        - "Filter and threshold controls"
+    export:
+      description: Can export cost data
+      affects:
+        - "Export buttons in cost tables"
+        - "Download reports functionality"
+  
+  accounts:
+    view:
+      description: Can view account information
+      affects:
+        - "Access to account pages"
+        - "Account explorer"
+    edit:
+      description: Can edit account metadata
+      affects:
+        - "Edit account details"
+        - "Update account tags"
+    create:
+      description: Can create new account entries
+      affects:
+        - "Add new account functionality"
+    delete:
+      description: Can delete account entries
+      affects:
+        - "Delete account functionality"
+  
+  users:
+    view:
+      description: Can view user information
+      affects:
+        - "User list pages"
+        - "User profile pages"
+    manage:
+      description: Can manage user roles and permissions
+      affects:
+        - "User role assignment"
+        - "Permission management"
+  
+  admin:
+    logs:
+      description: Access to system logs
+      affects:
+        - "Access to /admin/logs page"
+        - "Log viewer functionality"
+    issues:
+      description: Access to issue management
+      affects:
+        - "Access to /admin/issues page"
+        - "Issue tracking functionality"

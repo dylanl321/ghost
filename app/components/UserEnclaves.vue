@@ -4,7 +4,7 @@
       <div class="text-lg font-semibold">My Enclaves</div>
     </template>
 
-    <div class="max-h-[33vh] overflow-y-auto">
+    <div class="max-h-[40vh] overflow-y-auto">
       <UTable :rows="tableData" :columns="columns" :ui="{ thead: 'bg-gray-800 text-xs' }">
         <template #enclave-data="{ row }">
           <div>
@@ -85,6 +85,13 @@ function visibleRoles(row: any) {
 const GOV_IDENTIFIER = ' | gov'
 const COMM_IDENTIFIER = ' | comm'
 
-const tableData = Object.values(userGroupStore.myEnclaves)
+// Handle empty state gracefully
+const tableData = computed(() => {
+  if (!userGroupStore.myEnclaves) {
+    console.warn('User enclaves not loaded yet')
+    return []
+  }
+  return Object.values(userGroupStore.myEnclaves)
+})
 
 </script>

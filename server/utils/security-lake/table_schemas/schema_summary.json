@@ -1,0 +1,36 @@
+{
+  "summary": {
+    "generated_at": "2025-08-26T21:58:43.846627",
+    "environments": {
+      "commercial": {
+        "region": "us-east-1",
+        "monitoring_account": "253821132832",
+        "database": "amazon_security_lake_glue_db_us_east_1",
+        "table_count": 6,
+        "tables": [
+          "amazon_security_lake_table_us_east_1_cloud_trail_mgmt_2_0",
+          "amazon_security_lake_table_us_east_1_eks_audit_2_0",
+          "amazon_security_lake_table_us_east_1_lambda_execution_2_0",
+          "amazon_security_lake_table_us_east_1_route53_2_0",
+          "amazon_security_lake_table_us_east_1_sh_findings_2_0",
+          "amazon_security_lake_table_us_east_1_vpc_flow_2_0"
+        ]
+      },
+      "govcloud": {
+        "region": "us-gov-west-1",
+        "monitoring_account": "083876038518",
+        "database": "amazon_security_lake_glue_db_us_gov_west_1",
+        "table_count": 7,
+        "tables": [
+          "amazon_security_lake_table_us_gov_west_1_cloud_trail_mgmt_2_0",
+          "amazon_security_lake_table_us_gov_west_1_eks_audit_2_0",
+          "amazon_security_lake_table_us_gov_west_1_ext_gdms_pa_traffic",
+          "amazon_security_lake_table_us_gov_west_1_lambda_execution_2_0",
+          "amazon_security_lake_table_us_gov_west_1_route53_2_0",
+          "amazon_security_lake_table_us_gov_west_1_sh_findings_2_0",
+          "amazon_security_lake_table_us_gov_west_1_vpc_flow_2_0"
+        ]
+      }
+    }
+  }
+}

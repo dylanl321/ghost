@@ -1,29 +1,33 @@
 <template>
-  <div class="min-h-screen bg-slate-50 dark:bg-slate-900 flex">
+  <div class="h-screen bg-gray-50 dark:bg-slate-900 flex overflow-hidden">
     <!-- Side Navigation -->
-    <SideNav />
+    <SideNav ref="sideNavRef" />
 
     <!-- Main Content Wrapper -->
-    <div class="flex-1 ml-64 flex flex-col min-h-screen">
-      <TopNav 
-        :breadcrumbs="breadcrumbs" 
+    <div
+      class="flex-1 flex flex-col overflow-hidden min-h-0 transition-all duration-300 ease-in-out"
+      :style="{ marginLeft: navigationStore.contentMargin }"
+    >
+      <TopNav
+        :breadcrumbs="breadcrumbs"
+        @toggle-mobile-menu="handleMobileMenuToggle"
       />
 
       <!-- Main Content Area -->
-      <main class="flex-1 p-6 overflow-y-auto">
+      <main class="flex-1 pt-4 md:pt-4 overflow-auto min-h-0 flex flex-col bg-gray-50 dark:bg-slate-900">
         <!-- Page Content -->
-        <div class="relative">
-          <section 
-            class="transition-opacity duration-200" 
+        <div class="relative h-full min-h-0">
+          <section
+            class="transition-opacity duration-200 h-full min-h-0"
           >
             <slot />
           </section>
         </div>
       </main>
 
-      <!-- Footer with Ghost -->
-      <footer class="bg-slate-800 border-t border-slate-700 h-[53px] flex items-center">
-        <div class="px-6 flex justify-between items-center w-full text-sm text-gray-400">
+      <!-- Footer -->
+      <footer class="bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 h-[56px] flex items-center">
+        <div class="px-6 flex justify-between items-center w-full text-sm text-gray-500 dark:text-gray-400">
           <span>A product of the GDMS AWS Landing Zone Team</span>
           <!-- <div class="flex items-center gap-4">
             <NuxtLink
@@ -47,21 +51,51 @@
 </template>
 
 <script setup lang="ts">
+import { useNavigationStore } from '~/stores/useNavigationStore'
 
 const route = useRoute()
+const navigationStore = useNavigationStore()
+const sideNavRef = ref()
+
+// Mobile menu handler
+const handleMobileMenuToggle = () => {
+  if (sideNavRef.value) {
+    sideNavRef.value.toggleMobileMenu()
+  }
+}
 
 const breadcrumbs = computed(() => {
   const segments = route.path.split('/').filter(Boolean)
 
-  // always start with dashboard
   const crumbs = [{ label: 'Dashboard', to: '/' }]
 
-  segments.forEach((seg, i) => {
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i]
+    if (!seg) continue
+
+    // Collapse `/account/explorer` into one crumb
+    if (seg.toLowerCase() === 'account' && segments[i + 1]?.toLowerCase() === 'explorer') {
+      crumbs.push({
+        label: 'Account Explorer',
+        to: '/account/explorer',
+      })
+      break // stop after pushing, so "explorer" doesn't get added separately
+    }
+
+    // Handle `/account/{ID}` by changing "Account" to "Account Explorer"
+    if (seg.toLowerCase() === 'account' && parseInt(segments[i + 1] || "")) {
+      crumbs.push({
+        label: 'Account Explorer',
+        to: '/account/explorer',
+      })
+      continue
+    }
+
     crumbs.push({
       label: seg.charAt(0).toUpperCase() + seg.slice(1),
-      to: '/' + segments.slice(0, i + 1).join('/')
+      to: '/' + segments.slice(0, i + 1).join('/'),
     })
-  })
+  }
 
   return crumbs
 })

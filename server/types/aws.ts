@@ -21,8 +21,12 @@ export type AWSServiceType =
   | 'config'
   | 'guardduty'
   | 'securityhub'
+  | 'securitylake'
+  | 'athena'
   | 'ram'
   | 'bedrock-runtime'
+  | 'compute-optimizer'
+  | 'pricing'
 
 export interface AWSClientOptions {
   environment: AWSEnvironmentType
@@ -84,6 +88,7 @@ export interface AWSCredentials {
   accessKeyId: string
   secretAccessKey: string
   sessionToken?: string
+  expiration?: Date
 }
 
 export interface AWSConfigEnvironment {
