@@ -49,8 +49,8 @@ interface CostResponse {
 interface CostData {
   billableMonthToDateTotal: number
   proformaMonthToDateTotal: number
-  billableDaily: CostDaily[]
-  proformaDaily: CostDaily[]
+  billableLast14Days: CostDaily[]
+  proformaLast14Days: CostDaily[]
 }
 interface CostDaily {
   date: string
@@ -67,12 +67,12 @@ const currentSpend = computed(() => costResponse.value?.data.billableMonthToDate
 
 const billableTimeSeries = computed(() => {
   if (!costResponse.value) return []
-  return costResponse.value.data.billableDaily.slice(-15, -1)
+  return costResponse.value.data.billableLast14Days
 })
 
 const proformaTimeSeries = computed(() => {
   if (!costResponse.value) return []
-  return costResponse.value.data.proformaDaily.slice(-15, -1)
+  return costResponse.value.data.proformaLast14Days
 })
 
 onMounted(async () => {

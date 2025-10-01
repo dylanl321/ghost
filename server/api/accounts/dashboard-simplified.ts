@@ -36,7 +36,7 @@ registerEndpoint('/api/accounts/dashboard-simplified', 'GET', {
                 properties: {
                   billableMonthToDateTotal: { type: 'number' },
                   proformaMonthToDateTotal: { type: 'number' },
-                  billableDaily: { 
+                  billableLast14Days: { 
                     type: 'array', 
                     items: { 
                       type: 'object',
@@ -46,7 +46,7 @@ registerEndpoint('/api/accounts/dashboard-simplified', 'GET', {
                       }
                     } 
                   },
-                  proformaDaily: { 
+                  proformaLast14Days: { 
                     type: 'array', 
                     items: { 
                       type: 'object',
@@ -109,6 +109,13 @@ async function getOverview(accountId: string) {
   const startOfMonth = buildPaddedDate(year, month, 1);
   const tomorrow = buildPaddedDate(year, month, today + 1); // exclusive end
 
+  // Past 14 days (not including today)
+  const dailyEnd = buildPaddedDate(year, month, today) // exclusive
+
+  const tempStart = new Date(now);
+  tempStart.setDate(tempStart.getDate() - 14); // Go back 14 days to get the start date
+  const dailyStart = buildPaddedDate(tempStart.getFullYear(), tempStart.getMonth(), tempStart.getDate());
+
   // ---- BILLABLE (master account) ----
   const masterCreds = getMasterAccountCredentials('commercial')
   const billableClient = new CostExplorerClient({ credentials: masterCreds, region });
@@ -117,7 +124,7 @@ async function getOverview(accountId: string) {
   const monitoringCreds = await assumeChildAccountRole('commercial', monitoringAccountId);
   const proformaClient = new CostExplorerClient({ credentials: monitoringCreds, region });
 
-  const [billableMtd, billableDaily, proformaMtd, proformaDaily] = await Promise.all([
+  const [billableMtd, billableLast14Days, proformaMtd, proformaLast14Days] = await Promise.all([
     fetchCostData(billableClient, {
       TimePeriod: { Start: startOfMonth, End: tomorrow },
       Granularity: "MONTHLY",
@@ -130,7 +137,7 @@ async function getOverview(accountId: string) {
       },
     }),
     fetchCostData(billableClient, {
-      TimePeriod: { Start: startOfMonth, End: tomorrow },
+      TimePeriod: { Start: dailyStart, End: dailyEnd },
       Granularity: "DAILY",
       Metrics: ["BlendedCost"],
       Filter: {
@@ -152,7 +159,7 @@ async function getOverview(accountId: string) {
       },
     }),
     fetchCostData(proformaClient, {
-      TimePeriod: { Start: startOfMonth, End: tomorrow },
+      TimePeriod: { Start: dailyStart, End: dailyEnd },
       Granularity: "DAILY",
       Metrics: ["BlendedCost"],
       Filter: {
@@ -167,8 +174,8 @@ async function getOverview(accountId: string) {
   return {
     billableMonthToDateTotal: sumResults(billableMtd),
     proformaMonthToDateTotal: sumResults(proformaMtd),
-    billableDaily: mapDaily(billableDaily),
-    proformaDaily: mapDaily(proformaDaily),
+    billableLast14Days: mapDaily(billableLast14Days),
+    proformaLast14Days: mapDaily(proformaLast14Days),
   };
 }
 
