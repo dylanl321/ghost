@@ -1,10 +1,10 @@
 <template>
-  <div class="space-y-6 p-6 max-w-[1600px] mx-auto">
+  <div class="space-y-6 p-6">
     <UCard>
       <template #header>
-        <div class="p-2">
-          <h1 class="text-3xl font-bold mb-2 text-gray-900 dark:text-white">Welcome, {{ user?.claims?.given_name }}</h1>
-          <p class="text-sm text-gray-500 dark:text-gray-400">
+        <div>
+          <h1 class="text-2xl font-bold mb-1">Welcome, {{ user?.claims?.given_name }}</h1>
+          <p class="text-sm text-gray-400">
             Organization Cloud Dashboard
           </p>
         </div>
@@ -12,74 +12,77 @@
     </UCard>
 
     <!-- Metric Displays -->
-    <div class="grid grid-cols-4 gap-6">
+    <div class="grid grid-cols-4 gap-4">
 
       <!-- Month to Date -->
-      <UCard class="p-4">
-        <div class="flex justify-between items-start mb-3">
-          <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Month to Date Spend</p>
+      <UCard class="p-2">
+        <div class="flex justify-between">
+          <p class="text-sm font-medium text-gray-400">Month to Date Cost</p>
           <UTooltip v-if="monthToDateTrend !== 0" text="Comparison to same days last month">
-            <div :class="`flex gap-1 items-center ${monthToDateTrend > 0 ? 'text-red-500' : 'text-emerald-500'}`">
+            <div :class="`flex gap-1 items-center ${monthToDateTrend > 0 ? 'text-red-500' : 'text-green-500'}`">
               <UIcon
                 :name="`${monthToDateTrend > 0 ? 'i-heroicons-arrow-trending-up' : 'i-heroicons-arrow-trending-down'}`"
-                class="w-4 h-4" />
-              <p class="text-xs font-semibold">{{ formatNumber(monthToDateTrend, 1) }}%</p>
+                class="w-5 h-5" />
+              <p>{{ formatNumber(monthToDateTrend, 1) }}%</p>
             </div>
           </UTooltip>
         </div>
 
-        <p class="text-2xl font-bold text-gray-900 dark:text-white">
-          {{ formatCurrency(overviewThisMonth?.costs.budgetAnalysis.actualSpend || 0, 0) }}
+        <p class="text-lg font-semibold">
+          {{ formatCurrency(mtdTotal, 0) }}
         </p>
       </UCard>
 
       <!-- Projected Spend -->
-      <UCard class="p-4">
-        <div class="flex justify-between items-start mb-3">
-          <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Projected Spend</p>
-          <UTooltip v-if="projectedSpendTrend !== 0" text="Comparison to previous month spend">
+      <UCard class="p-2">
+        <div class="flex justify-between">
+          <UTooltip text="MTDcostSoFar + (14DailyAvgExcludingFirstOfMonth * RemainingDays)">
+            <p class="text-sm font-medium text-gray-400">Forecasted Cost</p>
+          </UTooltip>
+          <UTooltip v-if="projectedSpend !== 0 && projectedSpendTrend !== 0" text="Comparison to previous month spend">
             <div
-              :class="`flex gap-1 items-center ${projectedSpendTrend > 0 ? 'text-red-500' : 'text-emerald-500'}`">
+              :class="`flex gap-1 items-center ${projectedSpendTrend > 0 ? 'text-red-500' : 'text-green-500'}`">
               <UIcon
                 :name="`${projectedSpendTrend > 0 ? 'i-heroicons-arrow-trending-up' : 'i-heroicons-arrow-trending-down'}`"
-                class="w-4 h-4" />
-              <p class="text-xs font-semibold">{{ formatNumber(projectedSpendTrend, 1) }}%</p>
+                class="w-5 h-5" />
+              <p>{{ formatNumber(projectedSpendTrend, 1) }}%</p>
             </div>
           </UTooltip>
         </div>
 
-        <p class="text-2xl font-bold text-gray-900 dark:text-white">
-          {{ formatCurrency(overviewThisMonth?.costs.budgetAnalysis.projectedSpend || 0, 0) }}
+        <p v-if="projectedSpend !== 0" class="text-lg font-semibold">
+          {{ formatCurrency(projectedSpend, 0) }}
         </p>
+        <p v-else class="text-lg font-semibold">Not enough data</p>
       </UCard>
 
       <!-- Previous Month -->
-      <UCard class="p-4">
-        <p class="text-sm font-medium text-gray-600 dark:text-gray-400 mb-3">Previous Month</p>
-        <p class="text-2xl font-bold text-gray-900 dark:text-white">
-          {{ formatCurrency(overviewLastMonth?.costs.budgetAnalysis.actualSpend || 0, 0) }}
+      <UCard class="p-2">
+        <p class="text-sm font-medium text-gray-400">Previous Month</p>
+        <p class="text-lg font-semibold">
+          {{ formatCurrency(previousMonthSpend, 0) }}
         </p>
       </UCard>
 
       <!-- Active Accounts -->
-      <UCard class="p-4">
-        <p class="text-sm font-medium text-gray-600 dark:text-gray-400 mb-3">Active Accounts</p>
-        <p class="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-          {{ overviewThisMonth?.summary.activeAccounts || 0 }}
+      <UCard class="p-2">
+        <p class="text-sm font-medium text-gray-400">Active Accounts</p>
+        <p class="text-lg font-semibold">
+          {{ activeAccounts }}
         </p>
       </UCard>
     </div>
 
-    <div class="grid grid-cols-3 gap-6 auto-rows-fr">
+    <div class="grid grid-cols-3 gap-4 auto-rows-fr">
       <UserEnclaves :loading="loading" class="col-span-2" />
 
       <!-- Account insights (tall) -->
-      <AccountInsights :top-accounts="overviewThisMonth?.costs.topAccounts || []" :loading="loading"
+      <AccountInsights :top-accounts="topAccounts" :loading="loading"
         class="col-span-1 row-span-2" />
-
+      
       <!-- Organization cost trends -->
       <CostTrendChart title="Organization Cost Trends"
-        :time-series="overviewThisMonth?.costs.timeSeries.slice(-14) || []" :loading="loading" class="col-span-2" />
+        :time-series-billable="last14DaysSpend" :loading="loading" class="col-span-2" />
 
       <!-- Resource usage under cost trends -->
       <!-- <ResourceUsage class="col-span-2" /> -->
@@ -93,116 +96,71 @@
 <script setup lang="ts">
 
 const { user } = useOidcAuth()
-const userGroupStore = useUserGroupStore()
+// const userGroupStore = useUserGroupStore()
 const enclaveStore = useEnclaveStore()
 
 interface OverviewResponse {
-  summary: Summary;
-  costs: Costs;
+  success: boolean;
+  data: DashboardData;
 }
-interface Summary {
-  totalAccounts: number,
-  activeAccounts: number,
-  totalCostCurrent: number,
-  totalCostPrevious: number,
-  costGrowthPercent: number,
-  lastUpdated: string, // ex. "2025-09-17T23:40:58.560Z"
-}
-interface Costs {
-  timeSeries: TimeSeries[];
+interface DashboardData {
+  activeAccounts: number;
+  suspendedAccounts: number;
+  monthToDateTotal: number;
+  forecastedTotal: number;
+  previousMonthTotal: number;
+  previousMonthToDateTotal: number;
   topAccounts: TopAccount[];
-  topServices: TopService[];
-  budgetAnalysis: BudgetAnalysis;
-}
-interface TimeSeries {
-  date: string;
-  cost: number;
+  rolling14Daily: DailyCost[];
 }
 interface TopAccount {
   accountId: string;
-  name: string;
   cost: number;
-  trend: string;
-  percentOfTotal: number;
 }
-interface TopService {
-  service: string;
+interface DailyCost {
+  date: string; // e.g. "2025-09-26"
   cost: number;
-  accountsUsing: number;
-  trend: string;
-}
-interface BudgetAnalysis {
-  analysisPeriod: string;
-  totalBudget: number;
-  actualSpend: number;
-  projectedSpend: number;
-  budgetUtilization: number;
-  projectedUtilization: number;
-  riskLevel: string;
-  periodStatus: string;
-  daysElapsed: number;
-  daysRemaining: number;
 }
 
-const overviewThisMonth = ref<OverviewResponse | null>(null)
-const overviewLastMonth = ref<OverviewResponse | null>(null)
+const orgOverview = ref<OverviewResponse | null>(null)
 const loading = ref(true)
 
-const costSameDaysLastMonth = computed(() => {
-  if (!overviewLastMonth.value) return 0
-
-  const today = new Date(overviewThisMonth.value?.summary.lastUpdated || new Date())
-  const dayOfMonth = today.getUTCDate()
-
-  // Filter last month's time series up to same day #
-  const lastMonthSeries = overviewLastMonth.value.costs.timeSeries
-    .filter(entry => {
-      const d = new Date(entry.date)
-      return d.getUTCDate() <= dayOfMonth
-    })
-
-  return lastMonthSeries.reduce((sum, entry) => sum + entry.cost, 0)
-})
-
-const actualSpendThisMonth = computed<number>(() => overviewThisMonth.value?.costs.budgetAnalysis.actualSpend || 0)
-const actualSpendLastMonth = computed<number>(() => overviewLastMonth.value?.costs.budgetAnalysis.actualSpend || 0)
-const projectedSpend = computed<number>(() => overviewThisMonth.value?.costs.budgetAnalysis.projectedSpend || 0)
+const mtdTotal = computed(() => orgOverview.value?.data.monthToDateTotal || 0)
+const previousMTDTotal = computed(() => orgOverview.value?.data.previousMonthToDateTotal || 0)
+const projectedSpend = computed(() => orgOverview.value?.data.forecastedTotal || 0)
+const previousMonthSpend = computed(() => orgOverview.value?.data.previousMonthTotal || 0)
+const activeAccounts = computed(() => orgOverview.value?.data.activeAccounts || 0)
+const last14DaysSpend = computed(() => orgOverview.value?.data.rolling14Daily || [])
 
 const monthToDateTrend = computed(() => {
-  if (!costSameDaysLastMonth.value) return 0
-  return ((actualSpendThisMonth.value - costSameDaysLastMonth.value) / costSameDaysLastMonth.value) * 100
+  if (!previousMTDTotal.value) return 0
+  return ((mtdTotal.value - previousMTDTotal.value) / previousMTDTotal.value) * 100
 })
 
 const projectedSpendTrend = computed(() => {
-  if (!actualSpendLastMonth.value) return 0
-  return ((projectedSpend.value - actualSpendLastMonth.value) / actualSpendLastMonth.value) * 100
+  if (!previousMonthSpend.value) return 0
+  return ((projectedSpend.value - previousMonthSpend.value) / previousMonthSpend.value) * 100
 })
 
-// const clear = () => {
-//   enclaveStore.clear()
-//   userGroupStore.clear()
-// }
+const topAccounts = computed(() => {
+  if (!orgOverview.value) return []
+  return orgOverview.value?.data.topAccounts.map((acct) => ({
+    accountId: acct.accountId,
+    cost: acct.cost,
+    name: enclaveStore.enclaves[acct.accountId]?.projectName || "Unknown Name",
+    percentOfTotal: (acct.cost / mtdTotal.value) * 100
+  }))
+})
 
 onMounted(async () => {
   try {
-    const response = await $fetch('/api/organization/overview')
-    overviewThisMonth.value = response.data
-
-    const response2 = await $fetch('/api/organization/overview?analysisTimeframe=previous-month')
-    overviewLastMonth.value = response2.data
+    const response = await fetch('/api/organization/overview-simplified')
+    orgOverview.value = await response.json();
   } catch (err) {
     console.error('Failed to fetch overview:', err)
   } finally {
     loading.value = false
   }
-
-  console.log('my enclaves', userGroupStore.myEnclaves)
-  console.log('this month', overviewThisMonth.value)
-  console.log('last month', overviewLastMonth.value)
-
-  const groupMembers = useGroupMembers()
-  console.log('group members', await groupMembers.fetchEnclaveUsers('906234452947', '926182194632', user.value?.accessToken || ''))
-
 })
 
 </script>

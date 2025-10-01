@@ -156,7 +156,7 @@ onMounted(async () => {
       </div>
 
       <!-- Error actions -->
-      <div v-if="error" class="mt-6 space-y-3">
+      <!-- <div v-if="error" class="mt-6 space-y-3">
         <UButton
           @click="() => window.location.reload()"
           color="red"
@@ -173,7 +173,7 @@ onMounted(async () => {
         >
           Go to Dashboard
         </UButton>
-      </div>
+      </div> -->
     </div>
   </div>
 </template>
