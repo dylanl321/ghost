@@ -169,10 +169,16 @@ const quickStartArticles = [
     icon: 'i-heroicons-currency-dollar'
   },
   {
-    id: 'org-chart-guide',
-    title: 'Organization Chart',
-    description: 'Visualize your AWS account hierarchy and organizational structure',
-    icon: 'i-heroicons-squares-2x2'
+    id: 'swagger-ui-guide',
+    title: 'Swagger UI for API Testing',
+    description: 'Interactive API testing and exploration without writing code',
+    icon: 'i-heroicons-code-bracket'
+  },
+  {
+    id: 'api-keys-guide',
+    title: 'API Keys & Programmatic Access',
+    description: 'Request and use API keys for scripts, automation, and integrations',
+    icon: 'i-heroicons-key'
   }
 ]
 
