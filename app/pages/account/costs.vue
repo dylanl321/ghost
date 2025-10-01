@@ -570,8 +570,37 @@
 
         <!-- Main Content -->
         <div v-else class="space-y-6">
-          <!-- Early Month Notice -->
-          <div v-if="isEarlyInMonth" class="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
+          <!-- First Day of Month Notice -->
+          <div v-if="isFirstDayOfMonth" class="bg-amber-900/20 border border-amber-700 rounded-lg p-4">
+            <div class="flex items-start gap-3">
+              <Icon name="i-heroicons-calendar" class="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
+              <div class="flex-1">
+                <div class="flex items-start justify-between">
+                  <div class="flex-1">
+                    <h4 class="text-sm font-medium text-amber-300">Showing Previous Month's Data</h4>
+                    <p class="text-xs text-amber-400 mt-1">
+                      It's the first day of {{ new Date().toLocaleDateString('en-US', { month: 'long' }) }}, and AWS Cost Explorer doesn't have data available yet for today.
+                      Currently displaying the last day of {{ new Date(new Date().setMonth(new Date().getMonth() - 1)).toLocaleDateString('en-US', { month: 'long' }) }} instead.
+                      Check back tomorrow for {{ new Date().toLocaleDateString('en-US', { month: 'long' }) }} data.
+                    </p>
+                  </div>
+                  <UButton
+                    color="amber"
+                    variant="soft"
+                    size="sm"
+                    class="ml-4 flex-shrink-0"
+                    @click="switchToLastMonth"
+                  >
+                    <Icon name="i-heroicons-arrow-left" class="w-4 h-4 mr-1" />
+                    View Full Last Month
+                  </UButton>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Early Month Notice (days 2-5) -->
+          <div v-else-if="isEarlyInMonth" class="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
             <div class="flex items-start gap-3">
               <Icon name="i-heroicons-calendar" class="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
               <div class="flex-1">
@@ -579,13 +608,14 @@
                   <div class="flex-1">
                     <h4 class="text-sm font-medium text-blue-300">Limited Data Available for Current Month</h4>
                     <p class="text-xs text-blue-400 mt-1">
-                      It's early in the month, so cost data for {{ new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) }} is still accumulating. 
+                      It's early in the month, so cost data for {{ new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) }} is still accumulating.
+                      Data shown is through yesterday due to AWS Cost Explorer's 24-hour processing lag.
                       For a complete view of recent spending patterns, you may want to review last month's data.
                     </p>
                   </div>
-                  <UButton 
-                    color="blue" 
-                    variant="soft" 
+                  <UButton
+                    color="blue"
+                    variant="soft"
                     size="sm"
                     class="ml-4 flex-shrink-0"
                     @click="switchToLastMonth"
@@ -855,6 +885,12 @@ const isEarlyInMonth = computed(() => {
   const dayOfMonth = today.getDate()
   // Consider days 1-5 as early in the month
   return dayOfMonth <= 5 && selectedTimeframe.value === 'thisMonth'
+})
+
+// Detect if we're on the first day (special case: showing previous month's data)
+const isFirstDayOfMonth = computed(() => {
+  const today = new Date()
+  return today.getDate() === 1 && selectedTimeframe.value === 'thisMonth'
 })
 
 // Helper to switch to last month view

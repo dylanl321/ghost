@@ -120,8 +120,11 @@ export async function getUserSession(event: H3Event): Promise<{
     })
 
     // Extract user and token information from session
-    // nuxt-oidc-auth might store user in different ways
-    const user = sessionData.user || session.user
+    // nuxt-oidc-auth might store user in different ways:
+    // - session.user: Direct user object
+    // - session.claims: OIDC claims containing user info
+    // - session.data.user or session.data.claims: Wrapped in data property
+    const user = sessionData.user || session.user || sessionData.claims || session.claims
     const accessToken = sessionData.accessToken || sessionData.access_token || session.accessToken || session.access_token
 
     // Be more lenient: Accept if we have an access token (proves authentication)
@@ -133,10 +136,18 @@ export async function getUserSession(event: H3Event): Promise<{
         return null
       }
       // If no access token, require user to have SOME identifying info
-      const hasIdentity = user.email || user.id || user.sub || user.preferred_username || user.name
+      // Check common OIDC claim fields
+      const hasIdentity = user.email || user.id || user.sub || user.preferred_username || user.name || user.upn || user.unique_name
       if (!hasIdentity) {
         console.log('User object exists but has no identifying information')
         console.log('User keys:', Object.keys(user))
+        console.log('User sample values:', {
+          email: user.email,
+          id: user.id,
+          sub: user.sub,
+          name: user.name,
+          preferred_username: user.preferred_username
+        })
         return null
       }
     }
@@ -144,8 +155,10 @@ export async function getUserSession(event: H3Event): Promise<{
     console.log('Session validated successfully with:', {
       hasToken: !!accessToken,
       hasUser: !!user,
-      userEmail: user?.email,
-      userId: user?.id || user?.sub
+      userEmail: user?.email || user?.preferred_username || user?.upn || user?.unique_name,
+      userId: user?.id || user?.sub || user?.oid,
+      userName: user?.name || user?.displayName,
+      claimsKeys: user ? Object.keys(user) : []
     })
 
     return {

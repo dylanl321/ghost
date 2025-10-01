@@ -34,35 +34,32 @@ export function getRelativeDateRange(period: RelativePeriod): CostExplorerDateRa
     case 'last7days': {
       const start = new Date(today);
       start.setDate(today.getDate() - 7);
-      // End date is exclusive, so use tomorrow to include today
+      // end = today (exclusive), shows 7 days of data through yesterday
       const end = new Date(today);
-      end.setDate(today.getDate() + 1);
       return {
         startDate: formatDate(start),
         endDate: formatDate(end),
         description: 'Last 7 days'
       };
     }
-    
+
     case 'last30days': {
       const start = new Date(today);
       start.setDate(today.getDate() - 30);
-      // End date is exclusive, so use tomorrow to include today
+      // end = today (exclusive), shows 30 days of data through yesterday
       const end = new Date(today);
-      end.setDate(today.getDate() + 1);
       return {
         startDate: formatDate(start),
         endDate: formatDate(end),
         description: 'Last 30 days'
       };
     }
-    
+
     case 'last90days': {
       const start = new Date(today);
       start.setDate(today.getDate() - 90);
-      // End date is exclusive, so use tomorrow to include today
+      // end = today (exclusive), shows 90 days of data through yesterday
       const end = new Date(today);
-      end.setDate(today.getDate() + 1);
       return {
         startDate: formatDate(start),
         endDate: formatDate(end),
@@ -72,9 +69,22 @@ export function getRelativeDateRange(period: RelativePeriod): CostExplorerDateRa
     
     case 'thisMonth': {
       const start = new Date(now.getFullYear(), now.getMonth(), 1);
-      // For current month, use tomorrow as end date (exclusive) to include today
       const end = new Date(today);
-      end.setDate(today.getDate() + 1);
+
+      // AWS Cost Explorer constraints:
+      // 1. End date is exclusive
+      // 2. End date cannot be in the future
+      // 3. Start must be < end (not equal)
+
+      if (start.getTime() === today.getTime()) {
+        // First day of month: start == end is invalid
+        // Push start back by 1 day to show yesterday's data
+        start.setDate(start.getDate() - 1);
+        // end stays as today (Oct 1), returns Sept 30 data only
+      }
+      // For all cases: end = today (exclusive)
+      // This means we show data through yesterday, which matches AWS data lag
+
       return {
         startDate: formatDate(start),
         endDate: formatDate(end),
@@ -96,9 +106,14 @@ export function getRelativeDateRange(period: RelativePeriod): CostExplorerDateRa
     case 'thisQuarter': {
       const quarterStart = Math.floor(now.getMonth() / 3) * 3;
       const start = new Date(now.getFullYear(), quarterStart, 1);
-      // For current quarter, use tomorrow as end date (exclusive) to include today
       const end = new Date(today);
-      end.setDate(today.getDate() + 1);
+
+      if (start.getTime() === today.getTime()) {
+        // First day of quarter: push start back by 1 day
+        start.setDate(start.getDate() - 1);
+      }
+      // end = today (exclusive), shows data through yesterday
+
       return {
         startDate: formatDate(start),
         endDate: formatDate(end),
@@ -124,9 +139,14 @@ export function getRelativeDateRange(period: RelativePeriod): CostExplorerDateRa
     
     case 'thisYear': {
       const start = new Date(now.getFullYear(), 0, 1);
-      // For current year, use tomorrow as end date (exclusive) to include today
       const end = new Date(today);
-      end.setDate(today.getDate() + 1);
+
+      if (start.getTime() === today.getTime()) {
+        // First day of year (Jan 1): push start back by 1 day
+        start.setDate(start.getDate() - 1);
+      }
+      // end = today (exclusive), shows data through yesterday
+
       return {
         startDate: formatDate(start),
         endDate: formatDate(end),
@@ -148,9 +168,14 @@ export function getRelativeDateRange(period: RelativePeriod): CostExplorerDateRa
     case 'ytd': {
       // Year-to-date: From January 1st to today
       const start = new Date(now.getFullYear(), 0, 1);
-      // End date is exclusive, so use tomorrow to include today
       const end = new Date(today);
-      end.setDate(today.getDate() + 1);
+
+      if (start.getTime() === today.getTime()) {
+        // First day of year (Jan 1): push start back by 1 day
+        start.setDate(start.getDate() - 1);
+      }
+      // end = today (exclusive), shows data through yesterday
+
       return {
         startDate: formatDate(start),
         endDate: formatDate(end),

@@ -290,20 +290,36 @@ export async function getMonthOverMonthChange(
   environment: 'commercial' | 'govcloud' = 'commercial'
 ) {
   const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
   const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
   const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0)
-  
+
   const formatDate = (date: Date) => date.toISOString().split('T')[0]
-  
-  // Get current month costs
-  const currentMonthCosts = await getCostAndUsage({
-    startDate: formatDate(currentMonthStart),
-    endDate: formatDate(now),
-    granularity: 'MONTHLY',
-    metrics: ['UnblendedCost']
-  }, environment)
-  
+
+  // Determine current month date range
+  // AWS requires start < end, so on first day of month, return 0 for current month
+  let currentMonthStartDate = currentMonthStart
+  let currentMonthEndDate = today
+  let skipCurrentMonth = false
+
+  if (currentMonthStart.getTime() === today.getTime()) {
+    // First day of month: no meaningful data for current month yet
+    skipCurrentMonth = true
+  }
+
+  // Get current month costs (or return 0 if it's day 1)
+  let currentTotal = 0
+  if (!skipCurrentMonth) {
+    const currentMonthCosts = await getCostAndUsage({
+      startDate: formatDate(currentMonthStartDate),
+      endDate: formatDate(currentMonthEndDate),
+      granularity: 'MONTHLY',
+      metrics: ['UnblendedCost']
+    }, environment)
+    currentTotal = parseFloat(currentMonthCosts.total?.['UnblendedCost']?.Amount || '0')
+  }
+
   // Get last month costs
   const lastMonthCosts = await getCostAndUsage({
     startDate: formatDate(lastMonthStart),
@@ -311,8 +327,7 @@ export async function getMonthOverMonthChange(
     granularity: 'MONTHLY',
     metrics: ['UnblendedCost']
   }, environment)
-  
-  const currentTotal = parseFloat(currentMonthCosts.total?.['UnblendedCost']?.Amount || '0')
+
   const lastTotal = parseFloat(lastMonthCosts.total?.['UnblendedCost']?.Amount || '0')
   
   const change = currentTotal - lastTotal
