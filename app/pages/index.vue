@@ -29,7 +29,7 @@
         </div>
 
         <p class="text-lg font-semibold">
-          {{ formatCurrency(overviewThisMonth?.costs.budgetAnalysis.actualSpend || 0, 0) }}
+          {{ formatCurrency(mtdTotal, 0) }}
         </p>
       </UCard>
 
@@ -49,7 +49,7 @@
         </div>
 
         <p class="text-lg font-semibold">
-          {{ formatCurrency(overviewThisMonth?.costs.budgetAnalysis.projectedSpend || 0, 0) }}
+          {{ formatCurrency(projectedSpend, 0) }}
         </p>
       </UCard>
 
@@ -57,7 +57,7 @@
       <UCard class="p-2">
         <p class="text-sm font-medium text-gray-400">Previous Month</p>
         <p class="text-lg font-semibold">
-          {{ formatCurrency(overviewLastMonth?.costs.budgetAnalysis.actualSpend || 0, 0) }}
+          {{ formatCurrency(previousMonthSpend, 0) }}
         </p>
       </UCard>
 
@@ -65,7 +65,7 @@
       <UCard class="p-2">
         <p class="text-sm font-medium text-gray-400">Active Accounts</p>
         <p class="text-lg font-semibold">
-          {{ overviewThisMonth?.summary.activeAccounts || 0 }}
+          {{ activeAccounts }}
         </p>
       </UCard>
     </div>
@@ -74,12 +74,12 @@
       <UserEnclaves :loading="loading" class="col-span-2" />
 
       <!-- Account insights (tall) -->
-      <AccountInsights :top-accounts="overviewThisMonth?.costs.topAccounts || []" :loading="loading"
+      <AccountInsights :top-accounts="topAccounts" :loading="loading"
         class="col-span-1 row-span-2" />
       
       <!-- Organization cost trends -->
       <CostTrendChart title="Organization Cost Trends"
-        :time-series="overviewThisMonth?.costs.timeSeries.slice(-14) || []" :loading="loading" class="col-span-2" />
+        :time-series-billable="dailySpend" :loading="loading" class="col-span-2" />
 
       <!-- Resource usage under cost trends -->
       <!-- <ResourceUsage class="col-span-2" /> -->
@@ -93,118 +93,71 @@
 <script setup lang="ts">
 
 const { user } = useOidcAuth()
-const userGroupStore = useUserGroupStore()
+// const userGroupStore = useUserGroupStore()
 const enclaveStore = useEnclaveStore()
 
 interface OverviewResponse {
-  summary: Summary;
-  costs: Costs;
+  success: boolean;
+  data: DashboardData;
 }
-interface Summary {
-  totalAccounts: number,
-  activeAccounts: number,
-  totalCostCurrent: number,
-  totalCostPrevious: number,
-  costGrowthPercent: number,
-  lastUpdated: string, // ex. "2025-09-17T23:40:58.560Z"
-}
-interface Costs {
-  timeSeries: TimeSeries[];
+interface DashboardData {
+  activeAccounts: number;
+  suspendedAccounts: number;
+  monthToDateTotal: number;
+  forecastedTotal: number;
+  previousMonthTotal: number;
+  previousMonthToDateTotal: number;
   topAccounts: TopAccount[];
-  topServices: TopService[];
-  budgetAnalysis: BudgetAnalysis;
-}
-interface TimeSeries {
-  date: string;
-  cost: number;
+  daily: DailyCost[];
 }
 interface TopAccount {
   accountId: string;
-  name: string;
   cost: number;
-  trend: string;
-  percentOfTotal: number;
 }
-interface TopService {
-  service: string;
+interface DailyCost {
+  date: string; // e.g. "2025-09-26"
   cost: number;
-  accountsUsing: number;
-  trend: string;
-}
-interface BudgetAnalysis {
-  analysisPeriod: string;
-  totalBudget: number;
-  actualSpend: number;
-  projectedSpend: number;
-  budgetUtilization: number;
-  projectedUtilization: number;
-  riskLevel: string;
-  periodStatus: string;
-  daysElapsed: number;
-  daysRemaining: number;
 }
 
-const overviewThisMonth = ref<OverviewResponse | null>(null)
-const overviewLastMonth = ref<OverviewResponse | null>(null)
+const orgOverview = ref<OverviewResponse | null>(null)
 const loading = ref(true)
 
-const costSameDaysLastMonth = computed(() => {
-  if (!overviewLastMonth.value) return 0
-
-  const today = new Date(overviewThisMonth.value?.summary.lastUpdated || new Date())
-  const dayOfMonth = today.getUTCDate()
-
-  // Filter last month's time series up to same day #
-  const lastMonthSeries = overviewLastMonth.value.costs.timeSeries
-    .filter(entry => {
-      const d = new Date(entry.date)
-      return d.getUTCDate() <= dayOfMonth
-    })
-
-  return lastMonthSeries.reduce((sum, entry) => sum + entry.cost, 0)
-})
-
-const actualSpendThisMonth = computed<number>(() => overviewThisMonth.value?.costs.budgetAnalysis.actualSpend || 0)
-const actualSpendLastMonth = computed<number>(() => overviewLastMonth.value?.costs.budgetAnalysis.actualSpend || 0)
-const projectedSpend = computed<number>(() => overviewThisMonth.value?.costs.budgetAnalysis.projectedSpend || 0)
+const mtdTotal = computed(() => orgOverview.value?.data.monthToDateTotal || 0)
+const previousMTDTotal = computed(() => orgOverview.value?.data.previousMonthToDateTotal || 0)
+const projectedSpend = computed(() => orgOverview.value?.data.forecastedTotal || 0)
+const previousMonthSpend = computed(() => orgOverview.value?.data.previousMonthTotal || 0)
+const activeAccounts = computed(() => orgOverview.value?.data.activeAccounts || 0)
+const dailySpend = computed(() => orgOverview.value?.data.daily.slice(-15, -1) || [])
 
 const monthToDateTrend = computed(() => {
-  if (!costSameDaysLastMonth.value) return 0
-  return ((actualSpendThisMonth.value - costSameDaysLastMonth.value) / costSameDaysLastMonth.value) * 100
+  if (!previousMTDTotal.value) return 0
+  return ((mtdTotal.value - previousMTDTotal.value) / previousMTDTotal.value) * 100
 })
 
 const projectedSpendTrend = computed(() => {
-  if (!actualSpendLastMonth.value) return 0
-  return ((projectedSpend.value - actualSpendLastMonth.value) / actualSpendLastMonth.value) * 100
+  if (!previousMonthSpend.value) return 0
+  return ((projectedSpend.value - previousMonthSpend.value) / previousMonthSpend.value) * 100
 })
 
-// const clear = () => {
-//   enclaveStore.clear()
-//   userGroupStore.clear()
-// }
+const topAccounts = computed(() => {
+  if (!orgOverview.value) return []
+  return orgOverview.value?.data.topAccounts.map((acct) => ({
+    accountId: acct.accountId,
+    cost: acct.cost,
+    name: enclaveStore.enclaves[acct.accountId]?.projectName || "Unknown Name",
+    percentOfTotal: (acct.cost / mtdTotal.value) * 100
+  }))
+})
 
 onMounted(async () => {
   try {
-    const response = await fetch('/api/organization/overview')
-    const json = await response.json();
-    overviewThisMonth.value = json.data
-
-    const response2 = await fetch('/api/organization/overview?analysisTimeframe=previous-month')
-    const json2 = await response2.json();
-    overviewLastMonth.value = json2.data
+    const response = await fetch('/api/organization/overview-simplified')
+    orgOverview.value = await response.json();
   } catch (err) {
     console.error('Failed to fetch overview:', err)
   } finally {
     loading.value = false
   }
-
-  console.log('my enclaves', userGroupStore.myEnclaves)
-  console.log('this month', overviewThisMonth.value)
-  console.log('last month', overviewLastMonth.value)
-
-  const groupMembers = useGroupMembers()
-  console.log('group members', await groupMembers.fetchEnclaveUsers('906234452947', '926182194632', user.value?.accessToken || ''))
-
 })
 
 </script>

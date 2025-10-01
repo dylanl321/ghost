@@ -45,7 +45,6 @@ const props = defineProps<{
     accountId: string
     name: string
     cost: number
-    trend: string
     percentOfTotal: number
   }[]
 }>()

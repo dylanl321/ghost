@@ -11,7 +11,7 @@ const monitoringAccountId = '253821132832'
 // Register OpenAPI documentation
 registerEndpoint('/api/accounts/dashboard-simplified', 'GET', {
   summary: 'Get simplified account dashboard',
-  description: 'Data to populate GHOST account page for specific account',
+  description: 'Data to populate GHOST account page for specific account. This includes both "Billable" and "Pro Forma" numbers.',
   tags: ['Accounts'],
   parameters: [
     {
@@ -42,7 +42,7 @@ registerEndpoint('/api/accounts/dashboard-simplified', 'GET', {
                       type: 'object',
                       properties: {
                         date: { type: 'string' },
-                        amount: { type: 'number' },
+                        cost: { type: 'number' },
                       }
                     } 
                   },
@@ -52,7 +52,7 @@ registerEndpoint('/api/accounts/dashboard-simplified', 'GET', {
                       type: 'object',
                       properties: {
                         date: { type: 'string' },
-                        amount: { type: 'number' },
+                        cost: { type: 'number' },
                       }
                     } 
                   },
@@ -76,8 +76,8 @@ async function fetchCostData(client: CostExplorerClient, params: GetCostAndUsage
 function sumResults(response: GetCostAndUsageCommandOutput) {
   if (!response.ResultsByTime) return 0;
   return response.ResultsByTime.reduce((sum, r) => {
-    const amount = parseFloat(r.Total?.BlendedCost.Amount || "0");
-    return sum + amount;
+    const cost = parseFloat(r.Total?.BlendedCost.Amount || "0");
+    return sum + cost;
   }, 0);
 }
 
@@ -85,7 +85,7 @@ function mapDaily(response: GetCostAndUsageCommandOutput) {
   if (!response.ResultsByTime) return [];
   return response.ResultsByTime.map((r) => ({
     date: r.TimePeriod?.Start,
-    amount: parseFloat(r.Total?.BlendedCost.Amount || "0"),
+    cost: parseFloat(r.Total?.BlendedCost.Amount || "0"),
   }));
 }
 

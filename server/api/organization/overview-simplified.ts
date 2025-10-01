@@ -12,7 +12,7 @@ const region = 'us-east-1'
 // Register OpenAPI documentation
 registerEndpoint('/api/organization/overview-simplified', 'GET', {
   summary: 'Get simplified organization overview',
-  description: 'Data to populate the GHOST home page',
+  description: 'Data to populate the GHOST home page. These are the "Billable" numbers that you would see in the master account cost explorer.',
   tags: ['Dashboard'],
   responses: {
     200: {
@@ -38,7 +38,7 @@ registerEndpoint('/api/organization/overview-simplified', 'GET', {
                       type: 'object',
                       properties: {
                         accountId: { type: 'string' },
-                        amount: { type: 'number' },
+                        cost: { type: 'number' },
                         // name: { type: 'string' },
                       }
                     } 
@@ -49,7 +49,7 @@ registerEndpoint('/api/organization/overview-simplified', 'GET', {
                       type: 'object',
                       properties: {
                         date: { type: 'string' },
-                        amount: { type: 'number' },
+                        cost: { type: 'number' },
                       }
                     } 
                   },
@@ -92,7 +92,7 @@ async function fetchCostData(client: CostExplorerClient, params: GetCostAndUsage
 function dailySeries(results: any) {
   return results.ResultsByTime.map((r: any) => ({
     date: r.TimePeriod.Start,
-    amount: parseFloat(r.Total.UnblendedCost.Amount),
+    cost: parseFloat(r.Total.UnblendedCost.Amount),
   }));
 }
 
@@ -179,9 +179,9 @@ async function getOverview() {
 
   const lastDay = new Date(year, month + 1, 0).getDate();
   const forecastBaseDays = daily.slice(1); // skip day 1
-  const forecastAvg = forecastBaseDays.reduce((sum: number, d: any) => sum + d.amount, 0) / forecastBaseDays.length;
+  const forecastAvg = forecastBaseDays.reduce((sum: number, d: any) => sum + d.cost, 0) / forecastBaseDays.length;
   // This calculation is equivalent to `sum of current days + (average of current days * remaining days)`
-  const forecast = daily[0].amount + forecastAvg * (lastDay - 1);
+  const forecast = daily[0].cost + forecastAvg * (lastDay - 1);
 
   const prevTotal = parseFloat(prevMonthly.ResultsByTime?.[0].Total?.UnblendedCost.Amount || "0");
 
@@ -189,9 +189,9 @@ async function getOverview() {
 
   const topAccounts = byAccountMonthly.ResultsByTime?.[0].Groups?.map((g: any) => ({
     accountId: g.Keys[0],
-    amount: parseFloat(g.Metrics.UnblendedCost.Amount),
+    cost: parseFloat(g.Metrics.UnblendedCost.Amount),
   }))
-    .sort((a, b) => b.amount - a.amount)
+    .sort((a, b) => b.cost - a.cost)
     .slice(0, 10);
 
   return {

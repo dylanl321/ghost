@@ -16,22 +16,30 @@
       <!-- Summary metrics -->
       <div class="border-t border-gray-700 mt-4 pt-4 flex">
         <div class="w-1/3 text-left">
-          <div class="text-gray-400 text-sm">Total Cost</div>
-          <div class="text-white text-lg font-semibold">
-            ${{ totalCost.toLocaleString(undefined, { maximumFractionDigits: 2 }) }}
+          <div class="text-gray-400 text-sm">Total Cost (Last 14 Days)</div>
+          <div :class="`${totalCostProforma ? 'text-blue-400/80' : 'text-white'} text-lg font-semibold`">
+            {{ formatCurrency(totalCostBillable, 0) }}
+          </div>
+          <div v-if="totalCostProforma" class="text-green-400/80 text-lg font-semibold">
+            {{ formatCurrency(totalCostProforma, 0) }}
           </div>
         </div>
         <div class="w-1/3 text-left">
           <div class="text-gray-400 text-sm">Average Daily</div>
-          <div class="text-white text-lg font-semibold">
-            ${{ avgCost.toLocaleString(undefined, { maximumFractionDigits: 2 }) }}
+          <div :class="`${totalCostProforma ? 'text-blue-400/80' : 'text-white'} text-lg font-semibold`">
+            {{ formatCurrency(avgCostBillable, 0) }}
+          </div>
+          <div v-if="avgCostProforma" class="text-green-400/80 text-lg font-semibold">
+            {{ formatCurrency(avgCostProforma, 0) }}
           </div>
         </div>
         <div class="w-1/3 text-left">
           <div class="text-gray-400 text-sm">Peak Cost</div>
-          <div class="text-white text-lg font-semibold">
-            ${{ peakCost.toLocaleString(undefined, { maximumFractionDigits: 2 }) }}
+          <div :class="`${totalCostProforma ? 'text-blue-400/80' : 'text-white'} text-lg font-semibold`">
+            {{ formatCurrency(peakCostBillable, 0) }}
           </div>
+          <div v-if="peakCostProforma" class="text-green-400/80 text-lg font-semibold">
+            {{ formatCurrency(peakCostProforma, 0) }}</div>
         </div>
       </div>
     </div>
@@ -47,6 +55,9 @@ import {
   GridComponent,
   MarkAreaComponent
 } from 'echarts/components'
+
+const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 // Register required ECharts modules
 echarts.use([
@@ -65,24 +76,30 @@ interface TimePoint {
 const props = defineProps<{
   title: string
   loading: boolean
-  timeSeries: TimePoint[]
+  timeSeriesBillable: TimePoint[] // Billable
+  timeSeriesProforma?: TimePoint[] // Pro Forma
 }>()
 
 const dateRangeLabel = computed(() => {
-  if (!props.timeSeries?.length) return 'NA'
-  const start = new Date(props.timeSeries[0]!.date)
-  const end = new Date(props.timeSeries[props.timeSeries.length - 1]!.date)
+  if (!props.timeSeriesBillable?.length) return 'NA'
+  const start = new Date(props.timeSeriesBillable[0]!.date)
+  const end = new Date(props.timeSeriesBillable[props.timeSeriesBillable.length - 1]!.date)
   const fmt = (d: Date) =>
-    `${d.getMonth() + 1}/${d.getDate()}`
+    `${d.getUTCMonth() + 1}/${d.getUTCDate()}`
   return `${fmt(start)} - ${fmt(end)}`
 })
 
-const costs = computed(() => props.timeSeries.map(d => d.cost))
+const costsBillable = computed(() => props.timeSeriesBillable.map(d => d.cost))
+const costsProforma = computed(() => props.timeSeriesProforma?.map(d => d.cost) || [])
 
 // Summary metrics
-const totalCost = computed(() => costs.value.reduce((sum, c) => sum + c, 0))
-const avgCost = computed(() => costs.value.length ? totalCost.value / costs.value.length : 0)
-const peakCost = computed(() => Math.max(...costs.value, 0))
+const totalCostBillable = computed(() => costsBillable.value.reduce((sum, c) => sum + c, 0))
+const avgCostBillable = computed(() => costsBillable.value.length ? totalCostBillable.value / costsBillable.value.length : 0)
+const peakCostBillable = computed(() => Math.max(...costsBillable.value, 0))
+
+const totalCostProforma = computed(() => costsProforma.value.reduce((sum, c) => sum + c, 0))
+const avgCostProforma = computed(() => costsProforma.value.length ? totalCostProforma.value / costsProforma.value.length : 0)
+const peakCostProforma = computed(() => Math.max(...costsProforma.value, 0))
 
 // Create weekend mark areas
 function getWeekendMarkAreas(data: TimePoint[]) {
@@ -109,18 +126,35 @@ function getWeekendMarkAreas(data: TimePoint[]) {
 }
 
 const chartOptions = computed(() => {
-  const dates = props.timeSeries.map(d => d.date)
-  const costs = props.timeSeries.map(d => d.cost)
+  const dates = props.timeSeriesBillable.map(d => d.date)
 
   return {
     tooltip: {
       trigger: 'axis',
       formatter: (params: any) => {
-        const p = params[0]
-        const date = new Date(p.axisValue)
-        const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: '2-digit' })
-        return `${dateStr}<br/>Cost: $${p.data.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        const date = new Date(params[0].axisValue)
+        const dateLabel = `${months[date.getUTCMonth()]} ${date.getUTCDate()}`
+
+        const billable = params.find((p: any) => p.seriesName === "Billable Cost")
+        const proforma = params.find((p: any) => p.seriesName === "Proforma Cost")
+
+        let result = `${dateLabel}<br/>`
+        if (billable) {
+          result += `Billable: ${formatCurrency(billable.data, 2)}<br/>`
+        }
+        if (proforma) {
+          result += `Pro Forma: ${formatCurrency(proforma.data, 2)}<br/>`
+        }
+        if (proforma && billable) {
+          result += `Δ: ${formatCurrency(proforma.data - billable.data, 2)}`
+        }
+
+        return result.trim()
       }
+    },
+    legend: {
+      bottom: 0,
+      textStyle: { color: '#707c8f' }, // gray-300 text
     },
     xAxis: {
       type: 'category',
@@ -128,9 +162,9 @@ const chartOptions = computed(() => {
       axisLabel: {
         formatter: (value: string) => {
           const d = new Date(value)
-          const month = d.getMonth() + 1
-          const day = d.getDate()
-          const weekday = d.toLocaleDateString('en-US', { weekday: 'short' }) // Mon, Tue, ...
+          const month = d.getUTCMonth() + 1
+          const day = d.getUTCDate()
+          const weekday = weekdays[d.getUTCDay()] // Mon, Tue, ...
           return `${month}-${day}\n${weekday}`
         }
       }
@@ -142,13 +176,13 @@ const chartOptions = computed(() => {
       },
       splitLine: { lineStyle: { color: '#4b5563' } }
     },
-    grid: { left: '2%', right: '2%', bottom: '10%', top: '5%' },
+    grid: { left: '2%', right: '2%', bottom: '25%', top: '5%' },
     series: [
       {
-        name: 'Cost',
+        name: 'Billable Cost',
         type: 'line',
         smooth: true,
-        data: costs,
+        data: costsBillable.value,
         lineStyle: { color: '#3b82f6' },
         itemStyle: { color: '#3b82f6' },
         areaStyle: { color: 'rgba(59, 130, 246, 0.1)' },
@@ -161,8 +195,17 @@ const chartOptions = computed(() => {
             backgroundColor: 'transparent',
             borderColor: 'transparent'
           },
-          data: getWeekendMarkAreas(props.timeSeries)
+          data: getWeekendMarkAreas(props.timeSeriesBillable)
         }
+      },
+      props.timeSeriesProforma && {
+        name: 'Proforma Cost',
+        type: 'line',
+        smooth: true,
+        data: costsProforma.value,
+        lineStyle: { color: '#10b981' },
+        itemStyle: { color: '#10b981' },
+        areaStyle: { color: 'rgba(16, 185, 129, 0.1)' }
       }
     ]
   }
