@@ -9,7 +9,8 @@ export interface UserBadge {
 
 export function useSimpleBadges() {
   const { fetchUserMemberOf } = useGraphApi()
-  
+  const { getUserEnclaveRoles } = useEnclaveRoles()
+
   /**
    * Get badges for a single user
    */
@@ -22,17 +23,26 @@ export function useSimpleBadges() {
       // Fetch user's group memberships
       const groups = await fetchUserMemberOf(accessToken, userPrincipalName)
       const groupNames = groups.map((g: any) => g.displayName || '')
-      
+
+      // Check enclave roles from the store (no API call needed)
+      const enclaveRoleInfo = getUserEnclaveRoles(userPrincipalName)
+
       // Build badge context
       const context: BadgeContext = {
         userPrincipalName,
         groups: groupNames,
+        enclaveRoles: {
+          isPrimaryAdmin: enclaveRoleInfo.isPrimaryAdmin,
+          isDelegateAdmin: enclaveRoleInfo.isDelegateAdmin,
+          isCostManager: enclaveRoleInfo.isCostManager,
+          totalAdminAccounts: enclaveRoleInfo.totalAdminAccounts
+        },
         ...additionalContext
       }
-      
+
       // Evaluate badges using the simple configuration
       const badgeDefinitions = evaluateUserBadges(context)
-      
+
       // Convert to UserBadge format
       return badgeDefinitions.map(badge => ({
         title: badge.title,
@@ -100,14 +110,25 @@ export function useSimpleBadges() {
     groupNames: string[],
     additionalContext?: Partial<BadgeContext>
   ): UserBadge[] => {
+    const userPrincipalName = additionalContext?.userPrincipalName || ''
+
+    // Check enclave roles from the store (no API call needed)
+    const enclaveRoleInfo = userPrincipalName ? getUserEnclaveRoles(userPrincipalName) : null
+
     const context: BadgeContext = {
-      userPrincipalName: additionalContext?.userPrincipalName || '',
+      userPrincipalName,
       groups: groupNames,
+      enclaveRoles: enclaveRoleInfo ? {
+        isPrimaryAdmin: enclaveRoleInfo.isPrimaryAdmin,
+        isDelegateAdmin: enclaveRoleInfo.isDelegateAdmin,
+        isCostManager: enclaveRoleInfo.isCostManager,
+        totalAdminAccounts: enclaveRoleInfo.totalAdminAccounts
+      } : undefined,
       ...additionalContext
     }
-    
+
     const badgeDefinitions = evaluateUserBadges(context)
-    
+
     // Convert to UserBadge format
     return badgeDefinitions.map(badge => ({
       title: badge.title,

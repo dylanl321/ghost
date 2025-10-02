@@ -111,6 +111,8 @@ const { fetchUserProfile, fetchUserMemberOf, fetchGroupDetails } = useGraphApi()
 const { sortRolesByPriority } = useAwsGroupParser()
 const awsAccountsStore = useAwsAccountsStore()
 const { fetchMembersForGroup, getUserTags } = useGroupMembers()
+const enclaveStore = useEnclaveStore()
+const { usernameMatches } = useEnclaveRoles()
 
 // Initialize loading state properly
 const isInitializing = ref(true)
@@ -246,9 +248,9 @@ const loadUserAccess = async () => {
       }
       
       const accountData = awsAccountsStore.findAccountById(group.accountId!)
-      
+
       // Use commercial ID for grouping (primary identifier)
-      const primaryAccountId = accountData?.standardAccountId || group.accountId!
+      const primaryAccountId = accountData?.awsStandardAccountID || accountData?.accountId || group.accountId!
       
       // Enhanced account name resolution
       let accountName: string
@@ -259,12 +261,12 @@ const loadUserAccess = async () => {
         accountName = accountMap.get(primaryAccountId)!.accountName
       }
       
-      const isGovCloud = accountData?.govCloudAccountId ? group.accountId! === accountData.govCloudAccountId : false
-      const isCommercial = accountData?.standardAccountId ? group.accountId! === accountData.standardAccountId : true
+      const isGovCloud = accountData?.awsGovCloudAccountID ? group.accountId! === accountData.awsGovCloudAccountID : false
+      const isCommercial = accountData?.awsStandardAccountID ? group.accountId! === accountData.awsStandardAccountID : true
       const isActive = !!accountData
-      const hasMultiEnvironment = accountData?.govCloudAccountId && 
-                                  accountData.standardAccountId &&
-                                  accountData.govCloudAccountId !== accountData.standardAccountId
+      const hasMultiEnvironment = accountData?.awsGovCloudAccountID &&
+                                  accountData.awsStandardAccountID &&
+                                  accountData.awsGovCloudAccountID !== accountData.awsStandardAccountID
 
       if (!accountMap.has(primaryAccountId)) {
         accountMap.set(primaryAccountId, {
@@ -594,6 +596,45 @@ const getRoleTooltip = (role: string) => {
     'support': 'Access to AWS support features'
   }
   return tooltips[role.toLowerCase()] || `Role: ${role}`
+}
+
+// Get roles grouped by environment for an account
+const getRolesByEnvironment = (account: AccountAccess) => {
+  const rolesByEnv: Record<string, Set<string>> = {
+    commercial: new Set(),
+    govcloud: new Set()
+  }
+
+  // Group roles by environment from groupDetails
+  account.groupDetails.forEach(detail => {
+    rolesByEnv[detail.environment].add(detail.role)
+  })
+
+  return {
+    commercial: Array.from(rolesByEnv.commercial),
+    govcloud: Array.from(rolesByEnv.govcloud),
+    both: account.roles.filter(role =>
+      rolesByEnv.commercial.has(role) && rolesByEnv.govcloud.has(role)
+    )
+  }
+}
+
+// Check if user has admin or cost manager role for a specific account
+const getAccountAdminRoles = (accountId: string) => {
+  const enclave = enclaveStore.enclaves[accountId]
+  if (!enclave) return { isPrimaryAdmin: false, isDelegateAdmin: false, isCostManager: false }
+
+  return {
+    isPrimaryAdmin: enclave.primaryAccountAdminUsername
+      ? usernameMatches(enclave.primaryAccountAdminUsername, props.userPrincipalName)
+      : false,
+    isDelegateAdmin: enclave.delegateAccountAdminUsername
+      ? usernameMatches(enclave.delegateAccountAdminUsername, props.userPrincipalName)
+      : false,
+    isCostManager: enclave.costManagerUsername
+      ? usernameMatches(enclave.costManagerUsername, props.userPrincipalName)
+      : false
+  }
 }
 
 // Watch for user changes
@@ -1059,11 +1100,68 @@ defineExpose({
               </td>
               <td class="px-4 py-3">
                 <div class="flex flex-wrap gap-1">
-                  <span v-for="role in account.roles.slice(0, 3)" :key="role"
-                        class="px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded">
-                    {{ role }}
-                  </span>
-                  <span v-if="account.roles.length > 3" 
+                  <!-- Admin & Cost Manager Badges -->
+                  <UBadge
+                    v-if="getAccountAdminRoles(account.accountId).isPrimaryAdmin"
+                    color="orange"
+                    variant="solid"
+                    size="xs"
+                    class="font-medium"
+                  >
+                    <UIcon name="i-heroicons-shield-check" class="w-3 h-3 mr-0.5" />
+                    Primary Admin
+                  </UBadge>
+                  <UBadge
+                    v-if="getAccountAdminRoles(account.accountId).isDelegateAdmin"
+                    color="yellow"
+                    variant="solid"
+                    size="xs"
+                    class="font-medium"
+                  >
+                    <UIcon name="i-heroicons-user-group" class="w-3 h-3 mr-0.5" />
+                    Delegate Admin
+                  </UBadge>
+                  <UBadge
+                    v-if="getAccountAdminRoles(account.accountId).isCostManager"
+                    color="green"
+                    variant="solid"
+                    size="xs"
+                    class="font-medium"
+                  >
+                    <UIcon name="i-heroicons-currency-dollar" class="w-3 h-3 mr-0.5" />
+                    Cost Manager
+                  </UBadge>
+
+                  <!-- IAM Roles with environment context -->
+                  <template v-if="account.hasMultiEnvironment">
+                    <!-- Show roles grouped by environment -->
+                    <span v-for="role in getRolesByEnvironment(account).both.slice(0, 2)" :key="`both-${role}`"
+                          class="px-2 py-1 text-xs bg-purple-900/30 text-purple-300 rounded"
+                          :title="`${role} (Both environments)`">
+                      {{ role }}
+                    </span>
+                    <span v-for="role in getRolesByEnvironment(account).commercial.filter(r => !getRolesByEnvironment(account).both.includes(r)).slice(0, 1)" :key="`comm-${role}`"
+                          class="px-2 py-1 text-xs bg-blue-900/30 text-blue-300 rounded flex items-center gap-0.5"
+                          :title="`${role} (Commercial only)`">
+                      <div class="w-1.5 h-1.5 bg-blue-400 rounded-full"></div>
+                      {{ role }}
+                    </span>
+                    <span v-for="role in getRolesByEnvironment(account).govcloud.filter(r => !getRolesByEnvironment(account).both.includes(r)).slice(0, 1)" :key="`gov-${role}`"
+                          class="px-2 py-1 text-xs bg-orange-900/30 text-orange-300 rounded flex items-center gap-0.5"
+                          :title="`${role} (GovCloud only)`">
+                      <div class="w-1.5 h-1.5 bg-orange-400 rounded-full"></div>
+                      {{ role }}
+                    </span>
+                  </template>
+                  <template v-else>
+                    <!-- Single environment - show normally -->
+                    <span v-for="role in account.roles.slice(0, 3)" :key="role"
+                          class="px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded">
+                      {{ role }}
+                    </span>
+                  </template>
+
+                  <span v-if="account.roles.length > 3"
                         class="px-2 py-1 text-xs bg-gray-600 text-gray-400 rounded">
                     +{{ account.roles.length - 3 }}
                   </span>
@@ -1149,16 +1247,109 @@ defineExpose({
             </div>
           </div>
 
-          <!-- Primary Roles (max 4) -->
+          <!-- Admin & Cost Manager Badges -->
+          <div
+            v-if="getAccountAdminRoles(account.accountId).isPrimaryAdmin ||
+                  getAccountAdminRoles(account.accountId).isDelegateAdmin ||
+                  getAccountAdminRoles(account.accountId).isCostManager"
+            class="flex flex-wrap gap-1.5"
+          >
+            <UBadge
+              v-if="getAccountAdminRoles(account.accountId).isPrimaryAdmin"
+              color="orange"
+              variant="solid"
+              size="xs"
+              class="font-medium"
+            >
+              <UIcon name="i-heroicons-shield-check" class="w-3 h-3 mr-0.5" />
+              Primary Admin
+            </UBadge>
+            <UBadge
+              v-if="getAccountAdminRoles(account.accountId).isDelegateAdmin"
+              color="yellow"
+              variant="solid"
+              size="xs"
+              class="font-medium"
+            >
+              <UIcon name="i-heroicons-user-group" class="w-3 h-3 mr-0.5" />
+              Delegate Admin
+            </UBadge>
+            <UBadge
+              v-if="getAccountAdminRoles(account.accountId).isCostManager"
+              color="green"
+              variant="solid"
+              size="xs"
+              class="font-medium"
+            >
+              <UIcon name="i-heroicons-currency-dollar" class="w-3 h-3 mr-0.5" />
+              Cost Manager
+            </UBadge>
+          </div>
+
+          <!-- Primary Roles grouped by environment -->
           <div class="space-y-2">
-            <div class="flex flex-wrap gap-1">
+            <div v-if="account.hasMultiEnvironment" class="space-y-2">
+              <!-- Both environments - show roles with indicators -->
+              <div v-if="getRolesByEnvironment(account).both.length > 0">
+                <div class="text-xs text-gray-500 mb-1">Both Environments</div>
+                <div class="flex flex-wrap gap-1">
+                  <span v-for="role in getRolesByEnvironment(account).both.slice(0, 3)" :key="`both-${role}`"
+                        class="px-2 py-1 text-xs bg-purple-900/30 text-purple-300 rounded cursor-pointer hover:bg-purple-900/50 transition-colors flex items-center gap-1"
+                        @click.stop="showGroupDetails(account, role)"
+                        :title="`${getRoleTooltip(role)} (Both environments)`">
+                    {{ role }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- Commercial only -->
+              <div v-if="getRolesByEnvironment(account).commercial.filter(r => !getRolesByEnvironment(account).both.includes(r)).length > 0">
+                <div class="text-xs text-gray-500 mb-1 flex items-center gap-1">
+                  <div class="w-2 h-2 bg-blue-400 rounded-full"></div>
+                  Commercial Only
+                </div>
+                <div class="flex flex-wrap gap-1">
+                  <span v-for="role in getRolesByEnvironment(account).commercial.filter(r => !getRolesByEnvironment(account).both.includes(r)).slice(0, 2)" :key="`comm-${role}`"
+                        class="px-2 py-1 text-xs bg-blue-900/30 text-blue-300 rounded cursor-pointer hover:bg-blue-900/50 transition-colors"
+                        @click.stop="showGroupDetails(account, role)"
+                        :title="`${getRoleTooltip(role)} (Commercial only)`">
+                    {{ role }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- GovCloud only -->
+              <div v-if="getRolesByEnvironment(account).govcloud.filter(r => !getRolesByEnvironment(account).both.includes(r)).length > 0">
+                <div class="text-xs text-gray-500 mb-1 flex items-center gap-1">
+                  <div class="w-2 h-2 bg-orange-400 rounded-full"></div>
+                  GovCloud Only
+                </div>
+                <div class="flex flex-wrap gap-1">
+                  <span v-for="role in getRolesByEnvironment(account).govcloud.filter(r => !getRolesByEnvironment(account).both.includes(r)).slice(0, 2)" :key="`gov-${role}`"
+                        class="px-2 py-1 text-xs bg-orange-900/30 text-orange-300 rounded cursor-pointer hover:bg-orange-900/50 transition-colors"
+                        @click.stop="showGroupDetails(account, role)"
+                        :title="`${getRoleTooltip(role)} (GovCloud only)`">
+                    {{ role }}
+                  </span>
+                </div>
+              </div>
+
+              <button v-if="account.roles.length > 7"
+                      @click.stop="showGroupDetails(account)"
+                      class="px-2 py-1 text-xs bg-gray-700 text-gray-400 rounded hover:bg-gray-600 transition-colors">
+                +{{ account.roles.length - 7 }} more roles
+              </button>
+            </div>
+
+            <!-- Single environment - show normally -->
+            <div v-else class="flex flex-wrap gap-1">
               <span v-for="role in account.roles.slice(0, 4)" :key="role"
                     class="px-2 py-1 text-xs bg-gray-800 text-gray-300 rounded cursor-pointer hover:bg-gray-700 transition-colors"
                     @click.stop="showGroupDetails(account, role)"
                     :title="getRoleTooltip(role)">
                 {{ role }}
               </span>
-              <button v-if="account.roles.length > 4" 
+              <button v-if="account.roles.length > 4"
                       @click.stop="showGroupDetails(account)"
                       class="px-2 py-1 text-xs bg-gray-700 text-gray-400 rounded hover:bg-gray-600 transition-colors">
                 +{{ account.roles.length - 4 }} more
