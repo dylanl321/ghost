@@ -156,6 +156,7 @@ resource "aws_secretsmanager_secret" "secret" {
 
 # Attach autoscaling target to ECS service
 resource "aws_appautoscaling_target" "ecs" {
+  provider = aws.target_deployment_account
   max_capacity       = 3
   min_capacity       = 1
   resource_id        = "service/${aws_ecs_cluster.main.name}/${aws_ecs_service.main.name}"
@@ -165,6 +166,7 @@ resource "aws_appautoscaling_target" "ecs" {
 
 # Autoscaling policy based on average CPU
 resource "aws_appautoscaling_policy" "cpu_scale" {
+  provider = aws.target_deployment_account
   name               = "cpu-target-scaling"
   policy_type        = "TargetTrackingScaling"
   resource_id        = aws_appautoscaling_target.ecs.resource_id
