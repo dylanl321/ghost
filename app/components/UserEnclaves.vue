@@ -4,7 +4,7 @@
       <div class="text-lg font-semibold">My Enclaves</div>
     </template>
 
-    <div class="max-h-[33vh] overflow-y-auto">
+    <div class="max-h-[40vh] overflow-y-auto">
       <UTable :rows="tableData" :columns="columns" :ui="{ thead: 'bg-gray-800 text-xs' }">
         <template #enclave-data="{ row }">
           <div>

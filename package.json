@@ -7,10 +7,11 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "postinstall": "nuxt prepare",
+    "start": "nuxt start"
   },
   "dependencies": {
-    "@asteasolutions/zod-to-openapi": "^8.1.0",
+    "@asteasolutions/zod-to-openapi": "^7.3.4",
     "@aws-sdk/client-athena": "^3.693.0",
     "@aws-sdk/client-bedrock-runtime": "^3.888.0",
     "@aws-sdk/client-budgets": "^3.693.0",
@@ -41,8 +42,6 @@
     "@aws-sdk/lib-dynamodb": "^3.758.0",
     "@aws-sdk/s3-request-presigner": "^3.592.0",
     "@aws-sdk/util-dynamodb": "^3.693.0",
-    "@langchain/community": "^0.3.55",
-    "@langchain/core": "^0.3.75",
     "@nuxt/eslint": "^1.8.0",
     "@nuxt/ui": "^2.22.1",
     "@pinia/nuxt": "^0.11.2",
@@ -65,7 +64,6 @@
     "vue": "^3.5.18",
     "vue-echarts": "^8.0.0-beta.1",
     "vue-router": "^4.5.1",
-    "xlsx": "^0.18.5",
-    "zod": "^4.0.17"
+    "xlsx": "^0.18.5"
   }
 }

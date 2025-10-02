@@ -1,0 +1,167 @@
+image: "374673712317.dkr.ecr.us-gov-west-1.amazonaws.com/cicd:latest" # Set default image
+
+default:
+  tags: # Set default runner tag for jobs
+    - govcloud-production
+
+stages:
+  - test
+  - terraform_plan
+  - terraform_apply
+  - get_credentials
+  - docker_build
+
+workflow:
+  rules:
+    - if: $CI_COMMIT_REF_NAME == 'master'
+      variables:
+        ENV: prod # This determines which TF state file the changes get written to, and is also used to tag the image
+        APP_NAME: "ghost-dashboard"
+        DOMAIN_NAME: "ghost-aws.gd-ms.com"
+    - if: $CI_COMMIT_REF_NAME == 'dev'
+      variables:
+        ENV: dev
+        APP_NAME: "ghost-dashboard-dev"
+        DOMAIN_NAME: "ghost-aws-dev.gd-ms.com"
+    - if: $CI_COMMIT_REF_NAME != "dev" && $CI_COMMIT_REF_NAME != "master"
+      variables:
+        ENV: test
+        APP_NAME: "ghost-dashboard-test"
+
+variables:
+  AWS_ACCOUNT_ID: "461760157232" # Make sure this matches the account id Terraform variable
+  AWS_REGION: "us-gov-west-1"
+#   ECR_REPO: "ghost-dashboard" # ECR repository name. Ensure this matches what is in the ECR Terraform setup
+  TF_WORKING_DIR: "terraform" # Directory where the Terraform lives
+
+.assume_role:
+  before_script:
+    - CREDS=$(aws sts assume-role --role-arn "arn:aws-us-gov:iam::$AWS_ACCOUNT_ID:role/GDMSOrganizationsRole" --role-session-name "aws_action_center_prod")
+    - export AWS_ACCESS_KEY_ID=$(echo $CREDS | jq -r '.Credentials.AccessKeyId')
+    - export AWS_SECRET_ACCESS_KEY=$(echo $CREDS | jq -r '.Credentials.SecretAccessKey')
+    - export AWS_SESSION_TOKEN=$(echo $CREDS | jq -r '.Credentials.SessionToken')
+
+# Test jobs for feature branches - these run automatically for any branch except master/dev
+test_docker_build:
+  stage: test
+  tags:
+    - prod-docker-shared
+  image: 504885980539.dkr.ecr.us-gov-east-1.amazonaws.com/docker:24.0.5-dind
+  rules:
+    - if: $CI_COMMIT_REF_NAME != "dev" && $CI_COMMIT_REF_NAME != "master"
+  script:
+    - echo "Testing Docker build for feature branch $CI_COMMIT_REF_NAME"
+    - docker build -t $APP_NAME:$CI_COMMIT_SHA . # Build image with commit SHA tag
+    - echo "Docker build successful - image can be built"
+    - docker images | grep $APP_NAME # Show the built image
+  allow_failure: false
+
+code_quality_check:
+  stage: test
+  image: node:23-alpine
+  rules:
+    - if: $CI_COMMIT_REF_NAME != "dev" && $CI_COMMIT_REF_NAME != "master"
+  before_script:
+    - echo "Installing dependencies for code quality checks..."
+    - npm ci --prefer-offline --no-audit
+  script:
+    - echo "Running code quality checks for feature branch $CI_COMMIT_REF_NAME"
+    
+    # TypeScript type checking
+    - echo "Checking TypeScript types..."
+    - npx nuxi typecheck
+    
+    # Build test to ensure the project compiles
+    - echo "Testing application build..."
+    - NODE_OPTIONS=--max-old-space-size=8192 npm run build
+    
+    # Check for obvious code issues (basic syntax validation)
+    - echo "Validating Vue/TypeScript syntax..."
+    - npx vue-tsc --noEmit --skipLibCheck || echo "TypeScript validation completed with warnings"
+    
+    - echo "Code quality checks completed successfully"
+  cache:
+    key: 
+      files:
+        - package-lock.json
+    paths:
+      - node_modules/
+      - .nuxt/
+  artifacts:
+    expire_in: 1 hour
+    paths:
+      - .output/
+    when: on_success
+  allow_failure: false
+
+# Note that retrieving the ECR credentials has to be a separate stage from building and pushing the docker image.
+# This is because we have to use a govcloud-production runner to assume a role in our target account and get the ECR credentials (since it has master account permissions)
+#   but we need a prod-docker-shared runner to run the docker commands.
+# To resolve this we get the credentials in this job, save them as an artifact, and use that credentials artifact in the build job.
+get_ecr_credentials:
+  stage: get_credentials
+  extends: .assume_role
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "dev" || $CI_COMMIT_REF_NAME == "master"
+  script:
+    - touch ecr-credentials # Create an empty file
+    - echo "ECR_PASS=$(aws ecr get-login-password --region $AWS_REGION)" > ecr-credentials # save credentials to file
+  artifacts:
+    expire_in: 5 min
+    paths:
+      - ecr-credentials # Exporting as artifact so the build job can consume it
+
+build:
+  stage: docker_build
+  tags:
+    - prod-docker-shared
+  image: 504885980539.dkr.ecr.us-gov-east-1.amazonaws.com/docker:24.0.5-dind
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "dev" || $CI_COMMIT_REF_NAME == "master"
+      when: manual
+  script:
+    # Authenticate Docker to ECR
+    - source ecr-credentials
+    - echo $ECR_PASS | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+
+    # Build and push docker image to ECR
+    # - docker build -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$ENV . # Tag image with ENV
+    # - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$ENV
+    - docker build -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$APP_NAME:$ENV . # Tag image with ENV
+    - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$APP_NAME:$ENV
+  allow_failure: true
+
+plan:
+  stage: terraform_plan
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "dev" || $CI_COMMIT_REF_NAME == "master"
+      when: manual
+  script:
+    - cd $TF_WORKING_DIR
+    - terraform init "-backend-config=./conf/$ENV.conf"
+    - terraform validate
+    - terraform plan -out=tfplan -var "env=$ENV" -var "app_name=$APP_NAME" -var "app_domain=$DOMAIN_NAME"
+  artifacts:
+    paths:
+      - $TF_WORKING_DIR/tfplan # Terraform plan file
+
+apply:
+  stage: terraform_apply
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "dev" || $CI_COMMIT_REF_NAME == "master"
+      when: manual
+  script:
+    - cd $TF_WORKING_DIR
+    - terraform init "-backend-config=./conf/$ENV.conf"
+    - terraform apply tfplan
+
+Refresh Service:
+  stage: docker_build
+  extends: .assume_role
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "dev" || $CI_COMMIT_REF_NAME == "master"
+      when: manual
+  script:
+    - aws sts get-caller-identity
+    # - aws ecs update-service --cluster $ECR_REPO --service $ECR_REPO-service --force-new-deployment
+    - aws ecs update-service --cluster $APP_NAME --service $APP_NAME-service --force-new-deployment

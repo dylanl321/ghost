@@ -27,11 +27,11 @@
     </div>
 
     <div id="chat-container" :class="visible">
-      <div id="chat-box" :class="isFullScreen" ref="chatBoxRef">
+      <div id="chat-box" ref="chatBoxRef" :class="isFullScreen">
         <div v-for="(msg, index) in messages" :key="index" :class="`message ${msg.sender}`">
-          <div class="markdown-container" v-html="formatMessage(msg.text)"></div>
+          <div class="markdown-container" v-html="formatMessage(msg.text)"/>
           <div v-if="msg.links && msg.links.length > 0">
-            <br />
+            <br >
             <div v-for="(link, linkIndex) in msg.links" :key="linkIndex" class="link-box">
               <span class="bullet">•</span>
               <a :href="`https://docs.engcollab.gd-ms.us/${link}`" target="_blank" class="external-link">
@@ -48,28 +48,28 @@
             :key="index"
             class="example-question"
             :tabindex="index + 1"
-            @click="handleExampleClick(question)"
             :style="{ animationDelay: `${0.1 * index}s` }"
+            @click="handleExampleClick(question)"
           >
             {{ question }}
           </div>
         </div>
 
         <div v-if="isLoading" class="typing">
-          <div class="typing-dot"></div>
-          <div class="typing-dot"></div>
-          <div class="typing-dot"></div>
+          <div class="typing-dot"/>
+          <div class="typing-dot"/>
+          <div class="typing-dot"/>
         </div>
       </div>
 
-      <form @submit.prevent="handleSubmit" class="input-form">
+      <form class="input-form" @submit.prevent="handleSubmit">
         <input
+          ref="inputRef"
           v-model="inputValue"
           type="text"
           :disabled="isLoading"
           placeholder="Type your message"
-          ref="inputRef"
-        />
+        >
         <button type="submit" :disabled="isLoading">
           <UIcon name="i-heroicons-paper-airplane" class="w-6 h-6" />
         </button>
@@ -223,11 +223,11 @@ watch(isLoading, (newLoading) => {
 
 <style scoped>
 #chatwrapper {
-  @apply fixed bottom-4 right-4 w-96 max-w-md bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg z-50;
+  @apply fixed bottom-0 right-4 w-96 max-w-md bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg z-50;
 }
 
 #chatwrapper.fullscreen {
-  @apply fixed inset-4 w-auto max-w-none;
+  @apply fixed left-4 top-4 w-auto max-w-none;
 }
 
 .chat-header-rect {
@@ -268,7 +268,7 @@ watch(isLoading, (newLoading) => {
 }
 
 .fullscreen #chat-container.open {
-  @apply h-full;
+  @apply h-[90%];
 }
 
 #chat-box {

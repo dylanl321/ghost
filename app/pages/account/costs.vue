@@ -11,8 +11,8 @@
             variant="ghost" 
             color="gray"
             icon="i-heroicons-arrow-path"
-            @click="refreshData"
             :loading="isLoading"
+            @click="refreshData"
           />
         </div>
 
@@ -27,7 +27,7 @@
             <template #trailing>
               <div class="flex items-center gap-1">
                 <!-- Search scope indicator -->
-                <UTooltip :text="searchScopeTooltip" v-if="searchTerm">
+                <UTooltip v-if="searchTerm" :text="searchScopeTooltip">
                   <UBadge 
                     :color="searchScope === 'global' ? 'blue' : 'gray'" 
                     size="xs" 
@@ -64,8 +64,8 @@
               Found {{ searchResults.tabSpecific }} results in {{ getTabLabel(activeTab) }}
               <button 
                 v-if="searchResults.total > searchResults.tabSpecific"
-                @click="searchScope = 'global'" 
-                class="ml-1 text-blue-400 hover:text-blue-300 underline"
+                class="ml-1 text-blue-400 hover:text-blue-300 underline" 
+                @click="searchScope = 'global'"
               >
                 ({{ searchResults.total - searchResults.tabSpecific }} more in other tabs)
               </button>
@@ -74,7 +74,7 @@
           
           <!-- No results message -->
           <div v-if="searchTerm && searchResults.total === 0" class="mt-2 text-xs text-gray-400">
-            No results found. <button @click="searchScope = 'global'" class="text-blue-400 hover:text-blue-300 underline">Search all tabs?</button>
+            No results found. <button class="text-blue-400 hover:text-blue-300 underline" @click="searchScope = 'global'">Search all tabs?</button>
           </div>
         </div>
 
@@ -84,12 +84,12 @@
             <button
               v-for="tab in tabs"
               :key="tab.id"
-              @click="activeTab = tab.id"
               class="flex-1 px-3 py-2 text-xs font-medium border-b-2 transition-colors flex items-center justify-center gap-1"
               :class="{
                 'text-blue-400 border-blue-400 bg-blue-900/20': activeTab === tab.id,
                 'text-gray-400 border-transparent hover:text-gray-300 hover:border-gray-600': activeTab !== tab.id
               }"
+              @click="activeTab = tab.id"
             >
               <Icon :name="tab.icon" class="w-3 h-3" />
               <span class="leading-none">{{ tab.label }}</span>
@@ -124,12 +124,12 @@
                         <button
                           v-for="option in sortOptions"
                           :key="option.value"
-                          @click="accountSortBy = option.value as 'cost' | 'name' | 'budget' | 'utilization'; close()"
                           class="w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-gray-700 transition-colors"
                           :class="{ 
                             'bg-blue-900/50 text-blue-300': accountSortBy === option.value,
                             'text-gray-300': accountSortBy !== option.value
                           }"
+                          @click="accountSortBy = option.value as 'cost' | 'name' | 'budget' | 'utilization'; close()"
                         >
                           <Icon :name="option.icon" class="w-3 h-3" />
                           <span>{{ option.label }}</span>
@@ -167,7 +167,7 @@
                     :checked="selectedAccounts.includes(getAccountKey(account))"
                     class="w-3 h-3 text-blue-600 bg-gray-700 border-gray-600 rounded"
                     @click.stop
-                  />
+                  >
                   <div class="min-w-0 flex-1">
                     <div class="text-gray-200 font-medium truncate">
                       {{ account.accountName || account.projectName || account.name || 'Unnamed Account' }}
@@ -245,8 +245,8 @@
                         variant="ghost"
                         color="blue"
                         icon="i-heroicons-check-circle"
-                        @click.stop="selectLOBGroup(lob)"
                         class="px-2"
+                        @click.stop="selectLOBGroup(lob)"
                       />
                     </UTooltip>
                   </div>
@@ -267,7 +267,7 @@
                           :checked="selectedAccounts.includes(getAccountKey(account))"
                           class="w-3 h-3 text-blue-600 bg-gray-700 border-gray-600 rounded"
                           @click.stop
-                        />
+                        >
                         <div class="min-w-0 flex-1">
                           <div class="text-gray-200 truncate">
                             {{ account.accountName || account.projectName || 'Unnamed Account' }}
@@ -348,8 +348,8 @@
                         variant="ghost"
                         color="blue"
                         icon="i-heroicons-check-circle"
-                        @click.stop="selectDepartmentGroup(dept)"
                         class="px-2"
+                        @click.stop="selectDepartmentGroup(dept)"
                       />
                     </UTooltip>
                   </div>
@@ -370,7 +370,7 @@
                           :checked="selectedAccounts.includes(getAccountKey(account))"
                           class="w-3 h-3 text-blue-600 bg-gray-700 border-gray-600 rounded"
                           @click.stop
-                        />
+                        >
                         <div class="min-w-0 flex-1">
                           <div class="text-gray-200 truncate">
                             {{ account.accountName || account.projectName || 'Unnamed Account' }}
@@ -452,8 +452,8 @@
                         variant="ghost"
                         color="blue"
                         icon="i-heroicons-check-circle"
-                        @click.stop="selectSmartGroup(group)"
                         class="px-2"
+                        @click.stop="selectSmartGroup(group)"
                       />
                     </UTooltip>
                   </div>
@@ -474,7 +474,7 @@
                           :checked="selectedAccounts.includes(getAccountKey(account))"
                           class="w-3 h-3 text-blue-600 bg-gray-700 border-gray-600 rounded"
                           @click.stop
-                        />
+                        >
                         <div class="min-w-0 flex-1">
                           <div class="text-gray-200 truncate">
                             {{ account.accountName || account.projectName || 'Unnamed Account' }}
@@ -519,11 +519,11 @@
                 {{ selectedAccounts.length === 0 ? `Showing all ${accountsWithCosts.length} accounts` : `${selectedAccounts.length} of ${accountsWithCosts.length} selected` }}
               </span>
               <UButton 
+                v-show="selectedAccounts.length > 0" 
                 size="xs" 
-                color="gray" 
+                color="gray"
                 variant="link"
                 @click="clearSelection"
-                v-show="selectedAccounts.length > 0"
               >
                 Clear
               </UButton>
@@ -537,9 +537,9 @@
     <div class="flex-1 flex flex-col overflow-hidden min-h-0">
       <!-- Header -->
       <CostsHeader 
-        v-model:mode="dataMode as DataMode"
-        v-model:selectedTimeframe="selectedTimeframe"
-        v-model:selectedView="selectedView"
+        v-model:mode="dataMode"
+        v-model:selected-timeframe="selectedTimeframe"
+        v-model:selected-view="selectedView"
         :timeframe-options="timeframeOptions"
         :view-options="viewOptions"
         :selected-accounts="selectedAccounts"
@@ -692,8 +692,6 @@
 // COMPOSABLES AND IMPORTS
 // =============================================================================
 // useAccountCosts: Fetches raw account data from the API
-const { accounts, isLoading, error, fetchAccounts } = useAccountCosts()
-
 // Component imports for UI elements
 import CostsHeader from '~/components/costs/CostsHeader.vue'
 import CostsSummaryCards from '~/components/costs/CostsSummaryCards.vue'
@@ -710,6 +708,8 @@ import { useCostScenario } from '~/composables/useCostScenario'
 import { useChartRegistry } from '~/composables/useChartRegistry'
 import { useCostFilters } from '~/composables/useCostFilters'
 import type { DataMode } from '~/types/costs'
+
+const { accounts, isLoading, error, fetchAccounts } = useAccountCosts()
 
 // Types
 interface Account {
@@ -1241,7 +1241,7 @@ const smartGroups = computed(() => {
       }
       
       // Method 2: Base name extraction (improved)
-      let baseName = name
+      const baseName = name
         .replace(/[-_]\d+$/g, '')                    // Remove trailing numbers
         .replace(/\s*\d+$/g, '')                     // Remove trailing numbers with spaces
         .replace(/(dev|test|prod|staging|demo)$/i, '') // Remove environment suffixes
