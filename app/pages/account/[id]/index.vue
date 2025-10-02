@@ -2,9 +2,20 @@
   <div class="space-y-6 p-6">
     <!-- Account Header -->
     <UCard>
-      <div class="flex gap-2 items-center">
-        <div :class="`w-3 h-3 rounded-full ${accountStatus !== 'Decommissioned' ? 'bg-green-500' : 'bg-red-500'}`" />
-        <h1 class="font-semibold text-2xl">{{ accountName ?? "Loading..." }}</h1>
+      <div class="flex gap-2 items-center justify-between">
+        <div class="flex gap-2 items-center">
+          <div :class="`w-3 h-3 rounded-full ${accountStatus !== 'Decommissioned' ? 'bg-green-500' : 'bg-red-500'}`" />
+          <h1 class="font-semibold text-2xl">{{ accountName ?? "Loading..." }}</h1>
+        </div>
+        <UButton
+          v-if="accountId"
+          icon="i-heroicons-chart-bar"
+          color="primary"
+          variant="soft"
+          @click="navigateToCostsPage"
+        >
+          View Costs
+        </UButton>
       </div>
     </UCard>
 
@@ -12,14 +23,23 @@
       <!-- Account Details -->
       <AccountDetails v-if="accountId" :account-id="accountId" :current-spend="currentSpend" class="col-span-2" />
 
+      <!-- Budget Health -->
+      <BudgetHealthCard
+        :budget="budget"
+        :current-spend="currentSpend"
+        :forecast-data="forecastData"
+        :loading="loading"
+        class="col-span-1"
+      />
+
       <!-- Account Users -->
       <AccountUsers :users="users" :account-id="accountId" :loading="loading" class="col-span-1" />
 
+      <!-- Cost Trend Chart -->
       <CostTrendChart title="Account Cost Trends" :time-series-billable="billableTimeSeries" :time-series-proforma="proformaTimeSeries" :loading="loading" class="col-span-2" />
 
-      <!-- <ResourceUsage :columns="2" class="col-span-1" /> -->
-      <ResourceUsage :data="resourceCounts || {}" :columns="2" :loading="loading" />
-      <!-- <EC2Usage :instance-summary="instanceData?.summary || null" :loading="loading" /> -->
+      <!-- Resource Usage -->
+      <ResourceUsage :data="resourceCounts || {}" :columns="2" :loading="loading" class="col-span-1" />
     </div>
   </div>
 </template>
@@ -61,9 +81,16 @@ const users = ref<GraphUser[]>([])
 const instanceData = ref<InstanceResponse | null>(null)
 const costResponse = ref<CostResponse | null>(null)
 const resourceCounts = ref<ResourceCounts | null>(null)
+const forecastData = ref<any>(null)
 const loading = ref(true)
 
 const currentSpend = computed(() => costResponse.value?.data.billableMonthToDateTotal || 0)
+
+const budget = computed(() => {
+  const enclave = enclaveStore.enclaves[accountId.value]
+  if (!enclave?.estimatedMonthlyCharge) return 0
+  return parseFloat(enclave.estimatedMonthlyCharge.toString().replace(/[^0-9.-]/g, '') || '0')
+})
 
 const billableTimeSeries = computed(() => {
   if (!costResponse.value) return []
@@ -75,24 +102,82 @@ const proformaTimeSeries = computed(() => {
   return costResponse.value.data.proformaLast14Days
 })
 
+const router = useRouter()
+
+// Navigate to costs page with this account pre-selected
+const navigateToCostsPage = () => {
+  if (!accountId.value) return
+
+  // Build URL with query parameters to pre-select this account
+  const queryParams = {
+    accounts: JSON.stringify([accountId.value]),
+    timeframe: 'thisMonth',
+    tab: 'all'
+  }
+
+  router.push({
+    path: '/account/costs',
+    query: queryParams
+  })
+}
+
+// Check if URL has GovCloud ID and redirect to commercial ID
+const checkAndRedirectIfGovCloudId = () => {
+  const urlId = route.params.id as string
+
+  // Check if this ID exists in enclave store (commercial IDs are the keys)
+  if (enclaveStore.enclaves[urlId]) {
+    // Valid commercial ID, no redirect needed
+    return
+  }
+
+  // Search for enclave where GovCloud ID matches the URL ID
+  const enclave = Object.values(enclaveStore.enclaves).find(
+    (enc: any) => enc.awsGovCloudAccountID === urlId
+  )
+
+  if (enclave) {
+    // Found it - redirect to commercial ID
+    const commercialId = enclave.accountId || enclave.awsStandardAccountID
+    if (commercialId) {
+      console.log(`Redirecting from GovCloud ID ${urlId} to commercial ID ${commercialId}`)
+      router.replace(`/account/${commercialId}`)
+    }
+  }
+}
+
 onMounted(async () => {
+  // Check for GovCloud ID redirect first
+  checkAndRedirectIfGovCloudId()
+
   try {
     if (accountId.value) {
       users.value = await groupMembers.fetchEnclaveUsers(accountId.value, govCloudId.value || '', user.value?.accessToken || '')
     }
-    const response = await fetch(`/api/instances?environment=govcloud&accountIds=${accountId.value}&limit=2000`)
-    const json = await response.json()
-    instanceData.value = json.data
 
-    const response2 = await fetch(`/api/accounts/dashboard-simplified?standard_account_id=${accountId.value}`)
-    costResponse.value = await response2.json()
+    // Fetch all data in parallel for better performance
+    const [instancesRes, costsRes, resourcesRes, forecastRes] = await Promise.all([
+      fetch(`/api/instances?environment=govcloud&accountIds=${accountId.value}&limit=2000`),
+      fetch(`/api/accounts/dashboard-simplified?standard_account_id=${accountId.value}`),
+      fetch(`/api/config/summary-simplified?govcloud_account_id=${govCloudId.value}`),
+      fetch(`/api/costs/forecast?period=current-month-remainder&accountIds=${accountId.value}&granularity=DAILY&environment=commercial`)
+    ])
 
-    const response3 = await fetch(`/api/config/summary-simplified?govcloud_account_id=${govCloudId.value}`)
-    const json3 = await response3.json()
-    console.log(json3)
-    resourceCounts.value = json3.data
+    const [instancesJson, costsJson, resourcesJson, forecastJson] = await Promise.all([
+      instancesRes.json(),
+      costsRes.json(),
+      resourcesRes.json(),
+      forecastRes.json()
+    ])
+
+    instanceData.value = instancesJson.data
+    costResponse.value = costsJson
+    resourceCounts.value = resourcesJson.data
+    forecastData.value = forecastJson.data
+
+    console.log('Forecast data:', forecastData.value)
   } catch (err) {
-    console.error('Error fetching users:', err)
+    console.error('Error fetching account data:', err)
   } finally {
     loading.value = false
   }

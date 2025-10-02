@@ -19,11 +19,26 @@ export interface BadgeDefinition {
     department_includes?: string[]   // Department contains these strings
     min_aws_accounts?: number        // Minimum number of AWS accounts
     max_aws_accounts?: number        // Maximum number of AWS accounts
+    is_primary_admin?: boolean       // User is primary admin for any enclave
+    is_delegate_admin?: boolean      // User is delegate admin for any enclave
+    is_cost_manager?: boolean        // User is cost manager for any enclave
+    min_admin_accounts?: number      // Minimum number of accounts where user is admin
   }
 }
 
 // EDIT THIS CONFIGURATION TO ADD/MODIFY BADGE RULES
 export const BADGE_CONFIG: BadgeDefinition[] = [
+  {
+    id: 'super_user',
+    title: 'Super User',
+    color: 'red',
+    icon: 'i-heroicons-bolt',
+    description: 'Super user account with elevated privileges',
+    priority: 0,
+    rules: {
+      username_ends_with: ['.su']
+    }
+  },
   {
     id: 'contractor',
     title: 'External Contractor',
@@ -47,17 +62,6 @@ export const BADGE_CONFIG: BadgeDefinition[] = [
     }
   },
   {
-    id: 'super_user',
-    title: 'Super User',
-    color: 'red',
-    icon: 'i-heroicons-bolt',
-    description: 'Super user account with elevated privileges',
-    priority: 0,
-    rules: {
-      username_ends_with: ['.su']
-    }
-  },
-  {
     id: 'lz_team',
     title: 'LZ Team',
     color: 'purple',
@@ -66,6 +70,39 @@ export const BADGE_CONFIG: BadgeDefinition[] = [
     priority: 3,
     rules: {
       groups_exact: ['AWS-Product-Team']
+    }
+  },
+  {
+    id: 'account_admin',
+    title: 'Account Admin',
+    color: 'orange',
+    icon: 'i-heroicons-shield-check',
+    description: 'AWS account administrator',
+    priority: 4,
+    rules: {
+      is_primary_admin: true
+    }
+  },
+  {
+    id: 'delegate_admin',
+    title: 'Delegate Admin',
+    color: 'yellow',
+    icon: 'i-heroicons-user-group',
+    description: 'AWS account delegate administrator',
+    priority: 5,
+    rules: {
+      is_delegate_admin: true
+    }
+  },
+  {
+    id: 'cost_manager',
+    title: 'Cost Manager',
+    color: 'green',
+    icon: 'i-heroicons-currency-dollar',
+    description: 'AWS account cost manager',
+    priority: 6,
+    rules: {
+      is_cost_manager: true
     }
   }
 ]
@@ -83,6 +120,13 @@ export interface BadgeContext {
     roles: string[]
     isGovCloud: boolean
   }>
+  // Enclave admin roles (from enclave store, not Entra)
+  enclaveRoles?: {
+    isPrimaryAdmin: boolean
+    isDelegateAdmin: boolean
+    isCostManager: boolean
+    totalAdminAccounts: number
+  }
 }
 
 // Simple evaluation function
@@ -155,16 +199,33 @@ export function evaluateUserBadges(context: BadgeContext): BadgeDefinition[] {
     if (rules.min_aws_accounts && context.awsAccounts) {
       shouldApply = shouldApply || context.awsAccounts.length >= rules.min_aws_accounts
     }
-    
+
     if (rules.max_aws_accounts && context.awsAccounts) {
       shouldApply = shouldApply || context.awsAccounts.length <= rules.max_aws_accounts
     }
-    
+
+    // Check enclave role rules (from enclave store)
+    if (rules.is_primary_admin && context.enclaveRoles) {
+      shouldApply = shouldApply || context.enclaveRoles.isPrimaryAdmin
+    }
+
+    if (rules.is_delegate_admin && context.enclaveRoles) {
+      shouldApply = shouldApply || context.enclaveRoles.isDelegateAdmin
+    }
+
+    if (rules.is_cost_manager && context.enclaveRoles) {
+      shouldApply = shouldApply || context.enclaveRoles.isCostManager
+    }
+
+    if (rules.min_admin_accounts && context.enclaveRoles) {
+      shouldApply = shouldApply || context.enclaveRoles.totalAdminAccounts >= rules.min_admin_accounts
+    }
+
     if (shouldApply) {
       badges.push(badge)
     }
   }
-  
+
   // Sort by priority (lower number = higher priority)
   return badges.sort((a, b) => a.priority - b.priority)
 }

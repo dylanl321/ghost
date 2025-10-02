@@ -101,3 +101,23 @@ export function isValidUsername(slug: string): boolean {
   // Basic validation - alphanumeric with dots, hyphens, underscores
   return /^[a-z0-9._-]+$/i.test(slug) && slug.length > 0
 }
+
+/**
+ * Convert first.last format to "First Last" display name
+ * @param username - Username in first.last format
+ * @returns Formatted display name
+ * @example formatUsername('john.doe') => 'John Doe'
+ * @example formatUsername('mary.jane.smith') => 'Mary Jane Smith'
+ */
+export function formatUsername(username: string): string {
+  if (!username) return ''
+
+  // Remove @domain if present
+  const cleanUsername = username.includes('@') ? username.split('@')[0] : username
+
+  // Split by dots and capitalize each part
+  return cleanUsername
+    .split('.')
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ')
+}

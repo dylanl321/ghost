@@ -83,10 +83,57 @@
           </div>
         </template>
 
-        <div class="space-y-2 text-sm">
-          <AccountDetailsRow label="Primary Admin" :value="enclave?.primaryAccountAdminUsername" />
-          <AccountDetailsRow label="Delegate Admin" :value="enclave?.delegateAccountAdminUsername" />
-          <AccountDetailsRow label="Cost Manager" :value="enclave?.costManagerUsername" />
+        <div class="space-y-3 text-sm">
+          <!-- Primary Admin -->
+          <div v-if="enclave?.primaryAccountAdminUsername" class="flex items-center gap-2">
+            <span class="text-gray-400 text-xs min-w-[80px]">Primary:</span>
+            <NuxtLink
+              :to="`/account/user/${convertToUsernameSlug(enclave.primaryAccountAdminUsername)}`"
+              class="flex items-center gap-2 hover:bg-gray-700 rounded px-2 py-1 -mx-2 -my-1 transition flex-1"
+            >
+              <UserAvatar
+                :user-principal-name="`${enclave.primaryAccountAdminUsername}@gd-ms.com`"
+                :display-name="formatUsername(enclave.primaryAccountAdminUsername)"
+                size="xs"
+                class="flex-shrink-0"
+              />
+              <span class="text-white truncate">{{ formatUsername(enclave.primaryAccountAdminUsername) }}</span>
+            </NuxtLink>
+          </div>
+
+          <!-- Delegate Admin -->
+          <div v-if="enclave?.delegateAccountAdminUsername" class="flex items-center gap-2">
+            <span class="text-gray-400 text-xs min-w-[80px]">Delegate:</span>
+            <NuxtLink
+              :to="`/account/user/${convertToUsernameSlug(enclave.delegateAccountAdminUsername)}`"
+              class="flex items-center gap-2 hover:bg-gray-700 rounded px-2 py-1 -mx-2 -my-1 transition flex-1"
+            >
+              <UserAvatar
+                :user-principal-name="`${enclave.delegateAccountAdminUsername}@gd-ms.com`"
+                :display-name="formatUsername(enclave.delegateAccountAdminUsername)"
+                size="xs"
+                class="flex-shrink-0"
+              />
+              <span class="text-white truncate">{{ formatUsername(enclave.delegateAccountAdminUsername) }}</span>
+            </NuxtLink>
+          </div>
+
+          <!-- Cost Manager -->
+          <div v-if="enclave?.costManagerUsername" class="flex items-center gap-2">
+            <span class="text-gray-400 text-xs min-w-[80px]">Cost Mgr:</span>
+            <NuxtLink
+              :to="`/account/user/${convertToUsernameSlug(enclave.costManagerUsername)}`"
+              class="flex items-center gap-2 hover:bg-gray-700 rounded px-2 py-1 -mx-2 -my-1 transition flex-1"
+            >
+              <UserAvatar
+                :user-principal-name="`${enclave.costManagerUsername}@gd-ms.com`"
+                :display-name="formatUsername(enclave.costManagerUsername)"
+                size="xs"
+                class="flex-shrink-0"
+              />
+              <span class="text-white truncate">{{ formatUsername(enclave.costManagerUsername) }}</span>
+            </NuxtLink>
+          </div>
         </div>
       </UCard>
     </div>
@@ -94,6 +141,8 @@
 </template>
 
 <script setup lang="ts">
+import { convertToUsernameSlug, formatUsername } from '~/utils/userUtils'
+
 const enclaveStore = useEnclaveStore()
 
 // Assume accountId is passed as prop or pulled from route
