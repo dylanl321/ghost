@@ -6,10 +6,10 @@ default:
 
 stages:
   - test
-  - get_credentials
-  - docker_build
   - terraform_plan
   - terraform_apply
+  - get_credentials
+  - docker_build
 
 workflow:
   rules:
