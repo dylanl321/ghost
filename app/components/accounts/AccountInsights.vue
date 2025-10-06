@@ -8,14 +8,14 @@
     <div v-else>
       <NuxtLink v-for="(acct, idx) in sortedAccounts" :key="acct.accountId" :to="`/account/${acct.accountId}`"
         class="block p-4 bg-gray-900 border-t border-gray-800 hover:bg-gray-700 transition-colors duration-200">
-        <div class="flex items-center justify-between">
+        <div class="flex items-center justify-between flex-wrap lg:flex-nowrap gap-y-2">
           <div class="flex flex-col">
             <div class="flex gap-3 items-center">
               <div class="text-sm text-gray-400">#{{ idx + 1 }}</div>
               <div class="text-white text-base font-medium text-wrap">{{ acct.name }}</div>
             </div>
 
-            <div class="text-xs text-gray-400 mb-2">{{ acct.accountId }}</div>
+            <div class="text-xs text-gray-400">{{ acct.accountId }}</div>
           </div>
 
           <div class="flex gap-1 items-center">
@@ -28,7 +28,7 @@
         </div>
 
         <!-- Progress bar -->
-        <div class="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
+        <div class="w-full h-2 bg-gray-800 rounded-full overflow-hidden mt-2">
           <div class="h-full bg-green-500" :style="{ width: acct.percentOfTotal.toFixed(2) + '%' }"/>
         </div>
       </NuxtLink>

@@ -24,9 +24,9 @@ Work in progress
 
 ### How much does this cost?
 
-The primary cost of GHOST is ECS usage. As of 8-13-2025, the ECS tasks that Ghost runs on uses 2vCPUs and 4GB of RAM, which costs about $70/m. There is a dev and prod deployment, so 70 \* 2 = ~$140/m. Additionally, the service may auto scale based on load, which could increase the cost per additional task. This is a rough estimate, the actual cost may vary.
+The primary cost of GHOST is ECS usage. As of 8-13-2025, the ECS tasks that Ghost runs on uses 2vCPUs and 4GB of RAM, which costs about $70/m. There is a dev and prod deployment, so 70 \* 2 = ~$140/m. Additionally, the service are auto scale based on load, which could increase the cost per additional task. This is a rough estimate, the actual cost may vary.
 
-There may be other costs such as AI usage, DynamoDB (minimal), CloudWatch logs, etc.
+There are be other costs such as AI usage, DynamoDB (minimal), CloudWatch logs, etc.
 
 ### How is this deployed?
 
