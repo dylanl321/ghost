@@ -4,7 +4,7 @@
       <div class="text-lg font-semibold">Account Details</div>
     </template>
 
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4">
       <!-- Project Details -->
       <UCard class="bg-gray-800 md:row-span-2">
         <template #header>
@@ -85,11 +85,11 @@
 
         <div class="space-y-3 text-sm">
           <!-- Primary Admin -->
-          <div v-if="enclave?.primaryAccountAdminUsername" class="flex items-center gap-2">
-            <span class="text-gray-400 text-xs min-w-[80px]">Primary:</span>
+          <div v-if="enclave?.primaryAccountAdminUsername" class="flex items-center gap-2 gap-y-2 flex-wrap">
+            <span class="text-gray-400 text-xs min-w-[60px]">Primary:</span>
             <NuxtLink
               :to="`/account/user/${convertToUsernameSlug(enclave.primaryAccountAdminUsername)}`"
-              class="flex items-center gap-2 hover:bg-gray-700 rounded px-2 py-1 -mx-2 -my-1 transition flex-1"
+              class="flex items-center gap-2 hover:bg-gray-700 rounded"
             >
               <UserAvatar
                 :user-principal-name="`${enclave.primaryAccountAdminUsername}@gd-ms.com`"
@@ -102,11 +102,11 @@
           </div>
 
           <!-- Delegate Admin -->
-          <div v-if="enclave?.delegateAccountAdminUsername" class="flex items-center gap-2">
-            <span class="text-gray-400 text-xs min-w-[80px]">Delegate:</span>
+          <div v-if="enclave?.delegateAccountAdminUsername" class="flex items-center gap-2 gap-y-2 flex-wrap">
+            <span class="text-gray-400 text-xs min-w-[60px]">Delegate:</span>
             <NuxtLink
               :to="`/account/user/${convertToUsernameSlug(enclave.delegateAccountAdminUsername)}`"
-              class="flex items-center gap-2 hover:bg-gray-700 rounded px-2 py-1 -mx-2 -my-1 transition flex-1"
+              class="flex items-center gap-2 hover:bg-gray-700 rounded"
             >
               <UserAvatar
                 :user-principal-name="`${enclave.delegateAccountAdminUsername}@gd-ms.com`"
@@ -119,11 +119,11 @@
           </div>
 
           <!-- Cost Manager -->
-          <div v-if="enclave?.costManagerUsername" class="flex items-center gap-2">
-            <span class="text-gray-400 text-xs min-w-[80px]">Cost Mgr:</span>
+          <div v-if="enclave?.costManagerUsername" class="flex items-center gap-2 gap-y-2 flex-wrap">
+            <span class="text-gray-400 text-xs min-w-[60px]">Cost Mgr:</span>
             <NuxtLink
               :to="`/account/user/${convertToUsernameSlug(enclave.costManagerUsername)}`"
-              class="flex items-center gap-2 hover:bg-gray-700 rounded px-2 py-1 -mx-2 -my-1 transition flex-1"
+              class="flex items-center gap-2 hover:bg-gray-700 rounded"
             >
               <UserAvatar
                 :user-principal-name="`${enclave.costManagerUsername}@gd-ms.com`"

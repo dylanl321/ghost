@@ -19,9 +19,9 @@
       </div>
     </UCard>
 
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 row-auto">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 row-auto">
       <!-- Account Details -->
-      <AccountDetails v-if="accountId" :account-id="accountId" :current-spend="currentSpend" class="col-span-2" />
+      <AccountDetails v-if="accountId" :account-id="accountId" :current-spend="currentSpend" class="lg:col-span-2" />
 
       <!-- Budget Health -->
       <BudgetHealthCard
@@ -36,7 +36,7 @@
       <AccountUsers :users="users" :account-id="accountId" :loading="loading" class="col-span-1" />
 
       <!-- Cost Trend Chart -->
-      <CostTrendChart title="Account Cost Trends" :time-series-billable="billableTimeSeries" :time-series-proforma="proformaTimeSeries" :loading="loading" class="col-span-2" />
+      <CostTrendChart title="Account Cost Trends" :time-series-billable="billableTimeSeries" :time-series-proforma="proformaTimeSeries" :loading="loading" class="lg:col-span-2" />
 
       <!-- Resource Usage -->
       <ResourceUsage :data="resourceCounts || {}" :columns="2" :loading="loading" class="col-span-1" />
