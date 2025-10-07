@@ -13,6 +13,7 @@ import { CloudWatchClient } from '@aws-sdk/client-cloudwatch'
 import { OrganizationsClient } from '@aws-sdk/client-organizations'
 import { SSOAdminClient } from '@aws-sdk/client-sso-admin'
 import { SSOClient } from '@aws-sdk/client-sso'
+import { IdentitystoreClient } from '@aws-sdk/client-identitystore'
 import { LambdaClient } from '@aws-sdk/client-lambda'
 import { CloudFormationClient } from '@aws-sdk/client-cloudformation'
 import { CloudTrailClient } from '@aws-sdk/client-cloudtrail'
@@ -44,6 +45,7 @@ const SERVICE_CLIENT_MAP = {
   'organizations': OrganizationsClient,
   'sso-admin': SSOAdminClient,
   'sso': SSOClient,
+  'identitystore': IdentitystoreClient,
   'lambda': LambdaClient,
   'cloudformation': CloudFormationClient,
   'cloudtrail': CloudTrailClient,

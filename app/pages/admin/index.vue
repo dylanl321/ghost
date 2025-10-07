@@ -1,272 +1,202 @@
 <template>
-  <div class="space-y-6 p-6 max-w-[1600px] mx-auto">
+  <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
     <!-- Access Denied -->
-    <div v-if="!hasAdminAccess" class="max-w-2xl mx-auto">
-        <UCard>
-          <div class="p-8 text-center">
-            <Icon name="i-heroicons-shield-exclamation" class="w-16 h-16 text-red-500 mx-auto mb-4" />
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-              Access Denied
-            </h1>
-            <p class="text-gray-600 dark:text-gray-400 mb-6">
-              You don't have permission to access the admin panel. This area is restricted to administrators only.
-            </p>
-
-            <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 mb-6 text-left">
-              <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-2">
-                To get admin access:
-              </h3>
-              <ul class="text-sm text-gray-600 dark:text-gray-400 space-y-1 list-disc list-inside">
-                <li>You must be a member of the <code class="text-blue-600 dark:text-blue-400">AWS-Product-Team</code> group</li>
-                <li>Contact your manager to request access</li>
-                <li>Submit a SailPoint request for the AWS-Product-Team group</li>
-              </ul>
-            </div>
-
-            <div class="flex flex-col sm:flex-row gap-3 justify-center">
-              <UButton
-                color="emerald"
-                @click="navigateTo('/')"
-              >
-                <Icon name="i-heroicons-home" class="w-4 h-4 mr-2" />
-                Go to Dashboard
-              </UButton>
-              <UButton
-                color="gray"
-                variant="soft"
-                @click="navigateTo('/profile')"
-              >
-                <Icon name="i-heroicons-user-circle" class="w-4 h-4 mr-2" />
-                View My Profile
-              </UButton>
-            </div>
-          </div>
-        </UCard>
-      </div>
-
-    <!-- Admin Dashboard -->
-    <div v-else>
-      <!-- Header -->
-      <UCard>
-        <div class="p-2">
-          <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Admin Panel
+    <div v-if="!hasAdminAccess" class="flex items-center justify-center min-h-screen p-6">
+      <UCard class="max-w-2xl">
+        <div class="p-8 text-center">
+          <Icon name="i-heroicons-shield-exclamation" class="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+            Access Denied
           </h1>
-          <p class="text-gray-600 dark:text-gray-400">
-            Manage GHOST application settings, users, and system configuration
+          <p class="text-gray-600 dark:text-gray-400 mb-6">
+            You don't have permission to access the admin panel. This area is restricted to administrators only.
           </p>
+
+          <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 mb-6 text-left">
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+              To get admin access:
+            </h3>
+            <ul class="text-sm text-gray-600 dark:text-gray-400 space-y-1 list-disc list-inside">
+              <li>You must be a member of the <code class="text-blue-600 dark:text-blue-400">AWS-Product-Team</code> group</li>
+              <li>Contact your manager to request access</li>
+              <li>Submit a SailPoint request for the AWS-Product-Team group</li>
+            </ul>
+          </div>
+
+          <div class="flex flex-col sm:flex-row gap-3 justify-center">
+            <UButton
+              color="emerald"
+              @click="navigateTo('/')"
+            >
+              <Icon name="i-heroicons-home" class="w-4 h-4 mr-2" />
+              Go to Dashboard
+            </UButton>
+            <UButton
+              color="gray"
+              variant="soft"
+              @click="navigateTo('/profile')"
+            >
+              <Icon name="i-heroicons-user-circle" class="w-4 h-4 mr-2" />
+              View My Profile
+            </UButton>
+          </div>
         </div>
       </UCard>
+    </div>
 
-      <!-- Admin Cards Grid -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
-          <!-- Role Management -->
-          <UCard
-            class="hover:shadow-lg transition-shadow cursor-pointer"
-            @click="navigateTo('/admin/roles')"
-          >
-            <div class="p-6">
-              <div class="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center mb-4">
-                <Icon name="i-heroicons-shield-check" class="w-6 h-6 text-purple-600 dark:text-purple-400" />
-              </div>
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                Role Management
-              </h3>
-              <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                View and manage user roles and permissions
-              </p>
-              <UButton color="purple" variant="soft" size="sm">
-                Manage Roles
-              </UButton>
-            </div>
-          </UCard>
-
-          <!-- System Logs -->
-          <UCard
-            class="hover:shadow-lg transition-shadow cursor-pointer"
-            @click="navigateTo('/admin/logs')"
-          >
-            <div class="p-6">
-              <div class="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center mb-4">
-                <Icon name="i-heroicons-document-text" class="w-6 h-6 text-blue-600 dark:text-blue-400" />
-              </div>
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                System Logs
-              </h3>
-              <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                View application logs and debugging information
-              </p>
-              <UButton color="blue" variant="soft" size="sm">
-                View Logs
-              </UButton>
-            </div>
-          </UCard>
-
-          <!-- Issues & Tickets -->
-          <UCard
-            class="hover:shadow-lg transition-shadow cursor-pointer"
-            @click="navigateTo('/admin/issues')"
-          >
-            <div class="p-6">
-              <div class="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center mb-4">
-                <Icon name="i-heroicons-exclamation-triangle" class="w-6 h-6 text-red-600 dark:text-red-400" />
-              </div>
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                Issues & Tickets
-              </h3>
-              <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Track and manage reported issues
-              </p>
-              <UButton color="red" variant="soft" size="sm">
-                View Issues
-              </UButton>
-            </div>
-          </UCard>
-
-          <!-- API Keys -->
-          <UCard
-            class="hover:shadow-lg transition-shadow cursor-pointer"
-            @click="navigateTo('/admin/api-keys')"
-          >
-            <div class="p-6">
-              <div class="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 rounded-lg flex items-center justify-center mb-4">
-                <Icon name="i-heroicons-key" class="w-6 h-6 text-amber-600 dark:text-amber-400" />
-              </div>
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                API Keys
-              </h3>
-              <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Manage API keys for programmatic access
-              </p>
-              <UButton color="amber" variant="soft" size="sm">
-                Manage Keys
-              </UButton>
-            </div>
-          </UCard>
-
-          <!-- Forecast Management -->
-          <UCard
-            v-if="can('forecast.import')"
-            class="hover:shadow-lg transition-shadow cursor-pointer"
-            @click="navigateTo('/account/costs')"
-          >
-            <div class="p-6">
-              <div class="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center mb-4">
-                <Icon name="i-heroicons-currency-dollar" class="w-6 h-6 text-green-600 dark:text-green-400" />
-              </div>
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                Forecast Management
-              </h3>
-              <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Import and manage cost forecast data
-              </p>
-              <UButton color="green" variant="soft" size="sm">
-                Manage Forecasts
-              </UButton>
-            </div>
-          </UCard>
-
-          <!-- User Activity -->
-          <UCard class="opacity-60">
-            <div class="p-6">
-              <div class="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center mb-4">
-                <Icon name="i-heroicons-chart-bar" class="w-6 h-6 text-gray-500 dark:text-gray-400" />
-              </div>
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                User Activity
-              </h3>
-              <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Monitor user activity and usage metrics
-              </p>
-              <UButton color="gray" variant="soft" size="sm" disabled>
-                Coming Soon
-              </UButton>
-            </div>
-          </UCard>
-
-          <!-- System Settings -->
-          <UCard class="opacity-60">
-            <div class="p-6">
-              <div class="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center mb-4">
-                <Icon name="i-heroicons-cog-6-tooth" class="w-6 h-6 text-gray-500 dark:text-gray-400" />
-              </div>
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                System Settings
-              </h3>
-              <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Configure application settings and preferences
-              </p>
-              <UButton color="gray" variant="soft" size="sm" disabled>
-                Coming Soon
-              </UButton>
-            </div>
-          </UCard>
+    <!-- Admin Dashboard -->
+    <div v-else class="flex">
+      <!-- Sidebar -->
+      <aside class="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 min-h-screen">
+        <div class="p-6">
+          <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-1">
+            Admin Panel
+          </h2>
+          <p class="text-xs text-gray-600 dark:text-gray-400">
+            System Management
+          </p>
         </div>
 
-        <!-- Quick Stats -->
-        <div class="mt-8 grid grid-cols-1 md:grid-cols-4 gap-6">
-          <UCard>
-            <div class="p-6 text-center">
-              <div class="text-3xl font-bold text-blue-600 dark:text-blue-400 mb-1">
-                {{ totalUsers }}
-              </div>
-              <div class="text-sm text-gray-600 dark:text-gray-400">
-                Active Users
-              </div>
-            </div>
-          </UCard>
+        <nav class="px-3 space-y-1">
+          <button
+            @click="activeSection = 'sharelinks'"
+            class="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors"
+            :class="activeSection === 'sharelinks'
+              ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'"
+          >
+            <Icon name="i-heroicons-link" class="w-5 h-5" />
+            Share Links
+          </button>
 
-          <UCard>
-            <div class="p-6 text-center">
-              <div class="text-3xl font-bold text-purple-600 dark:text-purple-400 mb-1">
-                4
-              </div>
-              <div class="text-sm text-gray-600 dark:text-gray-400">
-                System Roles
-              </div>
-            </div>
-          </UCard>
+          <button
+            @click="activeSection = 'apikeys'"
+            class="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors"
+            :class="activeSection === 'apikeys'
+              ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'"
+          >
+            <Icon name="i-heroicons-key" class="w-5 h-5" />
+            API Keys
+          </button>
 
-          <UCard>
-            <div class="p-6 text-center">
-              <div class="text-3xl font-bold text-green-600 dark:text-green-400 mb-1">
-                <Icon name="i-heroicons-check-circle" class="w-8 h-8 inline" />
-              </div>
-              <div class="text-sm text-gray-600 dark:text-gray-400">
-                System Status
-              </div>
-            </div>
-          </UCard>
+          <button
+            @click="activeSection = 'roles'"
+            class="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors"
+            :class="activeSection === 'roles'
+              ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'"
+          >
+            <Icon name="i-heroicons-shield-check" class="w-5 h-5" />
+            Role Management
+          </button>
 
-          <UCard>
-            <div class="p-6 text-center">
-              <div class="text-3xl font-bold text-orange-600 dark:text-orange-400 mb-1">
-                {{ lastUpdate }}
-              </div>
-              <div class="text-sm text-gray-600 dark:text-gray-400">
-                Last Sync
+          <button
+            @click="activeSection = 'logs'"
+            class="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors"
+            :class="activeSection === 'logs'
+              ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'"
+          >
+            <Icon name="i-heroicons-document-text" class="w-5 h-5" />
+            System Logs
+          </button>
+
+          <button
+            @click="activeSection = 'issues'"
+            class="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors"
+            :class="activeSection === 'issues'
+              ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'"
+          >
+            <Icon name="i-heroicons-exclamation-triangle" class="w-5 h-5" />
+            Issues & Tickets
+          </button>
+
+          <div class="px-3 py-2 opacity-50">
+            <div class="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
+              <Icon name="i-heroicons-chart-bar" class="w-5 h-5" />
+              User Activity
+              <UBadge color="gray" size="xs" variant="soft">Soon</UBadge>
+            </div>
+          </div>
+
+          <div class="px-3 py-2 opacity-50">
+            <div class="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
+              <Icon name="i-heroicons-cog-6-tooth" class="w-5 h-5" />
+              System Settings
+              <UBadge color="gray" size="xs" variant="soft">Soon</UBadge>
+            </div>
+          </div>
+        </nav>
+
+        <!-- Quick Stats in Sidebar -->
+        <div class="p-3 mt-6">
+          <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 space-y-3">
+            <div>
+              <div class="text-xs text-gray-600 dark:text-gray-400">Active Users</div>
+              <div class="text-xl font-bold text-gray-900 dark:text-white">{{ totalUsers }}</div>
+            </div>
+            <div>
+              <div class="text-xs text-gray-600 dark:text-gray-400">Share Links</div>
+              <div class="text-xl font-bold text-gray-900 dark:text-white">{{ shortlinksTotal }}</div>
+            </div>
+            <div>
+              <div class="text-xs text-gray-600 dark:text-gray-400">System Status</div>
+              <div class="flex items-center gap-2">
+                <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+                <span class="text-sm font-medium text-green-600 dark:text-green-400">Online</span>
               </div>
             </div>
-          </UCard>
+          </div>
         </div>
-      </div>
+      </aside>
+
+      <!-- Main Content -->
+      <main class="flex-1 p-8">
+        <!-- Dynamic Component Loading -->
+        <ShareLinksPanel v-if="activeSection === 'sharelinks'" />
+        <ApiKeysPanel v-else-if="activeSection === 'apikeys'" />
+        <RolesPanel v-else-if="activeSection === 'roles'" />
+        <SystemLogsPanel v-else-if="activeSection === 'logs'" />
+        <IssuesPanel v-else-if="activeSection === 'issues'" />
+      </main>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import ShareLinksPanel from '~/components/admin/ShareLinksPanel.vue'
+import ApiKeysPanel from '~/components/admin/ApiKeysPanel.vue'
+import RolesPanel from '~/components/admin/RolesPanel.vue'
+import SystemLogsPanel from '~/components/admin/SystemLogsPanel.vue'
+import IssuesPanel from '~/components/admin/IssuesPanel.vue'
+
 // Page meta
 definePageMeta({
   title: 'Admin Panel',
-  description: 'Manage GHOST application settings and users'
+  description: 'Manage GHOST application settings and system configuration'
 })
 
-const { isAdmin, can } = useUserRoles()
+const { isAdmin } = useUserRoles()
 
 // Check if user has admin access
 const hasAdminAccess = computed(() => isAdmin.value)
 
-// Mock stats - replace with actual data later
+// Active section state
+const activeSection = ref('sharelinks')
+
+// Shortlinks data for stats (only loaded for sidebar stats)
+const { total: shortlinksTotal, fetchShortlinks } = useShortlinks()
+
+// Stats
 const totalUsers = ref('127')
-const lastUpdate = ref('2h ago')
+
+// Load initial stats
+onMounted(() => {
+  if (hasAdminAccess.value) {
+    // Fetch shortlinks count for sidebar stats
+    fetchShortlinks({ limit: 1 })
+  }
+})
 </script>

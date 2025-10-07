@@ -11,12 +11,12 @@
         <div>
           <h2 class="text-xl font-semibold text-white mb-2">Link Not Found</h2>
           <p class="text-gray-400 mb-4">{{ error }}</p>
-          <UButton 
-            color="blue" 
-            variant="solid" 
-            @click="$router.push('/account/costs')"
+          <UButton
+            color="blue"
+            variant="solid"
+            @click="$router.push('/')"
           >
-            Go to Cost Analytics
+            Go to Dashboard
           </UButton>
         </div>
       </div>
@@ -25,13 +25,25 @@
 </template>
 
 <script setup lang="ts">
-interface ShareLinkState {
+// Support multiple page types
+interface CostShareLinkState {
   selectedAccounts: string[]
   timeframe: string
   view: string
   tab: string
   dataMode: 'billable' | 'proforma'
 }
+
+interface AccountShareLinkState {
+  accountId: string
+  selectedTab: number
+}
+
+interface UserShareLinkState {
+  username: string
+}
+
+type ShareLinkState = CostShareLinkState | AccountShareLinkState | UserShareLinkState
 
 // Get the shortlink code from the route
 const route = useRoute()
@@ -74,27 +86,42 @@ onMounted(async () => {
 
     const { pagePath, configData } = response.data
 
-    // Build query parameters from the shared state
+    // Build query parameters based on page type
     const queryParams = new URLSearchParams()
-    
-    if (configData.selectedAccounts?.length > 0) {
-      queryParams.set('accounts', JSON.stringify(configData.selectedAccounts))
+
+    // Handle cost analytics pages
+    if ('selectedAccounts' in configData && 'timeframe' in configData) {
+      const costData = configData as CostShareLinkState
+      if (costData.selectedAccounts?.length > 0) {
+        queryParams.set('accounts', JSON.stringify(costData.selectedAccounts))
+      }
+      if (costData.timeframe) {
+        queryParams.set('timeframe', costData.timeframe)
+      }
+      if (costData.view) {
+        queryParams.set('view', costData.view)
+      }
+      if (costData.tab) {
+        queryParams.set('tab', costData.tab)
+      }
+      if (costData.dataMode) {
+        queryParams.set('mode', costData.dataMode)
+      }
     }
-    if (configData.timeframe) {
-      queryParams.set('timeframe', configData.timeframe)
+    // Handle account detail pages
+    else if ('accountId' in configData && 'selectedTab' in configData) {
+      const accountData = configData as AccountShareLinkState
+      if (accountData.selectedTab !== undefined) {
+        queryParams.set('tab', accountData.selectedTab.toString())
+      }
     }
-    if (configData.view) {
-      queryParams.set('view', configData.view)
-    }
-    if (configData.tab) {
-      queryParams.set('tab', configData.tab)
-    }
-    if (configData.dataMode) {
-      queryParams.set('mode', configData.dataMode)
+    // Handle user profile pages (no query params needed, username is in path)
+    else if ('username' in configData) {
+      // User pages don't need query params, username is in the path
     }
 
     // Redirect to the original page with state parameters
-    const targetUrl = queryParams.toString() 
+    const targetUrl = queryParams.toString()
       ? `${pagePath}?${queryParams.toString()}`
       : pagePath
 
