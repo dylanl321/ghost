@@ -1082,7 +1082,43 @@ defineExpose({
             <tr v-for="account in filteredAccounts" :key="account.accountId" class="hover:bg-gray-800/30">
               <td class="px-4 py-3">
                 <div>
-                  <div class="text-sm font-medium text-white">{{ account.accountName }}</div>
+                  <div class="flex items-start gap-2 mb-1">
+                    <span class="text-sm font-medium text-white flex-shrink-0">{{ account.accountName }}</span>
+
+                    <!-- Admin & Cost Manager Badges to the right of name -->
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                      <UBadge
+                        v-if="getAccountAdminRoles(account.accountId).isPrimaryAdmin"
+                        color="orange"
+                        variant="solid"
+                        size="xs"
+                        class="font-medium"
+                      >
+                        <UIcon name="i-heroicons-shield-check" class="w-3 h-3 mr-0.5" />
+                        Primary Admin
+                      </UBadge>
+                      <UBadge
+                        v-if="getAccountAdminRoles(account.accountId).isDelegateAdmin"
+                        color="yellow"
+                        variant="solid"
+                        size="xs"
+                        class="font-medium"
+                      >
+                        <UIcon name="i-heroicons-user-group" class="w-3 h-3 mr-0.5" />
+                        Delegate Admin
+                      </UBadge>
+                      <UBadge
+                        v-if="getAccountAdminRoles(account.accountId).isCostManager"
+                        color="green"
+                        variant="solid"
+                        size="xs"
+                        class="font-medium"
+                      >
+                        <UIcon name="i-heroicons-currency-dollar" class="w-3 h-3 mr-0.5" />
+                        Cost Manager
+                      </UBadge>
+                    </div>
+                  </div>
                   <div class="text-xs text-gray-400 font-mono">{{ account.accountId }}</div>
                 </div>
               </td>
@@ -1100,38 +1136,6 @@ defineExpose({
               </td>
               <td class="px-4 py-3">
                 <div class="flex flex-wrap gap-1">
-                  <!-- Admin & Cost Manager Badges -->
-                  <UBadge
-                    v-if="getAccountAdminRoles(account.accountId).isPrimaryAdmin"
-                    color="orange"
-                    variant="solid"
-                    size="xs"
-                    class="font-medium"
-                  >
-                    <UIcon name="i-heroicons-shield-check" class="w-3 h-3 mr-0.5" />
-                    Primary Admin
-                  </UBadge>
-                  <UBadge
-                    v-if="getAccountAdminRoles(account.accountId).isDelegateAdmin"
-                    color="yellow"
-                    variant="solid"
-                    size="xs"
-                    class="font-medium"
-                  >
-                    <UIcon name="i-heroicons-user-group" class="w-3 h-3 mr-0.5" />
-                    Delegate Admin
-                  </UBadge>
-                  <UBadge
-                    v-if="getAccountAdminRoles(account.accountId).isCostManager"
-                    color="green"
-                    variant="solid"
-                    size="xs"
-                    class="font-medium"
-                  >
-                    <UIcon name="i-heroicons-currency-dollar" class="w-3 h-3 mr-0.5" />
-                    Cost Manager
-                  </UBadge>
-
                   <!-- IAM Roles with environment context -->
                   <template v-if="account.hasMultiEnvironment">
                     <!-- Show roles grouped by environment -->
@@ -1216,74 +1220,70 @@ defineExpose({
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2 flex-1 min-w-0">
               <!-- Environment Indicators -->
-              <div class="flex gap-1">
-                <div v-if="account.environments.includes('commercial')" 
+              <div class="flex gap-1 flex-shrink-0">
+                <div v-if="account.environments.includes('commercial')"
                      class="w-2 h-2 bg-blue-400 rounded-full" title="Commercial"></div>
-                <div v-if="account.environments.includes('govcloud')" 
+                <div v-if="account.environments.includes('govcloud')"
                      class="w-2 h-2 bg-orange-400 rounded-full" title="GovCloud"></div>
               </div>
-              
+
               <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2">
-                  <h5 class="font-medium text-white truncate text-sm group-hover:text-blue-400 transition-colors">
+                <div class="flex items-start gap-2 mb-1">
+                  <h5 class="font-medium text-white text-sm group-hover:text-blue-400 transition-colors flex-shrink-0">
                     {{ account.accountName }}
                   </h5>
-                  <UBadge 
-                    v-if="!account.isActive" 
-                    color="gray" 
-                    variant="soft" 
-                    size="xs"
-                    label="Inactive"
-                  />
+
+                  <!-- Admin & Cost Manager Badges to the right of name -->
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <UBadge
+                      v-if="getAccountAdminRoles(account.accountId).isPrimaryAdmin"
+                      color="orange"
+                      variant="solid"
+                      size="xs"
+                      class="font-medium"
+                    >
+                      <UIcon name="i-heroicons-shield-check" class="w-3 h-3 mr-0.5" />
+                      Primary Admin
+                    </UBadge>
+                    <UBadge
+                      v-if="getAccountAdminRoles(account.accountId).isDelegateAdmin"
+                      color="yellow"
+                      variant="solid"
+                      size="xs"
+                      class="font-medium"
+                    >
+                      <UIcon name="i-heroicons-user-group" class="w-3 h-3 mr-0.5" />
+                      Delegate Admin
+                    </UBadge>
+                    <UBadge
+                      v-if="getAccountAdminRoles(account.accountId).isCostManager"
+                      color="green"
+                      variant="solid"
+                      size="xs"
+                      class="font-medium"
+                    >
+                      <UIcon name="i-heroicons-currency-dollar" class="w-3 h-3 mr-0.5" />
+                      Cost Manager
+                    </UBadge>
+
+                    <UBadge
+                      v-if="!account.isActive"
+                      color="gray"
+                      variant="soft"
+                      size="xs"
+                      label="Inactive"
+                    />
+                  </div>
                 </div>
                 <p class="text-xs text-gray-500 font-mono">{{ account.accountId }}</p>
               </div>
             </div>
-            
+
             <!-- Role Count -->
-            <div class="text-right">
+            <div class="text-right flex-shrink-0">
               <div class="text-sm font-medium text-blue-400">{{ account.roles.length }}</div>
               <div class="text-xs text-gray-500">roles</div>
             </div>
-          </div>
-
-          <!-- Admin & Cost Manager Badges -->
-          <div
-            v-if="getAccountAdminRoles(account.accountId).isPrimaryAdmin ||
-                  getAccountAdminRoles(account.accountId).isDelegateAdmin ||
-                  getAccountAdminRoles(account.accountId).isCostManager"
-            class="flex flex-wrap gap-1.5"
-          >
-            <UBadge
-              v-if="getAccountAdminRoles(account.accountId).isPrimaryAdmin"
-              color="orange"
-              variant="solid"
-              size="xs"
-              class="font-medium"
-            >
-              <UIcon name="i-heroicons-shield-check" class="w-3 h-3 mr-0.5" />
-              Primary Admin
-            </UBadge>
-            <UBadge
-              v-if="getAccountAdminRoles(account.accountId).isDelegateAdmin"
-              color="yellow"
-              variant="solid"
-              size="xs"
-              class="font-medium"
-            >
-              <UIcon name="i-heroicons-user-group" class="w-3 h-3 mr-0.5" />
-              Delegate Admin
-            </UBadge>
-            <UBadge
-              v-if="getAccountAdminRoles(account.accountId).isCostManager"
-              color="green"
-              variant="solid"
-              size="xs"
-              class="font-medium"
-            >
-              <UIcon name="i-heroicons-currency-dollar" class="w-3 h-3 mr-0.5" />
-              Cost Manager
-            </UBadge>
           </div>
 
           <!-- Primary Roles grouped by environment -->

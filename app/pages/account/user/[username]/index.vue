@@ -380,6 +380,10 @@ const updateBreadcrumbs = () => {
                         History
                       </UButton>
                     </NuxtLink>
+                    <UserShareButton
+                      :username="username"
+                      :display-name="userProfile.displayName"
+                    />
                   </div>
                 </div>
               </div>

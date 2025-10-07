@@ -39,6 +39,19 @@
         </div>
 
         <div class="flex items-center gap-2 flex-wrap 2xl:flex-nowrap">
+          <!-- IDC Session Status Badge -->
+          <UBadge
+            v-if="showSessionStatus && hasActiveSession(user.userPrincipalName)"
+            size="xs"
+            color="green"
+            variant="soft"
+            class="flex items-center gap-1"
+          >
+            <UIcon name="i-heroicons-check-circle" class="w-3 h-3" />
+            <span>Active Session</span>
+          </UBadge>
+
+          <!-- Role Badges -->
           <UBadge
             v-if="user.roles.length > 0"
             size="xs"
@@ -74,6 +87,7 @@
 
 <script setup lang="ts">
 import { convertToUsernameSlug } from '~/utils/userUtils'
+import type { IDCUserSession } from '~/shared/types/idc-sessions'
 
 interface GraphUser {
   displayName: string
@@ -85,7 +99,30 @@ const props = defineProps<{
   users: GraphUser[]
   accountId: string
   loading: boolean
+  idcSessions?: IDCUserSession[] // Optional IDC session data
+  showSessionStatus?: boolean // Whether to show IDC session badges
 }>()
+
+// Helper to check if a user has an active IDC session
+const hasActiveSession = (userPrincipalName: string): boolean => {
+  if (!props.idcSessions || props.idcSessions.length === 0) {
+    console.log('[AccountUsers] No IDC sessions available')
+    return false
+  }
+
+  console.log('[AccountUsers] Checking session for:', userPrincipalName)
+  console.log('[AccountUsers] Available sessions:', props.idcSessions.map(s => s.userPrincipalName))
+
+  const session = props.idcSessions.find(s => s.userPrincipalName === userPrincipalName)
+  console.log('[AccountUsers] Found session:', session)
+  return session?.isActive || false
+}
+
+// Get session details for a user
+const getUserSessionInfo = (userPrincipalName: string): IDCUserSession | undefined => {
+  if (!props.idcSessions) return undefined
+  return props.idcSessions.find(s => s.userPrincipalName === userPrincipalName)
+}
 
 const maxVisible = 6
 const visibleUsers = computed(() => props.users.slice(0, maxVisible))

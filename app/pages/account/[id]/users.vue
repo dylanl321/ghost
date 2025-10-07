@@ -12,6 +12,7 @@ const awsAccountsStore = useAwsAccountsStore()
 const groupMembers = useGroupMembers()
 const { user } = useOidcAuth()
 const enclaveStore = useEnclaveStore()
+const idcSessions = useIDCSessions()
 
 // Account info state
 const accountInfo = ref<any>(null)
@@ -21,6 +22,12 @@ const error = ref<string | null>(null)
 // Users state
 const users = ref<GraphUser[]>([])
 const usersLoading = ref(true)
+
+// IDC session state
+const idcSessionsData = ref<any[]>([])
+const idcSessionsLoading = ref(false)
+const showSessionStatus = ref(true) // Toggle to show/hide session status
+const idcConfigured = ref(true) // Track if IDC is properly configured
 
 // Get account info from store or fetch from API
 const fetchAccountInfo = async () => {
@@ -112,13 +119,13 @@ const breadcrumbItems = computed(() => [
 // Fetch users for the account
 const fetchUsers = async () => {
   if (!accountId.value) return
-  
+
   usersLoading.value = true
   try {
     const govCloudId = enclaveStore.enclaves[accountId.value]?.awsGovCloudAccountID || enhancedAccountInfo.value?.govCloudAccountId
     users.value = await groupMembers.fetchEnclaveUsers(
-      accountId.value, 
-      govCloudId || '', 
+      accountId.value,
+      govCloudId || '',
       user.value?.accessToken || ''
     )
   } catch (err) {
@@ -129,12 +136,40 @@ const fetchUsers = async () => {
   }
 }
 
+// Fetch IDC sessions for the account
+const fetchIDCSessions = async () => {
+  if (!accountId.value) return
+
+  idcSessionsLoading.value = true
+  try {
+    const environment = 'govcloud'
+
+    console.log('[IDC Sessions] Fetching sessions for account:', accountId.value)
+    const sessions = await idcSessions.fetchAccountSessions(accountId.value, environment)
+
+    console.log('[IDC Sessions] Received', sessions.length, 'sessions')
+    console.log('[IDC Sessions] Sessions data:', sessions)
+    console.log('[IDC Sessions] Entra users:', users.value.map(u => u.userPrincipalName))
+
+    idcSessionsData.value = sessions
+  } catch (err: any) {
+    console.error('[IDC Sessions] Error:', err)
+    showSessionStatus.value = false
+    idcConfigured.value = false
+    idcSessionsData.value = []
+  } finally {
+    idcSessionsLoading.value = false
+  }
+}
+
 // Initialize data
 onMounted(async () => {
   await awsAccountsStore.initialize()
   await enclaveStore.initialize()
   await fetchAccountInfo()
   await fetchUsers()
+  // Fetch IDC sessions in parallel (don't block on this)
+  fetchIDCSessions()
 })
 </script>
 
@@ -244,12 +279,23 @@ onMounted(async () => {
       </UAlert>
     </div>
 
-    <!-- Users Component with enhanced account info -->
-    <AccountUsers 
-      v-if="enhancedAccountInfo" 
+    <!-- IDC Configuration Notice (only show in development) -->
+    <UAlert
+      v-if="!idcConfigured && false"
+      color="blue"
+      icon="i-heroicons-information-circle"
+      title="AWS Identity Center Not Available"
+      description="IAM Identity Center is not set up in the GovCloud account. Session tracking is disabled."
+    />
+
+    <!-- Users Component with enhanced account info and IDC sessions -->
+    <AccountUsers
+      v-if="enhancedAccountInfo"
       :users="users"
-      :account-id="accountId" 
+      :account-id="accountId"
       :loading="usersLoading"
+      :idc-sessions="idcSessionsData"
+      :show-session-status="showSessionStatus"
     />
   </div>
 </template> 

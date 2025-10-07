@@ -4,7 +4,7 @@
 
 export type AWSEnvironmentType = 'commercial' | 'govcloud'
 
-export type AWSServiceType = 
+export type AWSServiceType =
   | 'dynamodb'
   | 'cost-explorer'
   | 'ec2'
@@ -15,6 +15,7 @@ export type AWSServiceType =
   | 'organizations'
   | 'sso-admin'
   | 'sso'
+  | 'identitystore'
   | 'lambda'
   | 'cloudformation'
   | 'cloudtrail'

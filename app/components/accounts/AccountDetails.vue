@@ -1,7 +1,37 @@
 <template>
   <UCard>
     <template #header>
-      <div class="text-lg font-semibold">Account Details</div>
+      <div class="flex items-center justify-between">
+        <div class="text-lg font-semibold">Account Details</div>
+
+        <div class="flex items-center gap-2">
+          <!-- Email Account Button -->
+          <UButton
+            v-if="enclave?.accountEmail"
+            :to="getAccountEmailLink()"
+            icon="i-heroicons-envelope"
+            color="blue"
+            variant="soft"
+            size="sm"
+            :title="`Email account: ${enclave.accountEmail}`"
+          >
+            Email Account
+          </UButton>
+
+          <!-- Email All Users Button -->
+          <UButton
+            v-if="allUsersEmails.length > 0"
+            :to="getAllUsersEmailLink()"
+            icon="i-heroicons-user-group"
+            color="purple"
+            variant="soft"
+            size="sm"
+            :title="`Email all ${allUsersEmails.length} account users`"
+          >
+            Email All Users
+          </UButton>
+        </div>
+      </div>
     </template>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4">
@@ -142,19 +172,42 @@
 
 <script setup lang="ts">
 import { convertToUsernameSlug, formatUsername } from '~/utils/userUtils'
+import type { GraphUser } from '~/composables/useGroupMembers'
 
 const enclaveStore = useEnclaveStore()
 
-// Assume accountId is passed as prop or pulled from route
-const props = defineProps<{ accountId: string, currentSpend: number }>()
+// Props
+const props = defineProps<{
+  accountId: string
+  currentSpend: number
+  users?: GraphUser[]
+}>()
 
 const enclave = computed(() => enclaveStore.enclaves[props.accountId])
 
-// Placeholder values for cost details until API is wired in
-// const currentSpend = 120000
 const utilization = computed(() => {
   const budget = Number(enclave.value?.estimatedMonthlyCharge) || 0
   return budget > 0 ? ((props.currentSpend / budget) * 100).toFixed(1) : '0'
 })
+
+// Email functionality
+const allUsersEmails = computed(() => {
+  if (!props.users || props.users.length === 0) return []
+  return props.users
+    .map(user => user.userPrincipalName)
+    .filter(email => email && email.includes('@'))
+})
+
+const getAccountEmailLink = () => {
+  if (!enclave.value?.accountEmail) return ''
+  return `mailto:${enclave.value.accountEmail}?subject=Regarding AWS Account: ${enclave.value.projectName || props.accountId}`
+}
+
+const getAllUsersEmailLink = () => {
+  if (allUsersEmails.value.length === 0) return ''
+  const emails = allUsersEmails.value.join(',')
+  const subject = `Regarding AWS Account: ${enclave.value?.projectName || props.accountId}`
+  return `mailto:${emails}?subject=${encodeURIComponent(subject)}`
+}
 
 </script>
