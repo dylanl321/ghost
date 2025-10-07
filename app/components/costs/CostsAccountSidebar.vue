@@ -3,14 +3,14 @@
     <div class="flex-1 bg-gray-900 flex flex-col min-h-0">
       <div class="flex items-center justify-between p-4 border-b border-gray-700">
         <h2 class="text-lg font-semibold text-white">Account Selector</h2>
-        <UButton size="xs" variant="ghost" color="gray" icon="i-heroicons-arrow-path" @click="$emit('refresh')" :loading="isLoading" />
+        <UButton size="xs" variant="ghost" color="gray" icon="i-heroicons-arrow-path" :loading="isLoading" @click="$emit('refresh')" />
       </div>
 
       <div class="p-3 border-b border-gray-700">
         <UInput v-model="searchTerm" :placeholder="searchPlaceholder" icon="i-heroicons-magnifying-glass" size="sm">
           <template #trailing>
             <div class="flex items-center gap-1">
-              <UTooltip :text="searchScopeTooltip" v-if="searchTerm">
+              <UTooltip v-if="searchTerm" :text="searchScopeTooltip">
                 <UBadge :color="searchScope === 'global' ? 'blue' : 'gray'" size="xs" variant="soft" class="cursor-pointer" @click="$emit('toggle-scope')">
                   {{ searchScope === 'global' ? 'All' : 'Tab' }}
                 </UBadge>
@@ -23,7 +23,7 @@
 
       <div class="border-b border-gray-700">
         <div class="flex">
-          <button v-for="tab in tabs" :key="tab.id" @click="$emit('set-tab', tab.id)" class="flex-1 px-3 py-2 text-xs font-medium border-b-2 transition-colors flex items-center justify-center gap-1" :class="{ 'text-blue-400 border-blue-400 bg-blue-900/20': activeTab === tab.id, 'text-gray-400 border-transparent hover:text-gray-300 hover:border-gray-600': activeTab !== tab.id }">
+          <button v-for="tab in tabs" :key="tab.id" class="flex-1 px-3 py-2 text-xs font-medium border-b-2 transition-colors flex items-center justify-center gap-1" :class="{ 'text-blue-400 border-blue-400 bg-blue-900/20': activeTab === tab.id, 'text-gray-400 border-transparent hover:text-gray-300 hover:border-gray-600': activeTab !== tab.id }" @click="$emit('set-tab', tab.id)">
             <Icon :name="tab.icon" class="w-3 h-3" />
             <span class="leading-none">{{ tab.label }}</span>
           </button>
@@ -40,7 +40,7 @@
             <span class="text-sm text-gray-300">
               {{ selectedAccounts.length === 0 ? `Showing all ${accountsList.length} accounts` : `${selectedAccounts.length} of ${accountsList.length} selected` }}
             </span>
-            <UButton size="xs" color="gray" variant="link" @click="$emit('clear-selection')" v-show="selectedAccounts.length > 0">Clear</UButton>
+            <UButton v-show="selectedAccounts.length > 0" size="xs" color="gray" variant="link" @click="$emit('clear-selection')">Clear</UButton>
           </div>
         </div>
       </div>
@@ -49,7 +49,6 @@
 </template>
 
 <script setup lang="ts">
-import type { Account } from '~/composables/useAccountCostsUI'
 
 defineProps<{
   isLoading: boolean,
@@ -60,7 +59,7 @@ defineProps<{
   searchPlaceholder: string,
   searchScopeTooltip: string,
   selectedAccounts: string[],
-  accountsList: Account[]
+  accountsList: AWSEnclaveData[]
 }>()
 
 defineEmits<{
