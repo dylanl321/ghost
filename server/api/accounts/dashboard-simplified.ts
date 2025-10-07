@@ -202,7 +202,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       return await getOverview(accountId)
     },
     {
-      ttl: 3600, // 1 hour
+      ttl: 1200, // 20 minutes
       tags: [CacheTags.ACCOUNTS]
     }
   )

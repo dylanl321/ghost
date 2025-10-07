@@ -25,3 +25,4 @@ logs
 
 # Other
 dev-notes.md
+*.sh

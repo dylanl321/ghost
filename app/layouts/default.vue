@@ -82,10 +82,10 @@ const breadcrumbs = computed(() => {
       break // stop after pushing, so "explorer" doesn't get added separately
     }
 
-    // Handle `/account/{ID}` by changing "Account" to "Account Explorer"
-    if (seg.toLowerCase() === 'account' && parseInt(segments[i + 1] || "")) {
+    // Handle `/account/*` by making "Account" link to the account explorer
+    if (seg.toLowerCase() === 'account') {
       crumbs.push({
-        label: 'Account Explorer',
+        label: 'Account',
         to: '/account/explorer',
       })
       continue
