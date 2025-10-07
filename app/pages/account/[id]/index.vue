@@ -7,40 +7,89 @@
           <div :class="`w-3 h-3 rounded-full ${accountStatus !== 'Decommissioned' ? 'bg-green-500' : 'bg-red-500'}`" />
           <h1 class="font-semibold text-2xl">{{ accountName ?? "Loading..." }}</h1>
         </div>
-        <UButton
-          v-if="accountId"
-          icon="i-heroicons-chart-bar"
-          color="primary"
-          variant="soft"
-          @click="navigateToCostsPage"
-        >
-          View Costs
-        </UButton>
+        <div class="flex gap-2">
+          <AccountShareButton
+            v-if="accountId"
+            :account-id="accountId"
+            :account-name="accountName"
+            :selected-tab="selectedTab"
+            :tab-name="currentTabName"
+          />
+          <UButton
+            v-if="accountId"
+            icon="i-heroicons-chart-bar"
+            color="primary"
+            variant="soft"
+            @click="navigateToCostsPage"
+          >
+            View Costs
+          </UButton>
+        </div>
       </div>
     </UCard>
 
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 row-auto">
-      <!-- Account Details -->
-      <AccountDetails v-if="accountId" :account-id="accountId" :current-spend="currentSpend" class="col-span-2" />
+    <!-- Tabs -->
+    <UTabs v-model="selectedTab" :items="tabs">
+      <!-- Overview Tab -->
+      <template #overview>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 row-auto mt-4">
+          <!-- Account Details -->
+          <AccountDetails v-if="accountId" :account-id="accountId" :current-spend="currentSpend" :users="users" class="col-span-2" />
 
-      <!-- Budget Health -->
-      <BudgetHealthCard
-        :budget="budget"
-        :current-spend="currentSpend"
-        :forecast-data="forecastData"
-        :loading="loading"
-        class="col-span-1"
-      />
+          <!-- Budget Health -->
+          <BudgetHealthCard
+            :budget="budget"
+            :current-spend="currentSpend"
+            :forecast-data="forecastData"
+            :loading="loading"
+            class="col-span-1"
+          />
 
-      <!-- Account Users -->
-      <AccountUsers :users="users" :account-id="accountId" :loading="loading" class="col-span-1" />
+          <!-- Account Users -->
+          <AccountUsers :users="users" :account-id="accountId" :loading="loading" class="col-span-1" />
 
-      <!-- Cost Trend Chart -->
-      <CostTrendChart title="Account Cost Trends" :time-series-billable="billableTimeSeries" :time-series-proforma="proformaTimeSeries" :loading="loading" class="col-span-2" />
+          <!-- Cost Trend Chart -->
+          <CostTrendChart title="Account Cost Trends" :time-series-billable="billableTimeSeries" :time-series-proforma="proformaTimeSeries" :loading="loading" class="col-span-2" />
+        </div>
+      </template>
 
-      <!-- Resource Usage -->
-      <ResourceUsage :data="resourceCounts || {}" :columns="2" :loading="loading" class="col-span-1" />
-    </div>
+      <!-- Resources Tab -->
+      <template #resources>
+        <div class="space-y-4 mt-4">
+          <!-- Resource Usage Summary -->
+          <ResourceUsage :data="resourceCounts || {}" :columns="2" :loading="loading" />
+
+          <!-- Summary Cards Row -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- Instance Scheduling (GovCloud) -->
+            <InstanceScheduling v-if="govCloudId || accountId" :account-id="govCloudId || accountId" />
+
+            <!-- EBS Volumes (GovCloud) -->
+            <EBSVolumes v-if="govCloudId || accountId" :account-id="govCloudId || accountId" />
+
+            <!-- S3 Buckets -->
+            <S3Buckets v-if="govCloudId || accountId" :account-id="govCloudId || accountId" :environment="govCloudId ? 'govcloud' : 'commercial'" />
+          </div>
+
+          <!-- Instances Table - Full Width (GovCloud) -->
+          <InstancesTable v-if="govCloudId || accountId" :account-id="govCloudId || accountId" />
+        </div>
+      </template>
+
+      <!-- Policies Tab -->
+      <template #policies>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 row-auto mt-4">
+          <!-- Service Control Policies -->
+          <ServiceControlPolicies v-if="accountId" :account-id="accountId" class="col-span-2" />
+
+          <!-- Organizational Structure -->
+          <OrganizationalStructure v-if="accountId" :account-id="accountId" class="col-span-1" />
+
+          <!-- Policy Analyzer -->
+          <PolicyAnalyzer v-if="accountId" :account-id="accountId" class="col-span-3" />
+        </div>
+      </template>
+    </UTabs>
   </div>
 </template>
 
@@ -56,6 +105,26 @@ const accountId = computed(() => route.params.id as string)
 const govCloudId = computed(() => enclaveStore.enclaves[accountId.value]?.awsGovCloudAccountID)
 const accountName = computed(() => enclaveStore.enclaves[accountId.value]?.projectName)
 const accountStatus = computed(() => enclaveStore.enclaves[accountId.value]?.enclaveStatus)
+
+// Tabs configuration
+const selectedTab = ref(0)
+const tabs = [
+  {
+    label: 'Overview',
+    slot: 'overview',
+    icon: 'i-heroicons-home'
+  },
+  {
+    label: 'Resources',
+    slot: 'resources',
+    icon: 'i-heroicons-server-stack'
+  },
+  {
+    label: 'Policies',
+    slot: 'policies',
+    icon: 'i-heroicons-shield-check'
+  }
+]
 
 interface InstanceResponse {
   instances: Instance[]
@@ -100,6 +169,12 @@ const billableTimeSeries = computed(() => {
 const proformaTimeSeries = computed(() => {
   if (!costResponse.value) return []
   return costResponse.value.data.proformaLast14Days
+})
+
+// Get the current tab name for the share button
+const currentTabName = computed(() => {
+  const tab = tabs.find((t, index) => index === selectedTab.value)
+  return tab?.label || 'Overview'
 })
 
 const router = useRouter()
@@ -150,14 +225,24 @@ onMounted(async () => {
   // Check for GovCloud ID redirect first
   checkAndRedirectIfGovCloudId()
 
+  // Check for tab query parameter from shared link
+  const tabParam = route.query.tab
+  if (tabParam !== undefined && tabParam !== null) {
+    const tabIndex = parseInt(tabParam as string)
+    if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex < tabs.length) {
+      selectedTab.value = tabIndex
+    }
+  }
+
   try {
     if (accountId.value) {
       users.value = await groupMembers.fetchEnclaveUsers(accountId.value, govCloudId.value || '', user.value?.accessToken || '')
     }
 
     // Fetch all data in parallel for better performance
+    // Use govCloudId for govcloud APIs, accountId (commercial) for commercial APIs
     const [instancesRes, costsRes, resourcesRes, forecastRes] = await Promise.all([
-      fetch(`/api/instances?environment=govcloud&accountIds=${accountId.value}&limit=2000`),
+      fetch(`/api/instances?environment=govcloud&accountIds=${govCloudId.value || accountId.value}&limit=2000`),
       fetch(`/api/accounts/dashboard-simplified?standard_account_id=${accountId.value}`),
       fetch(`/api/config/summary-simplified?govcloud_account_id=${govCloudId.value}`),
       fetch(`/api/costs/forecast?period=current-month-remainder&accountIds=${accountId.value}&granularity=DAILY&environment=commercial`)

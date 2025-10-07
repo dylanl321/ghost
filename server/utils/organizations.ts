@@ -345,6 +345,47 @@ export async function getAccountPolicies(
 }
 
 /**
+ * Get full policy document with statements
+ */
+export async function getPolicyDocument(
+  policyId: string,
+  environment: AWSEnvironmentType = 'commercial'
+): Promise<any | null> {
+  try {
+    const orgAccountId = getOrganizationsAccountId(environment)
+    const region = environment === 'commercial' ? 'us-east-1' : 'us-gov-west-1'
+    const client = await getOrganizationsClient(environment, region, orgAccountId)
+
+    const { DescribePolicyCommand } = await import('@aws-sdk/client-organizations')
+    const response = await client.send(
+      new DescribePolicyCommand({
+        PolicyId: policyId
+      })
+    )
+
+    if (!response.Policy) return null
+
+    // Parse the policy content JSON
+    const policyContent = response.Policy.Content
+      ? JSON.parse(response.Policy.Content)
+      : null
+
+    return {
+      id: response.Policy.PolicySummary?.Id,
+      arn: response.Policy.PolicySummary?.Arn,
+      name: response.Policy.PolicySummary?.Name,
+      description: response.Policy.PolicySummary?.Description,
+      type: response.Policy.PolicySummary?.Type,
+      awsManaged: response.Policy.PolicySummary?.AwsManaged,
+      content: policyContent
+    }
+  } catch (error) {
+    console.error(`Failed to get policy document for ${policyId}:`, error)
+    return null
+  }
+}
+
+/**
  * Get policies attached to a target (account or OU)
  */
 export async function getAttachedPolicies(
@@ -356,11 +397,11 @@ export async function getAttachedPolicies(
     const orgAccountId = getOrganizationsAccountId(environment)
     const region = environment === 'commercial' ? 'us-east-1' : 'us-gov-west-1'
     const client = await getOrganizationsClient(environment, region, orgAccountId)
-    
+
     const { ListPoliciesForTargetCommand } = await import('@aws-sdk/client-organizations')
     const policies: any[] = []
     let nextToken: string | undefined
-    
+
     do {
       const response = await client.send(
         new ListPoliciesForTargetCommand({
@@ -369,7 +410,7 @@ export async function getAttachedPolicies(
           NextToken: nextToken
         })
       )
-      
+
       if (response.Policies) {
         policies.push(...response.Policies.map(policy => ({
           id: policy.Id,
