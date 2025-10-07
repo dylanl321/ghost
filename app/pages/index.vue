@@ -12,7 +12,7 @@
     </UCard>
 
     <!-- Metric Displays -->
-    <div class="grid grid-cols-4 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
 
       <!-- Month to Date -->
       <UCard class="p-2">
@@ -73,16 +73,16 @@
       </UCard>
     </div>
 
-    <div class="grid grid-cols-3 gap-4 auto-rows-fr">
-      <UserEnclaves :loading="loading" class="col-span-2" />
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+      <UserEnclaves :loading="loading" class="xl:col-span-2" />
 
       <!-- Account insights (tall) -->
       <AccountInsights :top-accounts="topAccounts" :loading="loading"
-        class="col-span-1 row-span-2" />
+        class="xl:row-span-2" />
       
       <!-- Organization cost trends -->
       <CostTrendChart title="Organization Cost Trends"
-        :time-series-billable="last14DaysSpend" :loading="loading" class="col-span-2" />
+        :time-series-billable="last14DaysSpend" :loading="loading" class="xl:col-span-2" />
 
       <!-- Resource usage under cost trends -->
       <!-- <ResourceUsage class="col-span-2" /> -->

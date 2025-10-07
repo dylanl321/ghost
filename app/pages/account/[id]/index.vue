@@ -32,7 +32,7 @@
     <UTabs v-model="selectedTab" :items="tabs">
       <!-- Overview Tab -->
       <template #overview>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 row-auto mt-4">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 row-auto">
           <!-- Account Details -->
           <AccountDetails v-if="accountId" :account-id="accountId" :current-spend="currentSpend" :users="users" class="col-span-2" />
 
@@ -49,7 +49,7 @@
           <AccountUsers :users="users" :account-id="accountId" :loading="loading" class="col-span-1" />
 
           <!-- Cost Trend Chart -->
-          <CostTrendChart title="Account Cost Trends" :time-series-billable="billableTimeSeries" :time-series-proforma="proformaTimeSeries" :loading="loading" class="col-span-2" />
+          <CostTrendChart title="Account Cost Trends" :time-series-billable="billableTimeSeries" :time-series-proforma="proformaTimeSeries" :loading="loading" class="lg:col-span-2" />
         </div>
       </template>
 

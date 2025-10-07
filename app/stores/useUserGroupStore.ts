@@ -72,7 +72,7 @@ export const useUserGroupStore = defineStore('userGroups', {
         govcloudId: string,
         environment: string,
         roles: Array<string>,
-        total: number
+        // total: number
       }> = {}
 
       for (const [accountId, roleData] of Object.entries(state.awsRoles)) {
@@ -89,13 +89,13 @@ export const useUserGroupStore = defineStore('userGroups', {
             govcloudId: roleData.govCloudAccountId,
             environment: roleData.isGovCloud ? 'GovCloud' : 'Commercial',
             roles: [],
-            total: 0
+            // total: 0
           }
         }
 
         const identifier = accountId === roleData.standardAccountId ? COMM_IDENTIFIER : GOV_IDENTIFIER
         enclaves[enclaveKey].roles.push(...roleData.roles.map(r => `${r}${identifier}`)) // Add environment to end of each role string
-        enclaves[enclaveKey].total = enclaves[enclaveKey].roles.length
+        // enclaves[enclaveKey].total = enclaves[enclaveKey].roles.length
       }
 
       // return Object.values(enclaves)

@@ -22,18 +22,18 @@
 
       <!-- Results -->
       <div
-        v-for="item in results"
+        v-for="result in results"
         v-else
-        :key="item.key"
+        :key="result.key"
         class="px-2 py-2 text-sm text-white cursor-pointer rounded border-b border-gray-800"
-        @click="selectResult(item)"
+        @click="selectResult(result)"
       >
         <div class="flex gap-2 items-center">
           <!-- <UserAvatar v-if="item.type === 'user'" size="sm" :user-principal-name="item.subLabel" :display-name="item.label" /> -->
-          <UIcon v-if="item.type === 'user'" name="i-heroicons-user" class="text-blue-500 w-5 h-5"/>
+          <UIcon v-if="result.type === 'user'" name="i-heroicons-user" class="text-blue-500 w-5 h-5"/>
           <div>
-            <div class="font-medium">{{ item.label }}</div>
-            <div class="text-xs text-gray-400">{{ item.subLabel }}</div>
+            <div class="font-medium">{{ result.label }}</div>
+            <div class="text-xs text-gray-400">{{ result.subLabel }}</div>
           </div>
         </div>
       </div>
@@ -48,6 +48,7 @@ import { onClickOutside } from '@vueuse/core'
 const { user } = useOidcAuth()
 const { searchUsers } = useGraphApi()
 const enclaveStore = useEnclaveStore()
+const router = useRouter()
 
 const loading = ref(false)
 const query = ref('')
@@ -73,8 +74,9 @@ function searchAccounts() {
     .map(e => ({
       key: `account-${e.accountId}`,
       type: 'account',
-      label: e.accountName || e.accountId,
-      subLabel: `Comm: ${e.awsStandardAccountID} | Gov: ${e.awsGovCloudAccountID}`
+      label: e.projectName || e.awsStandardAccountID,
+      subLabel: `Comm: ${e.awsStandardAccountID} | Gov: ${e.awsGovCloudAccountID}`,
+      urlKey: e.awsStandardAccountID
     }))
 }
 
@@ -101,7 +103,8 @@ const onSearch = () => {
           key: `user-${u.id}`,
           type: 'user',
           label: u.displayName,
-          subLabel: u.userPrincipalName || u.mail
+          subLabel: u.userPrincipalName,
+          urlKey: u.userPrincipalName
         }))
       )
     } catch (e) {
@@ -117,8 +120,15 @@ const onSearch = () => {
   }, 300)
 }
 
-const selectResult = (item: any) => {
-  console.log('Selected:', item)
+const selectResult = (result: any) => {
+  console.log('Selected:', result)
   showResults.value = false
+
+  if (result.type === "account") {
+    router.push(`/account/${result.urlKey}`) 
+  } else if (result.type === "user") {
+    router.push(`/account/user/${convertToUsernameSlug(result.urlKey)}`) 
+  }
 }
 </script>
+
