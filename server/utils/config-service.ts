@@ -62,6 +62,7 @@ export interface ResourceDetail {
   resourceCreationTime?: Date
   availabilityZone?: string
   relationships?: any[]
+  supplementaryConfiguration?: any
 }
 
 export interface BatchResourceResult {
@@ -657,7 +658,8 @@ function parseConfigurationItem(
     configuration,
     configurationStateId: item.configurationStateId,
     availabilityZone: item.availabilityZone,
-    relationships: item.relationships
+    relationships: item.relationships,
+    supplementaryConfiguration: item.supplementaryConfiguration
   }
 }
 

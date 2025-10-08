@@ -16,6 +16,9 @@
         <div class="space-y-1 text-xs text-gray-400">
           <div>Stopped: {{ props.data.ec2.stopped }}</div>
           <div>Windows: {{ props.data.ec2.windows }}</div>
+          <div v-if="props.data.ec2.gdmsManaged !== undefined">
+            GDMS Managed: {{ props.data.ec2.gdmsManaged }}
+          </div>
         </div>
       </div>
 
@@ -68,13 +71,21 @@
 <script setup lang="ts">
 interface Props {
   columns?: number;
-  data: ResourceCounts;
+  data: ResourceCounts & {
+    ec2?: {
+      total: number;
+      stopped?: number;
+      windows?: number;
+      gdmsManaged?: number;
+      notManaged?: number;
+      totalDiskGB?: number;
+      monthlyPricing?: number;
+    };
+  };
   loading: boolean;
 }
 const props = withDefaults(defineProps<Props>(), {
   columns: 4
 });
-
-// Define interface for resource counts structure
 
 </script>

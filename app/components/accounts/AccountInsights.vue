@@ -1,7 +1,16 @@
 <template>
   <UCard>
     <template #header>
-      <div class="text-lg font-semibold">Top Accounts</div>
+      <div class="flex justify-between items-center">
+        <div class="text-lg font-semibold">Top Accounts</div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-gray-400">{{ showProforma ? 'Proforma' : 'Billable' }}</span>
+          <UToggle
+            v-model="showProforma"
+            @update:model-value="handleToggle"
+          />
+        </div>
+      </div>
     </template>
 
     <CenteredLoadingSpinner v-if="props.loading" />
@@ -37,7 +46,7 @@
 </template>
 
 <script setup lang="ts">
-import { UCard, UBadge } from '#components'
+import { UCard, UBadge, UToggle } from '#components'
 
 const props = defineProps<{
   loading: boolean
@@ -49,11 +58,21 @@ const props = defineProps<{
   }[]
 }>()
 
+const emit = defineEmits<{
+  toggleProforma: [value: boolean]
+}>()
+
+const showProforma = ref(true) // Default to proforma
+
 const sortedAccounts = computed(() =>
   [...props.topAccounts].sort((a, b) => b.cost - a.cost)
 )
 
 function formatCost(value: number) {
   return value.toLocaleString('en-US', { maximumFractionDigits: 0 })
+}
+
+function handleToggle(value: boolean) {
+  emit('toggleProforma', value)
 }
 </script>
