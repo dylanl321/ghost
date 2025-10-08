@@ -190,17 +190,26 @@ export const useGraphApi = () => {
       addResults(searchResults)
 
       // 3. Search by mail field (startswith) 
-      filter = `startswith(mail,'${cleanQuery}')`
-      searchResults = await makeSearchCall(filter)
-      addResults(searchResults)
+      // filter = `startswith(mail,'${cleanQuery}')`
+      // searchResults = await makeSearchCall(filter)
+      // addResults(searchResults)
 
       // 4. If query contains space, try searching individual parts
       if (cleanQuery.includes(' ')) {
-        const parts = cleanQuery.split(' ').filter(part => part.length > 1)
+        // const parts = cleanQuery.split(' ').filter(part => part.length > 1)
+        const parts = cleanQuery.split(' ')
         
-        for (const part of parts) {
-          // Search each part in display name
-          filter = `contains(displayName,'${part}')`
+        // for (const part of parts) {
+        //   // Search each part in display name
+        //   filter = `contains(displayName,'${part}')`
+        //   searchResults = await makeSearchCall(filter)
+        //   addResults(searchResults)
+        // }
+
+        // First name + full/partial last name (Ex. "james smi" or "james smith")
+        if (parts.length === 2) {
+          const [first, last] = parts
+          filter = `startswith(userPrincipalName,'${first}.${last}')`
           searchResults = await makeSearchCall(filter)
           addResults(searchResults)
         }
@@ -215,37 +224,37 @@ export const useGraphApi = () => {
       }
 
       // 5. Broader contains searches if we don't have many results yet
-      if (results.size < 5) {
-        // Contains search in display name
-        filter = `contains(displayName,'${cleanQuery}')`
-        searchResults = await makeSearchCall(filter)
-        addResults(searchResults)
+      // if (results.size < 5) {
+      //   // Contains search in display name
+      //   filter = `contains(displayName,'${cleanQuery}')`
+      //   searchResults = await makeSearchCall(filter)
+      //   addResults(searchResults)
 
-        // Contains search in userPrincipalName
-        filter = `contains(userPrincipalName,'${cleanQuery}')`
-        searchResults = await makeSearchCall(filter)
-        addResults(searchResults)
+      //   // Contains search in userPrincipalName
+      //   filter = `contains(userPrincipalName,'${cleanQuery}')`
+      //   searchResults = await makeSearchCall(filter)
+      //   addResults(searchResults)
 
-        // Contains search in mail
-        filter = `contains(mail,'${cleanQuery}')`
-        searchResults = await makeSearchCall(filter)
-        addResults(searchResults)
-      }
+      //   // Contains search in mail
+      //   filter = `contains(mail,'${cleanQuery}')`
+      //   searchResults = await makeSearchCall(filter)
+      //   addResults(searchResults)
+      // }
 
       // 6. If still limited results and single word, try searching for it as part of names
-      if (results.size < 3 && !cleanQuery.includes(' ') && cleanQuery.length > 2) {
-        // Search for names that contain the query anywhere (like middle names, nicknames)
-        const broadFilters = [
-          `contains(displayName,' ${cleanQuery}')`, // Space before to catch middle names
-          `contains(displayName,', ${cleanQuery}')`, // After comma for first names in "Last, First" format
-          `endswith(displayName,' ${cleanQuery}')`, // Ending with the query
-        ]
+      // if (results.size < 3 && !cleanQuery.includes(' ') && cleanQuery.length > 2) {
+      //   // Search for names that contain the query anywhere (like middle names, nicknames)
+      //   const broadFilters = [
+      //     `contains(displayName,' ${cleanQuery}')`, // Space before to catch middle names
+      //     `contains(displayName,', ${cleanQuery}')`, // After comma for first names in "Last, First" format
+      //     `endswith(displayName,' ${cleanQuery}')`, // Ending with the query
+      //   ]
 
-        for (const broadFilter of broadFilters) {
-          searchResults = await makeSearchCall(broadFilter)
-          addResults(searchResults)
-        }
-      }
+      //   for (const broadFilter of broadFilters) {
+      //     searchResults = await makeSearchCall(broadFilter)
+      //     addResults(searchResults)
+      //   }
+      // }
 
       // Convert Map back to array and limit results
       const finalResults = Array.from(results.values()).slice(0, top)
