@@ -60,10 +60,10 @@ export async function getUserSession(event: H3Event): Promise<{
       // Import getUserSession from nuxt-oidc-auth
       const { getUserSession: getOIDCUserSession } = await import('nuxt-oidc-auth/runtime/server/utils/session.js')
       oidcSession = await getOIDCUserSession(event)
-      console.log('OIDC Session from nuxt-oidc-auth:', {
-        hasSession: !!oidcSession,
-        keys: oidcSession ? Object.keys(oidcSession) : []
-      })
+      // console.log('OIDC Session from nuxt-oidc-auth:', {
+      //   hasSession: !!oidcSession,
+      //   keys: oidcSession ? Object.keys(oidcSession) : []
+      // })
     } catch (e) {
       console.log('Could not get session from nuxt-oidc-auth:', e.message)
 
@@ -91,17 +91,17 @@ export async function getUserSession(event: H3Event): Promise<{
 
     const session = oidcSession || contextSession
 
-    console.log('Session details:', {
-      hasSession: !!session,
-      hasAccessToken: !!session?.accessToken,
-      hasAccess_token: !!session?.access_token,
-      hasUser: !!session?.user,
-      hasData: !!session?.data,
-      sessionKeys: session ? Object.keys(session) : [],
-      dataKeys: session?.data ? Object.keys(session.data) : [],
-      userKeys: session?.user ? Object.keys(session.user) : [],
-      sessionType: typeof session
-    })
+    // console.log('Session details:', {
+    //   hasSession: !!session,
+    //   hasAccessToken: !!session?.accessToken,
+    //   hasAccess_token: !!session?.access_token,
+    //   hasUser: !!session?.user,
+    //   hasData: !!session?.data,
+    //   sessionKeys: session ? Object.keys(session) : [],
+    //   dataKeys: session?.data ? Object.keys(session.data) : [],
+    //   userKeys: session?.user ? Object.keys(session.user) : [],
+    //   sessionType: typeof session
+    // })
 
     if (!session) {
       console.log('No session found in any location')
@@ -112,12 +112,12 @@ export async function getUserSession(event: H3Event): Promise<{
     // Check both the top level and inside 'data'
     const sessionData = session.data || session
 
-    console.log('Session data structure:', {
-      hasSessionData: !!sessionData,
-      dataKeys: sessionData ? Object.keys(sessionData) : [],
-      hasAccessToken: !!sessionData?.accessToken,
-      hasUser: !!sessionData?.user
-    })
+    // console.log('Session data structure:', {
+    //   hasSessionData: !!sessionData,
+    //   dataKeys: sessionData ? Object.keys(sessionData) : [],
+    //   hasAccessToken: !!sessionData?.accessToken,
+    //   hasUser: !!sessionData?.user
+    // })
 
     // Extract user and token information from session
     // nuxt-oidc-auth might store user in different ways:
@@ -152,14 +152,15 @@ export async function getUserSession(event: H3Event): Promise<{
       }
     }
 
-    console.log('Session validated successfully with:', {
-      hasToken: !!accessToken,
-      hasUser: !!user,
-      userEmail: user?.email || user?.preferred_username || user?.upn || user?.unique_name,
-      userId: user?.id || user?.sub || user?.oid,
-      userName: user?.name || user?.displayName,
-      claimsKeys: user ? Object.keys(user) : []
-    })
+    console.log('Session validated successfully')
+    // console.log('Session validated successfully with:', {
+    //   hasToken: !!accessToken,
+    //   hasUser: !!user,
+    //   userEmail: user?.email || user?.preferred_username || user?.upn || user?.unique_name,
+    //   userId: user?.id || user?.sub || user?.oid,
+    //   userName: user?.name || user?.displayName,
+    //   claimsKeys: user ? Object.keys(user) : []
+    // })
 
     return {
       accessToken: accessToken,
