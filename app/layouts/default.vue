@@ -29,6 +29,7 @@
       <footer class="bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 h-[53px] flex items-center">
         <div class="px-6 flex justify-between items-center w-full text-sm text-gray-500 dark:text-gray-400">
           <span>A product of the GDMS AWS Landing Zone Team</span>
+          <FeedbackModal />
           <!-- <div class="flex items-center gap-4">
             <NuxtLink
               to="/changelog"
