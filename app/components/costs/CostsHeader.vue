@@ -1,19 +1,33 @@
 <template>
   <div class="bg-gray-900 border-b border-gray-700 p-4 md:p-5 pt-0 md:pt-0">
     <div class="flex justify-between items-center">
-      <div>
-        <h1 class="text-2xl font-bold text-white">Cost Analytics</h1>
-        <p class="text-gray-300 text-sm">Monitor and analyze account spending</p>
+      <div class="flex items-center gap-2">
+        <div>
+          <h1 class="text-2xl font-bold text-white">Cost Analytics</h1>
+          <p class="text-gray-300 text-sm">Monitor and analyze account spending</p>
+        </div>
+        <UTooltip text="Learn how to use the Cost Dashboard">
+          <NuxtLink to="/support/docs?topic=cost-dashboard-guide" class="text-gray-400 hover:text-gray-300">
+            <UIcon name="i-heroicons-question-mark-circle" class="w-5 h-5" />
+          </NuxtLink>
+        </UTooltip>
       </div>
       <div class="flex gap-2 items-center">
-        <div class="w-32">
-          <USelectMenu
-            v-model="modelMode"
-            :options="modeOptions"
-            value-attribute="value"
-            option-attribute="label"
-            size="xs"
-          />
+        <div class="flex items-center gap-1">
+          <div class="w-32">
+            <USelectMenu
+              v-model="modelMode"
+              :options="modeOptions"
+              value-attribute="value"
+              option-attribute="label"
+              size="xs"
+            />
+          </div>
+          <UTooltip text="Learn about Billable vs Pro-forma data">
+            <NuxtLink to="/support/docs?topic=proforma-vs-billable" class="text-gray-400 hover:text-gray-300">
+              <UIcon name="i-heroicons-question-mark-circle" class="w-4 h-4" />
+            </NuxtLink>
+          </UTooltip>
         </div>
         <ShareButton
           :selected-accounts="selectedAccounts"

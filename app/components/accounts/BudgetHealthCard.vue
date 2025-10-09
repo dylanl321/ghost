@@ -90,20 +90,25 @@
               <!-- Dot marker -->
               <div
                 :class="
-                  point.exceeds
+                  point.isToday
+                    ? 'bg-blue-500 ring-2 ring-blue-900'
+                    : point.exceeds
                     ? 'bg-red-500 ring-2 ring-red-900'
                     : 'bg-green-500'
                 "
                 class="w-3.5 h-3.5 rounded-full z-10 relative"
               />
               <!-- Date label -->
-              <div class="text-[10px] text-gray-400 mt-2 whitespace-nowrap">
+              <div
+                class="text-[10px] mt-2 whitespace-nowrap"
+                :class="point.isToday ? 'text-blue-400 font-semibold' : 'text-gray-400'"
+              >
                 {{ point.label }}
               </div>
               <!-- Amount -->
               <div
                 class="text-[10px] font-medium mt-0.5 whitespace-nowrap"
-                :class="point.exceeds ? 'text-red-400' : 'text-gray-300'"
+                :class="point.isToday ? 'text-blue-300' : point.exceeds ? 'text-red-400' : 'text-gray-300'"
               >
                 {{ formatCurrency(point.cumulative) }}
               </div>
@@ -194,46 +199,64 @@ const projectedSpend = computed(() => {
   return burnRate.value * daysInMonth;
 });
 
-// Build simple forecast timeline from AWS data (weekly snapshots)
+// Build simple forecast timeline from AWS data (showing entire month)
 const forecastTimeline = computed(() => {
-  if (!props.forecastData?.forecast?.forecastResultsByTime) return [];
-
   const timeline: Array<{
     date: string;
     label: string;
     cumulative: number;
     exceeds: boolean;
+    isToday?: boolean;
   }> = [];
 
-  let cumulative = props.currentSpend;
-
-  // Get forecast periods from AWS (daily data)
-  const periods = props.forecastData.forecast.forecastResultsByTime || [];
-
-  // Show weekly snapshots (every 7th day) plus the last day
-  periods.forEach((period: any, index: number) => {
-    const meanValue = parseFloat(period.MeanValue || "0");
-    cumulative += meanValue;
-
-    // Show every 7th day or the last day
-    const isWeekMark = (index + 1) % 7 === 0;
-    const isLastDay = index === periods.length - 1;
-
-    if (isWeekMark || isLastDay) {
-      const endDate = new Date(period.TimePeriod?.End || "");
-      const label = endDate.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      });
-
-      timeline.push({
-        date: period.TimePeriod?.End || "",
-        label,
-        cumulative,
-        exceeds: cumulative > props.budget,
-      });
-    }
+  // Add start of month (Day 1)
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  timeline.push({
+    date: startOfMonth.toISOString(),
+    label: startOfMonth.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+    cumulative: 0,
+    exceeds: false,
   });
+
+  // Add today's actual spend
+  timeline.push({
+    date: now.toISOString(),
+    label: "Today",
+    cumulative: props.currentSpend,
+    exceeds: props.currentSpend > props.budget,
+    isToday: true,
+  });
+
+  // Add forecast periods if available
+  if (props.forecastData?.forecast?.forecastResultsByTime) {
+    let cumulative = props.currentSpend;
+    const periods = props.forecastData.forecast.forecastResultsByTime || [];
+
+    // Show weekly snapshots (every 7th day from today) plus the last day
+    periods.forEach((period: any, index: number) => {
+      const meanValue = parseFloat(period.MeanValue || "0");
+      cumulative += meanValue;
+
+      // Show every 7th day or the last day
+      const isWeekMark = (index + 1) % 7 === 0;
+      const isLastDay = index === periods.length - 1;
+
+      if (isWeekMark || isLastDay) {
+        const endDate = new Date(period.TimePeriod?.End || "");
+        const label = endDate.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        });
+
+        timeline.push({
+          date: period.TimePeriod?.End || "",
+          label,
+          cumulative,
+          exceeds: cumulative > props.budget,
+        });
+      }
+    });
+  }
 
   return timeline;
 });
@@ -275,11 +298,9 @@ const exactExceedPosition = computed(() => {
   const exceedDayIndex = exactBudgetExceed.value.dayIndex;
   const periods = props.forecastData?.forecast?.forecastResultsByTime || [];
 
-  // Find which two dots the exceed date falls between
-  let prevDotIndex = -1;
-  let nextDotIndex = -1;
-  let prevDayIndex = -1;
-  let nextDayIndex = -1;
+  // Timeline now has: [Day 1, Today, ...forecast dots]
+  // So forecast dots start at index 2
+  const FORECAST_DOT_OFFSET = 2;
 
   // Build a map of dot positions to their day indices
   const dotDayIndices: number[] = [];
@@ -291,21 +312,38 @@ const exactExceedPosition = computed(() => {
     }
   });
 
-  // Find surrounding dots
-  for (let i = 0; i < dotDayIndices.length; i++) {
-    if (dotDayIndices[i] >= exceedDayIndex) {
-      nextDotIndex = i;
-      nextDayIndex = dotDayIndices[i];
-      if (i > 0) {
-        prevDotIndex = i - 1;
-        prevDayIndex = dotDayIndices[i - 1];
+  // Find which two dots the exceed date falls between
+  let prevDotIndex = -1;
+  let nextDotIndex = -1;
+  let prevDayIndex = -1;
+  let nextDayIndex = -1;
+
+  // Check if exceed happens before first forecast dot (between Today and first forecast)
+  if (exceedDayIndex < dotDayIndices[0]) {
+    // Exceed is between "Today" (dot index 1) and first forecast dot (dot index 2)
+    prevDotIndex = 1; // Today
+    nextDotIndex = 2; // First forecast dot
+    prevDayIndex = 0; // Today is day 0 in forecast terms
+    nextDayIndex = dotDayIndices[0];
+  } else {
+    // Find surrounding forecast dots
+    for (let i = 0; i < dotDayIndices.length; i++) {
+      if (dotDayIndices[i] >= exceedDayIndex) {
+        nextDotIndex = i + FORECAST_DOT_OFFSET;
+        nextDayIndex = dotDayIndices[i];
+        if (i > 0) {
+          prevDotIndex = i - 1 + FORECAST_DOT_OFFSET;
+          prevDayIndex = dotDayIndices[i - 1];
+        } else {
+          prevDotIndex = 1; // Today
+          prevDayIndex = 0;
+        }
+        break;
       }
-      break;
     }
   }
 
-  // If exceed is before first dot or after last dot
-  if (prevDotIndex === -1) return 0;
+  // If exceed is after last dot
   if (nextDotIndex === -1) return 100;
 
   // Calculate position between the two dots

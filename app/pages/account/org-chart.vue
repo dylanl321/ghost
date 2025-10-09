@@ -5,9 +5,16 @@
       <div class="space-y-4 p-2">
         <!-- Title and Main Controls -->
         <div class="flex justify-between items-center">
-          <div>
-            <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-1">Account Organization Chart</h1>
-            <p class="text-gray-600 dark:text-gray-300 text-sm">{{ masterAccountName }}</p>
+          <div class="flex items-center gap-2">
+            <div>
+              <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-1">Account Organization Chart</h1>
+              <p class="text-gray-600 dark:text-gray-300 text-sm">{{ masterAccountName }}</p>
+            </div>
+            <UTooltip text="Learn how to use the Organization Chart">
+              <NuxtLink to="/support/docs?topic=org-chart-guide" class="text-gray-400 hover:text-gray-300">
+                <UIcon name="i-heroicons-question-mark-circle" class="w-5 h-5" />
+              </NuxtLink>
+            </UTooltip>
           </div>
           <div class="flex gap-2">
             <UButton color="white" variant="ghost" icon="i-heroicons-arrow-path" @click="refreshData">
@@ -67,6 +74,11 @@
                 </span>
               </template>
             </UToggle>
+            <UTooltip text="Learn about Billable vs Pro-forma data">
+              <NuxtLink to="/support/docs?topic=proforma-vs-billable" class="text-gray-400 hover:text-gray-300">
+                <UIcon name="i-heroicons-question-mark-circle" class="w-4 h-4" />
+              </NuxtLink>
+            </UTooltip>
             <UButton
               color="emerald"
               variant="soft"

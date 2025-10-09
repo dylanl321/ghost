@@ -9,6 +9,11 @@
             v-model="showProforma"
             @update:model-value="handleToggle"
           />
+          <UTooltip text="Learn about Billable vs Pro-forma data">
+            <NuxtLink to="/support/docs?topic=proforma-vs-billable" class="text-gray-400 hover:text-gray-300">
+              <UIcon name="i-heroicons-question-mark-circle" class="w-4 h-4" />
+            </NuxtLink>
+          </UTooltip>
         </div>
       </div>
     </template>

@@ -45,8 +45,8 @@
     <div v-else-if="filteredInstances.length === 0" class="text-center text-gray-400 py-8">
       No instances found
     </div>
-    <div v-else class="max-h-[600px] overflow-y-auto">
-      <UTable :rows="filteredInstances" :columns="columns">
+    <div v-else class="overflow-y-auto relative" style="max-height: 600px;">
+      <UTable :rows="filteredInstances" :columns="columns" :ui="{ wrapper: 'relative', thead: 'sticky top-0 z-10 bg-gray-900 shadow-md' }">
       <!-- Instance Name -->
       <template #instanceName-data="{ row }">
         <div class="flex items-center gap-2">
@@ -91,10 +91,10 @@
         </div>
       </template>
 
-      <!-- Launch Date -->
-      <template #launchTime-data="{ row }">
-        <div v-if="row.launchTime" class="text-sm">
-          {{ formatDate(row.launchTime) }}
+      <!-- Last State Change -->
+      <template #configurationItemCaptureTime-data="{ row }">
+        <div v-if="row.configurationItemCaptureTime" class="text-sm">
+          {{ formatDate(row.configurationItemCaptureTime) }}
         </div>
         <div v-else class="text-gray-500 text-sm">N/A</div>
       </template>
@@ -114,11 +114,15 @@
 
       <!-- Schedule -->
       <template #schedule-data="{ row }">
-        <div v-if="row.schedulingInfo?.hasSchedule" class="space-y-1">
-          <div class="text-sm">{{ row.schedulingInfo.scheduleName }}</div>
-          <div v-if="row.schedulingInfo.lastScheduleMessage" class="text-xs text-gray-500">
-            {{ row.schedulingInfo.lastScheduleMessage }}
-          </div>
+        <div v-if="row.schedulingInfo?.hasSchedule" class="space-y-1 max-w-[200px]">
+          <UTooltip v-if="row.schedulingInfo.scheduleName" :text="row.schedulingInfo.scheduleName">
+            <div class="text-sm truncate">{{ row.schedulingInfo.scheduleName }}</div>
+          </UTooltip>
+          <UTooltip v-if="row.schedulingInfo.lastScheduleMessage" :text="row.schedulingInfo.lastScheduleMessage">
+            <div class="text-xs text-gray-500 truncate">
+              {{ row.schedulingInfo.lastScheduleMessage }}
+            </div>
+          </UTooltip>
         </div>
         <UBadge v-else color="yellow" variant="soft">No Schedule</UBadge>
       </template>
@@ -255,7 +259,7 @@ const columns = [
   { key: 'instanceType', label: 'Type' },
   { key: 'instanceState', label: 'State' },
   { key: 'ipAddresses', label: 'IP Addresses' },
-  { key: 'launchTime', label: 'Launch Date' },
+  { key: 'configurationItemCaptureTime', label: 'Last State Change' },
   { key: 'pricing', label: 'Monthly Cost' },
   { key: 'schedule', label: 'Schedule' },
   { key: 'tags', label: 'Tags' },

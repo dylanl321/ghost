@@ -1,12 +1,20 @@
 <template>
   <div class="relative w-80">
     <!-- Search input -->
-    <UInput
-      v-model="query"
-      placeholder="Search users or accounts..."
-      icon="i-heroicons-magnifying-glass"
-      @input="onSearch"
-    />
+    <div class="flex items-center gap-1">
+      <UInput
+        v-model="query"
+        placeholder="Search users or accounts..."
+        icon="i-heroicons-magnifying-glass"
+        @input="onSearch"
+        class="flex-1"
+      />
+      <UTooltip text="Learn how to use Universal Search">
+        <NuxtLink to="/support/docs?topic=universal-search" class="text-gray-400 hover:text-gray-300">
+          <UIcon name="i-heroicons-question-mark-circle" class="w-4 h-4" />
+        </NuxtLink>
+      </UTooltip>
+    </div>
 
     <!-- Results dropdown -->
     <div
@@ -25,13 +33,12 @@
         v-for="result in results"
         v-else
         :key="result.key"
-        class="px-2 py-2 text-sm text-white cursor-pointer rounded border-b border-gray-800 hover:bg-gray-800 transition"
+        class="px-2 py-2 text-sm text-white cursor-pointer rounded border-b border-gray-800"
         @click="selectResult(result)"
       >
         <div class="flex gap-2 items-center">
           <!-- <UserAvatar v-if="item.type === 'user'" size="sm" :user-principal-name="item.subLabel" :display-name="item.label" /> -->
           <UIcon v-if="result.type === 'user'" name="i-heroicons-user" class="text-blue-500 w-5 h-5"/>
-          <UIcon v-if="result.type === 'account'" name="i-heroicons-cloud" class="text-orange-500 w-5 h-5"/>
           <div>
             <div class="font-medium">{{ result.label }}</div>
             <div class="text-xs text-gray-400">{{ result.subLabel }}</div>
@@ -56,7 +63,6 @@ const query = ref('')
 const results = ref<any[]>([])
 const showResults = ref(false)
 let debounceTimer: any
-const debounceTimeMs = 500
 
 const dropdown = ref(null)
 onClickOutside(dropdown, () => {
@@ -68,17 +74,16 @@ function searchAccounts() {
   const enclaves = Object.values(enclaveStore.enclaves || {})
   return enclaves
     .filter(e =>
-      e.projectName?.toLowerCase().includes(query.value.toLowerCase()) ||
+      e.accountName?.toLowerCase().includes(query.value.toLowerCase()) ||
       e.awsGovCloudAccountID?.includes(query.value) ||
       e.awsStandardAccountID?.includes(query.value) ||
-      e.requestID?.toString().includes(query.value) ||
-      e.awsAccountEmail?.toLowerCase().includes(query.value.toLowerCase())
+      e.requestID?.toString().includes(query.value)
     )
     .map(e => ({
       key: `account-${e.accountId}`,
       type: 'account',
       label: e.projectName || e.awsStandardAccountID,
-      subLabel: `Comm: ${e.awsStandardAccountID} | Gov: ${e.awsGovCloudAccountID || "None"}`,
+      subLabel: `Comm: ${e.awsStandardAccountID} | Gov: ${e.awsGovCloudAccountID}`,
       urlKey: e.awsStandardAccountID
     }))
 }
@@ -120,13 +125,12 @@ const onSearch = () => {
     results.value = merged_results
     loading.value = false
     showResults.value = true
-  }, debounceTimeMs)
+  }, 300)
 }
 
 const selectResult = (result: any) => {
   console.log('Selected:', result)
   showResults.value = false
-  query.value = ""
 
   if (result.type === "account") {
     router.push(`/account/${result.urlKey}`) 
@@ -135,3 +139,4 @@ const selectResult = (result: any) => {
   }
 }
 </script>
+

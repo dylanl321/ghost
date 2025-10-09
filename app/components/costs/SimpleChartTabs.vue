@@ -16,8 +16,18 @@
         >
           <Icon v-if="tab.icon" :name="tab.icon" class="w-4 h-4 inline-block mr-1" />
           {{ tab.label }}
-          <span 
-            v-if="tab.badge"
+          <UTooltip v-if="tab.badge && tab.badgeTooltip" :text="tab.badgeTooltip">
+            <NuxtLink
+              to="/support/docs?topic=proforma-vs-billable"
+              class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
+              @click.stop
+            >
+              {{ tab.badge }}
+              <UIcon name="i-heroicons-question-mark-circle" class="w-3 h-3 ml-1" />
+            </NuxtLink>
+          </UTooltip>
+          <span
+            v-else-if="tab.badge"
             class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-700 text-gray-300"
           >
             {{ tab.badge }}
@@ -117,11 +127,12 @@ const tabs = computed(() => [
     label: 'Historical Trends',
     icon: 'i-heroicons-arrow-trending-up'
   },
-  { 
-    id: 'data', 
+  {
+    id: 'data',
     label: 'Data Table',
     icon: 'i-heroicons-table-cells',
-    badge: props.dataMode === 'proforma' ? 'Proforma' : 'Billable'
+    badge: props.dataMode === 'proforma' ? 'Proforma' : 'Billable',
+    badgeTooltip: 'Learn about Billable vs Pro-forma data'
   },
   { 
     id: 'forecast', 

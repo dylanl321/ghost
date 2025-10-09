@@ -192,6 +192,169 @@ export async function batchGetEC2InstancePricing(
 }
 
 /**
+ * Get pricing for an EBS volume
+ */
+export async function getEBSVolumePricing(
+  volumeType: string,
+  sizeGB: number,
+  region: string,
+  environment: AWSEnvironmentType = 'commercial'
+): Promise<{ monthlyEstimate: number; pricePerGBMonth: number; currency: string; pricingRegion: string } | null> {
+  try {
+    // Check cache first
+    const cacheKey = `ebs-${environment}-${region}-${volumeType}`
+    const cached = pricingCache.get(cacheKey)
+
+    let pricePerGBMonth: number
+
+    if (cached && Date.now() - cached.timestamp < PRICING_CACHE_TTL) {
+      pricePerGBMonth = cached.hourlyRate // Reusing the field to store per-GB-month price
+    } else {
+      // Get the pricing region name for the API
+      const pricingRegionName = REGION_NAME_MAP[region]
+      if (!pricingRegionName) {
+        console.warn(`[AWS Pricing] No pricing region mapping found for ${region}`)
+        return null
+      }
+
+      // AWS Pricing API is only available in us-east-1 for commercial
+      const pricingClient = await getPricingClient(environment === 'govcloud' ? 'commercial' : environment)
+
+      // Map volume type to product family
+      const volumeApiType = volumeType.toUpperCase()
+
+      // Build filter for the pricing query
+      const filters = [
+        { Type: 'TERM_MATCH', Field: 'volumeApiName', Value: volumeApiType },
+        { Type: 'TERM_MATCH', Field: 'location', Value: pricingRegionName },
+        { Type: 'TERM_MATCH', Field: 'productFamily', Value: 'Storage' }
+      ]
+
+      const command = new GetProductsCommand({
+        ServiceCode: 'AmazonEC2',
+        Filters: filters,
+        MaxResults: 1
+      })
+
+      const response = await pricingClient.send(command)
+
+      if (!response.PriceList || response.PriceList.length === 0) {
+        console.warn(`[AWS Pricing] No EBS pricing found for ${volumeType} in ${region}`)
+        return null
+      }
+
+      // Parse the pricing data
+      const priceData = JSON.parse(response.PriceList[0])
+      const terms = priceData.terms?.OnDemand
+
+      if (!terms) {
+        console.warn(`[AWS Pricing] No OnDemand pricing found for ${volumeType}`)
+        return null
+      }
+
+      // Extract the per-GB-month rate
+      const termKey = Object.keys(terms)[0]
+      const priceDimensions = terms[termKey]?.priceDimensions
+
+      if (!priceDimensions) {
+        console.warn(`[AWS Pricing] No price dimensions found for ${volumeType}`)
+        return null
+      }
+
+      const dimensionKey = Object.keys(priceDimensions)[0]
+      const pricePerUnit = priceDimensions[dimensionKey]?.pricePerUnit
+      const currency = Object.keys(pricePerUnit)[0]
+      pricePerGBMonth = parseFloat(pricePerUnit[currency])
+
+      // Cache the result (reusing hourlyRate field for per-GB-month)
+      pricingCache.set(cacheKey, {
+        hourlyRate: pricePerGBMonth,
+        currency,
+        timestamp: Date.now()
+      })
+    }
+
+    return {
+      pricePerGBMonth,
+      monthlyEstimate: pricePerGBMonth * sizeGB,
+      currency: 'USD',
+      pricingRegion: region
+    }
+  } catch (error) {
+    console.error(`[AWS Pricing] Error fetching EBS pricing for ${volumeType} in ${region}:`, error.message)
+    return null
+  }
+}
+
+/**
+ * Batch fetch EBS volume pricing for multiple volumes
+ */
+export async function batchGetEBSVolumePricing(
+  volumes: Array<{ volumeType: string; sizeGB: number; region: string }>,
+  environment: AWSEnvironmentType = 'commercial'
+): Promise<Map<string, { monthlyEstimate: number; pricePerGBMonth: number; currency: string; pricingRegion: string }>> {
+  const pricingMap = new Map<string, { monthlyEstimate: number; pricePerGBMonth: number; currency: string; pricingRegion: string }>()
+
+  // Deduplicate by volumeType + region combination
+  const uniqueCombinations = new Map<string, { volumeType: string; region: string; volumes: typeof volumes }>()
+
+  volumes.forEach(volume => {
+    const key = `${volume.region}-${volume.volumeType}`
+    if (!uniqueCombinations.has(key)) {
+      uniqueCombinations.set(key, {
+        volumeType: volume.volumeType,
+        region: volume.region,
+        volumes: []
+      })
+    }
+    uniqueCombinations.get(key)!.volumes.push(volume)
+  })
+
+  console.log(`[AWS Pricing] Fetching EBS pricing for ${uniqueCombinations.size} unique volume type/region combinations`)
+
+  const entries = Array.from(uniqueCombinations.entries())
+
+  for (let i = 0; i < entries.length; i++) {
+    const [key, combo] = entries[i]
+
+    try {
+      // Get pricing for one volume of this type (just to get the per-GB rate)
+      const sampleVolume = combo.volumes[0]
+      const pricing = await getEBSVolumePricing(
+        sampleVolume.volumeType,
+        sampleVolume.sizeGB,
+        sampleVolume.region,
+        environment
+      )
+
+      if (pricing) {
+        // Add pricing for each volume of this type/region
+        combo.volumes.forEach(vol => {
+          const volumeKey = `${vol.region}-${vol.volumeType}-${vol.sizeGB}`
+          pricingMap.set(volumeKey, {
+            pricePerGBMonth: pricing.pricePerGBMonth,
+            monthlyEstimate: pricing.pricePerGBMonth * vol.sizeGB,
+            currency: pricing.currency,
+            pricingRegion: vol.region
+          })
+        })
+      }
+
+      // Rate limit: Wait 100ms between API calls
+      if (i < entries.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+    } catch (error) {
+      console.error(`[AWS Pricing] Failed to fetch EBS pricing for ${key}:`, error.message)
+    }
+  }
+
+  console.log(`[AWS Pricing] Successfully fetched ${pricingMap.size} EBS pricing entries`)
+
+  return pricingMap
+}
+
+/**
  * Clear pricing cache
  */
 export function clearPricingCache(): void {

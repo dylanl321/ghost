@@ -1,5 +1,5 @@
 <template>
-  <UCard>
+  <UCard class="h-full flex flex-col">
     <template #header>
       <div class="flex justify-between items-center">
         <div class="text-lg font-semibold">S3 Buckets</div>
@@ -27,71 +27,58 @@
       All buckets are landing zone buckets. Toggle "Show LZ Buckets" to view them.
     </div>
     <div v-else class="space-y-4">
-      <!-- Policy Analysis Summary -->
-      <div v-if="policyAnalysis" class="bg-blue-900/10 border border-blue-700/30 rounded-lg p-4">
-        <div class="flex items-center justify-between mb-3">
-          <div class="flex items-center gap-2">
-            <UIcon name="i-heroicons-shield-check" class="w-5 h-5 text-blue-400" />
-            <span class="font-medium text-blue-300">Policy Analysis Results</span>
-          </div>
-          <UButton size="xs" variant="ghost" @click="policyAnalysis = null">
-            <UIcon name="i-heroicons-x-mark" />
-          </UButton>
+      <!-- All Metrics in Single Row -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+        <!-- Summary Cards -->
+        <div class="bg-gray-800/50 rounded-lg p-3">
+          <div class="text-xs text-gray-400">App Buckets</div>
+          <div class="text-xl font-bold text-yellow-400">{{ filteredBuckets.length }}</div>
+        </div>
+        <div class="bg-gray-800/50 rounded-lg p-3">
+          <div class="text-xs text-gray-400">Landing Zone</div>
+          <div class="text-xl font-bold text-purple-400">{{ landingZoneBucketsCount }}</div>
+        </div>
+        <div class="bg-gray-800/50 rounded-lg p-3">
+          <div class="text-xs text-gray-400">Versioned</div>
+          <div class="text-xl font-bold text-blue-400">{{ versionedCount }}</div>
+        </div>
+        <div class="bg-gray-800/50 rounded-lg p-3">
+          <div class="text-xs text-gray-400">Encrypted</div>
+          <div class="text-xl font-bold text-green-400">{{ encryptedCount }}</div>
         </div>
 
-        <div class="grid grid-cols-4 gap-3">
-          <div class="bg-gray-800/50 rounded p-3">
-            <div class="text-xs text-gray-400">Analyzed</div>
-            <div class="text-lg font-bold text-white">{{ policyAnalysis.summary.bucketsWithPolicies }}</div>
-          </div>
-          <div class="bg-red-900/20 rounded p-3">
-            <div class="text-xs text-gray-400">Public Buckets</div>
-            <div class="text-lg font-bold text-red-400">{{ policyAnalysis.summary.publicBuckets }}</div>
-          </div>
-          <div class="bg-yellow-900/20 rounded p-3">
-            <div class="text-xs text-gray-400">Cross-Account</div>
-            <div class="text-lg font-bold text-yellow-400">{{ policyAnalysis.summary.crossAccountBuckets }}</div>
-          </div>
-          <div class="bg-purple-900/20 rounded p-3">
-            <div class="text-xs text-gray-400">Total Risks</div>
-            <div class="text-lg font-bold text-purple-400">
-              {{ policyAnalysis.summary.criticalRisks + policyAnalysis.summary.highRisks }}
-            </div>
-          </div>
+        <!-- Policy Analysis -->
+        <div v-if="policyAnalysis" class="bg-gray-800/50 rounded-lg p-3">
+          <div class="text-xs text-gray-400">Analyzed</div>
+          <div class="text-xl font-bold text-white">{{ policyAnalysis.summary.bucketsWithPolicies }}</div>
         </div>
-      </div>
-
-      <!-- Summary Cards -->
-      <div class="grid grid-cols-4 gap-4">
-        <div class="bg-gray-800/50 rounded-lg p-4">
-          <div class="text-sm text-gray-400">Application Buckets</div>
-          <div class="text-2xl font-bold text-yellow-400">{{ filteredBuckets.length }}</div>
+        <div v-if="policyAnalysis" class="bg-red-900/20 rounded-lg p-3">
+          <div class="text-xs text-gray-400">Public</div>
+          <div class="text-xl font-bold text-red-400">{{ policyAnalysis.summary.publicBuckets }}</div>
         </div>
-        <div class="bg-gray-800/50 rounded-lg p-4">
-          <div class="text-sm text-gray-400">Landing Zone</div>
-          <div class="text-2xl font-bold text-purple-400">{{ landingZoneBucketsCount }}</div>
+        <div v-if="policyAnalysis" class="bg-yellow-900/20 rounded-lg p-3">
+          <div class="text-xs text-gray-400">Cross-Acct</div>
+          <div class="text-xl font-bold text-yellow-400">{{ policyAnalysis.summary.crossAccountBuckets }}</div>
         </div>
-        <div class="bg-gray-800/50 rounded-lg p-4">
-          <div class="text-sm text-gray-400">Versioned</div>
-          <div class="text-2xl font-bold text-blue-400">{{ versionedCount }}</div>
-        </div>
-        <div class="bg-gray-800/50 rounded-lg p-4">
-          <div class="text-sm text-gray-400">Encrypted</div>
-          <div class="text-2xl font-bold text-green-400">{{ encryptedCount }}</div>
+        <div v-if="policyAnalysis" class="bg-purple-900/20 rounded-lg p-3">
+          <div class="text-xs text-gray-400">Risks</div>
+          <div class="text-xl font-bold text-purple-400">
+            {{ policyAnalysis.summary.criticalRisks + policyAnalysis.summary.highRisks }}
+          </div>
         </div>
       </div>
 
       <!-- Buckets Table -->
-      <div class="max-h-[400px] overflow-y-auto">
+      <div class="overflow-y-auto" style="max-height: 500px;">
         <UTable :rows="filteredBuckets" :columns="columns">
           <!-- Bucket Details -->
           <template #resourceId-data="{ row }">
-            <div class="py-2 space-y-2">
-              <!-- Bucket Name -->
-              <div class="flex items-center gap-2 flex-wrap">
+            <div class="py-2">
+              <!-- Top Row: Name + Type Badge + Region + Date -->
+              <div class="flex items-center gap-3 flex-wrap mb-2">
                 <button
                   @click="showPolicyModal(row.resourceId)"
-                  class="font-medium text-sm truncate max-w-full text-blue-400 hover:text-blue-300 transition-colors text-left"
+                  class="font-medium text-sm text-blue-400 hover:text-blue-300 transition-colors"
                 >
                   {{ row.resourceId }}
                 </button>
@@ -103,6 +90,13 @@
                 >
                   {{ getLandingZoneBucketType(row.resourceId) }}
                 </UBadge>
+                <span class="text-xs text-gray-500">{{ row.region }}</span>
+                <span class="text-xs text-gray-500">•</span>
+                <span class="text-xs text-gray-500">{{ formatDate(row.configuration?.creationDate || row.creationTime) }}</span>
+              </div>
+
+              <!-- Bottom Row: All Badges Horizontally -->
+              <div class="flex flex-wrap gap-1.5 items-center">
                 <!-- Security Indicators -->
                 <UBadge
                   v-if="getBucketAnalysis(row.resourceId)?.isPublic"
@@ -131,17 +125,8 @@
                   <UIcon name="i-heroicons-lock-open" class="w-3 h-3 mr-1" />
                   No SSL
                 </UBadge>
-              </div>
 
-              <!-- Region and Created Date -->
-              <div class="flex items-center gap-3 text-xs text-gray-500">
-                <span>{{ row.region }}</span>
-                <span>•</span>
-                <span>Created {{ formatDate(row.configuration?.creationDate || row.creationTime) }}</span>
-              </div>
-
-              <!-- Features -->
-              <div class="flex flex-wrap gap-1">
+                <!-- Features -->
                 <UBadge
                   v-if="hasVersioning(row)"
                   color="blue"
@@ -174,10 +159,11 @@
                 >
                   Logging
                 </UBadge>
-              </div>
 
-              <!-- Tags -->
-              <div v-if="row.tags && Object.keys(row.tags).length > 0" class="flex flex-wrap gap-1">
+                <!-- Separator for tags if they exist -->
+                <span v-if="row.tags && Object.keys(row.tags).length > 0" class="text-xs text-gray-600">|</span>
+
+                <!-- Tags -->
                 <UBadge
                   v-for="(value, key) in Object.entries(row.tags).slice(0, 3)"
                   :key="key"
@@ -188,7 +174,7 @@
                   {{ key }}
                 </UBadge>
                 <UBadge
-                  v-if="Object.keys(row.tags).length > 3"
+                  v-if="row.tags && Object.keys(row.tags).length > 3"
                   color="gray"
                   variant="outline"
                   size="xs"

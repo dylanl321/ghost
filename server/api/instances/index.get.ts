@@ -321,6 +321,7 @@ export default defineEventHandler(handleAsync(async (event) => {
             instanceType: resource.configuration?.instanceType,
             instanceState: resource.configuration?.state?.name,
             launchTime: resource.configuration?.launchTime,
+            configurationItemCaptureTime: resource.creationTime, // When Config last detected a change
             networkInfo: {
               privateIpAddress: resource.configuration?.privateIpAddress,
               publicIpAddress: resource.configuration?.publicIpAddress,
