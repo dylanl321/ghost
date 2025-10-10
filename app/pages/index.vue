@@ -170,7 +170,7 @@
         </div>
 
         <!-- Daily Rates -->
-        <div class="text-xs space-y-0.5">
+        <div class="text-xs space-y-0.5 mb-2">
           <div class="flex justify-between text-gray-400">
             <span>Actual:</span>
             <span class="font-medium text-white">{{ formatCurrency(budgetHealth.actualDailyBurnRate, 0) }}/day</span>
@@ -180,6 +180,14 @@
             <span class="font-medium">{{ formatCurrency(budgetHealth.expectedDailyBudgetRate, 0) }}/day</span>
           </div>
         </div>
+
+        <!-- View Details Link -->
+        <NuxtLink
+          to="/account/costs?chartTab=budget-health"
+          class="block text-center text-xs text-blue-400 hover:text-blue-300 font-medium mt-2 pt-2 border-t border-gray-700"
+        >
+          View Budget Health Details →
+        </NuxtLink>
       </UCard>
     </div>
 

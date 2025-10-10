@@ -16,10 +16,12 @@ export const useChartRegistry = (args: {
   scenario: Ref<Scenario>
   timeframe?: Ref<string>
   mode?: Ref<'billable' | 'proforma'>
+  showAdvanced?: Ref<boolean>
 }) => {
   const currentScenario = args.scenario.value
   const currentTimeframe = args.timeframe?.value || 'thisMonth'
   const currentMode = args.mode?.value || 'billable'
+  const showAdvanced = args.showAdvanced?.value || false
   
   // Determine if we're looking at historical data (no current budget data available)
   const isHistoricalPeriod = ['last7days', 'last30days', 'last90days', 'lastMonth', 'lastQuarter', 'lastYear'].includes(currentTimeframe)
@@ -190,7 +192,7 @@ export const useChartRegistry = (args: {
             utilization: (a.actualCost / a.budgetedCost) * 100,
             status: a.status
           }))
-          .sort((a: any, b: any) => b.actualCost - a.actualCost)
+          .sort((a: any, b: any) => b.utilization - a.utilization) // Sort by utilization % descending
           .slice(0, 20) // Allow more for single/few account scenarios
       }
     },
@@ -3111,78 +3113,82 @@ export const useChartRegistry = (args: {
   }
 
   // Dynamic chart selection based on scenario
+  // Default charts shown by scenario (Tier 1 + Tier 2: Essential + Context-specific)
   const chartIdsByScenario: Record<Scenario, string[]> = {
-    // No accounts selected - show strategic organizational overview
+    // No accounts selected - strategic organizational overview (5 default charts)
     'all-accounts': [
-      'yearEndForecast',                  // Year-end projection with actuals + forecast (contextual - always full year)
-      'organizationForecastComparison',   // Simple org forecast vs current (current periods only)
-      'budgetSCurve',                     // S-curve budget envelope tracking (current periods only)
-      'forecastConfidenceBands',          // Forecast with uncertainty bands (current periods only)
-      'totalSpendTrend',                  // Overall spending trends (always shown)
-      'serviceBreakdown',                 // Service distribution pie (always shown)
-      'costOptimizationOpportunities',    // Optimization recommendations (current periods only)
-      'accountRiskAssessment',            // Risk assessment donut (current periods only)
-      'efficiencyScore',                  // Budget efficiency (current periods only)
-      'forecastGauge',                    // Next month forecast gauge (current periods only)
-      'historicalMonthlyTrend',           // Monthly history (historical periods)
-      'costGrowthRate'                    // Growth analysis (always useful)
+      'yearEndForecast',                  // Year-end projection (org-wide context only)
+      'totalSpendTrend',                  // Overall spending trends
+      'serviceBreakdown',                 // Service distribution
+      'budgetUtilization',                // Budget status (current periods)
+      'topSpenders',                      // Top cost accounts
+      'historicalMonthlyTrend'            // Monthly history (historical periods)
     ],
 
-    // Single account selected - deep dive analytics for the account
+    // Single account selected - focused account deep dive (4 default charts)
     'single-account': [
-      'yearEndForecast',               // Year-end projection (contextual - always full year)
-      'organizationForecastComparison', // Daily actual + forecast for current month
-      'cumulativeBurnUp',              // Cumulative burn-up (current periods only)
-      'monthlyTrendWithForecast',      // Monthly trend with forecast (current periods only)
-      'budgetUtilization',             // Budget status (current periods only)
-      'extendedForecastTrend',         // 3-month forecast (current periods only)
-      'serviceBreakdown',              // Service usage (always shown)
-      'totalSpendTrend',               // Spending trend (always shown)
-      'forecastGauge',                 // Forecast gauge (current periods only)
-      'historicalMonthlyTrend',        // Monthly history (historical periods)
-      'costGrowthRate'                 // Growth rate (always useful)
+      'totalSpendTrend',                  // Account spending trend
+      'serviceBreakdown',                 // Account service usage
+      'budgetUtilization',                // Account budget status (current periods)
+      'organizationForecastComparison',   // Daily actual + forecast (current month)
+      'historicalMonthlyTrend'            // Monthly history (historical periods)
     ],
 
-    // Few accounts selected (2-10) - comparative analysis focus
+    // Few accounts selected (2-10) - comparative analysis (5 default charts)
     'few-accounts': [
-      'yearEndForecast',               // Year-end projection (contextual - always full year)
-      'organizationForecastComparison', // Daily actual + forecast comparison
-      'currentVsForecastComparison',   // Current vs forecast for selected accounts
-      'accountForecastComparison',     // Compare forecasts across selected accounts
-      'cumulativeBurnUp',              // Burn-up comparison for selected accounts
-      'monthlyTrendWithForecast',      // Monthly comparison with forecast
-      'historicalVsForecastComparison', // Historical patterns vs forecasts
-      'budgetUtilization',             // Compare selected accounts' budget usage
-      'topSpenders',                   // Rank the selected accounts
-      'serviceBreakdown',              // Combined service usage
-      'costGrowthRate'                 // Growth comparison between accounts
+      'accountForecastComparison',        // Compare forecasts across accounts
+      'topSpenders',                      // Rank selected accounts
+      'serviceBreakdown',                 // Combined service usage
+      'budgetUtilization',                // Budget comparison
+      'totalSpendTrend',                  // Combined spending trend
+      'historicalMonthlyTrend'            // Monthly history (historical periods)
     ],
 
-    // LOB tab active - line of business analysis
+    // LOB tab active - line of business analysis (4 default charts)
     'lob-group': [
-      'budgetSCurve',                 // LOB S-curve budget tracking
-      'lobTrendComparison',           // Multi-line LOB trends
-      'accountForecastComparison',    // LOB forecast comparison
-      'monthlyTrendWithForecast',     // LOB monthly trend with forecast
-      'lobComparison',                // LOB comparison bars
-      'departmentComparison',         // Departments within LOB
-      'efficiencyScore',              // LOB budget efficiency
-      'topSpenders',                  // Top accounts in LOB
-      'costGrowthRate'                // LOB growth analysis
+      'lobTrendComparison',               // Multi-line LOB trends
+      'lobComparison',                    // LOB comparison bars
+      'budgetUtilization',                // LOB budget status
+      'topSpenders',                      // Top accounts in LOB
+      'historicalMonthlyTrend'            // Monthly history (historical periods)
     ],
 
-    // Department tab active - department analysis  
+    // Department tab active - department analysis (4 default charts)
     'department-group': [
-      'cumulativeBurnUp',             // Department cumulative burn tracking
-      'currentVsForecastComparison',  // Department current vs forecast
-      'departmentBudgetPerformance',  // Department budget performance
-      'monthlyTrendWithForecast',     // Department monthly trend with forecast
-      'historicalVsForecastComparison', // Department historical patterns
-      'totalSpendTrend',              // Department spending trends
-      'budgetUtilization',            // Department budget usage
-      'serviceBreakdown',             // Department's service mix
-      'topSpenders',                  // Top accounts in department
-      'costGrowthRate'                // Department growth analysis
+      'departmentTrendComparison',        // Department trend comparison
+      'departmentBudgetPerformance',      // Department budget performance
+      'budgetUtilization',                // Department budget usage
+      'serviceBreakdown',                 // Department service mix
+      'historicalMonthlyTrend'            // Monthly history (historical periods)
+    ]
+  }
+
+  // Advanced charts available via "Show More" toggle (Tier 3: Power user features)
+  const advancedChartIds: Record<Scenario, string[]> = {
+    'all-accounts': [
+      'costOptimizationOpportunities',    // Optimization recommendations
+      'accountRiskAssessment',            // Risk assessment
+      'billableVsProforma'                // Cost mode comparison (proforma mode)
+    ],
+
+    'single-account': [
+      'cumulativeBurnUp',                 // Cumulative burn-up tracking
+      'monthlyTrendWithForecast'          // Monthly trend with forecast
+    ],
+
+    'few-accounts': [
+      'historicalVsForecastComparison',   // Historical patterns vs forecasts
+      'monthlyTrendWithForecast'          // Monthly comparison with forecast
+    ],
+
+    'lob-group': [
+      'departmentComparison',             // Departments within LOB
+      'efficiencyScore'                   // LOB budget efficiency
+    ],
+
+    'department-group': [
+      'totalSpendTrend',                  // Department overall trend
+      'topSpenders'                       // Top accounts in department
     ]
   }
 
@@ -3190,15 +3196,16 @@ export const useChartRegistry = (args: {
     const currentScenario = args.scenario.value
     const currentTimeframe = args.timeframe?.value || 'thisMonth'
     const currentMode = args.mode?.value || 'billable'
-    
-    console.log('ChartRegistry: Computing charts for scenario:', currentScenario, 'timeframe:', currentTimeframe, 'mode:', currentMode)
-    
+    const showAdvancedCharts = args.showAdvanced?.value || false
+
+    console.log('ChartRegistry: Computing charts for scenario:', currentScenario, 'timeframe:', currentTimeframe, 'mode:', currentMode, 'showAdvanced:', showAdvancedCharts)
+
     // Determine if we're looking at historical data vs current/future
     const isHistoricalPeriod = ['last7days', 'last30days', 'last90days', 'lastMonth', 'lastQuarter', 'lastYear', 'last12months', 'last24months'].includes(currentTimeframe)
     const isCurrentPeriod = ['thisMonth', 'thisQuarter', 'thisYear'].includes(currentTimeframe)
-    
+
     console.log('ChartRegistry: Is historical period?', isHistoricalPeriod, 'Is current period?', isCurrentPeriod)
-    
+
     // Charts that require current budget data (should be excluded for historical periods)
     const budgetDependentCharts = [
       'budgetUtilization',
@@ -3208,37 +3215,39 @@ export const useChartRegistry = (args: {
       'costOptimizationOpportunities',
       'accountRiskAssessment'
     ]
-    
+
     // Forecast charts that only make sense for current/future periods
-    // These should be excluded from historical views
     const forecastCharts = [
-      'forecastGauge',
-      'currentVsForecastComparison',
-      'monthlyTrendWithForecast',
-      'accountForecastComparison',
-      'extendedForecastTrend',
+      'yearEndForecast',
       'organizationForecastComparison',
-      'forecastProjectionLine',
-      'forecastConfidenceBands',
-      'budgetSCurve', // S-curve includes forecast projection
-      'cumulativeBurnUp' // Burn-up shows future budget tracking
+      'accountForecastComparison',
+      'monthlyTrendWithForecast',
+      'cumulativeBurnUp',
+      'historicalVsForecastComparison'
     ]
+
+    // Start with default charts for scenario
+    let ids = [...chartIdsByScenario[currentScenario]]
+
+    // Add advanced charts if toggle is enabled
+    if (showAdvancedCharts) {
+      ids = [...ids, ...advancedChartIds[currentScenario]]
+    }
+
+    console.log('ChartRegistry: Initial chart IDs for scenario:', ids, 'advanced:', showAdvancedCharts)
     
-    // Historical comparison charts that make sense for any timeframe
-    // const comparisonCharts = [
-    //   'historicalVsForecastComparison', // This could compare last month to this month's forecast
-    //   'billableVsProforma' // Mode comparison works for any timeframe
-    // ]
-    
-    let ids = chartIdsByScenario[currentScenario]
-    console.log('ChartRegistry: Initial chart IDs for scenario:', ids)
-    
+    // Conditional: yearEndForecast only for all-accounts scenario
+    if (currentScenario !== 'all-accounts') {
+      ids = ids.filter(id => id !== 'yearEndForecast')
+      console.log('ChartRegistry: Removed yearEndForecast (not all-accounts scenario)')
+    }
+
     // Filter charts based on whether we're in historical or current period
     if (isHistoricalPeriod) {
       console.log('ChartRegistry: Filtering out forecast and budget-dependent charts for historical period')
       // Remove all forecast charts and budget-dependent charts for historical periods
       ids = ids.filter(id => !budgetDependentCharts.includes(id) && !forecastCharts.includes(id))
-      
+
       // Ensure we have historical charts
       if (!ids.includes('historicalMonthlyTrend')) {
         const trendIndex = ids.indexOf('totalSpendTrend')
@@ -3248,7 +3257,7 @@ export const useChartRegistry = (args: {
           ids.unshift('historicalMonthlyTrend')
         }
       }
-      
+
       // Add historical comparison if appropriate
       if (!ids.includes('historicalComparison')) {
         ids.push('historicalComparison')
@@ -3256,19 +3265,6 @@ export const useChartRegistry = (args: {
     } else if (isCurrentPeriod) {
       // For current periods, remove historical-only charts
       ids = ids.filter(id => id !== 'historicalMonthlyTrend' && id !== 'historicalComparison')
-      
-      // Add contextual charts based on timeframe regardless of historical/current status
-      // Temporarily disabled until we implement proper async chart handling
-      
-      // Add year-over-year for any view (always shows last 2 calendar years)
-      // if (!ids.includes('yearOverYearComparison') && !isHistoricalPeriod) {
-      //   ids.push('yearOverYearComparison')
-      // }
-      
-      // Add 24-month trend for shorter historical periods
-      // if ((currentTimeframe === 'last7days' || currentTimeframe === 'last30days' || currentTimeframe === 'last90days') && !ids.includes('last24MonthsTrend')) {
-      //   ids.push('last24MonthsTrend')
-      // }
     }
     
     // Add billable vs proforma comparison when in proforma mode
