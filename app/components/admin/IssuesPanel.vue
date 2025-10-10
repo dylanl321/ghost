@@ -3,56 +3,42 @@
     <!-- Header -->
     <UCard>
       <h1 class="text-2xl font-semibold">User Feedback</h1>
-      <p class="text-gray-500 text-sm">View all submitted issues, feature requests, and general feedback.</p>
+      <p class="text-sm text-gray-500">View all submitted feedback, issues, and feature requests.</p>
     </UCard>
 
     <!-- Filters -->
     <UCard>
-      <div class="flex flex-wrap items-end gap-4">
-        <div class="flex-1 min-w-[200px]">
-          <label class="block mb-1 text-sm font-medium">Type</label>
-          <USelect
-            v-model="filters.type"
-            :options="['All', 'Issue', 'Feature Request', 'General Feedback']"
-          />
-        </div>
-
-        <div class="flex-1 min-w-[200px]">
-          <label class="block mb-1 text-sm font-medium">Search</label>
-          <UInput
-            v-model="filters.search"
-            placeholder="Search descriptions or emails..."
-            clearable
-          />
-        </div>
-
-        <UButton color="primary" class="mt-1" @click="applyFilters">
-          Apply Filters
-        </UButton>
+      <div class="flex flex-wrap gap-4 items-end">
+        <USelect
+          v-model="filterType"
+          :options="feedbackTypeOptions"
+          label="Type"
+        />
+        <UInput v-model="search" placeholder="Search descriptions..." class="w-64" />
+        <UButton color="gray" variant="soft" @click="applyFilters">Apply</UButton>
       </div>
     </UCard>
 
     <!-- Table -->
     <UCard>
+      <UBadge>{{ paginatedItems.length }} Results</UBadge>
+
       <UTable
-        :rows="paginatedRows"
+        :rows="paginatedItems"
         :columns="columns"
-        :loading="isLoading"
-        :ui="{ td: { base: 'align-top whitespace-normal break-words' } }"
+        :loading="loading"
+        class="min-w-full"
       >
         <template #description-data="{ row }">
-          <div class="max-w-4xl whitespace-pre-wrap">
-            {{ row.description }}
-          </div>
+          <p class="whitespace-pre-wrap">{{ row.description }}</p>
         </template>
       </UTable>
 
-      <div class="flex justify-end mt-4">
+      <div class="flex justify-end items-center mt-4">
         <UPagination
           v-model="page"
           :page-count="pageCount"
-          :total="filteredFeedback.length"
-          :ui="{ wrapper: 'justify-end' }"
+          :total="filteredItems.length"
         />
       </div>
     </UCard>
@@ -60,85 +46,68 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useToast } from '#imports'
 
-interface Feedback {
-  id: string
-  type: 'Issue' | 'Feature Request' | 'General Feedback'
-  description: string
-  reporter_email: string
-  date_utc: string
-  time_utc: string
-  environment: string
-  resolved: boolean
-}
+type FeedbackType = '' | 'Issue' | 'Feature Request' | 'General Feedback'
 
-// Dummy data for now — will be replaced with API later
-const feedback = ref<Feedback[]>([
-  {
-    id: '1',
-    type: 'Issue',
-    description: 'The home page throws an error when clicking on Reports.',
-    reporter_email: 'test@example.com',
-    date_utc: '2025-10-08',
-    time_utc: '17:45',
-    environment: 'prod',
-    resolved: false,
-  },
-  {
-    id: '2',
-    type: 'Feature Request',
-    description: 'Add dark mode support to the dashboard.',
-    reporter_email: 'Anonymous',
-    date_utc: '2025-10-07',
-    time_utc: '10:15',
-    environment: 'dev',
-    resolved: false,
-  },
-])
+const toast = useToast()
+const loading = ref(false)
+const feedbackItems = ref<any[]>([])
+const feedbackTypeOptions: { label: string; value: FeedbackType }[] = [
+  { label: 'All', value: '' },
+  { label: 'Issue', value: 'Issue' },
+  { label: 'Feature Request', value: 'Feature Request' },
+  { label: 'General Feedback', value: 'General Feedback' },
+]
 
-const isLoading = ref(false)
+const filterType = ref<FeedbackType>('')
+const search = ref('')
+const page = ref(1)
+const pageCount = 10
 
-// Filters
-const filters = ref({
-  type: 'All',
-  search: '',
+const columns = [
+  { key: 'type', label: 'Type', sortable: true },
+  { key: 'reporter_email', label: 'Reporter', sortable: true },
+  { key: 'date_utc', label: 'Date', sortable: true },
+  { key: 'description', label: 'Description' }
+]
+
+// Derived data
+const filteredItems = computed(() => {
+  return feedbackItems.value.filter((item) => {
+    const matchesType = filterType.value ? item.type === filterType.value : true
+    const matchesSearch = search.value
+      ? item.description?.toLowerCase().includes(search.value.toLowerCase())
+      : true
+    return matchesType && matchesSearch
+  })
+})
+
+const paginatedItems = computed(() => {
+  const start = (page.value - 1) * pageCount
+  return filteredItems.value.slice(start, start + pageCount)
 })
 
 function applyFilters() {
   page.value = 1
 }
 
-// Table columns
-const columns = [
-  { key: 'type', label: 'Type', sortable: true },
-  { key: 'description', label: 'Description' },
-  { key: 'reporter_email', label: 'Reporter' },
-  { key: 'date_utc', label: 'Date' },
-  { key: 'environment', label: 'Env' },
-  { key: 'resolved', label: 'Resolved' },
-]
+// Fetch feedback list
+async function loadFeedback() {
+  loading.value = true
+  try {
+    const res = await fetch('/api/feedback/list')
+    if (!res.ok) throw new Error('Request failed')
+    const data = await res.json()
+    feedbackItems.value = data.data?.items ?? []
+  } catch (err) {
+    console.error('Failed to load feedback:', err)
+    toast.add({ title: 'Error', description: 'Failed to load feedback.', color: 'red' })
+  } finally {
+    loading.value = false
+  }
+}
 
-// Filtering logic
-const filteredFeedback = computed(() => {
-  return feedback.value.filter((item) => {
-    const matchesType = filters.value.type === 'All' || item.type === filters.value.type
-    const search = filters.value.search.toLowerCase()
-    const matchesSearch =
-      !search ||
-      item.description.toLowerCase().includes(search) ||
-      item.reporter_email.toLowerCase().includes(search)
-    return matchesType && matchesSearch
-  })
-})
-
-// Pagination
-const page = ref(1)
-const pageSize = 10
-const pageCount = computed(() => Math.ceil(filteredFeedback.value.length / pageSize))
-
-const paginatedRows = computed(() => {
-  const start = (page.value - 1) * pageSize
-  return filteredFeedback.value.slice(start, start + pageSize)
-})
+onMounted(loadFeedback)
 </script>
