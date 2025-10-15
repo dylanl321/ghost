@@ -15,7 +15,7 @@
       <div class="flex flex-wrap gap-6 items-center">
         <UFormGroup label="Type" class="min-w-[200px]">
           <USelect
-            v-model="filterType"
+            v-model="selectedType"
             :options="feedbackTypeOptions"
             placeholder="Select type"
           />
@@ -83,20 +83,20 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useToast } from '#imports'
 
-type FeedbackType = '' | 'Issue' | 'Feature Request' | 'General Feedback'
+type FeedbackType = 'All' | 'Issue' | 'Feature Request' | 'General Feedback'
 
 const toast = useToast()
 const loading = ref(false)
 const feedbackItems = ref<any[]>([])
 
 const feedbackTypeOptions: { label: string; value: FeedbackType }[] = [
-  { label: 'All', value: '' },
+  { label: 'All', value: 'All' },
   { label: 'Issue', value: 'Issue' },
   { label: 'Feature Request', value: 'Feature Request' },
   { label: 'General Feedback', value: 'General Feedback' },
 ]
 
-const filterType = ref<FeedbackType>('')
+const selectedType = ref('All')
 const filterUnresolved = ref(false)
 const search = ref('')
 const page = ref(1)
@@ -145,7 +145,7 @@ async function toggleResolved(row: any, resolved: boolean) {
 // --- Filters ---
 const filteredItems = computed(() =>
   feedbackItems.value.filter((item) => {
-    const matchesType = filterType.value ? item.type === filterType.value : true
+    const matchesType = selectedType.value === 'All' || item.type === selectedType.value
     const matchesSearch = search.value
       ? item.description?.toLowerCase().includes(search.value.toLowerCase())
       : true
@@ -160,7 +160,7 @@ const paginatedItems = computed(() => {
 })
 
 // Automatically reset pagination when filters change
-watch([filterType, search, filterUnresolved], () => {
+watch([selectedType, search, filterUnresolved], () => {
   page.value = 1
 })
 
