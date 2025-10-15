@@ -86,9 +86,12 @@
             <h1 class="text-xl font-bold text-gray-900 dark:text-white">Results</h1>
             <UBadge color="emerald" variant="subtle">{{ filteredRows.length }} enclaves found</UBadge>
           </div>
-          <div>
+          <div class="flex gap-4 flex-wrap ml-4">
             <UTooltip text="Export these results to CSV">
               <UButton icon="i-heroicons-arrow-down-tray" @click="() => exportToCSV(filteredRows)">Export</UButton>
+            </UTooltip>
+            <UTooltip text="Get a list of users for all accounts">
+              <ExportAccountUsers />
             </UTooltip>
           </div>
         </div>
