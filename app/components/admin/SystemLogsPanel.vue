@@ -20,7 +20,7 @@
 
     <!-- Filters -->
     <UCard class="space-y-4">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <UInput
           v-model="searchQuery"
           icon="i-heroicons-magnifying-glass-20-solid"
@@ -141,9 +141,9 @@ async function fetchLogs() {
     const res = await fetch(`/api/logging/activity-logs?durationInSeconds=${duration}`)
     const data = await res.json()
 
-    if (data.error) throw new Error(data.error)
-    logs.value = data
-    expandedLogs.value = new Array(data.length).fill(false)
+    if (!data.success) throw new Error("Unable to fetch logs from server")
+    logs.value = data.data
+    expandedLogs.value = new Array(data.data.length).fill(false)
   } catch (err) {
     console.error('Error fetching logs:', err)
   } finally {

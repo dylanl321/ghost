@@ -53,8 +53,9 @@ export default defineNuxtRouteMiddleware((to, from) => {
     }
   }
 
-  const username = user.value?.userName || "UnknownUser";
+  // Log page navigation
+  const email = user.value?.claims?.email as string
+  const username = email.split("@")[0] || "UnknownUser";
   const logMessage = `Navigation - USER:${username}, PATH:${to.fullPath}`;
-
   logActivity(logMessage);
 })
