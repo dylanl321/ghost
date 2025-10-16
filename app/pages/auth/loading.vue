@@ -62,6 +62,12 @@ onMounted(async () => {
       return;
     }
 
+    // Log user login
+    const email = user.value?.claims?.email as string
+    const username = email.split("@")[0] || "UnknownUser";
+    const logMessage = `Login - USER:${username}`;
+    logActivity(logMessage);
+
     step.value = "Fetching user groups...";
     progress.value = 30;
 
@@ -89,7 +95,7 @@ onMounted(async () => {
     console.log("aws roles", userGroupStore.awsRoles);
     
     // Debug roles in development
-    if (process.dev) {
+    if (import.meta.dev) {
       debugRoles();
     }
 
