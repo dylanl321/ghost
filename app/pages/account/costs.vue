@@ -162,10 +162,11 @@
                 @click="toggleAccount(getAccountKey(account))"
               >
                 <div class="flex items-center gap-2 min-w-0">
-                  <input 
-                    type="checkbox" 
+                  <input
+                    type="checkbox"
                     :checked="selectedAccounts.includes(getAccountKey(account))"
                     class="w-3 h-3 text-blue-600 bg-gray-700 border-gray-600 rounded"
+                    @change="toggleAccount(getAccountKey(account))"
                     @click.stop
                   >
                   <div class="min-w-0 flex-1">
@@ -262,10 +263,11 @@
                       @click="toggleAccount(getAccountKey(account))"
                     >
                       <div class="flex items-center gap-2 min-w-0">
-                        <input 
-                          type="checkbox" 
+                        <input
+                          type="checkbox"
                           :checked="selectedAccounts.includes(getAccountKey(account))"
                           class="w-3 h-3 text-blue-600 bg-gray-700 border-gray-600 rounded"
+                          @change="toggleAccount(getAccountKey(account))"
                           @click.stop
                         >
                         <div class="min-w-0 flex-1">
@@ -365,10 +367,11 @@
                       @click="toggleAccount(getAccountKey(account))"
                     >
                       <div class="flex items-center gap-2 min-w-0">
-                        <input 
-                          type="checkbox" 
+                        <input
+                          type="checkbox"
                           :checked="selectedAccounts.includes(getAccountKey(account))"
                           class="w-3 h-3 text-blue-600 bg-gray-700 border-gray-600 rounded"
+                          @change="toggleAccount(getAccountKey(account))"
                           @click.stop
                         >
                         <div class="min-w-0 flex-1">
@@ -469,10 +472,11 @@
                       @click="toggleAccount(getAccountKey(account))"
                     >
                       <div class="flex items-center gap-2 min-w-0">
-                        <input 
-                          type="checkbox" 
+                        <input
+                          type="checkbox"
                           :checked="selectedAccounts.includes(getAccountKey(account))"
                           class="w-3 h-3 text-blue-600 bg-gray-700 border-gray-600 rounded"
+                          @change="toggleAccount(getAccountKey(account))"
                           @click.stop
                         >
                         <div class="min-w-0 flex-1">
@@ -536,7 +540,7 @@
     <!-- Main Content -->
     <div class="flex-1 flex flex-col overflow-hidden min-h-0">
       <!-- Header -->
-      <CostsHeader 
+      <CostsHeader
         v-model:mode="dataMode"
         v-model:selected-timeframe="selectedTimeframe"
         v-model:selected-view="selectedView"
@@ -544,6 +548,7 @@
         :view-options="viewOptions"
         :selected-accounts="selectedAccounts"
         :active-tab="activeTab"
+        :dataset="dataset"
         @refresh="refreshData"
       />
 

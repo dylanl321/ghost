@@ -29,6 +29,10 @@
             </NuxtLink>
           </UTooltip>
         </div>
+        <ExportButton
+          :loading="isExporting"
+          @export="handleExport"
+        />
         <ShareButton
           :selected-accounts="selectedAccounts"
           :selected-timeframe="modelSelectedTimeframe"
@@ -67,13 +71,18 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import type { DataMode } from '~/types/costs'
+import type { NormalizedDataset } from '~/types/costs'
+import type { ExportFormat } from '~/shared/types/export'
+import ExportButton from '~/components/shared/ExportButton.vue'
 
-defineProps<{
+const props = defineProps<{
   timeframeOptions: Array<{ label: string, value: string }>,
   viewOptions: Array<{ label: string, value: string }>,
   selectedAccounts: string[],
-  activeTab: string
+  activeTab: string,
+  dataset?: NormalizedDataset | null
 }>()
 
 const modelMode = defineModel<DataMode>('mode', { default: 'billable' })
@@ -85,7 +94,41 @@ const modeOptions = [
   { label: 'Proforma', value: 'proforma' }
 ]
 
+const isExporting = ref(false)
+
 defineEmits<{ (e: 'refresh'): void }>()
+
+/**
+ * Handle export button click
+ */
+async function handleExport(format: ExportFormat) {
+  // Prevent double execution
+  if (isExporting.value) {
+    return
+  }
+
+  if (!props.dataset) {
+    console.warn('No dataset available for export')
+    return
+  }
+
+  isExporting.value = true
+
+  try {
+    const { useCostExport } = await import('~/composables/useCostExport')
+    const { exportCostData } = useCostExport(props.dataset)
+
+    await exportCostData(format, {
+      includeServices: true,
+      includeHistorical: true,
+      includeForecast: true
+    })
+  } catch (error) {
+    console.error('Export failed:', error)
+  } finally {
+    isExporting.value = false
+  }
+}
 </script>
 
 

@@ -2847,18 +2847,25 @@ export const useChartRegistry = (args: {
       extractor: (dataset) => {
         console.log('YearEndForecast: Starting extraction')
 
-        // Use org-wide historical data (not filtered by selected accounts)
-        // This ensures Year-End Projection always shows full organization context
-        const historical = dataset.orgWideHistorical || dataset.historical as any
+        const selectedAccounts = dataset.accounts || []
+        const filterBySelection = selectedAccounts.length > 0
+
+        // Use filtered data when accounts are selected, org-wide data otherwise
+        const historical = filterBySelection
+          ? (dataset.historical || dataset.orgWideHistorical)
+          : (dataset.orgWideHistorical || dataset.historical) as any
         const yearEndForecast = dataset.yearEndForecast as any
         const currentMonthForecast = dataset.forecast as any // Current month remainder forecast
         const summary = dataset.summary as any
         const mode = dataset.mode || 'billable'
 
-        console.log('YearEndForecast: Using historical source:', {
+        console.log('YearEndForecast: Using data source:', {
           hasOrgWide: !!dataset.orgWideHistorical,
           hasFiltered: !!dataset.historical,
-          usingOrgWide: !!dataset.orgWideHistorical
+          filterBySelection,
+          selectedAccountsCount: selectedAccounts.length,
+          usingFiltered: filterBySelection && !!dataset.historical,
+          usingOrgWide: !filterBySelection || !dataset.historical
         })
 
         if (!historical && !yearEndForecast) {
@@ -2911,9 +2918,6 @@ export const useChartRegistry = (args: {
         const currentMonth = today.getMonth() // 0-11
         const currentYear = today.getFullYear()
 
-        const selectedAccounts = dataset.accounts || []
-        const filterBySelection = selectedAccounts.length > 0
-
         // Process historical data (Jan - last complete month)
         const monthlyBreakdown = historicalData?.monthlyBreakdown || []
 
@@ -2926,27 +2930,61 @@ export const useChartRegistry = (args: {
         })
 
         // Create a map of YYYY-MM to cost for easier lookup
+        // Check if we're using filtered historical data or need to filter org-wide data
+        const usingFilteredHistorical = filterBySelection && !!dataset.historical
+
         const historicalCostMap = new Map<string, number>()
         monthlyBreakdown.forEach((month: any) => {
           const monthKey = month.month // Format: YYYY-MM
-          const cost = month.cost || 0
+
+          let cost = 0
+
+          if (usingFilteredHistorical) {
+            // Using filtered historical data from API - month.cost is already filtered
+            cost = month.cost || 0
+            console.log(`  Historical month: ${monthKey} = $${cost.toFixed(2)} (API-filtered: ${selectedAccounts.length} accounts)`)
+          } else if (filterBySelection && month.accountBreakdown && Array.isArray(month.accountBreakdown)) {
+            // Using org-wide data but need client-side filtering by accountBreakdown
+            cost = month.accountBreakdown
+              .filter((acc: any) => selectedAccounts.includes(acc.accountId))
+              .reduce((sum: number, acc: any) => sum + (acc.cost || 0), 0)
+            console.log(`  Historical month: ${monthKey} = $${cost.toFixed(2)} (client-filtered: ${selectedAccounts.length} accounts)`)
+          } else {
+            // Use total cost (org-wide, no filtering needed)
+            cost = month.cost || 0
+            console.log(`  Historical month: ${monthKey} = $${cost.toFixed(2)} (org-wide)`)
+          }
+
           historicalCostMap.set(monthKey, cost)
-          console.log(`  Historical month: ${monthKey} = $${cost.toFixed(2)}`)
         })
 
         // Get current month's actual spending from dedicated current month org-wide API
         // This is fetched separately to ensure we always have current month actuals
-        // regardless of selected timeframe or account filters
+        // Filter by selected accounts if applicable
         const currentMonthSummary = dataset.currentMonthOrgWide as any
         const currentMonthData = currentMonthSummary?.data || currentMonthSummary
 
         let currentMonthActual = 0
         if (mode === 'proforma' && currentMonthData?.proforma?.accounts) {
-          currentMonthActual = currentMonthData.proforma.accounts
-            .reduce((sum: number, account: any) => sum + (account.totalCost || 0), 0)
+          const accounts = currentMonthData.proforma.accounts
+          if (filterBySelection) {
+            currentMonthActual = accounts
+              .filter((acc: any) => selectedAccounts.includes(acc.accountId))
+              .reduce((sum: number, account: any) => sum + (account.totalCost || 0), 0)
+          } else {
+            currentMonthActual = accounts
+              .reduce((sum: number, account: any) => sum + (account.totalCost || 0), 0)
+          }
         } else if (currentMonthData?.accounts) {
-          currentMonthActual = currentMonthData.accounts
-            .reduce((sum: number, account: any) => sum + (account.totalCost || 0), 0)
+          const accounts = currentMonthData.accounts
+          if (filterBySelection) {
+            currentMonthActual = accounts
+              .filter((acc: any) => selectedAccounts.includes(acc.accountId))
+              .reduce((sum: number, account: any) => sum + (account.totalCost || 0), 0)
+          } else {
+            currentMonthActual = accounts
+              .reduce((sum: number, account: any) => sum + (account.totalCost || 0), 0)
+          }
         }
 
         console.log('YearEndForecast: Current month actual from dedicated API:', {
@@ -2955,7 +2993,9 @@ export const useChartRegistry = (args: {
           currentMonthActual,
           hasCurrentMonthData: !!currentMonthData,
           accountCount: (mode === 'proforma' ? currentMonthData?.proforma?.accounts?.length : currentMonthData?.accounts?.length) || 0,
-          note: 'Using dedicated currentMonthOrgWide API call'
+          filterBySelection,
+          selectedAccountsCount: filterBySelection ? selectedAccounts.length : 'all',
+          note: filterBySelection ? 'Filtered by selected accounts' : 'Using org-wide data'
         })
 
         // Get current month's end-of-month forecast (actual + remainder)
@@ -3092,6 +3132,9 @@ export const useChartRegistry = (args: {
           },
           metadata: {
             currentMonth: currentMonth + 1,
+            filterBySelection,
+            selectedAccountsCount: filterBySelection ? selectedAccounts.length : null,
+            scope: filterBySelection ? 'Selected Accounts' : 'Organization-Wide',
             // Year total: sum of actuals for past months + projected total for current and future months
             yearTotal: (() => {
               let total = 0
@@ -3117,7 +3160,7 @@ export const useChartRegistry = (args: {
   const chartIdsByScenario: Record<Scenario, string[]> = {
     // No accounts selected - strategic organizational overview (5 default charts)
     'all-accounts': [
-      'yearEndForecast',                  // Year-end projection (org-wide context only)
+      'yearEndForecast',                  // Year-end projection (org-wide)
       'totalSpendTrend',                  // Overall spending trends
       'serviceBreakdown',                 // Service distribution
       'budgetUtilization',                // Budget status (current periods)
@@ -3127,6 +3170,7 @@ export const useChartRegistry = (args: {
 
     // Single account selected - focused account deep dive (4 default charts)
     'single-account': [
+      'yearEndForecast',                  // Year-end projection for selected account
       'totalSpendTrend',                  // Account spending trend
       'serviceBreakdown',                 // Account service usage
       'budgetUtilization',                // Account budget status (current periods)
@@ -3136,6 +3180,7 @@ export const useChartRegistry = (args: {
 
     // Few accounts selected (2-10) - comparative analysis (5 default charts)
     'few-accounts': [
+      'yearEndForecast',                  // Year-end projection for selected accounts
       'accountForecastComparison',        // Compare forecasts across accounts
       'topSpenders',                      // Rank selected accounts
       'serviceBreakdown',                 // Combined service usage
@@ -3146,6 +3191,7 @@ export const useChartRegistry = (args: {
 
     // LOB tab active - line of business analysis (4 default charts)
     'lob-group': [
+      'yearEndForecast',                  // Year-end projection for selected LOB
       'lobTrendComparison',               // Multi-line LOB trends
       'lobComparison',                    // LOB comparison bars
       'budgetUtilization',                // LOB budget status
@@ -3155,6 +3201,7 @@ export const useChartRegistry = (args: {
 
     // Department tab active - department analysis (4 default charts)
     'department-group': [
+      'yearEndForecast',                  // Year-end projection for selected department
       'departmentTrendComparison',        // Department trend comparison
       'departmentBudgetPerformance',      // Department budget performance
       'budgetUtilization',                // Department budget usage
@@ -3235,12 +3282,9 @@ export const useChartRegistry = (args: {
     }
 
     console.log('ChartRegistry: Initial chart IDs for scenario:', ids, 'advanced:', showAdvancedCharts)
-    
-    // Conditional: yearEndForecast only for all-accounts scenario
-    if (currentScenario !== 'all-accounts') {
-      ids = ids.filter(id => id !== 'yearEndForecast')
-      console.log('ChartRegistry: Removed yearEndForecast (not all-accounts scenario)')
-    }
+
+    // yearEndForecast is now available for all scenarios
+    // It will show org-wide data when no accounts are selected, or filtered data when accounts are selected
 
     // Filter charts based on whether we're in historical or current period
     if (isHistoricalPeriod) {
@@ -3293,7 +3337,10 @@ export const useChartRegistry = (args: {
       let contextualDescription = chart.description
 
       if (currentScenario === 'single-account') {
-        if (chart.id === 'budgetUtilization') {
+        if (chart.id === 'yearEndForecast') {
+          contextualTitle = 'Year-End Projection: Selected Account'
+          contextualDescription = 'Annual spending forecast for the selected account'
+        } else if (chart.id === 'budgetUtilization') {
           contextualTitle = 'Account Budget Status'
           contextualDescription = 'Budget utilization for selected account'
         } else if (chart.id === 'serviceBreakdown') {
@@ -3304,7 +3351,10 @@ export const useChartRegistry = (args: {
           contextualDescription = 'Next month forecast for selected account'
         }
       } else if (currentScenario === 'few-accounts') {
-        if (chart.id === 'budgetUtilization') {
+        if (chart.id === 'yearEndForecast') {
+          contextualTitle = 'Year-End Projection: Selected Accounts'
+          contextualDescription = 'Annual spending forecast for the selected accounts'
+        } else if (chart.id === 'budgetUtilization') {
           contextualTitle = 'Selected Accounts Budget'
           contextualDescription = 'Budget comparison for selected accounts'
         } else if (chart.id === 'topSpenders') {
@@ -3313,6 +3363,16 @@ export const useChartRegistry = (args: {
         } else if (chart.id === 'serviceBreakdown') {
           contextualTitle = 'Combined Services'
           contextualDescription = 'Service costs across selected accounts'
+        }
+      } else if (currentScenario === 'lob-group') {
+        if (chart.id === 'yearEndForecast') {
+          contextualTitle = 'Year-End Projection: Line of Business'
+          contextualDescription = 'Annual spending forecast for the selected line of business'
+        }
+      } else if (currentScenario === 'department-group') {
+        if (chart.id === 'yearEndForecast') {
+          contextualTitle = 'Year-End Projection: Department'
+          contextualDescription = 'Annual spending forecast for the selected department'
         }
       }
 
