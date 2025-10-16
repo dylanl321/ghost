@@ -43,6 +43,7 @@ const fetchAccountData = async () => {
   isProcessing.value = true
 
   const fetchPromises = activeEnclaves.value.map(async ([accountId, data]) => {
+    accountId = `="${accountId}"`
     try {
       // Destructure and provide defaults for clean access
       const { 
@@ -76,7 +77,6 @@ const fetchAccountData = async () => {
   try {
     const results = await Promise.all(fetchPromises)
     const sortedResults = results.sort((a, b) => a.accountId.localeCompare(b.accountId))
-    // console.table(sortedResults.filter(r => !r.error))
     console.log(sortedResults.filter(r => !r.error))
     return sortedResults
   } catch (err) {
