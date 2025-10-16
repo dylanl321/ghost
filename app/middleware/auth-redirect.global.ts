@@ -5,7 +5,7 @@
 
 export default defineNuxtRouteMiddleware((to, from) => {
   // Skip on server-side rendering
-  if (process.server) return
+  if (import.meta.server) return
 
   // Skip if already on auth pages
   if (to.path.startsWith('/auth/')) return
@@ -52,4 +52,10 @@ export default defineNuxtRouteMiddleware((to, from) => {
       }
     }
   }
+
+  // Log page navigation
+  const email = user.value?.claims?.email as string
+  const username = email.split("@")[0] || "UnknownUser";
+  const logMessage = `Navigation - USER:${username}, PATH:${to.fullPath}`;
+  logActivity(logMessage);
 })
