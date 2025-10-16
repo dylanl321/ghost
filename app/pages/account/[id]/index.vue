@@ -56,22 +56,27 @@
       <!-- Resources Tab -->
       <template #resources>
         <div class="space-y-4 mt-4">
-          <!-- Resource Usage Summary -->
-          <ResourceUsage :data="resourceCounts || {}" :columns="2" :loading="loading" />
-
-          <!-- Summary Cards Row -->
+          <!-- Row 1: Resource Usage (1 col) + S3 Buckets (2 col) -->
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <!-- Instance Scheduling (GovCloud) -->
-            <InstanceScheduling v-if="govCloudId || accountId" :account-id="govCloudId || accountId" />
-
-            <!-- EBS Volumes (GovCloud) -->
-            <EBSVolumes v-if="govCloudId || accountId" :account-id="govCloudId || accountId" />
-
-            <!-- S3 Buckets -->
-            <S3Buckets v-if="govCloudId || accountId" :account-id="govCloudId || accountId" :environment="govCloudId ? 'govcloud' : 'commercial'" />
+            <div class="col-span-1 h-full">
+              <ResourceUsage :data="resourceCounts || {}" :columns="1" :loading="loading" class="h-full" />
+            </div>
+            <div class="col-span-1 md:col-span-2 h-full">
+              <S3Buckets v-if="govCloudId || accountId" :account-id="govCloudId || accountId" :environment="govCloudId ? 'govcloud' : 'commercial'" class="h-full" />
+            </div>
           </div>
 
-          <!-- Instances Table - Full Width (GovCloud) -->
+          <!-- Row 2: EBS Volumes (2 col) + Instance Scheduling (1 col) -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="col-span-1 md:col-span-2 h-full">
+              <EBSVolumes v-if="govCloudId || accountId" :account-id="govCloudId || accountId" class="h-full" />
+            </div>
+            <div class="col-span-1 h-full">
+              <InstanceScheduling v-if="govCloudId || accountId" :account-id="govCloudId || accountId" class="h-full" />
+            </div>
+          </div>
+
+          <!-- Row 3: Instances Table - Full Width (GovCloud) -->
           <InstancesTable v-if="govCloudId || accountId" :account-id="govCloudId || accountId" />
         </div>
       </template>

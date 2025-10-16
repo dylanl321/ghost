@@ -44,30 +44,59 @@ export interface EnrichedInstanceData {
   accountId: string
   region: string
   accountName?: string
-  
+
   // Enhanced fields
   instanceName?: string
   instanceType?: string
   instanceState?: string
-  
+  launchTime?: string
+
+  // Network information
+  networkInfo?: {
+    privateIpAddress?: string
+    publicIpAddress?: string
+    vpcId?: string
+    subnetId?: string
+  }
+
+  // Storage information
+  storageInfo?: {
+    rootVolumeSize?: number
+    totalVolumeSize?: number
+    volumeCount?: number
+    volumes?: Array<{
+      deviceName: string
+      volumeSize?: number
+      volumeType?: string
+    }>
+  }
+
+  // Pricing information
+  pricingInfo?: {
+    hourlyRate?: number
+    monthlyEstimate?: number
+    currency?: string
+    pricingRegion?: string
+  }
+
   // GDMS Management and Scheduling
   managementInfo?: {
     isGDMSManaged: boolean
     gdmsManagedValue?: string
   }
-  
+
   schedulingInfo?: {
     hasSchedule: boolean
     scheduleName?: string
     lastScheduleMessage?: string
     scheduleStatus?: 'running' | 'stopped' | 'unknown'
   }
-  
+
   patchingInfo?: {
     patchGroup?: string
     patchingAutomation?: string
   }
-  
+
   // Metadata
   metadata?: {
     environment?: string
@@ -76,7 +105,7 @@ export interface EnrichedInstanceData {
     owner?: string
     tags: Record<string, string>
   }
-  
+
   // AWS-powered optimization insights (when available)
   awsOptimizationInsights?: {
     family: string
@@ -418,34 +447,71 @@ export async function enrichInstanceData(
   
   // Extract instance name
   enriched.instanceName = extractInstanceName(tags)
-  
+
   // For EC2 instances, extract additional details from configuration
   if (resource.resourceType === 'AWS::EC2::Instance' && resource.configuration) {
     enriched.instanceType = resource.configuration.instanceType
     enriched.instanceState = resource.configuration.state?.name
+    enriched.launchTime = resource.configuration.launchTime
+
+    // Extract network information
+    enriched.networkInfo = {
+      privateIpAddress: resource.configuration.privateIpAddress,
+      publicIpAddress: resource.configuration.publicIpAddress,
+      vpcId: resource.configuration.vpcId,
+      subnetId: resource.configuration.subnetId
+    }
+
+    // Extract storage information from block device mappings
+    // Note: AWS Config may not include volume sizes in blockDeviceMappings
+    if (resource.configuration.blockDeviceMappings && Array.isArray(resource.configuration.blockDeviceMappings)) {
+      const volumes = resource.configuration.blockDeviceMappings
+        .filter((device: any) => device.ebs || device.Ebs)
+        .map((device: any) => {
+          const ebs = device.ebs || device.Ebs || {}
+          return {
+            deviceName: device.deviceName || device.DeviceName,
+            volumeSize: ebs.volumeSize || ebs.VolumeSize,
+            volumeType: ebs.volumeType || ebs.VolumeType
+          }
+        })
+
+      const totalSize = volumes.reduce((sum: number, vol: any) => sum + (vol.volumeSize || 0), 0)
+      const rootDevice = resource.configuration.blockDeviceMappings.find(
+        (device: any) => (device.deviceName || device.DeviceName) === resource.configuration.rootDeviceName
+      )
+      const rootEbs = rootDevice?.ebs || rootDevice?.Ebs
+
+      enriched.storageInfo = {
+        rootVolumeSize: rootEbs?.volumeSize || rootEbs?.VolumeSize,
+        totalVolumeSize: totalSize,
+        volumeCount: volumes.length,
+        volumes
+      }
+    }
   }
-  
+
   // Analyze GDMS management
   enriched.managementInfo = analyzeGDMSManagementTags(tags)
-  
+
   // Analyze GDMS scheduling
   enriched.schedulingInfo = analyzeGDMSSchedulingTags(tags)
-  
+
   // Analyze GDMS patching
   enriched.patchingInfo = analyzeGDMSPatchingTags(tags)
-  
+
   // Extract metadata
   enriched.metadata = extractInstanceMetadata(tags)
-  
+
   // Generate AWS-powered optimization insights
   if (enriched.instanceType) {
     enriched.awsOptimizationInsights = await generateOptimizationInsights(
-      enriched.instanceType, 
-      enriched.instanceState, 
+      enriched.instanceType,
+      enriched.instanceState,
       environment
     )
   }
-  
+
   return enriched
 }
 
@@ -496,9 +562,7 @@ export function generateTagSuggestions(instance: EnrichedInstanceData): {
     missing: [] as Array<{key: string, suggestion: string, reason: string}>,
     improvements: [] as Array<{key: string, currentValue: string, suggestion: string, reason: string}>
   }
-  
-  const instanceTags = instance.metadata?.tags || {}
-  
+
   // Check for missing name tag
   if (!instance.instanceName) {
     suggestions.missing.push({

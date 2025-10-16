@@ -1,12 +1,20 @@
 <template>
   <div class="relative w-80">
     <!-- Search input -->
-    <UInput
-      v-model="query"
-      placeholder="Search users or accounts..."
-      icon="i-heroicons-magnifying-glass"
-      @input="onSearch"
-    />
+    <div class="flex items-center gap-1">
+      <UInput
+        v-model="query"
+        placeholder="Search users or accounts..."
+        icon="i-heroicons-magnifying-glass"
+        class="flex-1"
+        @input="onSearch"
+      />
+      <UTooltip text="Learn how to use Universal Search">
+        <NuxtLink to="/support/docs?topic=universal-search" class="text-gray-400 hover:text-gray-300">
+          <UIcon name="i-heroicons-question-mark-circle" class="w-4 h-4" />
+        </NuxtLink>
+      </UTooltip>
+    </div>
 
     <!-- Results dropdown -->
     <div
@@ -135,3 +143,4 @@ const selectResult = (result: any) => {
   }
 }
 </script>
+

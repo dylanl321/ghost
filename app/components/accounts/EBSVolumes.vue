@@ -1,5 +1,5 @@
 <template>
-  <UCard>
+  <UCard class="h-full flex flex-col">
     <template #header>
       <div class="flex justify-between items-center">
         <div class="text-lg font-semibold">EBS Volumes</div>
@@ -14,34 +14,43 @@
       No EBS volumes found
     </div>
     <div v-else class="space-y-4">
-      <!-- Summary Cards -->
-      <div class="grid grid-cols-3 gap-4">
-        <div class="bg-gray-800/50 rounded-lg p-4">
-          <div class="text-sm text-gray-400">Total Size</div>
-          <div class="text-2xl font-bold text-blue-400">{{ totalSize }} GB</div>
+      <!-- All Metrics in Single Row -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div class="bg-gray-800/50 rounded-lg p-3">
+          <div class="text-xs text-gray-400">Total Size</div>
+          <div class="text-xl font-bold text-blue-400">{{ totalSize }} GB</div>
         </div>
-        <div class="bg-gray-800/50 rounded-lg p-4">
-          <div class="text-sm text-gray-400">Available</div>
-          <div class="text-2xl font-bold text-yellow-400">{{ availableCount }}</div>
+        <div class="bg-gray-800/50 rounded-lg p-3">
+          <div class="text-xs text-gray-400">Available</div>
+          <div class="text-xl font-bold text-yellow-400">{{ availableCount }}</div>
           <div class="text-xs text-gray-500">Unattached</div>
         </div>
-        <div class="bg-gray-800/50 rounded-lg p-4">
-          <div class="text-sm text-gray-400">In Use</div>
-          <div class="text-2xl font-bold text-green-400">{{ inUseCount }}</div>
+        <div class="bg-gray-800/50 rounded-lg p-3">
+          <div class="text-xs text-gray-400">In Use</div>
+          <div class="text-xl font-bold text-green-400">{{ inUseCount }}</div>
+        </div>
+        <div class="bg-gray-800/50 rounded-lg p-3">
+          <div class="text-xs text-gray-400">Unused Cost</div>
+          <div v-if="loadingPricing" class="text-sm text-gray-500">Calculating...</div>
+          <div v-else-if="unusedVolumeCost !== null" class="text-xl font-bold text-red-400">
+            ${{ unusedVolumeCost.toFixed(2) }}
+          </div>
+          <div v-else class="text-sm text-gray-500">N/A</div>
+          <div class="text-xs text-gray-500">/month</div>
         </div>
       </div>
 
-      <!-- Volume Type Breakdown -->
-      <div class="space-y-2">
-        <div class="text-sm font-semibold text-gray-300">Volume Types</div>
-        <div v-for="(count, type) in volumeTypeBreakdown" :key="type" class="flex justify-between items-center p-2 bg-gray-800/30 rounded">
-          <div class="text-sm text-gray-300">{{ type }}</div>
-          <UBadge color="blue" variant="soft">{{ count }}</UBadge>
+      <!-- Volume Type Breakdown (Compact Row) -->
+      <div class="flex flex-wrap gap-2 items-center">
+        <span class="text-xs font-semibold text-gray-400">Types:</span>
+        <div v-for="(count, type) in volumeTypeBreakdown" :key="type" class="flex items-center gap-1.5 px-2.5 py-1 bg-gray-800/30 rounded">
+          <span class="text-xs text-gray-300">{{ type }}</span>
+          <UBadge color="blue" variant="soft" size="xs">{{ count }}</UBadge>
         </div>
       </div>
 
       <!-- Volumes Table -->
-      <div class="max-h-[400px] overflow-y-auto">
+      <div class="overflow-y-auto" style="max-height: 450px;">
         <UTable :rows="volumes" :columns="columns">
           <!-- Volume ID -->
           <template #resourceId-data="{ row }">
@@ -107,6 +116,8 @@ const volumes = ref<any[]>([])
 const nextToken = ref<string | undefined>(undefined)
 const hasMore = ref(false)
 const loadingMore = ref(false)
+const unusedVolumeCost = ref<number | null>(null)
+const loadingPricing = ref(false)
 
 const columns = [
   { key: 'resourceId', label: 'Volume ID' },
@@ -139,6 +150,11 @@ const fetchVolumes = async (append = false) => {
 
     nextToken.value = data.data?.pagination?.nextToken
     hasMore.value = data.data?.pagination?.hasMore || false
+
+    // Calculate unused volume costs after loading volumes
+    if (!append) {
+      await calculateUnusedVolumeCost()
+    }
   } catch (error) {
     console.error('Error fetching volumes:', error)
     if (!append) {
@@ -147,6 +163,46 @@ const fetchVolumes = async (append = false) => {
   } finally {
     loading.value = false
     loadingMore.value = false
+  }
+}
+
+// Calculate cost of unused (available) volumes
+const calculateUnusedVolumeCost = async () => {
+  const availableVolumes = volumes.value.filter(v => v.configuration?.state === 'available')
+
+  if (availableVolumes.length === 0) {
+    unusedVolumeCost.value = 0
+    return
+  }
+
+  loadingPricing.value = true
+  try {
+    const volumesForPricing = availableVolumes.map(vol => ({
+      volumeId: vol.resourceId,
+      volumeType: vol.configuration?.volumeType || 'gp2',
+      sizeGB: vol.configuration?.size || 0,
+      region: vol.region
+    }))
+
+    const response = await fetch('/api/volumes/pricing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        volumes: volumesForPricing,
+        environment: 'govcloud'
+      })
+    })
+
+    const data = await response.json()
+
+    if (data.success && data.data?.summary) {
+      unusedVolumeCost.value = data.data.summary.totalMonthlyCost
+    }
+  } catch (error) {
+    console.error('Error calculating unused volume cost:', error)
+    unusedVolumeCost.value = null
+  } finally {
+    loadingPricing.value = false
   }
 }
 

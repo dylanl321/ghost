@@ -84,11 +84,21 @@ registerEndpoint('/api/instances', 'GET', {
       name: 'includeOptimizationHints',
       in: 'query',
       required: false,
-      schema: { 
+      schema: {
         type: 'boolean',
         default: true
       },
       description: 'Include basic optimization hints'
+    },
+    {
+      name: 'includePricing',
+      in: 'query',
+      required: false,
+      schema: {
+        type: 'boolean',
+        default: false
+      },
+      description: 'Include AWS pricing data (may slow down response)'
     },
     { $ref: '#/components/parameters/Limit' },
     { $ref: '#/components/parameters/NextToken' }
@@ -166,6 +176,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     const managedByFilter = query.managedBy as string | undefined
     const environmentFilter = query.environmentTag as string | undefined
     const includeOptimizationHints = query.includeOptimizationHints !== 'false'
+    const includePricing = query.includePricing === 'true'
     const limit = Math.min(parseInt(query.limit as string) || defaultLimit, 200)
     const nextToken = (query.nextToken as string) || defaultNextToken
     
@@ -309,6 +320,14 @@ export default defineEventHandler(handleAsync(async (event) => {
             instanceName: tags.Name || tags.name,
             instanceType: resource.configuration?.instanceType,
             instanceState: resource.configuration?.state?.name,
+            launchTime: resource.configuration?.launchTime,
+            configurationItemCaptureTime: resource.creationTime, // When Config last detected a change
+            networkInfo: {
+              privateIpAddress: resource.configuration?.privateIpAddress,
+              publicIpAddress: resource.configuration?.publicIpAddress,
+              vpcId: resource.configuration?.vpcId,
+              subnetId: resource.configuration?.subnetId
+            },
             managementInfo: {
               isGDMSManaged: tags.GDMS_Managed?.toLowerCase() === 'true',
               gdmsManagedValue: tags.GDMS_Managed
@@ -317,7 +336,7 @@ export default defineEventHandler(handleAsync(async (event) => {
               hasSchedule: !!tags.Schedule,
               scheduleName: tags.Schedule,
               lastScheduleMessage: tags.ScheduleMessage,
-              scheduleStatus: tags.ScheduleMessage?.toLowerCase().includes('started') ? 'running' as const : 
+              scheduleStatus: tags.ScheduleMessage?.toLowerCase().includes('started') ? 'running' as const :
                              tags.ScheduleMessage?.toLowerCase().includes('stopped') ? 'stopped' as const : 'unknown' as const
             },
             patchingInfo: {
@@ -381,14 +400,49 @@ export default defineEventHandler(handleAsync(async (event) => {
     }
     
     console.log(`[Instances API] After filtering: ${enrichedInstances.length} instances`)
-    
+
+    // Fetch pricing data if requested
+    if (includePricing && enrichedInstances.length > 0) {
+      try {
+        console.log('[Instances API] Fetching pricing data...')
+        const { batchGetEC2InstancePricing } = await import('../../utils/aws-pricing')
+
+        // Prepare instance types and regions for pricing lookup
+        const pricingRequests = enrichedInstances
+          .filter(instance => instance.instanceType && instance.region)
+          .map(instance => ({
+            instanceType: instance.instanceType!,
+            region: instance.region
+          }))
+
+        const pricingMap = await batchGetEC2InstancePricing(pricingRequests, environment)
+
+        // Add pricing info to each instance
+        enrichedInstances.forEach(instance => {
+          if (instance.instanceType && instance.region) {
+            const pricingKey = `${instance.region}-${instance.instanceType}`
+            const pricing = pricingMap.get(pricingKey)
+
+            if (pricing) {
+              instance.pricingInfo = pricing
+            }
+          }
+        })
+
+        console.log(`[Instances API] Added pricing data to ${pricingMap.size} instances`)
+      } catch (error) {
+        console.error('[Instances API] Failed to fetch pricing data:', error.message)
+        // Continue without pricing data
+      }
+    }
+
     // Remove optimization hints if not requested to reduce response size
     if (!includeOptimizationHints) {
       enrichedInstances.forEach(instance => {
         delete instance.awsOptimizationInsights
       })
     }
-    
+
     // Calculate summary statistics
     const summary = {
       totalInstances: enrichedInstances.length,
@@ -404,7 +458,13 @@ export default defineEventHandler(handleAsync(async (event) => {
         unknown: 0
       },
       byEnvironment: {} as Record<string, number>,
-      byAccount: {} as Record<string, number>
+      byAccount: {} as Record<string, number>,
+      totalPricing: includePricing ? {
+        totalHourlyRate: 0,
+        totalMonthlyEstimate: 0,
+        currency: 'USD',
+        instancesWithPricing: 0
+      } : undefined
     }
     
     enrichedInstances.forEach(instance => {
@@ -441,6 +501,13 @@ export default defineEventHandler(handleAsync(async (event) => {
       // By account
       const accountName = instance.accountName || instance.accountId
       summary.byAccount[accountName] = (summary.byAccount[accountName] || 0) + 1
+
+      // Accumulate pricing if available
+      if (includePricing && instance.pricingInfo && summary.totalPricing) {
+        summary.totalPricing.totalHourlyRate += instance.pricingInfo.hourlyRate || 0
+        summary.totalPricing.totalMonthlyEstimate += instance.pricingInfo.monthlyEstimate || 0
+        summary.totalPricing.instancesWithPricing++
+      }
     })
     
     const response = {

@@ -677,7 +677,12 @@
             :selected-accounts="selectedAccounts"
             :smart-charts-loading="isCostFetching"
             :data-mode="dataMode"
+            :selected-timeframe="selectedTimeframe"
+            :accounts-list="accountsList"
+            :active-tab-prop="activeChartTab"
+            :show-advanced-charts="showAdvancedCharts"
             @toggle-regression-line="showRegressionLine = !showRegressionLine"
+            @toggle-advanced-charts="showAdvancedCharts = !showAdvancedCharts; localStorage.setItem('showAdvancedCharts', String(showAdvancedCharts))"
             @tab-changed="handleTabChange"
             @refresh-data="fetchCosts"
           />
@@ -870,6 +875,7 @@ const selectedAccounts = ref<string[]>([])
 const selectedTimeframe = ref('thisMonth')
 const selectedView = ref('overview')
 const activeTab = ref('all')
+const activeChartTab = ref('smart') // Chart tab selection (smart, organizational, trends, budget-health, data, forecast)
 const expandedGroups = ref(new Set<string>())
 const accountSortBy = ref<'cost' | 'name' | 'budget' | 'utilization'>('cost') // Default sort by cost
 const showRegressionLine = ref(false) // Toggle for budget variance regression line
@@ -1440,7 +1446,7 @@ const selectSmartGroup = (group: any) => {
 // Handle shared state from URL parameters
 const applySharedStateFromUrl = () => {
   const route = useRoute()
-  
+
   // Check for share parameters in URL
   if (route.query.accounts) {
     try {
@@ -1452,19 +1458,23 @@ const applySharedStateFromUrl = () => {
       console.warn('Invalid accounts parameter in URL:', err)
     }
   }
-  
+
   if (route.query.timeframe && typeof route.query.timeframe === 'string') {
     selectedTimeframe.value = route.query.timeframe
   }
-  
+
   if (route.query.view && typeof route.query.view === 'string') {
     selectedView.value = route.query.view
   }
-  
+
   if (route.query.tab && typeof route.query.tab === 'string') {
     activeTab.value = route.query.tab
   }
-  
+
+  if (route.query.chartTab && typeof route.query.chartTab === 'string') {
+    activeChartTab.value = route.query.chartTab
+  }
+
   if (route.query.mode && typeof route.query.mode === 'string') {
     const mode = route.query.mode as DataMode
     if (mode === 'billable' || mode === 'proforma') {
@@ -1506,11 +1516,25 @@ const { mode: dataMode, isFetching: isCostFetching, isPending: isCostPending, fe
 //    This determines which charts are most relevant to show
 const { scenario } = useCostScenario({ selectedAccounts, activeTab })
 
+// Advanced charts toggle (persisted in localStorage)
+const showAdvancedCharts = ref(false)
+
+// Load toggle state from localStorage on mount
+onMounted(() => {
+  if (import.meta.client) {
+    const saved = localStorage.getItem('showAdvancedCharts')
+    if (saved !== null) {
+      showAdvancedCharts.value = saved === 'true'
+    }
+  }
+})
+
 // 3. useChartRegistry: Contains all chart definitions and selects appropriate charts
 //    - Each chart has an extractor function that transforms dataset into chart data
 //    - Charts are selected based on the current scenario
 //    - Historical timeframes exclude budget-dependent charts
-const { charts } = useChartRegistry({ scenario, timeframe: selectedTimeframe, mode: dataMode })
+//    - showAdvanced toggle includes power-user charts when enabled
+const { charts } = useChartRegistry({ scenario, timeframe: selectedTimeframe, mode: dataMode, showAdvanced: showAdvancedCharts })
 
 // Key helper to avoid undefined issues
 const getAccountKey = (account: Account): string => {

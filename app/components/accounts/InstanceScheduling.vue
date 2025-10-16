@@ -1,5 +1,5 @@
 <template>
-  <UCard>
+  <UCard class="h-full flex flex-col">
     <template #header>
       <div class="flex justify-between items-center">
         <div class="text-lg font-semibold">Instance Scheduling</div>
