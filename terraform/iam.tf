@@ -108,7 +108,7 @@ resource "aws_iam_role_policy" "ecs_ses_send_email" {
         Resource = "*"
         Condition = {
           StringEquals = {
-            "ses:FromAddress" = "noreply@${var.domain_name}"
+            "ses:FromAddress" = "GDMSCloud.AWS@gd-ms.com"
           }
         }
       },

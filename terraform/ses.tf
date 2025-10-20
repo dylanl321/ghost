@@ -1,7 +1,8 @@
 # SES Email Identity (From Address)
-# Note: This creates an email identity. For production, use domain identity instead
-resource "aws_ses_email_identity" "noreply" {
-  email = "noreply@${var.domain_name}"
+# Using existing verified identity: GDMSCloud.AWS@gd-ms.com
+# This identity is already set up in the AWS account
+locals {
+  ses_from_email = "GDMSCloud.AWS@gd-ms.com"
 }
 
 # SES Configuration Set for tracking
@@ -29,14 +30,14 @@ resource "aws_sns_topic" "ses_notifications" {
 resource "aws_ses_identity_notification_topic" "bounces" {
   topic_arn                = aws_sns_topic.ses_notifications.arn
   notification_type        = "Bounce"
-  identity                 = aws_ses_email_identity.noreply.email
+  identity                 = local.ses_from_email
   include_original_headers = false
 }
 
 resource "aws_ses_identity_notification_topic" "complaints" {
   topic_arn                = aws_sns_topic.ses_notifications.arn
   notification_type        = "Complaint"
-  identity                 = aws_ses_email_identity.noreply.email
+  identity                 = local.ses_from_email
   include_original_headers = false
 }
 
@@ -60,7 +61,7 @@ resource "aws_cloudwatch_event_rule" "ses_delivery_events" {
 # Output SES configuration details
 output "ses_from_email" {
   description = "SES from email address"
-  value       = aws_ses_email_identity.noreply.email
+  value       = local.ses_from_email
 }
 
 output "ses_configuration_set" {
