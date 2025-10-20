@@ -8,7 +8,7 @@ locals {
 # SES Configuration Set for tracking (in Account A)
 resource "aws_ses_configuration_set" "ghost_reports" {
   provider = aws.org_account
-  name     = "ghost-scheduled-reports"
+  name     = "ghost-scheduled-reports-${var.env}"
 
   delivery_options {
     tls_policy = "Require"
@@ -18,13 +18,14 @@ resource "aws_ses_configuration_set" "ghost_reports" {
 # SNS Topic for SES Bounce/Complaint notifications (in Account A)
 resource "aws_sns_topic" "ses_notifications" {
   provider = aws.org_account
-  name     = "ghost-ses-notifications"
+  name     = "ghost-ses-notifications-${var.env}"
 
   tags = {
     Name        = "GHOST SES Notifications"
     Environment = local.environment
     ManagedBy   = "Terraform"
     Service     = "GHOST"
+    Account     = "Account A (Org)"
   }
 }
 

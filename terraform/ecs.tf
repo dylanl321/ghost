@@ -56,7 +56,7 @@ resource "aws_ecs_task_definition" "main" {
         },
         {
           name  = "AWS_SES_CONFIGURATION_SET"
-          value = "ghost-scheduled-reports"
+          value = "ghost-scheduled-reports-${var.env}"
         }
       ],
       secrets = [

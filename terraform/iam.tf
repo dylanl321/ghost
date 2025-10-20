@@ -118,7 +118,7 @@ resource "aws_iam_role_policy" "ecs_ses_send_email" {
         Action = [
           "ses:PutConfigurationSetDeliveryOptions"
         ]
-        Resource = "arn:${local.child_partition}:ses:${local.child_region}:${local.child_account_id}:configuration-set/ghost-scheduled-reports"
+        Resource = "arn:${local.child_partition}:ses:${local.child_region}:${local.child_account_id}:configuration-set/ghost-scheduled-reports-${var.env}"
       }
     ]
   })
@@ -139,7 +139,7 @@ resource "aws_iam_role_policy" "ecs_sns_ses_notifications" {
         Action = [
           "sns:Publish"
         ]
-        Resource = "arn:${local.org_partition}:sns:${local.org_region}:${local.org_account_id}:ghost-ses-notifications"
+        Resource = "arn:${local.org_partition}:sns:${local.org_region}:${local.org_account_id}:ghost-ses-notifications-${var.env}"
       }
     ]
   })
