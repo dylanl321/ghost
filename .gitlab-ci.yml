@@ -4,12 +4,18 @@ default:
   tags: # Set default runner tag for jobs
     - govcloud-production
 
+# Pipeline Structure:
+# - test: Run tests for feature branches
+# - build: Docker and Terraform jobs run in parallel (independent of each other)
+# - deploy: Deployment jobs that depend on their respective build jobs
+#
+# Docker path: get_ecr_credentials → build → Refresh Service
+# Terraform path: plan → apply
+# Both paths are independent and can run simultaneously
 stages:
   - test
-  - get_credentials
-  - docker_build
-  - terraform_plan
-  - terraform_apply
+  - build
+  - deploy
 
 workflow:
   rules:
@@ -99,8 +105,9 @@ code_quality_check:
 #   but we need a prod-docker-shared runner to run the docker commands.
 # To resolve this we get the credentials in this job, save them as an artifact, and use that credentials artifact in the build job.
 get_ecr_credentials:
-  stage: get_credentials
+  stage: build
   extends: .assume_role
+  needs: [] # No dependencies - can run immediately after test stage
   rules:
     - if: $CI_COMMIT_REF_NAME == "dev" || $CI_COMMIT_REF_NAME == "master"
   script:
@@ -112,10 +119,13 @@ get_ecr_credentials:
       - ecr-credentials # Exporting as artifact so the build job can consume it
 
 build:
-  stage: docker_build
+  stage: build
   tags:
     - prod-docker-shared
   image: 504885980539.dkr.ecr.us-gov-east-1.amazonaws.com/docker:24.0.5-dind
+  needs:
+    - job: get_ecr_credentials
+      artifacts: true
   rules:
     - if: $CI_COMMIT_REF_NAME == "dev" || $CI_COMMIT_REF_NAME == "master"
       when: manual
@@ -132,7 +142,8 @@ build:
   allow_failure: true
 
 plan:
-  stage: terraform_plan
+  stage: build
+  needs: [] # No dependencies - can run in parallel with Docker jobs
   rules:
     - if: $CI_COMMIT_REF_NAME == "dev" || $CI_COMMIT_REF_NAME == "master"
       when: manual
@@ -146,7 +157,10 @@ plan:
       - $TF_WORKING_DIR/tfplan # Terraform plan file
 
 apply:
-  stage: terraform_apply
+  stage: deploy
+  needs:
+    - job: plan
+      artifacts: true
   rules:
     - if: $CI_COMMIT_REF_NAME == "dev" || $CI_COMMIT_REF_NAME == "master"
       when: manual
@@ -156,8 +170,11 @@ apply:
     - terraform apply tfplan
 
 Refresh Service:
-  stage: docker_build
+  stage: deploy
   extends: .assume_role
+  needs:
+    - job: build
+      artifacts: false
   rules:
     - if: $CI_COMMIT_REF_NAME == "dev" || $CI_COMMIT_REF_NAME == "master"
       when: manual
