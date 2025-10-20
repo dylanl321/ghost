@@ -32,4 +32,5 @@ locals {
   child_partition  = data.aws_partition.child_partition.partition         # Partition associated with target account (Commercial or GovCloud environment). Examples: "aws", "aws-us-gov"
   child_region     = data.aws_region.child_region.name                    # AWS region configured on the provider
   child_account_id = data.aws_caller_identity.child_identity.account_id   # Target account ID
+  environment      = var.env                                               # Environment name (dev/prod) for resource tagging
 }

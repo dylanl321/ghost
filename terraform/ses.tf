@@ -1,0 +1,74 @@
+# SES Email Identity (From Address)
+# Note: This creates an email identity. For production, use domain identity instead
+resource "aws_ses_email_identity" "noreply" {
+  email = "noreply@${var.domain_name}"
+}
+
+# SES Configuration Set for tracking
+resource "aws_ses_configuration_set" "ghost_reports" {
+  name = "ghost-scheduled-reports"
+
+  delivery_options {
+    tls_policy = "Require"
+  }
+}
+
+# SNS Topic for SES Bounce/Complaint notifications
+resource "aws_sns_topic" "ses_notifications" {
+  name = "ghost-ses-notifications"
+
+  tags = {
+    Name        = "GHOST SES Notifications"
+    Environment = local.environment
+    ManagedBy   = "Terraform"
+    Service     = "GHOST"
+  }
+}
+
+# Subscribe SES events to SNS topic
+resource "aws_ses_identity_notification_topic" "bounces" {
+  topic_arn                = aws_sns_topic.ses_notifications.arn
+  notification_type        = "Bounce"
+  identity                 = aws_ses_email_identity.noreply.email
+  include_original_headers = false
+}
+
+resource "aws_ses_identity_notification_topic" "complaints" {
+  topic_arn                = aws_sns_topic.ses_notifications.arn
+  notification_type        = "Complaint"
+  identity                 = aws_ses_email_identity.noreply.email
+  include_original_headers = false
+}
+
+# CloudWatch Event Rule for email delivery tracking
+resource "aws_cloudwatch_event_rule" "ses_delivery_events" {
+  name        = "ghost-ses-delivery-tracking"
+  description = "Track SES email delivery events"
+
+  event_pattern = jsonencode({
+    source      = ["aws.ses"]
+    detail-type = ["SES Email Sending Event"]
+  })
+
+  tags = {
+    Name        = "GHOST SES Delivery Tracking"
+    Environment = local.environment
+    ManagedBy   = "Terraform"
+  }
+}
+
+# Output SES configuration details
+output "ses_from_email" {
+  description = "SES from email address"
+  value       = aws_ses_email_identity.noreply.email
+}
+
+output "ses_configuration_set" {
+  description = "SES configuration set name"
+  value       = aws_ses_configuration_set.ghost_reports.name
+}
+
+output "ses_notifications_topic_arn" {
+  description = "ARN of SNS topic for SES notifications"
+  value       = aws_sns_topic.ses_notifications.arn
+}

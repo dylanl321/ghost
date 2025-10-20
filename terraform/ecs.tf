@@ -41,9 +41,21 @@ resource "aws_ecs_task_definition" "main" {
         {
           name  = "NODE_ENV"
           value = var.env
+        },
+        {
+          name  = "DYNAMODB_CONFIG_SECRET_NAME"
+          value = "ghost-dynamodb-config-${var.env}"
+        },
+        {
+          name  = "DYNAMODB_USE_TASK_ROLE"
+          value = "true"
         }
       ],
       secrets = [
+        {
+          name      = "DYNAMODB_CONFIG"
+          valueFrom = "${aws_secretsmanager_secret.dynamodb_config.arn}"
+        },
         {
           name  = "NUXT_OIDC_PROVIDERS_ENTRA_CLIENT_ID"
           valueFrom = "${local.secret_arn}:entra_client_id::"
