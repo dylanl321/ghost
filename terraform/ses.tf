@@ -7,7 +7,8 @@ locals {
 
 # SES Configuration Set for tracking
 resource "aws_ses_configuration_set" "ghost_reports" {
-  name = "ghost-scheduled-reports"
+  provider = aws.target_deployment_account
+  name     = "ghost-scheduled-reports"
 
   delivery_options {
     tls_policy = "Require"
@@ -16,7 +17,8 @@ resource "aws_ses_configuration_set" "ghost_reports" {
 
 # SNS Topic for SES Bounce/Complaint notifications
 resource "aws_sns_topic" "ses_notifications" {
-  name = "ghost-ses-notifications"
+  provider = aws.target_deployment_account
+  name     = "ghost-ses-notifications"
 
   tags = {
     Name        = "GHOST SES Notifications"
@@ -28,6 +30,7 @@ resource "aws_sns_topic" "ses_notifications" {
 
 # Subscribe SES events to SNS topic
 resource "aws_ses_identity_notification_topic" "bounces" {
+  provider                 = aws.target_deployment_account
   topic_arn                = aws_sns_topic.ses_notifications.arn
   notification_type        = "Bounce"
   identity                 = local.ses_from_email
@@ -35,6 +38,7 @@ resource "aws_ses_identity_notification_topic" "bounces" {
 }
 
 resource "aws_ses_identity_notification_topic" "complaints" {
+  provider                 = aws.target_deployment_account
   topic_arn                = aws_sns_topic.ses_notifications.arn
   notification_type        = "Complaint"
   identity                 = local.ses_from_email
@@ -43,6 +47,7 @@ resource "aws_ses_identity_notification_topic" "complaints" {
 
 # CloudWatch Event Rule for email delivery tracking
 resource "aws_cloudwatch_event_rule" "ses_delivery_events" {
+  provider    = aws.target_deployment_account
   name        = "ghost-ses-delivery-tracking"
   description = "Track SES email delivery events"
 
