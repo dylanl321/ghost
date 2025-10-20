@@ -25,7 +25,6 @@ resource "aws_sns_topic" "ses_notifications_org_account" {
     Environment = local.environment
     ManagedBy   = "Terraform"
     Service     = "GHOST"
-    Account     = "Account A (Org)"
   }
 }
 
@@ -61,7 +60,6 @@ resource "aws_cloudwatch_event_rule" "ses_delivery_events_org_account" {
     Name        = "GHOST SES Delivery Tracking"
     Environment = local.environment
     ManagedBy   = "Terraform"
-    Account     = "Account A (Org)"
   }
 }
 
