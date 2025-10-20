@@ -1,5 +1,11 @@
 variable "account_id" {
-  default = "461760157232"
+  description = "Account B - Deployment account (where ECS runs)"
+  default     = "461760157232"
+}
+
+variable "org_account_id" {
+  description = "Account A - Organization account (has SES, domain validation)"
+  default     = "083876038518"
 }
 
 variable "aws_region" {

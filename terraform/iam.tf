@@ -108,7 +108,7 @@ resource "aws_iam_role_policy" "ecs_ses_send_email" {
         Resource = "*"
         Condition = {
           StringEquals = {
-            "ses:FromAddress" = "GDMSCloud.AWS@gd-ms.com"
+            "ses:FromAddress" = "aws-ghost@gd-ms.com"
           }
         }
       },
@@ -124,7 +124,7 @@ resource "aws_iam_role_policy" "ecs_ses_send_email" {
   })
 }
 
-# SNS permissions for SES notifications
+# SNS permissions for SES notifications (cross-account to Account A)
 resource "aws_iam_role_policy" "ecs_sns_ses_notifications" {
   provider = aws.target_deployment_account
   name     = "${var.app_name}_sns_ses_notifications"
@@ -139,7 +139,7 @@ resource "aws_iam_role_policy" "ecs_sns_ses_notifications" {
         Action = [
           "sns:Publish"
         ]
-        Resource = "arn:${local.child_partition}:sns:${local.child_region}:${local.child_account_id}:ghost-ses-notifications"
+        Resource = "arn:${local.org_partition}:sns:${local.org_region}:${local.org_account_id}:ghost-ses-notifications"
       }
     ]
   })

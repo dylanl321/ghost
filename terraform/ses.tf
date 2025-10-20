@@ -1,13 +1,13 @@
 # SES Email Identity (From Address)
-# Using existing verified identity: GDMSCloud.AWS@gd-ms.com
-# This identity is already set up in the AWS account
+# Using existing verified identity in Account A (org account)
+# Account A has production SES and domain validation
 locals {
-  ses_from_email = "GDMSCloud.AWS@gd-ms.com"
+  ses_from_email = "aws-ghost@gd-ms.com"
 }
 
-# SES Configuration Set for tracking
+# SES Configuration Set for tracking (in Account A)
 resource "aws_ses_configuration_set" "ghost_reports" {
-  provider = aws.target_deployment_account
+  provider = aws.org_account
   name     = "ghost-scheduled-reports"
 
   delivery_options {
@@ -15,9 +15,9 @@ resource "aws_ses_configuration_set" "ghost_reports" {
   }
 }
 
-# SNS Topic for SES Bounce/Complaint notifications
+# SNS Topic for SES Bounce/Complaint notifications (in Account A)
 resource "aws_sns_topic" "ses_notifications" {
-  provider = aws.target_deployment_account
+  provider = aws.org_account
   name     = "ghost-ses-notifications"
 
   tags = {
@@ -28,9 +28,9 @@ resource "aws_sns_topic" "ses_notifications" {
   }
 }
 
-# Subscribe SES events to SNS topic
+# Subscribe SES events to SNS topic (in Account A)
 resource "aws_ses_identity_notification_topic" "bounces" {
-  provider                 = aws.target_deployment_account
+  provider                 = aws.org_account
   topic_arn                = aws_sns_topic.ses_notifications.arn
   notification_type        = "Bounce"
   identity                 = local.ses_from_email
@@ -38,16 +38,16 @@ resource "aws_ses_identity_notification_topic" "bounces" {
 }
 
 resource "aws_ses_identity_notification_topic" "complaints" {
-  provider                 = aws.target_deployment_account
+  provider                 = aws.org_account
   topic_arn                = aws_sns_topic.ses_notifications.arn
   notification_type        = "Complaint"
   identity                 = local.ses_from_email
   include_original_headers = false
 }
 
-# CloudWatch Event Rule for email delivery tracking
+# CloudWatch Event Rule for email delivery tracking (in Account A)
 resource "aws_cloudwatch_event_rule" "ses_delivery_events" {
-  provider    = aws.target_deployment_account
+  provider    = aws.org_account
   name        = "ghost-ses-delivery-tracking"
   description = "Track SES email delivery events"
 

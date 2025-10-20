@@ -49,6 +49,14 @@ resource "aws_ecs_task_definition" "main" {
         {
           name  = "DYNAMODB_USE_TASK_ROLE"
           value = "true"
+        },
+        {
+          name  = "AWS_SES_FROM_EMAIL"
+          value = "aws-ghost@gd-ms.com"
+        },
+        {
+          name  = "AWS_SES_CONFIGURATION_SET"
+          value = "ghost-scheduled-reports"
         }
       ],
       secrets = [
