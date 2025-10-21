@@ -1,9 +1,7 @@
 import { computed, type ComputedRef } from 'vue'
 import type { NormalizedDataset } from '~/types/costs'
 import type { TableColumn } from '~/components/shared/DataTable.vue'
-
-// Data mode type
-export type DataMode = 'billable' | 'proforma'
+import type { DataMode } from '~/shared/types/scheduled-reports'
 
 // Account metadata type (simplified for LOB/Department lookup)
 export interface AccountMetadata {
@@ -89,12 +87,12 @@ const extractAnalysisData = (dataset: NormalizedDataset, dataMode: DataMode = 'b
 const budgetOverageAccounts: TableDefinition = {
   id: 'budgetOverageAccounts',
   title: 'Accounts Over Budget',
-  description: 'All accounts currently exceeding their budgeted amount',
+  description: 'All accounts currently exceeding their budgeted amount, sorted by risk score',
   context: 'budget-health',
   layout: { width: 'full', priority: 2 },
   columns: [
     { key: 'accountName', label: 'Account Name', default: true },
-    { key: 'accountId', label: 'Account ID', default: true },
+    { key: 'accountId', label: 'Account ID', default: false },
     {
       key: 'actualCost',
       label: 'Actual Cost',
@@ -110,6 +108,23 @@ const budgetOverageAccounts: TableDefinition = {
       default: true
     },
     {
+      key: 'riskScore',
+      label: 'Risk Score',
+      align: 'right',
+      format: (v: number) => v.toFixed(0),
+      default: true,
+      helpLink: '/support/docs?topic=budget-risk-scoring',
+      helpTooltip: 'Learn how Risk Scores are calculated'
+    },
+    {
+      key: 'riskLevel',
+      label: 'Risk Level',
+      align: 'center',
+      default: true,
+      helpLink: '/support/docs?topic=budget-risk-scoring',
+      helpTooltip: 'Learn about Risk Levels'
+    },
+    {
       key: 'dollarOver',
       label: '$ Over Budget',
       align: 'right',
@@ -123,20 +138,20 @@ const budgetOverageAccounts: TableDefinition = {
       align: 'right',
       format: (v: number) => formatPercent(v),
       class: 'text-red-400 font-semibold',
-      default: true
+      default: false
     },
     {
       key: 'utilization',
       label: 'Utilization',
       align: 'right',
       format: (v: number) => formatPercent(v),
-      default: true
+      default: false
     },
     {
       key: 'status',
       label: 'Status',
       align: 'center',
-      default: true
+      default: false
     }
   ],
   extractor: (dataset: NormalizedDataset, dataMode: DataMode = 'billable') => {
@@ -157,9 +172,48 @@ const budgetOverageAccounts: TableDefinition = {
         dollarOver: acc.actualCost - acc.budgetedCost,
         percentOver: ((acc.actualCost - acc.budgetedCost) / acc.budgetedCost) * 100,
         utilization: (acc.actualCost / acc.budgetedCost) * 100,
-        status: getStatusText((acc.actualCost / acc.budgetedCost) * 100)
+        status: getStatusText((acc.actualCost / acc.budgetedCost) * 100),
+        riskScore: 0,
+        riskLevel: '',
+        riskColor: ''
       }))
-      .sort((a: any, b: any) => b.dollarOver - a.dollarOver) // Sort by dollar amount desc
+
+    // Calculate risk scores across all accounts
+    if (accounts.length > 0) {
+      const maxPercentOver = Math.max(...accounts.map((a: any) => a.percentOver), 1)
+      const maxDollarOver = Math.max(...accounts.map((a: any) => a.dollarOver), 1)
+
+      accounts.forEach((account: any) => {
+        // Normalize overage percentage (0-100 scale)
+        const normalizedPercent = (account.percentOver / maxPercentOver) * 100
+
+        // Normalize overage amount (0-100 scale)
+        const normalizedAmount = (account.dollarOver / maxDollarOver) * 100
+
+        // Combined risk score (70% weight on percentage, 30% weight on absolute impact)
+        const riskScore = (normalizedPercent * 0.7) + (normalizedAmount * 0.3)
+
+        // Determine risk level
+        if (riskScore >= 80) {
+          account.riskLevel = 'Critical'
+          account.riskColor = 'red'
+        } else if (riskScore >= 60) {
+          account.riskLevel = 'High'
+          account.riskColor = 'orange'
+        } else if (riskScore >= 40) {
+          account.riskLevel = 'Medium'
+          account.riskColor = 'yellow'
+        } else {
+          account.riskLevel = 'Low'
+          account.riskColor = 'blue'
+        }
+
+        account.riskScore = riskScore
+      })
+
+      // Sort by risk score descending
+      accounts.sort((a: any, b: any) => b.riskScore - a.riskScore)
+    }
 
     return accounts
   },
@@ -177,12 +231,12 @@ const budgetOverageAccounts: TableDefinition = {
 const severeOverageAccounts: TableDefinition = {
   id: 'severeOverageAccounts',
   title: 'Severe Budget Overages',
-  description: 'Accounts exceeding budget by more than 20%',
+  description: 'Accounts exceeding budget by more than 20%, sorted by risk score',
   context: 'budget-health',
   layout: { width: 'full', priority: 1 },
   columns: [
     { key: 'accountName', label: 'Account Name', default: true },
-    { key: 'accountId', label: 'Account ID', default: true },
+    { key: 'accountId', label: 'Account ID', default: false },
     {
       key: 'actualCost',
       label: 'Actual Cost',
@@ -198,6 +252,23 @@ const severeOverageAccounts: TableDefinition = {
       default: true
     },
     {
+      key: 'riskScore',
+      label: 'Risk Score',
+      align: 'right',
+      format: (v: number) => v.toFixed(0),
+      default: true,
+      helpLink: '/support/docs?topic=budget-risk-scoring',
+      helpTooltip: 'Learn how Risk Scores are calculated'
+    },
+    {
+      key: 'riskLevel',
+      label: 'Risk Level',
+      align: 'center',
+      default: true,
+      helpLink: '/support/docs?topic=budget-risk-scoring',
+      helpTooltip: 'Learn about Risk Levels'
+    },
+    {
       key: 'dollarOver',
       label: '$ Over Budget',
       align: 'right',
@@ -211,7 +282,7 @@ const severeOverageAccounts: TableDefinition = {
       align: 'right',
       format: (v: number) => formatPercent(v),
       class: 'text-red-400 font-semibold',
-      default: true
+      default: false
     }
   ],
   extractor: (dataset: NormalizedDataset, dataMode: DataMode = 'billable') => {
@@ -233,9 +304,48 @@ const severeOverageAccounts: TableDefinition = {
         actualCost: acc.actualCost,
         budgetedCost: acc.budgetedCost,
         dollarOver: acc.actualCost - acc.budgetedCost,
-        percentOver: ((acc.actualCost - acc.budgetedCost) / acc.budgetedCost) * 100
+        percentOver: ((acc.actualCost - acc.budgetedCost) / acc.budgetedCost) * 100,
+        riskScore: 0,
+        riskLevel: '',
+        riskColor: ''
       }))
-      .sort((a: any, b: any) => b.percentOver - a.percentOver) // Sort by % over desc
+
+    // Calculate risk scores across all accounts
+    if (accounts.length > 0) {
+      const maxPercentOver = Math.max(...accounts.map((a: any) => a.percentOver), 1)
+      const maxDollarOver = Math.max(...accounts.map((a: any) => a.dollarOver), 1)
+
+      accounts.forEach((account: any) => {
+        // Normalize overage percentage (0-100 scale)
+        const normalizedPercent = (account.percentOver / maxPercentOver) * 100
+
+        // Normalize overage amount (0-100 scale)
+        const normalizedAmount = (account.dollarOver / maxDollarOver) * 100
+
+        // Combined risk score (70% weight on percentage, 30% weight on absolute impact)
+        const riskScore = (normalizedPercent * 0.7) + (normalizedAmount * 0.3)
+
+        // Determine risk level
+        if (riskScore >= 80) {
+          account.riskLevel = 'Critical'
+          account.riskColor = 'red'
+        } else if (riskScore >= 60) {
+          account.riskLevel = 'High'
+          account.riskColor = 'orange'
+        } else if (riskScore >= 40) {
+          account.riskLevel = 'Medium'
+          account.riskColor = 'yellow'
+        } else {
+          account.riskLevel = 'Low'
+          account.riskColor = 'blue'
+        }
+
+        account.riskScore = riskScore
+      })
+
+      // Sort by risk score descending
+      accounts.sort((a: any, b: any) => b.riskScore - a.riskScore)
+    }
 
     return accounts
   },

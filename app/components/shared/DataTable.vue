@@ -83,7 +83,7 @@
               v-for="col in visibleColumnsArray"
               :key="col.key"
               :class="[
-                'px-4 py-3 text-xs font-medium text-gray-300 uppercase tracking-wider',
+                'px-4 py-3 text-xs font-medium text-gray-300 tracking-wider',
                 col.align === 'right' ? 'text-right' :
                 col.align === 'center' ? 'text-center' : 'text-left',
                 col.sortable !== false && config.sortable ? 'cursor-pointer hover:bg-gray-700' : ''
@@ -97,6 +97,11 @@
                   :name="sortDirection === 'asc' ? 'i-heroicons-arrow-up' : 'i-heroicons-arrow-down'"
                   class="w-3 h-3"
                 />
+                <UTooltip v-if="col.helpLink" :text="col.helpTooltip || 'Learn more'">
+                  <NuxtLink :to="col.helpLink" class="text-gray-400 hover:text-gray-300" @click.stop>
+                    <UIcon name="i-heroicons-question-mark-circle" class="w-3.5 h-3.5" />
+                  </NuxtLink>
+                </UTooltip>
               </div>
             </th>
           </tr>
@@ -199,6 +204,8 @@ export interface TableColumn {
   format?: (value: any, row: any) => string
   class?: string
   default?: boolean // Whether column is visible by default
+  helpLink?: string // Optional link to documentation
+  helpTooltip?: string // Optional tooltip text for help icon
 }
 
 // Configuration options

@@ -243,11 +243,11 @@ async function checkAWSEnvironment(environment: 'commercial' | 'govcloud') {
     // Check DynamoDB access
     try {
       const dynamoClient = await getDynamoDBClient(environment)
-      const tableName = getAccountsTableName()
-      
+      const tableName = await getAccountsTableName()
+
       // Try to describe the accounts table
-      const describeResponse = await dynamoClient.send(new DescribeTableCommand({ 
-        TableName: tableName 
+      const describeResponse = await dynamoClient.send(new DescribeTableCommand({
+        TableName: tableName
       }))
       
       result.services.dynamodb = {

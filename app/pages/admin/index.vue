@@ -113,6 +113,17 @@
             Issues & Tickets
           </button>
 
+          <button
+            @click="activeSection = 'scheduledreports'"
+            class="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors"
+            :class="activeSection === 'scheduledreports'
+              ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'"
+          >
+            <Icon name="i-heroicons-calendar-days" class="w-5 h-5" />
+            Scheduled Reports
+          </button>
+
           <div class="px-3 py-2 opacity-50">
             <div class="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
               <Icon name="i-heroicons-chart-bar" class="w-5 h-5" />
@@ -160,6 +171,7 @@
         <RolesPanel v-else-if="activeSection === 'roles'" />
         <SystemLogsPanel v-else-if="activeSection === 'logs'" />
         <IssuesPanel v-else-if="activeSection === 'issues'" />
+        <ScheduledReportsPanel v-else-if="activeSection === 'scheduledreports'" />
       </main>
     </div>
   </div>
@@ -171,6 +183,7 @@ import ApiKeysPanel from '~/components/admin/ApiKeysPanel.vue'
 import RolesPanel from '~/components/admin/RolesPanel.vue'
 import SystemLogsPanel from '~/components/admin/SystemLogsPanel.vue'
 import IssuesPanel from '~/components/admin/IssuesPanel.vue'
+import ScheduledReportsPanel from '~/components/admin/ScheduledReportsPanel.vue'
 
 // Page meta
 definePageMeta({

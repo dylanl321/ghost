@@ -416,11 +416,6 @@ const navigationItems = [
         to: "/account/user",
         icon: "i-heroicons-users"
       },
-      {
-        label: "AWS Assistant",
-        to: "/chat",
-        icon: "i-heroicons-chat-bubble-left-right"
-      },
 
       // NOTE: disabling this until the scorecard page is working
       // {

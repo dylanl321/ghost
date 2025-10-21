@@ -7,6 +7,7 @@
 import { randomBytes, scryptSync, timingSafeEqual } from 'crypto'
 import { putItem, getItem, scanItems, updateItem, deleteItem } from './dynamodb'
 import { accountCache } from './cache-manager'
+import { getTableName, getTableEnvironment } from '../lib/dynamodb-config'
 
 export interface ApiKey {
   id: string
@@ -103,20 +104,10 @@ function generateSalt(): string {
 }
 
 /**
- * DynamoDB table name for API keys
+ * DynamoDB table configuration
+ * Table names and environment are now loaded dynamically from config (Secrets Manager or env vars)
+ * This allows centralized configuration management
  */
-const API_KEYS_TABLE = process.env.DYNAMODB_API_KEYS_TABLE || 'ghost-api-keys'
-
-/**
- * DynamoDB table name for API key usage history
- */
-const API_KEY_USAGE_TABLE = process.env.DYNAMODB_API_KEY_USAGE_TABLE || 'ghost-api-keys-usage'
-
-/**
- * DynamoDB environment for API keys storage
- */
-const API_KEYS_ENVIRONMENT: 'commercial' | 'govcloud' =
-  (process.env.API_KEYS_STORAGE_ENV as 'commercial' | 'govcloud') || 'commercial'
 
 /**
  * Retention period for usage history in days
@@ -136,7 +127,9 @@ async function loadApiKeys(): Promise<ApiKey[]> {
     }
     
     // Scan DynamoDB table
-    const result = await scanItems(API_KEYS_TABLE, undefined, undefined, undefined, API_KEYS_ENVIRONMENT)
+    const tableName = await getTableName('apiKeys')
+    const environment = await getTableEnvironment('apiKeys')
+    const result = await scanItems(tableName, undefined, undefined, undefined, environment)
     const items = result.items
     const apiKeys: ApiKey[] = items.map(item => ({
       id: item.id,
@@ -159,7 +152,9 @@ async function loadApiKeys(): Promise<ApiKey[]> {
   } catch (error: any) {
     // Handle table not existing gracefully
     if (error.name === 'ResourceNotFoundException' || error.message?.includes('Requested resource not found')) {
-      console.log(`API keys table ${API_KEYS_TABLE} does not exist yet in ${API_KEYS_ENVIRONMENT} environment`)
+      const tableName = await getTableName('apiKeys').catch(() => 'ghost-api-keys')
+      const environment = await getTableEnvironment('apiKeys').catch(() => 'commercial')
+      console.log(`API keys table ${tableName} does not exist yet in ${environment} environment`)
       return []
     }
     console.error('Failed to load API keys from DynamoDB:', error)
@@ -181,7 +176,9 @@ async function saveApiKey(apiKey: ApiKey): Promise<void> {
       isActive: apiKey.isActive.toString() // Convert boolean to string for GSI
     }
 
-    await putItem(API_KEYS_TABLE, dbItem, API_KEYS_ENVIRONMENT)
+    const tableName = await getTableName('apiKeys')
+    const environment = await getTableEnvironment('apiKeys')
+    await putItem(tableName, dbItem, environment)
 
     // Invalidate cache
     await accountCache.delete('api_keys:all')
@@ -208,11 +205,13 @@ async function updateApiKey(id: string, updates: Partial<ApiKey>): Promise<void>
       dbUpdates.isActive = dbUpdates.isActive.toString() // Convert boolean to string for GSI
     }
 
+    const tableName = await getTableName('apiKeys')
+    const environment = await getTableEnvironment('apiKeys')
     await updateItem(
-      API_KEYS_TABLE,
+      tableName,
       { id },
       dbUpdates,
-      API_KEYS_ENVIRONMENT
+      environment
     )
 
     // Invalidate cache
@@ -357,7 +356,9 @@ export async function listApiKeys(createdBy?: string): Promise<Omit<ApiKey, 'key
 export async function deactivateApiKey(keyId: string, userId: string): Promise<boolean> {
   try {
     // Get the specific API key
-    const apiKey = await getItem(API_KEYS_TABLE, { id: keyId }, API_KEYS_ENVIRONMENT)
+    const tableName = await getTableName('apiKeys')
+    const environment = await getTableEnvironment('apiKeys')
+    const apiKey = await getItem(tableName, { id: keyId }, environment)
     
     if (!apiKey) {
       return false
@@ -476,7 +477,9 @@ export async function recordApiKeyUsage(
       ttl // Auto-delete after retention period
     }
 
-    await putItem(API_KEY_USAGE_TABLE, usageRecord, API_KEYS_ENVIRONMENT)
+    const usageTableName = await getTableName('apiKeysUsage')
+    const environment = await getTableEnvironment('apiKeysUsage')
+    await putItem(usageTableName, usageRecord, environment)
     console.log(`Successfully recorded API key usage for keyId=${keyId}`)
   } catch (error) {
     // Don't throw error - usage recording should not block API calls
@@ -504,11 +507,13 @@ export async function getApiKeyUsageHistory(
     const { QueryCommand } = await import('@aws-sdk/client-dynamodb')
     const { unmarshall } = await import('@aws-sdk/util-dynamodb')
 
-    const client = await getDynamoDBClient(API_KEYS_ENVIRONMENT)
+    const usageTableName = await getTableName('apiKeysUsage')
+    const environment = await getTableEnvironment('apiKeysUsage')
+    const client = await getDynamoDBClient(environment)
 
     // Query by keyId (partition key) and get most recent records
     const command = new QueryCommand({
-      TableName: API_KEY_USAGE_TABLE,
+      TableName: usageTableName,
       KeyConditionExpression: 'keyId = :keyId',
       ExpressionAttributeValues: {
         ':keyId': { S: keyId }

@@ -1,0 +1,251 @@
+/**
+ * Report Generator
+ * Generates cost reports for scheduled delivery
+ * Reuses the existing export system from the frontend
+ */
+
+import type { ReportConfig } from '~/shared/types/scheduled-reports'
+import type { NormalizedDataset } from '~/types/costs'
+import { getCostAndUsage } from './cost-explorer'
+import { getAllAccountsUnified } from './accounts-consolidated'
+import { validateDateParams } from './date-helpers'
+import { exportToPDFServer } from './pdf-export-server'
+
+/**
+ * Generate a cost report based on configuration
+ * Returns report as Buffer for email attachment
+ */
+export async function generateCostReport(
+  config: ReportConfig
+): Promise<{
+  success: boolean
+  buffer?: Buffer
+  filename?: string
+  error?: string
+}> {
+  try {
+    console.log('Generating cost report with config:', {
+      accounts: config.accounts?.length || 'all',
+      timeframe: config.timeframe,
+      dataMode: config.dataMode,
+      format: config.format
+    })
+
+    // Step 1: Fetch all required cost data and build NormalizedDataset
+    const dataset = await buildDataset(config)
+
+    // Step 2: Generate export using the existing export system
+    if (config.format === 'pdf') {
+      return await generatePDFReport(dataset, config)
+    } else {
+      return await generateTextReport(dataset, config)
+    }
+  } catch (error: any) {
+    console.error('Report generation error:', error)
+    return {
+      success: false,
+      error: error.message || 'Unknown error during report generation'
+    }
+  }
+}
+
+/**
+ * Build NormalizedDataset from cost data
+ * This creates the same data structure the frontend uses
+ */
+async function buildDataset(config: ReportConfig): Promise<NormalizedDataset> {
+  // Convert timeframe to date range
+  const dateRange = validateDateParams({
+    period: config.timeframe as any
+  })
+
+  // Fetch cost data
+  const costParams = {
+    startDate: dateRange.startDate,
+    endDate: dateRange.endDate,
+    granularity: 'MONTHLY' as const,
+    metrics: ['UnblendedCost', 'UsageQuantity'],
+    groupBy: [{
+      type: 'DIMENSION' as const,
+      key: 'LINKED_ACCOUNT'
+    }],
+    filter: config.accounts && config.accounts.length > 0 ? {
+      Dimensions: {
+        Key: 'LINKED_ACCOUNT',
+        Values: config.accounts,
+        MatchOptions: ['EQUALS']
+      }
+    } : undefined
+  }
+
+  const environment = config.dataMode === 'billable' ? 'commercial' : 'commercial'
+
+  // Fetch all data in parallel
+  const [costData, accounts] = await Promise.all([
+    getCostAndUsage(costParams, environment),
+    getAllAccountsUnified(false)
+  ])
+
+  if (!costData || !costData.resultsByTime) {
+    throw new Error('No cost data returned from AWS')
+  }
+
+  // Build normalized dataset (same structure as frontend)
+  const dataset: NormalizedDataset = {
+    accounts: config.accounts || [],
+    timeframe: config.timeframe,
+    mode: config.dataMode,
+    analysis: { data: costData },
+    services: config.includeServices ? { data: costData } : null,
+    historical: config.includeHistorical ? { data: costData } : null,
+    forecast: config.includeForecast ? { data: {} } : null,
+    yearEndForecast: null,
+    currentMonthOrgWide: null,
+    accountsList: accounts
+  }
+
+  return dataset
+}
+
+/**
+ * Generate PDF report using existing export system
+ */
+async function generatePDFReport(
+  dataset: NormalizedDataset,
+  config: ReportConfig
+): Promise<{
+  success: boolean
+  buffer?: Buffer
+  filename?: string
+  error?: string
+}> {
+  try {
+    // Use the existing export system by creating DataExportConfig
+    const { createCostExportConfig } = await import('./cost-export-server')
+
+    const exportConfig = createCostExportConfig(dataset, {
+      includeServices: config.includeServices,
+      includeHistorical: config.includeHistorical,
+      includeForecast: config.includeForecast
+    })
+
+    // Generate PDF using server-compatible exporter
+    const result = await exportToPDFServer(exportConfig)
+
+    if (!result.success || !result.blob) {
+      throw new Error(result.error || 'PDF generation failed')
+    }
+
+    // Convert Blob to Buffer
+    const arrayBuffer = await result.blob.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+
+    return {
+      success: true,
+      buffer,
+      filename: result.filename
+    }
+  } catch (error: any) {
+    console.error('PDF generation error:', error)
+    return {
+      success: false,
+      error: error.message
+    }
+  }
+}
+
+/**
+ * Generate text/CSV report
+ */
+async function generateTextReport(
+  dataset: NormalizedDataset,
+  config: ReportConfig
+): Promise<{
+  success: boolean
+  buffer?: Buffer
+  filename?: string
+  error?: string
+}> {
+  const dateRange = validateDateParams({
+    period: config.timeframe as any
+  })
+
+  const reportContent = formatReportData(config, dataset, dateRange)
+  const buffer = Buffer.from(reportContent, 'utf-8')
+
+  const timestamp = new Date().toISOString().split('T')[0]
+  const filename = `cost-report-${timestamp}.${config.format}`
+
+  return {
+    success: true,
+    buffer,
+    filename
+  }
+}
+
+/**
+ * Format cost data into a readable text report
+ */
+function formatReportData(
+  config: ReportConfig,
+  dataset: NormalizedDataset,
+  dateRange: { startDate: string; endDate: string }
+): string {
+  const accountMap = new Map()
+  dataset.accountsList.forEach(acc => {
+    if (acc.awsStandardAccountID) accountMap.set(acc.awsStandardAccountID, acc)
+    if (acc.awsGovCloudAccountID) accountMap.set(acc.awsGovCloudAccountID, acc)
+  })
+
+  // Calculate totals from analysis data
+  let totalCost = 0
+  const accountCosts = new Map<string, number>()
+
+  const costData = (dataset.analysis as any)?.data || dataset.analysis
+  if (costData?.resultsByTime) {
+    costData.resultsByTime.forEach((result: any) => {
+      result.Groups?.forEach((group: any) => {
+        const accountId = group.Keys?.[0]
+        const cost = parseFloat(group.Metrics?.['UnblendedCost']?.Amount || '0')
+        if (accountId) {
+          accountCosts.set(accountId, (accountCosts.get(accountId) || 0) + cost)
+          totalCost += cost
+        }
+      })
+    })
+  }
+
+  // Build report sections
+  const sections = []
+
+  // Header
+  sections.push(`AWS COST REPORT`)
+  sections.push(`Generated: ${new Date().toLocaleString()}`)
+  sections.push(`Period: ${dateRange.startDate} to ${dateRange.endDate}`)
+  sections.push(`Data Mode: ${dataset.mode}`)
+  sections.push(`\n${'='.repeat(80)}\n`)
+
+  // Summary
+  sections.push(`SUMMARY`)
+  sections.push(`Total Cost: $${totalCost.toFixed(2)}`)
+  sections.push(`Accounts: ${accountCosts.size}`)
+  sections.push(`\n${'='.repeat(80)}\n`)
+
+  // Account breakdown
+  sections.push(`COST BY ACCOUNT`)
+  sections.push(`\n`)
+
+  const sortedAccounts = Array.from(accountCosts.entries())
+    .sort((a, b) => b[1] - a[1])
+
+  sortedAccounts.forEach(([accountId, cost]) => {
+    const account = accountMap.get(accountId)
+    const accountName = account?.name || accountId
+    sections.push(`${accountName.padEnd(50)} $${cost.toFixed(2).padStart(15)}`)
+  })
+
+  sections.push(`\n${'='.repeat(80)}`)
+  sections.push(`TOTAL${' '.repeat(45)}$${totalCost.toFixed(2).padStart(15)}`)
+
+  return sections.join('\n')
+}

@@ -37,6 +37,9 @@ interface Props {
 
   // Loading state (can be controlled externally)
   loading?: boolean
+
+  // Schedule functionality
+  enableSchedule?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -47,6 +50,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   export: [format: ExportFormat]
+  schedule: []
 }>()
 
 const isExporting = computed(() => props.loading)
@@ -94,11 +98,22 @@ const exportMenuItems = computed(() => {
       }
     })
 
-  return [
-    [
-      ...items
-    ]
+  const menuGroups = [
+    items
   ]
+
+  // Add schedule option if enabled
+  if (props.enableSchedule) {
+    menuGroups.push([
+      {
+        label: 'Schedule Report',
+        icon: 'i-heroicons-calendar-days',
+        click: () => emit('schedule')
+      }
+    ])
+  }
+
+  return menuGroups
 })
 
 function handleExport(format: ExportFormat) {

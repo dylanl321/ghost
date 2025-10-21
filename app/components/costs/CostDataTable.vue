@@ -71,7 +71,7 @@
                 v-for="col in visibleColumns"
                 :key="col.key"
                 @click="sortBy(col.key)"
-                class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-750"
+                class="px-4 py-3 text-left text-xs font-medium text-gray-400 tracking-wider cursor-pointer hover:bg-gray-750"
               >
                 <div class="flex items-center gap-1">
                   {{ col.label }}
@@ -80,6 +80,11 @@
                     :name="sortDirection === 'asc' ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'"
                     class="w-4 h-4"
                   />
+                  <UTooltip v-if="col.helpLink" :text="col.helpTooltip || 'Learn more'">
+                    <NuxtLink :to="col.helpLink" class="text-gray-400 hover:text-gray-300" @click.stop>
+                      <Icon name="i-heroicons-question-mark-circle" class="w-3.5 h-3.5" />
+                    </NuxtLink>
+                  </UTooltip>
                 </div>
               </th>
             </tr>
@@ -104,6 +109,16 @@
                     size="xs"
                   >
                     {{ row.accountStatus || 'Active' }}
+                  </UBadge>
+                </span>
+                <!-- Special handling for risk level column -->
+                <span v-else-if="col.key === 'riskLevel'">
+                  <UBadge
+                    :color="row.riskColor || 'gray'"
+                    variant="subtle"
+                    size="xs"
+                  >
+                    {{ row.riskLevel || '-' }}
                   </UBadge>
                 </span>
                 <!-- Special handling for account name to show if decommissioned -->
@@ -214,8 +229,11 @@ const availableColumns = [
   { key: 'actualCost', label: 'Actual Cost', default: true, format: (v: number) => formatCurrency(v), class: 'text-right' },
   { key: 'budgetedCost', label: 'Budget', default: true, format: (v: number) => formatCurrency(v), class: 'text-right' },
   { key: 'utilization', label: 'Utilization %', default: true, format: (v: number) => `${v.toFixed(1)}%`, class: 'text-right' },
+  { key: 'overagePercent', label: 'Overage %', default: false, format: (v: number) => v > 0 ? `${v.toFixed(1)}%` : '-', class: 'text-right' },
+  { key: 'riskScore', label: 'Risk Score', default: true, format: (v: number) => v.toFixed(0), class: 'text-right', helpLink: '/support/docs?topic=budget-risk-scoring', helpTooltip: 'Learn how Risk Scores are calculated' },
+  { key: 'riskLevel', label: 'Risk Level', default: true, helpLink: '/support/docs?topic=budget-risk-scoring', helpTooltip: 'Learn about Risk Levels' },
   { key: 'variance', label: 'Variance', default: true, format: (v: number) => formatCurrency(v), class: 'text-right' },
-  { key: 'status', label: 'Budget Status', default: true },
+  { key: 'status', label: 'Budget Status', default: false },
   { key: 'departmentNumber', label: 'Department', default: false },
   { key: 'linesOfBusiness', label: 'Line of Business', default: false },
   { key: 'projectName', label: 'Project', default: false },
@@ -226,7 +244,7 @@ const availableColumns = [
 // State
 const searchQuery = ref('')
 const selectedColumns = ref(availableColumns.filter(c => c.default).map(c => c.key))
-const sortColumn = ref('actualCost')
+const sortColumn = ref('riskScore')
 const sortDirection = ref<'asc' | 'desc'>('desc')
 const currentPage = ref(1)
 const pageSize = ref(25)
@@ -250,14 +268,14 @@ const canGenerateDetailedReport = computed(() => {
 
 const tableData = computed(() => {
   if (!props.dataset) return []
-  
+
   const analysis = props.dataset.analysis as any
   const summary = props.dataset.summary as any
-  
+
   // Get the correct data based on mode
   let analysisData = analysis?.data || analysis
   let summaryData = summary?.data || summary
-  
+
   if (props.mode === 'proforma') {
     // In proforma mode, data might be nested
     if (analysisData?.proforma) {
@@ -267,42 +285,57 @@ const tableData = computed(() => {
       summaryData = summaryData.proforma
     }
   }
-  
+
+  let rawData: any[] = []
+
   // Primary source: analysis data with budget info
   if (analysisData?.budgetAnalysis?.byAccount) {
-    return analysisData.budgetAnalysis.byAccount.map((item: any) => {
+    rawData = analysisData.budgetAnalysis.byAccount.map((item: any) => {
       const cachedAccount = accountLookupCache.value.get(item.accountId)
       const accountStatus = cachedAccount?.enclaveStatus || cachedAccount?.status || 'Active'
       const isDecommissioned = accountStatus === 'Decommissioned' || accountStatus === 'decommissioned'
-      
+
+      const utilization = item.budgetedCost > 0 ? (item.actualCost / item.budgetedCost) * 100 : 0
+      const overagePercent = item.budgetedCost > 0 ? Math.max(0, ((item.actualCost - item.budgetedCost) / item.budgetedCost) * 100) : 0
+      const overageAmount = Math.max(0, item.actualCost - item.budgetedCost)
+
       return {
         ...item,
         accountName: cachedAccount?.accountName || item.accountName || item.accountId,
         accountStatus: isDecommissioned ? 'Decommissioned' : accountStatus,
-        utilization: item.budgetedCost > 0 ? (item.actualCost / item.budgetedCost) * 100 : 0,
+        utilization,
+        overagePercent,
+        overageAmount,
         variance: item.actualCost - item.budgetedCost,
         status: getStatus(item)
       }
     })
   }
-  
   // Fallback: summary data
-  if (summaryData?.accounts) {
-    return summaryData.accounts.map((item: any) => {
+  else if (summaryData?.accounts) {
+    rawData = summaryData.accounts.map((item: any) => {
       const cachedAccount = accountLookupCache.value.get(item.accountId)
       const accountStatus = cachedAccount?.enclaveStatus || cachedAccount?.status || 'Active'
       const isDecommissioned = accountStatus === 'Decommissioned' || accountStatus === 'decommissioned'
-      
+
+      const totalCost = item.totalCost || 0
+      const budget = item.budget || 0
+      const utilization = budget > 0 ? (totalCost / budget) * 100 : 0
+      const overagePercent = budget > 0 ? Math.max(0, ((totalCost - budget) / budget) * 100) : 0
+      const overageAmount = Math.max(0, totalCost - budget)
+
       return {
         accountId: item.accountId,
         accountName: cachedAccount?.accountName || item.accountName || item.accountId,
         accountStatus: isDecommissioned ? 'Decommissioned' : accountStatus,
-        actualCost: item.totalCost || 0,
-        budgetedCost: item.budget || 0,
-        utilization: item.budget > 0 ? (item.totalCost / item.budget) * 100 : 0,
-        variance: (item.totalCost || 0) - (item.budget || 0),
-        status: item.budget > 0 
-          ? (item.totalCost > item.budget ? 'over' : item.totalCost > item.budget * 0.9 ? 'warning' : 'under')
+        actualCost: totalCost,
+        budgetedCost: budget,
+        utilization,
+        overagePercent,
+        overageAmount,
+        variance: totalCost - budget,
+        status: budget > 0
+          ? (totalCost > budget ? 'over' : totalCost > budget * 0.9 ? 'warning' : 'under')
           : 'no-budget',
         departmentNumber: item.departmentNumber,
         linesOfBusiness: item.linesOfBusiness,
@@ -311,8 +344,51 @@ const tableData = computed(() => {
       }
     })
   }
-  
-  return []
+
+  // Calculate normalized risk scores across all accounts
+  if (rawData.length > 0) {
+    const maxOveragePercent = Math.max(...rawData.map(a => a.overagePercent), 1)
+    const maxOverageAmount = Math.max(...rawData.map(a => a.overageAmount), 1)
+
+    rawData.forEach(account => {
+      // Normalize overage percentage (0-100 scale)
+      const normalizedPercent = (account.overagePercent / maxOveragePercent) * 100
+
+      // Normalize overage amount (0-100 scale)
+      const normalizedAmount = (account.overageAmount / maxOverageAmount) * 100
+
+      // Combined risk score (70% weight on percentage, 30% weight on absolute impact)
+      // This balances severity of overage vs financial impact
+      const riskScore = (normalizedPercent * 0.7) + (normalizedAmount * 0.3)
+
+      // Determine risk level
+      let riskLevel = 'Good'
+      let riskColor = 'green'
+
+      if (account.overageAmount === 0 && account.variance <= 0) {
+        riskLevel = 'Good'
+        riskColor = 'green'
+      } else if (riskScore >= 80) {
+        riskLevel = 'Critical'
+        riskColor = 'red'
+      } else if (riskScore >= 60) {
+        riskLevel = 'High'
+        riskColor = 'orange'
+      } else if (riskScore >= 40) {
+        riskLevel = 'Medium'
+        riskColor = 'yellow'
+      } else if (riskScore >= 20) {
+        riskLevel = 'Low'
+        riskColor = 'blue'
+      }
+
+      account.riskScore = riskScore
+      account.riskLevel = riskLevel
+      account.riskColor = riskColor
+    })
+  }
+
+  return rawData
 })
 
 const filteredData = computed(() => {

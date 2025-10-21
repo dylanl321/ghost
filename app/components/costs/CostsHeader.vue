@@ -29,9 +29,18 @@
             </NuxtLink>
           </UTooltip>
         </div>
+        <UTooltip text="View your scheduled reports">
+          <NuxtLink to="/profile?section=scheduled-reports">
+            <UButton color="white" variant="ghost" icon="i-heroicons-calendar-days">
+              My Reports
+            </UButton>
+          </NuxtLink>
+        </UTooltip>
         <ExportButton
           :loading="isExporting"
+          :enable-schedule="true"
           @export="handleExport"
+          @schedule="openScheduleModal"
         />
         <ShareButton
           :selected-accounts="selectedAccounts"
@@ -67,6 +76,24 @@
         />
       </div>
     </div>
+
+    <!-- Schedule Modals -->
+    <SimpleScheduleModal
+      v-model="showSimpleModal"
+      :config="currentConfig"
+      :is-admin="isAdmin"
+      :user-email="userEmail"
+      @submit="handleScheduleSubmit"
+      @open-advanced="handleOpenAdvanced"
+    />
+
+    <ReportFormModal
+      v-model="showAdvancedModal"
+      :initial-config="advancedInitialConfig"
+      :is-admin="isAdmin"
+      :user-email="user?.email"
+      @submit="handleScheduleSubmit"
+    />
   </div>
 </template>
 
@@ -85,7 +112,7 @@ const props = defineProps<{
   dataset?: NormalizedDataset | null
 }>()
 
-const modelMode = defineModel<DataMode>('mode', { default: 'billable' })
+const modelMode = defineModel<DataMode>('mode', { default: 'proforma' })
 const modelSelectedTimeframe = defineModel<string>('selectedTimeframe')
 const modelSelectedView = defineModel<string>('selectedView')
 
@@ -95,6 +122,31 @@ const modeOptions = [
 ]
 
 const isExporting = ref(false)
+
+// Schedule functionality
+const { user } = useOidcAuth()
+const { isAdmin } = useUserRoles()
+const toast = useToast()
+
+// Extract user email from claims
+const userEmail = computed(() => {
+  if (!user.value) return ''
+  return user.value.email || user.value.claims?.email || user.value.claims?.preferred_username || ''
+})
+
+const {
+  showSimpleModal,
+  showAdvancedModal,
+  currentConfig,
+  advancedInitialConfig,
+  openScheduleModal: openSchedule,
+  handleOpenAdvanced,
+  captureViewState
+} = useScheduleFromView()
+
+const {
+  createReport
+} = useScheduledReports()
 
 defineEmits<{ (e: 'refresh'): void }>()
 
@@ -127,6 +179,45 @@ async function handleExport(format: ExportFormat) {
     console.error('Export failed:', error)
   } finally {
     isExporting.value = false
+  }
+}
+
+/**
+ * Open schedule modal with current cost view configuration
+ */
+function openScheduleModal() {
+  const config = captureViewState({
+    selectedAccounts: props.selectedAccounts,
+    timeframe: modelSelectedTimeframe.value,
+    dataMode: modelMode.value,
+    format: 'pdf',
+    includeServices: true,
+    includeHistorical: true,
+    includeForecast: true
+  })
+  openSchedule(config)
+}
+
+/**
+ * Handle schedule submission
+ */
+async function handleScheduleSubmit(data: any) {
+  const success = await createReport(data)
+  if (success) {
+    toast.add({
+      title: 'Report Scheduled',
+      description: 'Your cost report has been scheduled successfully',
+      icon: 'i-heroicons-check-circle',
+      color: 'green'
+    })
+    showSimpleModal.value = false
+  } else {
+    toast.add({
+      title: 'Error',
+      description: 'Failed to schedule report',
+      icon: 'i-heroicons-x-circle',
+      color: 'red'
+    })
   }
 }
 </script>

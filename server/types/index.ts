@@ -44,6 +44,8 @@ export interface DynamoDBQueryParams {
   queryExpression?: string
   filterExpression?: string
   projectionExpression?: string
+  expressionAttributeNames?: Record<string, string>
+  expressionAttributeValues?: Record<string, any>
   limit?: number
   nextToken?: string
 }

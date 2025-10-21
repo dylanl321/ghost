@@ -613,10 +613,14 @@ const getChartOptions = (chart: ChartDefinition) => {
 
         // Budget utilization - gauge for single account, bars for multiple
         if (chart.id === 'budgetUtilization' && Array.isArray(data)) {
+            // Calculate dynamic max based on actual data
+            const maxUtilization = Math.max(...data.map(d => d.utilization))
+            const dynamicMax = Math.max(120, Math.ceil(maxUtilization / 10) * 10) // Round up to nearest 10, minimum 120
+
             // For single account, show as gauge
             if (data.length === 1) {
                 const account = data[0]
-                const utilization = Math.min(account.utilization, 150) // Cap at 150%
+                const utilization = account.utilization
 
                 return {
                     ...baseOptions,
@@ -626,7 +630,7 @@ const getChartOptions = (chart: ChartDefinition) => {
                             startAngle: 180,
                             endAngle: 0,
                             min: 0,
-                            max: 120,
+                            max: dynamicMax,
                             splitNumber: 6,
                             axisLine: {
                                 lineStyle: {
@@ -717,7 +721,7 @@ const getChartOptions = (chart: ChartDefinition) => {
                 },
                 yAxis: {
                     type: 'value',
-                    max: 120,
+                    max: dynamicMax,
                     axisLine: { lineStyle: { color: '#374151' } },
                     axisLabel: {
                         color: '#6b7280',
@@ -1157,6 +1161,10 @@ const getChartOptions = (chart: ChartDefinition) => {
 
         // Department Budget Performance (Multiple Gauges)
         if (chart.id === 'departmentBudgetPerformance' && Array.isArray(data)) {
+            // Calculate dynamic max based on actual data
+            const maxUtilization = Math.max(...data.map(d => d.utilization))
+            const dynamicMax = Math.max(120, Math.ceil(maxUtilization / 10) * 10) // Round up to nearest 10, minimum 120
+
             // For multiple departments, show as horizontal bars instead of gauges
             return {
                 ...baseOptions,
@@ -1174,7 +1182,7 @@ const getChartOptions = (chart: ChartDefinition) => {
                 },
                 xAxis: {
                     type: 'value',
-                    max: 120,
+                    max: dynamicMax,
                     axisLine: { lineStyle: { color: '#374151' } },
                     axisLabel: {
                         color: '#6b7280',
