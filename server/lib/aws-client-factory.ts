@@ -147,29 +147,6 @@ export function hasCredentials(environment: AWSEnvironmentType): boolean {
   return !!(process.env[`${prefix}_ACCESS_KEY_ID`] && process.env[`${prefix}_SECRET_ACCESS_KEY`])
 }
 
-/**
- * Check if we should use ECS task role for local account access
- * This is needed when:
- * - App is deployed in Account B (deployment account)
- * - Env var credentials are for Account A (org account)
- * - Accessing resources in Account B (like DynamoDB tables)
- */
-function shouldUseECSTaskRole(service: AWSServiceType, accountId?: string): boolean {
-  // Only applies to DynamoDB and only when no accountId is specified
-  if (service !== 'dynamodb' || accountId) {
-    return false
-  }
-
-  // Check if running in ECS (production environment)
-  const isECS = process.env.AWS_EXECUTION_ENV?.includes('ECS') ||
-                process.env.ECS_CONTAINER_METADATA_URI_V4 ||
-                process.env.ECS_CONTAINER_METADATA_URI
-
-  // Check if explicitly enabled
-  const useTaskRole = process.env.DYNAMODB_USE_TASK_ROLE === 'true'
-
-  return !!(isECS && useTaskRole)
-}
 
 /**
  * Get default region for an environment
@@ -323,16 +300,7 @@ export async function getClient<T = any>(
   let credentialExpiration: Date | undefined
 
   try {
-    // Special handling for local account DynamoDB access via ECS task role
-    if (shouldUseECSTaskRole(service, accountId)) {
-      // Don't provide credentials - let AWS SDK use ECS task role
-      // This handles the case where:
-      // - App runs in Account B (deployment account)
-      // - Env vars have Account A credentials (org account)
-      // - DynamoDB tables are in Account B
-      console.log('[AWS Client Factory] Using ECS task role for local DynamoDB access')
-      credentials = undefined
-    } else if (accountId) {
+    if (accountId) {
       // Assume role into target account
       const baseCredentials = getBaseCredentials(environment)
       credentials = await assumeRole(

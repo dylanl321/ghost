@@ -24,9 +24,10 @@ import type { DynamoDBQueryParams } from '../types'
 export async function getItem(
   tableName: string,
   key: Record<string, any>,
-  environment: 'commercial' | 'govcloud' = 'govcloud'
+  environment: 'commercial' | 'govcloud' = 'govcloud',
+  accountId?: string
 ) {
-  const client = await getDynamoDBClient(environment)
+  const client = await getDynamoDBClient(environment, undefined, accountId)
   
   const command = new GetItemCommand({
     TableName: tableName,
@@ -43,9 +44,10 @@ export async function getItem(
 export async function putItem(
   tableName: string,
   item: Record<string, any>,
-  environment: 'commercial' | 'govcloud' = 'govcloud'
+  environment: 'commercial' | 'govcloud' = 'govcloud',
+  accountId?: string
 ) {
-  const client = await getDynamoDBClient(environment)
+  const client = await getDynamoDBClient(environment, undefined, accountId)
   
   const command = new PutItemCommand({
     TableName: tableName,
@@ -63,9 +65,10 @@ export async function updateItem(
   tableName: string,
   key: Record<string, any>,
   updates: Record<string, any>,
-  environment: 'commercial' | 'govcloud' = 'govcloud'
+  environment: 'commercial' | 'govcloud' = 'govcloud',
+  accountId?: string
 ) {
-  const client = await getDynamoDBClient(environment)
+  const client = await getDynamoDBClient(environment, undefined, accountId)
   
   // Build update expression
   const updateExpressionParts: string[] = []
@@ -100,9 +103,10 @@ export async function updateItem(
 export async function deleteItem(
   tableName: string,
   key: Record<string, any>,
-  environment: 'commercial' | 'govcloud' = 'govcloud'
+  environment: 'commercial' | 'govcloud' = 'govcloud',
+  accountId?: string
 ) {
-  const client = await getDynamoDBClient(environment)
+  const client = await getDynamoDBClient(environment, undefined, accountId)
   
   const command = new DeleteItemCommand({
     TableName: tableName,
@@ -119,9 +123,10 @@ export async function deleteItem(
  */
 export async function queryItems(
   params: DynamoDBQueryParams,
-  environment: 'commercial' | 'govcloud' = 'govcloud'
+  environment: 'commercial' | 'govcloud' = 'govcloud',
+  accountId?: string
 ) {
-  const client = await getDynamoDBClient(environment)
+  const client = await getDynamoDBClient(environment, undefined, accountId)
 
   const command = new QueryCommand({
     TableName: params.tableName,
@@ -157,9 +162,10 @@ export async function scanItems(
   nextToken?: string,
   environment: 'commercial' | 'govcloud' = 'govcloud',
   expressionAttributeNames?: Record<string, string>,
-  expressionAttributeValues?: Record<string, any>
+  expressionAttributeValues?: Record<string, any>,
+  accountId?: string
 ) {
-  const client = await getDynamoDBClient(environment)
+  const client = await getDynamoDBClient(environment, undefined, accountId)
 
   // Marshall expression attribute values if provided
   let marshalledValues
@@ -197,9 +203,10 @@ export async function scanItems(
 export async function batchWriteItems(
   tableName: string,
   items: Array<{ putRequest?: Record<string, any>, deleteRequest?: Record<string, any> }>,
-  environment: 'commercial' | 'govcloud' = 'govcloud'
+  environment: 'commercial' | 'govcloud' = 'govcloud',
+  accountId?: string
 ) {
-  const client = await getDynamoDBClient(environment)
+  const client = await getDynamoDBClient(environment, undefined, accountId)
   
   // Process in batches of 25 (DynamoDB limit)
   const batchSize = 25
@@ -236,9 +243,10 @@ export async function batchWriteItems(
 export async function batchGetItems(
   tableName: string,
   keys: Array<Record<string, any>>,
-  environment: 'commercial' | 'govcloud' = 'govcloud'
+  environment: 'commercial' | 'govcloud' = 'govcloud',
+  accountId?: string
 ) {
-  const client = await getDynamoDBClient(environment)
+  const client = await getDynamoDBClient(environment, undefined, accountId)
   
   // Process in batches of 100 (DynamoDB limit)
   const batchSize = 100
@@ -269,9 +277,10 @@ export async function batchGetItems(
 export async function batchPutItems(
   tableName: string,
   items: Array<Record<string, any>>,
-  environment: 'commercial' | 'govcloud' = 'govcloud'
+  environment: 'commercial' | 'govcloud' = 'govcloud',
+  accountId?: string
 ) {
-  const client = await getDynamoDBClient(environment)
+  const client = await getDynamoDBClient(environment, undefined, accountId)
   
   const batchSize = 25 // DynamoDB limit
   const results: any[] = []
@@ -372,9 +381,10 @@ export async function batchPutItems(
 export async function batchDeleteItems(
   tableName: string,
   keys: Array<Record<string, any>>,
-  environment: 'commercial' | 'govcloud' = 'govcloud'
+  environment: 'commercial' | 'govcloud' = 'govcloud',
+  accountId?: string
 ) {
-  const client = await getDynamoDBClient(environment)
+  const client = await getDynamoDBClient(environment, undefined, accountId)
   
   // Use smaller batch size for deletes
   const batchSize = 25 // DynamoDB limit for batch write

@@ -42,6 +42,12 @@ resource "aws_secretsmanager_secret_version" "dynamodb_config" {
       region      = var.aws_region
       accountId   = local.child_account_id
     }
+    reportExecutionLocks = {
+      tableName   = "ghost-report-execution-locks"
+      environment = "govcloud"
+      region      = var.aws_region
+      accountId   = local.child_account_id
+    }
 
     # API Keys Tables (GovCloud Account B - where app is deployed)
     apiKeys = {
@@ -65,12 +71,12 @@ resource "aws_secretsmanager_secret_version" "dynamodb_config" {
       accountId   = local.child_account_id
     }
 
-    # External Accounts Table (GovCloud, managed externally)
+    # External Accounts Table (GovCloud, in master/org account)
     externalAccounts = {
       tableName   = "gdms_aws_accounts-master"
       environment = "govcloud"
       region      = var.aws_region
-      accountId   = local.child_account_id
+      accountId   = local.org_account_id
       readOnly    = true
     }
   })
