@@ -19,7 +19,6 @@ export default defineEventHandler(async (event) => {
     }
 
     const userEmail = user.claims?.email || user.claims?.preferred_username
-    const isAdmin = await isUserAdmin(event)
 
     // Get report ID from route params
     const reportId = getRouterParam(event, 'id')
@@ -40,13 +39,7 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Check ownership (unless admin)
-    if (!isAdmin && report.createdBy !== userEmail) {
-      throw createError({
-        statusCode: 403,
-        message: 'Access denied'
-      })
-    }
+    // Allow all authenticated users to view any report
 
     return {
       success: true,

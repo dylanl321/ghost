@@ -6,13 +6,11 @@
  * Admin-only endpoint
  */
 
-import { requireAdmin } from '../../../../utils/user-roles'
 import { getExecutionHistory } from '../../../../utils/scheduled-reports'
 
 export default defineEventHandler(async (event) => {
   try {
-    // Require admin access
-    await requireAdmin(event)
+    // Allow all authenticated users to view delivery history
 
     // Get report ID from route params
     const reportId = event.context.params?.id

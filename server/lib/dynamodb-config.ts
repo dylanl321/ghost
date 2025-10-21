@@ -79,48 +79,52 @@ function loadFromEnvironment(): DynamoDBConfig {
   const govCloudAccountId = process.env.AWS_GOVCLOUD_ORGANIZATIONS_ACCOUNT_ID || ''
   const commercialAccountId = process.env.AWS_COMMERCIAL_ORGANIZATIONS_ACCOUNT_ID || ''
 
+  // Deployment account where app and local DynamoDB tables are deployed
+  // Credentials are for master account, so we assume role into deployment account
+  const deploymentAccountId = process.env.AWS_DEPLOYMENT_ACCOUNT_ID || govCloudAccountId
+
   return {
     scheduledReports: {
       tableName: process.env.SCHEDULED_REPORTS_TABLE || 'ghost-scheduled-reports',
       environment: 'govcloud',
       region: govCloudRegion,
-      accountId: govCloudAccountId
+      accountId: deploymentAccountId
     },
     emailTemplates: {
       tableName: process.env.EMAIL_TEMPLATES_TABLE || 'ghost-email-templates',
       environment: 'govcloud',
       region: govCloudRegion,
-      accountId: govCloudAccountId
+      accountId: deploymentAccountId
     },
     reportExecutions: {
       tableName: process.env.REPORT_EXECUTIONS_TABLE || 'ghost-report-executions',
       environment: 'govcloud',
       region: govCloudRegion,
-      accountId: govCloudAccountId
+      accountId: deploymentAccountId
     },
     reportExecutionLocks: {
       tableName: process.env.REPORT_EXECUTION_LOCKS_TABLE || 'ghost-report-execution-locks',
       environment: 'govcloud',
       region: govCloudRegion,
-      accountId: govCloudAccountId
+      accountId: deploymentAccountId
     },
     apiKeys: {
       tableName: process.env.DYNAMODB_API_KEYS_TABLE || 'ghost-api-keys',
       environment: (process.env.API_KEYS_STORAGE_ENV as 'commercial' | 'govcloud') || 'govcloud',
       region: process.env.API_KEYS_STORAGE_ENV === 'commercial' ? commercialRegion : govCloudRegion,
-      accountId: process.env.API_KEYS_STORAGE_ENV === 'commercial' ? commercialAccountId : govCloudAccountId
+      accountId: process.env.API_KEYS_STORAGE_ENV === 'commercial' ? commercialAccountId : deploymentAccountId
     },
     apiKeysUsage: {
       tableName: process.env.DYNAMODB_API_KEY_USAGE_TABLE || 'ghost-api-keys-usage',
       environment: (process.env.API_KEYS_STORAGE_ENV as 'commercial' | 'govcloud') || 'govcloud',
       region: process.env.API_KEYS_STORAGE_ENV === 'commercial' ? commercialRegion : govCloudRegion,
-      accountId: process.env.API_KEYS_STORAGE_ENV === 'commercial' ? commercialAccountId : govCloudAccountId
+      accountId: process.env.API_KEYS_STORAGE_ENV === 'commercial' ? commercialAccountId : deploymentAccountId
     },
     shortlinks: {
       tableName: process.env.SHORTLINKS_TABLE || 'ghost-dashboard-shortlinks',
       environment: 'govcloud',
       region: govCloudRegion,
-      accountId: govCloudAccountId
+      accountId: deploymentAccountId
     },
     externalAccounts: {
       tableName: process.env.AWS_ACCOUNTS_TABLE_NAME || 'gdms_aws_accounts-master',

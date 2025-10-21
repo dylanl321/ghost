@@ -4,12 +4,10 @@
  */
 
 import { listAllReports } from '../../../utils/scheduled-reports'
-import { requireAdmin } from '../../../utils/user-roles'
 
 export default defineEventHandler(async (event) => {
   try {
-    // Require admin access
-    await requireAdmin(event)
+    // Allow all authenticated users to list reports
 
     // Get query parameters
     const query = getQuery(event)

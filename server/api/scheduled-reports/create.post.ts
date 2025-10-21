@@ -63,18 +63,8 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Check if user is admin
-    const isAdmin = await isUserAdmin(event)
-
-    // Non-admin users can only set themselves as recipient
-    if (!isAdmin) {
-      if (body.recipients.length > 1 || body.recipients[0] !== userEmail) {
-        throw createError({
-          statusCode: 403,
-          message: 'Non-admin users can only send reports to themselves'
-        })
-      }
-    }
+    // Allow all authenticated users to create reports with any recipients
+    const isAdmin = true
 
     // Create the report
     const report = await createReport(body, userEmail, isAdmin)
