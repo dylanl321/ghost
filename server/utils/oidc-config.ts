@@ -87,7 +87,7 @@ export function getNuxtOIDCConfig() {
       },
       
       // Development settings
-      devtools: process.env.NODE_ENV === 'development'
+      devtools: ['development', 'dev'].includes(process.env.NODE_ENV?.toLowerCase() || '')
     }
   }
 }

@@ -4,7 +4,8 @@ export const useDevAuth = () => {
   const config = useRuntimeConfig()
   
   const isDevMode = () => {
-    return process.env.NODE_ENV === 'development'
+    const nodeEnv = process.env.NODE_ENV?.toLowerCase()
+    return nodeEnv === 'development' || nodeEnv === 'dev'
   }
   
   const isBypassEnabled = () => {

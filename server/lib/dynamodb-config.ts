@@ -156,7 +156,8 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
   cachedConfig = envConfig
   configLoadedAt = Date.now()
 
-  if (process.env.NODE_ENV === 'development') {
+  const nodeEnv = process.env.NODE_ENV?.toLowerCase()
+  if (nodeEnv === 'development' || nodeEnv === 'dev') {
     console.log('Using DynamoDB configuration from environment variables (development mode)')
   }
 

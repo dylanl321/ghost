@@ -44,19 +44,189 @@ resource "aws_ecs_task_definition" "main" {
         },
         {
           name  = "DYNAMODB_CONFIG_SECRET_NAME"
-          value = "ghost-dynamodb-config-${var.env}"
+          value = aws_secretsmanager_secret.dynamodb_config.name
         },
         {
           name  = "DYNAMODB_USE_TASK_ROLE"
           value = "true"
         },
+        # AWS Regions (moved from Secrets Manager - not sensitive)
+        {
+          name  = "AWS_COMMERCIAL_REGION"
+          value = "us-east-1"
+        },
+        {
+          name  = "AWS_GOVCLOUD_REGION"
+          value = "us-gov-west-1"
+        },
+        # AWS Account IDs
+        {
+          name  = "AWS_COMMERCIAL_ORGANIZATIONS_ACCOUNT_ID"
+          value = "205950196477"
+        },
+        {
+          name  = "AWS_GOVCLOUD_ORGANIZATIONS_ACCOUNT_ID"
+          value = "205950196477"
+        },
+        {
+          name  = "AWS_MASTER_ACCOUNT_ID"
+          value = "205950196477"
+        },
+        {
+          name  = "AWS_PROFORMA_ACCOUNT_ID"
+          value = "253821132832"
+        },
+        # Cross-Account Role Configuration
+        {
+          name  = "AWS_ASSUME_ROLE_NAME"
+          value = "GDMSOrganizationsRole"
+        },
+        {
+          name  = "AWS_ASSUME_ROLE_DURATION"
+          value = "3600"
+        },
+        # AWS Config Service Aggregators
+        {
+          name  = "AWS_COMMERCIAL_CONFIG_AGGREGATOR"
+          value = "CommercialAggregator"
+        },
+        {
+          name  = "AWS_GOVCLOUD_CONFIG_AGGREGATOR"
+          value = "GDMSAggregator"
+        },
+        # AWS Security Lake Configuration
+        {
+          name  = "AWS_COMMERCIAL_SECURITY_LAKE_REGION"
+          value = "us-east-1"
+        },
+        {
+          name  = "AWS_GOVCLOUD_SECURITY_LAKE_REGION"
+          value = "us-gov-west-1"
+        },
+        {
+          name  = "AWS_COMMERCIAL_SECURITY_LAKE_ACCOUNT"
+          value = "253821132832"
+        },
+        {
+          name  = "AWS_GOVCLOUD_SECURITY_LAKE_ACCOUNT"
+          value = "083876038518"
+        },
+        {
+          name  = "AWS_COMMERCIAL_ATHENA_RESULTS_BUCKET"
+          value = "aws-athena-query-results-us-east-1-253821132832"
+        },
+        {
+          name  = "AWS_GOVCLOUD_ATHENA_RESULTS_BUCKET"
+          value = "aws-athena-query-results-us-gov-west-1-083876038518"
+        },
+        # Entra ID Configuration (non-sensitive)
+        {
+          name  = "ENTRA_LOGIN_BASE_URL"
+          value = "https://login.microsoftonline.us"
+        },
+        {
+          name  = "ENTRA_GRAPH_BASE_URL"
+          value = "https://graph.microsoft.us"
+        },
+        {
+          name  = "ENTRA_GRAPH_VERSION"
+          value = "v1.0"
+        },
+        {
+          name  = "ENTRA_AWS_GROUP_PREFIX"
+          value = "AWS_"
+        },
+        {
+          name  = "ENTRA_DISTRIBUTION_GROUP_SUFFIX"
+          value = ".aws"
+        },
+        {
+          name  = "ENTRA_OWNER_DELIMITER"
+          value = " // "
+        },
+        {
+          name  = "ENTRA_CACHE_TTL"
+          value = "3600"
+        },
+        {
+          name  = "ENTRA_BATCH_SIZE"
+          value = "999"
+        },
+        {
+          name  = "ENTRA_MAX_RETRIES"
+          value = "3"
+        },
+        {
+          name  = "ENTRA_DEFAULT_DOMAIN"
+          value = "gd-ms.com"
+        },
+        # API Keys Storage
+        {
+          name  = "DYNAMODB_API_KEYS_TABLE"
+          value = aws_dynamodb_table.api_keys.name
+        },
+        {
+          name  = "API_KEYS_STORAGE_ENV"
+          value = "govcloud"
+        },
+        # SES Configuration
         {
           name  = "AWS_SES_FROM_EMAIL"
           value = "aws-ghost@gd-ms.com"
         },
         {
+          name  = "AWS_SES_FROM_NAME"
+          value = "GHOST AWS Dashboard"
+        },
+        {
+          name  = "AWS_SES_REPLY_TO"
+          value = "aws-ghost@gd-ms.com"
+        },
+        {
           name  = "AWS_SES_CONFIGURATION_SET"
           value = "ghost-scheduled-reports-${var.env}"
+        },
+        {
+          name  = "AWS_SES_REGION"
+          value = "us-gov-west-1"
+        },
+        # Scheduled Reports Configuration
+        {
+          name  = "SCHEDULED_REPORTS_TABLE"
+          value = aws_dynamodb_table.scheduled_reports.name
+        },
+        {
+          name  = "EMAIL_TEMPLATES_TABLE"
+          value = aws_dynamodb_table.email_templates.name
+        },
+        {
+          name  = "REPORT_EXECUTIONS_TABLE"
+          value = aws_dynamodb_table.report_executions.name
+        },
+        {
+          name  = "REPORT_SCHEDULER_ENABLED"
+          value = "true"
+        },
+        {
+          name  = "REPORT_SCHEDULER_TYPE"
+          value = "cron"
+        },
+        {
+          name  = "MAX_REPORTS_PER_USER"
+          value = "10"
+        },
+        {
+          name  = "MAX_REPORTS_PER_ADMIN"
+          value = "unlimited"
+        },
+        # Public URLs (environment-specific)
+        {
+          name  = "NUXT_PUBLIC_SITE_URL"
+          value = var.env == "prod" ? "https://ghost-aws.gd-ms.com" : "https://ghost-aws-dev.gd-ms.com"
+        },
+        {
+          name  = "NUXT_PUBLIC_API_URL"
+          value = var.env == "prod" ? "https://ghost-aws.gd-ms.com" : "https://ghost-aws-dev.gd-ms.com"
         }
       ],
       secrets = [
@@ -89,20 +259,12 @@ resource "aws_ecs_task_definition" "main" {
           valueFrom = "${local.secret_arn}:commercial_aws_secret_access_key::"
         },
         {
-          name  = "AWS_COMMERCIAL_REGION"
-          valueFrom = "${local.secret_arn}:commercial_region::"
-        },
-        {
           name  = "AWS_GOVCLOUD_ACCESS_KEY_ID"
           valueFrom = "${local.secret_arn}:govcloud_aws_access_key_id::"
         },
         {
           name  = "AWS_GOVCLOUD_SECRET_ACCESS_KEY"
           valueFrom = "${local.secret_arn}:govcloud_aws_secret_access_key::"
-        },
-        {
-          name  = "AWS_GOVCLOUD_REGION"
-          valueFrom = "${local.secret_arn}:govcloud_region::"
         },
         {
           name  = "NUXT_OIDC_TOKEN_KEY"
