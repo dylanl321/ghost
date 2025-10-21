@@ -5,7 +5,7 @@
 
 # S3 bucket for application storage
 resource "aws_s3_bucket" "app_storage" {
-  provider = aws.govcloud
+  provider = aws.target_deployment_account
   bucket   = "ghost-app-storage-${var.environment}"
 
   tags = {
@@ -18,7 +18,7 @@ resource "aws_s3_bucket" "app_storage" {
 
 # Enable versioning for data protection
 resource "aws_s3_bucket_versioning" "app_storage" {
-  provider = aws.govcloud
+  provider = aws.target_deployment_account
   bucket   = aws_s3_bucket.app_storage.id
 
   versioning_configuration {
@@ -28,7 +28,7 @@ resource "aws_s3_bucket_versioning" "app_storage" {
 
 # Lifecycle policies for automatic cleanup
 resource "aws_s3_bucket_lifecycle_configuration" "app_storage" {
-  provider = aws.govcloud
+  provider = aws.target_deployment_account
   bucket   = aws_s3_bucket.app_storage.id
 
   # Reports older than 90 days
@@ -88,7 +88,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "app_storage" {
 
 # CORS configuration for presigned URLs
 resource "aws_s3_bucket_cors_configuration" "app_storage" {
-  provider = aws.govcloud
+  provider = aws.target_deployment_account
   bucket   = aws_s3_bucket.app_storage.id
 
   cors_rule {
@@ -102,7 +102,7 @@ resource "aws_s3_bucket_cors_configuration" "app_storage" {
 
 # Server-side encryption
 resource "aws_s3_bucket_server_side_encryption_configuration" "app_storage" {
-  provider = aws.govcloud
+  provider = aws.target_deployment_account
   bucket   = aws_s3_bucket.app_storage.id
 
   rule {
@@ -115,7 +115,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "app_storage" {
 
 # Public access block (keep private)
 resource "aws_s3_bucket_public_access_block" "app_storage" {
-  provider = aws.govcloud
+  provider = aws.target_deployment_account
   bucket   = aws_s3_bucket.app_storage.id
 
   block_public_acls       = true
@@ -126,7 +126,7 @@ resource "aws_s3_bucket_public_access_block" "app_storage" {
 
 # Bucket logging (optional but recommended)
 resource "aws_s3_bucket" "app_storage_logs" {
-  provider = aws.govcloud
+  provider = aws.target_deployment_account
   bucket   = "ghost-app-storage-logs-${var.environment}"
 
   tags = {
@@ -137,7 +137,7 @@ resource "aws_s3_bucket" "app_storage_logs" {
 }
 
 resource "aws_s3_bucket_public_access_block" "app_storage_logs" {
-  provider = aws.govcloud
+  provider = aws.target_deployment_account
   bucket   = aws_s3_bucket.app_storage_logs.id
 
   block_public_acls       = true
@@ -147,7 +147,7 @@ resource "aws_s3_bucket_public_access_block" "app_storage_logs" {
 }
 
 resource "aws_s3_bucket_logging" "app_storage" {
-  provider = aws.govcloud
+  provider = aws.target_deployment_account
   bucket   = aws_s3_bucket.app_storage.id
 
   target_bucket = aws_s3_bucket.app_storage_logs.id
