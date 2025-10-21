@@ -227,7 +227,7 @@ resource "aws_ecs_task_definition" "main" {
         # S3 Storage Configuration (GovCloud)
         {
           name  = "AWS_S3_STORAGE_BUCKET"
-          value = "ghost-app-storage-${var.environment}"
+          value = "ghost-app-storage-${var.env}"
         },
         {
           name  = "AWS_S3_STORAGE_REGION"

@@ -6,11 +6,11 @@
 # S3 bucket for application storage
 resource "aws_s3_bucket" "app_storage" {
   provider = aws.target_deployment_account
-  bucket   = "ghost-app-storage-${var.environment}"
+  bucket   = "ghost-app-storage-${var.env}"
 
   tags = {
     Name        = "GHOST Application Storage"
-    Environment = var.environment
+    Environment = local.environment
     ManagedBy   = "Terraform"
     Purpose     = "Reports, exports, and application data"
   }
@@ -127,11 +127,11 @@ resource "aws_s3_bucket_public_access_block" "app_storage" {
 # Bucket logging (optional but recommended)
 resource "aws_s3_bucket" "app_storage_logs" {
   provider = aws.target_deployment_account
-  bucket   = "ghost-app-storage-logs-${var.environment}"
+  bucket   = "ghost-app-storage-logs-${var.env}"
 
   tags = {
     Name        = "GHOST Application Storage Logs"
-    Environment = var.environment
+    Environment = local.environment
     ManagedBy   = "Terraform"
   }
 }

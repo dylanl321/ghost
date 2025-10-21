@@ -231,8 +231,8 @@ resource "aws_iam_role_policy" "ecs_s3_app_storage" {
           "s3:ListBucket"
         ]
         Resource = [
-          "arn:${local.child_partition}:s3:::ghost-app-storage-${var.environment}/*",
-          "arn:${local.child_partition}:s3:::ghost-app-storage-${var.environment}"
+          "arn:${local.child_partition}:s3:::ghost-app-storage-${var.env}/*",
+          "arn:${local.child_partition}:s3:::ghost-app-storage-${var.env}"
         ]
       }
     ]
