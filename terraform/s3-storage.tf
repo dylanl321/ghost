@@ -86,20 +86,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "app_storage" {
   }
 }
 
-# CORS configuration for presigned URLs
-resource "aws_s3_bucket_cors_configuration" "app_storage" {
-  provider = aws.target_deployment_account
-  bucket   = aws_s3_bucket.app_storage.id
-
-  cors_rule {
-    allowed_headers = ["*"]
-    allowed_methods = ["GET", "HEAD"]
-    allowed_origins = [var.site_url]
-    expose_headers  = ["ETag"]
-    max_age_seconds = 3000
-  }
-}
-
 # Server-side encryption
 resource "aws_s3_bucket_server_side_encryption_configuration" "app_storage" {
   provider = aws.target_deployment_account
