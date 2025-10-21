@@ -5,10 +5,26 @@
 
 import type { H3Event } from 'h3'
 import { createError } from 'h3'
+import { getUserGroups } from './entra/graph-client'
+
+// In-memory cache for admin status checks (TTL: 10 minutes)
+const adminCache = new Map<string, { isAdmin: boolean, expiresAt: number }>()
+const ADMIN_CACHE_TTL = 10 * 60 * 1000 // 10 minutes
+
+// Periodic cleanup of expired cache entries (every 5 minutes)
+setInterval(() => {
+  const now = Date.now()
+  for (const [userId, entry] of adminCache.entries()) {
+    if (entry.expiresAt <= now) {
+      adminCache.delete(userId)
+    }
+  }
+}, 5 * 60 * 1000)
 
 /**
  * Check if a user is an admin
- * Just check if groups exist in session, otherwise allow in dev mode
+ * Fetches user groups from Microsoft Graph API to check for admin group membership
+ * Results are cached for 10 minutes to avoid excessive Graph API calls
  */
 export async function isUserAdmin(event: H3Event): Promise<boolean> {
   const auth = event.context.auth
@@ -16,8 +32,9 @@ export async function isUserAdmin(event: H3Event): Promise<boolean> {
     return false
   }
 
-  // In development, allow admin access
-  if (process.env.NODE_ENV === 'development') {
+  // In development, allow admin access (handle both 'development' and 'dev')
+  const nodeEnv = process.env.NODE_ENV?.toLowerCase()
+  if (nodeEnv === 'development' || nodeEnv === 'dev') {
     return true
   }
 
@@ -26,9 +43,64 @@ export async function isUserAdmin(event: H3Event): Promise<boolean> {
     return false
   }
 
-  // Check if groups are in the session
-  const groups = user.groups || user.claims?.groups || []
-  return groups.includes('AWS-Product-Team')
+  // Check if groups are already in the session (for API key auth or cached sessions)
+  const sessionGroups = user.groups || user.claims?.groups || []
+  if (sessionGroups.length > 0) {
+    return sessionGroups.includes('AWS-Product-Team')
+  }
+
+  // For OIDC auth, fetch groups from Microsoft Graph API
+  if (auth.authType === 'oidc') {
+    const userId = user.id || user.oid || user.sub
+    if (!userId) {
+      console.error('Cannot fetch groups: user ID not found in session')
+      return false
+    }
+
+    // Check cache first
+    const cached = adminCache.get(userId)
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.isAdmin
+    }
+
+    // Fetch from Graph API
+    try {
+      // Fetch user's groups from Microsoft Graph
+      const { data: userGroups } = await getUserGroups(event, userId)
+
+      // Check if user is in AWS-Product-Team group
+      const isAdmin = userGroups.some(group => group.displayName === 'AWS-Product-Team')
+
+      // Cache the result
+      adminCache.set(userId, {
+        isAdmin,
+        expiresAt: Date.now() + ADMIN_CACHE_TTL
+      })
+
+      return isAdmin
+    } catch (error) {
+      console.error('Failed to fetch user groups for admin check:', error)
+      // Fail closed - don't grant admin access if we can't verify
+      return false
+    }
+  }
+
+  // No groups found and not OIDC auth
+  return false
+}
+
+/**
+ * Clear admin cache for a specific user (useful for logout or permission changes)
+ */
+export function clearAdminCache(userId: string): void {
+  adminCache.delete(userId)
+}
+
+/**
+ * Clear all admin cache entries (useful for server restart or bulk permission updates)
+ */
+export function clearAllAdminCache(): void {
+  adminCache.clear()
 }
 
 /**

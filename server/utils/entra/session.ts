@@ -37,7 +37,8 @@ export async function getUserSession(event: H3Event): Promise<{
   }
 
   // Development mode - use test token ONLY if explicitly set
-  if (process.env.NODE_ENV === 'development' && process.env.ENTRA_TEST_ACCESS_TOKEN) {
+  const nodeEnv = process.env.NODE_ENV?.toLowerCase()
+  if ((nodeEnv === 'development' || nodeEnv === 'dev') && process.env.ENTRA_TEST_ACCESS_TOKEN) {
     console.log('Using test access token from environment variable')
     return {
       accessToken: process.env.ENTRA_TEST_ACCESS_TOKEN,

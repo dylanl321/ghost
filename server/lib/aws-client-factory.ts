@@ -291,7 +291,8 @@ export async function getClient<T = any>(
   validateRegionForPartition(targetRegion, environment)
   
   // Log client creation for debugging
-  if (process.env.AWS_DEBUG === 'true' || process.env.NODE_ENV === 'development') {
+  const nodeEnv = process.env.NODE_ENV?.toLowerCase()
+  if (process.env.AWS_DEBUG === 'true' || nodeEnv === 'development' || nodeEnv === 'dev') {
     console.log(`[AWS Client Factory] Creating ${service} client:`, {
       environment,
       region: targetRegion,

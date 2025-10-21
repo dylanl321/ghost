@@ -45,8 +45,9 @@ function requiresAuthentication(url: string): boolean {
  * Check if development mode is enabled
  */
 function isDevelopmentMode(): boolean {
-  // Allow dev bypass without explicit env var in development
-  return process.env.NODE_ENV === 'development'
+  // Allow dev bypass without explicit env var in development (handle both 'development' and 'dev')
+  const nodeEnv = process.env.NODE_ENV?.toLowerCase()
+  return nodeEnv === 'development' || nodeEnv === 'dev'
 }
 
 /**
