@@ -1,0 +1,196 @@
+/**
+ * DynamoDB Configuration Loader
+ * Centralized configuration for all DynamoDB tables used by the application
+ *
+ * Configuration hierarchy:
+ * 1. AWS Secrets Manager (production)
+ * 2. Environment variables (development/fallback)
+ * 3. Default values (last resort)
+ */
+
+import { GetSecretValueCommand, SecretsManagerClient } from '@aws-sdk/client-secrets-manager'
+
+export interface DynamoDBTableConfig {
+  tableName: string
+  environment: 'commercial' | 'govcloud'
+  region: string
+  accountId: string
+  readOnly?: boolean
+}
+
+export interface DynamoDBConfig {
+  scheduledReports: DynamoDBTableConfig
+  emailTemplates: DynamoDBTableConfig
+  reportExecutions: DynamoDBTableConfig
+  reportExecutionLocks: DynamoDBTableConfig
+  apiKeys: DynamoDBTableConfig
+  apiKeysUsage: DynamoDBTableConfig
+  shortlinks: DynamoDBTableConfig
+  externalAccounts: DynamoDBTableConfig
+}
+
+// Cache the configuration to avoid repeated Secrets Manager calls
+let cachedConfig: DynamoDBConfig | null = null
+let configLoadedAt: number | null = null
+const CONFIG_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+/**
+ * Get DynamoDB configuration from Secrets Manager
+ */
+async function loadFromSecretsManager(): Promise<DynamoDBConfig | null> {
+  try {
+    const secretName = `ghost-dynamodb-config-${process.env.NODE_ENV || 'dev'}`
+    const region = process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1'
+
+    const client = new SecretsManagerClient({
+      region,
+      credentials: {
+        accessKeyId: process.env.AWS_GOVCLOUD_ACCESS_KEY_ID || '',
+        secretAccessKey: process.env.AWS_GOVCLOUD_SECRET_ACCESS_KEY || ''
+      }
+    })
+
+    const command = new GetSecretValueCommand({ SecretId: secretName })
+    const response = await client.send(command)
+
+    if (!response.SecretString) {
+      console.warn('DynamoDB config secret exists but has no value')
+      return null
+    }
+
+    const config = JSON.parse(response.SecretString) as DynamoDBConfig
+    console.log('Successfully loaded DynamoDB configuration from Secrets Manager')
+    return config
+  } catch (error: any) {
+    // Only log in non-development environments or if not a ResourceNotFoundException
+    if (process.env.NODE_ENV !== 'development' || error.name !== 'ResourceNotFoundException') {
+      console.warn('Failed to load DynamoDB config from Secrets Manager:', error.message)
+    }
+    return null
+  }
+}
+
+/**
+ * Get DynamoDB configuration from environment variables (fallback)
+ */
+function loadFromEnvironment(): DynamoDBConfig {
+  const govCloudRegion = process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1'
+  const commercialRegion = process.env.AWS_COMMERCIAL_REGION || 'us-east-1'
+  const govCloudAccountId = process.env.AWS_GOVCLOUD_ORGANIZATIONS_ACCOUNT_ID || ''
+  const commercialAccountId = process.env.AWS_COMMERCIAL_ORGANIZATIONS_ACCOUNT_ID || ''
+
+  return {
+    scheduledReports: {
+      tableName: process.env.SCHEDULED_REPORTS_TABLE || 'ghost-scheduled-reports',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: govCloudAccountId
+    },
+    emailTemplates: {
+      tableName: process.env.EMAIL_TEMPLATES_TABLE || 'ghost-email-templates',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: govCloudAccountId
+    },
+    reportExecutions: {
+      tableName: process.env.REPORT_EXECUTIONS_TABLE || 'ghost-report-executions',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: govCloudAccountId
+    },
+    reportExecutionLocks: {
+      tableName: process.env.REPORT_EXECUTION_LOCKS_TABLE || 'ghost-report-execution-locks',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: govCloudAccountId
+    },
+    apiKeys: {
+      tableName: process.env.DYNAMODB_API_KEYS_TABLE || 'ghost-api-keys',
+      environment: (process.env.API_KEYS_STORAGE_ENV as 'commercial' | 'govcloud') || 'govcloud',
+      region: process.env.API_KEYS_STORAGE_ENV === 'commercial' ? commercialRegion : govCloudRegion,
+      accountId: process.env.API_KEYS_STORAGE_ENV === 'commercial' ? commercialAccountId : govCloudAccountId
+    },
+    apiKeysUsage: {
+      tableName: process.env.DYNAMODB_API_KEY_USAGE_TABLE || 'ghost-api-keys-usage',
+      environment: (process.env.API_KEYS_STORAGE_ENV as 'commercial' | 'govcloud') || 'govcloud',
+      region: process.env.API_KEYS_STORAGE_ENV === 'commercial' ? commercialRegion : govCloudRegion,
+      accountId: process.env.API_KEYS_STORAGE_ENV === 'commercial' ? commercialAccountId : govCloudAccountId
+    },
+    shortlinks: {
+      tableName: process.env.SHORTLINKS_TABLE || 'ghost-dashboard-shortlinks',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: govCloudAccountId
+    },
+    externalAccounts: {
+      tableName: process.env.AWS_ACCOUNTS_TABLE_NAME || 'gdms_aws_accounts-master',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: govCloudAccountId,
+      readOnly: true
+    }
+  }
+}
+
+/**
+ * Get DynamoDB configuration with caching
+ * Tries Secrets Manager first, then falls back to environment variables
+ */
+export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
+  // Return cached config if still valid
+  if (cachedConfig && configLoadedAt && (Date.now() - configLoadedAt < CONFIG_CACHE_TTL)) {
+    return cachedConfig
+  }
+
+  // Try loading from Secrets Manager first
+  const secretsConfig = await loadFromSecretsManager()
+
+  if (secretsConfig) {
+    cachedConfig = secretsConfig
+    configLoadedAt = Date.now()
+    return secretsConfig
+  }
+
+  // Fall back to environment variables
+  const envConfig = loadFromEnvironment()
+  cachedConfig = envConfig
+  configLoadedAt = Date.now()
+
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Using DynamoDB configuration from environment variables (development mode)')
+  }
+
+  return envConfig
+}
+
+/**
+ * Clear the configuration cache (useful for testing)
+ */
+export function clearConfigCache(): void {
+  cachedConfig = null
+  configLoadedAt = null
+}
+
+/**
+ * Get a specific table configuration
+ */
+export async function getTableConfig(tableName: keyof DynamoDBConfig): Promise<DynamoDBTableConfig> {
+  const config = await getDynamoDBConfig()
+  return config[tableName]
+}
+
+/**
+ * Helper to get table name by config key
+ */
+export async function getTableName(configKey: keyof DynamoDBConfig): Promise<string> {
+  const tableConfig = await getTableConfig(configKey)
+  return tableConfig.tableName
+}
+
+/**
+ * Helper to get environment for a table
+ */
+export async function getTableEnvironment(configKey: keyof DynamoDBConfig): Promise<'commercial' | 'govcloud'> {
+  const tableConfig = await getTableConfig(configKey)
+  return tableConfig.environment
+}

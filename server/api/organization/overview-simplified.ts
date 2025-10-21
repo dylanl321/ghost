@@ -122,7 +122,7 @@ async function getAccountCounts() {
 async function getBudgetHealth(costClient: CostExplorerClient, startOfMonth: string, endOfMonth: string, activeAccountIds: string[]) {
   try {
     // Get account metadata from DynamoDB
-    const tableName = getAccountsTableName();
+    const tableName = await getAccountsTableName();
     const scanResult = await scanItems(tableName, undefined, undefined, undefined, 'commercial');
     const accountsData = scanResult.items;
 
@@ -219,8 +219,15 @@ async function getBudgetHealth(costClient: CostExplorerClient, startOfMonth: str
       projectedMonthlySpend,
       accountsWithBudget,
     };
-  } catch (error) {
-    console.error('Error calculating budget health:', error);
+  } catch (error: any) {
+    console.error('Error calculating budget health:', {
+      message: error.message,
+      name: error.name,
+      code: error.code,
+      statusCode: error.$metadata?.httpStatusCode,
+      requestId: error.$metadata?.requestId,
+      stack: error.stack?.split('\n').slice(0, 3).join('\n')
+    });
     return {
       totalBudget: 0,
       accountsOverBudget: 0,
@@ -234,8 +241,23 @@ async function getBudgetHealth(costClient: CostExplorerClient, startOfMonth: str
 }
 
 async function fetchCostData(client: CostExplorerClient, params: GetCostAndUsageCommandInput): Promise<GetCostAndUsageCommandOutput> {
-  const command = new GetCostAndUsageCommand(params);
-  return client.send(command);
+  try {
+    const command = new GetCostAndUsageCommand(params);
+    return await client.send(command);
+  } catch (error: any) {
+    console.error('Cost Explorer API error:', {
+      message: error.message,
+      code: error.name,
+      statusCode: error.$metadata?.httpStatusCode,
+      requestId: error.$metadata?.requestId,
+      params: {
+        timePeriod: params.TimePeriod,
+        granularity: params.Granularity,
+        groupBy: params.GroupBy
+      }
+    });
+    throw error;
+  }
 }
 
 function dailySeries(results: any) {

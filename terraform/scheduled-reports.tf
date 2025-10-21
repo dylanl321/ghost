@@ -121,6 +121,30 @@ resource "aws_dynamodb_table" "report_executions" {
   }
 }
 
+# DynamoDB Table for Report Execution Locks (prevent duplicate execution in multi-container setup)
+resource "aws_dynamodb_table" "report_execution_locks" {
+  name           = "ghost-report-execution-locks"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "lockId"
+
+  attribute {
+    name = "lockId"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "expiresAt"
+    enabled        = true
+  }
+
+  tags = {
+    Name        = "GHOST Report Execution Locks"
+    Environment = local.environment
+    ManagedBy   = "Terraform"
+    Service     = "GHOST"
+  }
+}
+
 # Output table names for application configuration
 output "scheduled_reports_table_name" {
   description = "Name of the DynamoDB table for scheduled reports"
@@ -135,4 +159,9 @@ output "email_templates_table_name" {
 output "report_executions_table_name" {
   description = "Name of the DynamoDB table for report executions"
   value       = aws_dynamodb_table.report_executions.name
+}
+
+output "report_execution_locks_table_name" {
+  description = "Name of the DynamoDB table for report execution locks"
+  value       = aws_dynamodb_table.report_execution_locks.name
 }

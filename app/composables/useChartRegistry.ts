@@ -2857,7 +2857,7 @@ export const useChartRegistry = (args: {
         const yearEndForecast = dataset.yearEndForecast as any
         const currentMonthForecast = dataset.forecast as any // Current month remainder forecast
         const summary = dataset.summary as any
-        const mode = dataset.mode || 'billable'
+        const mode = dataset.mode || 'proforma'
 
         console.log('YearEndForecast: Using data source:', {
           hasOrgWide: !!dataset.orgWideHistorical,

@@ -1,8 +1,8 @@
 import { randomBytes } from 'crypto'
 import { getItem, putItem, updateItem, scanItems } from '../utils/dynamodb'
+import { getTableName, getTableEnvironment } from './dynamodb-config'
 
-const TABLE_NAME = 'ghost-dashboard-shortlinks'
-const DB_ENVIRONMENT = 'govcloud' // Use govcloud environment for shortlinks (Account: 461760157232)
+// Table configuration now loaded dynamically from Secrets Manager or environment variables
 
 export interface ShortLink {
   shortCode: string
@@ -69,7 +69,9 @@ export async function createShortLink(data: {
     ttl
   }
   
-  await putItem(TABLE_NAME, item, DB_ENVIRONMENT as 'commercial' | 'govcloud')
+  const tableName = await getTableName('shortlinks')
+  const environment = await getTableEnvironment('shortlinks')
+  await putItem(tableName, item, environment)
   return item
 }
 
@@ -78,8 +80,10 @@ export async function createShortLink(data: {
  */
 export async function getShortLink(shortCode: string): Promise<ShortLink | null> {
   try {
-    const item = await getItem(TABLE_NAME, { shortCode }) as ShortLink
-    
+    const tableName = await getTableName('shortlinks')
+    const environment = await getTableEnvironment('shortlinks')
+    const item = await getItem(tableName, { shortCode }, environment) as ShortLink
+
     if (!item) return null
     
     // Check if expired
@@ -89,10 +93,10 @@ export async function getShortLink(shortCode: string): Promise<ShortLink | null>
     
     // Update visit count and last visited
     const now = new Date().toISOString()
-    const updatedItem = await updateItem(TABLE_NAME, { shortCode }, {
+    const updatedItem = await updateItem(tableName, { shortCode }, {
       visitCount: (item.visitCount || 0) + 1,
       lastVisited: now
-    })
+    }, environment)
     
     return updatedItem as ShortLink
   } catch (error) {
@@ -118,11 +122,14 @@ export async function listShortLinks(options: {
       filterExpression = 'createdBy = :createdBy'
     }
     
+    const tableName = await getTableName('shortlinks')
+    const environment = await getTableEnvironment('shortlinks')
     const result = await scanItems(
-      TABLE_NAME,
+      tableName,
       filterExpression,
       limit,
-      undefined // nextToken for pagination
+      undefined, // nextToken for pagination
+      environment
     )
     
     // Filter out expired links
@@ -156,7 +163,9 @@ export async function getShortLinkAnalytics(shortCode: string): Promise<{
   lastVisited?: string
 } | null> {
   try {
-    const item = await getItem(TABLE_NAME, { shortCode }) as ShortLink
+    const tableName = await getTableName('shortlinks')
+    const environment = await getTableEnvironment('shortlinks')
+    const item = await getItem(tableName, { shortCode }, environment) as ShortLink
     
     if (!item) return null
     

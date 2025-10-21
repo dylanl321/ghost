@@ -122,21 +122,25 @@ export async function queryItems(
   environment: 'commercial' | 'govcloud' = 'govcloud'
 ) {
   const client = await getDynamoDBClient(environment)
-  
+
   const command = new QueryCommand({
     TableName: params.tableName,
     KeyConditionExpression: params.queryExpression,
     FilterExpression: params.filterExpression,
     ProjectionExpression: params.projectionExpression,
+    ExpressionAttributeNames: params.expressionAttributeNames,
+    ExpressionAttributeValues: params.expressionAttributeValues
+      ? marshall(params.expressionAttributeValues, { removeUndefinedValues: true })
+      : undefined,
     Limit: params.limit,
     ExclusiveStartKey: params.nextToken ? JSON.parse(Buffer.from(params.nextToken, 'base64').toString()) : undefined
   })
 
   const response = await client.send(command)
-  
+
   return {
     items: response.Items?.map(item => unmarshall(item)) || [],
-    nextToken: response.LastEvaluatedKey 
+    nextToken: response.LastEvaluatedKey
       ? Buffer.from(JSON.stringify(response.LastEvaluatedKey)).toString('base64')
       : undefined,
     count: response.Count || 0
@@ -151,22 +155,36 @@ export async function scanItems(
   filterExpression?: string,
   limit?: number,
   nextToken?: string,
-  environment: 'commercial' | 'govcloud' = 'govcloud'
+  environment: 'commercial' | 'govcloud' = 'govcloud',
+  expressionAttributeNames?: Record<string, string>,
+  expressionAttributeValues?: Record<string, any>
 ) {
   const client = await getDynamoDBClient(environment)
-  
+
+  // Marshall expression attribute values if provided
+  let marshalledValues
+  if (expressionAttributeValues) {
+    marshalledValues = marshall(expressionAttributeValues, { removeUndefinedValues: true })
+    // Check if marshalling resulted in empty object
+    if (Object.keys(marshalledValues).length === 0) {
+      marshalledValues = undefined
+    }
+  }
+
   const command = new ScanCommand({
     TableName: tableName,
     FilterExpression: filterExpression,
     Limit: limit,
-    ExclusiveStartKey: nextToken ? JSON.parse(Buffer.from(nextToken, 'base64').toString()) : undefined
+    ExclusiveStartKey: nextToken ? JSON.parse(Buffer.from(nextToken, 'base64').toString()) : undefined,
+    ExpressionAttributeNames: expressionAttributeNames,
+    ExpressionAttributeValues: marshalledValues
   })
 
   const response = await client.send(command)
-  
+
   return {
     items: response.Items?.map(item => unmarshall(item)) || [],
-    nextToken: response.LastEvaluatedKey 
+    nextToken: response.LastEvaluatedKey
       ? Buffer.from(JSON.stringify(response.LastEvaluatedKey)).toString('base64')
       : undefined,
     count: response.Count || 0

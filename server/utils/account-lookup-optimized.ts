@@ -58,8 +58,8 @@ async function getAccountByAccountId(
   accountId: string
 ): Promise<any | null> {
   try {
-    const tableName = getAccountsTableName()
-    
+    const tableName = await getAccountsTableName()
+
     // Since accountId is NOT the primary key (requestId is), we need to scan
     const { scanItems } = await import('./dynamodb')
     const scanResult = await scanItems(
@@ -246,9 +246,9 @@ async function getAccountByRequestId(
   requestId: string
 ): Promise<any | null> {
   try {
-    const tableName = getAccountsTableName()
+    const tableName = await getAccountsTableName()
     const requestIdNumber = parseInt(requestId)
-    
+
     // Use scan to find the account since we're not sure of the exact primary key schema
     const { scanItems } = await import('./dynamodb')
     const scanResult = await scanItems(

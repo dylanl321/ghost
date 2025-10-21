@@ -17,12 +17,13 @@
 import { scanItems, updateItem } from './dynamodb'
 import { getOrganizationsClient, hasCredentials } from '../lib/aws-client-factory'
 import type { AccountInfo, AWSEnvironmentType, AccountLookupCriteria } from '../types'
+import { getTableName, getTableEnvironment } from '../lib/dynamodb-config'
 
 /**
- * Get the DynamoDB table name for accounts
+ * Get the DynamoDB table name for accounts (with config loader)
  */
-export function getAccountsTableName(): string {
-  return process.env.AWS_ACCOUNTS_TABLE_NAME || 'gdms_aws_accounts-master'
+export async function getAccountsTableName(): Promise<string> {
+  return await getTableName('externalAccounts')
 }
 
 /**
@@ -130,8 +131,9 @@ export async function getAllAccountMetadataFromDynamoDB(): Promise<any[]> {
   }
   
   try {
-    const tableName = getAccountsTableName()
-    const result = await scanItems(tableName, undefined, undefined, undefined, 'govcloud')
+    const tableName = await getAccountsTableName()
+    const environment = await getTableEnvironment('externalAccounts')
+    const result = await scanItems(tableName, undefined, undefined, undefined, environment)
     return result.items
   } catch (error) {
     console.error('Failed to get accounts from DynamoDB:', error)
@@ -289,16 +291,17 @@ export async function updateAccountMetadata(
   }
   
   try {
-    const tableName = getAccountsTableName()
-    
+    const tableName = await getAccountsTableName()
+    const environment = await getTableEnvironment('externalAccounts')
+
     // Ensure we don't overwrite the primary account ID
     const { accountId: _, ...safeMetadata } = metadata
     const updateData = {
       ...safeMetadata,
       modifiedDate: new Date().toISOString()
     }
-    
-    await updateItem(tableName, { accountId }, updateData, 'govcloud')
+
+    await updateItem(tableName, { accountId }, updateData, environment)
     
     // Return the updated account with full data
     return lookupAccountUnified({ accountId })

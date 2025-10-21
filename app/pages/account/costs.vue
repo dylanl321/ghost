@@ -1511,7 +1511,7 @@ onMounted(async () => {
 const { mode: dataMode, isFetching: isCostFetching, isPending: isCostPending, fetchError: costError, dataset, fetchCosts } = useCostData({
   selectedAccounts,
   selectedTimeframe,
-  initialMode: 'billable',
+  initialMode: 'proforma',
   accountsList, // Pass full accounts data for LOB/Department mapping
   debounceMs: 800 // Wait 800ms after user stops selecting accounts
 })

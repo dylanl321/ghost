@@ -32,7 +32,7 @@
           {{ tab.label }}
           <UTooltip v-if="tab.badge && tab.badgeTooltip" :text="tab.badgeTooltip">
             <NuxtLink
-              to="/support/docs?topic=proforma-vs-billable"
+              :to="tab.badgeLink || '/support/docs?topic=proforma-vs-billable'"
               class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
               @click.stop
             >
@@ -188,14 +188,17 @@ const tabs = computed(() => [
     id: 'budget-health',
     label: 'Budget Health',
     icon: 'i-heroicons-heart',
-    badge: budgetTables.value.length > 0 ? `${budgetTables.value.length} tables` : undefined
+    badge: 'Risk Scoring',
+    badgeTooltip: 'Learn about Budget Risk Scores',
+    badgeLink: '/support/docs?topic=budget-risk-scoring'
   },
   {
     id: 'data',
     label: 'Data Table',
     icon: 'i-heroicons-table-cells',
     badge: props.dataMode === 'proforma' ? 'Proforma' : 'Billable',
-    badgeTooltip: 'Learn about Billable vs Pro-forma data'
+    badgeTooltip: 'Learn about Billable vs Pro-forma data',
+    badgeLink: '/support/docs?topic=proforma-vs-billable'
   },
   {
     id: 'forecast',

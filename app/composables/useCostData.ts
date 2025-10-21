@@ -10,7 +10,7 @@ interface UseCostDataArgs {
   debounceMs?: number // Debounce delay in milliseconds
 }
 
-export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode = 'billable', accountsList, debounceMs = 800 }: UseCostDataArgs) => {
+export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode = 'proforma', accountsList, debounceMs = 800 }: UseCostDataArgs) => {
   const mode = ref<DataMode>(initialMode)
   const isFetching = ref(false)
   const isPending = ref(false) // True when debounce timer is active

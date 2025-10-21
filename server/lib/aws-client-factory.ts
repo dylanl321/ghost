@@ -26,6 +26,9 @@ import { RAMClient } from '@aws-sdk/client-ram'
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime'
 import { ComputeOptimizerClient } from '@aws-sdk/client-compute-optimizer'
 import { PricingClient } from '@aws-sdk/client-pricing'
+import { SESClient } from '@aws-sdk/client-ses'
+import { SNSClient } from '@aws-sdk/client-sns'
+import { EventBridgeClient } from '@aws-sdk/client-eventbridge'
 
 import type { 
   AWSEnvironmentType, 
@@ -57,7 +60,10 @@ const SERVICE_CLIENT_MAP = {
   'ram': RAMClient,
   'bedrock-runtime': BedrockRuntimeClient,
   'compute-optimizer': ComputeOptimizerClient,
-  'pricing': PricingClient
+  'pricing': PricingClient,
+  'ses': SESClient,
+  'sns': SNSClient,
+  'eventbridge': EventBridgeClient
 } as const
 
 // Cache for AWS clients with expiration tracking
@@ -139,6 +145,30 @@ function getBaseCredentials(environment: AWSEnvironmentType): AWSCredentials {
 export function hasCredentials(environment: AWSEnvironmentType): boolean {
   const prefix = environment === 'commercial' ? 'AWS_COMMERCIAL' : 'AWS_GOVCLOUD'
   return !!(process.env[`${prefix}_ACCESS_KEY_ID`] && process.env[`${prefix}_SECRET_ACCESS_KEY`])
+}
+
+/**
+ * Check if we should use ECS task role for local account access
+ * This is needed when:
+ * - App is deployed in Account B (deployment account)
+ * - Env var credentials are for Account A (org account)
+ * - Accessing resources in Account B (like DynamoDB tables)
+ */
+function shouldUseECSTaskRole(service: AWSServiceType, accountId?: string): boolean {
+  // Only applies to DynamoDB and only when no accountId is specified
+  if (service !== 'dynamodb' || accountId) {
+    return false
+  }
+
+  // Check if running in ECS (production environment)
+  const isECS = process.env.AWS_EXECUTION_ENV?.includes('ECS') ||
+                process.env.ECS_CONTAINER_METADATA_URI_V4 ||
+                process.env.ECS_CONTAINER_METADATA_URI
+
+  // Check if explicitly enabled
+  const useTaskRole = process.env.DYNAMODB_USE_TASK_ROLE === 'true'
+
+  return !!(isECS && useTaskRole)
 }
 
 /**
@@ -288,11 +318,20 @@ export async function getClient<T = any>(
   }
   
   // Get appropriate credentials
-  let credentials: AWSCredentials
+  let credentials: AWSCredentials | undefined
   let credentialExpiration: Date | undefined
-  
+
   try {
-    if (accountId) {
+    // Special handling for local account DynamoDB access via ECS task role
+    if (shouldUseECSTaskRole(service, accountId)) {
+      // Don't provide credentials - let AWS SDK use ECS task role
+      // This handles the case where:
+      // - App runs in Account B (deployment account)
+      // - Env vars have Account A credentials (org account)
+      // - DynamoDB tables are in Account B
+      console.log('[AWS Client Factory] Using ECS task role for local DynamoDB access')
+      credentials = undefined
+    } else if (accountId) {
       // Assume role into target account
       const baseCredentials = getBaseCredentials(environment)
       credentials = await assumeRole(
@@ -595,6 +634,18 @@ export async function getAccountId(
   const { GetCallerIdentityCommand } = await import('@aws-sdk/client-sts')
   const response = await stsClient.send(new GetCallerIdentityCommand({}))
   return response.Account!
+}
+
+/**
+ * Get SES client
+ * Note: SES is in Account A (org account) with production email validation
+ */
+export async function getSESClient(
+  environment: AWSEnvironmentType = 'govcloud',
+  region?: string,
+  accountId?: string
+): Promise<SESClient> {
+  return getClient(environment, 'ses', region, accountId)
 }
 
 // Export validation functions for testing

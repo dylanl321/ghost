@@ -309,8 +309,8 @@ const currentPaceVsPrevious = computed(() => {
 })
 
 const topAccounts = computed(() => {
-  if (!orgOverview.value) return []
-  return orgOverview.value?.data.topAccounts.map((acct) => ({
+  if (!orgOverview.value?.data?.topAccounts) return []
+  return orgOverview.value.data.topAccounts.map((acct) => ({
     accountId: acct.accountId,
     cost: acct.cost,
     name: enclaveStore.enclaves[acct.accountId]?.projectName || "Unknown Name",

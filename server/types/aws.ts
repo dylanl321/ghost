@@ -28,6 +28,9 @@ export type AWSServiceType =
   | 'bedrock-runtime'
   | 'compute-optimizer'
   | 'pricing'
+  | 'ses'
+  | 'sns'
+  | 'eventbridge'
 
 export interface AWSClientOptions {
   environment: AWSEnvironmentType
