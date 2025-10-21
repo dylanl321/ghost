@@ -975,7 +975,6 @@ const serviceBreakdownTable: TableDefinition = {
   ],
   extractor: (dataset: NormalizedDataset, dataMode: DataMode = 'billable', accountsList?: AccountMetadata[], selectedAccounts?: string[]) => {
     // Extract service data from dataset.services
-    // API response structure: { success: true, data: { resultsByTime: [...], total: {...} } }
     const servicesResponse = dataset.services as any
 
     if (!servicesResponse) {
@@ -984,7 +983,17 @@ const serviceBreakdownTable: TableDefinition = {
     }
 
     // Unwrap the API response
-    const servicesData = servicesResponse.data || servicesResponse
+    const unwrappedData = servicesResponse.data || servicesResponse
+
+    // Handle multi-mode structure (billable, proforma, etc.) vs simple structure
+    let servicesData: any
+    if (unwrappedData.billable || unwrappedData.proforma) {
+      // Multi-mode structure - access the correct mode
+      servicesData = unwrappedData[dataMode] || unwrappedData.billable || unwrappedData
+    } else {
+      // Simple structure - data is at the root level
+      servicesData = unwrappedData
+    }
 
     if (!servicesData.resultsByTime || !Array.isArray(servicesData.resultsByTime)) {
       console.warn('No resultsByTime in services data:', servicesData)

@@ -1481,7 +1481,7 @@ export const useChartRegistry = (args: {
       extractor: (dataset) => {
         const summary = dataset.summary as any
         const forecast = dataset.forecast as any
-        
+
         console.log('CurrentVsForecast: Debug data availability:', {
           hasSummary: !!summary,
           hasForecast: !!forecast,
@@ -1491,15 +1491,32 @@ export const useChartRegistry = (args: {
           forecastStructure: forecast?.data?.forecast ? Object.keys(forecast.data.forecast) : 'no forecast object',
           fullForecastResponse: forecast
         })
-        
+
         if (!summary || !forecast) {
           console.log('CurrentVsForecast: Missing summary or forecast data')
           return []
         }
 
-        const summaryData = summary?.data || summary
-        const forecastData = forecast?.data || forecast
-        
+        const mode = dataset.mode || 'billable'
+        const unwrappedSummary = summary?.data || summary
+        const unwrappedForecast = forecast?.data || forecast
+
+        // Handle multi-mode structure
+        let summaryData: any
+        let forecastData: any
+
+        if (unwrappedSummary.billable || unwrappedSummary.proforma) {
+          summaryData = unwrappedSummary[mode] || unwrappedSummary.billable || unwrappedSummary
+        } else {
+          summaryData = unwrappedSummary
+        }
+
+        if (unwrappedForecast.billable || unwrappedForecast.proforma) {
+          forecastData = unwrappedForecast[mode] || unwrappedForecast.billable || unwrappedForecast
+        } else {
+          forecastData = unwrappedForecast
+        }
+
         // Extract current month data from summary
         const currentAccounts = summaryData?.accounts || []
         const currentAccountMap = new Map<string, { cost: number, name: string }>()
@@ -1591,15 +1608,39 @@ export const useChartRegistry = (args: {
         const summary = dataset.summary as any
         const historical = dataset.historical as any
         const forecast = dataset.forecast as any
-        
+
         if (!summary) {
           console.log('MonthlyTrendWithForecast: Missing summary data')
           return []
         }
 
-        const summaryData = summary?.data || summary
-        const historicalData = historical?.data || historical
-        const forecastData = forecast?.data || forecast
+        const mode = dataset.mode || 'billable'
+        const unwrappedSummary = summary?.data || summary
+        const unwrappedHistorical = historical?.data || historical
+        const unwrappedForecast = forecast?.data || forecast
+
+        // Handle multi-mode structure
+        let summaryData: any
+        let historicalData: any
+        let forecastData: any
+
+        if (unwrappedSummary.billable || unwrappedSummary.proforma) {
+          summaryData = unwrappedSummary[mode] || unwrappedSummary.billable || unwrappedSummary
+        } else {
+          summaryData = unwrappedSummary
+        }
+
+        if (unwrappedHistorical.billable || unwrappedHistorical.proforma) {
+          historicalData = unwrappedHistorical[mode] || unwrappedHistorical.billable || unwrappedHistorical
+        } else {
+          historicalData = unwrappedHistorical
+        }
+
+        if (unwrappedForecast.billable || unwrappedForecast.proforma) {
+          forecastData = unwrappedForecast[mode] || unwrappedForecast.billable || unwrappedForecast
+        } else {
+          forecastData = unwrappedForecast
+        }
 
         // Get current month data
         const currentAccounts = summaryData?.accounts || []
@@ -1687,16 +1728,34 @@ export const useChartRegistry = (args: {
       extractor: (dataset) => {
         const forecast = dataset.forecast as any
         const summary = dataset.summary as any
-        
+
         if (!forecast || !summary) {
           console.log('AccountForecastComparison: Missing forecast or summary data')
           return []
         }
 
-        const forecastData = forecast?.data || forecast
-        const summaryData = summary?.data || summary
+        const mode = dataset.mode || 'billable'
+        const unwrappedForecast = forecast?.data || forecast
+        const unwrappedSummary = summary?.data || summary
+
+        // Handle multi-mode structure (billable/proforma) vs simple structure
+        let forecastData: any
+        let summaryData: any
+
+        if (unwrappedForecast.billable || unwrappedForecast.proforma) {
+          forecastData = unwrappedForecast[mode] || unwrappedForecast.billable || unwrappedForecast
+        } else {
+          forecastData = unwrappedForecast
+        }
+
+        if (unwrappedSummary.billable || unwrappedSummary.proforma) {
+          summaryData = unwrappedSummary[mode] || unwrappedSummary.billable || unwrappedSummary
+        } else {
+          summaryData = unwrappedSummary
+        }
+
         const currentAccounts = summaryData?.accounts || []
-        
+
         // Get total forecast
         let totalForecast = 0
         if (forecastData?.forecast?.total?.Amount) {
@@ -2333,15 +2392,39 @@ export const useChartRegistry = (args: {
         const historical = dataset.historical as any
         const forecast = dataset.forecast as any
         const summary = dataset.summary as any
-        
+
         if (!historical || !forecast) {
           console.log('HistoricalVsForecast: Missing historical or forecast data')
           return []
         }
 
-        const historicalData = historical?.data || historical
-        const forecastData = forecast?.data || forecast
-        const summaryData = summary?.data || summary
+        const mode = dataset.mode || 'billable'
+        const unwrappedHistorical = historical?.data || historical
+        const unwrappedForecast = forecast?.data || forecast
+        const unwrappedSummary = summary?.data || summary
+
+        // Handle multi-mode structure
+        let historicalData: any
+        let forecastData: any
+        let summaryData: any
+
+        if (unwrappedHistorical.billable || unwrappedHistorical.proforma) {
+          historicalData = unwrappedHistorical[mode] || unwrappedHistorical.billable || unwrappedHistorical
+        } else {
+          historicalData = unwrappedHistorical
+        }
+
+        if (unwrappedForecast.billable || unwrappedForecast.proforma) {
+          forecastData = unwrappedForecast[mode] || unwrappedForecast.billable || unwrappedForecast
+        } else {
+          forecastData = unwrappedForecast
+        }
+
+        if (unwrappedSummary.billable || unwrappedSummary.proforma) {
+          summaryData = unwrappedSummary[mode] || unwrappedSummary.billable || unwrappedSummary
+        } else {
+          summaryData = unwrappedSummary
+        }
 
         const monthlyData = historicalData?.monthlyBreakdown || []
         const forecastTotal = forecastData?.forecast?.total?.Amount ? parseFloat(forecastData.forecast.total.Amount) : 0

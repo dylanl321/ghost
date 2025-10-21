@@ -261,7 +261,7 @@
                 <summary class="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:underline">
                   View all available variables (click to expand)
                 </summary>
-                <div class="mt-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 text-xs space-y-3">
+                <div v-pre class="mt-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 text-xs space-y-3">
                   <div>
                     <p class="font-semibold text-gray-900 dark:text-white mb-1">Basic Info:</p>
                     <p class="text-gray-600 dark:text-gray-400">

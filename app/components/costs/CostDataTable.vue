@@ -85,6 +85,9 @@
                       <Icon name="i-heroicons-question-mark-circle" class="w-3.5 h-3.5" />
                     </NuxtLink>
                   </UTooltip>
+                  <UTooltip v-else-if="col.helpTooltip" :text="col.helpTooltip">
+                    <Icon name="i-heroicons-information-circle" class="w-3.5 h-3.5 text-gray-500" />
+                  </UTooltip>
                 </div>
               </th>
             </tr>
@@ -221,12 +224,30 @@ const { fetchAccountDetails } = useAccountCosts()
 // Account lookup cache
 const accountLookupCache = ref<Map<string, any>>(new Map())
 
+// Get timeframe label for column
+const getTimeframeLabel = () => {
+  const timeframe = props.dataset?.timeframe
+  const labels: Record<string, string> = {
+    'thisMonth': 'This Month',
+    'lastMonth': 'Last Month',
+    'thisQuarter': 'This Quarter',
+    'lastQuarter': 'Last Quarter',
+    'thisYear': 'This Year',
+    'lastYear': 'Last Year',
+    'last7days': 'Last 7 Days',
+    'last30days': 'Last 30 Days',
+    'last90days': 'Last 90 Days',
+    'ytd': 'YTD'
+  }
+  return labels[timeframe || 'thisMonth'] || 'Period'
+}
+
 // Column definitions
-const availableColumns = [
+const availableColumns = computed(() => [
   { key: 'accountId', label: 'Account ID', default: true },
   { key: 'accountName', label: 'Account Name', default: true },
   { key: 'accountStatus', label: 'Account Status', default: true, format: (v: string) => v || 'Active', class: 'text-center' },
-  { key: 'actualCost', label: 'Actual Cost', default: true, format: (v: number) => formatCurrency(v), class: 'text-right' },
+  { key: 'actualCost', label: `${getTimeframeLabel()} Cost`, default: true, format: (v: number) => formatCurrency(v), class: 'text-right' },
   { key: 'budgetedCost', label: 'Budget', default: true, format: (v: number) => formatCurrency(v), class: 'text-right' },
   { key: 'utilization', label: 'Utilization %', default: true, format: (v: number) => `${v.toFixed(1)}%`, class: 'text-right' },
   { key: 'overagePercent', label: 'Overage %', default: false, format: (v: number) => v > 0 ? `${v.toFixed(1)}%` : '-', class: 'text-right' },
@@ -234,31 +255,34 @@ const availableColumns = [
   { key: 'riskLevel', label: 'Risk Level', default: true, helpLink: '/support/docs?topic=budget-risk-scoring', helpTooltip: 'Learn about Risk Levels' },
   { key: 'variance', label: 'Variance', default: true, format: (v: number) => formatCurrency(v), class: 'text-right' },
   { key: 'status', label: 'Budget Status', default: false },
+  { key: 'endOfMonthForecast', label: 'End of Month Forecast', default: true, format: (v: number) => formatCurrency(v), class: 'text-right', helpTooltip: 'Projected total cost by end of current month' },
+  { key: 'ytdTotal', label: 'YTD Total', default: true, format: (v: number) => formatCurrency(v), class: 'text-right', helpTooltip: 'Year-to-date total (Jan 1 - today)' },
+  { key: 'fullYearEstimate', label: 'Full Year Estimate', default: true, format: (v: number) => formatCurrency(v), class: 'text-right', helpTooltip: 'Projected full year total (YTD actuals + remaining months forecast)' },
   { key: 'departmentNumber', label: 'Department', default: false },
   { key: 'linesOfBusiness', label: 'Line of Business', default: false },
   { key: 'projectName', label: 'Project', default: false },
   { key: 'environment', label: 'Environment', default: false },
   { key: 'forecastedCost', label: 'Forecast', default: false, format: (v: number) => formatCurrency(v), class: 'text-right' }
-]
+])
 
 // State
 const searchQuery = ref('')
-const selectedColumns = ref(availableColumns.filter(c => c.default).map(c => c.key))
+const selectedColumns = ref(availableColumns.value.filter(c => c.default).map(c => c.key))
 const sortColumn = ref('riskScore')
 const sortDirection = ref<'asc' | 'desc'>('desc')
 const currentPage = ref(1)
 const pageSize = ref(25)
 
 // Computed
-const columnOptions = computed(() => 
-  availableColumns.map(col => ({
+const columnOptions = computed(() =>
+  availableColumns.value.map(col => ({
     label: col.label,
     value: col.key
   }))
 )
 
-const visibleColumns = computed(() => 
-  availableColumns.filter(col => selectedColumns.value.includes(col.key))
+const visibleColumns = computed(() =>
+  availableColumns.value.filter(col => selectedColumns.value.includes(col.key))
 )
 
 const canGenerateDetailedReport = computed(() => {
@@ -271,10 +295,16 @@ const tableData = computed(() => {
 
   const analysis = props.dataset.analysis as any
   const summary = props.dataset.summary as any
+  const forecast = props.dataset.forecast as any
+  const yearEndForecast = props.dataset.yearEndForecast as any
+  const ytdSummary = props.dataset.ytdSummary as any // YTD per-account data
 
   // Get the correct data based on mode
   let analysisData = analysis?.data || analysis
   let summaryData = summary?.data || summary
+  let forecastData = forecast?.data || forecast
+  let yearEndForecastData = yearEndForecast?.data || yearEndForecast
+  let ytdSummaryData = ytdSummary?.data || ytdSummary
 
   if (props.mode === 'proforma') {
     // In proforma mode, data might be nested
@@ -284,7 +314,80 @@ const tableData = computed(() => {
     if (summaryData?.proforma) {
       summaryData = summaryData.proforma
     }
+    if (forecastData?.proforma) {
+      forecastData = forecastData.proforma
+    }
+    if (yearEndForecastData?.proforma) {
+      yearEndForecastData = yearEndForecastData.proforma
+    }
+    if (ytdSummaryData?.proforma) {
+      ytdSummaryData = ytdSummaryData.proforma
+    }
   }
+
+  // Extract forecast totals per account (if available)
+  const endOfMonthForecastByAccount = new Map<string, number>()
+
+  // Get end of month forecast per account (actual + remainder)
+  if (forecastData?.forecast?.total?.Amount) {
+    const totalRemainderForecast = parseFloat(forecastData.forecast.total.Amount)
+    const currentAccounts = summaryData?.accounts || []
+    const totalCurrentCost = currentAccounts.reduce((sum: number, acc: any) => sum + (acc.totalCost || 0), 0)
+
+    // Distribute remainder forecast proportionally and add to current month actual
+    currentAccounts.forEach((acc: any) => {
+      const currentMonthActual = acc.totalCost || 0
+      let remainderForAccount = 0
+
+      if (totalCurrentCost > 0) {
+        const proportion = currentMonthActual / totalCurrentCost
+        remainderForAccount = totalRemainderForecast * proportion
+      }
+
+      // End of month = Current actual + Remainder forecast
+      endOfMonthForecastByAccount.set(acc.accountId, currentMonthActual + remainderForAccount)
+    })
+  }
+
+  // Get YTD totals from ytdSummary API (period=ytd, already includes current month)
+  const ytdByAccount = new Map<string, number>()
+  const ytdAccounts = ytdSummaryData?.accounts || []
+
+  ytdAccounts.forEach((acc: any) => {
+    ytdByAccount.set(acc.accountId, acc.totalCost || 0)
+  })
+
+  const currentAccounts = summaryData?.accounts || []
+
+  // Get remaining months forecast per account (not including current month actual)
+  const remainingMonthsForecastByAccount = new Map<string, number>()
+  if (yearEndForecastData?.forecast?.total?.Amount) {
+    const totalRemainingForecast = parseFloat(yearEndForecastData.forecast.total.Amount)
+    const totalCurrentCost = currentAccounts.reduce((sum: number, acc: any) => sum + (acc.totalCost || 0), 0)
+
+    // Distribute forecast proportionally
+    currentAccounts.forEach((acc: any) => {
+      if (totalCurrentCost > 0) {
+        const proportion = (acc.totalCost || 0) / totalCurrentCost
+        remainingMonthsForecastByAccount.set(acc.accountId, totalRemainingForecast * proportion)
+      }
+    })
+  }
+
+  // Calculate full year estimate: Past months + End of Month + Future months
+  // This matches the Year-End Projection graph calculation
+  const fullYearEstimateByAccount = new Map<string, number>()
+  currentAccounts.forEach((acc: any) => {
+    const ytdTotal = ytdByAccount.get(acc.accountId) || 0
+    const currentMonthActual = acc.totalCost || 0
+    const endOfMonth = endOfMonthForecastByAccount.get(acc.accountId) || currentMonthActual
+    const futureMonthsForecast = remainingMonthsForecastByAccount.get(acc.accountId) || 0
+
+    // Full Year = (Past months) + (Current month end-of-month) + (Future months)
+    //           = (YTD - current month actual) + (End of month) + (Future months)
+    const pastMonthsActual = ytdTotal - currentMonthActual
+    fullYearEstimateByAccount.set(acc.accountId, pastMonthsActual + endOfMonth + futureMonthsForecast)
+  })
 
   let rawData: any[] = []
 
@@ -307,7 +410,10 @@ const tableData = computed(() => {
         overagePercent,
         overageAmount,
         variance: item.actualCost - item.budgetedCost,
-        status: getStatus(item)
+        status: getStatus(item),
+        endOfMonthForecast: endOfMonthForecastByAccount.get(item.accountId) || item.actualCost,
+        ytdTotal: ytdByAccount.get(item.accountId) || item.actualCost,
+        fullYearEstimate: fullYearEstimateByAccount.get(item.accountId) || 0
       }
     })
   }
@@ -340,7 +446,10 @@ const tableData = computed(() => {
         departmentNumber: item.departmentNumber,
         linesOfBusiness: item.linesOfBusiness,
         projectName: item.projectName,
-        environment: item.environment
+        environment: item.environment,
+        endOfMonthForecast: endOfMonthForecastByAccount.get(item.accountId) || totalCost,
+        ytdTotal: ytdByAccount.get(item.accountId) || totalCost,
+        fullYearEstimate: fullYearEstimateByAccount.get(item.accountId) || 0
       }
     })
   }

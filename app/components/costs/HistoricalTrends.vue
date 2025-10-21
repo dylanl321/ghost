@@ -282,7 +282,7 @@ const growthRateChart = computed(() => {
       type: 'value',
       axisLabel: {
         color: '#9ca3af',
-        formatter: '{value}%'
+        formatter: (value: number) => `${value.toFixed(1)}%`
       },
       axisLine: {
         lineStyle: { color: 'rgba(156, 163, 175, 0.2)' }
@@ -308,7 +308,7 @@ const growthRateChart = computed(() => {
       label: {
         show: true,
         position: 'top',
-        formatter: '{c}%',
+        formatter: (params: any) => `${params.value.toFixed(1)}%`,
         color: '#9ca3af',
         fontSize: 10
       }
