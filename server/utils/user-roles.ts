@@ -51,9 +51,11 @@ export async function isUserAdmin(event: H3Event): Promise<boolean> {
 
   // For OIDC auth, fetch groups from Microsoft Graph API
   if (auth.authType === 'oidc') {
-    const userId = user.id || user.oid || user.sub
+    // Try to get user ID from various possible locations in the session
+    const userId = user.id || user.oid || user.sub ||
+                   user.claims?.id || user.claims?.oid || user.claims?.sub
     if (!userId) {
-      console.error('Cannot fetch groups: user ID not found in session')
+      console.error('Cannot fetch groups: user ID not found in session. User object:', JSON.stringify(user, null, 2))
       return false
     }
 

@@ -6,14 +6,12 @@
  * Admin-only endpoint
  */
 
-import { requireAdmin } from '../../../utils/user-roles'
 import { getReport } from '../../../utils/scheduled-reports'
 import { executeScheduledReport } from '../../../utils/report-scheduler'
 
 export default defineEventHandler(async (event) => {
   try {
-    // Require admin access
-    await requireAdmin(event)
+    // Allow all authenticated users to execute reports
 
     // Get request body
     const body = await readBody(event)

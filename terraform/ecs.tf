@@ -76,6 +76,10 @@ resource "aws_ecs_task_definition" "main" {
           name  = "AWS_PROFORMA_ACCOUNT_ID"
           value = "253821132832"
         },
+        {
+          name  = "AWS_DEPLOYMENT_ACCOUNT_ID"
+          value = local.child_account_id
+        },
         # Cross-Account Role Configuration
         {
           name  = "AWS_ASSUME_ROLE_NAME"

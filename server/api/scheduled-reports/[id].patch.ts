@@ -21,7 +21,6 @@ export default defineEventHandler(async (event) => {
     }
 
     const userEmail = user.claims?.email || user.claims?.preferred_username
-    const isAdmin = await isUserAdmin(event)
 
     // Get report ID from route params
     const reportId = getRouterParam(event, 'id')
@@ -41,13 +40,7 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Check ownership (unless admin)
-    if (!isAdmin && existing.createdBy !== userEmail) {
-      throw createError({
-        statusCode: 403,
-        message: 'Access denied'
-      })
-    }
+    // Allow all authenticated users to update any report
 
     // Parse request body
     const updates = await readBody<UpdateReportRequest>(event)
@@ -69,15 +62,7 @@ export default defineEventHandler(async (event) => {
         })
       }
 
-      // Non-admin users can only set themselves as recipient
-      if (!isAdmin) {
-        if (updates.recipients.length > 1 || updates.recipients[0] !== userEmail) {
-          throw createError({
-            statusCode: 403,
-            message: 'Non-admin users can only send reports to themselves'
-          })
-        }
-      }
+      // Allow all authenticated users to set any recipients
     }
 
     // Update the report

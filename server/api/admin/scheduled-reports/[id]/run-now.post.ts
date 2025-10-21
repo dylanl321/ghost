@@ -5,12 +5,10 @@
 
 import { getReport } from '../../../../utils/scheduled-reports'
 import { executeScheduledReport } from '../../../../utils/report-scheduler'
-import { requireAdmin } from '../../../../utils/user-roles'
 
 export default defineEventHandler(async (event) => {
   try {
-    // Require admin access
-    await requireAdmin(event)
+    // Allow all authenticated users to execute reports
 
     // Get report ID from route params
     const reportId = getRouterParam(event, 'id')
