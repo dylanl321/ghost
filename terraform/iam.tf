@@ -81,7 +81,9 @@ resource "aws_iam_role_policy" "ecs_scheduled_reports_dynamodb" {
           "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-scheduled-reports/index/*",
           "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-email-templates",
           "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-email-templates/index/*",
-          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-report-executions"
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-report-executions",
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-shared-reports",
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-shared-reports/index/*"
         ]
       }
     ]
@@ -203,6 +205,34 @@ resource "aws_iam_role_policy" "ecs_shortlinks_dynamodb" {
         Resource = [
           "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-dashboard-shortlinks",
           "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-dashboard-shortlinks/index/*"
+        ]
+      }
+    ]
+  })
+}
+
+# S3 permissions for application storage (reports, exports, attachments)
+resource "aws_iam_role_policy" "ecs_s3_app_storage" {
+  provider = aws.target_deployment_account
+  name     = "${var.app_name}_s3_app_storage"
+  role     = aws_iam_role.ecs_task_execution_role.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "S3AppStorageAccess"
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:DeleteObject",
+          "s3:GetObjectAttributes",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          "arn:${local.child_partition}:s3:::ghost-app-storage-${var.environment}/*",
+          "arn:${local.child_partition}:s3:::ghost-app-storage-${var.environment}"
         ]
       }
     ]

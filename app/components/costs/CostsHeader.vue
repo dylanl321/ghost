@@ -49,6 +49,14 @@
           :active-tab="activeTab"
           :data-mode="modelMode"
         />
+        <UButton
+          color="white"
+          variant="ghost"
+          icon="i-heroicons-document-arrow-down"
+          @click="showShareReportModal = true"
+        >
+          Generate Report
+        </UButton>
         <CostSettings />
         <UButton color="white" variant="ghost" icon="i-heroicons-arrow-path" @click="$emit('refresh')">
           Refresh
@@ -94,6 +102,12 @@
       :user-email="user?.email"
       @submit="handleScheduleSubmit"
     />
+
+    <!-- Share Report Modal -->
+    <ShareReportModal
+      v-model="showShareReportModal"
+      :config="currentConfig"
+    />
   </div>
 </template>
 
@@ -122,6 +136,7 @@ const modeOptions = [
 ]
 
 const isExporting = ref(false)
+const showShareReportModal = ref(false)
 
 // Schedule functionality
 const { user } = useOidcAuth()

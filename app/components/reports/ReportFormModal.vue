@@ -304,6 +304,91 @@
             </template>
           </UFormGroup>
 
+          <UFormGroup>
+            <UCheckbox
+              v-model="customizeBody"
+              label="Customize email body (Advanced)"
+              help="Customize the email content using template variables"
+            />
+          </UFormGroup>
+
+          <!-- Custom Body Editor -->
+          <UFormGroup
+            v-if="customizeBody"
+            label="Email Body"
+            help="Enter custom HTML or plain text. Use variables like {{reportName}}, {{timeframe}}, etc."
+          >
+            <UTextarea
+              v-model="form.emailTemplate.body"
+              placeholder="<p>Hello {{userName}},</p><p>Your AWS cost report for {{reportPeriod}} is ready. Total accounts: {{accountCount}}.</p>"
+              :rows="10"
+            />
+            <template #help>
+              <details class="mt-2">
+                <summary class="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:underline">
+                  View all available variables (click to expand)
+                </summary>
+                <div v-pre class="mt-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 text-xs space-y-3">
+                  <div>
+                    <p class="font-semibold text-gray-900 dark:text-white mb-1">Basic Info:</p>
+                    <p class="text-gray-600 dark:text-gray-400">
+                      {{reportName}}, {{timeframe}}, {{dataMode}}, {{accountCount}}, {{format}}
+                    </p>
+                  </div>
+                  <div>
+                    <p class="font-semibold text-gray-900 dark:text-white mb-1">Current Date (when report runs):</p>
+                    <p class="text-gray-600 dark:text-gray-400">
+                      {{currentDate}}, {{currentMonth}}, {{currentYear}}, {{currentDay}}
+                    </p>
+                  </div>
+                  <div>
+                    <p class="font-semibold text-gray-900 dark:text-white mb-1">Report Period Start:</p>
+                    <p class="text-gray-600 dark:text-gray-400">
+                      {{startDate}}, {{startMonth}}, {{startYear}}, {{startDay}}
+                    </p>
+                  </div>
+                  <div>
+                    <p class="font-semibold text-gray-900 dark:text-white mb-1">Report Period End:</p>
+                    <p class="text-gray-600 dark:text-gray-400">
+                      {{endDate}}, {{endMonth}}, {{endYear}}, {{endDay}}
+                    </p>
+                  </div>
+                  <div>
+                    <p class="font-semibold text-gray-900 dark:text-white mb-1">Computed Values:</p>
+                    <p class="text-gray-600 dark:text-gray-400">
+                      {{dateRange}}, {{reportPeriod}}, {{quarter}}
+                    </p>
+                  </div>
+                  <div>
+                    <p class="font-semibold text-gray-900 dark:text-white mb-1">Additional:</p>
+                    <p class="text-gray-600 dark:text-gray-400">
+                      {{userName}}, {{timestamp}}, {{siteUrl}}, {{recipientEmail}}
+                    </p>
+                  </div>
+                  <div class="pt-2 border-t border-gray-300 dark:border-gray-600">
+                    <p class="text-gray-700 dark:text-gray-300 italic">
+                      <span class="font-semibold">HTML Example:</span> "&lt;p&gt;Report for {{startMonth}} {{startYear}}&lt;/p&gt;"
+                      <br>
+                      <span class="text-gray-500 dark:text-gray-400">(You can use HTML tags for formatting)</span>
+                    </p>
+                  </div>
+                </div>
+              </details>
+            </template>
+          </UFormGroup>
+
+          <!-- View Default Template Helper -->
+          <div v-if="customizeBody" class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+            <details>
+              <summary class="text-sm font-medium text-blue-900 dark:text-blue-100 cursor-pointer hover:underline">
+                View default email template (for reference)
+              </summary>
+              <div class="mt-3 p-3 bg-white dark:bg-gray-900 rounded border border-blue-200 dark:border-blue-700 text-xs overflow-x-auto">
+                <pre class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{{defaultTemplatePreview}}</pre>
+              </div>
+            </details>
+          </div>
+
           <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
             <p class="text-sm text-gray-600 dark:text-gray-400">
               <Icon name="i-heroicons-information-circle" class="w-4 h-4 inline mr-1" />
@@ -413,6 +498,73 @@ const form = ref({
 })
 
 const recipientsInput = ref('')
+const customizeBody = ref(false)
+
+// Default email template preview (Outlook-compatible version)
+const defaultTemplatePreview = `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN">
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <title>AWS Cost Report</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f3f4f6; -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%;">
+  <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color:#f3f4f6; border-collapse:collapse;">
+    <tr>
+      <td align="center" style="padding:30px 15px;">
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="600" style="background-color:#ffffff; border:1px solid #d1d5db; border-collapse:collapse;">
+          <!-- Header -->
+          <tr>
+            <td style="padding:24px 32px; border-bottom:1px solid #e5e7eb;">
+              <h1 style="margin:0; font-size:20px; font-weight:600; color:#111827;">AWS Cost Report</h1>
+              <p style="margin:6px 0 0; font-size:14px; color:#6b7280;">{{reportName}}</p>
+            </td>
+          </tr>
+          <!-- Body -->
+          <tr>
+            <td style="padding:24px 32px;">
+              <p style="margin:0 0 12px; font-size:15px; color:#374151;">Hello {{userName}},</p>
+              <p style="margin:0 0 16px; font-size:15px; color:#4b5563; line-height:1.5;">Your scheduled cost report is ready and attached to this email.</p>
+              <!-- Key Details -->
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;">
+                <tr>
+                  <td width="140" style="padding:6px 12px 6px 0; border-bottom:1px solid #f3f4f6; font-size:14px; color:#6b7280;">Report Period</td>
+                  <td style="padding:6px 0; border-bottom:1px solid #f3f4f6; font-size:14px; color:#111827; font-weight:500;">{{timeframe}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:6px 12px 6px 0; border-bottom:1px solid #f3f4f6; font-size:14px; color:#6b7280;">Data Mode</td>
+                  <td style="padding:6px 0; border-bottom:1px solid #f3f4f6; font-size:14px; color:#111827; font-weight:500;">{{dataMode}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:6px 12px 6px 0; font-size:14px; color:#6b7280;">Generated</td>
+                  <td style="padding:6px 0; font-size:14px; color:#111827; font-weight:500;">{{timestamp}}</td>
+                </tr>
+              </table>
+              <!-- Button -->
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin:16px auto;">
+                <tr>
+                  <td align="center" style="border-radius:6px; background:#2563eb;">
+                    <a href="{{siteUrl}}" style="display:inline-block; padding:12px 24px; background:#2563eb; color:#ffffff; font-size:14px; font-weight:bold; text-decoration:none; border-radius:6px; border:0;">Open Dashboard</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="padding:20px 32px; border-top:1px solid #e5e7eb; text-align:center;">
+              <p style="margin:0 0 4px; font-size:13px; font-weight:600; color:#374151;">GHOST Cost Dashboard</p>
+              <p style="margin:2px 0; font-size:12px; color:#9ca3af;">Sent to {{recipientEmail}}</p>
+              <p style="margin:10px 0 0;">
+                <a href="{{siteUrl}}/profile" style="font-size:12px; color:#4b5563; text-decoration:none;">View Your Profile</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
 
 // Options
 const accountOptions = ref<Array<{ id: string; name: string }>>([])
@@ -593,6 +745,7 @@ function resetForm() {
     }
   }
   recipientsInput.value = ''
+  customizeBody.value = false
   errors.value = {}
 }
 
@@ -601,6 +754,12 @@ function handleSubmit() {
   const recipients = props.isAdmin
     ? recipientsInput.value.split(',').map(e => e.trim()).filter(Boolean)
     : [props.userEmail || '']
+
+  // Set isCustom flag based on whether custom body is provided
+  const emailTemplate = {
+    ...form.value.emailTemplate,
+    isCustom: customizeBody.value && form.value.emailTemplate.body.trim().length > 0
+  }
 
   const data: CreateReportRequest = {
     reportName: form.value.reportName,
@@ -611,7 +770,7 @@ function handleSubmit() {
     },
     schedule: form.value.schedule,
     recipients,
-    emailTemplate: form.value.emailTemplate
+    emailTemplate
   }
 
   submitting.value = true
@@ -631,6 +790,8 @@ watch(() => [props.editingReport, props.initialConfig] as const, ([report, initi
       emailTemplate: report.emailTemplate
     }
     recipientsInput.value = report.recipients.join(', ')
+    // Enable customizeBody if custom body exists
+    customizeBody.value = report.emailTemplate.body && report.emailTemplate.body.trim().length > 0
   } else if (initial) {
     // Pre-filling from initial config
     if (initial.reportName) form.value.reportName = initial.reportName
@@ -644,12 +805,24 @@ watch(() => [props.editingReport, props.initialConfig] as const, ([report, initi
     }
     if (initial.emailTemplate) {
       Object.assign(form.value.emailTemplate, initial.emailTemplate)
+      // Enable customizeBody if custom body exists in initial config
+      if (initial.emailTemplate.body && initial.emailTemplate.body.trim().length > 0) {
+        customizeBody.value = true
+      }
     }
     if (initial.recipients) {
       recipientsInput.value = initial.recipients.join(', ')
     }
   }
 }, { immediate: true })
+
+// Clear body when customizeBody is disabled
+watch(customizeBody, (enabled) => {
+  if (!enabled) {
+    form.value.emailTemplate.body = ''
+    form.value.emailTemplate.isCustom = false
+  }
+})
 
 // Reset submitting when modal closes
 watch(isOpen, (value) => {

@@ -80,11 +80,26 @@ async function buildDataset(config: ReportConfig): Promise<NormalizedDataset> {
 
   const environment = config.dataMode === 'billable' ? 'commercial' : 'commercial'
 
-  // Fetch all data in parallel
-  const [costData, accounts] = await Promise.all([
+  // Build additional data fetches if forecast is included
+  const fetchPromises: any[] = [
     getCostAndUsage(costParams, environment),
     getAllAccountsUnified(false)
-  ])
+  ]
+
+  // Fetch YTD summary for accurate YTD totals
+  if (config.includeForecast) {
+    const ytdParams = {
+      ...costParams,
+      ...validateDateParams({ period: 'ytd' })
+    }
+    fetchPromises.push(getCostAndUsage(ytdParams, environment))
+  }
+
+  // Fetch all data in parallel
+  const results = await Promise.all(fetchPromises)
+  const costData = results[0]
+  const accounts = results[1]
+  const ytdData = config.includeForecast ? results[2] : null
 
   if (!costData || !costData.resultsByTime) {
     throw new Error('No cost data returned from AWS')
@@ -98,7 +113,8 @@ async function buildDataset(config: ReportConfig): Promise<NormalizedDataset> {
     analysis: { data: costData },
     services: config.includeServices ? { data: costData } : null,
     historical: config.includeHistorical ? { data: costData } : null,
-    forecast: config.includeForecast ? { data: {} } : null,
+    forecast: config.includeForecast ? { data: costData } : null,
+    ytdSummary: config.includeForecast && ytdData ? { data: ytdData } : null,
     yearEndForecast: null,
     currentMonthOrgWide: null,
     accountsList: accounts

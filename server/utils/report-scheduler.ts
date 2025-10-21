@@ -12,6 +12,7 @@ import {
 import { generateCostReport } from './report-generator'
 import { sendReportEmail, renderTemplate, getDefaultTemplate } from './email-service'
 import { claimExecutionLock, createLockId } from './execution-locks'
+import { uploadReportToS3 } from './s3-reports-storage'
 
 /**
  * Execute a single scheduled report
@@ -36,7 +37,30 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
 
     console.log(`  → Report generated: ${reportResult.filename} (${reportResult.buffer.length} bytes)`)
 
-    // Step 2: Prepare email content with enhanced date context
+    // Step 2: Upload report to S3
+    console.log('  → Uploading report to S3...')
+    const executionId = `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+    const s3UploadResult = await uploadReportToS3(
+      'scheduled',
+      reportResult.buffer,
+      {
+        reportId: report.reportId,
+        reportName: report.reportName,
+        userId: report.createdBy,
+        executionId,
+        format: report.reportConfig.format === 'pdf' ? 'pdf' : 'csv'
+      }
+    )
+
+    if (!s3UploadResult.success) {
+      console.warn(`  ⚠ Failed to upload report to S3: ${s3UploadResult.error}`)
+      // Continue execution - we can still send email with attachment
+    } else {
+      console.log(`  → Report uploaded to S3: ${s3UploadResult.key}`)
+    }
+
+    // Step 3: Prepare email content with enhanced date context
     const dateContext = buildDateContext(report.reportConfig.timeframe)
 
     const emailSubject = renderTemplate(report.emailTemplate.subject, {
@@ -52,6 +76,14 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
     }
 
     // Build template context
+    // Use environment-specific site URL, falling back to localhost in dev
+    const siteUrl = process.env.NUXT_PUBLIC_SITE_URL ||
+                    (process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : '')
+
+    if (!siteUrl) {
+      console.warn('NUXT_PUBLIC_SITE_URL not set - email links will be empty')
+    }
+
     const templateContext = {
       userName: report.createdBy.split('@')[0], // Extract name from email
       reportName: report.reportName,
@@ -67,15 +99,15 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
         minute: '2-digit',
         timeZoneName: 'short'
       }),
-      dashboardUrl: process.env.NUXT_PUBLIC_SITE_URL || 'https://ghost-dashboard.com',
-      settingsUrl: `${process.env.NUXT_PUBLIC_SITE_URL || 'https://ghost-dashboard.com'}/reports/scheduled`,
+      siteUrl: siteUrl,
       recipientEmail: report.recipients[0], // First recipient
+      downloadUrl: s3UploadResult.s3Url || '', // S3 presigned download URL
       ...dateContext // Include all date variables
     }
 
     const renderedBody = renderTemplate(emailBody, templateContext)
 
-    // Step 3: Send email to all recipients
+    // Step 4: Send email to all recipients
     console.log(`  → Sending email to ${report.recipients.length} recipient(s)...`)
     const emailResult = await sendReportEmail(
       report.recipients,
@@ -93,19 +125,24 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
     const duration = Date.now() - startTime
     console.log(`  ✓ Report sent successfully in ${duration}ms`)
 
-    // Step 4: Update report status
+    // Step 5: Update report status
     await updateReportRunStatus(report.reportId, 'success')
 
-    // Step 5: Record execution with email delivery details
+    // Step 6: Record execution with email delivery details and S3 storage info
     await recordExecution({
       reportId: report.reportId,
+      executionId,
       executionTime: new Date().toISOString(),
       status: 'success',
       duration,
       emailsSent: emailResult.deliveryDetails?.totalSent || report.recipients.length,
       emailsFailed: emailResult.deliveryDetails?.totalFailed || 0,
       reportSize: reportResult.buffer.length,
-      emailDelivery: emailResult.deliveryDetails  // Store detailed delivery info
+      emailDelivery: emailResult.deliveryDetails,  // Store detailed delivery info
+      s3Key: s3UploadResult.key,                   // S3 object key
+      s3Url: s3UploadResult.s3Url,                 // Presigned download URL
+      s3UrlExpiresAt: s3UploadResult.s3UrlExpiresAt, // URL expiration
+      downloadCount: 0                              // Initialize download counter
     })
 
     return {

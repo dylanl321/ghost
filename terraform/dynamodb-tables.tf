@@ -166,6 +166,57 @@ resource "aws_dynamodb_table" "shortlinks" {
 }
 
 # ============================================================================
+# Shared Reports Table (GovCloud Environment)
+# ============================================================================
+resource "aws_dynamodb_table" "shared_reports" {
+  provider       = aws.target_deployment_account
+  name           = "ghost-shared-reports"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "shareId"
+
+  attribute {
+    name = "shareId"
+    type = "S"
+  }
+
+  attribute {
+    name = "userId"
+    type = "S"
+  }
+
+  # GSI for querying reports by user (for profile "My Reports" tab)
+  global_secondary_index {
+    name            = "UserIdIndex"
+    hash_key        = "userId"
+    projection_type = "ALL"
+  }
+
+  # Enable TTL to auto-delete old shared reports (90 days)
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  # Enable encryption at rest
+  server_side_encryption {
+    enabled = true
+  }
+
+  # Enable point-in-time recovery
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Name        = "GHOST Shared Reports"
+    Environment = local.environment
+    ManagedBy   = "Terraform"
+    Service     = "GHOST"
+    Component   = "SharedReports"
+  }
+}
+
+# ============================================================================
 # Outputs
 # ============================================================================
 
@@ -197,4 +248,14 @@ output "shortlinks_table_name" {
 output "shortlinks_table_arn" {
   description = "ARN of the DynamoDB table for shortlinks"
   value       = aws_dynamodb_table.shortlinks.arn
+}
+
+output "shared_reports_table_name" {
+  description = "Name of the DynamoDB table for shared reports"
+  value       = aws_dynamodb_table.shared_reports.name
+}
+
+output "shared_reports_table_arn" {
+  description = "ARN of the DynamoDB table for shared reports"
+  value       = aws_dynamodb_table.shared_reports.arn
 }

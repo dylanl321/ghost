@@ -138,6 +138,38 @@ export function useCostExport(dataset: NormalizedDataset) {
 
     if (byAccount.length === 0) return null
 
+    // Get YTD data if available
+    const ytdSummaryData = (dataset.ytdSummary as any)?.data || dataset.ytdSummary
+    const ytdByAccount = new Map<string, number>()
+
+    if (ytdSummaryData?.resultsByTime) {
+      ytdSummaryData.resultsByTime.forEach((result: any) => {
+        result.Groups?.forEach((group: any) => {
+          const accountId = group.Keys?.[0]
+          const cost = parseFloat(group.Metrics?.UnblendedCost?.Amount || '0')
+          if (accountId) {
+            ytdByAccount.set(accountId, (ytdByAccount.get(accountId) || 0) + cost)
+          }
+        })
+      })
+    }
+
+    // Get current month forecast data if available
+    const forecastData = (dataset.forecast as any)?.data || dataset.forecast
+    const totalCurrentCost = byAccount.reduce((sum: number, acc: any) => sum + (acc.actualCost || 0), 0)
+    const totalForecastRemainder = forecastData?.forecast?.total?.Amount
+      ? parseFloat(forecastData.forecast.total.Amount)
+      : 0
+
+    // Get year-end forecast if available
+    const yearEndForecastData = (dataset.yearEndForecast as any)?.data || dataset.yearEndForecast
+    const totalYearEndForecast = yearEndForecastData?.forecast?.total?.Amount
+      ? parseFloat(yearEndForecastData.forecast.total.Amount)
+      : 0
+
+    const hasYtdData = ytdByAccount.size > 0
+    const hasForecastData = totalForecastRemainder > 0 || totalYearEndForecast > 0
+
     const columns: ColumnConfig[] = [
       { key: 'accountId', header: 'Account ID', format: 'text', width: 20 },
       { key: 'accountName', header: 'Account Name', format: 'text', width: 30 },
@@ -149,12 +181,44 @@ export function useCostExport(dataset: NormalizedDataset) {
       { key: 'utilizationPct', header: 'Utilization %', format: 'percentage', decimals: 1, alignment: 'right', width: 12 }
     ]
 
+    // Add forecast columns if data is available
+    if (hasForecastData) {
+      columns.push(
+        { key: 'endOfMonthForecast', header: 'End of Month Forecast', format: 'currency', decimals: 2, alignment: 'right', width: 18 }
+      )
+    }
+
+    if (hasYtdData) {
+      columns.push(
+        { key: 'ytdTotal', header: 'YTD Total', format: 'currency', decimals: 2, alignment: 'right', width: 15 }
+      )
+    }
+
+    if (hasForecastData && hasYtdData) {
+      columns.push(
+        { key: 'fullYearEstimate', header: 'Full Year Estimate', format: 'currency', decimals: 2, alignment: 'right', width: 18 }
+      )
+    }
+
     const data = byAccount.map((account: any) => {
       const metadata = getAccountMetadata(account)
       const totalCost = account.actualCost || 0
       const budget = account.budgetedCost || account.budget || 0
 
-      return {
+      // Calculate proportional end of month forecast
+      const proportion = totalCurrentCost > 0 ? totalCost / totalCurrentCost : 0
+      const forecastRemainder = totalForecastRemainder * proportion
+      const endOfMonthForecast = totalCost + forecastRemainder
+
+      // Get YTD total
+      const ytdTotal = ytdByAccount.get(account.accountId) || 0
+
+      // Calculate full year estimate: past months + end of month + future months
+      const pastMonthsActual = ytdTotal - totalCost
+      const futureMonthsForecast = totalYearEndForecast * proportion
+      const fullYearEstimate = pastMonthsActual + endOfMonthForecast + futureMonthsForecast
+
+      const rowData: any = {
         accountId: account.accountId,
         accountName: metadata.accountName,
         department: metadata.department,
@@ -164,12 +228,29 @@ export function useCostExport(dataset: NormalizedDataset) {
         variance: totalCost - budget,
         utilizationPct: budget > 0 ? (totalCost / budget) * 100 : 0
       }
+
+      // Add forecast data if available
+      if (hasForecastData) {
+        rowData.endOfMonthForecast = endOfMonthForecast
+      }
+
+      if (hasYtdData) {
+        rowData.ytdTotal = ytdTotal
+      }
+
+      if (hasForecastData && hasYtdData) {
+        rowData.fullYearEstimate = fullYearEstimate
+      }
+
+      return rowData
     })
 
     return {
       name: 'Current Month Summary',
       type: 'table',
-      description: `Cost summary for ${dataset.timeframe} (${dataset.mode} mode)`,
+      description: hasYtdData || hasForecastData
+        ? `Cost summary for ${dataset.timeframe} (${dataset.mode} mode) with forecast data`
+        : `Cost summary for ${dataset.timeframe} (${dataset.mode} mode)`,
       data,
       columns,
       formatting: {

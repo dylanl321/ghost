@@ -107,25 +107,48 @@
             <h4 class="text-sm font-semibold text-gray-900 dark:text-white">
               Email Body
             </h4>
-            <UButton
-              size="xs"
-              color="gray"
-              variant="ghost"
-              @click="showFullBody = !showFullBody"
-            >
-              {{ showFullBody ? 'Show Preview' : 'Show Full HTML' }}
-            </UButton>
+            <div class="flex gap-2">
+              <UButton
+                size="xs"
+                color="gray"
+                :variant="viewMode === 'preview' ? 'solid' : 'ghost'"
+                @click="viewMode = 'preview'"
+              >
+                Preview
+              </UButton>
+              <UButton
+                size="xs"
+                color="gray"
+                :variant="viewMode === 'rendered' ? 'solid' : 'ghost'"
+                @click="viewMode = 'rendered'"
+              >
+                Rendered
+              </UButton>
+              <UButton
+                size="xs"
+                color="gray"
+                :variant="viewMode === 'source' ? 'solid' : 'ghost'"
+                @click="viewMode = 'source'"
+              >
+                Source
+              </UButton>
+            </div>
           </div>
 
           <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-            <!-- Preview -->
-            <div v-if="!showFullBody" class="p-4 bg-gray-50 dark:bg-gray-800">
+            <!-- Text Preview -->
+            <div v-if="viewMode === 'preview'" class="p-4 bg-gray-50 dark:bg-gray-800">
               <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
                 {{ execution.emailDelivery.bodyPreview }}...
               </p>
             </div>
 
-            <!-- Full HTML -->
+            <!-- Rendered HTML -->
+            <div v-else-if="viewMode === 'rendered'" class="p-4 bg-white dark:bg-gray-900 max-h-96 overflow-y-auto">
+              <div v-html="execution.emailDelivery.htmlBody" />
+            </div>
+
+            <!-- HTML Source Code -->
             <div v-else class="p-4 bg-white dark:bg-gray-900 max-h-96 overflow-y-auto">
               <pre class="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono">{{ execution.emailDelivery.htmlBody }}</pre>
             </div>
@@ -189,7 +212,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean]
 }>()
 
-const showFullBody = ref(false)
+const viewMode = ref<'preview' | 'rendered' | 'source'>('rendered')
 
 const recipientColumns = [
   { key: 'email', label: 'Recipient' },

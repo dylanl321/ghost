@@ -120,6 +120,10 @@ export interface ReportExecution {
   emailsFailed?: number
   reportSize?: number // bytes
   emailDelivery?: EmailDeliveryDetails  // Detailed email delivery tracking
+  s3Key?: string // S3 object key where report is stored
+  s3Url?: string // Presigned download URL
+  s3UrlExpiresAt?: string // When presigned URL expires (ISO 8601)
+  downloadCount?: number // Track how many times the report was downloaded
   expiresAt?: number // TTL for DynamoDB (30 days)
 }
 

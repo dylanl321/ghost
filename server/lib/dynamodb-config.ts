@@ -23,6 +23,7 @@ export interface DynamoDBConfig {
   emailTemplates: DynamoDBTableConfig
   reportExecutions: DynamoDBTableConfig
   reportExecutionLocks: DynamoDBTableConfig
+  sharedReports: DynamoDBTableConfig
   apiKeys: DynamoDBTableConfig
   apiKeysUsage: DynamoDBTableConfig
   shortlinks: DynamoDBTableConfig
@@ -104,6 +105,12 @@ function loadFromEnvironment(): DynamoDBConfig {
     },
     reportExecutionLocks: {
       tableName: process.env.REPORT_EXECUTION_LOCKS_TABLE || 'ghost-report-execution-locks',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
+    },
+    sharedReports: {
+      tableName: process.env.SHARED_REPORTS_TABLE || 'ghost-shared-reports',
       environment: 'govcloud',
       region: govCloudRegion,
       accountId: deploymentAccountId

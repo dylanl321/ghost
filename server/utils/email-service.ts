@@ -36,9 +36,18 @@ const SES_CONFIG_SET = process.env.AWS_SES_CONFIGURATION_SET // Optional - only 
 
 /**
  * Render email template with variable substitution
+ * Supports basic conditionals: {{#if variable}}...{{/if}}
  */
 export function renderTemplate(template: string, context: TemplateContext): string {
   let rendered = template
+
+  // Handle conditionals {{#if variable}}...{{/if}}
+  const conditionalRegex = /{{#if\s+(\w+)}}([\s\S]*?){{\/if}}/g
+  rendered = rendered.replace(conditionalRegex, (match, varName, content) => {
+    const value = context[varName]
+    // Show content if variable is truthy and not an empty string
+    return (value && String(value).trim() !== '') ? content : ''
+  })
 
   // Replace {{variable}} with values from context
   for (const [key, value] of Object.entries(context)) {
@@ -298,118 +307,125 @@ export function validateEmails(emails: string[]): { valid: boolean; errors: stri
 
 /**
  * Get default email template
+ * Optimized for Outlook compatibility using table-based layout
  */
 export function getDefaultTemplate(): string {
   return `
-<!DOCTYPE html>
-<html>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      line-height: 1.6;
-      color: #333;
-      margin: 0;
-      padding: 0;
-      background-color: #f5f5f5;
-    }
-    .container {
-      max-width: 600px;
-      margin: 20px auto;
-      background: white;
-      border-radius: 8px;
-      overflow: hidden;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .header {
-      background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
-      color: white;
-      padding: 30px;
-      text-align: center;
-    }
-    .header h1 {
-      margin: 0;
-      font-size: 24px;
-      font-weight: 600;
-    }
-    .content {
-      padding: 30px;
-    }
-    .details {
-      background: #f9fafb;
-      border-left: 4px solid #1e40af;
-      padding: 15px;
-      margin: 20px 0;
-      border-radius: 4px;
-    }
-    .details h3 {
-      margin: 0 0 10px 0;
-      font-size: 16px;
-      color: #1e40af;
-    }
-    .details ul {
-      margin: 0;
-      padding-left: 20px;
-    }
-    .details li {
-      margin: 5px 0;
-    }
-    .button {
-      display: inline-block;
-      padding: 12px 24px;
-      background: #1e40af;
-      color: white;
-      text-decoration: none;
-      border-radius: 6px;
-      margin: 20px 0;
-      font-weight: 500;
-    }
-    .footer {
-      text-align: center;
-      padding: 20px;
-      color: #666;
-      font-size: 12px;
-      background: #f9fafb;
-    }
-    .footer p {
-      margin: 5px 0;
-    }
-  </style>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AWS Cost Report</title>
 </head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>Your AWS Cost Report</h1>
-    </div>
-    <div class="content">
-      <p>Hello {{userName}},</p>
-      <p>Your scheduled AWS cost report <strong>{{reportName}}</strong> is ready.</p>
+<body style="margin:0; padding:0; background-color:#f3f4f6; font-family: Arial, sans-serif; -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%;">
+  <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color:#f3f4f6; border-collapse:collapse; mso-table-lspace:0pt; mso-table-rspace:0pt;">
+    <tr>
+      <td align="center" style="padding:30px 15px;">
+        <!-- Main Container -->
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="600" style="background-color:#ffffff; border:1px solid #d1d5db; border-collapse:collapse;">
 
-      <div class="details">
-        <h3>Report Details</h3>
-        <ul>
-          <li><strong>Period:</strong> {{timeframe}}</li>
-          <li><strong>Data Mode:</strong> {{dataMode}}</li>
-          <li><strong>Accounts:</strong> {{accountCount}} accounts</li>
-          <li><strong>Format:</strong> {{format}}</li>
-          <li><strong>Generated:</strong> {{timestamp}}</li>
-        </ul>
-      </div>
+          <!-- Header -->
+          <tr>
+            <td style="padding:24px 32px; border-bottom:1px solid #e5e7eb;">
+              <h1 style="margin:0; font-size:20px; font-weight:600; color:#111827; font-family: Arial, sans-serif;">AWS Cost Report</h1>
+              <p style="margin:6px 0 0; font-size:14px; color:#6b7280; font-family: Arial, sans-serif;">{{reportName}}</p>
+            </td>
+          </tr>
 
-      <p>The detailed report is attached to this email. For interactive analysis and additional features, visit the GHOST Dashboard.</p>
+          <!-- Body -->
+          <tr>
+            <td style="padding:24px 32px;">
+              <p style="margin:0 0 12px; font-size:15px; color:#374151; font-family: Arial, sans-serif;">Hello {{userName}},</p>
+              <p style="margin:0 0 16px; font-size:15px; color:#4b5563; line-height:1.5;">Your scheduled cost report is ready and attached to this email.</p>
 
-      <a href="{{dashboardUrl}}" class="button">Open Dashboard</a>
-    </div>
-    <div class="footer">
-      <p><strong>GHOST Cost Dashboard</strong></p>
-      <p>Automated Report • This email was sent to {{recipientEmail}}</p>
-      <p style="margin-top: 10px;">
-        <a href="{{settingsUrl}}" style="color: #1e40af; text-decoration: none;">Update Schedule Settings</a>
-      </p>
-    </div>
-  </div>
+              <!-- Key Details -->
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse; font-family: Arial, sans-serif;">
+                <tr>
+                  <td width="140" style="padding:6px 12px 6px 0; border-bottom:1px solid #f3f4f6; font-size:14px; color:#6b7280;">Report Period</td>
+                  <td style="padding:6px 0; border-bottom:1px solid #f3f4f6; font-size:14px; color:#111827; font-weight:500;">{{timeframe}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:6px 12px 6px 0; border-bottom:1px solid #f3f4f6; font-size:14px; color:#6b7280;">Data Mode</td>
+                  <td style="padding:6px 0; border-bottom:1px solid #f3f4f6; font-size:14px; color:#111827; font-weight:500;">{{dataMode}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:6px 12px 6px 0; border-bottom:1px solid #f3f4f6; font-size:14px; color:#6b7280;">Accounts</td>
+                  <td style="padding:6px 0; border-bottom:1px solid #f3f4f6; font-size:14px; color:#111827; font-weight:500;">{{accountCount}} accounts</td>
+                </tr>
+                <tr>
+                  <td style="padding:6px 12px 6px 0; border-bottom:1px solid #f3f4f6; font-size:14px; color:#6b7280;">Format</td>
+                  <td style="padding:6px 0; border-bottom:1px solid #f3f4f6; font-size:14px; color:#111827; font-weight:500;">{{format}}</td>
+                </tr>
+                <tr>
+                  <td style="padding:6px 12px 6px 0; font-size:14px; color:#6b7280;">Generated</td>
+                  <td style="padding:6px 0; font-size:14px; color:#111827; font-weight:500;">{{timestamp}}</td>
+                </tr>
+              </table>
+
+              <p style="margin:16px 0 8px; font-size:15px; color:#4b5563; line-height:1.5;">You can download the report directly or visit the GHOST Dashboard for interactive analysis.</p>
+
+              <!-- Download Report Button (conditional) -->
+              {{#if downloadUrl}}
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin:12px auto;">
+                <tr>
+                  <td align="center" style="border-radius:6px; background:#16a34a;">
+                    <!--[if mso]>
+                      <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml"
+                        xmlns:w="urn:schemas-microsoft-com:office:word"
+                        href="{{downloadUrl}}" style="height:42px;v-text-anchor:middle;width:160px;"
+                        arcsize="15%" strokecolor="#16a34a" fillcolor="#16a34a">
+                        <w:anchorlock/>
+                        <center style="color:#ffffff; font-family:Arial, sans-serif; font-size:14px; font-weight:bold;">Download Report</center>
+                      </v:roundrect>
+                    <![endif]-->
+                    <!--[if !mso]><!-->
+                      <a href="{{downloadUrl}}"
+                         style="display:inline-block; padding:12px 24px; background:#16a34a; color:#ffffff; font-size:14px; font-weight:bold; text-decoration:none; border-radius:6px; border:0; font-family:Arial, sans-serif;">Download Report</a>
+                    <!--<![endif]-->
+                  </td>
+                </tr>
+              </table>
+              {{/if}}
+
+              <!-- Open Dashboard Button -->
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin:12px auto;">
+                <tr>
+                  <td align="center" style="border-radius:6px; background:#2563eb;">
+                    <!--[if mso]>
+                      <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml"
+                        xmlns:w="urn:schemas-microsoft-com:office:word"
+                        href="{{siteUrl}}" style="height:42px;v-text-anchor:middle;width:160px;"
+                        arcsize="15%" strokecolor="#2563eb" fillcolor="#2563eb">
+                        <w:anchorlock/>
+                        <center style="color:#ffffff; font-family:Arial, sans-serif; font-size:14px; font-weight:bold;">Open Dashboard</center>
+                      </v:roundrect>
+                    <![endif]-->
+                    <!--[if !mso]><!-->
+                      <a href="{{siteUrl}}"
+                         style="display:inline-block; padding:12px 24px; background:#2563eb; color:#ffffff; font-size:14px; font-weight:bold; text-decoration:none; border-radius:6px; border:0; font-family:Arial, sans-serif;">Open Dashboard</a>
+                    <!--<![endif]-->
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:20px 32px; border-top:1px solid #e5e7eb; text-align:center;">
+              <p style="margin:0 0 4px; font-size:13px; font-weight:600; color:#374151;">GHOST Cost Dashboard</p>
+              <p style="margin:2px 0; font-size:12px; color:#9ca3af;">Automated Report &bull; Sent to {{recipientEmail}}</p>
+              <p style="margin:10px 0 0;">
+                <a href="{{siteUrl}}/profile" style="font-size:12px; color:#4b5563; text-decoration:none; font-family: Arial, sans-serif;">View Your Profile</a>
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>
   `.trim()

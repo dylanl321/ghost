@@ -99,6 +99,23 @@ function createSummarySheet(dataset: NormalizedDataset): SheetConfig | null {
     })
   })
 
+  // Calculate YTD totals if available
+  const ytdCosts = new Map<string, number>()
+  if (dataset.ytdSummary) {
+    const ytdData = (dataset.ytdSummary as any)?.data || dataset.ytdSummary
+    if (ytdData?.resultsByTime) {
+      ytdData.resultsByTime.forEach((result: any) => {
+        result.Groups?.forEach((group: any) => {
+          const accountId = group.Keys?.[0]
+          const cost = parseFloat(group.Metrics?.['UnblendedCost']?.Amount || '0')
+          if (accountId) {
+            ytdCosts.set(accountId, (ytdCosts.get(accountId) || 0) + cost)
+          }
+        })
+      })
+    }
+  }
+
   // Build account summary data
   const accountMap = new Map()
   dataset.accountsList.forEach(acc => {
@@ -106,14 +123,23 @@ function createSummarySheet(dataset: NormalizedDataset): SheetConfig | null {
     if (acc.awsGovCloudAccountID) accountMap.set(acc.awsGovCloudAccountID, acc)
   })
 
+  const hasYtdData = ytdCosts.size > 0
+
   const data = Array.from(accountCosts.entries())
     .map(([accountId, cost]) => {
       const account = accountMap.get(accountId)
-      return {
+      const rowData: any = {
         accountName: account?.name || accountId,
         accountId,
         cost
       }
+
+      // Add YTD if available
+      if (hasYtdData) {
+        rowData.ytdTotal = ytdCosts.get(accountId) || 0
+      }
+
+      return rowData
     })
     .sort((a, b) => b.cost - a.cost)
 
@@ -123,10 +149,24 @@ function createSummarySheet(dataset: NormalizedDataset): SheetConfig | null {
     { key: 'cost', header: 'Total Cost', format: 'currency', decimals: 2, alignment: 'right', width: 20 }
   ]
 
+  // Add YTD column if data is available
+  if (hasYtdData) {
+    columns.push({
+      key: 'ytdTotal',
+      header: 'YTD Total',
+      format: 'currency',
+      decimals: 2,
+      alignment: 'right',
+      width: 20
+    })
+  }
+
   return {
     name: 'Cost Summary by Account',
     type: 'table',
-    description: 'Total costs grouped by AWS account',
+    description: hasYtdData
+      ? 'Total costs grouped by AWS account with YTD totals'
+      : 'Total costs grouped by AWS account',
     data,
     columns,
     formatting: {

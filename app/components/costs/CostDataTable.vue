@@ -652,13 +652,18 @@ const generateDetailedReport = () => {
   csvContent += 'Average Cost per Account,' + formatCurrency(averageCost) + '\n'
   csvContent += 'Over Budget Accounts,' + selectedAccountsData.filter(acc => acc.status === 'over').length + '\n'
   csvContent += 'Under Budget Accounts,' + selectedAccountsData.filter(acc => acc.status === 'under').length + '\n'
+  csvContent += '\n'
+  csvContent += '=== FORECAST DATA ===\n\n'
+  csvContent += 'Total End of Month Forecast,' + formatCurrency(selectedAccountsData.reduce((sum, acc) => sum + (acc.endOfMonthForecast || 0), 0)) + '\n'
+  csvContent += 'Total YTD,' + formatCurrency(selectedAccountsData.reduce((sum, acc) => sum + (acc.ytdTotal || 0), 0)) + '\n'
+  csvContent += 'Total Full Year Estimate,' + formatCurrency(selectedAccountsData.reduce((sum, acc) => sum + (acc.fullYearEstimate || 0), 0)) + '\n'
   csvContent += '\n\n'
   
   // Sheet 2: Account Details
   csvContent += '=== ACCOUNT DETAILS ===\n\n'
-  const accountHeaders = ['Account ID', 'Account Name', 'Account Status', 'Department', 'Line of Business', 'Actual Cost', 'Budget', 'Utilization %', 'Variance', 'Budget Status']
+  const accountHeaders = ['Account ID', 'Account Name', 'Account Status', 'Department', 'Line of Business', 'Actual Cost', 'Budget', 'Utilization %', 'Variance', 'Budget Status', 'End of Month Forecast', 'YTD Total', 'Full Year Estimate']
   csvContent += accountHeaders.map(escapeCSV).join(',') + '\n'
-  
+
   selectedAccountsData.forEach(acc => {
     const row = [
       acc.accountId,
@@ -670,7 +675,10 @@ const generateDetailedReport = () => {
       formatCurrency(acc.budgetedCost || 0),
       (acc.utilization || 0).toFixed(1) + '%',
       formatCurrency(acc.variance || 0),
-      acc.status || ''
+      acc.status || '',
+      formatCurrency(acc.endOfMonthForecast || 0),
+      formatCurrency(acc.ytdTotal || 0),
+      formatCurrency(acc.fullYearEstimate || 0)
     ]
     csvContent += row.map(escapeCSV).join(',') + '\n'
   })
@@ -819,7 +827,11 @@ const exportToPDFHandler = async () => {
     'Average Utilization': `${averageUtilization.toFixed(1)}%`,
     'Over Budget Accounts': dataToExport.filter(acc => acc.status === 'over').length,
     'Under Budget Accounts': dataToExport.filter(acc => acc.status === 'under').length,
-    'Warning Accounts': dataToExport.filter(acc => acc.status === 'warning').length
+    'Warning Accounts': dataToExport.filter(acc => acc.status === 'warning').length,
+    '': '', // Spacer
+    'Total End of Month Forecast': formatCurrency(dataToExport.reduce((sum, acc) => sum + (acc.endOfMonthForecast || 0), 0)),
+    'Total YTD': formatCurrency(dataToExport.reduce((sum, acc) => sum + (acc.ytdTotal || 0), 0)),
+    'Total Full Year Estimate': formatCurrency(dataToExport.reduce((sum, acc) => sum + (acc.fullYearEstimate || 0), 0))
   }
   
   // Prepare table data
@@ -912,9 +924,34 @@ const exportToPDFHandler = async () => {
 }
 
 const exportToCSV = () => {
-  // Prepare CSV data
+  // Calculate summary totals
+  const totalCost = filteredData.value.reduce((sum, acc) => sum + (acc.actualCost || 0), 0)
+  const totalBudget = filteredData.value.reduce((sum, acc) => sum + (acc.budgetedCost || 0), 0)
+  const totalEndOfMonth = filteredData.value.reduce((sum, acc) => sum + (acc.endOfMonthForecast || 0), 0)
+  const totalYtd = filteredData.value.reduce((sum, acc) => sum + (acc.ytdTotal || 0), 0)
+  const totalFullYear = filteredData.value.reduce((sum, acc) => sum + (acc.fullYearEstimate || 0), 0)
+
+  // Build CSV with summary header
+  let csvContent = ''
+
+  // Summary section
+  csvContent += '=== SUMMARY ===\n'
+  csvContent += 'Report Generated,' + new Date().toISOString() + '\n'
+  csvContent += 'Data Mode,' + props.mode.toUpperCase() + '\n'
+  csvContent += 'Timeframe,' + getTimeframeLabel() + '\n'
+  csvContent += 'Total Accounts,' + filteredData.value.length + '\n'
+  csvContent += '\n'
+  csvContent += 'Total ' + getTimeframeLabel() + ' Cost,' + formatCurrency(totalCost) + '\n'
+  csvContent += 'Total Budget,' + formatCurrency(totalBudget) + '\n'
+  csvContent += 'Total End of Month Forecast,' + formatCurrency(totalEndOfMonth) + '\n'
+  csvContent += 'Total YTD,' + formatCurrency(totalYtd) + '\n'
+  csvContent += 'Total Full Year Estimate,' + formatCurrency(totalFullYear) + '\n'
+  csvContent += '\n\n'
+
+  // Account data table
+  csvContent += '=== ACCOUNT DATA ===\n\n'
   const headers = visibleColumns.value.map(col => col.label)
-  const rows = filteredData.value.map(row => 
+  const rows = filteredData.value.map(row =>
     visibleColumns.value.map(col => {
       const value = getNestedValue(row, col.key)
       if (col.format && value !== null && value !== undefined) {
@@ -923,18 +960,15 @@ const exportToCSV = () => {
       return value || ''
     })
   )
-  
-  // Build CSV content
-  const csvContent = [
-    headers.map(escapeCSV).join(','),
-    ...rows.map(row => row.map(escapeCSV).join(','))
-  ].join('\n')
-  
+
+  csvContent += headers.map(escapeCSV).join(',') + '\n'
+  csvContent += rows.map(row => row.map(escapeCSV).join(',')).join('\n')
+
   // Generate filename with timestamp
   const timestamp = new Date().toISOString().split('T')[0]
   const modeLabel = props.mode === 'proforma' ? 'proforma' : 'billable'
   const filename = `cost-data-${modeLabel}-${timestamp}.csv`
-  
+
   // Download file
   downloadCSV(csvContent, filename)
 }

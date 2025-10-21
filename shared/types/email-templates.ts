@@ -230,15 +230,15 @@ export const COST_REPORT_VARIABLES: TemplateVariable[] = [
 
   // URLs
   {
-    name: 'dashboardUrl',
-    description: 'Link to GHOST dashboard',
+    name: 'siteUrl',
+    description: 'Base URL of the GHOST dashboard site',
     example: 'https://ghost.example.com',
     required: false
   },
   {
-    name: 'settingsUrl',
-    description: 'Link to report settings',
-    example: 'https://ghost.example.com/reports/scheduled',
+    name: 'downloadUrl',
+    description: 'S3 presigned URL to download the report (30-day expiration)',
+    example: 'https://s3.amazonaws.com/...',
     required: false
   },
   {

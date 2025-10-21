@@ -182,10 +182,11 @@ resource "aws_ecs_task_definition" "main" {
           name  = "AWS_SES_REPLY_TO"
           value = "aws-ghost@gd-ms.com"
         },
-        {
-          name  = "AWS_SES_CONFIGURATION_SET"
-          value = "ghost-scheduled-reports-${var.env}"
-        },
+        # Configuration set is optional - comment out if not created in SES yet
+        # {
+        #   name  = "AWS_SES_CONFIGURATION_SET"
+        #   value = "ghost-scheduled-reports-${var.env}"
+        # },
         {
           name  = "AWS_SES_REGION"
           value = "us-gov-west-1"
@@ -204,6 +205,10 @@ resource "aws_ecs_task_definition" "main" {
           value = aws_dynamodb_table.report_executions.name
         },
         {
+          name  = "SHARED_REPORTS_TABLE"
+          value = aws_dynamodb_table.shared_reports.name
+        },
+        {
           name  = "REPORT_SCHEDULER_ENABLED"
           value = "true"
         },
@@ -218,6 +223,23 @@ resource "aws_ecs_task_definition" "main" {
         {
           name  = "MAX_REPORTS_PER_ADMIN"
           value = "unlimited"
+        },
+        # S3 Storage Configuration (GovCloud)
+        {
+          name  = "AWS_S3_STORAGE_BUCKET"
+          value = "ghost-app-storage-${var.environment}"
+        },
+        {
+          name  = "AWS_S3_STORAGE_REGION"
+          value = "us-gov-west-1"
+        },
+        {
+          name  = "AWS_S3_STORAGE_ACCOUNT_ID"
+          value = "083876038518"
+        },
+        {
+          name  = "S3_PRESIGNED_URL_EXPIRES_DAYS"
+          value = "30"
         },
         # Public URLs (environment-specific)
         {
