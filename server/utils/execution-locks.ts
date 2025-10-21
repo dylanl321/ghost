@@ -10,7 +10,7 @@ import { PutItemCommand } from '@aws-sdk/client-dynamodb'
 import { marshall } from '@aws-sdk/util-dynamodb'
 import { getDynamoDBClient } from '../lib/aws-client-factory'
 import { getItem, deleteItem } from './dynamodb'
-import { getTableName, getTableEnvironment } from '../lib/dynamodb-config'
+import { getTableName, getTableEnvironment, getTableAccountId } from '../lib/dynamodb-config'
 
 export interface ExecutionLock {
   lockId: string              // Format: {reportId}#{scheduledTime}
@@ -48,6 +48,7 @@ export async function claimExecutionLock(
   try {
     const tableName = await getTableName('reportExecutionLocks')
     const environment = await getTableEnvironment('reportExecutionLocks')
+    const accountId = await getTableAccountId('reportExecutionLocks')
     const lockId = createLockId(reportId, scheduledTime)
     const now = new Date().toISOString()
     const expiresAt = Math.floor(Date.now() / 1000) + 3600 // 1 hour from now
@@ -64,7 +65,7 @@ export async function claimExecutionLock(
     // Try to create the lock with a conditional write
     // This will only succeed if no lock exists for this lockId
     try {
-      const client = await getDynamoDBClient(environment)
+      const client = await getDynamoDBClient(environment, undefined, accountId)
 
       const command = new PutItemCommand({
         TableName: tableName,
@@ -79,7 +80,8 @@ export async function claimExecutionLock(
       const verification = await getItem(
         tableName,
         { lockId },
-        environment
+        environment,
+        accountId
       )
 
       if (verification && verification.claimedBy === lock.claimedBy) {
@@ -119,13 +121,15 @@ export async function releaseExecutionLock(
   try {
     const tableName = await getTableName('reportExecutionLocks')
     const environment = await getTableEnvironment('reportExecutionLocks')
+    const accountId = await getTableAccountId('reportExecutionLocks')
     const lockId = createLockId(reportId, scheduledTime)
 
     // First, check if we own the lock
     const lock = await getItem(
       tableName,
       { lockId },
-      environment
+      environment,
+      accountId
     ) as ExecutionLock | null
 
     if (!lock) {
@@ -142,7 +146,8 @@ export async function releaseExecutionLock(
     await deleteItem(
       tableName,
       { lockId },
-      environment
+      environment,
+      accountId
     )
 
     console.log(`✓ Lock released: ${lockId}`)
@@ -163,12 +168,14 @@ export async function hasExecutionLock(
   try {
     const tableName = await getTableName('reportExecutionLocks')
     const environment = await getTableEnvironment('reportExecutionLocks')
+    const accountId = await getTableAccountId('reportExecutionLocks')
     const lockId = createLockId(reportId, scheduledTime)
 
     const lock = await getItem(
       tableName,
       { lockId },
-      environment
+      environment,
+      accountId
     ) as ExecutionLock | null
 
     if (lock) {

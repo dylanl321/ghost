@@ -77,7 +77,7 @@ function loadFromEnvironment(): DynamoDBConfig {
   const govCloudRegion = process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1'
   const commercialRegion = process.env.AWS_COMMERCIAL_REGION || 'us-east-1'
   const govCloudAccountId = process.env.AWS_GOVCLOUD_ORGANIZATIONS_ACCOUNT_ID || ''
-  const commercialAccountId = process.env.AWS_COMMERCIAL_ORGANIZATIONS_ACCOUNT_ID || ''
+  const commercialAccountId = process.env.AWS_COMMERCIAL_ORGANIZATIONS_ACCOUNT_ID || '205950196477'
 
   // Deployment account where app and local DynamoDB tables are deployed
   // Credentials are for master account, so we assume role into deployment account
@@ -198,4 +198,12 @@ export async function getTableName(configKey: keyof DynamoDBConfig): Promise<str
 export async function getTableEnvironment(configKey: keyof DynamoDBConfig): Promise<'commercial' | 'govcloud'> {
   const tableConfig = await getTableConfig(configKey)
   return tableConfig.environment
+}
+
+/**
+ * Helper to get account ID for a table
+ */
+export async function getTableAccountId(configKey: keyof DynamoDBConfig): Promise<string> {
+  const tableConfig = await getTableConfig(configKey)
+  return tableConfig.accountId
 }

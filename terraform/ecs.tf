@@ -46,10 +46,6 @@ resource "aws_ecs_task_definition" "main" {
           name  = "DYNAMODB_CONFIG_SECRET_NAME"
           value = aws_secretsmanager_secret.dynamodb_config.name
         },
-        {
-          name  = "DYNAMODB_USE_TASK_ROLE"
-          value = "true"
-        },
         # AWS Regions (moved from Secrets Manager - not sensitive)
         {
           name  = "AWS_COMMERCIAL_REGION"
@@ -66,7 +62,7 @@ resource "aws_ecs_task_definition" "main" {
         },
         {
           name  = "AWS_GOVCLOUD_ORGANIZATIONS_ACCOUNT_ID"
-          value = "205950196477"
+          value = "374673712317"
         },
         {
           name  = "AWS_MASTER_ACCOUNT_ID"

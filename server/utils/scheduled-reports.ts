@@ -19,7 +19,7 @@ import {
   queryItems,
   scanItems
 } from './dynamodb'
-import { getTableName, getTableEnvironment } from '../lib/dynamodb-config'
+import { getTableName, getTableEnvironment, getTableAccountId } from '../lib/dynamodb-config'
 
 // Table configuration now loaded dynamically from Secrets Manager or environment variables
 
@@ -136,6 +136,7 @@ export async function getReport(reportId: string): Promise<ScheduledReport | nul
   try {
     const tableName = await getTableName('scheduledReports')
     const environment = await getTableEnvironment('scheduledReports')
+    const accountId = await getTableAccountId('scheduledReports')
 
     // Query by partition key (reportId)
     const result = await queryItems(
@@ -145,7 +146,8 @@ export async function getReport(reportId: string): Promise<ScheduledReport | nul
         expressionAttributeValues: { ':reportId': reportId },
         limit: 1
       },
-      environment
+      environment,
+      accountId
     )
 
     return result.items[0] as ScheduledReport || null
@@ -171,6 +173,7 @@ export async function listUserReports(
 
     const tableName = await getTableName('scheduledReports')
     const environment = await getTableEnvironment('scheduledReports')
+    const accountId = await getTableAccountId('scheduledReports')
 
     const expressionAttributeValues: Record<string, any> = { ':userId': userId }
     const expressionAttributeNames: Record<string, string> = {}
@@ -189,7 +192,8 @@ export async function listUserReports(
       undefined,
       environment,
       Object.keys(expressionAttributeNames).length > 0 ? expressionAttributeNames : undefined,
-      expressionAttributeValues
+      expressionAttributeValues,
+      accountId
     )
 
     return {
@@ -211,12 +215,16 @@ export async function listAllReports(
   try {
     const tableName = await getTableName('scheduledReports')
     const environment = await getTableEnvironment('scheduledReports')
+    const accountId = await getTableAccountId('scheduledReports')
     const result = await scanItems(
       tableName,
       undefined,
       limit,
       undefined,
-      environment
+      environment,
+      undefined,
+      undefined,
+      accountId
     )
 
     return {
@@ -238,6 +246,7 @@ export async function getUpcomingReports(
   try {
     const tableName = await getTableName('scheduledReports')
     const environment = await getTableEnvironment('scheduledReports')
+    const accountId = await getTableAccountId('scheduledReports')
     const now = new Date()
     const future = new Date(now.getTime() + withinSeconds * 1000)
 
@@ -253,7 +262,8 @@ export async function getUpcomingReports(
       {
         ':active': 'active',
         ':future': future.toISOString()
-      }
+      },
+      accountId
     )
 
     return result.items.filter((report: any) => {
@@ -306,7 +316,8 @@ export async function createReport(
 
   const tableName = await getTableName('scheduledReports')
   const environment = await getTableEnvironment('scheduledReports')
-  await putItem(tableName, report, environment)
+  const accountId = await getTableAccountId('scheduledReports')
+  await putItem(tableName, report, environment, accountId)
   return report
 }
 
@@ -346,7 +357,8 @@ export async function updateReport(
 
     const tableName = await getTableName('scheduledReports')
     const environment = await getTableEnvironment('scheduledReports')
-    await putItem(tableName, updatedReport, environment)
+    const accountId = await getTableAccountId('scheduledReports')
+    await putItem(tableName, updatedReport, environment, accountId)
     return updatedReport as ScheduledReport
   } catch (error) {
     console.error('Error updating report:', error)
@@ -364,10 +376,12 @@ export async function deleteReport(reportId: string): Promise<boolean> {
 
     const tableName = await getTableName('scheduledReports')
     const environment = await getTableEnvironment('scheduledReports')
+    const accountId = await getTableAccountId('scheduledReports')
     await deleteItem(
       tableName,
       { reportId, createdAt: report.createdAt },
-      environment
+      environment,
+      accountId
     )
     return true
   } catch (error) {
@@ -410,10 +424,12 @@ export async function updateReportRunStatus(
 
     const tableName = await getTableName('scheduledReports')
     const environment = await getTableEnvironment('scheduledReports')
+    const accountId = await getTableAccountId('scheduledReports')
     await putItem(
       tableName,
       { ...report, ...updates },
-      environment
+      environment,
+      accountId
     )
   } catch (error) {
     console.error('Error updating run status:', error)
@@ -433,7 +449,8 @@ export async function recordExecution(execution: Omit<ReportExecution, 'executio
 
     const executionsTableName = await getTableName('reportExecutions')
     const environment = await getTableEnvironment('reportExecutions')
-    await putItem(executionsTableName, fullExecution, environment)
+    const accountId = await getTableAccountId('reportExecutions')
+    await putItem(executionsTableName, fullExecution, environment, accountId)
   } catch (error) {
     console.error('Error recording execution:', error)
   }
@@ -449,6 +466,7 @@ export async function getExecutionHistory(
   try {
     const executionsTableName = await getTableName('reportExecutions')
     const environment = await getTableEnvironment('reportExecutions')
+    const accountId = await getTableAccountId('reportExecutions')
 
     // Query by partition key (reportId), sorted by executionTime descending
     const result = await queryItems(
@@ -458,7 +476,8 @@ export async function getExecutionHistory(
         expressionAttributeValues: { ':reportId': reportId },
         limit
       },
-      environment
+      environment,
+      accountId
     )
 
     // Sort by execution time descending
