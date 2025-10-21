@@ -91,8 +91,8 @@ export const useScheduledReports = () => {
       )
 
       if (response.success) {
-        // Refresh the reports list
-        await fetchReports()
+        // Refresh the reports list in background (don't await)
+        fetchReports()
         return true
       } else {
         error.value = response.error || 'Failed to create report'
@@ -131,8 +131,8 @@ export const useScheduledReports = () => {
         if (currentReport.value?.reportId === reportId && response.data) {
           currentReport.value = response.data
         }
-        // Refresh the reports list
-        await fetchReports()
+        // Refresh the reports list in background (don't await)
+        fetchReports()
         return true
       } else {
         error.value = response.error || 'Failed to update report'

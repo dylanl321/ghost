@@ -254,19 +254,60 @@
           <UFormGroup label="Email Subject">
             <UInput
               v-model="form.emailTemplate.subject"
-              placeholder="Your AWS Cost Report - {{reportName}}"
+              placeholder="AWS Cost Report for {{reportPeriod}}"
             />
             <template #help>
-              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Available variables: {{reportName}}, {{timeframe}}, {{totalCost}}, {{date}}
-              </p>
+              <details class="mt-2">
+                <summary class="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:underline">
+                  View all available variables (click to expand)
+                </summary>
+                <div class="mt-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 text-xs space-y-3">
+                  <div>
+                    <p class="font-semibold text-gray-900 dark:text-white mb-1">Basic Info:</p>
+                    <p class="text-gray-600 dark:text-gray-400">
+                      {{reportName}}, {{timeframe}}, {{dataMode}}, {{accountCount}}, {{format}}
+                    </p>
+                  </div>
+                  <div>
+                    <p class="font-semibold text-gray-900 dark:text-white mb-1">Current Date (when report runs):</p>
+                    <p class="text-gray-600 dark:text-gray-400">
+                      {{currentDate}}, {{currentMonth}}, {{currentYear}}, {{currentDay}}
+                    </p>
+                  </div>
+                  <div>
+                    <p class="font-semibold text-gray-900 dark:text-white mb-1">Report Period Start:</p>
+                    <p class="text-gray-600 dark:text-gray-400">
+                      {{startDate}}, {{startMonth}}, {{startYear}}, {{startDay}}
+                    </p>
+                  </div>
+                  <div>
+                    <p class="font-semibold text-gray-900 dark:text-white mb-1">Report Period End:</p>
+                    <p class="text-gray-600 dark:text-gray-400">
+                      {{endDate}}, {{endMonth}}, {{endYear}}, {{endDay}}
+                    </p>
+                  </div>
+                  <div>
+                    <p class="font-semibold text-gray-900 dark:text-white mb-1">Computed Values:</p>
+                    <p class="text-gray-600 dark:text-gray-400">
+                      {{dateRange}}, {{reportPeriod}}, {{quarter}}
+                    </p>
+                  </div>
+                  <div class="pt-2 border-t border-gray-300 dark:border-gray-600">
+                    <p class="text-gray-700 dark:text-gray-300 italic">
+                      <span class="font-semibold">Example:</span> "Cost Report for {{startMonth}} {{startYear}}"
+                      <br>
+                      <span class="text-gray-500 dark:text-gray-400">(For a report on Oct 5th covering September, this becomes "Cost Report for September 2025")</span>
+                    </p>
+                  </div>
+                </div>
+              </details>
             </template>
           </UFormGroup>
 
           <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
             <p class="text-sm text-gray-600 dark:text-gray-400">
               <Icon name="i-heroicons-information-circle" class="w-4 h-4 inline mr-1" />
-              A professional email template will be used with your report attached.
+              A formatted email will be used with your report attached.
             </p>
           </div>
         </div>
@@ -365,7 +406,7 @@ const form = ref({
     timezone: 'America/New_York'
   },
   emailTemplate: {
-    subject: 'Your AWS Cost Report - {{reportName}}',
+    subject: 'AWS Cost Report for {{reportPeriod}}',
     body: '',
     isCustom: false
   }
@@ -546,7 +587,7 @@ function resetForm() {
       timezone: 'America/New_York'
     },
     emailTemplate: {
-      subject: 'Your AWS Cost Report - {{reportName}}',
+      subject: 'AWS Cost Report for {{reportPeriod}}',
       body: '',
       isCustom: false
     }

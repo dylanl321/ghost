@@ -36,11 +36,14 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
 
     console.log(`  → Report generated: ${reportResult.filename} (${reportResult.buffer.length} bytes)`)
 
-    // Step 2: Prepare email content
+    // Step 2: Prepare email content with enhanced date context
+    const dateContext = buildDateContext(report.reportConfig.timeframe)
+
     const emailSubject = renderTemplate(report.emailTemplate.subject, {
       reportName: report.reportName,
       timeframe: formatTimeframe(report.reportConfig.timeframe),
-      dataMode: formatDataMode(report.reportConfig.dataMode)
+      dataMode: formatDataMode(report.reportConfig.dataMode),
+      ...dateContext
     })
 
     let emailBody = report.emailTemplate.body
@@ -66,7 +69,8 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
       }),
       dashboardUrl: process.env.NUXT_PUBLIC_SITE_URL || 'https://ghost-dashboard.com',
       settingsUrl: `${process.env.NUXT_PUBLIC_SITE_URL || 'https://ghost-dashboard.com'}/reports/scheduled`,
-      recipientEmail: report.recipients[0] // First recipient
+      recipientEmail: report.recipients[0], // First recipient
+      ...dateContext // Include all date variables
     }
 
     const renderedBody = renderTemplate(emailBody, templateContext)
@@ -223,4 +227,98 @@ function formatTimeframe(timeframe: string): string {
  */
 function formatDataMode(mode: string): string {
   return mode === 'billable' ? 'Billable (Actual Costs)' : 'Pro-forma (With Savings Plans)'
+}
+
+/**
+ * Build comprehensive date context for email templates
+ * Provides various date formats based on the report timeframe
+ */
+function buildDateContext(timeframe: string): Record<string, string> {
+  const now = new Date()
+  const currentYear = now.getFullYear()
+  const currentMonth = now.getMonth() // 0-indexed
+
+  // Calculate date ranges based on timeframe
+  let startDate: Date
+  let endDate: Date
+
+  switch (timeframe) {
+    case 'thisMonth':
+      startDate = new Date(currentYear, currentMonth, 1)
+      endDate = new Date(currentYear, currentMonth + 1, 0)
+      break
+
+    case 'lastMonth':
+      startDate = new Date(currentYear, currentMonth - 1, 1)
+      endDate = new Date(currentYear, currentMonth, 0)
+      break
+
+    case 'last3Months':
+      startDate = new Date(currentYear, currentMonth - 3, 1)
+      endDate = new Date(currentYear, currentMonth, 0)
+      break
+
+    case 'last6Months':
+      startDate = new Date(currentYear, currentMonth - 6, 1)
+      endDate = new Date(currentYear, currentMonth, 0)
+      break
+
+    case 'last12Months':
+      startDate = new Date(currentYear, currentMonth - 12, 1)
+      endDate = new Date(currentYear, currentMonth, 0)
+      break
+
+    case 'yearToDate':
+      startDate = new Date(currentYear, 0, 1)
+      endDate = now
+      break
+
+    case 'lastYear':
+      startDate = new Date(currentYear - 1, 0, 1)
+      endDate = new Date(currentYear - 1, 11, 31)
+      break
+
+    default:
+      startDate = new Date(currentYear, currentMonth - 1, 1)
+      endDate = new Date(currentYear, currentMonth, 0)
+  }
+
+  // Build comprehensive date variables
+  return {
+    // Current date/time
+    currentDate: now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+    currentMonth: now.toLocaleDateString('en-US', { month: 'long' }),
+    currentMonthShort: now.toLocaleDateString('en-US', { month: 'short' }),
+    currentYear: currentYear.toString(),
+    currentDay: now.getDate().toString(),
+
+    // Report period start
+    startDate: startDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+    startMonth: startDate.toLocaleDateString('en-US', { month: 'long' }),
+    startMonthShort: startDate.toLocaleDateString('en-US', { month: 'short' }),
+    startYear: startDate.getFullYear().toString(),
+    startDay: startDate.getDate().toString(),
+
+    // Report period end
+    endDate: endDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+    endMonth: endDate.toLocaleDateString('en-US', { month: 'long' }),
+    endMonthShort: endDate.toLocaleDateString('en-US', { month: 'short' }),
+    endYear: endDate.getFullYear().toString(),
+    endDay: endDate.getDate().toString(),
+
+    // Date range
+    dateRange: `${startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
+
+    // ISO format dates (for technical use)
+    startDateISO: startDate.toISOString().split('T')[0],
+    endDateISO: endDate.toISOString().split('T')[0],
+
+    // Quarter information
+    quarter: `Q${Math.floor(startDate.getMonth() / 3) + 1}`,
+
+    // Relative descriptions
+    reportPeriod: timeframe === 'lastMonth'
+      ? startDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+      : `${startDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })} - ${endDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
+  }
 }

@@ -50,6 +50,7 @@ export interface TemplateVariable {
  * Available template variables for cost reports
  */
 export const COST_REPORT_VARIABLES: TemplateVariable[] = [
+  // Basic report info
   {
     name: 'userName',
     description: 'Name of the recipient',
@@ -64,14 +65,14 @@ export const COST_REPORT_VARIABLES: TemplateVariable[] = [
   },
   {
     name: 'timeframe',
-    description: 'Report time period',
+    description: 'Report time period (formatted)',
     example: 'Last Month',
     required: true
   },
   {
     name: 'dataMode',
     description: 'Cost data mode (Billable or Pro-forma)',
-    example: 'Billable',
+    example: 'Billable (Actual Costs)',
     required: true
   },
   {
@@ -98,6 +99,136 @@ export const COST_REPORT_VARIABLES: TemplateVariable[] = [
     example: 'October 16, 2025 at 2:30 PM EDT',
     required: true
   },
+
+  // Current date/time
+  {
+    name: 'currentDate',
+    description: 'Current date when report runs',
+    example: 'October 5, 2025',
+    required: true
+  },
+  {
+    name: 'currentMonth',
+    description: 'Current month name',
+    example: 'October',
+    required: true
+  },
+  {
+    name: 'currentMonthShort',
+    description: 'Current month abbreviated',
+    example: 'Oct',
+    required: true
+  },
+  {
+    name: 'currentYear',
+    description: 'Current year',
+    example: '2025',
+    required: true
+  },
+  {
+    name: 'currentDay',
+    description: 'Current day of month',
+    example: '5',
+    required: true
+  },
+
+  // Report period start
+  {
+    name: 'startDate',
+    description: 'Report period start date',
+    example: 'September 1, 2025',
+    required: true
+  },
+  {
+    name: 'startMonth',
+    description: 'Report period start month',
+    example: 'September',
+    required: true
+  },
+  {
+    name: 'startMonthShort',
+    description: 'Report period start month abbreviated',
+    example: 'Sep',
+    required: true
+  },
+  {
+    name: 'startYear',
+    description: 'Report period start year',
+    example: '2025',
+    required: true
+  },
+  {
+    name: 'startDay',
+    description: 'Report period start day',
+    example: '1',
+    required: true
+  },
+
+  // Report period end
+  {
+    name: 'endDate',
+    description: 'Report period end date',
+    example: 'September 30, 2025',
+    required: true
+  },
+  {
+    name: 'endMonth',
+    description: 'Report period end month',
+    example: 'September',
+    required: true
+  },
+  {
+    name: 'endMonthShort',
+    description: 'Report period end month abbreviated',
+    example: 'Sep',
+    required: true
+  },
+  {
+    name: 'endYear',
+    description: 'Report period end year',
+    example: '2025',
+    required: true
+  },
+  {
+    name: 'endDay',
+    description: 'Report period end day',
+    example: '30',
+    required: true
+  },
+
+  // Date ranges and computed values
+  {
+    name: 'dateRange',
+    description: 'Report date range (start - end)',
+    example: 'Sep 1 - Sep 30, 2025',
+    required: true
+  },
+  {
+    name: 'reportPeriod',
+    description: 'Report period formatted intelligently',
+    example: 'September 2025',
+    required: true
+  },
+  {
+    name: 'quarter',
+    description: 'Fiscal quarter',
+    example: 'Q3',
+    required: true
+  },
+  {
+    name: 'startDateISO',
+    description: 'Start date in ISO format',
+    example: '2025-09-01',
+    required: true
+  },
+  {
+    name: 'endDateISO',
+    description: 'End date in ISO format',
+    example: '2025-09-30',
+    required: true
+  },
+
+  // URLs
   {
     name: 'dashboardUrl',
     description: 'Link to GHOST dashboard',
@@ -108,6 +239,12 @@ export const COST_REPORT_VARIABLES: TemplateVariable[] = [
     name: 'settingsUrl',
     description: 'Link to report settings',
     example: 'https://ghost.example.com/reports/scheduled',
+    required: false
+  },
+  {
+    name: 'recipientEmail',
+    description: 'Email of the recipient',
+    example: 'user@example.com',
     required: false
   }
 ]

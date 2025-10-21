@@ -3,9 +3,9 @@
  * Handles email sending with attachments for scheduled reports
  *
  * Architecture:
- * - SES resources are in Account A (org account: 083876038518)
- * - Uses cross-account role assumption via aws-client-factory
- * - ECS app runs in Account B but sends emails via Account A's SES
+ * - SES resources are in org/master account (same account as credentials)
+ * - Uses base credentials directly (no role assumption needed)
+ * - ECS app runs in deployment account but credentials are for org account with SES
  */
 
 import { SendRawEmailCommand } from '@aws-sdk/client-ses'
@@ -33,7 +33,6 @@ const SES_FROM_EMAIL = process.env.AWS_SES_FROM_EMAIL || 'aws-ghost@gd-ms.com'
 const SES_FROM_NAME = process.env.AWS_SES_FROM_NAME || 'GHOST AWS Dashboard'
 const SES_REPLY_TO = process.env.AWS_SES_REPLY_TO || 'aws-ghost@gd-ms.com'
 const SES_CONFIG_SET = process.env.AWS_SES_CONFIGURATION_SET // Optional - only if configured
-const SES_ACCOUNT_ID = process.env.AWS_GOVCLOUD_ORGANIZATIONS_ACCOUNT_ID // Account A (org account)
 
 /**
  * Render email template with variable substitution
@@ -137,8 +136,8 @@ export async function sendEmail(options: SendEmailOptions): Promise<{
   error?: string
 }> {
   try {
-    // Get SES client for Account A (org account) with cross-account role assumption
-    const client = await getSESClient('govcloud', SES_REGION, SES_ACCOUNT_ID)
+    // Get SES client using base credentials (SES is in same account as credentials)
+    const client = await getSESClient('govcloud', SES_REGION)
     const mimeMessage = buildMimeMessage(options)
 
     const command = new SendRawEmailCommand({
