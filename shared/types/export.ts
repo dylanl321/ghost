@@ -74,6 +74,8 @@ export interface ExportOptions {
     includeToc?: boolean // Table of contents
     footerText?: string
   }
+  // AI Analysis
+  includeAI?: boolean // Whether to include AI-powered insights (defaults to true)
   // XLSX-specific options
   xlsx?: {
     autoWidth?: boolean

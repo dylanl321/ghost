@@ -3,9 +3,16 @@
     <UCard>
       <template #header>
         <div class="flex items-center justify-between">
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-            Generate Shareable Report Link
-          </h3>
+          <div class="flex items-center gap-2">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+              Generate Shareable Report Link
+            </h3>
+            <UTooltip text="Learn how to create and share reports">
+              <NuxtLink to="/support/docs?topic=reports-guide" class="text-gray-400 hover:text-gray-300">
+                <UIcon name="i-heroicons-question-mark-circle" class="w-5 h-5" />
+              </NuxtLink>
+            </UTooltip>
+          </div>
           <UButton
             color="gray"
             variant="ghost"
@@ -99,6 +106,17 @@
           />
         </div>
 
+        <!-- AI Insights Toggle -->
+        <div>
+          <UCheckbox
+            v-model="includeAI"
+            label="Include AI-powered cost analysis (recommended)"
+          />
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-6">
+            Add intelligent insights and recommendations to PDF reports using Claude AI
+          </p>
+        </div>
+
         <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 space-y-2">
           <p class="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
             Current View Settings
@@ -182,6 +200,7 @@ const emit = defineEmits<{
 const { createSharedReport, copyShareLink, isCreating } = useSharedReports()
 
 const reportName = ref('')
+const includeAI = ref(true) // Default to enabled
 const shareResult = ref<CreateShareReportResponse | null>(null)
 const error = ref<string | null>(null)
 
@@ -194,6 +213,7 @@ const isOpen = computed({
 watch(isOpen, (open) => {
   if (open) {
     reportName.value = generateDefaultName()
+    includeAI.value = true
     shareResult.value = null
     error.value = null
   }
@@ -210,7 +230,13 @@ async function generateShareLink() {
 
   const result = await createSharedReport({
     reportName: reportName.value,
-    config: props.config
+    config: {
+      ...props.config,
+      options: {
+        ...props.config.options,
+        includeAI: includeAI.value
+      }
+    }
   })
 
   if (result.success) {

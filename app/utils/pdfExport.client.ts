@@ -73,6 +73,16 @@ export class PDFExporter {
       orientation: this.options.orientation,
       unit: 'mm',
       format: this.options.format,
+      compress: true, // Enable compression for smaller file sizes
+    })
+
+    // Set PDF metadata
+    this.pdf.setProperties({
+      title: this.options.title || 'GHOST Export',
+      subject: this.options.subtitle || '',
+      author: 'GHOST Cost Dashboard',
+      keywords: 'AWS, Cost Report, GHOST, Analytics',
+      creator: 'GHOST Cost Dashboard'
     })
 
     this.currentY = this.options.margins.top
@@ -472,6 +482,81 @@ export class PDFExporter {
   public getPDF(): jsPDF {
     return this.pdf
   }
+
+  /**
+   * Add visual status indicator
+   */
+  public addStatusIndicator(
+    x: number,
+    y: number,
+    status: 'success' | 'warning' | 'error' | 'info',
+    size: number = 3
+  ): void {
+    const colors = {
+      success: [34, 197, 94],    // Green
+      warning: [234, 179, 8],     // Yellow
+      error: [239, 68, 68],       // Red
+      info: [59, 130, 246]        // Blue
+    }
+
+    this.pdf.setFillColor(...(colors[status] as [number, number, number]))
+    this.pdf.circle(x, y, size, 'F')
+  }
+
+  /**
+   * Add trend arrow
+   */
+  public addTrendArrow(
+    x: number,
+    y: number,
+    trend: 'up' | 'down' | 'flat',
+    size: number = 5
+  ): void {
+    const colors = {
+      up: [239, 68, 68],      // Red for increase
+      down: [34, 197, 94],    // Green for decrease
+      flat: [156, 163, 175]   // Gray for flat
+    }
+
+    this.pdf.setFillColor(...(colors[trend] as [number, number, number]))
+    this.pdf.setDrawColor(...(colors[trend] as [number, number, number]))
+
+    if (trend === 'up') {
+      // Draw up arrow (triangle)
+      this.pdf.triangle(x, y - size, x - size, y + size, x + size, y + size, 'F')
+    } else if (trend === 'down') {
+      // Draw down arrow (triangle)
+      this.pdf.triangle(x, y + size, x - size, y - size, x + size, y - size, 'F')
+    } else {
+      // Draw horizontal line for flat
+      this.pdf.setLineWidth(2)
+      this.pdf.line(x - size, y, x + size, y)
+    }
+  }
+
+  /**
+   * Add bookmark/outline entry
+   */
+  public addBookmark(title: string, level: number = 0): void {
+    // Note: jsPDF doesn't have full bookmark support, but we can track sections
+    // This is a placeholder for future enhancement when switching to a library with better support
+    const pageNumber = this.pdf.getCurrentPageInfo().pageNumber
+    console.log(`Bookmark: ${title} at page ${pageNumber}, level ${level}`)
+  }
+}
+
+/**
+ * Helper to format large numbers with K/M/B suffixes
+ */
+export function formatCompactNumber(value: number): string {
+  if (Math.abs(value) >= 1e9) {
+    return `$${(value / 1e9).toFixed(1)}B`
+  } else if (Math.abs(value) >= 1e6) {
+    return `$${(value / 1e6).toFixed(1)}M`
+  } else if (Math.abs(value) >= 1e3) {
+    return `$${(value / 1e3).toFixed(1)}K`
+  }
+  return `$${value.toFixed(0)}`
 }
 
 export async function exportToPDF(

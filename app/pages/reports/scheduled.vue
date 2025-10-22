@@ -4,9 +4,16 @@
       <!-- Header -->
       <div class="mb-8">
         <div class="flex items-center justify-between mb-2">
-          <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
-            Scheduled Reports
-          </h1>
+          <div class="flex items-center gap-3">
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
+              Scheduled Reports
+            </h1>
+            <UTooltip text="Learn how to create and manage scheduled reports">
+              <NuxtLink to="/support/docs?topic=reports-guide" class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300">
+                <UIcon name="i-heroicons-question-mark-circle" class="w-6 h-6" />
+              </NuxtLink>
+            </UTooltip>
+          </div>
           <UButton
             color="blue"
             icon="i-heroicons-plus"

@@ -11,9 +11,16 @@
     >
       <template #header>
         <div class="flex items-center justify-between">
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-            {{ editingReport ? 'Edit Report' : 'Create Scheduled Report' }}
-          </h3>
+          <div class="flex items-center gap-2">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+              {{ editingReport ? 'Edit Report' : 'Create Scheduled Report' }}
+            </h3>
+            <UTooltip text="Learn how to configure scheduled reports">
+              <NuxtLink to="/support/docs?topic=reports-guide" class="text-gray-400 hover:text-gray-300">
+                <UIcon name="i-heroicons-question-mark-circle" class="w-5 h-5" />
+              </NuxtLink>
+            </UTooltip>
+          </div>
           <UButton
             color="gray"
             variant="ghost"
@@ -150,6 +157,17 @@
                 label="Include cost forecast"
               />
             </div>
+          </UFormGroup>
+
+          <UFormGroup label="AI Enhancements" help="Available for PDF reports only">
+            <UCheckbox
+              v-model="form.includeAI"
+              label="Include AI-powered cost analysis (recommended)"
+              :disabled="form.reportConfig.format !== 'pdf'"
+            />
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-6">
+              Add intelligent insights and recommendations using Claude AI
+            </p>
           </UFormGroup>
         </div>
 
@@ -473,6 +491,7 @@ const form = ref({
   reportName: '',
   description: '',
   accounts: [] as string[],
+  includeAI: true, // Default to enabled
   reportConfig: {
     timeframe: 'lastMonth' as any,
     dataMode: 'billable' as any,
@@ -721,6 +740,7 @@ function resetForm() {
     reportName: '',
     description: '',
     accounts: [],
+    includeAI: true,
     reportConfig: {
       timeframe: 'lastMonth',
       dataMode: 'billable',
@@ -766,7 +786,10 @@ function handleSubmit() {
     description: form.value.description || undefined,
     reportConfig: {
       accounts: form.value.accounts,
-      ...form.value.reportConfig
+      ...form.value.reportConfig,
+      options: {
+        includeAI: form.value.includeAI
+      }
     },
     schedule: form.value.schedule,
     recipients,
@@ -785,6 +808,7 @@ watch(() => [props.editingReport, props.initialConfig] as const, ([report, initi
       reportName: report.reportName,
       description: report.description || '',
       accounts: report.reportConfig.accounts,
+      includeAI: report.reportConfig.options?.includeAI !== false, // Default to true
       reportConfig: report.reportConfig,
       schedule: report.schedule,
       emailTemplate: report.emailTemplate
@@ -798,6 +822,7 @@ watch(() => [props.editingReport, props.initialConfig] as const, ([report, initi
     if (initial.description) form.value.description = initial.description
     if (initial.reportConfig) {
       form.value.accounts = initial.reportConfig.accounts || []
+      form.value.includeAI = initial.reportConfig.options?.includeAI !== false
       Object.assign(form.value.reportConfig, initial.reportConfig)
     }
     if (initial.schedule) {

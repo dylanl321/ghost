@@ -116,6 +116,16 @@ function createSummarySheet(dataset: NormalizedDataset): SheetConfig | null {
     }
   }
 
+  // Get budget data from summary if available
+  const budgetMap = new Map<string, number>()
+  if (dataset.summary?.items) {
+    dataset.summary.items.forEach((item: any) => {
+      if (item.budget && item.accountId) {
+        budgetMap.set(item.accountId, item.budget)
+      }
+    })
+  }
+
   // Build account summary data
   const accountMap = new Map()
   dataset.accountsList.forEach(acc => {
@@ -124,6 +134,7 @@ function createSummarySheet(dataset: NormalizedDataset): SheetConfig | null {
   })
 
   const hasYtdData = ytdCosts.size > 0
+  const hasBudgetData = budgetMap.size > 0
 
   const data = Array.from(accountCosts.entries())
     .map(([accountId, cost]) => {
@@ -139,6 +150,15 @@ function createSummarySheet(dataset: NormalizedDataset): SheetConfig | null {
         rowData.ytdTotal = ytdCosts.get(accountId) || 0
       }
 
+      // Add budget if available
+      if (hasBudgetData) {
+        const budget = budgetMap.get(accountId)
+        if (budget) {
+          rowData.budget = budget
+          rowData.budgetUtilization = (cost / budget) * 100
+        }
+      }
+
       return rowData
     })
     .sort((a, b) => b.cost - a.cost)
@@ -148,6 +168,28 @@ function createSummarySheet(dataset: NormalizedDataset): SheetConfig | null {
     { key: 'accountId', header: 'Account ID', format: 'text', width: 20 },
     { key: 'cost', header: 'Total Cost', format: 'currency', decimals: 2, alignment: 'right', width: 20 }
   ]
+
+  // Add budget columns if data is available
+  if (hasBudgetData) {
+    columns.push(
+      {
+        key: 'budget',
+        header: 'Budget',
+        format: 'currency',
+        decimals: 2,
+        alignment: 'right',
+        width: 20
+      },
+      {
+        key: 'budgetUtilization',
+        header: 'Utilization %',
+        format: 'number',
+        decimals: 1,
+        alignment: 'right',
+        width: 15
+      }
+    )
+  }
 
   // Add YTD column if data is available
   if (hasYtdData) {

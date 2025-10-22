@@ -12,7 +12,7 @@ resource "aws_s3_bucket" "app_storage" {
     Name        = "GHOST Application Storage"
     Environment = local.environment
     ManagedBy   = "Terraform"
-    Purpose     = "Reports, exports, and application data"
+    Purpose     = "Reports exports and application data"
   }
 }
 

@@ -293,7 +293,14 @@
       <template #header>
         <div class="flex items-center justify-between">
           <div>
-            <h2 class="text-lg font-semibold text-white">Scheduled Reports</h2>
+            <div class="flex items-center gap-2">
+              <h2 class="text-lg font-semibold text-white">Scheduled Reports</h2>
+              <UTooltip text="Learn how to create and manage scheduled reports">
+                <NuxtLink to="/support/docs?topic=reports-guide" class="text-gray-400 hover:text-gray-300">
+                  <UIcon name="i-heroicons-question-mark-circle" class="w-5 h-5" />
+                </NuxtLink>
+              </UTooltip>
+            </div>
             <p class="text-sm text-gray-400 mt-1">Automate cost reports to be delivered to your inbox</p>
           </div>
           <UButton
@@ -391,6 +398,126 @@
           </UButton>
         </div>
       </div>
+        </UCard>
+      </template>
+
+      <!-- My Reports Tab -->
+      <template #my-reports>
+        <UCard class="mt-4">
+          <template #header>
+            <div>
+              <h2 class="text-lg font-semibold text-white">My Shared Reports</h2>
+              <p class="text-sm text-gray-400 mt-1">Reports you've generated with shareable links</p>
+            </div>
+          </template>
+
+          <div>
+            <!-- Loading State -->
+            <div v-if="sharedReportsLoading && sharedReports.length === 0" class="flex flex-col items-center justify-center py-12">
+              <Icon name="i-heroicons-arrow-path" class="w-10 h-10 animate-spin text-gray-400 mb-3" />
+              <p class="text-gray-500 text-sm">Loading your shared reports...</p>
+            </div>
+
+            <!-- Error State -->
+            <div v-else-if="sharedReportsError" class="text-center py-12">
+              <Icon name="i-heroicons-exclamation-triangle" class="w-12 h-12 text-red-500 mx-auto mb-3" />
+              <h3 class="text-lg font-semibold text-white mb-2">Failed to Load Reports</h3>
+              <p class="text-gray-400 text-sm mb-4">{{ sharedReportsError }}</p>
+              <UButton @click="fetchSharedReports()" color="blue" size="sm">
+                Try Again
+              </UButton>
+            </div>
+
+            <!-- Reports Table -->
+            <div v-else-if="sharedReports.length > 0" class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead class="border-b border-gray-700">
+                  <tr class="text-gray-400 text-left">
+                    <th class="pb-3 pr-4 font-medium">Report Name</th>
+                    <th class="pb-3 pr-4 font-medium">Created</th>
+                    <th class="pb-3 pr-4 font-medium">Size</th>
+                    <th class="pb-3 pr-4 font-medium">Downloads</th>
+                    <th class="pb-3 pr-4 font-medium">Status</th>
+                    <th class="pb-3 font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-800">
+                  <tr v-for="report in sharedReports" :key="report.shareId" class="text-gray-300 hover:bg-gray-800/50">
+                    <td class="py-3 pr-4">
+                      <div class="font-medium text-white">{{ report.reportName }}</div>
+                      <div class="text-xs text-gray-500 mt-0.5">
+                        {{ report.reportConfig.format === 'pdf' ? 'PDF' : 'CSV' }}
+                      </div>
+                    </td>
+                    <td class="py-3 pr-4 text-xs">
+                      {{ formatDate(report.createdAt) }}
+                    </td>
+                    <td class="py-3 pr-4 text-xs">
+                      {{ formatFileSize(report.reportSize) }}
+                    </td>
+                    <td class="py-3 pr-4">
+                      <UBadge color="gray" variant="soft" size="xs">
+                        {{ report.downloadCount || 0 }}
+                      </UBadge>
+                    </td>
+                    <td class="py-3 pr-4">
+                      <UBadge
+                        :color="isExpired(report.expiresAt) ? 'red' : 'green'"
+                        variant="soft"
+                        size="xs"
+                      >
+                        {{ isExpired(report.expiresAt) ? 'Expired' : 'Active' }}
+                      </UBadge>
+                    </td>
+                    <td class="py-3">
+                      <div class="flex items-center gap-2">
+                        <UButton
+                          icon="i-heroicons-link"
+                          size="xs"
+                          color="blue"
+                          variant="soft"
+                          @click="copyShareLink(report.shortUrl)"
+                          :disabled="isExpired(report.expiresAt)"
+                        >
+                          Copy Link
+                        </UButton>
+                        <UButton
+                          icon="i-heroicons-trash"
+                          size="xs"
+                          color="red"
+                          variant="ghost"
+                          @click="handleDeleteSharedReport(report.shareId)"
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div v-if="sharedReports.length > 0" class="mt-4 pt-4 border-t border-gray-800">
+                <p class="text-xs text-gray-500">
+                  Shared reports are automatically deleted after 90 days
+                </p>
+              </div>
+            </div>
+
+            <!-- Empty State -->
+            <div v-else class="text-center py-12">
+              <Icon name="i-heroicons-document-arrow-down" class="w-16 h-16 text-gray-600 mx-auto mb-3" />
+              <h3 class="text-lg font-semibold text-white mb-2">No Shared Reports</h3>
+              <p class="text-gray-400 text-sm mb-4">
+                Generate a shareable report from the Costs page to get started
+              </p>
+              <UButton
+                to="/account/costs"
+                color="blue"
+                icon="i-heroicons-chart-bar"
+                size="sm"
+              >
+                Go to Costs Page
+              </UButton>
+            </div>
+          </div>
         </UCard>
       </template>
     </UTabs>
@@ -596,6 +723,11 @@ const profileTabs = [
     label: 'Scheduled Reports',
     slot: 'reports',
     icon: 'i-heroicons-calendar-days'
+  },
+  {
+    label: 'My Reports',
+    slot: 'my-reports',
+    icon: 'i-heroicons-document-arrow-down'
   }
 ]
 
@@ -682,6 +814,20 @@ const {
   togglePause,
   fetchExecutionHistory
 } = useScheduledReports()
+
+// Shared Reports functionality
+const {
+  sharedReports,
+  isLoading: sharedReportsLoading,
+  fetchSharedReports,
+  deleteSharedReport,
+  copyShareLink,
+  formatFileSize,
+  formatDate,
+  isExpired
+} = useSharedReports()
+
+const sharedReportsError = ref<string | null>(null)
 
 // State
 const currentFilter = ref<'all' | 'active' | 'paused'>('all')
@@ -856,9 +1002,30 @@ async function loadHistory() {
   }
 }
 
+// Shared Reports methods
+async function handleDeleteSharedReport(shareId: string) {
+  try {
+    await deleteSharedReport(shareId)
+    toast.add({
+      title: 'Report Deleted',
+      description: 'Your shared report has been deleted',
+      icon: 'i-heroicons-check-circle',
+      color: 'green'
+    })
+  } catch (err) {
+    toast.add({
+      title: 'Error',
+      description: 'Failed to delete shared report',
+      icon: 'i-heroicons-x-circle',
+      color: 'red'
+    })
+  }
+}
+
 // Load reports on mount
 onMounted(async () => {
   await fetchReports()
+  await fetchSharedReports()
 
   // Switch to scheduled reports tab if coming from query param
   if (route.query.section === 'scheduled-reports') {

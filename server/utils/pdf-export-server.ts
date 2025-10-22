@@ -51,6 +51,7 @@ interface PDFOptions {
   filename: string
   orientation: 'portrait' | 'landscape'
   format: string
+  compress?: boolean
 }
 
 function configToPDFOptions(config: DataExportConfig): PDFOptions {
@@ -62,7 +63,8 @@ function configToPDFOptions(config: DataExportConfig): PDFOptions {
       'pdf'
     ),
     orientation: pdfOptions.orientation || 'portrait',
-    format: pdfOptions.pageSize || 'a4'
+    format: pdfOptions.pageSize || 'a4',
+    compress: true  // Enable compression for smaller file sizes
   }
 }
 
@@ -175,6 +177,501 @@ function createTitlePage(
   pdf.setFont(undefined, 'italic')
   pdf.text('GHOST Cost Dashboard', centerX, pageHeight - 20, { align: 'center' })
   pdf.text('AWS Cost Analysis Report', centerX, pageHeight - 15, { align: 'center' })
+}
+
+/**
+ * Create Executive Summary page
+ */
+function createExecutiveSummary(
+  pdf: any,
+  config: DataExportConfig
+): void {
+  const pageWidth = pdf.internal.pageSize.width
+  const centerX = pageWidth / 2
+  let currentY = 30
+
+  // Page Title
+  pdf.setFontSize(22)
+  pdf.setTextColor('#1e40af')
+  pdf.setFont(undefined, 'bold')
+  pdf.text('Executive Summary', centerX, currentY, { align: 'center' })
+  currentY += 15
+
+  // Extract key metrics from metadata
+  const metadata = config.metadata || {}
+  const summarySheet = config.sheets.find(s => s.type === 'summary' || s.name.toLowerCase().includes('summary'))
+  
+  // Helper to format currency
+  const formatCurrency = (value: number | undefined): string => {
+    if (value === undefined || value === null) return 'N/A'
+    if (Math.abs(value) >= 1e6) {
+      return `$${(value / 1e6).toFixed(2)}M`
+    } else if (Math.abs(value) >= 1e3) {
+      return `$${(value / 1e3).toFixed(1)}K`
+    }
+    return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  }
+
+  // Try to extract key metrics from summary data
+  let totalCost: number | undefined
+  let previousCost: number | undefined
+  let changePercent: number | undefined
+  let budgetUtilization: number | undefined
+  let totalBudget: number | undefined
+
+  if (summarySheet && Array.isArray(summarySheet.data)) {
+    const summaryData = summarySheet.data[0] || {}
+
+    // If summary has individual account rows, calculate totals
+    if (summarySheet.data.length > 1 || !summaryData.totalCost) {
+      totalCost = summarySheet.data.reduce((sum: number, row: any) =>
+        sum + (row.cost || row.totalCost || 0), 0
+      )
+
+      // Calculate YTD if available
+      if (summarySheet.data[0]?.ytdTotal !== undefined) {
+        previousCost = summarySheet.data.reduce((sum: number, row: any) =>
+          sum + (row.ytdTotal || 0), 0
+        )
+      }
+
+      // Calculate total budget if available
+      if (summarySheet.data[0]?.budget !== undefined) {
+        totalBudget = summarySheet.data.reduce((sum: number, row: any) =>
+          sum + (row.budget || 0), 0
+        )
+        if (totalBudget > 0) {
+          budgetUtilization = (totalCost / totalBudget) * 100
+        }
+      }
+    } else {
+      // Single summary row with totals
+      totalCost = summaryData.totalCost || summaryData.cost || summaryData.current
+      previousCost = summaryData.previousCost || summaryData.previous
+      changePercent = summaryData.changePercent || summaryData.change
+      budgetUtilization = summaryData.budgetUtilization || summaryData.utilization
+      totalBudget = summaryData.budget
+    }
+  }
+
+  // Draw key metrics in boxes
+  const boxWidth = (pageWidth - 60) / 2
+  const boxHeight = 35
+  const boxLeft1 = 20
+  const boxLeft2 = boxLeft1 + boxWidth + 10
+
+  // Box 1: Total Cost
+  pdf.setFillColor(248, 250, 252)
+  pdf.rect(boxLeft1, currentY, boxWidth, boxHeight, 'F')
+  pdf.setDrawColor(226, 232, 240)
+  pdf.rect(boxLeft1, currentY, boxWidth, boxHeight)
+  
+  pdf.setFontSize(11)
+  pdf.setTextColor('#64748b')
+  pdf.setFont(undefined, 'normal')
+  pdf.text('Total Cost', boxLeft1 + 5, currentY + 8)
+  
+  pdf.setFontSize(20)
+  pdf.setTextColor('#1e40af')
+  pdf.setFont(undefined, 'bold')
+  const costText = totalCost !== undefined ? formatCurrency(totalCost) : 'N/A'
+  pdf.text(costText, boxLeft1 + 5, currentY + 22)
+
+  if (changePercent !== undefined) {
+    const changeText = changePercent >= 0 ? `+${changePercent.toFixed(1)}%` : `${changePercent.toFixed(1)}%`
+    const changeColor = changePercent > 10 ? '#ef4444' : changePercent < -10 ? '#22c55e' : '#eab308'
+    
+    pdf.setFontSize(10)
+    pdf.setTextColor(changeColor)
+    pdf.text(changeText, boxLeft1 + 5, currentY + 30)
+  }
+
+  // Box 2: Budget Status
+  pdf.setFillColor(248, 250, 252)
+  pdf.rect(boxLeft2, currentY, boxWidth, boxHeight, 'F')
+  pdf.setDrawColor(226, 232, 240)
+  pdf.rect(boxLeft2, currentY, boxWidth, boxHeight)
+  
+  pdf.setFontSize(11)
+  pdf.setTextColor('#64748b')
+  pdf.setFont(undefined, 'normal')
+  pdf.text('Budget Status', boxLeft2 + 5, currentY + 8)
+
+  if (budgetUtilization !== undefined) {
+    pdf.setFontSize(20)
+    const statusColor = budgetUtilization > 100 ? '#ef4444' : budgetUtilization > 90 ? '#eab308' : '#22c55e'
+    pdf.setTextColor(statusColor)
+    pdf.setFont(undefined, 'bold')
+    pdf.text(`${budgetUtilization.toFixed(0)}%`, boxLeft2 + 5, currentY + 22)
+    
+    // Status indicator
+    const circleColor = budgetUtilization > 100 ? [239, 68, 68] : budgetUtilization > 90 ? [234, 179, 8] : [34, 197, 94]
+    pdf.setFillColor(...circleColor)
+    pdf.circle(boxLeft2 + boxWidth - 10, currentY + 18, 3, 'F')
+    
+    pdf.setFontSize(10)
+    pdf.setTextColor('#64748b')
+    pdf.setFont(undefined, 'normal')
+    const statusText = budgetUtilization > 100 ? 'Over Budget' : budgetUtilization > 90 ? 'Near Limit' : 'On Track'
+    pdf.text(statusText, boxLeft2 + 5, currentY + 30)
+  } else {
+    pdf.setFontSize(16)
+    pdf.setTextColor('#94a3b8')
+    pdf.setFont(undefined, 'normal')
+    pdf.text('No Budget Set', boxLeft2 + 5, currentY + 22)
+  }
+
+  currentY += boxHeight + 15
+
+  // Top Cost Drivers
+  const servicesSheet = config.sheets.find(s => 
+    s.name.toLowerCase().includes('service') || 
+    s.name.toLowerCase().includes('breakdown')
+  )
+
+  if (servicesSheet && Array.isArray(servicesSheet.data) && servicesSheet.data.length > 0) {
+    pdf.setFontSize(14)
+    pdf.setTextColor('#1e40af')
+    pdf.setFont(undefined, 'bold')
+    pdf.text('Top Cost Drivers', 20, currentY)
+    currentY += 10
+
+    const topServices = servicesSheet.data.slice(0, 5)
+
+    topServices.forEach((service: any, index: number) => {
+      pdf.setFontSize(11)
+      pdf.setTextColor('#000000')
+      pdf.setFont(undefined, 'normal')
+
+      const serviceName = String(service.serviceName || service.service || service.name || service.Service || 'Unknown')
+      const displayName = serviceName.length > 40 ? serviceName.substring(0, 37) + '...' : serviceName
+      const cost = service.cost || service.amount || service.Cost || 0
+
+      pdf.text(`${index + 1}. ${displayName}`, 25, currentY)
+      pdf.setFont(undefined, 'bold')
+      pdf.text(formatCurrency(cost), pageWidth - 25, currentY, { align: 'right' })
+
+      currentY += 8
+    })
+  }
+}
+
+/**
+ * Create Intelligent Insights page (with optional AI analysis)
+ */
+async function createInsightsPage(
+  pdf: any,
+  config: DataExportConfig,
+  includeAI: boolean = false
+): Promise<void> {
+  const pageWidth = pdf.internal.pageSize.width
+  let currentY = 30
+
+  pdf.setFontSize(22)
+  pdf.setTextColor('#1e40af')
+  pdf.setFont(undefined, 'bold')
+  pdf.text('Intelligent Insights', 20, currentY)
+  currentY += 15
+
+  const summarySheet = config.sheets.find(s => s.type === 'summary' || s.name.toLowerCase().includes('summary'))
+  const servicesSheet = config.sheets.find(s => s.name.toLowerCase().includes('service') || s.name.toLowerCase().includes('breakdown'))
+
+  // Try to get AI analysis first if enabled
+  let aiAnalysis: string | null = null
+  if (includeAI && summarySheet && servicesSheet) {
+    try {
+      aiAnalysis = await generateAICostAnalysis(summarySheet, servicesSheet, config)
+    } catch (error) {
+      console.error('AI analysis failed, falling back to rule-based insights:', error)
+    }
+  }
+
+  // If AI analysis is available, use it
+  if (aiAnalysis) {
+    pdf.setFontSize(12)
+    pdf.setTextColor('#000000')
+    pdf.setFont(undefined, 'normal')
+    
+    // Add AI attribution badge
+    pdf.setFillColor(243, 244, 246)
+    pdf.rect(20, currentY, 80, 8, 'F')
+    pdf.setFontSize(9)
+    pdf.setTextColor('#6b7280')
+    pdf.text('AI-Powered Analysis (Claude)', 23, currentY + 5)
+    currentY += 13
+
+    // Render AI analysis
+    pdf.setFontSize(10)
+    pdf.setTextColor('#000000')
+    const aiLines = pdf.splitTextToSize(aiAnalysis, pageWidth - 40)
+    aiLines.forEach((line: string) => {
+      if (currentY > pdf.internal.pageSize.height - 40) {
+        pdf.addPage()
+        currentY = 30
+      }
+      pdf.text(line, 20, currentY)
+      currentY += 5
+    })
+    
+    currentY += 10
+    return // Skip rule-based insights if AI succeeded
+  }
+
+  // Fall back to rule-based insights
+  let insights: Array<{
+    category: 'optimization' | 'warning' | 'info' | 'success'
+    title: string
+    description: string
+  }> = []
+
+  // Analyze Summary Data
+  if (summarySheet && Array.isArray(summarySheet.data) && summarySheet.data.length > 0) {
+    const data = summarySheet.data[0]
+    let changePercent = data.changePercent || data.change
+    let budgetUtilization = data.budgetUtilization || data.utilization
+    let totalCost = data.totalCost || data.cost || data.current || 0
+
+    // If summary has multiple rows, calculate total
+    if (summarySheet.data.length > 1) {
+      totalCost = summarySheet.data.reduce((sum: number, row: any) =>
+        sum + (row.cost || row.totalCost || 0), 0
+      )
+    }
+
+    if (changePercent !== undefined && changePercent > 20) {
+      insights.push({
+        category: 'warning',
+        title: 'Significant Cost Increase Detected',
+        description: `Costs have increased by ${changePercent.toFixed(1)}% from the previous period. Review top services for unexpected growth.`
+      })
+    }
+
+    if (budgetUtilization !== undefined && budgetUtilization > 100) {
+      insights.push({
+        category: 'warning',
+        title: 'Budget Exceeded',
+        description: `Current spending is at ${budgetUtilization.toFixed(0)}% of budget. Immediate cost control measures recommended.`
+      })
+    } else if (budgetUtilization !== undefined && budgetUtilization > 90) {
+      insights.push({
+        category: 'warning',
+        title: 'Approaching Budget Limit',
+        description: `Budget utilization is at ${budgetUtilization.toFixed(0)}%. Implement spending alerts and review planned deployments.`
+      })
+    }
+
+    if (totalCost > 1000000) {
+      insights.push({
+        category: 'optimization',
+        title: 'High Volume Spending Opportunity',
+        description: `Monthly costs exceed $1M. Small percentage optimizations yield significant savings. Review Reserved Instances and Savings Plans.`
+      })
+    }
+  }
+
+  // Analyze Service Breakdown
+  if (servicesSheet && Array.isArray(servicesSheet.data) && servicesSheet.data.length > 0) {
+    const services = servicesSheet.data.slice(0, 10)
+    
+    services.forEach((service: any) => {
+      const serviceName = String(service.serviceName || service.service || service.name || service.Service || '').toLowerCase()
+      const cost = service.cost || service.amount || service.Cost || 0
+      
+      if (serviceName.includes('ec2') && cost > 10000 && insights.length < 6) {
+        insights.push({
+          category: 'optimization',
+          title: 'EC2 Optimization Opportunity',
+          description: `Significant EC2 spending detected. Review instance utilization and consider Reserved Instances or Savings Plans.`
+        })
+      }
+      
+      if (serviceName.includes('rds') && cost > 5000 && insights.length < 6) {
+        insights.push({
+          category: 'optimization',
+          title: 'Database Cost Review',
+          description: `Review RDS instance sizing and consider Aurora for better price-performance.`
+        })
+      }
+    })
+  }
+
+  insights = insights.slice(0, 6)
+
+  // Draw insights
+  if (insights.length > 0) {
+    insights.forEach((insight) => {
+      if (currentY > pdf.internal.pageSize.height - 60) {
+        pdf.addPage()
+        currentY = 30
+      }
+
+      const categoryColors = {
+        optimization: { fill: [59, 130, 246], text: '#3b82f6' },
+        warning: { fill: [234, 179, 8], text: '#eab308' },
+        info: { fill: [100, 116, 139], text: '#64748b' },
+        success: { fill: [34, 197, 94], text: '#22c55e' }
+      }
+      
+      const category = categoryColors[insight.category]
+      
+      pdf.setFillColor(...category.fill)
+      pdf.circle(23, currentY, 2.5, 'F')
+      
+      pdf.setFontSize(12)
+      pdf.setTextColor(category.text)
+      pdf.setFont(undefined, 'bold')
+      pdf.text(insight.title, 30, currentY + 1)
+      currentY += 6
+      
+      pdf.setFontSize(10)
+      pdf.setTextColor('#000000')
+      pdf.setFont(undefined, 'normal')
+      const descLines = pdf.splitTextToSize(insight.description, pageWidth - 50)
+      descLines.forEach((line: string) => {
+        if (currentY > pdf.internal.pageSize.height - 40) {
+          pdf.addPage()
+          currentY = 30
+        }
+        pdf.text(line, 30, currentY)
+        currentY += 5
+      })
+      
+      currentY += 8
+    })
+  }
+
+  // General Recommendations
+  currentY += 10
+  if (currentY > pdf.internal.pageSize.height - 80) {
+    pdf.addPage()
+    currentY = 30
+  }
+
+  pdf.setFontSize(14)
+  pdf.setTextColor('#1e40af')
+  pdf.setFont(undefined, 'bold')
+  pdf.text('General Recommendations', 20, currentY)
+  currentY += 10
+
+  const recs = [
+    'Implement automated cost alerting at 50%, 80%, and 100% of budget',
+    'Tag all resources with cost center, environment, and owner',
+    'Review and rightsize underutilized resources monthly',
+    'Enable AWS Cost Anomaly Detection',
+    'Conduct quarterly architectural reviews'
+  ]
+
+  pdf.setFontSize(10)
+  pdf.setTextColor('#000000')
+  pdf.setFont(undefined, 'normal')
+
+  recs.forEach((rec, index) => {
+    if (currentY > pdf.internal.pageSize.height - 30) {
+      pdf.addPage()
+      currentY = 30
+    }
+    pdf.text(`${index + 1}. ${rec}`, 25, currentY)
+    currentY += 6
+  })
+}
+
+/**
+ * Generate AI-powered cost analysis using Bedrock
+ */
+async function generateAICostAnalysis(
+  summarySheet: any,
+  servicesSheet: any,
+  config: DataExportConfig
+): Promise<string | null> {
+  try {
+    // Import Bedrock client
+    const { invokeBedrock } = await import('./bedrock-client')
+
+    // Extract key data points - calculate totals if needed
+    const summaryData = summarySheet.data?.[0] || {}
+    let totalCost = summaryData.totalCost || summaryData.cost || summaryData.current || 0
+    let previousCost = summaryData.previousCost || summaryData.previous
+    let changePercent = summaryData.changePercent || summaryData.change
+    let budgetUtilization = summaryData.budgetUtilization || summaryData.utilization
+    let totalBudget: number | undefined
+
+    // If summary has multiple rows (accounts), calculate totals
+    if (summarySheet.data && summarySheet.data.length > 1) {
+      totalCost = summarySheet.data.reduce((sum: number, row: any) =>
+        sum + (row.cost || row.totalCost || 0), 0
+      )
+
+      if (summarySheet.data[0]?.ytdTotal !== undefined) {
+        previousCost = summarySheet.data.reduce((sum: number, row: any) =>
+          sum + (row.ytdTotal || 0), 0
+        )
+      }
+
+      // Calculate budget totals
+      if (summarySheet.data[0]?.budget !== undefined) {
+        totalBudget = summarySheet.data.reduce((sum: number, row: any) =>
+          sum + (row.budget || 0), 0
+        )
+        if (totalBudget > 0) {
+          budgetUtilization = (totalCost / totalBudget) * 100
+        }
+      }
+    }
+
+    // Get top 15 accounts with detailed info
+    const topAccounts = (summarySheet.data?.slice(0, 15) || []).map((acc: any) => ({
+      name: acc.accountName || acc.name || acc.accountId,
+      cost: acc.cost || acc.totalCost || 0,
+      budget: acc.budget,
+      utilization: acc.budgetUtilization
+    }))
+
+    // Get top 10 services
+    const topServices = servicesSheet.data?.slice(0, 10).map((s: any) => ({
+      name: s.serviceName || s.service || s.name || s.Service || 'Unknown',
+      cost: s.cost || s.amount || s.Cost || 0
+    })) || []
+
+    // Build analysis context
+    const prompt = `COST OVERVIEW:
+- Total Spend: $${totalCost.toLocaleString()}${changePercent !== undefined ? ` (${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(1)}% vs previous period)` : ''}
+${totalBudget ? `- Total Budget: $${totalBudget.toLocaleString()}` : ''}
+${budgetUtilization !== undefined ? `- Budget Utilization: ${budgetUtilization.toFixed(1)}%` : ''}
+${previousCost !== undefined ? `- Previous Period: $${previousCost.toLocaleString()}` : ''}
+
+TOP 15 ACCOUNTS:
+${topAccounts.map((a: any, i: number) =>
+  `${i + 1}. ${a.name}: $${a.cost.toLocaleString()}${a.budget ? ` (Budget: $${a.budget.toLocaleString()}, ${a.utilization?.toFixed(0)}% utilized)` : ''}`
+).join('\n')}
+
+TOP AWS SERVICES:
+${topServices.map((s: any, i: number) => `${i + 1}. ${s.name}: $${s.cost.toLocaleString()}`).join('\n')}
+
+Write 3-4 concise paragraphs (~200 words) covering:
+
+1. Overall Cost Health: Assess the spending trends and budget performance
+2. Key Patterns & Highlights: Identify notable spending patterns, top accounts, and services driving costs
+3. Notable Items: Highlight accounts or services that warrant attention (over/under budget, unusual patterns)
+
+Focus on analysis and observations, not recommendations. Be specific with numbers.`
+
+    const response = await invokeBedrock({
+      prompt,
+      model: 'claude-sonnet',
+      temperature: 0.3,
+      maxTokens: 500,
+      systemPrompt: 'You are an AWS financial analyst providing executive-level cost insights. Write clear, direct analysis without preambles or meta-commentary. Never use phrases like "Based on the provided data" or "According to the information". Focus on what the data shows, not what should be done about it. Be specific with numbers and patterns.'
+    })
+
+    if (response.success && response.content) {
+      return response.content.trim()
+    }
+    
+    return null
+  } catch (error) {
+    console.error('AI cost analysis error:', error)
+    return null
+  }
 }
 
 /**
@@ -538,13 +1035,37 @@ export async function exportToPDFServer(
     const pdfOptions = configToPDFOptions(config)
     const pdf = new jsPDF({
       orientation: pdfOptions.orientation,
-      format: pdfOptions.format
+      format: pdfOptions.format,
+      compress: pdfOptions.compress || true
+    })
+
+    // Set PDF metadata
+    pdf.setProperties({
+      title: config.title || 'GHOST Cost Report',
+      subject: config.subtitle || '',
+      author: 'GHOST Cost Dashboard',
+      keywords: 'AWS, Cost Report, GHOST, Analytics',
+      creator: 'GHOST Cost Dashboard'
     })
 
     let currentY = 20
 
     // Page 1: Professional Title Page
     createTitlePage(pdf, config)
+    
+    // Page 2: Executive Summary (if summary data available)
+    const hasSummaryData = config.sheets.some(s => 
+      s.type === 'summary' || s.name.toLowerCase().includes('summary')
+    )
+    if (hasSummaryData) {
+      pdf.addPage()
+      createExecutiveSummary(pdf, config)
+    }
+
+    // Page 3: Intelligent Insights (with optional AI analysis)
+    pdf.addPage()
+    const includeAI = config.options?.includeAI !== false // Default to true
+    await createInsightsPage(pdf, config, includeAI)
     pdf.addPage()
 
     // Content Pages: Add all sheets

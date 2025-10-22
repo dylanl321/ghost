@@ -28,22 +28,24 @@ resource "aws_sns_topic" "ses_notifications_org_account" {
   }
 }
 
-# Subscribe SES events to SNS topic (in Account A)
-resource "aws_ses_identity_notification_topic" "bounces" {
-  provider                 = aws.org_account
-  topic_arn                = aws_sns_topic.ses_notifications_org_account.arn
-  notification_type        = "Bounce"
-  identity                 = local.ses_from_email
-  include_original_headers = false
-}
-
-resource "aws_ses_identity_notification_topic" "complaints" {
-  provider                 = aws.org_account
-  topic_arn                = aws_sns_topic.ses_notifications_org_account.arn
-  notification_type        = "Complaint"
-  identity                 = local.ses_from_email
-  include_original_headers = false
-}
+# NOTE: SES identity notification topics require the email identity to be verified first
+# Uncomment these resources after aws-ghost@gd-ms.com is verified in SES
+#
+# resource "aws_ses_identity_notification_topic" "bounces" {
+#   provider                 = aws.org_account
+#   topic_arn                = aws_sns_topic.ses_notifications_org_account.arn
+#   notification_type        = "Bounce"
+#   identity                 = local.ses_from_email
+#   include_original_headers = false
+# }
+#
+# resource "aws_ses_identity_notification_topic" "complaints" {
+#   provider                 = aws.org_account
+#   topic_arn                = aws_sns_topic.ses_notifications_org_account.arn
+#   notification_type        = "Complaint"
+#   identity                 = local.ses_from_email
+#   include_original_headers = false
+# }
 
 # CloudWatch Event Rule for email delivery tracking (in Account A)
 resource "aws_cloudwatch_event_rule" "ses_delivery_events_org_account" {

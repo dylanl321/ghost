@@ -162,6 +162,14 @@ const popularArticles = [
     link: '/support/docs?topic=cost-dashboard-guide'
   },
   {
+    id: 'reports-guide',
+    title: 'Creating and Scheduling Reports',
+    description: 'Generate shareable reports and automate recurring schedules',
+    icon: 'i-heroicons-document-chart-bar',
+    color: 'text-emerald-600 dark:text-emerald-400',
+    link: '/support/docs?topic=reports-guide'
+  },
+  {
     id: 'universal-search',
     title: 'Using Universal Search',
     description: 'Find accounts, users, and resources quickly',
@@ -192,14 +200,6 @@ const popularArticles = [
     icon: 'i-heroicons-key',
     color: 'text-indigo-600 dark:text-indigo-400',
     link: '/support/docs?topic=request-access'
-  },
-  {
-    id: 'troubleshooting',
-    title: 'Common Issues & Solutions',
-    description: 'Troubleshoot login, access, and data issues',
-    icon: 'i-heroicons-wrench-screwdriver',
-    color: 'text-red-600 dark:text-red-400',
-    link: '/support/docs?topic=common-issues'
   }
 ]
 

@@ -11,9 +11,16 @@
     >
       <template #header>
         <div class="flex items-center justify-between">
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-            Schedule Report
-          </h3>
+          <div class="flex items-center gap-2">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+              Schedule Report
+            </h3>
+            <UTooltip text="Learn how to create and schedule reports">
+              <NuxtLink to="/support/docs?topic=reports-guide" class="text-gray-400 hover:text-gray-300">
+                <UIcon name="i-heroicons-question-mark-circle" class="w-5 h-5" />
+              </NuxtLink>
+            </UTooltip>
+          </div>
           <UButton
             color="gray"
             variant="ghost"
@@ -133,6 +140,15 @@
           </div>
         </div>
 
+        <!-- AI Insights Toggle -->
+        <UFormGroup label="Report Enhancements">
+          <UCheckbox
+            v-model="form.includeAI"
+            label="Include AI-powered cost analysis (recommended)"
+            help="Add intelligent insights and recommendations to PDF reports using Claude AI"
+          />
+        </UFormGroup>
+
         <!-- Recipient Info -->
         <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
           <div class="flex items-start gap-2">
@@ -216,6 +232,7 @@ const errors = ref<Record<string, string>>({})
 // Form data
 const form = ref({
   reportName: '',
+  includeAI: true, // Default to enabled
   schedule: {
     frequency: 'weekly' as any,
     dayOfWeek: 1,
@@ -345,6 +362,7 @@ function handleClose() {
 function resetForm() {
   form.value = {
     reportName: '',
+    includeAI: true,
     schedule: {
       frequency: 'weekly',
       dayOfWeek: 1,
@@ -372,7 +390,13 @@ function handleSubmit() {
 
   const data: CreateReportRequest = {
     reportName: form.value.reportName,
-    reportConfig: props.config,
+    reportConfig: {
+      ...props.config,
+      options: {
+        ...props.config.options,
+        includeAI: form.value.includeAI
+      }
+    },
     schedule: form.value.schedule,
     recipients: [props.userEmail],
     emailTemplate: {
