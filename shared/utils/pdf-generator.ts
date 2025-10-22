@@ -4,7 +4,7 @@
  * Uses dependency injection for environment-specific features
  */
 
-import type { DataExportConfig, ExportResult, SheetConfig } from '../types/export'
+import type { DataExportConfig, ExportResult, SheetConfig } from '#shared/types/export'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 

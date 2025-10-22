@@ -5,12 +5,19 @@ The '@nuxt/eslint' module is a linter that does static code analysis to detect i
 
 */
 
+import { fileURLToPath } from 'node:url'
+
 const entra_tenant_id = "7c5a26cf-ddf0-400c-9703-4070b4e3a54d";
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   compatibilityDate: "2025-07-15",
   devtools: { enabled: false },
+
+  alias: {
+    '#shared': fileURLToPath(new URL('./shared', import.meta.url))
+  },
+
   modules: [
     "@nuxt/ui",
     "@nuxt/eslint",

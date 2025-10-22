@@ -4,7 +4,7 @@
  */
 
 import type { DataExportConfig, ExportResult } from '~/shared/types/export'
-import { createPDF, type PDFGeneratorHooks } from '../../shared/utils/pdf-generator'
+import { createPDF, type PDFGeneratorHooks } from '#shared/utils/pdf-generator'
 
 /**
  * Generate AI-powered cost analysis using Bedrock (server-side)

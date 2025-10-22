@@ -22,7 +22,7 @@ import {
   createMonthlyBreakdownSheet,
   createForecastSheet,
   createYearEndSummarySheet
-} from '../../shared/utils/cost-sheet-builders'
+} from '#shared/utils/cost-sheet-builders'
 
 export function useCostExport(dataset: NormalizedDataset) {
   const { exportData, exportMultipleFormats, isExporting } = useDataExport()

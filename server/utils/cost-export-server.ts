@@ -16,7 +16,7 @@ import {
   createMonthlyBreakdownSheet,
   createForecastSheet,
   createYearEndSummarySheet
-} from '../../shared/utils/cost-sheet-builders'
+} from '#shared/utils/cost-sheet-builders'
 
 export function createCostExportConfig(
   dataset: NormalizedDataset,
