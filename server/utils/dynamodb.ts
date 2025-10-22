@@ -130,6 +130,7 @@ export async function queryItems(
 
   const command = new QueryCommand({
     TableName: params.tableName,
+    IndexName: params.indexName,
     KeyConditionExpression: params.queryExpression,
     FilterExpression: params.filterExpression,
     ProjectionExpression: params.projectionExpression,
@@ -138,6 +139,7 @@ export async function queryItems(
       ? marshall(params.expressionAttributeValues, { removeUndefinedValues: true })
       : undefined,
     Limit: params.limit,
+    ScanIndexForward: params.scanIndexForward,
     ExclusiveStartKey: params.nextToken ? JSON.parse(Buffer.from(params.nextToken, 'base64').toString()) : undefined
   })
 

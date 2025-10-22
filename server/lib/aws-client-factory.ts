@@ -87,9 +87,17 @@ function validateRegionForPartition(
   environment: AWSEnvironmentType
 ): void {
   const pattern = REGION_PATTERNS[environment]
+
+  // Debug logging for invalid environment
+  if (!pattern) {
+    console.error(`[AWS Client Factory] Invalid environment value: "${environment}" (type: ${typeof environment})`)
+    console.error(`[AWS Client Factory] Available environments:`, Object.keys(REGION_PATTERNS))
+    throw new Error(`Invalid AWS environment: ${environment}. Must be 'commercial' or 'govcloud'`)
+  }
+
   const otherEnvironment = environment === 'commercial' ? 'govcloud' : 'commercial'
   const otherPattern = REGION_PATTERNS[otherEnvironment]
-  
+
   if (!pattern.test(region)) {
     if (otherPattern.test(region)) {
       throw new Error(

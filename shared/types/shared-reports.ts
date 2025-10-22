@@ -12,12 +12,11 @@ export interface SharedReport {
   shareId: string             // PK: UUID
   userId: string              // SK: Email of who created it
   reportName: string          // User-friendly name
-  s3Key: string               // Full S3 object key
-  s3Url: string               // Presigned download URL
+  s3Key: string               // S3 object key (presigned URLs generated on-demand)
   shortCode: string           // From shortlinks table
   shortUrl: string            // Full short URL (e.g., https://ghost.com/s/abc123)
   createdAt: string           // ISO 8601 timestamp
-  expiresAt?: string          // When the URL/link expires
+  expiresAt?: string          // When the report expires (90 days)
   downloadCount: number       // Track how many times downloaded
   reportConfig: ReportConfig  // Configuration used to generate the report
   reportSize: number          // File size in bytes

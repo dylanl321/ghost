@@ -277,7 +277,19 @@ const reportsMenuItems = computed(() => [[
   {
     label: 'Generate One-Time Report',
     icon: 'i-heroicons-document-arrow-down',
-    click: () => showShareReportModal.value = true
+    click: () => {
+      // Capture current page state before opening modal
+      currentConfig.value = captureViewState({
+        selectedAccounts: props.selectedAccounts,
+        timeframe: modelSelectedTimeframe.value,
+        dataMode: modelMode.value,
+        format: 'pdf',
+        includeServices: true,
+        includeHistorical: true,
+        includeForecast: false
+      })
+      showShareReportModal.value = true
+    }
   }
 ], [
   {

@@ -192,3 +192,62 @@ export async function hasExecutionLock(
     return { locked: true }
   }
 }
+
+/**
+ * Clean up stale locks on startup
+ * Removes locks that are older than the specified age (default 5 minutes)
+ * This handles the case where a container restarts and leaves behind old locks
+ */
+export async function cleanupStaleLocks(maxAgeMinutes: number = 5): Promise<number> {
+  try {
+    const tableName = await getTableName('reportExecutionLocks')
+    const environment = await getTableEnvironment('reportExecutionLocks')
+    const accountId = await getTableAccountId('reportExecutionLocks')
+
+    console.log(`Cleaning up execution locks older than ${maxAgeMinutes} minutes...`)
+
+    // Import scanItems for scanning the table
+    const { scanItems } = await import('./dynamodb')
+
+    // Scan all locks (no filter, no limit, no nextToken, then environment and accountId)
+    const result = await scanItems(tableName, undefined, undefined, undefined, environment, undefined, undefined, accountId)
+    const locks = result.items as ExecutionLock[]
+
+    if (!locks || locks.length === 0) {
+      console.log('  No locks found to clean up')
+      return 0
+    }
+
+    const cutoffTime = Date.now() - (maxAgeMinutes * 60 * 1000)
+    let deletedCount = 0
+
+    // Delete locks older than cutoff
+    for (const lock of locks) {
+      const lockAge = new Date(lock.claimedAt).getTime()
+
+      if (lockAge < cutoffTime) {
+        console.log(`  → Deleting stale lock: ${lock.lockId} (claimed by ${lock.claimedBy} at ${lock.claimedAt})`)
+
+        await deleteItem(
+          tableName,
+          { lockId: lock.lockId },
+          environment,
+          accountId
+        )
+
+        deletedCount++
+      }
+    }
+
+    if (deletedCount > 0) {
+      console.log(`✓ Cleaned up ${deletedCount} stale execution lock(s)`)
+    } else {
+      console.log('  No stale locks found')
+    }
+
+    return deletedCount
+  } catch (error: any) {
+    console.error('Error cleaning up stale locks:', error)
+    return 0
+  }
+}

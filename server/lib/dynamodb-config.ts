@@ -188,7 +188,19 @@ export function clearConfigCache(): void {
  */
 export async function getTableConfig(tableName: keyof DynamoDBConfig): Promise<DynamoDBTableConfig> {
   const config = await getDynamoDBConfig()
-  return config[tableName]
+  const tableConfig = config[tableName]
+
+  // Debug logging for development
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`[DynamoDB Config] Getting config for "${tableName}":`, {
+      tableName: tableConfig.tableName,
+      environment: tableConfig.environment,
+      region: tableConfig.region,
+      accountId: tableConfig.accountId
+    })
+  }
+
+  return tableConfig
 }
 
 /**

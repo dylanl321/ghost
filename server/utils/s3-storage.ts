@@ -83,10 +83,13 @@ function getRegion(): string {
 
 /**
  * Get default presigned URL expiration in seconds
+ * AWS Signature v4 presigned URLs have a maximum expiration of 7 days
  */
 function getDefaultPresignedExpiration(): number {
-  const days = parseInt(process.env.S3_PRESIGNED_URL_EXPIRES_DAYS || '30', 10)
-  return days * 24 * 60 * 60 // Convert to seconds
+  const days = parseInt(process.env.S3_PRESIGNED_URL_EXPIRES_DAYS || '7', 10)
+  const maxDays = 7 // AWS SigV4 limit
+  const actualDays = Math.min(days, maxDays)
+  return actualDays * 24 * 60 * 60 // Convert to seconds
 }
 
 // Deployment account ID where S3 bucket and DynamoDB tables are located

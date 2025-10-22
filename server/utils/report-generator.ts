@@ -51,12 +51,32 @@ export async function generateCostReport(
 
 /**
  * Build NormalizedDataset from cost data
- * This creates the same data structure the frontend uses
+ * This creates the same data structure the frontend uses with proper budgetAnalysis
  */
 async function buildDataset(config: ReportConfig): Promise<NormalizedDataset> {
+  console.log('[Report Generator] Building dataset with config:', {
+    dataMode: config.dataMode,
+    timeframe: config.timeframe,
+    accountCount: config.accounts?.length || 0
+  })
+
+  // Import necessary utilities
+  const { getProformaCosts } = await import('./cost-explorer')
+
   // Convert timeframe to date range
   const dateRange = validateDateParams({
     period: config.timeframe as any
+  })
+
+  const environment = 'commercial'
+
+  // Determine which cost function to use based on dataMode
+  const costFetcher = config.dataMode === 'proforma' ? getProformaCosts : getCostAndUsage
+
+  console.log('[Report Generator] Fetching costs:', {
+    mode: config.dataMode,
+    fetcher: config.dataMode === 'proforma' ? 'getProformaCosts' : 'getCostAndUsage',
+    dateRange
   })
 
   // Fetch cost data
@@ -78,45 +98,86 @@ async function buildDataset(config: ReportConfig): Promise<NormalizedDataset> {
     } : undefined
   }
 
-  const environment = config.dataMode === 'billable' ? 'commercial' : 'commercial'
-
-  // Build additional data fetches if forecast is included
-  const fetchPromises: any[] = [
-    getCostAndUsage(costParams, environment),
+  // Fetch all required data
+  const [costData, accounts] = await Promise.all([
+    costFetcher(costParams, environment),
     getAllAccountsUnified(false)
-  ]
-
-  // Fetch YTD summary for accurate YTD totals
-  if (config.includeForecast) {
-    const ytdParams = {
-      ...costParams,
-      ...validateDateParams({ period: 'ytd' })
-    }
-    fetchPromises.push(getCostAndUsage(ytdParams, environment))
-  }
-
-  // Fetch all data in parallel
-  const results = await Promise.all(fetchPromises)
-  const costData = results[0]
-  const accounts = results[1]
-  const ytdData = config.includeForecast ? results[2] : null
+  ])
 
   if (!costData || !costData.resultsByTime) {
     throw new Error('No cost data returned from AWS')
   }
 
-  // Build normalized dataset (same structure as frontend)
+  // Build budgetAnalysis structure that matches what sheets expect
+  const accountCostsMap = new Map<string, number>()
+  costData.resultsByTime.forEach((result: any) => {
+    result.Groups?.forEach((group: any) => {
+      const accountId = group.Keys?.[0]
+      const cost = parseFloat(group.Metrics?.UnblendedCost?.Amount || '0')
+      if (accountId) {
+        accountCostsMap.set(accountId, (accountCostsMap.get(accountId) || 0) + cost)
+      }
+    })
+  })
+
+  // Build account lookup map
+  const accountMap = new Map()
+  accounts.forEach(acc => {
+    if (acc.awsStandardAccountID) accountMap.set(acc.awsStandardAccountID, acc)
+    if (acc.awsGovCloudAccountID) accountMap.set(acc.awsGovCloudAccountID, acc)
+  })
+
+  // Build budgetAnalysis.byAccount array that matches the structure sheets need
+  const byAccount = Array.from(accountCostsMap.entries()).map(([accountId, actualCost]) => {
+    const account = accountMap.get(accountId)
+
+    // Extract budget from account metadata (stored as estimatedMonthlyCharge)
+    const budgetStr = account?.estimatedMonthlyCharge || '0'
+    const budgetedCost = parseFloat(budgetStr.replace(/[^0-9.-]/g, '')) || 0
+
+    return {
+      accountId,
+      accountName: account?.name || account?.projectName || accountId,
+      actualCost,
+      budgetedCost,
+      variance: actualCost - budgetedCost,
+      utilizationPct: budgetedCost > 0 ? (actualCost / budgetedCost) * 100 : 0,
+      // Additional metadata
+      linesOfBusiness: account?.linesOfBusiness || '',
+      departmentNumber: account?.departmentNumber || ''
+    }
+  })
+
+  // Build budget analysis structure - matches what /api/costs/analysis returns
+  const budgetAnalysis = {
+    byAccount,
+    totalActual: Array.from(accountCostsMap.values()).reduce((sum, cost) => sum + cost, 0),
+    totalBudget: byAccount.reduce((sum, acc) => sum + acc.budgetedCost, 0),
+    overBudgetAccounts: byAccount.filter(acc => acc.utilizationPct > 100),
+    underBudgetAccounts: byAccount.filter(acc => acc.utilizationPct <= 100)
+  }
+
+  console.log('[Report Generator] Dataset built successfully:', {
+    mode: config.dataMode,
+    hasBudgetAnalysis: true,
+    accountCount: byAccount.length,
+    totalCost: budgetAnalysis.totalActual
+  })
+
+  // Build normalized dataset matching client structure
+  // IMPORTANT: analysis should NOT have .data property that wraps budgetAnalysis
+  // The sheet builder checks for .data and if it exists, uses that instead of budgetAnalysis
   const dataset: NormalizedDataset = {
     accounts: config.accounts || [],
     timeframe: config.timeframe,
     mode: config.dataMode,
-    analysis: { data: costData },
+    analysis: { budgetAnalysis },  // Top-level budgetAnalysis, matches API response
     services: config.includeServices ? { data: costData } : null,
     historical: config.includeHistorical ? { data: costData } : null,
     forecast: config.includeForecast ? { data: costData } : null,
-    ytdSummary: config.includeForecast && ytdData ? { data: ytdData } : null,
-    yearEndForecast: null,
-    currentMonthOrgWide: null,
+    ytdSummary: config.includeForecast ? { data: costData } : null,
+    yearEndForecast: config.includeForecast ? { data: costData } : null,
+    currentMonthOrgWide: { data: costData, accounts: byAccount },
     accountsList: accounts
   }
 

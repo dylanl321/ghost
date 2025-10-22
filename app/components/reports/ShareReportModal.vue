@@ -32,7 +32,7 @@
               Report link created successfully!
             </p>
             <p class="text-xs text-green-700 dark:text-green-300 mt-0.5">
-              Link expires in 90 days
+              Report available for 90 days
             </p>
           </div>
         </div>
@@ -59,7 +59,7 @@
             </UButton>
           </div>
           <p class="text-xs text-gray-600 dark:text-gray-400 mt-2">
-            Anyone with this link can download the report for 90 days
+            Anyone with this link can download the report (available for 90 days)
           </p>
         </div>
 
@@ -92,7 +92,7 @@
       <!-- Initial Form State -->
       <div v-else class="space-y-4">
         <p class="text-sm text-gray-600 dark:text-gray-400">
-          Generate a shareable link for the current cost report view. The link will be valid for 90 days.
+          Generate a shareable link for the current cost report view. The report will be available for 90 days.
         </p>
 
         <div>

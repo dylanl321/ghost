@@ -3,7 +3,7 @@
  * DELETE /api/reports/shared-reports/:id
  */
 
-import { getTableName, getTableEnvironment } from '../../../lib/dynamodb-config'
+import { getTableConfig } from '../../../lib/dynamodb-config'
 import type { SharedReport } from '~/shared/types/shared-reports'
 
 export default defineEventHandler(async (event) => {
@@ -30,11 +30,10 @@ export default defineEventHandler(async (event) => {
 
     console.log(`Deleting shared report: ${shareId} for user ${userEmail}`)
 
-    const tableName = await getTableName('shared-reports')
-    const environment = await getTableEnvironment('shared-reports')
+    const tableConfig = await getTableConfig('sharedReports')
 
     // Get the report to verify ownership and get S3 key
-    const report = await getItem(tableName, { shareId }, environment) as SharedReport | null
+    const report = await getItem(tableConfig.tableName, { shareId }, tableConfig.environment, tableConfig.accountId) as SharedReport | null
 
     if (!report) {
       return {
@@ -62,7 +61,7 @@ export default defineEventHandler(async (event) => {
     }
 
     // Delete from DynamoDB
-    await deleteItem(tableName, { shareId }, environment)
+    await deleteItem(tableConfig.tableName, { shareId }, tableConfig.environment, tableConfig.accountId)
 
     console.log(`  ✓ Shared report deleted successfully`)
 

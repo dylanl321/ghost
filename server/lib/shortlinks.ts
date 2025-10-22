@@ -1,6 +1,6 @@
 import { randomBytes } from 'crypto'
 import { getItem, putItem, updateItem, scanItems } from '../utils/dynamodb'
-import { getTableName, getTableEnvironment } from './dynamodb-config'
+import { getTableConfig } from './dynamodb-config'
 
 // Table configuration now loaded dynamically from Secrets Manager or environment variables
 
@@ -68,10 +68,9 @@ export async function createShortLink(data: {
     description: data.description,
     ttl
   }
-  
-  const tableName = await getTableName('shortlinks')
-  const environment = await getTableEnvironment('shortlinks')
-  await putItem(tableName, item, environment)
+
+  const tableConfig = await getTableConfig('shortlinks')
+  await putItem(tableConfig.tableName, item, tableConfig.environment, tableConfig.accountId)
   return item
 }
 
@@ -80,24 +79,23 @@ export async function createShortLink(data: {
  */
 export async function getShortLink(shortCode: string): Promise<ShortLink | null> {
   try {
-    const tableName = await getTableName('shortlinks')
-    const environment = await getTableEnvironment('shortlinks')
-    const item = await getItem(tableName, { shortCode }, environment) as ShortLink
+    const tableConfig = await getTableConfig('shortlinks')
+    const item = await getItem(tableConfig.tableName, { shortCode }, tableConfig.environment, tableConfig.accountId) as ShortLink
 
     if (!item) return null
-    
+
     // Check if expired
     if (item.expiresAt && new Date(item.expiresAt) < new Date()) {
       return null
     }
-    
+
     // Update visit count and last visited
     const now = new Date().toISOString()
-    const updatedItem = await updateItem(tableName, { shortCode }, {
+    const updatedItem = await updateItem(tableConfig.tableName, { shortCode }, {
       visitCount: (item.visitCount || 0) + 1,
       lastVisited: now
-    }, environment)
-    
+    }, tableConfig.environment, tableConfig.accountId)
+
     return updatedItem as ShortLink
   } catch (error) {
     console.error('Error getting short link:', error)
@@ -115,21 +113,23 @@ export async function listShortLinks(options: {
 }): Promise<{ links: ShortLink[], total: number }> {
   try {
     const limit = options.limit || 50
-    
+
     // Build filter expression for non-expired items
     let filterExpression = undefined
     if (options.createdBy) {
       filterExpression = 'createdBy = :createdBy'
     }
-    
-    const tableName = await getTableName('shortlinks')
-    const environment = await getTableEnvironment('shortlinks')
+
+    const tableConfig = await getTableConfig('shortlinks')
     const result = await scanItems(
-      tableName,
+      tableConfig.tableName,
       filterExpression,
       limit,
       undefined, // nextToken for pagination
-      environment
+      tableConfig.environment,
+      undefined, // expressionAttributeNames
+      undefined, // expressionAttributeValues
+      tableConfig.accountId
     )
     
     // Filter out expired links
@@ -163,12 +163,11 @@ export async function getShortLinkAnalytics(shortCode: string): Promise<{
   lastVisited?: string
 } | null> {
   try {
-    const tableName = await getTableName('shortlinks')
-    const environment = await getTableEnvironment('shortlinks')
-    const item = await getItem(tableName, { shortCode }, environment) as ShortLink
-    
+    const tableConfig = await getTableConfig('shortlinks')
+    const item = await getItem(tableConfig.tableName, { shortCode }, tableConfig.environment, tableConfig.accountId) as ShortLink
+
     if (!item) return null
-    
+
     return {
       visitCount: item.visitCount || 0,
       createdAt: item.createdAt,

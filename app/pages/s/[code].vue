@@ -43,7 +43,13 @@ interface UserShareLinkState {
   username: string
 }
 
-type ShareLinkState = CostShareLinkState | AccountShareLinkState | UserShareLinkState
+interface ReportShareLinkState {
+  shareId: string
+  reportName: string
+  format: string
+}
+
+type ShareLinkState = CostShareLinkState | AccountShareLinkState | UserShareLinkState | ReportShareLinkState
 
 // Get the shortlink code from the route
 const route = useRoute()
@@ -85,6 +91,24 @@ onMounted(async () => {
     }
 
     const { pagePath, configData } = response.data
+
+    // Handle shared report downloads directly
+    if ('shareId' in configData) {
+      const reportData = configData as ReportShareLinkState
+
+      // Fetch the report and generate presigned URL, then redirect
+      try {
+        const downloadResponse = await $fetch<{ presignedUrl: string }>(`/api/reports/download/${reportData.shareId}`)
+
+        // Redirect to S3 directly
+        window.location.href = downloadResponse.presignedUrl
+        return
+      } catch (err: any) {
+        error.value = err?.data?.message || 'Failed to download report'
+        isLoading.value = false
+        return
+      }
+    }
 
     // Build query parameters based on page type
     const queryParams = new URLSearchParams()

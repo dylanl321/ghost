@@ -60,12 +60,15 @@ function getContentType(format: 'pdf' | 'csv'): string {
 
 /**
  * Upload a report to S3
+ * @param generatePresignedUrl - If true, generates a presigned URL immediately (for scheduled reports sent via email)
+ *                               If false, presigned URLs generated on-demand (for shared reports accessed via shortlink)
  */
 export async function uploadReportToS3(
   type: ReportType,
   buffer: Buffer,
   metadata: ReportMetadata,
-  timestamp?: number
+  timestamp?: number,
+  generatePresignedUrl: boolean = true
 ): Promise<ReportUploadResult> {
   try {
     const key = generateReportKey(type, metadata, timestamp)
@@ -101,18 +104,22 @@ export async function uploadReportToS3(
       return uploadResult
     }
 
-    // Generate presigned URL
-    const s3Url = await getPresignedDownloadUrl({ key })
+    // Optionally generate presigned URL (for scheduled reports sent via email)
+    // For shared reports, presigned URLs are generated on-demand when accessed
+    if (generatePresignedUrl) {
+      const s3Url = await getPresignedDownloadUrl({ key })
+      const expiresInSeconds = parseInt(process.env.S3_PRESIGNED_URL_EXPIRES_DAYS || '7', 10) * 24 * 60 * 60
+      const s3UrlExpiresAt = new Date(Date.now() + expiresInSeconds * 1000).toISOString()
 
-    // Calculate expiration time (30 days from now)
-    const expiresInSeconds = parseInt(process.env.S3_PRESIGNED_URL_EXPIRES_DAYS || '30', 10) * 24 * 60 * 60
-    const s3UrlExpiresAt = new Date(Date.now() + expiresInSeconds * 1000).toISOString()
-
-    return {
-      ...uploadResult,
-      s3Url,
-      s3UrlExpiresAt
+      return {
+        ...uploadResult,
+        s3Url,
+        s3UrlExpiresAt
+      }
     }
+
+    // Return without presigned URL
+    return uploadResult
   } catch (error: any) {
     console.error('Error uploading report to S3:', error)
     return {

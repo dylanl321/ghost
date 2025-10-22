@@ -4,7 +4,7 @@
  * Redirects to S3 presigned URL
  */
 
-import { getTableName, getTableEnvironment } from '../../../lib/dynamodb-config'
+import { getTableConfig } from '../../../lib/dynamodb-config'
 import type { SharedReport } from '~/shared/types/shared-reports'
 
 export default defineEventHandler(async (event) => {
@@ -20,11 +20,10 @@ export default defineEventHandler(async (event) => {
 
     console.log(`Downloading shared report: ${shareId}`)
 
-    const tableName = await getTableName('shared-reports')
-    const environment = await getTableEnvironment('shared-reports')
+    const tableConfig = await getTableConfig('sharedReports')
 
     // Get the shared report
-    const report = await getItem(tableName, { shareId }, environment) as SharedReport | null
+    const report = await getItem(tableConfig.tableName, { shareId }, tableConfig.environment, tableConfig.accountId) as SharedReport | null
 
     if (!report) {
       throw createError({
@@ -43,27 +42,27 @@ export default defineEventHandler(async (event) => {
 
     // Increment download count
     await updateItem(
-      tableName,
+      tableConfig.tableName,
       { shareId },
       {
         downloadCount: (report.downloadCount || 0) + 1
       },
-      environment
+      tableConfig.environment,
+      tableConfig.accountId
     )
 
-    // Generate fresh presigned URL (or use existing if still valid)
-    let downloadUrl = report.s3Url
+    // Generate fresh presigned URL on-demand (valid for 7 days)
+    console.log('  → Generating presigned URL for S3 download')
+    const presignedUrl = await getReportDownloadUrl(report.s3Key, 7)
 
-    // If URL is expired or missing, generate a new one
-    if (!downloadUrl || (report.s3UrlExpiresAt && new Date(report.s3UrlExpiresAt) < new Date())) {
-      console.log('  → Generating fresh presigned URL')
-      downloadUrl = await getReportDownloadUrl(report.s3Key, 30) // 30 days
+    console.log(`  → Returning presigned URL`)
+
+    // Return presigned URL for frontend to handle download
+    return {
+      presignedUrl,
+      reportName: report.reportName,
+      reportSize: report.reportSize
     }
-
-    console.log(`  → Redirecting to S3 download`)
-
-    // Redirect to S3 presigned URL
-    return sendRedirect(event, downloadUrl, 302)
   } catch (error: any) {
     console.error('Error downloading shared report:', error)
 

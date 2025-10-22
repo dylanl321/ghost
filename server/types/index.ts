@@ -48,6 +48,8 @@ export interface DynamoDBQueryParams {
   expressionAttributeValues?: Record<string, any>
   limit?: number
   nextToken?: string
+  indexName?: string
+  scanIndexForward?: boolean
 }
 
 export interface CostExplorerParams {
