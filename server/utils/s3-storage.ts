@@ -89,6 +89,9 @@ function getDefaultPresignedExpiration(): number {
   return days * 24 * 60 * 60 // Convert to seconds
 }
 
+// Deployment account ID where S3 bucket and DynamoDB tables are located
+const deploymentAccountId = '461760157232'
+
 /**
  * Upload a file to S3
  */
@@ -99,8 +102,8 @@ export async function uploadToS3(options: UploadOptions): Promise<S3UploadResult
 
     console.log(`Uploading to S3: s3://${bucket}/${options.key}`)
 
-    // Get S3 client for GovCloud
-    const s3Client = await getS3Client('govcloud', region)
+    // Get S3 client for GovCloud with role assumption to deployment account
+    const s3Client = await getS3Client('govcloud', region, deploymentAccountId)
 
     const command = new PutObjectCommand({
       Bucket: bucket,
@@ -145,8 +148,8 @@ export async function getPresignedDownloadUrl(options: PresignedUrlOptions): Pro
 
     console.log(`Generating presigned URL for: s3://${bucket}/${options.key}`)
 
-    // Get S3 client for GovCloud
-    const s3Client = await getS3Client('govcloud', region)
+    // Get S3 client for GovCloud with role assumption to deployment account
+    const s3Client = await getS3Client('govcloud', region, deploymentAccountId)
 
     const command = new GetObjectCommand({
       Bucket: bucket,
@@ -174,8 +177,8 @@ export async function deleteFromS3(key: string): Promise<{ success: boolean; err
 
     console.log(`Deleting from S3: s3://${bucket}/${key}`)
 
-    // Get S3 client for GovCloud
-    const s3Client = await getS3Client('govcloud', region)
+    // Get S3 client for GovCloud with role assumption to deployment account
+    const s3Client = await getS3Client('govcloud', region, deploymentAccountId)
 
     const command = new DeleteObjectCommand({
       Bucket: bucket,
@@ -204,8 +207,8 @@ export async function getObjectMetadata(key: string): Promise<S3ObjectMetadata |
     const bucket = getBucketName()
     const region = getRegion()
 
-    // Get S3 client for GovCloud
-    const s3Client = await getS3Client('govcloud', region)
+    // Get S3 client for GovCloud with role assumption to deployment account
+    const s3Client = await getS3Client('govcloud', region, deploymentAccountId)
 
     const command = new HeadObjectCommand({
       Bucket: bucket,
@@ -240,8 +243,8 @@ export async function listObjectsByPrefix(
     const bucket = getBucketName()
     const region = getRegion()
 
-    // Get S3 client for GovCloud
-    const s3Client = await getS3Client('govcloud', region)
+    // Get S3 client for GovCloud with role assumption to deployment account
+    const s3Client = await getS3Client('govcloud', region, deploymentAccountId)
 
     const command = new ListObjectsV2Command({
       Bucket: bucket,
