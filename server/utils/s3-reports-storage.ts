@@ -154,9 +154,9 @@ export async function deleteReportFromS3(s3Key: string): Promise<{ success: bool
 }
 
 /**
- * List all reports for a user
+ * List all report files for a user from S3 storage
  */
-export async function listUserReports(
+export async function listUserReportFiles(
   userId: string,
   type: ReportType = 'shared',
   maxKeys: number = 100

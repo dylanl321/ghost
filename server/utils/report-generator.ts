@@ -70,9 +70,6 @@ async function buildDataset(config: ReportConfig): Promise<NormalizedDataset> {
 
   const environment = 'commercial'
 
-  // Determine which cost function to use based on dataMode
-  const costFetcher = config.dataMode === 'proforma' ? getProformaCosts : getCostAndUsage
-
   console.log('[Report Generator] Fetching costs:', {
     mode: config.dataMode,
     fetcher: config.dataMode === 'proforma' ? 'getProformaCosts' : 'getCostAndUsage',
@@ -98,13 +95,31 @@ async function buildDataset(config: ReportConfig): Promise<NormalizedDataset> {
     } : undefined
   }
 
-  // Fetch all required data
-  const [costData, accounts] = await Promise.all([
-    costFetcher(costParams, environment),
+  // Fetch all required data - call the appropriate function with correct parameters
+  const [rawCostData, accounts] = await Promise.all([
+    config.dataMode === 'proforma'
+      ? getProformaCosts(costParams)  // Uses default proforma account ID from env
+      : getCostAndUsage(costParams, environment),  // Pass environment for billable
     getAllAccountsUnified(false)
   ])
 
-  if (!costData || !costData.resultsByTime) {
+  // Extract the actual cost data based on mode
+  // getProformaCosts returns { proforma: { costs: {...} } }
+  // getCostAndUsage returns { resultsByTime: [...] } directly
+  let costData: any
+  if (config.dataMode === 'proforma') {
+    if (!rawCostData?.proforma?.costs?.resultsByTime) {
+      throw new Error('No proforma cost data returned from AWS')
+    }
+    costData = rawCostData.proforma.costs
+  } else {
+    if (!rawCostData?.resultsByTime) {
+      throw new Error('No cost data returned from AWS')
+    }
+    costData = rawCostData
+  }
+
+  if (!costData.resultsByTime) {
     throw new Error('No cost data returned from AWS')
   }
 
