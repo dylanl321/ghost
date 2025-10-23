@@ -151,6 +151,32 @@ const config = await getTableConfig('apiKeys')
 
 **Note**: This table is managed by external systems and should not be modified by the GHOST dashboard.
 
+### 8. Account Notes (`ghost-account-notes`)
+
+**Purpose**: Stores admin notes and comments on AWS accounts
+**Environment**: GovCloud (Account B - deployment account)
+**Terraform**: `terraform/account-notes.tf`
+**Config Key**: `accountNotes`
+
+**Attributes:**
+- `noteId` (Hash Key) - Unique note identifier (UUID)
+- `accountId` - AWS account ID (GSI)
+- `createdBy` - User email who created the note (GSI)
+- `createdAt` - Timestamp (used as range key in GSIs)
+- `content` - Note content
+- `mentionedUsers` - Array of mentioned user emails
+- `tags` - Categorization tags
+
+**Indexes:**
+- `AccountIdIndex` - Query notes by account ID
+- `CreatedByIndex` - Query notes by creator
+
+**Features:**
+- Admin-only access
+- Support for @mentions with email notifications
+- Tagging for categorization
+- Creator-only delete permissions
+
 ## Environment Configuration
 
 ### Production (via Secrets Manager)
@@ -355,6 +381,8 @@ clearConfigCache()
 | `apiKeys` | `ghost-api-keys` | GovCloud | Account B | API keys storage |
 | `apiKeysUsage` | `ghost-api-keys-usage` | GovCloud | Account B | API usage tracking |
 | `shortlinks` | `ghost-dashboard-shortlinks` | GovCloud | Account B | URL shortlinks |
+| `userPreferences` | `ghost-user-preferences` | GovCloud | Account B | User preferences |
+| `accountNotes` | `ghost-account-notes` | GovCloud | Account B | Account notes (admin) |
 | `externalAccounts` | `gdms_aws_accounts-master` | GovCloud | Account B | AWS accounts (external) |
 
 **Note**: All tables are in Account B (deployment account: 461760157232) and accessed via ECS task role.

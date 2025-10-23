@@ -1,7 +1,6 @@
 <template>
   <div v-if="shouldShow">
     <!-- Separator -->
-    <div class="border-t border-slate-700 my-2"></div>
 
     <!-- Collapsed sidebar: Just the icon -->
     <div
@@ -23,51 +22,45 @@
     </div>
 
     <!-- Expanded sidebar: Simple collapsible section -->
-    <div v-else class="py-2 px-3">
+    <div v-else class="space-y-1 px-3">
       <!-- Header -->
       <button
-        class="w-full flex items-center justify-between px-3 py-2 rounded-md text-slate-300 hover:bg-slate-800 transition-colors group"
+        class="w-full flex items-center px-3 py-2 rounded-md cursor-pointer hover:bg-slate-800 transition-colors relative group overflow-hidden text-slate-400"
+        :class="{ 'text-white bg-slate-800': isExpanded }"
         @click="isExpanded = !isExpanded"
       >
-        <div class="flex items-center gap-2">
-          <UIcon name="i-heroicons-star-solid" class="w-4 h-4 text-yellow-500" />
-          <span class="text-sm font-medium">Favorites</span>
-          <UBadge
-            v-if="favorites.length > 0"
-            size="xs"
-            color="gray"
-            variant="subtle"
-          >
-            {{ favorites.length }}
-          </UBadge>
-          <UTooltip text="Learn about favorites">
-            <NuxtLink
-              to="/support/docs?topic=favorites-guide"
-              class="text-slate-400 hover:text-slate-300"
-              @click.stop
+        <UIcon name="i-heroicons-star-solid" class="flex-shrink-0 w-5 h-5 text-yellow-500" />
+        <div class="flex items-center justify-between flex-1 ml-3 min-w-0">
+          <span class="text-sm font-medium truncate">Favorites</span>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <UBadge
+              v-if="favorites.length > 0"
+              size="xs"
+              color="gray"
+              variant="subtle"
             >
-              <UIcon name="i-heroicons-question-mark-circle" class="w-3.5 h-3.5" />
-            </NuxtLink>
-          </UTooltip>
+              {{ favorites.length }}
+            </UBadge>
+            <UIcon
+              :name="isExpanded ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'"
+              class="w-4 h-4 transition-transform"
+            />
+          </div>
         </div>
-        <UIcon
-          :name="isExpanded ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'"
-          class="w-4 h-4 transition-transform"
-        />
       </button>
 
       <!-- Favorites List -->
-      <div v-if="isExpanded" class="mt-1 space-y-0.5">
+      <div v-if="isExpanded" class="ml-8 space-y-0.5">
         <template v-if="favorites.length > 0">
           <NuxtLink
             v-for="account in favorites"
             :key="account.accountId"
             :to="`/account/${account.accountId}`"
-            class="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
+            class="flex items-center gap-2 px-3 py-2 rounded-md text-slate-400 hover:bg-slate-800 hover:text-white transition-colors text-sm"
             :class="{ 'text-white bg-slate-800': isActiveAccount(account.accountId) }"
           >
             <UIcon name="i-heroicons-building-office-2" class="w-4 h-4 flex-shrink-0" />
-            <span class="truncate text-xs" :title="account.projectName || account.accountId">
+            <span class="truncate" :title="account.projectName || account.accountId">
               {{ account.projectName || account.accountId }}
             </span>
           </NuxtLink>

@@ -101,8 +101,9 @@ export function useAccountNotes(accountId: string) {
     error.value = null
 
     try {
-      await $fetch(`/api/accounts/${accountId}/notes/${noteId}`, {
-        method: 'DELETE'
+      await $fetch(`/api/accounts/${accountId}/notes.delete`, {
+        method: 'POST',
+        body: { noteId }
       })
 
       // Remove from list
@@ -145,4 +146,5 @@ export function useAccountNotes(accountId: string) {
     deleteNote
   }
 }
+
 

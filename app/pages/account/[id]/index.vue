@@ -87,16 +87,8 @@
           <!-- Account Users -->
           <AccountUsers :users="users" :account-id="accountId" :loading="loading" class="col-span-1" />
 
-          <!-- Service Availability -->
-          <ServiceAvailabilityCard
-            :resource-counts="resourceCounts"
-            :loading="loading"
-            class="col-span-1 lg:col-span-2"
-            @view-resources="selectedTab = 1"
-          />
-
           <!-- Cost Trend Chart -->
-          <CostTrendChart title="Account Cost Trends" :time-series-billable="billableTimeSeries" :time-series-proforma="proformaTimeSeries" :loading="loading" class="col-span-1 lg:col-span-3" />
+          <CostTrendChart title="Account Cost Trends" :time-series-billable="billableTimeSeries" :time-series-proforma="proformaTimeSeries" :loading="loading" class="col-span-1 lg:col-span-2" />
         </div>
       </template>
 

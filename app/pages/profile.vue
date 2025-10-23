@@ -58,7 +58,7 @@
           </div>
 
           <!-- User Badges -->
-          <div class="pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div class="pt-4">
             <h4 class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-3">Badges</h4>
             <div class="flex flex-wrap gap-2">
               <UBadge

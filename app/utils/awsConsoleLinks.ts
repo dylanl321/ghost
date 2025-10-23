@@ -277,3 +277,4 @@ export function getSessionManagerLink(accountId: string, isGovCloud: boolean = f
   return `${baseUrl}/systems-manager/session-manager?region=${region}`
 }
 
+

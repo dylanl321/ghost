@@ -71,3 +71,4 @@ output "account_notes_table_name" {
   value       = aws_dynamodb_table.account_notes.name
 }
 
+

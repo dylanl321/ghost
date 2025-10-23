@@ -84,8 +84,8 @@
     </div>
 
     <!-- Navigation Menu -->
-    <div class="flex-1 overflow-y-auto py-6 overflow-x-hidden">
-      <nav class="space-y-1 px-3 min-w-0">
+    <div class="flex-1 overflow-y-auto py-6 overflow-x-hidden flex flex-col">
+      <nav class="space-y-1 px-3 min-w-0 flex-shrink-0">
         <template v-for="item in navigationItems" :key="item.label">
           <!-- Menu Item -->
           <div class="text-slate-400">
@@ -200,6 +200,10 @@
           </div>
         </template>
       </nav>
+
+      <!-- Spacer to push favorites/recent to bottom -->
+      <div class="flex-1"></div>
+
       <!-- Favorite Accounts -->
       <FavoriteAccountsNav />
       <!-- Recent Accounts -->

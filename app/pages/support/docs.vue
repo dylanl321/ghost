@@ -1,5 +1,5 @@
 <template>
-  <DocsLayout :categories="categories" v-model="selectedArticleId">
+  <DocsLayout v-if="!loading" :categories="categories" v-model="selectedArticleId">
     <!-- Breadcrumbs -->
     <div class="mb-6">
       <nav class="flex items-center space-x-2 text-sm">
@@ -24,9 +24,6 @@
       <div class="p-8">
         <!-- Article Header -->
         <div class="mb-8 pb-6 border-b border-gray-200 dark:border-gray-700">
-          <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            {{ currentArticle.title }}
-          </h1>
           <div class="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
             <span class="flex items-center">
               <UIcon name="i-heroicons-folder" class="w-4 h-4 mr-1" />
@@ -134,10 +131,15 @@
       </div>
     </div>
   </DocsLayout>
+  
+  <!-- Loading State -->
+  <div v-else class="flex items-center justify-center min-h-screen">
+    <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-gray-400" />
+  </div>
 </template>
 
 <script setup lang="ts">
-import { supportCategories, getArticleById, getCategoryByArticleId } from '~/utils/supportArticles'
+import { loadSupportCategories, getArticleById, getCategoryByArticleId } from '~/utils/supportArticles'
 import type { SupportArticle, SupportCategory } from '~/utils/supportArticles'
 
 // Page meta
@@ -151,11 +153,23 @@ const route = useRoute()
 const router = useRouter()
 const selectedArticleId = ref<string>('')
 
-// Data
-const categories = supportCategories
+// Load categories from API
+const categories = ref<SupportCategory[]>([])
+const loading = ref(true)
+
+onMounted(async () => {
+  categories.value = await loadSupportCategories()
+  loading.value = false
+  
+  // Check for topic query parameter after categories load
+  const topicParam = route.query.topic as string
+  if (topicParam) {
+    selectedArticleId.value = topicParam
+  }
+})
 
 // Quick start articles for the welcome page
-const quickStartArticles = [
+const quickStartArticles = computed(() => [
   {
     id: 'universal-search',
     title: 'Universal Search',
@@ -180,15 +194,17 @@ const quickStartArticles = [
     description: 'Request and use API keys for scripts, automation, and integrations',
     icon: 'i-heroicons-key'
   }
-]
+])
 
 // Computed properties
-const currentArticle = computed(() => {
-  return selectedArticleId.value ? getArticleById(selectedArticleId.value) : undefined
+const currentArticle = computed<SupportArticle | undefined>(() => {
+  if (!selectedArticleId.value || !categories.value.length) return undefined
+  return getArticleById(selectedArticleId.value, categories.value)
 })
 
-const currentCategory = computed(() => {
-  return selectedArticleId.value ? getCategoryByArticleId(selectedArticleId.value) : undefined
+const currentCategory = computed<SupportCategory | undefined>(() => {
+  if (!selectedArticleId.value || !categories.value.length) return undefined
+  return getCategoryByArticleId(selectedArticleId.value, categories.value)
 })
 
 const relatedArticles = computed(() => {

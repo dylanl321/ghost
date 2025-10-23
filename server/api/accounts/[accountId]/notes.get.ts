@@ -1,5 +1,5 @@
 /**
- * GET /api/accounts/:accountId/notes
+ * GET /api/accounts/:accountId/account-notes-list
  * List notes for an account (admin only)
  */
 
@@ -41,4 +41,3 @@ export default defineEventHandler(async (event) => {
     return errors.serverError(event, error.message || 'Failed to list notes')
   }
 })
-

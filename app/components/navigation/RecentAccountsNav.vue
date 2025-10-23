@@ -23,27 +23,34 @@
     </div>
 
     <!-- Expanded sidebar: Collapsible section -->
-    <div v-else-if="!navigationStore.isCollapsed || navigationStore.isHovered" class="px-3 py-2">
+    <div v-else-if="!navigationStore.isCollapsed || navigationStore.isHovered" class="space-y-1 px-3">
       <button
-        class="w-full flex items-center justify-between px-2 py-1.5 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
+        class="w-full flex items-center px-3 py-2 rounded-md cursor-pointer hover:bg-slate-800 transition-colors relative group overflow-hidden text-slate-400"
+        :class="{ 'text-white bg-slate-800': isExpanded }"
         @click="isExpanded = !isExpanded"
       >
-        <div class="flex items-center gap-2">
-          <UIcon name="i-heroicons-clock" class="w-4 h-4" />
-          <span>Recent</span>
-          <span v-if="recentAccounts.length > 0" class="text-xs text-slate-500">
-            ({{ recentAccounts.length }})
-          </span>
+        <UIcon name="i-heroicons-clock" class="flex-shrink-0 w-5 h-5" />
+        <div class="flex items-center justify-between flex-1 ml-3 min-w-0">
+          <span class="text-sm font-medium truncate">Recent</span>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <UBadge
+              v-if="recentAccounts.length > 0"
+              size="xs"
+              color="gray"
+              variant="subtle"
+            >
+              {{ recentAccounts.length }}
+            </UBadge>
+            <UIcon
+              :name="isExpanded ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'"
+              class="w-4 h-4 transition-transform"
+            />
+          </div>
         </div>
-        <UIcon
-          name="i-heroicons-chevron-down"
-          :class="isExpanded ? 'rotate-180' : ''"
-          class="w-4 h-4 transition-transform"
-        />
       </button>
 
       <!-- Recent Accounts List -->
-      <div v-if="isExpanded" class="mt-1 space-y-0.5">
+      <div v-if="isExpanded" class="ml-8 space-y-0.5">
         <template v-if="recentAccounts.length > 0">
           <div
             v-for="account in recentAccounts"
@@ -52,11 +59,11 @@
           >
             <NuxtLink
               :to="`/account/${account.accountId}`"
-              class="flex-1 flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
+              class="flex-1 flex items-center gap-2 px-3 py-2 rounded-md text-slate-400 hover:bg-slate-800 hover:text-white transition-colors text-sm"
               :class="{ 'text-white bg-slate-800': isActiveAccount(account.accountId) }"
             >
               <UIcon name="i-heroicons-building-office-2" class="w-4 h-4 flex-shrink-0" />
-              <span class="truncate text-xs flex-1" :title="account.projectName || account.accountId">
+              <span class="truncate flex-1" :title="account.projectName || account.accountId">
                 {{ account.projectName || account.accountId }}
               </span>
             </NuxtLink>
@@ -92,7 +99,7 @@ const navigationStore = useNavigationStore()
 const { recentAccounts, removeRecentAccount } = useRecentAccounts()
 
 // Local state
-const isExpanded = ref(true)
+const isExpanded = ref(false)
 
 // Show the component when expanded or when collapsed with recent accounts
 const shouldShow = computed(() => {
@@ -114,4 +121,5 @@ async function handleRemove(accountId: string) {
   await removeRecentAccount(accountId)
 }
 </script>
+
 

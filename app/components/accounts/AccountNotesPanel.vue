@@ -38,62 +38,92 @@
           </div>
         </div>
 
-        <!-- Mentioned Users -->
-        <div v-if="mentionedUsers.length > 0">
-          <label class="block text-sm font-medium text-gray-300 mb-2">Mentioned Users</label>
-          <div class="flex flex-wrap gap-2">
+        <!-- User Mentions Search -->
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">
+            Mention Users (optional)
+          </label>
+
+          <!-- Search Input -->
+          <div class="relative">
+            <UInput
+              v-model="userSearchQuery"
+              placeholder="Search users by name or email to mention..."
+              icon="i-heroicons-magnifying-glass"
+              @input="onUserSearchInput"
+              @focus="showUserDropdown = true"
+            />
+
+            <!-- Search Results Dropdown -->
+            <div
+              v-if="showUserDropdown && (userSearchResults.length > 0 || searchingUsers) && userSearchQuery.length >= 2"
+              ref="userDropdownRef"
+              class="absolute z-10 mt-1 w-full rounded-lg shadow-lg p-2 max-h-60 overflow-y-auto border border-gray-800 bg-[#0e1625]"
+            >
+              <!-- Loading -->
+              <div v-if="searchingUsers" class="px-2 py-2 text-sm text-gray-400 flex items-center gap-2">
+                <UIcon name="i-heroicons-arrow-path" class="animate-spin w-4 h-4" />
+                Searching users...
+              </div>
+
+              <!-- Results -->
+              <div
+                v-for="result in userSearchResults"
+                v-else
+                :key="result.userPrincipalName"
+                class="px-2 py-2 text-sm cursor-pointer rounded hover:bg-gray-800 transition"
+                @click="selectUser(result)"
+              >
+                <div class="flex items-center gap-2">
+                  <UIcon name="i-heroicons-user" class="w-4 h-4 text-blue-500" />
+                  <div class="flex flex-col">
+                    <span class="font-medium text-white">{{ result.displayName }}</span>
+                    <span class="text-xs text-gray-500">{{ result.userPrincipalName }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Selected Users -->
+          <div v-if="selectedUserMentions.length > 0" class="flex flex-wrap gap-2 mt-2">
             <UBadge
-              v-for="user in mentionedUsers"
-              :key="user"
+              v-for="user in selectedUserMentions"
+              :key="user.userPrincipalName"
               color="blue"
               variant="soft"
               size="sm"
             >
-              <template #default>
-                <div class="flex items-center gap-1">
-                  <UIcon name="i-heroicons-at-symbol" class="w-3 h-3" />
-                  {{ user }}
-                  <button @click="removeMention(user)" class="ml-1 hover:text-red-400">
-                    <UIcon name="i-heroicons-x-mark" class="w-3 h-3" />
-                  </button>
-                </div>
-              </template>
+              <div class="flex items-center gap-1">
+                <UIcon name="i-heroicons-at-symbol" class="w-3 h-3" />
+                {{ formatUserDisplayName(user.userPrincipalName) }}
+                <button @click="removeSelectedUser(user)" class="ml-1 hover:text-red-400">
+                  <UIcon name="i-heroicons-x-mark" class="w-3 h-3" />
+                </button>
+              </div>
             </UBadge>
           </div>
         </div>
 
         <!-- Actions -->
-        <div class="flex justify-between items-center pt-2">
-          <div class="flex gap-2">
-            <UButton
-              icon="i-heroicons-at-symbol"
-              color="gray"
-              variant="soft"
-              size="sm"
-              @click="showMentionDialog = true"
-            >
-              Mention User
-            </UButton>
-          </div>
-          <div class="flex gap-2">
-            <UButton
-              color="gray"
-              variant="ghost"
-              size="sm"
-              :disabled="saving"
-              @click="clearForm"
-            >
-              Clear
-            </UButton>
-            <UButton
-              color="primary"
-              :loading="saving"
-              :disabled="!canSubmit"
-              @click="handleCreateNote"
-            >
-              Add Note
-            </UButton>
-          </div>
+        <div class="flex justify-end items-center pt-2 gap-2">
+          <UButton
+            color="gray"
+            variant="ghost"
+            size="sm"
+            :disabled="saving"
+            @click="clearForm"
+          >
+            Clear
+          </UButton>
+          <UButton
+            color="primary"
+            :loading="saving"
+            :disabled="!canSubmit"
+            @click="handleCreateNote"
+          >
+            Add Note
+          </UButton>
         </div>
       </div>
     </UCard>
@@ -119,19 +149,30 @@
           <!-- Note Header -->
           <div class="flex items-start justify-between">
             <div class="flex-1">
-              <div class="flex items-center gap-2">
-                <span class="font-medium text-white">{{ note.createdBy }}</span>
-                <span class="text-xs text-gray-500">
-                  {{ formatDate(note.createdAt) }}
-                </span>
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="font-medium text-white">{{ formatUserDisplayName(note.createdBy) }}</span>
+                <UTooltip :text="formatFullDate(note.createdAt)">
+                  <span class="text-xs text-gray-500 cursor-help">
+                    {{ formatRelativeDate(note.createdAt) }}
+                  </span>
+                </UTooltip>
+                <UTooltip v-if="note.updatedAt" :text="`Last edited: ${formatFullDate(note.updatedAt)}`">
+                  <UBadge
+                    color="gray"
+                    variant="subtle"
+                    size="xs"
+                    class="cursor-help"
+                  >
+                    edited {{ formatRelativeDate(note.updatedAt) }}
+                  </UBadge>
+                </UTooltip>
                 <UBadge
-                  v-if="note.updatedAt"
-                  color="gray"
+                  v-if="note.mentionedUsers && note.mentionedUsers.length > 0"
+                  color="blue"
                   variant="subtle"
                   size="xs"
-                  title="This note was edited"
                 >
-                  edited
+                  <UIcon name="i-heroicons-at-symbol" class="w-3 h-3" />
                 </UBadge>
               </div>
               <!-- Tags -->
@@ -163,34 +204,26 @@
           <div class="text-gray-300 whitespace-pre-wrap">{{ note.content }}</div>
 
           <!-- Mentioned Users -->
-          <div v-if="note.mentionedUsers && note.mentionedUsers.length > 0" class="flex items-center gap-2 text-xs text-gray-500">
-            <UIcon name="i-heroicons-at-symbol" class="w-3 h-3" />
-            <span>Mentioned: {{ note.mentionedUsers.join(', ') }}</span>
+          <div v-if="note.mentionedUsers && note.mentionedUsers.length > 0" class="flex items-start gap-2 text-xs">
+            <div class="flex items-center gap-1 text-gray-500">
+              <UIcon name="i-heroicons-at-symbol" class="w-3 h-3" />
+              <span>Mentioned:</span>
+            </div>
+            <div class="flex flex-wrap gap-1">
+              <UBadge
+                v-for="mentionedUser in note.mentionedUsers"
+                :key="mentionedUser"
+                color="blue"
+                variant="soft"
+                size="xs"
+              >
+                {{ formatUserDisplayName(mentionedUser) }}
+              </UBadge>
+            </div>
           </div>
         </div>
       </UCard>
     </div>
-
-    <!-- Mention User Dialog -->
-    <UModal v-model="showMentionDialog" title="Mention User">
-      <div class="p-4 space-y-4">
-        <p class="text-sm text-gray-400">Enter the email of the user you want to mention:</p>
-        <UInput
-          v-model="mentionEmail"
-          type="email"
-          placeholder="user@example.com"
-          @keyup.enter="addMention"
-        />
-        <div class="flex justify-end gap-2">
-          <UButton color="gray" variant="ghost" @click="showMentionDialog = false">
-            Cancel
-          </UButton>
-          <UButton color="primary" @click="addMention">
-            Add Mention
-          </UButton>
-        </div>
-      </div>
-    </UModal>
   </div>
 </template>
 
@@ -198,25 +231,43 @@
 import { ref, computed, onMounted } from 'vue'
 import { useToast } from '#imports'
 import { NOTE_TAG_OPTIONS } from '#shared/types/account-notes'
+import { formatUsername } from '~/utils/userUtils'
+import { onClickOutside } from '@vueuse/core'
 
 interface Props {
   accountId: string
+}
+
+interface UserSearchResult {
+  id: string
+  displayName: string
+  userPrincipalName: string
+  mail?: string
+  jobTitle?: string
+  department?: string
 }
 
 const props = defineProps<Props>()
 
 const toast = useToast()
 const { user } = useOidcAuth()
+const { searchUsers } = useGraphApi()
 const { notes, loading, fetchNotes, createNote, deleteNote } = useAccountNotes(props.accountId)
 
 // Form state
 const newNoteContent = ref('')
 const selectedTags = ref<string[]>([])
-const mentionedUsers = ref<string[]>([])
+const selectedUserMentions = ref<UserSearchResult[]>([])
 const saving = ref(false)
 const deleting = ref<string | null>(null)
-const showMentionDialog = ref(false)
-const mentionEmail = ref('')
+
+// User search state
+const userSearchQuery = ref('')
+const userSearchResults = ref<UserSearchResult[]>([])
+const searchingUsers = ref(false)
+const showUserDropdown = ref(false)
+const userDropdownRef = ref(null)
+let searchDebounceTimer: NodeJS.Timeout | null = null
 
 const availableTags = NOTE_TAG_OPTIONS
 
@@ -226,12 +277,59 @@ const canSubmit = computed(() => {
 })
 
 const currentUserEmail = computed(() => {
-  return user.value?.claims?.email as string || user.value?.email || ''
+  return user.value?.claims?.email as string || ''
+})
+
+// Close dropdown when clicking outside
+onClickOutside(userDropdownRef, () => {
+  showUserDropdown.value = false
 })
 
 // Check if current user can delete a note (only creator can delete)
 function canDeleteNote(note: any): boolean {
   return note.createdBy === currentUserEmail.value
+}
+
+// Format user display name from email (first.last@domain.com -> First Last)
+function formatUserDisplayName(email: string): string {
+  if (!email) return ''
+  // Extract username part before @
+  const username = email.includes('@') ? email.split('@')[0] : email
+  return formatUsername(username || '')
+}
+
+// Format full date with time (e.g., "January 15, 2025 at 2:30 PM")
+function formatFullDate(dateString: string): string {
+  const date = new Date(dateString)
+  return date.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  })
+}
+
+// Format relative date (e.g., "2h ago", "3d ago")
+function formatRelativeDate(dateString: string): string {
+  const date = new Date(dateString)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMins < 1) return 'just now'
+  if (diffMins < 60) return `${diffMins}m ago`
+  if (diffHours < 24) return `${diffHours}h ago`
+  if (diffDays < 7) return `${diffDays}d ago`
+
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+  })
 }
 
 // Methods
@@ -244,26 +342,70 @@ function toggleTag(tag: string) {
   }
 }
 
-function addMention() {
-  const email = mentionEmail.value.trim()
-  if (email && !mentionedUsers.value.includes(email)) {
-    mentionedUsers.value.push(email)
-    mentionEmail.value = ''
-    showMentionDialog.value = false
-  }
+// Handle user search input event
+function onUserSearchInput() {
+  handleUserSearchAsync(userSearchQuery.value)
 }
 
-function removeMention(email: string) {
-  const index = mentionedUsers.value.indexOf(email)
-  if (index > -1) {
-    mentionedUsers.value.splice(index, 1)
+// Handle user search with debouncing (async)
+function handleUserSearchAsync(query: string) {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
   }
+
+  if (!query || query.trim().length < 2) {
+    userSearchResults.value = []
+    showUserDropdown.value = false
+    return
+  }
+
+  searchDebounceTimer = setTimeout(async () => {
+    searchingUsers.value = true
+    showUserDropdown.value = true
+    try {
+      const accessToken = user.value?.accessToken || ''
+      const results = await searchUsers(accessToken, query, 10)
+      console.log('User search results:', results) // Debug log
+      userSearchResults.value = results as UserSearchResult[]
+    } catch (error) {
+      console.error('Failed to search users:', error)
+      userSearchResults.value = []
+    } finally {
+      searchingUsers.value = false
+    }
+  }, 300)
+}
+
+// Select a user from search results
+function selectUser(user: UserSearchResult) {
+  // Add to selected if not already there
+  const alreadySelected = selectedUserMentions.value.find(
+    u => u.userPrincipalName === user.userPrincipalName
+  )
+
+  if (!alreadySelected) {
+    selectedUserMentions.value.push(user)
+  }
+
+  // Clear search
+  userSearchQuery.value = ''
+  userSearchResults.value = []
+  showUserDropdown.value = false
+}
+
+// Remove a selected user
+function removeSelectedUser(user: UserSearchResult) {
+  selectedUserMentions.value = selectedUserMentions.value.filter(
+    u => u.userPrincipalName !== user.userPrincipalName
+  )
 }
 
 function clearForm() {
   newNoteContent.value = ''
   selectedTags.value = []
-  mentionedUsers.value = []
+  selectedUserMentions.value = []
+  userSearchQuery.value = ''
+  userSearchResults.value = []
 }
 
 async function handleCreateNote() {
@@ -272,10 +414,13 @@ async function handleCreateNote() {
   saving.value = true
 
   try {
+    // Extract user emails from selected user objects
+    const mentionedUserEmails = selectedUserMentions.value.map(u => u.userPrincipalName)
+
     const success = await createNote({
       content: newNoteContent.value.trim(),
       tags: selectedTags.value,
-      mentionedUsers: mentionedUsers.value
+      mentionedUsers: mentionedUserEmails
     })
 
     if (success) {
@@ -300,29 +445,10 @@ async function handleDeleteNote(noteId: string) {
   }
 }
 
-function formatDate(dateString: string): string {
-  const date = new Date(dateString)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMs / 3600000)
-  const diffDays = Math.floor(diffMs / 86400000)
-
-  if (diffMins < 1) return 'just now'
-  if (diffMins < 60) return `${diffMins}m ago`
-  if (diffHours < 24) return `${diffHours}h ago`
-  if (diffDays < 7) return `${diffDays}d ago`
-
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
-  })
-}
-
 // Load notes on mount
 onMounted(() => {
   fetchNotes()
 })
 </script>
+
 
