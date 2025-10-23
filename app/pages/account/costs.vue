@@ -720,6 +720,7 @@ import { useCostFilters } from '~/composables/useCostFilters'
 import type { DataMode } from '~/types/costs'
 
 const { accounts, isLoading, error, fetchAccounts } = useAccountCosts()
+const { favoriteIds } = useFavoriteAccounts()
 
 // Types
 interface Account {
@@ -1129,6 +1130,25 @@ const lobGroups = computed(() => {
   return allGroups
 })
 
+// Favorite accounts computed property
+const favoriteAccounts = computed(() => {
+  if (favoriteIds.value.length === 0) return []
+
+  // Filter accounts that are in the favorites list
+  let favorites = accountsWithCosts.value.filter((account: Account) => {
+    const accountKey = getAccountKey(account)
+    return favoriteIds.value.includes(accountKey)
+  })
+
+  // Apply search filtering if we're in global search mode or searching within favorites tab
+  if (searchTerm.value && (searchScope.value === 'global' || activeTab.value === 'favorites')) {
+    const term = searchTerm.value.toLowerCase()
+    favorites = favorites.filter(acc => matchesSearchTerm(acc, term))
+  }
+
+  return favorites
+})
+
 const departmentGroups = computed(() => {
   const groups = new Map<string, { name: string; accounts: Account[]; totalBudget: number; totalSpend: number }>()
   
@@ -1175,7 +1195,21 @@ const departmentGroups = computed(() => {
 
 const smartGroups = computed(() => {
   const groups: Array<{ id: string; name: string; description: string; icon: string; iconColor: string; accounts: Account[]; totalBudget: number; totalSpend: number }> = []
-  
+
+  // Favorites (if any)
+  if (favoriteAccounts.value.length > 0) {
+    groups.push({
+      id: 'favorites',
+      name: 'My Favorites',
+      description: 'Your starred accounts',
+      icon: 'i-heroicons-star-solid',
+      iconColor: 'text-yellow-500',
+      accounts: favoriteAccounts.value,
+      totalBudget: favoriteAccounts.value.reduce((sum: number, acc: Account) => sum + getBudget(acc), 0),
+      totalSpend: favoriteAccounts.value.reduce((sum: number, acc: Account) => sum + getSpend(acc), 0)
+    })
+  }
+
   // High Budget (>$10K/month)
   const highBudgetAccounts = accountsWithCosts.value.filter((acc: Account) => getBudget(acc) > 10000)
   if (highBudgetAccounts.length > 0) {

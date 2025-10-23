@@ -4,33 +4,157 @@
     <div class="mb-6 flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-1">
-          User Preferences
+          User Preferences Management
         </h1>
         <p class="text-sm text-gray-600 dark:text-gray-400">
-          View and manage user preferences for all users
+          View, edit, and manage all user preferences and custom settings
         </p>
+      </div>
+      <div class="flex gap-2">
+        <UButton
+          icon="i-heroicons-arrow-down-tray"
+          color="gray"
+          variant="soft"
+          size="sm"
+          @click="exportToCSV"
+          :disabled="filteredPreferences.length === 0"
+        >
+          Export
+        </UButton>
+        <UButton
+          icon="i-heroicons-arrow-path"
+          color="blue"
+          variant="soft"
+          size="sm"
+          @click="loadPreferences"
+          :loading="loading"
+        >
+          Refresh
+        </UButton>
       </div>
     </div>
 
-    <!-- Info Alert -->
-    <UAlert
-      color="blue"
-      variant="soft"
-      icon="i-heroicons-information-circle"
-      class="mb-6"
-      title="About User Preferences"
-      description="User preferences include timezone settings, last login times, and custom settings. Changes to user preferences will affect how the application displays information for that user."
-    />
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <UCard>
+        <div class="flex items-center gap-3">
+          <div class="p-2 bg-blue-500/10 rounded-lg">
+            <Icon name="i-heroicons-users" class="w-5 h-5 text-blue-500" />
+          </div>
+          <div>
+            <p class="text-xs text-gray-600 dark:text-gray-400">Total Users</p>
+            <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ allPreferences.length }}</p>
+          </div>
+        </div>
+      </UCard>
+
+      <UCard>
+        <div class="flex items-center gap-3">
+          <div class="p-2 bg-green-500/10 rounded-lg">
+            <Icon name="i-heroicons-clock" class="w-5 h-5 text-green-500" />
+          </div>
+          <div>
+            <p class="text-xs text-gray-600 dark:text-gray-400">Active Today</p>
+            <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ activeToday }}</p>
+          </div>
+        </div>
+      </UCard>
+
+      <UCard>
+        <div class="flex items-center gap-3">
+          <div class="p-2 bg-yellow-500/10 rounded-lg">
+            <Icon name="i-heroicons-star" class="w-5 h-5 text-yellow-500" />
+          </div>
+          <div>
+            <p class="text-xs text-gray-600 dark:text-gray-400">With Favorites</p>
+            <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ usersWithFavorites }}</p>
+          </div>
+        </div>
+      </UCard>
+
+      <UCard>
+        <div class="flex items-center gap-3">
+          <div class="p-2 bg-purple-500/10 rounded-lg">
+            <Icon name="i-heroicons-globe-alt" class="w-5 h-5 text-purple-500" />
+          </div>
+          <div>
+            <p class="text-xs text-gray-600 dark:text-gray-400">Unique Timezones</p>
+            <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ uniqueTimezones }}</p>
+          </div>
+        </div>
+      </UCard>
+    </div>
+
+    <!-- Search and Filters -->
+    <UCard class="mb-6">
+      <div class="space-y-4">
+        <div class="flex flex-col sm:flex-row gap-4">
+          <!-- Search -->
+          <div class="flex-1">
+            <UInput
+              v-model="searchQuery"
+              icon="i-heroicons-magnifying-glass"
+              placeholder="Search by user email..."
+              size="lg"
+            />
+          </div>
+
+          <!-- Timezone Filter -->
+          <div class="w-full sm:w-64">
+            <USelect
+              v-model="timezoneFilter"
+              :options="[{ label: 'All Timezones', value: '' }, ...timezoneOptions]"
+              size="lg"
+              placeholder="Filter by timezone"
+            />
+          </div>
+
+          <!-- Sort -->
+          <div class="w-full sm:w-48">
+            <USelect
+              v-model="sortBy"
+              :options="sortOptions"
+              size="lg"
+            />
+          </div>
+        </div>
+
+        <!-- Active Filters Display -->
+        <div v-if="searchQuery || timezoneFilter" class="flex items-center gap-2 flex-wrap">
+          <span class="text-xs text-gray-600 dark:text-gray-400">Active filters:</span>
+          <UBadge v-if="searchQuery" color="blue" variant="soft" size="sm">
+            Search: {{ searchQuery }}
+            <button @click="searchQuery = ''" class="ml-1 hover:text-gray-900 dark:hover:text-white">
+              <Icon name="i-heroicons-x-mark" class="w-3 h-3" />
+            </button>
+          </UBadge>
+          <UBadge v-if="timezoneFilter" color="blue" variant="soft" size="sm">
+            Timezone: {{ timezoneFilter }}
+            <button @click="timezoneFilter = ''" class="ml-1 hover:text-gray-900 dark:hover:text-white">
+              <Icon name="i-heroicons-x-mark" class="w-3 h-3" />
+            </button>
+          </UBadge>
+          <UButton
+            size="xs"
+            color="gray"
+            variant="ghost"
+            @click="clearFilters"
+          >
+            Clear all
+          </UButton>
+        </div>
+      </div>
+    </UCard>
 
     <!-- User Preferences List -->
     <UCard>
       <template #header>
         <div class="flex items-center justify-between">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
-            All Users
+            User Preferences
           </h2>
-          <UBadge color="gray" variant="soft">
-            {{ allPreferences.length }} {{ allPreferences.length === 1 ? 'user' : 'users' }}
+          <UBadge color="blue" variant="soft">
+            {{ filteredPreferences.length }} of {{ allPreferences.length }} {{ allPreferences.length === 1 ? 'user' : 'users' }}
           </UBadge>
         </div>
       </template>
@@ -69,18 +193,19 @@
             <tr class="text-left">
               <th class="pb-3 pr-4 font-medium text-gray-700 dark:text-gray-300">User</th>
               <th class="pb-3 pr-4 font-medium text-gray-700 dark:text-gray-300">Timezone</th>
+              <th class="pb-3 pr-4 font-medium text-gray-700 dark:text-gray-300">Favorites</th>
               <th class="pb-3 pr-4 font-medium text-gray-700 dark:text-gray-300">Last Login</th>
               <th class="pb-3 pr-4 font-medium text-gray-700 dark:text-gray-300">Created</th>
               <th class="pb-3 font-medium text-gray-700 dark:text-gray-300">Actions</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-200 dark:divide-gray-800">
-            <tr v-for="prefs in allPreferences" :key="prefs.userId" class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+            <tr v-for="prefs in filteredPreferences" :key="prefs.userId" class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
               <td class="py-3 pr-4">
                 <div class="flex items-center gap-2">
                   <UserAvatar :email="prefs.userId" size="sm" />
                   <div>
-                    <div class="font-medium text-gray-900 dark:text-white">{{ prefs.userId }}</div>
+                    <div class="font-medium text-gray-900 dark:text-white text-sm">{{ prefs.userId }}</div>
                   </div>
                 </div>
               </td>
@@ -89,6 +214,14 @@
                   {{ prefs.timezone }}
                 </UBadge>
               </td>
+              <td class="py-3 pr-4">
+                <div class="flex items-center gap-1">
+                  <Icon name="i-heroicons-star-solid" class="w-4 h-4 text-yellow-500" />
+                  <span class="text-gray-900 dark:text-white font-medium">
+                    {{ getFavoriteCount(prefs) }}
+                  </span>
+                </div>
+              </td>
               <td class="py-3 pr-4 text-gray-600 dark:text-gray-400 text-xs">
                 {{ prefs.lastLoginAt ? formatDate(prefs.lastLoginAt) : 'Never' }}
               </td>
@@ -96,25 +229,31 @@
                 {{ formatDate(prefs.createdAt) }}
               </td>
               <td class="py-3">
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-1">
+                  <UButton
+                    color="gray"
+                    variant="ghost"
+                    size="xs"
+                    icon="i-heroicons-eye"
+                    @click="viewDetails(prefs)"
+                    title="View details"
+                  />
                   <UButton
                     color="blue"
                     variant="ghost"
                     size="xs"
                     icon="i-heroicons-pencil"
                     @click="editPreferences(prefs)"
-                  >
-                    Edit
-                  </UButton>
+                    title="Edit preferences"
+                  />
                   <UButton
                     color="red"
                     variant="ghost"
                     size="xs"
                     icon="i-heroicons-trash"
                     @click="confirmDelete(prefs)"
-                  >
-                    Delete
-                  </UButton>
+                    title="Delete preferences"
+                  />
                 </div>
               </td>
             </tr>
@@ -123,8 +262,119 @@
       </div>
     </UCard>
 
+    <!-- Details Modal -->
+    <UModal v-model="showDetailsModal" :ui="{ width: 'sm:max-w-2xl' }">
+      <UCard>
+        <template #header>
+          <div class="flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+              User Preferences Details
+            </h3>
+            <UButton
+              icon="i-heroicons-pencil"
+              color="blue"
+              variant="soft"
+              size="xs"
+              @click="editFromDetails"
+            >
+              Edit
+            </UButton>
+          </div>
+        </template>
+
+        <div v-if="viewingPrefs" class="space-y-6">
+          <!-- User Info -->
+          <div>
+            <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">User Information</h4>
+            <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 space-y-3">
+              <div class="flex items-center gap-3">
+                <UserAvatar :email="viewingPrefs.userId" size="md" />
+                <div>
+                  <div class="font-medium text-gray-900 dark:text-white">{{ viewingPrefs.userId }}</div>
+                  <div class="text-xs text-gray-500">User ID</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- System Preferences -->
+          <div>
+            <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">System Preferences</h4>
+            <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 space-y-3">
+              <div class="flex justify-between items-center">
+                <span class="text-sm text-gray-600 dark:text-gray-400">Timezone</span>
+                <UBadge color="blue" variant="soft">{{ viewingPrefs.timezone }}</UBadge>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-sm text-gray-600 dark:text-gray-400">Last Login</span>
+                <span class="text-sm text-gray-900 dark:text-white">
+                  {{ viewingPrefs.lastLoginAt ? formatDate(viewingPrefs.lastLoginAt) : 'Never' }}
+                </span>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-sm text-gray-600 dark:text-gray-400">Account Created</span>
+                <span class="text-sm text-gray-900 dark:text-white">{{ formatDate(viewingPrefs.createdAt) }}</span>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-sm text-gray-600 dark:text-gray-400">Last Updated</span>
+                <span class="text-sm text-gray-900 dark:text-white">{{ formatDate(viewingPrefs.updatedAt) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Custom Preferences -->
+          <div v-if="viewingPrefs.preferences && Object.keys(viewingPrefs.preferences).length > 0">
+            <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Custom Preferences</h4>
+            <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 space-y-3">
+              <!-- Favorite Accounts -->
+              <div v-if="viewingPrefs.preferences.favoriteAccounts">
+                <div class="flex items-center gap-2 mb-2">
+                  <Icon name="i-heroicons-star-solid" class="w-4 h-4 text-yellow-500" />
+                  <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Favorite Accounts</span>
+                  <UBadge size="xs" color="gray" variant="soft">
+                    {{ viewingPrefs.preferences.favoriteAccounts.length }} accounts
+                  </UBadge>
+                </div>
+                <div class="pl-6 space-y-1">
+                  <div
+                    v-for="(accountId, idx) in viewingPrefs.preferences.favoriteAccounts"
+                    :key="idx"
+                    class="text-xs font-mono text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-900 px-2 py-1 rounded"
+                  >
+                    {{ accountId }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Other Custom Preferences -->
+              <div v-for="(value, key) in viewingPrefs.preferences" :key="key">
+                <div v-if="key !== 'favoriteAccounts'" class="space-y-2">
+                  <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ key }}</span>
+                  <pre class="text-xs bg-white dark:bg-gray-900 p-2 rounded overflow-x-auto">{{ JSON.stringify(value, null, 2) }}</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-else>
+            <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Custom Preferences</h4>
+            <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 text-center">
+              <p class="text-sm text-gray-500 dark:text-gray-400 italic">No custom preferences set</p>
+            </div>
+          </div>
+        </div>
+
+        <template #footer>
+          <div class="flex justify-end">
+            <UButton color="gray" variant="ghost" @click="showDetailsModal = false">
+              Close
+            </UButton>
+          </div>
+        </template>
+      </UCard>
+    </UModal>
+
     <!-- Edit Modal -->
-    <UModal v-model="showEditModal" :ui="{ width: 'sm:max-w-md' }">
+    <UModal v-model="showEditModal" :ui="{ width: 'sm:max-w-2xl' }">
       <UCard>
         <template #header>
           <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
@@ -154,6 +404,38 @@
               value-attribute="value"
               size="lg"
             />
+          </div>
+
+          <!-- Favorite Accounts Editor -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Favorite Accounts
+            </label>
+            <UTextarea
+              v-model="editFavorites"
+              :rows="5"
+              placeholder="Enter account IDs, one per line"
+              class="font-mono text-sm"
+            />
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Enter AWS account IDs, one per line. Current: {{ editFavorites.split('\n').filter(l => l.trim()).length }} accounts
+            </p>
+          </div>
+
+          <!-- Raw Custom Preferences JSON Editor -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Custom Preferences (Advanced)
+            </label>
+            <UTextarea
+              v-model="editCustomPreferences"
+              :rows="8"
+              placeholder="{}"
+              class="font-mono text-xs"
+            />
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              JSON format. Changes here will override the Favorite Accounts field above.
+            </p>
           </div>
         </div>
 
@@ -213,13 +495,104 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const showEditModal = ref(false)
 const showDeleteModal = ref(false)
+const showDetailsModal = ref(false)
 const editingPrefs = ref<UserPreferences | null>(null)
 const deletingPrefs = ref<UserPreferences | null>(null)
+const viewingPrefs = ref<UserPreferences | null>(null)
 const editTimezone = ref<string>('')
+const editFavorites = ref<string>('')
+const editCustomPreferences = ref<string>('')
 const saving = ref(false)
 const deleting = ref(false)
 const commonTimezones = COMMON_TIMEZONES
 const toast = useToast()
+
+// Search and filter state
+const searchQuery = ref('')
+const timezoneFilter = ref('')
+const sortBy = ref('lastLogin')
+
+// Computed properties for stats
+const activeToday = computed(() => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return allPreferences.value.filter(prefs => {
+    if (!prefs.lastLoginAt) return false
+    const lastLogin = new Date(prefs.lastLoginAt)
+    return lastLogin >= today
+  }).length
+})
+
+const usersWithFavorites = computed(() => {
+  return allPreferences.value.filter(prefs => {
+    return prefs.preferences?.favoriteAccounts && prefs.preferences.favoriteAccounts.length > 0
+  }).length
+})
+
+const uniqueTimezones = computed(() => {
+  const timezones = new Set(allPreferences.value.map(p => p.timezone))
+  return timezones.size
+})
+
+// Timezone options for filter
+const timezoneOptions = computed(() => {
+  const timezones = new Set(allPreferences.value.map(p => p.timezone))
+  return Array.from(timezones).sort().map(tz => ({ label: tz, value: tz }))
+})
+
+// Sort options
+const sortOptions = [
+  { label: 'Last Login (Recent)', value: 'lastLogin' },
+  { label: 'Created Date (Recent)', value: 'created' },
+  { label: 'User Email (A-Z)', value: 'email' },
+  { label: 'Most Favorites', value: 'favorites' }
+]
+
+// Filtered and sorted preferences
+const filteredPreferences = computed(() => {
+  let filtered = [...allPreferences.value]
+
+  // Apply search filter
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase()
+    filtered = filtered.filter(prefs =>
+      prefs.userId.toLowerCase().includes(query)
+    )
+  }
+
+  // Apply timezone filter
+  if (timezoneFilter.value) {
+    filtered = filtered.filter(prefs => prefs.timezone === timezoneFilter.value)
+  }
+
+  // Apply sorting
+  filtered.sort((a, b) => {
+    switch (sortBy.value) {
+      case 'lastLogin':
+        return new Date(b.lastLoginAt || 0).getTime() - new Date(a.lastLoginAt || 0).getTime()
+      case 'created':
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      case 'email':
+        return a.userId.localeCompare(b.userId)
+      case 'favorites':
+        return (b.preferences?.favoriteAccounts?.length || 0) - (a.preferences?.favoriteAccounts?.length || 0)
+      default:
+        return 0
+    }
+  })
+
+  return filtered
+})
+
+// Helper functions
+function getFavoriteCount(prefs: UserPreferences): number {
+  return prefs.preferences?.favoriteAccounts?.length || 0
+}
+
+function clearFilters() {
+  searchQuery.value = ''
+  timezoneFilter.value = ''
+}
 
 // Load all preferences
 async function loadPreferences() {
@@ -237,10 +610,32 @@ async function loadPreferences() {
   }
 }
 
+// View details
+function viewDetails(prefs: UserPreferences) {
+  viewingPrefs.value = prefs
+  showDetailsModal.value = true
+}
+
+// Edit from details modal
+function editFromDetails() {
+  if (viewingPrefs.value) {
+    showDetailsModal.value = false
+    editPreferences(viewingPrefs.value)
+  }
+}
+
 // Edit preferences
 function editPreferences(prefs: UserPreferences) {
   editingPrefs.value = prefs
   editTimezone.value = prefs.timezone
+
+  // Populate favorites textarea
+  const favorites = prefs.preferences?.favoriteAccounts || []
+  editFavorites.value = favorites.join('\n')
+
+  // Populate custom preferences JSON
+  editCustomPreferences.value = JSON.stringify(prefs.preferences || {}, null, 2)
+
   showEditModal.value = true
 }
 
@@ -250,16 +645,41 @@ async function saveEdit() {
 
   saving.value = true
   try {
+    // Parse custom preferences JSON
+    let customPrefs: Record<string, any> = {}
+    try {
+      customPrefs = JSON.parse(editCustomPreferences.value || '{}')
+    } catch (e) {
+      toast.add({
+        title: 'Invalid JSON',
+        description: 'Custom preferences must be valid JSON',
+        color: 'red',
+        icon: 'i-heroicons-exclamation-triangle'
+      })
+      saving.value = false
+      return
+    }
+
+    // If favorites field has content, parse and use it (overrides JSON)
+    if (editFavorites.value.trim()) {
+      const favoritesList = editFavorites.value
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0)
+      customPrefs.favoriteAccounts = favoritesList
+    }
+
     await $fetch(`/api/admin/user-preferences/${encodeURIComponent(editingPrefs.value.userId)}`, {
       method: 'PATCH',
       body: {
-        timezone: editTimezone.value
+        timezone: editTimezone.value,
+        preferences: customPrefs
       }
     })
 
     toast.add({
       title: 'Preferences Updated',
-      description: `Timezone updated for ${editingPrefs.value.userId}`,
+      description: `Preferences updated for ${editingPrefs.value.userId}`,
       color: 'green',
       icon: 'i-heroicons-check-circle'
     })
@@ -332,6 +752,51 @@ function formatDate(dateStr: string): string {
     return date.toLocaleDateString()
   } catch {
     return dateStr
+  }
+}
+
+// Export to CSV
+function exportToCSV() {
+  try {
+    const headers = ['User ID', 'Timezone', 'Favorite Count', 'Last Login', 'Created At', 'Updated At', 'Custom Preferences']
+    const rows = filteredPreferences.value.map(prefs => [
+      prefs.userId,
+      prefs.timezone,
+      getFavoriteCount(prefs).toString(),
+      prefs.lastLoginAt || 'Never',
+      prefs.createdAt,
+      prefs.updatedAt,
+      JSON.stringify(prefs.preferences || {})
+    ])
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(','))
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `user-preferences-${new Date().toISOString().split('T')[0]}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    toast.add({
+      title: 'Export Successful',
+      description: `Exported ${filteredPreferences.value.length} user preferences`,
+      color: 'green',
+      icon: 'i-heroicons-check-circle'
+    })
+  } catch (err: any) {
+    toast.add({
+      title: 'Export Failed',
+      description: err.message || 'Failed to export preferences',
+      color: 'red',
+      icon: 'i-heroicons-x-circle'
+    })
   }
 }
 

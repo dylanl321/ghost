@@ -8,6 +8,18 @@
           <h1 class="font-semibold text-2xl">{{ accountName ?? "Loading..." }}</h1>
         </div>
         <div class="flex gap-2">
+          <!-- Favorite Button -->
+          <UButton
+            v-if="accountId"
+            :icon="favoritesComposable.isFavorite(accountId) ? 'i-heroicons-star-solid' : 'i-heroicons-star'"
+            :color="favoritesComposable.isFavorite(accountId) ? 'yellow' : 'gray'"
+            variant="ghost"
+            size="sm"
+            :loading="favoritesComposable.loading.value"
+            :title="favoritesComposable.isFavorite(accountId) ? 'Remove from favorites' : 'Add to favorites'"
+            @click="favoritesComposable.toggleFavorite(accountId)"
+          />
+
           <AccountShareButton
             v-if="accountId"
             :account-id="accountId"
@@ -105,6 +117,7 @@ const route = useRoute()
 const enclaveStore = useEnclaveStore()
 const groupMembers = useGroupMembers()
 const { user } = useOidcAuth()
+const favoritesComposable = useFavoriteAccounts()
 
 const accountId = computed(() => route.params.id as string)
 const govCloudId = computed(() => enclaveStore.enclaves[accountId.value]?.awsGovCloudAccountID)

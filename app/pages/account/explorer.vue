@@ -67,6 +67,15 @@
           <label for="lobSelection" class="text-sm text-gray-600 dark:text-gray-400 mr-2">My Enclaves:</label>
           <UCheckbox v-model="myEnclavesCheckbox" />
         </div>
+
+        <!-- Favorites filter -->
+        <div class="flex items-center">
+          <label for="favoritesCheckbox" class="text-sm text-gray-600 dark:text-gray-400 mr-2 flex items-center gap-1">
+            <UIcon name="i-heroicons-star-solid" class="w-4 h-4 text-yellow-500" />
+            Favorites Only:
+          </label>
+          <UCheckbox id="favoritesCheckbox" v-model="favoritesCheckbox" />
+        </div>
       </div>
 
       <!-- Search -->
@@ -164,15 +173,22 @@
 
           <!-- Actions column -->
           <template #actions-data="{ row }">
-            <UDropdown :items="getActionItems(row)">
-              <UButton color="gray" variant="ghost" icon="i-heroicons-ellipsis-vertical" />
-              <template #items>
-                <ULink :to="`/account/${row.accountId}`"
-                  class="block px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-800">
-                  Account Details
-                </ULink>
-              </template>
-            </UDropdown>
+            <div class="flex items-center gap-1">
+              <!-- Favorite button -->
+              <UButton
+                :icon="isFavorite(row.awsStandardAccountID) ? 'i-heroicons-star-solid' : 'i-heroicons-star'"
+                :color="isFavorite(row.awsStandardAccountID) ? 'yellow' : 'gray'"
+                variant="ghost"
+                size="xs"
+                @click="toggleFavorite(row.awsStandardAccountID)"
+                :title="isFavorite(row.awsStandardAccountID) ? 'Remove from favorites' : 'Add to favorites'"
+              />
+
+              <!-- More actions -->
+              <UDropdown :items="getActionItems(row)">
+                <UButton color="gray" variant="ghost" icon="i-heroicons-ellipsis-vertical" size="xs" />
+              </UDropdown>
+            </div>
           </template>
 
         </UTable>
@@ -191,6 +207,7 @@ import { ref, computed } from 'vue'
 
 const enclaveStore = useEnclaveStore()
 const userGroupStore = useUserGroupStore()
+const { favoriteIds, toggleFavorite, isFavorite } = useFavoriteAccounts()
 const loading = ref(false)
 
 // search + filters
@@ -205,6 +222,7 @@ const lobFilter = ref<'All' | 'MSS' | 'SIS' | 'Cyber' | 'SC&I' | 'LAS' | 'IT'>('
 const lobOptions = ['All', 'MSS', 'SIS', 'Cyber', 'SC&I', 'LAS', 'IT']
 const sawseCheckbox = ref<boolean>(false)
 const myEnclavesCheckbox = ref<boolean>(false)
+const favoritesCheckbox = ref<boolean>(false)
 
 // pagination
 const page = ref(1)
@@ -343,7 +361,11 @@ const filteredRows = computed(() => {
       myEnclavesCheckbox.value === false ||
       Object.keys(userGroupStore.myEnclaves).some(accountId => accountId === e.awsStandardAccountID)
 
-    return matchesSearch && matchesStatus && matchesEnvironment && matchesLOB && matchesSAWSE && matchesMyEnclaves
+    const matchesFavorites =
+      favoritesCheckbox.value === false ||
+      isFavorite(e.awsStandardAccountID)
+
+    return matchesSearch && matchesStatus && matchesEnvironment && matchesLOB && matchesSAWSE && matchesMyEnclaves && matchesFavorites
   })
 })
 
@@ -360,6 +382,7 @@ function resetFilters() {
   lobFilter.value = 'All'
   sawseCheckbox.value = false
   myEnclavesCheckbox.value = false
+  favoritesCheckbox.value = false
 }
 
 </script>

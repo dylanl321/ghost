@@ -1,16 +1,19 @@
 /**
  * User Preferences Composable
  * Easy access to current user's preferences
+ * Singleton pattern - shared state across all components
  */
 
 import type { UserPreferences, UpdatePreferencesRequest } from '#shared/types/user-preferences'
 import { getBrowserTimezone } from '#shared/types/user-preferences'
 
-export function useUserPreferences() {
-  const preferences = ref<UserPreferences | null>(null)
-  const loading = ref(false)
-  const error = ref<string | null>(null)
+// Shared state (singleton pattern)
+const preferences = ref<UserPreferences | null>(null)
+const loading = ref(false)
+const error = ref<string | null>(null)
+const initialized = ref(false)
 
+export function useUserPreferences() {
   // Computed helpers
   const timezone = computed(() => preferences.value?.timezone || 'America/New_York')
   const lastLogin = computed(() => preferences.value?.lastLoginAt ? new Date(preferences.value.lastLoginAt) : null)
@@ -19,13 +22,19 @@ export function useUserPreferences() {
   /**
    * Load user preferences from API
    */
-  async function load() {
+  async function load(force: boolean = false) {
+    // Skip if already loaded and not forcing refresh
+    if (initialized.value && !force) {
+      return
+    }
+
     loading.value = true
     error.value = null
 
     try {
       const response = await $fetch<{ data: UserPreferences }>('/api/user/preferences')
       preferences.value = response.data
+      initialized.value = true
     } catch (err: any) {
       console.error('Failed to load user preferences:', err)
       error.value = err.message || 'Failed to load preferences'
@@ -38,6 +47,7 @@ export function useUserPreferences() {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
+      initialized.value = true
     } finally {
       loading.value = false
     }
@@ -78,7 +88,8 @@ export function useUserPreferences() {
    * Set a single preference value
    */
   async function setPreference(key: string, value: any) {
-    if (!preferences.value) {
+    // Ensure preferences are loaded first
+    if (!initialized.value) {
       await load()
     }
 
@@ -98,18 +109,24 @@ export function useUserPreferences() {
     return preferences.value?.preferences?.[key] ?? defaultValue
   }
 
-  // Auto-load on mount (client-side only)
+  // Auto-load on mount (client-side only) if not already loaded
   onMounted(() => {
-    if (process.client) {
+    if (process.client && !initialized.value) {
       load()
     }
   })
+
+  // Auto-initialize on first call (client-side only)
+  if (process.client && !initialized.value && !loading.value) {
+    load()
+  }
 
   return {
     // State
     preferences: readonly(preferences),
     loading: readonly(loading),
     error: readonly(error),
+    initialized: readonly(initialized),
 
     // Computed
     timezone,
