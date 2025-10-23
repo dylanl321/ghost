@@ -1,5 +1,3 @@
-import { loadSupportArticles } from '~/server/utils/supportArticleLoader'
-
 export default defineEventHandler(() => {
   try {
     const categories = loadSupportArticles()

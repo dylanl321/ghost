@@ -254,7 +254,7 @@ const openServiceNow = () => {
 // Watch for route query changes
 watch(() => route.query.topic, (topic) => {
   if (topic && typeof topic === 'string') {
-    const article = getArticleById(topic)
+    const article = getArticleById(topic, categories.value)
     if (article) {
       selectedArticleId.value = topic
     }
@@ -265,7 +265,7 @@ watch(() => route.query.topic, (topic) => {
 onMounted(() => {
   const topic = route.query.topic
   if (topic && typeof topic === 'string') {
-    const article = getArticleById(topic)
+    const article = getArticleById(topic, categories.value)
     if (article) {
       selectedArticleId.value = topic
     }

@@ -178,28 +178,28 @@ const popularArticles = [
     link: '/support/docs?topic=universal-search'
   },
   {
-    id: 'sharing-links',
-    title: 'Sharing GHOST Links',
-    description: 'Share filtered views and deep links with your team',
-    icon: 'i-heroicons-share',
+    id: 'favorites-guide',
+    title: 'Using Favorites',
+    description: 'Save and organize your most-used accounts',
+    icon: 'i-heroicons-star',
     color: 'text-green-600 dark:text-green-400',
-    link: '/support/docs?topic=sharing-links'
+    link: '/support/docs?topic=favorites-guide'
   },
   {
-    id: 'roles-permissions',
-    title: 'Understanding Roles & Permissions',
-    description: 'Learn about your access level and what you can do',
-    icon: 'i-heroicons-shield-check',
+    id: 'org-chart-guide',
+    title: 'Organization Chart Guide',
+    description: 'Navigate your AWS account hierarchy',
+    icon: 'i-heroicons-chart-bar',
     color: 'text-orange-600 dark:text-orange-400',
-    link: '/support/docs?topic=roles-permissions'
+    link: '/support/docs?topic=org-chart-guide'
   },
   {
-    id: 'request-access',
-    title: 'How to Request AWS Access',
-    description: 'Step-by-step guide to request account access',
-    icon: 'i-heroicons-key',
+    id: 'swagger-ui-guide',
+    title: 'Swagger UI for API Testing',
+    description: 'Interactive API testing and exploration',
+    icon: 'i-heroicons-code-bracket',
     color: 'text-indigo-600 dark:text-indigo-400',
-    link: '/support/docs?topic=request-access'
+    link: '/support/docs?topic=swagger-ui-guide'
   }
 ]
 
