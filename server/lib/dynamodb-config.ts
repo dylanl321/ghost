@@ -29,6 +29,7 @@ export interface DynamoDBConfig {
   shortlinks: DynamoDBTableConfig
   externalAccounts: DynamoDBTableConfig
   userPreferences: DynamoDBTableConfig
+  accountNotes: DynamoDBTableConfig
 }
 
 // Cache the configuration to avoid repeated Secrets Manager calls
@@ -143,6 +144,12 @@ function loadFromEnvironment(): DynamoDBConfig {
     },
     userPreferences: {
       tableName: process.env.USER_PREFERENCES_TABLE || 'ghost-user-preferences',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
+    },
+    accountNotes: {
+      tableName: process.env.ACCOUNT_NOTES_TABLE || 'ghost-account-notes',
       environment: 'govcloud',
       region: govCloudRegion,
       accountId: deploymentAccountId

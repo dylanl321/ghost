@@ -40,6 +40,15 @@
           >
             {{ favorites.length }}
           </UBadge>
+          <UTooltip text="Learn about favorites">
+            <NuxtLink
+              to="/support/docs?topic=favorites-guide"
+              class="text-slate-400 hover:text-slate-300"
+              @click.stop
+            >
+              <UIcon name="i-heroicons-question-mark-circle" class="w-3.5 h-3.5" />
+            </NuxtLink>
+          </UTooltip>
         </div>
         <UIcon
           :name="isExpanded ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'"

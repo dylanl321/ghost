@@ -32,9 +32,23 @@ export function useUserPreferences() {
     error.value = null
 
     try {
-      const response = await $fetch<{ data: UserPreferences }>('/api/user/preferences')
+      // Send browser timezone in query params so server can use it during auto-creation
+      const browserTz = getBrowserTimezone()
+      const response = await $fetch<{ data: UserPreferences }>('/api/user/preferences', {
+        query: { timezone: browserTz }
+      })
       preferences.value = response.data
       initialized.value = true
+
+      // Auto-fix timezone if it's still the server default (EST) and doesn't match browser
+      // This handles users who logged in before this fix was deployed
+      if (preferences.value.timezone === 'America/New_York' && browserTz !== 'America/New_York') {
+        console.log('Auto-updating timezone from server default (EST) to browser timezone:', browserTz)
+        // Update silently in background, don't wait for it
+        updateTimezone(browserTz).catch(err => {
+          console.warn('Failed to auto-update timezone:', err)
+        })
+      }
     } catch (err: any) {
       console.error('Failed to load user preferences:', err)
       error.value = err.message || 'Failed to load preferences'

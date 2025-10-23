@@ -426,7 +426,14 @@
                   <div class="flex items-center gap-2 min-w-0 flex-1">
                     <Icon :name="group.icon" class="w-4 h-4 flex-shrink-0" :class="group.iconColor" />
                     <div class="min-w-0">
-                      <div class="font-medium text-gray-200 truncate">{{ group.name }}</div>
+                      <div class="font-medium text-gray-200 truncate flex items-center gap-1">
+                        {{ group.name }}
+                        <UTooltip v-if="group.id === 'favorites'" text="Learn about favorites">
+                          <NuxtLink to="/support/docs?topic=favorites-guide" class="text-gray-400 hover:text-gray-300" @click.stop>
+                            <UIcon name="i-heroicons-question-mark-circle" class="w-3.5 h-3.5" />
+                          </NuxtLink>
+                        </UTooltip>
+                      </div>
                       <div class="text-xs text-gray-400 truncate">{{ group.description }}</div>
                       <div class="text-xs text-gray-400">{{ group.accounts.length }} accounts</div>
                     </div>

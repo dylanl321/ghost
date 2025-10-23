@@ -75,6 +75,11 @@
             Favorites Only:
           </label>
           <UCheckbox id="favoritesCheckbox" v-model="favoritesCheckbox" />
+          <UTooltip text="Learn about favorites">
+            <NuxtLink to="/support/docs?topic=favorites-guide" class="ml-1 text-gray-400 hover:text-gray-300">
+              <UIcon name="i-heroicons-question-mark-circle" class="w-4 h-4" />
+            </NuxtLink>
+          </UTooltip>
         </div>
       </div>
 

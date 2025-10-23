@@ -19,6 +19,16 @@
             :title="favoritesComposable.isFavorite(accountId) ? 'Remove from favorites' : 'Add to favorites'"
             @click="favoritesComposable.toggleFavorite(accountId)"
           />
+          <UTooltip text="Learn about favorites">
+            <NuxtLink to="/support/docs?topic=favorites-guide">
+              <UButton
+                icon="i-heroicons-question-mark-circle"
+                color="gray"
+                variant="ghost"
+                size="sm"
+              />
+            </NuxtLink>
+          </UTooltip>
 
           <AccountShareButton
             v-if="accountId"
@@ -27,6 +37,23 @@
             :selected-tab="selectedTab"
             :tab-name="currentTabName"
           />
+          
+          <!-- AWS Console Access Dropdown -->
+          <UDropdown
+            v-if="accountId"
+            :items="consoleMenuItems"
+            :popper="{ placement: 'bottom-end' }"
+          >
+            <UButton
+              icon="i-heroicons-arrow-top-right-on-square"
+              color="blue"
+              variant="soft"
+              trailing-icon="i-heroicons-chevron-down"
+            >
+              AWS Console
+            </UButton>
+          </UDropdown>
+
           <UButton
             v-if="accountId"
             icon="i-heroicons-chart-bar"
@@ -46,7 +73,7 @@
       <template #overview>
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 row-auto">
           <!-- Account Details -->
-          <AccountDetails v-if="accountId" :account-id="accountId" :current-spend="currentSpend" :users="users" class="col-span-2" />
+          <AccountDetails v-if="accountId" :account-id="accountId" :current-spend="currentSpend" :users="users" class="col-span-1 lg:col-span-2" />
 
           <!-- Budget Health -->
           <BudgetHealthCard
@@ -60,8 +87,16 @@
           <!-- Account Users -->
           <AccountUsers :users="users" :account-id="accountId" :loading="loading" class="col-span-1" />
 
+          <!-- Service Availability -->
+          <ServiceAvailabilityCard
+            :resource-counts="resourceCounts"
+            :loading="loading"
+            class="col-span-1 lg:col-span-2"
+            @view-resources="selectedTab = 1"
+          />
+
           <!-- Cost Trend Chart -->
-          <CostTrendChart title="Account Cost Trends" :time-series-billable="billableTimeSeries" :time-series-proforma="proformaTimeSeries" :loading="loading" class="lg:col-span-2" />
+          <CostTrendChart title="Account Cost Trends" :time-series-billable="billableTimeSeries" :time-series-proforma="proformaTimeSeries" :loading="loading" class="col-span-1 lg:col-span-3" />
         </div>
       </template>
 
@@ -106,43 +141,149 @@
           <PolicyAnalyzer v-if="accountId" :account-id="accountId" class="col-span-3" />
         </div>
       </template>
+
+      <!-- Notes Tab (Admin Only) -->
+      <template #notes>
+        <div class="mt-4">
+          <AccountNotesPanel v-if="accountId && isAdmin" :account-id="accountId" />
+        </div>
+      </template>
     </UTabs>
   </div>
 </template>
 
 <script setup lang="ts">
 import type { GraphUser } from '~/composables/useGroupMembers'
+import { getIdcRoleLink, getIdcLoginLink, getAdminSupportRoles, type RoleLink } from '~/utils/awsConsoleLinks'
 
 const route = useRoute()
 const enclaveStore = useEnclaveStore()
+const userGroupStore = useUserGroupStore()
 const groupMembers = useGroupMembers()
 const { user } = useOidcAuth()
 const favoritesComposable = useFavoriteAccounts()
+const { addRecentAccount } = useRecentAccounts()
 
 const accountId = computed(() => route.params.id as string)
 const govCloudId = computed(() => enclaveStore.enclaves[accountId.value]?.awsGovCloudAccountID)
 const accountName = computed(() => enclaveStore.enclaves[accountId.value]?.projectName)
 const accountStatus = computed(() => enclaveStore.enclaves[accountId.value]?.enclaveStatus)
 
+// Check if user is admin
+const { isAdmin } = useUserRoles()
+
+// Get user's roles for this account
+const userAccountRoles = computed<RoleLink[]>(() => {
+  if (!accountId.value) return []
+
+  const roles: RoleLink[] = []
+
+  // Search through roleGroups for roles matching this account (commercial or GovCloud)
+  Object.values(userGroupStore.roleGroups).forEach(roleGroup => {
+    // Check if this role group is for the commercial account
+    if (roleGroup.accountId === accountId.value) {
+      roles.push(getIdcRoleLink(accountId.value, roleGroup.role, false))
+    }
+
+    // Check if this role group is for the GovCloud account
+    if (govCloudId.value && roleGroup.accountId === govCloudId.value) {
+      roles.push(getIdcRoleLink(govCloudId.value, roleGroup.role, true))
+    }
+  })
+
+  return roles
+})
+
+// AWS Console menu items
+const consoleMenuItems = computed(() => {
+  if (!accountId.value) return []
+
+  // Build menu items as array of arrays (each array is a section)
+  const menuItems = []
+
+  // User's Role Links - Primary access method
+  if (userAccountRoles.value.length > 0) {
+    const roleSection = [
+      {
+        label: 'My Roles',
+        slot: 'header'
+      },
+      ...userAccountRoles.value.map(roleLink => ({
+        label: roleLink.label,
+        icon: roleLink.icon,
+        href: roleLink.url,
+        target: '_blank'
+      }))
+    ]
+    menuItems.push(roleSection)
+  }
+
+  // Admin Support Roles (for central auditing accounts)
+  if (isAdmin.value) {
+    const targetName = accountName.value || undefined
+    const supportRoles = getAdminSupportRoles(accountId.value, govCloudId.value, targetName)
+    const supportSection = [
+      {
+        label: 'Support Roles',
+        slot: 'header'
+      },
+      ...supportRoles.map(roleLink => ({
+        label: roleLink.label,
+        icon: roleLink.icon,
+        href: roleLink.url,
+        target: '_blank'
+      }))
+    ]
+    menuItems.push(supportSection)
+  }
+
+  // IDC Portal Home - fallback option
+  const hasGovCloud = !!govCloudId.value
+  const idcLink = getIdcLoginLink(hasGovCloud)
+  menuItems.push([
+    {
+      label: idcLink.label,
+      icon: idcLink.icon,
+      href: idcLink.url,
+      target: '_blank'
+    }
+  ])
+
+  return menuItems
+})
+
 // Tabs configuration
 const selectedTab = ref(0)
-const tabs = [
-  {
-    label: 'Overview',
-    slot: 'overview',
-    icon: 'i-heroicons-home'
-  },
-  {
-    label: 'Resources',
-    slot: 'resources',
-    icon: 'i-heroicons-server-stack'
-  },
-  {
-    label: 'Policies',
-    slot: 'policies',
-    icon: 'i-heroicons-shield-check'
+const tabs = computed(() => {
+  const baseTabs = [
+    {
+      label: 'Overview',
+      slot: 'overview',
+      icon: 'i-heroicons-home'
+    },
+    {
+      label: 'Resources',
+      slot: 'resources',
+      icon: 'i-heroicons-server-stack'
+    },
+    {
+      label: 'Policies',
+      slot: 'policies',
+      icon: 'i-heroicons-shield-check'
+    }
+  ]
+
+  // Add Notes tab for admins only
+  if (isAdmin.value) {
+    baseTabs.push({
+      label: 'Notes',
+      slot: 'notes',
+      icon: 'i-heroicons-document-text'
+    })
   }
-]
+
+  return baseTabs
+})
 
 interface InstanceResponse {
   instances: Instance[]
@@ -191,7 +332,7 @@ const proformaTimeSeries = computed(() => {
 
 // Get the current tab name for the share button
 const currentTabName = computed(() => {
-  const tab = tabs.find((t, index) => index === selectedTab.value)
+  const tab = tabs.value.find((t, index) => index === selectedTab.value)
   return tab?.label || 'Overview'
 })
 
@@ -243,11 +384,18 @@ onMounted(async () => {
   // Check for GovCloud ID redirect first
   checkAndRedirectIfGovCloudId()
 
+  // Track account visit in recent accounts
+  if (accountId.value) {
+    addRecentAccount(accountId.value).catch(err => {
+      console.warn('Failed to track recent account:', err)
+    })
+  }
+
   // Check for tab query parameter from shared link
   const tabParam = route.query.tab
   if (tabParam !== undefined && tabParam !== null) {
     const tabIndex = parseInt(tabParam as string)
-    if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex < tabs.length) {
+    if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex < tabs.value.length) {
       selectedTab.value = tabIndex
     }
   }

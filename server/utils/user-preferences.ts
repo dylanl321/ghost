@@ -9,7 +9,7 @@ import { getTableName, getTableEnvironment, getTableAccountId } from '../lib/dyn
 import type { H3Event } from 'h3'
 
 /**
- * Detect timezone from request headers
+ * Detect timezone from request headers or query params
  */
 function detectTimezoneFromRequest(event?: H3Event): string {
   if (!event) return 'America/New_York'
@@ -19,8 +19,13 @@ function detectTimezoneFromRequest(event?: H3Event): string {
     const timezoneHeader = event.node.req.headers['x-timezone'] as string
     if (timezoneHeader) return timezoneHeader
 
-    // Try to parse from Accept-Language or other headers
-    // For now, default to Eastern Time
+    // Check for timezone in query params (client can send on first preferences fetch)
+    const query = getQuery(event)
+    const timezoneParam = query.timezone as string
+    if (timezoneParam) return timezoneParam
+
+    // Default to Eastern Time if no timezone provided
+    // Note: Client-side will auto-correct this to browser timezone on first load
     return 'America/New_York'
   } catch {
     return 'America/New_York'

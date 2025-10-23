@@ -27,6 +27,8 @@ export default defineEventHandler(async (event) => {
     }
 
     // Get or create preferences
+    // Note: Client sends ?timezone query param with browser timezone
+    // Server uses this during auto-creation instead of hardcoded EST default
     const preferences = await getUserPreferences(userId, event)
 
     return {

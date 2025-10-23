@@ -202,6 +202,8 @@
       </nav>
       <!-- Favorite Accounts -->
       <FavoriteAccountsNav />
+      <!-- Recent Accounts -->
+      <RecentAccountsNav />
     </div>
 
     <!-- Footer Links -->

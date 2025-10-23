@@ -122,10 +122,31 @@ export async function getUserSession(event: H3Event): Promise<{
 
     // Extract user and token information from session
     // nuxt-oidc-auth might store user in different ways:
-    // - session.user: Direct user object
-    // - session.claims: OIDC claims containing user info
+    // - session.user: Direct user object (profile info like email, name)
+    // - session.claims: OIDC claims containing user info (includes oid, sub)
     // - session.data.user or session.data.claims: Wrapped in data property
-    const user = sessionData.user || session.user || sessionData.claims || session.claims
+    // IMPORTANT: We need to merge user and claims to get both profile info AND id claims (like oid)
+    const baseUser = sessionData.user || session.user
+    const claims = sessionData.claims || session.claims
+
+    // Merge user object with claims to ensure we have all necessary fields
+    // Azure AD/Entra uses 'oid' as the Object ID, which is needed for Graph API calls
+    const user = baseUser && claims
+      ? { ...baseUser, ...claims } // Merge both to get profile + token claims
+      : (baseUser || claims) // Fallback to whichever exists
+
+    // Debug log to verify we have the necessary ID claims
+    if (user) {
+      console.log('Extracted user with ID claims:', {
+        hasEmail: !!user.email,
+        hasOid: !!user.oid,
+        hasSub: !!user.sub,
+        hasId: !!user.id,
+        userName: user.name || user.email,
+        mergedFromBoth: !!(baseUser && claims)
+      })
+    }
+
     const accessToken = sessionData.accessToken || sessionData.access_token || session.accessToken || session.access_token
 
     // Be more lenient: Accept if we have an access token (proves authentication)
