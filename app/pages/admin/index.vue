@@ -124,6 +124,28 @@
             Scheduled Reports
           </button>
 
+          <button
+            @click="activeSection = 'storedreports'"
+            class="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors"
+            :class="activeSection === 'storedreports'
+              ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'"
+          >
+            <Icon name="i-heroicons-document-duplicate" class="w-5 h-5" />
+            Stored Reports
+          </button>
+
+          <button
+            @click="activeSection = 'userpreferences'"
+            class="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors"
+            :class="activeSection === 'userpreferences'
+              ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'"
+          >
+            <Icon name="i-heroicons-user-circle" class="w-5 h-5" />
+            User Preferences
+          </button>
+
           <div class="px-3 py-2 opacity-50">
             <div class="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
               <Icon name="i-heroicons-chart-bar" class="w-5 h-5" />
@@ -172,6 +194,8 @@
         <SystemLogsPanel v-else-if="activeSection === 'logs'" />
         <IssuesPanel v-else-if="activeSection === 'issues'" />
         <ScheduledReportsPanel v-else-if="activeSection === 'scheduledreports'" />
+        <StoredReportsPanel v-else-if="activeSection === 'storedreports'" />
+        <UserPreferencesPanel v-else-if="activeSection === 'userpreferences'" />
       </main>
     </div>
   </div>
@@ -184,6 +208,8 @@ import RolesPanel from '~/components/admin/RolesPanel.vue'
 import SystemLogsPanel from '~/components/admin/SystemLogsPanel.vue'
 import IssuesPanel from '~/components/admin/IssuesPanel.vue'
 import ScheduledReportsPanel from '~/components/admin/ScheduledReportsPanel.vue'
+import StoredReportsPanel from '~/components/admin/StoredReportsPanel.vue'
+import UserPreferencesPanel from '~/components/admin/UserPreferencesPanel.vue'
 
 // Page meta
 definePageMeta({

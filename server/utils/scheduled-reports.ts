@@ -46,17 +46,22 @@ export function calculateNextNRunTimes(schedule: any, timezone: string, n: numbe
  */
 export function calculateNextRunTime(schedule: any, timezone: string, fromTime?: Date): Date {
   const now = fromTime || new Date()
-  const nextRun = new Date(now)
+
+  // Convert current time to user's timezone for calculation
+  const nowInTz = convertToTimezone(now, timezone)
+
+  let nextRunInTz: Date
 
   switch (schedule.frequency) {
     case 'daily': {
-      // Parse time (HH:MM)
+      // Parse time (HH:MM) - this is in user's timezone
       const [hours, minutes] = schedule.time.split(':').map(Number)
-      nextRun.setHours(hours, minutes, 0, 0)
+      nextRunInTz = new Date(nowInTz)
+      nextRunInTz.setHours(hours, minutes, 0, 0)
 
       // If time has passed today, schedule for tomorrow
-      if (nextRun <= now) {
-        nextRun.setDate(nextRun.getDate() + 1)
+      if (nextRunInTz <= nowInTz) {
+        nextRunInTz.setDate(nextRunInTz.getDate() + 1)
       }
       break
     }
@@ -64,17 +69,18 @@ export function calculateNextRunTime(schedule: any, timezone: string, fromTime?:
     case 'weekly': {
       const [hours, minutes] = schedule.time.split(':').map(Number)
       const targetDay = schedule.dayOfWeek || 1 // Default Monday
-      const currentDay = now.getDay()
+      const currentDay = nowInTz.getDay()
 
-      nextRun.setHours(hours, minutes, 0, 0)
+      nextRunInTz = new Date(nowInTz)
+      nextRunInTz.setHours(hours, minutes, 0, 0)
 
       // Calculate days until target day
       let daysUntil = targetDay - currentDay
-      if (daysUntil <= 0 || (daysUntil === 0 && nextRun <= now)) {
+      if (daysUntil <= 0 || (daysUntil === 0 && nextRunInTz <= nowInTz)) {
         daysUntil += 7
       }
 
-      nextRun.setDate(now.getDate() + daysUntil)
+      nextRunInTz.setDate(nowInTz.getDate() + daysUntil)
       break
     }
 
@@ -82,18 +88,19 @@ export function calculateNextRunTime(schedule: any, timezone: string, fromTime?:
       const [hours, minutes] = schedule.time.split(':').map(Number)
       const targetDay = schedule.dayOfMonth || 1
 
-      nextRun.setHours(hours, minutes, 0, 0)
-      nextRun.setDate(targetDay)
+      nextRunInTz = new Date(nowInTz)
+      nextRunInTz.setHours(hours, minutes, 0, 0)
+      nextRunInTz.setDate(targetDay)
 
       // If date has passed this month, schedule for next month
-      if (nextRun <= now) {
-        nextRun.setMonth(nextRun.getMonth() + 1)
+      if (nextRunInTz <= nowInTz) {
+        nextRunInTz.setMonth(nextRunInTz.getMonth() + 1)
       }
 
       // Handle month overflow (e.g., day 31 in February)
-      if (nextRun.getDate() !== targetDay) {
+      if (nextRunInTz.getDate() !== targetDay) {
         // Set to last day of month
-        nextRun.setDate(0)
+        nextRunInTz.setDate(0)
       }
       break
     }
@@ -101,32 +108,71 @@ export function calculateNextRunTime(schedule: any, timezone: string, fromTime?:
     case 'quarterly': {
       const [hours, minutes] = schedule.time.split(':').map(Number)
       const targetMonth = schedule.monthOfQuarter || 1
-      const currentMonth = now.getMonth()
+      const currentMonth = nowInTz.getMonth()
       const currentQuarter = Math.floor(currentMonth / 3)
 
-      nextRun.setHours(hours, minutes, 0, 0)
+      nextRunInTz = new Date(nowInTz)
+      nextRunInTz.setHours(hours, minutes, 0, 0)
 
       // Calculate next quarter month
       let nextQuarter = currentQuarter
       const targetMonthInYear = (currentQuarter * 3) + (targetMonth - 1)
 
       if (currentMonth > targetMonthInYear ||
-          (currentMonth === targetMonthInYear && nextRun <= now)) {
+          (currentMonth === targetMonthInYear && nextRunInTz <= nowInTz)) {
         nextQuarter++
       }
 
       if (nextQuarter > 3) {
         nextQuarter = 0
-        nextRun.setFullYear(nextRun.getFullYear() + 1)
+        nextRunInTz.setFullYear(nextRunInTz.getFullYear() + 1)
       }
 
-      nextRun.setMonth((nextQuarter * 3) + (targetMonth - 1))
-      nextRun.setDate(1)
+      nextRunInTz.setMonth((nextQuarter * 3) + (targetMonth - 1))
+      nextRunInTz.setDate(1)
       break
     }
+
+    default:
+      nextRunInTz = new Date(nowInTz)
   }
 
-  return nextRun
+  // Convert back to UTC for storage
+  return convertFromTimezone(nextRunInTz, timezone)
+}
+
+/**
+ * Convert a Date to a specific timezone (returns a Date representing that time in that timezone)
+ */
+function convertToTimezone(date: Date, timezone: string): Date {
+  // Format the date in the target timezone
+  const dateStr = date.toLocaleString('en-US', { timeZone: timezone })
+  return new Date(dateStr)
+}
+
+/**
+ * Convert a date from a specific timezone back to UTC
+ * Input date represents a local time in the timezone, output is UTC
+ */
+function convertFromTimezone(localDate: Date, timezone: string): Date {
+  // Create a string representation of the local time
+  const year = localDate.getFullYear()
+  const month = String(localDate.getMonth() + 1).padStart(2, '0')
+  const day = String(localDate.getDate()).padStart(2, '0')
+  const hours = String(localDate.getHours()).padStart(2, '0')
+  const minutes = String(localDate.getMinutes()).padStart(2, '0')
+  const seconds = String(localDate.getSeconds()).padStart(2, '0')
+
+  // ISO string representing time in the timezone
+  const isoString = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`
+
+  // Parse it as if it were in the specified timezone
+  const dateInTz = new Date(new Date(isoString).toLocaleString('en-US', { timeZone: 'UTC' }))
+  const dateInUtc = new Date(new Date(isoString).toLocaleString('en-US', { timeZone: timezone }))
+
+  // Calculate the offset and adjust
+  const offset = dateInTz.getTime() - dateInUtc.getTime()
+  return new Date(localDate.getTime() - offset)
 }
 
 /**
@@ -286,9 +332,22 @@ export async function createReport(
 ): Promise<ScheduledReport> {
   const reportId = uuidv4()
   const now = new Date().toISOString()
+
+  // Get user's timezone from preferences (fallback to report's timezone)
+  let timezone = request.schedule.timezone
+  try {
+    const { getUserPreferences } = await import('./user-preferences')
+    const userPrefs = await getUserPreferences(createdBy)
+    if (userPrefs?.timezone) {
+      timezone = userPrefs.timezone
+    }
+  } catch (error) {
+    console.warn('Failed to get user timezone preferences, using schedule timezone:', error)
+  }
+
   const nextRunTime = calculateNextRunTime(
     request.schedule,
-    request.schedule.timezone
+    timezone
   ).toISOString()
 
   const report: ScheduledReport = {
@@ -344,9 +403,22 @@ export async function updateReport(
         ...existing.schedule,
         ...updates.schedule
       }
+
+      // Get user's timezone from preferences (fallback to schedule timezone)
+      let timezone = updatedReport.schedule.timezone
+      try {
+        const { getUserPreferences } = await import('./user-preferences')
+        const userPrefs = await getUserPreferences(existing.createdBy)
+        if (userPrefs?.timezone) {
+          timezone = userPrefs.timezone
+        }
+      } catch (error) {
+        console.warn('Failed to get user timezone preferences, using schedule timezone:', error)
+      }
+
       updatedReport.nextRunTime = calculateNextRunTime(
         updatedReport.schedule,
-        updatedReport.schedule.timezone
+        timezone
       ).toISOString()
     }
 

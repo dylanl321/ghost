@@ -421,3 +421,171 @@ export const useScheduledReportsAdmin = () => {
     runReportNow
   }
 }
+
+/**
+ * Stored Reports interface
+ */
+export interface StoredReport {
+  s3Key: string
+  size: number
+  lastModified: string
+  type: 'scheduled' | 'shared'
+  reportId: string | null
+  executionId: string | null
+  format: string
+  userId: string | null
+}
+
+export interface StoredReportsStats {
+  totalFiles: number
+  totalSize: number
+  byType: {
+    scheduled: number
+    shared: number
+  }
+  byFormat: Record<string, number>
+}
+
+/**
+ * Admin composable for managing stored reports in S3
+ */
+export const useStoredReportsAdmin = () => {
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+  const storedReports = ref<StoredReport[]>([])
+  const stats = ref<StoredReportsStats | null>(null)
+  const nextToken = ref<string | undefined>(undefined)
+
+  /**
+   * Fetch stored reports from S3 (admin only)
+   */
+  const fetchStoredReports = async (type?: 'scheduled' | 'shared', continuationToken?: string) => {
+    loading.value = true
+    error.value = null
+
+    try {
+      const queryParams = new URLSearchParams()
+      if (type) queryParams.set('type', type)
+      if (continuationToken) queryParams.set('continuationToken', continuationToken)
+
+      const query = queryParams.toString() ? `?${queryParams.toString()}` : ''
+      const response = await $fetch<{
+        success: boolean
+        data?: {
+          reports: StoredReport[]
+          stats: StoredReportsStats
+          nextToken?: string
+        }
+        error?: string
+      }>(`/api/admin/stored-reports/list${query}`)
+
+      if (response.success && response.data) {
+        storedReports.value = response.data.reports
+        stats.value = response.data.stats
+        nextToken.value = response.data.nextToken
+      } else {
+        error.value = response.error || 'Failed to fetch stored reports'
+      }
+    } catch (err: any) {
+      console.error('Error fetching stored reports:', err)
+      error.value = err?.data?.message || err?.message || 'Failed to fetch stored reports'
+      storedReports.value = []
+      stats.value = null
+    } finally {
+      loading.value = false
+    }
+  }
+
+  /**
+   * Get download URL for a stored report
+   */
+  const getDownloadUrl = async (s3Key: string): Promise<string | null> => {
+    try {
+      const response = await $fetch<{
+        success: boolean
+        data?: {
+          downloadUrl: string
+        }
+        error?: string
+      }>('/api/admin/stored-reports/download-url', {
+        method: 'POST',
+        body: { s3Key }
+      })
+
+      if (response.success && response.data) {
+        return response.data.downloadUrl
+      } else {
+        error.value = response.error || 'Failed to get download URL'
+        return null
+      }
+    } catch (err: any) {
+      console.error('Error getting download URL:', err)
+      error.value = err?.data?.message || err?.message || 'Failed to get download URL'
+      return null
+    }
+  }
+
+  /**
+   * Delete a stored report from S3
+   */
+  const deleteStoredReport = async (s3Key: string): Promise<boolean> => {
+    loading.value = true
+    error.value = null
+
+    try {
+      const response = await $fetch<{
+        success: boolean
+        message?: string
+        error?: string
+      }>('/api/admin/stored-reports/delete', {
+        method: 'DELETE',
+        body: { s3Key }
+      })
+
+      if (response.success) {
+        // Remove from local list
+        storedReports.value = storedReports.value.filter(r => r.s3Key !== s3Key)
+        // Recalculate stats
+        if (stats.value) {
+          stats.value.totalFiles--
+          const deleted = storedReports.value.find(r => r.s3Key === s3Key)
+          if (deleted) {
+            stats.value.totalSize -= deleted.size
+          }
+        }
+        return true
+      } else {
+        error.value = response.error || 'Failed to delete report'
+        return false
+      }
+    } catch (err: any) {
+      console.error('Error deleting stored report:', err)
+      error.value = err?.data?.message || err?.message || 'Failed to delete report'
+      return false
+    } finally {
+      loading.value = false
+    }
+  }
+
+  /**
+   * Clear error message
+   */
+  const clearError = () => {
+    error.value = null
+  }
+
+  return {
+    // State
+    loading: readonly(loading),
+    error: readonly(error),
+    storedReports: readonly(storedReports),
+    stats: readonly(stats),
+    nextToken: readonly(nextToken),
+
+    // Methods
+    fetchStoredReports,
+    getDownloadUrl,
+    deleteStoredReport,
+    clearError
+  }
+}

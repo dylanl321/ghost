@@ -217,6 +217,39 @@ resource "aws_dynamodb_table" "shared_reports" {
 }
 
 # ============================================================================
+# User Preferences Table (GovCloud Environment)
+# ============================================================================
+resource "aws_dynamodb_table" "user_preferences" {
+  provider       = aws.target_deployment_account
+  name           = "ghost-user-preferences"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "userId"
+
+  attribute {
+    name = "userId"
+    type = "S"
+  }
+
+  # Enable encryption at rest
+  server_side_encryption {
+    enabled = true
+  }
+
+  # Enable point-in-time recovery
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Name        = "GHOST User Preferences"
+    Environment = local.environment
+    ManagedBy   = "Terraform"
+    Service     = "GHOST"
+    Component   = "UserPreferences"
+  }
+}
+
+# ============================================================================
 # Outputs
 # ============================================================================
 
@@ -258,4 +291,14 @@ output "shared_reports_table_name" {
 output "shared_reports_table_arn" {
   description = "ARN of the DynamoDB table for shared reports"
   value       = aws_dynamodb_table.shared_reports.arn
+}
+
+output "user_preferences_table_name" {
+  description = "Name of the DynamoDB table for user preferences"
+  value       = aws_dynamodb_table.user_preferences.name
+}
+
+output "user_preferences_table_arn" {
+  description = "ARN of the DynamoDB table for user preferences"
+  value       = aws_dynamodb_table.user_preferences.arn
 }

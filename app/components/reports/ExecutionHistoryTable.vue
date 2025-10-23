@@ -107,16 +107,28 @@
 
         <!-- Actions Column -->
         <template #actions-data="{ row }">
-          <UButton
-            v-if="row.emailDelivery"
-            icon="i-heroicons-envelope-open"
-            color="gray"
-            variant="ghost"
-            size="xs"
-            @click="emit('view-email', row)"
-          >
-            View Email
-          </UButton>
+          <div class="flex items-center gap-1">
+            <UButton
+              v-if="row.s3Url"
+              icon="i-heroicons-arrow-down-tray"
+              color="blue"
+              variant="ghost"
+              size="xs"
+              @click="downloadReport(row.s3Url)"
+              title="Download Report"
+            />
+            <UButton
+              v-if="row.emailDelivery"
+              icon="i-heroicons-envelope-open"
+              color="gray"
+              variant="ghost"
+              size="xs"
+              @click="emit('view-email', row)"
+              title="View Email Details"
+            >
+              View Email
+            </UButton>
+          </div>
         </template>
       </UTable>
     </div>
@@ -211,5 +223,10 @@ function formatDuration(ms: number): string {
   const minutes = Math.floor(seconds / 60)
   const remainingSeconds = seconds % 60
   return `${minutes}m ${remainingSeconds}s`
+}
+
+// Download report helper
+function downloadReport(url: string) {
+  window.open(url, '_blank')
 }
 </script>

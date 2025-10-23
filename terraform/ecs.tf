@@ -201,6 +201,10 @@ resource "aws_ecs_task_definition" "main" {
           value = aws_dynamodb_table.email_templates.name
         },
         {
+          name  = "USER_PREFERENCES_TABLE"
+          value = aws_dynamodb_table.user_preferences.name
+        },
+        {
           name  = "REPORT_EXECUTIONS_TABLE"
           value = aws_dynamodb_table.report_executions.name
         },

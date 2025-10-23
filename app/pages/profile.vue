@@ -520,6 +520,123 @@
           </div>
         </UCard>
       </template>
+
+      <!-- Settings Tab -->
+      <template #settings>
+        <UCard class="mt-4">
+          <template #header>
+            <div>
+              <h2 class="text-lg font-semibold text-white">User Settings</h2>
+              <p class="text-sm text-gray-400 mt-1">Manage your preferences and application settings</p>
+            </div>
+          </template>
+
+          <div class="space-y-6">
+            <!-- Timezone Setting -->
+            <div>
+              <div class="flex items-center justify-between mb-4">
+                <div>
+                  <h3 class="text-base font-medium text-white">Timezone</h3>
+                  <p class="text-sm text-gray-400 mt-1">
+                    Used for scheduled reports and time display
+                  </p>
+                </div>
+              </div>
+
+              <!-- Loading State -->
+              <div v-if="userPrefsLoading" class="flex items-center gap-2 text-gray-400 text-sm py-2">
+                <Icon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin" />
+                <span>Loading settings...</span>
+              </div>
+
+              <!-- Settings Content -->
+              <div v-else class="space-y-4">
+                <!-- Current Timezone -->
+                <div class="bg-gray-800 rounded-lg p-4">
+                  <div class="flex items-center justify-between mb-2">
+                    <span class="text-sm font-medium text-gray-300">Current Timezone</span>
+                    <UBadge color="blue" variant="soft" size="sm">
+                      {{ userTimezone }}
+                    </UBadge>
+                  </div>
+                  <p class="text-xs text-gray-500">
+                    All times in the application are displayed in this timezone
+                  </p>
+                </div>
+
+                <!-- Detected Browser Timezone -->
+                <div class="bg-gray-800 rounded-lg p-4">
+                  <div class="flex items-center justify-between mb-2">
+                    <span class="text-sm font-medium text-gray-300">Browser Timezone</span>
+                    <UBadge color="gray" variant="soft" size="sm">
+                      {{ browserTimezone }}
+                    </UBadge>
+                  </div>
+                  <p class="text-xs text-gray-500 mb-3">
+                    Detected from your browser settings
+                  </p>
+                  <UButton
+                    v-if="browserTimezone !== userTimezone"
+                    size="sm"
+                    color="blue"
+                    variant="soft"
+                    @click="useBrowserTimezone"
+                    :loading="updatingTimezone"
+                  >
+                    Use Browser Timezone
+                  </UButton>
+                </div>
+
+                <!-- Timezone Selector -->
+                <div>
+                  <label class="block text-sm font-medium text-gray-300 mb-2">
+                    Change Timezone
+                  </label>
+                  <div class="flex gap-2">
+                    <USelect
+                      v-model="selectedTimezone"
+                      :options="commonTimezones"
+                      option-attribute="label"
+                      value-attribute="value"
+                      class="flex-1"
+                      size="lg"
+                    />
+                    <UButton
+                      color="blue"
+                      :disabled="selectedTimezone === userTimezone"
+                      :loading="updatingTimezone"
+                      @click="saveTimezone"
+                    >
+                      Save
+                    </UButton>
+                  </div>
+                  <p class="text-xs text-gray-500 mt-2">
+                    Select a timezone from the common options
+                  </p>
+                </div>
+
+                <!-- Last Login -->
+                <div v-if="userLastLogin" class="bg-gray-800 rounded-lg p-4">
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm font-medium text-gray-300">Last Login</span>
+                    <span class="text-sm text-gray-400">
+                      {{ formatDate(userLastLogin.toISOString()) }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Error State -->
+              <div v-if="userPrefsError" class="bg-red-900/20 border border-red-800 rounded-lg p-4 mt-4">
+                <div class="flex items-center gap-2 text-red-400 text-sm">
+                  <Icon name="i-heroicons-exclamation-triangle" class="w-5 h-5" />
+                  <span>{{ userPrefsError }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </UCard>
+      </template>
     </UTabs>
 
     <!-- Create/Edit Modal -->
@@ -602,6 +719,7 @@
 <script setup lang="ts">
 import { PERMISSION_CATEGORIES } from '~/config/roles'
 import type { ScheduledReport, CreateReportRequest } from '~/shared/types/scheduled-reports'
+import { COMMON_TIMEZONES } from '#shared/types/user-preferences'
 
 const { user } = useOidcAuth()
 const userGroupStore = useUserGroupStore()
@@ -609,6 +727,61 @@ const { userRoles, userPermissions, isAdmin } = useUserRoles()
 const { getBadgesFromGroups } = useSimpleBadges()
 const toast = useToast()
 const route = useRoute()
+
+// User preferences for settings tab
+const {
+  preferences: userPrefs,
+  timezone: userTimezone,
+  lastLogin: userLastLogin,
+  browserTimezone,
+  loading: userPrefsLoading,
+  error: userPrefsError,
+  updateTimezone: updateUserTimezone,
+  load: loadUserPrefs
+} = useUserPreferences()
+
+// Settings tab state
+const selectedTimezone = ref<string>('')
+const updatingTimezone = ref(false)
+const commonTimezones = COMMON_TIMEZONES
+
+// Initialize selected timezone when preferences load
+watch(userTimezone, (newVal) => {
+  if (newVal && !selectedTimezone.value) {
+    selectedTimezone.value = newVal
+  }
+}, { immediate: true })
+
+// Save timezone function
+async function saveTimezone() {
+  updatingTimezone.value = true
+  try {
+    const success = await updateUserTimezone(selectedTimezone.value)
+    if (success) {
+      toast.add({
+        title: 'Timezone Updated',
+        description: `Your timezone has been set to ${selectedTimezone.value}`,
+        color: 'green',
+        icon: 'i-heroicons-check-circle'
+      })
+    } else {
+      toast.add({
+        title: 'Update Failed',
+        description: 'Failed to update timezone. Please try again.',
+        color: 'red',
+        icon: 'i-heroicons-x-circle'
+      })
+    }
+  } finally {
+    updatingTimezone.value = false
+  }
+}
+
+// Use browser timezone function
+async function useBrowserTimezone() {
+  selectedTimezone.value = browserTimezone.value
+  await saveTimezone()
+}
 
 // User basic info
 const userEmail = computed(() => user.value?.claims?.email || 'Unknown')
@@ -728,6 +901,11 @@ const profileTabs = [
     label: 'My Reports',
     slot: 'my-reports',
     icon: 'i-heroicons-document-arrow-down'
+  },
+  {
+    label: 'Settings',
+    slot: 'settings',
+    icon: 'i-heroicons-cog-6-tooth'
   }
 ]
 

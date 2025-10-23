@@ -1,5 +1,5 @@
 <template>
-  <UModal v-model="isOpen" :ui="{ width: 'sm:max-w-4xl' }">
+  <UModal v-model="isOpen" :ui="{ width: 'sm:max-w-7xl' }">
     <UCard>
       <template #header>
         <div class="flex items-center justify-between">
@@ -24,11 +24,22 @@
       <div v-if="execution?.emailDelivery" class="space-y-6">
         <!-- Email Subject & Message ID -->
         <div>
-          <h4 class="text-sm font-semibold text-gray-900 dark:text-white mb-2">
-            Subject
-          </h4>
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="text-sm font-semibold text-gray-900 dark:text-white">
+              Subject
+            </h4>
+            <UButton
+              icon="i-heroicons-clipboard-document"
+              size="xs"
+              color="gray"
+              variant="ghost"
+              @click="copyToClipboard(execution.emailDelivery.subject, 'Subject')"
+            >
+              Copy
+            </UButton>
+          </div>
           <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-            <p class="text-sm text-gray-900 dark:text-white font-medium">
+            <p class="text-sm text-gray-900 dark:text-white font-medium break-words">
               {{ execution.emailDelivery.subject }}
             </p>
           </div>
@@ -36,6 +47,13 @@
           <div v-if="execution.emailDelivery.sesMessageId" class="mt-2 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
             <Icon name="i-heroicons-envelope" class="w-4 h-4" />
             <span class="font-mono">{{ execution.emailDelivery.sesMessageId }}</span>
+            <UButton
+              icon="i-heroicons-clipboard-document"
+              size="xs"
+              color="gray"
+              variant="ghost"
+              @click="copyToClipboard(execution.emailDelivery.sesMessageId, 'Message ID')"
+            />
           </div>
         </div>
 
@@ -45,11 +63,20 @@
             <h4 class="text-sm font-semibold text-gray-900 dark:text-white">
               Recipients ({{ execution.emailDelivery.recipients.length }})
             </h4>
-            <div class="flex items-center gap-2 text-xs">
-              <UBadge color="green" variant="soft">
+            <div class="flex items-center gap-2">
+              <UButton
+                icon="i-heroicons-clipboard-document-list"
+                size="xs"
+                color="gray"
+                variant="soft"
+                @click="copyAllRecipients"
+              >
+                Copy All
+              </UButton>
+              <UBadge color="green" variant="soft" size="xs">
                 {{ execution.emailDelivery.totalSent }} sent
               </UBadge>
-              <UBadge v-if="execution.emailDelivery.totalFailed > 0" color="red" variant="soft">
+              <UBadge v-if="execution.emailDelivery.totalFailed > 0" color="red" variant="soft" size="xs">
                 {{ execution.emailDelivery.totalFailed }} failed
               </UBadge>
             </div>
@@ -64,7 +91,14 @@
               <template #email-data="{ row }">
                 <div class="flex items-center gap-2">
                   <Icon name="i-heroicons-user" class="w-4 h-4 text-gray-400" />
-                  <span class="text-sm text-gray-900 dark:text-white font-medium">{{ row.email }}</span>
+                  <span class="text-sm text-gray-900 dark:text-white font-mono">{{ row.email }}</span>
+                  <UButton
+                    icon="i-heroicons-clipboard-document"
+                    size="xs"
+                    color="gray"
+                    variant="ghost"
+                    @click="copyToClipboard(row.email, 'Email')"
+                  />
                 </div>
               </template>
 
@@ -88,9 +122,9 @@
 
               <!-- Error Column -->
               <template #error-data="{ row }">
-                <div v-if="row.error" class="max-w-xs">
+                <div v-if="row.error" class="max-w-md">
                   <UTooltip :text="row.error">
-                    <span class="text-sm text-red-600 dark:text-red-400 truncate cursor-help">
+                    <span class="text-sm text-red-600 dark:text-red-400 truncate cursor-help block">
                       {{ row.error }}
                     </span>
                   </UTooltip>
@@ -108,6 +142,16 @@
               Email Body
             </h4>
             <div class="flex gap-2">
+              <UButton
+                v-if="viewMode === 'source'"
+                icon="i-heroicons-clipboard-document"
+                size="xs"
+                color="gray"
+                variant="soft"
+                @click="copyToClipboard(execution.emailDelivery.htmlBody, 'HTML Source')"
+              >
+                Copy HTML
+              </UButton>
               <UButton
                 size="xs"
                 color="gray"
@@ -137,19 +181,19 @@
 
           <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
             <!-- Text Preview -->
-            <div v-if="viewMode === 'preview'" class="p-4 bg-gray-50 dark:bg-gray-800">
+            <div v-if="viewMode === 'preview'" class="p-4 bg-gray-50 dark:bg-gray-800 max-h-[600px] overflow-y-auto">
               <p class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
                 {{ execution.emailDelivery.bodyPreview }}...
               </p>
             </div>
 
             <!-- Rendered HTML -->
-            <div v-else-if="viewMode === 'rendered'" class="p-4 bg-white dark:bg-gray-900 max-h-96 overflow-y-auto">
+            <div v-else-if="viewMode === 'rendered'" class="p-4 bg-white dark:bg-gray-900 max-h-[600px] overflow-y-auto">
               <div v-html="execution.emailDelivery.htmlBody" />
             </div>
 
             <!-- HTML Source Code -->
-            <div v-else class="p-4 bg-white dark:bg-gray-900 max-h-96 overflow-y-auto">
+            <div v-else class="p-4 bg-white dark:bg-gray-900 max-h-[600px] overflow-y-auto">
               <pre class="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono">{{ execution.emailDelivery.htmlBody }}</pre>
             </div>
           </div>
@@ -266,5 +310,34 @@ function formatBytes(bytes?: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+// Copy to clipboard helper
+const toast = useToast()
+
+function copyToClipboard(text: string, label: string = 'Text') {
+  navigator.clipboard.writeText(text).then(() => {
+    toast.add({
+      title: 'Copied!',
+      description: `${label} copied to clipboard`,
+      icon: 'i-heroicons-check-circle',
+      color: 'green',
+      timeout: 2000
+    })
+  }).catch(() => {
+    toast.add({
+      title: 'Copy Failed',
+      description: 'Failed to copy to clipboard',
+      icon: 'i-heroicons-x-circle',
+      color: 'red'
+    })
+  })
+}
+
+function copyAllRecipients() {
+  if (!props.execution?.emailDelivery) return
+
+  const emails = props.execution.emailDelivery.recipients.map(r => r.email).join(', ')
+  copyToClipboard(emails, 'All recipients')
 }
 </script>
