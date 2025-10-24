@@ -19,6 +19,7 @@ import { validateEntraConfig } from '../../../../utils/entra/config'
 import { lookupAccountOptimized } from '../../../../utils/account-lookup-optimized'
 import { registerEndpoint } from '../../../../plugins/swagger'
 import type { AccountGroups, EntraAPIResponse } from '../../../../types/entra'
+import { logger } from '../../../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/entra/accounts/{accountId}/groups', 'GET', {
@@ -93,14 +94,14 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Accoun
       govcloudAccountId = accountLookup.govCloudAccountId || accountLookup.awsGovCloudAccountID || accountLookup.govId
       accountEmail = accountLookup.email
       
-      console.log(`Account lookup successful for ${identifier}:`, {
+      logger.info(`Account lookup successful for ${identifier}:`, {
         commercialAccountId,
         govcloudAccountId,
         email: accountEmail
       })
     } catch (error: any) {
       // If account not found, still try with the identifier as-is
-      console.log(`Account lookup failed for ${identifier}, trying as direct account ID`)
+      logger.error(`Account lookup failed for ${identifier}, trying as direct account ID`)
       if (/^\d{12}$/.test(identifier)) {
         commercialAccountId = identifier
       }
@@ -129,7 +130,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Accoun
     
     // Fetch groups for commercial account ID if it exists
     if (commercialAccountId) {
-      console.log(`Fetching commercial Entra groups for account ${commercialAccountId}`)
+      logger.info(`Fetching commercial Entra groups for account ${commercialAccountId}`)
       try {
         const commercialGroupsResponse = await getAWSGroups(event, {
           accountId: commercialAccountId,
@@ -150,15 +151,15 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Accoun
           return parsed && 'role' in parsed ? parsed : null
         }).filter(Boolean) as any[]
         
-        console.log(`Found ${accountGroups.commercial.length} commercial groups`)
+        logger.debug(`Found ${accountGroups.commercial.length} commercial groups`)
       } catch (error) {
-        console.error(`Failed to fetch commercial groups for ${commercialAccountId}:`, error)
+        logger.error(`Failed to fetch commercial groups for ${commercialAccountId}:`, error)
       }
     }
     
     // Fetch groups for govcloud account ID if it exists and is different
     if (govcloudAccountId && govcloudAccountId !== commercialAccountId) {
-      console.log(`Fetching govcloud Entra groups for account ${govcloudAccountId}`)
+      logger.info(`Fetching govcloud Entra groups for account ${govcloudAccountId}`)
       try {
         const govcloudGroupsResponse = await getAWSGroups(event, {
           accountId: govcloudAccountId,
@@ -179,9 +180,9 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Accoun
           return parsed && 'role' in parsed ? parsed : null
         }).filter(Boolean) as any[]
         
-        console.log(`Found ${accountGroups.govcloud.length} govcloud groups`)
+        logger.debug(`Found ${accountGroups.govcloud.length} govcloud groups`)
       } catch (error) {
-        console.error(`Failed to fetch govcloud groups for ${govcloudAccountId}:`, error)
+        logger.error(`Failed to fetch govcloud groups for ${govcloudAccountId}:`, error)
       }
     }
     
@@ -189,16 +190,16 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Accoun
     if (!accountGroups.distribution && accountEmail) {
       try {
         const emailPrefix = accountEmail.split('@')[0]
-        console.log(`Found account email '${accountEmail}', searching for distribution group '${emailPrefix}'`)
+        logger.debug(`Found account email '${accountEmail}', searching for distribution group '${emailPrefix}'`)
         const distributionGroup = await findDistributionGroup(event, emailPrefix)
         if (distributionGroup) {
           accountGroups.distribution = distributionGroup
-          console.log(`Found distribution group: ${distributionGroup.displayName}`)
+          logger.debug(`Found distribution group: ${distributionGroup.displayName}`)
         } else {
-          console.log(`No distribution group found for '${emailPrefix}'`)
+          logger.debug(`No distribution group found for '${emailPrefix}'`)
         }
       } catch (error) {
-        console.error('Failed to find distribution group:', error)
+        logger.error('Failed to find distribution group:', error)
       }
     }
     
@@ -213,7 +214,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Accoun
     
     // Add member details if requested
     if (includeMembers) {
-      console.log('Fetching member details for all groups...')
+      logger.info('Fetching member details for all groups...')
       
       // Fetch members for commercial groups
       for (const group of accountGroups.commercial) {
@@ -222,7 +223,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Accoun
           group.memberCount = members.totalCount || 0
           group.members = members.members || []
         } catch (error) {
-          console.error(`Failed to get members for group ${group.id}:`, error)
+          logger.error(`Failed to get members for group ${group.id}:`, error)
           group.memberCount = 0
           group.members = []
         }
@@ -235,7 +236,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Accoun
           group.memberCount = members.totalCount || 0
           group.members = members.members || []
         } catch (error) {
-          console.error(`Failed to get members for group ${group.id}:`, error)
+          logger.error(`Failed to get members for group ${group.id}:`, error)
           group.memberCount = 0
           group.members = []
         }
@@ -248,7 +249,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Accoun
           accountGroups.distribution.memberCount = members.totalCount || 0
           accountGroups.distribution.members = members.members || []
         } catch (error) {
-          console.error(`Failed to get members for distribution group ${accountGroups.distribution.id}:`, error)
+          logger.error(`Failed to get members for distribution group ${accountGroups.distribution.id}:`, error)
           accountGroups.distribution.memberCount = 0
           accountGroups.distribution.members = []
         }
@@ -288,7 +289,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Accoun
       cached: overallCached
     }
   } catch (error: any) {
-    console.error('Error fetching account groups:', error)
+    logger.error('Error fetching account groups:', error)
     
     // Re-throw H3 errors
     if (error.statusCode) {

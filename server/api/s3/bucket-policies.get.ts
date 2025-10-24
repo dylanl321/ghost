@@ -16,6 +16,7 @@ import {
   type BucketPolicyAnalysis
 } from '../../utils/s3-policy-analyzer'
 import type { AWSEnvironmentType } from '../../types'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/s3/bucket-policies', 'GET', {
@@ -136,7 +137,7 @@ async function fetchBucketPolicy(
     if (error.name === 'NoSuchBucketPolicy') {
       return null
     }
-    console.warn(`[S3 Policy] Failed to fetch policy for ${bucketName}:`, error.message)
+    logger.warn(`[S3 Policy] Failed to fetch policy for ${bucketName}:`, error.message)
     return null
   }
 }
@@ -168,7 +169,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.validationError(event, ['Maximum 100 buckets per request'])
   }
 
-  console.log(`[S3 Policy] Analyzing ${bucketNames.length} buckets in account ${accountId}`)
+  logger.info(`[S3 Policy] Analyzing ${bucketNames.length} buckets in account ${accountId}`)
 
   // Create S3 client
   const s3Client = await getClient<S3Client>(environment, 's3', region, accountId)
@@ -191,7 +192,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   // Generate summary
   const summary = generatePolicySummary(analyses)
 
-  console.log(`[S3 Policy] Analysis complete: ${summary.publicBuckets} public, ${summary.crossAccountBuckets} cross-account`)
+  logger.info(`[S3 Policy] Analysis complete: ${summary.publicBuckets} public, ${summary.crossAccountBuckets} cross-account`)
 
   return sendSuccess(event, {
     analyses,

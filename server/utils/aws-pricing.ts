@@ -7,6 +7,7 @@
 import { getPricingClient } from '../lib/aws-client-factory'
 import { GetProductsCommand } from '@aws-sdk/client-pricing'
 import type { AWSEnvironmentType } from '../types/aws'
+import { logger } from './logger'
 
 // Cache for pricing data with expiration
 interface PricingCacheEntry {
@@ -69,7 +70,7 @@ export async function getEC2InstancePricing(
     // Get the pricing region name for the API
     const pricingRegionName = REGION_NAME_MAP[region]
     if (!pricingRegionName) {
-      console.warn(`[AWS Pricing] No pricing region mapping found for ${region}`)
+      logger.warn(`[AWS Pricing] No pricing region mapping found for ${region}`)
       return null
     }
 
@@ -96,7 +97,7 @@ export async function getEC2InstancePricing(
     const response = await pricingClient.send(command)
 
     if (!response.PriceList || response.PriceList.length === 0) {
-      console.warn(`[AWS Pricing] No pricing found for ${instanceType} in ${region}`)
+      logger.warn(`[AWS Pricing] No pricing found for ${instanceType} in ${region}`)
       return null
     }
 
@@ -105,7 +106,7 @@ export async function getEC2InstancePricing(
     const terms = priceData.terms?.OnDemand
 
     if (!terms) {
-      console.warn(`[AWS Pricing] No OnDemand pricing found for ${instanceType}`)
+      logger.warn(`[AWS Pricing] No OnDemand pricing found for ${instanceType}`)
       return null
     }
 
@@ -114,7 +115,7 @@ export async function getEC2InstancePricing(
     const priceDimensions = terms[termKey]?.priceDimensions
 
     if (!priceDimensions) {
-      console.warn(`[AWS Pricing] No price dimensions found for ${instanceType}`)
+      logger.warn(`[AWS Pricing] No price dimensions found for ${instanceType}`)
       return null
     }
 
@@ -137,7 +138,7 @@ export async function getEC2InstancePricing(
       pricingRegion: region
     }
   } catch (error) {
-    console.error(`[AWS Pricing] Error fetching pricing for ${instanceType} in ${region}:`, error.message)
+    logger.error(`[AWS Pricing] Error fetching pricing for ${instanceType} in ${region}:`, error.message)
     return null
   }
 }
@@ -162,7 +163,7 @@ export async function batchGetEC2InstancePricing(
     }
   })
 
-  console.log(`[AWS Pricing] Fetching pricing for ${uniqueCombinations.size} unique instance type/region combinations`)
+  logger.info(`[AWS Pricing] Fetching pricing for ${uniqueCombinations.size} unique instance type/region combinations`)
 
   // Fetch pricing for each unique combination (with rate limiting to avoid API throttling)
   const entries = Array.from(uniqueCombinations.entries())
@@ -182,11 +183,11 @@ export async function batchGetEC2InstancePricing(
         await new Promise(resolve => setTimeout(resolve, 100))
       }
     } catch (error) {
-      console.error(`[AWS Pricing] Failed to fetch pricing for ${key}:`, error.message)
+      logger.error(`[AWS Pricing] Failed to fetch pricing for ${key}:`, error.message)
     }
   }
 
-  console.log(`[AWS Pricing] Successfully fetched ${pricingMap.size} pricing entries`)
+  logger.info(`[AWS Pricing] Successfully fetched ${pricingMap.size} pricing entries`)
 
   return pricingMap
 }
@@ -213,7 +214,7 @@ export async function getEBSVolumePricing(
       // Get the pricing region name for the API
       const pricingRegionName = REGION_NAME_MAP[region]
       if (!pricingRegionName) {
-        console.warn(`[AWS Pricing] No pricing region mapping found for ${region}`)
+        logger.warn(`[AWS Pricing] No pricing region mapping found for ${region}`)
         return null
       }
 
@@ -239,7 +240,7 @@ export async function getEBSVolumePricing(
       const response = await pricingClient.send(command)
 
       if (!response.PriceList || response.PriceList.length === 0) {
-        console.warn(`[AWS Pricing] No EBS pricing found for ${volumeType} in ${region}`)
+        logger.warn(`[AWS Pricing] No EBS pricing found for ${volumeType} in ${region}`)
         return null
       }
 
@@ -248,7 +249,7 @@ export async function getEBSVolumePricing(
       const terms = priceData.terms?.OnDemand
 
       if (!terms) {
-        console.warn(`[AWS Pricing] No OnDemand pricing found for ${volumeType}`)
+        logger.warn(`[AWS Pricing] No OnDemand pricing found for ${volumeType}`)
         return null
       }
 
@@ -257,7 +258,7 @@ export async function getEBSVolumePricing(
       const priceDimensions = terms[termKey]?.priceDimensions
 
       if (!priceDimensions) {
-        console.warn(`[AWS Pricing] No price dimensions found for ${volumeType}`)
+        logger.warn(`[AWS Pricing] No price dimensions found for ${volumeType}`)
         return null
       }
 
@@ -281,7 +282,7 @@ export async function getEBSVolumePricing(
       pricingRegion: region
     }
   } catch (error) {
-    console.error(`[AWS Pricing] Error fetching EBS pricing for ${volumeType} in ${region}:`, error.message)
+    logger.error(`[AWS Pricing] Error fetching EBS pricing for ${volumeType} in ${region}:`, error.message)
     return null
   }
 }
@@ -310,7 +311,7 @@ export async function batchGetEBSVolumePricing(
     uniqueCombinations.get(key)!.volumes.push(volume)
   })
 
-  console.log(`[AWS Pricing] Fetching EBS pricing for ${uniqueCombinations.size} unique volume type/region combinations`)
+  logger.info(`[AWS Pricing] Fetching EBS pricing for ${uniqueCombinations.size} unique volume type/region combinations`)
 
   const entries = Array.from(uniqueCombinations.entries())
 
@@ -345,11 +346,11 @@ export async function batchGetEBSVolumePricing(
         await new Promise(resolve => setTimeout(resolve, 100))
       }
     } catch (error) {
-      console.error(`[AWS Pricing] Failed to fetch EBS pricing for ${key}:`, error.message)
+      logger.error(`[AWS Pricing] Failed to fetch EBS pricing for ${key}:`, error.message)
     }
   }
 
-  console.log(`[AWS Pricing] Successfully fetched ${pricingMap.size} EBS pricing entries`)
+  logger.info(`[AWS Pricing] Successfully fetched ${pricingMap.size} EBS pricing entries`)
 
   return pricingMap
 }
@@ -359,7 +360,7 @@ export async function batchGetEBSVolumePricing(
  */
 export function clearPricingCache(): void {
   pricingCache.clear()
-  console.log('[AWS Pricing] Pricing cache cleared')
+  logger.info('[AWS Pricing] Pricing cache cleared')
 }
 
 /**

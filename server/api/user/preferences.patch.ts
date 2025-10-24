@@ -6,6 +6,7 @@
 import { getUserSession } from '../../utils/entra/session'
 import { updateUserPreferences } from '../../utils/user-preferences'
 import type { UpdatePreferencesRequest } from '#shared/types/user-preferences'
+import { logger } from '../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -51,7 +52,7 @@ export default defineEventHandler(async (event) => {
     }
 
   } catch (error: any) {
-    console.error('Failed to update user preferences:', error)
+    logger.error('Failed to update user preferences:', error)
 
     if (error.statusCode) {
       throw error

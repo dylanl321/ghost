@@ -2,6 +2,7 @@ import { sendSuccess, errors } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import { DynamoDBDocumentClient, ScanCommand } from '@aws-sdk/lib-dynamodb'
+import { logger } from '../../utils/logger'
 
 const region = 'us-gov-west-1'
 const deploymentAccountId = '461760157232'
@@ -68,7 +69,7 @@ export default defineEventHandler(async (event) => {
     const metadata = { responseTimeMs: Date.now() - startTime }
     return sendSuccess(event, { items: data.Items ?? [] }, metadata)
   } catch (err) {
-    console.error('Error listing feedback:', err)
+    logger.error('Error listing feedback:', err)
     return errors.serverError(event, 'Failed to list feedback')
   }
 })

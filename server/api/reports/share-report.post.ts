@@ -7,6 +7,7 @@ import type { CreateShareReportRequest, CreateShareReportResponse } from '~/shar
 import { createShortLink } from '../../lib/shortlinks'
 import { getTableConfig } from '../../lib/dynamodb-config'
 import { v4 as uuidv4 } from 'uuid'
+import { logger } from '../../utils/logger'
 
 export default defineEventHandler(async (event): Promise<CreateShareReportResponse> => {
   try {
@@ -31,10 +32,10 @@ export default defineEventHandler(async (event): Promise<CreateShareReportRespon
       }
     }
 
-    console.log(`Creating shareable report: ${body.reportName} for user ${userEmail}`)
+    logger.info(`Creating shareable report: ${body.reportName} for user ${userEmail}`)
 
     // Step 1: Generate the report
-    console.log('  → Generating report...')
+    logger.info('  → Generating report...')
     const reportResult = await generateCostReport(body.config)
 
     if (!reportResult.success || !reportResult.buffer) {
@@ -44,7 +45,7 @@ export default defineEventHandler(async (event): Promise<CreateShareReportRespon
       }
     }
 
-    console.log(`  → Report generated: ${reportResult.filename} (${reportResult.buffer.length} bytes)`)
+    logger.info(`  → Report generated: ${reportResult.filename} (${reportResult.buffer.length} bytes)`)
 
     // Step 2: Upload to S3 (without generating presigned URL - we'll do that on-demand)
     const shareId = uuidv4()
@@ -70,7 +71,7 @@ export default defineEventHandler(async (event): Promise<CreateShareReportRespon
       }
     }
 
-    console.log(`  → Report uploaded to S3: ${s3UploadResult.key}`)
+    logger.info(`  → Report uploaded to S3: ${s3UploadResult.key}`)
 
     // Step 3: Create shortlink to download endpoint
     const siteUrl = process.env.NUXT_PUBLIC_SITE_URL || 'http://localhost:3000'
@@ -91,7 +92,7 @@ export default defineEventHandler(async (event): Promise<CreateShareReportRespon
     })
 
     const shortUrl = `${siteUrl}/s/${shortlink.shortCode}`
-    console.log(`  → Shortlink created: ${shortUrl} -> ${downloadUrl}`)
+    logger.info(`  → Shortlink created: ${shortUrl} -> ${downloadUrl}`)
 
     // Step 4: Store shared report metadata in DynamoDB
     const tableConfig = await getTableConfig('sharedReports')
@@ -115,7 +116,7 @@ export default defineEventHandler(async (event): Promise<CreateShareReportRespon
       ttl
     }, tableConfig.environment, tableConfig.accountId)
 
-    console.log(`  ✓ Shared report created successfully`)
+    logger.info(`  ✓ Shared report created successfully`)
 
     return {
       success: true,
@@ -124,7 +125,7 @@ export default defineEventHandler(async (event): Promise<CreateShareReportRespon
       downloadUrl: downloadUrl // Our download endpoint, not S3 directly
     }
   } catch (error: any) {
-    console.error('Error creating shareable report:', error)
+    logger.error('Error creating shareable report:', error)
     return {
       success: false,
       error: error.message || 'Unknown error creating shareable report'

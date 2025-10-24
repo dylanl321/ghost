@@ -6,6 +6,7 @@
 import { sendSuccess, errors } from '../../../utils/api-response'
 import { isUserAdmin } from '../../../utils/user-roles'
 import { listAccountNotes } from '../../../lib/account-notes'
+import { logger } from '../../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -37,7 +38,7 @@ export default defineEventHandler(async (event) => {
       count: notes.length
     })
   } catch (error: any) {
-    console.error('Error listing account notes:', error)
+    logger.error('Error listing account notes:', error)
     return errors.serverError(event, error.message || 'Failed to list notes')
   }
 })

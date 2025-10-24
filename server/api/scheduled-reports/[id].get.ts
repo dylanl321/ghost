@@ -5,6 +5,7 @@
 
 import { getReport } from '../../utils/scheduled-reports'
 import { isUserAdmin } from '../../utils/user-roles'
+import { logger } from '../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -46,7 +47,7 @@ export default defineEventHandler(async (event) => {
       data: report
     }
   } catch (error: any) {
-    console.error('Error getting scheduled report:', error)
+    logger.error('Error getting scheduled report:', error)
 
     if (error.statusCode) {
       throw error

@@ -5,6 +5,7 @@
 
 import { getTableConfig } from '../../../lib/dynamodb-config'
 import type { SharedReport } from '~/shared/types/shared-reports'
+import { logger } from '../../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -28,7 +29,7 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    console.log(`Deleting shared report: ${shareId} for user ${userEmail}`)
+    logger.info(`Deleting shared report: ${shareId} for user ${userEmail}`)
 
     const tableConfig = await getTableConfig('sharedReports')
 
@@ -52,10 +53,10 @@ export default defineEventHandler(async (event) => {
 
     // Delete from S3
     if (report.s3Key) {
-      console.log(`  → Deleting from S3: ${report.s3Key}`)
+      logger.info(`  → Deleting from S3: ${report.s3Key}`)
       const s3Result = await deleteReportFromS3(report.s3Key)
       if (!s3Result.success) {
-        console.warn(`  ⚠ Failed to delete from S3: ${s3Result.error}`)
+        logger.warn(`  ⚠ Failed to delete from S3: ${s3Result.error}`)
         // Continue with deletion even if S3 fails
       }
     }
@@ -63,13 +64,13 @@ export default defineEventHandler(async (event) => {
     // Delete from DynamoDB
     await deleteItem(tableConfig.tableName, { shareId }, tableConfig.environment, tableConfig.accountId)
 
-    console.log(`  ✓ Shared report deleted successfully`)
+    logger.info(`  ✓ Shared report deleted successfully`)
 
     return {
       success: true
     }
   } catch (error: any) {
-    console.error('Error deleting shared report:', error)
+    logger.error('Error deleting shared report:', error)
     return {
       success: false,
       error: error.message || 'Failed to delete shared report'

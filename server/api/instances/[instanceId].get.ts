@@ -27,6 +27,7 @@ import {
 } from '../../utils/compute-optimizer'
 import { parseAndValidateAccountFilters, filterAccounts } from '../../utils/account-filters'
 import type { AWSEnvironmentType } from '../../types'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/instances/[instanceId]', 'GET', {
@@ -210,7 +211,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     const includeTagSuggestions = query.includeTagSuggestions !== 'false'
     const specificAccountId = query.accountId as string | undefined
     
-    console.log(`[Instance Details] Looking for instance ${instanceId} in ${environment}`)
+    logger.info(`[Instance Details] Looking for instance ${instanceId} in ${environment}`)
     
     // Get environment-specific aggregator and region
     const aggregatorName = environment === 'commercial' 
@@ -236,7 +237,7 @@ export default defineEventHandler(handleAsync(async (event) => {
         }
       }).filter(Boolean)
       
-      console.log(`[Instance Details] Searching across ${accountIds.length} accounts`)
+      logger.info(`[Instance Details] Searching across ${accountIds.length} accounts`)
     }
     
     // Search for the instance across accounts
@@ -262,12 +263,12 @@ export default defineEventHandler(handleAsync(async (event) => {
         if (resource) {
           instanceResource = resource
           foundInAccount = accountId
-          console.log(`[Instance Details] Found instance in account ${accountId}`)
+          logger.debug(`[Instance Details] Found instance in account ${accountId}`)
           break
         }
       } catch (error) {
         // Continue searching in other accounts
-        console.log(`[Instance Details] Instance not found in account ${accountId}`)
+        logger.debug(`[Instance Details] Instance not found in account ${accountId}`)
       }
     }
     
@@ -278,7 +279,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     // Enrich the instance data
     const enrichedInstance = await enrichInstanceData(instanceResource, environment)
     
-    console.log(`[Instance Details] Enriched instance: ${enrichedInstance.instanceName || instanceId}`)
+    logger.info(`[Instance Details] Enriched instance: ${enrichedInstance.instanceName || instanceId}`)
     
     // Prepare response data
     const responseData: any = {
@@ -288,7 +289,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     // Get optimization recommendations if requested
     if (includeOptimization) {
       try {
-        console.log('[Instance Details] Fetching optimization recommendations')
+        logger.info('[Instance Details] Fetching optimization recommendations')
         
         const partition = environment === 'govcloud' ? 'aws-us-gov' : 'aws'
         const arn = `arn:${partition}:ec2:${instanceResource.region}:${foundInAccount}:instance/${instanceId}`
@@ -318,7 +319,7 @@ export default defineEventHandler(handleAsync(async (event) => {
           }
         }
       } catch (error) {
-        console.warn('[Instance Details] Optimization analysis failed:', error)
+        logger.warn('[Instance Details] Optimization analysis failed:', error)
         responseData.optimization = {
           source: 'Limited Analysis (AWS services unavailable)',
           message: `AWS service error: ${error.message}`,
@@ -339,7 +340,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     })
     
   } catch (error) {
-    console.error('[Instance Details] Unexpected error:', error)
+    logger.error('[Instance Details] Unexpected error:', error)
     return errors.serverError(event, `Failed to get instance details: ${error.message}`)
   }
 }))

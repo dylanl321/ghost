@@ -6,6 +6,7 @@
  */
 
 import type { UnifiedAccount, EnrichmentLevel, DataSource } from '../schemas/account-schema'
+import { logger } from './logger'
 
 // Local type that matches the schema
 type AccountType = 'commercial' | 'govcloud'
@@ -461,7 +462,7 @@ export function transformAccountList(
         // Remove from map to track processed accounts
         dynamoMap.delete(orgAccount.Id)
       } catch (error) {
-        console.error(`Error creating unified account for ${orgAccount.Id}:`, error)
+        logger.error(`Error creating unified account for ${orgAccount.Id}:`, error)
       }
     }
   })
@@ -472,7 +473,7 @@ export function transformAccountList(
       const unified = createUnifiedAccount(undefined, dynamoAccount)
       unifiedAccounts.push(unified)
     } catch (error) {
-      console.error(`Error creating unified account for DynamoDB-only account ${commercialId}:`, error)
+      logger.error(`Error creating unified account for DynamoDB-only account ${commercialId}:`, error)
     }
   })
   

@@ -10,6 +10,7 @@ import { getCostAndUsage } from './cost-explorer'
 import { getAllAccountsUnified } from './accounts-consolidated'
 import { validateDateParams } from './date-helpers'
 import { exportToPDFServer } from './pdf-export-server'
+import { logger } from './logger'
 
 /**
  * Generate a cost report based on configuration
@@ -24,7 +25,7 @@ export async function generateCostReport(
   error?: string
 }> {
   try {
-    console.log('Generating cost report with config:', {
+    logger.info('Generating cost report with config:', {
       accounts: config.accounts?.length || 'all',
       timeframe: config.timeframe,
       dataMode: config.dataMode,
@@ -41,7 +42,7 @@ export async function generateCostReport(
       return await generateTextReport(dataset, config)
     }
   } catch (error: any) {
-    console.error('Report generation error:', error)
+    logger.error('Report generation error:', error)
     return {
       success: false,
       error: error.message || 'Unknown error during report generation'
@@ -54,7 +55,7 @@ export async function generateCostReport(
  * This creates the same data structure the frontend uses with proper budgetAnalysis
  */
 async function buildDataset(config: ReportConfig): Promise<NormalizedDataset> {
-  console.log('[Report Generator] Building dataset with config:', {
+  logger.info('[Report Generator] Building dataset with config:', {
     dataMode: config.dataMode,
     timeframe: config.timeframe,
     accountCount: config.accounts?.length || 0
@@ -70,7 +71,7 @@ async function buildDataset(config: ReportConfig): Promise<NormalizedDataset> {
 
   const environment = 'commercial'
 
-  console.log('[Report Generator] Fetching costs:', {
+  logger.info('[Report Generator] Fetching costs:', {
     mode: config.dataMode,
     fetcher: config.dataMode === 'proforma' ? 'getProformaCosts' : 'getCostAndUsage',
     dateRange
@@ -172,7 +173,7 @@ async function buildDataset(config: ReportConfig): Promise<NormalizedDataset> {
     underBudgetAccounts: byAccount.filter(acc => acc.utilizationPct <= 100)
   }
 
-  console.log('[Report Generator] Dataset built successfully:', {
+  logger.info('[Report Generator] Dataset built successfully:', {
     mode: config.dataMode,
     hasBudgetAnalysis: true,
     accountCount: byAccount.length,
@@ -238,7 +239,7 @@ async function generatePDFReport(
       filename: result.filename
     }
   } catch (error: any) {
-    console.error('PDF generation error:', error)
+    logger.error('PDF generation error:', error)
     return {
       success: false,
       error: error.message

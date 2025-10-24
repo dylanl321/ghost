@@ -4,6 +4,7 @@
  */
 
 import { getReportDownloadUrl } from '../../../utils/s3-reports-storage'
+import { logger } from '../../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -28,7 +29,7 @@ export default defineEventHandler(async (event) => {
       }
     }
   } catch (error: any) {
-    console.error('Error generating download URL:', error)
+    logger.error('Error generating download URL:', error)
 
     throw createError({
       statusCode: 500,

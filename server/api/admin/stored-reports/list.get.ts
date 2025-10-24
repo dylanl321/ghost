@@ -5,6 +5,7 @@
 
 import { listObjectsByPrefix } from '../../../utils/s3-storage'
 import { getReportDownloadUrl } from '../../../utils/s3-reports-storage'
+import { logger } from '../../../utils/logger'
 
 // Parse S3 key to extract metadata
 function parseS3Key(key: string) {
@@ -99,7 +100,7 @@ export default defineEventHandler(async (event) => {
       }
     }
   } catch (error: any) {
-    console.error('Error listing stored reports:', error)
+    logger.error('Error listing stored reports:', error)
 
     throw createError({
       statusCode: 500,

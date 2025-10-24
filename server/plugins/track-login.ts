@@ -6,6 +6,7 @@
 import { defineNitroPlugin } from 'nitropack/runtime/plugin'
 import { getUserSession } from '../utils/entra/session'
 import { updateLastLogin } from '../utils/user-preferences'
+import { logger } from '../utils/logger'
 
 // Track last update times to debounce (in-memory cache)
 const lastUpdateTimes = new Map<string, number>()
@@ -37,7 +38,7 @@ export default defineNitroPlugin((nitroApp) => {
 
       // Update last login time (async, non-blocking)
       updateLastLogin(userId).catch(err => {
-        console.error('Failed to update last login:', err)
+        logger.error('Failed to update last login:', err)
       })
 
       // Record update time
@@ -55,7 +56,7 @@ export default defineNitroPlugin((nitroApp) => {
 
     } catch (error) {
       // Silently fail - don't impact request
-      // console.error('Login tracking error:', error)
+      // logger.error('Login tracking error:', error)
     }
   })
 })

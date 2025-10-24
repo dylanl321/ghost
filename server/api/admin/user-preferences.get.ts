@@ -5,6 +5,7 @@
 
 import { getAllUserPreferences } from '../../utils/user-preferences'
 import { isUserAdmin } from '../../utils/user-roles'
+import { logger } from '../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -32,7 +33,7 @@ export default defineEventHandler(async (event) => {
     }
 
   } catch (error: any) {
-    console.error('Failed to get all user preferences:', error)
+    logger.error('Failed to get all user preferences:', error)
 
     if (error.statusCode) {
       throw error

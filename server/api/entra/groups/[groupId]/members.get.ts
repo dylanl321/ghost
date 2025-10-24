@@ -9,6 +9,7 @@ import { getGroupMembers } from '../../../../utils/entra/graph-client'
 import { validateEntraConfig } from '../../../../utils/entra/config'
 import { registerEndpoint } from '../../../../plugins/swagger'
 import type { GroupMembersResponse, EntraAPIResponse } from '../../../../types/entra'
+import { logger } from '../../../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/entra/groups/{groupId}/members', 'GET', {
@@ -88,7 +89,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<GroupM
     const query = getQuery(event)
     const includeDetails = query.includeDetails === 'true'
     
-    console.log(`Fetching members for group ${groupId}`)
+    logger.info(`Fetching members for group ${groupId}`)
     
     // Get group members
     const membersResponse = await getGroupMembers(event, groupId)
@@ -109,7 +110,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<GroupM
       cached: false // Will be true when from cache
     }
   } catch (error: any) {
-    console.error('Error fetching group members:', error)
+    logger.error('Error fetching group members:', error)
     
     // Re-throw H3 errors
     if (error.statusCode) {

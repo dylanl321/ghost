@@ -10,6 +10,7 @@ import { getApiKeyStats } from '../../../utils/api-keys'
 import { getAuthContext, requireScope } from '../../../middleware/entra-auth'
 import { registerEndpoint } from '../../../plugins/swagger'
 import type { EntraAPIResponse } from '../../../types/entra'
+import { logger } from '../../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/entra/config/status', 'GET', {
@@ -95,7 +96,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Config
     // Configuration status is available to all authenticated users
     // No admin scope required for basic status checks
     
-    console.log('Checking Entra ID configuration status')
+    logger.debug('Checking Entra ID configuration status')
     
     // Validate configurations
     const entraConfig = validateAllEntraConfig()
@@ -119,7 +120,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Config
       data: response
     }
   } catch (error: any) {
-    console.error('Error checking configuration status:', error)
+    logger.error('Error checking configuration status:', error)
     
     // Re-throw H3 errors
     if (error.statusCode) {

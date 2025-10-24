@@ -16,6 +16,7 @@ import {
 } from '../../../utils/organizations'
 import { sendSuccess, parseQueryParams, errors, handleAsync } from '../../../utils/api-response'
 import { registerEndpoint } from '../../../plugins/swagger'
+import { logger } from '../../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/organization/accounts/[accountId]', 'GET', {
@@ -123,7 +124,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     try {
       organizationalUnit = await getAccountOU(targetAccountId, environment)
     } catch (error) {
-      console.warn(`Failed to get OU for account ${targetAccountId} in ${environment}:`, error)
+      logger.warn(`Failed to get OU for account ${targetAccountId} in ${environment}:`, error)
       // Continue with null organizationalUnit
     }
     
@@ -132,12 +133,12 @@ export default defineEventHandler(handleAsync(async (event) => {
       try {
         policies = await getAccountPolicies(targetAccountId, environment)
       } catch (error) {
-        console.warn(`Failed to get policies for account ${targetAccountId} in ${environment}:`, error)
+        logger.warn(`Failed to get policies for account ${targetAccountId} in ${environment}:`, error)
         // Continue with empty policies array
       }
     }
   } else {
-    console.warn(`Organizations account ID not configured for ${environment} environment`)
+    logger.warn(`Organizations account ID not configured for ${environment} environment`)
   }
   
   const result: any = {

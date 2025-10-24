@@ -13,6 +13,7 @@ import { registerEndpoint } from '../../plugins/swagger'
 import { parseAndValidateAccountFilters, getAccountIdsFromCriteria } from '../../utils/account-filters'
 import { costCache, CacheTags } from '../../utils/cache-manager'
 import { validateDateParams, type RelativePeriod } from '../../utils/date-helpers'
+import { logger } from '../../utils/logger'
 
 // Helper function to format date as YYYY-MM-DD
 function formatDate(date: Date): string {
@@ -195,7 +196,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   const historicalData = await costCache.getOrSet(
     cacheKey,
     async () => {
-      console.log('Cache miss: Fetching historical cost data...')
+      logger.info('Cache miss: Fetching historical cost data...')
       
       let allResultsByTime: any[] = []
       
@@ -218,10 +219,10 @@ export default defineEventHandler(handleAsync(async (event) => {
           endDate: endDate
         }
         
-        console.log('Fetching first 12 months of 24-month period...')
+        logger.info('Fetching first 12 months of 24-month period...')
         const firstPeriodData = await getCostAndUsage(firstPeriodParams, environment)
         
-        console.log('Fetching second 12 months of 24-month period...')
+        logger.info('Fetching second 12 months of 24-month period...')
         const secondPeriodData = await getCostAndUsage(secondPeriodParams, environment)
         
         // Combine results

@@ -8,6 +8,7 @@ import { syncAccountFromOrganizations } from '../../utils/accounts-consolidated'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { accountCache, organizationCache, CacheTags } from '../../utils/cache-manager'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/accounts/sync', 'POST', {
@@ -87,7 +88,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
   
   try {
-    console.log(`Syncing account ${accountId} from Organizations to DynamoDB`)
+    logger.info(`Syncing account ${accountId} from Organizations to DynamoDB`)
     const syncedAccount = await syncAccountFromOrganizations(accountId)
     
     if (!syncedAccount) {
@@ -95,13 +96,13 @@ export default defineEventHandler(handleAsync(async (event) => {
     }
     
     // Invalidate related caches after successful sync
-    console.log('Invalidating caches after account sync...')
+    logger.info('Invalidating caches after account sync...')
     const [accountsInvalidated, organizationInvalidated] = await Promise.all([
       accountCache.invalidateByTags([CacheTags.ACCOUNTS]),
       organizationCache.invalidateByTags([CacheTags.ACCOUNTS]) // Organization cache depends on account data
     ])
     
-    console.log(`Cache invalidation complete: ${accountsInvalidated + organizationInvalidated} entries cleared`)
+    logger.debug(`Cache invalidation complete: ${accountsInvalidated + organizationInvalidated} entries cleared`)
     
     return sendSuccess(event, syncedAccount, {
       operation: 'synced',
@@ -116,7 +117,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       }
     })
   } catch (error: any) {
-    console.error('Error syncing account:', error)
+    logger.error('Error syncing account:', error)
     
     if (error.message?.includes('not found in Organizations')) {
       return errors.notFound(event, 'Account in Organizations')

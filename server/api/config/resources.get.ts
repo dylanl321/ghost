@@ -34,6 +34,7 @@ import {
   type ResourceType as OptimizerResourceType
 } from '../../utils/compute-optimizer'
 import type { AWSEnvironmentType } from '../../types'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/config/resources', 'GET', {
@@ -517,7 +518,7 @@ Keep response concise and practical.`
       }
     }
   } catch (error) {
-    console.error('AI analysis failed:', error)
+    logger.error('AI analysis failed:', error)
   }
   
   return {
@@ -608,7 +609,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     const nextToken = query.nextToken as string | undefined
     const runningTotal = parseInt(query.runningTotal as string) || 0
     
-    console.log(`[Config API] Querying resources: type=${resourceType}, filters=${JSON.stringify(accountFilters)}, env=${environment}`)
+    logger.info(`[Config API] Querying resources: type=${resourceType}, filters=${JSON.stringify(accountFilters)}, env=${environment}`)
     
     // Filter accounts using the standard filtering system
     const filteredAccounts = await filterAccounts(accountFilters)
@@ -622,8 +623,8 @@ export default defineEventHandler(handleAsync(async (event) => {
       }
     }).filter(Boolean)
     
-    console.log(`[Config API] Resolved account IDs: ${accountFilters.accountIds?.join(', ') || 'none'}`)
-    console.log(`[Config API] Found ${targetAccountIds.length} accounts after filtering: ${targetAccountIds.join(', ')}`)
+    logger.info(`[Config API] Resolved account IDs: ${accountFilters.accountIds?.join(', ') || 'none'}`)
+    logger.debug(`[Config API] Found ${targetAccountIds.length} accounts after filtering: ${targetAccountIds.join(', ')}`)
     
     if (targetAccountIds.length === 0 && (accountFilters.accountIds || accountFilters.linesOfBusiness || accountFilters.departments)) {
       return sendSuccess(event, {
@@ -658,8 +659,8 @@ export default defineEventHandler(handleAsync(async (event) => {
         : process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1')
     
     // Fetch resources from Config
-    console.log(`[Config API] Fetching from aggregator: ${aggregatorName}`)
-    console.log(`[Config API] Filter being passed: ${JSON.stringify(filter)}`)
+    logger.info(`[Config API] Fetching from aggregator: ${aggregatorName}`)
+    logger.info(`[Config API] Filter being passed: ${JSON.stringify(filter)}`)
     const { resources: resourceIdentifiers, nextToken: newNextToken } = await listAggregateResources(
       aggregatorName,
       filter,
@@ -667,7 +668,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       targetRegion
     )
     
-    console.log(`[Config API] Found ${resourceIdentifiers.length} resource identifiers`)
+    logger.debug(`[Config API] Found ${resourceIdentifiers.length} resource identifiers`)
     
     // Handle response based on detail level
     let resourceDetails: any[] = []
@@ -719,7 +720,7 @@ export default defineEventHandler(handleAsync(async (event) => {
             }
           })
         } catch (error) {
-          console.warn('[Config API] Failed to enrich EC2 instances:', error)
+          logger.warn('[Config API] Failed to enrich EC2 instances:', error)
           // Fall back to basic data without names
           ec2Details = ec2Instances.map(r => ({
             resourceId: r.ResourceId,
@@ -774,7 +775,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       }
     }
     
-    console.log(`[Config API] Processed ${resourceDetails.length} resources with detail level: ${responseDetail}`)
+    logger.info(`[Config API] Processed ${resourceDetails.length} resources with detail level: ${responseDetail}`)
     
     // Create account name mapping from resolved accounts and filtered accounts
     const accountNamesMap = new Map<string, string>()
@@ -820,7 +821,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     let filteredResources = resourceDetails
     if (tags) {
       filteredResources = filterResourcesByTags(resourceDetails, tags)
-      console.log(`[Config API] After tag filtering: ${filteredResources.length} resources`)
+      logger.info(`[Config API] After tag filtering: ${filteredResources.length} resources`)
     }
     
     // Enrich with account names from the filtered accounts
@@ -841,7 +842,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       const optimizableResources = prepareResourcesForOptimizer(filteredResources, environment)
       
       if (optimizableResources.length > 0) {
-        console.log(`[Config API] Fetching optimization for ${optimizableResources.length} resources`)
+        logger.info(`[Config API] Fetching optimization for ${optimizableResources.length} resources`)
         try {
           optimizationResults = await getBatchOptimizationRecommendations(
             optimizableResources,
@@ -865,7 +866,7 @@ export default defineEventHandler(handleAsync(async (event) => {
             }
           })
         } catch (error) {
-          console.error('Optimization analysis failed:', error)
+          logger.error('Optimization analysis failed:', error)
         }
       }
     }
@@ -897,7 +898,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     // Generate AI analysis if requested
     let aiAnalysis = null
     if (includeAiAnalysis && filteredResources.length > 0) {
-      console.log('[Config API] Generating AI analysis')
+      logger.info('[Config API] Generating AI analysis')
       aiAnalysis = await generateAiAnalysis(filteredResources, summary, aiModel)
     }
     
@@ -919,11 +920,11 @@ export default defineEventHandler(handleAsync(async (event) => {
       }
     }
     
-    console.log(`[Config API] Returning ${filteredResources.length} resources with ${Object.keys(summary.byType).length} types`)
+    logger.info(`[Config API] Returning ${filteredResources.length} resources with ${Object.keys(summary.byType).length} types`)
     
     return sendSuccess(event, response, { message: 'Resources fetched successfully' })
   } catch (error) {
-    console.error('[Config API] Unexpected error:', error)
+    logger.error('[Config API] Unexpected error:', error)
     return errors.serverError(event, `Configuration service error: ${error.message}`)
   }
 }))

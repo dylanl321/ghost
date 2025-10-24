@@ -26,6 +26,7 @@ import {
 } from '../../utils/config-service'
 import { getCacheManager } from '../../utils/cache-manager'
 import type { AWSEnvironmentType } from '../../types'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/config/summary', 'GET', {
@@ -359,9 +360,9 @@ async function queryResourceType(
           nextToken = newToken
           
           if (resources.length > 0) {
-            console.log(`[Config Summary API] Found ${resources.length} ${resourceType} resources${accountId ? ` for account ${accountId}` : ''} (total: ${allResources.length})`)
+            logger.debug(`[Config Summary API] Found ${resources.length} ${resourceType} resources${accountId ? ` for account ${accountId}` : ''} (total: ${allResources.length})`)
           } else if (!nextToken) {
-            console.log(`[Config Summary API] No ${resourceType} resources found${accountId ? ` for account ${accountId}` : ''}`)
+            logger.debug(`[Config Summary API] No ${resourceType} resources found${accountId ? ` for account ${accountId}` : ''}`)
           }
           
           // Success - break out of retry loop
@@ -375,14 +376,14 @@ async function queryResourceType(
             retryCount++
             if (retryCount < maxRetries) {
               const backoffTime = Math.pow(2, retryCount) * 1000 // Exponential backoff: 2s, 4s, 8s
-              console.log(`[Config Summary API] Rate limited for ${resourceType}, retrying in ${backoffTime}ms (attempt ${retryCount}/${maxRetries})`)
+              logger.info(`[Config Summary API] Rate limited for ${resourceType}, retrying in ${backoffTime}ms (attempt ${retryCount}/${maxRetries})`)
               await sleep(backoffTime)
               continue
             }
           }
           
           // Non-rate limit error or max retries reached
-          console.error(`[Config Summary API] Failed to query ${resourceType}${accountId ? ` for account ${accountId}` : ''}:`, errorMessage)
+          logger.error(`[Config Summary API] Failed to query ${resourceType}${accountId ? ` for account ${accountId}` : ''}:`, errorMessage)
           break
         }
       }
@@ -433,7 +434,7 @@ async function queryResourcesParallel(
       }
     })
     
-    console.log(`[Config Summary API] Completed batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(resourceTypes.length / batchSize)}`)
+    logger.info(`[Config Summary API] Completed batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(resourceTypes.length / batchSize)}`)
     
     // Add delay between batches to avoid rate limiting (except for last batch)
     if (i + batchSize < resourceTypes.length) {
@@ -441,7 +442,7 @@ async function queryResourcesParallel(
     }
   }
   
-  console.log(`[Config Summary API] Query complete. Found resources: ${JSON.stringify(typesSummary)}`)
+  logger.debug(`[Config Summary API] Query complete. Found resources: ${JSON.stringify(typesSummary)}`)
   
   return allResources
 }
@@ -555,7 +556,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     // Check cache
     const cached = await cache.get(cacheKey)
     if (cached) {
-      console.log(`[Config Summary API] Cache hit for summary: ${cacheKey}`)
+      logger.info(`[Config Summary API] Cache hit for summary: ${cacheKey}`)
       return sendSuccess(event, cached, { message: 'Resource summary (cached)', fromCache: true })
     }
     
@@ -617,7 +618,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       ? (process.env.AWS_COMMERCIAL_CONFIG_AGGREGATOR || 'CommercialAggregator')
       : (process.env.AWS_GOVCLOUD_CONFIG_AGGREGATOR || 'GDMSAggregator')
     
-    console.log(`[Config Summary API] Generating summary for env=${environment}, filters=${JSON.stringify(accountFilters)}`)
+    logger.info(`[Config Summary API] Generating summary for env=${environment}, filters=${JSON.stringify(accountFilters)}`)
     
     // Filter accounts if needed
     const filteredAccounts = await filterAccounts(accountFilters)
@@ -631,7 +632,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       }
     }).filter(Boolean)
     
-    console.log(`[Config Summary API] Found ${targetAccountIds.length} accounts after filtering`)
+    logger.debug(`[Config Summary API] Found ${targetAccountIds.length} accounts after filtering`)
     
     // Get default region for environment
     const targetRegion = region || 
@@ -647,17 +648,17 @@ export default defineEventHandler(handleAsync(async (event) => {
       case 'quick':
         resourcesToQuery = PRIORITY_RESOURCE_TYPES
         maxResources = 1000
-        console.log(`[Config Summary API] Quick mode: Querying ${resourcesToQuery.length} priority resource types`)
+        logger.info(`[Config Summary API] Quick mode: Querying ${resourcesToQuery.length} priority resource types`)
         break
       case 'full':
         resourcesToQuery = RESOURCE_TYPES
         maxResources = maxResourcesPerType
-        console.log(`[Config Summary API] Full mode: Querying ${resourcesToQuery.length} resource types with pagination (max ${maxResources} per type)`)
+        logger.info(`[Config Summary API] Full mode: Querying ${resourcesToQuery.length} resource types with pagination (max ${maxResources} per type)`)
         break
       default: // 'standard'
         resourcesToQuery = RESOURCE_TYPES
         maxResources = 1000
-        console.log(`[Config Summary API] Standard mode: Querying ${resourcesToQuery.length} resource types`)
+        logger.info(`[Config Summary API] Standard mode: Querying ${resourcesToQuery.length} resource types`)
         break
     }
     
@@ -668,11 +669,11 @@ export default defineEventHandler(handleAsync(async (event) => {
     // If specific account IDs were provided in the query, use them
     if (accountFilters.accountIds && accountFilters.accountIds.length > 0) {
       baseFilter.accountIds = targetAccountIds
-      console.log(`[Config Summary API] Filtering by ${targetAccountIds.length} specific accounts`)
+      logger.info(`[Config Summary API] Filtering by ${targetAccountIds.length} specific accounts`)
     } else if (accountFilters.linesOfBusiness || accountFilters.departments) {
       // For LOB/department filters, we might want to post-filter instead
       // since querying 100+ accounts individually is slow
-      console.log(`[Config Summary API] Post-filtering for LOB/departments from all resources`)
+      logger.info(`[Config Summary API] Post-filtering for LOB/departments from all resources`)
     }
     
     if (region) {
@@ -691,14 +692,14 @@ export default defineEventHandler(handleAsync(async (event) => {
     )
     const queryTime = Date.now() - startTime
     
-    console.log(`[Config Summary API] Total resources found: ${allResources.length} in ${queryTime}ms`)
+    logger.debug(`[Config Summary API] Total resources found: ${allResources.length} in ${queryTime}ms`)
     
     // Post-filter resources if we queried org-wide but need specific LOB/department filtering
     let filteredResources = allResources
     if (!baseFilter.accountIds && targetAccountIds.length > 0) {
       const targetAccountIdSet = new Set(targetAccountIds)
       filteredResources = allResources.filter(r => targetAccountIdSet.has(r.accountId))
-      console.log(`[Config Summary API] Post-filtered to ${filteredResources.length} resources for target accounts`)
+      logger.info(`[Config Summary API] Post-filtered to ${filteredResources.length} resources for target accounts`)
     }
     
     // Create account name mapping
@@ -802,9 +803,9 @@ export default defineEventHandler(handleAsync(async (event) => {
     
     // Cache the response
     await cache.set(cacheKey, response, cacheTTL)
-    console.log(`[Config Summary API] Cached summary for ${cacheTTL}s: ${cacheKey}`)
+    logger.info(`[Config Summary API] Cached summary for ${cacheTTL}s: ${cacheKey}`)
     
-    console.log(`[Config Summary API] Returning summary with ${stats.total} total resources across ${Object.keys(stats.byAccount).length} accounts`)
+    logger.info(`[Config Summary API] Returning summary with ${stats.total} total resources across ${Object.keys(stats.byAccount).length} accounts`)
     
     return sendSuccess(event, response, { 
       message: targetAccountIds.length > 0 
@@ -812,7 +813,7 @@ export default defineEventHandler(handleAsync(async (event) => {
         : 'Organization-wide resource summary'
     })
   } catch (error) {
-    console.error('[Config Summary API] Unexpected error:', error)
+    logger.error('[Config Summary API] Unexpected error:', error)
     return errors.serverError(event, `Configuration service error: ${error.message}`)
   }
 }))

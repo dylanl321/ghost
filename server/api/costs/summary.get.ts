@@ -10,6 +10,7 @@ import { registerEndpoint } from '../../plugins/swagger'
 import { parseAndValidateAccountFilters, getAccountIdsFromCriteria } from '../../utils/account-filters'
 import { costCache, CacheTags } from '../../utils/cache-manager'
 import { validateDateParams, getRecommendedGranularity, type RelativePeriod } from '../../utils/date-helpers'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/costs/summary', 'GET', {
@@ -321,7 +322,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   const finalResult = await costCache.getOrSet(
     cacheKey,
     async () => {
-      console.log('Cache miss: Fetching cost summary data...')
+      logger.info('Cache miss: Fetching cost summary data...')
       
       // When proforma is requested, we get both billable and proforma data
       if (proforma) {

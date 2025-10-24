@@ -8,6 +8,7 @@ import { defineEventHandler, getQuery } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { STORED_QUERIES, getStoredQuery, getQueriesByCategory } from '../../utils/security-lake'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/security-lake/queries-enhanced', 'GET', {
@@ -273,7 +274,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     })
 
   } catch (error) {
-    console.error('[Security Lake] Enhanced queries failed:', error)
+    logger.error('[Security Lake] Enhanced queries failed:', error)
     return errors.serverError(event, error instanceof Error ? error.message : 'Query listing failed')
   }
 }))

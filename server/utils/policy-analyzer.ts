@@ -3,6 +3,8 @@
  * Parses and analyzes Service Control Policies to determine effective permissions
  */
 
+import { logger } from './logger'
+
 export interface PolicyStatement {
   Sid?: string
   Effect: 'Allow' | 'Deny'
@@ -833,11 +835,11 @@ Return your analysis as a JSON object with this EXACT structure:
       const aiAnalysis = JSON.parse(response.content)
       return aiAnalysis
     } catch (parseError) {
-      console.error('[AI Policy Analysis] Failed to parse AI response:', parseError)
+      logger.error('[AI Policy Analysis] Failed to parse AI response:', parseError)
       return generateFallbackAnalysis(analysis, policies)
     }
   } catch (error) {
-    console.error('[AI Policy Analysis] Error:', error)
+    logger.error('[AI Policy Analysis] Error:', error)
     return generateFallbackAnalysis(analysis, policies)
   }
 }

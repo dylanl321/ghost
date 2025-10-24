@@ -8,6 +8,7 @@
 
 import { getReport } from '../../../utils/scheduled-reports'
 import { executeScheduledReport } from '../../../utils/report-scheduler'
+import { logger } from '../../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -34,7 +35,7 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    console.log(`Admin force-executing report: ${report.reportName} (${reportId})`)
+    logger.info(`Admin force-executing report: ${report.reportName} (${reportId})`)
 
     // Execute the report immediately (bypassing scheduler)
     // Note: This doesn't use execution locking since it's a manual admin action
@@ -57,7 +58,7 @@ export default defineEventHandler(async (event) => {
       })
     }
   } catch (error: any) {
-    console.error('Error force-executing report:', error)
+    logger.error('Error force-executing report:', error)
 
     if (error.statusCode) {
       throw error

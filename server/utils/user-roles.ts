@@ -6,6 +6,7 @@
 import type { H3Event } from 'h3'
 import { createError } from 'h3'
 import { getUserGroups } from './entra/graph-client'
+import { logger } from './logger'
 
 // In-memory cache for admin status checks (TTL: 10 minutes)
 const adminCache = new Map<string, { isAdmin: boolean, expiresAt: number }>()
@@ -38,6 +39,12 @@ export async function isUserAdmin(event: H3Event): Promise<boolean> {
     return true
   }
 
+  // Allow admin bypass via environment variable for non-production deployments
+  if (process.env.ADMIN_BYPASS === 'true') {
+    logger.warn('⚠️  ADMIN_BYPASS enabled - all authenticated users have admin access')
+    return true
+  }
+
   const user = auth.user
   if (!user) {
     return false
@@ -55,7 +62,7 @@ export async function isUserAdmin(event: H3Event): Promise<boolean> {
     const userId = user.id || user.oid || user.sub ||
                    user.claims?.id || user.claims?.oid || user.claims?.sub
     if (!userId) {
-      console.error('Cannot fetch groups: user ID not found in session. User object:', JSON.stringify(user, null, 2))
+      logger.error('Cannot fetch groups: user ID not found in session. User object:', JSON.stringify(user, null, 2))
       return false
     }
 
@@ -81,7 +88,7 @@ export async function isUserAdmin(event: H3Event): Promise<boolean> {
 
       return isAdmin
     } catch (error) {
-      console.error('Failed to fetch user groups for admin check:', error)
+      logger.error('Failed to fetch user groups for admin check:', error)
       // Fail closed - don't grant admin access if we can't verify
       return false
     }

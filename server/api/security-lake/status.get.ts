@@ -8,6 +8,7 @@ import { defineEventHandler, getQuery } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { getAsyncQueryStatus } from '../../utils/security-lake'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/security-lake/status', 'GET', {
@@ -107,7 +108,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     return sendSuccess(event, status)
 
   } catch (error) {
-    console.error('[Security Lake] Status check failed:', error)
+    logger.error('[Security Lake] Status check failed:', error)
     return errors.serverError(event, error instanceof Error ? error.message : 'Status check failed')
   }
 }))

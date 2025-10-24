@@ -5,6 +5,7 @@
 
 import { getAthenaClient } from '../lib/aws-client-factory'
 import { getCacheManager } from './cache-manager'
+import { logger } from './logger'
 
 // Types
 export interface QueryParameter {
@@ -395,7 +396,7 @@ export async function executeStoredQuery(request: QueryExecutionRequest): Promis
     return await executeSQL(sql, query, environment, async)
 
   } catch (error) {
-    console.error(`[Security Lake] Query execution failed:`, error)
+    logger.error(`[Security Lake] Query execution failed:`, error)
     return {
       success: false,
       error: error instanceof Error ? error.message : String(error)
@@ -495,7 +496,7 @@ async function executeSQL(sql: string, query: StoredQuery, environment: 'commerc
     // Get Athena client
     const athenaClient = await getAthenaClient(environment, config.region, config.monitoringAccountId)
 
-    console.log(`[Security Lake V2] Executing query '${query.id}' in ${environment}`)
+    logger.info(`[Security Lake V2] Executing query '${query.id}' in ${environment}`)
 
     // Start query execution
     const { StartQueryExecutionCommand } = await import('@aws-sdk/client-athena')
@@ -593,7 +594,7 @@ async function executeSQL(sql: string, query: StoredQuery, environment: 'commerc
     return result
 
   } catch (error) {
-    console.error(`[Security Lake V2] SQL execution failed:`, error)
+    logger.error(`[Security Lake V2] SQL execution failed:`, error)
     throw error
   }
 }
@@ -658,7 +659,7 @@ export async function getAsyncQueryStatus(
           : undefined
 
       } catch (resultsError) {
-        console.error(`[Security Lake] Failed to get results for ${queryExecutionId}:`, resultsError)
+        logger.error(`[Security Lake] Failed to get results for ${queryExecutionId}:`, resultsError)
         response.error = 'Failed to retrieve results'
       }
     } else if (status === 'FAILED') {
@@ -668,7 +669,7 @@ export async function getAsyncQueryStatus(
     return response
 
   } catch (error) {
-    console.error(`[Security Lake] Failed to get query status:`, error)
+    logger.error(`[Security Lake] Failed to get query status:`, error)
     return {
       queryId: queryExecutionId,
       status: 'FAILED',

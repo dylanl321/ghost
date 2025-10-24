@@ -4,6 +4,7 @@
  */
 
 import { listAllReports } from '../../../utils/scheduled-reports'
+import { logger } from '../../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -24,7 +25,7 @@ export default defineEventHandler(async (event) => {
       }
     }
   } catch (error: any) {
-    console.error('Error listing all reports:', error)
+    logger.error('Error listing all reports:', error)
 
     if (error.statusCode) {
       throw error

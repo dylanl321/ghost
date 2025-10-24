@@ -47,6 +47,14 @@ export default defineNuxtConfig({
   //   fonts: false // Prevent NuxtUI from fetching fonts, which causes a certificate error
   // },
 
+  nitro: {
+    noExternal: ['gray-matter'],
+    serverAssets: [{
+      baseName: 'support',
+      dir: './app/content/support'
+    }]
+  },
+
   // nitro: {
   //   compatibilityDate: '2024-12-27',
   //   routeRules: {

@@ -6,6 +6,7 @@
 import { setResponseStatus, getQuery } from 'h3'
 import type { H3Event } from 'h3'
 import type { APIResponse, PaginatedResponse } from '../types'
+import { logger } from './logger'
 
 /**
  * Send a successful response
@@ -159,7 +160,7 @@ export function handleAsync<T extends (...args: any[]) => Promise<any>>(fn: T): 
       }
       
       // Generic error handling
-      console.error('API Error:', error)
+      logger.error('API Error:', error)
       return errors.serverError(event, error.message || 'An unexpected error occurred')
     }
   }) as T

@@ -9,6 +9,7 @@
  */
 
 import { GetSecretValueCommand, SecretsManagerClient } from '@aws-sdk/client-secrets-manager'
+import { logger } from '../utils/logger'
 
 export interface DynamoDBTableConfig {
   tableName: string
@@ -57,17 +58,17 @@ async function loadFromSecretsManager(): Promise<DynamoDBConfig | null> {
     const response = await client.send(command)
 
     if (!response.SecretString) {
-      console.warn('DynamoDB config secret exists but has no value')
+      logger.warn('DynamoDB config secret exists but has no value')
       return null
     }
 
     const config = JSON.parse(response.SecretString) as DynamoDBConfig
-    console.log('Successfully loaded DynamoDB configuration from Secrets Manager')
+    logger.info('Successfully loaded DynamoDB configuration from Secrets Manager')
     return config
   } catch (error: any) {
     // Only log in non-development environments or if not a ResourceNotFoundException
     if (process.env.NODE_ENV !== 'development' || error.name !== 'ResourceNotFoundException') {
-      console.warn('Failed to load DynamoDB config from Secrets Manager:', error.message)
+      logger.warn('Failed to load DynamoDB config from Secrets Manager:', error.message)
     }
     return null
   }
@@ -183,7 +184,7 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
 
   const nodeEnv = process.env.NODE_ENV?.toLowerCase()
   if (nodeEnv === 'development' || nodeEnv === 'dev') {
-    console.log('Using DynamoDB configuration from environment variables (development mode)')
+    logger.info('Using DynamoDB configuration from environment variables (development mode)')
   }
 
   return envConfig
@@ -197,6 +198,9 @@ export function clearConfigCache(): void {
   configLoadedAt = null
 }
 
+// Track which tables have been logged to avoid duplicate logs
+const loggedTables = new Set<string>()
+
 /**
  * Get a specific table configuration
  */
@@ -204,14 +208,10 @@ export async function getTableConfig(tableName: keyof DynamoDBConfig): Promise<D
   const config = await getDynamoDBConfig()
   const tableConfig = config[tableName]
 
-  // Debug logging for development
-  if (process.env.NODE_ENV === 'development') {
-    console.log(`[DynamoDB Config] Getting config for "${tableName}":`, {
-      tableName: tableConfig.tableName,
-      environment: tableConfig.environment,
-      region: tableConfig.region,
-      accountId: tableConfig.accountId
-    })
+  // Only log on first access per table in development (reduces noise)
+  if (process.env.NODE_ENV === 'development' && !loggedTables.has(tableName)) {
+    logger.debug(`[DynamoDB Config] Loaded config for "${tableName}": ${tableConfig.tableName} (${tableConfig.environment})`)
+    loggedTables.add(tableName)
   }
 
   return tableConfig

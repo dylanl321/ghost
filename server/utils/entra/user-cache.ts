@@ -7,6 +7,7 @@ import type { H3Event } from 'h3'
 import type { EntraUser } from '../../types/entra'
 import { accountCache, CacheTags } from '../cache-manager'
 import { getUserDetails, searchUsers } from './graph-client'
+import { logger } from '../logger'
 
 // In-memory cache for ultra-fast lookups during request
 const memoryCache = new Map<string, EntraUser>()
@@ -25,7 +26,7 @@ export async function getCachedUser(
   const timestamp = memoryTimestamps.get(userId)
   
   if (memoryCached && timestamp && Date.now() - timestamp < MEMORY_TTL) {
-    console.log(`Memory cache hit for user ${userId}`)
+    logger.info(`Memory cache hit for user ${userId}`)
     return memoryCached
   }
   
@@ -34,7 +35,7 @@ export async function getCachedUser(
   const cached = await accountCache.get(cacheKey)
   
   if (cached) {
-    console.log(`Persistent cache hit for user ${userId}`)
+    logger.info(`Persistent cache hit for user ${userId}`)
     // Update memory cache
     memoryCache.set(userId, cached)
     memoryTimestamps.set(userId, Date.now())
@@ -42,7 +43,7 @@ export async function getCachedUser(
   }
   
   // Fetch from Graph API
-  console.log(`Cache miss for user ${userId}, fetching from Graph API`)
+  logger.info(`Cache miss for user ${userId}, fetching from Graph API`)
   
   try {
     const user = await getUserDetails(event, userId)
@@ -64,7 +65,7 @@ export async function getCachedUser(
     
     return user
   } catch (error) {
-    console.error(`Failed to fetch user ${userId}:`, error)
+    logger.error(`Failed to fetch user ${userId}:`, error)
     return null
   }
 }
@@ -93,7 +94,7 @@ export async function getCachedUsers(
   
   // Fetch uncached users
   if (uncachedIds.length > 0) {
-    console.log(`Fetching ${uncachedIds.length} uncached users`)
+    logger.info(`Fetching ${uncachedIds.length} uncached users`)
     
     // Fetch in parallel but limit concurrency
     const batchSize = 5
@@ -125,11 +126,11 @@ export async function searchAndCacheUsers(
   // Check cache first
   const cached = await accountCache.get(cacheKey)
   if (cached) {
-    console.log(`Cache hit for user search "${searchTerm}"`)
+    logger.info(`Cache hit for user search "${searchTerm}"`)
     return cached
   }
   
-  console.log(`Cache miss for user search "${searchTerm}", fetching from Graph API`)
+  logger.info(`Cache miss for user search "${searchTerm}", fetching from Graph API`)
   
   try {
     const users = await searchUsers(event, searchTerm)
@@ -162,7 +163,7 @@ export async function searchAndCacheUsers(
     
     return users
   } catch (error) {
-    console.error(`Failed to search users with term "${searchTerm}":`, error)
+    logger.error(`Failed to search users with term "${searchTerm}":`, error)
     return []
   }
 }
@@ -175,7 +176,7 @@ export async function clearUserCache(): Promise<void> {
   memoryTimestamps.clear()
   
   await accountCache.invalidateByTags(['ENTRA_USERS'])
-  console.log('User cache cleared')
+  logger.info('User cache cleared')
 }
 
 /**

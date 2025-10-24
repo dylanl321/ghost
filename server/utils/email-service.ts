@@ -12,6 +12,7 @@ import { SendRawEmailCommand } from '@aws-sdk/client-ses'
 import { getSESClient } from '../lib/aws-client-factory'
 import type { TemplateContext } from '~/shared/types/email-templates'
 import type { EmailDeliveryRecipient, EmailDeliveryDetails } from '~/shared/types/scheduled-reports'
+import { logger } from './logger'
 
 interface EmailAttachment {
   filename: string
@@ -159,7 +160,7 @@ export async function sendEmail(options: SendEmailOptions): Promise<{
 
     const response = await client.send(command)
 
-    console.log('Email sent successfully:', {
+    logger.info('Email sent successfully:', {
       messageId: response.MessageId,
       recipients: options.to.length
     })
@@ -169,7 +170,7 @@ export async function sendEmail(options: SendEmailOptions): Promise<{
       messageId: response.MessageId
     }
   } catch (error: any) {
-    console.error('Failed to send email:', error)
+    logger.error('Failed to send email:', error)
     return {
       success: false,
       error: error.message || 'Failed to send email'
@@ -242,7 +243,7 @@ export async function sendReportEmail(
       deliveryDetails
     }
   } catch (error: any) {
-    console.error('Error sending report email:', error)
+    logger.error('Error sending report email:', error)
 
     // Even on error, return delivery details showing failure
     const deliveryRecipients: EmailDeliveryRecipient[] = recipients.map(email => ({

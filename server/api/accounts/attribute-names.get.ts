@@ -11,6 +11,7 @@ import { defineEventHandler, getQuery } from 'h3'
 import { getAllAccountMetadataFromDynamoDB } from '../../utils/accounts-consolidated'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/accounts/attribute-names', 'GET', {
@@ -212,7 +213,7 @@ export default defineEventHandler(handleAsync(async (event) => {
 
     return sendSuccess(event, data, metadata)
   } catch (error) {
-    console.error('Error retrieving account attribute names:', error)
+    logger.error('Error retrieving account attribute names:', error)
     return errors.serverError(event, 'Failed to retrieve account attribute names')
   }
 }))

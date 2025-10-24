@@ -4,6 +4,7 @@
  */
 
 import { defineEventHandler, setHeader } from 'h3'
+import { logger } from '../utils/logger'
 
 export default defineEventHandler(async (event) => {
   setHeader(event, 'content-type', 'text/html')
@@ -87,10 +88,10 @@ export default defineEventHandler(async (event) => {
           return req;
         },
         onComplete: function() {
-          console.log('Swagger UI loaded successfully');
+          logger.info('Swagger UI loaded successfully');
         },
         onFailure: function(data) {
-          console.error('Failed to load Swagger UI:', data);
+          logger.error('Failed to load Swagger UI:', data);
         }
       });
       // End Swagger UI call region

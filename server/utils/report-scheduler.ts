@@ -13,6 +13,7 @@ import { generateCostReport } from './report-generator'
 import { sendReportEmail, renderTemplate, getDefaultTemplate } from './email-service'
 import { claimExecutionLock, createLockId } from './execution-locks'
 import { uploadReportToS3 } from './s3-reports-storage'
+import { logger } from './logger'
 
 /**
  * Execute a single scheduled report
@@ -24,21 +25,21 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
 }> {
   const startTime = Date.now()
 
-  console.log(`Executing scheduled report: ${report.reportName} (${report.reportId})`)
+  logger.info(`Executing scheduled report: ${report.reportName} (${report.reportId})`)
 
   try {
     // Step 1: Generate the report
-    console.log('  → Generating report...')
+    logger.info('  → Generating report...')
     const reportResult = await generateCostReport(report.reportConfig)
 
     if (!reportResult.success || !reportResult.buffer) {
       throw new Error(reportResult.error || 'Failed to generate report')
     }
 
-    console.log(`  → Report generated: ${reportResult.filename} (${reportResult.buffer.length} bytes)`)
+    logger.info(`  → Report generated: ${reportResult.filename} (${reportResult.buffer.length} bytes)`)
 
     // Step 2: Upload report to S3
-    console.log('  → Uploading report to S3...')
+    logger.info('  → Uploading report to S3...')
     const executionId = `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
     const s3UploadResult = await uploadReportToS3(
@@ -54,10 +55,10 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
     )
 
     if (!s3UploadResult.success) {
-      console.warn(`  ⚠ Failed to upload report to S3: ${s3UploadResult.error}`)
+      logger.warn(`  ⚠ Failed to upload report to S3: ${s3UploadResult.error}`)
       // Continue execution - we can still send email with attachment
     } else {
-      console.log(`  → Report uploaded to S3: ${s3UploadResult.key}`)
+      logger.info(`  → Report uploaded to S3: ${s3UploadResult.key}`)
     }
 
     // Step 3: Prepare email content with enhanced date context
@@ -81,7 +82,7 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
                     (process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : '')
 
     if (!siteUrl) {
-      console.warn('NUXT_PUBLIC_SITE_URL not set - email links will be empty')
+      logger.warn('NUXT_PUBLIC_SITE_URL not set - email links will be empty')
     }
 
     const templateContext = {
@@ -108,7 +109,7 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
     const renderedBody = renderTemplate(emailBody, templateContext)
 
     // Step 4: Send email to all recipients
-    console.log(`  → Sending email to ${report.recipients.length} recipient(s)...`)
+    logger.info(`  → Sending email to ${report.recipients.length} recipient(s)...`)
     const emailResult = await sendReportEmail(
       report.recipients,
       emailSubject,
@@ -123,7 +124,7 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
     }
 
     const duration = Date.now() - startTime
-    console.log(`  ✓ Report sent successfully in ${duration}ms`)
+    logger.info(`  ✓ Report sent successfully in ${duration}ms`)
 
     // Step 5: Update report status
     await updateReportRunStatus(report.reportId, 'success')
@@ -153,7 +154,7 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
     const duration = Date.now() - startTime
     const errorMessage = error.message || 'Unknown error during report execution'
 
-    console.error(`  ✗ Report execution failed: ${errorMessage}`)
+    logger.error(`  ✗ Report execution failed: ${errorMessage}`)
 
     // Update report status with error
     await updateReportRunStatus(report.reportId, 'failed', errorMessage)
@@ -194,7 +195,7 @@ export async function processScheduledReports(): Promise<{
       return { processed: 0, successful: 0, failed: 0 }
     }
 
-    console.log(`Found ${dueReports.length} report(s) to execute`)
+    logger.debug(`Found ${dueReports.length} report(s) to execute`)
 
     let successful = 0
     let failed = 0
@@ -206,7 +207,7 @@ export async function processScheduledReports(): Promise<{
       const lockClaimed = await claimExecutionLock(report.reportId, report.nextRunTime)
 
       if (!lockClaimed) {
-        console.log(`⊘ Skipping ${report.reportName} - already claimed by another container`)
+        logger.info(`⊘ Skipping ${report.reportName} - already claimed by another container`)
         skipped++
         continue
       }
@@ -225,7 +226,7 @@ export async function processScheduledReports(): Promise<{
     }
 
     if (skipped > 0) {
-      console.log(`⊘ Skipped ${skipped} report(s) (already claimed by other containers)`)
+      logger.info(`⊘ Skipped ${skipped} report(s) (already claimed by other containers)`)
     }
 
     return {
@@ -234,7 +235,7 @@ export async function processScheduledReports(): Promise<{
       failed
     }
   } catch (error: any) {
-    console.error('Error processing scheduled reports:', error)
+    logger.error('Error processing scheduled reports:', error)
     return { processed: 0, successful: 0, failed: 0 }
   }
 }

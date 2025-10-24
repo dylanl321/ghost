@@ -7,6 +7,7 @@ import type { UpdateReportRequest } from '~/shared/types/scheduled-reports'
 import { getReport, updateReport } from '../../utils/scheduled-reports'
 import { validateEmails } from '../../utils/email-service'
 import { isUserAdmin } from '../../utils/user-roles'
+import { logger } from '../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -80,7 +81,7 @@ export default defineEventHandler(async (event) => {
       data: updated
     }
   } catch (error: any) {
-    console.error('Error updating scheduled report:', error)
+    logger.error('Error updating scheduled report:', error)
 
     if (error.statusCode) {
       throw error

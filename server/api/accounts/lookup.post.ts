@@ -8,6 +8,7 @@ import { lookupAccountUnified } from '../../utils/accounts-consolidated'
 import { applyEnrichmentLevel, validateEnrichmentLevel, getEnrichmentDescription } from '../../utils/account-enrichment'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/accounts/lookup', 'POST', {
@@ -125,7 +126,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
   
   try {
-    console.log('Looking up account with criteria:', criteria)
+    logger.info('Looking up account with criteria:', criteria)
     const account = await lookupAccountUnified(criteria)
     
     if (!account) {
@@ -145,7 +146,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       enrichmentDescription: getEnrichmentDescription(enrichmentLevel)
     })
   } catch (error) {
-    console.error('Error looking up account:', error)
+    logger.error('Error looking up account:', error)
     return errors.serverError(event, 'Failed to lookup account')
   }
 }))

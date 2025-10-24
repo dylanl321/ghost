@@ -1,5 +1,6 @@
 import { sendSuccess, errors } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/logging/activity-logs', 'GET', {
@@ -59,7 +60,7 @@ export default defineEventHandler(async (event) => {
     const metadata = { responseTimeMs: Date.now() - startTime }
     return sendSuccess(event, logs, metadata)
   } catch (err) {
-    console.error('Error fetching activity logs:', err)
+    logger.error('Error fetching activity logs:', err)
     return errors.serverError(event, 'Failed to fetch activity logs')
   }
 })

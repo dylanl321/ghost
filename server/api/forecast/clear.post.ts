@@ -7,6 +7,7 @@ import { defineEventHandler, readBody } from 'h3'
 import { scanItems, batchDeleteItems } from '../../utils/dynamodb'
 import { sendSuccess, parseQueryParams, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/forecast/clear', 'POST', {
@@ -69,8 +70,8 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
 
   try {
-    console.log('🗑️  Starting forecast data clear operation...')
-    console.log('Environment:', environment)
+    logger.info('🗑️  Starting forecast data clear operation...')
+    logger.info('Environment:', environment)
     
     // Get all items from the table
     const scanResult = await scanItems(
@@ -82,10 +83,10 @@ export default defineEventHandler(handleAsync(async (event) => {
     )
 
     const items = scanResult.items
-    console.log(`📊 Found ${items.length} items to delete`)
+    logger.debug(`📊 Found ${items.length} items to delete`)
 
     if (items.length === 0) {
-      console.log('✅ No items to delete, table is already empty')
+      logger.info('✅ No items to delete, table is already empty')
       return sendSuccess(event, {
         deletedCount: 0,
         message: 'No forecast data found to clear'
@@ -101,7 +102,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       SK: item.SK
     }))
 
-    console.log(`🗑️  Deleting ${keys.length} items using batch delete...`)
+    logger.info(`🗑️  Deleting ${keys.length} items using batch delete...`)
     
     // Use optimized batch delete with parallel processing
     const deleteResult = await batchDeleteItems(
@@ -110,10 +111,10 @@ export default defineEventHandler(handleAsync(async (event) => {
       environment
     )
 
-    console.log(`✅ Cleared ${deleteResult.deletedCount} forecast records`)
+    logger.info(`✅ Cleared ${deleteResult.deletedCount} forecast records`)
     
     if (deleteResult.failedCount > 0) {
-      console.warn(`⚠️  ${deleteResult.failedCount} items failed to delete`)
+      logger.warn(`⚠️  ${deleteResult.failedCount} items failed to delete`)
     }
 
     return sendSuccess(event, {
@@ -126,8 +127,8 @@ export default defineEventHandler(handleAsync(async (event) => {
     })
 
   } catch (err: any) {
-    console.error('Forecast clear error:', err)
-    console.error('Error details:', {
+    logger.error('Forecast clear error:', err)
+    logger.error('Error details:', {
       message: err.message,
       code: err.code,
       name: err.name,

@@ -5,6 +5,7 @@
 
 import type { SharedReport } from '~/shared/types/shared-reports'
 import { getTableConfig } from '../../../lib/dynamodb-config'
+import { logger } from '../../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -20,7 +21,7 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    console.log(`Fetching shared reports for user: ${userEmail}`)
+    logger.info(`Fetching shared reports for user: ${userEmail}`)
 
     const tableConfig = await getTableConfig('sharedReports')
 
@@ -41,14 +42,14 @@ export default defineEventHandler(async (event) => {
 
     const reports = result.items as SharedReport[]
 
-    console.log(`  → Found ${reports.length} shared reports`)
+    logger.debug(`  → Found ${reports.length} shared reports`)
 
     return {
       success: true,
       data: reports
     }
   } catch (error: any) {
-    console.error('Error fetching shared reports:', error)
+    logger.error('Error fetching shared reports:', error)
     return {
       success: false,
       error: error.message || 'Failed to fetch shared reports',

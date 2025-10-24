@@ -23,6 +23,7 @@ import {
 import { groupByAccount } from './group-parser'
 import { accountCache, CacheTags } from '../cache-manager'
 import { getUserSession } from './session'
+import { logger } from '../logger'
 
 /**
  * Create headers for Graph API requests
@@ -31,7 +32,7 @@ async function getGraphHeaders(event: H3Event, requiresConsistencyLevel: boolean
   // Get user session from OIDC - this will be implemented with nuxt-oidc
   const session = await getUserSession(event)
   
-  console.log('Session check:', {
+  logger.debug('Session check:', {
     hasSession: !!session,
     hasAccessToken: !!session?.accessToken,
     tokenLength: session?.accessToken?.length,
@@ -43,7 +44,7 @@ async function getGraphHeaders(event: H3Event, requiresConsistencyLevel: boolean
   })
   
   if (!session?.accessToken) {
-    console.error('No access token available in session')
+    logger.error('No access token available in session')
     throw new Error('No access token available in session')
   }
   
@@ -55,10 +56,10 @@ async function getGraphHeaders(event: H3Event, requiresConsistencyLevel: boolean
   // Add ConsistencyLevel header for advanced queries (endsWith, count, etc.)
   if (requiresConsistencyLevel) {
     headers['ConsistencyLevel'] = 'eventual'
-    console.log('Added ConsistencyLevel header for advanced query')
+    logger.info('Added ConsistencyLevel header for advanced query')
   }
   
-  console.log('Graph API headers prepared:', Object.keys(headers))
+  logger.info('Graph API headers prepared:', Object.keys(headers))
   return headers
 }
 
@@ -82,8 +83,8 @@ export async function graphRequest<T>(
   let retries = 0
   const maxRetries = entraConfig.search.maxRetries
   
-  console.log(`Making Graph API request to: ${url}`)
-  console.log('Request options:', { method: options.method || 'GET', requiresConsistencyLevel })
+  logger.info(`Making Graph API request to: ${url}`)
+  logger.info('Request options:', { method: options.method || 'GET', requiresConsistencyLevel })
 
   while (retries <= maxRetries) {
     try {
@@ -96,15 +97,15 @@ export async function graphRequest<T>(
         }
       })
       
-      console.log(`Graph API response: ${response.status} ${response.statusText}`)
+      logger.info(`Graph API response: ${response.status} ${response.statusText}`)
       
       if (!response.ok) {
         let error: any = {}
         try {
           error = await response.json()
-          console.error('Graph API error response:', error)
+          logger.error('Graph API error response:', error)
         } catch (parseError) {
-          console.error('Could not parse error response:', parseError)
+          logger.error('Could not parse error response:', parseError)
           error = { message: `HTTP ${response.status}: ${response.statusText}` }
         }
         
@@ -114,7 +115,7 @@ export async function graphRequest<T>(
           const delay = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, retries) * 1000
           
           if (retries < maxRetries) {
-            console.log(`Rate limited, retrying after ${delay}ms...`)
+            logger.info(`Rate limited, retrying after ${delay}ms...`)
             await new Promise(resolve => setTimeout(resolve, delay))
             retries++
             continue
@@ -123,7 +124,7 @@ export async function graphRequest<T>(
         
         // Handle authentication errors
         if (response.status === 401) {
-          console.error('Authentication failed: Token expired or invalid')
+          logger.error('Authentication failed: Token expired or invalid')
           throw createError({
             statusCode: 401,
             statusMessage: 'Authentication token expired. Please sign in again.',
@@ -140,7 +141,7 @@ export async function graphRequest<T>(
             errorMessage.includes('token is expired') ||
             errorMessage.includes('token has expired') ||
             errorMessage.includes('AADSTS700082')) {
-          console.error('Token expiration detected in Graph API response')
+          logger.error('Token expiration detected in Graph API response')
           throw createError({
             statusCode: 401,
             statusMessage: 'Authentication token expired. Please sign in again.',
@@ -155,7 +156,7 @@ export async function graphRequest<T>(
       }
       
       const data = await response.json()
-      console.log(`Graph API success: Retrieved ${data.value?.length || 'unknown'} items`)
+      logger.info(`Graph API success: Retrieved ${data.value?.length || 'unknown'} items`)
       return data
     } catch (error) {
       if (retries >= maxRetries) {
@@ -183,15 +184,15 @@ export async function getAllPages<T>(
   let nextLink: string | null = initialEndpoint
   let pageCount = 0
   
-  console.log(`Starting pagination for endpoint: ${initialEndpoint}`)
+  logger.info(`Starting pagination for endpoint: ${initialEndpoint}`)
   
   while (nextLink) {
     pageCount++
-    console.log(`Fetching page ${pageCount}: ${nextLink}`)
+    logger.info(`Fetching page ${pageCount}: ${nextLink}`)
     
     const response = await graphRequest<any>(event, nextLink)
     
-    console.log(`Page ${pageCount} response:`, {
+    logger.info(`Page ${pageCount} response:`, {
       hasValue: !!response.value,
       itemCount: response.value?.length || 0,
       hasNextLink: !!response['@odata.nextLink'],
@@ -200,9 +201,9 @@ export async function getAllPages<T>(
     
     if (response.value) {
       results.push(...response.value)
-      console.log(`Added ${response.value.length} items, total so far: ${results.length}`)
+      logger.info(`Added ${response.value.length} items, total so far: ${results.length}`)
     } else {
-      console.log('No "value" property in response:', Object.keys(response))
+      logger.info('No "value" property in response:', Object.keys(response))
     }
     
     // Handle pagination
@@ -211,13 +212,13 @@ export async function getAllPages<T>(
       : null
       
     if (nextLink) {
-      console.log(`Next page URL: ${nextLink}`)
+      logger.info(`Next page URL: ${nextLink}`)
     } else {
-      console.log('No more pages')
+      logger.info('No more pages')
     }
   }
   
-  console.log(`Pagination complete: ${results.length} total items across ${pageCount} pages`)
+  logger.info(`Pagination complete: ${results.length} total items across ${pageCount} pages`)
   return results
 }
 
@@ -233,11 +234,11 @@ export async function getAWSGroups(
   // Check cache first
   const cached = await accountCache.get(cacheKey)
   if (cached) {
-    console.log(`Cache hit for ${cacheKey}`)
+    logger.info(`Cache hit for ${cacheKey}`)
     return { data: cached, fromCache: true }
   }
   
-  console.log(`Cache miss for ${cacheKey}, fetching from Graph API...`)
+  logger.info(`Cache miss for ${cacheKey}, fetching from Graph API...`)
   
   try {
     // Build filter query
@@ -301,7 +302,7 @@ export async function getAWSGroups(
     
     return { data: parsed, fromCache: false }
   } catch (error) {
-    console.error('Failed to fetch AWS groups:', error)
+    logger.error('Failed to fetch AWS groups:', error)
     throw error
   }
 }
@@ -319,11 +320,11 @@ export async function getGroupMembers(
   // Check cache first
   const cached = await accountCache.get(cacheKey)
   if (cached) {
-    console.log(`Cache hit for group members ${groupId}`)
+    logger.info(`Cache hit for group members ${groupId}`)
     return cached
   }
   
-  console.log(`Cache miss for group members ${groupId}, fetching from Graph API...`)
+  logger.info(`Cache miss for group members ${groupId}, fetching from Graph API...`)
   
   try {
     // First get the group details
@@ -365,7 +366,7 @@ export async function getGroupMembers(
     
     return response
   } catch (error) {
-    console.error(`Failed to fetch members for group ${groupId}:`, error)
+    logger.error(`Failed to fetch members for group ${groupId}:`, error)
     throw error
   }
 }
@@ -401,7 +402,7 @@ export async function getUserDetails(
     
     return user
   } catch (error) {
-    console.error(`Failed to fetch user ${userId}:`, error)
+    logger.error(`Failed to fetch user ${userId}:`, error)
     throw error
   }
 }
@@ -427,7 +428,7 @@ export async function searchUsers(
     
     return users
   } catch (error) {
-    console.error(`Failed to search users with term "${searchTerm}":`, error)
+    logger.error(`Failed to search users with term "${searchTerm}":`, error)
     throw error
   }
 }
@@ -474,7 +475,7 @@ export async function getUserGroups(
     
     return awsGroups
   } catch (error) {
-    console.error(`Failed to fetch groups for user ${userId}:`, error)
+    logger.error(`Failed to fetch groups for user ${userId}:`, error)
     throw error
   }
 }
@@ -492,7 +493,7 @@ export async function clearEntraCache(pattern?: string): Promise<number> {
   }
   
   const invalidated = await accountCache.invalidateByTags(tags)
-  console.log(`Cleared ${invalidated} Entra cache entries`)
+  logger.debug(`Cleared ${invalidated} Entra cache entries`)
   
   return invalidated
 }

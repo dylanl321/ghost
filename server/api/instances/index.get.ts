@@ -23,6 +23,7 @@ import {
 import { parseAndValidateAccountFilters, filterAccounts } from '../../utils/account-filters'
 import { lookupAccountOptimized } from '../../utils/account-lookup-optimized'
 import type { AWSEnvironmentType } from '../../types'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/instances', 'GET', {
@@ -180,7 +181,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     const limit = Math.min(parseInt(query.limit as string) || defaultLimit, 200)
     const nextToken = (query.nextToken as string) || defaultNextToken
     
-    console.log(`[Instances API] Listing instances in ${environment} with filters:`, {
+    logger.info(`[Instances API] Listing instances in ${environment} with filters:`, {
       regions: regions?.length || 'all',
       states: instanceStates?.length || 'all',
       scheduling: schedulingFilter,
@@ -229,7 +230,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       }
       
       if (resolveErrors.length > 0) {
-        console.warn(`[Instances API] Account resolution errors:`, resolveErrors)
+        logger.warn(`[Instances API] Account resolution errors:`, resolveErrors)
       }
       
       targetAccountIds = resolvedAccountIds
@@ -271,7 +272,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       region
     )
     
-    console.log(`[Instances API] Found ${instanceIdentifiers.length} instance identifiers`)
+    logger.debug(`[Instances API] Found ${instanceIdentifiers.length} instance identifiers`)
     
     // Get detailed configurations for instances
     const batchResult = await batchGetResourceConfigs(
@@ -287,7 +288,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       region
     )
     
-    console.log(`[Instances API] Retrieved configs for ${batchResult.successful.length} instances`)
+    logger.info(`[Instances API] Retrieved configs for ${batchResult.successful.length} instances`)
     
     // Enrich instance data (skip AWS API calls for list operations to improve performance)
     let enrichedInstances: any[] = []
@@ -399,12 +400,12 @@ export default defineEventHandler(handleAsync(async (event) => {
       )
     }
     
-    console.log(`[Instances API] After filtering: ${enrichedInstances.length} instances`)
+    logger.info(`[Instances API] After filtering: ${enrichedInstances.length} instances`)
 
     // Fetch pricing data if requested
     if (includePricing && enrichedInstances.length > 0) {
       try {
-        console.log('[Instances API] Fetching pricing data...')
+        logger.info('[Instances API] Fetching pricing data...')
         const { batchGetEC2InstancePricing } = await import('../../utils/aws-pricing')
 
         // Prepare instance types and regions for pricing lookup
@@ -429,9 +430,9 @@ export default defineEventHandler(handleAsync(async (event) => {
           }
         })
 
-        console.log(`[Instances API] Added pricing data to ${pricingMap.size} instances`)
+        logger.info(`[Instances API] Added pricing data to ${pricingMap.size} instances`)
       } catch (error) {
-        console.error('[Instances API] Failed to fetch pricing data:', error.message)
+        logger.error('[Instances API] Failed to fetch pricing data:', error.message)
         // Continue without pricing data
       }
     }
@@ -534,7 +535,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     })
     
   } catch (error) {
-    console.error('[Instances API] Unexpected error:', error)
+    logger.error('[Instances API] Unexpected error:', error)
     return errors.serverError(event, `Failed to list instances: ${error.message}`)
   }
 }))

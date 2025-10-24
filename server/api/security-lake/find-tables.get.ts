@@ -8,6 +8,7 @@ import { defineEventHandler, getQuery } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { getAthenaClient } from '../../lib/aws-client-factory'
 import { getEnvironmentConfig } from '../../utils/security-lake'
+import { logger } from '../../utils/logger'
 
 async function executeQuery(athenaClient: any, sql: string, outputLocation: string): Promise<any> {
   const { StartQueryExecutionCommand, GetQueryExecutionCommand, GetQueryResultsCommand } = await import('@aws-sdk/client-athena')
@@ -66,7 +67,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     // Get all databases
     const databases = await executeQuery(athenaClient, 'SHOW DATABASES', outputLocation)
     
-    console.log('Found databases:', databases)
+    logger.debug('Found databases:', databases)
     
     const results: any = {}
     
@@ -105,7 +106,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     })
     
   } catch (error) {
-    console.error('[Security Lake] Find tables failed:', error)
+    logger.error('[Security Lake] Find tables failed:', error)
     return errors.serverError(event, error instanceof Error ? error.message : 'Search failed')
   }
 }))

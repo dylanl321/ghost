@@ -1,4 +1,5 @@
 import { getShortLink } from '../../lib/shortlinks'
+import { logger } from '../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -25,7 +26,7 @@ export default defineEventHandler(async (event) => {
       data: shortLink
     }
   } catch (error: any) {
-    console.error('Error retrieving short link:', error)
+    logger.error('Error retrieving short link:', error)
     throw createError({
       statusCode: error.statusCode || 500,
       statusMessage: error.statusMessage || 'Failed to retrieve short link'

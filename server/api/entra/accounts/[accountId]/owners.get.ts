@@ -17,6 +17,7 @@ import { validateEntraConfig } from '../../../../utils/entra/config'
 import { lookupAccountOptimized } from '../../../../utils/account-lookup-optimized'
 import { registerEndpoint } from '../../../../plugins/swagger'
 import type { GroupOwner, EntraAPIResponse } from '../../../../types/entra'
+import { logger } from '../../../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/entra/accounts/{accountId}/owners', 'GET', {
@@ -130,7 +131,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Owners
     } catch (error: any) {
       // If account not found, still try with the identifier as-is
       // (in case it's a valid account ID not in our database)
-      console.log(`Account lookup failed for ${identifier}, trying as direct account ID`)
+      logger.error(`Account lookup failed for ${identifier}, trying as direct account ID`)
       accountId = identifier
     }
     
@@ -138,7 +139,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Owners
     const query = getQuery(event)
     const resolveDetails = query.resolveDetails === 'true'
     
-    console.log(`Fetching owners for account ${accountId} (identifier: ${identifier})`)
+    logger.info(`Fetching owners for account ${accountId} (identifier: ${identifier})`)
     
     // Get all groups for this account
     const allGroups = await getAWSGroups(event, {
@@ -168,7 +169,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Owners
             const userDetails = await getUserDetails(event, userPrincipalName)
             owner.details = userDetails
           } catch (error) {
-            console.log(`Could not resolve details for owner ${owner.identifier}`)
+            logger.info(`Could not resolve details for owner ${owner.identifier}`)
           }
         }
       }
@@ -202,7 +203,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Owners
       cached: false
     }
   } catch (error: any) {
-    console.error('Error fetching account owners:', error)
+    logger.error('Error fetching account owners:', error)
     
     // Re-throw H3 errors
     if (error.statusCode) {

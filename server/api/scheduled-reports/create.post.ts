@@ -7,6 +7,7 @@ import type { CreateReportRequest } from '~/shared/types/scheduled-reports'
 import { createReport } from '../../utils/scheduled-reports'
 import { validateEmails } from '../../utils/email-service'
 import { isUserAdmin, getUserEmail } from '../../utils/user-roles'
+import { logger } from '../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -74,7 +75,7 @@ export default defineEventHandler(async (event) => {
       data: report
     }
   } catch (error: any) {
-    console.error('Error creating scheduled report:', error)
+    logger.error('Error creating scheduled report:', error)
 
     if (error.statusCode) {
       throw error

@@ -6,6 +6,7 @@
 
 import { getTableConfig } from '../../../lib/dynamodb-config'
 import type { SharedReport } from '~/shared/types/shared-reports'
+import { logger } from '../../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -18,7 +19,7 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    console.log(`Downloading shared report: ${shareId}`)
+    logger.info(`Downloading shared report: ${shareId}`)
 
     const tableConfig = await getTableConfig('sharedReports')
 
@@ -52,10 +53,10 @@ export default defineEventHandler(async (event) => {
     )
 
     // Generate fresh presigned URL on-demand (valid for 7 days)
-    console.log('  → Generating presigned URL for S3 download')
+    logger.info('  → Generating presigned URL for S3 download')
     const presignedUrl = await getReportDownloadUrl(report.s3Key, 7)
 
-    console.log(`  → Returning presigned URL`)
+    logger.info(`  → Returning presigned URL`)
 
     // Return presigned URL for frontend to handle download
     return {
@@ -64,7 +65,7 @@ export default defineEventHandler(async (event) => {
       reportSize: report.reportSize
     }
   } catch (error: any) {
-    console.error('Error downloading shared report:', error)
+    logger.error('Error downloading shared report:', error)
 
     if (error.statusCode) {
       throw error // Re-throw HTTP errors

@@ -8,6 +8,7 @@ import { createError } from 'h3'
 import { deactivateApiKey } from '../../../utils/api-keys'
 import { getAuthContext, requireScope } from '../../../middleware/entra-auth'
 import type { EntraAPIResponse } from '../../../types/entra'
+import { logger } from '../../../utils/logger'
 
 interface DeactivateResponse {
   keyId: string
@@ -33,7 +34,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Deacti
     const authContext = getAuthContext(event)
     const userId = authContext.user?.email || authContext.user?.displayName || 'unknown'
     
-    console.log(`Deactivating API key ${keyId} for user ${userId}`)
+    logger.info(`Deactivating API key ${keyId} for user ${userId}`)
     
     // Deactivate the key
     const deactivated = await deactivateApiKey(keyId, userId)
@@ -54,7 +55,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Deacti
       }
     }
   } catch (error: any) {
-    console.error('Error deactivating API key:', error)
+    logger.error('Error deactivating API key:', error)
     
     // Re-throw H3 errors
     if (error.statusCode) {

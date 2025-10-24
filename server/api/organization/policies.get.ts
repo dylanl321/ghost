@@ -12,6 +12,7 @@ import {
 } from '../../utils/organizations'
 import { sendSuccess, parseQueryParams, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/organization/policies', 'GET', {
@@ -196,7 +197,7 @@ export default defineEventHandler(handleAsync(async (event) => {
         })
       }
     } catch (error) {
-      console.warn(`Failed to get policies for ${targetType} ${targetId}:`, error)
+      logger.warn(`Failed to get policies for ${targetType} ${targetId}:`, error)
     }
 
     // Get inherited policies from all parent OUs
@@ -218,7 +219,7 @@ export default defineEventHandler(handleAsync(async (event) => {
           })
         }
       } catch (error) {
-        console.warn(`Failed to get policies for OU ${node.id}:`, error)
+        logger.warn(`Failed to get policies for OU ${node.id}:`, error)
       }
     }
 
@@ -242,7 +243,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     })
 
   } catch (error) {
-    console.error('Error fetching policies:', error)
+    logger.error('Error fetching policies:', error)
     return errors.serverError(event, 'Failed to fetch policies')
   }
 }))

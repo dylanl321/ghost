@@ -2,6 +2,7 @@ import { sendSuccess, errors } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { logger } from '../../utils/logger'
 
 const region = 'us-gov-west-1'
 const deploymentAccountId = '461760157232'
@@ -96,7 +97,7 @@ export default defineEventHandler(async (event) => {
 
     const docClient = DynamoDBDocumentClient.from(ddbClient)
 
-    console.log("Host:", event.node.req.headers.host)
+    logger.info("Host:", event.node.req.headers.host)
     let environment = 'prod'
     if (event.node.req.headers.host?.includes('dev')) {
       environment = 'dev'
@@ -126,7 +127,7 @@ export default defineEventHandler(async (event) => {
     
     return sendSuccess(event, item.id, metadata)
   } catch (err) {
-    console.error('Error submitting feedback:', err)
+    logger.error('Error submitting feedback:', err)
     return errors.serverError(event, 'Failed to store feedback')
   }
 })

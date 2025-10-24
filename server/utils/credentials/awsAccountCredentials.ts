@@ -1,5 +1,6 @@
 import { STSClient, AssumeRoleCommand } from "@aws-sdk/client-sts";
 import type { AwsCredentialIdentity } from "@aws-sdk/types";
+import { logger } from '../logger'
 
 interface CachedAwsCredentialIdentity extends AwsCredentialIdentity {
   expiration?: Date;
@@ -44,7 +45,6 @@ export default function getMasterAccountCredentials(profileName: 'commercial' | 
 export async function assumeChildAccountRole(environment: 'commercial' | 'govcloud', accountId: string) {
   const cache = credentialCache[accountId]
   if (cache && cache.expiration && cache.expiration > new Date()) {
-    console.log(`Using cached credentials for account ${accountId}`);
     return cache
   }
 
@@ -53,7 +53,7 @@ export async function assumeChildAccountRole(environment: 'commercial' | 'govclo
     throw new Error("One or more AWS credential environment variables is not set.");
   }
 
-  console.log(`No cached credentials found for ${accountId}. Retrieving credentials...`);
+  logger.debug(`Assuming role for account ${accountId}...`);
 
   // If we are retrieving credentials for the deployment account, and this code is live, use the EC2 instance metadata
   const config = useRuntimeConfig();

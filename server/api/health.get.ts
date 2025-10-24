@@ -14,6 +14,7 @@ import { DescribeOrganizationCommand } from '@aws-sdk/client-organizations'
 import os from 'os'
 import process from 'process'
 import { getAccountsTableName } from '../utils/accounts-consolidated'
+import { logger } from '../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/health', 'GET', {
@@ -398,7 +399,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     
     // Check commercial environment
     if (config.commercial) {
-      console.log('Performing health check for commercial AWS environment...')
+      logger.info('Performing health check for commercial AWS environment...')
       healthData.aws.commercial = await checkAWSEnvironment('commercial')
       
       if (healthData.aws.commercial.identity?.status === 'expired') {
@@ -412,7 +413,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     
     // Check govcloud environment
     if (config.govcloud) {
-      console.log('Performing health check for GovCloud AWS environment...')
+      logger.info('Performing health check for GovCloud AWS environment...')
       healthData.aws.govcloud = await checkAWSEnvironment('govcloud')
       
       if (healthData.aws.govcloud.identity?.status === 'expired') {
@@ -434,7 +435,7 @@ export default defineEventHandler(handleAsync(async (event) => {
         cost: costCache.getStats()
       }
     } catch (error) {
-      console.warn('Could not retrieve cache statistics:', error)
+      logger.warn('Could not retrieve cache statistics:', error)
     }
   }
   

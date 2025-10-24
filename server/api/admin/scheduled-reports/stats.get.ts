@@ -4,6 +4,7 @@
  */
 
 import { getReportStatistics } from '../../../utils/scheduled-reports'
+import { logger } from '../../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -17,7 +18,7 @@ export default defineEventHandler(async (event) => {
       data: stats
     }
   } catch (error: any) {
-    console.error('Error getting report statistics:', error)
+    logger.error('Error getting report statistics:', error)
 
     if (error.statusCode) {
       throw error

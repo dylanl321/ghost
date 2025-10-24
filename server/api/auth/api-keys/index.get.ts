@@ -8,6 +8,7 @@ import { createError } from 'h3'
 import { listApiKeys, getApiKeyStats } from '../../../utils/api-keys'
 import { getAuthContext, requireScope } from '../../../middleware/entra-auth'
 import type { ApiKey, EntraAPIResponse } from '../../../types/entra'
+import { logger } from '../../../utils/logger'
 
 interface ApiKeysResponse {
   keys: Omit<ApiKey, 'keyHash' | 'salt'>[]
@@ -28,7 +29,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<ApiKey
     const query = getQuery(event)
     const includeAll = query.all === 'true' && authContext.scopes?.includes('admin')
     
-    console.log(`Listing API keys for ${userId}`)
+    logger.info(`Listing API keys for ${userId}`)
     
     // Get API keys
     const apiKeys = await listApiKeys(includeAll ? undefined : userId)
@@ -51,7 +52,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<ApiKey
       }
     }
   } catch (error: any) {
-    console.error('Error listing API keys:', error)
+    logger.error('Error listing API keys:', error)
     
     // Re-throw H3 errors
     if (error.statusCode) {

@@ -7,6 +7,7 @@ import { defineEventHandler, readBody } from 'h3'
 import { putItem, batchPutItems } from '../../utils/dynamodb'
 import { sendSuccess, parseQueryParams, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/forecast/upload', 'POST', {
@@ -157,7 +158,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     })
 
   } catch (err: any) {
-    console.error('Forecast upload error:', err)
+    logger.error('Forecast upload error:', err)
     return errors.serverError(event, `Failed to upload forecast data: ${err.message}`)
   }
 }))

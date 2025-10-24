@@ -34,6 +34,7 @@ import { getDynamoDBClient } from '../lib/aws-client-factory'
 import { getAccountFromOrganizations, getAccountsTableName } from './accounts-consolidated'
 import { errors } from './api-response'
 import type { H3Event } from 'h3'
+import { logger } from './logger'
 
 // Type definitions
 export interface AccountLookupOptions {
@@ -100,7 +101,7 @@ async function getAccountByAccountId(
           }
         }
       } catch (error) {
-        console.warn(`Failed to get Organizations data for ${accountId}:`, error)
+        logger.warn(`Failed to get Organizations data for ${accountId}:`, error)
       }
       
       return normalizedAccount
@@ -116,12 +117,12 @@ async function getAccountByAccountId(
         }
       }
     } catch (error) {
-      console.warn(`Failed to get Organizations data for ${accountId}:`, error)
+      logger.warn(`Failed to get Organizations data for ${accountId}:`, error)
     }
     
     return null
   } catch (error) {
-    console.error(`Error looking up account ${accountId}:`, error)
+    logger.error(`Error looking up account ${accountId}:`, error)
     return null
   }
 }
@@ -159,7 +160,7 @@ async function getAccountByEmail(
     } catch (gsiError: any) {
       // GSI doesn't exist, fall back to Scan
       if (gsiError.name === 'ResourceNotFoundException' || gsiError.message?.includes('Requested resource not found')) {
-        console.warn(`GSI email-index not found, falling back to Scan for ${email}`)
+        logger.warn(`GSI email-index not found, falling back to Scan for ${email}`)
         
         // Use scanItems utility function with proper filter
         const { scanItems } = await import('./dynamodb')
@@ -213,7 +214,7 @@ async function getAccountByEmail(
           }
         }
       } catch (error) {
-        console.warn(`Failed to get Organizations data for govcloud ${govCloudAccountId}:`, error)
+        logger.warn(`Failed to get Organizations data for govcloud ${govCloudAccountId}:`, error)
       }
     }
     
@@ -228,13 +229,13 @@ async function getAccountByEmail(
           }
         }
       } catch (error) {
-        console.warn(`Failed to get Organizations data for commercial ${commercialAccountId}:`, error)
+        logger.warn(`Failed to get Organizations data for commercial ${commercialAccountId}:`, error)
       }
     }
     
     return normalizedAccount
   } catch (error) {
-    console.error(`Error looking up account by email ${email}:`, error)
+    logger.error(`Error looking up account by email ${email}:`, error)
     return null
   }
 }
@@ -306,7 +307,7 @@ async function getAccountByRequestId(
             return enrichedAccount
           }
         } catch (error) {
-          console.warn(`Failed to get Organizations data for govcloud ${govCloudAccountId}:`, error)
+          logger.warn(`Failed to get Organizations data for govcloud ${govCloudAccountId}:`, error)
         }
       }
       
@@ -327,7 +328,7 @@ async function getAccountByRequestId(
             return enrichedAccount
           }
         } catch (error) {
-          console.warn(`Failed to get Organizations data for commercial ${commercialAccountId}:`, error)
+          logger.warn(`Failed to get Organizations data for commercial ${commercialAccountId}:`, error)
         }
       }
       
@@ -336,7 +337,7 @@ async function getAccountByRequestId(
     
     return null
   } catch (error) {
-    console.error(`Error looking up account by requestId ${requestId}:`, error)
+    logger.error(`Error looking up account by requestId ${requestId}:`, error)
     return null
   }
 }
@@ -367,7 +368,7 @@ export async function findAccountByIdentifierOptimized(
   identifier: string,
   options: AccountLookupOptions = {}
 ): Promise<OptimizedLookupResult | null> {
-  console.log('running findAccountByIdentifierOptimized')
+  logger.info('running findAccountByIdentifierOptimized')
 
   if (!identifier || identifier.trim() === '') {
     return null
@@ -421,7 +422,7 @@ export async function findAccountByIdentifierOptimized(
       }
     }
   } catch (error) {
-    console.warn(`Error searching govcloud for ${identifierType} ${cleanIdentifier}:`, error)
+    logger.warn(`Error searching govcloud for ${identifierType} ${cleanIdentifier}:`, error)
   }
   
   return null
@@ -435,7 +436,7 @@ export async function lookupAccountOptimized(
   identifier: string,
   options: AccountLookupOptions = {}
 ): Promise<OptimizedLookupResult | null> {
-  console.log('running lookupAccountOptimized')
+  logger.info('running lookupAccountOptimized')
 
   // Validate identifier format
   if (!identifier || identifier.trim() === '') {

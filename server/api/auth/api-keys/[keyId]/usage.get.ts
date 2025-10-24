@@ -9,6 +9,7 @@ import { getApiKeyUsageHistory, getApiKeyUsageStats } from '../../../../utils/ap
 import { getAuthContext, requireScope } from '../../../../middleware/entra-auth'
 import { registerEndpoint } from '../../../../plugins/swagger'
 import type { EntraAPIResponse } from '../../../../types/entra'
+import { logger } from '../../../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/auth/api-keys/{keyId}/usage', 'GET', {
@@ -119,7 +120,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<any>> 
       }
     }
   } catch (error: any) {
-    console.error('Error getting API key usage:', error)
+    logger.error('Error getting API key usage:', error)
 
     // Re-throw H3 errors
     if (error.statusCode) {

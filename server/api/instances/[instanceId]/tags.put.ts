@@ -17,6 +17,7 @@ import {
 import { getResourceConfig } from '../../../utils/config-service'
 import { getEC2Client } from '../../../lib/aws-client-factory'
 import type { AWSEnvironmentType } from '../../../types'
+import { logger } from '../../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/instances/[instanceId]/tags', 'PUT', {
@@ -180,7 +181,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       return errors.badRequest(event, 'Action is required')
     }
     
-    console.log(`[Tag Management] ${action} tags for instance ${instanceId} in ${environment}`)
+    logger.info(`[Tag Management] ${action} tags for instance ${instanceId} in ${environment}`)
     
     // Get environment-specific configuration
     const aggregatorName = environment === 'commercial' 
@@ -288,7 +289,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       delete newTags[keyToRemove]
     }
     
-    console.log(`[Tag Management] Current tags: ${Object.keys(currentTags).length}, New tags: ${Object.keys(newTags).length}`)
+    logger.info(`[Tag Management] Current tags: ${Object.keys(currentTags).length}, New tags: ${Object.keys(newTags).length}`)
     
     const responseData = {
       instanceId,
@@ -314,7 +315,7 @@ export default defineEventHandler(handleAsync(async (event) => {
             Tags: Object.entries(tagsToApply).map(([Key, Value]) => ({ Key, Value }))
           })
           await ec2Client.send(createTagsCommand)
-          console.log(`[Tag Management] Applied ${Object.keys(tagsToApply).length} tags to ${instanceId}`)
+          logger.info(`[Tag Management] Applied ${Object.keys(tagsToApply).length} tags to ${instanceId}`)
         }
         
         // Remove tags
@@ -325,10 +326,10 @@ export default defineEventHandler(handleAsync(async (event) => {
             Tags: tagsToRemove.map(Key => ({ Key }))
           })
           await ec2Client.send(deleteTagsCommand)
-          console.log(`[Tag Management] Removed ${tagsToRemove.length} tags from ${instanceId}`)
+          logger.info(`[Tag Management] Removed ${tagsToRemove.length} tags from ${instanceId}`)
         }
       } catch (error) {
-        console.error('[Tag Management] Failed to update tags:', error)
+        logger.error('[Tag Management] Failed to update tags:', error)
         return errors.serverError(event, `Failed to update tags: ${error.message}`)
       }
     }
@@ -352,7 +353,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     })
     
   } catch (error) {
-    console.error('[Tag Management] Unexpected error:', error)
+    logger.error('[Tag Management] Unexpected error:', error)
     return errors.serverError(event, `Failed to manage tags: ${error.message}`)
   }
 }))

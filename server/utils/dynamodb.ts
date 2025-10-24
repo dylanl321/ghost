@@ -17,6 +17,7 @@ import {
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb'
 import { getDynamoDBClient } from '../lib/aws-client-factory'
 import type { DynamoDBQueryParams } from '../types'
+import { logger } from './logger'
 
 /**
  * Get a single item from DynamoDB
@@ -295,7 +296,7 @@ export async function batchPutItems(
     batches.push(items.slice(i, i + batchSize))
   }
   
-  console.log(`Processing ${items.length} items in ${batches.length} batches`)
+  logger.info(`Processing ${items.length} items in ${batches.length} batches`)
   
   // Process batches with controlled parallelism
   const parallelLimit = 3 // Process 3 batches at a time
@@ -344,10 +345,10 @@ export async function batchPutItems(
           if (error.name === 'ProvisionedThroughputExceededException' && retryCount < maxRetries) {
             retryCount++
             const delay = Math.pow(2, retryCount) * 200
-            console.log(`Throttled - waiting ${delay}ms before retry ${retryCount}/${maxRetries}`)
+            logger.info(`Throttled - waiting ${delay}ms before retry ${retryCount}/${maxRetries}`)
             await new Promise(resolve => setTimeout(resolve, delay))
           } else {
-            console.error('Batch put error:', error.message)
+            logger.error('Batch put error:', error.message)
             failedCount += currentBatch.length
             throw error
           }
@@ -364,7 +365,7 @@ export async function batchPutItems(
     results.push(...batchResults)
     
     // Progress update
-    console.log(`Processed ${Math.min((i + parallelLimit) * batchSize, items.length)}/${items.length} items`)
+    logger.info(`Processed ${Math.min((i + parallelLimit) * batchSize, items.length)}/${items.length} items`)
     
     // Add delay between parallel batch sets
     if (i + parallelLimit < batches.length) {
@@ -372,7 +373,7 @@ export async function batchPutItems(
     }
   }
   
-  console.log(`Batch put completed: ${processedCount} processed, ${failedCount} failed`)
+  logger.error(`Batch put completed: ${processedCount} processed, ${failedCount} failed`)
   
   return results
 }
@@ -448,10 +449,10 @@ export async function batchDeleteItems(
           if (error.name === 'ProvisionedThroughputExceededException' && retryCount < maxRetries) {
             retryCount++
             const delay = Math.pow(2, retryCount) * 200
-            console.log(`Throttled during delete - waiting ${delay}ms before retry`)
+            logger.info(`Throttled during delete - waiting ${delay}ms before retry`)
             await new Promise(resolve => setTimeout(resolve, delay))
           } else {
-            console.error('Batch delete error:', error.message)
+            logger.error('Batch delete error:', error.message)
             failedCount += currentBatch.length
             throw error
           }
@@ -473,7 +474,7 @@ export async function batchDeleteItems(
     }
   }
   
-  console.log(`Batch delete completed: ${deletedCount} deleted, ${failedCount} failed`)
+  logger.error(`Batch delete completed: ${deletedCount} deleted, ${failedCount} failed`)
   
   return {
     deletedCount,

@@ -4,6 +4,7 @@ import { organizationCache, CacheTags } from '../../utils/cache-manager'
 import { CostExplorerClient, GetCostAndUsageCommand } from "@aws-sdk/client-cost-explorer";
 import type { GetCostAndUsageCommandInput, GetCostAndUsageCommandOutput } from "@aws-sdk/client-cost-explorer";
 import getMasterAccountCredentials from '~~/server/utils/credentials/awsAccountCredentials';
+import { logger } from '../../utils/logger'
 
 const region = 'us-east-1'
 const monitoringAccountId = '253821132832'
@@ -198,7 +199,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   const info = await organizationCache.getOrSet(
     cacheKey,
     async () => {
-      console.log(`Cache miss: Fetching organization overview...`)
+      logger.info(`Cache miss: Fetching organization overview...`)
       return await getOverview(accountId)
     },
     {

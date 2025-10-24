@@ -8,6 +8,7 @@ import { updateAccountMetadata } from '../../utils/accounts-consolidated'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { accountCache, organizationCache, CacheTags } from '../../utils/cache-manager'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/accounts/update', 'POST', {
@@ -121,7 +122,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
   
   try {
-    console.log(`Updating metadata for account ${accountId}:`, Object.keys(metadata))
+    logger.info(`Updating metadata for account ${accountId}:`, Object.keys(metadata))
     const updatedAccount = await updateAccountMetadata(accountId, metadata)
     
     if (!updatedAccount) {
@@ -129,13 +130,13 @@ export default defineEventHandler(handleAsync(async (event) => {
     }
     
     // Invalidate related caches after successful update
-    console.log('Invalidating caches after account metadata update...')
+    logger.info('Invalidating caches after account metadata update...')
     const [accountsInvalidated, organizationInvalidated] = await Promise.all([
       accountCache.invalidateByTags([CacheTags.ACCOUNTS]),
       organizationCache.invalidateByTags([CacheTags.ACCOUNTS]) // Organization cache depends on account data
     ])
     
-    console.log(`Cache invalidation complete: ${accountsInvalidated + organizationInvalidated} entries cleared`)
+    logger.debug(`Cache invalidation complete: ${accountsInvalidated + organizationInvalidated} entries cleared`)
     
     return sendSuccess(event, updatedAccount, {
       fieldsUpdated: Object.keys(metadata),
@@ -149,7 +150,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       }
     })
   } catch (error: any) {
-    console.error('Error updating account metadata:', error)
+    logger.error('Error updating account metadata:', error)
     
     if (error.message?.includes('credentials required')) {
       return errors.badRequest(event, error.message)

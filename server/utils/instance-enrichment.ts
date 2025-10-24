@@ -7,6 +7,7 @@
 
 import type { ResourceDetail } from './config-service'
 import type { AWSEnvironmentType } from '../types/aws'
+import { logger } from './logger'
 
 // Common tag keys for instance naming
 const INSTANCE_NAME_TAGS = [
@@ -323,7 +324,7 @@ async function getInstanceTypeInfo(instanceType: string, environment: AWSEnviron
     
     return instanceTypeInfo
   } catch (error) {
-    console.warn(`[Instance Enrichment] Failed to get instance type info for ${instanceType}:`, error.message)
+    logger.warn(`[Instance Enrichment] Failed to get instance type info for ${instanceType}:`, error.message)
     return null
   }
 }
@@ -531,13 +532,13 @@ export async function batchEnrichInstances(
       .filter(Boolean)
   )]
   
-  console.log(`[Instance Enrichment] Pre-loading ${uniqueInstanceTypes.length} unique instance types`)
+  logger.info(`[Instance Enrichment] Pre-loading ${uniqueInstanceTypes.length} unique instance types`)
   
   // Pre-populate cache for unique instance types (parallel but limited)
   await Promise.all(
     uniqueInstanceTypes.slice(0, 10).map(instanceType => // Limit to first 10 types to avoid API limits
       getInstanceTypeInfo(instanceType, environment).catch(err => {
-        console.warn(`[Instance Enrichment] Failed to pre-load ${instanceType}:`, err.message)
+        logger.warn(`[Instance Enrichment] Failed to pre-load ${instanceType}:`, err.message)
         return null
       })
     )

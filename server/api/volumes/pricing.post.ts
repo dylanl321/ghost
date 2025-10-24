@@ -8,6 +8,7 @@ import { defineEventHandler, readBody } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { batchGetEBSVolumePricing } from '../../utils/aws-pricing'
 import type { AWSEnvironmentType } from '../../types'
+import { logger } from '../../utils/logger'
 
 export default defineEventHandler(handleAsync(async (event) => {
   try {
@@ -21,7 +22,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       return errors.validationError(event, 'volumes array is required')
     }
 
-    console.log(`[Volumes Pricing API] Calculating pricing for ${volumes.length} volumes in ${environment}`)
+    logger.info(`[Volumes Pricing API] Calculating pricing for ${volumes.length} volumes in ${environment}`)
 
     // Fetch pricing data
     const pricingMap = await batchGetEBSVolumePricing(volumes, environment)
@@ -57,7 +58,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       }
     })
   } catch (error) {
-    console.error('[Volumes Pricing API] Error:', error)
+    logger.error('[Volumes Pricing API] Error:', error)
     return errors.serverError(event, `Failed to calculate volume pricing: ${error.message}`)
   }
 }))

@@ -11,6 +11,7 @@ import { registerEndpoint } from '../../plugins/swagger'
 import { lookupAccountOptimized } from '../../utils/account-lookup-optimized'
 import { validateDateParams, type RelativePeriod } from '../../utils/date-helpers'
 import type { AWSEnvironmentType } from '../../types'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/accounts/dashboard', 'GET', {
@@ -505,7 +506,7 @@ export default defineEventHandler(handleAsync(async (event) => {
         dashboardData.metadata.performance.dataPoints += instanceData.summary?.totalInstances || 0
       }
     } catch (error) {
-      console.warn('Failed to fetch instance data for dashboard:', error)
+      logger.warn('Failed to fetch instance data for dashboard:', error)
       // Continue with empty data rather than failing completely
     }
     
@@ -555,7 +556,7 @@ export default defineEventHandler(handleAsync(async (event) => {
         dashboardData.metadata.performance.dataPoints += totalConfigResources
       }
     } catch (error) {
-      console.warn('Failed to fetch config resource data for dashboard:', error)
+      logger.warn('Failed to fetch config resource data for dashboard:', error)
       // Continue with estimated data
     }
     
@@ -570,7 +571,7 @@ export default defineEventHandler(handleAsync(async (event) => {
         }
       })
       
-      console.log('Cost API Response:', costResponse)
+      logger.info('Cost API Response:', costResponse)
       
       if (costResponse?.success && costResponse?.data) {
         const costData = costResponse.data
@@ -598,7 +599,7 @@ export default defineEventHandler(handleAsync(async (event) => {
         }
       }
     } catch (error) {
-      console.error('Cost API failed:', error.message || error)
+      logger.error('Cost API failed:', error.message || error)
     }
     
     // Step 6: Fetch compliance and governance data
@@ -611,7 +612,7 @@ export default defineEventHandler(handleAsync(async (event) => {
         }
       })
       
-      console.log('Governance API Response:', governanceResponse)
+      logger.info('Governance API Response:', governanceResponse)
       
       if (governanceResponse?.success && governanceResponse?.data) {
         const govData = governanceResponse.data
@@ -637,7 +638,7 @@ export default defineEventHandler(handleAsync(async (event) => {
         }
       }
     } catch (error) {
-      console.error('Governance API failed:', error.message || error)
+      logger.error('Governance API failed:', error.message || error)
     }
     
     // Step 7: Fix tag coverage calculation
@@ -653,7 +654,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     })
     
   } catch (error) {
-    console.error('Error generating account dashboard:', error)
+    logger.error('Error generating account dashboard:', error)
     throw createError({
       statusCode: 500,
       statusMessage: 'Failed to generate account dashboard'

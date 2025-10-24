@@ -10,6 +10,7 @@ import { getDynamoDBClient } from '../../../lib/aws-client-factory'
 import { API_KEYS_TABLE_SCHEMA } from '../../../utils/api-keys-schema'
 import { getAuthContext, requireScope } from '../../../middleware/entra-auth'
 import type { EntraAPIResponse } from '../../../types/entra'
+import { logger } from '../../../utils/logger'
 
 interface MigrationResponse {
   tableExists: boolean
@@ -26,7 +27,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Migrat
     const tableName = API_KEYS_TABLE_SCHEMA.TableName
     const environment = (process.env.API_KEYS_STORAGE_ENV as 'commercial' | 'govcloud') || 'commercial'
     
-    console.log(`Checking if API keys table ${tableName} exists in ${environment}`)
+    logger.debug(`Checking if API keys table ${tableName} exists in ${environment}`)
     
     const client = await getDynamoDBClient(environment)
     
@@ -51,13 +52,13 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Migrat
       }
     }
     
-    console.log(`Creating API keys table ${tableName}`)
+    logger.info(`Creating API keys table ${tableName}`)
     
     // Create the table
     const createCommand = new CreateTableCommand(API_KEYS_TABLE_SCHEMA)
     const result = await client.send(createCommand)
     
-    console.log(`API keys table created successfully: ${result.TableDescription?.TableArn}`)
+    logger.info(`API keys table created successfully: ${result.TableDescription?.TableArn}`)
     
     return {
       success: true,
@@ -69,7 +70,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Migrat
       }
     }
   } catch (error: any) {
-    console.error('Error creating API keys table:', error)
+    logger.error('Error creating API keys table:', error)
     
     // Re-throw H3 errors
     if (error.statusCode) {

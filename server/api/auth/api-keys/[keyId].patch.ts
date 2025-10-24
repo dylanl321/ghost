@@ -9,6 +9,7 @@ import { getAuthContext, requireScope } from '../../../middleware/entra-auth'
 import { registerEndpoint } from '../../../plugins/swagger'
 import type { EntraAPIResponse } from '../../../types/entra'
 import { updateItem, getItem } from '../../../utils/dynamodb'
+import { logger } from '../../../utils/logger'
 
 const API_KEYS_TABLE = process.env.DYNAMODB_API_KEYS_TABLE || 'ghost-api-keys'
 const API_KEYS_ENVIRONMENT: 'commercial' | 'govcloud' =
@@ -120,14 +121,14 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<any>> 
       API_KEYS_ENVIRONMENT
     )
 
-    console.log(`Updated API key ${keyId} metadata by ${userId}`)
+    logger.info(`Updated API key ${keyId} metadata by ${userId}`)
 
     return {
       success: true,
       message: 'API key updated successfully'
     }
   } catch (error: any) {
-    console.error('Error updating API key:', error)
+    logger.error('Error updating API key:', error)
 
     // Re-throw H3 errors
     if (error.statusCode) {

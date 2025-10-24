@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto'
 import { getItem, putItem, updateItem, scanItems } from '../utils/dynamodb'
 import { getTableConfig } from './dynamodb-config'
+import { logger } from '../utils/logger'
 
 // Table configuration now loaded dynamically from Secrets Manager or environment variables
 
@@ -98,7 +99,7 @@ export async function getShortLink(shortCode: string): Promise<ShortLink | null>
 
     return updatedItem as ShortLink
   } catch (error) {
-    console.error('Error getting short link:', error)
+    logger.error('Error getting short link:', error)
     return null
   }
 }
@@ -149,7 +150,7 @@ export async function listShortLinks(options: {
       total: validLinks.length
     }
   } catch (error) {
-    console.error('Error listing short links:', error)
+    logger.error('Error listing short links:', error)
     return { links: [], total: 0 }
   }
 }
@@ -174,7 +175,7 @@ export async function getShortLinkAnalytics(shortCode: string): Promise<{
       lastVisited: item.lastVisited
     }
   } catch (error) {
-    console.error('Error getting short link analytics:', error)
+    logger.error('Error getting short link analytics:', error)
     return null
   }
 }

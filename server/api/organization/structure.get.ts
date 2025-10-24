@@ -11,6 +11,7 @@ import {
 import { sendSuccess, parseQueryParams, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { organizationCache, CacheTags } from '../../utils/cache-manager'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/organization/structure', 'GET', {
@@ -75,7 +76,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     organizationCache.getOrSet(
       orgInfoCacheKey,
       async () => {
-        console.log(`Cache miss: Fetching organization info for ${environment} environment...`)
+        logger.info(`Cache miss: Fetching organization info for ${environment} environment...`)
         return await getOrganizationInfo(environment)
       },
       {
@@ -86,7 +87,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     organizationCache.getOrSet(
       ouTreeCacheKey,
       async () => {
-        console.log(`Cache miss: Fetching organizational unit tree for ${environment} environment...`)
+        logger.info(`Cache miss: Fetching organizational unit tree for ${environment} environment...`)
         return await getOrganizationalUnitTree(environment)
       },
       {

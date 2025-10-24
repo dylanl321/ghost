@@ -5,6 +5,7 @@
 
 import type { DataExportConfig, ExportResult } from '~/shared/types/export'
 import { createPDF, type PDFGeneratorHooks } from '#shared/utils/pdf-generator'
+import { logger } from './logger'
 
 /**
  * Generate AI-powered cost analysis using Bedrock (server-side)
@@ -100,7 +101,7 @@ Focus on analysis and observations, not recommendations. Be specific with number
 
     return null
   } catch (error) {
-    console.error('AI cost analysis error:', error)
+    logger.error('AI cost analysis error:', error)
     return null
   }
 }
@@ -119,6 +120,6 @@ const serverHooks: PDFGeneratorHooks = {
 export async function exportToPDFServer(
   config: DataExportConfig
 ): Promise<ExportResult> {
-  console.log('[PDF Export] SERVER adapter calling shared createPDF')
+  logger.info('[PDF Export] SERVER adapter calling shared createPDF')
   return createPDF(config, serverHooks)
 }

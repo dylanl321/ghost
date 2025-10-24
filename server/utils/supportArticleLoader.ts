@@ -1,6 +1,7 @@
-import fs from 'fs'
-import path from 'path'
 import matter from 'gray-matter'
+import { readdir, readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { logger } from './logger'
 
 export interface SupportArticle {
   id: string
@@ -30,70 +31,76 @@ const CATEGORY_ORDER = ['getting-started', 'costs', 'features', 'advanced']
 /**
  * Load all support articles from the content/support directory
  */
-export function loadSupportArticles(): SupportCategory[] {
-  const contentDir = path.join(process.cwd(), 'app/content/support')
-  
-  if (!fs.existsSync(contentDir)) {
-    console.warn('Support content directory not found:', contentDir)
-    return []
-  }
+export async function loadSupportArticles(): Promise<SupportCategory[]> {
+  try {
+    // Path to support articles directory
+    const supportDir = join(process.cwd(), 'app', 'content', 'support')
 
-  const categories: SupportCategory[] = []
+    // Read all category directories
+    const categoryDirs = await readdir(supportDir, { withFileTypes: true })
 
-  // Read all category directories
-  const categoryDirs = fs.readdirSync(contentDir, { withFileTypes: true })
-    .filter(dirent => dirent.isDirectory())
-    .map(dirent => dirent.name)
-
-  // Sort categories by predefined order
-  const sortedDirs = categoryDirs.sort((a, b) => {
-    const indexA = CATEGORY_ORDER.indexOf(a)
-    const indexB = CATEGORY_ORDER.indexOf(b)
-    if (indexA === -1 && indexB === -1) return a.localeCompare(b)
-    if (indexA === -1) return 1
-    if (indexB === -1) return -1
-    return indexA - indexB
-  })
-
-  // Process each category directory
-  for (const categoryDir of sortedDirs) {
-    const categoryPath = path.join(contentDir, categoryDir)
-    const articles: SupportArticle[] = []
-
-    // Read all markdown files in the category
-    const files = fs.readdirSync(categoryPath)
-      .filter(file => file.endsWith('.md'))
-
-    for (const file of files) {
-      const filePath = path.join(categoryPath, file)
-      const fileContents = fs.readFileSync(filePath, 'utf8')
-      
-      // Parse frontmatter and content
-      const { data, content } = matter(fileContents)
-      
-      // Generate article ID from filename (remove .md extension)
-      const articleId = file.replace('.md', '')
-      
-      articles.push({
-        id: articleId,
-        title: data.title || articleId,
-        content: content.trim(),
-        lastUpdated: data.lastUpdated,
-        icon: data.icon
+    // Sort categories by predefined order
+    const sortedCategoryDirs = categoryDirs
+      .filter(dirent => dirent.isDirectory())
+      .sort((a, b) => {
+        const indexA = CATEGORY_ORDER.indexOf(a.name)
+        const indexB = CATEGORY_ORDER.indexOf(b.name)
+        if (indexA === -1 && indexB === -1) return a.name.localeCompare(b.name)
+        if (indexA === -1) return 1
+        if (indexB === -1) return -1
+        return indexA - indexB
       })
+
+    const categories: SupportCategory[] = []
+
+    // Process each category directory
+    for (const categoryDir of sortedCategoryDirs) {
+      const categoryPath = join(supportDir, categoryDir.name)
+      const files = await readdir(categoryPath)
+
+      const articles: SupportArticle[] = []
+
+      // Process each markdown file in the category
+      for (const fileName of files) {
+        if (!fileName.endsWith('.md')) continue
+
+        const filePath = join(categoryPath, fileName)
+        const fileContents = await readFile(filePath, 'utf-8')
+
+        // Parse frontmatter and content
+        const { data, content } = matter(fileContents)
+
+        // Generate article ID from filename (remove .md extension)
+        const articleId = fileName.replace('.md', '')
+
+        articles.push({
+          id: articleId,
+          title: data.title || articleId,
+          content: content.trim(),
+          lastUpdated: data.lastUpdated,
+          icon: data.icon
+        })
+      }
+
+      // Sort articles by title
+      articles.sort((a, b) => a.title.localeCompare(b.title))
+
+      if (articles.length > 0) {
+        categories.push({
+          id: categoryDir.name,
+          title: CATEGORY_TITLES[categoryDir.name] || categoryDir.name,
+          articles
+        })
+      }
     }
 
-    // Sort articles by title
-    articles.sort((a, b) => a.title.localeCompare(b.title))
+    logger.info(`Loaded ${categories.length} support categories with ${categories.reduce((sum, cat) => sum + cat.articles.length, 0)} articles`)
 
-    categories.push({
-      id: categoryDir,
-      title: CATEGORY_TITLES[categoryDir] || categoryDir,
-      articles
-    })
+    return categories
+  } catch (error) {
+    logger.error('Error loading support articles:', error)
+    return []
   }
-
-  return categories
 }
 
 /**

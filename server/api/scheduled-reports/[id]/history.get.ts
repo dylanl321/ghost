@@ -5,6 +5,7 @@
 
 import { getReport, getExecutionHistory } from '../../../utils/scheduled-reports'
 import { isUserAdmin } from '../../../utils/user-roles'
+import { logger } from '../../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -55,7 +56,7 @@ export default defineEventHandler(async (event) => {
       }
     }
   } catch (error: any) {
-    console.error('Error getting execution history:', error)
+    logger.error('Error getting execution history:', error)
 
     if (error.statusCode) {
       throw error

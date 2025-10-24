@@ -13,6 +13,7 @@ import { entraConfig, getCacheKey } from './config'
 import { parseGroupDescription } from './group-parser'
 import { graphRequest, getAllPages } from './graph-client'
 import { accountCache, CacheTags } from '../cache-manager'
+import { logger } from '../logger'
 
 /**
  * Check if a group is a distribution group
@@ -55,11 +56,11 @@ export async function findDistributionGroup(
     // Check cache first
     const cached = await accountCache.get(cacheKey)
     if (cached) {
-      console.log(`Cache hit for distribution group ${groupName}`)
+      logger.info(`Cache hit for distribution group ${groupName}`)
       return cached
     }
     
-    console.log(`Looking for distribution group: ${groupName}`)
+    logger.info(`Looking for distribution group: ${groupName}`)
     
     // Search for the specific distribution group
     const filter = `displayName eq '${groupName}'`
@@ -71,7 +72,7 @@ export async function findDistributionGroup(
     const response = await graphRequest<any>(event, `/groups?${queryParams}`)
     
     if (!response.value || response.value.length === 0) {
-      console.log(`No distribution group found for ${accountName}`)
+      logger.debug(`No distribution group found for ${accountName}`)
       return null
     }
     
@@ -100,7 +101,7 @@ export async function findDistributionGroup(
     
     return distributionGroup
   } catch (error) {
-    console.error(`Failed to find distribution group for ${accountIdentifier}:`, error)
+    logger.error(`Failed to find distribution group for ${accountIdentifier}:`, error)
     return null
   }
 }
@@ -116,7 +117,7 @@ export async function getAllDistributionGroups(
   // Check cache first
   const cached = await accountCache.get(cacheKey)
   if (cached) {
-    console.log('Cache hit for all distribution groups')
+    logger.info('Cache hit for all distribution groups')
     return cached
   }
   
@@ -158,7 +159,7 @@ export async function getAllDistributionGroups(
     
     return distributionGroups
   } catch (error) {
-    console.error('Failed to get all distribution groups:', error)
+    logger.error('Failed to get all distribution groups:', error)
     throw error
   }
 }
@@ -175,7 +176,7 @@ export async function getDistributionGroupMembers(
   // Check cache first
   const cached = await accountCache.get(cacheKey)
   if (cached) {
-    console.log(`Cache hit for distribution group members ${groupId}`)
+    logger.info(`Cache hit for distribution group members ${groupId}`)
     return cached
   }
   
@@ -202,7 +203,7 @@ export async function getDistributionGroupMembers(
     
     return members
   } catch (error) {
-    console.error(`Failed to get distribution group members for ${groupId}:`, error)
+    logger.error(`Failed to get distribution group members for ${groupId}:`, error)
     throw error
   }
 }

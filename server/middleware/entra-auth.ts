@@ -7,6 +7,7 @@ import { defineEventHandler, getHeader, createError, getRequestURL } from 'h3'
 import type { H3Event } from 'h3'
 import { validateApiKey, recordApiKeyUsage } from '../utils/api-keys'
 import { getUserSession as getOIDCSession } from '../utils/entra/session'
+import { logger } from '../utils/logger'
 
 interface AuthContext {
   isAuthenticated: boolean
@@ -81,7 +82,7 @@ async function validateAPIKeyAuth(event: H3Event): Promise<AuthContext | null> {
       scopes: keyInfo.scopes || []
     }
   } catch (error) {
-    console.error('API key validation failed:', error)
+    logger.error('API key validation failed:', error)
     return null
   }
 }
@@ -108,7 +109,7 @@ async function validateOIDCAuth(event: H3Event): Promise<AuthContext | null> {
 
     return null
   } catch (error) {
-    console.error('OIDC authentication check failed:', error)
+    logger.error('OIDC authentication check failed:', error)
     return null
   }
 }
@@ -138,18 +139,18 @@ export default defineEventHandler(async (event) => {
     return
   }
 
-  console.log(`API auth check for: ${event.node.req.url}`)
+  logger.debug(`API auth check for: ${event.node.req.url}`)
   
   let authContext: AuthContext | null = null
   
   // Development mode bypass - check for dev token or dev environment
   if (isDevelopmentMode() && hasDevModeToken(event)) {
     authContext = createDevAuthContext()
-    console.log('Development mode: bypassing authentication with dev token')
+    logger.debug('Development mode: bypassing authentication with dev token')
   } else if (isDevelopmentMode() && process.env.ENTRA_DEV_BYPASS === 'true') {
     // Legacy env var check for backwards compatibility
     authContext = createDevAuthContext()
-    console.log('Development mode: bypassing authentication (ENTRA_DEV_BYPASS=true)')
+    logger.debug('Development mode: bypassing authentication (ENTRA_DEV_BYPASS=true)')
   } else {
     // Try API key authentication first
     authContext = await validateAPIKeyAuth(event)
@@ -181,7 +182,7 @@ export default defineEventHandler(async (event) => {
   event.context.auth = authContext
 
   // Log successful authentication
-  console.log(`Authenticated via ${authContext.authType} for ${event.node.req.url}`)
+  logger.debug(`Authenticated via ${authContext.authType} for ${event.node.req.url}`)
 
   // Record API key usage for audit trail (async, non-blocking)
   if (authContext.authType === 'apikey' && authContext.apiKeyId) {
@@ -203,7 +204,7 @@ export default defineEventHandler(async (event) => {
         ipAddress,
         userAgent
       ).catch(err => {
-        console.error('Failed to record API key usage:', err)
+        logger.error('Failed to record API key usage:', err)
       })
     })
   }

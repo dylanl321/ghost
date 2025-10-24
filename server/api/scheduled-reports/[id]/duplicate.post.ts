@@ -7,6 +7,7 @@
 
 import { getUserEmail } from '../../../utils/user-roles'
 import { getReport, createReport } from '../../../utils/scheduled-reports'
+import { logger } from '../../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -80,14 +81,14 @@ export default defineEventHandler(async (event) => {
       existingReport.isAdmin
     )
 
-    console.log(`Report duplicated: ${reportId} → ${newReport.reportId}`)
+    logger.info(`Report duplicated: ${reportId} → ${newReport.reportId}`)
 
     return {
       success: true,
       data: newReport
     }
   } catch (error: any) {
-    console.error('Error duplicating report:', error)
+    logger.error('Error duplicating report:', error)
 
     if (error.statusCode) {
       throw error

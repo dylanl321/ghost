@@ -9,6 +9,7 @@ import { getUserSession } from '../../../utils/entra/session'
 import { createAccountNote } from '../../../lib/account-notes'
 import { sendEmail } from '../../../utils/email-service'
 import type { CreateNoteRequest } from '#shared/types/account-notes'
+import { logger } from '../../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -74,7 +75,7 @@ View the full note in GHOST dashboard.
           })
         }
       } catch (emailError: any) {
-        console.error('Failed to send mention notifications:', emailError)
+        logger.error('Failed to send mention notifications:', emailError)
         // Don't fail the request if email fails
       }
     }
@@ -83,7 +84,7 @@ View the full note in GHOST dashboard.
       message: 'Note created successfully'
     })
   } catch (error: any) {
-    console.error('Error creating account note:', error)
+    logger.error('Error creating account note:', error)
     return errors.serverError(event, error.message || 'Failed to create note')
   }
 })

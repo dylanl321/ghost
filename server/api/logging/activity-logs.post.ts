@@ -1,5 +1,6 @@
 import { sendSuccess, errors } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/logging/activity-logs', 'POST', {
@@ -61,7 +62,7 @@ export default defineEventHandler(async (event) => {
     const metadata = { responseTimeMs: Date.now() - startTime }
     return sendSuccess(event, { message: 'Log sent successfully' }, metadata)
   } catch (err) {
-    console.error('Error logging message:', err)
+    logger.error('Error logging message:', err)
     return errors.serverError(event, 'Error logging message')
   }
 })

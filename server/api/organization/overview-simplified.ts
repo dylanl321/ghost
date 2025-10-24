@@ -10,6 +10,7 @@ import { CostExplorerClient,GetCostAndUsageCommand
 import { OrganizationsClient, ListAccountsCommand } from "@aws-sdk/client-organizations";
 import { scanItems } from '../../utils/dynamodb'
 import { getAccountsTableName } from '../../utils/accounts-consolidated'
+import { logger } from '../../utils/logger'
 
 const region = 'us-east-1'
 
@@ -126,7 +127,7 @@ async function getBudgetHealth(costClient: CostExplorerClient, startOfMonth: str
     const scanResult = await scanItems(tableName, undefined, undefined, undefined, 'commercial');
     const accountsData = scanResult.items;
 
-    console.log(`[Budget Health] Scanned ${accountsData.length} accounts from DynamoDB`)
+    logger.info(`[Budget Health] Scanned ${accountsData.length} accounts from DynamoDB`)
 
     // Create a map of accountId to budget
     const budgetMap = new Map<string, number>();
@@ -149,7 +150,7 @@ async function getBudgetHealth(costClient: CostExplorerClient, startOfMonth: str
       }
     });
 
-    console.log(`[Budget Health] Found ${accountsWithBudget} accounts with budgets, total: $${totalBudget.toFixed(2)}`)
+    logger.debug(`[Budget Health] Found ${accountsWithBudget} accounts with budgets, total: $${totalBudget.toFixed(2)}`)
 
     // Get MTD costs by account to count over-budget accounts
     const byAccountResponse = await fetchCostData(costClient, {
@@ -208,7 +209,7 @@ async function getBudgetHealth(costClient: CostExplorerClient, startOfMonth: str
       ? ((actualDailyBurnRate - expectedDailyBudgetRate) / expectedDailyBudgetRate) * 100
       : 0;
 
-    console.log(`[Budget Health] Daily burn rate: $${actualDailyBurnRate.toFixed(2)}/day (${daysExcludingFirst} days), Budget rate: $${expectedDailyBudgetRate.toFixed(2)}/day, Variance: ${burnRateVsBudget.toFixed(1)}%`)
+    logger.info(`[Budget Health] Daily burn rate: $${actualDailyBurnRate.toFixed(2)}/day (${daysExcludingFirst} days), Budget rate: $${expectedDailyBudgetRate.toFixed(2)}/day, Variance: ${burnRateVsBudget.toFixed(1)}%`)
 
     return {
       totalBudget,
@@ -220,7 +221,7 @@ async function getBudgetHealth(costClient: CostExplorerClient, startOfMonth: str
       accountsWithBudget,
     };
   } catch (error: any) {
-    console.error('Error calculating budget health:', {
+    logger.error('Error calculating budget health:', {
       message: error.message,
       name: error.name,
       code: error.code,
@@ -245,7 +246,7 @@ async function fetchCostData(client: CostExplorerClient, params: GetCostAndUsage
     const command = new GetCostAndUsageCommand(params);
     return await client.send(command);
   } catch (error: any) {
-    console.error('Cost Explorer API error:', {
+    logger.error('Cost Explorer API error:', {
       message: error.message,
       code: error.name,
       statusCode: error.$metadata?.httpStatusCode,
@@ -311,7 +312,7 @@ async function getOverview(useProforma: boolean = false) {
   tempStart.setDate(tempStart.getDate() - 14); // Go back 14 days to get the start date
   const dailyStart = buildPaddedDate(tempStart.getFullYear(), tempStart.getMonth(), tempStart.getDate());
 
-  console.log(`Running queries with values: startOfMonth=${startOfMonth},
+  logger.info(`Running queries with values: startOfMonth=${startOfMonth},
     tomorrow=${tomorrow}, endOfMonth=${endOfMonth}, forecastStart=${forecastStart}, forecastEnd=${forecastEnd},
     prevStart=${prevStart}, prevMTDEnd=${prevMTDEnd}, dailyEnd=${dailyEnd}, dailyStart=${dailyStart}, `)
 
@@ -363,7 +364,7 @@ async function getOverview(useProforma: boolean = false) {
   // Query for top accounts - use proforma or master account based on parameter
   let byAccountMonthly
   if (useProforma) {
-    console.log(`Querying proforma account (${proformaAccountId}) for top accounts`)
+    logger.info(`Querying proforma account (${proformaAccountId}) for top accounts`)
     const proformaCreds = await assumeChildAccountRole('commercial', proformaAccountId)
     const proformaClient = new CostExplorerClient({ region, credentials: proformaCreds })
     byAccountMonthly = await fetchCostData(proformaClient, {
@@ -373,7 +374,7 @@ async function getOverview(useProforma: boolean = false) {
       GroupBy: [{ Type: "DIMENSION", Key: "LINKED_ACCOUNT" }],
     })
   } else {
-    console.log(`Querying master account for top accounts`)
+    logger.info(`Querying master account for top accounts`)
     byAccountMonthly = await fetchCostData(costClient, {
       TimePeriod: { Start: startOfMonth, End: endOfMonth },
       Granularity: "MONTHLY",
@@ -392,7 +393,7 @@ async function getOverview(useProforma: boolean = false) {
   // Use AWS's native forecast API which uses ML models to predict spending
   // This matches the AWS Console forecast exactly
   const forecast = parseFloat(forecastResponse.total?.Amount || "0")
-  console.log(`AWS Forecast API returned: $${forecast.toFixed(2)} for period ${forecastStart} to ${forecastEnd}`)
+  logger.info(`AWS Forecast API returned: $${forecast.toFixed(2)} for period ${forecastStart} to ${forecastEnd}`)
 
   const prevTotal = parseFloat(prevMonthly.ResultsByTime?.[0].Total?.UnblendedCost.Amount || "0");
 
@@ -431,7 +432,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   const info = await organizationCache.getOrSet(
     cacheKey,
     async () => {
-      console.log(`Cache miss: Fetching organization overview (${useProforma ? 'proforma' : 'billable'})...`)
+      logger.info(`Cache miss: Fetching organization overview (${useProforma ? 'proforma' : 'billable'})...`)
       return await getOverview(useProforma)
     },
     {

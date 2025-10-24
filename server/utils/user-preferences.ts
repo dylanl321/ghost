@@ -7,6 +7,7 @@ import type { UserPreferences, UpdatePreferencesRequest } from '#shared/types/us
 import { getItem, putItem, scanItems } from './dynamodb'
 import { getTableName, getTableEnvironment, getTableAccountId } from '../lib/dynamodb-config'
 import type { H3Event } from 'h3'
+import { logger } from './logger'
 
 /**
  * Detect timezone from request headers or query params
@@ -70,11 +71,11 @@ export async function getUserPreferences(
 
     await putItem(tableName, defaults, environment, accountId)
 
-    console.log(`Created default preferences for user: ${userId}`)
+    logger.info(`Created default preferences for user: ${userId}`)
     return defaults
 
   } catch (error) {
-    console.error('Error getting user preferences:', error)
+    logger.error('Error getting user preferences:', error)
     // Return defaults even on error
     const now = new Date().toISOString()
     return {
@@ -124,7 +125,7 @@ export async function updateUserPreferences(
     return updated
 
   } catch (error) {
-    console.error('Error updating user preferences:', error)
+    logger.error('Error updating user preferences:', error)
     throw error
   }
 }
@@ -159,7 +160,7 @@ export async function setUserPreference(
     return updated
 
   } catch (error) {
-    console.error('Error setting user preference:', error)
+    logger.error('Error setting user preference:', error)
     throw error
   }
 }
@@ -185,7 +186,7 @@ export async function updateLastLogin(userId: string): Promise<void> {
 
   } catch (error) {
     // Don't throw on login tracking errors
-    console.error('Error updating last login:', error)
+    logger.error('Error updating last login:', error)
   }
 }
 
@@ -217,7 +218,7 @@ export async function getAllUserPreferences(
     }
 
   } catch (error) {
-    console.error('Error listing all user preferences:', error)
+    logger.error('Error listing all user preferences:', error)
     return { preferences: [], total: 0 }
   }
 }
@@ -242,7 +243,7 @@ export async function deleteUserPreferences(userId: string): Promise<boolean> {
     return true
 
   } catch (error) {
-    console.error('Error deleting user preferences:', error)
+    logger.error('Error deleting user preferences:', error)
     return false
   }
 }

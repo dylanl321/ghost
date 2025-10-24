@@ -7,6 +7,7 @@ import { defineEventHandler, getQuery } from 'h3'
 import { scanItems, queryItems } from '../../utils/dynamodb'
 import { sendPaginated, parseQueryParams, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/forecast/data', 'GET', {
@@ -174,7 +175,7 @@ export default defineEventHandler(handleAsync(async (event) => {
           
           // Safety limit to prevent infinite loops
           if (allItems.length > 10000) {
-            console.warn('Reached safety limit of 10000 items')
+            logger.warn('Reached safety limit of 10000 items')
             hasMore = false
           }
         }
@@ -239,7 +240,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     )
 
   } catch (err: any) {
-    console.error('Forecast data fetch error:', err)
+    logger.error('Forecast data fetch error:', err)
     return errors.serverError(event, `Failed to fetch forecast data: ${err.message}`)
   }
 }))

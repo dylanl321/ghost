@@ -7,6 +7,7 @@
  */
 
 import { getExecutionHistory } from '../../../../utils/scheduled-reports'
+import { logger } from '../../../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -38,7 +39,7 @@ export default defineEventHandler(async (event) => {
       }
     }
   } catch (error: any) {
-    console.error('Error getting delivery history:', error)
+    logger.error('Error getting delivery history:', error)
 
     if (error.statusCode) {
       throw error

@@ -18,6 +18,7 @@ import { scanItems, updateItem } from './dynamodb'
 import { getOrganizationsClient, hasCredentials } from '../lib/aws-client-factory'
 import type { AccountInfo, AWSEnvironmentType, AccountLookupCriteria } from '../types'
 import { getTableName, getTableEnvironment } from '../lib/dynamodb-config'
+import { logger } from './logger'
 
 /**
  * Get the DynamoDB table name for accounts (with config loader)
@@ -63,7 +64,7 @@ export async function getAccountFromOrganizations(
       environment: environment
     }
   } catch (error) {
-    console.error(`Failed to get account ${accountId} from Organizations:`, error)
+    logger.error(`Failed to get account ${accountId} from Organizations:`, error)
     return null
   }
 }
@@ -76,7 +77,7 @@ export async function getAllAccountsFromOrganizations(
   environment: AWSEnvironmentType = 'commercial'
 ): Promise<AccountInfo[]> {
   if (!hasCredentials(environment)) {
-    console.warn(`No credentials available for ${environment} environment`)
+    logger.warn(`No credentials available for ${environment} environment`)
     return []
   }
 
@@ -113,7 +114,7 @@ export async function getAllAccountsFromOrganizations(
     
     return accounts
   } catch (error) {
-    console.error(`Failed to list accounts from Organizations (${environment}):`, error)
+    logger.error(`Failed to list accounts from Organizations (${environment}):`, error)
     return []
   }
 }
@@ -126,7 +127,7 @@ export async function getAllAccountsFromOrganizations(
  */
 export async function getAllAccountMetadataFromDynamoDB(): Promise<any[]> {
   if (!hasCredentials('govcloud')) {
-    console.warn('No credentials available for govcloud environment, skipping DynamoDB query')
+    logger.warn('No credentials available for govcloud environment, skipping DynamoDB query')
     return []
   }
   
@@ -136,7 +137,7 @@ export async function getAllAccountMetadataFromDynamoDB(): Promise<any[]> {
     const result = await scanItems(tableName, undefined, undefined, undefined, environment)
     return result.items
   } catch (error) {
-    console.error('Failed to get accounts from DynamoDB:', error)
+    logger.error('Failed to get accounts from DynamoDB:', error)
     return []
   }
 }
@@ -306,7 +307,7 @@ export async function updateAccountMetadata(
     // Return the updated account with full data
     return lookupAccountUnified({ accountId })
   } catch (error) {
-    console.error(`Failed to update metadata for account ${accountId}:`, error)
+    logger.error(`Failed to update metadata for account ${accountId}:`, error)
     throw error
   }
 }
@@ -325,10 +326,10 @@ export async function syncAccountFromOrganizations(
       throw new Error(`Account ${accountId} not found in Organizations`)
     }
     
-    console.log(`Synced account ${accountId} from Organizations (${environment})`)
+    logger.info(`Synced account ${accountId} from Organizations (${environment})`)
     return orgData
   } catch (error) {
-    console.error(`Failed to sync account ${accountId} from Organizations:`, error)
+    logger.error(`Failed to sync account ${accountId} from Organizations:`, error)
     throw error
   }
 }

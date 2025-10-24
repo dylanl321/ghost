@@ -5,6 +5,7 @@
 
 import { getReport } from '../../../../utils/scheduled-reports'
 import { executeScheduledReport } from '../../../../utils/report-scheduler'
+import { logger } from '../../../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -29,7 +30,7 @@ export default defineEventHandler(async (event) => {
     }
 
     // Execute the report immediately
-    console.log(`[Admin] Force executing report: ${report.reportName}`)
+    logger.info(`[Admin] Force executing report: ${report.reportName}`)
     const result = await executeScheduledReport(report)
 
     if (!result.success) {
@@ -45,7 +46,7 @@ export default defineEventHandler(async (event) => {
       duration: result.duration
     }
   } catch (error: any) {
-    console.error('Error executing report:', error)
+    logger.error('Error executing report:', error)
 
     if (error.statusCode) {
       throw error

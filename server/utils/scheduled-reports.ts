@@ -20,6 +20,7 @@ import {
   scanItems
 } from './dynamodb'
 import { getTableName, getTableEnvironment, getTableAccountId } from '../lib/dynamodb-config'
+import { logger } from './logger'
 
 // Table configuration now loaded dynamically from Secrets Manager or environment variables
 
@@ -198,7 +199,7 @@ export async function getReport(reportId: string): Promise<ScheduledReport | nul
 
     return result.items[0] as ScheduledReport || null
   } catch (error) {
-    console.error('Error getting report:', error)
+    logger.error('Error getting report:', error)
     return null
   }
 }
@@ -213,7 +214,7 @@ export async function listUserReports(
 ): Promise<{ reports: ScheduledReport[]; total: number }> {
   try {
     if (!userId) {
-      console.warn('listUserReports called without userId')
+      logger.warn('listUserReports called without userId')
       return { reports: [], total: 0 }
     }
 
@@ -247,7 +248,7 @@ export async function listUserReports(
       total: result.count
     }
   } catch (error) {
-    console.error('Error listing user reports:', error)
+    logger.error('Error listing user reports:', error)
     return { reports: [], total: 0 }
   }
 }
@@ -278,7 +279,7 @@ export async function listAllReports(
       total: result.count
     }
   } catch (error) {
-    console.error('Error listing all reports:', error)
+    logger.error('Error listing all reports:', error)
     return { reports: [], total: 0 }
   }
 }
@@ -317,7 +318,7 @@ export async function getUpcomingReports(
       return nextRun <= future && report.status === 'active'
     }) as ScheduledReport[]
   } catch (error) {
-    console.error('Error getting upcoming reports:', error)
+    logger.error('Error getting upcoming reports:', error)
     return []
   }
 }
@@ -342,7 +343,7 @@ export async function createReport(
       timezone = userPrefs.timezone
     }
   } catch (error) {
-    console.warn('Failed to get user timezone preferences, using schedule timezone:', error)
+    logger.warn('Failed to get user timezone preferences, using schedule timezone:', error)
   }
 
   const nextRunTime = calculateNextRunTime(
@@ -413,7 +414,7 @@ export async function updateReport(
           timezone = userPrefs.timezone
         }
       } catch (error) {
-        console.warn('Failed to get user timezone preferences, using schedule timezone:', error)
+        logger.warn('Failed to get user timezone preferences, using schedule timezone:', error)
       }
 
       updatedReport.nextRunTime = calculateNextRunTime(
@@ -433,7 +434,7 @@ export async function updateReport(
     await putItem(tableName, updatedReport, environment, accountId)
     return updatedReport as ScheduledReport
   } catch (error) {
-    console.error('Error updating report:', error)
+    logger.error('Error updating report:', error)
     return null
   }
 }
@@ -457,7 +458,7 @@ export async function deleteReport(reportId: string): Promise<boolean> {
     )
     return true
   } catch (error) {
-    console.error('Error deleting report:', error)
+    logger.error('Error deleting report:', error)
     return false
   }
 }
@@ -504,7 +505,7 @@ export async function updateReportRunStatus(
       accountId
     )
   } catch (error) {
-    console.error('Error updating run status:', error)
+    logger.error('Error updating run status:', error)
   }
 }
 
@@ -524,7 +525,7 @@ export async function recordExecution(execution: Omit<ReportExecution, 'executio
     const accountId = await getTableAccountId('reportExecutions')
     await putItem(executionsTableName, fullExecution, environment, accountId)
   } catch (error) {
-    console.error('Error recording execution:', error)
+    logger.error('Error recording execution:', error)
   }
 }
 
@@ -557,7 +558,7 @@ export async function getExecutionHistory(
       new Date(b.executionTime).getTime() - new Date(a.executionTime).getTime()
     )
   } catch (error) {
-    console.error('Error getting execution history:', error)
+    logger.error('Error getting execution history:', error)
     return []
   }
 }
@@ -635,7 +636,7 @@ export async function getReportStatistics(): Promise<ReportStatistics> {
 
     return stats
   } catch (error) {
-    console.error('Error getting statistics:', error)
+    logger.error('Error getting statistics:', error)
     throw error
   }
 }

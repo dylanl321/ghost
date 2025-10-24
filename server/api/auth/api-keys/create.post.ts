@@ -9,6 +9,7 @@ import { createApiKey, API_KEY_SCOPES } from '../../../utils/api-keys'
 import { getAuthContext, requireScope } from '../../../middleware/entra-auth'
 import { registerEndpoint } from '../../../plugins/swagger'
 import type { CreateApiKeyRequest, CreateApiKeyResponse, EntraAPIResponse } from '../../../types/entra'
+import { logger } from '../../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/auth/api-keys/create', 'POST', {
@@ -140,19 +141,19 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Create
       }
     }
     
-    console.log(`Creating API key "${body.name}" for ${createdBy}`)
+    logger.info(`Creating API key "${body.name}" for ${createdBy}`)
     
     // Create the API key
     const newApiKey = await createApiKey(body, createdBy)
     
-    console.log(`Successfully created API key ${newApiKey.id}`)
+    logger.info(`Successfully created API key ${newApiKey.id}`)
     
     return {
       success: true,
       data: newApiKey
     }
   } catch (error: any) {
-    console.error('Error creating API key:', error)
+    logger.error('Error creating API key:', error)
     
     // Re-throw H3 errors
     if (error.statusCode) {

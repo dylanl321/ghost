@@ -25,6 +25,7 @@ import {
 } from '../../../../utils/policy-analyzer'
 import { sendSuccess, errors, handleAsync } from '../../../../utils/api-response'
 import { registerEndpoint } from '../../../../plugins/swagger'
+import { logger } from '../../../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/organization/accounts/[identifier]/policy-analysis', 'GET', {
@@ -87,7 +88,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       headers
     })
   } catch (error: any) {
-    console.error('Failed to fetch governance data:', error)
+    logger.error('Failed to fetch governance data:', error)
     return errors.notFound(event, `Failed to fetch governance data: ${error.message || 'Unknown error'}`)
   }
 
@@ -104,7 +105,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   // Collect all policies (direct + inherited)
   const allPolicies = orgContext.allPolicies || []
 
-  console.log(`[Policy Analysis] Found ${allPolicies.length} policies for account ${identifier} in ${environment}`)
+  logger.debug(`[Policy Analysis] Found ${allPolicies.length} policies for account ${identifier} in ${environment}`)
 
   if (allPolicies.length === 0) {
     return sendSuccess(event, {
@@ -130,11 +131,11 @@ export default defineEventHandler(handleAsync(async (event) => {
   // Fetch full policy documents for each policy
   const parsedPolicies = []
 
-  console.log(`[Policy Analysis] Fetching full policy documents...`)
+  logger.info(`[Policy Analysis] Fetching full policy documents...`)
 
   for (const policy of allPolicies) {
     try {
-      console.log(`[Policy Analysis] Fetching policy: ${policy.name} (${policy.id})`)
+      logger.info(`[Policy Analysis] Fetching policy: ${policy.name} (${policy.id})`)
       const policyDoc = await getPolicyDocument(policy.id, environment as any)
 
       if (policyDoc && policyDoc.content) {
@@ -147,22 +148,22 @@ export default defineEventHandler(handleAsync(async (event) => {
           policy.attachedAt || 'Unknown'
         )
         parsedPolicies.push(parsed)
-        console.log(`[Policy Analysis] Successfully parsed policy: ${policy.name}`)
+        logger.info(`[Policy Analysis] Successfully parsed policy: ${policy.name}`)
       } else {
-        console.log(`[Policy Analysis] Policy document has no content: ${policy.name}`)
+        logger.info(`[Policy Analysis] Policy document has no content: ${policy.name}`)
       }
     } catch (error) {
-      console.error(`[Policy Analysis] Failed to fetch policy document for ${policy.id}:`, error)
+      logger.error(`[Policy Analysis] Failed to fetch policy document for ${policy.id}:`, error)
       // Continue with other policies even if one fails
     }
   }
 
-  console.log(`[Policy Analysis] Parsed ${parsedPolicies.length} policies, now analyzing...`)
+  logger.info(`[Policy Analysis] Parsed ${parsedPolicies.length} policies, now analyzing...`)
 
   // Analyze all policies
   const analysis: PolicyAnalysisResult = analyzePolicies(parsedPolicies)
 
-  console.log(`[Policy Analysis] Analysis complete, enhancing with additional insights...`)
+  logger.info(`[Policy Analysis] Analysis complete, enhancing with additional insights...`)
 
   // Generate policy evaluation order
   const evaluationOrder = determinePolicyEvaluationOrder(parsedPolicies)
@@ -303,7 +304,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   // Generate AI analysis (async, but we'll await it)
   let aiAnalysis = null
   try {
-    console.log(`[Policy Analysis] Generating AI-powered insights...`)
+    logger.info(`[Policy Analysis] Generating AI-powered insights...`)
     aiAnalysis = await generateAIPolicyAnalysis(
       analysis,
       parsedPolicies,
@@ -313,13 +314,13 @@ export default defineEventHandler(handleAsync(async (event) => {
         environment: environment
       }
     )
-    console.log(`[Policy Analysis] AI analysis complete`)
+    logger.info(`[Policy Analysis] AI analysis complete`)
   } catch (error) {
-    console.error('[Policy Analysis] AI analysis failed:', error)
+    logger.error('[Policy Analysis] AI analysis failed:', error)
     // Continue without AI analysis if it fails
   }
 
-  console.log(`[Policy Analysis] All enhancements complete, returning results`)
+  logger.info(`[Policy Analysis] All enhancements complete, returning results`)
 
   return sendSuccess(event, {
     analysis,

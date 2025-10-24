@@ -6,6 +6,8 @@
  */
 
 // Cache entry interface
+import { logger } from './logger'
+
 interface CacheEntry<T = any> {
   data: T
   timestamp: number
@@ -300,7 +302,7 @@ class CacheManager {
     keysToDelete.forEach(key => this.cache.delete(key))
     
     if (keysToDelete.length > 0) {
-      console.log(`Cache cleanup: removed ${keysToDelete.length} expired entries`)
+      logger.info(`Cache cleanup: removed ${keysToDelete.length} expired entries`)
       this.updateStats()
     }
   }

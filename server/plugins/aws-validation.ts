@@ -3,10 +3,11 @@
  */
 
 import { validateAWSConfiguration } from '../lib/aws-client-factory'
+import { logger } from '../utils/logger'
 
 export default defineNitroPlugin((nitroApp) => {
   // Validate AWS configuration on startup
-  console.log('[AWS Validation] Checking AWS configuration...')
+  logger.debug('[AWS Validation] Checking AWS configuration...')
   validateAWSConfiguration()
   
   // Set up error handling for AWS credential issues
@@ -20,12 +21,12 @@ export default defineNitroPlugin((nitroApp) => {
         error.message?.includes('SignatureDoesNotMatch') ||
         error.message?.includes('CredentialsError')) {
       
-      console.error('[AWS Validation] AWS Authentication Error Detected!')
-      console.error('This is likely due to one of the following issues:')
-      console.error('1. Using wrong partition credentials (e.g., commercial keys with GovCloud region)')
-      console.error('2. Expired AWS credentials')
-      console.error('3. Invalid AWS credentials')
-      console.error('4. Region/partition mismatch')
+      logger.error('[AWS Validation] AWS Authentication Error Detected!')
+      logger.error('This is likely due to one of the following issues:')
+      logger.error('1. Using wrong partition credentials (e.g., commercial keys with GovCloud region)')
+      logger.error('2. Expired AWS credentials')
+      logger.error('3. Invalid AWS credentials')
+      logger.error('4. Region/partition mismatch')
       
       // Re-validate configuration to help diagnose
       validateAWSConfiguration()

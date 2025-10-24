@@ -11,6 +11,7 @@ import { marshall } from '@aws-sdk/util-dynamodb'
 import { getDynamoDBClient } from '../lib/aws-client-factory'
 import { getItem, deleteItem } from './dynamodb'
 import { getTableName, getTableEnvironment, getTableAccountId } from '../lib/dynamodb-config'
+import { logger } from './logger'
 
 export interface ExecutionLock {
   lockId: string              // Format: {reportId}#{scheduledTime}
@@ -85,10 +86,10 @@ export async function claimExecutionLock(
       )
 
       if (verification && verification.claimedBy === lock.claimedBy) {
-        console.log(`✓ Lock claimed by ${lock.claimedBy}: ${lockId}`)
+        logger.info(`✓ Lock claimed by ${lock.claimedBy}: ${lockId}`)
         return true
       } else {
-        console.log(`✗ Lock verification failed for ${lockId}`)
+        logger.error(`✗ Lock verification failed for ${lockId}`)
         return false
       }
     } catch (error: any) {
@@ -96,16 +97,16 @@ export async function claimExecutionLock(
       // This means another container already claimed the lock
       if (error.name === 'ConditionalCheckFailedException' ||
           error.message?.includes('ConditionalCheckFailed')) {
-        console.log(`✗ Lock already claimed by another container: ${lockId}`)
+        logger.info(`✗ Lock already claimed by another container: ${lockId}`)
         return false
       }
 
       // For other errors, we can't safely claim the lock
-      console.error(`Error claiming lock ${lockId}:`, error)
+      logger.error(`Error claiming lock ${lockId}:`, error)
       return false
     }
   } catch (error: any) {
-    console.error('Error in claimExecutionLock:', error)
+    logger.error('Error in claimExecutionLock:', error)
     return false
   }
 }
@@ -133,12 +134,12 @@ export async function releaseExecutionLock(
     ) as ExecutionLock | null
 
     if (!lock) {
-      console.log(`No lock found to release: ${lockId}`)
+      logger.debug(`No lock found to release: ${lockId}`)
       return true // Lock doesn't exist, that's fine
     }
 
     if (lock.claimedBy !== getContainerId()) {
-      console.warn(`Cannot release lock ${lockId} - owned by ${lock.claimedBy}, not us`)
+      logger.warn(`Cannot release lock ${lockId} - owned by ${lock.claimedBy}, not us`)
       return false
     }
 
@@ -150,10 +151,10 @@ export async function releaseExecutionLock(
       accountId
     )
 
-    console.log(`✓ Lock released: ${lockId}`)
+    logger.info(`✓ Lock released: ${lockId}`)
     return true
   } catch (error: any) {
-    console.error('Error releasing lock:', error)
+    logger.error('Error releasing lock:', error)
     return false
   }
 }
@@ -187,7 +188,7 @@ export async function hasExecutionLock(
 
     return { locked: false }
   } catch (error: any) {
-    console.error('Error checking lock:', error)
+    logger.error('Error checking lock:', error)
     // If we can't determine lock status, assume it's locked for safety
     return { locked: true }
   }
@@ -204,7 +205,7 @@ export async function cleanupStaleLocks(maxAgeMinutes: number = 5): Promise<numb
     const environment = await getTableEnvironment('reportExecutionLocks')
     const accountId = await getTableAccountId('reportExecutionLocks')
 
-    console.log(`Cleaning up execution locks older than ${maxAgeMinutes} minutes...`)
+    logger.info(`Cleaning up execution locks older than ${maxAgeMinutes} minutes...`)
 
     // Import scanItems for scanning the table
     const { scanItems } = await import('./dynamodb')
@@ -214,7 +215,7 @@ export async function cleanupStaleLocks(maxAgeMinutes: number = 5): Promise<numb
     const locks = result.items as ExecutionLock[]
 
     if (!locks || locks.length === 0) {
-      console.log('  No locks found to clean up')
+      logger.debug('  No locks found to clean up')
       return 0
     }
 
@@ -226,7 +227,7 @@ export async function cleanupStaleLocks(maxAgeMinutes: number = 5): Promise<numb
       const lockAge = new Date(lock.claimedAt).getTime()
 
       if (lockAge < cutoffTime) {
-        console.log(`  → Deleting stale lock: ${lock.lockId} (claimed by ${lock.claimedBy} at ${lock.claimedAt})`)
+        logger.info(`  → Deleting stale lock: ${lock.lockId} (claimed by ${lock.claimedBy} at ${lock.claimedAt})`)
 
         await deleteItem(
           tableName,
@@ -240,14 +241,14 @@ export async function cleanupStaleLocks(maxAgeMinutes: number = 5): Promise<numb
     }
 
     if (deletedCount > 0) {
-      console.log(`✓ Cleaned up ${deletedCount} stale execution lock(s)`)
+      logger.info(`✓ Cleaned up ${deletedCount} stale execution lock(s)`)
     } else {
-      console.log('  No stale locks found')
+      logger.debug('  No stale locks found')
     }
 
     return deletedCount
   } catch (error: any) {
-    console.error('Error cleaning up stale locks:', error)
+    logger.error('Error cleaning up stale locks:', error)
     return 0
   }
 }

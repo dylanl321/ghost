@@ -7,6 +7,7 @@ import { defineEventHandler, readBody } from 'h3'
 import { invokeBedrock, type BedrockModel } from '../../utils/bedrock-client'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
+import { logger } from '../../utils/logger'
 
 export interface ChatMessage {
   role: 'user' | 'assistant'
@@ -80,11 +81,11 @@ export default defineEventHandler(handleAsync(async (event) => {
   const body = await readBody(event) as ChatRequest
   const { userInput } = body
 
-  console.log('[Chat API] Request received, message length:', userInput?.length)
+  logger.info('[Chat API] Request received, message length:', userInput?.length)
 
   // Validate input
   if (!userInput || typeof userInput !== 'string' || userInput.trim().length === 0) {
-    console.error('[Chat API] Invalid message:', userInput)
+    logger.error('[Chat API] Invalid message:', userInput)
     return errors.badRequest(event, 'userInput is required and must be a non-empty string')
   }
 
@@ -116,7 +117,7 @@ Always provide helpful, accurate, and actionable advice. If you don't know somet
     })
 
     if (!bedrockResponse.success) {
-      console.error('[Chat API] Bedrock error:', bedrockResponse.error)
+      logger.error('[Chat API] Bedrock error:', bedrockResponse.error)
       throw new Error(bedrockResponse.error?.message || 'Failed to get response from AI model')
     }
 
@@ -128,7 +129,7 @@ Always provide helpful, accurate, and actionable advice. If you don't know somet
 
     return response
   } catch (error: any) {
-    console.error('[Chat API] Unexpected error:', error)
+    logger.error('[Chat API] Unexpected error:', error)
     throw new Error(error.message || 'An unexpected error occurred while processing your request')
   }
 }))

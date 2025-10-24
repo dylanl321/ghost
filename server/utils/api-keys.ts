@@ -8,6 +8,7 @@ import { randomBytes, scryptSync, timingSafeEqual } from 'crypto'
 import { putItem, getItem, scanItems, updateItem, deleteItem } from './dynamodb'
 import { accountCache } from './cache-manager'
 import { getTableName, getTableEnvironment } from '../lib/dynamodb-config'
+import { logger } from './logger'
 
 export interface ApiKey {
   id: string
@@ -154,10 +155,10 @@ async function loadApiKeys(): Promise<ApiKey[]> {
     if (error.name === 'ResourceNotFoundException' || error.message?.includes('Requested resource not found')) {
       const tableName = await getTableName('apiKeys').catch(() => 'ghost-api-keys')
       const environment = await getTableEnvironment('apiKeys').catch(() => 'commercial')
-      console.log(`API keys table ${tableName} does not exist yet in ${environment} environment`)
+      logger.info(`API keys table ${tableName} does not exist yet in ${environment} environment`)
       return []
     }
-    console.error('Failed to load API keys from DynamoDB:', error)
+    logger.error('Failed to load API keys from DynamoDB:', error)
     return []
   }
 }
@@ -183,7 +184,7 @@ async function saveApiKey(apiKey: ApiKey): Promise<void> {
     // Invalidate cache
     await accountCache.delete('api_keys:all')
   } catch (error) {
-    console.error('Failed to save API key to DynamoDB:', error)
+    logger.error('Failed to save API key to DynamoDB:', error)
     throw error
   }
 }
@@ -217,7 +218,7 @@ async function updateApiKey(id: string, updates: Partial<ApiKey>): Promise<void>
     // Invalidate cache
     await accountCache.delete('api_keys:all')
   } catch (error) {
-    console.error('Failed to update API key in DynamoDB:', error)
+    logger.error('Failed to update API key in DynamoDB:', error)
     throw error
   }
 }
@@ -269,7 +270,7 @@ export async function createApiKey(
     // Save to DynamoDB
     await saveApiKey(apiKey)
     
-    console.log(`Created API key ${id} for ${createdBy} with scopes: ${request.scopes.join(', ')}`)
+    logger.info(`Created API key ${id} for ${createdBy} with scopes: ${request.scopes.join(', ')}`)
     
     return {
       id,
@@ -279,7 +280,7 @@ export async function createApiKey(
       expiresAt
     }
   } catch (error) {
-    console.error('Failed to create API key:', error)
+    logger.error('Failed to create API key:', error)
     throw error
   }
 }
@@ -326,7 +327,7 @@ export async function validateApiKey(key: string): Promise<ApiKeyValidation> {
       error: 'Invalid API key'
     }
   } catch (error) {
-    console.error('API key validation error:', error)
+    logger.error('API key validation error:', error)
     return {
       valid: false,
       error: 'API key validation failed'
@@ -345,7 +346,7 @@ export async function listApiKeys(createdBy?: string): Promise<Omit<ApiKey, 'key
       .filter(key => !createdBy || key.createdBy === createdBy)
       .map(({ keyHash, salt, ...key }) => key)
   } catch (error) {
-    console.error('Failed to list API keys:', error)
+    logger.error('Failed to list API keys:', error)
     return []
   }
 }
@@ -372,10 +373,10 @@ export async function deactivateApiKey(keyId: string, userId: string): Promise<b
     // Update to inactive
     await updateApiKey(keyId, { isActive: false })
     
-    console.log(`Deactivated API key ${keyId} by ${userId}`)
+    logger.info(`Deactivated API key ${keyId} by ${userId}`)
     return true
   } catch (error) {
-    console.error('Failed to deactivate API key:', error)
+    logger.error('Failed to deactivate API key:', error)
     throw error
   }
 }
@@ -398,14 +399,14 @@ export async function cleanupExpiredKeys(): Promise<number> {
     }
     
     if (removedCount > 0) {
-      console.log(`Cleaned up ${removedCount} expired API keys`)
+      logger.info(`Cleaned up ${removedCount} expired API keys`)
       // Invalidate cache
       await accountCache.delete('api_keys:all')
     }
     
     return removedCount
   } catch (error) {
-    console.error('Failed to cleanup expired keys:', error)
+    logger.error('Failed to cleanup expired keys:', error)
     return 0
   }
 }
@@ -445,7 +446,7 @@ export async function getApiKeyStats(): Promise<{
 
     return stats
   } catch (error) {
-    console.error('Failed to get API key stats:', error)
+    logger.error('Failed to get API key stats:', error)
     return { total: 0, active: 0, expired: 0, byScope: {} }
   }
 }
@@ -462,7 +463,7 @@ export async function recordApiKeyUsage(
   userAgent?: string
 ): Promise<void> {
   try {
-    console.log(`Recording API key usage: keyId=${keyId}, endpoint=${endpoint}, method=${method}, status=${statusCode}`)
+    logger.info(`Recording API key usage: keyId=${keyId}, endpoint=${endpoint}, method=${method}, status=${statusCode}`)
     const now = new Date()
     const ttl = Math.floor(now.getTime() / 1000) + (USAGE_RETENTION_DAYS * 24 * 60 * 60)
 
@@ -480,10 +481,10 @@ export async function recordApiKeyUsage(
     const usageTableName = await getTableName('apiKeysUsage')
     const environment = await getTableEnvironment('apiKeysUsage')
     await putItem(usageTableName, usageRecord, environment)
-    console.log(`Successfully recorded API key usage for keyId=${keyId}`)
+    logger.info(`Successfully recorded API key usage for keyId=${keyId}`)
   } catch (error) {
     // Don't throw error - usage recording should not block API calls
-    console.error('Failed to record API key usage:', error)
+    logger.error('Failed to record API key usage:', error)
   }
 }
 
@@ -537,7 +538,7 @@ export async function getApiKeyUsageHistory(
 
     return usage
   } catch (error) {
-    console.error('Failed to get API key usage history:', error)
+    logger.error('Failed to get API key usage history:', error)
     return []
   }
 }
@@ -587,7 +588,7 @@ export async function getApiKeyUsageStats(keyId: string): Promise<{
 
     return stats
   } catch (error) {
-    console.error('Failed to get API key usage stats:', error)
+    logger.error('Failed to get API key usage stats:', error)
     return {
       totalCalls: 0,
       lastUsed: null,

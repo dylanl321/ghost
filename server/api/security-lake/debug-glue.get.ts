@@ -8,6 +8,7 @@ import { defineEventHandler, getQuery } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { getAthenaClient } from '../../lib/aws-client-factory'
 import { getEnvironmentConfig } from '../../utils/security-lake'
+import { logger } from '../../utils/logger'
 
 export default defineEventHandler(handleAsync(async (event) => {
   const query = getQuery(event)
@@ -105,7 +106,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     })
     
   } catch (error) {
-    console.error('[Security Lake] Debug failed:', error)
+    logger.error('[Security Lake] Debug failed:', error)
     return errors.serverError(event, error instanceof Error ? error.message : 'Debug failed')
   }
 }))

@@ -5,6 +5,7 @@
 
 import { getUserSession } from '../../utils/entra/session'
 import { getUserPreferences } from '../../utils/user-preferences'
+import { logger } from '../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -37,7 +38,7 @@ export default defineEventHandler(async (event) => {
     }
 
   } catch (error: any) {
-    console.error('Failed to get user preferences:', error)
+    logger.error('Failed to get user preferences:', error)
 
     if (error.statusCode) {
       throw error

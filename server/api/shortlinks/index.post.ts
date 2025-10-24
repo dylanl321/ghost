@@ -1,4 +1,5 @@
 import { createShortLink } from '../../lib/shortlinks'
+import { logger } from '../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -35,7 +36,7 @@ export default defineEventHandler(async (event) => {
       }
     }
   } catch (error: any) {
-    console.error('Error creating short link:', error)
+    logger.error('Error creating short link:', error)
     throw createError({
       statusCode: error.statusCode || 500,
       statusMessage: error.statusMessage || 'Failed to create short link'

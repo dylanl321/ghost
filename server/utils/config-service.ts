@@ -19,6 +19,7 @@ import {
 import { getConfigServiceClient } from '../lib/aws-client-factory'
 import { getCacheManager } from './cache-manager'
 import type { AWSEnvironmentType } from '../types'
+import { logger } from './logger'
 
 // Cache configuration
 const CACHE_TTL = {
@@ -100,7 +101,7 @@ export async function listAggregateResources(
   if (!filter?.nextToken) {
     const cached = await cache.get<{ resources: ResourceIdentifier[]; nextToken?: string }>(cacheKey)
     if (cached) {
-      console.log(`[Config] Cache hit for resource list: ${cacheKey}`)
+      logger.info(`[Config] Cache hit for resource list: ${cacheKey}`)
       return cached
     }
   }
@@ -119,7 +120,7 @@ export async function listAggregateResources(
       throw new Error(`Config aggregator '${aggregatorName}' not found. Please verify the aggregator name in your ${environment} environment or contact your AWS administrator.`)
     }
     
-    console.log(`[Config] Verified aggregator '${aggregatorName}' exists in ${environment}`)
+    logger.info(`[Config] Verified aggregator '${aggregatorName}' exists in ${environment}`)
   } catch (error) {
     if (error.name === 'NoSuchConfigurationAggregatorException' || error.message?.includes('does not exist')) {
       throw new Error(`Config aggregator '${aggregatorName}' not found in ${environment} environment. Please check your AWS Config setup or contact your AWS administrator.`)
@@ -142,7 +143,7 @@ export async function listAggregateResources(
       'AWS::Lambda::Function'
     ]
     
-    console.log(`[Config] No resource type specified, querying ${commonResourceTypes.length} common types`)
+    logger.info(`[Config] No resource type specified, querying ${commonResourceTypes.length} common types`)
     
     for (const resourceType of commonResourceTypes) {
       if (resources.length >= maxItems) break
@@ -169,7 +170,7 @@ export async function listAggregateResources(
           resources.push(...response.ResourceIdentifiers)
         }
       } catch (error) {
-        console.warn(`[Config] Failed to list ${resourceType}:`, error)
+        logger.warn(`[Config] Failed to list ${resourceType}:`, error)
       }
     }
     
@@ -178,7 +179,7 @@ export async function listAggregateResources(
     // Cache the result
     if (resources.length > 0) {
       await cache.set(cacheKey, result, CACHE_TTL.RESOURCE_LIST)
-      console.log(`[Config] Cached resource list: ${cacheKey}`)
+      logger.info(`[Config] Cached resource list: ${cacheKey}`)
     }
     
     return result
@@ -225,7 +226,7 @@ export async function listAggregateResources(
   // Cache the result if it's not a paginated request
   if (!filter?.nextToken && resources.length > 0) {
     await cache.set(cacheKey, result, CACHE_TTL.RESOURCE_LIST)
-    console.log(`[Config] Cached resource list: ${cacheKey}`)
+    logger.info(`[Config] Cached resource list: ${cacheKey}`)
   }
   
   return result
@@ -249,7 +250,7 @@ export async function getResourceConfig(
   // Check cache
   const cached = await cache.get<ResourceDetail>(cacheKey)
   if (cached) {
-    console.log(`[Config] Cache hit for resource detail: ${cacheKey}`)
+    logger.info(`[Config] Cache hit for resource detail: ${cacheKey}`)
     return cached
   }
   
@@ -269,11 +270,11 @@ export async function getResourceConfig(
     
     // Cache the result
     await cache.set(cacheKey, detail, CACHE_TTL.RESOURCE_DETAIL)
-    console.log(`[Config] Cached resource detail: ${cacheKey}`)
+    logger.info(`[Config] Cached resource detail: ${cacheKey}`)
     
     return detail
   } catch (error) {
-    console.error(`Error fetching resource config:`, error)
+    logger.error(`Error fetching resource config:`, error)
     return null
   }
 }
@@ -309,7 +310,7 @@ export async function batchGetResourceConfigs(
     }
   }
   
-  console.log(`[Config] Batch get: ${successful.length} cached, ${uncachedIdentifiers.length} to fetch`)
+  logger.info(`[Config] Batch get: ${successful.length} cached, ${uncachedIdentifiers.length} to fetch`)
   
   // Batch fetch uncached resources (max 100 per request)
   const chunks = chunkArray(uncachedIdentifiers, 100)
@@ -386,7 +387,7 @@ export async function queryResources(
   if (!nextToken) {
     const cached = await cache.get<{ results: any[]; nextToken?: string }>(cacheKey)
     if (cached) {
-      console.log(`[Config] Cache hit for query: ${query.substring(0, 50)}...`)
+      logger.info(`[Config] Cache hit for query: ${query.substring(0, 50)}...`)
       return cached
     }
   }
@@ -681,5 +682,5 @@ export async function clearConfigCache(pattern?: string): Promise<void> {
   const cache = getCacheManager()
   const prefix = pattern || 'config:'
   await cache.clearPattern(prefix)
-  console.log(`[Config] Cleared cache with pattern: ${prefix}`)
+  logger.info(`[Config] Cleared cache with pattern: ${prefix}`)
 }

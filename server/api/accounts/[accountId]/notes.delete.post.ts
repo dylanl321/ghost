@@ -7,6 +7,7 @@ import { sendSuccess, errors } from '../../../utils/api-response'
 import { isUserAdmin } from '../../../utils/user-roles'
 import { getUserSession } from '../../../utils/entra/session'
 import { deleteAccountNote } from '../../../lib/account-notes'
+import { logger } from '../../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -39,7 +40,7 @@ export default defineEventHandler(async (event) => {
       message: 'Note deleted successfully'
     })
   } catch (error: any) {
-    console.error('Error deleting account note:', error)
+    logger.error('Error deleting account note:', error)
 
     if (error.message === 'Note not found') {
       return errors.notFound(event, 'Note not found')

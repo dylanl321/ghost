@@ -5,6 +5,7 @@
 
 import { getReport, deleteReport } from '../../utils/scheduled-reports'
 import { isUserAdmin } from '../../utils/user-roles'
+import { logger } from '../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -55,7 +56,7 @@ export default defineEventHandler(async (event) => {
       message: 'Report deleted successfully'
     }
   } catch (error: any) {
-    console.error('Error deleting scheduled report:', error)
+    logger.error('Error deleting scheduled report:', error)
 
     if (error.statusCode) {
       throw error

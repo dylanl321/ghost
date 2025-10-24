@@ -5,6 +5,7 @@ import {
   CreateLogStreamCommand, 
   FilterLogEventsCommand
 } from "@aws-sdk/client-cloudwatch-logs";
+import { logger } from './logger'
 
 const config = useRuntimeConfig();
 
@@ -64,13 +65,13 @@ async function setupLogging(): Promise<void> {
       );
     } catch (error: any) {
       if (error.name !== "ResourceAlreadyExistsException") {
-        console.error("Error creating log stream:", error);
+        logger.error("Error creating log stream:", error);
       }
     }
 
     isLoggingSetup = true;
   } catch (error) {
-    console.error("Error setting up logging:", error);
+    logger.error("Error setting up logging:", error);
     throw error;
   }
 }
@@ -92,23 +93,23 @@ export async function logMessage(message: string): Promise<void> {
 
     try {
       await sendLog();
-      console.log("Log sent successfully");
+      logger.info("Log sent successfully");
     } catch (error: any) {
       if (
         error.name === "ExpiredTokenException" ||
         error.message?.includes("security token included in the request is expired")
       ) {
-        console.warn("Security token expired. Refreshing...");
+        logger.warn("Security token expired. Refreshing...");
         isLoggingSetup = false;
         await withTimeout(setupLogging(), 8_000);
         await sendLog();
-        console.log("Log sent successfully after token refresh");
+        logger.debug("Log sent successfully after token refresh");
       } else {
-        console.error("Error sending log:", error);
+        logger.error("Error sending log:", error);
       }
     }
   } catch (error) {
-    console.error("Failed to log message:", error);
+    logger.error("Failed to log message:", error);
   }
 }
 
@@ -137,7 +138,7 @@ export async function getLogs(durationSeconds: number): Promise<FilteredLogEvent
       (a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0)
     );
   } catch (error) {
-    console.error("Error fetching logs:", error);
+    logger.error("Error fetching logs:", error);
     return [];
   }
 }

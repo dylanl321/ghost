@@ -7,6 +7,7 @@
 import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { getS3Client } from '../lib/aws-client-factory'
+import { logger } from './logger'
 
 /**
  * Upload options for S3
@@ -103,7 +104,7 @@ export async function uploadToS3(options: UploadOptions): Promise<S3UploadResult
     const bucket = getBucketName()
     const region = getRegion()
 
-    console.log(`Uploading to S3: s3://${bucket}/${options.key}`)
+    logger.info(`Uploading to S3: s3://${bucket}/${options.key}`)
 
     // Get S3 client for GovCloud with role assumption to deployment account
     const s3Client = await getS3Client('govcloud', region, deploymentAccountId)
@@ -119,7 +120,7 @@ export async function uploadToS3(options: UploadOptions): Promise<S3UploadResult
 
     const response = await s3Client.send(command)
 
-    console.log(`Successfully uploaded to S3: ${options.key}`)
+    logger.info(`Successfully uploaded to S3: ${options.key}`)
 
     return {
       success: true,
@@ -129,7 +130,7 @@ export async function uploadToS3(options: UploadOptions): Promise<S3UploadResult
       etag: response.ETag
     }
   } catch (error: any) {
-    console.error('S3 upload error:', error)
+    logger.error('S3 upload error:', error)
     return {
       success: false,
       key: options.key,
@@ -149,7 +150,7 @@ export async function getPresignedDownloadUrl(options: PresignedUrlOptions): Pro
     const region = getRegion()
     const expiresIn = options.expiresInSeconds || getDefaultPresignedExpiration()
 
-    console.log(`Generating presigned URL for: s3://${bucket}/${options.key}`)
+    logger.info(`Generating presigned URL for: s3://${bucket}/${options.key}`)
 
     // Get S3 client for GovCloud with role assumption to deployment account
     const s3Client = await getS3Client('govcloud', region, deploymentAccountId)
@@ -161,11 +162,11 @@ export async function getPresignedDownloadUrl(options: PresignedUrlOptions): Pro
 
     const url = await getSignedUrl(s3Client, command, { expiresIn })
 
-    console.log(`Generated presigned URL (expires in ${expiresIn}s)`)
+    logger.info(`Generated presigned URL (expires in ${expiresIn}s)`)
 
     return url
   } catch (error: any) {
-    console.error('Error generating presigned URL:', error)
+    logger.error('Error generating presigned URL:', error)
     throw new Error(`Failed to generate presigned URL: ${error.message}`)
   }
 }
@@ -178,7 +179,7 @@ export async function deleteFromS3(key: string): Promise<{ success: boolean; err
     const bucket = getBucketName()
     const region = getRegion()
 
-    console.log(`Deleting from S3: s3://${bucket}/${key}`)
+    logger.info(`Deleting from S3: s3://${bucket}/${key}`)
 
     // Get S3 client for GovCloud with role assumption to deployment account
     const s3Client = await getS3Client('govcloud', region, deploymentAccountId)
@@ -190,11 +191,11 @@ export async function deleteFromS3(key: string): Promise<{ success: boolean; err
 
     await s3Client.send(command)
 
-    console.log(`Successfully deleted from S3: ${key}`)
+    logger.info(`Successfully deleted from S3: ${key}`)
 
     return { success: true }
   } catch (error: any) {
-    console.error('S3 delete error:', error)
+    logger.error('S3 delete error:', error)
     return {
       success: false,
       error: error.message || 'Unknown S3 delete error'
@@ -229,7 +230,7 @@ export async function getObjectMetadata(key: string): Promise<S3ObjectMetadata |
       metadata: response.Metadata
     }
   } catch (error: any) {
-    console.error('Error getting S3 object metadata:', error)
+    logger.error('Error getting S3 object metadata:', error)
     return null
   }
 }
@@ -269,7 +270,7 @@ export async function listObjectsByPrefix(
       nextToken: response.NextContinuationToken
     }
   } catch (error: any) {
-    console.error('Error listing S3 objects:', error)
+    logger.error('Error listing S3 objects:', error)
     return { objects: [] }
   }
 }

@@ -23,6 +23,7 @@
 import { defineEventHandler, getQuery } from 'h3'
 import { sendSuccess, sendApiError, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/organization/overview', 'GET', {
@@ -628,7 +629,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     })
     
   } catch (error: any) {
-    console.error('Organization overview generation failed:', error)
+    logger.error('Organization overview generation failed:', error)
     return errors.serverError(event, `Failed to generate overview: ${error.message}`)
   }
 }))
@@ -648,7 +649,7 @@ async function generateOrganizationOverview(options: {
   const { organizationCache, accountCache, costCache, CacheKeys, CacheTags } = await import('../../utils/cache-manager')
   const { getAllAccountsUnified } = await import('../../utils/accounts-consolidated')
   
-  console.log(`[${options.requestId}] Starting organization overview generation...`)
+  logger.info(`[${options.requestId}] Starting organization overview generation...`)
   
   // Generate cache key for this specific request
   const cacheKey = CacheKeys.organizationOverview({
@@ -661,7 +662,7 @@ async function generateOrganizationOverview(options: {
   // Try to get from cache first
   const cachedResult = await organizationCache.get(cacheKey)
   if (cachedResult) {
-    console.log(`[${options.requestId}] Returning cached result`)
+    logger.info(`[${options.requestId}] Returning cached result`)
     return cachedResult
   }
   
@@ -674,7 +675,7 @@ async function generateOrganizationOverview(options: {
   const accounts = await accountCache.getOrSet(
     accountCacheKey,
     async () => {
-      console.log(`[${options.requestId}] Fetching accounts from database...`)
+      logger.info(`[${options.requestId}] Fetching accounts from database...`)
       const allAccounts = await getAllAccountsUnified(false)
       
       // Filter by LOB if specified
@@ -693,7 +694,7 @@ async function generateOrganizationOverview(options: {
     }
   )
   
-  console.log(`[${options.requestId}] Found ${accounts.length} accounts`)
+  logger.debug(`[${options.requestId}] Found ${accounts.length} accounts`)
   
   // Step 2: Generate account statistics
   const accountStats = generateAccountStatistics(accounts, options.lob)
@@ -713,8 +714,8 @@ async function generateOrganizationOverview(options: {
   // Use AWS-specific date conversion for Cost Explorer (exclusive end date)
   const { startDate: analysisStartDate, endDate: analysisEndDate } = dateRangeToISOForAWS(analysisRange)
   
-  console.log(`[${options.requestId}] Time series period: ${timeSeriesStartDate.toISOString()} to ${timeSeriesEndDate.toISOString()}`)
-  console.log(`[${options.requestId}] Budget analysis period: ${analysisStartDate} to ${analysisEndDate} (${analysisRange.label})`)
+  logger.info(`[${options.requestId}] Time series period: ${timeSeriesStartDate.toISOString()} to ${timeSeriesEndDate.toISOString()}`)
+  logger.info(`[${options.requestId}] Budget analysis period: ${analysisStartDate} to ${analysisEndDate} (${analysisRange.label})`)
   
   const costCacheKey = CacheKeys.costAnalysis({
     startDate: timeSeriesStartDate.toISOString().split('T')[0],
@@ -727,7 +728,7 @@ async function generateOrganizationOverview(options: {
   const costData = await costCache.getOrSet(
     costCacheKey,
     async () => {
-      console.log(`[${options.requestId}] Fetching cost data...`)
+      logger.info(`[${options.requestId}] Fetching cost data...`)
       return await fetchRealCostData(
         accounts, 
         timeSeriesStartDate, 
@@ -752,7 +753,7 @@ async function generateOrganizationOverview(options: {
   // Step 6: Generate AI analysis if requested
   let aiAnalysis = null
   if (options.includeAiAnalysis) {
-    console.log(`[${options.requestId}] Generating AI analysis using ${options.aiModel}...`)
+    logger.info(`[${options.requestId}] Generating AI analysis using ${options.aiModel}...`)
     
     try {
       // Import AI utilities
@@ -826,7 +827,7 @@ async function generateOrganizationOverview(options: {
         try {
           parsedInsights = JSON.parse(costAnalysisResult.content)
         } catch (e) {
-          console.warn(`[${options.requestId}] Failed to parse AI insights as JSON, keeping as text`)
+          logger.warn(`[${options.requestId}] Failed to parse AI insights as JSON, keeping as text`)
           parsedInsights = { raw_analysis: costAnalysisResult.content }
         }
       }
@@ -835,7 +836,7 @@ async function generateOrganizationOverview(options: {
         try {
           parsedRecommendations = JSON.parse(budgetRecommendationsResult.content)
         } catch (e) {
-          console.warn(`[${options.requestId}] Failed to parse AI recommendations as JSON, keeping as text`)
+          logger.warn(`[${options.requestId}] Failed to parse AI recommendations as JSON, keeping as text`)
           parsedRecommendations = { raw_recommendations: budgetRecommendationsResult.content }
         }
       }
@@ -854,10 +855,10 @@ async function generateOrganizationOverview(options: {
         generatedAt: new Date().toISOString()
       }
       
-      console.log(`[${options.requestId}] AI analysis completed. Insights: ${aiAnalysis.insights ? 'Generated' : 'Failed'}, Recommendations: ${aiAnalysis.recommendations ? 'Generated' : 'Failed'}`)
+      logger.error(`[${options.requestId}] AI analysis completed. Insights: ${aiAnalysis.insights ? 'Generated' : 'Failed'}, Recommendations: ${aiAnalysis.recommendations ? 'Generated' : 'Failed'}`)
       
     } catch (error: any) {
-      console.error(`[${options.requestId}] AI analysis failed:`, error)
+      logger.error(`[${options.requestId}] AI analysis failed:`, error)
       
       // Provide detailed error information for AI analysis failures
       let errorMessage = 'AI analysis failed'
@@ -940,7 +941,7 @@ async function generateOrganizationOverview(options: {
     }
   })
   
-  console.log(`[${options.requestId}] Overview generation completed`)
+  logger.info(`[${options.requestId}] Overview generation completed`)
   
   return overview
 }
@@ -1018,13 +1019,13 @@ async function fetchRealCostData(
     
     const govcloudAccountsWithCommercial = accounts.filter(a => a.govCloudAccountId)
     
-    console.log(`[${requestId}] Found ${accounts.length} total accounts:`)
-    console.log(`[${requestId}]   - ${accounts.filter(a => a.accountId && !a.govCloudAccountId).length} commercial-only accounts`)
-    console.log(`[${requestId}]   - ${govcloudAccountsWithCommercial.length} accounts with GovCloud components`)
-    console.log(`[${requestId}] Fetching costs for ${allCommercialAccountIds.size} unique commercial account IDs (Cost Explorer supported)`)
-    console.log(`[${requestId}] Using ${dataType} data from account: ${effectiveAccountId || 'default (master account)'}`)
-    console.log(`[${requestId}] Time series period: ${timeSeriesStartDate.toISOString().split('T')[0]} to ${timeSeriesEndDate.toISOString().split('T')[0]}`)
-    console.log(`[${requestId}] Budget analysis period: ${analysisRange.startDate.toISOString().split('T')[0]} to ${analysisRange.endDate.toISOString().split('T')[0]} (${analysisRange.label})`)
+    logger.debug(`[${requestId}] Found ${accounts.length} total accounts:`)
+    logger.info(`[${requestId}]   - ${accounts.filter(a => a.accountId && !a.govCloudAccountId).length} commercial-only accounts`)
+    logger.info(`[${requestId}]   - ${govcloudAccountsWithCommercial.length} accounts with GovCloud components`)
+    logger.info(`[${requestId}] Fetching costs for ${allCommercialAccountIds.size} unique commercial account IDs (Cost Explorer supported)`)
+    logger.info(`[${requestId}] Using ${dataType} data from account: ${effectiveAccountId || 'default (master account)'}`)
+    logger.info(`[${requestId}] Time series period: ${timeSeriesStartDate.toISOString().split('T')[0]} to ${timeSeriesEndDate.toISOString().split('T')[0]}`)
+    logger.info(`[${requestId}] Budget analysis period: ${analysisRange.startDate.toISOString().split('T')[0]} to ${analysisRange.endDate.toISOString().split('T')[0]} (${analysisRange.label})`)
     
     const commercialAccountIds = Array.from(allCommercialAccountIds)
     
@@ -1043,7 +1044,7 @@ async function fetchRealCostData(
               metrics: ['UnblendedCost', 'BlendedCost'],
               groupBy: [{ type: 'DIMENSION', key: 'LINKED_ACCOUNT' }]
             }, 'commercial').catch(error => {
-              console.warn('Failed to fetch billable costs:', error)
+              logger.warn('Failed to fetch billable costs:', error)
               return null
             })
           : null,
@@ -1056,7 +1057,7 @@ async function fetchRealCostData(
               metrics: ['UnblendedCost', 'BlendedCost'],
               groupBy: [{ type: 'DIMENSION', key: 'LINKED_ACCOUNT' }]
             }, 'commercial', proformaAccountId).catch(error => {
-              console.warn('Failed to fetch proforma costs:', error)
+              logger.warn('Failed to fetch proforma costs:', error)
               return null
             })
           : null
@@ -1074,7 +1075,7 @@ async function fetchRealCostData(
             metrics: ['UnblendedCost', 'BlendedCost'],
             groupBy: [{ type: 'DIMENSION', key: 'LINKED_ACCOUNT' }]
           }, 'commercial', effectiveAccountId).catch(error => {
-            console.warn(`Failed to fetch ${dataType} costs:`, error)
+            logger.warn(`Failed to fetch ${dataType} costs:`, error)
             return null
           })
         : null
@@ -1088,7 +1089,7 @@ async function fetchRealCostData(
           'DAILY',
           'commercial'
         ).catch(error => {
-          console.warn('Failed to fetch service costs:', error)
+          logger.warn('Failed to fetch service costs:', error)
           return { resultsByTime: [], dimensionValueAttributes: [], total: {} }
         })
       : { resultsByTime: [], dimensionValueAttributes: [], total: {} }
@@ -1161,7 +1162,7 @@ async function fetchRealCostData(
     }
     
   } catch (error) {
-    console.error('Error fetching real cost data:', error)
+    logger.error('Error fetching real cost data:', error)
     throw error // Propagate the error instead of returning fake data
   }
 }
@@ -1169,17 +1170,17 @@ async function fetchRealCostData(
 
 // Generate comprehensive per-LOB analysis with intelligent insights
 async function generatePerLOBAnalysis(accounts: any[], costData: any, options: any) {
-  console.log('Generating per-LOB analysis...')
+  logger.info('Generating per-LOB analysis...')
   
   // Use the all account costs from the cost data
   const allAccountCosts = costData.allAccountCosts
   if (!allAccountCosts) {
-    console.error('allAccountCosts not available in costData')
+    logger.error('allAccountCosts not available in costData')
     return null
   }
   
-  console.log(`LOB Analysis: Using cost data for ${allAccountCosts.size} accounts from Cost Explorer`)
-  console.log(`Original accounts from DynamoDB: ${accounts.length}`)
+  logger.info(`LOB Analysis: Using cost data for ${allAccountCosts.size} accounts from Cost Explorer`)
+  logger.info(`Original accounts from DynamoDB: ${accounts.length}`)
   
   // ONLY include accounts that have actual costs in Cost Explorer
   const accountsWithCosts = accounts.filter(account => {
@@ -1188,7 +1189,7 @@ async function generatePerLOBAnalysis(accounts: any[], costData: any, options: a
     return hasCost
   })
   
-  console.log(`Filtered to accounts with costs: ${accountsWithCosts.length}`)
+  logger.info(`Filtered to accounts with costs: ${accountsWithCosts.length}`)
   
   // Group accounts by LOB (only accounts with costs)
   const lobGroups = new Map<string, any[]>()
@@ -1221,7 +1222,7 @@ async function generatePerLOBAnalysis(accounts: any[], costData: any, options: a
       lobCosts += accountCost
     }
     
-    console.log(`[LOB: ${lobName}] ${lobAccounts.length} accounts, ${matchedAccounts} matched with cost data, total cost: $${lobCosts.toFixed(2)}`)
+    logger.info(`[LOB: ${lobName}] ${lobAccounts.length} accounts, ${matchedAccounts} matched with cost data, total cost: $${lobCosts.toFixed(2)}`)
     
     // Intelligent budget estimation based on multiple factors
     const estimatedBudget = calculateIntelligentBudget(lobAccounts, lobCosts, lobName)
@@ -1872,7 +1873,7 @@ function calculateBudgetAnalysisCost(
   const totalCost = filteredCosts.reduce((sum, day) => sum + (day.cost || 0), 0)
   
   // Debug logging
-  console.log(`Budget analysis cost calculation:
+  logger.info(`Budget analysis cost calculation:
     Time series has ${timeSeries.length} days total
     Analysis period: ${analysisRange.label} (${analysisStartDate.toISOString().split('T')[0]} to ${analysisEndDate.toISOString().split('T')[0]})
     Filtered to ${filteredCosts.length} days within analysis period
@@ -1881,8 +1882,8 @@ function calculateBudgetAnalysisCost(
   if (filteredCosts.length > 0) {
     const firstDay = filteredCosts[0]
     const lastDay = filteredCosts[filteredCosts.length - 1]
-    console.log(`    First day: ${firstDay.date} = $${firstDay.cost?.toFixed(2) || '0'}`)
-    console.log(`    Last day: ${lastDay.date} = $${lastDay.cost?.toFixed(2) || '0'}`)
+    logger.info(`    First day: ${firstDay.date} = $${firstDay.cost?.toFixed(2) || '0'}`)
+    logger.info(`    Last day: ${lastDay.date} = $${lastDay.cost?.toFixed(2) || '0'}`)
   }
   
   return totalCost
@@ -1950,7 +1951,7 @@ function generateCalendarBasedBudgetAnalysis(analysisCost: number, accounts: any
   if (projectedUtilization > 100) riskLevel = 'high'
   else if (projectedUtilization > 85) riskLevel = 'medium'
   
-  console.log(`Budget Analysis Debug:
+  logger.debug(`Budget Analysis Debug:
     Period: ${analysisRange.label}
     Period complete: ${analysisRange.isComplete}
     Days in period: ${totalDaysInPeriod}
@@ -1988,7 +1989,7 @@ function calculatePeriodBudget(accounts: any[], analysisRange: any): number {
     a.enclaveStatus !== 'DECOMMISSIONED'
   )
   
-  console.log(`Budget calculation: ${accounts.length} total accounts, ${activeAccounts.length} active (excluding decommissioned)`)
+  logger.info(`Budget calculation: ${accounts.length} total accounts, ${activeAccounts.length} active (excluding decommissioned)`)
   
   // Sum up the monthly budget from estimatedMonthlyCharge field
   let accountsWithBudget = 0
@@ -2016,19 +2017,19 @@ function calculatePeriodBudget(accounts: any[], analysisRange: any): number {
   
   // Log top budget accounts for debugging
   const topBudgets = accountBudgets.sort((a, b) => b.amount - a.amount).slice(0, 5)
-  console.log(`Top 5 account budgets:`)
+  logger.info(`Top 5 account budgets:`)
   topBudgets.forEach(item => {
-    console.log(`  ${item.name}: $${item.amount.toFixed(2)}/month`)
+    logger.info(`  ${item.name}: $${item.amount.toFixed(2)}/month`)
   })
   
-  console.log(`Budget totals: ${accountsWithBudget} accounts with budgets, ${skippedAccounts} without, total monthly budget: $${monthlyBudget.toFixed(2)}`)
+  logger.info(`Budget totals: ${accountsWithBudget} accounts with budgets, ${skippedAccounts} without, total monthly budget: $${monthlyBudget.toFixed(2)}`)
   
   // Validate the budget is reasonable
   if (monthlyBudget === 0) {
-    console.warn('WARNING: No budget data found in estimatedMonthlyCharge fields')
+    logger.warn('WARNING: No budget data found in estimatedMonthlyCharge fields')
     // Use a fallback estimate based on active accounts
     const fallbackMonthlyBudget = activeAccounts.length * 2000 // $2k/month per account as fallback
-    console.log(`Using fallback budget: $${fallbackMonthlyBudget.toFixed(2)}/month`)
+    logger.info(`Using fallback budget: $${fallbackMonthlyBudget.toFixed(2)}/month`)
     return fallbackMonthlyBudget * (analysisRange.daysInPeriod / 30)
   }
   
@@ -2044,7 +2045,7 @@ function calculatePeriodBudget(accounts: any[], analysisRange: any): number {
   
   const scaledBudget = monthlyBudget * (actualDaysInPeriod / daysInCurrentMonth)
   
-  console.log(`Scaled budget from monthly $${monthlyBudget.toFixed(2)} to ${actualDaysInPeriod}-day period: $${scaledBudget.toFixed(2)}`)
+  logger.info(`Scaled budget from monthly $${monthlyBudget.toFixed(2)} to ${actualDaysInPeriod}-day period: $${scaledBudget.toFixed(2)}`)
   
   return scaledBudget
 }
@@ -2146,7 +2147,7 @@ function generateAllAccountCostsFromCostData(commercialCosts: any, govcloudCosts
     })
   }
   
-  console.log(`Generated costs for ${accountCosts.size} accounts, total: $${Array.from(accountCosts.values()).reduce((sum, cost) => sum + cost, 0).toFixed(2)}`)
+  logger.info(`Generated costs for ${accountCosts.size} accounts, total: $${Array.from(accountCosts.values()).reduce((sum, cost) => sum + cost, 0).toFixed(2)}`)
   
   return accountCosts
 }
@@ -2238,7 +2239,7 @@ async function getPreviousPeriodCost(accountIds: string[], startDate: Date, endD
       return parseFloat(result.total.BlendedCost.Amount)
     }
   } catch (error) {
-    console.warn('Failed to get previous period cost:', error)
+    logger.warn('Failed to get previous period cost:', error)
   }
   
   return 0
@@ -2295,7 +2296,7 @@ function mergeBillableAndProformaAccounts(billableAccounts: any[], proformaAccou
 
 // Async processing function (TODO: Implement with proper job queue)
 async function processOverviewAsync(requestId: string, options: any) {
-  console.log(`[${requestId}] Starting async processing with calendar-based budget analysis...`)
+  logger.info(`[${requestId}] Starting async processing with calendar-based budget analysis...`)
   
   // In a real implementation, this would use a job queue like Bull or Agenda
   setTimeout(async () => {
@@ -2306,9 +2307,9 @@ async function processOverviewAsync(requestId: string, options: any) {
         analysisTimeframe: options.analysisTimeframe || 'current-month'
       })
       // Store result in cache/database for retrieval
-      console.log(`[${requestId}] Async processing completed`)
+      logger.info(`[${requestId}] Async processing completed`)
     } catch (error) {
-      console.error(`[${requestId}] Async processing failed:`, error)
+      logger.error(`[${requestId}] Async processing failed:`, error)
     }
   }, 100)
 }

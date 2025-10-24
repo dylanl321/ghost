@@ -7,6 +7,7 @@ import { defineEventHandler, readBody } from 'h3'
 import { deleteItem } from '../../utils/dynamodb'
 import { sendSuccess, parseQueryParams, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/forecast/delete', 'DELETE', {
@@ -110,7 +111,7 @@ export default defineEventHandler(handleAsync(async (event) => {
           errors.push(`Item with ID ${id} not found`)
         }
       } catch (err: any) {
-        console.error(`Error deleting item ${id}:`, err)
+        logger.error(`Error deleting item ${id}:`, err)
         errors.push(`Failed to delete item ${id}: ${err.message}`)
       }
     }
@@ -129,7 +130,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     })
 
   } catch (err: any) {
-    console.error('Forecast delete error:', err)
+    logger.error('Forecast delete error:', err)
     return errors.serverError(event, `Failed to delete forecast data: ${err.message}`)
   }
 }))

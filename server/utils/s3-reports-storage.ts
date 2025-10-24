@@ -5,6 +5,7 @@
 
 import { uploadToS3, getPresignedDownloadUrl, deleteFromS3, listObjectsByPrefix, type S3UploadResult } from './s3-storage'
 import type { ReportConfig } from '~/shared/types/scheduled-reports'
+import { logger } from './logger'
 
 /**
  * Report type for S3 storage
@@ -121,7 +122,7 @@ export async function uploadReportToS3(
     // Return without presigned URL
     return uploadResult
   } catch (error: any) {
-    console.error('Error uploading report to S3:', error)
+    logger.error('Error uploading report to S3:', error)
     return {
       success: false,
       key: '',

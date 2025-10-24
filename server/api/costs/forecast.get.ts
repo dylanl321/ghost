@@ -21,6 +21,7 @@ import { defineEventHandler, getQuery } from 'h3'
 import { getCostForecast, getProformaForecast } from '../../utils/cost-explorer'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/costs/forecast', 'GET', {
@@ -199,7 +200,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   
   let filter: any = undefined
   if (accountIds.length > 0) {
-    console.log(`[Forecast API] Filtering forecast for ${accountIds.length} accounts:`, accountIds)
+    logger.info(`[Forecast API] Filtering forecast for ${accountIds.length} accounts:`, accountIds)
     // Create filter for specific accounts
     if (accountIds.length === 1) {
       filter = {
@@ -220,7 +221,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       }
     }
   } else {
-    console.log('[Forecast API] No account filter - returning org-wide forecast')
+    logger.info('[Forecast API] No account filter - returning org-wide forecast')
   }
   
   // ================================
@@ -275,7 +276,7 @@ export default defineEventHandler(handleAsync(async (event) => {
         const monthsUntilDecember = 12 - currentMonth
         monthsToAdd = Math.max(1, monthsUntilDecember) // At least 1 month
 
-        console.log('[Forecast API] rest-of-year calculation:', {
+        logger.info('[Forecast API] rest-of-year calculation:', {
           currentMonth,
           monthsUntilDecember,
           monthsToAdd,
@@ -286,7 +287,7 @@ export default defineEventHandler(handleAsync(async (event) => {
         endDate = new Date(today.getFullYear(), 11, 31) // Dec 31 of current year
         endDate.setDate(endDate.getDate() + 1) // Make it Jan 1 next year for exclusive end
 
-        console.log('[Forecast API] rest-of-year date range:', {
+        logger.info('[Forecast API] rest-of-year date range:', {
           startDate: startDate.toISOString(),
           endDate: endDate.toISOString()
         })
@@ -387,17 +388,17 @@ export default defineEventHandler(handleAsync(async (event) => {
     }
 
     // Log forecast details for debugging
-    console.log('[Forecast API] Forecast total:', forecast?.total?.Amount || 'No total',
+    logger.info('[Forecast API] Forecast total:', forecast?.total?.Amount || 'No total',
                 'for accounts:', accountIds.length > 0 ? accountIds : 'All')
 
     // Log forecast periods (especially for rest-of-year to check December)
     if (period === 'rest-of-year' && forecast?.forecastResultsByTime) {
-      console.log('[Forecast API] rest-of-year returned', forecast.forecastResultsByTime.length, 'periods:')
+      logger.info('[Forecast API] rest-of-year returned', forecast.forecastResultsByTime.length, 'periods:')
       forecast.forecastResultsByTime.forEach((period: any, idx: number) => {
         const start = period?.TimePeriod?.Start
         const end = period?.TimePeriod?.End
         const mean = period?.MeanValue
-        console.log(`  Period ${idx + 1}: ${start} to ${end}, Mean: $${mean}`)
+        logger.info(`  Period ${idx + 1}: ${start} to ${end}, Mean: $${mean}`)
       })
     }
     

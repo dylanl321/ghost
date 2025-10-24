@@ -5,6 +5,7 @@
 
 import { defineEventHandler } from 'h3'
 import { getUserSession } from '../../utils/entra/session'
+import { logger } from '../../utils/logger'
 
 // Decode JWT token to extract claims (without verification for debugging)
 function decodeJWT(token: string) {
@@ -18,18 +19,18 @@ function decodeJWT(token: string) {
     const payload = Buffer.from(parts[1], 'base64').toString('utf-8')
     return JSON.parse(payload)
   } catch (error) {
-    console.error('Failed to decode JWT:', error)
+    logger.error('Failed to decode JWT:', error)
     return null
   }
 }
 
 export default defineEventHandler(async (event) => {
   try {
-    console.log('Debug token endpoint called')
+    logger.debug('Debug token endpoint called')
     
     const session = await getUserSession(event)
     
-    console.log('Session debug info:', {
+    logger.debug('Session debug info:', {
       hasSession: !!session,
       hasAccessToken: !!session?.accessToken,
       tokenLength: session?.accessToken?.length,
@@ -83,7 +84,7 @@ export default defineEventHandler(async (event) => {
       }
     }
   } catch (error: any) {
-    console.error('Debug token error:', error)
+    logger.error('Debug token error:', error)
     
     return {
       success: false,

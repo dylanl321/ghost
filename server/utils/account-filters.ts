@@ -8,6 +8,7 @@ import type { UnifiedAccount } from '../schemas/account-schema'
 import type { LOBSummary, DepartmentSummary } from '#shared/types/accounts'
 import { getLOBFullName } from './lob-mapping'
 import { findAccountByIdentifierOptimized } from './account-lookup-optimized'
+import { logger } from './logger'
 
 /**
  * Get nested value from object using dot notation
@@ -329,7 +330,7 @@ export function parseAccountFilters(query: Record<string, any>): AccountFilterCr
       }
     } catch (error) {
       // If JSON parsing fails, ignore and fall back to individual parameters
-      console.warn('Failed to parse filters JSON:', error)
+      logger.warn('Failed to parse filters JSON:', error)
     }
   } else if (query.key) {
     // Handle individual key/value/operator parameters

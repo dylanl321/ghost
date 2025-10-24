@@ -4,6 +4,7 @@
  */
 
 import { listUserReports } from '../../utils/scheduled-reports'
+import { logger } from '../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -42,7 +43,7 @@ export default defineEventHandler(async (event) => {
       }
     }
   } catch (error: any) {
-    console.error('Error listing scheduled reports:', error)
+    logger.error('Error listing scheduled reports:', error)
 
     if (error.statusCode) {
       throw error

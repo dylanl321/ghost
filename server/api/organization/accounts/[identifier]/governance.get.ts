@@ -28,6 +28,7 @@ import {
 import { lookupAccountOptimized } from '../../../../utils/account-lookup-optimized'
 import { sendSuccess, errors, handleAsync } from '../../../../utils/api-response'
 import { registerEndpoint } from '../../../../plugins/swagger'
+import { logger } from '../../../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/organization/accounts/[identifier]/governance', 'GET', {
@@ -312,7 +313,7 @@ export default defineEventHandler(handleAsync(async (event) => {
           })
         }
       } catch (error) {
-        console.warn(`Failed to get account policies for ${accountId} in ${environment}:`, error)
+        logger.warn(`Failed to get account policies for ${accountId} in ${environment}:`, error)
       }
       
       // Get inherited policies from each OU in hierarchy
@@ -330,7 +331,7 @@ export default defineEventHandler(handleAsync(async (event) => {
             })
           }
         } catch (error) {
-          console.warn(`Failed to get OU policies for ${ou.id} in ${environment}:`, error)
+          logger.warn(`Failed to get OU policies for ${ou.id} in ${environment}:`, error)
         }
       }
       
@@ -354,7 +355,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       }
       
     } catch (error) {
-      console.error(`Error analyzing governance for ${accountId} in ${environment}:`, error)
+      logger.error(`Error analyzing governance for ${accountId} in ${environment}:`, error)
       
       // Return partial data even if there's an error
       organizationalContext[environment] = {

@@ -11,6 +11,7 @@ import { summarizeGroupsByRole } from '../../../utils/entra/aws-group-matcher'
 import { validateEntraConfig } from '../../../utils/entra/config'
 import { registerEndpoint } from '../../../plugins/swagger'
 import type { EntraAPIResponse } from '../../../types/entra'
+import { logger } from '../../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/entra/groups/aws-auth', 'GET', {
@@ -119,7 +120,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<AWSAut
     const role = query.role as string | undefined
     const searchTerm = query.search as string | undefined
     
-    console.log('Fetching all AWS authentication groups')
+    logger.debug('Fetching all AWS authentication groups')
     
     // Get all AWS groups
     const allGroups = await getAWSGroups(event, {
@@ -210,7 +211,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<AWSAut
       cached: false
     }
   } catch (error: any) {
-    console.error('Error fetching AWS auth groups:', error)
+    logger.error('Error fetching AWS auth groups:', error)
     
     // Re-throw H3 errors
     if (error.statusCode) {

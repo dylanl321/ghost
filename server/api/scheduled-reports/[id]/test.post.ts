@@ -6,6 +6,7 @@
 import { getReport } from '../../../utils/scheduled-reports'
 import { executeScheduledReport } from '../../../utils/report-scheduler'
 import { isUserAdmin } from '../../../utils/user-roles'
+import { logger } from '../../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -55,7 +56,7 @@ export default defineEventHandler(async (event) => {
     }
 
     // Execute the report immediately
-    console.log(`Sending test report: ${report.reportName}`)
+    logger.info(`Sending test report: ${report.reportName}`)
     const result = await executeScheduledReport(testReport)
 
     if (!result.success) {
@@ -71,7 +72,7 @@ export default defineEventHandler(async (event) => {
       duration: result.duration
     }
   } catch (error: any) {
-    console.error('Error sending test report:', error)
+    logger.error('Error sending test report:', error)
 
     if (error.statusCode) {
       throw error

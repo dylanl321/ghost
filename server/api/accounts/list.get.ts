@@ -20,6 +20,7 @@ import {
 } from '../../utils/account-filters'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/accounts/list', 'GET', {
@@ -294,7 +295,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     
     return sendSuccess(event, accounts, metadata)
   } catch (error) {
-    console.error('Error listing accounts:', error)
+    logger.error('Error listing accounts:', error)
     return errors.serverError(event, 'Failed to retrieve accounts')
   }
 }))

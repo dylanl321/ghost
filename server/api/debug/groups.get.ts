@@ -5,13 +5,14 @@
 
 import { defineEventHandler, getQuery } from 'h3'
 import { getAllPages, graphRequest } from '../../utils/entra/graph-client'
+import { logger } from '../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
     const query = getQuery(event)
     const searchTerm = (query.search as string) || 'AWS'
     
-    console.log(`Debugging groups with search term: ${searchTerm}`)
+    logger.debug(`Debugging groups with search term: ${searchTerm}`)
     
     // Search for groups that contain the search term
     const filter = `startsWith(displayName, '${searchTerm}')`
@@ -60,7 +61,7 @@ export default defineEventHandler(async (event) => {
       }
     }
   } catch (error: any) {
-    console.error('Debug groups error:', error)
+    logger.error('Debug groups error:', error)
     
     return {
       success: false,

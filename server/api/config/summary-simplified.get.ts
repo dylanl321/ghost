@@ -3,6 +3,7 @@ import { registerEndpoint } from '../../plugins/swagger'
 import { organizationCache, CacheTags } from '../../utils/cache-manager'
 import getMasterAccountCredentials from '~~/server/utils/credentials/awsAccountCredentials';
 import { ConfigServiceClient, SelectAggregateResourceConfigCommand } from "@aws-sdk/client-config-service"
+import { logger } from '../../utils/logger'
 
 const region = 'us-gov-west-1'
 const config_aggregator_name = "GDMSAggregator"
@@ -180,7 +181,7 @@ async function getResourceCounts(accountId: string) {
           resourceCounts[resourceType][queryName] = 0
         }
       } catch (err) {
-        console.error(
+        logger.error(
           `[ResourceCounts] Failed query for ${resourceType}.${queryName}:`,
           err
         )
@@ -238,7 +239,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   const info = await organizationCache.getOrSet(
     cacheKey,
     async () => {
-      console.log(`Cache miss: Fetching organization overview...`)
+      logger.info(`Cache miss: Fetching organization overview...`)
       return await getResourceCounts(accountId)
     },
     {

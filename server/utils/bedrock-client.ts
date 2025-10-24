@@ -12,6 +12,7 @@
 import type { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime'
 import { InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime'
 import { getBedrockRuntimeClient } from '../lib/aws-client-factory'
+import { logger } from './logger'
 
 // Supported AI models with their configurations
 export type BedrockModel = 'nova-pro' | 'claude-sonnet'
@@ -105,7 +106,7 @@ async function getBedrockClient(): Promise<BedrockRuntimeClient> {
     ? process.env.AWS_COMMERCIAL_BEDROCK_ACCOUNT
     : process.env.AWS_GOVCLOUD_BEDROCK_ACCOUNT
   
-  console.log(`[Bedrock] Using environment: ${useEnvironment}, region: ${region}`)
+  logger.info(`[Bedrock] Using environment: ${useEnvironment}, region: ${region}`)
   
   return await getBedrockRuntimeClient(useEnvironment as any, region, accountId)
 }
@@ -239,7 +240,7 @@ async function tryInvokeWithFallbacks(
   
   for (const modelId of fallbackIds) {
     try {
-      console.log(`[Bedrock] Trying model ID: ${modelId}`)
+      logger.info(`[Bedrock] Trying model ID: ${modelId}`)
       
       const command = new InvokeModelCommand({
         modelId,
@@ -249,11 +250,11 @@ async function tryInvokeWithFallbacks(
       })
 
       const response = await client.send(command)
-      console.log(`[Bedrock] Successfully connected to model: ${modelId}`)
+      logger.info(`[Bedrock] Successfully connected to model: ${modelId}`)
       return { success: true, response, modelUsed: modelId }
       
     } catch (error: any) {
-      console.log(`[Bedrock] Model ${modelId} failed: ${error.name} - ${error.message}`)
+      logger.error(`[Bedrock] Model ${modelId} failed: ${error.name} - ${error.message}`)
       
       // If it's not a model-not-found error, return the error immediately
       if (error.name !== 'ValidationException' && 
@@ -284,14 +285,14 @@ export async function invokeBedrock(request: BedrockRequest): Promise<BedrockRes
   const startTime = Date.now()
   const model = request.model || 'claude-sonnet' // Default to Claude Sonnet
   
-  console.log('[Bedrock] invokeBedrock called with model:', model, 'type:', typeof model)
+  logger.info('[Bedrock] invokeBedrock called with model:', model, 'type:', typeof model)
   
   // Ensure model is a string and is valid
   const modelStr = String(model).trim()
   const config = MODEL_CONFIGS[modelStr as BedrockModel]
   
   if (!config) {
-    console.error('[Bedrock] Invalid model:', modelStr, 'Available:', Object.keys(MODEL_CONFIGS))
+    logger.error('[Bedrock] Invalid model:', modelStr, 'Available:', Object.keys(MODEL_CONFIGS))
     return {
       success: false,
       error: createError(
@@ -307,7 +308,7 @@ export async function invokeBedrock(request: BedrockRequest): Promise<BedrockRes
   }
 
   try {
-    console.log(`[Bedrock] Invoking ${config.modelId} with ${request.prompt.length} character prompt`)
+    logger.info(`[Bedrock] Invoking ${config.modelId} with ${request.prompt.length} character prompt`)
     
     // Get Bedrock client
     const client = await getBedrockClient()
@@ -341,7 +342,7 @@ export async function invokeBedrock(request: BedrockRequest): Promise<BedrockRes
     const response = result.response!
     const actualModelUsed = result.modelUsed!
     
-    console.log(`[Bedrock] Successfully using model: ${actualModelUsed}`)
+    logger.info(`[Bedrock] Successfully using model: ${actualModelUsed}`)
     
     if (!response.body) {
       return {
@@ -362,7 +363,7 @@ export async function invokeBedrock(request: BedrockRequest): Promise<BedrockRes
     const responseBody = JSON.parse(new TextDecoder().decode(response.body))
     const { content, inputTokens, outputTokens } = parseResponse(config, responseBody)
 
-    console.log(`[Bedrock] Success: ${content.length} characters generated, tokens: ${inputTokens}→${outputTokens}`)
+    logger.debug(`[Bedrock] Success: ${content.length} characters generated, tokens: ${inputTokens}→${outputTokens}`)
 
     return {
       success: true,
@@ -374,7 +375,7 @@ export async function invokeBedrock(request: BedrockRequest): Promise<BedrockRes
     }
 
   } catch (error: any) {
-    console.error('[Bedrock] Error:', error)
+    logger.error('[Bedrock] Error:', error)
     
     // Handle specific AWS Bedrock errors with detailed user guidance
     let bedrockError: BedrockError

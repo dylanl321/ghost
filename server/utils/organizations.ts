@@ -5,6 +5,7 @@
 
 import { getOrganizationsClient } from '../lib/aws-client-factory'
 import type { AWSEnvironmentType } from '../types/aws'
+import { logger } from './logger'
 
 export interface OrganizationalUnit {
   id: string
@@ -60,7 +61,7 @@ export async function getOrganizationInfo(
       availablePolicyTypes: response.Organization.AvailablePolicyTypes
     }
   } catch (error) {
-    console.error('Failed to get organization info:', error)
+    logger.error('Failed to get organization info:', error)
     return null
   }
 }
@@ -105,7 +106,7 @@ export async function listOrganizationalUnits(
     
     return ous
   } catch (error) {
-    console.error(`Failed to list OUs for parent ${parentId}:`, error)
+    logger.error(`Failed to list OUs for parent ${parentId}:`, error)
     return []
   }
 }
@@ -157,7 +158,7 @@ export async function getOrganizationalUnitTree(
     
     return await buildTree(root.Id!)
   } catch (error) {
-    console.error('Failed to get OU tree:', error)
+    logger.error('Failed to get OU tree:', error)
     return null
   }
 }
@@ -195,7 +196,7 @@ export async function listAccountsInOU(
     
     return accounts
   } catch (error) {
-    console.error(`Failed to list accounts in OU ${ouId}:`, error)
+    logger.error(`Failed to list accounts in OU ${ouId}:`, error)
     return []
   }
 }
@@ -239,7 +240,7 @@ export async function getAccountOU(
       name: ouResponse.OrganizationalUnit.Name!
     }
   } catch (error) {
-    console.error(`Failed to get OU for account ${accountId}:`, error)
+    logger.error(`Failed to get OU for account ${accountId}:`, error)
     return null
   }
 }
@@ -267,7 +268,7 @@ export async function moveAccount(
     
     return true
   } catch (error) {
-    console.error(`Failed to move account ${accountId}:`, error)
+    logger.error(`Failed to move account ${accountId}:`, error)
     return false
   }
 }
@@ -300,7 +301,7 @@ export async function createOrganizationalUnit(
       parentId: parentId
     }
   } catch (error) {
-    console.error(`Failed to create OU ${name}:`, error)
+    logger.error(`Failed to create OU ${name}:`, error)
     return null
   }
 }
@@ -339,7 +340,7 @@ export async function getAccountPolicies(
     
     return policies
   } catch (error) {
-    console.error(`Failed to get policies for account ${accountId}:`, error)
+    logger.error(`Failed to get policies for account ${accountId}:`, error)
     return []
   }
 }
@@ -380,7 +381,7 @@ export async function getPolicyDocument(
       content: policyContent
     }
   } catch (error) {
-    console.error(`Failed to get policy document for ${policyId}:`, error)
+    logger.error(`Failed to get policy document for ${policyId}:`, error)
     return null
   }
 }
@@ -426,7 +427,7 @@ export async function getAttachedPolicies(
     
     return policies
   } catch (error) {
-    console.error(`Failed to get policies for ${targetType} ${targetId}:`, error)
+    logger.error(`Failed to get policies for ${targetType} ${targetId}:`, error)
     return []
   }
 }
@@ -457,7 +458,7 @@ export async function tagAccount(
     
     return true
   } catch (error) {
-    console.error(`Failed to tag account ${accountId}:`, error)
+    logger.error(`Failed to tag account ${accountId}:`, error)
     return false
   }
 }

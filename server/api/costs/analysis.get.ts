@@ -24,6 +24,7 @@ import { getAllAccountsUnified } from '../../utils/accounts-consolidated'
 import { parseAndValidateAccountFilters, getAccountIdsFromCriteria } from '../../utils/account-filters'
 import { costCache, accountCache, CacheTags } from '../../utils/cache-manager'
 import { validateDateParams, getRecommendedGranularity, type RelativePeriod } from '../../utils/date-helpers'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/costs/analysis', 'GET', {
@@ -440,7 +441,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     costCache.getOrSet(
       costDataCacheKey,
       async () => {
-        console.log('Cache miss: Fetching cost data from AWS Cost Explorer...')
+        logger.info('Cache miss: Fetching cost data from AWS Cost Explorer...')
         if (proforma) {
           // Use getProformaCosts for proper proforma analysis
           // This gets master account costs, assumes role into proforma account,
@@ -462,7 +463,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       ? accountCache.getOrSet(
           accountDataCacheKey,
           async () => {
-            console.log('Cache miss: Fetching unified accounts for budget analysis...')
+            logger.info('Cache miss: Fetching unified accounts for budget analysis...')
             return await getAllAccountsUnified(includeDecommissioned)
           },
           {

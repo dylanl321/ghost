@@ -12,6 +12,7 @@ import { validateEntraConfig } from '../../../utils/entra/config'
 import { registerEndpoint } from '../../../plugins/swagger'
 import { requireScope } from '../../../middleware/entra-auth'
 import type { EntraAPIResponse } from '../../../types/entra'
+import { logger } from '../../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/entra/cache/invalidate', 'POST', {
@@ -108,7 +109,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Invali
     const body = await readBody<InvalidateRequest>(event)
     const { pattern = 'all', accountId, groupId } = body
     
-    console.log(`Invalidating Entra cache with pattern: ${pattern}`)
+    logger.info(`Invalidating Entra cache with pattern: ${pattern}`)
     
     let invalidated = 0
     let message = ''
@@ -164,7 +165,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Invali
       }
     }
     
-    console.log(`Cache invalidation complete: ${invalidated} entries removed`)
+    logger.debug(`Cache invalidation complete: ${invalidated} entries removed`)
     
     return {
       success: true,
@@ -175,7 +176,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Invali
       }
     }
   } catch (error: any) {
-    console.error('Error invalidating cache:', error)
+    logger.error('Error invalidating cache:', error)
     
     // Re-throw H3 errors
     if (error.statusCode) {

@@ -19,6 +19,7 @@ import {
 import { getComputeOptimizerClient } from '../lib/aws-client-factory'
 import { getCacheManager } from './cache-manager'
 import type { AWSEnvironmentType } from '../types'
+import { logger } from './logger'
 
 // Cache configuration
 const CACHE_TTL = {
@@ -115,11 +116,11 @@ export async function getEC2Recommendations(
   }
   
   if (uncachedArns.length === 0) {
-    console.log(`[Optimizer] All ${instanceArns.length} instances from cache`)
+    logger.info(`[Optimizer] All ${instanceArns.length} instances from cache`)
     return recommendations
   }
   
-  console.log(`[Optimizer] Fetching ${uncachedArns.length} instances, ${recommendations.length} from cache`)
+  logger.info(`[Optimizer] Fetching ${uncachedArns.length} instances, ${recommendations.length} from cache`)
   
   // Determine region from ARN if not provided
   const arnRegion = region || uncachedArns[0].split(':')[3]
@@ -150,7 +151,7 @@ export async function getEC2Recommendations(
         }
       }
     } catch (error) {
-      console.error(`Error fetching EC2 recommendations:`, error)
+      logger.error(`Error fetching EC2 recommendations:`, error)
     }
   }
   
@@ -216,7 +217,7 @@ export async function getEBSRecommendations(
         }
       }
     } catch (error) {
-      console.error(`Error fetching EBS recommendations:`, error)
+      logger.error(`Error fetching EBS recommendations:`, error)
     }
   }
   
@@ -280,7 +281,7 @@ export async function getLambdaRecommendations(
         }
       }
     } catch (error) {
-      console.error(`Error fetching Lambda recommendations:`, error)
+      logger.error(`Error fetching Lambda recommendations:`, error)
     }
   }
   
@@ -329,7 +330,7 @@ export async function getBatchOptimizationRecommendations(
           recommendations = await getLambdaRecommendations(arns, environment, region)
           break
         default:
-          console.warn(`Unsupported resource type for optimization: ${resourceType}`)
+          logger.warn(`Unsupported resource type for optimization: ${resourceType}`)
       }
       
       allRecommendations.push(...recommendations)
@@ -568,5 +569,5 @@ export async function clearOptimizerCache(pattern?: string): Promise<void> {
   const cache = getCacheManager()
   const prefix = pattern || 'optimizer:'
   await cache.clearPattern(prefix)
-  console.log(`[Optimizer] Cleared cache with pattern: ${prefix}`)
+  logger.info(`[Optimizer] Cleared cache with pattern: ${prefix}`)
 }

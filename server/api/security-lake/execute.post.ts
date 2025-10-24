@@ -9,6 +9,7 @@ import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { executeStoredQuery } from '../../utils/security-lake'
 import type { QueryExecutionRequest } from '../../utils/security-lake'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/security-lake/execute', 'POST', {
@@ -137,7 +138,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     })
 
   } catch (error) {
-    console.error('[Security Lake] API execution failed:', error)
+    logger.error('[Security Lake] API execution failed:', error)
     return errors.serverError(event, error instanceof Error ? error.message : 'Query execution failed')
   }
 }))

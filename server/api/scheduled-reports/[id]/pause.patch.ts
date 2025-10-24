@@ -5,6 +5,7 @@
 
 import { getReport, updateReport } from '../../../utils/scheduled-reports'
 import { isUserAdmin } from '../../../utils/user-roles'
+import { logger } from '../../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -62,7 +63,7 @@ export default defineEventHandler(async (event) => {
       message: body.pause ? 'Report paused' : 'Report resumed'
     }
   } catch (error: any) {
-    console.error('Error updating report status:', error)
+    logger.error('Error updating report status:', error)
 
     if (error.statusCode) {
       throw error

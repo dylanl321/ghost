@@ -8,6 +8,7 @@
 import { defineEventHandler, readBody } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
+import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/cache/invalidate', 'POST', {
@@ -157,7 +158,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
   
   // Log the cache invalidation
-  console.log(`Cache invalidation: ${invalidationResults.total} entries cleared (tags: ${tags.join(', ')}) - Reason: ${reason}`)
+  logger.info(`Cache invalidation: ${invalidationResults.total} entries cleared (tags: ${tags.join(', ')}) - Reason: ${reason}`)
   
   const result = {
     invalidated: invalidationResults,

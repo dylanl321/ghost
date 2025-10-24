@@ -8,6 +8,8 @@
  * Note: This is only needed if setting up app-only authentication.
  * For delegated auth using user's access token, only tenant ID is required.
  */
+import { logger } from './logger'
+
 export function getEntraOIDCConfig() {
   const tenantId = process.env.ENTRA_TENANT_ID
   const clientId = process.env.ENTRA_CLIENT_ID
@@ -23,7 +25,7 @@ export function getEntraOIDCConfig() {
   
   // Return null if app-only auth is not configured
   if (!clientId || !clientSecret) {
-    console.log('App-only authentication not configured. Using delegated authentication with user tokens.')
+    logger.debug('App-only authentication not configured. Using delegated authentication with user tokens.')
     return null
   }
   

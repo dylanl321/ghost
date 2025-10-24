@@ -6,6 +6,7 @@
 import { defineEventHandler, readBody, getHeader } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
+import { logger } from '../../utils/logger'
 
 registerEndpoint('/api/testing/runner', 'POST', {
   summary: 'Run comprehensive API tests',
@@ -214,7 +215,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     })
 
   } catch (error) {
-    console.error('Test runner error:', error)
+    logger.error('Test runner error:', error)
     return errors.serverError(event, 'Test execution failed')
   }
 }))

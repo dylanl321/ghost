@@ -1,4 +1,5 @@
 import { listShortLinks } from '../../lib/shortlinks'
+import { logger } from '../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -29,7 +30,7 @@ export default defineEventHandler(async (event) => {
       }
     }
   } catch (error: any) {
-    console.error('Error listing short links:', error)
+    logger.error('Error listing short links:', error)
     throw createError({
       statusCode: error.statusCode || 500,
       statusMessage: error.statusMessage || 'Failed to list short links'

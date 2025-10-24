@@ -4,6 +4,7 @@
  */
 
 import { deleteReportFromS3 } from '../../../utils/s3-reports-storage'
+import { logger } from '../../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -32,7 +33,7 @@ export default defineEventHandler(async (event) => {
       message: 'Report deleted successfully'
     }
   } catch (error: any) {
-    console.error('Error deleting stored report:', error)
+    logger.error('Error deleting stored report:', error)
 
     throw createError({
       statusCode: error.statusCode || 500,

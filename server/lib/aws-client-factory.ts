@@ -29,6 +29,7 @@ import { PricingClient } from '@aws-sdk/client-pricing'
 import { SESClient } from '@aws-sdk/client-ses'
 import { SNSClient } from '@aws-sdk/client-sns'
 import { EventBridgeClient } from '@aws-sdk/client-eventbridge'
+import { logger } from '../utils/logger'
 
 import type { 
   AWSEnvironmentType, 
@@ -90,8 +91,8 @@ function validateRegionForPartition(
 
   // Debug logging for invalid environment
   if (!pattern) {
-    console.error(`[AWS Client Factory] Invalid environment value: "${environment}" (type: ${typeof environment})`)
-    console.error(`[AWS Client Factory] Available environments:`, Object.keys(REGION_PATTERNS))
+    logger.error(`[AWS Client Factory] Invalid environment value: "${environment}" (type: ${typeof environment})`)
+    logger.error(`[AWS Client Factory] Available environments:`, Object.keys(REGION_PATTERNS))
     throw new Error(`Invalid AWS environment: ${environment}. Must be 'commercial' or 'govcloud'`)
   }
 
@@ -106,7 +107,7 @@ function validateRegionForPartition(
         `Use a ${environment} region instead (e.g., ${environment === 'commercial' ? 'us-east-1' : 'us-gov-west-1'}).`
       )
     } else {
-      console.warn(
+      logger.warn(
         `[AWS Client Factory] Warning: Region "${region}" may not be valid for ${environment} environment. ` +
         `Expected pattern: ${pattern.source}`
       )
@@ -168,7 +169,7 @@ function getDefaultRegion(environment: AWSEnvironmentType): string {
   try {
     validateRegionForPartition(defaultRegion, environment)
   } catch (error) {
-    console.error(`[AWS Client Factory] Invalid default region configuration: ${error.message}`)
+    logger.error(`[AWS Client Factory] Invalid default region configuration: ${error.message}`)
     // Fall back to safe defaults
     return environment === 'commercial' ? 'us-east-1' : 'us-gov-west-1'
   }
@@ -274,23 +275,11 @@ export async function getClient<T = any>(
   
   // Critical validation: Ensure region matches the partition
   validateRegionForPartition(targetRegion, environment)
-  
-  // Log client creation for debugging
-  const nodeEnv = process.env.NODE_ENV?.toLowerCase()
-  if (process.env.AWS_DEBUG === 'true' || nodeEnv === 'development' || nodeEnv === 'dev') {
-    console.log(`[AWS Client Factory] Creating ${service} client:`, {
-      environment,
-      region: targetRegion,
-      accountId: accountId || 'default',
-      partition: environment === 'commercial' ? 'aws' : 'aws-us-gov',
-      credentialsPrefix: environment === 'commercial' ? 'AWS_COMMERCIAL_*' : 'AWS_GOVCLOUD_*'
-    })
-  }
-  
+
   // Check cache first
   const cacheKey = getCacheKey(environment, service, targetRegion, accountId)
   const cachedEntry = clientCache.get(cacheKey)
-  
+
   // Return cached client if it exists and credentials haven't expired
   if (cachedEntry) {
     // Check if credentials have expired (with 5 minute buffer)
@@ -299,8 +288,14 @@ export async function getClient<T = any>(
     } else {
       // Remove expired client from cache
       clientCache.delete(cacheKey)
-      console.log(`[AWS Client Factory] Removed expired client from cache: ${cacheKey}`)
+      logger.debug(`[AWS Client Factory] Removed expired client: ${service}/${environment}/${targetRegion}`)
     }
+  }
+
+  // Log NEW client creation only (not cache hits)
+  const nodeEnv = process.env.NODE_ENV?.toLowerCase()
+  if (process.env.AWS_DEBUG === 'true' || nodeEnv === 'development' || nodeEnv === 'dev') {
+    logger.debug(`[AWS Client Factory] Creating ${service} client for ${environment}/${targetRegion}${accountId ? ` (account: ${accountId})` : ''}`)
   }
   
   // Get appropriate credentials
@@ -353,12 +348,7 @@ export async function getClient<T = any>(
     client,
     expiration: credentialExpiration
   })
-  
-  // Log successful creation in debug mode
-  if (process.env.AWS_DEBUG === 'true') {
-    console.log(`[AWS Client Factory] Successfully created ${service} client for ${environment}/${targetRegion}`)
-  }
-  
+
   return client as T
 }
 
@@ -377,7 +367,7 @@ export function clearExpiredClients(): number {
   }
   
   if (cleared > 0) {
-    console.log(`[AWS Client Factory] Cleared ${cleared} expired clients from cache`)
+    logger.info(`[AWS Client Factory] Cleared ${cleared} expired clients from cache`)
   }
   
   return cleared
@@ -389,7 +379,7 @@ export function clearExpiredClients(): number {
 export function clearAllClients(): void {
   const size = clientCache.size
   clientCache.clear()
-  console.log(`[AWS Client Factory] Cleared all ${size} clients from cache`)
+  logger.info(`[AWS Client Factory] Cleared all ${size} clients from cache`)
 }
 
 // Set up periodic cleanup of expired clients (every 5 minutes)
@@ -525,7 +515,7 @@ export async function getPricingClient(
  */
 export function clearClientCache(): void {
   if (process.env.AWS_DEBUG === 'true') {
-    console.log(`[AWS Client Factory] Clearing ${clientCache.size} cached clients`)
+    logger.info(`[AWS Client Factory] Clearing ${clientCache.size} cached clients`)
   }
   clientCache.clear()
 }
@@ -586,18 +576,18 @@ export function validateAWSConfiguration(): void {
   
   // Output results
   if (errors.length > 0) {
-    console.error('[AWS Client Factory] ❌ CRITICAL configuration errors detected:')
-    errors.forEach(error => console.error(`  ⚠️  ${error}`))
-    console.error('These WILL cause authentication failures. Please fix immediately.')
+    logger.error('[AWS Client Factory] ❌ CRITICAL configuration errors detected:')
+    errors.forEach(error => logger.error(`  ⚠️  ${error}`))
+    logger.error('These WILL cause authentication failures. Please fix immediately.')
   }
   
   if (warnings.length > 0) {
-    console.warn('[AWS Client Factory] ⚠️  Configuration warnings:')
-    warnings.forEach(warning => console.warn(`  - ${warning}`))
+    logger.warn('[AWS Client Factory] ⚠️  Configuration warnings:')
+    warnings.forEach(warning => logger.warn(`  - ${warning}`))
   }
   
   if (errors.length === 0 && warnings.length === 0 && process.env.AWS_DEBUG === 'true') {
-    console.log('[AWS Client Factory] ✅ AWS configuration validated successfully')
+    logger.debug('[AWS Client Factory] ✅ AWS configuration validated successfully')
   }
 }
 

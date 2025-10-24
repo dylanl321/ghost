@@ -15,6 +15,7 @@ import {
   IdentitystoreClient,
   DescribeUserCommand
 } from '@aws-sdk/client-identitystore'
+import { logger } from '../../../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -70,14 +71,14 @@ export default defineEventHandler(async (event) => {
             permissionSetName: permissionSetArn.split('/').pop()
           })
         } catch (e) {
-          console.warn(`Failed to get user ${assignment.PrincipalId}:`, e)
+          logger.warn(`Failed to get user ${assignment.PrincipalId}:`, e)
         }
       }
     }
 
     return sendSuccess(event, sessions)
   } catch (error: any) {
-    console.error('IDC sessions error:', error)
+    logger.error('IDC sessions error:', error)
     return errors.serverError(event, error.message)
   }
 })

@@ -15,6 +15,7 @@ import {
 } from '@aws-sdk/client-cost-explorer'
 import { getCostExplorerClient } from '../lib/aws-client-factory'
 import type { CostExplorerParams } from '../types'
+import { logger } from './logger'
 
 /**
  * Get cost and usage data
@@ -64,16 +65,16 @@ export async function getCostAndUsage(
     // Check for next page
     nextPageToken = response.NextPageToken
     
-    console.log(`Cost Explorer pagination: fetched ${response.ResultsByTime?.length || 0} results, nextToken: ${!!nextPageToken}`)
+    logger.debug(`Cost Explorer pagination: fetched ${response.ResultsByTime?.length || 0} results, nextToken: ${!!nextPageToken}`)
     
   } while (nextPageToken)
   
-  console.log(`Cost Explorer total results: ${allResultsByTime.length} time periods`)
+  logger.info(`Cost Explorer total results: ${allResultsByTime.length} time periods`)
   
   // IMPORTANT: When using GroupBy, AWS doesn't return a root-level Total
   // We need to make a separate call without GroupBy to get the true total
   if (groupBy && groupBy.length > 0 && Object.keys(total).length === 0) {
-    console.log('GroupBy detected with no root Total - making separate call for total')
+    logger.info('GroupBy detected with no root Total - making separate call for total')
     try {
       const totalCommand = new GetCostAndUsageCommand({
         TimePeriod: {
@@ -89,10 +90,10 @@ export async function getCostAndUsage(
       const totalResponse: any = await client.send(totalCommand)
       if (totalResponse.Total) {
         total = totalResponse.Total
-        console.log('Successfully retrieved total from separate call')
+        logger.info('Successfully retrieved total from separate call')
       }
     } catch (error) {
-      console.warn('Failed to get separate total:', error)
+      logger.warn('Failed to get separate total:', error)
       // Fall back to calculating from resultsByTime
     }
   }
@@ -479,7 +480,7 @@ export async function getProformaCosts(
   // IMPORTANT: When using GroupBy, AWS doesn't return a root-level Total
   // Make a separate call without GroupBy to get the true total for proforma account
   if (groupBy && groupBy.length > 0 && (!proformaResponse.Total || Object.keys(proformaResponse.Total).length === 0)) {
-    console.log('Proforma: GroupBy detected with no root Total - making separate call for total')
+    logger.info('Proforma: GroupBy detected with no root Total - making separate call for total')
     try {
       const proformaTotalCommand = new GetCostAndUsageCommand({
         TimePeriod: {
@@ -495,10 +496,10 @@ export async function getProformaCosts(
       const proformaTotalResponse: any = await proformaClient.send(proformaTotalCommand)
       if (proformaTotalResponse.Total) {
         proformaCosts.total = proformaTotalResponse.Total
-        console.log('Proforma: Successfully retrieved total from separate call')
+        logger.info('Proforma: Successfully retrieved total from separate call')
       }
     } catch (error) {
-      console.warn('Proforma: Failed to get separate total:', error)
+      logger.warn('Proforma: Failed to get separate total:', error)
     }
   }
   
@@ -554,7 +555,7 @@ export async function getProformaCosts(
   // This represents costs that remain in the master account after Billing Conductor allocation
   const masterUnallocatedCost = Math.max(0, billableTotal - proformaTotal)
   
-  console.log(`Proforma calculation:
+  logger.info(`Proforma calculation:
     Master Account Total (billable): $${billableTotal.toFixed(2)}
     Proforma Account Total: $${proformaTotal.toFixed(2)}
     Master Unallocated: $${masterUnallocatedCost.toFixed(2)}
@@ -589,7 +590,7 @@ export async function getProformaCosts(
     
     // Validate proforma >= billable for this period
     if (proformaPeriodTotal < billablePeriodTotal && Math.abs(periodDifference) > 1) {
-      console.warn(`⚠️ Proforma validation failed for period ${billableResult.TimePeriod?.Start}: Proforma ($${proformaPeriodTotal}) < Billable ($${billablePeriodTotal})`)
+      logger.warn(`⚠️ Proforma validation failed for period ${billableResult.TimePeriod?.Start}: Proforma ($${proformaPeriodTotal}) < Billable ($${billablePeriodTotal})`)
     }
     
     // Build account-level comparison if grouped by account
@@ -612,7 +613,7 @@ export async function getProformaCosts(
           
           // Validation: proforma should be >= billable for each account (except master)
           if (accountId !== masterAccountId && proformaCost < billableCost && Math.abs(difference) > 1) {
-            console.warn(`⚠️ Account ${accountId}: Proforma ($${proformaCost}) < Billable ($${billableCost})`)
+            logger.warn(`⚠️ Account ${accountId}: Proforma ($${proformaCost}) < Billable ($${billableCost})`)
           }
           
           accountComparisons.push({
