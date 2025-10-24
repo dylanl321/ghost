@@ -48,11 +48,7 @@ export default defineNuxtConfig({
   // },
 
   nitro: {
-    noExternal: ['gray-matter'],
-    serverAssets: [{
-      baseName: 'support',
-      dir: './app/content/support'
-    }]
+    noExternal: ['gray-matter']
   },
 
   // nitro: {
