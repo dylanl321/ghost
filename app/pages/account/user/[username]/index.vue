@@ -389,31 +389,30 @@ const updateBreadcrumbs = () => {
               </div>
             </div>
 
-            <!-- AWS Stats Summary - Single Row (Columns 8-12) -->
+            <!-- AWS Stats Summary - Simplified (Columns 8-12) -->
             <div class="lg:col-span-5">
               <div class="space-y-3">
-                <h3 class="text-lg font-semibold text-white flex items-center gap-2">
-                  <UIcon name="i-heroicons-chart-bar" class="w-5 h-5 text-blue-400" />
-                  AWS Access
+                <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wide">
+                  AWS Access Summary
                 </h3>
-                
-                <!-- Single row of 4 stats -->
-                <div class="grid grid-cols-4 gap-3">
-                  <div class="bg-gray-800/50 rounded-lg p-3 text-center">
-                    <div class="text-xl font-bold text-blue-400">{{ accessSummary.totalAccounts }}</div>
-                    <div class="text-xs text-gray-400">Accounts</div>
+
+                <!-- Simplified stats with subtle AWS accent -->
+                <div class="bg-gray-800/30 rounded-lg p-4 space-y-3 border-l-4 border-blue-500/50">
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm text-gray-400">Accounts</span>
+                    <span class="text-lg font-semibold text-white">{{ accessSummary.totalAccounts }}</span>
                   </div>
-                  <div class="bg-gray-800/50 rounded-lg p-3 text-center">
-                    <div class="text-xl font-bold text-green-400">{{ accessSummary.totalRoles }}</div>
-                    <div class="text-xs text-gray-400">Roles</div>
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm text-gray-400">Total Roles</span>
+                    <span class="text-lg font-semibold text-white">{{ accessSummary.totalRoles }}</span>
                   </div>
-                  <div class="bg-gray-800/50 rounded-lg p-3 text-center">
-                    <div class="text-xl font-bold text-orange-400">{{ userAccessRef?.accessSummary?.govCloudAccounts || 0 }}</div>
-                    <div class="text-xs text-gray-400">GovCloud</div>
+                  <div class="flex items-center justify-between pt-2 border-t border-gray-700">
+                    <span class="text-xs text-gray-500">GovCloud</span>
+                    <span class="text-sm font-medium text-gray-300">{{ userAccessRef?.accessSummary?.govCloudAccounts || 0 }}</span>
                   </div>
-                  <div class="bg-gray-800/50 rounded-lg p-3 text-center">
-                    <div class="text-xl font-bold text-purple-400">{{ userAccessRef?.accessSummary?.multiEnvAccounts || 0 }}</div>
-                    <div class="text-xs text-gray-400">Multi-Env</div>
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs text-gray-500">Multi-Environment</span>
+                    <span class="text-sm font-medium text-gray-300">{{ userAccessRef?.accessSummary?.multiEnvAccounts || 0 }}</span>
                   </div>
                 </div>
                 

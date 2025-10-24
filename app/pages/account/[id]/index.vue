@@ -1,5 +1,18 @@
 <template>
   <div class="space-y-6 p-6">
+    <!-- Decommissioned Account Warning Banner -->
+    <UAlert
+      v-if="isAccountInactive"
+      color="orange"
+      variant="solid"
+      icon="i-heroicons-exclamation-triangle"
+      :close-button="{ icon: 'i-heroicons-x-mark', color: 'white', variant: 'link' }"
+    >
+      <template #title>
+        <span class="font-semibold">Account {{ accountStatus }}</span>
+      </template>
+    </UAlert>
+
     <!-- Account Header -->
     <UCard>
       <div class="flex gap-2 items-center justify-between">
@@ -59,6 +72,7 @@
             icon="i-heroicons-chart-bar"
             color="primary"
             variant="soft"
+            :disabled="isAccountInactive"
             @click="navigateToCostsPage"
           >
             View Costs
@@ -75,26 +89,50 @@
           <!-- Account Details -->
           <AccountDetails v-if="accountId" :account-id="accountId" :current-spend="currentSpend" :users="users" class="col-span-1 lg:col-span-2" />
 
-          <!-- Budget Health -->
-          <BudgetHealthCard
-            :budget="budget"
-            :current-spend="currentSpend"
-            :forecast-data="forecastData"
-            :loading="loading"
-            class="col-span-1"
-          />
+          <!-- Budget Health - with overlay for inactive accounts -->
+          <div class="col-span-1 relative">
+            <BudgetHealthCard
+              :budget="budget"
+              :current-spend="currentSpend"
+              :forecast-data="forecastData"
+              :loading="loading"
+              :class="{ 'opacity-50 pointer-events-none': isAccountInactive }"
+            />
+            <div v-if="isAccountInactive" class="absolute inset-0 flex items-center justify-center bg-gray-900/80 rounded-lg">
+              <div class="text-center p-4">
+                <UIcon name="i-heroicons-exclamation-triangle" class="w-12 h-12 text-yellow-400 mx-auto mb-2" />
+                <p class="text-white font-semibold mb-1">Account {{ accountStatus }}</p>
+                <p class="text-sm text-gray-400">Cost data is not available for inactive accounts</p>
+              </div>
+            </div>
+          </div>
 
           <!-- Account Users -->
           <AccountUsers :users="users" :account-id="accountId" :loading="loading" class="col-span-1" />
 
-          <!-- Cost Trend Chart -->
-          <CostTrendChart title="Account Cost Trends" :time-series-billable="billableTimeSeries" :time-series-proforma="proformaTimeSeries" :loading="loading" class="col-span-1 lg:col-span-2" />
+          <!-- Cost Trend Chart - with overlay for inactive accounts -->
+          <div class="col-span-1 lg:col-span-2 relative">
+            <CostTrendChart
+              title="Account Cost Trends"
+              :time-series-billable="billableTimeSeries"
+              :time-series-proforma="proformaTimeSeries"
+              :loading="loading"
+              :class="{ 'opacity-50 pointer-events-none': isAccountInactive }"
+            />
+            <div v-if="isAccountInactive" class="absolute inset-0 flex items-center justify-center bg-gray-900/80 rounded-lg">
+              <div class="text-center p-4">
+                <UIcon name="i-heroicons-exclamation-triangle" class="w-12 h-12 text-yellow-400 mx-auto mb-2" />
+                <p class="text-white font-semibold mb-1">Account {{ accountStatus }}</p>
+                <p class="text-sm text-gray-400">Cost trends are not available for inactive accounts</p>
+              </div>
+            </div>
+          </div>
         </div>
       </template>
 
       <!-- Resources Tab -->
       <template #resources>
-        <div class="space-y-4 mt-4">
+        <div v-if="!isAccountInactive" class="space-y-4 mt-4">
           <!-- Row 1: Resource Usage (1 col) + S3 Buckets (2 col) -->
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div class="col-span-1 h-full">
@@ -118,11 +156,18 @@
           <!-- Row 3: Instances Table - Full Width (GovCloud) -->
           <InstancesTable v-if="govCloudId || accountId" :account-id="govCloudId || accountId" />
         </div>
+        <div v-else class="flex items-center justify-center py-16">
+          <div class="text-center">
+            <UIcon name="i-heroicons-server-stack" class="w-16 h-16 text-gray-500 mx-auto mb-4 opacity-50" />
+            <h3 class="text-lg font-semibold text-white mb-2">Resources Unavailable</h3>
+            <p class="text-gray-400">This tab is disabled because the account is {{ accountStatus?.toLowerCase() }}.</p>
+          </div>
+        </div>
       </template>
 
       <!-- Policies Tab -->
       <template #policies>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 row-auto mt-4">
+        <div v-if="!isAccountInactive" class="grid grid-cols-1 md:grid-cols-3 gap-4 row-auto mt-4">
           <!-- Service Control Policies -->
           <ServiceControlPolicies v-if="accountId" :account-id="accountId" class="col-span-2" />
 
@@ -131,6 +176,13 @@
 
           <!-- Policy Analyzer -->
           <PolicyAnalyzer v-if="accountId" :account-id="accountId" class="col-span-3" />
+        </div>
+        <div v-else class="flex items-center justify-center py-16 mt-4">
+          <div class="text-center">
+            <UIcon name="i-heroicons-shield-check" class="w-16 h-16 text-gray-500 mx-auto mb-4 opacity-50" />
+            <h3 class="text-lg font-semibold text-white mb-2">Policies Unavailable</h3>
+            <p class="text-gray-400">This tab is disabled because the account is {{ accountStatus?.toLowerCase() }}.</p>
+          </div>
         </div>
       </template>
 
@@ -160,6 +212,7 @@ const accountId = computed(() => route.params.id as string)
 const govCloudId = computed(() => enclaveStore.enclaves[accountId.value]?.awsGovCloudAccountID)
 const accountName = computed(() => enclaveStore.enclaves[accountId.value]?.projectName)
 const accountStatus = computed(() => enclaveStore.enclaves[accountId.value]?.enclaveStatus)
+const isAccountInactive = computed(() => accountStatus.value === 'Decommissioned' || accountStatus.value === 'Inactive')
 
 // Check if user is admin
 const { isAdmin } = useUserRoles()
@@ -251,17 +304,20 @@ const tabs = computed(() => {
     {
       label: 'Overview',
       slot: 'overview',
-      icon: 'i-heroicons-home'
+      icon: 'i-heroicons-home',
+      disabled: false
     },
     {
       label: 'Resources',
       slot: 'resources',
-      icon: 'i-heroicons-server-stack'
+      icon: 'i-heroicons-server-stack',
+      disabled: isAccountInactive.value
     },
     {
       label: 'Policies',
       slot: 'policies',
-      icon: 'i-heroicons-shield-check'
+      icon: 'i-heroicons-shield-check',
+      disabled: isAccountInactive.value
     }
   ]
 
@@ -270,7 +326,8 @@ const tabs = computed(() => {
     baseTabs.push({
       label: 'Notes',
       slot: 'notes',
-      icon: 'i-heroicons-document-text'
+      icon: 'i-heroicons-document-text',
+      disabled: false
     })
   }
 
@@ -393,6 +450,13 @@ onMounted(async () => {
   }
 
   try {
+    // Skip data fetching for inactive/decommissioned accounts
+    if (isAccountInactive.value) {
+      console.log(`Account ${accountId.value} is ${accountStatus.value}, skipping data fetch`)
+      loading.value = false
+      return
+    }
+
     if (accountId.value) {
       users.value = await groupMembers.fetchEnclaveUsers(accountId.value, govCloudId.value || '', user.value?.accessToken || '')
     }

@@ -400,10 +400,8 @@ const filteredAccounts = computed(() => {
 
   // Filter by account status if needed
   if (!showInactiveAccounts.value) {
-    filtered = filtered.filter(account => 
-      account.isActive && 
-      account.status !== 'unknown' && 
-      account.accountStatus !== 'unknown' &&
+    filtered = filtered.filter(account =>
+      account.isActive &&
       account.accountName !== 'Unknown Account'
     )
   }
@@ -952,31 +950,25 @@ defineExpose({
         
         <!-- Stats Section -->
         <div v-if="showStats">
-          <!-- Simplified Summary Stats -->
-          <div class="grid grid-cols-3 md:grid-cols-6 gap-4 mb-6">
-            <div class="bg-gray-800/50 rounded-lg p-3 text-center">
-              <div class="text-xl font-bold text-blue-400">{{ accessSummary.totalAccounts }}</div>
-              <div class="text-xs text-gray-400">Accounts</div>
-            </div>
-            <div class="bg-gray-800/50 rounded-lg p-3 text-center">
-              <div class="text-xl font-bold text-green-400">{{ accessSummary.totalRoles }}</div>
-              <div class="text-xs text-gray-400">Roles</div>
-            </div>
-            <div class="bg-gray-800/50 rounded-lg p-3 text-center">
-              <div class="text-xl font-bold text-blue-400">{{ accessSummary.commercialAccounts }}</div>
-              <div class="text-xs text-gray-400">Commercial</div>
-            </div>
-            <div class="bg-gray-800/50 rounded-lg p-3 text-center">
-              <div class="text-xl font-bold text-orange-400">{{ accessSummary.govCloudAccounts }}</div>
-              <div class="text-xs text-gray-400">GovCloud</div>
-            </div>
-            <div class="bg-gray-800/50 rounded-lg p-3 text-center">
-              <div class="text-xl font-bold text-purple-400">{{ accessSummary.multiEnvAccounts }}</div>
-              <div class="text-xs text-gray-400">Multi-Env</div>
-            </div>
-            <div class="bg-gray-800/50 rounded-lg p-3 text-center">
-              <div class="text-xl font-bold text-gray-400">{{ allRoles.length }}</div>
-              <div class="text-xs text-gray-400">Unique Roles</div>
+          <!-- Simplified Summary Stats with subtle AWS accent -->
+          <div class="bg-gray-800/30 rounded-lg p-4 mb-6 border-l-4 border-blue-500/50">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div class="text-center">
+                <div class="text-2xl font-bold text-white">{{ accessSummary.totalAccounts }}</div>
+                <div class="text-xs text-gray-400 mt-1">Accounts</div>
+              </div>
+              <div class="text-center">
+                <div class="text-2xl font-bold text-white">{{ accessSummary.totalRoles }}</div>
+                <div class="text-xs text-gray-400 mt-1">Total Roles</div>
+              </div>
+              <div class="text-center">
+                <div class="text-2xl font-bold text-white">{{ accessSummary.govCloudAccounts }}</div>
+                <div class="text-xs text-gray-400 mt-1">GovCloud</div>
+              </div>
+              <div class="text-center">
+                <div class="text-2xl font-bold text-white">{{ accessSummary.multiEnvAccounts }}</div>
+                <div class="text-xs text-gray-400 mt-1">Multi-Env</div>
+              </div>
             </div>
           </div>
         </div>
@@ -1082,44 +1074,44 @@ defineExpose({
             <tr v-for="account in filteredAccounts" :key="account.accountId" class="hover:bg-gray-800/30">
               <td class="px-4 py-3">
                 <div>
-                  <div class="flex items-start gap-2 mb-1">
-                    <span class="text-sm font-medium text-white flex-shrink-0">{{ account.accountName }}</span>
-
-                    <!-- Admin & Cost Manager Badges to the right of name -->
-                    <div class="flex items-center gap-1.5 flex-wrap">
-                      <UBadge
-                        v-if="getAccountAdminRoles(account.accountId).isPrimaryAdmin"
-                        color="orange"
-                        variant="solid"
-                        size="xs"
-                        class="font-medium"
-                      >
-                        <UIcon name="i-heroicons-shield-check" class="w-3 h-3 mr-0.5" />
-                        Primary Admin
-                      </UBadge>
-                      <UBadge
-                        v-if="getAccountAdminRoles(account.accountId).isDelegateAdmin"
-                        color="yellow"
-                        variant="solid"
-                        size="xs"
-                        class="font-medium"
-                      >
-                        <UIcon name="i-heroicons-user-group" class="w-3 h-3 mr-0.5" />
-                        Delegate Admin
-                      </UBadge>
-                      <UBadge
-                        v-if="getAccountAdminRoles(account.accountId).isCostManager"
-                        color="green"
-                        variant="solid"
-                        size="xs"
-                        class="font-medium"
-                      >
-                        <UIcon name="i-heroicons-currency-dollar" class="w-3 h-3 mr-0.5" />
-                        Cost Manager
-                      </UBadge>
-                    </div>
+                  <div class="mb-1">
+                    <span class="text-sm font-medium text-white">{{ account.accountName }}</span>
                   </div>
-                  <div class="text-xs text-gray-400 font-mono">{{ account.accountId }}</div>
+                  <div class="text-xs text-gray-400 font-mono mb-1">{{ account.accountId }}</div>
+
+                  <!-- Admin & Cost Manager Badges - colored to indicate privilege level -->
+                  <div v-if="getAccountAdminRoles(account.accountId).isPrimaryAdmin || getAccountAdminRoles(account.accountId).isDelegateAdmin || getAccountAdminRoles(account.accountId).isCostManager" class="flex items-center gap-1.5 flex-wrap">
+                    <UBadge
+                      v-if="getAccountAdminRoles(account.accountId).isPrimaryAdmin"
+                      color="orange"
+                      variant="soft"
+                      size="xs"
+                      class="font-medium"
+                    >
+                      <UIcon name="i-heroicons-shield-check" class="w-3 h-3 mr-0.5" />
+                      Primary Admin
+                    </UBadge>
+                    <UBadge
+                      v-if="getAccountAdminRoles(account.accountId).isDelegateAdmin"
+                      color="yellow"
+                      variant="soft"
+                      size="xs"
+                      class="font-medium"
+                    >
+                      <UIcon name="i-heroicons-user-group" class="w-3 h-3 mr-0.5" />
+                      Delegate
+                    </UBadge>
+                    <UBadge
+                      v-if="getAccountAdminRoles(account.accountId).isCostManager"
+                      color="blue"
+                      variant="soft"
+                      size="xs"
+                      class="font-medium"
+                    >
+                      <UIcon name="i-heroicons-currency-dollar" class="w-3 h-3 mr-0.5" />
+                      Cost Manager
+                    </UBadge>
+                  </div>
                 </div>
               </td>
               <td class="px-4 py-3">
@@ -1136,22 +1128,22 @@ defineExpose({
               </td>
               <td class="px-4 py-3">
                 <div class="flex flex-wrap gap-1">
-                  <!-- IAM Roles with environment context -->
+                  <!-- IAM Roles - simplified styling -->
                   <template v-if="account.hasMultiEnvironment">
-                    <!-- Show roles grouped by environment -->
+                    <!-- Show roles grouped by environment with minimal indicators -->
                     <span v-for="role in getRolesByEnvironment(account).both.slice(0, 2)" :key="`both-${role}`"
-                          class="px-2 py-1 text-xs bg-purple-900/30 text-purple-300 rounded"
+                          class="px-2 py-1 text-xs bg-gray-800 text-gray-300 rounded"
                           :title="`${role} (Both environments)`">
                       {{ role }}
                     </span>
                     <span v-for="role in getRolesByEnvironment(account).commercial.filter(r => !getRolesByEnvironment(account).both.includes(r)).slice(0, 1)" :key="`comm-${role}`"
-                          class="px-2 py-1 text-xs bg-blue-900/30 text-blue-300 rounded flex items-center gap-0.5"
+                          class="px-2 py-1 text-xs bg-gray-800 text-gray-300 rounded flex items-center gap-1"
                           :title="`${role} (Commercial only)`">
                       <div class="w-1.5 h-1.5 bg-blue-400 rounded-full"></div>
                       {{ role }}
                     </span>
                     <span v-for="role in getRolesByEnvironment(account).govcloud.filter(r => !getRolesByEnvironment(account).both.includes(r)).slice(0, 1)" :key="`gov-${role}`"
-                          class="px-2 py-1 text-xs bg-orange-900/30 text-orange-300 rounded flex items-center gap-0.5"
+                          class="px-2 py-1 text-xs bg-gray-800 text-gray-300 rounded flex items-center gap-1"
                           :title="`${role} (GovCloud only)`">
                       <div class="w-1.5 h-1.5 bg-orange-400 rounded-full"></div>
                       {{ role }}
@@ -1160,13 +1152,13 @@ defineExpose({
                   <template v-else>
                     <!-- Single environment - show normally -->
                     <span v-for="role in account.roles.slice(0, 3)" :key="role"
-                          class="px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded">
+                          class="px-2 py-1 text-xs bg-gray-800 text-gray-300 rounded">
                       {{ role }}
                     </span>
                   </template>
 
                   <span v-if="account.roles.length > 3"
-                        class="px-2 py-1 text-xs bg-gray-600 text-gray-400 rounded">
+                        class="px-2 py-1 text-xs text-gray-400">
                     +{{ account.roles.length - 3 }}
                   </span>
                 </div>
@@ -1228,54 +1220,54 @@ defineExpose({
               </div>
 
               <div class="flex-1 min-w-0">
-                <div class="flex items-start gap-2 mb-1">
-                  <h5 class="font-medium text-white text-sm group-hover:text-blue-400 transition-colors flex-shrink-0">
+                <div class="mb-1">
+                  <h5 class="font-medium text-white text-sm group-hover:text-blue-400 transition-colors">
                     {{ account.accountName }}
                   </h5>
-
-                  <!-- Admin & Cost Manager Badges to the right of name -->
-                  <div class="flex items-center gap-1.5 flex-wrap">
-                    <UBadge
-                      v-if="getAccountAdminRoles(account.accountId).isPrimaryAdmin"
-                      color="orange"
-                      variant="solid"
-                      size="xs"
-                      class="font-medium"
-                    >
-                      <UIcon name="i-heroicons-shield-check" class="w-3 h-3 mr-0.5" />
-                      Primary Admin
-                    </UBadge>
-                    <UBadge
-                      v-if="getAccountAdminRoles(account.accountId).isDelegateAdmin"
-                      color="yellow"
-                      variant="solid"
-                      size="xs"
-                      class="font-medium"
-                    >
-                      <UIcon name="i-heroicons-user-group" class="w-3 h-3 mr-0.5" />
-                      Delegate Admin
-                    </UBadge>
-                    <UBadge
-                      v-if="getAccountAdminRoles(account.accountId).isCostManager"
-                      color="green"
-                      variant="solid"
-                      size="xs"
-                      class="font-medium"
-                    >
-                      <UIcon name="i-heroicons-currency-dollar" class="w-3 h-3 mr-0.5" />
-                      Cost Manager
-                    </UBadge>
-
-                    <UBadge
-                      v-if="!account.isActive"
-                      color="gray"
-                      variant="soft"
-                      size="xs"
-                      label="Inactive"
-                    />
-                  </div>
                 </div>
-                <p class="text-xs text-gray-500 font-mono">{{ account.accountId }}</p>
+                <p class="text-xs text-gray-500 font-mono mb-2">{{ account.accountId }}</p>
+
+                <!-- Admin & Cost Manager Badges - colored to indicate privilege level -->
+                <div v-if="getAccountAdminRoles(account.accountId).isPrimaryAdmin || getAccountAdminRoles(account.accountId).isDelegateAdmin || getAccountAdminRoles(account.accountId).isCostManager" class="flex items-center gap-1.5 flex-wrap mt-1">
+                  <UBadge
+                    v-if="getAccountAdminRoles(account.accountId).isPrimaryAdmin"
+                    color="orange"
+                    variant="soft"
+                    size="xs"
+                    class="font-medium"
+                  >
+                    <UIcon name="i-heroicons-shield-check" class="w-3 h-3 mr-0.5" />
+                    Primary Admin
+                  </UBadge>
+                  <UBadge
+                    v-if="getAccountAdminRoles(account.accountId).isDelegateAdmin"
+                    color="yellow"
+                    variant="soft"
+                    size="xs"
+                    class="font-medium"
+                  >
+                    <UIcon name="i-heroicons-user-group" class="w-3 h-3 mr-0.5" />
+                    Delegate
+                  </UBadge>
+                  <UBadge
+                    v-if="getAccountAdminRoles(account.accountId).isCostManager"
+                    color="blue"
+                    variant="soft"
+                    size="xs"
+                    class="font-medium"
+                  >
+                    <UIcon name="i-heroicons-currency-dollar" class="w-3 h-3 mr-0.5" />
+                    Cost Manager
+                  </UBadge>
+
+                  <UBadge
+                    v-if="!account.isActive"
+                    color="gray"
+                    variant="soft"
+                    size="xs"
+                    label="Inactive"
+                  />
+                </div>
               </div>
             </div>
 
@@ -1286,15 +1278,15 @@ defineExpose({
             </div>
           </div>
 
-          <!-- Primary Roles grouped by environment -->
+          <!-- Primary Roles - Simplified display -->
           <div class="space-y-2">
             <div v-if="account.hasMultiEnvironment" class="space-y-2">
-              <!-- Both environments - show roles with indicators -->
+              <!-- Multi-environment: Show environment labels more subtly -->
               <div v-if="getRolesByEnvironment(account).both.length > 0">
-                <div class="text-xs text-gray-500 mb-1">Both Environments</div>
+                <div class="text-xs text-gray-500 mb-1.5">Both Environments</div>
                 <div class="flex flex-wrap gap-1">
                   <span v-for="role in getRolesByEnvironment(account).both.slice(0, 3)" :key="`both-${role}`"
-                        class="px-2 py-1 text-xs bg-purple-900/30 text-purple-300 rounded cursor-pointer hover:bg-purple-900/50 transition-colors flex items-center gap-1"
+                        class="px-2 py-1 text-xs bg-gray-800 text-gray-300 rounded cursor-pointer hover:bg-gray-700 transition-colors"
                         @click.stop="showGroupDetails(account, role)"
                         :title="`${getRoleTooltip(role)} (Both environments)`">
                     {{ role }}
@@ -1304,13 +1296,13 @@ defineExpose({
 
               <!-- Commercial only -->
               <div v-if="getRolesByEnvironment(account).commercial.filter(r => !getRolesByEnvironment(account).both.includes(r)).length > 0">
-                <div class="text-xs text-gray-500 mb-1 flex items-center gap-1">
-                  <div class="w-2 h-2 bg-blue-400 rounded-full"></div>
-                  Commercial Only
+                <div class="text-xs text-gray-500 mb-1.5 flex items-center gap-1">
+                  <div class="w-1.5 h-1.5 bg-blue-400 rounded-full"></div>
+                  Commercial
                 </div>
                 <div class="flex flex-wrap gap-1">
                   <span v-for="role in getRolesByEnvironment(account).commercial.filter(r => !getRolesByEnvironment(account).both.includes(r)).slice(0, 2)" :key="`comm-${role}`"
-                        class="px-2 py-1 text-xs bg-blue-900/30 text-blue-300 rounded cursor-pointer hover:bg-blue-900/50 transition-colors"
+                        class="px-2 py-1 text-xs bg-gray-800 text-gray-300 rounded cursor-pointer hover:bg-gray-700 transition-colors"
                         @click.stop="showGroupDetails(account, role)"
                         :title="`${getRoleTooltip(role)} (Commercial only)`">
                     {{ role }}
@@ -1320,13 +1312,13 @@ defineExpose({
 
               <!-- GovCloud only -->
               <div v-if="getRolesByEnvironment(account).govcloud.filter(r => !getRolesByEnvironment(account).both.includes(r)).length > 0">
-                <div class="text-xs text-gray-500 mb-1 flex items-center gap-1">
-                  <div class="w-2 h-2 bg-orange-400 rounded-full"></div>
-                  GovCloud Only
+                <div class="text-xs text-gray-500 mb-1.5 flex items-center gap-1">
+                  <div class="w-1.5 h-1.5 bg-orange-400 rounded-full"></div>
+                  GovCloud
                 </div>
                 <div class="flex flex-wrap gap-1">
                   <span v-for="role in getRolesByEnvironment(account).govcloud.filter(r => !getRolesByEnvironment(account).both.includes(r)).slice(0, 2)" :key="`gov-${role}`"
-                        class="px-2 py-1 text-xs bg-orange-900/30 text-orange-300 rounded cursor-pointer hover:bg-orange-900/50 transition-colors"
+                        class="px-2 py-1 text-xs bg-gray-800 text-gray-300 rounded cursor-pointer hover:bg-gray-700 transition-colors"
                         @click.stop="showGroupDetails(account, role)"
                         :title="`${getRoleTooltip(role)} (GovCloud only)`">
                     {{ role }}
@@ -1336,7 +1328,7 @@ defineExpose({
 
               <button v-if="account.roles.length > 7"
                       @click.stop="showGroupDetails(account)"
-                      class="px-2 py-1 text-xs bg-gray-700 text-gray-400 rounded hover:bg-gray-600 transition-colors">
+                      class="px-2 py-1 text-xs text-gray-400 hover:text-gray-300 transition-colors underline">
                 +{{ account.roles.length - 7 }} more roles
               </button>
             </div>
@@ -1351,7 +1343,7 @@ defineExpose({
               </span>
               <button v-if="account.roles.length > 4"
                       @click.stop="showGroupDetails(account)"
-                      class="px-2 py-1 text-xs bg-gray-700 text-gray-400 rounded hover:bg-gray-600 transition-colors">
+                      class="px-2 py-1 text-xs text-gray-400 hover:text-gray-300 transition-colors underline">
                 +{{ account.roles.length - 4 }} more
               </button>
             </div>

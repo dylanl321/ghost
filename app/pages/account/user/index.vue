@@ -533,10 +533,11 @@ onMounted(async () => {
     <!-- Users List -->
     <UCard v-else-if="filteredUsers.length > 0" class="bg-gray-900 border border-gray-800">
       <div class="divide-y divide-gray-700">
-        <div 
-          v-for="user in filteredUsers" 
+        <div
+          v-for="user in filteredUsers"
           :key="user.userPrincipalName"
-          class="p-4 hover:bg-gray-800/50 transition-colors"
+          class="p-4 hover:bg-gray-800/50 transition-colors cursor-pointer"
+          @click="handleUserClick(user.userPrincipalName)"
         >
           <div class="flex items-center justify-between">
             <!-- User Info -->
@@ -550,9 +551,14 @@ onMounted(async () => {
               
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-3 mb-1">
-                  <h4 class="font-medium text-white">{{ user.displayName }}</h4>
+                  <h4
+                    class="font-medium text-white hover:text-blue-400 cursor-pointer transition-colors"
+                    @click="handleUserClick(user.userPrincipalName)"
+                  >
+                    {{ user.displayName }}
+                  </h4>
                   <!-- Contact Actions -->
-                  <div class="flex items-center gap-1">
+                  <div class="flex items-center gap-1" @click.stop>
                     <UButton
                       :to="getEmailLink(user.userPrincipalName)"
                       icon="i-heroicons-envelope"
@@ -612,7 +618,7 @@ onMounted(async () => {
                 </div>
                 
                 <!-- Key Roles -->
-                <div v-if="user.roles.length > 0" class="flex flex-wrap gap-1 mt-2">
+                <div v-if="user.roles.length > 0" class="flex flex-wrap gap-1 mt-2" @click.stop>
                   <UBadge
                     v-for="role in user.roles.slice(0, 3)"
                     :key="role"
@@ -636,15 +642,10 @@ onMounted(async () => {
               </div>
             </div>
 
-            <!-- View Details Button -->
-            <UButton
-              @click="handleUserClick(user.userPrincipalName)"
-              variant="outline"
-              size="sm"
-              icon="i-heroicons-arrow-top-right-on-square"
-            >
-              View Details
-            </UButton>
+            <!-- View Details Icon (whole row is clickable now) -->
+            <div class="flex-shrink-0 text-gray-500">
+              <UIcon name="i-heroicons-chevron-right" class="w-5 h-5" />
+            </div>
           </div>
         </div>
       </div>
