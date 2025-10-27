@@ -1,5 +1,5 @@
 <template>
-  <UCard class="h-full flex flex-col">
+  <UCard v-bind="$attrs" class="h-full flex flex-col">
     <template #header>
       <div class="flex justify-between items-center">
         <div class="text-lg font-semibold">S3 Buckets</div>
@@ -299,6 +299,10 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({
+  inheritAttrs: false
+})
+
 interface Props {
   accountId: string
   environment?: 'commercial' | 'govcloud'

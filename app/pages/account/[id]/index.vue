@@ -95,6 +95,7 @@
               :budget="budget"
               :current-spend="currentSpend"
               :forecast-data="forecastData"
+              :daily-costs="billableTimeSeries"
               :loading="loading"
               :class="{ 'opacity-50 pointer-events-none': isAccountInactive }"
             />

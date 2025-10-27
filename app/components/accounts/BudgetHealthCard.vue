@@ -89,13 +89,10 @@
             >
               <!-- Dot marker -->
               <div
-                :class="
-                  point.isToday
-                    ? 'bg-blue-500 ring-2 ring-blue-900'
-                    : point.exceeds
-                    ? 'bg-red-500 ring-2 ring-red-900'
-                    : 'bg-green-500'
-                "
+                :class="[
+                  point.exceeds ? 'bg-red-500' : 'bg-green-500',
+                  point.isToday ? 'ring-2 ring-blue-400 shadow-lg' : point.exceeds ? 'ring-2 ring-red-900' : ''
+                ]"
                 class="w-3.5 h-3.5 rounded-full z-10 relative"
               />
               <!-- Date label -->
@@ -157,10 +154,16 @@
 </template>
 
 <script setup lang="ts">
+interface DailyCost {
+  date: string;
+  cost: number;
+}
+
 const props = defineProps<{
   budget: number;
   currentSpend: number;
   forecastData: any;
+  dailyCosts?: DailyCost[];
   loading?: boolean;
 }>();
 
@@ -199,70 +202,37 @@ const projectedSpend = computed(() => {
   return burnRate.value * daysInMonth;
 });
 
-// Build simple forecast timeline from AWS data (showing entire month)
-const forecastTimeline = computed(() => {
-  const timeline: Array<{
-    date: string;
-    label: string;
-    cumulative: number;
-    exceeds: boolean;
-    isToday?: boolean;
-  }> = [];
+// Find EXACT day when budget was/will be exceeded (checking both historical and forecast data)
+// This must be defined before forecastTimeline since timeline uses it
+const exactBudgetExceed = computed(() => {
+  if (props.budget === 0) return null;
 
-  // Add start of month (Day 1)
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  timeline.push({
-    date: startOfMonth.toISOString(),
-    label: startOfMonth.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-    cumulative: 0,
-    exceeds: false,
-  });
+  // First check historical data to see if budget was already exceeded
+  if (props.dailyCosts && props.dailyCosts.length > 0) {
+    let cumulative = 0;
+    const sortedDailyCosts = [...props.dailyCosts].sort((a, b) =>
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
 
-  // Add today's actual spend
-  timeline.push({
-    date: now.toISOString(),
-    label: "Today",
-    cumulative: props.currentSpend,
-    exceeds: props.currentSpend > props.budget,
-    isToday: true,
-  });
+    for (let i = 0; i < sortedDailyCosts.length; i++) {
+      cumulative += sortedDailyCosts[i].cost;
 
-  // Add forecast periods if available
-  if (props.forecastData?.forecast?.forecastResultsByTime) {
-    let cumulative = props.currentSpend;
-    const periods = props.forecastData.forecast.forecastResultsByTime || [];
-
-    // Show weekly snapshots (every 7th day from today) plus the last day
-    periods.forEach((period: any, index: number) => {
-      const meanValue = parseFloat(period.MeanValue || "0");
-      cumulative += meanValue;
-
-      // Show every 7th day or the last day
-      const isWeekMark = (index + 1) % 7 === 0;
-      const isLastDay = index === periods.length - 1;
-
-      if (isWeekMark || isLastDay) {
-        const endDate = new Date(period.TimePeriod?.End || "");
-        const label = endDate.toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-        });
-
-        timeline.push({
-          date: period.TimePeriod?.End || "",
-          label,
-          cumulative,
-          exceeds: cumulative > props.budget,
-        });
+      if (cumulative > props.budget) {
+        const endDate = new Date(sortedDailyCosts[i].date);
+        return {
+          date: sortedDailyCosts[i].date,
+          label: endDate.toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+          }),
+          dayIndex: i,
+          isHistorical: true,
+        };
       }
-    });
+    }
   }
 
-  return timeline;
-});
-
-// Find EXACT day when budget will be exceeded (not just weekly checkpoints)
-const exactBudgetExceed = computed(() => {
+  // If not exceeded yet, check forecast data
   if (!props.forecastData?.forecast?.forecastResultsByTime) return null;
 
   let cumulative = props.currentSpend;
@@ -283,6 +253,7 @@ const exactBudgetExceed = computed(() => {
         }),
         dayIndex: i,
         totalDays: periods.length,
+        isHistorical: false,
       };
     }
   }
@@ -290,73 +261,151 @@ const exactBudgetExceed = computed(() => {
   return null;
 });
 
-// Calculate position relative to the DOTS (not days) since dots are evenly spaced
+// Build timeline from historical daily costs + forecast data
+const forecastTimeline = computed(() => {
+  const timeline: Array<{
+    date: string;
+    label: string;
+    cumulative: number;
+    exceeds: boolean;
+    isToday?: boolean;
+  }> = [];
+
+  // Start with Day 1 of current month
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  timeline.push({
+    date: startOfMonth.toISOString().split('T')[0],
+    label: startOfMonth.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+    cumulative: 0,
+    exceeds: false,
+  });
+
+  // Build cumulative costs from historical daily data
+  if (props.dailyCosts && props.dailyCosts.length > 0) {
+    let cumulative = 0;
+
+    // Sort daily costs by date to ensure proper ordering
+    const sortedDailyCosts = [...props.dailyCosts].sort((a, b) =>
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+
+    sortedDailyCosts.forEach((day, index) => {
+      cumulative += day.cost;
+
+      // Show every 3rd day for historical data, but skip if very close to "Today"
+      const dayDate = new Date(day.date);
+      const isEvery3Days = (index + 1) % 3 === 0;
+      const isLastHistoricalDay = index === sortedDailyCosts.length - 1;
+
+      // Don't show dots that are too close to today (within 1 day)
+      const daysDiff = Math.abs((now.getTime() - dayDate.getTime()) / (1000 * 60 * 60 * 24));
+      const tooCloseToToday = daysDiff < 1;
+
+      if ((isEvery3Days || isLastHistoricalDay) && !tooCloseToToday) {
+        timeline.push({
+          date: day.date,
+          label: dayDate.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+          cumulative,
+          exceeds: cumulative > props.budget, // Red if cumulative spend exceeds budget
+        });
+      }
+    });
+  }
+
+  // Add today's actual spend
+  const todayDateStr = now.toISOString().split('T')[0];
+
+  timeline.push({
+    date: todayDateStr,
+    label: "Today",
+    cumulative: props.currentSpend,
+    exceeds: props.currentSpend > props.budget, // Red if current spend exceeds budget
+    isToday: true,
+  });
+
+  // Add forecast periods if available
+  if (props.forecastData?.forecast?.forecastResultsByTime) {
+    let cumulative = props.currentSpend;
+    const periods = props.forecastData.forecast.forecastResultsByTime || [];
+
+    // Show every 3rd day from forecast plus the last day
+    periods.forEach((period: any, index: number) => {
+      const meanValue = parseFloat(period.MeanValue || "0");
+      cumulative += meanValue;
+
+      // Show every 3rd day or the last day
+      const isEvery3Days = (index + 1) % 3 === 0;
+      const isLastDay = index === periods.length - 1;
+
+      if (isEvery3Days || isLastDay) {
+        const endDate = new Date(period.TimePeriod?.End || "");
+        const label = endDate.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        });
+
+        timeline.push({
+          date: period.TimePeriod?.End || "",
+          label,
+          cumulative,
+          exceeds: cumulative > props.budget, // Red if projected cumulative exceeds budget
+        });
+      }
+    });
+  }
+
+  return timeline;
+});
+
+// Calculate position for the exceed marker on the timeline
 const exactExceedPosition = computed(() => {
   if (!exactBudgetExceed.value || forecastTimeline.value.length === 0)
     return null;
 
-  const exceedDayIndex = exactBudgetExceed.value.dayIndex;
-  const periods = props.forecastData?.forecast?.forecastResultsByTime || [];
+  const exceedDate = new Date(exactBudgetExceed.value.date).getTime();
+  const timeline = forecastTimeline.value;
 
-  // Timeline now has: [Day 1, Today, ...forecast dots]
-  // So forecast dots start at index 2
-  const FORECAST_DOT_OFFSET = 2;
+  // Find the two timeline dots that the exceed date falls between
+  let prevDot = null;
+  let nextDot = null;
+  let prevIndex = -1;
+  let nextIndex = -1;
 
-  // Build a map of dot positions to their day indices
-  const dotDayIndices: number[] = [];
-  periods.forEach((period: any, dayIdx: number) => {
-    const isWeekMark = (dayIdx + 1) % 7 === 0;
-    const isLastDay = dayIdx === periods.length - 1;
-    if (isWeekMark || isLastDay) {
-      dotDayIndices.push(dayIdx);
+  for (let i = 0; i < timeline.length; i++) {
+    const dotDate = new Date(timeline[i].date).getTime();
+
+    if (dotDate <= exceedDate) {
+      prevDot = timeline[i];
+      prevIndex = i;
     }
-  });
-
-  // Find which two dots the exceed date falls between
-  let prevDotIndex = -1;
-  let nextDotIndex = -1;
-  let prevDayIndex = -1;
-  let nextDayIndex = -1;
-
-  // Check if exceed happens before first forecast dot (between Today and first forecast)
-  if (exceedDayIndex < dotDayIndices[0]) {
-    // Exceed is between "Today" (dot index 1) and first forecast dot (dot index 2)
-    prevDotIndex = 1; // Today
-    nextDotIndex = 2; // First forecast dot
-    prevDayIndex = 0; // Today is day 0 in forecast terms
-    nextDayIndex = dotDayIndices[0];
-  } else {
-    // Find surrounding forecast dots
-    for (let i = 0; i < dotDayIndices.length; i++) {
-      if (dotDayIndices[i] >= exceedDayIndex) {
-        nextDotIndex = i + FORECAST_DOT_OFFSET;
-        nextDayIndex = dotDayIndices[i];
-        if (i > 0) {
-          prevDotIndex = i - 1 + FORECAST_DOT_OFFSET;
-          prevDayIndex = dotDayIndices[i - 1];
-        } else {
-          prevDotIndex = 1; // Today
-          prevDayIndex = 0;
-        }
-        break;
-      }
+    if (dotDate >= exceedDate && nextDot === null) {
+      nextDot = timeline[i];
+      nextIndex = i;
+      break;
     }
   }
 
-  // If exceed is after last dot
-  if (nextDotIndex === -1) return 100;
+  // If exceed date is before first dot or after last dot
+  if (!prevDot) return 0;
+  if (!nextDot) return 100;
 
-  // Calculate position between the two dots
-  const daysBetweenDots = nextDayIndex - prevDayIndex;
-  const daysFromPrevDot = exceedDayIndex - prevDayIndex;
-  const proportionBetweenDots = daysFromPrevDot / daysBetweenDots;
+  // If exceed date exactly matches a dot, return that dot's position
+  if (prevIndex === nextIndex) {
+    return (prevIndex / (timeline.length - 1)) * 100;
+  }
 
-  // Dots are evenly spaced, so calculate position
-  const dotSpacing = 100 / (forecastTimeline.value.length - 1);
-  const position =
-    prevDotIndex * dotSpacing + proportionBetweenDots * dotSpacing;
+  // Calculate position by interpolating between the two dots based on dates
+  const prevDate = new Date(prevDot.date).getTime();
+  const nextDate = new Date(nextDot.date).getTime();
+  const dateRange = nextDate - prevDate;
+  const exceedOffset = exceedDate - prevDate;
+  const proportionBetweenDots = dateRange > 0 ? exceedOffset / dateRange : 0;
 
-  return position;
+  // Dots are evenly spaced on the timeline
+  const dotSpacing = 100 / (timeline.length - 1);
+  const position = prevIndex * dotSpacing + proportionBetweenDots * dotSpacing;
+
+  return Math.max(0, Math.min(100, position)); // Clamp between 0-100
 });
 
 const budgetExceedDate = computed(() => {

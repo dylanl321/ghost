@@ -430,7 +430,6 @@ onMounted(async () => {
             <UCheckbox
               v-model="showOnlyAwsUsers"
               label="AWS users only"
-              size="sm"
             />
             <UButton
               v-if="selectedRole || selectedAccount || showOnlyAwsUsers"
