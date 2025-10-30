@@ -52,7 +52,7 @@ test_docker_build:
   stage: test
   tags:
     - prod-docker-shared
-  image: 504885980539.dkr.ecr.us-gov-east-1.amazonaws.com/docker:24.0.5-dind
+  image: 504885980539.dkr.ecr.us-gov-east-1.amazonaws.com/docker:latest
   rules:
     - if: $CI_COMMIT_REF_NAME != "dev" && $CI_COMMIT_REF_NAME != "master"
   script:
@@ -122,7 +122,7 @@ build:
   stage: build
   tags:
     - prod-docker-shared
-  image: 504885980539.dkr.ecr.us-gov-east-1.amazonaws.com/docker:24.0.5-dind
+  image: 504885980539.dkr.ecr.us-gov-east-1.amazonaws.com/docker:latest
   needs:
     - job: get_ecr_credentials
       artifacts: true
