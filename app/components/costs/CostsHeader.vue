@@ -336,7 +336,7 @@ async function generateShareUrl() {
   shareError.value = ''
 
   try {
-    const response = await $fetch('/api/shortlinks/create', {
+    const response = await $fetch('/api/shortlinks', {
       method: 'POST',
       body: {
         type: 'cost-view',

@@ -14,7 +14,10 @@
       />
 
       <!-- Main Content Area -->
-      <main class="flex-1 pt-4 md:pt-4 overflow-auto min-h-0 flex flex-col bg-gray-50 dark:bg-slate-900">
+      <main 
+        class="flex-1 min-h-0 flex flex-col bg-gray-50 dark:bg-slate-900"
+        :class="isExplorerPage ? 'overflow-hidden' : 'pt-4 md:pt-4 overflow-auto'"
+      >
         <!-- Page Content -->
         <div class="relative h-full min-h-0">
           <section
@@ -57,6 +60,9 @@ import { useNavigationStore } from '~/stores/useNavigationStore'
 const route = useRoute()
 const navigationStore = useNavigationStore()
 const sideNavRef = ref()
+
+// Detect explorer page to adjust layout
+const isExplorerPage = computed(() => route.path === '/account/explorer')
 
 // Mobile menu handler
 const handleMobileMenuToggle = () => {
