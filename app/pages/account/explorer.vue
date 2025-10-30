@@ -506,7 +506,21 @@ const loading = ref(false)
 const showFilterModal = ref(false)
 const showFilterPanel = ref(false)
 
-// Total active filters (for badge)
+// search + filters - MUST be defined before totalActiveFilters uses them
+const search = ref('')
+const searchScope = ref<'All Fields' | 'Project Name' | 'Personnel' | 'Account IDs'>('All Fields')
+const searchScopeOptions = ['All Fields', 'Project Name', 'Personnel', 'Account IDs']
+const statusFilter = ref<'All' | 'Active' | 'Decommissioned'>('Active')
+const statusOptions: ('All' | 'Active' | 'Decommissioned')[] = ['All', 'Active', 'Decommissioned']
+const envFilter = ref<'All' | 'Commercial Only' | 'GovCloud Paired'>('All')
+const envOptions: ('All' | 'Commercial Only' | 'GovCloud Paired')[] = ['All', 'Commercial Only', 'GovCloud Paired']
+const lobFilter = ref<'All' | 'MSS' | 'SIS' | 'Cyber' | 'SC&I' | 'LAS' | 'IT'>('All')
+const lobOptions = ['All', 'MSS', 'SIS', 'Cyber', 'SC&I', 'LAS', 'IT']
+const sawseCheckbox = ref<boolean>(false)
+const myEnclavesCheckbox = ref<boolean>(false)
+const favoritesCheckbox = ref<boolean>(false)
+
+// Total active filters (for badge) - NOW defined after all refs it depends on
 const totalActiveFilters = computed(() => {
   let count = 0
 
@@ -524,20 +538,6 @@ const totalActiveFilters = computed(() => {
 
   return count
 })
-
-// search + filters
-const search = ref('')
-const searchScope = ref<'All Fields' | 'Project Name' | 'Personnel' | 'Account IDs'>('All Fields')
-const searchScopeOptions = ['All Fields', 'Project Name', 'Personnel', 'Account IDs']
-const statusFilter = ref<'All' | 'Active' | 'Decommissioned'>('Active')
-const statusOptions: ('All' | 'Active' | 'Decommissioned')[] = ['All', 'Active', 'Decommissioned']
-const envFilter = ref<'All' | 'Commercial Only' | 'GovCloud Paired'>('All')
-const envOptions: ('All' | 'Commercial Only' | 'GovCloud Paired')[] = ['All', 'Commercial Only', 'GovCloud Paired']
-const lobFilter = ref<'All' | 'MSS' | 'SIS' | 'Cyber' | 'SC&I' | 'LAS' | 'IT'>('All')
-const lobOptions = ['All', 'MSS', 'SIS', 'Cyber', 'SC&I', 'LAS', 'IT']
-const sawseCheckbox = ref<boolean>(false)
-const myEnclavesCheckbox = ref<boolean>(false)
-const favoritesCheckbox = ref<boolean>(false)
 
 // Advanced filters
 const filtersByCategory = getFiltersByCategory()
@@ -626,11 +626,6 @@ const itemsPerPage = ref(25)
 
 // Pagination
 const page = ref(1)
-
-// Reset to page 1 when filters change the result set
-watch(filteredRows, () => {
-  page.value = 1
-})
 
 const getActionItems = (account: AWSEnclaveData) => {
   // Always use commercial account ID for navigation (primary identifier)
@@ -772,6 +767,11 @@ const paginatedRows = computed(() => {
   if (perPage >= 999999) return filteredRows.value // Show all
   const start = (page.value - 1) * perPage
   return filteredRows.value.slice(start, start + perPage)
+})
+
+// Reset to page 1 when filters change the result set
+watch(filteredRows, () => {
+  page.value = 1
 })
 
 function resetFilters() {
