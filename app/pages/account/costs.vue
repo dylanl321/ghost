@@ -16,6 +16,63 @@
           />
         </div>
 
+        <!-- Selected Accounts Indicator -->
+        <div v-if="selectedAccounts.length > 0" class="px-3 py-2 border-b border-gray-700">
+          <UPopover mode="hover" :popper="{ placement: 'bottom-start', offsetDistance: 4 }">
+            <button
+              class="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-gray-300 bg-blue-900/20 hover:bg-blue-900/30 rounded transition-colors"
+            >
+              <Icon name="i-heroicons-check-circle" class="w-3.5 h-3.5 text-blue-400" />
+              <span class="font-medium">{{ selectedAccounts.length }} account{{ selectedAccounts.length !== 1 ? 's' : '' }} selected</span>
+              <Icon name="i-heroicons-chevron-down" class="w-3 h-3 text-gray-400 ml-auto" />
+            </button>
+
+            <template #panel>
+              <div class="p-2 w-72 max-h-64 overflow-y-auto">
+                <div class="text-xs font-medium text-gray-300 mb-2">Selected Accounts</div>
+                <div class="space-y-1">
+                  <div
+                    v-for="account in displayedSelectedAccounts"
+                    :key="getAccountKey(account)"
+                    class="flex items-center justify-between gap-2 px-2 py-1.5 bg-blue-900/30 rounded text-xs group"
+                  >
+                    <div class="flex-1 min-w-0">
+                      <div class="text-gray-200 truncate font-medium">
+                        {{ formatAccountDisplayName(account) }}
+                      </div>
+                      <div class="text-gray-400 text-[10px] truncate">
+                        {{ account.accountId || account.awsStandardAccountID }}
+                      </div>
+                    </div>
+                    <button
+                      class="flex-shrink-0 p-0.5 rounded hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors"
+                      @click.stop="toggleAccount(getAccountKey(account))"
+                    >
+                      <Icon name="i-heroicons-x-mark" class="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div v-if="remainingSelectedCount > 0" class="px-2 py-1 text-xs text-blue-400">
+                    +{{ remainingSelectedCount }} more selected
+                  </div>
+                </div>
+
+                <div class="mt-2 pt-2 border-t border-gray-700">
+                  <UButton
+                    size="xs"
+                    color="gray"
+                    variant="ghost"
+                    block
+                    @click="clearSelection"
+                  >
+                    Clear All Selections
+                  </UButton>
+                </div>
+              </div>
+            </template>
+          </UPopover>
+        </div>
+
         <!-- Search -->
         <div class="p-3 border-b border-gray-700">
           <UInput 
@@ -1090,6 +1147,27 @@ const utilization = computed(() => {
   if (totalBudget.value === 0) return 0
   return Math.round((totalSpend.value / totalBudget.value) * 100)
 })
+
+// Selected accounts display logic
+const selectedAccountObjects = computed(() => {
+  if (selectedAccounts.value.length === 0) return []
+  return accountsWithCosts.value.filter((acc: Account) =>
+    selectedAccounts.value.includes(getAccountKey(acc))
+  )
+})
+
+const displayedSelectedAccounts = computed(() => {
+  return selectedAccountObjects.value.slice(0, 3)
+})
+
+const remainingSelectedCount = computed(() => {
+  return Math.max(0, selectedAccountObjects.value.length - 3)
+})
+
+const formatAccountDisplayName = (account: Account) => {
+  const name = account.accountName || account.projectName || account.name || 'Unnamed Account'
+  return name.length > 20 ? name.substring(0, 20) + '...' : name
+}
 
 // Grouping computed properties with search filtering
 const lobGroups = computed(() => {

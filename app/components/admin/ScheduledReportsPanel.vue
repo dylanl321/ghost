@@ -91,6 +91,29 @@
       </UCard>
     </div>
 
+    <!-- Warning for Stuck Reports -->
+    <UAlert
+      v-if="stuckReportsCount > 0"
+      color="orange"
+      variant="soft"
+      title="Scheduling Issues Detected"
+      :description="`${stuckReportsCount} report(s) have incorrect next run times. Click 'Fix Stuck' to resolve.`"
+      icon="i-heroicons-exclamation-triangle"
+      class="mb-4"
+    >
+      <template #actions>
+        <UButton
+          color="orange"
+          variant="solid"
+          size="xs"
+          @click="fixStuckReports"
+          :loading="fixingStuck"
+        >
+          Fix Now
+        </UButton>
+      </template>
+    </UAlert>
+
     <!-- All Reports Table -->
     <UCard>
       <template #header>
@@ -112,6 +135,17 @@
               size="sm"
               class="w-64"
             />
+            <UButton
+              icon="i-heroicons-wrench-screwdriver"
+              color="orange"
+              variant="soft"
+              size="sm"
+              @click="fixStuckReports"
+              :loading="fixingStuck"
+              title="Fix reports with incorrect scheduling"
+            >
+              Fix Stuck
+            </UButton>
             <UButton
               icon="i-heroicons-arrow-path"
               color="gray"
@@ -203,7 +237,7 @@
           <!-- Next Run -->
           <template #nextRunTime-data="{ row }">
             <div class="text-sm">
-              <div class="text-gray-900 dark:text-white">{{ formatDate(row.nextRunTime) }}</div>
+              <div class="text-gray-900 dark:text-white">{{ formatDateInTimezone(row.nextRunTime, row.schedule.timezone) }}</div>
               <div class="text-xs text-gray-500 dark:text-gray-400">
                 {{ formatTimeAgo(row.nextRunTime) }}
               </div>
@@ -331,6 +365,157 @@
       v-model="showEmailModal"
       :execution="selectedExecution"
     />
+
+    <!-- Report Detail Modal -->
+    <UModal v-model="showDetailModal" :ui="{ width: 'sm:max-w-2xl' }">
+      <UCard v-if="selectedReport">
+        <template #header>
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+                {{ selectedReport.reportName }}
+              </h3>
+              <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Report Details
+              </p>
+            </div>
+            <UButton
+              color="gray"
+              variant="ghost"
+              icon="i-heroicons-x-mark-20-solid"
+              size="sm"
+              @click="showDetailModal = false"
+            />
+          </div>
+        </template>
+
+        <div class="space-y-6">
+          <!-- Status and Schedule -->
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
+              <div class="mt-1">
+                <ReportStatusBadge :status="selectedReport.status" show-icon />
+              </div>
+            </div>
+            <div>
+              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Schedule</label>
+              <div class="mt-1 text-sm text-gray-900 dark:text-white">
+                <ScheduleDisplay :schedule="selectedReport.schedule" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Timing Info -->
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Next Run</label>
+              <div class="mt-1 text-sm text-gray-900 dark:text-white">
+                {{ formatDateInTimezone(selectedReport.nextRunTime, selectedReport.schedule.timezone) }}
+              </div>
+            </div>
+            <div>
+              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Last Run</label>
+              <div class="mt-1 text-sm text-gray-900 dark:text-white">
+                {{ selectedReport.lastRunTime ? formatDate(selectedReport.lastRunTime) : 'Never' }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Recipients -->
+          <div>
+            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Recipients</label>
+            <div class="mt-2 flex flex-wrap gap-2">
+              <UBadge
+                v-for="recipient in selectedReport.recipients"
+                :key="recipient"
+                color="blue"
+                variant="soft"
+              >
+                {{ recipient }}
+              </UBadge>
+            </div>
+          </div>
+
+          <!-- Report Config -->
+          <div>
+            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Report Configuration</label>
+            <div class="mt-2 bg-gray-50 dark:bg-gray-800 rounded-lg p-3 space-y-2 text-sm">
+              <div class="flex justify-between">
+                <span class="text-gray-600 dark:text-gray-400">Timeframe:</span>
+                <span class="text-gray-900 dark:text-white">{{ selectedReport.reportConfig.timeframe }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-600 dark:text-gray-400">Format:</span>
+                <span class="text-gray-900 dark:text-white">{{ selectedReport.reportConfig.format.toUpperCase() }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-600 dark:text-gray-400">Data Mode:</span>
+                <span class="text-gray-900 dark:text-white">{{ selectedReport.reportConfig.dataMode }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-600 dark:text-gray-400">Accounts:</span>
+                <span class="text-gray-900 dark:text-white">
+                  {{ selectedReport.reportConfig.accounts?.length || 'All' }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Stats -->
+          <div>
+            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Statistics</label>
+            <div class="mt-2 grid grid-cols-3 gap-4">
+              <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+                <div class="text-xs text-gray-600 dark:text-gray-400">Total Runs</div>
+                <div class="text-lg font-semibold text-gray-900 dark:text-white">{{ selectedReport.runCount }}</div>
+              </div>
+              <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+                <div class="text-xs text-gray-600 dark:text-gray-400">Created</div>
+                <div class="text-sm font-semibold text-gray-900 dark:text-white">
+                  {{ new Date(selectedReport.createdAt).toLocaleDateString() }}
+                </div>
+              </div>
+              <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+                <div class="text-xs text-gray-600 dark:text-gray-400">Owner</div>
+                <div class="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                  {{ selectedReport.createdBy.split('@')[0] }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <template #footer>
+          <div class="flex justify-between">
+            <UButton
+              color="gray"
+              variant="ghost"
+              @click="showDetailModal = false"
+            >
+              Close
+            </UButton>
+            <div class="flex gap-2">
+              <UButton
+                color="blue"
+                variant="soft"
+                icon="i-heroicons-clock"
+                @click="handleViewHistory(selectedReport); showDetailModal = false"
+              >
+                View History
+              </UButton>
+              <UButton
+                color="blue"
+                icon="i-heroicons-bolt"
+                @click="handleRunNow(selectedReport); showDetailModal = false"
+              >
+                Execute Now
+              </UButton>
+            </div>
+          </div>
+        </template>
+      </UCard>
+    </UModal>
   </div>
 </template>
 
@@ -375,12 +560,14 @@ const frequencyFilters = [
 const showRunNowModal = ref(false)
 const showHistoryModal = ref(false)
 const showEmailModal = ref(false)
+const showDetailModal = ref(false)
 const reportToRun = ref<ScheduledReport | null>(null)
 const selectedReport = ref<ScheduledReport | null>(null)
 const selectedExecution = ref<ReportExecution | null>(null)
 const executing = ref(false)
 const historyLoading = ref(false)
 const historyError = ref<string | null>(null)
+const fixingStuck = ref(false)
 
 // Table columns
 const columns = [
@@ -420,13 +607,41 @@ const filteredReports = computed(() => {
   return reports
 })
 
+// Detect stuck reports
+const stuckReportsCount = computed(() => {
+  const now = new Date()
+  return allReports.value.filter(report => {
+    // Check active and paused reports (paused may have been auto-paused due to issues)
+    if (report.status === 'disabled') return false
+
+    const nextRun = new Date(report.nextRunTime)
+
+    // Report is stuck if:
+    // 1. Next run is >1 hour in the past
+    const hoursBehind = (now.getTime() - nextRun.getTime()) / (1000 * 60 * 60)
+    if (hoursBehind > 1) return true
+
+    // 2. Report last ran within 2 hours but next run is still in the past
+    // This catches reports that are trying to run repeatedly
+    if (report.lastRunTime) {
+      const lastRun = new Date(report.lastRunTime)
+      const hoursSinceLastRun = (now.getTime() - lastRun.getTime()) / (1000 * 60 * 60)
+
+      // If last run was very recent (< 2 hours) and next run is in past, it's stuck
+      if (hoursSinceLastRun < 2 && nextRun < now) return true
+    }
+
+    return false
+  }).length
+})
+
 // Methods
 function getRowActions(report: ScheduledReport) {
   return [
     [{
       label: 'View Details',
       icon: 'i-heroicons-eye',
-      click: () => navigateTo(`/reports/scheduled?id=${report.reportId}`)
+      click: () => handleViewDetails(report)
     }],
     [{
       label: 'Execute Now',
@@ -438,6 +653,11 @@ function getRowActions(report: ScheduledReport) {
       click: () => handleViewHistory(report)
     }]
   ]
+}
+
+function handleViewDetails(report: ScheduledReport) {
+  selectedReport.value = report
+  showDetailModal.value = true
 }
 
 function handleRunNow(report: ScheduledReport) {
@@ -503,6 +723,65 @@ async function refreshData() {
   ])
 }
 
+async function fixStuckReports() {
+  fixingStuck.value = true
+
+  try {
+    const response = await $fetch<{
+      success: boolean
+      message: string
+      data: {
+        locksDeleted: number
+        reportsChecked: number
+        reportsFixed: number
+        reportsPaused: number
+        errors: string[]
+      }
+    }>('/api/admin/scheduled-reports/fix-stuck', {
+      method: 'POST'
+    })
+
+    if (response.success) {
+      const { reportsFixed, reportsPaused, locksDeleted, errors } = response.data
+
+      let toastMessage = `Fixed ${reportsFixed} report(s)`
+      if (reportsPaused > 0) {
+        toastMessage += `, paused ${reportsPaused} for safety`
+      }
+      if (locksDeleted > 0) {
+        toastMessage += `, removed ${locksDeleted} stale lock(s)`
+      }
+
+      toast.add({
+        title: 'Success',
+        description: toastMessage,
+        color: 'green',
+        timeout: 5000
+      })
+
+      if (errors.length > 0) {
+        toast.add({
+          title: 'Some Errors Occurred',
+          description: `${errors.length} error(s) - check console`,
+          color: 'orange'
+        })
+        console.error('Fix stuck reports errors:', errors)
+      }
+
+      // Refresh data to show updated reports
+      await refreshData()
+    }
+  } catch (err: any) {
+    toast.add({
+      title: 'Error',
+      description: err.message || 'Failed to fix stuck reports',
+      color: 'red'
+    })
+  } finally {
+    fixingStuck.value = false
+  }
+}
+
 function handleViewEmail(execution: ReportExecution) {
   selectedExecution.value = execution
   showEmailModal.value = true
@@ -517,6 +796,19 @@ function formatDate(dateString: string): string {
     hour: 'numeric',
     minute: '2-digit',
     hour12: true
+  })
+}
+
+function formatDateInTimezone(dateString: string, timezone: string): string {
+  const date = new Date(dateString)
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: timezone,
+    timeZoneName: 'short'
   })
 }
 

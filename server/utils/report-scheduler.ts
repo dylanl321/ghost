@@ -7,7 +7,8 @@ import type { ScheduledReport } from '~/shared/types/scheduled-reports'
 import {
   getUpcomingReports,
   updateReportRunStatus,
-  recordExecution
+  recordExecution,
+  calculateNextRunTime
 } from './scheduled-reports'
 import { generateCostReport } from './report-generator'
 import { sendReportEmail, renderTemplate, getDefaultTemplate } from './email-service'
@@ -186,13 +187,14 @@ export async function processScheduledReports(): Promise<{
   processed: number
   successful: number
   failed: number
+  paused: number
 }> {
   try {
     // Get reports due in next 60 seconds
     const dueReports = await getUpcomingReports(60)
 
     if (dueReports.length === 0) {
-      return { processed: 0, successful: 0, failed: 0 }
+      return { processed: 0, successful: 0, failed: 0, paused: 0 }
     }
 
     logger.debug(`Found ${dueReports.length} report(s) to execute`)
@@ -200,9 +202,25 @@ export async function processScheduledReports(): Promise<{
     let successful = 0
     let failed = 0
     let skipped = 0
+    let paused = 0
 
     // Execute reports sequentially to avoid overwhelming the system
     for (const report of dueReports) {
+      // Safety check: Detect suspicious execution patterns
+      const isSuspicious = await checkForSuspiciousPattern(report)
+
+      if (isSuspicious.detected) {
+        logger.warn(`⚠️  Suspicious pattern detected for ${report.reportName}: ${isSuspicious.reason}`)
+        logger.warn(`⚠️  Auto-pausing report for safety`)
+
+        // Auto-pause the report
+        const { updateReport } = await import('./scheduled-reports')
+        await updateReport(report.reportId, { status: 'paused' })
+
+        paused++
+        continue
+      }
+
       // Try to claim execution lock
       const lockClaimed = await claimExecutionLock(report.reportId, report.nextRunTime)
 
@@ -229,15 +247,84 @@ export async function processScheduledReports(): Promise<{
       logger.info(`⊘ Skipped ${skipped} report(s) (already claimed by other containers)`)
     }
 
+    if (paused > 0) {
+      logger.warn(`⚠️  Auto-paused ${paused} report(s) due to suspicious patterns`)
+    }
+
     return {
       processed: successful + failed,
       successful,
-      failed
+      failed,
+      paused
     }
   } catch (error: any) {
     logger.error('Error processing scheduled reports:', error)
-    return { processed: 0, successful: 0, failed: 0 }
+    return { processed: 0, successful: 0, failed: 0, paused: 0 }
   }
+}
+
+/**
+ * Check if a report shows suspicious execution patterns
+ * that might indicate a bug or misconfiguration
+ */
+async function checkForSuspiciousPattern(report: ScheduledReport): Promise<{
+  detected: boolean
+  reason?: string
+}> {
+  const now = new Date()
+  const nextRun = new Date(report.nextRunTime)
+
+  // Check 1: Next run is more than 1 hour in the past
+  const hoursBehind = (now.getTime() - nextRun.getTime()) / (1000 * 60 * 60)
+  if (hoursBehind > 1) {
+    return {
+      detected: true,
+      reason: `Next run time is ${hoursBehind.toFixed(1)} hours in the past`
+    }
+  }
+
+  // Check 2: Excessive runs in a short period
+  // For daily reports: >5 runs in 24h is suspicious
+  // For weekly reports: >3 runs in 24h is suspicious
+  // For monthly reports: >2 runs in 24h is suspicious
+  if (report.lastRunTime) {
+    const lastRun = new Date(report.lastRunTime)
+    const hoursSinceLastRun = (now.getTime() - lastRun.getTime()) / (1000 * 60 * 60)
+
+    // If last run was in the past 24 hours, check run count
+    if (hoursSinceLastRun < 24) {
+      const maxRunsPerDay: Record<string, number> = {
+        daily: 5,
+        weekly: 3,
+        monthly: 2,
+        quarterly: 2
+      }
+
+      const threshold = maxRunsPerDay[report.schedule.frequency] || 5
+
+      if (report.runCount > threshold && hoursSinceLastRun < 24) {
+        return {
+          detected: true,
+          reason: `${report.runCount} runs detected (>${threshold} runs in 24h for ${report.schedule.frequency} schedule)`
+        }
+      }
+    }
+  }
+
+  // Check 3: Next run time doesn't match expected frequency
+  // This catches timezone conversion bugs
+  const calculatedNext = calculateNextRunTime(report.schedule, report.schedule.timezone)
+  const timeDiffHours = Math.abs(calculatedNext.getTime() - nextRun.getTime()) / (1000 * 60 * 60)
+
+  // Allow 2 hour tolerance for DST transitions
+  if (timeDiffHours > 2) {
+    return {
+      detected: true,
+      reason: `Stored next run differs from calculated by ${timeDiffHours.toFixed(1)} hours`
+    }
+  }
+
+  return { detected: false }
 }
 
 /**

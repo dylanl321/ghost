@@ -69,7 +69,8 @@ export function calculateNextRunTime(schedule: any, timezone: string, fromTime?:
 
     case 'weekly': {
       const [hours, minutes] = schedule.time.split(':').map(Number)
-      const targetDay = schedule.dayOfWeek || 1 // Default Monday
+      // Ensure dayOfWeek is a number (handle both string and number from DB)
+      const targetDay = Number(schedule.dayOfWeek) || 1 // Default Monday
       const currentDay = nowInTz.getDay()
 
       nextRunInTz = new Date(nowInTz)
@@ -87,7 +88,8 @@ export function calculateNextRunTime(schedule: any, timezone: string, fromTime?:
 
     case 'monthly': {
       const [hours, minutes] = schedule.time.split(':').map(Number)
-      const targetDay = schedule.dayOfMonth || 1
+      // Ensure dayOfMonth is a number (handle both string and number from DB)
+      const targetDay = Number(schedule.dayOfMonth) || 1
 
       nextRunInTz = new Date(nowInTz)
       nextRunInTz.setHours(hours, minutes, 0, 0)
@@ -99,6 +101,7 @@ export function calculateNextRunTime(schedule: any, timezone: string, fromTime?:
       }
 
       // Handle month overflow (e.g., day 31 in February)
+      // Now both sides are numbers for proper comparison
       if (nextRunInTz.getDate() !== targetDay) {
         // Set to last day of month
         nextRunInTz.setDate(0)
@@ -108,7 +111,8 @@ export function calculateNextRunTime(schedule: any, timezone: string, fromTime?:
 
     case 'quarterly': {
       const [hours, minutes] = schedule.time.split(':').map(Number)
-      const targetMonth = schedule.monthOfQuarter || 1
+      // Ensure monthOfQuarter is a number (handle both string and number from DB)
+      const targetMonth = Number(schedule.monthOfQuarter) || 1
       const currentMonth = nowInTz.getMonth()
       const currentQuarter = Math.floor(currentMonth / 3)
 
@@ -144,19 +148,49 @@ export function calculateNextRunTime(schedule: any, timezone: string, fromTime?:
 
 /**
  * Convert a Date to a specific timezone (returns a Date representing that time in that timezone)
+ * This properly handles DST and timezone offsets
  */
 function convertToTimezone(date: Date, timezone: string): Date {
-  // Format the date in the target timezone
-  const dateStr = date.toLocaleString('en-US', { timeZone: timezone })
-  return new Date(dateStr)
+  // Get the date components in the target timezone using Intl API
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  })
+
+  const parts = formatter.formatToParts(date)
+  const dateParts: Record<string, string> = {}
+
+  for (const part of parts) {
+    if (part.type !== 'literal') {
+      dateParts[part.type] = part.value
+    }
+  }
+
+  // Create a new Date object with the converted components
+  // Note: This Date object is in the local system timezone but represents
+  // the same wall-clock time as in the target timezone
+  return new Date(
+    parseInt(dateParts.year),
+    parseInt(dateParts.month) - 1, // Month is 0-indexed
+    parseInt(dateParts.day),
+    parseInt(dateParts.hour),
+    parseInt(dateParts.minute),
+    parseInt(dateParts.second)
+  )
 }
 
 /**
  * Convert a date from a specific timezone back to UTC
- * Input date represents a local time in the timezone, output is UTC
+ * Input date represents a local time in the timezone (as wall-clock time), output is UTC
  */
 function convertFromTimezone(localDate: Date, timezone: string): Date {
-  // Create a string representation of the local time
+  // Create an ISO string from the local date components (treating them as wall-clock time)
   const year = localDate.getFullYear()
   const month = String(localDate.getMonth() + 1).padStart(2, '0')
   const day = String(localDate.getDate()).padStart(2, '0')
@@ -164,16 +198,46 @@ function convertFromTimezone(localDate: Date, timezone: string): Date {
   const minutes = String(localDate.getMinutes()).padStart(2, '0')
   const seconds = String(localDate.getSeconds()).padStart(2, '0')
 
-  // ISO string representing time in the timezone
-  const isoString = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`
+  // Create a date string in ISO format without timezone indicator
+  const dateString = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`
 
-  // Parse it as if it were in the specified timezone
-  const dateInTz = new Date(new Date(isoString).toLocaleString('en-US', { timeZone: 'UTC' }))
-  const dateInUtc = new Date(new Date(isoString).toLocaleString('en-US', { timeZone: timezone }))
+  // Use Intl.DateTimeFormat to get the offset for this timezone at this date/time
+  // We need to determine what UTC time corresponds to this local time in the given timezone
 
-  // Calculate the offset and adjust
-  const offset = dateInTz.getTime() - dateInUtc.getTime()
-  return new Date(localDate.getTime() - offset)
+  // Create a test date by parsing the string as if it were UTC
+  const testDate = new Date(`${dateString}Z`)
+
+  // Get what this UTC time looks like in the target timezone
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  })
+
+  const parts = formatter.formatToParts(testDate)
+  const dateParts: Record<string, string> = {}
+
+  for (const part of parts) {
+    if (part.type !== 'literal') {
+      dateParts[part.type] = part.value
+    }
+  }
+
+  // Reconstruct what time it shows in the timezone
+  const tzTimeString = `${dateParts.year}-${dateParts.month}-${dateParts.day}T${dateParts.hour}:${dateParts.minute}:${dateParts.second}`
+
+  // Calculate the offset between what we want and what we got
+  const wantedTime = new Date(dateString).getTime()
+  const gotTime = new Date(tzTimeString).getTime()
+  const offset = wantedTime - gotTime
+
+  // Adjust the test date by the offset to get the correct UTC time
+  return new Date(testDate.getTime() + offset)
 }
 
 /**
@@ -334,22 +398,17 @@ export async function createReport(
   const reportId = uuidv4()
   const now = new Date().toISOString()
 
-  // Get user's timezone from preferences (fallback to report's timezone)
-  let timezone = request.schedule.timezone
-  try {
-    const { getUserPreferences } = await import('./user-preferences')
-    const userPrefs = await getUserPreferences(createdBy)
-    if (userPrefs?.timezone) {
-      timezone = userPrefs.timezone
-    }
-  } catch (error) {
-    logger.warn('Failed to get user timezone preferences, using schedule timezone:', error)
-  }
+  // ALWAYS use the schedule's timezone, not user preferences
+  // The schedule defines when the report should run in its specified timezone
+  const timezone = request.schedule.timezone
+  logger.info(`Creating report "${request.reportName}" with schedule timezone: ${timezone}`)
 
   const nextRunTime = calculateNextRunTime(
     request.schedule,
     timezone
   ).toISOString()
+
+  logger.info(`  Calculated nextRunTime: ${nextRunTime}`)
 
   const report: ScheduledReport = {
     reportId,
@@ -405,22 +464,17 @@ export async function updateReport(
         ...updates.schedule
       }
 
-      // Get user's timezone from preferences (fallback to schedule timezone)
-      let timezone = updatedReport.schedule.timezone
-      try {
-        const { getUserPreferences } = await import('./user-preferences')
-        const userPrefs = await getUserPreferences(existing.createdBy)
-        if (userPrefs?.timezone) {
-          timezone = userPrefs.timezone
-        }
-      } catch (error) {
-        logger.warn('Failed to get user timezone preferences, using schedule timezone:', error)
-      }
+      // ALWAYS use the schedule's timezone, not user preferences
+      // The schedule defines when the report should run in its specified timezone
+      const timezone = updatedReport.schedule.timezone
+      logger.info(`Recalculating nextRunTime for ${existing.reportName} using schedule timezone: ${timezone}`)
 
       updatedReport.nextRunTime = calculateNextRunTime(
         updatedReport.schedule,
         timezone
       ).toISOString()
+
+      logger.info(`  New nextRunTime: ${updatedReport.nextRunTime}`)
     }
 
     // Update userIdStatus if status changed
@@ -476,10 +530,16 @@ export async function updateReportRunStatus(
     if (!report) return
 
     const now = new Date().toISOString()
+
+    logger.info(`Updating run status for ${report.reportName} (status: ${status})`)
+    logger.info(`  Using schedule timezone: ${report.schedule.timezone}`)
+
     const nextRunTime = calculateNextRunTime(
       report.schedule,
       report.schedule.timezone
     ).toISOString()
+
+    logger.info(`  Calculated nextRunTime: ${nextRunTime}`)
 
     const updates: any = {
       lastRunTime: now,
