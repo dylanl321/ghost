@@ -468,7 +468,7 @@ onMounted(async () => {
       fetch(`/api/instances?environment=govcloud&accountIds=${govCloudId.value || accountId.value}&limit=2000`),
       fetch(`/api/accounts/dashboard-simplified?standard_account_id=${accountId.value}`),
       fetch(`/api/config/summary-simplified?govcloud_account_id=${govCloudId.value}`),
-      fetch(`/api/costs/forecast?period=current-month-remainder&accountIds=${accountId.value}&granularity=DAILY&environment=commercial`)
+      fetch(`/api/costs/projections?period=current-month-remainder&accountIds=${accountId.value}&granularity=DAILY&environment=commercial`)
     ])
 
     const [instancesJson, costsJson, resourcesJson, forecastJson] = await Promise.all([
@@ -483,7 +483,7 @@ onMounted(async () => {
     resourceCounts.value = resourcesJson.data
     forecastData.value = forecastJson.data
 
-    console.log('Forecast data:', forecastData.value)
+    console.log('AWS projection data:', forecastData.value)
   } catch (err) {
     console.error('Error fetching account data:', err)
   } finally {

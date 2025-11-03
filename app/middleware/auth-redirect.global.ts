@@ -18,15 +18,16 @@ export default defineNuxtRouteMiddleware((to, from) => {
   
   // If authentication is needed and we're not already going to auth
   if (needsAuth) {
-    console.log('Auth required for:', to.fullPath)
-    
-    // Use the auth redirect composable
-    const { redirectToAuth } = useAuthRedirect()
-    
-    // Save the current URL and redirect to auth
-    redirectToAuth(to.fullPath)
-    
-    // Abort the current navigation
+    console.log('[Auth Middleware] Auth required for:', to.fullPath)
+
+    // Save the return URL to sessionStorage before OIDC takes over
+    const { saveReturnUrl } = useAuthRedirect()
+    saveReturnUrl(to.fullPath)
+
+    // Let OIDC's middleware handle the actual redirect to Entra
+    // It will redirect to the configured callbackRedirectUrl after auth
+    // Don't manually redirect here - just abort and let OIDC handle it
+    console.log('[Auth Middleware] Aborting navigation, letting OIDC handle redirect')
     return abortNavigation()
   }
 
@@ -42,8 +43,8 @@ export default defineNuxtRouteMiddleware((to, from) => {
         
         if (payload.exp && payload.exp < now) {
           console.log('Token expired, redirecting to auth')
-          const { redirectToAuth } = useAuthRedirect()
-          redirectToAuth(to.fullPath)
+          const { saveReturnUrl } = useAuthRedirect()
+          saveReturnUrl(to.fullPath)
           return abortNavigation()
         }
       } catch (error) {

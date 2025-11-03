@@ -4,11 +4,13 @@ lastUpdated: 2025-01-15
 icon: i-heroicons-chart-bar
 ---
 
+> 📖 **New to cost concepts?** Start with the [Cost Concepts Overview](/support/docs?topic=cost-concepts-overview) to understand all key terminology.
+
 # Using the Cost Dashboard
 
 ## Overview
 
-The Cost Dashboard (`/account/costs`) provides comprehensive AWS cost analytics, forecasting, and budget tracking across all your accounts.
+Cost Dashboard (`/account/costs`) provides AWS cost analytics, forecasting, and GDMS forecast tracking.
 
 ## Accessing the Dashboard
 
@@ -23,12 +25,13 @@ Displays key cost information:
 - **Current Month Spend**: Month-to-date costs
 - **Forecasted Total**: Projected month-end cost
 - **vs Last Month**: Percentage change comparison
-- **Budget Status**: Visual indicator of budget usage
+- **GDMS Forecast Status**: Visual indicator of GDMS forecast utilization
 
 ### Cost Trend Chart
 Interactive chart showing:
 - Historical daily costs (blue line)
-- Forecast projection (dashed line)
+- AWS ML projection (dashed line)
+- GDMS forecasted costs (solid line)
 - Hover over data points for exact values
 - Click and drag to zoom into specific date ranges
 

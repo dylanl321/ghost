@@ -7,7 +7,7 @@
  * - Account counts and status distribution
  * - Cost analysis with time series data (7, 30, 90 days)
  * - Top spending accounts and services
- * - Budget vs actual analysis with forecasting
+ * - GDMS forecast vs actual analysis with AWS ML projections
  * - Line of Business (LOB) filtering
  * - Billable vs Proforma data support
  * - Async processing with progress tracking

@@ -91,7 +91,7 @@ function getAccountMetadata(account: any, accountsList: any[]) {
  * Create Current Month Summary Sheet
  */
 export function createCurrentMonthSheet(dataset: NormalizedDataset): SheetConfig | null {
-  // Get data from budgetAnalysis which has the actual cost and budget data
+  // Get data from budgetAnalysis which has the actual cost and GDMS forecast data
   const analysisData = (dataset.analysis as any)?.data || dataset.analysis
   const byAccount = analysisData?.budgetAnalysis?.byAccount || []
 
@@ -135,7 +135,7 @@ export function createCurrentMonthSheet(dataset: NormalizedDataset): SheetConfig
     { key: 'department', header: 'Department', format: 'text', width: 15 },
     { key: 'lob', header: 'Line of Business', format: 'text', width: 20 },
     { key: 'totalCost', header: 'Current Cost', format: 'currency', decimals: 2, alignment: 'right', width: 15 },
-    { key: 'budget', header: 'Budget', format: 'currency', decimals: 2, alignment: 'right', width: 15 },
+    { key: 'budget', header: 'GDMS Forecast', format: 'currency', decimals: 2, alignment: 'right', width: 15 },
     { key: 'variance', header: 'Variance', format: 'currency', decimals: 2, alignment: 'right', width: 15 },
     { key: 'utilizationPct', header: 'Utilization %', format: 'percentage', decimals: 1, alignment: 'right', width: 12 }
   ]
@@ -162,7 +162,7 @@ export function createCurrentMonthSheet(dataset: NormalizedDataset): SheetConfig
   const data = byAccount.map((account: any) => {
     const metadata = getAccountMetadata(account, dataset.accountsList || [])
     const totalCost = account.actualCost || 0
-    const budget = account.budgetedCost || account.budget || 0
+    const gdmsForecast = account.budgetedCost || account.budget || 0
 
     // Calculate proportional end of month forecast
     const proportion = totalCurrentCost > 0 ? totalCost / totalCurrentCost : 0
@@ -183,9 +183,9 @@ export function createCurrentMonthSheet(dataset: NormalizedDataset): SheetConfig
       department: metadata.department,
       lob: metadata.lob,
       totalCost,
-      budget,
-      variance: totalCost - budget,
-      utilizationPct: budget > 0 ? (totalCost / budget) * 100 : 0
+      budget: gdmsForecast,
+      variance: totalCost - gdmsForecast,
+      utilizationPct: gdmsForecast > 0 ? (totalCost / gdmsForecast) * 100 : 0
     }
 
     // Add forecast data if available
@@ -737,26 +737,26 @@ export function createCurrentMonthSheet(dataset: NormalizedDataset): SheetConfig
     // Year-end projection = YTD + current month remainder + future months
     const yearEndProjection = yearToDate + currentMonthRemainder + futureMonthsForecast
 
-    // Get total budget from analysis data
+    // Get total GDMS forecast from analysis data
     const analysisData = (dataset.analysis as any)?.data || dataset.analysis
     const byAccount = analysisData?.budgetAnalysis?.byAccount || []
-    const monthlyBudget = byAccount.reduce((sum: number, account: any) => {
+    const monthlyGDMSForecast = byAccount.reduce((sum: number, account: any) => {
       return sum + (account.budgetedCost || account.budget || 0)
     }, 0)
 
-    // Calculate annual budget (multiply monthly by 12)
-    const annualBudget = monthlyBudget > 0 ? monthlyBudget * 12 : 0
+    // Calculate annual GDMS forecast (multiply monthly by 12)
+    const annualGDMSForecast = monthlyGDMSForecast > 0 ? monthlyGDMSForecast * 12 : 0
 
     const data = [
       { metric: 'Year-to-Date Actual', value: yearToDate },
       { metric: '  - Complete Months', value: ytdActual },
       { metric: '  - Current Month (MTD)', value: currentMonthActual },
-      { metric: 'Remaining Forecast', value: currentMonthRemainder + futureMonthsForecast },
+      { metric: 'Remaining AWS Projection', value: currentMonthRemainder + futureMonthsForecast },
       { metric: '  - Current Month Remainder', value: currentMonthRemainder },
       { metric: '  - Future Months', value: futureMonthsForecast },
-      { metric: 'Year-End Projection', value: yearEndProjection },
-      { metric: 'Estimated Annual Budget', value: annualBudget },
-      { metric: 'Projected Variance', value: yearEndProjection - annualBudget }
+      { metric: 'Year-End AWS Projection', value: yearEndProjection },
+      { metric: 'Annual GDMS Forecast', value: annualGDMSForecast },
+      { metric: 'GDMS Forecast Variance', value: yearEndProjection - annualGDMSForecast }
     ]
 
     const columns: ColumnConfig[] = [

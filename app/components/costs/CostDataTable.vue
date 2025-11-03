@@ -248,14 +248,14 @@ const availableColumns = computed(() => [
   { key: 'accountName', label: 'Account Name', default: true },
   { key: 'accountStatus', label: 'Account Status', default: true, format: (v: string) => v || 'Active', class: 'text-center' },
   { key: 'actualCost', label: `${getTimeframeLabel()} Cost`, default: true, format: (v: number) => formatCurrency(v), class: 'text-right' },
-  { key: 'budgetedCost', label: 'Budget', default: true, format: (v: number) => formatCurrency(v), class: 'text-right' },
+  { key: 'budgetedCost', label: 'GDMS Forecast', default: true, format: (v: number) => formatCurrency(v), class: 'text-right' },
   { key: 'utilization', label: 'Utilization %', default: true, format: (v: number) => `${v.toFixed(1)}%`, class: 'text-right' },
   { key: 'overagePercent', label: 'Overage %', default: false, format: (v: number) => v > 0 ? `${v.toFixed(1)}%` : '-', class: 'text-right' },
   { key: 'riskScore', label: 'Risk Score', default: true, format: (v: number) => v.toFixed(0), class: 'text-right', helpLink: '/support/docs?topic=budget-risk-scoring', helpTooltip: 'Learn how Risk Scores are calculated' },
   { key: 'riskLevel', label: 'Risk Level', default: true, helpLink: '/support/docs?topic=budget-risk-scoring', helpTooltip: 'Learn about Risk Levels' },
-  { key: 'variance', label: 'Variance', default: true, format: (v: number) => formatCurrency(v), class: 'text-right' },
-  { key: 'status', label: 'Budget Status', default: false },
-  { key: 'endOfMonthForecast', label: 'End of Month Forecast', default: true, format: (v: number) => formatCurrency(v), class: 'text-right', helpTooltip: 'Projected total cost by end of current month' },
+  { key: 'variance', label: 'GDMS Variance', default: true, format: (v: number) => formatCurrency(v), class: 'text-right' },
+  { key: 'status', label: 'GDMS Status', default: false },
+  { key: 'endOfMonthForecast', label: 'End of Month AWS Projection', default: true, format: (v: number) => formatCurrency(v), class: 'text-right', helpTooltip: 'AWS ML projection for end of current month' },
   { key: 'ytdTotal', label: 'YTD Total', default: true, format: (v: number) => formatCurrency(v), class: 'text-right', helpTooltip: 'Year-to-date total (Jan 1 - today)' },
   { key: 'fullYearEstimate', label: 'Full Year Estimate', default: true, format: (v: number) => formatCurrency(v), class: 'text-right', helpTooltip: 'Projected full year total (YTD actuals + remaining months forecast)' },
   { key: 'departmentNumber', label: 'Department', default: false },
@@ -647,21 +647,21 @@ const generateDetailedReport = () => {
   csvContent += 'Active Accounts,' + selectedAccountsData.filter(acc => acc.accountStatus !== 'Decommissioned').length + '\n'
   csvContent += 'Decommissioned Accounts,' + selectedAccountsData.filter(acc => acc.accountStatus === 'Decommissioned').length + '\n'
   csvContent += 'Total Cost,' + formatCurrency(totalCost) + '\n'
-  csvContent += 'Total Budget,' + formatCurrency(totalBudget) + '\n'
-  csvContent += 'Budget Utilization,' + averageUtilization.toFixed(1) + '%\n'
+  csvContent += 'Total GDMS Forecast,' + formatCurrency(totalBudget) + '\n'
+  csvContent += 'GDMS Forecast Utilization,' + averageUtilization.toFixed(1) + '%\n'
   csvContent += 'Average Cost per Account,' + formatCurrency(averageCost) + '\n'
-  csvContent += 'Over Budget Accounts,' + selectedAccountsData.filter(acc => acc.status === 'over').length + '\n'
-  csvContent += 'Under Budget Accounts,' + selectedAccountsData.filter(acc => acc.status === 'under').length + '\n'
+  csvContent += 'Over GDMS Forecast Accounts,' + selectedAccountsData.filter(acc => acc.status === 'over').length + '\n'
+  csvContent += 'Under GDMS Forecast Accounts,' + selectedAccountsData.filter(acc => acc.status === 'under').length + '\n'
   csvContent += '\n'
   csvContent += '=== FORECAST DATA ===\n\n'
-  csvContent += 'Total End of Month Forecast,' + formatCurrency(selectedAccountsData.reduce((sum, acc) => sum + (acc.endOfMonthForecast || 0), 0)) + '\n'
+  csvContent += 'Total End of Month AWS Projection,' + formatCurrency(selectedAccountsData.reduce((sum, acc) => sum + (acc.endOfMonthForecast || 0), 0)) + '\n'
   csvContent += 'Total YTD,' + formatCurrency(selectedAccountsData.reduce((sum, acc) => sum + (acc.ytdTotal || 0), 0)) + '\n'
   csvContent += 'Total Full Year Estimate,' + formatCurrency(selectedAccountsData.reduce((sum, acc) => sum + (acc.fullYearEstimate || 0), 0)) + '\n'
   csvContent += '\n\n'
   
   // Sheet 2: Account Details
   csvContent += '=== ACCOUNT DETAILS ===\n\n'
-  const accountHeaders = ['Account ID', 'Account Name', 'Account Status', 'Department', 'Line of Business', 'Actual Cost', 'Budget', 'Utilization %', 'Variance', 'Budget Status', 'End of Month Forecast', 'YTD Total', 'Full Year Estimate']
+  const accountHeaders = ['Account ID', 'Account Name', 'Account Status', 'Department', 'Line of Business', 'Actual Cost', 'GDMS Forecast', 'Utilization %', 'GDMS Variance', 'GDMS Status', 'End of Month AWS Projection', 'YTD Total', 'Full Year Estimate']
   csvContent += accountHeaders.map(escapeCSV).join(',') + '\n'
 
   selectedAccountsData.forEach(acc => {
@@ -756,35 +756,35 @@ const getServiceAnalysis = () => {
 const generateRecommendations = (accounts: any[]) => {
   const recommendations = []
   
-  // Check for underutilized budgets
+  // Check for underutilized GDMS forecasts
   const underutilized = accounts.filter(acc => acc.utilization < 50)
   if (underutilized.length > 0) {
     recommendations.push({
-      type: 'budget-optimization',
+      type: 'gdms-forecast-optimization',
       severity: 'medium',
-      message: `${underutilized.length} account(s) are using less than 50% of budget. Consider reallocating budget.`,
+      message: `${underutilized.length} account(s) are using less than 50% of GDMS forecast. Consider reallocating forecast.`,
       accounts: underutilized.map(a => a.accountName)
     })
   }
   
-  // Check for over-budget accounts
+  // Check for over-GDMS forecast accounts
   const overBudget = accounts.filter(acc => acc.utilization > 100)
   if (overBudget.length > 0) {
     recommendations.push({
-      type: 'budget-alert',
+      type: 'gdms-forecast-alert',
       severity: 'high',
-      message: `${overBudget.length} account(s) are over budget. Review spending immediately.`,
+      message: `${overBudget.length} account(s) are over GDMS forecast. Review spending immediately.`,
       accounts: overBudget.map(a => a.accountName)
     })
   }
   
-  // Check for accounts nearing budget limit
+  // Check for accounts nearing GDMS forecast limit
   const nearLimit = accounts.filter(acc => acc.utilization >= 90 && acc.utilization <= 100)
   if (nearLimit.length > 0) {
     recommendations.push({
-      type: 'budget-warning',
+      type: 'gdms-forecast-warning',
       severity: 'medium',
-      message: `${nearLimit.length} account(s) are approaching budget limit (90-100% utilized).`,
+      message: `${nearLimit.length} account(s) are approaching GDMS forecast limit (90-100% utilized).`,
       accounts: nearLimit.map(a => a.accountName)
     })
   }
@@ -823,13 +823,13 @@ const exportToPDFHandler = async () => {
     'Active Accounts': dataToExport.filter(acc => acc.accountStatus !== 'Decommissioned').length,
     'Decommissioned Accounts': dataToExport.filter(acc => acc.accountStatus === 'Decommissioned').length,
     'Total Actual Cost': formatCurrency(totalCost),
-    'Total Budget': formatCurrency(totalBudget),
+    'Total GDMS Forecast': formatCurrency(totalBudget),
     'Average Utilization': `${averageUtilization.toFixed(1)}%`,
-    'Over Budget Accounts': dataToExport.filter(acc => acc.status === 'over').length,
-    'Under Budget Accounts': dataToExport.filter(acc => acc.status === 'under').length,
+    'Over GDMS Forecast Accounts': dataToExport.filter(acc => acc.status === 'over').length,
+    'Under GDMS Forecast Accounts': dataToExport.filter(acc => acc.status === 'under').length,
     'Warning Accounts': dataToExport.filter(acc => acc.status === 'warning').length,
     '': '', // Spacer
-    'Total End of Month Forecast': formatCurrency(dataToExport.reduce((sum, acc) => sum + (acc.endOfMonthForecast || 0), 0)),
+    'Total End of Month AWS Projection': formatCurrency(dataToExport.reduce((sum, acc) => sum + (acc.endOfMonthForecast || 0), 0)),
     'Total YTD': formatCurrency(dataToExport.reduce((sum, acc) => sum + (acc.ytdTotal || 0), 0)),
     'Total Full Year Estimate': formatCurrency(dataToExport.reduce((sum, acc) => sum + (acc.fullYearEstimate || 0), 0))
   }
@@ -942,8 +942,8 @@ const exportToCSV = () => {
   csvContent += 'Total Accounts,' + filteredData.value.length + '\n'
   csvContent += '\n'
   csvContent += 'Total ' + getTimeframeLabel() + ' Cost,' + formatCurrency(totalCost) + '\n'
-  csvContent += 'Total Budget,' + formatCurrency(totalBudget) + '\n'
-  csvContent += 'Total End of Month Forecast,' + formatCurrency(totalEndOfMonth) + '\n'
+  csvContent += 'Total GDMS Forecast,' + formatCurrency(totalBudget) + '\n'
+  csvContent += 'Total End of Month AWS Projection,' + formatCurrency(totalEndOfMonth) + '\n'
   csvContent += 'Total YTD,' + formatCurrency(totalYtd) + '\n'
   csvContent += 'Total Full Year Estimate,' + formatCurrency(totalFullYear) + '\n'
   csvContent += '\n\n'

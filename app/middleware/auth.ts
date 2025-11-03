@@ -18,10 +18,10 @@ export default defineNuxtRouteMiddleware((to, from) => {
   // Check if user is authenticated
   if (!loggedIn.value || !user.value) {
     console.log('Authentication required for protected route:', to.fullPath)
-    
-    const { redirectToAuth } = useAuthRedirect()
-    redirectToAuth(to.fullPath)
-    
+
+    const { saveReturnUrl } = useAuthRedirect()
+    saveReturnUrl(to.fullPath)
+
     return abortNavigation()
   }
 
@@ -29,10 +29,10 @@ export default defineNuxtRouteMiddleware((to, from) => {
   const accessToken = user.value.accessToken
   if (!accessToken) {
     console.log('No access token available, redirecting to auth')
-    
-    const { redirectToAuth } = useAuthRedirect()
-    redirectToAuth(to.fullPath)
-    
+
+    const { saveReturnUrl } = useAuthRedirect()
+    saveReturnUrl(to.fullPath)
+
     return abortNavigation()
   }
 
@@ -40,10 +40,10 @@ export default defineNuxtRouteMiddleware((to, from) => {
   const claims = user.value.claims
   if (!claims?.email || !claims?.given_name) {
     console.log('Incomplete user profile, redirecting to auth')
-    
-    const { redirectToAuth } = useAuthRedirect()
-    redirectToAuth(to.fullPath)
-    
+
+    const { saveReturnUrl } = useAuthRedirect()
+    saveReturnUrl(to.fullPath)
+
     return abortNavigation()
   }
 })

@@ -17,15 +17,33 @@ const step = ref("Validating login state...");
 const error = ref<string | null>(null);
 const progress = ref(0);
 
-// Enhanced return URL handling with query param support
+// Enhanced return URL handling with multiple fallback options
 const getFinalReturnUrl = (): string => {
+  console.log('[Auth Loading] Determining return URL...')
+  console.log('[Auth Loading] Query params:', route.query)
+
   // First check query parameters (takes precedence)
-  if (route.query.returnTo && typeof route.query.returnTo === "string") {
-    return decodeURIComponent(route.query.returnTo);
+  // Support both 'returnTo' and 'redirect' parameters for compatibility
+  const queryParam = route.query.returnTo || route.query.redirect
+  if (queryParam && typeof queryParam === "string") {
+    console.log('[Auth Loading] Using query parameter:', queryParam)
+    return decodeURIComponent(queryParam);
   }
 
-  // Then use the composable's logic
-  return getReturnUrl();
+  // Then check sessionStorage
+  const savedUrl = sessionStorage.getItem('auth_return_url')
+  console.log('[Auth Loading] SessionStorage value:', savedUrl)
+
+  if (savedUrl) {
+    // Clean up after retrieving
+    sessionStorage.removeItem('auth_return_url')
+    console.log('[Auth Loading] Using saved URL from sessionStorage:', savedUrl)
+    return savedUrl
+  }
+
+  // Fallback to home
+  console.log('[Auth Loading] No saved URL found, defaulting to home')
+  return '/'
 };
 
 const validateLoginState = async (accessToken: string) => {

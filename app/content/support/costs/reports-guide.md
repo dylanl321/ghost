@@ -4,6 +4,8 @@ lastUpdated: 2025-10-21
 icon: i-heroicons-document-text
 ---
 
+> 📖 **New to cost concepts?** Start with the [Cost Concepts Overview](/support/docs?topic=cost-concepts-overview) to understand all key terminology.
+
 # Creating and Scheduling Cost Reports
 
 ## Overview
@@ -103,7 +105,8 @@ Access advanced options:
 **Include in Report**
 - **Service breakdown**: Costs by AWS service
 - **Historical trends**: Previous period comparisons
-- **Cost forecast**: Projected costs for next period
+- **AWS ML projection**: Projected costs for next period
+- **GDMS forecast**: Strategic yearly forecast comparison
 
 **Step 3: Schedule**
 
@@ -247,7 +250,8 @@ Each scheduled report displays:
 - Cost summary with key metrics
 - Service breakdown table (if enabled)
 - Historical trend charts (if enabled)
-- Cost forecast (if enabled)
+- AWS ML projection (if enabled)
+- GDMS forecast comparison (if enabled)
 
 **File Size**: Typically 200-500 KB
 
@@ -258,7 +262,8 @@ Each scheduled report displays:
 - Account Details - Per-account breakdown
 - Service Breakdown - Costs by service (if enabled)
 - Historical Data - Time series data (if enabled)
-- Forecast - Projected costs (if enabled)
+- AWS ML Projection - Projected costs (if enabled)
+- GDMS Forecast - Strategic forecast comparison (if enabled)
 - Metadata - Report configuration
 
 **Features:**
@@ -304,7 +309,8 @@ Each scheduled report displays:
 - Include historical trends for previous period comparisons
 - Use Proforma data mode for internal chargeback with savings plans distributed
 - Include service breakdown to view per-service costs
-- Forecasts apply to future periods only
+- AWS ML projections apply to future periods only
+- GDMS forecasts show strategic yearly allocations
 
 ### Email Templates
 

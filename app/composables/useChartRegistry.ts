@@ -2,6 +2,7 @@ import { computed } from 'vue'
 import type { Ref } from 'vue'
 import type { NormalizedDataset } from '~/types/costs'
 import type { Scenario } from '~/composables/useCostScenario'
+// import { calculateComprehensiveVariance, generateVarianceInsights } from '~/shared/utils/variance-calculator'
 
 export interface ChartDefinition {
   id: string
@@ -289,11 +290,11 @@ export const useChartRegistry = (args: {
       }
     },
 
-    // Next Month Forecast (Gauge)
+    // Next Month AWS Projection (Gauge)
     forecastGauge: {
       id: 'forecastGauge',
-      title: 'Next Month Forecast',
-      description: 'Predicted spending for next month',
+      title: 'Next Month AWS Projection',
+      description: 'AWS ML predicted spending for next month',
       type: 'gauge',
       extractor: (dataset) => {
         const forecast = dataset.forecast as any
@@ -449,10 +450,10 @@ export const useChartRegistry = (args: {
         })
 
         return [
-          { name: 'Under Budget', value: stats.underBudget, color: '#10b981' },
+          { name: 'Under GDMS Forecast', value: stats.underBudget, color: '#10b981' },
           { name: 'On Target', value: stats.onTarget, color: '#3b82f6' },
-          { name: 'Over Budget', value: stats.overBudget, color: '#ef4444' },
-          { name: 'No Budget', value: stats.noBudget, color: '#6b7280' }
+          { name: 'Over GDMS Forecast', value: stats.overBudget, color: '#ef4444' },
+          { name: 'No GDMS Forecast', value: stats.noBudget, color: '#6b7280' }
         ].filter(s => s.value > 0)
       }
     },
@@ -1472,11 +1473,11 @@ export const useChartRegistry = (args: {
       }
     },
 
-    // Current vs Forecast Comparison (Bar Chart)
+    // Current vs AWS Projection Comparison (Bar Chart)
     currentVsForecastComparison: {
       id: 'currentVsForecastComparison',
-      title: 'Current vs Forecast Comparison',
-      description: 'Compare current month spending to next month forecast',
+      title: 'Current vs AWS Projection Comparison',
+      description: 'Compare current month spending to next month AWS projection',
       type: 'bar',
       extractor: (dataset) => {
         const summary = dataset.summary as any
@@ -1578,7 +1579,7 @@ export const useChartRegistry = (args: {
             forecastCost = forecastTotal / accountsToProcess.length
           }
           
-          console.log(`CurrentVsForecast: Account ${account.name} - Current: ${account.cost}, Forecast: ${forecastCost}`)
+          console.log(`CurrentVsForecast: Account ${account.name} - Current: ${account.cost}, AWS Projection: ${forecastCost}`)
           
           return {
             accountId: account.accountId,
@@ -1598,11 +1599,11 @@ export const useChartRegistry = (args: {
       }
     },
 
-    // Last Month vs This Month vs Forecast (Multi-bar Chart)
+    // Last Month vs This Month vs AWS Projection (Multi-bar Chart)
     monthlyTrendWithForecast: {
       id: 'monthlyTrendWithForecast',
-      title: 'Monthly Trend with Forecast',
-      description: 'Compare last month, current month, and next month forecast',
+      title: 'Monthly Trend with AWS Projection',
+      description: 'Compare last month, current month, and next month AWS projection',
       type: 'bar',
       extractor: (dataset) => {
         const summary = dataset.summary as any
@@ -1722,8 +1723,8 @@ export const useChartRegistry = (args: {
     // Account Forecast Comparison (Horizontal Bar Chart)
     accountForecastComparison: {
       id: 'accountForecastComparison',
-      title: 'Account Forecast Comparison',
-      description: 'Side-by-side forecast comparison across accounts',
+      title: 'Account AWS Projection Comparison',
+      description: 'Side-by-side AWS projection comparison across accounts',
       type: 'bar',
       extractor: (dataset) => {
         const forecast = dataset.forecast as any
@@ -1815,8 +1816,8 @@ export const useChartRegistry = (args: {
     // 3-Month Forecast Trend (Line Chart)
     extendedForecastTrend: {
       id: 'extendedForecastTrend',
-      title: '3-Month Forecast Trend',
-      description: 'Extended forecast projection over 3 months',
+      title: '3-Month AWS Projection Trend',
+      description: 'Extended AWS projection over 3 months',
       type: 'line',
       extractor: (dataset) => {
         console.log('ExtendedForecastTrend: Dataset keys:', Object.keys(dataset))
@@ -1844,10 +1845,10 @@ export const useChartRegistry = (args: {
             
             return {
               dates: [nextMonth.toISOString().split('T')[0]],
-              series: [{
-                name: 'Forecast',
-                dates: [nextMonth.toISOString().split('T')[0]],
-                values: [forecastAmount],
+          series: [{
+            name: 'AWS Projection',
+            dates: [nextMonth.toISOString().split('T')[0]],
+            values: [forecastAmount],
                 total: forecastAmount
               }]
             }
@@ -1900,7 +1901,7 @@ export const useChartRegistry = (args: {
         return {
           dates,
           series: [{
-            name: 'Forecast',
+            name: 'AWS Projection',
             dates,
             values,
             total: values.reduce((sum, val) => sum + val, 0)
@@ -1916,8 +1917,8 @@ export const useChartRegistry = (args: {
     // Forecast Projection Line with Actual (Current + Future Overlay)
     forecastProjectionLine: {
       id: 'forecastProjectionLine',
-      title: 'Actual + Forecast Projection',
-      description: 'Actual costs to date with forecast overlay for rest of period',
+      title: 'Actual + AWS Projection',
+      description: 'Actual costs to date with AWS projection overlay for rest of period',
       type: 'line',
       extractor: (dataset) => {
         const forecast = dataset.forecast as any
@@ -2233,9 +2234,9 @@ export const useChartRegistry = (args: {
               // For daily data: use monthly budget spread across the days
               // For monthly data: use annual budget spread across months
               
-              console.log(`CumulativeBurnUp DEBUG [${data.name}]: Starting budget calculation`)
-              console.log(`  - Monthly Budget: $${data.monthlyBudget.toLocaleString()}`)
-              console.log(`  - Annual Budget: $${data.annualBudget.toLocaleString()}`)
+              console.log(`CumulativeBurnUp DEBUG [${data.name}]: Starting GDMS forecast calculation`)
+              console.log(`  - Monthly GDMS Forecast: $${data.monthlyBudget.toLocaleString()}`)
+              console.log(`  - Annual GDMS Forecast: $${data.annualBudget.toLocaleString()}`)
               console.log(`  - Periods: ${periods}`)
               console.log(`  - Periods in Year: ${periodsInYear}`)
               console.log(`  - Is Daily Data: ${periodsInYear === 365}`)
@@ -2313,8 +2314,8 @@ export const useChartRegistry = (args: {
     // Forecast with Confidence Bands
     forecastConfidenceBands: {
       id: 'forecastConfidenceBands',
-      title: 'Forecast with Confidence Bands',
-      description: 'Future projections with uncertainty ranges',
+      title: 'AWS Projection with Confidence Bands',
+      description: 'Future AWS projections with uncertainty ranges',
       type: 'line',
       extractor: (dataset) => {
         const forecast = dataset.forecast as any
@@ -2385,8 +2386,8 @@ export const useChartRegistry = (args: {
     // Historical vs Forecast Comparison
     historicalVsForecastComparison: {
       id: 'historicalVsForecastComparison',
-      title: 'Historical Average vs Forecast',
-      description: 'Compare forecast to historical spending patterns',
+      title: 'Historical Average vs AWS Projection',
+      description: 'Compare AWS projection to historical spending patterns',
       type: 'bar',
       extractor: (dataset) => {
         const historical = dataset.historical as any
@@ -2467,8 +2468,8 @@ export const useChartRegistry = (args: {
     // Daily Spend + Forecast for Current Month (Actual to Date + Forecast for Remaining Days)
     organizationForecastComparison: {
       id: 'organizationForecastComparison',
-      title: 'Current Month: Actual & Forecasted Daily Spend',
-      description: 'Daily spending with actual data to date and forecast for remaining days',
+      title: 'Current Month: Actual & AWS Projected Daily Spend',
+      description: 'Daily spending with actual data to date and AWS projection for remaining days',
       type: 'line', // Combined bar + line chart
       extractor: (dataset) => {
         const summary = dataset.summary as any
@@ -2709,7 +2710,7 @@ export const useChartRegistry = (args: {
               type: 'bar'
             },
             {
-              name: 'Forecast Daily Spend',
+              name: 'AWS Projection Daily Spend',
               data: forecastDailySpends,
               type: 'bar'
             },
@@ -2719,12 +2720,12 @@ export const useChartRegistry = (args: {
               type: 'line'
             },
             {
-              name: 'Cumulative Forecast',
+              name: 'Cumulative AWS Projection',
               data: forecastCumulative,
               type: 'line'
             },
             {
-              name: 'Budget',
+              name: 'GDMS Forecasted Costs',
               data: budgetLine,
               type: 'line'
             }
@@ -3204,7 +3205,7 @@ export const useChartRegistry = (args: {
               type: 'bar'
             },
             {
-              name: 'Forecast',
+              name: 'AWS Projection',
               data: forecastValues,
               type: 'bar'
             }

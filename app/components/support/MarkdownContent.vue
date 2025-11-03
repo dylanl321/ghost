@@ -5,169 +5,77 @@
 </template>
 
 <script setup lang="ts">
+import { marked } from 'marked'
+import mermaid from 'mermaid'
+
 // Props
 const props = defineProps<{
   content: string
 }>()
 
-// Enhanced markdown parser with better structure and spacing
-const parseMarkdown = (markdown: string): string => {
-  // Split into lines for better processing
-  const lines = markdown.split('\n')
-  const result: string[] = []
-  let inCodeBlock = false
-  let codeBlockContent: string[] = []
-  let inList = false
-  let listItems: string[] = []
-  let listType: 'ul' | 'ol' | null = null
+// Mermaid chart counter for unique IDs
+let mermaidCounter = 0
 
-  const flushList = () => {
-    if (listItems.length > 0 && listType) {
-      const tag = listType === 'ul' ? 'ul' : 'ol'
-      const listClass = listType === 'ul' ? 'list-disc' : 'list-decimal'
-      result.push(`<${tag} class="${listClass} list-outside ml-6 my-6 space-y-3">`)
-      listItems.forEach(item => result.push(item))
-      result.push(`</${tag}>`)
-      listItems = []
-      listType = null
-      inList = false
-    }
+// Initialize mermaid on client side only
+onMounted(() => {
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'default',
+    securityLevel: 'loose',
+  })
+})
+
+// Configure marked options
+marked.setOptions({
+  gfm: true, // GitHub Flavored Markdown
+  breaks: true, // Convert \n to <br>
+})
+
+// Custom renderer to handle mermaid code blocks
+const renderer = new marked.Renderer()
+
+// Override code block rendering to detect mermaid
+const originalCodeRenderer = renderer.code.bind(renderer)
+renderer.code = function(code: string, language: string | undefined) {
+  if (language === 'mermaid') {
+    const mermaidId = `mermaid-${mermaidCounter++}`
+    // Return a placeholder that will be rendered by mermaid
+    return `<div class="mermaid-chart" id="${mermaidId}">${code}</div>`
   }
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    const trimmed = line.trim()
-
-    // Handle code blocks
-    if (trimmed.startsWith('```')) {
-      if (inCodeBlock) {
-        // End code block
-        const code = codeBlockContent.join('\n')
-        result.push(`<pre class="code-block"><code>${escapeHtml(code)}</code></pre>`)
-        codeBlockContent = []
-        inCodeBlock = false
-      } else {
-        // Start code block
-        flushList()
-        inCodeBlock = true
-      }
-      continue
-    }
-
-    if (inCodeBlock) {
-      codeBlockContent.push(line)
-      continue
-    }
-
-    // Empty lines
-    if (trimmed === '') {
-      flushList()
-      result.push('<div class="spacer"></div>')
-      continue
-    }
-
-    // Headers
-    if (trimmed.startsWith('#')) {
-      flushList()
-      const headerMatch = trimmed.match(/^(#{1,6})\s+(.+)$/)
-      if (headerMatch) {
-        const level = headerMatch[1].length
-        const text = processInlineMarkdown(headerMatch[2])
-        result.push(`<h${level}>${text}</h${level}>`)
-        continue
-      }
-    }
-
-    // Unordered lists (bullet points)
-    if (trimmed.match(/^[-*]\s+/)) {
-      if (listType !== 'ul') {
-        flushList()
-        listType = 'ul'
-      }
-      inList = true
-      const content = processInlineMarkdown(trimmed.replace(/^[-*]\s+/, ''))
-      listItems.push(`<li>${content}</li>`)
-      continue
-    }
-
-    // Ordered lists (numbered)
-    if (trimmed.match(/^\d+\.\s+/)) {
-      if (listType !== 'ol') {
-        flushList()
-        listType = 'ol'
-      }
-      inList = true
-      const content = processInlineMarkdown(trimmed.replace(/^\d+\.\s+/, ''))
-      listItems.push(`<li>${content}</li>`)
-      continue
-    }
-
-    // Blockquotes
-    if (trimmed.startsWith('>')) {
-      flushList()
-      const content = processInlineMarkdown(trimmed.replace(/^>\s*/, ''))
-      result.push(`<blockquote>${content}</blockquote>`)
-      continue
-    }
-
-    // Horizontal rules
-    if (trimmed.match(/^---+$/)) {
-      flushList()
-      result.push('<hr>')
-      continue
-    }
-
-    // Regular paragraphs
-    flushList()
-    const content = processInlineMarkdown(trimmed)
-    if (content) {
-      result.push(`<p>${content}</p>`)
-    }
-  }
-
-  // Flush any remaining list
-  flushList()
-
-  return result.join('\n')
+  // Use default code rendering for other languages
+  return originalCodeRenderer(code, language)
 }
 
-// Process inline markdown (bold, italic, links, code, etc.)
-const processInlineMarkdown = (text: string): string => {
-  let result = text
-
-  // Code blocks (inline)
-  result = result.replace(/`([^`]+)`/g, '<code>$1</code>')
-
-  // Bold
-  result = result.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-  result = result.replace(/__(.+?)__/g, '<strong>$1</strong>')
-
-  // Italic (but not in URLs or already processed)
-  result = result.replace(/(?<!\*)\*(?!\*)([^*]+)\*(?!\*)/g, '<em>$1</em>')
-  result = result.replace(/(?<!_)_(?!_)([^_]+)_(?!_)/g, '<em>$1</em>')
-
-  // Links
-  result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
-
-  // Special emoji/icon handling for common patterns
-  result = result.replace(/✅/g, '<span class="emoji-check">✅</span>')
-  result = result.replace(/❌/g, '<span class="emoji-x">❌</span>')
-  result = result.replace(/💡/g, '<span class="emoji-bulb">💡</span>')
-  result = result.replace(/🔒/g, '<span class="emoji-lock">🔒</span>')
-
-  return result
-}
-
-// Escape HTML to prevent XSS in code blocks
-const escapeHtml = (text: string): string => {
-  const div = document.createElement('div')
-  div.textContent = text
-  return div.innerHTML
-}
-
-// Computed
+// Computed property to render markdown
 const renderedContent = computed(() => {
-  return parseMarkdown(props.content)
+  try {
+    // Reset counter for each render
+    mermaidCounter = 0
+    // Parse markdown with marked
+    const html = marked.parse(props.content, { renderer }) as string
+    return html
+  } catch (error) {
+    console.error('Error parsing markdown:', error)
+    return '<p class="text-red-500">Error rendering markdown content</p>'
+  }
+})
+
+// Render mermaid charts after content updates
+watch(renderedContent, async () => {
+  await nextTick()
+  // Find all mermaid chart elements and render them
+  const mermaidElements = document.querySelectorAll('.mermaid-chart')
+  for (const element of mermaidElements) {
+    try {
+      const code = element.textContent || ''
+      const id = element.id
+      const { svg } = await mermaid.render(id + '-svg', code)
+      element.innerHTML = svg
+    } catch (error) {
+      console.error('Error rendering mermaid chart:', error)
+      element.innerHTML = '<p class="text-red-500">Error rendering chart</p>'
+    }
+  }
 })
 </script>
 
@@ -324,5 +232,14 @@ const renderedContent = computed(() => {
 /* Add hover effect to table rows */
 :deep(tbody tr) {
   @apply hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors;
+}
+
+/* Mermaid charts */
+:deep(.mermaid-chart) {
+  @apply my-6 p-4 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-x-auto;
+}
+
+:deep(.mermaid-chart svg) {
+  @apply max-w-full h-auto mx-auto;
 }
 </style>

@@ -71,6 +71,8 @@
     "jspdf": "^3.0.2",
     "jspdf-autotable": "^5.0.2",
     "jszip": "^3.10.1",
+    "marked": "^16.4.1",
+    "mermaid": "^11.12.1",
     "node-schedule": "^2.1.1",
     "nuxt": "^4.0.3",
     "nuxt-echarts": "^1.0.0",

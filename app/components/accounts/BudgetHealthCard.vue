@@ -1,9 +1,20 @@
 <template>
   <UCard class="bg-gray-900 border border-gray-800">
     <template #header>
-      <div class="flex items-center gap-2">
-        <UIcon name="i-heroicons-chart-pie" class="text-blue-500 w-5 h-5" />
-        <h3 class="font-semibold text-lg">Budget Health</h3>
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <UIcon name="i-heroicons-chart-pie" class="text-blue-500 w-5 h-5" />
+          <h3 class="font-semibold text-lg">GDMS Forecast Health</h3>
+        </div>
+        <UButton
+          to="/support/docs?topic=gdms-forecast-health"
+          variant="ghost"
+          size="xs"
+          icon="i-heroicons-question-mark-circle"
+          class="text-gray-400 hover:text-white"
+        >
+          Help
+        </UButton>
       </div>
     </template>
 
@@ -18,7 +29,7 @@
       <!-- Progress Bar -->
       <div>
         <div class="flex justify-between items-baseline mb-2">
-          <span class="text-sm text-gray-400">Budget Utilization</span>
+          <span class="text-sm text-gray-400">GDMS Forecast Utilization</span>
           <span :class="utilizationColorClass" class="text-2xl font-bold">
             {{ utilizationPercent }}%
           </span>
@@ -35,7 +46,7 @@
       <!-- Key Metrics Grid -->
       <div class="grid grid-cols-2 gap-4">
         <div class="bg-gray-800/50 rounded-lg p-3">
-          <div class="text-xs text-gray-400 mb-1">Monthly Budget</div>
+          <div class="text-xs text-gray-400 mb-1">Monthly GDMS Forecast</div>
           <div class="text-lg font-semibold text-white">
             {{ formatCurrency(budget) }}
           </div>
@@ -56,7 +67,7 @@
         </div>
 
         <div class="bg-gray-800/50 rounded-lg p-3">
-          <div class="text-xs text-gray-400 mb-1">Projected MTD</div>
+          <div class="text-xs text-gray-400 mb-1">AWS Projected MTD</div>
           <div :class="projectedColorClass" class="text-lg font-semibold">
             {{ formatCurrency(projectedSpend) }}
           </div>
@@ -69,9 +80,9 @@
         class="bg-gray-800/50 rounded-lg p-4"
       >
         <div class="flex items-center justify-between mb-4">
-          <div class="text-xs font-medium text-gray-300">Spend Projection</div>
+          <div class="text-xs font-medium text-gray-300">AWS Spend Projection</div>
           <div class="text-xs text-gray-400">
-            Budget: {{ formatCurrency(budget) }}
+            GDMS Forecast: {{ formatCurrency(budget) }}
           </div>
         </div>
 
@@ -121,7 +132,7 @@
               :style="{ left: markerLeftPosition }"
             >
               <UTooltip
-                :text="`Budget exceeded on ${budgetExceedDate}`"
+                :text="budgetExceedTooltipText"
                 :popper="{ placement: 'top' }"
               >
                 <div
@@ -191,9 +202,9 @@ const burnRate = computed(() => {
 // Use AWS Cost Explorer forecast for projected spend
 const projectedSpend = computed(() => {
   // If we have forecast data from AWS, use it (current spend + forecast for rest of month)
-  if (props.forecastData?.forecast?.total?.Amount) {
+  if (props.forecastData?.projection?.total?.Amount) {
     const forecastRemaining = parseFloat(
-      props.forecastData.forecast.total.Amount
+      props.forecastData.projection.total.Amount
     );
     return props.currentSpend + forecastRemaining;
   }
@@ -207,12 +218,22 @@ const projectedSpend = computed(() => {
 const exactBudgetExceed = computed(() => {
   if (props.budget === 0) return null;
 
-  // First check historical data to see if budget was already exceeded
+  // First check historical data to see if budget was already exceeded (current month only)
   if (props.dailyCosts && props.dailyCosts.length > 0) {
     let cumulative = 0;
-    const sortedDailyCosts = [...props.dailyCosts].sort((a, b) =>
-      new Date(a.date).getTime() - new Date(b.date).getTime()
-    );
+
+    // Filter to only include dates from the current month
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+    const sortedDailyCosts = [...props.dailyCosts]
+      .filter((day) => {
+        const dayDate = new Date(day.date);
+        return dayDate >= currentMonthStart && dayDate <= currentMonthEnd;
+      })
+      .sort((a, b) =>
+        new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
 
     for (let i = 0; i < sortedDailyCosts.length; i++) {
       cumulative += sortedDailyCosts[i].cost;
@@ -233,10 +254,10 @@ const exactBudgetExceed = computed(() => {
   }
 
   // If not exceeded yet, check forecast data
-  if (!props.forecastData?.forecast?.forecastResultsByTime) return null;
+  if (!props.forecastData?.projection?.forecastResultsByTime) return null;
 
   let cumulative = props.currentSpend;
-  const periods = props.forecastData.forecast.forecastResultsByTime || [];
+  const periods = props.forecastData.projection.forecastResultsByTime || [];
 
   for (let i = 0; i < periods.length; i++) {
     const period = periods[i];
@@ -271,23 +292,36 @@ const forecastTimeline = computed(() => {
     isToday?: boolean;
   }> = [];
 
-  // Start with Day 1 of current month
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  timeline.push({
-    date: startOfMonth.toISOString().split('T')[0],
-    label: startOfMonth.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-    cumulative: 0,
-    exceeds: false,
-  });
+  const startOfMonthStr = startOfMonth.toISOString().split('T')[0];
 
-  // Build cumulative costs from historical daily data
+  // Build cumulative costs from historical daily data (current month only)
   if (props.dailyCosts && props.dailyCosts.length > 0) {
     let cumulative = 0;
 
-    // Sort daily costs by date to ensure proper ordering
-    const sortedDailyCosts = [...props.dailyCosts].sort((a, b) =>
-      new Date(a.date).getTime() - new Date(b.date).getTime()
-    );
+    // Filter to only include dates from the current month, then sort
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+    const sortedDailyCosts = [...props.dailyCosts]
+      .filter((day) => {
+        const dayDate = new Date(day.date);
+        return dayDate >= currentMonthStart && dayDate <= currentMonthEnd;
+      })
+      .sort((a, b) =>
+        new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+
+    // Add start of month marker if historical data doesn't start on day 1
+    const hasStartOfMonth = sortedDailyCosts.some(day => day.date === startOfMonthStr);
+    if (!hasStartOfMonth && sortedDailyCosts.length > 0) {
+      timeline.push({
+        date: startOfMonthStr,
+        label: startOfMonth.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        cumulative: 0,
+        exceeds: false,
+      });
+    }
 
     sortedDailyCosts.forEach((day, index) => {
       cumulative += day.cost;
@@ -310,6 +344,14 @@ const forecastTimeline = computed(() => {
         });
       }
     });
+  } else {
+    // No historical data, add start of month marker
+    timeline.push({
+      date: startOfMonthStr,
+      label: startOfMonth.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      cumulative: 0,
+      exceeds: false,
+    });
   }
 
   // Add today's actual spend
@@ -324,9 +366,9 @@ const forecastTimeline = computed(() => {
   });
 
   // Add forecast periods if available
-  if (props.forecastData?.forecast?.forecastResultsByTime) {
+  if (props.forecastData?.projection?.forecastResultsByTime) {
     let cumulative = props.currentSpend;
-    const periods = props.forecastData.forecast.forecastResultsByTime || [];
+    const periods = props.forecastData.projection.forecastResultsByTime || [];
 
     // Show every 3rd day from forecast plus the last day
     periods.forEach((period: any, index: number) => {
@@ -412,6 +454,17 @@ const budgetExceedDate = computed(() => {
   return exactBudgetExceed.value ? exactBudgetExceed.value.label : null;
 });
 
+// Tooltip text for budget exceed marker
+const budgetExceedTooltipText = computed(() => {
+  if (!exactBudgetExceed.value || !budgetExceedDate.value) return '';
+
+  if (exactBudgetExceed.value.isHistorical) {
+    return `GDMS Forecast exceeded on ${budgetExceedDate.value}`;
+  } else {
+    return `Projected by AWS to exceed on ${budgetExceedDate.value}`;
+  }
+});
+
 // Check if the exceed day matches one of the displayed dots
 const exceedDayMatchesDot = computed(() => {
   if (!exactBudgetExceed.value) return false;
@@ -455,30 +508,30 @@ const statusMessage = computed(() => {
   const budget = props.budget;
 
   if (budget === 0) {
-    return "No budget set for this account";
+    return "No GDMS forecast set for this account";
   }
 
   if (projected > budget * 1.2) {
-    return `Projected to exceed budget by ${formatCurrency(
+    return `AWS projection shows exceeding GDMS forecast by ${formatCurrency(
       projected - budget
     )} (${Math.round(((projected - budget) / budget) * 100)}%)`;
   }
   if (projected > budget) {
-    return `On track to exceed budget by ${formatCurrency(projected - budget)}`;
+    return `AWS projection shows exceeding GDMS forecast by ${formatCurrency(projected - budget)}`;
   }
   if (utilizationPercent.value >= 90) {
-    return `${100 - utilizationPercent.value}% of budget remaining with ${
+    return `${100 - utilizationPercent.value}% of GDMS forecast remaining with ${
       daysInMonth - currentDay
     } days left`;
   }
   if (projected < budget * 0.5) {
-    return `Tracking well below budget - projected ${Math.round(
+    return `Tracking well below GDMS forecast - projected ${Math.round(
       (projected / budget) * 100
     )}% utilization`;
   }
   return `On track for ${Math.round(
     (projected / budget) * 100
-  )}% budget utilization`;
+  )}% GDMS forecast utilization`;
 });
 
 const statusBgClass = computed(() => {

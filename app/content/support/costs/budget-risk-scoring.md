@@ -1,17 +1,19 @@
 ---
-title: Understanding Budget Risk Scores
+title: Understanding GDMS Forecast Risk Scores
 lastUpdated: 2025-10-21
 icon: i-heroicons-exclamation-triangle
 ---
 
-# Understanding Budget Risk Scores
+> 📖 **New to cost concepts?** Start with the [Cost Concepts Overview](/support/docs?topic=cost-concepts-overview) to understand all key terminology.
+
+# Understanding GDMS Forecast Risk Scores
 
 ## Why Risk Scores?
 
-Budget Risk Scores solve the problem of comparing accounts with vastly different budget sizes. Consider:
+GDMS Forecast Risk Scores solve the problem of comparing accounts with vastly different GDMS forecast sizes. Consider:
 
-- **Account A**: Budget $100, Actual $200 → 100% over, $100 impact
-- **Account B**: Budget $1,000,000, Actual $1,100,000 → 10% over, $100,000 impact
+- **Account A**: GDMS Forecast $100, Actual $200 → 100% over, $100 impact
+- **Account B**: GDMS Forecast $1,000,000, Actual $1,100,000 → 10% over, $100,000 impact
 
 Account A has severe percentage overage but low financial impact. Account B has lower percentage but huge financial impact. Neither metric alone tells the full story.
 
@@ -37,7 +39,7 @@ The 70/30 weighting prioritizes severity while still accounting for financial im
 ## Example Calculation
 
 Given:
-- Budget: $1,000,000
+- GDMS Forecast: $1,000,000
 - Actual: $2,000,000
 - $ Over: $1,000,000 (100% of max overage in organization)
 - % Over: 100% (100% of max % overage in organization)

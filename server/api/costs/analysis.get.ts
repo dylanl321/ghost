@@ -1,6 +1,6 @@
 /**
  * GET /api/costs/analysis
- * Advanced cost analysis with budget comparison, anomalies, and proforma analysis
+ * Advanced cost analysis with GDMS forecast comparison, anomalies, and proforma analysis
  * 
  * COST DATA SOURCES:
  * - Master Account (205950196477): Raw AWS billing data - what AWS actually charges

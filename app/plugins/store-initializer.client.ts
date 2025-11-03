@@ -31,6 +31,9 @@ export default defineNuxtPlugin(async (nuxtApp) => {
     // Check if user is logged in
     if (!loggedIn.value || !user.value?.accessToken) {
       console.log('User not logged in, skipping store initialization')
+      // Save current URL before redirecting to auth
+      const { saveReturnUrl } = useAuthRedirect()
+      saveReturnUrl(route.fullPath)
       router.push('/auth/loading')
       return
     }

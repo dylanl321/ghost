@@ -1829,7 +1829,7 @@ const getChartOptions = (chart: ChartDefinition) => {
                     }
                 },
                 legend: {
-                    data: ['Actual Daily Spend', 'Forecast Daily Spend', 'Cumulative Actual', 'Cumulative Forecast', 'Budget'],
+                    data: ['Actual Daily Spend', 'AWS Projection', 'Cumulative Actual', 'Cumulative AWS Projection', 'GDMS Forecasted Costs'],
                     textStyle: { color: '#9ca3af' },
                     top: 10
                 },
@@ -1876,7 +1876,7 @@ const getChartOptions = (chart: ChartDefinition) => {
                         barWidth: '40%'
                     },
                     {
-                        name: 'Forecast Daily Spend',
+                        name: 'AWS Projection',
                         type: 'bar',
                         data: data.series[1].data,
                         itemStyle: { 
@@ -1898,7 +1898,7 @@ const getChartOptions = (chart: ChartDefinition) => {
                         symbolSize: 4
                     },
                     {
-                        name: 'Cumulative Forecast',
+                        name: 'Cumulative AWS Projection',
                         type: 'line',
                         data: data.series[3].data,
                         smooth: true,
@@ -1910,7 +1910,7 @@ const getChartOptions = (chart: ChartDefinition) => {
                         symbol: 'none'
                     },
                     {
-                        name: 'Budget',
+                        name: 'GDMS Forecasted Costs',
                         type: 'line',
                         data: data.series[4].data,
                         lineStyle: { 
@@ -2135,14 +2135,14 @@ const getChartOptions = (chart: ChartDefinition) => {
                         connectNulls: false
                     },
                     {
-                        name: 'Projected Spend',
+                        name: 'AWS Projected Spend',
                         type: 'line',
                         data: [...Array(data.actualSeries.values.length).fill(null), ...data.forecastSeries.values],
                         lineStyle: { color: '#10b981', width: 3, type: 'dashed' },
                         connectNulls: false
                     },
                     {
-                        name: 'Budget',
+                        name: 'GDMS Forecasted Costs',
                         type: 'line',
                         data: Array(data.dates.length).fill(data.totalBudget),
                         lineStyle: { color: '#f59e0b', width: 2, type: 'dotted' }
@@ -2746,9 +2746,9 @@ const getChartOptions = (chart: ChartDefinition) => {
                 z: 2
             })
 
-            // Forecast (green bars, stacked on top of actual for current month)
+            // AWS Projection (green bars, stacked on top of actual for current month)
             series.push({
-                name: 'Forecast',
+                name: 'AWS Projection',
                 type: 'bar',
                 stack: 'total',
                 data: forecastBars,
@@ -2780,9 +2780,9 @@ const getChartOptions = (chart: ChartDefinition) => {
                 z: 3
             })
 
-            // Forecast trend line
+            // AWS Projection trend line
             series.push({
-                name: 'Forecast Trend',
+                name: 'AWS Projection Trend',
                 type: 'line',
                 data: forecastLineData,
                 smooth: true,

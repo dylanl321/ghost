@@ -286,7 +286,7 @@ const reportsMenuItems = computed(() => [[
         format: 'pdf',
         includeServices: true,
         includeHistorical: true,
-        includeForecast: false
+        includeProjections: false
       })
       showShareReportModal.value = true
     }
@@ -472,7 +472,7 @@ async function handleExport(format: ExportFormat) {
     await exportCostData(format, {
       includeServices: true,
       includeHistorical: true,
-      includeForecast: true
+      includeProjections: true
     })
 
     // Success toast
@@ -508,7 +508,7 @@ function openScheduleModal() {
     format: 'pdf',
     includeServices: true,
     includeHistorical: true,
-    includeForecast: true
+    includeProjections: true
   })
   openSchedule(config)
 }

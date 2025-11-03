@@ -190,9 +190,9 @@ async function buildDataset(config: ReportConfig): Promise<NormalizedDataset> {
     analysis: { budgetAnalysis },  // Top-level budgetAnalysis, matches API response
     services: config.includeServices ? { data: costData } : null,
     historical: config.includeHistorical ? { data: costData } : null,
-    forecast: config.includeForecast ? { data: costData } : null,
-    ytdSummary: config.includeForecast ? { data: costData } : null,
-    yearEndForecast: config.includeForecast ? { data: costData } : null,
+    projections: config.includeProjections ? { data: costData } : null,
+    ytdSummary: config.includeProjections ? { data: costData } : null,
+    yearEndProjections: config.includeProjections ? { data: costData } : null,
     currentMonthOrgWide: { data: costData, accounts: byAccount },
     accountsList: accounts
   }

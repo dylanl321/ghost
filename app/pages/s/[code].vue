@@ -64,9 +64,10 @@ const { loggedIn } = useOidcAuth()
 
 // If not authenticated, save the current URL and redirect to auth
 if (!loggedIn.value) {
-  // Store the intended destination
-  const intendedUrl = route.fullPath
-  await navigateTo(`/auth/loading?redirect=${encodeURIComponent(intendedUrl)}`)
+  // Save the intended destination to sessionStorage
+  const { saveReturnUrl } = useAuthRedirect()
+  saveReturnUrl(route.fullPath)
+  await navigateTo('/auth/loading')
 }
 
 onMounted(async () => {
