@@ -3155,8 +3155,9 @@ export const useChartRegistry = (args: {
               willInclude: year === currentYear && monthIndex > currentMonth
             })
 
-            // Process all future months including December
-            if (year === currentYear && monthIndex > currentMonth) {
+            // Process all future months in current year (including December)
+            // Current month handled separately with currentMonthEndForecast
+            if (year === currentYear && monthIndex >= currentMonth) {
               // Get confidence intervals if available (80% = p10 to p90)
               let upper = null
               let lower = null
@@ -3169,13 +3170,13 @@ export const useChartRegistry = (args: {
                 console.log(`  ⚠ No confidence bands available`)
               }
 
-              console.log(`  ✓ Setting forecast for month ${monthIndex} (${months[monthIndex]}): $${meanValue.toFixed(2)}`)
+              console.log(`  ✓ Setting current year forecast for month ${monthIndex} (${months[monthIndex]}): $${meanValue.toFixed(2)}`)
 
               forecastValues[monthIndex] = meanValue
               upperBound[monthIndex] = upper
               lowerBound[monthIndex] = lower
-            } else {
-              console.log(`  ✗ Skipping (year mismatch or not future month)`)
+            } else if (year === currentYear) {
+              console.log(`  ✗ Skipping current year month ${monthIndex} (before or at current month ${currentMonth})`)
             }
           })
 
@@ -3189,50 +3190,170 @@ export const useChartRegistry = (args: {
           console.log('YearEndForecast: NO FORECAST DATA in API response')
         }
 
+        // Calculate budget data for the budget line
+        // Budget represents the GDMS forecasted costs (estimatedMonthlyCharge from accounts)
+        const analysis = dataset.analysis as any
+        const analysisData = analysis?.data || analysis
+        const byAccount = analysisData?.budgetAnalysis?.byAccount || []
+
+        let totalAnnualBudget = 0
+        let monthlyBudget = 0
+
+        if (filterBySelection) {
+          // Sum budgets for selected accounts
+          totalAnnualBudget = byAccount
+            .filter((a: any) => selectedAccounts.includes(a.accountId))
+            .reduce((sum: number, a: any) => sum + (a.budgetedCost || 0), 0) * 12
+          monthlyBudget = totalAnnualBudget / 12
+        } else {
+          // Sum all account budgets for org-wide view
+          totalAnnualBudget = byAccount
+            .reduce((sum: number, a: any) => sum + (a.budgetedCost || 0), 0) * 12
+          monthlyBudget = totalAnnualBudget / 12
+        }
+
+        console.log('YearEndForecast: Budget calculation:', {
+          totalAnnualBudget,
+          monthlyBudget,
+          accountsWithBudget: byAccount.filter((a: any) => (a.budgetedCost || 0) > 0).length,
+          filterBySelection
+        })
+
+        // Generate next year projection data using actual AWS forecasts
+        // AWS provides up to 12 months of forecasts from today, which may span into next year
+        const nextYear = currentYear + 1
+        const nextYearMonths: string[] = []
+        const nextYearForecasts: (number | null)[] = []
+
+        // Build next year month labels
+        for (let m = 0; m < 12; m++) {
+          const date = new Date(nextYear, m, 1)
+          const monthLabel = date.toLocaleDateString('en-US', { month: 'short' })
+          nextYearMonths.push(monthLabel)
+          nextYearForecasts.push(null) // Initialize with null
+        }
+
+        // Parse AWS forecast data that falls into next year
+        if (forecastData?.forecast?.forecastResultsByTime) {
+          const forecastByTime = forecastData.forecast.forecastResultsByTime
+
+          console.log('YearEndForecast: Processing next year forecasts from AWS data')
+          console.log('YearEndForecast: Total forecast periods:', forecastByTime.length)
+          console.log('YearEndForecast: Looking for next year:', nextYear)
+          console.log('YearEndForecast: Current year:', currentYear)
+
+          forecastByTime.forEach((period: any, idx: number) => {
+            const dateStr = period?.TimePeriod?.Start || ''
+            if (!dateStr) return
+
+            // Parse date using UTC to avoid timezone issues
+            const date = new Date(dateStr + 'T00:00:00Z')
+            const monthIndex = date.getUTCMonth() // 0-11
+            const year = date.getUTCFullYear()
+            const meanValue = parseFloat(period?.MeanValue || '0')
+
+            console.log(`  Forecast period ${idx}: ${dateStr} -> Year: ${year}, Month: ${monthIndex}, Value: $${meanValue.toFixed(0)}`)
+
+            // Only include forecasts for next year
+            if (year === nextYear && meanValue > 0) {
+              nextYearForecasts[monthIndex] = meanValue
+              console.log(`    ✓ Added to next year: ${nextYearMonths[monthIndex]} ${nextYear} = $${meanValue.toFixed(0)}`)
+            } else if (year === nextYear) {
+              console.log(`    ✗ Skipped (value is 0 or null)`)
+            }
+          })
+        } else {
+          console.log('YearEndForecast: No forecast data available in forecastResultsByTime')
+        }
+
+        const hasNextYearData = nextYearForecasts.some(v => v !== null)
+        console.log('YearEndForecast: Next year AWS forecast data available:', hasNextYearData)
+
         console.log('YearEndForecast: Final data:', {
-          months: months,
-          actualValues: actualValues.map((v, i) => `${months[i]}: ${v !== null ? '$' + v.toFixed(0) : 'null'}`),
-          forecastValues: forecastValues.map((v, i) => `${months[i]}: ${v !== null ? '$' + v.toFixed(0) : 'null'}`),
-          hasConfidenceBands: upperBound.some(v => v !== null)
+          currentYear: {
+            months: months,
+            actualValues: actualValues.map((v, i) => `${months[i]}: ${v !== null ? '$' + v.toFixed(0) : 'null'}`),
+            forecastValues: forecastValues.map((v, i) => `${months[i]}: ${v !== null ? '$' + v.toFixed(0) : 'null'}`),
+            hasConfidenceBands: upperBound.some(v => v !== null),
+            monthlyBudget: monthlyBudget > 0 ? '$' + monthlyBudget.toFixed(0) : 'N/A'
+          },
+          nextYear: {
+            year: nextYear,
+            forecastValues: nextYearForecasts.map((v, i) => `${nextYearMonths[i]}: ${v !== null ? '$' + v.toFixed(0) : 'null'}`),
+            monthsWithData: nextYearForecasts.filter(v => v !== null).length,
+            hasData: hasNextYearData
+          }
         })
 
         return {
-          months,
-          series: [
-            {
-              name: 'Actual Costs',
-              data: actualValues,
-              type: 'bar'
-            },
-            {
-              name: 'AWS Projection',
-              data: forecastValues,
-              type: 'bar'
-            }
-          ],
-          confidenceBands: {
-            upper: upperBound,
-            lower: lowerBound
-          },
-          metadata: {
-            currentMonth: currentMonth + 1,
-            filterBySelection,
-            selectedAccountsCount: filterBySelection ? selectedAccounts.length : null,
-            scope: filterBySelection ? 'Selected Accounts' : 'Organization-Wide',
-            // Year total: sum of actuals for past months + projected total for current and future months
-            yearTotal: (() => {
-              let total = 0
-              for (let i = 0; i < 12; i++) {
-                if (i < currentMonth) {
-                  // Past months: use actual
-                  total += actualValues[i] || 0
-                } else {
-                  // Current and future months: use forecast (which includes current month projection)
-                  total += forecastValues[i] || 0
-                }
+          currentYear: {
+            year: currentYear,
+            months,
+            series: [
+              {
+                name: 'Actual',
+                data: actualValues,
+                type: 'bar'
+              },
+              {
+                name: 'AWS Projection',
+                data: forecastValues,
+                type: 'bar'
               }
-              return total
-            })()
+            ],
+            confidenceBands: {
+              upper: upperBound,
+              lower: lowerBound
+            },
+            budget: {
+              monthly: monthlyBudget,
+              annual: totalAnnualBudget
+            },
+            metadata: {
+              currentMonth: currentMonth + 1,
+              filterBySelection,
+              selectedAccountsCount: filterBySelection ? selectedAccounts.length : null,
+              scope: filterBySelection ? 'Selected Accounts' : 'Organization-Wide',
+              // Year total: sum of actuals for past months + projected total for current and future months
+              yearTotal: (() => {
+                let total = 0
+                for (let i = 0; i < 12; i++) {
+                  if (i < currentMonth) {
+                    // Past months: use actual
+                    total += actualValues[i] || 0
+                  } else {
+                    // Current and future months: use forecast (which includes current month projection)
+                    total += forecastValues[i] || 0
+                  }
+                }
+                return total
+              })()
+            }
+          },
+          nextYear: {
+            year: nextYear,
+            months: nextYearMonths,
+            series: [
+              {
+                name: 'AWS Projection',
+                data: nextYearForecasts,
+                type: 'bar'
+              }
+            ],
+            budget: {
+              monthly: monthlyBudget,
+              annual: totalAnnualBudget
+            },
+            metadata: {
+              filterBySelection,
+              selectedAccountsCount: filterBySelection ? selectedAccounts.length : null,
+              scope: filterBySelection ? 'Selected Accounts' : 'Organization-Wide',
+              projectedTotal: nextYearForecasts.reduce((sum: number, val: number | null) => sum + (val || 0), 0),
+              monthsWithData: nextYearForecasts.filter(v => v !== null).length,
+              disclaimer: hasNextYearData
+                ? `Showing AWS forecasts for next ${nextYearForecasts.filter(v => v !== null).length} months. AWS forecasts extend up to 12 months from today.`
+                : 'AWS forecast data for next year not yet available. Forecasts extend up to 12 months from today.'
+            }
           }
         }
       }

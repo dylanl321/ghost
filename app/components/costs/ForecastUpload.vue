@@ -340,17 +340,23 @@ const processFile = async () => {
 const readExcelFile = (file: File): Promise<XLSX.WorkBook> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
-    
+
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer)
-        const workbook = XLSX.read(data, { type: 'array' })
+        // cellDates: parse date cells as Date objects
+        // cellFormula: false to get calculated values instead of formulas
+        const workbook = XLSX.read(data, {
+          type: 'array',
+          cellDates: true,
+          cellFormula: false
+        })
         resolve(workbook)
       } catch (err) {
         reject(new Error('Invalid Excel file format'))
       }
     }
-    
+
     reader.onerror = () => reject(new Error('Failed to read file'))
     reader.readAsArrayBuffer(file)
   })
@@ -358,44 +364,81 @@ const readExcelFile = (file: File): Promise<XLSX.WorkBook> => {
 
 const extractForecastData = (workbook: XLSX.WorkBook): any[] => {
   const data: any[] = []
-  
+
   // Get the first worksheet
   const sheetName = workbook.SheetNames[0]
   const worksheet = workbook.Sheets[sheetName!]
-  
+
   if (!worksheet) {
     throw new Error('No data found in Excel file')
   }
 
-  // Convert to JSON with all rows
-  const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
-  
-  if (jsonData.length < 4) {
-    throw new Error('Excel file must contain at least 4 rows (count, costs, headers, and data)')
+  // Convert to JSON with all rows, using defval to preserve empty cells
+  const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null, raw: false })
+
+  if (jsonData.length < 2) {
+    throw new Error('Excel file must contain at least 2 rows (headers and data)')
   }
 
-  console.log('Excel structure:')
-  console.log('Row 1 (count):', jsonData[0])
-  console.log('Row 2 (costs):', jsonData[1]) 
-  console.log('Row 3 (headers):', jsonData[2])
-  console.log('Row 4 (sample data):', jsonData[3])
+  console.log('Excel structure - first 5 rows:')
+  for (let i = 0; i < Math.min(5, jsonData.length); i++) {
+    console.log(`Row ${i + 1}:`, jsonData[i])
+  }
 
-  // Extract the three header rows
-  const countRow = jsonData[0] as any[]
-  const costsRow = jsonData[1] as any[]
-  const headerRow = jsonData[2] as any[]
-  const dataRows = jsonData.slice(3) as any[][]
+  // Detect file format by looking for header row
+  // Format 1: Row 1 has formulas/aggregates, Row 2 has headers (BOM format)
+  // Format 2: Row 1-2 are metadata, Row 3 has headers (old format)
 
-  // Find where the monthly data starts (column J = index 9)
-  const monthlyDataStartIndex = 9
-  
-  // Extract metadata columns (A-I)
+  let headerRowIndex = -1
+  let dataStartIndex = -1
+
+  // Check if row 2 contains "Enclave ID" (BOM format)
+  if (jsonData.length > 1) {
+    const row2 = jsonData[1] as any[]
+    if (row2[0] === 'Enclave ID' || String(row2[0]).trim() === 'Enclave ID') {
+      headerRowIndex = 1  // Row 2 (0-indexed)
+      dataStartIndex = 2  // Row 3 (0-indexed)
+      console.log('Detected BOM format: header at row 2, data starts at row 3')
+    }
+  }
+
+  // Check if row 3 contains "Enclave ID" (old format)
+  if (headerRowIndex === -1 && jsonData.length > 2) {
+    const row3 = jsonData[2] as any[]
+    if (row3[0] === 'Enclave ID' || String(row3[0]).trim() === 'Enclave ID') {
+      headerRowIndex = 2  // Row 3 (0-indexed)
+      dataStartIndex = 3  // Row 4 (0-indexed)
+      console.log('Detected old format: header at row 3, data starts at row 4')
+    }
+  }
+
+  if (headerRowIndex === -1) {
+    throw new Error('Could not find header row. Expected "Enclave ID" in column A of row 2 or 3')
+  }
+
+  const headerRow = jsonData[headerRowIndex] as any[]
+  const dataRows = jsonData.slice(dataStartIndex) as any[][]
+
+  console.log('Header row:', headerRow)
+  console.log(`Processing ${dataRows.length} data rows`)
+
+  // Find where the monthly data starts (after the last metadata column)
+  // Look for the first date column or numeric column index 9
+  let monthlyDataStartIndex = 9  // Default to column J
+
+  // Verify by checking if column 9 looks like a date or month
+  if (headerRow[9] instanceof Date || typeof headerRow[9] === 'string' && /\d{4}/.test(String(headerRow[9]))) {
+    monthlyDataStartIndex = 9
+  }
+
+  // Extract metadata columns (A-I typically)
   const metadataColumns = headerRow.slice(0, monthlyDataStartIndex)
   console.log('Metadata columns:', metadataColumns)
-  
+
   // Extract monthly columns (J onwards)
   const monthlyColumns = headerRow.slice(monthlyDataStartIndex)
-  console.log('Monthly columns:', monthlyColumns)
+  console.log(`Found ${monthlyColumns.length} monthly columns`)
+  console.log('First 5 monthly columns:', monthlyColumns.slice(0, 5))
   
   // Create column mapping for metadata
   const metadataMapping: Record<string, number> = {}
@@ -525,16 +568,18 @@ const saveToDatabase = async () => {
     const transformedData: any[] = []
     
     uploadedData.value.forEach((record: any) => {
-      // Ensure account IDs are strings and preserve leading zeros
-      let accountId = record['Com Acct ID'] || record.awsCommercialAccountID || record['Gov Acct ID'] || record.awsGovCloudAccountID
-      
+      // Handle both "Com Act ID" and "Com Acct ID" column names
+      // "Com Act ID" is the column name in the BOM file
+      // "Com Acct ID" was the old column name
+      let accountId = record['Com Act ID'] || record['Com Acct ID'] || record.awsCommercialAccountID || record['Gov Acct ID'] || record['Gov Act ID'] || record.awsGovCloudAccountID
+
       // AWS account IDs should be 12 digits - pad with leading zeros if needed
       if (accountId) {
         accountId = String(accountId).padStart(12, '0')
       }
-      
+
       const accountName = record['Account Name'] || record.accountName || ''
-      
+
       if (accountId) {
         // Keep all month data, including zeros
         const monthlyForecasts: Record<string, number> = {}
@@ -546,7 +591,7 @@ const saveToDatabase = async () => {
             }
           })
         }
-        
+
         transformedData.push({
           accountId: accountId, // Already padded with zeros
           accountName,
@@ -556,8 +601,9 @@ const saveToDatabase = async () => {
           deptNumber: record['Dept #'],
           projNumber: record['Proj #'],
           taskNumber: record['Task #'],
-          govAccountId: record['Gov Acct ID'] ? String(record['Gov Acct ID']).padStart(12, '0') : null,
-          comAccountId: record['Com Acct ID'] ? String(record['Com Acct ID']).padStart(12, '0') : null,
+          // Handle both old and new column names
+          govAccountId: (record['Gov Acct ID'] || record['Gov Act ID']) ? String(record['Gov Acct ID'] || record['Gov Act ID']).padStart(12, '0') : null,
+          comAccountId: (record['Com Act ID'] || record['Com Acct ID']) ? String(record['Com Act ID'] || record['Com Acct ID']).padStart(12, '0') : null,
           forecasts: monthlyForecasts,
           status: 'active'
         })

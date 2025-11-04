@@ -130,8 +130,8 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
 
   const buildYearEndForecastUrl = () => {
     const params = new URLSearchParams()
-    // Get rest-of-year forecast for year-end projection
-    params.set('period', 'rest-of-year')
+    // Get 12-month forecast for year-end projection (spans into next year)
+    params.set('period', '12-months')
     params.set('granularity', 'MONTHLY')
     params.set('proforma', String(query.value.mode === 'proforma'))
     // Add account filtering

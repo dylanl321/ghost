@@ -8,20 +8,45 @@
                     class="col-span-full bg-gray-900 border border-gray-700 rounded-lg">
                     <div class="px-6 py-4 border-b border-gray-700">
                         <div class="flex items-start justify-between">
-                            <div>
+                            <div class="flex-1">
                                 <h3 class="text-lg font-semibold text-white">{{ chart.title }}</h3>
                                 <p v-if="chart.description" class="text-sm text-gray-400 mt-1">{{ chart.description }}</p>
                             </div>
-                            <UButton 
-                                v-if="chart.id === 'budgetVarianceAnalysis'"
-                                size="xs"
-                                :color="showRegressionLine ? 'blue' : 'gray'"
-                                :variant="showRegressionLine ? 'solid' : 'outline'"
-                                icon="i-heroicons-chart-bar"
-                                @click="$emit('toggleRegressionLine')"
-                            >
-                                {{ showRegressionLine ? 'Hide' : 'Show' }} Trend
-                            </UButton>
+                            <div class="flex items-center gap-3">
+                                <!-- Year selector for yearEndForecast chart -->
+                                <div v-if="chart.id === 'yearEndForecast'" class="flex gap-1 bg-gray-800 rounded-lg p-1">
+                                    <button
+                                        class="px-3 py-1.5 text-xs font-medium rounded transition-colors"
+                                        :class="selectedYearView === 'current'
+                                            ? 'bg-blue-600 text-white'
+                                            : 'text-gray-400 hover:text-gray-300'"
+                                        @click="selectedYearView = 'current'"
+                                    >
+                                        {{ new Date().getFullYear() }}
+                                    </button>
+                                    <button
+                                        class="px-3 py-1.5 text-xs font-medium rounded transition-colors"
+                                        :class="selectedYearView === 'next'
+                                            ? 'bg-blue-600 text-white'
+                                            : 'text-gray-400 hover:text-gray-300'"
+                                        @click="selectedYearView = 'next'"
+                                    >
+                                        {{ new Date().getFullYear() + 1 }}
+                                    </button>
+                                </div>
+
+                                <!-- Budget variance regression toggle -->
+                                <UButton
+                                    v-if="chart.id === 'budgetVarianceAnalysis'"
+                                    size="xs"
+                                    :color="showRegressionLine ? 'blue' : 'gray'"
+                                    :variant="showRegressionLine ? 'solid' : 'outline'"
+                                    icon="i-heroicons-chart-bar"
+                                    @click="$emit('toggleRegressionLine')"
+                                >
+                                    {{ showRegressionLine ? 'Hide' : 'Show' }} Trend
+                                </UButton>
+                            </div>
                         </div>
                     </div>
                     <div class="p-6">
@@ -152,6 +177,9 @@ const emit = defineEmits<{
 // Import contextual charts composable
 import { useContextualCharts } from '~/composables/useContextualCharts'
 const { fetchContextualData } = useContextualCharts(ref(props.selectedAccounts || []))
+
+// Year selection state for yearEndForecast chart
+const selectedYearView = ref<'current' | 'next'>('current')
 
 // Layout helpers
 const isFullWidth = (chart: ChartDefinition) => {
@@ -2666,24 +2694,35 @@ const getChartOptions = (chart: ChartDefinition) => {
         }
 
         // Year-End Forecast with Actuals (Full Year View)
-        if (chart.id === 'yearEndForecast' && data?.months && data?.series) {
+        if (chart.id === 'yearEndForecast' && data) {
+            // Handle new data structure with currentYear and nextYear
+            const yearData = selectedYearView.value === 'current' ? data.currentYear : data.nextYear
+
+            if (!yearData?.months || !yearData?.series) {
+                console.log('[Chart Render] yearEndForecast: Invalid year data structure')
+                return null
+            }
+
             const series: any[] = []
 
-            // Check if we have confidence bands
-            const hasConfidenceBands = data.confidenceBands?.upper &&
-                                     data.confidenceBands.upper.some((v: any) => v !== null)
+            // Check if we have confidence bands (only for current year)
+            const hasConfidenceBands = selectedYearView.value === 'current' &&
+                                     yearData.confidenceBands?.upper &&
+                                     yearData.confidenceBands.upper.some((v: any) => v !== null)
 
-            console.log('[Chart Render] yearEndForecast hasConfidenceBands:', hasConfidenceBands)
-            console.log('[Chart Render] Forecast data:', data.series[1]?.data)
-            console.log('[Chart Render] Upper bounds:', data.confidenceBands?.upper)
-            console.log('[Chart Render] Lower bounds:', data.confidenceBands?.lower)
+            console.log('[Chart Render] yearEndForecast:', {
+                selectedYear: selectedYearView.value,
+                year: yearData.year,
+                hasConfidenceBands,
+                seriesCount: yearData.series?.length
+            })
 
             // Add confidence band area using stacked area approach
             if (hasConfidenceBands) {
                 // Calculate the area between lower and upper bounds
                 // ECharts stacked area: lower bound + (upper - lower) difference
-                const areaData = data.confidenceBands.lower.map((lower: number | null, idx: number) => {
-                    const upper = data.confidenceBands.upper[idx]
+                const areaData = yearData.confidenceBands.lower.map((lower: number | null, idx: number) => {
+                    const upper = yearData.confidenceBands.upper[idx]
                     if (lower !== null && upper !== null) {
                         return upper - lower // The height of the confidence band
                     }
@@ -2694,7 +2733,7 @@ const getChartOptions = (chart: ChartDefinition) => {
                 series.push({
                     name: 'Confidence Lower',
                     type: 'line',
-                    data: data.confidenceBands.lower,
+                    data: yearData.confidenceBands.lower,
                     lineStyle: { opacity: 0 },
                     symbol: 'none',
                     stack: 'confidence',
@@ -2716,97 +2755,184 @@ const getChartOptions = (chart: ChartDefinition) => {
                 })
             }
 
-            // Build stacked bars for actual and forecast
-            // Current month shows both: actual (bottom) + forecast remainder (top)
-            const currentMonthIndex = data.metadata?.currentMonth - 1 // Convert to 0-indexed
+            // Build stacked bars for actual and forecast (or simple bars for estimates)
+            const isNextYear = selectedYearView.value === 'next'
+            const currentMonthIndex = yearData.metadata?.currentMonth ? yearData.metadata.currentMonth - 1 : -1 // Convert to 0-indexed
 
-            // Actual spend series (blue bars for past + current month)
-            const actualBars = data.series[0].data.map((val: number | null) => val)
+            if (isNextYear) {
+                // Next year: AWS projection bars (green, same as current year forecasts)
+                series.push({
+                    name: 'AWS Projection',
+                    type: 'bar',
+                    data: yearData.series[0].data,
+                    itemStyle: {
+                        color: '#10b981',
+                        opacity: 0.9,
+                        borderRadius: [4, 4, 0, 0]
+                    },
+                    barWidth: '60%',
+                    z: 2
+                })
 
-            // Forecast series for future months (green bars)
-            const forecastBars = data.series[1].data.map((val: number | null, idx: number) => {
-                // For current month, show forecast remainder (end-of-month forecast minus current actual)
-                if (idx === currentMonthIndex && val !== null && actualBars[idx] !== null) {
-                    return val - actualBars[idx] // Remaining forecast to reach month-end
-                }
-                return val
-            })
+                // Add trend line for next year forecasts
+                series.push({
+                    name: 'AWS Projection Trend',
+                    type: 'line',
+                    data: yearData.series[0].data,
+                    smooth: true,
+                    lineStyle: {
+                        color: '#059669',
+                        width: 2,
+                        type: 'dashed'
+                    },
+                    symbol: 'circle',
+                    symbolSize: 6,
+                    z: 3
+                })
+            } else {
+                // Current year: stacked bars for actual + forecast
+                // Actual spend series (blue bars for past + current month)
+                const actualBars = yearData.series[0].data.map((val: number | null) => val)
 
-            // Actual costs (blue bars)
-            series.push({
-                name: 'Actual',
-                type: 'bar',
-                stack: 'total',
-                data: actualBars,
-                itemStyle: {
-                    color: '#3b82f6',
-                    borderRadius: [0, 0, 0, 0] // No radius for stacked bars
-                },
-                barWidth: '60%',
-                z: 2
-            })
+                // Forecast series for future months (green bars)
+                const forecastBars = yearData.series[1].data.map((val: number | null, idx: number) => {
+                    // For current month, show forecast remainder (end-of-month forecast minus current actual)
+                    if (idx === currentMonthIndex && val !== null && actualBars[idx] !== null) {
+                        return val - actualBars[idx] // Remaining forecast to reach month-end
+                    }
+                    return val
+                })
 
-            // AWS Projection (green bars, stacked on top of actual for current month)
-            series.push({
-                name: 'AWS Projection',
-                type: 'bar',
-                stack: 'total',
-                data: forecastBars,
-                itemStyle: {
-                    color: '#10b981',
-                    opacity: 0.8,
-                    borderRadius: [4, 4, 0, 0] // Only top has radius
-                },
-                barWidth: '60%',
-                z: 2
-            })
+                // Actual costs (blue bars)
+                series.push({
+                    name: 'Actual',
+                    type: 'bar',
+                    stack: 'total',
+                    data: actualBars,
+                    itemStyle: {
+                        color: '#3b82f6',
+                        borderRadius: [0, 0, 0, 0] // No radius for stacked bars
+                    },
+                    barWidth: '60%',
+                    z: 2
+                })
 
-            // Add trend lines overlaying the bars
-            const actualLineData = data.series[0].data.map((v: number | null) => v)
-            const forecastLineData = data.series[1].data.map((v: number | null) => v)
+                // AWS Projection (green bars, stacked on top of actual for current month)
+                series.push({
+                    name: 'AWS Projection',
+                    type: 'bar',
+                    stack: 'total',
+                    data: forecastBars,
+                    itemStyle: {
+                        color: '#10b981',
+                        opacity: 0.8,
+                        borderRadius: [4, 4, 0, 0] // Only top has radius
+                    },
+                    barWidth: '60%',
+                    z: 2
+                })
 
-            // Actual trend line
-            series.push({
-                name: 'Actual Trend',
-                type: 'line',
-                data: actualLineData,
-                smooth: true,
-                lineStyle: {
-                    color: '#1e40af',
-                    width: 2
-                },
-                symbol: 'circle',
-                symbolSize: 6,
-                z: 3
-            })
+                // Add trend lines overlaying the bars
+                const actualLineData = yearData.series[0].data.map((v: number | null) => v)
+                const forecastLineData = yearData.series[1].data.map((v: number | null) => v)
 
-            // AWS Projection trend line
-            series.push({
-                name: 'AWS Projection Trend',
-                type: 'line',
-                data: forecastLineData,
-                smooth: true,
-                lineStyle: {
-                    color: '#059669',
-                    width: 2,
-                    type: 'dashed'
-                },
-                symbol: 'circle',
-                symbolSize: 6,
-                z: 3
-            })
+                // Actual trend line
+                series.push({
+                    name: 'Actual Trend',
+                    type: 'line',
+                    data: actualLineData,
+                    smooth: true,
+                    lineStyle: {
+                        color: '#1e40af',
+                        width: 2
+                    },
+                    symbol: 'circle',
+                    symbolSize: 6,
+                    z: 3
+                })
+
+                // AWS Projection trend line
+                series.push({
+                    name: 'AWS Projection Trend',
+                    type: 'line',
+                    data: forecastLineData,
+                    smooth: true,
+                    lineStyle: {
+                        color: '#059669',
+                        width: 2,
+                        type: 'dashed'
+                    },
+                    symbol: 'circle',
+                    symbolSize: 6,
+                    z: 3
+                })
+            }
+
+            // Add GDMS Budget line if budget data is available
+            if (yearData.budget && yearData.budget.monthly > 0) {
+                const monthlyBudget = yearData.budget.monthly
+                // Create array with monthly budget for all 12 months
+                const budgetLineData = Array(12).fill(monthlyBudget)
+
+                series.push({
+                    name: 'GDMS Forecasted Costs',
+                    type: 'line',
+                    data: budgetLineData,
+                    lineStyle: {
+                        color: 'rgba(245, 158, 11, 0.6)', // Orange with 60% opacity for discretion
+                        width: 2,
+                        type: 'dashed'
+                    },
+                    symbol: 'circle',
+                    symbolSize: 4,
+                    itemStyle: {
+                        color: 'rgba(245, 158, 11, 0.8)'
+                    },
+                    z: 4,
+                    emphasis: {
+                        lineStyle: {
+                            color: '#f59e0b',
+                            width: 3
+                        }
+                    }
+                })
+
+                console.log('[Chart Render] Added GDMS Budget line:', {
+                    monthlyBudget,
+                    annualBudget: yearData.budget.annual
+                })
+            }
 
             // Calculate year total for subtitle
-            const yearTotal = data.metadata?.yearTotal || 0
+            const yearTotal = yearData.metadata?.yearTotal || yearData.metadata?.projectedTotal || 0
             const yearTotalFormatted = formatCurrency(yearTotal, false)
+
+            // Build title with budget info if available
+            let titleText = isNextYear
+                ? `${yearData.year} Projected Total: ${yearTotalFormatted}`
+                : `Projected Year Total: ${yearTotalFormatted}`
+
+            if (yearData.budget && yearData.budget.annual > 0) {
+                const annualBudget = formatCurrency(yearData.budget.annual, false)
+                const percentOfBudget = ((yearTotal / yearData.budget.annual) * 100).toFixed(0)
+                titleText += ` | GDMS Forecast: ${annualBudget} (${percentOfBudget}%)`
+            }
+
+            // Add note for next year if only partial data
+            if (isNextYear && yearData.metadata?.monthsWithData) {
+                const monthsCount = yearData.metadata.monthsWithData
+                if (monthsCount < 12) {
+                    titleText += ` (${monthsCount} months)`
+                }
+            }
 
             return {
                 ...baseOptions,
                 title: {
-                    text: `Projected Year Total: ${yearTotalFormatted}`,
+                    text: titleText,
                     textStyle: {
                         color: '#ffffff',
-                        fontSize: 16,
+                        fontSize: 14,
                         fontWeight: 'bold'
                     },
                     left: 'center',
@@ -2818,60 +2944,94 @@ const getChartOptions = (chart: ChartDefinition) => {
                     formatter: (params: any) => {
                         const monthIndex = params[0].dataIndex
                         const month = params[0].name
-                        const currentMonthIndex = data.metadata?.currentMonth - 1
-                        let result = `<b>${month} ${new Date().getFullYear()}</b><br/>`
+                        const currentMonthIndex = yearData.metadata?.currentMonth ? yearData.metadata.currentMonth - 1 : -1
+                        let result = `<b>${month} ${yearData.year}</b><br/>`
 
-                        // Get actual and forecast values for this month
-                        const actualVal = data.series[0].data[monthIndex]
-                        const forecastVal = data.series[1].data[monthIndex]
-
-                        if (monthIndex < currentMonthIndex) {
-                            // Past month - only actual
-                            if (actualVal !== null) {
-                                result += `<span style="color: #3b82f6">● Actual: ${formatCurrency(actualVal)}</span><br/>`
-                            }
-                        } else if (monthIndex === currentMonthIndex) {
-                            // Current month - show actual + projected month-end + remainder
-                            if (actualVal !== null) {
-                                result += `<span style="color: #3b82f6">● Actual (MTD): ${formatCurrency(actualVal)}</span><br/>`
-                            }
+                        if (isNextYear) {
+                            // Next year - show AWS projections for available months
+                            const forecastVal = yearData.series[0].data[monthIndex]
                             if (forecastVal !== null) {
-                                result += `<span style="color: #10b981">● Projected Month-End: ${formatCurrency(forecastVal)}</span><br/>`
-                                if (actualVal !== null) {
-                                    const remainder = forecastVal - actualVal
-                                    result += `<span style="color: #6ee7b7">  └─ Remaining: ${formatCurrency(remainder)}</span><br/>`
-                                }
+                                result += `<span style="color: #10b981">● AWS Projection: ${formatCurrency(forecastVal)}</span><br/>`
+                            } else {
+                                result += `<span style="color: #6b7280">○ No AWS forecast available</span><br/>`
+                                result += `<span style="color: #9ca3af; font-size: 11px;">  (Forecasts extend 12 months from today)</span><br/>`
                             }
                         } else {
-                            // Future month - only forecast
-                            if (forecastVal !== null) {
-                                result += `<span style="color: #10b981">● Forecast: ${formatCurrency(forecastVal)}</span><br/>`
-                            }
+                            // Current year - show actual and forecast
+                            const actualVal = yearData.series[0].data[monthIndex]
+                            const forecastVal = yearData.series[1].data[monthIndex]
 
-                            // Show confidence band if available
-                            if (hasConfidenceBands) {
-                                const lower = data.confidenceBands.lower[monthIndex]
-                                const upper = data.confidenceBands.upper[monthIndex]
-                                if (lower !== null && upper !== null) {
-                                    result += `<span style="color: #6ee7b7">▬ 80% Range: ${formatCurrency(lower)} - ${formatCurrency(upper)}</span><br/>`
+                            if (monthIndex < currentMonthIndex) {
+                                // Past month - only actual
+                                if (actualVal !== null) {
+                                    result += `<span style="color: #3b82f6">● Actual: ${formatCurrency(actualVal)}</span><br/>`
+                                }
+                            } else if (monthIndex === currentMonthIndex) {
+                                // Current month - show actual + projected month-end + remainder
+                                if (actualVal !== null) {
+                                    result += `<span style="color: #3b82f6">● Actual (MTD): ${formatCurrency(actualVal)}</span><br/>`
+                                }
+                                if (forecastVal !== null) {
+                                    result += `<span style="color: #10b981">● Projected Month-End: ${formatCurrency(forecastVal)}</span><br/>`
+                                    if (actualVal !== null) {
+                                        const remainder = forecastVal - actualVal
+                                        result += `<span style="color: #6ee7b7">  └─ Remaining: ${formatCurrency(remainder)}</span><br/>`
+                                    }
+                                }
+                            } else {
+                                // Future month - only forecast
+                                if (forecastVal !== null) {
+                                    result += `<span style="color: #10b981">● Forecast: ${formatCurrency(forecastVal)}</span><br/>`
+                                }
+
+                                // Show confidence band if available
+                                if (hasConfidenceBands) {
+                                    const lower = yearData.confidenceBands.lower[monthIndex]
+                                    const upper = yearData.confidenceBands.upper[monthIndex]
+                                    if (lower !== null && upper !== null) {
+                                        result += `<span style="color: #6ee7b7">▬ 80% Range: ${formatCurrency(lower)} - ${formatCurrency(upper)}</span><br/>`
+                                    }
                                 }
                             }
+                        }
+
+                        // Show GDMS Budget line for all months (shown separately for clarity)
+                        if (yearData.budget && yearData.budget.monthly > 0) {
+                            result += `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">`
+                            result += `<span style="color: #f59e0b; font-weight: 500;">⚊ GDMS Forecasted Costs: ${formatCurrency(yearData.budget.monthly)}/month</span>`
+                            result += `</div>`
+                        }
+
+                        // Show disclaimer for next year estimates
+                        if (isNextYear && yearData.metadata?.disclaimer) {
+                            result += `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 11px;">`
+                            result += `<span style="color: #9ca3af; font-style: italic;">${yearData.metadata.disclaimer}</span>`
+                            result += `</div>`
                         }
 
                         return result
                     }
                 },
                 legend: {
-                    data: [
-                        { name: 'Actual', icon: 'rect', itemStyle: { color: '#3b82f6' } },
-                        { name: 'Forecast', icon: 'rect', itemStyle: { color: '#10b981' } },
-                        { name: 'Actual Trend', icon: 'line', itemStyle: { color: '#1e40af' } },
-                        { name: 'Forecast Trend', icon: 'line', itemStyle: { color: '#059669' } },
-                        ...(hasConfidenceBands ? [{ name: '80% Confidence Band', icon: 'rect', itemStyle: { color: 'rgba(16, 185, 129, 0.15)' } }] : [])
-                    ],
-                    textStyle: { color: '#9ca3af' },
+                    data: isNextYear
+                        ? [
+                            'AWS Projection',
+                            'AWS Projection Trend',
+                            ...(yearData.budget && yearData.budget.monthly > 0 ? ['GDMS Forecasted Costs'] : [])
+                        ]
+                        : [
+                            'Actual',
+                            'AWS Projection',
+                            'Actual Trend',
+                            'AWS Projection Trend',
+                            ...(yearData.budget && yearData.budget.monthly > 0 ? ['GDMS Forecasted Costs'] : []),
+                            ...(hasConfidenceBands ? ['80% Confidence Band'] : [])
+                        ],
+                    textStyle: { color: '#9ca3af', fontSize: 11 },
                     top: 35,
-                    itemGap: 15
+                    itemGap: 15,
+                    itemWidth: 25,
+                    itemHeight: 14
                 },
                 grid: {
                     left: '3%',
@@ -2882,17 +3042,21 @@ const getChartOptions = (chart: ChartDefinition) => {
                 },
                 xAxis: {
                     type: 'category',
-                    data: data.months,
+                    data: yearData.months,
                     axisLine: { lineStyle: { color: '#374151' } },
                     axisLabel: {
                         color: '#6b7280',
                         fontSize: 11
                     },
+                    axisTick: {
+                        alignWithLabel: true
+                    },
+                    boundaryGap: true, // Keep bars centered, line will span full width
                     splitLine: {
-                        show: true,
+                        show: !isNextYear, // Only show current month line for current year
                         interval: (index: number) => {
-                            // Show vertical line at current month
-                            return data.metadata && index === data.metadata.currentMonth - 1
+                            // Show vertical line at current month (current year only)
+                            return !isNextYear && yearData.metadata?.currentMonth && index === yearData.metadata.currentMonth - 1
                         },
                         lineStyle: {
                             color: '#fbbf24',
