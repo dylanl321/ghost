@@ -100,9 +100,18 @@ export async function getCostAndUsage(
         // Initialize accumulator for each metric
         const accumulatedTotal: any = {}
 
-        // Sum up totals from all time periods
+        // Sum up totals from all time periods AND inject per-period Totals back into allResultsByTime
         totalResponse.ResultsByTime.forEach((result: any, index: number) => {
           if (result.Total) {
+            // Inject the per-period Total into the original allResultsByTime structure
+            // This fixes the issue where enhanceCostData sums Groups instead of using Totals
+            if (allResultsByTime[index]) {
+              allResultsByTime[index].Total = result.Total
+              logger.debug(`✓ Billable: Injected period ${index} Total: ${result.Total?.UnblendedCost?.Amount}`)
+            } else {
+              logger.warn(`✗ Billable: Cannot inject period ${index} Total - allResultsByTime[${index}] is undefined`)
+            }
+
             params.metrics.forEach((metric: string) => {
               if (result.Total[metric]?.Amount) {
                 if (!accumulatedTotal[metric]) {
@@ -117,7 +126,7 @@ export async function getCostAndUsage(
               }
             })
           } else {
-            logger.debug(`Period ${index} has no Total in separate call`)
+            logger.debug(`Billable: Period ${index} has no Total in separate call`)
           }
         })
 
@@ -494,33 +503,56 @@ export async function getProformaCosts(
   
   // Get proforma costs from proforma account (assume role)
   const proformaClient = await getCostExplorerClient(environment, undefined, proformaAccountId)
-  
+
   const groupBy = params.groupBy?.map(group => ({
     Type: group.type,
     Key: group.key
   }))
 
-  const proformaCommand = new GetCostAndUsageCommand({
-    TimePeriod: {
-      Start: params.startDate,
-      End: params.endDate
-    },
-    Granularity: params.granularity as Granularity,
-    Metrics: params.metrics,
-    GroupBy: groupBy,
-    Filter: params.filter
-  })
+  // Handle pagination for proforma data (same as billable)
+  let allProformaResultsByTime: any[] = []
+  let proformaDimensionValueAttributes: any[] = []
+  let proformaRootTotal: any = {}
+  let proformaNextPageToken: string | undefined = undefined
 
-  const proformaResponse: any = await proformaClient.send(proformaCommand)
+  do {
+    const proformaCommand = new GetCostAndUsageCommand({
+      TimePeriod: {
+        Start: params.startDate,
+        End: params.endDate
+      },
+      Granularity: params.granularity as Granularity,
+      Metrics: params.metrics,
+      GroupBy: groupBy,
+      Filter: params.filter,
+      NextPageToken: proformaNextPageToken
+    })
+
+    const proformaResponse: any = await proformaClient.send(proformaCommand)
+
+    // Accumulate results
+    allProformaResultsByTime = allProformaResultsByTime.concat(proformaResponse.ResultsByTime || [])
+    proformaDimensionValueAttributes = proformaDimensionValueAttributes.concat(proformaResponse.DimensionValueAttributes || [])
+
+    if (proformaResponse.Total) {
+      proformaRootTotal = proformaResponse.Total
+    }
+
+    proformaNextPageToken = proformaResponse.NextPageToken
+    logger.debug(`Proforma pagination: fetched ${proformaResponse.ResultsByTime?.length || 0} results, nextToken: ${!!proformaNextPageToken}`)
+  } while (proformaNextPageToken)
+
+  logger.info(`Proforma total results: ${allProformaResultsByTime.length} time periods`)
+
   let proformaCosts = {
-    resultsByTime: proformaResponse.ResultsByTime || [],
-    dimensionValueAttributes: proformaResponse.DimensionValueAttributes || [],
-    total: proformaResponse.Total || {}
+    resultsByTime: allProformaResultsByTime,
+    dimensionValueAttributes: proformaDimensionValueAttributes,
+    total: proformaRootTotal
   }
   
   // IMPORTANT: When using GroupBy, AWS doesn't return a root-level Total
   // Make a separate call without GroupBy to get the true total for proforma account
-  if (groupBy && groupBy.length > 0 && (!proformaResponse.Total || Object.keys(proformaResponse.Total).length === 0)) {
+  if (groupBy && groupBy.length > 0 && (!proformaRootTotal || Object.keys(proformaRootTotal).length === 0)) {
     logger.info('Proforma: GroupBy detected with no root Total - making separate call for total')
     try {
       const proformaTotalCommand = new GetCostAndUsageCommand({
@@ -533,11 +565,63 @@ export async function getProformaCosts(
         Filter: params.filter
         // Explicitly NO GroupBy to get the total
       })
-      
+
       const proformaTotalResponse: any = await proformaClient.send(proformaTotalCommand)
-      if (proformaTotalResponse.Total) {
-        proformaCosts.total = proformaTotalResponse.Total
-        logger.info('Proforma: Successfully retrieved total from separate call')
+
+      logger.debug('Proforma separate total call response:', {
+        hasResultsByTime: !!proformaTotalResponse.ResultsByTime,
+        resultsByTimeLength: proformaTotalResponse.ResultsByTime?.length || 0,
+        firstPeriodHasTotal: !!proformaTotalResponse.ResultsByTime?.[0]?.Total
+      })
+
+      // AWS doesn't return a root-level Total; we need to sum from ResultsByTime (same as billable side)
+      if (proformaTotalResponse.ResultsByTime && proformaTotalResponse.ResultsByTime.length > 0) {
+        const accumulatedTotal: any = {}
+
+        // Sum up totals from all time periods AND inject per-period Totals back into proformaCosts
+        logger.info(`Proforma: About to inject Totals. proformaTotalResponse has ${proformaTotalResponse.ResultsByTime.length} periods, proformaCosts has ${proformaCosts.resultsByTime.length} periods`)
+
+        proformaTotalResponse.ResultsByTime.forEach((result: any, index: number) => {
+          if (result.Total) {
+            // Inject the per-period Total into the original proformaCosts structure
+            // This fixes the issue where enhanceCostData sums Groups instead of using Totals
+            if (proformaCosts.resultsByTime[index]) {
+              const before = proformaCosts.resultsByTime[index].Total?.UnblendedCost?.Amount
+              proformaCosts.resultsByTime[index].Total = result.Total
+              logger.info(`✓ Proforma period ${index}: Injected Total ${result.Total?.UnblendedCost?.Amount} (was: ${before || 'NONE'})`)
+            } else {
+              logger.warn(`✗ Proforma: Cannot inject period ${index} Total - resultsByTime[${index}] is undefined (array length: ${proformaCosts.resultsByTime.length})`)
+            }
+
+            params.metrics.forEach((metric: string) => {
+              if (result.Total[metric]?.Amount) {
+                if (!accumulatedTotal[metric]) {
+                  accumulatedTotal[metric] = {
+                    Amount: '0',
+                    Unit: result.Total[metric].Unit || 'USD'
+                  }
+                }
+                const currentAmount = parseFloat(accumulatedTotal[metric].Amount)
+                const addAmount = parseFloat(result.Total[metric].Amount)
+                accumulatedTotal[metric].Amount = (currentAmount + addAmount).toString()
+              }
+            })
+          } else {
+            logger.debug(`Proforma: Period ${index} has no Total in separate call`)
+          }
+        })
+
+        if (Object.keys(accumulatedTotal).length > 0) {
+          proformaCosts.total = accumulatedTotal
+          logger.info('✓ Proforma: Successfully retrieved total from separate call (summed from ResultsByTime):', {
+            metrics: Object.keys(accumulatedTotal),
+            UnblendedCost: accumulatedTotal.UnblendedCost?.Amount
+          })
+        } else {
+          logger.warn('Proforma: Separate call returned ResultsByTime but no Totals in periods')
+        }
+      } else {
+        logger.warn('Proforma: Separate call returned no ResultsByTime')
       }
     } catch (error) {
       logger.warn('Proforma: Failed to get separate total:', error)
@@ -922,7 +1006,18 @@ export function calculateCostTrends(resultsByTime: any[]) {
  */
 export async function enhanceCostData(costData: any, includeDecommissioned: boolean = false, groupByDimension: string = 'LINKED_ACCOUNT') {
   const { getAllAccountsUnified } = await import('./accounts-consolidated')
-  
+
+  // Debug: Check if per-period Totals are present
+  const hasPerPeriodTotals = costData.resultsByTime?.some((r: any) => r.Total?.UnblendedCost?.Amount)
+  logger.info(`[enhanceCostData] Processing cost data:`, {
+    periodsCount: costData.resultsByTime?.length || 0,
+    hasPerPeriodTotals,
+    firstPeriodTotal: costData.resultsByTime?.[0]?.Total?.UnblendedCost?.Amount || 'MISSING',
+    firstPeriodGroupsCount: costData.resultsByTime?.[0]?.Groups?.length || 0,
+    rootTotal: costData.total?.UnblendedCost?.Amount || 'MISSING',
+    groupByDimension
+  })
+
   // Get account data for enrichment
   const accounts = await getAllAccountsUnified(includeDecommissioned)
   const accountMap = new Map()
@@ -1024,9 +1119,23 @@ export async function enhanceCostData(costData: any, includeDecommissioned: bool
   
   // Sort by total cost descending
   accountSummary.sort((a, b) => b.totalCost - a.totalCost)
-  
+
   // Calculate overall summary
-  const totalCost = Array.from(accountTotals.values()).reduce((sum, account) => sum + account.cost, 0)
+  // IMPORTANT: Use per-period Totals (not sum of Groups) to include unallocated costs like support, tax, etc.
+  let totalCost = 0
+  if (costData.resultsByTime && costData.resultsByTime.length > 0) {
+    // Sum per-period Totals (includes unallocated costs)
+    totalCost = costData.resultsByTime.reduce((sum: number, result: any) => {
+      const periodTotal = parseFloat(result.Total?.UnblendedCost?.Amount || '0')
+      return sum + periodTotal
+    }, 0)
+    logger.debug(`[enhanceCostData] Using per-period Totals sum: $${totalCost.toFixed(2)}`)
+  } else {
+    // Fallback to summing Groups (may miss unallocated costs)
+    totalCost = Array.from(accountTotals.values()).reduce((sum, account) => sum + account.cost, 0)
+    logger.warn(`[enhanceCostData] Falling back to Groups sum: $${totalCost.toFixed(2)} - per-period Totals not available`)
+  }
+
   const totalAccounts = accountTotals.size
   const averageCostPerAccount = totalAccounts > 0 ? totalCost / totalAccounts : 0
   

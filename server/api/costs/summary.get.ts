@@ -340,14 +340,27 @@ export default defineEventHandler(handleAsync(async (event) => {
             : await enhanceCostData(proformaData.billable.costs, includeDecommissioned, groupByDimension)
 
           // Get enhanced proforma data
+          logger.info('[summary] IMMEDIATELY Before enhanceCostData for proforma:', {
+            rootTotal: proformaData.proforma.total,
+            costsTotal: proformaData.proforma.costs.total?.UnblendedCost?.Amount,
+            resultsByTimeLength: proformaData.proforma.costs.resultsByTime?.length,
+            firstPeriodHasTotal: !!proformaData.proforma.costs.resultsByTime?.[0]?.Total,
+            firstPeriodTotalAmount: proformaData.proforma.costs.resultsByTime?.[0]?.Total?.UnblendedCost?.Amount,
+            firstPeriodGroupsCount: proformaData.proforma.costs.resultsByTime?.[0]?.Groups?.length
+          })
+
           const proformaEnhanced = groupByDimension === 'NONE' || groupByDimension === 'MONTHLY_ONLY'
             ? proformaData.proforma.costs // Return raw data for NONE grouping
             : await enhanceCostData(proformaData.proforma.costs, includeDecommissioned, groupByDimension)
-          
+
+          logger.info('[summary] After enhanceCostData for proforma:', {
+            enhancedTotalCost: proformaEnhanced?.summary?.totalCost
+          })
+
           // Note: Master account unallocated costs are NOT added to proforma accounts list
           // Proforma view shows only Billing Conductor allocated costs
           // Unallocated costs (support, tax, etc.) are available in masterAccount.unallocatedCost
-          
+
           return {
             billable: billableEnhanced,
             proforma: proformaEnhanced,

@@ -77,12 +77,8 @@ export default defineEventHandler(handleAsync(async (event) => {
   logger.info(`Cache clear requested for tags: ${tags.join(', ')}`)
 
   // Clear cache entries by tags
-  let clearedEntries = 0
-  for (const tag of tags) {
-    const cleared = costCache.clearByTag(tag)
-    clearedEntries += cleared
-    logger.info(`Cleared ${cleared} cache entries for tag: ${tag}`)
-  }
+  const clearedEntries = await costCache.invalidateByTags(tags)
+  logger.info(`Cleared ${clearedEntries} cache entries for tags: ${tags.join(', ')}`)
 
   return sendSuccess(event, {
     clearedEntries,

@@ -146,6 +146,17 @@
             User Preferences
           </button>
 
+          <button
+            @click="activeSection = 'validation'"
+            class="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors"
+            :class="activeSection === 'validation'
+              ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'"
+          >
+            <Icon name="i-heroicons-clipboard-document-check" class="w-5 h-5" />
+            Data Validation
+          </button>
+
           <div class="px-3 py-2 opacity-50">
             <div class="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
               <Icon name="i-heroicons-chart-bar" class="w-5 h-5" />
@@ -196,6 +207,7 @@
         <ScheduledReportsPanel v-else-if="activeSection === 'scheduledreports'" />
         <StoredReportsPanel v-else-if="activeSection === 'storedreports'" />
         <UserPreferencesPanel v-else-if="activeSection === 'userpreferences'" />
+        <ValidationPanel v-else-if="activeSection === 'validation'" />
       </main>
     </div>
   </div>
@@ -210,6 +222,7 @@ import IssuesPanel from '~/components/admin/IssuesPanel.vue'
 import ScheduledReportsPanel from '~/components/admin/ScheduledReportsPanel.vue'
 import StoredReportsPanel from '~/components/admin/StoredReportsPanel.vue'
 import UserPreferencesPanel from '~/components/admin/UserPreferencesPanel.vue'
+import ValidationPanel from '~/components/admin/ValidationPanel.vue'
 
 // Page meta
 definePageMeta({
