@@ -2957,7 +2957,27 @@ export const useChartRegistry = (args: {
           return null
         }
 
-        const historicalData = historical?.data || historical
+        // Handle historical data structure difference between modes
+        const rawHistoricalData = historical?.data || historical
+        let historicalData: any
+
+        if (mode === 'proforma' && rawHistoricalData?.proforma) {
+          // Proforma mode: use proforma historical data
+          historicalData = rawHistoricalData.proforma
+          console.log('YearEndForecast: Using proforma historical data')
+        } else if (mode === 'billable' && rawHistoricalData?.billable) {
+          // Billable mode when proforma structure exists: use billable historical data
+          historicalData = rawHistoricalData.billable
+          console.log('YearEndForecast: Using billable historical data from dual structure')
+        } else if (rawHistoricalData?.billable || rawHistoricalData?.proforma) {
+          // Fallback: if only one exists, use it
+          historicalData = rawHistoricalData.billable || rawHistoricalData.proforma
+          console.log('YearEndForecast: Using fallback historical data')
+        } else {
+          // Old format: data directly without billable/proforma wrapper
+          historicalData = rawHistoricalData
+          console.log('YearEndForecast: Using legacy historical data format')
+        }
 
         // Handle summary data structure difference between modes
         const rawSummaryData = summary?.data || summary

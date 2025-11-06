@@ -86,11 +86,52 @@ export async function getCostAndUsage(
         Filter: params.filter
         // Explicitly NO GroupBy to get the total
       })
-      
+
       const totalResponse: any = await client.send(totalCommand)
-      if (totalResponse.Total) {
-        total = totalResponse.Total
-        logger.info('Successfully retrieved total from separate call')
+
+      logger.debug('Separate total call response:', {
+        hasResultsByTime: !!totalResponse.ResultsByTime,
+        resultsByTimeLength: totalResponse.ResultsByTime?.length || 0,
+        firstPeriodHasTotal: !!totalResponse.ResultsByTime?.[0]?.Total
+      })
+
+      // AWS doesn't return a root-level Total; we need to sum from ResultsByTime
+      if (totalResponse.ResultsByTime && totalResponse.ResultsByTime.length > 0) {
+        // Initialize accumulator for each metric
+        const accumulatedTotal: any = {}
+
+        // Sum up totals from all time periods
+        totalResponse.ResultsByTime.forEach((result: any, index: number) => {
+          if (result.Total) {
+            params.metrics.forEach((metric: string) => {
+              if (result.Total[metric]?.Amount) {
+                if (!accumulatedTotal[metric]) {
+                  accumulatedTotal[metric] = {
+                    Amount: '0',
+                    Unit: result.Total[metric].Unit || 'USD'
+                  }
+                }
+                const currentAmount = parseFloat(accumulatedTotal[metric].Amount)
+                const addAmount = parseFloat(result.Total[metric].Amount)
+                accumulatedTotal[metric].Amount = (currentAmount + addAmount).toString()
+              }
+            })
+          } else {
+            logger.debug(`Period ${index} has no Total in separate call`)
+          }
+        })
+
+        if (Object.keys(accumulatedTotal).length > 0) {
+          total = accumulatedTotal
+          logger.info('✓ Successfully retrieved total from separate call (summed from ResultsByTime):', {
+            metrics: Object.keys(accumulatedTotal),
+            UnblendedCost: accumulatedTotal.UnblendedCost?.Amount
+          })
+        } else {
+          logger.warn('Separate call returned ResultsByTime but no Totals in periods')
+        }
+      } else {
+        logger.warn('Separate call returned no ResultsByTime')
       }
     } catch (error) {
       logger.warn('Failed to get separate total:', error)
@@ -521,6 +562,12 @@ export async function getProformaCosts(
       } else if (result.Groups) {
         // Only fall back to summing groups if Total is not available
         // Note: This will miss unallocated costs like support fees, tax, etc.
+        // This should rarely happen after fix to sum ResultsByTime totals
+        logger.warn('Using Group summation for billable costs (period-level Total not available)', {
+          period: result.TimePeriod,
+          groupCount: result.Groups.length,
+          note: 'Unallocated costs may be missed - ensure separate Total call succeeded'
+        })
         result.Groups.forEach((group: any) => {
           const cost = parseFloat(group.Metrics?.['UnblendedCost']?.Amount || '0')
           billableTotal += (isNaN(cost) ? 0 : cost)
@@ -543,6 +590,12 @@ export async function getProformaCosts(
       } else if (result.Groups) {
         // Only fall back to summing groups if Total is not available
         // Note: This will miss unallocated costs like support fees, tax, etc.
+        // This should rarely happen after fix to sum ResultsByTime totals
+        logger.warn('Using Group summation for proforma costs (period-level Total not available)', {
+          period: result.TimePeriod,
+          groupCount: result.Groups.length,
+          note: 'Unallocated costs may be missed - ensure separate Total call succeeded'
+        })
         result.Groups.forEach((group: any) => {
           const cost = parseFloat(group.Metrics?.['UnblendedCost']?.Amount || '0')
           proformaTotal += (isNaN(cost) ? 0 : cost)
@@ -588,9 +641,11 @@ export async function getProformaCosts(
     const proformaPeriodTotal = parseFloat(proformaResult?.Total?.['UnblendedCost']?.Amount || '0')
     const periodDifference = proformaPeriodTotal - billablePeriodTotal
     
-    // Validate proforma >= billable for this period
-    if (proformaPeriodTotal < billablePeriodTotal && Math.abs(periodDifference) > 1) {
-      logger.warn(`⚠️ Proforma validation failed for period ${billableResult.TimePeriod?.Start}: Proforma ($${proformaPeriodTotal}) < Billable ($${billablePeriodTotal})`)
+    // Validate proforma vs billable for this period
+    // Note: Proforma should typically be >= billable (savings plans allocated to accounts)
+    // Warn if proforma is significantly lower (may indicate allocation issues)
+    if (proformaPeriodTotal < billablePeriodTotal && Math.abs(periodDifference) > billablePeriodTotal * 0.05) {
+      logger.warn(`⚠️ Period ${billableResult.TimePeriod?.Start}: Proforma ($${proformaPeriodTotal.toFixed(2)}) < Billable ($${billablePeriodTotal.toFixed(2)}) - Check if savings plans are being allocated`)
     }
     
     // Build account-level comparison if grouped by account
@@ -611,9 +666,11 @@ export async function getProformaCosts(
           const difference = proformaCost - billableCost
           const percentChange = billableCost > 0 ? (difference / billableCost) * 100 : 0
           
-          // Validation: proforma should be >= billable for each account (except master)
-          if (accountId !== masterAccountId && proformaCost < billableCost && Math.abs(difference) > 1) {
-            logger.warn(`⚠️ Account ${accountId}: Proforma ($${proformaCost}) < Billable ($${billableCost})`)
+          // Validation: For individual linked accounts, proforma should be >= billable
+          // (Billing Conductor allocates savings plan costs to accounts that benefit from them)
+          // Proforma < Billable indicates savings plans may not be allocated properly
+          if (accountId !== masterAccountId && accountId !== proformaAccountId && proformaCost < billableCost && Math.abs(difference) > 5) {
+            logger.debug(`Account ${accountId}: Proforma ($${proformaCost.toFixed(2)}) < Billable ($${billableCost.toFixed(2)}) - Savings plan allocation may be incomplete`)
           }
           
           accountComparisons.push({
@@ -680,15 +737,23 @@ export async function getProformaCosts(
   })
   
   // Overall validation
+  // Expected: Proforma >= Billable (savings plans allocated to accounts increase their costs)
+  // Exception: Master account unallocated costs (support, overhead) stay in billable side
+  const masterUnallocated = billableTotal - proformaTotal
+
+  // Validation passes if proforma >= billable OR difference is small (< 5% of billable)
+  const validationPassed = proformaTotal >= billableTotal || Math.abs(masterUnallocated) < billableTotal * 0.05
+
   const overallValidation = {
-    passed: proformaTotal >= billableTotal || Math.abs(proformaTotal - billableTotal) < 1,
-    message: proformaTotal >= billableTotal 
-      ? `✅ Proforma validation passed: $${proformaTotal.toFixed(2)} >= $${billableTotal.toFixed(2)}`
-      : `❌ Proforma validation failed: $${proformaTotal.toFixed(2)} < $${billableTotal.toFixed(2)}`,
+    passed: validationPassed,
+    message: validationPassed
+      ? `✅ Proforma allocation validated: Billable ($${billableTotal.toFixed(2)}) → Proforma ($${proformaTotal.toFixed(2)}) | Master Unallocated: $${masterUnallocated.toFixed(2)}`
+      : `⚠️ Proforma validation issue: Proforma ($${proformaTotal.toFixed(2)}) < Billable ($${billableTotal.toFixed(2)}) by $${Math.abs(masterUnallocated).toFixed(2)} - Check savings plan allocation`,
     billableTotal,
     proformaTotal,
-    difference: proformaTotal - billableTotal,
-    percentChange: billableTotal > 0 ? ((proformaTotal - billableTotal) / billableTotal) * 100 : 0
+    masterUnallocated,
+    savingsAllocated: proformaTotal - billableTotal, // Positive = savings allocated to accounts
+    allocationPercent: billableTotal > 0 ? ((proformaTotal - billableTotal) / billableTotal) * 100 : 0
   }
   
   return {

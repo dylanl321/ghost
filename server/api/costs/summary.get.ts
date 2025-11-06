@@ -335,49 +335,18 @@ export default defineEventHandler(handleAsync(async (event) => {
         // Prepare result based on enhanced flag
         if (enhanced) {
           // Get enhanced billable data first
-          const billableEnhanced = groupByDimension === 'NONE' || groupByDimension === 'MONTHLY_ONLY' 
+          const billableEnhanced = groupByDimension === 'NONE' || groupByDimension === 'MONTHLY_ONLY'
             ? proformaData.billable.costs // Return raw data for NONE grouping
             : await enhanceCostData(proformaData.billable.costs, includeDecommissioned, groupByDimension)
-          
+
           // Get enhanced proforma data
           const proformaEnhanced = groupByDimension === 'NONE' || groupByDimension === 'MONTHLY_ONLY'
             ? proformaData.proforma.costs // Return raw data for NONE grouping
             : await enhanceCostData(proformaData.proforma.costs, includeDecommissioned, groupByDimension)
           
-          // Add master account unallocated cost to proforma enhanced data
-          if (proformaData.masterAccount.unallocatedCost > 0) {
-            proformaEnhanced.accounts = proformaEnhanced.accounts || []
-            proformaEnhanced.accounts.push({
-              accountId: masterAccountId,
-              accountName: 'GDMS Cloud (Master - Unallocated)',
-              organizationalUnit: null,
-              departmentNumber: null,
-              linesOfBusiness: null,
-              enclaveStatus: null,
-              estimatedMonthlyBudget: null,
-              totalCost: proformaData.masterAccount.unallocatedCost,
-              totalUsage: 0,
-              averageMonthlyCost: proformaData.masterAccount.unallocatedCost,
-              periodsWithData: 1,
-              costFormatted: `$${proformaData.masterAccount.unallocatedCost.toFixed(2)}`,
-              averageCostFormatted: `$${proformaData.masterAccount.unallocatedCost.toFixed(2)}`,
-              metadata: {
-                enterpriseSupportCost: proformaData.masterAccount.enterpriseSupportCost,
-                isUnallocated: true
-              }
-            })
-            
-            // Sort by total cost descending
-            proformaEnhanced.accounts.sort((a, b) => b.totalCost - a.totalCost)
-            
-            // Update proforma totals
-            const originalTotal = proformaEnhanced.summary.totalCost
-            proformaEnhanced.summary.totalCost = originalTotal + proformaData.masterAccount.unallocatedCost
-            proformaEnhanced.summary.totalCostFormatted = `$${(originalTotal + proformaData.masterAccount.unallocatedCost).toFixed(2)}`
-            proformaEnhanced.summary.totalAccounts = proformaEnhanced.accounts.length
-            proformaEnhanced.summary.averageCostPerAccount = proformaEnhanced.summary.totalCost / proformaEnhanced.summary.totalAccounts
-            proformaEnhanced.summary.averageCostPerAccountFormatted = `$${proformaEnhanced.summary.averageCostPerAccount.toFixed(2)}`
-          }
+          // Note: Master account unallocated costs are NOT added to proforma accounts list
+          // Proforma view shows only Billing Conductor allocated costs
+          // Unallocated costs (support, tax, etc.) are available in masterAccount.unallocatedCost
           
           return {
             billable: billableEnhanced,

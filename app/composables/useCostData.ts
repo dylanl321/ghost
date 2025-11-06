@@ -60,6 +60,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     const params = new URLSearchParams()
     const period = mapUiToHistoricalPeriod(query.value.timeframe)
     params.set('period', period)
+    params.set('proforma', String(query.value.mode === 'proforma'))
     if (query.value.accounts.length > 0) params.set('accountIds', query.value.accounts.join(','))
     return `/api/costs/historical?${params.toString()}`
   }
@@ -68,6 +69,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
   const buildOrgWideHistoricalUrl = () => {
     const params = new URLSearchParams()
     params.set('period', 'last12months') // Always get full year for year-end projection
+    params.set('proforma', String(query.value.mode === 'proforma'))
     return `/api/costs/historical?${params.toString()}`
   }
 
@@ -280,6 +282,24 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     console.log('Accounts selection changed, debouncing fetch...', selectedAccounts.value)
     debouncedFetch()
   }, { deep: true })
+
+  // Watch for mode changes separately to clear cache
+  watch(mode, async (newMode, oldMode) => {
+    // Only clear cache if mode actually changed (not on initial mount)
+    if (oldMode !== undefined && newMode !== oldMode) {
+      console.log(`Mode changed from ${oldMode} to ${newMode}, clearing cache...`)
+      try {
+        await $fetch('/api/costs/cache-clear', {
+          method: 'POST',
+          body: { tags: ['costs'] }
+        })
+        console.log('Cache cleared successfully')
+      } catch (error) {
+        console.error('Failed to clear cache:', error)
+        // Continue anyway - worst case we get cached data
+      }
+    }
+  })
 
   // Watch for changes to timeframe and mode without debouncing (immediate)
   watch([selectedTimeframe, mode], () => {

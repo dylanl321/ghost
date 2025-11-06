@@ -7,7 +7,7 @@
  */
 
 import { defineEventHandler, getQuery } from 'h3'
-import { getCostAndUsage } from '../../utils/cost-explorer'
+import { getCostAndUsage, getProformaCosts } from '../../utils/cost-explorer'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { parseAndValidateAccountFilters, getAccountIdsFromCriteria } from '../../utils/account-filters'
@@ -34,17 +34,47 @@ registerEndpoint('/api/costs/historical', 'GET', {
       name: 'period',
       in: 'query',
       required: true,
-      schema: { 
+      schema: {
         type: 'string',
         enum: ['last7days', 'last30days', 'last90days', 'lastMonth', 'lastQuarter', 'lastYear', 'ytd', 'last12months', 'last24months']
       },
       description: 'Historical period to retrieve data for'
     },
     {
+      name: 'proforma',
+      in: 'query',
+      required: false,
+      schema: {
+        type: 'boolean',
+        default: false
+      },
+      description: 'Include proforma data analysis (commercial environment only)'
+    },
+    {
+      name: 'proformaAccountId',
+      in: 'query',
+      required: false,
+      schema: {
+        type: 'string',
+        default: '253821132832'
+      },
+      description: 'Proforma account ID for cost analysis'
+    },
+    {
+      name: 'masterAccountId',
+      in: 'query',
+      required: false,
+      schema: {
+        type: 'string',
+        default: '205950196477'
+      },
+      description: 'Master account ID for cost analysis'
+    },
+    {
       name: 'accountIds',
       in: 'query',
       required: false,
-      schema: { 
+      schema: {
         type: 'string'
       },
       description: 'Comma-separated list of account identifiers to filter. Supports all account ID formats: accountId, govCloudAccountId, awsStandardAccountID, or awsGovCloudAccountID'
@@ -53,7 +83,7 @@ registerEndpoint('/api/costs/historical', 'GET', {
       name: 'linesOfBusiness',
       in: 'query',
       required: false,
-      schema: { 
+      schema: {
         type: 'string'
       },
       description: 'Comma-separated list of lines of business to filter accounts'
@@ -62,7 +92,7 @@ registerEndpoint('/api/costs/historical', 'GET', {
       name: 'departments',
       in: 'query',
       required: false,
-      schema: { 
+      schema: {
         type: 'string'
       },
       description: 'Comma-separated list of department numbers to filter accounts'
@@ -128,13 +158,13 @@ export default defineEventHandler(handleAsync(async (event) => {
   const startTime = Date.now()
   const query = getQuery(event)
   const { environment } = parseQueryParams(event)
-  
+
   // Validate required period parameter
   const period = query.period as RelativePeriod
   if (!period) {
     return errors.badRequest(event, 'Period parameter is required')
   }
-  
+
   // Validate date parameters for the historical period
   let dateRange: { startDate: string; endDate: string; description?: string }
   try {
@@ -144,22 +174,45 @@ export default defineEventHandler(handleAsync(async (event) => {
   } catch (error) {
     return errors.badRequest(event, (error as Error).message)
   }
-  
+
   const { startDate, endDate } = dateRange
-  
+
+  // Parse proforma parameters
+  const proforma = query.proforma === 'true' || query.proforma === true
+  const proformaAccountId = (query.proformaAccountId as string) || process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832'
+  const masterAccountId = (query.masterAccountId as string) || process.env.AWS_MASTER_ACCOUNT_ID || '205950196477'
+
+  // Validate proforma requirements
+  if (proforma && environment !== 'commercial') {
+    return errors.badRequest(event, 'Proforma data analysis is only available for commercial environment')
+  }
+
+  // Validate proforma account IDs
+  if (proforma) {
+    if (!/^\d{12}$/.test(proformaAccountId)) {
+      return errors.badRequest(event, 'Invalid proforma account ID format. Must be 12 digits.')
+    }
+    if (!/^\d{12}$/.test(masterAccountId)) {
+      return errors.badRequest(event, 'Invalid master account ID format. Must be 12 digits.')
+    }
+    if (proformaAccountId === masterAccountId) {
+      return errors.badRequest(event, 'Proforma and master account IDs cannot be the same')
+    }
+  }
+
   // Parse and validate account filtering criteria
   const { criteria: accountFilters, errors: filterErrors } = parseAndValidateAccountFilters(query)
-  
+
   // Check for validation errors
   if (filterErrors.length > 0) {
     return errors.badRequest(event, `Invalid account filters: ${filterErrors.join('; ')}`)
   }
-  
+
   // Get filtered account IDs only if specific filters are provided
   const filteredAccountIds = (accountFilters.accountIds || accountFilters.linesOfBusiness || accountFilters.departments)
     ? await getAccountIdsFromCriteria(accountFilters)
     : undefined
-  
+
   // Check if any accounts were found when filters are applied
   if (filteredAccountIds !== undefined && filteredAccountIds.length === 0) {
     return errors.notFound(event, 'No accounts found matching the specified filters')
@@ -189,107 +242,188 @@ export default defineEventHandler(handleAsync(async (event) => {
   const cacheKey = `costs:historical:${JSON.stringify({
     period,
     environment,
+    proforma,
+    proformaAccountId: proforma ? proformaAccountId : null,
+    masterAccountId: proforma ? masterAccountId : null,
     filteredAccountIds: filteredAccountIds?.slice(0, 5) // Sample for uniqueness
   })}`
+
+  // Helper function to process results into historical format
+  const processHistoricalData = (resultsByTime: any[], periodLabel: string) => {
+    let totalCost = 0
+    const accountSet = new Set<string>()
+    const monthlyData: { [key: string]: number } = {}
+    const monthlyAccountBreakdown: { [key: string]: { accountId: string, cost: number }[] } = {}
+
+    resultsByTime.forEach((result: any) => {
+      const monthKey = result.TimePeriod?.Start?.substring(0, 7) // YYYY-MM format
+
+      if (result.Groups) {
+        result.Groups.forEach((group: any) => {
+          const accountId = group.Keys?.[0]
+          const cost = parseFloat(group.Metrics?.UnblendedCost?.Amount || '0')
+
+          if (accountId) {
+            totalCost += cost
+            accountSet.add(accountId)
+
+            if (monthKey) {
+              monthlyData[monthKey] = (monthlyData[monthKey] || 0) + cost
+
+              // Track per-account breakdown for each month
+              if (!monthlyAccountBreakdown[monthKey]) {
+                monthlyAccountBreakdown[monthKey] = []
+              }
+              monthlyAccountBreakdown[monthKey].push({ accountId, cost })
+            }
+          }
+        })
+      }
+    })
+
+    // Format monthly breakdown with account details
+    const monthlyBreakdown = Object.entries(monthlyData)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, cost]) => ({
+        month,
+        cost,
+        costFormatted: `$${cost.toFixed(2)}`,
+        accountBreakdown: monthlyAccountBreakdown[month] || []
+      }))
+
+    const accountCount = accountSet.size
+    const averageCostPerAccount = accountCount > 0 ? totalCost / accountCount : 0
+
+    return {
+      period: periodLabel,
+      totalCost,
+      totalCostFormatted: `$${totalCost.toFixed(2)}`,
+      accountCount,
+      averageCostPerAccount,
+      averageCostPerAccountFormatted: `$${averageCostPerAccount.toFixed(2)}`,
+      monthlyBreakdown,
+      resultsByTime, // Include raw data for charts that need it
+      dateRange: {
+        start: startDate,
+        end: endDate
+      }
+    }
+  }
 
   // Get historical cost data with caching
   const historicalData = await costCache.getOrSet(
     cacheKey,
     async () => {
-      logger.info('Cache miss: Fetching historical cost data...')
-      
-      let allResultsByTime: any[] = []
-      
-      // For last24months, we need to make two separate calls due to AWS 365-day limit
-      if (period === 'last24months') {
-        const now = new Date()
-        const midpoint = new Date(now.getFullYear(), now.getMonth() - 12, 1)
-        
-        // First 12 months (older data)
-        const firstPeriodParams = {
-          ...costParams,
-          startDate: startDate,
-          endDate: formatDate(midpoint)
+      logger.info(`Cache miss: Fetching historical cost data (proforma=${proforma})...`)
+
+      if (proforma) {
+        // Proforma mode: fetch both billable and proforma data
+        logger.info('Fetching proforma historical data...')
+
+        let billableResultsByTime: any[] = []
+        let proformaResultsByTime: any[] = []
+
+        // For last24months, we need to make two separate calls due to AWS 365-day limit
+        if (period === 'last24months') {
+          const now = new Date()
+          const midpoint = new Date(now.getFullYear(), now.getMonth() - 12, 1)
+
+          // First 12 months (older data)
+          const firstPeriodParams = {
+            ...costParams,
+            startDate: startDate,
+            endDate: formatDate(midpoint)
+          }
+
+          // Second 12 months (recent data)
+          const secondPeriodParams = {
+            ...costParams,
+            startDate: formatDate(midpoint),
+            endDate: endDate
+          }
+
+          logger.info('Fetching first 12 months of 24-month period (proforma)...')
+          const firstPeriodData = await getProformaCosts(firstPeriodParams, proformaAccountId, masterAccountId)
+
+          logger.info('Fetching second 12 months of 24-month period (proforma)...')
+          const secondPeriodData = await getProformaCosts(secondPeriodParams, proformaAccountId, masterAccountId)
+
+          // Combine results
+          billableResultsByTime = [
+            ...(firstPeriodData?.billable?.costs?.resultsByTime || []),
+            ...(secondPeriodData?.billable?.costs?.resultsByTime || [])
+          ]
+          proformaResultsByTime = [
+            ...(firstPeriodData?.proforma?.costs?.resultsByTime || []),
+            ...(secondPeriodData?.proforma?.costs?.resultsByTime || [])
+          ]
+        } else {
+          // Single call for periods <= 12 months
+          const proformaData = await getProformaCosts(costParams, proformaAccountId, masterAccountId)
+          billableResultsByTime = proformaData?.billable?.costs?.resultsByTime || []
+          proformaResultsByTime = proformaData?.proforma?.costs?.resultsByTime || []
         }
-        
-        // Second 12 months (recent data)
-        const secondPeriodParams = {
-          ...costParams,
-          startDate: formatDate(midpoint),
-          endDate: endDate
+
+        if ((!billableResultsByTime || billableResultsByTime.length === 0) &&
+            (!proformaResultsByTime || proformaResultsByTime.length === 0)) {
+          throw new Error('No historical data found')
         }
-        
-        logger.info('Fetching first 12 months of 24-month period...')
-        const firstPeriodData = await getCostAndUsage(firstPeriodParams, environment)
-        
-        logger.info('Fetching second 12 months of 24-month period...')
-        const secondPeriodData = await getCostAndUsage(secondPeriodParams, environment)
-        
-        // Combine results
-        allResultsByTime = [
-          ...(firstPeriodData?.resultsByTime || []),
-          ...(secondPeriodData?.resultsByTime || [])
-        ]
+
+        // Process both datasets
+        const billableData = processHistoricalData(billableResultsByTime, period)
+        const proformaData = processHistoricalData(proformaResultsByTime, period)
+
+        return {
+          billable: billableData,
+          proforma: proformaData
+        }
       } else {
-        // Single call for periods <= 12 months
-        const costData = await getCostAndUsage(costParams, environment)
-        allResultsByTime = costData?.resultsByTime || []
-      }
-      
-      if (!allResultsByTime || allResultsByTime.length === 0) {
-        throw new Error('No historical data found')
-      }
-      
-      // Calculate totals and monthly breakdown from historical data
-      let totalCost = 0
-      const accountSet = new Set<string>()
-      const monthlyData: { [key: string]: number } = {}
-      
-      allResultsByTime.forEach((result: any) => {
-        const monthKey = result.TimePeriod?.Start?.substring(0, 7) // YYYY-MM format
-        
-        if (result.Groups) {
-          result.Groups.forEach((group: any) => {
-            const accountId = group.Keys?.[0]
-            const cost = parseFloat(group.Metrics?.UnblendedCost?.Amount || '0')
-            
-            if (accountId) {
-              totalCost += cost
-              accountSet.add(accountId)
-              
-              if (monthKey) {
-                monthlyData[monthKey] = (monthlyData[monthKey] || 0) + cost
-              }
-            }
-          })
+        // Billable mode: fetch only billable data
+        logger.info('Fetching billable historical data...')
+
+        let allResultsByTime: any[] = []
+
+        // For last24months, we need to make two separate calls due to AWS 365-day limit
+        if (period === 'last24months') {
+          const now = new Date()
+          const midpoint = new Date(now.getFullYear(), now.getMonth() - 12, 1)
+
+          // First 12 months (older data)
+          const firstPeriodParams = {
+            ...costParams,
+            startDate: startDate,
+            endDate: formatDate(midpoint)
+          }
+
+          // Second 12 months (recent data)
+          const secondPeriodParams = {
+            ...costParams,
+            startDate: formatDate(midpoint),
+            endDate: endDate
+          }
+
+          logger.info('Fetching first 12 months of 24-month period...')
+          const firstPeriodData = await getCostAndUsage(firstPeriodParams, environment)
+
+          logger.info('Fetching second 12 months of 24-month period...')
+          const secondPeriodData = await getCostAndUsage(secondPeriodParams, environment)
+
+          // Combine results
+          allResultsByTime = [
+            ...(firstPeriodData?.resultsByTime || []),
+            ...(secondPeriodData?.resultsByTime || [])
+          ]
+        } else {
+          // Single call for periods <= 12 months
+          const costData = await getCostAndUsage(costParams, environment)
+          allResultsByTime = costData?.resultsByTime || []
         }
-      })
-      
-      // Format monthly breakdown
-      const monthlyBreakdown = Object.entries(monthlyData)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([month, cost]) => ({
-          month,
-          cost,
-          costFormatted: `$${cost.toFixed(2)}`
-        }))
-      
-      const accountCount = accountSet.size
-      const averageCostPerAccount = accountCount > 0 ? totalCost / accountCount : 0
-      
-      return {
-        period,
-        totalCost,
-        totalCostFormatted: `$${totalCost.toFixed(2)}`,
-        accountCount,
-        averageCostPerAccount,
-        averageCostPerAccountFormatted: `$${averageCostPerAccount.toFixed(2)}`,
-        monthlyBreakdown,
-        resultsByTime: allResultsByTime, // Include raw data for charts that need it
-        dateRange: {
-          start: startDate,
-          end: endDate
+
+        if (!allResultsByTime || allResultsByTime.length === 0) {
+          throw new Error('No historical data found')
         }
+
+        return processHistoricalData(allResultsByTime, period)
       }
     },
     {
@@ -301,7 +435,12 @@ export default defineEventHandler(handleAsync(async (event) => {
   // Add cache metadata
   const cacheInfo = costCache.getEntryInfo(cacheKey)
   const cacheStats = costCache.getStats()
-  
+
+  // Get account count from appropriate data structure
+  const accountCount = proforma
+    ? (historicalData.billable?.accountCount || historicalData.proforma?.accountCount || 0)
+    : (historicalData.accountCount || 0)
+
   const metadata = {
     cache: {
       hit: !!cacheInfo,
@@ -314,14 +453,15 @@ export default defineEventHandler(handleAsync(async (event) => {
     performance: {
       responseTimeMs: Date.now() - startTime,
       period,
-      accountCount: historicalData.accountCount
+      accountCount
     },
     dateRange: {
       startDate,
       endDate,
       description: dateRange.description || null,
       isHistorical: true
-    }
+    },
+    mode: proforma ? 'proforma' : 'billable'
   }
 
   return sendSuccess(event, historicalData, metadata)
