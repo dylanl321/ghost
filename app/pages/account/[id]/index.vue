@@ -95,7 +95,7 @@
               :budget="budget"
               :current-spend="currentSpend"
               :forecast-data="forecastData"
-              :daily-costs="billableTimeSeries"
+              :daily-costs="proformaTimeSeries"
               :loading="loading"
               :class="{ 'opacity-50 pointer-events-none': isAccountInactive }"
             />
@@ -362,7 +362,7 @@ const resourceCounts = ref<ResourceCounts | null>(null)
 const forecastData = ref<any>(null)
 const loading = ref(true)
 
-const currentSpend = computed(() => costResponse.value?.data.billableMonthToDateTotal || 0)
+const currentSpend = computed(() => costResponse.value?.data.proformaMonthToDateTotal || 0)
 
 const budget = computed(() => {
   const enclave = enclaveStore.enclaves[accountId.value]

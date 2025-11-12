@@ -150,7 +150,8 @@ onMounted(async () => {
       ? `${pagePath}?${queryParams.toString()}`
       : pagePath
 
-    await navigateTo(targetUrl)
+    // Use replace: true so the /s/[code] page doesn't stay in browser history
+    await navigateTo(targetUrl, { replace: true })
 
   } catch (err: any) {
     console.error('Error loading shared link:', err)

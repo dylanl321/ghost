@@ -1670,6 +1670,11 @@ const handleTabChange = (tabId: string) => {
   console.log('Tab changed to:', tabId)
   // Can add analytics or additional logic here if needed
 }
+
+// Set page title
+useHead({
+  title: 'Cost Analytics - Ghost Dashboard'
+})
 </script>
 
 <style scoped>

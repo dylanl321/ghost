@@ -83,7 +83,7 @@
 
         <div class="space-y-2 text-sm">
           <AccountDetailsRow label="Budget" :value="formatCurrency(parseInt(enclave?.estimatedMonthlyCharge || '0'), 0)" />
-          <AccountDetailsRow label="Current Spend (Billable)" :value="formatCurrency(props.currentSpend, 0)" />
+          <AccountDetailsRow label="Current Spend (Proforma)" :value="formatCurrency(props.currentSpend, 0)" />
           <AccountDetailsRow label="Utilization" :value="utilization + '%'" />
         </div>
       </UCard>

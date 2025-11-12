@@ -336,22 +336,30 @@ async function generateShareUrl() {
   shareError.value = ''
 
   try {
+    // Build the current route URL
+    const route = useRoute()
+    const originalUrl = route.fullPath
+
+    // Create the short link with the correct API structure
     const response = await $fetch('/api/shortlinks', {
       method: 'POST',
       body: {
-        type: 'cost-view',
-        state: {
-          accounts: props.selectedAccounts,
+        originalUrl,
+        pagePath: '/account/costs',
+        configData: {
+          selectedAccounts: props.selectedAccounts,
           timeframe: modelSelectedTimeframe.value,
           view: modelSelectedView.value,
           tab: props.activeTab,
-          mode: modelMode.value
-        }
+          dataMode: modelMode.value
+        },
+        description: 'Cost Analytics Share Link',
+        expiresInDays: 30
       }
     })
 
-    if (response && typeof response === 'object' && 'shortUrl' in response) {
-      generatedShareUrl.value = response.shortUrl as string
+    if (response && typeof response === 'object' && 'data' in response) {
+      generatedShareUrl.value = (response.data as any).shortUrl as string
       toast.add({
         title: 'Share Link Created',
         description: 'Your shareable link is ready',
