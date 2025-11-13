@@ -250,6 +250,79 @@ resource "aws_dynamodb_table" "user_preferences" {
 }
 
 # ============================================================================
+# Admin Notifications Table (GovCloud Environment)
+# ============================================================================
+# Tracks all admin notifications sent (feedback, errors, alerts, etc.)
+# for audit trail and notification history viewing
+resource "aws_dynamodb_table" "admin_notifications" {
+  provider       = aws.target_deployment_account
+  name           = "ghost_admin_notifications"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "id"
+  range_key      = "timestamp"
+
+  attribute {
+    name = "id"
+    type = "S"
+  }
+
+  attribute {
+    name = "timestamp"
+    type = "S"
+  }
+
+  attribute {
+    name = "type"
+    type = "S"
+  }
+
+  attribute {
+    name = "status"
+    type = "S"
+  }
+
+  # GSI for querying notifications by type
+  global_secondary_index {
+    name            = "type-timestamp-index"
+    hash_key        = "type"
+    range_key       = "timestamp"
+    projection_type = "ALL"
+  }
+
+  # GSI for querying notifications by status
+  global_secondary_index {
+    name            = "status-timestamp-index"
+    hash_key        = "status"
+    range_key       = "timestamp"
+    projection_type = "ALL"
+  }
+
+  # Enable TTL to auto-delete old notifications (180 days)
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  # Enable encryption at rest
+  server_side_encryption {
+    enabled = true
+  }
+
+  # Enable point-in-time recovery
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Name        = "GHOST Admin Notifications"
+    Environment = local.environment
+    ManagedBy   = "Terraform"
+    Service     = "GHOST"
+    Component   = "AdminNotifications"
+  }
+}
+
+# ============================================================================
 # Outputs
 # ============================================================================
 
@@ -301,4 +374,14 @@ output "user_preferences_table_name" {
 output "user_preferences_table_arn" {
   description = "ARN of the DynamoDB table for user preferences"
   value       = aws_dynamodb_table.user_preferences.arn
+}
+
+output "admin_notifications_table_name" {
+  description = "Name of the DynamoDB table for admin notifications"
+  value       = aws_dynamodb_table.admin_notifications.name
+}
+
+output "admin_notifications_table_arn" {
+  description = "ARN of the DynamoDB table for admin notifications"
+  value       = aws_dynamodb_table.admin_notifications.arn
 }

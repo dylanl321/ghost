@@ -59,17 +59,6 @@ const code = route.params.code as string
 const isLoading = ref(true)
 const error = ref<string | null>(null)
 
-// Check authentication - redirect to login if needed
-const { loggedIn } = useOidcAuth()
-
-// If not authenticated, save the current URL and redirect to auth
-if (!loggedIn.value) {
-  // Save the intended destination to sessionStorage
-  const { saveReturnUrl } = useAuthRedirect()
-  saveReturnUrl(route.fullPath)
-  await navigateTo('/auth/loading')
-}
-
 onMounted(async () => {
   if (!code) {
     error.value = 'No share code provided'

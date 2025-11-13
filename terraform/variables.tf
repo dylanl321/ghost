@@ -50,3 +50,16 @@ variable "subnets" {
 variable "env" {
   default = "dev"
 }
+
+# Admin Notifications
+variable "admin_notification_emails" {
+  description = "Comma-separated list of email addresses to receive admin notifications (feedback, errors, etc.)"
+  type        = string
+  default     = "dylan.lewis@gd-ms.com"
+}
+
+variable "admin_notifications_enabled" {
+  description = "Enable/disable admin email notifications"
+  type        = bool
+  default     = true
+}

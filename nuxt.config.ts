@@ -65,6 +65,10 @@ export default defineNuxtConfig({
   // },
 
   runtimeConfig: {
+    // Server-side only (not exposed to client)
+    strandsServerUrl: process.env.STRANDS_SERVER_URL || '',
+    strandsTimeout: parseInt(process.env.STRANDS_TIMEOUT || '30000', 10),
+    
     public: {
       environment: process.env.NODE_ENV || "local",
       authBypass: process.env.AUTH_BYPASS === "true",

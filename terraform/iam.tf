@@ -211,6 +211,34 @@ resource "aws_iam_role_policy" "ecs_shortlinks_dynamodb" {
   })
 }
 
+# DynamoDB permissions for admin notifications (read/write)
+resource "aws_iam_role_policy" "ecs_admin_notifications_dynamodb" {
+  provider = aws.target_deployment_account
+  name     = "${var.app_name}_admin_notifications_dynamodb"
+  role     = aws_iam_role.ecs_task_execution_role.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AdminNotificationsDynamoDB"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Resource = [
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost_admin_notifications",
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost_admin_notifications/index/*"
+        ]
+      }
+    ]
+  })
+}
+
 # S3 permissions for application storage (reports, exports, attachments)
 resource "aws_iam_role_policy" "ecs_s3_app_storage" {
   provider = aws.target_deployment_account
