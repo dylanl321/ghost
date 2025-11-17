@@ -45,10 +45,17 @@
 <script setup lang="ts">
 const route = useRoute()
 const router = useRouter()
-const { getPreference, setPreference } = useUserPreferences()
+const { getPreference, setPreference, initialized } = useUserPreferences()
 
 const visible = ref(false)
 const hasIncrementedThisSession = ref(false)
+
+// Re-compute visibility when preferences change
+watch(initialized, (isInitialized) => {
+  if (isInitialized && !route.path.startsWith('/support')) {
+    visible.value = computeVisibility()
+  }
+})
 
 function computeVisibility(): boolean {
   const pref = getPreference<any>('welcomeBanner', null) || {}
@@ -99,6 +106,13 @@ onMounted(async () => {
     visible.value = false
     return
   }
+
+  // Wait for preferences to be fully loaded before checking visibility
+  const { initialized, load } = useUserPreferences()
+  if (!initialized.value) {
+    await load()
+  }
+
   visible.value = computeVisibility()
   if (visible.value) {
     await incrementSeenIfNeeded()

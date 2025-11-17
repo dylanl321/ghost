@@ -10,6 +10,15 @@
           </p>
         </div>
         <div class="flex gap-2 items-center">
+          <!-- View Repositories Button -->
+          <UButton
+            to="/admin/pipelines/repositories"
+            color="primary"
+            variant="soft"
+            icon="i-heroicons-folder"
+          >
+            View Repositories
+          </UButton>
           <!-- Time Range Selector -->
           <USelectMenu
             v-model="selectedDays"

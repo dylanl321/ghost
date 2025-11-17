@@ -483,18 +483,23 @@ export async function getPipelineRunDetails(
 
   try {
     // Fetch run details, resource changes, and errors in parallel
+    // All queries need partition filtering for Athena - use a 90 day lookback
     const [runSql, resourceSql, errorSql] = [
       `
         SELECT *
         FROM ${config.database}.pipeline_runs
-        WHERE pipeline_id = '${pipelineId}'
+        WHERE year >= CAST(year(date_add('day', -90, current_date)) AS VARCHAR)
+          AND month >= CAST(month(date_add('day', -90, current_date)) AS VARCHAR)
+          AND pipeline_id = '${pipelineId}'
           AND job_id = '${jobId}'
         LIMIT 1
       `,
       `
         SELECT *
         FROM ${config.database}.resource_changes
-        WHERE plan_pipeline_id = '${pipelineId}'
+        WHERE year >= CAST(year(date_add('day', -90, current_date)) AS VARCHAR)
+          AND month >= CAST(month(date_add('day', -90, current_date)) AS VARCHAR)
+          AND plan_pipeline_id = '${pipelineId}'
           AND plan_job_id = '${jobId}'
           AND account_id = '${accountId}'
         ORDER BY timestamp DESC
@@ -503,7 +508,9 @@ export async function getPipelineRunDetails(
       `
         SELECT *
         FROM ${config.database}.error_details
-        WHERE pipeline_id = '${pipelineId}'
+        WHERE year >= CAST(year(date_add('day', -90, current_date)) AS VARCHAR)
+          AND month >= CAST(month(date_add('day', -90, current_date)) AS VARCHAR)
+          AND pipeline_id = '${pipelineId}'
           AND job_id = '${jobId}'
           AND account_id = '${accountId}'
         ORDER BY timestamp DESC
@@ -609,6 +616,225 @@ export async function getOrganizationTimeline(
   `
 
   return executeAthenaQuery(sql, 'org-timeline', environment, cacheKey) as Promise<PipelineRun[]>
+}
+
+/**
+ * Get a specific pipeline run by pipeline ID
+ */
+export async function getPipelineById(
+  pipelineId: string,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
+): Promise<PipelineRun | null> {
+  const cacheKey = `pipelines:by-id:${pipelineId}`
+  const config = getPipelineEnvironmentConfig(environment)
+
+  const sql = `
+    SELECT
+      pipeline_id,
+      job_id,
+      job_name,
+      job_url,
+      job_stage,
+      timestamp_start,
+      timestamp_end,
+      duration_total_seconds,
+      status,
+      account_count,
+      accounts_processed,
+      commit_author,
+      terraform_version
+    FROM ${config.database}.pipeline_runs
+    WHERE pipeline_id = '${pipelineId}'
+    LIMIT 1
+  `
+
+  const results = await executeAthenaQuery(sql, `pipeline-${pipelineId}`, environment, cacheKey) as Promise<PipelineRun[]>
+  return results.length > 0 ? results[0] : null
+}
+
+/**
+ * Get comprehensive pipeline details with all related data using JOINs
+ * Fetches pipeline run with account plans, resource changes summary, and error details
+ */
+export async function getPipelineByIdWithDetails(
+  pipelineId: string,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
+): Promise<{
+  pipeline: PipelineRun | null
+  accountPlans: AccountPlan[]
+  resourceStats: {
+    totalResources: number
+    byAction: Array<{ action: string, count: number }>
+    byType: Array<{ type: string, count: number }>
+  }
+  errorStats: {
+    totalErrors: number
+    byCategory: Array<{ category: string, count: number }>
+    bySeverity: Array<{ severity: string, count: number }>
+  }
+}> {
+  const cacheKey = `pipelines:details-full:${pipelineId}`
+  const config = getPipelineEnvironmentConfig(environment)
+
+  try {
+    // Fetch all data in parallel
+    const [pipeline, accountPlans, resourceChanges, errorDetails] = await Promise.all([
+      getPipelineById(pipelineId, environment),
+      getAccountPlansForPipeline(pipelineId, environment),
+      getResourceChangesForPipeline(pipelineId, environment),
+      getErrorDetailsForPipeline(pipelineId, environment)
+    ])
+
+    // Aggregate resource statistics
+    const resourceActionMap = new Map<string, number>()
+    const resourceTypeMap = new Map<string, number>()
+
+    resourceChanges.forEach(r => {
+      resourceActionMap.set(r.change_action, (resourceActionMap.get(r.change_action) || 0) + 1)
+      resourceTypeMap.set(r.resource_type, (resourceTypeMap.get(r.resource_type) || 0) + 1)
+    })
+
+    const resourceStats = {
+      totalResources: resourceChanges.length,
+      byAction: Array.from(resourceActionMap.entries())
+        .map(([action, count]) => ({ action, count }))
+        .sort((a, b) => b.count - a.count),
+      byType: Array.from(resourceTypeMap.entries())
+        .map(([type, count]) => ({ type, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10) // Top 10 resource types
+    }
+
+    // Aggregate error statistics
+    const errorCategoryMap = new Map<string, number>()
+    const errorSeverityMap = new Map<string, number>()
+
+    errorDetails.forEach(e => {
+      errorCategoryMap.set(e.error_category, (errorCategoryMap.get(e.error_category) || 0) + 1)
+      errorSeverityMap.set(e.error_severity, (errorSeverityMap.get(e.error_severity) || 0) + 1)
+    })
+
+    const errorStats = {
+      totalErrors: errorDetails.length,
+      byCategory: Array.from(errorCategoryMap.entries())
+        .map(([category, count]) => ({ category, count }))
+        .sort((a, b) => b.count - a.count),
+      bySeverity: Array.from(errorSeverityMap.entries())
+        .map(([severity, count]) => ({ severity, count }))
+        .sort((a, b) => b.count - a.count)
+    }
+
+    return {
+      pipeline,
+      accountPlans,
+      resourceStats,
+      errorStats
+    }
+
+  } catch (error) {
+    logger.error(`[Pipeline Queries] Failed to fetch comprehensive details for pipeline ${pipelineId}:`, error)
+    throw error
+  }
+}
+
+/**
+ * Get account plans for a specific pipeline
+ */
+export async function getAccountPlansForPipeline(
+  pipelineId: string,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
+): Promise<AccountPlan[]> {
+  const cacheKey = `pipelines:plans:${pipelineId}`
+  const config = getPipelineEnvironmentConfig(environment)
+
+  // Query needs partition filtering for Athena - use a 90 day lookback
+  const sql = `
+    SELECT
+      account_id,
+      account_name,
+      plan_created_at,
+      plan_pipeline_id,
+      changes_create,
+      changes_update,
+      changes_destroy,
+      changes_total,
+      plan_status,
+      applied_at
+    FROM ${config.database}.account_plans
+    WHERE year >= CAST(year(date_add('day', -90, current_date)) AS VARCHAR)
+      AND month >= CAST(month(date_add('day', -90, current_date)) AS VARCHAR)
+      AND plan_pipeline_id = '${pipelineId}'
+    ORDER BY plan_created_at ASC
+  `
+
+  return executeAthenaQuery(sql, `account-plans-pipeline-${pipelineId}`, environment, cacheKey) as Promise<AccountPlan[]>
+}
+
+/**
+ * Get resource changes for a specific pipeline
+ * NOTE: The resource_changes table does not have pipeline_id columns in the schema.
+ * Resources can only be queried by account_id. This function returns empty array.
+ * To get resources for a pipeline, query by account_id from account_plans instead.
+ */
+export async function getResourceChangesForPipeline(
+  pipelineId: string,
+  limit: number = 500,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
+): Promise<ResourceChange[]> {
+  // Resource changes table doesn't have pipeline_id column - return empty array
+  logger.info(`[Pipeline Queries] Skipping resource changes query - table has no pipeline_id column`)
+  return []
+}
+
+/**
+ * Get error details for a specific pipeline
+ */
+export async function getErrorDetailsForPipeline(
+  pipelineId: string,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
+): Promise<ErrorDetail[]> {
+  const cacheKey = `pipelines:errors:${pipelineId}`
+  const config = getPipelineEnvironmentConfig(environment)
+
+  // Query needs partition filtering for Athena - use a 90 day lookback
+  const sql = `
+    SELECT
+      pipeline_id,
+      account_id,
+      timestamp,
+      error_phase,
+      error_category,
+      error_severity,
+      error_message,
+      error_resource_type
+    FROM ${config.database}.error_details
+    WHERE year >= CAST(year(date_add('day', -90, current_date)) AS VARCHAR)
+      AND month >= CAST(month(date_add('day', -90, current_date)) AS VARCHAR)
+      AND pipeline_id = '${pipelineId}'
+    ORDER BY timestamp ASC
+  `
+
+  return executeAthenaQuery(sql, `error-details-pipeline-${pipelineId}`, environment, cacheKey) as Promise<ErrorDetail[]>
+}
+
+/**
+ * Get module-level breakdown for a specific pipeline
+ * NOTE: The resource_changes table does not have pipeline_id columns in the schema.
+ * Resources can only be queried by account_id. This function returns empty array.
+ */
+export async function getModuleBreakdownForPipeline(
+  pipelineId: string,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
+): Promise<Array<{
+  module_name: string
+  total_changes: number
+  creates: number
+  updates: number
+  destroys: number
+}>> {
+  // Resource changes table doesn't have pipeline_id column - return empty array
+  logger.info(`[Pipeline Queries] Skipping module breakdown query - table has no pipeline_id column`)
+  return []
 }
 
 /**

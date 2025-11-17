@@ -1,5 +1,5 @@
 // Auto-generated file - DO NOT EDIT
-// Generated at: 2025-11-13T17:28:19.364Z
+// Generated at: 2025-11-17T19:32:00.337Z
 // Run 'npm run bundle:support' to regenerate
 
 export interface SupportArticle {
@@ -34,6 +34,13 @@ export const supportArticlesBundle: SupportCategory[] = [
         "content": "# Using Universal Search\n\n## Overview\n\nUniversal Search (top navigation bar) searches across accounts, users, resources, and more in GHOST.\n\n## Quick Access\n\n### Keyboard Shortcut\nPress **`/`** to instantly focus the search bar from anywhere in GHOST.\n\n### Search Bar Location\nTop-right of every page, next to your user avatar.\n\n## What You Can Search\n\n### AWS Accounts\nSearch by:\n- Account name: `production webapp`\n- Account ID: `123456789012`\n- Environment: `prod`, `dev`, `staging`\n- Owner name: `john smith`\n\n### Users\nSearch by:\n- Name: `Jane Doe`\n- Email: `jane.doe@company.com`\n- Username: `jdoe`\n\n## Search Tips\n\n### Basic Search\nJust type what you're looking for:\n- `webapp` - Finds anything with \"webapp\"\n- `john` - Finds users and accounts related to \"john\"\n\n### Exact Matches\nUse quotes for exact phrases:\n- `\"Production Account\"` - Must match exactly\n- `\"123456789012\"` - Exact account ID\n\n### Type Filters\nNarrow by resource type:\n- `type:account production` - Only accounts\n- `type:user jane` - Only users\n\n## Common Searches\n\n### Find My Accounts\nSearch for your name or team\n\n### Find Production Accounts\n```\nenv:production\n```\n\n### Find Account by ID\n```\n123456789012\n```\nPaste the 12-digit account ID.\n\n## Tips\n\n💡 **Use keyboard shortcuts** - `/` to focus search, `Esc` to close results\n\n💡 **Start with account ID** - Most precise search method\n\n💡 **Use type filters** - Faster results with fewer mismatches",
         "lastUpdated": "2025-01-15T00:00:00.000Z",
         "icon": "i-heroicons-magnifying-glass"
+      },
+      {
+        "id": "welcome-overview",
+        "title": "Welcome to GHOST — Quick Overview",
+        "content": "# Welcome to GHOST\n\nThis short overview helps you get oriented and productive quickly.\n\n## What you can do in GHOST\n\n- Universal Search: Find accounts, users, and resources instantly from anywhere.\n- Cost Dashboard: Monitor spend, analyze trends, and export/share cost views.\n- Organization Explorer: Navigate your org, environments, and accounts.\n- Reports: Schedule one-time or recurring cost reports.\n\n## Cost Dashboard highlights\n\n- Switch between Billable and Proforma views.\n- Choose Timeframe and View presets for quick analysis.\n- Use the Accounts selector to narrow focus.\n- Explore charts and breakdowns; export to PDF/CSV/Excel.\n- Generate a shareable link with your current view settings.\n\n## Learn next\n\n- Cost Dashboard Guide: /support/docs?topic=cost-dashboard-guide\n- Universal Search: /support/docs?topic=universal-search\n\nTip: Look for the help menu and the guided tour on the Cost Dashboard to learn by doing.",
+        "lastUpdated": "2025-11-13T00:00:00.000Z",
+        "icon": "i-heroicons-sparkles"
       }
     ]
   },

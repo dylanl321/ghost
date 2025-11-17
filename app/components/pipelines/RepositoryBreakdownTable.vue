@@ -17,62 +17,97 @@
       No repository data available
     </div>
     <div v-else>
-      <UTable
-        :rows="filteredRepositories"
-        :columns="columns"
-        :loading="loading"
-        class="w-full"
+      <UAccordion
+        :items="accordionItems"
+        :ui="{ wrapper: 'space-y-2' }"
       >
-        <!-- Repository Column -->
-        <template #repository-data="{ row }">
-          <div class="flex items-center gap-2">
-            <UIcon name="i-heroicons-folder" class="text-gray-400 flex-shrink-0" />
-            <div class="min-w-0">
-              <div class="font-medium text-sm truncate">{{ row.repository }}</div>
-              <div class="text-xs text-gray-400 truncate">{{ row.accounts.length }} account(s)</div>
-            </div>
-          </div>
-        </template>
-
-        <!-- Total Runs Column -->
-        <template #totalRuns-data="{ row }">
-          <span class="font-semibold">{{ row.totalRuns }}</span>
-        </template>
-
-        <!-- Success Rate Column -->
-        <template #successRate-data="{ row }">
-          <div class="flex items-center gap-2">
-            <div class="flex-1">
-              <div class="h-2 bg-gray-700 rounded-full overflow-hidden">
-                <div
-                  class="h-full bg-green-500"
-                  :style="{ width: `${row.successRate}%` }"
-                ></div>
-              </div>
-            </div>
-            <span class="text-sm font-semibold w-12 text-right">{{ row.successRate }}%</span>
-          </div>
-        </template>
-
-        <!-- Last Run Column -->
-        <template #lastRun-data="{ row }">
-          <span class="text-sm text-gray-400">{{ formatDate(row.lastRun) }}</span>
-        </template>
-
-        <!-- Actions Column -->
-        <template #actions-data="{ row }">
+        <template #default="{ item, open }">
           <UButton
-            v-if="row.projectUrl"
-            icon="i-heroicons-arrow-top-right-on-square"
-            size="xs"
             color="gray"
             variant="ghost"
-            :to="row.projectUrl"
-            target="_blank"
-            title="View in GitLab"
-          />
+            class="w-full"
+            :ui="{ rounded: 'rounded-lg', padding: { sm: 'p-3' } }"
+          >
+            <template #leading>
+              <UIcon
+                name="i-heroicons-chevron-right"
+                class="w-5 h-5 transition-transform duration-200"
+                :class="[open && 'rotate-90']"
+              />
+            </template>
+
+            <div class="flex items-center justify-between w-full">
+              <div class="flex items-center gap-3 min-w-0 flex-1">
+                <UIcon name="i-heroicons-folder" class="text-purple-400 flex-shrink-0 w-5 h-5" />
+                <div class="min-w-0 flex-1">
+                  <div class="font-medium text-white truncate">{{ item.repository }}</div>
+                  <div class="text-xs text-gray-400">{{ item.accounts.length }} accounts</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-4 flex-shrink-0">
+                <div class="text-right">
+                  <div class="text-sm font-semibold text-white">{{ item.totalRuns }} runs</div>
+                  <div class="text-xs text-gray-400">{{ item.successRate }}% success</div>
+                </div>
+                <div class="w-24">
+                  <div class="h-2 bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                      class="h-full bg-green-500"
+                      :style="{ width: `${item.successRate}%` }"
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </UButton>
         </template>
-      </UTable>
+
+        <template #item="{ item }">
+          <div class="space-y-3 p-4 bg-gray-800/50 rounded-lg">
+            <!-- Quick Stats -->
+            <div class="grid grid-cols-4 gap-4 pb-3 border-b border-gray-700">
+              <div>
+                <div class="text-xs text-gray-400">Success Rate</div>
+                <div class="text-lg font-semibold text-green-400">{{ item.successRate }}%</div>
+              </div>
+              <div>
+                <div class="text-xs text-gray-400">Total Runs</div>
+                <div class="text-lg font-semibold text-white">{{ item.totalRuns }}</div>
+              </div>
+              <div>
+                <div class="text-xs text-gray-400">Accounts</div>
+                <div class="text-lg font-semibold text-white">{{ item.accounts.length }}</div>
+              </div>
+              <div>
+                <div class="text-xs text-gray-400">Last Run</div>
+                <div class="text-sm font-semibold text-gray-300">{{ formatDate(item.lastRun) }}</div>
+              </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex gap-2">
+              <UButton
+                :to="`/admin/pipelines/${encodeURIComponent(item.repository)}`"
+                color="primary"
+                size="sm"
+                icon="i-heroicons-chart-bar"
+              >
+                View Repository Details
+              </UButton>
+              <UButton
+                v-if="item.projectUrl"
+                :to="item.projectUrl"
+                target="_blank"
+                color="gray"
+                size="sm"
+                icon="i-heroicons-arrow-top-right-on-square"
+              >
+                Open in GitLab
+              </UButton>
+            </div>
+          </div>
+        </template>
+      </UAccordion>
 
       <!-- Pagination (if needed) -->
       <div v-if="filteredRepositories.length > 20" class="mt-4 flex justify-center">
@@ -100,15 +135,6 @@ const props = defineProps<{
 }>()
 
 const searchQuery = ref('')
-
-// Table columns
-const columns = [
-  { key: 'repository', label: 'Repository', sortable: true },
-  { key: 'totalRuns', label: 'Total Runs', sortable: true },
-  { key: 'successRate', label: 'Success Rate', sortable: true },
-  { key: 'lastRun', label: 'Last Run', sortable: true },
-  { key: 'actions', label: '' }
-]
 
 // Aggregate timeline data by repository
 const repositories = computed(() => {
@@ -190,6 +216,21 @@ const filteredRepositories = computed(() => {
   return repositories.value
     .filter(repo => repo.repository.toLowerCase().includes(query))
     .slice(0, 20)
+})
+
+// Create accordion items from repositories
+const accordionItems = computed(() => {
+  return filteredRepositories.value.map(repo => ({
+    label: repo.repository,
+    repository: repo.repository,
+    totalRuns: repo.totalRuns,
+    successRate: repo.successRate,
+    lastRun: repo.lastRun,
+    accounts: repo.accounts,
+    projectUrl: repo.projectUrl,
+    slot: 'item',
+    defaultOpen: false
+  }))
 })
 
 // Format date helper
