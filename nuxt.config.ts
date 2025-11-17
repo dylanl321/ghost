@@ -68,7 +68,12 @@ export default defineNuxtConfig({
     // Server-side only (not exposed to client)
     strandsServerUrl: process.env.STRANDS_SERVER_URL || '',
     strandsTimeout: parseInt(process.env.STRANDS_TIMEOUT || '30000', 10),
-    
+
+    // Admin Notifications
+    adminNotificationEmails: process.env.ADMIN_NOTIFICATION_EMAILS || 'dylan.lewis@gd-ms.com',
+    adminNotificationsEnabled: process.env.ADMIN_NOTIFICATIONS_ENABLED !== 'false',
+    notificationsTableName: process.env.NOTIFICATIONS_TABLE_NAME || 'ghost_admin_notifications',
+
     public: {
       environment: process.env.NODE_ENV || "local",
       authBypass: process.env.AUTH_BYPASS === "true",

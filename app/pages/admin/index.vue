@@ -114,6 +114,17 @@
           </button>
 
           <button
+            @click="activeSection = 'notifications'"
+            class="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors"
+            :class="activeSection === 'notifications'
+              ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'"
+          >
+            <Icon name="i-heroicons-bell" class="w-5 h-5" />
+            Notifications
+          </button>
+
+          <button
             @click="activeSection = 'scheduledreports'"
             class="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors"
             :class="activeSection === 'scheduledreports'
@@ -204,6 +215,7 @@
         <RolesPanel v-else-if="activeSection === 'roles'" />
         <SystemLogsPanel v-else-if="activeSection === 'logs'" />
         <IssuesPanel v-else-if="activeSection === 'issues'" />
+        <NotificationsPanel v-else-if="activeSection === 'notifications'" />
         <ScheduledReportsPanel v-else-if="activeSection === 'scheduledreports'" />
         <StoredReportsPanel v-else-if="activeSection === 'storedreports'" />
         <UserPreferencesPanel v-else-if="activeSection === 'userpreferences'" />
@@ -219,6 +231,7 @@ import ApiKeysPanel from '~/components/admin/ApiKeysPanel.vue'
 import RolesPanel from '~/components/admin/RolesPanel.vue'
 import SystemLogsPanel from '~/components/admin/SystemLogsPanel.vue'
 import IssuesPanel from '~/components/admin/IssuesPanel.vue'
+import NotificationsPanel from '~/components/admin/NotificationsPanel.vue'
 import ScheduledReportsPanel from '~/components/admin/ScheduledReportsPanel.vue'
 import StoredReportsPanel from '~/components/admin/StoredReportsPanel.vue'
 import UserPreferencesPanel from '~/components/admin/UserPreferencesPanel.vue'

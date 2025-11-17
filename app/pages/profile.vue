@@ -634,6 +634,95 @@
                 </div>
               </div>
             </div>
+
+            <!-- Onboarding & Tutorials -->
+            <div>
+              <div class="flex items-center justify-between mb-4">
+                <div>
+                  <h3 class="text-base font-medium text-white">Onboarding & Tutorials</h3>
+                  <p class="text-sm text-gray-400 mt-1">
+                    Re-enable the welcome banner and reset guided tutorials
+                  </p>
+                </div>
+              </div>
+
+              <div class="space-y-4">
+                <!-- Welcome Banner Controls -->
+                <div class="bg-gray-800 rounded-lg p-4">
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-2">
+                      <Icon name="i-heroicons-sparkles" class="w-5 h-5 text-blue-400" />
+                      <span class="text-sm font-medium text-gray-300">Welcome Banner</span>
+                    </div>
+                    <UBadge size="xs" :color="welcomeBannerStatusColor" variant="soft">
+                      {{ welcomeBannerStatus }}
+                    </UBadge>
+                  </div>
+                  <p class="text-xs text-gray-500 mb-3">
+                    Shows a quick overview link the next time you visit the app.
+                  </p>
+                  <div class="flex gap-2">
+                    <UButton size="sm" color="blue" variant="soft" @click="resetWelcomeBanner" :loading="resetLoading.banner">
+                      Re-enable Banner
+                    </UButton>
+                    <UButton size="sm" color="gray" variant="ghost" to="/support/docs?topic=welcome-overview">
+                      View Overview Doc
+                    </UButton>
+                  </div>
+                </div>
+
+                <!-- Cost Dashboard Tour Controls -->
+                <div class="bg-gray-800 rounded-lg p-4">
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-2">
+                      <Icon name="i-heroicons-currency-dollar" class="w-5 h-5 text-green-400" />
+                      <span class="text-sm font-medium text-gray-300">Cost Dashboard Tour</span>
+                    </div>
+                    <UBadge size="xs" :color="costTourStatusColor" variant="soft">
+                      {{ costTourStatus }}
+                    </UBadge>
+                  </div>
+                  <p class="text-xs text-gray-500 mb-3">
+                    Reset the guided tour; it will auto-start next time or use the Start Tour action on the Costs page.
+                  </p>
+                  <div class="flex gap-2">
+                    <UButton size="sm" color="blue" variant="soft" @click="resetCostTour" :loading="resetLoading.cost">
+                      Reset Cost Tour
+                    </UButton>
+                    <UButton size="sm" color="gray" variant="ghost" to="/account/costs?tour=1">
+                      Start on Costs Page
+                    </UButton>
+                    <UButton size="sm" color="gray" variant="ghost" to="/support/docs?topic=cost-dashboard-guide">
+                      Cost Docs
+                    </UButton>
+                  </div>
+                </div>
+
+                <!-- Account Page Tour Controls -->
+                <div class="bg-gray-800 rounded-lg p-4">
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-2">
+                      <Icon name="i-heroicons-building-office" class="w-5 h-5 text-cyan-400" />
+                      <span class="text-sm font-medium text-gray-300">Account Page Tour</span>
+                    </div>
+                    <UBadge size="xs" :color="accountTourStatusColor" variant="soft">
+                      {{ accountTourStatus }}
+                    </UBadge>
+                  </div>
+                  <p class="text-xs text-gray-500 mb-3">
+                    Reset the guided tour; on any account page, click the sparkles icon to start, or append <code>?tour=1</code> in the URL.
+                  </p>
+                  <div class="flex gap-2">
+                    <UButton size="sm" color="blue" variant="soft" @click="resetAccountTour" :loading="resetLoading.account">
+                      Reset Account Tour
+                    </UButton>
+                    <UButton size="sm" color="gray" variant="ghost" to="/account/explorer">
+                      Open Account Explorer
+                    </UButton>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </UCard>
       </template>
@@ -727,6 +816,7 @@ const { userRoles, userPermissions, isAdmin } = useUserRoles()
 const { getBadgesFromGroups } = useSimpleBadges()
 const toast = useToast()
 const route = useRoute()
+const { getPreference, setPreference } = useUserPreferences()
 
 // User preferences for settings tab
 const {
@@ -781,6 +871,80 @@ async function saveTimezone() {
 async function useBrowserTimezone() {
   selectedTimezone.value = browserTimezone.value
   await saveTimezone()
+}
+
+// Onboarding & Tutorials state and helpers
+const resetLoading = reactive({ banner: false, cost: false, account: false })
+
+const welcomeBannerStatus = computed(() => {
+  const pref = getPreference<any>('welcomeBanner', {}) || {}
+  if (pref.dismissed) return 'Dismissed'
+  const seen = Number(pref.seenCount || 0)
+  return seen >= 3 ? 'Hidden (limit reached)' : 'Active'
+})
+const welcomeBannerStatusColor = computed(() => {
+  return welcomeBannerStatus.value.startsWith('Hidden') || welcomeBannerStatus.value === 'Dismissed' ? 'gray' : 'green'
+})
+
+const costTourStatus = computed(() => {
+  const pref = getPreference<any>('costTour', {}) || {}
+  return pref.completed ? 'Completed' : 'Not completed'
+})
+const costTourStatusColor = computed(() => costTourStatus.value === 'Completed' ? 'green' : 'gray')
+
+const accountTourStatus = computed(() => {
+  const pref = getPreference<any>('accountTour', {}) || {}
+  return pref.completed ? 'Completed' : 'Not completed'
+})
+const accountTourStatusColor = computed(() => accountTourStatus.value === 'Completed' ? 'green' : 'gray')
+
+async function resetWelcomeBanner() {
+  resetLoading.banner = true
+  try {
+    const current = getPreference<any>('welcomeBanner', {}) || {}
+    await setPreference('welcomeBanner', {
+      ...current,
+      dismissed: false,
+      seenCount: 0,
+      clicked: false,
+      resetAt: new Date().toISOString()
+    })
+    toast.add({ title: 'Welcome Banner Enabled', description: 'It will show again on your next visit.', color: 'green', icon: 'i-heroicons-check-circle' })
+  } finally {
+    resetLoading.banner = false
+  }
+}
+
+async function resetCostTour() {
+  resetLoading.cost = true
+  try {
+    const current = getPreference<any>('costTour', {}) || {}
+    await setPreference('costTour', {
+      ...current,
+      completed: false,
+      lastStep: 0,
+      resetAt: new Date().toISOString()
+    })
+    toast.add({ title: 'Cost Tour Reset', description: 'Return to Costs to start the tour.', color: 'green', icon: 'i-heroicons-check-circle' })
+  } finally {
+    resetLoading.cost = false
+  }
+}
+
+async function resetAccountTour() {
+  resetLoading.account = true
+  try {
+    const current = getPreference<any>('accountTour', {}) || {}
+    await setPreference('accountTour', {
+      ...current,
+      completed: false,
+      lastStep: 0,
+      resetAt: new Date().toISOString()
+    })
+    toast.add({ title: 'Account Tour Reset', description: 'Open any account to start the tour.', color: 'green', icon: 'i-heroicons-check-circle' })
+  } finally {
+    resetLoading.account = false
+  }
 }
 
 // User basic info

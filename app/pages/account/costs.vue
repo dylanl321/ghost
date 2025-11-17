@@ -1,7 +1,7 @@
 <template>
   <div class="flex h-full min-h-0 bg-gray-950">
     <!-- Sidebar -->
-    <div class="w-80 flex-shrink-0 border-r border-gray-700 h-full min-h-0 flex flex-col overflow-hidden">
+    <div class="w-80 flex-shrink-0 border-r border-gray-700 h-full min-h-0 flex flex-col overflow-hidden" data-tour="account-selector">
       <div class="flex-1 bg-gray-900 flex flex-col min-h-0">
         <!-- Header -->
         <div class="flex items-center justify-between p-4 border-b border-gray-700">
@@ -74,9 +74,9 @@
         </div>
 
         <!-- Search -->
-        <div class="p-3 border-b border-gray-700">
-          <UInput 
-            v-model="searchTerm" 
+        <div class="p-3 border-b border-gray-700" data-tour="account-search">
+          <UInput
+            v-model="searchTerm"
             :placeholder="searchPlaceholder"
             icon="i-heroicons-magnifying-glass"
             size="sm"
@@ -136,7 +136,7 @@
         </div>
 
         <!-- Tabs -->
-        <div class="border-b border-gray-700">
+        <div class="border-b border-gray-700" data-tour="account-tabs">
           <div class="flex">
             <button
               v-for="tab in tabs"
@@ -607,13 +607,12 @@
       <CostsHeader
         v-model:mode="dataMode"
         v-model:selected-timeframe="selectedTimeframe"
-        v-model:selected-view="selectedView"
         :timeframe-options="timeframeOptions"
-        :view-options="viewOptions"
         :selected-accounts="selectedAccounts"
         :active-tab="activeTab"
         :dataset="dataset"
         @refresh="refreshData"
+        @start-tour="handleStartTour"
       />
 
       <!-- Content Area -->
@@ -712,13 +711,15 @@
           </div>
 
           <!-- Summary Cards -->
-          <CostsSummaryCards
-            :total-accounts="selectedAccounts.length || accountsWithCosts.length"
-            :total-budget="isHistoricalTimeframe ? 0 : totalBudget"
-            :total-spend="totalSpend"
-            :utilization="isHistoricalTimeframe ? 0 : utilization"
-            :format-currency="formatCurrency"
-          />
+          <div data-tour="costs-summary">
+            <CostsSummaryCards
+              :total-accounts="selectedAccounts.length || accountsWithCosts.length"
+              :total-budget="isHistoricalTimeframe ? 0 : totalBudget"
+              :total-spend="totalSpend"
+              :utilization="isHistoricalTimeframe ? 0 : utilization"
+              :format-currency="formatCurrency"
+            />
+          </div>
 
           <div v-if="isCostPending" class="bg-gray-900 border border-amber-600 rounded-lg p-4 text-amber-400 flex items-center gap-2">
             <Icon name="i-heroicons-clock" class="w-5 h-5 animate-pulse" />
@@ -738,23 +739,24 @@
                - Each chart's extractor function transforms dataset to chart format
                Charts are dynamically selected based on scenario and timeframe
                ============================================================= -->
-          <ChartTabs
-            v-else
-            :smart-charts="charts"
-            :dataset="dataset"
-            :show-regression-line="showRegressionLine"
-            :selected-accounts="selectedAccounts"
-            :smart-charts-loading="isCostFetching"
-            :data-mode="dataMode"
-            :selected-timeframe="selectedTimeframe"
-            :accounts-list="accountsList"
-            :active-tab-prop="activeChartTab"
-            :show-advanced-charts="showAdvancedCharts"
-            @toggle-regression-line="showRegressionLine = !showRegressionLine"
-            @toggle-advanced-charts="showAdvancedCharts = !showAdvancedCharts; localStorage.setItem('showAdvancedCharts', String(showAdvancedCharts))"
-            @tab-changed="handleTabChange"
-            @refresh-data="fetchCosts"
-          />
+          <div v-else data-tour="costs-chart">
+            <ChartTabs
+              :smart-charts="charts"
+              :dataset="dataset"
+              :show-regression-line="showRegressionLine"
+              :selected-accounts="selectedAccounts"
+              :smart-charts-loading="isCostFetching"
+              :data-mode="dataMode"
+              :selected-timeframe="selectedTimeframe"
+              :accounts-list="accountsList"
+              :active-tab-prop="activeChartTab"
+              :show-advanced-charts="showAdvancedCharts"
+              @toggle-regression-line="showRegressionLine = !showRegressionLine"
+              @toggle-advanced-charts="showAdvancedCharts = !showAdvancedCharts; localStorage.setItem('showAdvancedCharts', String(showAdvancedCharts))"
+              @tab-changed="handleTabChange"
+              @refresh-data="fetchCosts"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -771,6 +773,58 @@ import CostsHeader from '~/components/costs/CostsHeader.vue'
 import CostsSummaryCards from '~/components/costs/CostsSummaryCards.vue'
 import ChartTabs from '~/components/costs/SimpleChartTabs.vue'
 import ForecastDataTable from '~/components/costs/ForecastDataTable.vue'
+import { startCostTour } from '~/components/tutorial/CostTour'
+
+const { getPreference, setPreference, load: loadPreferences } = useUserPreferences()
+const tourStartedThisSession = ref(false)
+const lastResetTimestamp = ref<string | null>(null)
+
+async function handleStartTour() {
+  const pref = getPreference<any>('costTour', {}) || {}
+  const resetTimestamp = pref?.resetByAdminAt
+  
+  // Allow tour to run if it was reset (even if started this session)
+  const wasReset = resetTimestamp && resetTimestamp !== lastResetTimestamp.value
+  if (tourStartedThisSession.value && !wasReset) return
+  
+  if (wasReset) {
+    lastResetTimestamp.value = resetTimestamp
+  }
+  tourStartedThisSession.value = true
+
+  const startAt = Number(pref?.lastStep || 0)
+
+  try {
+    await startCostTour({
+      startAtStep: isNaN(startAt) ? 0 : startAt,
+      onComplete: async () => {
+        await setPreference('costTour', {
+          ...(getPreference<any>('costTour', {}) || {}),
+          completed: true,
+          completedAt: new Date().toISOString()
+        })
+      },
+      onExit: async (currentStep) => {
+        await setPreference('costTour', {
+          ...(getPreference<any>('costTour', {}) || {}),
+          lastStep: currentStep,
+          startedAt: (getPreference<any>('costTour', {}) || {}).startedAt || new Date().toISOString()
+        })
+      }
+    })
+  } catch (error: any) {
+    console.error('Failed to start tour:', error)
+    const toast = useToast()
+    toast.add({
+      title: 'Tour Error',
+      description: error.message || 'Failed to start the guided tour. Please try again.',
+      color: 'red',
+      icon: 'i-heroicons-exclamation-triangle'
+    })
+    // Reset session flag so user can try again
+    tourStartedThisSession.value = false
+  }
+}
 
 // Core composables that power the chart system:
 // - useCostData: Fetches and manages cost data based on selected accounts/timeframe
@@ -943,7 +997,6 @@ const searchTerm = ref('')
 const searchScope = ref<'tab' | 'global'>('tab') // Default to searching within current tab
 const selectedAccounts = ref<string[]>([])
 const selectedTimeframe = ref('thisMonth')
-const selectedView = ref('overview')
 const activeTab = ref('all')
 const activeChartTab = ref('smart') // Chart tab selection (smart, organizational, trends, budget-health, data, forecast)
 const expandedGroups = ref(new Set<string>())
@@ -986,12 +1039,6 @@ const timeframeOptions = [
   { label: 'Year-to-Date', value: 'ytd' },
   { label: 'Last 12 Months', value: 'last12months' },
   { label: 'Last Year', value: 'lastYear' }
-]
-
-const viewOptions = [
-  { label: 'Overview', value: 'overview' },
-  { label: 'By Department', value: 'department' },
-  { label: 'By Service', value: 'service' }
 ]
 
 // Sorting options for accounts
@@ -1587,10 +1634,6 @@ const applySharedStateFromUrl = () => {
     selectedTimeframe.value = route.query.timeframe
   }
 
-  if (route.query.view && typeof route.query.view === 'string') {
-    selectedView.value = route.query.view
-  }
-
   if (route.query.tab && typeof route.query.tab === 'string') {
     activeTab.value = route.query.tab
   }
@@ -1610,11 +1653,48 @@ const applySharedStateFromUrl = () => {
 // Initialize - only on client side to avoid SSR issues
 onMounted(async () => {
   if (import.meta.client) {
+    // Reload preferences to get fresh data (in case admin reset it)
+    await loadPreferences(true)
+    
     // Apply any shared state from URL first
     applySharedStateFromUrl()
     
     // Then refresh data with the applied state
     await refreshData()
+
+    // Auto-start tour only for first-time users, forced starts, or admin resets
+    const tourPref = getPreference<any>('costTour', {}) || {}
+    const forceStart = useRoute().query.tour === '1'
+    const wasReset = tourPref?.resetByAdminAt && tourPref?.resetByAdminAt !== lastResetTimestamp.value
+
+    // Only auto-start if:
+    // 1. Force start from URL (?tour=1)
+    // 2. Admin reset the tour
+    // 3. User has NEVER started the tour before (no startedAt and no completed)
+    const neverStarted = !tourPref?.startedAt && !tourPref?.completed
+    const shouldAutoStart = (forceStart || wasReset || neverStarted) && !tourStartedThisSession.value
+
+    if (shouldAutoStart) {
+      // Wait for DOM elements to be ready
+      await nextTick()
+      // Check if tour elements exist before starting
+      const checkElements = () => {
+        const header = document.querySelector('[data-tour="costs-header"]')
+        return header !== null
+      }
+
+      // Try multiple times with increasing delays
+      let attempts = 0
+      const tryStart = () => {
+        if (checkElements()) {
+          handleStartTour()
+        } else if (attempts < 5) {
+          attempts++
+          setTimeout(tryStart, 300)
+        }
+      }
+      setTimeout(tryStart, 500)
+    }
   }
 })
 

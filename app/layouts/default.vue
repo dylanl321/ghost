@@ -13,6 +13,9 @@
         @toggle-mobile-menu="handleMobileMenuToggle"
       />
 
+      <!-- Welcome Banner -->
+      <WelcomeBanner v-if="!route.path.startsWith('/support')" />
+
       <!-- Main Content Area -->
       <main 
         class="flex-1 min-h-0 flex flex-col bg-gray-50 dark:bg-slate-900"
@@ -56,6 +59,7 @@
 
 <script setup lang="ts">
 import { useNavigationStore } from '~/stores/useNavigationStore'
+import WelcomeBanner from '~/components/welcome/WelcomeBanner.vue'
 
 const route = useRoute()
 const navigationStore = useNavigationStore()

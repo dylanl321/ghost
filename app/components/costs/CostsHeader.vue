@@ -1,5 +1,5 @@
 <template>
-  <div class="bg-gray-900 border-b border-gray-700 p-4 md:p-5 pt-0 md:pt-0">
+  <div class="bg-gray-900 border-b border-gray-700 p-4 md:p-5 pt-0 md:pt-0" data-tour="costs-header">
     <div class="flex justify-between items-center">
       <div class="flex items-center gap-2">
         <div>
@@ -11,10 +11,21 @@
             <UIcon name="i-heroicons-question-mark-circle" class="w-5 h-5" />
           </NuxtLink>
         </UTooltip>
+        <UTooltip text="Start guided tour">
+          <UButton
+            color="blue"
+            variant="soft"
+            size="xs"
+            icon="i-heroicons-sparkles"
+            @click="emitStartTour"
+          >
+            Tour
+          </UButton>
+        </UTooltip>
       </div>
       <div class="flex gap-2 items-center">
         <!-- Data Mode Selector -->
-        <div class="w-32">
+        <div class="w-32" data-tour="costs-mode">
           <USelectMenu
             v-model="modelMode"
             :options="modeOptions"
@@ -38,9 +49,11 @@
         </UDropdown>
 
         <!-- Help Menu -->
-        <UDropdown :items="helpMenuItems" :popper="{ placement: 'bottom-end' }">
-          <UButton color="white" variant="ghost" icon="i-heroicons-question-mark-circle" />
-        </UDropdown>
+        <span data-tour="costs-help">
+          <UDropdown :items="helpMenuItems" :popper="{ placement: 'bottom-end' }">
+            <UButton color="white" variant="ghost" icon="i-heroicons-question-mark-circle" />
+          </UDropdown>
+        </span>
 
         <!-- Settings -->
         <CostSettings />
@@ -53,20 +66,11 @@
     </div>
 
     <div class="flex flex-wrap gap-3 mt-3">
-      <div class="w-full sm:w-64 md:w-72">
+      <div class="w-full sm:w-64 md:w-72" data-tour="costs-timeframe">
         <USelectMenu
           v-model="modelSelectedTimeframe"
           :options="timeframeOptions"
           placeholder="Time Period"
-          value-attribute="value"
-          option-attribute="label"
-        />
-      </div>
-      <div class="w-full sm:w-64 md:w-72">
-        <USelectMenu
-          v-model="modelSelectedView"
-          :options="viewOptions"
-          placeholder="Select View"
           value-attribute="value"
           option-attribute="label"
         />
@@ -185,7 +189,7 @@
       v-model="showSimpleModal"
       :config="currentConfig"
       :is-admin="isAdmin"
-      :user-email="userEmail"
+      :user-email="String(user?.claims?.email || '')"
       @submit="handleScheduleSubmit"
       @open-advanced="handleOpenAdvanced"
     />
@@ -194,7 +198,7 @@
       v-model="showAdvancedModal"
       :initial-config="advancedInitialConfig"
       :is-admin="isAdmin"
-      :user-email="user?.email"
+      :user-email="String(user?.claims?.email || '')"
       @submit="handleScheduleSubmit"
     />
 
@@ -210,12 +214,13 @@
 import { ref } from 'vue'
 import type { DataMode } from '~/types/costs'
 import type { NormalizedDataset } from '~/types/costs'
-import type { ExportFormat } from '~/shared/types/export'
+import type { ExportFormat } from '#shared/types/export'
 import ExportButton from '~/components/shared/ExportButton.vue'
+
+const emit = defineEmits<{ (e: 'refresh'): void; (e: 'start-tour'): void }>()
 
 const props = defineProps<{
   timeframeOptions: Array<{ label: string, value: string }>,
-  viewOptions: Array<{ label: string, value: string }>,
   selectedAccounts: string[],
   activeTab: string,
   dataset?: NormalizedDataset | null
@@ -223,7 +228,6 @@ const props = defineProps<{
 
 const modelMode = defineModel<DataMode>('mode', { default: 'proforma' })
 const modelSelectedTimeframe = defineModel<string>('selectedTimeframe')
-const modelSelectedView = defineModel<string>('selectedView')
 
 const modeOptions = [
   { label: 'Billable', value: 'billable' },
@@ -243,6 +247,10 @@ const { user } = useOidcAuth()
 const { isAdmin } = useUserRoles()
 const toast = useToast()
 
+function emitStartTour() {
+  emit('start-tour')
+}
+
 // Reports menu items
 const reportsMenuItems = computed(() => [[
   {
@@ -261,6 +269,18 @@ const reportsMenuItems = computed(() => [[
     label: 'Export as Excel',
     icon: 'i-heroicons-document-chart-bar',
     click: () => handleExport('xlsx'),
+    disabled: isExporting.value
+  },
+  {
+    label: 'Export as BOM',
+    icon: 'i-heroicons-document-duplicate',
+    click: () => handleBomExport(),
+    disabled: isExporting.value
+  },
+  {
+    label: 'Proforma vs Billable Comparison',
+    icon: 'i-heroicons-scale',
+    click: () => handleProformaBillableExport(),
     disabled: isExporting.value
   }
 ], [
@@ -286,7 +306,7 @@ const reportsMenuItems = computed(() => [[
         format: 'pdf',
         includeServices: true,
         includeHistorical: true,
-        includeProjections: false
+        includeForecast: false
       })
       showShareReportModal.value = true
     }
@@ -300,7 +320,12 @@ const reportsMenuItems = computed(() => [[
 ]])
 
 // Help menu items
-const helpMenuItems = [[
+const helpMenuItems = computed(() => [[
+  {
+    label: 'Start Guided Tour',
+    icon: 'i-heroicons-sparkles',
+    click: emitStartTour
+  },
   {
     label: 'Cost Dashboard Guide',
     icon: 'i-heroicons-book-open',
@@ -316,7 +341,7 @@ const helpMenuItems = [[
     icon: 'i-heroicons-document-text',
     to: '/support/docs?topic=reports-guide'
   }
-]]
+]])
 
 /**
  * Open share link modal
@@ -349,7 +374,6 @@ async function generateShareUrl() {
         configData: {
           selectedAccounts: props.selectedAccounts,
           timeframe: modelSelectedTimeframe.value,
-          view: modelSelectedView.value,
           tab: props.activeTab,
           dataMode: modelMode.value
         },
@@ -417,7 +441,7 @@ async function copyShareUrl() {
 // Extract user email from claims
 const userEmail = computed(() => {
   if (!user.value) return ''
-  return user.value.email || user.value.claims?.email || user.value.claims?.preferred_username || ''
+  return user.value.claims?.email || user.value.claims?.preferred_username || ''
 })
 
 const {
@@ -433,8 +457,6 @@ const {
 const {
   createReport
 } = useScheduledReports()
-
-defineEmits<{ (e: 'refresh'): void }>()
 
 /**
  * Handle export button click
@@ -462,7 +484,8 @@ async function handleExport(format: ExportFormat) {
   const formatLabels: Record<ExportFormat, string> = {
     pdf: 'PDF',
     csv: 'CSV',
-    xlsx: 'Excel'
+    xlsx: 'Excel',
+    json: 'JSON'
   }
 
   toast.add({
@@ -480,7 +503,7 @@ async function handleExport(format: ExportFormat) {
     await exportCostData(format, {
       includeServices: true,
       includeHistorical: true,
-      includeProjections: true
+      includeForecast: true
     })
 
     // Success toast
@@ -506,6 +529,166 @@ async function handleExport(format: ExportFormat) {
 }
 
 /**
+ * Handle Proforma vs Billable Comparison Export
+ */
+async function handleProformaBillableExport() {
+  // Prevent double execution
+  if (isExporting.value) {
+    return
+  }
+
+  isExporting.value = true
+
+  // Show loading toast
+  toast.add({
+    title: 'Generating Comparison Report',
+    description: 'Creating Proforma vs Billable comparison report...',
+    icon: 'i-heroicons-arrow-path',
+    timeout: 0,
+    id: 'proforma-billable-export-progress'
+  })
+
+  try {
+    const { useProformaBillableExport } = await import('~/composables/useProformaBillableExport')
+    const { fetchProformaBillableData } = useProformaBillableExport()
+
+    // Fetch comparison data
+    const comparisonData = await fetchProformaBillableData()
+
+    // Create Excel export
+    const { createProformaBillableComparisonSheets } = await import('#shared/utils/cost-sheet-builders')
+    const { exportData } = useDataExport()
+
+    const sheets = createProformaBillableComparisonSheets(comparisonData)
+
+    const config = {
+      title: 'Proforma vs Billable Cost Comparison',
+      subtitle: '2025 Actual + 2026 Forecast',
+      metadata: {
+        generatedBy: `${user.value?.claims?.name || 'User'} via GHOST Cost Dashboard`,
+        timestamp: new Date().toLocaleString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZoneName: 'short'
+        }),
+        timeframe: '2025 (Actual) + 2026 (Forecast)',
+        scope: 'Organization-Wide',
+        filters: {
+          'Report Type': 'Proforma vs Billable Comparison',
+          'Years': '2025 + 2026'
+        }
+      },
+      sheets,
+      options: {
+        filename: `proforma-vs-billable-${new Date().toISOString().split('T')[0]}`,
+        includeMetadata: true,
+        xlsx: {
+          autoWidth: true,
+          freezeHeader: true,
+          showGridlines: true
+        }
+      }
+    }
+
+    await exportData(config, 'xlsx')
+
+    // Success toast
+    toast.remove('proforma-billable-export-progress')
+    toast.add({
+      title: 'Export Complete',
+      description: 'Proforma vs Billable comparison report downloaded successfully',
+      icon: 'i-heroicons-check-circle',
+      color: 'green'
+    })
+  } catch (error) {
+    console.error('Proforma vs Billable export failed:', error)
+    toast.remove('proforma-billable-export-progress')
+    toast.add({
+      title: 'Export Failed',
+      description: 'An error occurred while generating the comparison report',
+      icon: 'i-heroicons-x-circle',
+      color: 'red'
+    })
+  } finally {
+    isExporting.value = false
+  }
+}
+
+/**
+ * Handle BOM export
+ */
+async function handleBomExport() {
+  // Prevent double execution
+  if (isExporting.value) {
+    return
+  }
+
+  if (!props.dataset) {
+    console.warn('No dataset available for BOM export')
+    toast.add({
+      title: 'Export Error',
+      description: 'No data available for export',
+      icon: 'i-heroicons-exclamation-circle',
+      color: 'red'
+    })
+    return
+  }
+
+  // Check if accounts are selected
+  if (!props.selectedAccounts || props.selectedAccounts.length === 0) {
+    toast.add({
+      title: 'No Accounts Selected',
+      description: 'Please select at least one account to export BOM',
+      icon: 'i-heroicons-exclamation-circle',
+      color: 'yellow'
+    })
+    return
+  }
+
+  isExporting.value = true
+
+  // Show loading toast
+  const exportType = props.selectedAccounts.length === 1 ? 'BOM file' : 'BOM files (ZIP)'
+  toast.add({
+    title: 'Generating BOM Export',
+    description: `Creating ${exportType}...`,
+    icon: 'i-heroicons-arrow-path',
+    timeout: 0,
+    id: 'bom-export-progress'
+  })
+
+  try {
+    const { useBomExport } = await import('~/composables/useBomExport')
+    const { exportBom } = useBomExport(props.dataset)
+
+    await exportBom()
+
+    // Success toast
+    toast.remove('bom-export-progress')
+    toast.add({
+      title: 'BOM Export Complete',
+      description: `${exportType} downloaded successfully`,
+      icon: 'i-heroicons-check-circle',
+      color: 'green'
+    })
+  } catch (error) {
+    console.error('BOM export failed:', error)
+    toast.remove('bom-export-progress')
+    toast.add({
+      title: 'BOM Export Failed',
+      description: error instanceof Error ? error.message : 'An error occurred while generating the BOM export',
+      icon: 'i-heroicons-x-circle',
+      color: 'red'
+    })
+  } finally {
+    isExporting.value = false
+  }
+}
+
+/**
  * Open schedule modal with current cost view configuration
  */
 function openScheduleModal() {
@@ -516,7 +699,7 @@ function openScheduleModal() {
     format: 'pdf',
     includeServices: true,
     includeHistorical: true,
-    includeProjections: true
+    includeForecast: true
   })
   openSchedule(config)
 }

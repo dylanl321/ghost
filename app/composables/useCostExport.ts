@@ -21,7 +21,8 @@ import {
   createCurrentMonthDetailSheet,
   createMonthlyBreakdownSheet,
   createForecastSheet,
-  createYearEndSummarySheet
+  createYearEndSummarySheet,
+  createProformaBillableComparisonSheets
 } from '#shared/utils/cost-sheet-builders'
 
 export function useCostExport(dataset: NormalizedDataset) {
@@ -207,6 +208,7 @@ export function useCostExport(dataset: NormalizedDataset) {
     createMonthlyBreakdownSheet,
     createHistoricalSheet,
     createForecastSheet,
-    createYearEndSummarySheet
+    createYearEndSummarySheet,
+    createProformaBillableComparisonSheets
   }
 }

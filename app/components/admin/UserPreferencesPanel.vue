@@ -246,6 +246,36 @@
                     @click="editPreferences(prefs)"
                     title="Edit preferences"
                   />
+                  <UTooltip text="Re-enable welcome banner">
+                    <UButton
+                      color="gray"
+                      variant="ghost"
+                      size="xs"
+                      icon="i-heroicons-sparkles"
+                      @click="resetWelcomeBannerFor(prefs)"
+                      title="Re-enable welcome banner"
+                    />
+                  </UTooltip>
+                  <UTooltip text="Reset Cost Dashboard tour">
+                    <UButton
+                      color="gray"
+                      variant="ghost"
+                      size="xs"
+                      icon="i-heroicons-currency-dollar"
+                      @click="resetCostTourFor(prefs)"
+                      title="Reset Cost tour"
+                    />
+                  </UTooltip>
+                  <UTooltip text="Reset Account Details tour">
+                    <UButton
+                      color="gray"
+                      variant="ghost"
+                      size="xs"
+                      icon="i-heroicons-building-office"
+                      @click="resetAccountTourFor(prefs)"
+                      title="Reset Account tour"
+                    />
+                  </UTooltip>
                   <UButton
                     color="red"
                     variant="ghost"
@@ -695,6 +725,101 @@ async function saveEdit() {
     })
   } finally {
     saving.value = false
+  }
+}
+
+// Admin quick actions to reset onboarding/tutorials for a user
+async function patchUserPreferences(userId: string, prefsPatch: Record<string, any>) {
+  await $fetch(`/api/admin/user-preferences/${encodeURIComponent(userId)}`, {
+    method: 'PATCH',
+    body: {
+      preferences: prefsPatch
+    }
+  })
+}
+
+async function resetWelcomeBannerFor(prefs: UserPreferences) {
+  try {
+    await patchUserPreferences(prefs.userId, {
+      ...(prefs.preferences || {}),
+      welcomeBanner: {
+        ...(prefs.preferences?.welcomeBanner || {}),
+        dismissed: false,
+        seenCount: 0,
+        clicked: false,
+        resetByAdminAt: new Date().toISOString()
+      }
+    })
+    toast.add({
+      title: 'Welcome Banner Enabled',
+      description: `Banner will show again for ${prefs.userId}`,
+      color: 'green',
+      icon: 'i-heroicons-check-circle'
+    })
+    await loadPreferences()
+  } catch (err: any) {
+    toast.add({
+      title: 'Action Failed',
+      description: err.message || 'Could not update banner preference',
+      color: 'red',
+      icon: 'i-heroicons-x-circle'
+    })
+  }
+}
+
+async function resetCostTourFor(prefs: UserPreferences) {
+  try {
+    await patchUserPreferences(prefs.userId, {
+      ...(prefs.preferences || {}),
+      costTour: {
+        ...(prefs.preferences?.costTour || {}),
+        completed: false,
+        lastStep: 0,
+        resetByAdminAt: new Date().toISOString()
+      }
+    })
+    toast.add({
+      title: 'Cost Tour Reset',
+      description: `Tour will auto-start next time for ${prefs.userId}`,
+      color: 'green',
+      icon: 'i-heroicons-check-circle'
+    })
+    await loadPreferences()
+  } catch (err: any) {
+    toast.add({
+      title: 'Action Failed',
+      description: err.message || 'Could not reset cost tour',
+      color: 'red',
+      icon: 'i-heroicons-x-circle'
+    })
+  }
+}
+
+async function resetAccountTourFor(prefs: UserPreferences) {
+  try {
+    await patchUserPreferences(prefs.userId, {
+      ...(prefs.preferences || {}),
+      accountTour: {
+        ...(prefs.preferences?.accountTour || {}),
+        completed: false,
+        lastStep: 0,
+        resetByAdminAt: new Date().toISOString()
+      }
+    })
+    toast.add({
+      title: 'Account Tour Reset',
+      description: `Tour will auto-start next time for ${prefs.userId}`,
+      color: 'green',
+      icon: 'i-heroicons-check-circle'
+    })
+    await loadPreferences()
+  } catch (err: any) {
+    toast.add({
+      title: 'Action Failed',
+      description: err.message || 'Could not reset account tour',
+      color: 'red',
+      icon: 'i-heroicons-x-circle'
+    })
   }
 }
 

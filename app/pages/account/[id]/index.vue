@@ -14,7 +14,7 @@
     </UAlert>
 
     <!-- Account Header -->
-    <UCard>
+    <UCard data-tour="account-header">
       <div class="flex gap-2 items-center justify-between">
         <div class="flex gap-2 items-center">
           <div :class="`w-3 h-3 rounded-full ${accountStatus !== 'Decommissioned' ? 'bg-green-500' : 'bg-red-500'}`" />
@@ -32,15 +32,26 @@
             :title="favoritesComposable.isFavorite(accountId) ? 'Remove from favorites' : 'Add to favorites'"
             @click="favoritesComposable.toggleFavorite(accountId)"
           />
-          <UTooltip text="Learn about favorites">
-            <NuxtLink to="/support/docs?topic=favorites-guide">
-              <UButton
-                icon="i-heroicons-question-mark-circle"
-                color="gray"
-                variant="ghost"
-                size="sm"
-              />
-            </NuxtLink>
+          <span data-tour="account-docs-link">
+            <UTooltip text="Learn about favorites">
+              <NuxtLink to="/support/docs?topic=favorites-guide">
+                <UButton
+                  icon="i-heroicons-question-mark-circle"
+                  color="gray"
+                  variant="ghost"
+                  size="sm"
+                />
+              </NuxtLink>
+            </UTooltip>
+          </span>
+          <UTooltip text="Start Guided Tour">
+            <UButton
+              icon="i-heroicons-sparkles"
+              color="gray"
+              variant="ghost"
+              size="sm"
+              @click="handleStartAccountTour"
+            />
           </UTooltip>
 
           <AccountShareButton
@@ -82,15 +93,17 @@
     </UCard>
 
     <!-- Tabs -->
-    <UTabs v-model="selectedTab" :items="tabs">
+    <UTabs v-model="selectedTab" :items="tabs" data-tour="account-tabs">
       <!-- Overview Tab -->
       <template #overview>
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 row-auto">
           <!-- Account Details -->
-          <AccountDetails v-if="accountId" :account-id="accountId" :current-spend="currentSpend" :users="users" class="col-span-1 lg:col-span-2" />
+          <div data-tour="account-details" class="col-span-1 lg:col-span-2">
+            <AccountDetails v-if="accountId" :account-id="accountId" :current-spend="currentSpend" :users="users" />
+          </div>
 
           <!-- Budget Health - with overlay for inactive accounts -->
-          <div class="col-span-1 relative">
+          <div class="col-span-1 relative" data-tour="account-budget">
             <BudgetHealthCard
               :budget="budget"
               :current-spend="currentSpend"
@@ -109,10 +122,12 @@
           </div>
 
           <!-- Account Users -->
-          <AccountUsers :users="users" :account-id="accountId" :loading="loading" class="col-span-1" />
+          <div class="col-span-1" data-tour="account-users">
+            <AccountUsers :users="users" :account-id="accountId" :loading="loading" />
+          </div>
 
           <!-- Cost Trend Chart - with overlay for inactive accounts -->
-          <div class="col-span-1 lg:col-span-2 relative">
+          <div class="col-span-1 lg:col-span-2 relative" data-tour="account-cost-trend">
             <CostTrendChart
               title="Account Cost Trends"
               :time-series-billable="billableTimeSeries"
@@ -187,6 +202,20 @@
         </div>
       </template>
 
+      <!-- Pipelines Tab -->
+      <template #pipelines>
+        <div class="mt-4">
+          <UAlert color="blue" icon="i-heroicons-clock" variant="soft" class="mb-4">
+            <template #title>Pipeline Data Loading</template>
+            <template #description>
+              Pipeline data is queried from AWS Athena and may take 30-60 seconds to load initially.
+              Data is cached for 5 minutes to improve subsequent load times.
+            </template>
+          </UAlert>
+          <PipelinesDashboard v-if="accountId" :account-id="accountId" />
+        </div>
+      </template>
+
       <!-- Notes Tab (Admin Only) -->
       <template #notes>
         <div class="mt-4">
@@ -200,6 +229,7 @@
 <script setup lang="ts">
 import type { GraphUser } from '~/composables/useGroupMembers'
 import { getIdcRoleLink, getIdcLoginLink, getAdminSupportRoles, type RoleLink } from '~/utils/awsConsoleLinks'
+import { startAccountTour } from '~/components/tutorial/AccountTour'
 
 const route = useRoute()
 const enclaveStore = useEnclaveStore()
@@ -208,6 +238,9 @@ const groupMembers = useGroupMembers()
 const { user } = useOidcAuth()
 const favoritesComposable = useFavoriteAccounts()
 const { addRecentAccount } = useRecentAccounts()
+const { getPreference, setPreference, load: loadPreferences } = useUserPreferences()
+const accountTourStartedThisSession = ref(false)
+const lastAccountResetTimestamp = ref<string | null>(null)
 
 const accountId = computed(() => route.params.id as string)
 const govCloudId = computed(() => enclaveStore.enclaves[accountId.value]?.awsGovCloudAccountID)
@@ -319,6 +352,12 @@ const tabs = computed(() => {
       slot: 'policies',
       icon: 'i-heroicons-shield-check',
       disabled: isAccountInactive.value
+    },
+    {
+      label: 'Pipelines',
+      slot: 'pipelines',
+      icon: 'i-heroicons-arrow-path',
+      disabled: false
     }
   ]
 
@@ -405,6 +444,53 @@ const navigateToCostsPage = () => {
   })
 }
 
+async function handleStartAccountTour() {
+  const pref = getPreference<any>('accountTour', {}) || {}
+  const resetTimestamp = pref?.resetByAdminAt
+  
+  // Allow tour to run if it was reset (even if started this session)
+  const wasReset = resetTimestamp && resetTimestamp !== lastAccountResetTimestamp.value
+  if (accountTourStartedThisSession.value && !wasReset) return
+  
+  if (wasReset) {
+    lastAccountResetTimestamp.value = resetTimestamp
+  }
+  accountTourStartedThisSession.value = true
+  
+  const startAt = Number(pref?.lastStep || 0)
+  
+  try {
+    await startAccountTour({
+      startAtStep: isNaN(startAt) ? 0 : startAt,
+      onComplete: async () => {
+        await setPreference('accountTour', {
+          ...(getPreference<any>('accountTour', {}) || {}),
+          completed: true,
+          completedAt: new Date().toISOString()
+        })
+      },
+      onExit: async (currentStep) => {
+        await setPreference('accountTour', {
+          ...(getPreference<any>('accountTour', {}) || {}),
+          lastStep: currentStep,
+          startedAt: (getPreference<any>('accountTour', {}) || {}).startedAt || new Date().toISOString()
+        })
+      }
+    })
+  } catch (error: any) {
+    console.error('Failed to start account tour:', error)
+    const toast = useToast()
+    toast.add({
+      title: 'Tour Error',
+      description: error.message || 'Failed to start the guided tour. Please try again.',
+      color: 'red',
+      icon: 'i-heroicons-exclamation-triangle'
+    })
+    // Reset session flag so user can try again
+    accountTourStartedThisSession.value = false
+  }
+}
+
 // Check if URL has GovCloud ID and redirect to commercial ID
 const checkAndRedirectIfGovCloudId = () => {
   const urlId = route.params.id as string
@@ -439,6 +525,36 @@ onMounted(async () => {
     addRecentAccount(accountId.value).catch(err => {
       console.warn('Failed to track recent account:', err)
     })
+  }
+
+  // Reload preferences to get fresh data (in case admin reset it)
+  await loadPreferences(true)
+  
+  // Auto-start account tour once for first-time users or if reset
+  const tourPref = getPreference<any>('accountTour', {}) || {}
+  const forceStart = route.query.tour === '1'
+  const wasReset = tourPref?.resetByAdminAt && tourPref?.resetByAdminAt !== lastAccountResetTimestamp.value
+  
+  if ((forceStart || tourPref?.completed !== true || wasReset) && !accountTourStartedThisSession.value) {
+    // Wait for DOM elements to be ready
+    await nextTick()
+    // Check if tour elements exist before starting
+    const checkElements = () => {
+      const header = document.querySelector('[data-tour="account-header"]')
+      return header !== null
+    }
+    
+    // Try multiple times with increasing delays
+    let attempts = 0
+    const tryStart = () => {
+      if (checkElements()) {
+        handleStartAccountTour()
+      } else if (attempts < 5) {
+        attempts++
+        setTimeout(tryStart, 300)
+      }
+    }
+    setTimeout(tryStart, 500)
   }
 
   // Check for tab query parameter from shared link

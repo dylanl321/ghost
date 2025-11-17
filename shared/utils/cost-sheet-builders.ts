@@ -643,6 +643,426 @@ export function createCurrentMonthSheet(dataset: NormalizedDataset): SheetConfig
 
 
 /**
+ * createProformaBillableComparisonSheets
+ * Creates three sheets: Summary, Monthly Detail, and Account Detail
+ */
+export function createProformaBillableComparisonSheets(
+  data: any[]
+): SheetConfig[] {
+  const sheets: SheetConfig[] = []
+
+  // Sheet 1: Summary Sheet (Year totals and month totals)
+  const summarySheet = createProformaBillableSummarySheet(data)
+  if (summarySheet) sheets.push(summarySheet)
+
+  // Sheet 2: Monthly Detail Sheet (all accounts by month)
+  const monthlyDetailSheet = createProformaBillableMonthlySheet(data)
+  if (monthlyDetailSheet) sheets.push(monthlyDetailSheet)
+
+  // Sheet 3: Account Detail Sheet (per-account breakdown with LOB grouping)
+  const accountDetailSheet = createProformaBillableAccountSheet(data)
+  if (accountDetailSheet) sheets.push(accountDetailSheet)
+
+  return sheets
+}
+
+/**
+ * Sheet 1: Summary Sheet - Year totals and month totals
+ */
+function createProformaBillableSummarySheet(data: any[]): SheetConfig | null {
+  if (!data || data.length === 0) return null
+
+  // Calculate overall totals
+  let billable2025Total = 0
+  let proforma2025Total = 0
+  let billable2026Total = 0
+  let proforma2026Total = 0
+
+  data.forEach((account) => {
+    billable2025Total += account.billable2025 || 0
+    proforma2025Total += account.proforma2025 || 0
+    billable2026Total += account.billable2026 || 0
+    proforma2026Total += account.proforma2026 || 0
+  })
+
+  const savings2025Total = billable2025Total - proforma2025Total
+  const savings2026Total = billable2026Total - proforma2026Total
+  const savingsPercent2025 = billable2025Total > 0
+    ? (savings2025Total / billable2025Total) * 100
+    : 0
+  const savingsPercent2026 = billable2026Total > 0
+    ? (savings2026Total / billable2026Total) * 100
+    : 0
+
+  // Build month-by-month totals
+  const monthlyTotalsMap = new Map<string, { billable: number; proforma: number }>()
+
+  data.forEach((account) => {
+    account.monthlyData?.forEach((month: any) => {
+      if (!monthlyTotalsMap.has(month.month)) {
+        monthlyTotalsMap.set(month.month, { billable: 0, proforma: 0 })
+      }
+      const monthTotal = monthlyTotalsMap.get(month.month)!
+      monthTotal.billable += month.billable || 0
+      monthTotal.proforma += month.proforma || 0
+    })
+  })
+
+  // Convert to sorted array
+  const monthlyTotals = Array.from(monthlyTotalsMap.entries())
+    .map(([month, totals]) => ({
+      month,
+      billable: totals.billable,
+      proforma: totals.proforma,
+      savings: totals.billable - totals.proforma,
+      savingsPercent: totals.billable > 0
+        ? ((totals.billable - totals.proforma) / totals.billable) * 100
+        : 0
+    }))
+    .sort((a, b) => a.month.localeCompare(b.month))
+
+  // Build summary data
+  const summaryData = [
+    { category: '2025 TOTALS', metric: 'Billable', value: billable2025Total },
+    { category: '2025 TOTALS', metric: 'Proforma', value: proforma2025Total },
+    { category: '2025 TOTALS', metric: 'Savings', value: savings2025Total },
+    { category: '2025 TOTALS', metric: 'Savings %', value: savingsPercent2025 / 100 },
+    { category: '', metric: '', value: null }, // Spacer
+    { category: '2026 FORECAST', metric: 'Billable', value: billable2026Total },
+    { category: '2026 FORECAST', metric: 'Proforma', value: proforma2026Total },
+    { category: '2026 FORECAST', metric: 'Savings', value: savings2026Total },
+    { category: '2026 FORECAST', metric: 'Savings %', value: savingsPercent2026 / 100 },
+    { category: '', metric: '', value: null }, // Spacer
+    { category: 'GRAND TOTAL', metric: 'Billable (2025+2026)', value: billable2025Total + billable2026Total },
+    { category: 'GRAND TOTAL', metric: 'Proforma (2025+2026)', value: proforma2025Total + proforma2026Total },
+    { category: 'GRAND TOTAL', metric: 'Total Savings', value: savings2025Total + savings2026Total }
+  ]
+
+  // Add monthly breakdown
+  summaryData.push({ category: '', metric: '', value: null }) // Spacer
+  summaryData.push({ category: 'MONTHLY TOTALS', metric: '', value: null }) // Header
+
+  monthlyTotals.forEach((m) => {
+    const date = new Date(m.month + '-01')
+    const monthLabel = date.toLocaleDateString('en-US', { year: 'numeric', month: 'short' })
+
+    summaryData.push({ category: monthLabel, metric: 'Billable', value: m.billable })
+    summaryData.push({ category: monthLabel, metric: 'Proforma', value: m.proforma })
+    summaryData.push({ category: monthLabel, metric: 'Savings', value: m.savings })
+    summaryData.push({ category: monthLabel, metric: 'Savings %', value: m.savingsPercent / 100 })
+  })
+
+  const columns: ColumnConfig[] = [
+    { key: 'category', header: 'Category', format: 'text', width: 25 },
+    { key: 'metric', header: 'Metric', format: 'text', width: 30 },
+    {
+      key: 'value',
+      header: 'Amount',
+      format: 'currency',
+      decimals: 2,
+      alignment: 'right',
+      width: 20
+    }
+  ]
+
+  return {
+    name: 'Summary',
+    type: 'table',
+    description: 'Proforma vs Billable Summary - Year and Month Totals. 2025 shows actual costs (YTD). 2026 shows AWS Cost Forecast distributed proportionally to accounts based on their 2025 cost share.',
+    data: summaryData,
+    columns,
+    formatting: {
+      headerStyle: {
+        backgroundColor: '#1e40af',
+        textColor: '#ffffff',
+        bold: true
+      },
+      rowStyle: {
+        alternateColors: true,
+        evenRowColor: '#f9fafb',
+        oddRowColor: '#ffffff'
+      }
+    }
+  }
+}
+
+/**
+ * Sheet 2: Monthly Detail - All accounts by month with LOB grouping
+ */
+function createProformaBillableMonthlySheet(data: any[]): SheetConfig | null {
+  if (!data || data.length === 0) return null
+
+  // Group by LOB
+  const lobGroups = new Map<string, any[]>()
+
+  data.forEach((account) => {
+    const lob = account.lob || 'Unassigned'
+    if (!lobGroups.has(lob)) {
+      lobGroups.set(lob, [])
+    }
+    lobGroups.get(lob)!.push(account)
+  })
+
+  // Get all unique months across all accounts
+  const allMonths = new Set<string>()
+  data.forEach((account) => {
+    account.monthlyData?.forEach((m: any) => allMonths.add(m.month))
+  })
+  const sortedMonths = Array.from(allMonths).sort()
+
+  // Build columns: Account info + each month (Billable, Proforma, Savings)
+  const columns: ColumnConfig[] = [
+    { key: 'lob', header: 'LOB', format: 'text', width: 20 },
+    { key: 'accountId', header: 'Account ID', format: 'text', width: 18 },
+    { key: 'accountName', header: 'Account Name', format: 'text', width: 30 }
+  ]
+
+  // Add columns for each month
+  sortedMonths.forEach((month) => {
+    const date = new Date(month + '-01')
+    const monthLabel = date.toLocaleDateString('en-US', { year: 'numeric', month: 'short' })
+
+    columns.push({
+      key: `${month}_billable`,
+      header: `${monthLabel} Billable`,
+      format: 'currency',
+      decimals: 2,
+      alignment: 'right',
+      width: 15
+    })
+    columns.push({
+      key: `${month}_proforma`,
+      header: `${monthLabel} Proforma`,
+      format: 'currency',
+      decimals: 2,
+      alignment: 'right',
+      width: 15
+    })
+    columns.push({
+      key: `${month}_savings`,
+      header: `${monthLabel} Savings`,
+      format: 'currency',
+      decimals: 2,
+      alignment: 'right',
+      width: 15
+    })
+  })
+
+  // Build rows grouped by LOB
+  const rows: any[] = []
+
+  // Sort LOBs alphabetically
+  const sortedLobs = Array.from(lobGroups.keys()).sort()
+
+  sortedLobs.forEach((lob) => {
+    const accounts = lobGroups.get(lob)!
+    // Sort accounts by name within LOB
+    accounts.sort((a, b) => a.accountName.localeCompare(b.accountName))
+
+    accounts.forEach((account) => {
+      const row: any = {
+        lob: account.lob || 'Unassigned',
+        accountId: account.accountId,
+        accountName: account.accountName
+      }
+
+      // Build monthly data map for quick lookup
+      const monthlyMap = new Map<string, any>()
+      account.monthlyData?.forEach((m: any) => {
+        monthlyMap.set(m.month, m)
+      })
+
+      // Fill in each month's data
+      sortedMonths.forEach((month) => {
+        const monthData = monthlyMap.get(month) || { billable: 0, proforma: 0, savings: 0 }
+        row[`${month}_billable`] = monthData.billable
+        row[`${month}_proforma`] = monthData.proforma
+        row[`${month}_savings`] = monthData.savings
+      })
+
+      rows.push(row)
+    })
+
+    // Add LOB subtotal row
+    const lobSubtotal: any = {
+      lob: `${lob} SUBTOTAL`,
+      accountId: '',
+      accountName: ''
+    }
+
+    sortedMonths.forEach((month) => {
+      let billableSum = 0
+      let proformaSum = 0
+
+      accounts.forEach((account) => {
+        const monthData = account.monthlyData?.find((m: any) => m.month === month)
+        if (monthData) {
+          billableSum += monthData.billable || 0
+          proformaSum += monthData.proforma || 0
+        }
+      })
+
+      lobSubtotal[`${month}_billable`] = billableSum
+      lobSubtotal[`${month}_proforma`] = proformaSum
+      lobSubtotal[`${month}_savings`] = billableSum - proformaSum
+    })
+
+    rows.push(lobSubtotal)
+  })
+
+  return {
+    name: 'Monthly Detail',
+    type: 'table',
+    description: 'Month-by-month comparison for all accounts grouped by LOB',
+    data: rows,
+    columns,
+    formatting: {
+      headerStyle: {
+        backgroundColor: '#1e40af',
+        textColor: '#ffffff',
+        bold: true
+      },
+      rowStyle: {
+        alternateColors: true,
+        evenRowColor: '#f9fafb',
+        oddRowColor: '#ffffff'
+      }
+    }
+  }
+}
+
+/**
+ * Sheet 3: Account Detail - Per-account yearly totals with LOB grouping
+ */
+function createProformaBillableAccountSheet(data: any[]): SheetConfig | null {
+  if (!data || data.length === 0) return null
+
+  // Group by LOB
+  const lobGroups = new Map<string, any[]>()
+
+  data.forEach((account) => {
+    const lob = account.lob || 'Unassigned'
+    if (!lobGroups.has(lob)) {
+      lobGroups.set(lob, [])
+    }
+    lobGroups.get(lob)!.push(account)
+  })
+
+  const columns: ColumnConfig[] = [
+    { key: 'lob', header: 'LOB', format: 'text', width: 20 },
+    { key: 'accountId', header: 'Account ID', format: 'text', width: 18 },
+    { key: 'accountName', header: 'Account Name', format: 'text', width: 30 },
+    { key: 'billable2025', header: '2025 Billable', format: 'currency', decimals: 2, alignment: 'right', width: 15 },
+    { key: 'proforma2025', header: '2025 Proforma', format: 'currency', decimals: 2, alignment: 'right', width: 15 },
+    { key: 'savings2025', header: '2025 Savings', format: 'currency', decimals: 2, alignment: 'right', width: 15 },
+    { key: 'savingsPercent2025', header: '2025 Savings %', format: 'percentage', decimals: 1, alignment: 'right', width: 12 },
+    { key: 'billable2026', header: '2026 Billable', format: 'currency', decimals: 2, alignment: 'right', width: 15 },
+    { key: 'proforma2026', header: '2026 Proforma', format: 'currency', decimals: 2, alignment: 'right', width: 15 },
+    { key: 'savings2026', header: '2026 Savings', format: 'currency', decimals: 2, alignment: 'right', width: 15 },
+    { key: 'savingsPercent2026', header: '2026 Savings %', format: 'percentage', decimals: 1, alignment: 'right', width: 12 }
+  ]
+
+  // Build rows grouped by LOB
+  const rows: any[] = []
+
+  // Sort LOBs alphabetically
+  const sortedLobs = Array.from(lobGroups.keys()).sort()
+
+  sortedLobs.forEach((lob) => {
+    const accounts = lobGroups.get(lob)!
+    // Sort accounts by name within LOB
+    accounts.sort((a, b) => a.accountName.localeCompare(b.accountName))
+
+    // Add account rows
+    accounts.forEach((account) => {
+      rows.push({
+        lob: account.lob || 'Unassigned',
+        accountId: account.accountId,
+        accountName: account.accountName,
+        billable2025: account.billable2025,
+        proforma2025: account.proforma2025,
+        savings2025: account.savings2025,
+        savingsPercent2025: account.savingsPercent2025,
+        billable2026: account.billable2026,
+        proforma2026: account.proforma2026,
+        savings2026: account.savings2026,
+        savingsPercent2026: account.savingsPercent2026
+      })
+    })
+
+    // Add LOB subtotal
+    const lobSubtotal = {
+      lob: `${lob} SUBTOTAL`,
+      accountId: '',
+      accountName: '',
+      billable2025: accounts.reduce((sum, acc) => sum + (acc.billable2025 || 0), 0),
+      proforma2025: accounts.reduce((sum, acc) => sum + (acc.proforma2025 || 0), 0),
+      savings2025: accounts.reduce((sum, acc) => sum + (acc.savings2025 || 0), 0),
+      savingsPercent2025: 0,
+      billable2026: accounts.reduce((sum, acc) => sum + (acc.billable2026 || 0), 0),
+      proforma2026: accounts.reduce((sum, acc) => sum + (acc.proforma2026 || 0), 0),
+      savings2026: accounts.reduce((sum, acc) => sum + (acc.savings2026 || 0), 0),
+      savingsPercent2026: 0
+    }
+
+    // Calculate subtotal percentages
+    lobSubtotal.savingsPercent2025 = lobSubtotal.billable2025 > 0
+      ? (lobSubtotal.savings2025 / lobSubtotal.billable2025) * 100
+      : 0
+    lobSubtotal.savingsPercent2026 = lobSubtotal.billable2026 > 0
+      ? (lobSubtotal.savings2026 / lobSubtotal.billable2026) * 100
+      : 0
+
+    rows.push(lobSubtotal)
+  })
+
+  // Add grand total row
+  const grandTotal = {
+    lob: 'GRAND TOTAL',
+    accountId: '',
+    accountName: '',
+    billable2025: data.reduce((sum, acc) => sum + (acc.billable2025 || 0), 0),
+    proforma2025: data.reduce((sum, acc) => sum + (acc.proforma2025 || 0), 0),
+    savings2025: data.reduce((sum, acc) => sum + (acc.savings2025 || 0), 0),
+    savingsPercent2025: 0,
+    billable2026: data.reduce((sum, acc) => sum + (acc.billable2026 || 0), 0),
+    proforma2026: data.reduce((sum, acc) => sum + (acc.proforma2026 || 0), 0),
+    savings2026: data.reduce((sum, acc) => sum + (acc.savings2026 || 0), 0),
+    savingsPercent2026: 0
+  }
+
+  grandTotal.savingsPercent2025 = grandTotal.billable2025 > 0
+    ? (grandTotal.savings2025 / grandTotal.billable2025) * 100
+    : 0
+  grandTotal.savingsPercent2026 = grandTotal.billable2026 > 0
+    ? (grandTotal.savings2026 / grandTotal.billable2026) * 100
+    : 0
+
+  rows.push(grandTotal)
+
+  return {
+    name: 'Account Detail',
+    type: 'table',
+    description: 'Per-account breakdown with LOB grouping and yearly totals',
+    data: rows,
+    columns,
+    formatting: {
+      headerStyle: {
+        backgroundColor: '#1e40af',
+        textColor: '#ffffff',
+        bold: true
+      },
+      rowStyle: {
+        alternateColors: true,
+        evenRowColor: '#f9fafb',
+        oddRowColor: '#ffffff'
+      }
+    }
+  }
+}
+
+
+/**
  * createYearEndSummarySheet
  */
   export function createYearEndSummarySheet(dataset: NormalizedDataset): SheetConfig | null {

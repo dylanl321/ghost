@@ -136,6 +136,18 @@
               class="w-64"
             />
             <UButton
+              v-if="pausedReportsCount > 0"
+              icon="i-heroicons-play"
+              color="green"
+              variant="soft"
+              size="sm"
+              @click="resumeAllPaused"
+              :loading="resumingAll"
+              :title="`Resume ${pausedReportsCount} paused report(s)`"
+            >
+              Resume All ({{ pausedReportsCount }})
+            </UButton>
+            <UButton
               icon="i-heroicons-wrench-screwdriver"
               color="orange"
               variant="soft"
@@ -534,8 +546,8 @@ const {
   runReportNow
 } = useScheduledReportsAdmin()
 
-// Use the regular composable for execution history
-const { executions, fetchExecutionHistory } = useScheduledReports()
+// Use the regular composable for execution history and pause/resume
+const { executions, fetchExecutionHistory, togglePause } = useScheduledReports()
 
 // Filters
 const searchQuery = ref('')
@@ -568,6 +580,7 @@ const executing = ref(false)
 const historyLoading = ref(false)
 const historyError = ref<string | null>(null)
 const fixingStuck = ref(false)
+const resumingAll = ref(false)
 
 // Table columns
 const columns = [
@@ -605,6 +618,11 @@ const filteredReports = computed(() => {
   }
 
   return reports
+})
+
+// Count paused reports
+const pausedReportsCount = computed(() => {
+  return allReports.value.filter(r => r.status === 'paused').length
 })
 
 // Detect stuck reports
@@ -651,6 +669,10 @@ function getRowActions(report: ScheduledReport) {
       label: 'View History',
       icon: 'i-heroicons-clock',
       click: () => handleViewHistory(report)
+    }, {
+      label: report.status === 'paused' ? 'Resume' : 'Pause',
+      icon: report.status === 'paused' ? 'i-heroicons-play' : 'i-heroicons-pause',
+      click: () => handleTogglePause(report)
     }]
   ]
 }
@@ -785,6 +807,93 @@ async function fixStuckReports() {
 function handleViewEmail(execution: ReportExecution) {
   selectedExecution.value = execution
   showEmailModal.value = true
+}
+
+/**
+ * Toggle pause/resume for a single report
+ */
+async function handleTogglePause(report: ScheduledReport) {
+  const isPaused = report.status === 'paused'
+  const action = isPaused ? 'resuming' : 'pausing'
+
+  try {
+    const success = await togglePause(report.reportId, !isPaused)
+
+    if (success) {
+      toast.add({
+        title: 'Success',
+        description: `Successfully ${isPaused ? 'resumed' : 'paused'} ${report.reportName}`,
+        icon: 'i-heroicons-check-circle',
+        color: 'green'
+      })
+
+      // Refresh data to show updated status
+      await refreshData()
+    } else {
+      toast.add({
+        title: 'Error',
+        description: `Failed to ${action} report`,
+        icon: 'i-heroicons-x-circle',
+        color: 'red'
+      })
+    }
+  } catch (err: any) {
+    console.error(`Error ${action} report:`, err)
+    toast.add({
+      title: 'Error',
+      description: err.message || `Failed to ${action} report`,
+      icon: 'i-heroicons-x-circle',
+      color: 'red'
+    })
+  }
+}
+
+/**
+ * Resume all paused reports
+ */
+async function resumeAllPaused() {
+  resumingAll.value = true
+
+  const pausedReports = allReports.value.filter(r => r.status === 'paused')
+  const results = {
+    succeeded: 0,
+    failed: 0,
+    errors: [] as string[]
+  }
+
+  // Process all paused reports
+  for (const report of pausedReports) {
+    try {
+      const success = await togglePause(report.reportId, false)
+      if (success) {
+        results.succeeded++
+      } else {
+        results.failed++
+        results.errors.push(`Failed to resume ${report.reportName}`)
+      }
+    } catch (err: any) {
+      results.failed++
+      results.errors.push(`Error resuming ${report.reportName}: ${err.message}`)
+    }
+  }
+
+  // Show results
+  if (results.succeeded > 0) {
+    toast.add({
+      title: 'Reports Resumed',
+      description: `Successfully resumed ${results.succeeded} report(s)${results.failed > 0 ? `, ${results.failed} failed` : ''}`,
+      color: results.failed > 0 ? 'orange' : 'green',
+      timeout: 5000
+    })
+  }
+
+  if (results.errors.length > 0) {
+    console.error('Resume errors:', results.errors)
+  }
+
+  // Refresh data
+  await refreshData()
+  resumingAll.value = false
 }
 
 // Date formatting helpers

@@ -1,7 +1,7 @@
 <template>
   <div class="chart-tabs-container">
     <!-- Tab Navigation with Show More Toggle -->
-    <div class="border-b border-gray-700 mb-4">
+    <div class="border-b border-gray-700 mb-4" data-tour="chart-tabs">
       <div class="flex items-center justify-between mb-2">
         <div class="flex-1"></div>
         <!-- Show Advanced Charts Toggle -->
