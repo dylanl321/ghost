@@ -3,6 +3,7 @@ import { registerEndpoint } from '../../plugins/swagger'
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { logger } from '../../utils/logger'
+import { sendAdminNotification, NotificationType } from '../../utils/admin-notifications'
 
 const region = 'us-gov-west-1'
 const deploymentAccountId = '461760157232'
@@ -123,8 +124,28 @@ export default defineEventHandler(async (event) => {
 
     await docClient.send(cmd)
 
+    // Send admin notification (don't fail the request if notification fails)
+    try {
+      await sendAdminNotification({
+        type: NotificationType.FEEDBACK,
+        subject: `[GHOST Feedback] New ${type} from ${environment}`,
+        data: {
+          ...item,
+          timestamp: now.toISOString()
+        },
+        metadata: {
+          trigger: 'feedback_submission',
+          environment,
+          submittedAt: now.toISOString()
+        }
+      })
+    } catch (notificationError: any) {
+      // Log error but don't fail the feedback submission
+      logger.error('Failed to send admin notification for feedback:', notificationError)
+    }
+
     const metadata = { responseTimeMs: Date.now() - startTime }
-    
+
     return sendSuccess(event, item.id, metadata)
   } catch (err) {
     logger.error('Error submitting feedback:', err)
