@@ -254,9 +254,11 @@
 import { ref, computed, watch, onMounted, nextTick } from "vue";
 import { useRoute } from "vue-router";
 import { useNavigationStore } from "~/stores/useNavigationStore";
+import { useUserRoles } from "~/composables/useUserRoles";
 
 const route = useRoute();
 const navigationStore = useNavigationStore();
+const { isAdmin } = useUserRoles();
 
 // Mobile detection - SSR safe
 const isMobile = computed(() => {
@@ -453,48 +455,54 @@ if (process.client) {
   });
 }
 
-const navigationItems = [
-  {
-    label: "Accounts",
-    icon: "i-heroicons-squares-2x2",
-    defaultOpen: true,
-    collapsed: false,
-    children: [
-      {
-        label: "Overview",
-        to: "/",
-        icon: "i-heroicons-home",
-      },
-      {
-        label: "Explorer",
-        to: "/account/explorer",
-        icon: "i-heroicons-magnifying-glass",
-      },
-      {
-        label: "Organization Chart",
-        to: "/account/org-chart",
-        icon: "i-heroicons-building-library",
-      },
-      {
-        label: "Cost Dashboard",
-        to: "/account/costs",
-        icon: "i-heroicons-currency-dollar",
-        collapseRule: "default-collapsed", // This page benefits from more screen space
-      },
-      {
-        label: "Users",
-        to: "/account/user",
-        icon: "i-heroicons-users",
-      },
+const navigationItems = computed(() => {
+  // Base navigation items
+  const accountsChildren = [
+    {
+      label: "Overview",
+      to: "/",
+      icon: "i-heroicons-home",
+    },
+    {
+      label: "Explorer",
+      to: "/account/explorer",
+      icon: "i-heroicons-magnifying-glass",
+    },
+    {
+      label: "Organization Chart",
+      to: "/account/org-chart",
+      icon: "i-heroicons-building-library",
+    },
+    {
+      label: "Cost Dashboard",
+      to: "/account/costs",
+      icon: "i-heroicons-currency-dollar",
+      collapseRule: "default-collapsed", // This page benefits from more screen space
+    },
+    {
+      label: "Users",
+      to: "/account/user",
+      icon: "i-heroicons-users",
+    }
+  ];
 
-      // NOTE: disabling this until the scorecard page is working
-      // {
-      //   label: "Scorecard",
-      //   to: "/org-scorecard",
-      //   icon: "i-heroicons-chart-bar"
-      // }
-    ],
-  },
+  // Add Pipeline Analytics for admins only (client-side only to avoid SSR hydration mismatch)
+  if (process.client && isAdmin.value) {
+    accountsChildren.push({
+      label: "Pipeline Analytics",
+      to: "/admin/pipelines",
+      icon: "i-heroicons-arrow-path",
+    });
+  }
+
+  return [
+    {
+      label: "Accounts",
+      icon: "i-heroicons-squares-2x2",
+      defaultOpen: true,
+      collapsed: false,
+      children: accountsChildren,
+    },
   // {
   //   label: 'Reports',
   //   icon: 'i-heroicons-currency-dollar',
@@ -538,7 +546,8 @@ const navigationItems = [
   //     }
   //   ]
   // }
-];
+  ];
+});
 
 // const handleNavigation = (to) => {
 //   if (to) {

@@ -118,7 +118,8 @@ export default defineEventHandler(handleAsync(async (event) => {
   // Parse optional parameters
   const daysParam = query.days ? parseInt(query.days as string, 10) : 7
   const days = Math.min(Math.max(daysParam, 1), 90) // Clamp between 1 and 90
-  const environment = (query.environment as 'commercial' | 'govcloud') || 'commercial'
+  // Pipeline data is ALWAYS stored in GovCloud - ignore environment parameter
+  const environment = 'govcloud' as const
 
   logger.info(`[Pipelines API] Fetching summary for account ${accountId} (${days} days, ${environment})`)
 

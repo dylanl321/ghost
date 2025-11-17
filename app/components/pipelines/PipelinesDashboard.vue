@@ -1,9 +1,22 @@
 <template>
   <div class="space-y-4">
-    <!-- Time range selector -->
+    <!-- Time range selector and org analytics link -->
     <div class="flex justify-between items-center">
-      <div class="text-sm text-gray-400">
-        Showing pipeline data for the last <strong class="text-white">{{ selectedDays }} days</strong>
+      <div class="flex items-center gap-4">
+        <div class="text-sm text-gray-400">
+          Showing pipeline data for the last <strong class="text-white">{{ selectedDays }} days</strong>
+        </div>
+        <!-- Admin-only organization analytics link -->
+        <ClientOnly>
+          <NuxtLink
+            v-if="isAdmin"
+            to="/admin/pipelines"
+            class="text-sm text-blue-400 hover:text-blue-300 flex items-center gap-1"
+          >
+            <UIcon name="i-heroicons-chart-bar" class="w-4 h-4" />
+            View Organization Analytics
+          </NuxtLink>
+        </ClientOnly>
       </div>
       <UButtonGroup size="sm">
         <UButton
@@ -126,6 +139,7 @@ const props = defineProps<{
   accountId: string
 }>()
 
+const { isAdmin } = useUserRoles()
 const selectedDays = ref(7)
 const loading = ref(true)
 const error = ref<string | null>(null)

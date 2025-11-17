@@ -85,13 +85,15 @@ export interface PipelineSummary {
 }
 
 // Configuration
-export function getPipelineEnvironmentConfig(environment: 'commercial' | 'govcloud' = 'commercial'): PipelineEnvironmentConfig {
-  // Pipeline data is stored in commercial environment by default
+export function getPipelineEnvironmentConfig(environment: 'commercial' | 'govcloud' = 'govcloud'): PipelineEnvironmentConfig {
+  // Pipeline data is ALWAYS stored in GovCloud deployment/storage account (461760157232)
+  // The telemetry_db database with pipeline data tables is in us-gov-west-1
+  // We use GovCloud credentials to query the telemetry_db Athena database
   return {
-    region: process.env.AWS_COMMERCIAL_REGION || 'us-east-1',
-    database: process.env.ATHENA_PIPELINE_DATABASE || 'default',
+    region: process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1',
+    database: process.env.ATHENA_PIPELINE_DATABASE || 'telemetry_db',
     athenaResultsBucket: process.env.ATHENA_PIPELINE_RESULTS_BUCKET || 'gdlz-gitlab-pipeline-data',
-    accountId: process.env.AWS_COMMERCIAL_ACCOUNT_ID || '253821132832'
+    accountId: '461760157232' // GovCloud deployment account
   }
 }
 
@@ -200,6 +202,18 @@ async function executeAthenaQuery(
         // Try to parse numbers
         if (value !== null && !isNaN(Number(value)) && value !== '') {
           record[columnName] = Number(value)
+        } else if (value !== null && value.startsWith('[') && value.endsWith(']')) {
+          // Parse Athena array format: [item1, item2, item3]
+          try {
+            const arrayContent = value.slice(1, -1).trim()
+            if (arrayContent) {
+              record[columnName] = arrayContent.split(',').map(item => item.trim())
+            } else {
+              record[columnName] = []
+            }
+          } catch {
+            record[columnName] = value
+          }
         } else {
           record[columnName] = value
         }
@@ -233,6 +247,8 @@ export async function getPipelineRunsForAccount(
 ): Promise<PipelineRun[]> {
   const cacheKey = `pipelines:runs:${accountId}:${days}`
 
+  const config = getPipelineEnvironmentConfig(environment)
+
   const sql = `
     SELECT
       pipeline_id,
@@ -248,7 +264,7 @@ export async function getPipelineRunsForAccount(
       accounts_processed,
       commit_author,
       terraform_version
-    FROM pipeline_runs
+    FROM ${config.database}.pipeline_runs
     WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
       AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
       AND contains(accounts_processed, '${accountId}')
@@ -268,6 +284,7 @@ export async function getAccountPlansForAccount(
   environment: 'commercial' | 'govcloud' = 'commercial'
 ): Promise<AccountPlan[]> {
   const cacheKey = `pipelines:plans:${accountId}:${days}`
+  const config = getPipelineEnvironmentConfig(environment)
 
   const sql = `
     SELECT
@@ -281,7 +298,7 @@ export async function getAccountPlansForAccount(
       changes_total,
       plan_status,
       applied_at
-    FROM account_plans
+    FROM ${config.database}.account_plans
     WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
       AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
       AND account_id = '${accountId}'
@@ -301,6 +318,7 @@ export async function getResourceChangesForAccount(
   environment: 'commercial' | 'govcloud' = 'commercial'
 ): Promise<ResourceChange[]> {
   const cacheKey = `pipelines:resources:${accountId}:${days}`
+  const config = getPipelineEnvironmentConfig(environment)
 
   const sql = `
     SELECT
@@ -312,7 +330,7 @@ export async function getResourceChangesForAccount(
       applied,
       apply_success,
       timestamp
-    FROM resource_changes
+    FROM ${config.database}.resource_changes
     WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
       AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
       AND account_id = '${accountId}'
@@ -332,6 +350,7 @@ export async function getErrorDetailsForAccount(
   environment: 'commercial' | 'govcloud' = 'commercial'
 ): Promise<ErrorDetail[]> {
   const cacheKey = `pipelines:errors:${accountId}:${days}`
+  const config = getPipelineEnvironmentConfig(environment)
 
   const sql = `
     SELECT
@@ -343,7 +362,7 @@ export async function getErrorDetailsForAccount(
       error_severity,
       error_message,
       error_resource_type
-    FROM error_details
+    FROM ${config.database}.error_details
     WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
       AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
       AND account_id = '${accountId}'
@@ -427,18 +446,19 @@ export async function getDailyPipelineMetrics(
   environment: 'commercial' | 'govcloud' = 'commercial'
 ): Promise<Array<{ date: string, total: number, successful: number, failed: number }>> {
   const cacheKey = `pipelines:daily-metrics:${accountId}:${days}`
+  const config = getPipelineEnvironmentConfig(environment)
 
   const sql = `
     SELECT
-      DATE(CAST(timestamp_start AS TIMESTAMP)) as date,
+      DATE(from_iso8601_timestamp(timestamp_start)) as date,
       COUNT(*) as total,
       SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful,
       SUM(CASE WHEN status IN ('failure', 'partial_failure') THEN 1 ELSE 0 END) as failed
-    FROM pipeline_runs
+    FROM ${config.database}.pipeline_runs
     WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
       AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
       AND contains(accounts_processed, '${accountId}')
-    GROUP BY DATE(CAST(timestamp_start AS TIMESTAMP))
+    GROUP BY DATE(from_iso8601_timestamp(timestamp_start))
     ORDER BY date DESC
   `
 
@@ -459,20 +479,21 @@ export async function getPipelineRunDetails(
   errors: ErrorDetail[]
 }> {
   const cacheKey = `pipelines:details:${pipelineId}:${jobId}`
+  const config = getPipelineEnvironmentConfig(environment)
 
   try {
     // Fetch run details, resource changes, and errors in parallel
     const [runSql, resourceSql, errorSql] = [
       `
         SELECT *
-        FROM pipeline_runs
+        FROM ${config.database}.pipeline_runs
         WHERE pipeline_id = '${pipelineId}'
           AND job_id = '${jobId}'
         LIMIT 1
       `,
       `
         SELECT *
-        FROM resource_changes
+        FROM ${config.database}.resource_changes
         WHERE plan_pipeline_id = '${pipelineId}'
           AND plan_job_id = '${jobId}'
           AND account_id = '${accountId}'
@@ -481,7 +502,7 @@ export async function getPipelineRunDetails(
       `,
       `
         SELECT *
-        FROM error_details
+        FROM ${config.database}.error_details
         WHERE pipeline_id = '${pipelineId}'
           AND job_id = '${jobId}'
           AND account_id = '${accountId}'
@@ -506,4 +527,219 @@ export async function getPipelineRunDetails(
     logger.error(`[Pipeline Queries] Failed to fetch details for pipeline ${pipelineId}, job ${jobId}:`, error)
     throw error
   }
+}
+
+/**
+ * Get organization-wide pipeline summary (all accounts)
+ */
+export async function getOrganizationSummary(
+  days: number = 30,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
+): Promise<any> {
+  const cacheKey = `pipelines:org-summary:${days}`
+  const config = getPipelineEnvironmentConfig(environment)
+
+  const sql = `
+    WITH run_stats AS (
+      SELECT
+        COUNT(*) as total_runs,
+        SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful_runs,
+        SUM(CASE WHEN status IN ('failure', 'partial_failure') THEN 1 ELSE 0 END) as failed_runs,
+        AVG(duration_total_seconds) as avg_duration,
+        COUNT(DISTINCT pipeline_id) as unique_pipelines
+      FROM ${config.database}.pipeline_runs
+      WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
+        AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+    ),
+    plan_stats AS (
+      SELECT
+        SUM(changes_total) as total_changes,
+        COUNT(DISTINCT account_id) as unique_accounts
+      FROM ${config.database}.account_plans
+      WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
+        AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+    )
+    SELECT
+      r.total_runs,
+      r.successful_runs,
+      r.failed_runs,
+      CAST(r.successful_runs AS DOUBLE) / NULLIF(r.total_runs, 0) * 100 as success_rate,
+      r.avg_duration,
+      COALESCE(p.unique_accounts, 0) as unique_accounts,
+      COALESCE(p.total_changes, 0) as total_changes
+    FROM run_stats r
+    CROSS JOIN plan_stats p
+  `
+
+  const results = await executeAthenaQuery(sql, 'org-summary', environment, cacheKey)
+  return results.length > 0 ? results[0] : null
+}
+
+/**
+ * Get organization-wide pipeline timeline (all accounts, recent runs)
+ */
+export async function getOrganizationTimeline(
+  days: number = 30,
+  limit: number = 200,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
+): Promise<PipelineRun[]> {
+  const cacheKey = `pipelines:org-timeline:${days}:${limit}`
+  const config = getPipelineEnvironmentConfig(environment)
+
+  const sql = `
+    SELECT
+      pipeline_id,
+      job_id,
+      job_name,
+      job_url,
+      job_stage,
+      timestamp_start,
+      timestamp_end,
+      duration_total_seconds,
+      status,
+      account_count,
+      accounts_processed,
+      commit_author,
+      terraform_version
+    FROM ${config.database}.pipeline_runs
+    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
+      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+    ORDER BY timestamp_start DESC
+    LIMIT ${limit}
+  `
+
+  return executeAthenaQuery(sql, 'org-timeline', environment, cacheKey) as Promise<PipelineRun[]>
+}
+
+/**
+ * Get account-level breakdown for organization view
+ */
+export async function getAccountBreakdown(
+  days: number = 30,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
+): Promise<any[]> {
+  const cacheKey = `pipelines:account-breakdown:${days}`
+  const config = getPipelineEnvironmentConfig(environment)
+
+  const sql = `
+    SELECT
+      account_id,
+      account_name,
+      COUNT(*) as total_runs,
+      SUM(CASE WHEN plan_status = 'applied' THEN 1 ELSE 0 END) as successful_runs,
+      CAST(SUM(CASE WHEN plan_status = 'applied' THEN 1 ELSE 0 END) AS DOUBLE) / NULLIF(COUNT(*), 0) * 100 as success_rate,
+      MAX(plan_created_at) as last_run
+    FROM ${config.database}.account_plans
+    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
+      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+    GROUP BY account_id, account_name
+    ORDER BY total_runs DESC
+    LIMIT 50
+  `
+
+  return executeAthenaQuery(sql, 'account-breakdown', environment, cacheKey)
+}
+
+/**
+ * Get resource breakdown for organization view
+ */
+export async function getOrganizationResourceBreakdown(
+  days: number = 30,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
+): Promise<any[]> {
+  const cacheKey = `pipelines:org-resources:${days}`
+  const config = getPipelineEnvironmentConfig(environment)
+
+  const sql = `
+    SELECT
+      resource_type,
+      change_action,
+      COUNT(*) as count
+    FROM ${config.database}.resource_changes
+    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
+      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+    GROUP BY resource_type, change_action
+    ORDER BY count DESC
+    LIMIT 20
+  `
+
+  return executeAthenaQuery(sql, 'org-resources', environment, cacheKey)
+}
+
+/**
+ * Get error breakdown for organization view
+ */
+export async function getOrganizationErrorBreakdown(
+  days: number = 30,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
+): Promise<any[]> {
+  const cacheKey = `pipelines:org-errors:${days}`
+  const config = getPipelineEnvironmentConfig(environment)
+
+  const sql = `
+    SELECT
+      error_category,
+      COUNT(*) as count
+    FROM ${config.database}.error_details
+    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
+      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+    GROUP BY error_category
+    ORDER BY count DESC
+  `
+
+  return executeAthenaQuery(sql, 'org-errors', environment, cacheKey)
+}
+
+/**
+ * Get daily metrics for organization (all accounts)
+ */
+export async function getOrganizationDailyMetrics(
+  days: number = 30,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
+): Promise<Array<{ date: string, total: number, successful: number, failed: number }>> {
+  const cacheKey = `pipelines:org-daily-metrics:${days}`
+  const config = getPipelineEnvironmentConfig(environment)
+
+  const sql = `
+    SELECT
+      DATE(from_iso8601_timestamp(timestamp_start)) as date,
+      COUNT(*) as total,
+      SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful,
+      SUM(CASE WHEN status IN ('failure', 'partial_failure') THEN 1 ELSE 0 END) as failed
+    FROM ${config.database}.pipeline_runs
+    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
+      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+    GROUP BY DATE(from_iso8601_timestamp(timestamp_start))
+    ORDER BY date DESC
+  `
+
+  return executeAthenaQuery(sql, 'org-daily-metrics', environment, cacheKey) as Promise<Array<{ date: string, total: number, successful: number, failed: number }>>
+}
+
+/**
+ * Get activity heat map data (hour-by-hour or day-by-day)
+ */
+export async function getActivityHeatMap(
+  days: number = 30,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
+): Promise<any[]> {
+  const cacheKey = `pipelines:heatmap:${days}`
+  const config = getPipelineEnvironmentConfig(environment)
+
+  const sql = `
+    SELECT
+      DATE(from_iso8601_timestamp(timestamp_start)) as date,
+      HOUR(from_iso8601_timestamp(timestamp_start)) as hour,
+      DAY_OF_WEEK(from_iso8601_timestamp(timestamp_start)) as day_of_week,
+      COUNT(*) as count,
+      SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count,
+      SUM(CASE WHEN status IN ('failure', 'partial_failure') THEN 1 ELSE 0 END) as failure_count
+    FROM ${config.database}.pipeline_runs
+    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
+      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+    GROUP BY DATE(from_iso8601_timestamp(timestamp_start)), HOUR(from_iso8601_timestamp(timestamp_start)), DAY_OF_WEEK(from_iso8601_timestamp(timestamp_start))
+    ORDER BY date DESC, hour DESC
+  `
+
+  return executeAthenaQuery(sql, 'heatmap', environment, cacheKey)
 }

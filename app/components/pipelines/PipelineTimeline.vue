@@ -59,6 +59,14 @@
           </div>
         </template>
 
+        <!-- Repository column -->
+        <template #repository-data="{ row }">
+          <div class="flex items-center gap-2">
+            <UIcon name="i-heroicons-folder" class="w-4 h-4 text-gray-400" />
+            <span class="text-sm text-gray-300">{{ getRepositoryName(row.job_url) }}</span>
+          </div>
+        </template>
+
         <!-- Pipeline ID (shortened) -->
         <template #pipeline_id-data="{ row }">
           <code class="text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded">
@@ -119,6 +127,11 @@ const columns = [
   {
     key: 'job_name',
     label: 'Job',
+    sortable: false
+  },
+  {
+    key: 'repository',
+    label: 'Repository',
     sortable: false
   },
   {
@@ -191,5 +204,30 @@ function formatTime(timestamp: string): string {
     hour: '2-digit',
     minute: '2-digit'
   })
+}
+
+function getRepositoryName(jobUrl: string): string {
+  if (!jobUrl) return 'Unknown'
+
+  try {
+    // Parse GitLab URL: https://gitlab.example.com/group/project/-/jobs/12345
+    const url = new URL(jobUrl)
+    const pathParts = url.pathname.split('/').filter(Boolean)
+
+    // Find the index of '-' which separates the repo path from the job path
+    const dashIndex = pathParts.indexOf('-')
+
+    if (dashIndex === -1 || dashIndex < 2) {
+      return 'Unknown'
+    }
+
+    // Everything before '-' is the repository path
+    const repoParts = pathParts.slice(0, dashIndex)
+
+    // Return the full repository path (group/project)
+    return repoParts.join('/')
+  } catch {
+    return 'Unknown'
+  }
 }
 </script>

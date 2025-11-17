@@ -125,6 +125,19 @@ resource "aws_ecs_task_definition" "main" {
           name  = "AWS_GOVCLOUD_ATHENA_RESULTS_BUCKET"
           value = "aws-athena-query-results-us-gov-west-1-083876038518"
         },
+        # Pipeline Analytics Configuration (Athena for GitLab pipeline telemetry)
+        {
+          name  = "ATHENA_PIPELINE_DATABASE"
+          value = "telemetry_db"
+        },
+        {
+          name  = "ATHENA_PIPELINE_RESULTS_BUCKET"
+          value = "gdlz-gitlab-pipeline-data"
+        },
+        {
+          name  = "ATHENA_PIPELINE_WORKGROUP"
+          value = "primary"
+        },
         # Entra ID Configuration (non-sensitive)
         {
           name  = "ENTRA_LOGIN_BASE_URL"

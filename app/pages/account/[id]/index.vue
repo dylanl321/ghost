@@ -530,12 +530,19 @@ onMounted(async () => {
   // Reload preferences to get fresh data (in case admin reset it)
   await loadPreferences(true)
   
-  // Auto-start account tour once for first-time users or if reset
+  // Auto-start account tour only for first-time users, forced starts, or admin resets
   const tourPref = getPreference<any>('accountTour', {}) || {}
   const forceStart = route.query.tour === '1'
   const wasReset = tourPref?.resetByAdminAt && tourPref?.resetByAdminAt !== lastAccountResetTimestamp.value
-  
-  if ((forceStart || tourPref?.completed !== true || wasReset) && !accountTourStartedThisSession.value) {
+
+  // Only auto-start if:
+  // 1. Force start from URL (?tour=1)
+  // 2. Admin reset the tour
+  // 3. User has NEVER started the tour before (no startedAt and no completed)
+  const neverStarted = !tourPref?.startedAt && !tourPref?.completed
+  const shouldAutoStart = (forceStart || wasReset || neverStarted) && !accountTourStartedThisSession.value
+
+  if (shouldAutoStart) {
     // Wait for DOM elements to be ready
     await nextTick()
     // Check if tour elements exist before starting

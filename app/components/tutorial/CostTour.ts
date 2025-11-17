@@ -100,18 +100,21 @@ export async function startCostTour(options: StartCostTourOptions = {}) {
     allowClose: true,
     // Callbacks
     onNextClick: () => {
-      currentStepIndex++
-      driverObj.moveNext()
+      // Check if we're on the last step (Done button is the Next button on last step)
+      if (currentStepIndex === validSteps.length - 1) {
+        tourCompleted = true
+        driverObj.destroy()
+      } else {
+        currentStepIndex++
+        driverObj.moveNext()
+      }
     },
     onPrevClick: () => {
       currentStepIndex--
       driverObj.movePrevious()
     },
     onCloseClick: () => {
-      // Check if we're on the last step
-      if (currentStepIndex === validSteps.length - 1) {
-        tourCompleted = true
-      }
+      // X button always exits without completion
       driverObj.destroy()
     },
     onDestroyStarted: () => {
