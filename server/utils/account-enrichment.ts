@@ -15,7 +15,7 @@ export function applyEnrichmentLevel(
 ): Partial<UnifiedAccount> {
   
   switch (level) {
-    case 'simple':
+    case 'minimal':
       return {
         id: account.id,
         govId: account.govId,
@@ -26,7 +26,7 @@ export function applyEnrichmentLevel(
         requestID: account.requestID,
         _metadata: {
           ...account._metadata,
-          enrichment_level: 'simple'
+          enrichment_level: 'minimal'
         }
       }
       
