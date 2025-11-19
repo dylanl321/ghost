@@ -10,9 +10,10 @@ interface AccountBomData {
   accountId: string
   accountName: string
   requestId?: string
-  costs2025: number[] // 12 months Jan-Dec
-  costs2026: number[] // 12 months Jan-Dec
+  monthlyCosts: number[] // 12 months of forecast
+  monthLabels: string[] // YYYY-MM format for each month
   shortLink: string
+  generationDate: string // YYYY-MM-DD format
 }
 
 /**
@@ -135,43 +136,41 @@ export function createAssumptionsSheet(): WorkSheet {
 }
 
 /**
- * Converts a date to Excel serial number
+ * Converts YYYY-MM string to Excel serial number
  * Excel dates start from 1900-01-01 = 1
  */
-function dateToExcelSerial(date: Date): number {
-  const epoch = new Date(1899, 11, 30) // Excel epoch
+function monthLabelToExcelSerial(monthLabel: string): number {
+  const [year, month] = monthLabel.split('-').map(Number)
+  const date = new Date(Date.UTC(year, month - 1, 1)) // month is 1-12, convert to 0-11
+  const epoch = new Date(Date.UTC(1899, 11, 30)) // Excel epoch in UTC
   const msPerDay = 24 * 60 * 60 * 1000
   return Math.floor((date.getTime() - epoch.getTime()) / msPerDay)
 }
 
 /**
- * Creates the IT Cloud sheet with monthly cost data
+ * Creates the IT Cloud sheet with 12-month forecast data
  */
 export function createITCloudSheet(bomData: AccountBomData): WorkSheet {
-  // Create month headers as Excel serial numbers for proper date formatting
-  const months2025 = Array.from({ length: 12 }, (_, i) => {
-    return dateToExcelSerial(new Date(2025, i, 1))
-  })
-
-  const months2026 = Array.from({ length: 12 }, (_, i) => {
-    return dateToExcelSerial(new Date(2026, i, 1))
-  })
+  // Convert month labels to Excel serial numbers for proper date formatting
+  const monthSerials = bomData.monthLabels.map(label => monthLabelToExcelSerial(label))
 
   const data = [
-    ['2025 Estimated Spend:', { f: '=N7' }], // Formula to sum 2025 total
-    ['2026 Estimated Spend:', { f: '=N11' }], // Formula to sum 2026 total
-    [],
-    [],
-    ['2025 Month by Month'], // Section header
-    [null, ...months2025, '2025 Total'], // Month headers row
-    [null, ...bomData.costs2025, { f: '=SUM(B7:M7)' }], // Cost values + formula
-    [],
-    ['2026 Month by Month'], // Section header
-    [null, ...months2026, '2026 Total'], // Month headers row
-    [null, ...bomData.costs2026, { f: '=SUM(B11:M11)' }], // Cost values + formula
-    [],
-    [],
-    ['Source:', bomData.shortLink] // Short link to cost page
+    ['12-Month Forecast'], // Row 1: Title
+    ['Generated:', bomData.generationDate], // Row 2: Generation date
+    [], // Row 3: Empty
+    ['IMPORTANT NOTE:', 'This forecast is based on current usage patterns and is subject to change. Actual costs may vary based on usage, service changes, and other factors. This forecast is valid as of the generation date and should be regenerated periodically for accurate planning.'], // Row 4: Disclaimer
+    [], // Row 5: Empty
+    [], // Row 6: Empty
+    ['Estimated Total Spend:', { f: '=N11' }], // Row 7: Total formula (points to N11)
+    [], // Row 8: Empty
+    ['Monthly Forecast'], // Row 9: Section header
+    [null, ...monthSerials, 'Total'], // Row 10: Month headers
+    [null, ...bomData.monthlyCosts, { f: '=SUM(B11:M11)' }], // Row 11: Cost values + formula
+    [], // Row 12: Empty
+    [], // Row 13: Empty
+    ['Source:', bomData.shortLink], // Row 14: Source link
+    [], // Row 15: Empty
+    ['Forecast Period:', `${bomData.monthLabels[0]} through ${bomData.monthLabels[11]}`] // Row 16: Period
   ]
 
   const ws = XLSX.utils.aoa_to_sheet(data)
@@ -183,27 +182,6 @@ export function createITCloudSheet(bomData: AccountBomData): WorkSheet {
     { wch: 15 }  // N - Total
   ]
 
-  // Note: Cell styling (bold, colors) requires xlsx-style library
-  // For now, we only apply number formatting which is supported by standard xlsx library
-
-  // Row 6: Month headers (dates) - format as "mmm-yy"
-  for (let col = 1; col <= 12; col++) {
-    const cellRef = XLSX.utils.encode_cell({ r: 5, c: col })
-    if (ws[cellRef]) {
-      ws[cellRef].t = 'n' // Number type (Excel serial)
-      ws[cellRef].z = 'mmm-yy' // Date format
-    }
-  }
-
-  // Row 7: 2025 cost values - format as currency
-  for (let col = 1; col <= 12; col++) {
-    const cellRef = XLSX.utils.encode_cell({ r: 6, c: col })
-    if (ws[cellRef]) {
-      ws[cellRef].t = 'n' // Number type
-      ws[cellRef].z = '_("$"* #,##0_);_("$"* \\(#,##0\\);_("$"* "-"??_);_(@_)'
-    }
-  }
-
   // Row 10: Month headers (dates) - format as "mmm-yy"
   for (let col = 1; col <= 12; col++) {
     const cellRef = XLSX.utils.encode_cell({ r: 9, c: col })
@@ -213,7 +191,7 @@ export function createITCloudSheet(bomData: AccountBomData): WorkSheet {
     }
   }
 
-  // Row 11: 2026 cost values - format as currency
+  // Row 11: Cost values - format as currency
   for (let col = 1; col <= 12; col++) {
     const cellRef = XLSX.utils.encode_cell({ r: 10, c: col })
     if (ws[cellRef]) {
@@ -222,13 +200,11 @@ export function createITCloudSheet(bomData: AccountBomData): WorkSheet {
     }
   }
 
-  // Total columns (N7 and N11) - format as currency
-  if (ws['N7']) ws['N7'].z = '_("$"* #,##0_);_("$"* \\(#,##0\\);_("$"* "-"??_);_(@_)'
+  // Total column (N11) - format as currency
   if (ws['N11']) ws['N11'].z = '_("$"* #,##0_);_("$"* \\(#,##0\\);_("$"* "-"??_);_(@_)'
 
-  // Summary cells (B1 and B2) - format as currency
-  if (ws['B1']) ws['B1'].z = '_("$"* #,##0_);_("$"* \\(#,##0\\);_("$"* "-"??_);_(@_)'
-  if (ws['B2']) ws['B2'].z = '_("$"* #,##0_);_("$"* \\(#,##0\\);_("$"* "-"??_);_(@_)'
+  // Summary cell (B7) - format as currency
+  if (ws['B7']) ws['B7'].z = '_("$"* #,##0_);_("$"* \\(#,##0\\);_("$"* "-"??_);_(@_)'
 
   // Add hyperlink to source cell (B14)
   if (ws['B14'] && bomData.shortLink) {
@@ -237,6 +213,11 @@ export function createITCloudSheet(bomData: AccountBomData): WorkSheet {
       Tooltip: 'View in GHOST Cost Dashboard'
     }
   }
+
+  // Merge cells for the important note (D4 spans across multiple columns for readability)
+  ws['!merges'] = [
+    { s: { r: 3, c: 1 }, e: { r: 3, c: 13 } } // Merge B4:N4 for the note
+  ]
 
   return ws
 }

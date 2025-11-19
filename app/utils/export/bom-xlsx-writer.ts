@@ -27,13 +27,13 @@ export async function generateBomFile(bomData: AccountBomData): Promise<Blob> {
 }
 
 /**
- * Generates filename in format: "requestId - accountName.xlsx"
+ * Generates filename in format: "requestId - accountName-bom.xlsx"
  */
 export function generateBomFilename(accountName: string, requestId?: string): string {
   const id = requestId || 'GHOST'
   // Sanitize filename to remove invalid characters
   const safeName = accountName.replace(/[^a-zA-Z0-9\s\-_]/g, '')
-  return `${id} - ${safeName}.xlsx`
+  return `${id} - ${safeName}-bom.xlsx`
 }
 
 /**

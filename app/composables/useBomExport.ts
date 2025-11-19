@@ -1,6 +1,6 @@
 /**
  * BOM Export Composable
- * Orchestrates BOM export logic including data transformation, short link generation, and file export
+ * Generates forward-looking 12-month forecast BOM exports
  */
 
 import type { NormalizedDataset } from '~/types/costs'
@@ -11,54 +11,27 @@ export const useBomExport = (dataset: NormalizedDataset) => {
   const route = useRoute()
 
   /**
-   * Extracts monthly actuals for 2025 from historical dataset (AWS sourced)
+   * Fetches 12-month forecast starting from current month
+   * Includes current month remainder + next 11 months
+   * Fills any missing months with average of available data
    */
-  function extractMonthlyActuals2025(accountId: string): number[] {
-    const costs2025: number[] = Array(12).fill(0)
+  async function fetch12MonthForecast(accountId: string): Promise<{ costs: number[], monthLabels: string[] }> {
+    const costs: number[] = Array(12).fill(0)
+    const today = new Date()
+    const currentMonth = today.getMonth() // 0-11
+    const currentYear = today.getFullYear()
 
-    console.log('BOM Export: Extracting costs for account:', accountId)
-    console.log('BOM Export: Mode:', dataset.mode)
+    // Generate month labels for the next 12 months starting from current month
+    const monthLabels: string[] = []
+    for (let i = 0; i < 12; i++) {
+      const date = new Date(currentYear, currentMonth + i, 1)
+      const year = date.getFullYear()
+      const month = date.getMonth()
+      monthLabels.push(`${year}-${String(month + 1).padStart(2, '0')}`)
+    }
 
-    // Get 2025 historical data from monthlyBreakdown (server-populated from AWS CE)
-    const historicalSource = dataset.orgWideHistorical || dataset.historical
-    const historicalData = (historicalSource as any)?.data || historicalSource
-    const monthlyBreakdown = historicalData?.monthlyBreakdown || []
-
-    console.log('BOM Export: Monthly breakdown entries:', monthlyBreakdown.length)
-
-    // Extract 2025 per-account costs from monthlyBreakdown.accountBreakdown
-    monthlyBreakdown.forEach((month: any) => {
-      const monthStr = month.month // Format: "YYYY-MM"
-      if (!monthStr) return
-
-      const [year, monthNum] = monthStr.split('-').map(Number)
-
-      if (year === 2025 && monthNum >= 1 && monthNum <= 12) {
-        const monthIndex = monthNum - 1 // Convert to 0-indexed
-
-        // Find cost for this specific account in accountBreakdown
-        if (month.accountBreakdown && Array.isArray(month.accountBreakdown)) {
-          const accountData = month.accountBreakdown.find((acc: any) => acc.accountId === accountId)
-          if (accountData) {
-            costs2025[monthIndex] = Math.round(accountData.cost || 0)
-            console.log(`BOM Export: Found 2025-${monthNum.toString().padStart(2, '0')}: $${costs2025[monthIndex]}`)
-          }
-        }
-      }
-    })
-
-    console.log('BOM Export: 2025 costs after historical:', costs2025)
-
-    // Do not derive or copy values; leave missing months as zeros (AWS-only values)
-    return costs2025
-  }
-
-  /**
-   * Fetches per-account monthly forecast for 2026 directly from server API (AWS sourced)
-   * No proportional scaling or derived calculations.
-   */
-  async function fetchAccountForecast2026(accountId: string): Promise<number[]> {
-    const costs2026: number[] = Array(12).fill(0)
+    console.log('BOM Export: Fetching 12-month forecast for account:', accountId)
+    console.log('BOM Export: Month range:', monthLabels[0], 'to', monthLabels[11])
 
     const params = new URLSearchParams()
     params.set('period', '12-months')
@@ -67,62 +40,78 @@ export const useBomExport = (dataset: NormalizedDataset) => {
     params.set('accountIds', accountId)
 
     try {
+      // Fetch 12-month forecast (starts from first of next month)
       const response: any = await globalThis.$fetch(`/api/costs/forecast?${params.toString()}`)
       const results = response?.data?.forecast?.forecastResultsByTime || []
-      console.log('BOM Export: Per-account forecast results count:', results.length)
 
-      results.forEach((result: any) => {
+      console.log('BOM Export: Forecast results count:', results.length)
+
+      // Also fetch current month remainder
+      const currentMonthParams = new URLSearchParams()
+      currentMonthParams.set('period', 'current-month-remainder')
+      currentMonthParams.set('granularity', 'MONTHLY')
+      currentMonthParams.set('proforma', String(dataset.mode === 'proforma'))
+      currentMonthParams.set('accountIds', accountId)
+
+      const currentMonthResponse: any = await globalThis.$fetch(`/api/costs/forecast?${currentMonthParams.toString()}`)
+      const currentMonthResults = currentMonthResponse?.data?.forecast?.forecastResultsByTime || []
+
+      // Add current month remainder to position 0
+      if (currentMonthResults.length > 0) {
+        const currentMonthCost = parseFloat(currentMonthResults[0]?.MeanValue || currentMonthResults[0]?.meanValue || '0')
+        costs[0] = Math.round(currentMonthCost)
+        console.log(`BOM Export: Current month (${monthLabels[0]}) remainder: $${costs[0]}`)
+      }
+
+      // Process 12-month forecast results (positions 1-11)
+      results.forEach((result: any, index: number) => {
         const timePeriod = result.TimePeriod || result.timePeriod
         if (!timePeriod) return
         const start = timePeriod.Start || timePeriod.start
         if (!start) return
-        const startDate = new Date(start)
-        const year = startDate.getFullYear()
-        const monthIndex = startDate.getMonth() // 0-11
-        if (year === 2026 && monthIndex >= 0 && monthIndex <= 11) {
-          const meanValue = parseFloat(result.MeanValue || result.meanValue || '0')
-          costs2026[monthIndex] = Math.round(meanValue || 0)
-          console.log(`BOM Export: 2026-${(monthIndex + 1).toString().padStart(2, '0')}: $${costs2026[monthIndex]}`)
+
+        const meanValue = parseFloat(result.MeanValue || result.meanValue || '0')
+
+        // Find which position this forecast period belongs to in our 12-month array
+        const periodMonth = start.substring(0, 7) // YYYY-MM format
+        const labelIndex = monthLabels.indexOf(periodMonth)
+
+        if (labelIndex >= 0 && labelIndex < 12) {
+          // Add to existing value (for current month) or set new value
+          costs[labelIndex] = Math.round((costs[labelIndex] || 0) + meanValue)
+          console.log(`BOM Export: ${periodMonth}: $${costs[labelIndex]}`)
         }
       })
+
+      // Fill any missing months with average of available data
+      const nonZeroMonths = costs.filter(cost => cost > 0)
+      if (nonZeroMonths.length > 0) {
+        const average = Math.round(nonZeroMonths.reduce((sum, cost) => sum + cost, 0) / nonZeroMonths.length)
+
+        for (let i = 0; i < 12; i++) {
+          if (costs[i] === 0) {
+            costs[i] = average
+            console.log(`BOM Export: Filled ${monthLabels[i]} with average: $${average}`)
+          }
+        }
+      }
     } catch (error) {
-      console.error('BOM Export: Failed to fetch per-account forecast:', error)
+      console.error('BOM Export: Failed to fetch forecast data:', error)
     }
 
-    console.log('BOM Export: Final 2026 forecast costs:', costs2026)
-    return costs2026
+    console.log('BOM Export: Final 12-month forecast:', costs)
+    return { costs, monthLabels }
   }
 
   /**
-   * Generates a short link for a specific account
+   * Generates a permanent, predictable URL for a specific account
+   * Format: /account/costs?account={accountId}
+   * This provides a clean, stable, permanent link for this account
    */
-  async function generateAccountShortLink(accountId: string): Promise<string> {
-    try {
-      // Use global $fetch instead of destructured from useNuxtApp()
-      const response: any = await globalThis.$fetch('/api/shortlinks', {
-        method: 'POST',
-        body: {
-          originalUrl: route.fullPath,
-          pagePath: '/account/costs',
-          configData: {
-            selectedAccounts: [accountId],
-            timeframe: dataset.timeframe,
-            view: 'overview',
-            tab: 'all',
-            dataMode: dataset.mode
-          },
-          description: `BOM Export - Account ${accountId}`,
-          expiresInDays: 365 // BOM links should last a full year
-        }
-      })
-
-      return response.data.shortUrl
-    } catch (error) {
-      console.error('Failed to generate short link:', error)
-      // Fallback to direct URL with account filter
-      const baseUrl = window.location.origin
-      return `${baseUrl}/account/costs?accounts=${encodeURIComponent(JSON.stringify([accountId]))}&mode=${dataset.mode}`
-    }
+  function generateAccountPermanentLink(accountId: string): string {
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+    // Use clean 'account' (singular) parameter for single account links
+    return `${baseUrl}/account/costs?account=${accountId}`
   }
 
   /**
@@ -133,25 +122,26 @@ export const useBomExport = (dataset: NormalizedDataset) => {
     const account = dataset.accountsList?.find(acc => acc.accountId === accountId)
     const accountName = account?.accountName || account?.projectName || accountId
 
-    // Extract monthly actuals (2025) from historical
-    const costs2025 = extractMonthlyActuals2025(accountId)
+    // Fetch 12-month forecast
+    const { costs, monthLabels } = await fetch12MonthForecast(accountId)
 
-    // Fetch per-account forecast (2026) from server (AWS sourced)
-    const costs2026 = await fetchAccountForecast2026(accountId)
-
-    // Generate short link
-    const shortLink = await generateAccountShortLink(accountId)
+    // Generate permanent link
+    const permanentLink = generateAccountPermanentLink(accountId)
 
     // Use real request ID from metadata when available; else fallback
     const requestId = (account?.requestID || account?.requestId || accountId.substring(0, 8)).toString().toUpperCase()
+
+    // Get generation date
+    const generationDate = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
 
     return {
       accountId,
       accountName,
       requestId,
-      costs2025,
-      costs2026,
-      shortLink
+      monthlyCosts: costs,
+      monthLabels,
+      shortLink: permanentLink,
+      generationDate
     }
   }
 

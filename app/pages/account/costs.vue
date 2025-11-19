@@ -612,7 +612,7 @@
         :active-tab="activeTab"
         :dataset="dataset"
         @refresh="refreshData"
-        @start-tour="handleStartTour"
+        @start-tour="() => handleStartTour(true)"
       />
 
       <!-- Content Area -->
@@ -779,20 +779,64 @@ const { getPreference, setPreference, load: loadPreferences } = useUserPreferenc
 const tourStartedThisSession = ref(false)
 const lastResetTimestamp = ref<string | null>(null)
 
-async function handleStartTour() {
+async function handleStartTour(isManualStart = false) {
   const pref = getPreference<any>('costTour', {}) || {}
   const resetTimestamp = pref?.resetByAdminAt
-  
+
   // Allow tour to run if it was reset (even if started this session)
   const wasReset = resetTimestamp && resetTimestamp !== lastResetTimestamp.value
-  if (tourStartedThisSession.value && !wasReset) return
-  
+
+  // Only block auto-starts, not manual button clicks
+  if (!isManualStart && tourStartedThisSession.value && !wasReset) return
+
   if (wasReset) {
     lastResetTimestamp.value = resetTimestamp
   }
   tourStartedThisSession.value = true
 
-  const startAt = Number(pref?.lastStep || 0)
+  // Check if critical tour elements are ready
+  const checkElements = () => {
+    const header = document.querySelector('[data-tour="costs-header"]')
+    const accountSelector = document.querySelector('[data-tour="account-selector"]')
+    const summary = document.querySelector('[data-tour="costs-summary"]')
+    const chart = document.querySelector('[data-tour="costs-chart"]')
+    const chartTabs = document.querySelector('[data-tour="chart-tabs"]')
+    const help = document.querySelector('[data-tour="costs-help"]')
+    return header && accountSelector && summary && chart && chartTabs && help
+  }
+
+  // For manual starts, wait for elements to be ready
+  if (isManualStart && !checkElements()) {
+    const toast = useToast()
+    toast.add({
+      title: 'Please Wait',
+      description: 'Waiting for page to finish loading...',
+      color: 'blue',
+      icon: 'i-heroicons-clock',
+      timeout: 2000
+    })
+
+    // Wait up to 5 seconds for elements to be ready
+    let attempts = 0
+    while (attempts < 10 && !checkElements()) {
+      await new Promise(resolve => setTimeout(resolve, 500))
+      attempts++
+    }
+
+    if (!checkElements()) {
+      toast.add({
+        title: 'Tour Unavailable',
+        description: 'Please select accounts and wait for data to load before starting the tour.',
+        color: 'amber',
+        icon: 'i-heroicons-exclamation-triangle'
+      })
+      tourStartedThisSession.value = false
+      return
+    }
+  }
+
+  // For manual starts, always start from the beginning
+  const startAt = isManualStart ? 0 : Number(pref?.lastStep || 0)
 
   try {
     await startCostTour({
@@ -1619,7 +1663,12 @@ const applySharedStateFromUrl = () => {
   const route = useRoute()
 
   // Check for share parameters in URL
-  if (route.query.accounts) {
+  // Support both 'account' (single, clean) and 'accounts' (array, legacy)
+  if (route.query.account && typeof route.query.account === 'string') {
+    // Single account - clean URL format: ?account=123456789012
+    selectedAccounts.value = [route.query.account]
+  } else if (route.query.accounts) {
+    // Multiple accounts - legacy format: ?accounts=["123","456"]
     try {
       const accounts = JSON.parse(route.query.accounts as string)
       if (Array.isArray(accounts)) {
@@ -1677,20 +1726,25 @@ onMounted(async () => {
     if (shouldAutoStart) {
       // Wait for DOM elements to be ready
       await nextTick()
-      // Check if tour elements exist before starting
+      // Check if all critical tour elements exist before starting
       const checkElements = () => {
         const header = document.querySelector('[data-tour="costs-header"]')
-        return header !== null
+        const accountSelector = document.querySelector('[data-tour="account-selector"]')
+        const summary = document.querySelector('[data-tour="costs-summary"]')
+        const chart = document.querySelector('[data-tour="costs-chart"]')
+        const chartTabs = document.querySelector('[data-tour="chart-tabs"]')
+        const help = document.querySelector('[data-tour="costs-help"]')
+        return header && accountSelector && summary && chart && chartTabs && help
       }
 
-      // Try multiple times with increasing delays
+      // Try multiple times with increasing delays to wait for data loading
       let attempts = 0
       const tryStart = () => {
         if (checkElements()) {
           handleStartTour()
-        } else if (attempts < 5) {
+        } else if (attempts < 10) {
           attempts++
-          setTimeout(tryStart, 300)
+          setTimeout(tryStart, 500)
         }
       }
       setTimeout(tryStart, 500)
