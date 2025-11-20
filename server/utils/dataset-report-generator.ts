@@ -5,8 +5,8 @@
 
 import type { DatasetReportConfig, DatasetReportData } from '#shared/types/dataset-reports'
 import { getConfigResources, getConfigComplianceSummary, getConfigResourceTypeSummary } from './aws-config-data'
-import { getSecurityHubFindings, getSecurityHubFindingsSummary } from './security-hub-data'
-import { getCloudTrailEvents, getCloudTrailEventStatistics } from './cloudtrail-data'
+import { getSecurityHubFindings } from './security-hub-data'
+import { getCloudTrailEvents } from './cloudtrail-data'
 import { getAllAccountsUnified } from './accounts-consolidated'
 import { exportDatasetToPDF } from './pdf-export-dataset'
 import { logger } from './logger'
@@ -156,38 +156,54 @@ async function buildDatasetReport(config: DatasetReportConfig): Promise<DatasetR
         logger.info('[Dataset Report] Fetching Security Hub findings')
         const filters = config.datasets.securityHub!.filters || {}
 
-        // Determine regions to query
-        const regions = filters.regions || ['us-east-1', 'us-west-2']
+        // Fetch records (regions are determined inside the function now)
+        const records = await getSecurityHubFindings(targetAccountIds, filters)
 
-        const [records, summary] = await Promise.all([
-          getSecurityHubFindings(targetAccountIds, filters, regions),
-          getSecurityHubFindingsSummary(targetAccountIds, filters, regions)
-        ])
+        // Build summary from records
+        const findingsBySeverity = {
+          CRITICAL: records.filter(f => f.severity === 'CRITICAL').length,
+          HIGH: records.filter(f => f.severity === 'HIGH').length,
+          MEDIUM: records.filter(f => f.severity === 'MEDIUM').length,
+          LOW: records.filter(f => f.severity === 'LOW').length,
+          INFORMATIONAL: records.filter(f => f.severity === 'INFORMATIONAL').length
+        }
+
+        const findingsByStatus = {
+          NEW: records.filter(f => f.workflowStatus === 'NEW').length,
+          NOTIFIED: records.filter(f => f.workflowStatus === 'NOTIFIED').length,
+          RESOLVED: records.filter(f => f.workflowStatus === 'RESOLVED').length,
+          SUPPRESSED: records.filter(f => f.workflowStatus === 'SUPPRESSED').length
+        }
+
+        const findingsByProduct: Record<string, number> = {}
+        for (const record of records) {
+          findingsByProduct[record.productName] = (findingsByProduct[record.productName] || 0) + 1
+        }
 
         reportData.securityHub = {
           enabled: true,
-          totalFindings: summary.totalFindings,
+          totalFindings: records.length,
           findingsBySeverity: {
-            critical: summary.findingsBySeverity.CRITICAL,
-            high: summary.findingsBySeverity.HIGH,
-            medium: summary.findingsBySeverity.MEDIUM,
-            low: summary.findingsBySeverity.LOW,
-            informational: summary.findingsBySeverity.INFORMATIONAL
+            critical: findingsBySeverity.CRITICAL,
+            high: findingsBySeverity.HIGH,
+            medium: findingsBySeverity.MEDIUM,
+            low: findingsBySeverity.LOW,
+            informational: findingsBySeverity.INFORMATIONAL
           },
           findingsByStatus: {
-            new: summary.findingsByStatus.NEW,
-            notified: summary.findingsByStatus.NOTIFIED,
-            resolved: summary.findingsByStatus.RESOLVED,
-            suppressed: summary.findingsByStatus.SUPPRESSED
+            new: findingsByStatus.NEW,
+            notified: findingsByStatus.NOTIFIED,
+            resolved: findingsByStatus.RESOLVED,
+            suppressed: findingsByStatus.SUPPRESSED
           },
-          findingsByProduct: summary.findingsByProduct,
+          findingsByProduct,
           records
         }
 
         logger.info('[Dataset Report] Security Hub data fetched', {
           totalFindings: records.length,
-          criticalFindings: summary.findingsBySeverity.CRITICAL,
-          highFindings: summary.findingsBySeverity.HIGH
+          criticalFindings: findingsBySeverity.CRITICAL,
+          highFindings: findingsBySeverity.HIGH
         })
       })()
     )
@@ -200,27 +216,63 @@ async function buildDatasetReport(config: DatasetReportConfig): Promise<DatasetR
         logger.info('[Dataset Report] Fetching CloudTrail events')
         const filters = config.datasets.cloudtrail!.filters || {}
 
-        const [records, statistics] = await Promise.all([
-          getCloudTrailEvents(targetAccountIds, filters),
-          getCloudTrailEventStatistics(targetAccountIds, filters)
-        ])
+        const records = await getCloudTrailEvents(targetAccountIds, filters)
+
+        // Build statistics from records
+        const eventsByType: Record<string, number> = {}
+        const eventsByService: Record<string, number> = {}
+        const userCounts: Record<string, number> = {}
+        let errorEvents = 0
+        let writeEvents = 0
+        let readEvents = 0
+
+        for (const record of records) {
+          // Count by event type
+          eventsByType[record.eventType] = (eventsByType[record.eventType] || 0) + 1
+
+          // Count by service
+          eventsByService[record.eventSource] = (eventsByService[record.eventSource] || 0) + 1
+
+          // Count by user
+          if (record.userIdentityUserName) {
+            userCounts[record.userIdentityUserName] = (userCounts[record.userIdentityUserName] || 0) + 1
+          }
+
+          // Count errors
+          if (record.errorCode) {
+            errorEvents++
+          }
+
+          // Count read vs write
+          if (record.readOnly) {
+            readEvents++
+          } else {
+            writeEvents++
+          }
+        }
+
+        // Get top users
+        const topUsers = Object.entries(userCounts)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 10)
+          .map(([userName, eventCount]) => ({ userName, eventCount }))
 
         reportData.cloudtrail = {
           enabled: true,
-          totalEvents: statistics.totalEvents,
-          eventsByType: statistics.eventsByType,
-          eventsByService: statistics.eventsByService,
-          topUsers: statistics.topUsers,
-          errorEvents: statistics.errorEvents,
-          writeEvents: statistics.writeEvents,
-          readEvents: statistics.readEvents,
+          totalEvents: records.length,
+          eventsByType,
+          eventsByService,
+          topUsers,
+          errorEvents,
+          writeEvents,
+          readEvents,
           records
         }
 
         logger.info('[Dataset Report] CloudTrail data fetched', {
           totalEvents: records.length,
-          writeEvents: statistics.writeEvents,
-          errorEvents: statistics.errorEvents
+          writeEvents,
+          errorEvents
         })
       })()
     )
@@ -431,8 +483,14 @@ async function generateXLSXDatasetReport(
 }> {
   logger.info('[Dataset Report] Generating XLSX')
 
-  // For now, fall back to CSV format
+  // For now, fall back to CSV format with proper extension
   // TODO: Implement proper XLSX generation when excel library is integrated
   logger.warn('[Dataset Report] XLSX format not yet implemented, falling back to CSV')
-  return await generateCSVDatasetReport(reportData, config)
+  const csvResult = await generateCSVDatasetReport(reportData, config)
+
+  // Keep CSV format but update filename extension to match what user requested
+  return {
+    ...csvResult,
+    filename: csvResult.filename.replace('.csv', '.csv') // Keep as CSV for now
+  }
 }

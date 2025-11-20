@@ -39,18 +39,19 @@
     <!-- Products -->
     <UFormGroup label="Products" help="Filter by security product">
       <USelectMenu
-        v-model="filters.products"
+        v-model="selectedProducts"
         :options="productOptions"
         multiple
         searchable
         placeholder="Select products..."
+        value-attribute="value"
       >
         <template #label>
-          <span v-if="!filters.products || filters.products.length === 0">
+          <span v-if="!selectedProducts || selectedProducts.length === 0">
             All products
           </span>
           <span v-else>
-            {{ filters.products.length }} selected
+            {{ selectedProducts.length }} selected
           </span>
         </template>
       </USelectMenu>
@@ -59,18 +60,19 @@
     <!-- Compliance Standards -->
     <UFormGroup label="Compliance Standards" help="Filter by compliance framework">
       <USelectMenu
-        v-model="filters.complianceStandards"
+        v-model="selectedComplianceStandards"
         :options="complianceOptions"
         multiple
         searchable
         placeholder="Select standards..."
+        value-attribute="value"
       >
         <template #label>
-          <span v-if="!filters.complianceStandards || filters.complianceStandards.length === 0">
+          <span v-if="!selectedComplianceStandards || selectedComplianceStandards.length === 0">
             All standards
           </span>
           <span v-else>
-            {{ filters.complianceStandards.length }} selected
+            {{ selectedComplianceStandards.length }} selected
           </span>
         </template>
       </USelectMenu>
@@ -140,7 +142,37 @@
 <script setup lang="ts">
 import type { SecurityHubDatasetFilters } from '~/shared/types/dataset-reports'
 
-const filters = defineModel<SecurityHubDatasetFilters>({ default: () => ({ activeOnly: true, lookbackDays: 30 }) })
+const filters = defineModel<SecurityHubDatasetFilters>({
+  default: () => ({
+    activeOnly: true,
+    lookbackDays: 30,
+    severities: [],
+    statuses: [],
+    products: [],
+    complianceStandards: []
+  })
+})
+
+// Computed wrappers to extract just the values from select menus
+const selectedProducts = computed({
+  get: () => filters.value.products || [],
+  set: (val: any[]) => {
+    if (!filters.value.products) {
+      filters.value.products = []
+    }
+    filters.value.products = val.map(v => typeof v === 'object' ? v.value : v)
+  }
+})
+
+const selectedComplianceStandards = computed({
+  get: () => filters.value.complianceStandards || [],
+  set: (val: any[]) => {
+    if (!filters.value.complianceStandards) {
+      filters.value.complianceStandards = []
+    }
+    filters.value.complianceStandards = val.map(v => typeof v === 'object' ? v.value : v)
+  }
+})
 
 // Constants
 const severities = [
@@ -238,6 +270,13 @@ function setNewFindings() {
 }
 
 function clearFilters() {
-  filters.value = { activeOnly: true, lookbackDays: 30 }
+  filters.value = {
+    activeOnly: true,
+    lookbackDays: 30,
+    severities: [],
+    statuses: [],
+    products: [],
+    complianceStandards: []
+  }
 }
 </script>

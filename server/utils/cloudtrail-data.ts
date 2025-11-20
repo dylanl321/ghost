@@ -186,14 +186,15 @@ async function fetchEventsForAccount(
   accountName: string,
   filters: CloudTrailDatasetFilters,
   startTime: Date,
-  endTime: Date
+  endTime: Date,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
 ): Promise<CloudTrailEventRecord[]> {
   const events: CloudTrailEventRecord[] = []
 
   try {
     // CloudTrail LookupEvents only works in the region where the trail is configured
-    // For organization trails, this is typically us-east-1
-    const region = 'us-east-1'
+    // For organization trails, use appropriate region for the environment
+    const region = environment === 'govcloud' ? 'us-gov-west-1' : 'us-east-1'
     const client = await getCloudTrailClient(accountId, region)
 
     const lookupAttributes = buildLookupAttributes(filters)
@@ -268,6 +269,9 @@ export async function getCloudTrailEvents(
 ): Promise<CloudTrailEventRecord[]> {
   const startTime = Date.now()
 
+  // Determine environment
+  const environment = (process.env.AWS_CLOUDTRAIL_ENVIRONMENT as 'commercial' | 'govcloud') || 'govcloud'
+
   // Calculate time range
   const lookbackDays = Math.min(
     filters.lookbackDays || DEFAULT_LOOKBACK_DAYS,
@@ -279,6 +283,7 @@ export async function getCloudTrailEvents(
 
   logger.info('[CloudTrail] Fetching events', {
     accountCount: accountIds.length || 'all',
+    environment,
     lookbackDays,
     startDate: startDate.toISOString(),
     endDate: endDate.toISOString(),
@@ -288,29 +293,68 @@ export async function getCloudTrailEvents(
   try {
     // Get all accounts for name mapping
     const allAccounts = await getAllAccountsUnified()
-    const accountMap = new Map(
-      allAccounts.map(acc => [acc.accountId, acc.accountName || acc.accountId])
+
+    // Build account maps for both Commercial and GovCloud IDs
+    const commercialAccountMap = new Map(
+      allAccounts.map(acc => [acc.accountId, acc.accountName || acc.projectName || acc.accountId])
+    )
+    const govCloudAccountMap = new Map(
+      allAccounts
+        .filter(acc => acc.awsGovCloudAccountID)
+        .map(acc => [acc.awsGovCloudAccountID!, acc.accountName || acc.projectName || acc.accountId])
     )
 
-    // Determine which accounts to query
-    let targetAccounts = accountIds
+    // Determine which accounts to query - use correct IDs for the environment
+    let targetAccounts: Array<{ accountId: string; accountName: string }> = []
     if (accountIds.length === 0) {
       // Empty array = all accounts
-      targetAccounts = allAccounts.map(acc => acc.accountId)
+      if (environment === 'govcloud') {
+        targetAccounts = allAccounts
+          .filter(acc => acc.awsGovCloudAccountID)
+          .map(acc => ({
+            accountId: acc.awsGovCloudAccountID!,
+            accountName: acc.accountName || acc.projectName || acc.accountId
+          }))
+      } else {
+        targetAccounts = allAccounts.map(acc => ({
+          accountId: acc.accountId,
+          accountName: acc.accountName || acc.projectName || acc.accountId
+        }))
+      }
+    } else {
+      // User selected specific accounts (by commercial ID)
+      // Need to map to the correct environment's account IDs
+      if (environment === 'govcloud') {
+        targetAccounts = accountIds
+          .map(commercialId => {
+            const account = allAccounts.find(acc => acc.accountId === commercialId)
+            if (!account?.awsGovCloudAccountID) return null
+            return {
+              accountId: account.awsGovCloudAccountID,
+              accountName: account.accountName || account.projectName || commercialId
+            }
+          })
+          .filter((acc): acc is { accountId: string; accountName: string } => acc !== null)
+      } else {
+        targetAccounts = accountIds
+          .map(id => {
+            const name = commercialAccountMap.get(id)
+            if (!name) return null
+            return { accountId: id, accountName: name }
+          })
+          .filter((acc): acc is { accountId: string; accountName: string } => acc !== null)
+      }
     }
 
-    // Validate accounts exist
+    if (targetAccounts.length < accountIds.length && accountIds.length > 0) {
+      logger.warn('[CloudTrail] Some accounts not found in environment', {
+        environment,
+        requestedCount: accountIds.length,
+        validCount: targetAccounts.length
+      })
+    }
+
     const validAccounts = targetAccounts
-      .filter(id => accountMap.has(id))
-      .map(id => ({
-        accountId: id,
-        accountName: accountMap.get(id)!,
-      }))
-
-    if (validAccounts.length < targetAccounts.length) {
-      const missing = targetAccounts.filter(id => !accountMap.has(id))
-      logger.warn('[CloudTrail] Some accounts not found', { missing })
-    }
 
     // Fetch events from all accounts
     const allEvents: CloudTrailEventRecord[] = []
@@ -323,7 +367,8 @@ export async function getCloudTrailEvents(
         accountName,
         filters,
         startDate,
-        endDate
+        endDate,
+        environment
       )
       allEvents.push(...accountEvents)
 

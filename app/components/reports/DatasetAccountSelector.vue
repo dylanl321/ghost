@@ -142,8 +142,9 @@ const loading = ref(false)
 const filteredAccounts = computed(() => {
   let filtered = accounts.value
 
-  // Filter out decommissioned accounts
+  // Filter out decommissioned accounts and null/undefined entries
   filtered = filtered.filter(a => {
+    if (!a) return false
     const enclaveStatus = (a.enclaveStatus || '').toLowerCase()
     const accountStatus = (a.accountStatus || '').toLowerCase()
     return !enclaveStatus.includes('decommission') && !accountStatus.includes('decommission')

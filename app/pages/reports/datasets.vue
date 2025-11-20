@@ -737,9 +737,51 @@ function handleSaveQuery() {
   console.log('Saving query:', queryBuilder.value)
 }
 
-function handleExport() {
-  // TODO: Implement export functionality
+async function handleExport() {
   console.log('Exporting data with format:', outputFormat.value)
+
+  try {
+    // Show loading state (could add a loading indicator here)
+    const exportResponse = await $fetch('/api/dataset-reports/export', {
+      method: 'POST',
+      body: {
+        accountIds: selectedAccounts.value,
+        reportConfig: {
+          accounts: selectedAccounts.value,
+          datasets: queryBuilder.value.datasets,
+          format: outputFormat.value,
+          enableAI: enableAI.value
+        }
+      },
+      // Fetch as blob for file download
+      responseType: 'blob'
+    })
+
+    // Create download link
+    const blob = new Blob([exportResponse as any])
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+
+    // Set filename based on format
+    const timestamp = new Date().toISOString().split('T')[0]
+    const extension = outputFormat.value === 'xlsx' ? 'xlsx' : outputFormat.value
+    link.download = `dataset-report-${timestamp}.${extension}`
+
+    // Trigger download
+    document.body.appendChild(link)
+    link.click()
+
+    // Cleanup
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+
+    console.log('Export completed successfully')
+  } catch (error: any) {
+    console.error('Export failed:', error)
+    // TODO: Show error toast to user
+    alert(`Export failed: ${error.message || 'Unknown error'}`)
+  }
 }
 
 function formatDateTime(value?: string) {

@@ -7,18 +7,19 @@
     <!-- Resource Types -->
     <UFormGroup label="Resource Types" help="Leave empty to include all types">
       <USelectMenu
-        v-model="filters.resourceTypes"
+        v-model="selectedResourceTypes"
         :options="resourceTypeOptions"
         multiple
         searchable
         placeholder="Select resource types..."
+        value-attribute="value"
       >
         <template #label>
-          <span v-if="filters.resourceTypes && filters.resourceTypes.length === 0">
+          <span v-if="!selectedResourceTypes || selectedResourceTypes.length === 0">
             All resource types
           </span>
           <span v-else>
-            {{ filters.resourceTypes?.length || 0 }} selected
+            {{ selectedResourceTypes.length }} selected
           </span>
         </template>
       </USelectMenu>
@@ -53,18 +54,19 @@
     <!-- Regions -->
     <UFormGroup label="Regions" help="Leave empty to include all regions">
       <USelectMenu
-        v-model="filters.regions"
+        v-model="selectedRegions"
         :options="regionOptions"
         multiple
         searchable
         placeholder="Select regions..."
+        value-attribute="value"
       >
         <template #label>
-          <span v-if="!filters.regions || filters.regions.length === 0">
+          <span v-if="!selectedRegions || selectedRegions.length === 0">
             All regions
           </span>
           <span v-else>
-            {{ filters.regions.length }} selected
+            {{ selectedRegions.length }} selected
           </span>
         </template>
       </USelectMenu>
@@ -114,7 +116,36 @@
 <script setup lang="ts">
 import type { ConfigDatasetFilters } from '~/shared/types/dataset-reports'
 
-const filters = defineModel<ConfigDatasetFilters>({ default: () => ({}) })
+const filters = defineModel<ConfigDatasetFilters>({
+  default: () => ({
+    resourceTypes: [],
+    complianceStatus: [],
+    regions: []
+  })
+})
+
+// Computed wrappers to extract just the values from select menus
+const selectedResourceTypes = computed({
+  get: () => filters.value.resourceTypes || [],
+  set: (val: any[]) => {
+    if (!filters.value.resourceTypes) {
+      filters.value.resourceTypes = []
+    }
+    // Extract just the value strings if objects are passed
+    filters.value.resourceTypes = val.map(v => typeof v === 'object' ? v.value : v)
+  }
+})
+
+const selectedRegions = computed({
+  get: () => filters.value.regions || [],
+  set: (val: any[]) => {
+    if (!filters.value.regions) {
+      filters.value.regions = []
+    }
+    // Extract just the value strings if objects are passed
+    filters.value.regions = val.map(v => typeof v === 'object' ? v.value : v)
+  }
+})
 
 // Constants
 const complianceStatuses = [
@@ -211,6 +242,10 @@ function setNetworkResources() {
 }
 
 function clearFilters() {
-  filters.value = {}
+  filters.value = {
+    resourceTypes: [],
+    complianceStatus: [],
+    regions: []
+  }
 }
 </script>

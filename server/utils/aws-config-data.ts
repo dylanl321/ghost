@@ -23,10 +23,15 @@ import type {
 import type { AWSConfigResourceType, ComplianceStatus } from '#shared/types/aws-config'
 
 /**
- * AWS Config aggregator name (from environment)
- * This should be configured in your AWS environment
+ * Get environment-specific Config aggregator name
+ * Commercial and GovCloud have separate aggregators
  */
-const CONFIG_AGGREGATOR_NAME = process.env.AWS_CONFIG_AGGREGATOR_NAME || 'OrganizationAggregator'
+function getConfigAggregatorName(environment: 'commercial' | 'govcloud'): string {
+  if (environment === 'govcloud') {
+    return process.env.AWS_GOVCLOUD_CONFIG_AGGREGATOR || 'GDMSAggregator'
+  }
+  return process.env.AWS_COMMERCIAL_CONFIG_AGGREGATOR || 'GDMS_Aggregator'
+}
 
 /**
  * Get Config client for a specific account/region
@@ -49,10 +54,12 @@ async function getConfigClient(accountId?: string, region?: string): Promise<Con
 async function fetchResourcesViaQuery(
   accounts: string[],
   filters: ConfigDatasetFilters,
-  region: string = 'us-east-1'
+  region: string = 'us-east-1',
+  environment: 'commercial' | 'govcloud' = 'govcloud'
 ): Promise<ConfigResourceRecord[]> {
   const client = await getConfigClient(undefined, region)
   const results: ConfigResourceRecord[] = []
+  const aggregatorName = getConfigAggregatorName(environment)
 
   // Build SQL-like query
   let queryParts: string[] = [
@@ -67,25 +74,29 @@ async function fetchResourcesViaQuery(
     '  tags',
   ]
 
-  // Always query from current configuration
-  queryParts.push('WHERE configurationItemStatus = \'OK\'')
+  // Start WHERE clause - no status filter needed for aggregated queries
+  // The aggregator automatically filters to current resources
+  let whereStarted = false
 
   // Filter by accounts if specified
   if (accounts.length > 0) {
     const accountList = accounts.map(id => `'${id}'`).join(', ')
-    queryParts.push(`AND accountId IN (${accountList})`)
+    queryParts.push(`${whereStarted ? 'AND' : 'WHERE'} accountId IN (${accountList})`)
+    whereStarted = true
   }
 
   // Filter by resource types
   if (filters.resourceTypes && filters.resourceTypes.length > 0) {
     const typeList = filters.resourceTypes.map(t => `'${t}'`).join(', ')
-    queryParts.push(`AND resourceType IN (${typeList})`)
+    queryParts.push(`${whereStarted ? 'AND' : 'WHERE'} resourceType IN (${typeList})`)
+    whereStarted = true
   }
 
   // Filter by regions
   if (filters.regions && filters.regions.length > 0) {
     const regionList = filters.regions.map(r => `'${r}'`).join(', ')
-    queryParts.push(`AND awsRegion IN (${regionList})`)
+    queryParts.push(`${whereStarted ? 'AND' : 'WHERE'} awsRegion IN (${regionList})`)
+    whereStarted = true
   }
 
   const expression = queryParts.join('\n')
@@ -100,7 +111,7 @@ async function fetchResourcesViaQuery(
     do {
       const command = new SelectAggregateResourceConfigCommand({
         Expression: expression,
-        ConfigurationAggregatorName: CONFIG_AGGREGATOR_NAME,
+        ConfigurationAggregatorName: aggregatorName,
         Limit: 100,
         NextToken: nextToken,
       })
@@ -189,10 +200,12 @@ async function fetchResourcesViaQuery(
 async function fetchComplianceDetails(
   accounts: string[],
   filters: ConfigDatasetFilters,
-  region: string = 'us-east-1'
+  region: string = 'us-east-1',
+  environment: 'commercial' | 'govcloud' = 'govcloud'
 ): Promise<Map<string, { status: ComplianceStatus; rules: string[] }>> {
   const client = await getConfigClient(undefined, region)
   const complianceMap = new Map<string, { status: ComplianceStatus; rules: string[] }>()
+  const aggregatorName = getConfigAggregatorName(environment)
 
   // If complianceOnly filter is set, we need compliance data
   // Otherwise, compliance is optional enrichment
@@ -203,7 +216,7 @@ async function fetchComplianceDetails(
   try {
     // Use aggregator to get compliance across all accounts
     const command = new GetAggregateComplianceDetailsByConfigRuleCommand({
-      ConfigurationAggregatorName: CONFIG_AGGREGATOR_NAME,
+      ConfigurationAggregatorName: aggregatorName,
       ConfigRuleName: undefined,  // Get all rules
       AccountId: accounts.length > 0 ? accounts[0] : undefined,
       AwsRegion: region,
@@ -247,34 +260,66 @@ export async function getConfigResources(
   try {
     // Get all accounts for name mapping
     const allAccounts = await getAllAccountsUnified()
-    const accountMap = new Map(
-      allAccounts.map(acc => [acc.accountId, acc.accountName || acc.accountId])
-    )
 
-    // Determine which accounts to query
-    let targetAccounts = accountIds
-    if (accountIds.length === 0) {
-      // Empty array = all accounts
-      targetAccounts = allAccounts.map(acc => acc.accountId)
-    }
-
-    // Validate accounts exist
-    const validAccounts = targetAccounts.filter(id => accountMap.has(id))
-    if (validAccounts.length < targetAccounts.length) {
-      const missing = targetAccounts.filter(id => !accountMap.has(id))
-      logger.warn('[Config] Some accounts not found', { missing })
-    }
-
-    // Determine the appropriate region based on environment
+    // Determine the appropriate environment based on configuration
     const environment = (process.env.AWS_CONFIG_ENVIRONMENT as 'commercial' | 'govcloud') || 'govcloud'
     const region = environment === 'govcloud' ? 'us-gov-west-1' : 'us-east-1'
 
+    // Build account maps for both Commercial and GovCloud IDs
+    const commercialAccountMap = new Map(
+      allAccounts.map(acc => [acc.accountId, acc.accountName || acc.projectName || acc.accountId])
+    )
+    const govCloudAccountMap = new Map(
+      allAccounts
+        .filter(acc => acc.awsGovCloudAccountID)
+        .map(acc => [acc.awsGovCloudAccountID!, acc.accountName || acc.projectName || acc.accountId])
+    )
+
+    // Determine which accounts to query - need to use correct IDs for the environment
+    let targetAccounts: string[] = []
+    if (accountIds.length === 0) {
+      // Empty array = all accounts
+      if (environment === 'govcloud') {
+        targetAccounts = allAccounts
+          .filter(acc => acc.awsGovCloudAccountID)
+          .map(acc => acc.awsGovCloudAccountID!)
+      } else {
+        targetAccounts = allAccounts.map(acc => acc.accountId)
+      }
+    } else {
+      // User selected specific accounts (by commercial ID)
+      // Need to map to the correct environment's account IDs
+      if (environment === 'govcloud') {
+        targetAccounts = accountIds
+          .map(commercialId => {
+            const account = allAccounts.find(acc => acc.accountId === commercialId)
+            return account?.awsGovCloudAccountID
+          })
+          .filter((id): id is string => !!id) // Remove undefined values
+      } else {
+        targetAccounts = accountIds
+      }
+    }
+
+    // Validate accounts exist
+    const accountMap = environment === 'govcloud' ? govCloudAccountMap : commercialAccountMap
+    const validAccounts = targetAccounts.filter(id => accountMap.has(id))
+    if (validAccounts.length < targetAccounts.length) {
+      const missing = targetAccounts.filter(id => !accountMap.has(id))
+      logger.warn('[Config] Some accounts not found in environment', {
+        missing,
+        environment,
+        requestedCount: targetAccounts.length,
+        validCount: validAccounts.length
+      })
+    }
+
     // Fetch resources via advanced query
     // Config aggregator works across all regions, so we only need one call
-    const resources = await fetchResourcesViaQuery(validAccounts, filters, region)
+    const resources = await fetchResourcesViaQuery(validAccounts, filters, region, environment)
 
     // Fetch compliance details if needed
-    const complianceMap = await fetchComplianceDetails(validAccounts, filters, region)
+    const complianceMap = await fetchComplianceDetails(validAccounts, filters, region, environment)
 
     // Enrich resources with account names and compliance
     const enrichedResources = resources.map(resource => {

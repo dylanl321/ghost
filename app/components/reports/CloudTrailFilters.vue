@@ -16,18 +16,19 @@
     <!-- Event Types -->
     <UFormGroup label="Event Types" help="Filter by event classification">
       <USelectMenu
-        v-model="filters.eventTypes"
+        v-model="selectedEventTypes"
         :options="eventTypeOptions"
         multiple
         searchable
         placeholder="Select event types..."
+        value-attribute="value"
       >
         <template #label>
-          <span v-if="!filters.eventTypes || filters.eventTypes.length === 0">
+          <span v-if="!selectedEventTypes || selectedEventTypes.length === 0">
             All event types
           </span>
           <span v-else>
-            {{ filters.eventTypes.length }} selected
+            {{ selectedEventTypes.length }} selected
           </span>
         </template>
       </USelectMenu>
@@ -36,18 +37,19 @@
     <!-- Event Names -->
     <UFormGroup label="Specific Events" help="Filter by specific API calls">
       <USelectMenu
-        v-model="filters.eventNames"
+        v-model="selectedEventNames"
         :options="eventNameOptions"
         multiple
         searchable
         placeholder="Select events..."
+        value-attribute="value"
       >
         <template #label>
-          <span v-if="!filters.eventNames || filters.eventNames.length === 0">
+          <span v-if="!selectedEventNames || selectedEventNames.length === 0">
             All events
           </span>
           <span v-else>
-            {{ filters.eventNames.length }} selected
+            {{ selectedEventNames.length }} selected
           </span>
         </template>
       </USelectMenu>
@@ -56,18 +58,19 @@
     <!-- Services -->
     <UFormGroup label="AWS Services" help="Filter by service source">
       <USelectMenu
-        v-model="filters.eventSources"
+        v-model="selectedEventSources"
         :options="serviceOptions"
         multiple
         searchable
         placeholder="Select services..."
+        value-attribute="value"
       >
         <template #label>
-          <span v-if="!filters.eventSources || filters.eventSources.length === 0">
+          <span v-if="!selectedEventSources || selectedEventSources.length === 0">
             All services
           </span>
           <span v-else>
-            {{ filters.eventSources.length }} selected
+            {{ selectedEventSources.length }} selected
           </span>
         </template>
       </USelectMenu>
@@ -146,7 +149,45 @@
 <script setup lang="ts">
 import type { CloudTrailDatasetFilters } from '~/shared/types/dataset-reports'
 
-const filters = defineModel<CloudTrailDatasetFilters>({ default: () => ({ lookbackDays: 7 }) })
+const filters = defineModel<CloudTrailDatasetFilters>({
+  default: () => ({
+    lookbackDays: 7,
+    eventTypes: [],
+    eventNames: [],
+    eventSources: []
+  })
+})
+
+// Computed wrappers to extract just the values from select menus
+const selectedEventTypes = computed({
+  get: () => filters.value.eventTypes || [],
+  set: (val: any[]) => {
+    if (!filters.value.eventTypes) {
+      filters.value.eventTypes = []
+    }
+    filters.value.eventTypes = val.map(v => typeof v === 'object' ? v.value : v)
+  }
+})
+
+const selectedEventNames = computed({
+  get: () => filters.value.eventNames || [],
+  set: (val: any[]) => {
+    if (!filters.value.eventNames) {
+      filters.value.eventNames = []
+    }
+    filters.value.eventNames = val.map(v => typeof v === 'object' ? v.value : v)
+  }
+})
+
+const selectedEventSources = computed({
+  get: () => filters.value.eventSources || [],
+  set: (val: any[]) => {
+    if (!filters.value.eventSources) {
+      filters.value.eventSources = []
+    }
+    filters.value.eventSources = val.map(v => typeof v === 'object' ? v.value : v)
+  }
+})
 
 // Constants
 const lookbackOptions = [
@@ -258,6 +299,11 @@ function setConsoleLogins() {
 }
 
 function clearFilters() {
-  filters.value = { lookbackDays: 7 }
+  filters.value = {
+    lookbackDays: 7,
+    eventTypes: [],
+    eventNames: [],
+    eventSources: []
+  }
 }
 </script>

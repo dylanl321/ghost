@@ -22,18 +22,31 @@ import type {
 import type { FindingSeverity, WorkflowStatus } from '#shared/types/security-hub'
 
 /**
- * Get Security Hub client for a specific account/region
+ * Get Security Hub client for the Security Lake aggregation account
+ * Security Hub data is centralized in Security Lake accounts
  */
-async function getSecurityHubClient(accountId?: string, region: string = 'us-east-1'): Promise<SecurityHubClient> {
-  // Default to govcloud environment (can be overridden by env var if needed)
-  const environment = (process.env.AWS_SECURITYHUB_ENVIRONMENT as 'commercial' | 'govcloud') || 'govcloud'
-  return getClient<SecurityHubClient>(environment, 'securityhub', region, accountId)
+async function getSecurityHubClient(region: string, environment: 'commercial' | 'govcloud'): Promise<SecurityHubClient> {
+  // Use the Security Lake aggregation account for the environment
+  const securityLakeAccount = environment === 'govcloud'
+    ? process.env.AWS_GOVCLOUD_SECURITY_LAKE_ACCOUNT
+    : process.env.AWS_COMMERCIAL_SECURITY_LAKE_ACCOUNT
+
+  if (!securityLakeAccount) {
+    throw new Error(`Security Lake account not configured for ${environment} environment. Set AWS_${environment.toUpperCase()}_SECURITY_LAKE_ACCOUNT`)
+  }
+
+  return getClient<SecurityHubClient>(environment, 'securityhub', region, securityLakeAccount)
 }
 
 /**
- * Common AWS regions for Security Hub
+ * Get default regions based on environment
  */
-const DEFAULT_REGIONS = ['us-east-1', 'us-west-2']
+function getDefaultRegions(environment: 'commercial' | 'govcloud'): string[] {
+  if (environment === 'govcloud') {
+    return ['us-gov-west-1', 'us-gov-east-1']
+  }
+  return ['us-east-1', 'us-west-2']
+}
 
 /**
  * Normalize Security Hub finding to our simplified record format
@@ -162,19 +175,30 @@ function buildSecurityHubFilters(filters: SecurityHubDatasetFilters) {
 }
 
 /**
- * Fetch findings for a single account/region
+ * Fetch findings for specific accounts in a region
+ * Queries the centralized Security Lake account which aggregates all findings
  */
-async function fetchFindingsForAccountRegion(
-  accountId: string,
-  accountName: string,
+async function fetchFindingsForRegion(
+  targetAccountIds: string[],
+  accountNameMap: Map<string, string>,
   region: string,
-  filters: SecurityHubDatasetFilters
+  filters: SecurityHubDatasetFilters,
+  environment: 'commercial' | 'govcloud'
 ): Promise<SecurityHubFindingRecord[]> {
   const findings: SecurityHubFindingRecord[] = []
 
   try {
-    const client = await getSecurityHubClient(accountId, region)
+    // Get client for Security Lake aggregation account
+    const client = await getSecurityHubClient(region, environment)
     const secHubFilters = buildSecurityHubFilters(filters)
+
+    // Add account filter to only get findings for our target accounts
+    if (targetAccountIds.length > 0) {
+      secHubFilters.AwsAccountId = targetAccountIds.map(id => ({
+        Value: id,
+        Comparison: 'EQUALS'
+      }))
+    }
 
     let nextToken: string | undefined
     let pageCount = 0
@@ -192,6 +216,8 @@ async function fetchFindingsForAccountRegion(
 
       if (response.Findings) {
         for (const finding of response.Findings) {
+          // Get account name from map (finding has the actual account ID)
+          const accountName = accountNameMap.get(finding.AwsAccountId || '') || finding.AwsAccountId || 'Unknown'
           findings.push(normalizeFinding(finding, accountName))
         }
       }
@@ -199,7 +225,6 @@ async function fetchFindingsForAccountRegion(
       nextToken = response.NextToken
 
       logger.debug('[SecurityHub] Fetched findings page', {
-        accountId,
         region,
         page: pageCount,
         findingsInPage: response.Findings?.length || 0,
@@ -209,8 +234,7 @@ async function fetchFindingsForAccountRegion(
     } while (nextToken && pageCount < maxPages)
 
     if (nextToken) {
-      logger.warn('[SecurityHub] Exceeded max pages for account/region', {
-        accountId,
+      logger.warn('[SecurityHub] Exceeded max pages for region', {
         region,
         maxPages,
         totalFindings: findings.length,
@@ -218,17 +242,17 @@ async function fetchFindingsForAccountRegion(
     }
 
   } catch (error: any) {
-    // Security Hub might not be enabled in this account/region
+    // Security Hub might not be enabled in Security Lake account/region
     if (error.name === 'InvalidAccessException' || error.message?.includes('not subscribed')) {
-      logger.warn('[SecurityHub] Not enabled in account/region', { accountId, region })
+      logger.warn('[SecurityHub] Not enabled in Security Lake account/region', { region, environment })
     } else {
       logger.error('[SecurityHub] Failed to fetch findings', {
-        accountId,
         region,
+        environment,
         error: error.message,
       })
     }
-    // Non-fatal - continue with other accounts/regions
+    // Non-fatal - continue with other regions
   }
 
   return findings
@@ -239,15 +263,19 @@ async function fetchFindingsForAccountRegion(
  *
  * @param accountIds - List of account IDs to query (empty = all accounts)
  * @param filters - Filter options for findings
- * @param regions - List of regions to query (defaults to us-east-1, us-west-2)
  * @returns Normalized Security Hub finding records
  */
 export async function getSecurityHubFindings(
   accountIds: string[],
-  filters: SecurityHubDatasetFilters = {},
-  regions: string[] = DEFAULT_REGIONS
+  filters: SecurityHubDatasetFilters = {}
 ): Promise<SecurityHubFindingRecord[]> {
   const startTime = Date.now()
+
+  // Determine environment and appropriate regions
+  const environment = (process.env.AWS_SECURITYHUB_ENVIRONMENT as 'commercial' | 'govcloud') || 'govcloud'
+  const regions = filters.regions && filters.regions.length > 0
+    ? filters.regions
+    : getDefaultRegions(environment)
 
   logger.info('[SecurityHub] Fetching findings', {
     accountCount: accountIds.length || 'all',
@@ -258,55 +286,101 @@ export async function getSecurityHubFindings(
   try {
     // Get all accounts for name mapping
     const allAccounts = await getAllAccountsUnified()
-    const accountMap = new Map(
-      allAccounts.map(acc => [acc.accountId, acc.accountName || acc.accountId])
+
+    // Build account maps for both Commercial and GovCloud IDs
+    const commercialAccountMap = new Map(
+      allAccounts.map(acc => [acc.accountId, acc.accountName || acc.projectName || acc.accountId])
+    )
+    const govCloudAccountMap = new Map(
+      allAccounts
+        .filter(acc => acc.awsGovCloudAccountID)
+        .map(acc => [acc.awsGovCloudAccountID!, acc.accountName || acc.projectName || acc.accountId])
     )
 
-    // Determine which accounts to query
-    let targetAccounts = accountIds
+    // Determine which accounts to query - use correct IDs for the environment
+    let targetAccounts: Array<{ accountId: string; accountName: string }> = []
     if (accountIds.length === 0) {
       // Empty array = all accounts
-      targetAccounts = allAccounts.map(acc => acc.accountId)
-    }
-
-    // Validate accounts exist
-    const validAccounts = targetAccounts
-      .filter(id => accountMap.has(id))
-      .map(id => ({
-        accountId: id,
-        accountName: accountMap.get(id)!,
-      }))
-
-    if (validAccounts.length < targetAccounts.length) {
-      const missing = targetAccounts.filter(id => !accountMap.has(id))
-      logger.warn('[SecurityHub] Some accounts not found', { missing })
-    }
-
-    // Fetch findings from all account/region combinations
-    const allFindings: SecurityHubFindingRecord[] = []
-
-    // Process accounts in parallel (with concurrency limit)
-    const concurrencyLimit = 5
-    for (let i = 0; i < validAccounts.length; i += concurrencyLimit) {
-      const batch = validAccounts.slice(i, i + concurrencyLimit)
-
-      const batchPromises = batch.flatMap(({ accountId, accountName }) =>
-        regions.map(region =>
-          fetchFindingsForAccountRegion(accountId, accountName, region, filters)
-        )
-      )
-
-      const batchResults = await Promise.all(batchPromises)
-      for (const findings of batchResults) {
-        allFindings.push(...findings)
+      if (environment === 'govcloud') {
+        targetAccounts = allAccounts
+          .filter(acc => acc.awsGovCloudAccountID)
+          .map(acc => ({
+            accountId: acc.awsGovCloudAccountID!,
+            accountName: acc.accountName || acc.projectName || acc.accountId
+          }))
+      } else {
+        targetAccounts = allAccounts.map(acc => ({
+          accountId: acc.accountId,
+          accountName: acc.accountName || acc.projectName || acc.accountId
+        }))
       }
+    } else {
+      // User selected specific accounts (by commercial ID)
+      // Need to map to the correct environment's account IDs
+      if (environment === 'govcloud') {
+        targetAccounts = accountIds
+          .map(commercialId => {
+            const account = allAccounts.find(acc => acc.accountId === commercialId)
+            if (!account?.awsGovCloudAccountID) return null
+            return {
+              accountId: account.awsGovCloudAccountID,
+              accountName: account.accountName || account.projectName || commercialId
+            }
+          })
+          .filter((acc): acc is { accountId: string; accountName: string } => acc !== null)
+      } else {
+        targetAccounts = accountIds
+          .map(id => {
+            const name = commercialAccountMap.get(id)
+            if (!name) return null
+            return { accountId: id, accountName: name }
+          })
+          .filter((acc): acc is { accountId: string; accountName: string } => acc !== null)
+      }
+    }
 
-      logger.info('[SecurityHub] Batch completed', {
-        batchNumber: Math.floor(i / concurrencyLimit) + 1,
-        accountsInBatch: batch.length,
-        totalFindings: allFindings.length,
+    if (targetAccounts.length < accountIds.length && accountIds.length > 0) {
+      logger.warn('[SecurityHub] Some accounts not found in environment', {
+        environment,
+        requestedCount: accountIds.length,
+        validCount: targetAccounts.length
       })
     }
+
+    const validAccounts = targetAccounts
+
+    // Build account name map for all target accounts
+    const accountNameMap = new Map(
+      validAccounts.map(acc => [acc.accountId, acc.accountName])
+    )
+
+    // Extract just the account IDs
+    const targetAccountIds = validAccounts.map(acc => acc.accountId)
+
+    logger.info('[SecurityHub] Querying Security Lake aggregation account', {
+      environment,
+      accountsToFilter: targetAccountIds.length,
+      regions: regions.length
+    })
+
+    // Fetch findings from all regions
+    // Query the centralized Security Lake account which has all findings
+    const allFindings: SecurityHubFindingRecord[] = []
+
+    // Process regions in parallel
+    const regionPromises = regions.map(region =>
+      fetchFindingsForRegion(targetAccountIds, accountNameMap, region, filters, environment)
+    )
+
+    const regionResults = await Promise.all(regionPromises)
+    for (const findings of regionResults) {
+      allFindings.push(...findings)
+    }
+
+    logger.info('[SecurityHub] All regions completed', {
+      totalFindings: allFindings.length,
+      regionsQueried: regions.length
+    })
 
     // Sort by severity (critical first) and then by date (newest first)
     const severityOrder: Record<FindingSeverity, number> = {
