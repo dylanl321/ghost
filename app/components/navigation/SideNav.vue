@@ -151,19 +151,33 @@
               "
               class="mt-1 ml-4 space-y-1 transition-all duration-200"
             >
-              <NuxtLink
-                v-for="child in item.children"
-                :key="child.label"
-                :to="child.to"
-                class="flex items-center gap-3 px-3 py-2 rounded-md text-sm hover:bg-slate-800 transition-colors relative group"
-                :class="{ 'text-white bg-slate-800': isActive(child) }"
-                @click.stop
-              >
-                <UIcon :name="child.icon" class="flex-shrink-0 w-4 h-4" />
-                <span class="font-medium transition-opacity duration-200">{{
-                  child.label
-                }}</span>
-              </NuxtLink>
+              <template v-for="child in item.children" :key="child.label">
+                <ClientOnly v-if="child.label === 'Pipeline Analytics'">
+                  <NuxtLink
+                    :to="child.to"
+                    class="flex items-center gap-3 px-3 py-2 rounded-md text-sm hover:bg-slate-800 transition-colors relative group"
+                    :class="{ 'text-white bg-slate-800': isActive(child) }"
+                    @click.stop
+                  >
+                    <UIcon :name="child.icon" class="flex-shrink-0 w-4 h-4" />
+                    <span class="font-medium transition-opacity duration-200">{{
+                      child.label
+                    }}</span>
+                  </NuxtLink>
+                </ClientOnly>
+                <NuxtLink
+                  v-else
+                  :to="child.to"
+                  class="flex items-center gap-3 px-3 py-2 rounded-md text-sm hover:bg-slate-800 transition-colors relative group"
+                  :class="{ 'text-white bg-slate-800': isActive(child) }"
+                  @click.stop
+                >
+                  <UIcon :name="child.icon" class="flex-shrink-0 w-4 h-4" />
+                  <span class="font-medium transition-opacity duration-200">{{
+                    child.label
+                  }}</span>
+                </NuxtLink>
+              </template>
             </div>
 
             <!-- Single Item Link -->
@@ -251,7 +265,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, nextTick } from "vue";
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { useRoute } from "vue-router";
 import { useNavigationStore } from "~/stores/useNavigationStore";
 import { useUserRoles } from "~/composables/useUserRoles";
@@ -483,10 +497,15 @@ const navigationItems = computed(() => {
       label: "Users",
       to: "/account/user",
       icon: "i-heroicons-users",
+    },
+    {
+      label: "Dataset Reports",
+      to: "/reports/datasets",
+      icon: "i-heroicons-server-stack",
     }
   ];
 
-  // Add Pipeline Analytics for admins only (client-side only to avoid SSR hydration mismatch)
+  // Add Pipeline Analytics for admins only (client-side only to avoid hydration mismatch)
   if (process.client && isAdmin.value) {
     accountsChildren.push({
       label: "Pipeline Analytics",

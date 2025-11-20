@@ -71,6 +71,20 @@ resource "aws_secretsmanager_secret_version" "dynamodb_config" {
       accountId   = local.child_account_id
     }
 
+    # Query System Tables (GovCloud)
+    savedQueries = {
+      tableName   = "ghost-saved-queries"
+      environment = "govcloud"
+      region      = var.aws_region
+      accountId   = local.child_account_id
+    }
+    queryExecutions = {
+      tableName   = "ghost-query-executions"
+      environment = "govcloud"
+      region      = var.aws_region
+      accountId   = local.child_account_id
+    }
+
     # External Accounts Table (GovCloud, in master/org account)
     externalAccounts = {
       tableName   = "gdms_aws_accounts-master"

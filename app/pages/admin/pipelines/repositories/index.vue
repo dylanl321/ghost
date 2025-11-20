@@ -335,10 +335,9 @@ onMounted(() => {
   fetchRepositories()
 })
 
-// Navigation
+// Navigation - use project name for cleaner URLs
 function navigateToRepository(repo: any) {
-  const encodedPath = encodeURIComponent(repo.fullPath)
-  navigateTo(`/admin/pipelines/${encodedPath}`)
+  navigateTo(`/admin/pipelines/${repo.project}`)
 }
 
 // Formatting helpers
@@ -350,25 +349,18 @@ function formatPercentage(num: number): string {
   return `${num}%`
 }
 
+// Use date formatter composable for timezone-aware formatting
+const { formatDurationShort, formatRelativeTime: formatRelativeTimeWithTz } = useDateFormatter()
+
 function formatDuration(seconds: number): string {
-  if (!seconds) return '0m'
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m`
-  const hours = Math.floor(minutes / 60)
-  const remainingMinutes = minutes % 60
-  return `${hours}h ${remainingMinutes}m`
+  return formatDurationShort(seconds)
 }
 
 function formatRelativeTime(timestamp: string): string {
-  if (!timestamp) return 'N/A'
-  try {
-    return formatDistanceToNow(new Date(timestamp), { addSuffix: true })
-  } catch {
-    return 'Unknown'
-  }
+  return formatRelativeTimeWithTz(timestamp)
 }
 
-function getSuccessRateColor(rate: number): string {
+function getSuccessRateColor(rate: number): 'green' | 'yellow' | 'orange' | 'red' {
   if (rate >= 90) return 'green'
   if (rate >= 70) return 'yellow'
   if (rate >= 50) return 'orange'

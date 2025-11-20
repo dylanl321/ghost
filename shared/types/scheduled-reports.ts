@@ -3,6 +3,7 @@
  * Shared between frontend and backend
  */
 
+export type ReportType = 'cost' | 'dataset'
 export type ReportFrequency = 'daily' | 'weekly' | 'monthly' | 'quarterly'
 export type ReportStatus = 'active' | 'paused' | 'disabled'
 export type ExecutionStatus = 'success' | 'failed' | 'running'
@@ -53,6 +54,9 @@ export interface ScheduledReport {
   reportId: string // UUID
   reportName: string
   description?: string
+
+  // Report type - determines which generator to use
+  reportType: ReportType // 'cost' or 'dataset'
 
   // Owner
   createdBy: string // User email

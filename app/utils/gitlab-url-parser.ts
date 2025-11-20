@@ -4,6 +4,17 @@
  *
  * Expected format: https://gitlab.example.com/{group}/{project}/-/jobs/{jobId}
  * Handles nested groups: https://gitlab.example.com/{parent}/{child}/{project}/-/jobs/{jobId}
+ *
+ * Examples:
+ * - GDMSCloud/aws/terraform/aws-account-orchestrator
+ *   → group: "GDMSCloud/aws/terraform"
+ *   → project: "aws-account-orchestrator"
+ *   → fullPath: "GDMSCloud/aws/terraform/aws-account-orchestrator"
+ *
+ * - GDMSCloud/aws/terraform/modules/security-baseline
+ *   → group: "GDMSCloud/aws/terraform/modules"
+ *   → project: "security-baseline"
+ *   → fullPath: "GDMSCloud/aws/terraform/modules/security-baseline"
  */
 
 import type { GitLabRepoInfo } from '~/shared/types/pipelines'
@@ -34,16 +45,20 @@ export function parseGitLabUrl(jobUrl: string): GitLabRepoInfo | null {
       return null
     }
 
-    // Everything before '-' is the repository path
+    // Everything before '-' is the repository path (handles nested groups)
+    // Example: ["GDMSCloud", "aws", "terraform", "aws-account-orchestrator"]
     const repoParts = pathParts.slice(0, dashIndex)
 
-    // Last part is the project name
+    // Last part is always the project/repository name
+    // Example: "aws-account-orchestrator"
     const project = repoParts[repoParts.length - 1]
 
     // Everything except the last part is the group path
+    // Example: "GDMSCloud/aws/terraform"
     const group = repoParts.slice(0, -1).join('/')
 
-    // Full path is group/project
+    // Full path combines group and project
+    // Example: "GDMSCloud/aws/terraform/aws-account-orchestrator"
     const fullPath = repoParts.join('/')
 
     // Extract job ID from the path after '/-/jobs/'

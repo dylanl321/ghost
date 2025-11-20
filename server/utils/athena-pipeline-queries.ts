@@ -1,88 +1,24 @@
 /**
  * Pipeline Data - Athena Query Utilities
  * Query GitLab pipeline telemetry data stored in S3 and queryable via Athena
+ *
+ * Performance Optimizations:
+ * - Application-level caching with 5-minute TTL using cache-manager
+ * - Athena query result reuse enabled (60 minutes) to avoid re-executing identical queries
+ * - Parallel query execution for fetching multiple related datasets
  */
 
 import { getAthenaClient } from '../lib/aws-client-factory'
 import { getCacheManager } from './cache-manager'
 import { logger } from './logger'
-
-// Types
-export interface PipelineEnvironmentConfig {
-  region: string
-  database: string
-  athenaResultsBucket: string
-  accountId: string
-}
-
-export interface PipelineRun {
-  pipeline_id: string
-  job_id: string
-  job_name: string
-  job_url: string
-  job_stage: string
-  timestamp_start: string
-  timestamp_end: string
-  duration_total_seconds: number
-  status: string
-  account_count: number
-  accounts_processed: string[]
-  commit_author: string
-  terraform_version: string
-}
-
-export interface AccountPlan {
-  account_id: string
-  account_name: string
-  plan_created_at: string
-  plan_pipeline_id: string
-  changes_create: number
-  changes_update: number
-  changes_destroy: number
-  changes_total: number
-  plan_status: string
-  applied_at?: string
-}
-
-export interface ResourceChange {
-  account_id: string
-  resource_address: string
-  resource_type: string
-  module_name: string
-  change_action: string
-  applied: boolean
-  apply_success: boolean
-  timestamp: string
-}
-
-export interface ErrorDetail {
-  pipeline_id: string
-  account_id: string
-  timestamp: string
-  error_phase: string
-  error_category: string
-  error_severity: string
-  error_message: string
-  error_resource_type?: string
-}
-
-export interface PipelineSummary {
-  totalRuns: number
-  successfulRuns: number
-  failedRuns: number
-  avgDurationSeconds: number
-  totalChanges: number
-  resourceBreakdown: Array<{
-    resourceType: string
-    action: string
-    count: number
-  }>
-  errorBreakdown: Array<{
-    category: string
-    count: number
-  }>
-  recentRuns: PipelineRun[]
-}
+import type {
+  PipelineEnvironmentConfig,
+  PipelineRun,
+  AccountPlan,
+  ResourceChange,
+  ErrorDetail,
+  PipelineSummary
+} from '~/shared/types/pipelines'
 
 // Configuration
 export function getPipelineEnvironmentConfig(environment: 'commercial' | 'govcloud' = 'govcloud'): PipelineEnvironmentConfig {
@@ -101,6 +37,7 @@ export function getPipelineEnvironmentConfig(environment: 'commercial' | 'govclo
 const CACHE_TTL_SECONDS = 300 // 5 minutes cache for pipeline data
 const DEFAULT_TIMEOUT_SECONDS = 60
 const POLL_INTERVAL_MS = 2000
+const ATHENA_RESULT_REUSE_MAX_AGE_MINUTES = 60 // Reuse Athena query results up to 60 minutes old
 
 /**
  * Execute an Athena SQL query and return results
@@ -130,6 +67,7 @@ async function executeAthenaQuery(
     const athenaClient = await getAthenaClient(environment, config.region, config.accountId)
 
     logger.info(`[Pipeline Queries] Executing query '${queryName}' in ${environment}`)
+    logger.debug(`[Pipeline Queries] SQL: ${sql}`)
 
     // Start query execution
     const { StartQueryExecutionCommand, GetQueryExecutionCommand, GetQueryResultsCommand } = await import('@aws-sdk/client-athena')
@@ -142,6 +80,14 @@ async function executeAthenaQuery(
       WorkGroup: process.env.ATHENA_PIPELINE_WORKGROUP || 'primary',
       ResultConfiguration: {
         OutputLocation: `s3://${config.athenaResultsBucket}/query-results/`
+      },
+      // Enable query result reuse to speed up repeated queries
+      // Athena will reuse results from identical queries within the time window
+      ResultReuseConfiguration: {
+        ResultReuseByAgeConfiguration: {
+          Enabled: true,
+          MaxAgeInMinutes: ATHENA_RESULT_REUSE_MAX_AGE_MINUTES
+        }
       }
     }))
 
@@ -400,18 +346,24 @@ export async function getPipelineSummary(
 
   const totalChanges = plans.reduce((sum, p) => sum + (p.changes_total || 0), 0)
 
-  // Group resources by type and action
-  const resourceMap = new Map<string, number>()
+  // Group resources by address (name), type, and action
+  const resourceMap = new Map<string, { resourceAddress: string, resourceType: string, action: string, count: number }>()
   resources.forEach(r => {
-    const key = `${r.resource_type}:${r.change_action}`
-    resourceMap.set(key, (resourceMap.get(key) || 0) + 1)
+    const key = `${r.resource_address}:${r.resource_type}:${r.change_action}`
+    const existing = resourceMap.get(key)
+    if (existing) {
+      existing.count += 1
+    } else {
+      resourceMap.set(key, {
+        resourceAddress: r.resource_address,
+        resourceType: r.resource_type,
+        action: r.change_action,
+        count: 1
+      })
+    }
   })
 
-  const resourceBreakdown = Array.from(resourceMap.entries())
-    .map(([key, count]) => {
-      const [resourceType, action] = key.split(':')
-      return { resourceType, action, count }
-    })
+  const resourceBreakdown = Array.from(resourceMap.values())
     .sort((a, b) => b.count - a.count)
     .slice(0, 10) // Top 10
 
@@ -560,6 +512,10 @@ export async function getOrganizationSummary(
     ),
     plan_stats AS (
       SELECT
+        COUNT(*) as total_account_plans,
+        SUM(CASE WHEN plan_status = 'applied' THEN 1 ELSE 0 END) as successful_accounts,
+        SUM(CASE WHEN plan_status = 'failed' THEN 1 ELSE 0 END) as failed_accounts,
+        SUM(CASE WHEN plan_status = 'pending' THEN 1 ELSE 0 END) as pending_accounts,
         SUM(changes_total) as total_changes,
         COUNT(DISTINCT account_id) as unique_accounts
       FROM ${config.database}.account_plans
@@ -568,12 +524,17 @@ export async function getOrganizationSummary(
     )
     SELECT
       r.total_runs,
-      r.successful_runs,
-      r.failed_runs,
-      CAST(r.successful_runs AS DOUBLE) / NULLIF(r.total_runs, 0) * 100 as success_rate,
+      r.successful_runs as successful_pipelines,
+      r.failed_runs as failed_pipelines,
+      CAST(r.successful_runs AS DOUBLE) / NULLIF(r.total_runs, 0) * 100 as pipeline_success_rate,
       r.avg_duration,
       COALESCE(p.unique_accounts, 0) as unique_accounts,
-      COALESCE(p.total_changes, 0) as total_changes
+      COALESCE(p.total_changes, 0) as total_changes,
+      COALESCE(p.total_account_plans, 0) as total_account_plans,
+      COALESCE(p.successful_accounts, 0) as successful_accounts,
+      COALESCE(p.failed_accounts, 0) as failed_accounts,
+      COALESCE(p.pending_accounts, 0) as pending_accounts,
+      CAST(COALESCE(p.successful_accounts, 0) AS DOUBLE) / NULLIF(COALESCE(p.total_account_plans, 0), 0) * 100 as account_success_rate
     FROM run_stats r
     CROSS JOIN plan_stats p
   `
@@ -662,6 +623,13 @@ export async function getPipelineByIdWithDetails(
 ): Promise<{
   pipeline: PipelineRun | null
   accountPlans: AccountPlan[]
+  accountStats: {
+    total: number
+    applied: number
+    failed: number
+    pending: number
+    expired: number
+  }
   resourceStats: {
     totalResources: number
     byAction: Array<{ action: string, count: number }>
@@ -705,6 +673,15 @@ export async function getPipelineByIdWithDetails(
         .slice(0, 10) // Top 10 resource types
     }
 
+    // Aggregate account statistics by plan_status
+    const accountStats = {
+      total: accountPlans.length,
+      applied: accountPlans.filter(p => p.plan_status === 'applied').length,
+      failed: accountPlans.filter(p => p.plan_status === 'failed').length,
+      pending: accountPlans.filter(p => p.plan_status === 'pending').length,
+      expired: accountPlans.filter(p => p.plan_status === 'expired').length
+    }
+
     // Aggregate error statistics
     const errorCategoryMap = new Map<string, number>()
     const errorSeverityMap = new Map<string, number>()
@@ -727,6 +704,7 @@ export async function getPipelineByIdWithDetails(
     return {
       pipeline,
       accountPlans,
+      accountStats,
       resourceStats,
       errorStats
     }
@@ -748,6 +726,7 @@ export async function getAccountPlansForPipeline(
   const config = getPipelineEnvironmentConfig(environment)
 
   // Query needs partition filtering for Athena - use a 90 day lookback
+  // Note: plan_pipeline_id is a numeric column
   const sql = `
     SELECT
       account_id,
@@ -759,11 +738,13 @@ export async function getAccountPlansForPipeline(
       changes_destroy,
       changes_total,
       plan_status,
-      applied_at
+      applied_at,
+      failed_at,
+      failure_reason
     FROM ${config.database}.account_plans
     WHERE year >= CAST(year(date_add('day', -90, current_date)) AS VARCHAR)
       AND month >= CAST(month(date_add('day', -90, current_date)) AS VARCHAR)
-      AND plan_pipeline_id = '${pipelineId}'
+      AND plan_pipeline_id = ${pipelineId}
     ORDER BY plan_created_at ASC
   `
 
@@ -772,18 +753,59 @@ export async function getAccountPlansForPipeline(
 
 /**
  * Get resource changes for a specific pipeline
- * NOTE: The resource_changes table does not have pipeline_id columns in the schema.
- * Resources can only be queried by account_id. This function returns empty array.
- * To get resources for a pipeline, query by account_id from account_plans instead.
+ * First gets account IDs from account_plans, then queries resources separately
  */
 export async function getResourceChangesForPipeline(
   pipelineId: string,
   limit: number = 500,
   environment: 'commercial' | 'govcloud' = 'govcloud'
 ): Promise<ResourceChange[]> {
-  // Resource changes table doesn't have pipeline_id column - return empty array
-  logger.info(`[Pipeline Queries] Skipping resource changes query - table has no pipeline_id column`)
-  return []
+  const cacheKey = `pipelines:resources:${pipelineId}`
+
+  try {
+    // First, get the account plans for this pipeline to get the list of accounts
+    const accountPlans = await getAccountPlansForPipeline(pipelineId, environment)
+
+    if (accountPlans.length === 0) {
+      logger.info(`[Pipeline Queries] No account plans found for pipeline ${pipelineId}`)
+      return []
+    }
+
+    // Get unique account IDs
+    const accountIds = [...new Set(accountPlans.map(p => p.account_id))]
+    logger.info(`[Pipeline Queries] Found ${accountIds.length} accounts for pipeline ${pipelineId}: ${accountIds.join(', ')}`)
+
+    // Query resources for each account with this pipeline_id
+    const config = getPipelineEnvironmentConfig(environment)
+    const accountIdList = accountIds.map(id => `'${id}'`).join(',')
+
+    const sql = `
+      SELECT
+        account_id,
+        resource_address,
+        resource_type,
+        module_name,
+        change_action,
+        applied,
+        apply_success,
+        timestamp
+      FROM ${config.database}.resource_changes
+      WHERE year >= CAST(year(date_add('day', -90, current_date)) AS VARCHAR)
+        AND month >= CAST(month(date_add('day', -90, current_date)) AS VARCHAR)
+        AND account_id IN (${accountIdList})
+        AND plan_pipeline_id = ${pipelineId}
+      LIMIT ${limit}
+    `
+
+    logger.info(`[Pipeline Queries] Querying resources for pipeline ${pipelineId} with ${accountIds.length} accounts`)
+    const results = await executeAthenaQuery(sql, `resource-changes-pipeline-${pipelineId}`, environment, cacheKey) as ResourceChange[]
+    logger.info(`[Pipeline Queries] Found ${results.length} resource changes for pipeline ${pipelineId}`)
+
+    return results
+  } catch (error) {
+    logger.error(`[Pipeline Queries] Failed to fetch resources for pipeline ${pipelineId}:`, error)
+    throw error
+  }
 }
 
 /**
@@ -797,6 +819,7 @@ export async function getErrorDetailsForPipeline(
   const config = getPipelineEnvironmentConfig(environment)
 
   // Query needs partition filtering for Athena - use a 90 day lookback
+  // Note: pipeline_id is a numeric column
   const sql = `
     SELECT
       pipeline_id,
@@ -810,7 +833,7 @@ export async function getErrorDetailsForPipeline(
     FROM ${config.database}.error_details
     WHERE year >= CAST(year(date_add('day', -90, current_date)) AS VARCHAR)
       AND month >= CAST(month(date_add('day', -90, current_date)) AS VARCHAR)
-      AND pipeline_id = '${pipelineId}'
+      AND pipeline_id = ${pipelineId}
     ORDER BY timestamp ASC
   `
 
@@ -819,8 +842,7 @@ export async function getErrorDetailsForPipeline(
 
 /**
  * Get module-level breakdown for a specific pipeline
- * NOTE: The resource_changes table does not have pipeline_id columns in the schema.
- * Resources can only be queried by account_id. This function returns empty array.
+ * First gets account IDs from account_plans, then queries resources separately
  */
 export async function getModuleBreakdownForPipeline(
   pipelineId: string,
@@ -832,9 +854,52 @@ export async function getModuleBreakdownForPipeline(
   updates: number
   destroys: number
 }>> {
-  // Resource changes table doesn't have pipeline_id column - return empty array
-  logger.info(`[Pipeline Queries] Skipping module breakdown query - table has no pipeline_id column`)
-  return []
+  const cacheKey = `pipelines:modules:${pipelineId}`
+
+  try {
+    // First, get the account plans for this pipeline to get the list of accounts
+    const accountPlans = await getAccountPlansForPipeline(pipelineId, environment)
+
+    if (accountPlans.length === 0) {
+      logger.info(`[Pipeline Queries] No account plans found for pipeline ${pipelineId}`)
+      return []
+    }
+
+    // Get unique account IDs
+    const accountIds = [...new Set(accountPlans.map(p => p.account_id))]
+
+    // Query module breakdown for these accounts with this pipeline_id
+    const config = getPipelineEnvironmentConfig(environment)
+    const accountIdList = accountIds.map(id => `'${id}'`).join(',')
+
+    const sql = `
+      SELECT
+        module_name,
+        COUNT(*) as total_changes,
+        SUM(CASE WHEN change_action = 'create' THEN 1 ELSE 0 END) as creates,
+        SUM(CASE WHEN change_action = 'update' THEN 1 ELSE 0 END) as updates,
+        SUM(CASE WHEN change_action = 'delete' OR change_action = 'destroy' THEN 1 ELSE 0 END) as destroys
+      FROM ${config.database}.resource_changes
+      WHERE year >= CAST(year(date_add('day', -90, current_date)) AS VARCHAR)
+        AND month >= CAST(month(date_add('day', -90, current_date)) AS VARCHAR)
+        AND account_id IN (${accountIdList})
+        AND plan_pipeline_id = ${pipelineId}
+      GROUP BY module_name
+      ORDER BY total_changes DESC
+      LIMIT 50
+    `
+
+    return executeAthenaQuery(sql, `module-breakdown-pipeline-${pipelineId}`, environment, cacheKey) as Promise<Array<{
+      module_name: string
+      total_changes: number
+      creates: number
+      updates: number
+      destroys: number
+    }>>
+  } catch (error) {
+    logger.error(`[Pipeline Queries] Failed to fetch module breakdown for pipeline ${pipelineId}:`, error)
+    throw error
+  }
 }
 
 /**
@@ -853,6 +918,8 @@ export async function getAccountBreakdown(
       account_name,
       COUNT(*) as total_runs,
       SUM(CASE WHEN plan_status = 'applied' THEN 1 ELSE 0 END) as successful_runs,
+      SUM(CASE WHEN plan_status = 'failed' THEN 1 ELSE 0 END) as failed_runs,
+      SUM(CASE WHEN plan_status = 'pending' THEN 1 ELSE 0 END) as pending_runs,
       CAST(SUM(CASE WHEN plan_status = 'applied' THEN 1 ELSE 0 END) AS DOUBLE) / NULLIF(COUNT(*), 0) * 100 as success_rate,
       MAX(plan_created_at) as last_run
     FROM ${config.database}.account_plans
@@ -868,6 +935,7 @@ export async function getAccountBreakdown(
 
 /**
  * Get resource breakdown for organization view
+ * Groups by specific resource address (name) instead of just type
  */
 export async function getOrganizationResourceBreakdown(
   days: number = 30,
@@ -878,13 +946,14 @@ export async function getOrganizationResourceBreakdown(
 
   const sql = `
     SELECT
+      resource_address,
       resource_type,
       change_action,
       COUNT(*) as count
     FROM ${config.database}.resource_changes
     WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
       AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
-    GROUP BY resource_type, change_action
+    GROUP BY resource_address, resource_type, change_action
     ORDER BY count DESC
     LIMIT 20
   `
@@ -968,4 +1037,160 @@ export async function getActivityHeatMap(
   `
 
   return executeAthenaQuery(sql, 'heatmap', environment, cacheKey)
+}
+
+/**
+ * Get repository breakdown with account-level success/failure metrics
+ * Returns aggregated stats by repository, tracking account success/failure rather than pipeline status
+ */
+export async function getRepositoryBreakdownWithAccounts(
+  days: number = 30,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
+): Promise<any[]> {
+  const cacheKey = `pipelines:repo-breakdown-accounts:${days}`
+  const config = getPipelineEnvironmentConfig(environment)
+
+  const sql = `
+    SELECT
+      plan_pipeline_id,
+      COUNT(DISTINCT account_id) as total_accounts,
+      SUM(CASE WHEN plan_status = 'applied' THEN 1 ELSE 0 END) as successful_accounts,
+      SUM(CASE WHEN plan_status = 'failed' THEN 1 ELSE 0 END) as failed_accounts,
+      SUM(CASE WHEN plan_status = 'pending' THEN 1 ELSE 0 END) as pending_accounts,
+      CAST(SUM(CASE WHEN plan_status = 'applied' THEN 1 ELSE 0 END) AS DOUBLE) / NULLIF(COUNT(*), 0) * 100 as account_success_rate,
+      MAX(plan_created_at) as last_run
+    FROM ${config.database}.account_plans
+    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
+      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+    GROUP BY plan_pipeline_id
+    ORDER BY COUNT(DISTINCT account_id) DESC
+    LIMIT 100
+  `
+
+  return executeAthenaQuery(sql, 'repo-breakdown-accounts', environment, cacheKey)
+}
+
+/**
+ * Get all unique pipeline authors with their aggregate metrics
+ */
+export async function getAllPipelineAuthors(
+  days: number = 30,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
+): Promise<Array<{
+  commit_author: string
+  total_runs: number
+  successful_runs: number
+  failed_runs: number
+  success_rate: number
+  total_accounts: number
+  last_run: string
+}>> {
+  const cacheKey = `pipelines:authors-list:${days}`
+  const config = getPipelineEnvironmentConfig(environment)
+
+  const sql = `
+    SELECT
+      commit_author,
+      COUNT(*) as total_runs,
+      SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful_runs,
+      SUM(CASE WHEN status IN ('failure', 'partial_failure') THEN 1 ELSE 0 END) as failed_runs,
+      CAST(SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS DOUBLE) / NULLIF(COUNT(*), 0) * 100 as success_rate,
+      SUM(account_count) as total_accounts,
+      MAX(timestamp_start) as last_run
+    FROM ${config.database}.pipeline_runs
+    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
+      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+      AND commit_author IS NOT NULL
+      AND commit_author != ''
+    GROUP BY commit_author
+    ORDER BY total_runs DESC
+  `
+
+  return executeAthenaQuery(sql, 'authors-list', environment, cacheKey) as Promise<Array<{
+    commit_author: string
+    total_runs: number
+    successful_runs: number
+    failed_runs: number
+    success_rate: number
+    total_accounts: number
+    last_run: string
+  }>>
+}
+
+/**
+ * Get pipeline runs for a specific author
+ */
+export async function getPipelineRunsByAuthor(
+  authorEmail: string,
+  days: number = 30,
+  limit: number = 200,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
+): Promise<PipelineRun[]> {
+  const cacheKey = `pipelines:author-runs:${authorEmail}:${days}:${limit}`
+  const config = getPipelineEnvironmentConfig(environment)
+
+  // Use LOWER() for case-insensitive matching since email addresses should be case-insensitive
+  const sql = `
+    SELECT
+      pipeline_id,
+      job_id,
+      job_name,
+      job_url,
+      job_stage,
+      timestamp_start,
+      timestamp_end,
+      duration_total_seconds,
+      status,
+      account_count,
+      accounts_processed,
+      commit_author,
+      terraform_version
+    FROM ${config.database}.pipeline_runs
+    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
+      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+      AND LOWER(commit_author) LIKE LOWER('%${authorEmail}%')
+    ORDER BY timestamp_start DESC
+    LIMIT ${limit}
+  `
+
+  return executeAthenaQuery(sql, `author-runs-${authorEmail}`, environment, cacheKey) as Promise<PipelineRun[]>
+}
+
+/**
+ * Get author-specific summary metrics
+ */
+export async function getAuthorSummary(
+  authorEmail: string,
+  days: number = 30,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
+): Promise<{
+  total_runs: number
+  successful_runs: number
+  failed_runs: number
+  success_rate: number
+  avg_duration: number
+  total_accounts: number
+  unique_accounts: number
+  repositories: string[]
+} | null> {
+  const cacheKey = `pipelines:author-summary:${authorEmail}:${days}`
+  const config = getPipelineEnvironmentConfig(environment)
+
+  const sql = `
+    SELECT
+      COUNT(*) as total_runs,
+      SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful_runs,
+      SUM(CASE WHEN status IN ('failure', 'partial_failure') THEN 1 ELSE 0 END) as failed_runs,
+      CAST(SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS DOUBLE) / NULLIF(COUNT(*), 0) * 100 as success_rate,
+      AVG(duration_total_seconds) as avg_duration,
+      SUM(account_count) as total_accounts,
+      COUNT(DISTINCT pipeline_id) as unique_pipelines
+    FROM ${config.database}.pipeline_runs
+    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
+      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+      AND LOWER(commit_author) LIKE LOWER('%${authorEmail}%')
+  `
+
+  const results = await executeAthenaQuery(sql, `author-summary-${authorEmail}`, environment, cacheKey)
+  return results.length > 0 ? results[0] : null
 }

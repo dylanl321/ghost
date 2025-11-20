@@ -106,7 +106,10 @@ const onSearch = () => {
 
     const merged_results: any[] = []
 
-    // 1. Users (Graph API)
+    // 1. Accounts (local enclaves) - prioritized first
+    merged_results.push(...searchAccounts())
+
+    // 2. Users (Graph API)
     try {
       const userResults = await searchUsers(user.value?.accessToken || '', query.value, 5)
       merged_results.push(
@@ -121,9 +124,6 @@ const onSearch = () => {
     } catch (e) {
       console.warn('User search failed', e)
     }
-
-    // 2. Accounts (local enclaves)
-    merged_results.push(...searchAccounts())
 
     results.value = merged_results
     loading.value = false

@@ -47,6 +47,7 @@ import {
   GridComponent,
   LegendComponent
 } from 'echarts/components'
+import { getShortAccountName, parseAccountName } from '~/utils/account-name-parser'
 
 // Register required ECharts modules
 echarts.use([
@@ -105,7 +106,10 @@ const totalRuns = computed(() => {
 
 const chartOptions = computed(() => {
   const accounts = displayedAccounts.value
-  const accountNames = accounts.map(a => a.account_name || a.account_id)
+  // Parse and shorten account names for display
+  const accountNames = accounts.map(a => getShortAccountName(a.account_name || a.account_id, 25))
+  // Keep full names for tooltips
+  const fullAccountNames = accounts.map(a => a.account_name || a.account_id)
   const totalRunsData = accounts.map(a => a.total_runs || 0)
   const successRateData = accounts.map(a => a.success_rate || 0)
 
@@ -116,8 +120,10 @@ const chartOptions = computed(() => {
         type: 'shadow'
       },
       formatter: (params: any) => {
-        const accountName = params[0].axisValue
-        let result = `<strong>${accountName}</strong><br/>`
+        // Get the index to find the full account name
+        const index = params[0]?.dataIndex ?? 0
+        const fullAccountName = fullAccountNames[index] || params[0].axisValue
+        let result = `<strong>${fullAccountName}</strong><br/>`
         params.forEach((p: any) => {
           const value = p.seriesName === 'Success Rate' ? `${p.data}%` : p.data
           result += `${p.marker} ${p.seriesName}: ${value}<br/>`
@@ -149,11 +155,7 @@ const chartOptions = computed(() => {
       type: 'category',
       data: accountNames,
       axisLabel: {
-        color: '#9ca3af',
-        formatter: (value: string) => {
-          // Truncate long account names
-          return value.length > 25 ? value.substring(0, 22) + '...' : value
-        }
+        color: '#9ca3af'
       },
       inverse: true // Top to bottom
     },

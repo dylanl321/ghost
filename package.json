@@ -12,7 +12,15 @@
     "bundle:support": "tsx scripts/bundle-support-articles.ts",
     "seed:email-templates": "tsx scripts/seed-email-templates.ts",
     "test:email": "tsx scripts/test-email.ts",
-    "test:scheduled-report": "tsx scripts/test-scheduled-report.ts"
+    "test:scheduled-report": "tsx scripts/test-scheduled-report.ts",
+    "validate": "tsx scripts/validate-codebase.ts",
+    "validate:fix": "tsx scripts/validate-codebase.ts --fix",
+    "check:types": "npx nuxi typecheck",
+    "check:lint": "npx eslint . --ext .ts,.vue,.js",
+    "check:lint:fix": "npx eslint . --ext .ts,.vue,.js --fix",
+    "check:unused": "npx ts-prune --project tsconfig.json",
+    "check:deps": "npx depcheck --ignores=\"@nuxt/*,nuxt-*,@types/*,eslint,typescript\"",
+    "check:files": "npx unimported"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^7.3.4",
@@ -88,5 +96,11 @@
     "vue-echarts": "^8.0.0-beta.1",
     "vue-router": "^4.5.1",
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@iconify-json/simple-icons": "^1.2.59",
+    "depcheck": "^1.4.7",
+    "ts-prune": "^0.10.3",
+    "unimported": "^1.31.0"
   }
 }

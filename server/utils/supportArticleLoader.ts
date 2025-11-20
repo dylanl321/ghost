@@ -1,19 +1,5 @@
 import { logger } from './logger'
-import { supportArticlesBundle } from './support-articles-bundle'
-
-export interface SupportArticle {
-  id: string
-  title: string
-  content: string
-  lastUpdated?: string
-  icon?: string
-}
-
-export interface SupportCategory {
-  id: string
-  title: string
-  articles: SupportArticle[]
-}
+import { supportArticlesBundle, type SupportArticle, type SupportCategory } from './support-articles-bundle'
 
 /**
  * Load all support articles from the bundled data

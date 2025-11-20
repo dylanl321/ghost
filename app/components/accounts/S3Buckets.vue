@@ -312,12 +312,35 @@ const props = withDefaults(defineProps<Props>(), {
   environment: 'govcloud'
 })
 
-const loading = ref(true)
-const buckets = ref<any[]>([])
-const nextToken = ref<string | undefined>(undefined)
-const hasMore = ref(false)
+// Use the Config Resources composable
+const {
+  resources: buckets,
+  loading,
+  error,
+  pagination,
+  fetch: fetchResources,
+  fetchNextPage,
+  hasMore
+} = useConfigResources({
+  environment: props.environment,
+  resourceType: 'AWS::S3::Bucket',
+  accountIds: props.accountId,
+  responseDetail: 'full',
+  limit: 1000,
+  immediate: true,
+  onSuccess: (data) => {
+    // Auto-analyze policies after loading buckets
+    if (data.resources.length > 0) {
+      analyzePolicies()
+    }
+  },
+  onError: (err) => {
+    console.error('Error fetching buckets:', err)
+  }
+})
+
 const loadingMore = ref(false)
-const errorMessage = ref<string | null>(null)
+const errorMessage = computed(() => error.value?.message || null)
 const showLandingZoneBuckets = ref(false)
 const analyzingPolicies = ref(false)
 const policyAnalysis = ref<any>(null)
@@ -330,56 +353,18 @@ const columns = [
   { key: 'resourceId', label: 'Bucket Details' }
 ]
 
-// Fetch buckets
-const fetchBuckets = async (append = false) => {
-  if (append) {
-    loadingMore.value = true
-  } else {
-    loading.value = true
-    buckets.value = []
-    nextToken.value = undefined
-    errorMessage.value = null
-  }
-
-  try {
-    const url = `/api/config/resources?environment=${props.environment}&resourceType=AWS::S3::Bucket&accountIds=${props.accountId}&responseDetail=full&limit=1000${nextToken.value ? `&nextToken=${nextToken.value}` : ''}`
-
-    const response = await fetch(url)
-    const data = await response.json()
-
-    if (!data.success) {
-      console.error('S3 fetch failed:', data)
-      errorMessage.value = data.message || 'Failed to fetch S3 buckets'
-    }
-
-    if (append) {
-      buckets.value = [...buckets.value, ...(data.data?.resources || [])]
-    } else {
-      buckets.value = data.data?.resources || []
-    }
-
-    nextToken.value = data.data?.pagination?.nextToken
-    hasMore.value = data.data?.pagination?.hasMore || false
-
-    // Auto-analyze policies after loading buckets
-    if (!append && buckets.value.length > 0) {
-      await analyzePolicies()
-    }
-  } catch (error) {
-    console.error('Error fetching buckets:', error)
-    errorMessage.value = (error as Error).message || 'Unknown error'
-    if (!append) {
-      buckets.value = []
-    }
-  } finally {
-    loading.value = false
-    loadingMore.value = false
-  }
-}
-
-const loadMore = () => {
+// Load more buckets
+const loadMore = async () => {
   if (hasMore.value && !loadingMore.value) {
-    fetchBuckets(true)
+    loadingMore.value = true
+    try {
+      const data = await fetchNextPage()
+      if (data && data.resources.length > 0) {
+        await analyzePolicies()
+      }
+    } finally {
+      loadingMore.value = false
+    }
   }
 }
 
@@ -687,12 +672,15 @@ const copyPolicy = async () => {
   }
 }
 
-onMounted(() => {
-  fetchBuckets()
+// Watch for account changes and refetch
+watch(() => props.accountId, () => {
+  fetchResources()
+  policyAnalysis.value = null // Clear policy analysis when account changes
 })
 
-watch(() => props.accountId, () => {
-  fetchBuckets()
-  policyAnalysis.value = null // Clear policy analysis when account changes
+// Watch for environment changes and refetch
+watch(() => props.environment, () => {
+  fetchResources()
+  policyAnalysis.value = null
 })
 </script>

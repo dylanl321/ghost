@@ -11,6 +11,7 @@ import {
   calculateNextRunTime
 } from './scheduled-reports'
 import { generateCostReport } from './report-generator'
+import { generateDatasetReport } from './dataset-report-generator'
 import { sendReportEmail, renderTemplate, getDefaultTemplate } from './email-service'
 import { claimExecutionLock, createLockId } from './execution-locks'
 import { uploadReportToS3 } from './s3-reports-storage'
@@ -29,9 +30,16 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
   logger.info(`Executing scheduled report: ${report.reportName} (${report.reportId})`)
 
   try {
-    // Step 1: Generate the report
-    logger.info('  → Generating report...')
-    const reportResult = await generateCostReport(report.reportConfig)
+    // Step 1: Generate the report (route based on report type)
+    logger.info(`  → Generating ${report.reportType || 'cost'} report...`)
+
+    let reportResult
+    if (report.reportType === 'dataset') {
+      reportResult = await generateDatasetReport(report.reportConfig)
+    } else {
+      // Default to cost report for backwards compatibility
+      reportResult = await generateCostReport(report.reportConfig)
+    }
 
     if (!reportResult.success || !reportResult.buffer) {
       throw new Error(reportResult.error || 'Failed to generate report')

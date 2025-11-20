@@ -19,6 +19,21 @@
           >
             View Repositories
           </UButton>
+          <!-- View Authors Button -->
+          <UButton
+            to="/admin/pipelines/authors"
+            color="primary"
+            variant="soft"
+            icon="i-heroicons-users"
+          >
+            View Authors
+          </UButton>
+          <!-- Author Filter -->
+          <PipelinesAuthorSelector
+            v-model="selectedAuthor"
+            :days="selectedDays"
+            environment="govcloud"
+          />
           <!-- Time Range Selector -->
           <USelectMenu
             v-model="selectedDays"
@@ -77,12 +92,15 @@
           </div>
         </UCard>
 
-        <!-- Success Rate -->
+        <!-- Account Success Rate -->
         <UCard>
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm text-gray-400">Success Rate</p>
-              <p class="text-2xl font-bold mt-1">{{ formatPercentage(summary?.success_rate) }}</p>
+              <p class="text-sm text-gray-400">Account Success Rate</p>
+              <p class="text-2xl font-bold mt-1">{{ formatPercentage(summary?.account_success_rate) }}</p>
+              <p class="text-xs text-gray-500 mt-1">
+                {{ formatNumber(summary?.successful_accounts) }} / {{ formatNumber(summary?.total_account_plans) }} accounts
+              </p>
             </div>
             <UIcon name="i-heroicons-check-circle" class="w-8 h-8 text-green-500" />
           </div>
@@ -107,6 +125,45 @@
               <p class="text-2xl font-bold mt-1">{{ formatDuration(summary?.avg_duration) }}</p>
             </div>
             <UIcon name="i-heroicons-clock" class="w-8 h-8 text-orange-500" />
+          </div>
+        </UCard>
+      </div>
+
+      <!-- Row 1.5: Account-Level Details -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <!-- Successful Accounts -->
+        <UCard>
+          <div class="flex items-center justify-between">
+            <div class="flex-1">
+              <p class="text-sm text-gray-400">Successful Accounts</p>
+              <p class="text-2xl font-bold mt-1 text-green-400">{{ formatNumber(summary?.successful_accounts) }}</p>
+              <p class="text-xs text-gray-500 mt-1">Plans applied successfully</p>
+            </div>
+            <UIcon name="i-heroicons-check-badge" class="w-8 h-8 text-green-500" />
+          </div>
+        </UCard>
+
+        <!-- Failed Accounts -->
+        <UCard>
+          <div class="flex items-center justify-between">
+            <div class="flex-1">
+              <p class="text-sm text-gray-400">Failed Accounts</p>
+              <p class="text-2xl font-bold mt-1 text-red-400">{{ formatNumber(summary?.failed_accounts) }}</p>
+              <p class="text-xs text-gray-500 mt-1">Plans failed to apply</p>
+            </div>
+            <UIcon name="i-heroicons-x-circle" class="w-8 h-8 text-red-500" />
+          </div>
+        </UCard>
+
+        <!-- Pending Accounts -->
+        <UCard>
+          <div class="flex items-center justify-between">
+            <div class="flex-1">
+              <p class="text-sm text-gray-400">Pending Accounts</p>
+              <p class="text-2xl font-bold mt-1 text-yellow-400">{{ formatNumber(summary?.pending_accounts) }}</p>
+              <p class="text-xs text-gray-500 mt-1">Awaiting application</p>
+            </div>
+            <UIcon name="i-heroicons-clock" class="w-8 h-8 text-yellow-500" />
           </div>
         </UCard>
       </div>
@@ -164,7 +221,7 @@
 
       <!-- Row 4: Repository Breakdown Table (Full Width) -->
       <PipelinesRepositoryBreakdownTable
-        :timeline-data="timelineData"
+        :timeline-data="filteredTimelineData"
         :loading="loading"
       />
     </div>
@@ -179,6 +236,7 @@ import PipelinesOrganizationTrendChart from '~/components/pipelines/Organization
 import PipelinesActivityHeatMap from '~/components/pipelines/ActivityHeatMap.vue'
 import PipelinesAccountPerformanceChart from '~/components/pipelines/AccountPerformanceChart.vue'
 import PipelinesRepositoryBreakdownTable from '~/components/pipelines/RepositoryBreakdownTable.vue'
+import PipelinesAuthorSelector from '~/components/pipelines/AuthorSelector.vue'
 
 // Admin-only access control
 definePageMeta({
@@ -198,6 +256,9 @@ const selectedDaysLabel = computed(() => {
   const option = timeRangeOptions.find(o => o.value === selectedDays.value)
   return option?.label || 'Last 30 Days'
 })
+
+// Author filter
+const selectedAuthor = ref<string | null>(null)
 
 // Data state
 const loading = ref(true)
@@ -260,8 +321,21 @@ async function fetchPipelineData() {
   }
 }
 
-// Watch for time range changes
-watch(selectedDays, () => {
+// Filter timeline data by author
+const filteredTimelineData = computed(() => {
+  if (!selectedAuthor.value || !timelineData.value) {
+    return timelineData.value
+  }
+
+  // Filter by author email (case-insensitive partial match)
+  return timelineData.value.filter((run: any) => {
+    if (!run.commit_author) return false
+    return run.commit_author.toLowerCase().includes(selectedAuthor.value!.toLowerCase())
+  })
+})
+
+// Watch for time range changes and author changes
+watch([selectedDays, selectedAuthor], () => {
   fetchPipelineData()
 })
 

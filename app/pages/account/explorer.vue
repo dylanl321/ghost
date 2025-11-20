@@ -117,12 +117,14 @@
 
           <!-- Project Name column -->
           <template #projectName-data="{ row }">
-            <div class="flex items-center gap-2 mb-2">
-              <span class="w-3 h-3 rounded-full"
-                :class="row.enclaveStatus !== 'Decommissioned' ? 'bg-green-500' : 'bg-red-500'" />
-              <span>{{ row.projectName || row.accountId }}</span>
-            </div>
-            <p class="text-xs">{{ row.awsAccountEmail }}</p>
+            <NuxtLink :to="`/account/${row.awsStandardAccountID}`" class="hover:underline">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="w-3 h-3 rounded-full"
+                  :class="row.enclaveStatus !== 'Decommissioned' ? 'bg-green-500' : 'bg-red-500'" />
+                <span>{{ row.projectName || row.accountId }}</span>
+              </div>
+              <p class="text-xs">{{ row.awsAccountEmail }}</p>
+            </NuxtLink>
           </template>
 
           <!-- Account IDs column -->

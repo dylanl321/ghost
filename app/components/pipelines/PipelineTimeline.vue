@@ -59,26 +59,64 @@
           </div>
         </template>
 
-        <!-- Repository column -->
+        <!-- Repository column (clickable link to admin repo page) -->
         <template #repository-data="{ row }">
-          <div class="flex items-center gap-2">
-            <UIcon name="i-heroicons-folder" class="w-4 h-4 text-gray-400" />
-            <span class="text-sm text-gray-300">{{ getRepositoryName(row.job_url) }}</span>
-          </div>
+          <ClientOnly>
+            <NuxtLink
+              v-if="isAdmin && row.job_url"
+              :to="getRepositoryUrl(row.job_url)"
+              class="flex items-center gap-2 text-blue-400 hover:text-blue-300"
+            >
+              <UIcon name="i-heroicons-folder" class="w-4 h-4" />
+              <span class="text-sm">{{ getRepositoryName(row.job_url) }}</span>
+            </NuxtLink>
+            <div v-else class="flex items-center gap-2">
+              <UIcon name="i-heroicons-folder" class="w-4 h-4 text-gray-400" />
+              <span class="text-sm text-gray-300">{{ getRepositoryName(row.job_url) }}</span>
+            </div>
+          </ClientOnly>
         </template>
 
-        <!-- Pipeline ID (shortened) -->
+        <!-- Pipeline ID (clickable link to admin detail page) -->
         <template #pipeline_id-data="{ row }">
-          <code class="text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded">
-            #{{ row.pipeline_id }}
-          </code>
+          <ClientOnly>
+            <NuxtLink
+              v-if="isAdmin"
+              :to="getPipelineDetailUrl(row)"
+              class="text-blue-400 hover:text-blue-300 font-mono text-xs"
+            >
+              #{{ row.pipeline_id }}
+            </NuxtLink>
+            <code v-else class="text-xs text-gray-400 bg-gray-800 px-2 py-1 rounded">
+              #{{ row.pipeline_id }}
+            </code>
+          </ClientOnly>
         </template>
 
         <!-- Account count -->
         <template #account_count-data="{ row }">
-          <UBadge color="gray" variant="subtle" size="sm">
+          <UTooltip
+            v-if="row.account_count === 0"
+            text="This pipeline run targeted all accounts"
+          >
+            <UBadge color="blue" variant="subtle" size="sm">
+              All
+            </UBadge>
+          </UTooltip>
+          <UBadge v-else color="gray" variant="subtle" size="sm">
             {{ row.account_count }}
           </UBadge>
+        </template>
+
+        <!-- Author column with badge -->
+        <template #commit_author-data="{ row }">
+          <PipelinesAuthorBadge
+            v-if="row.commit_author"
+            :author-field="row.commit_author"
+            :show-contact-icons="false"
+            :max-name-length="20"
+          />
+          <span v-else class="text-xs text-gray-400">Unknown</span>
         </template>
 
         <!-- Terraform version -->
@@ -93,6 +131,8 @@
 </template>
 
 <script setup lang="ts">
+import PipelinesAuthorBadge from './AuthorBadge.vue'
+
 interface PipelineRun {
   pipeline_id: string
   job_id: string
@@ -113,6 +153,8 @@ const props = defineProps<{
   loading: boolean
 }>()
 
+const { isAdmin } = useUserRoles()
+
 const columns = [
   {
     key: 'status',
@@ -132,6 +174,11 @@ const columns = [
   {
     key: 'repository',
     label: 'Repository',
+    sortable: false
+  },
+  {
+    key: 'commit_author',
+    label: 'Author',
     sortable: false
   },
   {
@@ -229,5 +276,21 @@ function getRepositoryName(jobUrl: string): string {
   } catch {
     return 'Unknown'
   }
+}
+
+function getRepositoryPath(jobUrl: string): string {
+  return getRepositoryName(jobUrl)
+}
+
+function getRepositoryUrl(jobUrl: string): string {
+  const repoPath = getRepositoryPath(jobUrl)
+  if (repoPath === 'Unknown') return '#'
+  return `/admin/pipelines/${encodeURIComponent(repoPath)}`
+}
+
+function getPipelineDetailUrl(row: PipelineRun): string {
+  const repoPath = getRepositoryPath(row.job_url)
+  if (repoPath === 'Unknown') return '#'
+  return `/admin/pipelines/${encodeURIComponent(repoPath)}/${row.pipeline_id}`
 }
 </script>

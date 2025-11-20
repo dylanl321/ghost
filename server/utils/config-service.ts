@@ -83,6 +83,10 @@ export async function getConfigClient(
 
 /**
  * List aggregate discovered resources with caching
+ *
+ * NOTE: AWS Config API limitation - the Filters.AccountId parameter only accepts
+ * a single account ID, not an array. When multiple account IDs are provided,
+ * this function queries them in parallel and combines results.
  */
 export async function listAggregateResources(
   aggregatorName: string,
@@ -91,12 +95,36 @@ export async function listAggregateResources(
   region?: string
 ): Promise<{ resources: ResourceIdentifier[]; nextToken?: string }> {
   const cache = getCacheManager()
+
+  // If multiple accounts provided, query them in parallel
+  if (filter?.accountIds && filter.accountIds.length > 1) {
+    logger.info(`[Config] Multiple accounts (${filter.accountIds.length}) provided, querying in parallel`)
+
+    const accountPromises = filter.accountIds.map(accountId =>
+      listAggregateResources(
+        aggregatorName,
+        { ...filter, accountIds: [accountId] },
+        environment,
+        region
+      )
+    )
+
+    const results = await Promise.all(accountPromises)
+    const allResources = results.flatMap(r => r.resources)
+    const maxItems = filter.limit || 100
+
+    return {
+      resources: allResources.slice(0, maxItems),
+      nextToken: undefined // Can't paginate across multiple accounts
+    }
+  }
+
   const cacheKey = CACHE_KEYS.RESOURCE_LIST(
-    aggregatorName, 
+    aggregatorName,
     filter?.resourceType,
     filter?.accountIds?.[0]
   )
-  
+
   // Check cache for non-paginated requests
   if (!filter?.nextToken) {
     const cached = await cache.get<{ resources: ResourceIdentifier[]; nextToken?: string }>(cacheKey)
@@ -105,9 +133,9 @@ export async function listAggregateResources(
       return cached
     }
   }
-  
+
   const client = await getConfigClient(environment, region)
-  
+
   // First, verify the aggregator exists
   try {
     const { DescribeConfigurationAggregatorsCommand } = await import('@aws-sdk/client-config-service')
@@ -115,11 +143,11 @@ export async function listAggregateResources(
       ConfigurationAggregatorNames: [aggregatorName]
     })
     const aggregatorResponse = await client.send(checkAggregatorCommand)
-    
+
     if (!aggregatorResponse.ConfigurationAggregators?.length) {
       throw new Error(`Config aggregator '${aggregatorName}' not found. Please verify the aggregator name in your ${environment} environment or contact your AWS administrator.`)
     }
-    
+
     logger.info(`[Config] Verified aggregator '${aggregatorName}' exists in ${environment}`)
   } catch (error) {
     if (error.name === 'NoSuchConfigurationAggregatorException' || error.message?.includes('does not exist')) {
@@ -127,11 +155,11 @@ export async function listAggregateResources(
     }
     throw error
   }
-  
+
   const resources: ResourceIdentifier[] = []
   let currentToken = filter?.nextToken
   const maxItems = filter?.limit || 100
-  
+
   // If no resource type specified, we need to query common resource types
   // AWS Config requires ResourceType parameter
   if (!filter?.resourceType) {
@@ -142,30 +170,36 @@ export async function listAggregateResources(
       'AWS::RDS::DBInstance',
       'AWS::Lambda::Function'
     ]
-    
+
     logger.info(`[Config] No resource type specified, querying ${commonResourceTypes.length} common types`)
-    
+
     for (const resourceType of commonResourceTypes) {
       if (resources.length >= maxItems) break
-      
+
       try {
         const params: ListAggregateDiscoveredResourcesCommandInput = {
           ConfigurationAggregatorName: aggregatorName,
           ResourceType: resourceType,
           Limit: Math.min(maxItems - resources.length, 100)
         }
-        
+
+        // Build Filters object - AWS Config API only accepts single values
+        const filters: any = {}
         if (filter?.accountIds?.length === 1) {
-          params.Filters = { AccountId: filter.accountIds[0] }
+          filters.AccountId = filter.accountIds[0]
         }
-        
         if (filter?.regions && filter.regions.length > 0) {
-          params.Filters = { ...params.Filters, Region: filter.regions[0] }
+          filters.Region = filter.regions[0]
         }
-        
+
+        // Only add Filters if we have at least one filter
+        if (Object.keys(filters).length > 0) {
+          params.Filters = filters
+        }
+
         const command = new ListAggregateDiscoveredResourcesCommand(params)
         const response = await client.send(command)
-        
+
         if (response.ResourceIdentifiers) {
           resources.push(...response.ResourceIdentifiers)
         }
@@ -173,18 +207,18 @@ export async function listAggregateResources(
         logger.warn(`[Config] Failed to list ${resourceType}:`, error)
       }
     }
-    
+
     const result = { resources: resources.slice(0, maxItems), nextToken: undefined }
-    
+
     // Cache the result
     if (resources.length > 0) {
       await cache.set(cacheKey, result, CACHE_TTL.RESOURCE_LIST)
       logger.info(`[Config] Cached resource list: ${cacheKey}`)
     }
-    
+
     return result
   }
-  
+
   // Original logic for when resource type is specified
   do {
     const params: ListAggregateDiscoveredResourcesCommandInput = {
@@ -192,43 +226,51 @@ export async function listAggregateResources(
       ResourceType: filter.resourceType,
       Limit: Math.min(maxItems - resources.length, 100)
     }
-    
+
     // Only add optional fields if they have values
     if (currentToken) {
       params.NextToken = currentToken
     }
-    
+
+    // Build Filters object - AWS Config API only accepts single values
+    const filters: any = {}
     if (filter?.accountIds?.length === 1) {
-      params.Filters = { AccountId: filter.accountIds[0] }
+      filters.AccountId = filter.accountIds[0]
     }
-    
     if (filter?.regions && filter.regions.length > 0) {
-      params.Filters = { ...params.Filters, Region: filter.regions[0] }
+      filters.Region = filter.regions[0]
     }
-    
+
+    // Only add Filters if we have at least one filter
+    if (Object.keys(filters).length > 0) {
+      params.Filters = filters
+    }
+
+    logger.info(`[Config] Query params: ${JSON.stringify(params, null, 2)}`)
+
     const command = new ListAggregateDiscoveredResourcesCommand(params)
     const response = await client.send(command)
-    
+
     if (response.ResourceIdentifiers) {
       resources.push(...response.ResourceIdentifiers)
     }
-    
+
     currentToken = response.NextToken
-    
+
     // Stop if we've reached the limit
     if (resources.length >= maxItems) {
       break
     }
   } while (currentToken && !filter?.nextToken) // Only auto-paginate if not manually paginating
-  
+
   const result = { resources, nextToken: currentToken }
-  
+
   // Cache the result if it's not a paginated request
   if (!filter?.nextToken && resources.length > 0) {
     await cache.set(cacheKey, result, CACHE_TTL.RESOURCE_LIST)
     logger.info(`[Config] Cached resource list: ${cacheKey}`)
   }
-  
+
   return result
 }
 
@@ -311,59 +353,70 @@ export async function batchGetResourceConfigs(
   }
   
   logger.info(`[Config] Batch get: ${successful.length} cached, ${uncachedIdentifiers.length} to fetch`)
-  
+
   // Batch fetch uncached resources (max 100 per request)
   const chunks = chunkArray(uncachedIdentifiers, 100)
-  
-  for (const chunk of chunks) {
-    try {
-      const command = new BatchGetAggregateResourceConfigCommand({
-        ConfigurationAggregatorName: aggregatorName,
-        ResourceIdentifiers: chunk
-      })
-      
-      const response = await client.send(command)
-      
-      // Process successful results
-      if (response.BaseConfigurationItems) {
-        for (const item of response.BaseConfigurationItems) {
-          const identifier = chunk.find(id => 
-            id.ResourceId === item.resourceId &&
-            id.SourceAccountId === item.accountId
-          )
-          
-          if (identifier) {
-            const detail = parseConfigurationItem(item as ConfigurationItem, identifier)
-            successful.push(detail)
-            
-            // Cache the result
-            const cacheKey = CACHE_KEYS.RESOURCE_DETAIL(
-              aggregatorName,
-              `${identifier.SourceAccountId}:${identifier.ResourceId}`
+
+  // Process chunks in parallel with concurrency limit of 5 to avoid rate limits
+  const concurrencyLimit = 5
+  const chunkPromises: Promise<void>[] = []
+
+  for (let i = 0; i < chunks.length; i += concurrencyLimit) {
+    const chunkBatch = chunks.slice(i, i + concurrencyLimit)
+
+    const batchPromises = chunkBatch.map(async (chunk) => {
+      try {
+        const command = new BatchGetAggregateResourceConfigCommand({
+          ConfigurationAggregatorName: aggregatorName,
+          ResourceIdentifiers: chunk
+        })
+
+        const response = await client.send(command)
+
+        // Process successful results
+        if (response.BaseConfigurationItems) {
+          for (const item of response.BaseConfigurationItems) {
+            const identifier = chunk.find(id =>
+              id.ResourceId === item.resourceId &&
+              id.SourceAccountId === item.accountId
             )
-            await cache.set(cacheKey, detail, CACHE_TTL.RESOURCE_DETAIL)
+
+            if (identifier) {
+              const detail = parseConfigurationItem(item as ConfigurationItem, identifier)
+              successful.push(detail)
+
+              // Cache the result
+              const cacheKey = CACHE_KEYS.RESOURCE_DETAIL(
+                aggregatorName,
+                `${identifier.SourceAccountId}:${identifier.ResourceId}`
+              )
+              await cache.set(cacheKey, detail, CACHE_TTL.RESOURCE_DETAIL)
+            }
           }
         }
-      }
-      
-      // Process failed results
-      if (response.UnprocessedResourceIdentifiers) {
-        for (const unprocessed of response.UnprocessedResourceIdentifiers) {
+
+        // Process failed results
+        if (response.UnprocessedResourceIdentifiers) {
+          for (const unprocessed of response.UnprocessedResourceIdentifiers) {
+            failed.push({
+              identifier: unprocessed as ResourceIdentifier,
+              error: new Error('Resource could not be processed')
+            })
+          }
+        }
+      } catch (error) {
+        // Add all chunk items to failed if batch request fails
+        for (const identifier of chunk) {
           failed.push({
-            identifier: unprocessed as ResourceIdentifier,
-            error: new Error('Resource could not be processed')
+            identifier: identifier as ResourceIdentifier,
+            error: error as Error
           })
         }
       }
-    } catch (error) {
-      // Add all chunk items to failed if batch request fails
-      for (const identifier of chunk) {
-        failed.push({
-          identifier: identifier as ResourceIdentifier,
-          error: error as Error
-        })
-      }
-    }
+    })
+
+    // Wait for this batch of chunks to complete before starting next batch
+    await Promise.all(batchPromises)
   }
   
   return { successful, failed }

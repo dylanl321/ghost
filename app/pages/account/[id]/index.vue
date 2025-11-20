@@ -352,14 +352,18 @@ const tabs = computed(() => {
       slot: 'policies',
       icon: 'i-heroicons-shield-check',
       disabled: isAccountInactive.value
-    },
-    {
+    }
+  ]
+
+  // Add Pipelines tab for admins only
+  if (isAdmin.value) {
+    baseTabs.push({
       label: 'Pipelines',
       slot: 'pipelines',
       icon: 'i-heroicons-arrow-path',
       disabled: false
-    }
-  ]
+    })
+  }
 
   // Add Notes tab for admins only
   if (isAdmin.value) {

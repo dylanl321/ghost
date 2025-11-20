@@ -4,23 +4,43 @@ import { organizationCache, CacheTags } from '../../utils/cache-manager'
 import getMasterAccountCredentials from '~~/server/utils/credentials/awsAccountCredentials';
 import { ConfigServiceClient, SelectAggregateResourceConfigCommand } from "@aws-sdk/client-config-service"
 import { logger } from '../../utils/logger'
+import type { AWSEnvironmentType } from '../../types'
 
-const region = 'us-gov-west-1'
-const config_aggregator_name = "GDMSAggregator"
+// Environment configuration helper
+function getEnvironmentConfig(environment: AWSEnvironmentType) {
+  if (environment === 'govcloud') {
+    return {
+      region: process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1',
+      aggregatorName: process.env.AWS_GOVCLOUD_CONFIG_AGGREGATOR || 'GDMSAggregator'
+    }
+  } else {
+    return {
+      region: process.env.AWS_COMMERCIAL_REGION || 'us-east-1',
+      aggregatorName: process.env.AWS_COMMERCIAL_CONFIG_AGGREGATOR || 'CommercialAggregator'
+    }
+  }
+}
 
 // Register OpenAPI documentation
 registerEndpoint('/api/config/summary-simplified', 'GET', {
   summary: 'Get simplified resource summary',
   description:
-    'Get resource counts for the whole organization, or for a single account. Leave govcloud_account_id blank for organization resource counts.',
+    'Get resource counts for the whole organization, or for a single account. Leave account_id blank for organization resource counts.',
   tags: ['Resources'],
   parameters: [
     {
-      name: 'govcloud_account_id',
+      name: 'environment',
+      in: 'query',
+      required: false,
+      schema: { type: 'string', enum: ['commercial', 'govcloud'], default: 'commercial' },
+      description: 'AWS environment (commercial or govcloud)',
+    },
+    {
+      name: 'account_id',
       in: 'query',
       required: false,
       schema: { type: 'string' },
-      description: 'Commercial Account ID',
+      description: 'AWS Account ID (optional - omit for organization-wide counts)',
     },
   ],
   responses: {
@@ -102,9 +122,10 @@ registerEndpoint('/api/config/summary-simplified', 'GET', {
   },
 })
 
-async function getResourceCounts(accountId: string) {
-  const creds = getMasterAccountCredentials("govcloud")
-  const configClient = new ConfigServiceClient({ credentials: creds, region })
+async function getResourceCounts(accountId: string, environment: AWSEnvironmentType) {
+  const envConfig = getEnvironmentConfig(environment)
+  const creds = getMasterAccountCredentials(environment)
+  const configClient = new ConfigServiceClient({ credentials: creds, region: envConfig.region })
 
   const queryGroups: Record<
     string,
@@ -158,7 +179,7 @@ async function getResourceCounts(accountId: string) {
 
       try {
         const command = new SelectAggregateResourceConfigCommand({
-          ConfigurationAggregatorName: config_aggregator_name,
+          ConfigurationAggregatorName: envConfig.aggregatorName,
           Expression: query,
         })
         const response = await configClient.send(command)
@@ -230,17 +251,24 @@ export default defineEventHandler(handleAsync(async (event) => {
   const startTime = Date.now()
 
   const query = getQuery(event)
-  
-  const accountId = (query.govcloud_account_id as string) || ""
 
-  // Generate cache key
-  const cacheKey = `config:summary-simplified:${accountId || "all"}`
+  // Support both old and new parameter names for backward compatibility
+  const accountId = (query.account_id as string) || (query.govcloud_account_id as string) || ""
+  const environment = (query.environment as AWSEnvironmentType) || 'commercial'
+
+  // Validate environment parameter
+  if (environment !== 'commercial' && environment !== 'govcloud') {
+    return errors.badRequest(event, 'Invalid environment. Must be "commercial" or "govcloud"')
+  }
+
+  // Generate cache key with environment
+  const cacheKey = `config:summary-simplified:${environment}:${accountId || "all"}`
 
   const info = await organizationCache.getOrSet(
     cacheKey,
     async () => {
-      logger.info(`Cache miss: Fetching organization overview...`)
-      return await getResourceCounts(accountId)
+      logger.info(`Cache miss: Fetching ${environment} organization overview...`)
+      return await getResourceCounts(accountId, environment)
     },
     {
       ttl: 3600, // 1 hour

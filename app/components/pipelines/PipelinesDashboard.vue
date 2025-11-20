@@ -79,8 +79,19 @@
               {{ summaryData.summary.totalRuns }}
             </div>
             <div class="text-sm text-gray-400 mt-1">
-              <span class="text-green-400">{{ summaryData.summary.successfulRuns }} successful</span>,
+              <span class="text-green-400">{{ summaryData.summary.successfulRuns }} pipelines</span>,
               <span class="text-red-400">{{ summaryData.summary.failedRuns }} failed</span>
+            </div>
+          </div>
+
+          <div class="border-t border-gray-700 pt-3">
+            <div class="text-gray-400 text-sm mb-1">Account Results</div>
+            <div class="text-xl font-semibold">
+              <span class="text-green-400">{{ summaryData.summary.successfulAccounts || 0 }}</span> /
+              <span class="text-red-400">{{ summaryData.summary.failedAccounts || 0 }}</span>
+            </div>
+            <div class="text-xs text-gray-400 mt-1">
+              {{ summaryData.summary.accountSuccessRate ? summaryData.summary.accountSuccessRate.toFixed(1) : 0 }}% success rate
             </div>
           </div>
 

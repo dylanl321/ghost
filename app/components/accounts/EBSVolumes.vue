@@ -107,14 +107,36 @@
 <script setup lang="ts">
 interface Props {
   accountId: string
+  environment?: 'commercial' | 'govcloud'
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  environment: 'govcloud'
+})
 
-const loading = ref(true)
-const volumes = ref<any[]>([])
-const nextToken = ref<string | undefined>(undefined)
-const hasMore = ref(false)
+// Use the Config Resources composable
+const {
+  resources: volumes,
+  loading,
+  hasMore,
+  fetch: fetchResources,
+  fetchNextPage
+} = useConfigResources({
+  environment: props.environment,
+  resourceType: 'AWS::EC2::Volume',
+  accountIds: props.accountId,
+  responseDetail: 'full',
+  limit: 1000,
+  immediate: true,
+  onSuccess: () => {
+    // Calculate unused volume costs after loading volumes
+    calculateUnusedVolumeCost()
+  },
+  onError: (error) => {
+    console.error('Error fetching volumes:', error)
+  }
+})
+
 const loadingMore = ref(false)
 const unusedVolumeCost = ref<number | null>(null)
 const loadingPricing = ref(false)
@@ -126,45 +148,6 @@ const columns = [
   { key: 'attachedTo', label: 'Attached To' },
   { key: 'region', label: 'Region' }
 ]
-
-// Fetch volumes
-const fetchVolumes = async (append = false) => {
-  if (append) {
-    loadingMore.value = true
-  } else {
-    loading.value = true
-    volumes.value = []
-    nextToken.value = undefined
-  }
-
-  try {
-    const url = `/api/config/resources?environment=govcloud&resourceType=AWS::EC2::Volume&accountIds=${props.accountId}&responseDetail=full&limit=1000${nextToken.value ? `&nextToken=${nextToken.value}` : ''}`
-    const response = await fetch(url)
-    const data = await response.json()
-
-    if (append) {
-      volumes.value = [...volumes.value, ...(data.data?.resources || [])]
-    } else {
-      volumes.value = data.data?.resources || []
-    }
-
-    nextToken.value = data.data?.pagination?.nextToken
-    hasMore.value = data.data?.pagination?.hasMore || false
-
-    // Calculate unused volume costs after loading volumes
-    if (!append) {
-      await calculateUnusedVolumeCost()
-    }
-  } catch (error) {
-    console.error('Error fetching volumes:', error)
-    if (!append) {
-      volumes.value = []
-    }
-  } finally {
-    loading.value = false
-    loadingMore.value = false
-  }
-}
 
 // Calculate cost of unused (available) volumes
 const calculateUnusedVolumeCost = async () => {
@@ -206,9 +189,16 @@ const calculateUnusedVolumeCost = async () => {
   }
 }
 
-const loadMore = () => {
+// Load more volumes
+const loadMore = async () => {
   if (hasMore.value && !loadingMore.value) {
-    fetchVolumes(true)
+    loadingMore.value = true
+    try {
+      await fetchNextPage()
+      await calculateUnusedVolumeCost()
+    } finally {
+      loadingMore.value = false
+    }
   }
 }
 
@@ -243,11 +233,13 @@ const getAttachedInstance = (row: any) => {
   return null
 }
 
-onMounted(() => {
-  fetchVolumes()
+// Watch for account changes and refetch
+watch(() => props.accountId, () => {
+  fetchResources()
 })
 
-watch(() => props.accountId, () => {
-  fetchVolumes()
+// Watch for environment changes and refetch
+watch(() => props.environment, () => {
+  fetchResources()
 })
 </script>

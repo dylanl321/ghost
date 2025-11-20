@@ -27,6 +27,7 @@ function requiresAuthentication(url: string): boolean {
     '/api/swagger',
     '/api/swagger-ui',
     '/api/swagger.json',
+    '/api/schema',        // Schema metadata for query builder
     '/_nuxt/',
     '/api/_content',      // Nuxt content API
     '/api/_auth',         // OIDC authentication endpoints

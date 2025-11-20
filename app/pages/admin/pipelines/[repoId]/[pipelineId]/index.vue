@@ -1,16 +1,5 @@
 <template>
   <div class="space-y-6 p-6">
-    <!-- Breadcrumbs -->
-    <div class="flex items-center gap-2 text-sm text-gray-400">
-      <NuxtLink to="/admin/pipelines" class="hover:text-white">Pipelines</NuxtLink>
-      <UIcon name="i-heroicons-chevron-right" class="w-4 h-4" />
-      <NuxtLink to="/admin/pipelines/repositories" class="hover:text-white">Repositories</NuxtLink>
-      <UIcon name="i-heroicons-chevron-right" class="w-4 h-4" />
-      <NuxtLink :to="`/admin/pipelines/${encodedRepoId}`" class="hover:text-white">{{ projectName }}</NuxtLink>
-      <UIcon name="i-heroicons-chevron-right" class="w-4 h-4" />
-      <span class="text-white">Pipeline #{{ pipelineId }}</span>
-    </div>
-
     <!-- Pipeline Header -->
     <UCard>
       <div class="flex gap-4 items-start justify-between">
@@ -166,6 +155,23 @@
 
     <!-- Dashboard Content -->
     <div v-if="!loading && !error && pipelineData.pipeline_id" class="space-y-4">
+      <!-- Account Success/Failure Summary (for partial_failure status) -->
+      <UAlert
+        v-if="pipelineData.status === 'partial_failure' && accountStats.total > 0"
+        color="orange"
+        icon="i-heroicons-exclamation-triangle"
+        variant="soft"
+      >
+        <template #title>Partial Failure: Some Accounts Failed</template>
+        <template #description>
+          <div class="flex items-center gap-4 mt-2">
+            <span class="text-green-400">✓ {{ accountStats.applied }} succeeded</span>
+            <span class="text-red-400">✗ {{ accountStats.failed }} failed</span>
+            <span v-if="accountStats.pending > 0" class="text-gray-400">⏱ {{ accountStats.pending }} pending</span>
+          </div>
+        </template>
+      </UAlert>
+
       <!-- Summary Stats -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <UCard>
@@ -182,7 +188,9 @@
           <div class="flex items-center justify-between">
             <div>
               <p class="text-sm text-gray-400">Accounts Processed</p>
-              <p class="text-2xl font-bold mt-1">{{ pipelineData.account_count || 0 }}</p>
+              <p class="text-2xl font-bold mt-1">
+                {{ pipelineData.account_count === 0 ? 'All Accounts' : pipelineData.account_count }}
+              </p>
             </div>
             <UIcon name="i-heroicons-building-office" class="w-8 h-8 text-purple-500" />
           </div>
@@ -263,20 +271,28 @@
           <!-- Status -->
           <template #plan_status-data="{ row }">
             <UBadge
-              :color="row.plan_status === 'applied' ? 'green' : 'gray'"
+              :color="getPlanStatusColor(row.plan_status)"
               variant="soft"
               size="sm"
             >
-              {{ row.plan_status || 'pending' }}
+              {{ formatPlanStatus(row.plan_status) }}
             </UBadge>
           </template>
 
-          <!-- Applied At -->
-          <template #applied_at-data="{ row }">
-            <span v-if="row.applied_at" class="text-sm text-gray-300">
-              {{ formatDateTime(row.applied_at) }}
-            </span>
-            <span v-else class="text-sm text-gray-500">-</span>
+          <!-- Completed/Failed At -->
+          <template #completed_at-data="{ row }">
+            <div class="text-sm">
+              <div v-if="row.plan_status === 'applied' && row.applied_at" class="text-gray-300">
+                {{ formatDateTime(row.applied_at) }}
+              </div>
+              <div v-else-if="row.plan_status === 'failed' && row.failed_at" class="text-red-400">
+                {{ formatDateTime(row.failed_at) }}
+              </div>
+              <div v-else class="text-gray-500">-</div>
+              <div v-if="row.failure_reason" class="text-xs text-red-300 mt-1 max-w-xs truncate" :title="row.failure_reason">
+                {{ row.failure_reason }}
+              </div>
+            </div>
           </template>
         </UTable>
       </UCard>
@@ -384,12 +400,153 @@
         </UCard>
       </div>
 
+      <!-- Accounts Targeted -->
+      <UCard v-if="accountsList.length > 0">
+        <template #header>
+          <div class="flex items-center justify-between">
+            <h3 class="font-semibold text-lg">Accounts Targeted ({{ accountsList.length }})</h3>
+            <UButton
+              size="xs"
+              variant="ghost"
+              @click="showAllAccounts = !showAllAccounts"
+            >
+              {{ showAllAccounts ? 'Show Less' : 'Show All' }}
+            </UButton>
+          </div>
+        </template>
+        <div class="flex flex-wrap gap-2">
+          <UBadge
+            v-for="(account, index) in (showAllAccounts ? accountsList : accountsList.slice(0, 20))"
+            :key="account"
+            color="gray"
+            variant="soft"
+            size="sm"
+          >
+            {{ account }}
+          </UBadge>
+          <UBadge v-if="!showAllAccounts && accountsList.length > 20" color="blue" variant="soft" size="sm">
+            +{{ accountsList.length - 20 }} more
+          </UBadge>
+        </div>
+      </UCard>
+
+      <!-- Detailed Resource Changes Table -->
+      <UCard v-if="detailedResources.length > 0">
+        <template #header>
+          <div class="flex items-center justify-between">
+            <h3 class="font-semibold text-lg">Resource Changes ({{ detailedResources.length }})</h3>
+            <UInput
+              v-model="resourceSearchQuery"
+              icon="i-heroicons-magnifying-glass"
+              placeholder="Search resources..."
+              size="sm"
+              class="w-64"
+            />
+          </div>
+        </template>
+        <UTable :rows="filteredResources" :columns="resourceColumns">
+          <!-- Resource Address -->
+          <template #resource_address-data="{ row }">
+            <div class="font-mono text-xs text-gray-300 max-w-md truncate" :title="row.resource_address">
+              {{ row.resource_address }}
+            </div>
+          </template>
+
+          <!-- Resource Type -->
+          <template #resource_type-data="{ row }">
+            <UBadge color="blue" variant="soft" size="xs">
+              {{ row.resource_type }}
+            </UBadge>
+          </template>
+
+          <!-- Action -->
+          <template #change_action-data="{ row }">
+            <div class="flex items-center gap-2">
+              <UIcon
+                :name="getActionIcon(row.change_action)"
+                :class="getActionColor(row.change_action)"
+                class="w-4 h-4"
+              />
+              <span class="capitalize text-sm">{{ row.change_action }}</span>
+            </div>
+          </template>
+
+          <!-- Module -->
+          <template #module_name-data="{ row }">
+            <span class="text-sm text-gray-400">{{ row.module_name || 'root' }}</span>
+          </template>
+
+          <!-- Status -->
+          <template #apply_success-data="{ row }">
+            <UBadge
+              v-if="row.applied"
+              :color="row.apply_success ? 'green' : 'red'"
+              variant="soft"
+              size="xs"
+            >
+              {{ row.apply_success ? 'Applied' : 'Failed' }}
+            </UBadge>
+            <UBadge v-else color="gray" variant="subtle" size="xs">
+              Pending
+            </UBadge>
+          </template>
+        </UTable>
+      </UCard>
+
+      <!-- Detailed Error Messages -->
+      <UCard v-if="detailedErrors.length > 0">
+        <template #header>
+          <div class="flex items-center justify-between">
+            <h3 class="font-semibold text-lg text-red-400">Error Details ({{ detailedErrors.length }})</h3>
+            <USelectMenu
+              v-model="errorFilter"
+              :options="errorFilterOptions"
+              size="sm"
+            />
+          </div>
+        </template>
+        <div class="space-y-4">
+          <div
+            v-for="(errorItem, index) in filteredErrors"
+            :key="index"
+            class="p-4 bg-red-900/20 border border-red-500/30 rounded-lg"
+          >
+            <div class="flex items-start justify-between mb-2">
+              <div class="flex items-center gap-2">
+                <UBadge :color="getSeverityColor(errorItem.error_severity)" variant="soft" size="sm">
+                  {{ errorItem.error_severity }}
+                </UBadge>
+                <UBadge color="gray" variant="subtle" size="sm">
+                  {{ errorItem.error_category }}
+                </UBadge>
+                <span class="text-xs text-gray-400">{{ errorItem.error_phase }}</span>
+              </div>
+              <div class="text-xs text-gray-500">
+                {{ formatDateTime(errorItem.timestamp) }}
+              </div>
+            </div>
+            <div class="flex items-center gap-2 mb-2">
+              <UIcon name="i-heroicons-building-office" class="w-4 h-4 text-gray-400" />
+              <span class="text-sm text-gray-300">{{ errorItem.account_id }}</span>
+              <span v-if="errorItem.error_resource_type" class="text-xs text-gray-500">
+                ({{ errorItem.error_resource_type }})
+              </span>
+            </div>
+            <pre class="text-xs text-red-300 font-mono whitespace-pre-wrap bg-black/30 p-3 rounded overflow-x-auto">{{ errorItem.error_message }}</pre>
+          </div>
+        </div>
+      </UCard>
+
       <!-- Job Details -->
       <UCard>
         <template #header>
           <h3 class="font-semibold text-lg">Job Details</h3>
         </template>
         <div class="space-y-3">
+          <div class="flex justify-between items-center py-2 border-b border-gray-700">
+            <span class="text-gray-400">Pipeline ID</span>
+            <span class="text-white font-mono">{{ pipelineData.pipeline_id }}</span>
+          </div>
           <div class="flex justify-between items-center py-2 border-b border-gray-700">
             <span class="text-gray-400">Job ID</span>
             <span class="text-white font-mono">{{ pipelineData.job_id }}</span>
@@ -411,7 +568,7 @@
               rel="noopener noreferrer"
               class="text-blue-400 hover:text-blue-300 flex items-center gap-1"
             >
-              <span class="text-sm">View in GitLab</span>
+              <span class="text-sm">View Job Log in GitLab</span>
               <UIcon name="i-heroicons-arrow-top-right-on-square" class="w-4 h-4" />
             </a>
           </div>
@@ -442,19 +599,34 @@ definePageMeta({
 const route = useRoute()
 const repoId = route.params.repoId as string
 const pipelineId = route.params.pipelineId as string
-const encodedRepoId = computed(() => encodeURIComponent(repoId))
-const repositoryPath = decodeURIComponent(repoId)
+const projectName = repoId // Now using project name directly as the URL parameter
 
-// Parse repository info
-const parts = repositoryPath.split('/')
-const projectName = parts[parts.length - 1]
+// Computed property for repository path display
+const repositoryPath = computed(() => {
+  return repoId || 'Unknown Repository'
+})
 
 const loading = ref(true)
 const error = ref<string | null>(null)
 const pipelineData = ref<any>({})
 const accountPlans = ref<any[]>([])
+const accountStats = ref<any>({})
 const resourceStats = ref<any>({})
 const errorStats = ref<any>({})
+const detailedResources = ref<any[]>([])
+const detailedErrors = ref<any[]>([])
+
+// UI state
+const showAllAccounts = ref(false)
+const resourceSearchQuery = ref('')
+const errorFilter = ref('all')
+
+const errorFilterOptions = [
+  { label: 'All Errors', value: 'all' },
+  { label: 'Critical', value: 'critical' },
+  { label: 'Error', value: 'error' },
+  { label: 'Warning', value: 'warning' }
+]
 
 const accountsList = computed(() => {
   if (!pipelineData.value.accounts_processed) return []
@@ -466,6 +638,30 @@ const accountsList = computed(() => {
   }
 
   return []
+})
+
+// Filter resources by search query
+const filteredResources = computed(() => {
+  if (!resourceSearchQuery.value) return detailedResources.value
+
+  const query = resourceSearchQuery.value.toLowerCase()
+  return detailedResources.value.filter((resource: any) => {
+    return (
+      resource.resource_address?.toLowerCase().includes(query) ||
+      resource.resource_type?.toLowerCase().includes(query) ||
+      resource.module_name?.toLowerCase().includes(query) ||
+      resource.account_id?.toLowerCase().includes(query)
+    )
+  })
+})
+
+// Filter errors by severity
+const filteredErrors = computed(() => {
+  if (errorFilter.value === 'all') return detailedErrors.value
+
+  return detailedErrors.value.filter((error: any) => {
+    return error.error_severity?.toLowerCase() === errorFilter.value.toLowerCase()
+  })
 })
 
 // Fetch pipeline data with comprehensive details
@@ -504,8 +700,33 @@ async function fetchPipelineData() {
     // Destructure the comprehensive response
     pipelineData.value = result.data.pipeline
     accountPlans.value = result.data.accountPlans
+    accountStats.value = result.data.accountStats
     resourceStats.value = result.data.resourceStats
     errorStats.value = result.data.errorStats
+
+    // Debug: Log resource stats
+    console.log('[Pipeline Details] Resource Stats:', resourceStats.value)
+    console.log('[Pipeline Details] Total Resources:', resourceStats.value?.totalResources)
+
+    // Fetch detailed resources and errors in parallel
+    const [resourcesResponse, errorsResponse] = await Promise.all([
+      fetch(`/api/pipelines/${pipelineId}/resources`),
+      fetch(`/api/pipelines/${pipelineId}/errors`)
+    ])
+
+    if (resourcesResponse.ok) {
+      const resourcesResult = await resourcesResponse.json()
+      if (resourcesResult.success) {
+        detailedResources.value = resourcesResult.data || []
+      }
+    }
+
+    if (errorsResponse.ok) {
+      const errorsResult = await errorsResponse.json()
+      if (errorsResult.success) {
+        detailedErrors.value = errorsResult.data || []
+      }
+    }
 
   } catch (err: any) {
     console.error('Error fetching pipeline data:', err)
@@ -521,7 +742,16 @@ const accountPlanColumns = [
   { key: 'changes_total', label: 'Total Changes', sortable: true },
   { key: 'change_details', label: 'Details', sortable: false },
   { key: 'plan_status', label: 'Status', sortable: true },
-  { key: 'applied_at', label: 'Applied At', sortable: true }
+  { key: 'completed_at', label: 'Completed / Failed At', sortable: true }
+]
+
+// Table columns for resources
+const resourceColumns = [
+  { key: 'resource_address', label: 'Resource', sortable: true },
+  { key: 'resource_type', label: 'Type', sortable: true },
+  { key: 'change_action', label: 'Action', sortable: true },
+  { key: 'module_name', label: 'Module', sortable: true },
+  { key: 'apply_success', label: 'Status', sortable: true }
 ]
 
 // Initial load
@@ -529,28 +759,16 @@ onMounted(() => {
   fetchPipelineData()
 })
 
+// Use date formatter composable for timezone-aware formatting
+const { formatDateTime: formatDateTimeWithTz, formatDuration: formatDurationWithTz } = useDateFormatter()
+
 // Formatting helpers
 function formatDuration(seconds: number): string {
-  if (!seconds) return '0m'
-  const minutes = Math.floor(seconds / 60)
-  const secs = seconds % 60
-  if (minutes < 60) return `${minutes}m ${secs}s`
-  const hours = Math.floor(minutes / 60)
-  const remainingMinutes = minutes % 60
-  return `${hours}h ${remainingMinutes}m ${secs}s`
+  return formatDurationWithTz(seconds)
 }
 
 function formatDateTime(timestamp: string): string {
-  if (!timestamp) return 'N/A'
-  const date = new Date(timestamp)
-  return date.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  })
+  return formatDateTimeWithTz(timestamp)
 }
 
 function getStatusColor(status: string): string {
@@ -628,5 +846,25 @@ function getMRStateColor(state: string): string {
     default:
       return 'gray'
   }
+}
+
+function getPlanStatusColor(status: string): string {
+  switch (status?.toLowerCase()) {
+    case 'applied':
+      return 'green'
+    case 'failed':
+      return 'red'
+    case 'pending':
+      return 'yellow'
+    case 'expired':
+      return 'gray'
+    default:
+      return 'gray'
+  }
+}
+
+function formatPlanStatus(status: string): string {
+  if (!status) return 'Unknown'
+  return status.charAt(0).toUpperCase() + status.slice(1)
 }
 </script>

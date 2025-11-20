@@ -78,10 +78,14 @@ const props = defineProps<{
 const dateRangeLabel = computed(() => {
   if (!props.dailyMetrics?.length) return 'No data'
   const sortedMetrics = [...props.dailyMetrics].sort((a, b) => a.date.localeCompare(b.date))
-  const start = new Date(sortedMetrics[0].date)
-  const end = new Date(sortedMetrics[sortedMetrics.length - 1].date)
-  const fmt = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`
-  return `${fmt(start)} - ${fmt(end)}`
+  // Parse date strings directly to avoid timezone issues
+  const fmt = (dateStr: string) => {
+    // Handle both "YYYY-MM-DD" and "YYYY-MM-DDTHH:MM:SSZ" formats
+    const datePart = dateStr.split('T')[0]
+    const [year, month, day] = datePart.split('-').map(Number)
+    return `${month}/${day}`
+  }
+  return `${fmt(sortedMetrics[0].date)} - ${fmt(sortedMetrics[sortedMetrics.length - 1].date)}`
 })
 
 // Summary metrics
@@ -124,8 +128,13 @@ const chartOptions = computed(() => {
     tooltip: {
       trigger: 'axis',
       formatter: (params: any) => {
-        const date = new Date(params[0].axisValue)
-        const dateLabel = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        // Parse date string directly to avoid timezone issues
+        const dateStr = params[0].axisValue
+        // Handle both "YYYY-MM-DD" and "YYYY-MM-DDTHH:MM:SSZ" formats
+        const datePart = dateStr.split('T')[0]
+        const [year, month, day] = datePart.split('-').map(Number)
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        const dateLabel = `${monthNames[month - 1]} ${day}`
 
         let result = `<strong>${dateLabel}</strong><br/>`
         params.forEach((p: any) => {
@@ -144,8 +153,11 @@ const chartOptions = computed(() => {
       data: dates,
       axisLabel: {
         formatter: (value: string) => {
-          const d = new Date(value)
-          return `${d.getMonth() + 1}/${d.getDate()}`
+          // Parse date string directly to avoid timezone issues
+          // Handle both "YYYY-MM-DD" and "YYYY-MM-DDTHH:MM:SSZ" formats
+          const datePart = value.split('T')[0]
+          const [year, month, day] = datePart.split('-').map(Number)
+          return `${month}/${day}`
         },
         color: '#9ca3af'
       }

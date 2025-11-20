@@ -1,14 +1,5 @@
 <template>
   <div class="space-y-6 p-6">
-    <!-- Breadcrumbs -->
-    <div class="flex items-center gap-2 text-sm text-gray-400">
-      <NuxtLink to="/admin/pipelines" class="hover:text-white">Pipelines</NuxtLink>
-      <UIcon name="i-heroicons-chevron-right" class="w-4 h-4" />
-      <NuxtLink to="/admin/pipelines/repositories" class="hover:text-white">Repositories</NuxtLink>
-      <UIcon name="i-heroicons-chevron-right" class="w-4 h-4" />
-      <span class="text-white">{{ repositoryPath }}</span>
-    </div>
-
     <!-- Repository Header -->
     <UCard>
       <div class="flex gap-4 items-start justify-between">
@@ -29,18 +20,27 @@
             </a>
           </div>
         </div>
-        <USelectMenu
-          v-model="selectedDays"
-          :options="timeRangeOptions"
-          value-attribute="value"
-          option-attribute="label"
-          class="w-40"
-        >
-          <template #label>
-            <UIcon name="i-heroicons-calendar" class="mr-2" />
-            {{ selectedDaysLabel }}
-          </template>
-        </USelectMenu>
+        <div class="flex gap-2 items-center">
+          <!-- Author Filter -->
+          <PipelinesAuthorSelector
+            v-model="selectedAuthor"
+            :days="selectedDays"
+            environment="govcloud"
+          />
+          <!-- Time Range Selector -->
+          <USelectMenu
+            v-model="selectedDays"
+            :options="timeRangeOptions"
+            value-attribute="value"
+            option-attribute="label"
+            class="w-40"
+          >
+            <template #label>
+              <UIcon name="i-heroicons-calendar" class="mr-2" />
+              {{ selectedDaysLabel }}
+            </template>
+          </USelectMenu>
+        </div>
       </div>
     </UCard>
 
@@ -84,8 +84,11 @@
         <UCard>
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm text-gray-400">Success Rate</p>
+              <p class="text-sm text-gray-400">Pipeline Success Rate</p>
               <p class="text-2xl font-bold mt-1">{{ formatPercentage(repositoryData.successRate) }}</p>
+              <p class="text-xs text-gray-500 mt-1">
+                {{ repositoryData.successfulRuns }} / {{ repositoryData.totalRuns }} runs
+              </p>
             </div>
             <UIcon name="i-heroicons-check-circle" class="w-8 h-8 text-green-500" />
           </div>
@@ -94,7 +97,7 @@
         <UCard>
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm text-gray-400">Accounts</p>
+              <p class="text-sm text-gray-400">Total Accounts</p>
               <p class="text-2xl font-bold mt-1">{{ repositoryData.accounts?.length || 0 }}</p>
             </div>
             <UIcon name="i-heroicons-building-office" class="w-8 h-8 text-purple-500" />
@@ -108,6 +111,50 @@
               <p class="text-2xl font-bold mt-1">{{ formatDuration(repositoryData.avgDuration) }}</p>
             </div>
             <UIcon name="i-heroicons-clock" class="w-8 h-8 text-orange-500" />
+          </div>
+        </UCard>
+      </div>
+
+      <!-- Account-Level Breakdown -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <UCard>
+          <div class="flex items-center justify-between">
+            <div class="flex-1">
+              <p class="text-sm text-gray-400">Successful Accounts</p>
+              <p class="text-2xl font-bold mt-1 text-green-400">
+                {{ repositoryData.accountStats?.successful || 0 }}
+              </p>
+              <p class="text-xs text-gray-500 mt-1">Plans applied successfully</p>
+            </div>
+            <UIcon name="i-heroicons-check-badge" class="w-8 h-8 text-green-500" />
+          </div>
+        </UCard>
+
+        <UCard>
+          <div class="flex items-center justify-between">
+            <div class="flex-1">
+              <p class="text-sm text-gray-400">Failed Accounts</p>
+              <p class="text-2xl font-bold mt-1 text-red-400">
+                {{ repositoryData.accountStats?.failed || 0 }}
+              </p>
+              <p class="text-xs text-gray-500 mt-1">Plans failed to apply</p>
+            </div>
+            <UIcon name="i-heroicons-x-circle" class="w-8 h-8 text-red-500" />
+          </div>
+        </UCard>
+
+        <UCard>
+          <div class="flex items-center justify-between">
+            <div class="flex-1">
+              <p class="text-sm text-gray-400">Total Unique Accounts</p>
+              <p class="text-2xl font-bold mt-1">
+                {{ repositoryData.accountStats?.total || 0 }}
+              </p>
+              <p class="text-xs text-gray-500 mt-1">
+                Accounts processed by this repository
+              </p>
+            </div>
+            <UIcon name="i-heroicons-building-office-2" class="w-8 h-8 text-blue-500" />
           </div>
         </UCard>
       </div>
@@ -137,7 +184,7 @@
           <!-- Pipeline ID -->
           <template #pipeline_id-data="{ row }">
             <NuxtLink
-              :to="`/admin/pipelines/${encodedRepoId}/${row.pipeline_id}`"
+              :to="`/admin/pipelines/${projectName}/${row.pipeline_id}`"
               class="text-blue-400 hover:text-blue-300 font-mono text-xs"
             >
               #{{ row.pipeline_id }}
@@ -175,14 +222,28 @@
 
           <!-- Account Count -->
           <template #account_count-data="{ row }">
-            <UBadge color="gray" variant="subtle" size="sm">
+            <UTooltip
+              v-if="row.account_count === 0"
+              text="This pipeline run targeted all accounts"
+            >
+              <UBadge color="blue" variant="subtle" size="sm">
+                All
+              </UBadge>
+            </UTooltip>
+            <UBadge v-else color="gray" variant="subtle" size="sm">
               {{ row.account_count }}
             </UBadge>
           </template>
 
           <!-- Commit Author -->
           <template #commit_author-data="{ row }">
-            <span class="text-sm text-gray-300">{{ row.commit_author || 'N/A' }}</span>
+            <PipelinesAuthorBadge
+              v-if="row.commit_author"
+              :author-field="row.commit_author"
+              :show-contact-icons="false"
+              :max-name-length="20"
+            />
+            <span v-else class="text-sm text-gray-400">Unknown</span>
           </template>
         </UTable>
       </UCard>
@@ -192,6 +253,8 @@
 
 <script setup lang="ts">
 import { parseGitLabUrl } from '~/utils/gitlab-url-parser'
+import PipelinesAuthorSelector from '~/components/pipelines/AuthorSelector.vue'
+import PipelinesAuthorBadge from '~/components/pipelines/AuthorBadge.vue'
 
 // Admin-only access control
 definePageMeta({
@@ -201,13 +264,9 @@ definePageMeta({
 
 const route = useRoute()
 const repoId = route.params.repoId as string
-const encodedRepoId = computed(() => encodeURIComponent(repoId))
-const repositoryPath = decodeURIComponent(repoId)
-
-// Parse repository info
-const parts = repositoryPath.split('/')
-const projectName = parts[parts.length - 1]
-const groupName = parts.slice(0, -1).join('/')
+const projectName = repoId // Now using project name directly as the URL parameter
+const groupName = ref<string>('')
+const fullRepositoryPath = ref<string>('')
 const projectUrl = ref<string | null>(null)
 
 // Time range options
@@ -223,10 +282,25 @@ const selectedDaysLabel = computed(() => {
   return option?.label || 'Last 30 Days'
 })
 
+// Author filter
+const selectedAuthor = ref<string | null>(null)
+
 const loading = ref(true)
 const error = ref<string | null>(null)
 const repositoryData = ref<any>({})
-const pipelineRuns = ref<any[]>([])
+const allPipelineRuns = ref<any[]>([])
+
+// Filter pipeline runs by author
+const pipelineRuns = computed(() => {
+  if (!selectedAuthor.value) {
+    return allPipelineRuns.value
+  }
+
+  return allPipelineRuns.value.filter((run: any) => {
+    if (!run.commit_author) return false
+    return run.commit_author.toLowerCase().includes(selectedAuthor.value!.toLowerCase())
+  })
+})
 
 // Table columns
 const columns = [
@@ -257,15 +331,24 @@ async function fetchRepositoryData() {
       throw new Error(result.message || 'Failed to fetch repository data')
     }
 
-    // Filter runs for this repository
+    // Filter runs for this repository by project name
     const filteredRuns = result.data.filter((run: any) => {
       const repoInfo = parseGitLabUrl(run.job_url)
-      return repoInfo?.fullPath === repositoryPath
+      return repoInfo?.project === projectName
     })
 
-    console.log('Repository runs found:', filteredRuns.length, 'for path:', repositoryPath)
+    console.log('Repository runs found:', filteredRuns.length, 'for project:', projectName)
 
-    pipelineRuns.value = filteredRuns
+    // Extract group name and full path from first matching run
+    if (filteredRuns.length > 0) {
+      const firstRepoInfo = parseGitLabUrl(filteredRuns[0].job_url)
+      if (firstRepoInfo) {
+        groupName.value = firstRepoInfo.group
+        fullRepositoryPath.value = firstRepoInfo.fullPath
+      }
+    }
+
+    allPipelineRuns.value = filteredRuns
 
     // Calculate repository metrics
     let totalRuns = filteredRuns.length
@@ -299,13 +382,52 @@ async function fetchRepositoryData() {
       }
     })
 
+    // Calculate account-level stats based on actual account processing
+    // Count how many times each account was processed successfully vs failed
+    const accountSuccessCounts = new Map<string, { success: number, failure: number }>()
+
+    filteredRuns.forEach((run: any) => {
+      if (run.accounts_processed && Array.isArray(run.accounts_processed)) {
+        run.accounts_processed.forEach((acc: string) => {
+          if (!accountSuccessCounts.has(acc)) {
+            accountSuccessCounts.set(acc, { success: 0, failure: 0 })
+          }
+          const counts = accountSuccessCounts.get(acc)!
+          if (run.status === 'success') {
+            counts.success++
+          } else if (run.status === 'failure' || run.status === 'partial_failure') {
+            counts.failure++
+          }
+        })
+      }
+    })
+
+    // Determine account status: if they have more successes than failures, count as successful
+    let successfulAccounts = 0
+    let failedAccounts = 0
+    accountSuccessCounts.forEach((counts) => {
+      if (counts.success > counts.failure) {
+        successfulAccounts++
+      } else if (counts.failure > 0) {
+        failedAccounts++
+      }
+    })
+
+    const totalAccounts = accountsSet.size
+
     repositoryData.value = {
       totalRuns,
       successfulRuns,
       failedRuns,
       successRate: totalRuns > 0 ? Math.round((successfulRuns / totalRuns) * 100) : 0,
       avgDuration: totalRuns > 0 ? Math.round(totalDuration / totalRuns) : 0,
-      accounts: Array.from(accountsSet)
+      accounts: Array.from(accountsSet),
+      accountStats: {
+        successful: successfulAccounts,
+        failed: failedAccounts,
+        total: totalAccounts,
+        successRate: totalAccounts > 0 ? Math.round((successfulAccounts / totalAccounts) * 100) : 0
+      }
     }
 
   } catch (err: any) {
@@ -331,32 +453,19 @@ function formatPercentage(num: number): string {
   return `${num}%`
 }
 
+// Use date formatter composable for timezone-aware formatting
+const { formatDateOnly, formatTimeOnly, formatDurationShort } = useDateFormatter()
+
 function formatDuration(seconds: number): string {
-  if (!seconds) return '0m'
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m`
-  const hours = Math.floor(minutes / 60)
-  const remainingMinutes = minutes % 60
-  return `${hours}h ${remainingMinutes}m`
+  return formatDurationShort(seconds)
 }
 
 function formatDate(timestamp: string): string {
-  if (!timestamp) return 'N/A'
-  const date = new Date(timestamp)
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  })
+  return formatDateOnly(timestamp)
 }
 
 function formatTime(timestamp: string): string {
-  if (!timestamp) return ''
-  const date = new Date(timestamp)
-  return date.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  return formatTimeOnly(timestamp)
 }
 
 function getStatusColor(status: string): string {

@@ -5,9 +5,9 @@
 
 // GitLab repository information parsed from job_url
 export interface GitLabRepoInfo {
-  group: string // Top-level group or nested group path
-  project: string // Project name
-  fullPath: string // Full path: group/project
+  group: string // Nested group path (e.g., "GDMSCloud/aws/terraform")
+  project: string // Project/repository name - last segment of path (e.g., "aws-account-orchestrator")
+  fullPath: string // Full path: group/project (e.g., "GDMSCloud/aws/terraform/aws-account-orchestrator")
   jobId: string // GitLab job ID
   url: string // Original job URL
 }
@@ -77,6 +77,7 @@ export interface PipelineSummary {
   avgDurationSeconds: number
   totalChanges: number
   resourceBreakdown: Array<{
+    resourceAddress: string
     resourceType: string
     action: string
     count: number
@@ -115,6 +116,7 @@ export interface OrganizationPipelineSummary {
     lastRun: string
   }>
   resourceBreakdown: Array<{
+    resourceAddress: string
     resourceType: string
     action: string
     count: number
@@ -189,4 +191,39 @@ export interface PipelineEnvironmentConfig {
   database: string
   athenaResultsBucket: string
   accountId: string
+}
+
+// Author information parsed from commit_author field
+export interface AuthorInfo {
+  name: string
+  email: string
+  displayName: string
+  raw: string
+}
+
+// Author-level metrics
+export interface PipelineAuthorMetrics {
+  commit_author: string // Raw author string from database
+  author_name: string // Parsed name
+  author_email: string // Parsed email
+  author_display: string // Display name
+  author_raw: string // Full raw author string
+  total_runs: number
+  successful_runs: number
+  failed_runs: number
+  success_rate: number // Percentage
+  total_accounts: number
+  last_run: string // ISO timestamp
+}
+
+// Author summary with detailed metrics
+export interface AuthorSummary {
+  total_runs: number
+  successful_runs: number
+  failed_runs: number
+  success_rate: number
+  avg_duration: number
+  total_accounts: number
+  unique_accounts: number
+  repositories: string[]
 }

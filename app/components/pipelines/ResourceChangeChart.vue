@@ -59,6 +59,7 @@ echarts.use([
 ])
 
 interface ResourceChange {
+  resourceAddress: string
   resourceType: string
   action: string
   count: number
@@ -93,37 +94,48 @@ const totalChanges = computed(() =>
 )
 
 const chartOptions = computed(() => {
-  // Group by resource type
-  const resourceMap = new Map<string, { create: number; update: number; destroy: number; replace: number }>()
+  // Group by resource address (name)
+  const resourceMap = new Map<string, {
+    address: string
+    type: string
+    create: number
+    update: number
+    destroy: number
+    replace: number
+  }>()
 
   props.resourceBreakdown.forEach(r => {
-    if (!resourceMap.has(r.resourceType)) {
-      resourceMap.set(r.resourceType, { create: 0, update: 0, destroy: 0, replace: 0 })
+    if (!resourceMap.has(r.resourceAddress)) {
+      resourceMap.set(r.resourceAddress, {
+        address: r.resourceAddress,
+        type: r.resourceType,
+        create: 0,
+        update: 0,
+        destroy: 0,
+        replace: 0
+      })
     }
-    const entry = resourceMap.get(r.resourceType)!
+    const entry = resourceMap.get(r.resourceAddress)!
     if (r.action === 'create') entry.create += r.count
     else if (r.action === 'update') entry.update += r.count
     else if (r.action === 'destroy') entry.destroy += r.count
     else if (r.action === 'replace') entry.replace += r.count
   })
 
-  // Get top 10 resource types by total changes
-  const sortedResources = Array.from(resourceMap.entries())
-    .map(([type, counts]) => ({
-      type,
-      total: counts.create + counts.update + counts.destroy + counts.replace,
-      ...counts
+  // Get top 10 resources by total changes (already sorted from API, but re-sort to be safe)
+  const sortedResources = Array.from(resourceMap.values())
+    .map(resource => ({
+      ...resource,
+      total: resource.create + resource.update + resource.destroy + resource.replace
     }))
     .sort((a, b) => b.total - a.total)
     .slice(0, 10)
 
-  const resourceTypes = sortedResources.map(r => {
-    // Shorten resource type name for display
-    const parts = r.type.split('_')
-    if (parts.length > 3) {
-      return `${parts[0]}_${parts[1]}_...${parts[parts.length - 1]}`
-    }
-    return r.type
+  // Format display names - show resource address with type hint
+  const resourceNames = sortedResources.map(r => {
+    // Truncate long resource addresses for display
+    const address = r.address.length > 60 ? r.address.substring(0, 57) + '...' : r.address
+    return address
   })
 
   const createData = sortedResources.map(r => r.create)
@@ -138,7 +150,17 @@ const chartOptions = computed(() => {
         type: 'shadow'
       },
       formatter: (params: any) => {
-        let result = `<strong>${params[0].name}</strong><br/>`
+        // Find the resource for this tooltip
+        const resourceIndex = params[0].dataIndex
+        const resource = sortedResources[resourceIndex]
+
+        if (!resource) {
+          return `<strong>${params[0].name}</strong><br/>`
+        }
+
+        let result = `<strong>${resource.address}</strong><br/>`
+        result += `<span style="color: #9ca3af; font-size: 11px;">${resource.type}</span><br/><br/>`
+
         params.forEach((p: any) => {
           if (p.data > 0) {
             result += `${p.marker} ${p.seriesName}: ${p.data}<br/>`
@@ -160,7 +182,7 @@ const chartOptions = computed(() => {
     },
     yAxis: {
       type: 'category',
-      data: resourceTypes,
+      data: resourceNames,
       axisLabel: {
         color: '#9ca3af',
         fontSize: 11
