@@ -10,6 +10,7 @@
         v-model="filters.lookbackDays"
         :options="lookbackOptions"
         placeholder="Select period..."
+        value-attribute="value"
       />
     </UFormGroup>
 

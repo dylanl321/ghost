@@ -1,135 +1,156 @@
 /**
- * AWS CloudTrail Data Fetcher
+ * AWS CloudTrail Data Fetcher (via Security Lake)
  *
- * Fetches CloudTrail events, API activity, and audit logs
- * across multiple accounts and regions.
+ * Fetches CloudTrail events from Security Lake using Athena queries.
+ * Security Lake stores CloudTrail data in OCSF format, providing better
+ * performance and longer historical data retention than direct CloudTrail API.
+ *
+ * IMPORTANT: Security Lake's OCSF schema has limited queryable fields at the top level.
+ * Most CloudTrail data is preserved in the 'unmapped' field as JSON.
+ * We query only basic fields (accountid, region, time, class_name, activity_name, status, unmapped)
+ * and perform detailed filtering client-side after parsing the unmapped data.
  */
 
-import {
-  LookupEventsCommand,
-  type CloudTrailClient,
-  type Event as CloudTrailAPIEvent,
-  type LookupAttribute,
-} from '@aws-sdk/client-cloudtrail'
-import { getClient } from '../lib/aws-client-factory'
 import { getAllAccountsUnified } from './accounts-consolidated'
+import { buildTableName, getEnvironmentConfig } from './security-lake-consolidated'
+import { getAthenaClient } from '../lib/aws-client-factory'
 import { logger } from './logger'
 import type {
   CloudTrailEventRecord,
   CloudTrailDatasetFilters,
 } from '#shared/types/dataset-reports'
 
-/**
- * Get CloudTrail client for a specific account/region
- */
-async function getCloudTrailClient(accountId?: string, region: string = 'us-east-1'): Promise<CloudTrailClient> {
-  // Default to govcloud environment (can be overridden by env var if needed)
-  const environment = (process.env.AWS_CLOUDTRAIL_ENVIRONMENT as 'commercial' | 'govcloud') || 'govcloud'
-  return getClient<CloudTrailClient>(environment, 'cloudtrail', region, accountId)
-}
+import {
+  StartQueryExecutionCommand,
+  GetQueryExecutionCommand,
+  GetQueryResultsCommand,
+  type AthenaClient,
+} from '@aws-sdk/client-athena'
 
 /**
  * Default lookback period (days)
  */
 const DEFAULT_LOOKBACK_DAYS = 7
-const MAX_LOOKBACK_DAYS = 90  // CloudTrail API limitation
+const MAX_LOOKBACK_DAYS = 365  // Security Lake can store much longer history
 
 /**
- * Normalize CloudTrail event to our simplified record format
+ * Normalize Security Lake OCSF CloudTrail event to our simplified record format
+ *
+ * Security Lake stores CloudTrail in OCSF format with most data in the 'unmapped' field.
+ * The unmapped field contains the complete original CloudTrail event as JSON.
  */
-function normalizeEvent(event: CloudTrailAPIEvent, accountId: string, accountName: string): CloudTrailEventRecord {
-  // Parse CloudTrail event JSON (if available)
-  let parsedEvent: any = {}
-  if (event.CloudTrailEvent) {
-    try {
-      parsedEvent = JSON.parse(event.CloudTrailEvent)
-    } catch {
-      logger.warn('[CloudTrail] Failed to parse CloudTrailEvent JSON')
+function normalizeSecurityLakeEvent(row: any, accountName: string): CloudTrailEventRecord {
+  // Athena returns time as epoch milliseconds
+  const eventTime = row.time ? new Date(Number(row.time)).toISOString() : ''
+
+  // Parse unmapped field - it's a map<string,string> in Athena, not JSON
+  // Athena returns maps as objects, so unmapped should already be an object
+  let unmappedData: any = {}
+  if (row.unmapped) {
+    // If it's already an object, use it directly
+    if (typeof row.unmapped === 'object' && !Array.isArray(row.unmapped)) {
+      unmappedData = row.unmapped
+    } else if (typeof row.unmapped === 'string') {
+      // Only try to parse if it's a string
+      try {
+        unmappedData = JSON.parse(row.unmapped)
+      } catch (e) {
+        // Not valid JSON, might be empty or malformed
+      }
     }
   }
 
-  // Extract user identity
-  const userIdentity = parsedEvent.userIdentity || {}
-  const userIdentityType = userIdentity.type || 'Unknown'
-  const userIdentityPrincipalId = userIdentity.principalId
-  const userIdentityArn = userIdentity.arn
-  const userIdentityUserName = event.Username || userIdentity.userName
+  // Extract data - prioritize OCSF fields over unmapped
+  const eventName = row.event_name || row.activity_name || unmappedData.eventName || ''
+  const eventType = row.class_name || unmappedData.eventType || 'API Activity'
+  const eventSource = row.service_name || unmappedData.eventSource || ''
 
-  // Extract resources
-  const resources = event.Resources?.map(r => ({
-    type: r.ResourceType || '',
-    name: r.ResourceName || '',
-    arn: r.ResourceName,  // ResourceName is typically an ARN
-  }))
+  // Determine if event is read-only based on operation name
+  const readOnly = unmappedData.readOnly === true ||
+                    eventName.toLowerCase().includes('get') ||
+                    eventName.toLowerCase().includes('list') ||
+                    eventName.toLowerCase().includes('describe')
 
-  // Determine if read-only
-  const readOnly = event.ReadOnly === 'true' || event.ReadOnly === true
+  // Extract user identity - prefer OCSF fields
+  const userName = row.user_name || unmappedData.userIdentity?.userName || unmappedData.userName
+  const userType = row.user_type || unmappedData.userIdentity?.type || 'Unknown'
+  const userUid = row.user_uid || unmappedData.userIdentity?.principalId
+  const userArn = unmappedData.userIdentity?.arn
 
   return {
-    accountId,
+    accountId: row.accountid || '',
     accountName,
-    region: parsedEvent.awsRegion || 'unknown',
-    eventId: event.EventId || '',
-    eventName: event.EventName || '',
-    eventType: parsedEvent.eventType || 'AwsApiCall',
-    eventTime: event.EventTime?.toISOString() || '',
-    eventSource: parsedEvent.eventSource || '',
-    userIdentityType,
-    userIdentityPrincipalId,
-    userIdentityArn,
-    userIdentityUserName,
-    sourceIPAddress: parsedEvent.sourceIPAddress,
-    userAgent: parsedEvent.userAgent,
-    errorCode: parsedEvent.errorCode,
-    errorMessage: parsedEvent.errorMessage,
+    region: row.region || unmappedData.awsRegion || 'unknown',
+    eventId: row.event_id || unmappedData.eventID || '',
+    eventName,
+    eventType,
+    eventTime: row.time_dt || unmappedData.eventTime || eventTime,
+    eventSource,
+    userIdentityType: userType,
+    userIdentityPrincipalId: userUid,
+    userIdentityArn: userArn,
+    userIdentityUserName: userName,
+    sourceIPAddress: row.source_ip || unmappedData.sourceIPAddress,
+    userAgent: row.user_agent || unmappedData.userAgent,
+    errorCode: unmappedData.errorCode,
+    errorMessage: unmappedData.errorMessage,
     readOnly,
-    resources,
-    requestParameters: parsedEvent.requestParameters,
-    responseElements: parsedEvent.responseElements,
+    resources: unmappedData.resources,
+    requestParameters: unmappedData.requestParameters,
+    responseElements: unmappedData.responseElements,
   }
 }
 
 /**
- * Build CloudTrail lookup attributes from filters
+ * Build SQL WHERE clause from filters for Security Lake query
+ *
+ * Now that we're querying OCSF struct fields directly (api.operation, api.service.name),
+ * we can apply most filters at the SQL level for better performance.
  */
-function buildLookupAttributes(filters: CloudTrailDatasetFilters): LookupAttribute[] {
-  const attributes: LookupAttribute[] = []
+function buildWhereClause(
+  filters: CloudTrailDatasetFilters,
+  accountIds: string[],
+  startEpoch: number,
+  endEpoch: number
+): string {
+  const conditions: string[] = []
 
-  // Filter by event names
+  // Time range (required)
+  conditions.push(`time BETWEEN ${startEpoch} AND ${endEpoch}`)
+
+  // Account filter
+  if (accountIds.length > 0) {
+    const accountList = accountIds.map(id => `'${id}'`).join(', ')
+    conditions.push(`accountid IN (${accountList})`)
+  }
+
+  // Regions filter
+  if (filters.regions && filters.regions.length > 0) {
+    const regionList = filters.regions.map(r => `'${r}'`).join(', ')
+    conditions.push(`cloud.region IN (${regionList})`)
+  }
+
+  // Event names filter (api.operation)
   if (filters.eventNames && filters.eventNames.length > 0) {
-    // CloudTrail API only supports one EventName at a time
-    // We'll filter client-side for multiple event names
-    attributes.push({
-      AttributeKey: 'EventName',
-      AttributeValue: filters.eventNames[0],
-    })
+    const eventList = filters.eventNames.map(name => `'${name}'`).join(', ')
+    conditions.push(`api.operation IN (${eventList})`)
   }
 
-  // Filter by event source (service)
+  // Event sources filter (api.service.name)
   if (filters.eventSources && filters.eventSources.length > 0) {
-    attributes.push({
-      AttributeKey: 'EventSource',
-      AttributeValue: filters.eventSources[0],
-    })
+    const sourceList = filters.eventSources.map(src => `'${src}'`).join(', ')
+    conditions.push(`api.service.name IN (${sourceList})`)
   }
 
-  // Filter by user identity
-  if (filters.userIdentities && filters.userIdentities.length > 0) {
-    attributes.push({
-      AttributeKey: 'Username',
-      AttributeValue: filters.userIdentities[0],
-    })
-  }
-
-  // Filter by read-only (if write-only specified)
+  // Write events only (exclude Get*, List*, Describe*)
   if (filters.writeEventsOnly) {
-    attributes.push({
-      AttributeKey: 'ReadOnly',
-      AttributeValue: 'false',
-    })
+    conditions.push(`(api.operation NOT LIKE 'Get%' AND api.operation NOT LIKE 'List%' AND api.operation NOT LIKE 'Describe%')`)
   }
 
-  return attributes
+  // Note: Event types and errors-only filters will still be applied client-side
+  // since they may require more complex logic
+
+  return conditions.join(' AND ')
 }
 
 /**
@@ -179,78 +200,205 @@ function applyClientSideFilters(
 }
 
 /**
- * Fetch events for a single account
+ * Query Security Lake for CloudTrail events using Athena
  */
-async function fetchEventsForAccount(
-  accountId: string,
-  accountName: string,
+async function querySecurityLakeForEvents(
+  accountIds: string[],
+  accountNameMap: Map<string, string>,
   filters: CloudTrailDatasetFilters,
   startTime: Date,
   endTime: Date,
-  environment: 'commercial' | 'govcloud' = 'govcloud'
+  environment: 'commercial' | 'govcloud'
 ): Promise<CloudTrailEventRecord[]> {
   const events: CloudTrailEventRecord[] = []
 
   try {
-    // CloudTrail LookupEvents only works in the region where the trail is configured
-    // For organization trails, use appropriate region for the environment
+    // Get environment configuration
+    const config = getEnvironmentConfig(environment)
     const region = environment === 'govcloud' ? 'us-gov-west-1' : 'us-east-1'
-    const client = await getCloudTrailClient(accountId, region)
 
-    const lookupAttributes = buildLookupAttributes(filters)
+    // Get Athena client for Security Lake account
+    const client = await getAthenaClient(environment, region, config.monitoringAccountId)
 
-    let nextToken: string | undefined
-    let pageCount = 0
-    const maxPages = 10  // Limit to prevent excessive API calls (CloudTrail can be slow)
+    // Convert dates to Unix epoch milliseconds for OCSF
+    const startEpoch = Math.floor(startTime.getTime())
+    const endEpoch = Math.floor(endTime.getTime())
 
-    do {
-      const command = new LookupEventsCommand({
-        LookupAttributes: lookupAttributes.length > 0 ? lookupAttributes : undefined,
-        StartTime: startTime,
-        EndTime: endTime,
-        MaxResults: 50,  // CloudTrail API max is 50
-        NextToken: nextToken,
-      })
+    // Build table name from Security Lake
+    // Map to the data source identifier used in Security Lake
+    const tableName = buildTableName(environment, 'cloud_trail_mgmt')
 
-      const response = await client.send(command)
-      pageCount++
+    // Build WHERE clause
+    const whereClause = buildWhereClause(filters, accountIds, startEpoch, endEpoch)
 
-      if (response.Events) {
-        for (const event of response.Events) {
-          events.push(normalizeEvent(event, accountId, accountName))
-        }
+    // Build complete SQL query
+    // Security Lake OCSF schema - query top-level fields and nested struct fields with dot notation
+    // The unmapped field (map<string,string>) contains the complete original CloudTrail event
+    const sqlQuery = `
+      SELECT
+        accountid,
+        cloud.region as region,
+        time,
+        time_dt,
+        metadata.uid as event_id,
+        api.operation as event_name,
+        class_name,
+        activity_name,
+        severity,
+        status,
+        api.service.name as service_name,
+        actor.user.name as user_name,
+        actor.user.type as user_type,
+        actor.user.uid as user_uid,
+        src_endpoint.ip as source_ip,
+        http_request.user_agent as user_agent,
+        unmapped
+      FROM ${tableName}
+      WHERE ${whereClause}
+      ORDER BY time DESC
+    `.trim()
+
+    logger.info('[CloudTrail Security Lake] Executing Athena query', {
+      environment,
+      region,
+      tableName,
+      accountCount: accountIds.length
+    })
+
+    // Start query execution
+    const startCommand = new StartQueryExecutionCommand({
+      QueryString: sqlQuery,
+      QueryExecutionContext: {
+        Database: config.database
+      },
+      ResultConfiguration: {
+        OutputLocation: `s3://${config.athenaResultsBucket}/cloudtrail-queries/`
+      }
+    })
+
+    const startResponse = await client.send(startCommand)
+    const queryExecutionId = startResponse.QueryExecutionId
+
+    if (!queryExecutionId) {
+      throw new Error('Failed to start Athena query - no execution ID returned')
+    }
+
+    logger.debug('[CloudTrail Security Lake] Query started', { queryExecutionId })
+
+    // Poll for query completion
+    let queryStatus = 'RUNNING'
+    let attempts = 0
+    const maxAttempts = 60 // 60 attempts * 2 seconds = 2 minutes max wait
+
+    while (queryStatus === 'RUNNING' || queryStatus === 'QUEUED') {
+      if (attempts >= maxAttempts) {
+        throw new Error('Athena query timeout - exceeded maximum wait time')
       }
 
-      nextToken = response.NextToken
+      // Wait 2 seconds between checks
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      attempts++
 
-      logger.debug('[CloudTrail] Fetched events page', {
-        accountId,
-        page: pageCount,
-        eventsInPage: response.Events?.length || 0,
-        totalEvents: events.length,
+      const statusCommand = new GetQueryExecutionCommand({
+        QueryExecutionId: queryExecutionId
       })
 
-    } while (nextToken && pageCount < maxPages)
+      const statusResponse = await client.send(statusCommand)
+      queryStatus = statusResponse.QueryExecution?.Status?.State || 'UNKNOWN'
 
-    if (nextToken) {
-      logger.warn('[CloudTrail] Exceeded max pages for account', {
-        accountId,
-        maxPages,
-        totalEvents: events.length,
+      if (queryStatus === 'FAILED' || queryStatus === 'CANCELLED') {
+        const reason = statusResponse.QueryExecution?.Status?.StateChangeReason || 'Unknown error'
+        throw new Error(`Athena query failed: ${reason}`)
+      }
+
+      logger.debug('[CloudTrail Security Lake] Query status', {
+        queryExecutionId,
+        status: queryStatus,
+        attempts
       })
     }
+
+    logger.info('[CloudTrail Security Lake] Query completed', {
+      queryExecutionId,
+      attempts,
+      durationSeconds: attempts * 2
+    })
+
+    // Fetch query results
+    const resultsCommand = new GetQueryResultsCommand({
+      QueryExecutionId: queryExecutionId,
+      MaxResults: 1000
+    })
+
+    let resultResponse = await client.send(resultsCommand)
+    let processedRows = 0
+
+    do {
+      if (!resultResponse.ResultSet?.Rows) {
+        break
+      }
+
+      // First row is headers, skip it
+      const rows = resultResponse.ResultSet.Rows.slice(processedRows === 0 ? 1 : 0)
+
+      for (const row of rows) {
+        if (!row.Data) continue
+
+        // Parse row data into object
+        const rowData: any = {}
+        const columns = resultResponse.ResultSet.ResultSetMetadata?.ColumnInfo || []
+
+        row.Data.forEach((cell, index) => {
+          const columnName = columns[index]?.Name || `col_${index}`
+          const value = cell.VarCharValue
+
+          // Parse JSON fields (unmapped contains the original CloudTrail event)
+          if (value && columnName === 'unmapped') {
+            try {
+              rowData[columnName] = JSON.parse(value)
+            } catch {
+              rowData[columnName] = value
+            }
+          } else {
+            rowData[columnName] = value
+          }
+        })
+
+        // Get account name
+        const accountId = rowData.accountid || ''
+        const accountName = accountNameMap.get(accountId) || accountId
+
+        // Normalize the event
+        const event = normalizeSecurityLakeEvent(rowData, accountName)
+        events.push(event)
+      }
+
+      processedRows += rows.length
+
+      // Check for more results
+      if (resultResponse.NextToken) {
+        resultResponse = await client.send(new GetQueryResultsCommand({
+          QueryExecutionId: queryExecutionId,
+          NextToken: resultResponse.NextToken,
+          MaxResults: 1000
+        }))
+      } else {
+        break
+      }
+
+    } while (resultResponse.NextToken)
+
+    logger.info('[CloudTrail Security Lake] Events retrieved', {
+      totalEvents: events.length,
+      processedRows
+    })
 
   } catch (error: any) {
-    // CloudTrail might not be enabled or accessible
-    if (error.name === 'InvalidClientTokenId' || error.message?.includes('not enabled')) {
-      logger.warn('[CloudTrail] Not accessible in account', { accountId })
-    } else {
-      logger.error('[CloudTrail] Failed to fetch events', {
-        accountId,
-        error: error.message,
-      })
-    }
-    // Non-fatal - continue with other accounts
+    logger.error('[CloudTrail Security Lake] Query failed', {
+      error: error.message,
+      stack: error.stack
+    })
+    // Non-fatal - return empty results
   }
 
   return events
@@ -356,28 +504,27 @@ export async function getCloudTrailEvents(
 
     const validAccounts = targetAccounts
 
-    // Fetch events from all accounts
-    const allEvents: CloudTrailEventRecord[] = []
+    // Extract just the account IDs for querying Security Lake
+    const queryAccountIds = validAccounts.map(acc => acc.accountId)
 
-    // Process accounts sequentially to avoid rate limiting
-    // CloudTrail API has strict rate limits (2 TPS per account)
-    for (const { accountId, accountName } of validAccounts) {
-      const accountEvents = await fetchEventsForAccount(
-        accountId,
-        accountName,
-        filters,
-        startDate,
-        endDate,
-        environment
-      )
-      allEvents.push(...accountEvents)
+    // Build account name map for the results
+    const accountNameMap = environment === 'govcloud' ? govCloudAccountMap : commercialAccountMap
 
-      logger.info('[CloudTrail] Account completed', {
-        accountId,
-        eventsFound: accountEvents.length,
-        totalEvents: allEvents.length,
-      })
-    }
+    // Query Security Lake once for all accounts (much more efficient than per-account queries)
+    logger.info('[CloudTrail] Querying Security Lake', {
+      accountCount: queryAccountIds.length,
+      environment,
+      lookbackDays
+    })
+
+    const allEvents = await querySecurityLakeForEvents(
+      queryAccountIds,
+      accountNameMap,
+      filters,
+      startDate,
+      endDate,
+      environment
+    )
 
     // Apply client-side filters
     const filteredEvents = applyClientSideFilters(allEvents, filters)
