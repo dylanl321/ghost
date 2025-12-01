@@ -1,5 +1,5 @@
 # Use a Node.js base image with Debian (includes build tools for native modules)
-FROM node:23
+FROM node:22
 
 # Maintainer information
 LABEL maintainer="AWSProductTeam@gd-ms.com"
