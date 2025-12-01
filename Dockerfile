@@ -1,5 +1,5 @@
-# Use a Node.js base image. See full list of images here: https://hub.docker.com/_/node
-FROM node:23-slim
+# Use a Node.js base image with Debian (includes build tools for native modules)
+FROM node:23
 
 # Maintainer information
 LABEL maintainer="AWSProductTeam@gd-ms.com"
