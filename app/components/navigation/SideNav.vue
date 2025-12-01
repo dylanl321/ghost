@@ -209,70 +209,43 @@
         }"
       >
         <!-- Documentation Link -->
-        <NuxtLink
-          to="/support/docs"
-          class="flex items-center justify-center p-2 rounded-md text-slate-400 hover:bg-slate-800 hover:text-white transition-colors relative group"
-          :class="{
-            'text-white bg-slate-800': route.path.startsWith('/support/docs'),
-          }"
-        >
-          <UIcon name="i-heroicons-document-text" class="flex-shrink-0 w-5 h-5" />
-
-          <!-- Tooltip for collapsed state -->
-          <div
-            v-if="navigationStore.isCollapsed && !navigationStore.isHovered"
-            class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-slate-600"
+        <UTooltip text="Documentation" :shortcuts="[]">
+          <NuxtLink
+            to="/support/docs"
+            class="flex items-center justify-center p-2 rounded-md text-slate-400 hover:bg-slate-800 hover:text-white transition-colors relative group"
+            :class="{
+              'text-white bg-slate-800': route.path.startsWith('/support/docs'),
+            }"
           >
-            Documentation
-            <div
-              class="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-0 h-0 border-r-4 border-r-slate-800 border-t-2 border-b-2 border-t-transparent border-b-transparent"
-            ></div>
-          </div>
-        </NuxtLink>
+            <UIcon name="i-heroicons-document-text" class="flex-shrink-0 w-5 h-5" />
+          </NuxtLink>
+        </UTooltip>
 
         <!-- Support Link -->
-        <NuxtLink
-          to="/support"
-          class="flex items-center justify-center p-2 rounded-md text-slate-400 hover:bg-slate-800 hover:text-white transition-colors relative group"
-          :class="{
-            'text-white bg-slate-800': route.path === '/support' || route.path.startsWith('/support/'),
-          }"
-        >
-          <UIcon name="i-heroicons-lifebuoy" class="flex-shrink-0 w-5 h-5" />
-
-          <!-- Tooltip for collapsed state -->
-          <div
-            v-if="navigationStore.isCollapsed && !navigationStore.isHovered"
-            class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-slate-600"
+        <UTooltip text="Support" :shortcuts="[]">
+          <NuxtLink
+            to="/support"
+            class="flex items-center justify-center p-2 rounded-md text-slate-400 hover:bg-slate-800 hover:text-white transition-colors relative group"
+            :class="{
+              'text-white bg-slate-800': route.path === '/support' || route.path.startsWith('/support/'),
+            }"
           >
-            Support
-            <div
-              class="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-0 h-0 border-r-4 border-r-slate-800 border-t-2 border-b-2 border-t-transparent border-b-transparent"
-            ></div>
-          </div>
-        </NuxtLink>
+            <UIcon name="i-heroicons-lifebuoy" class="flex-shrink-0 w-5 h-5" />
+          </NuxtLink>
+        </UTooltip>
 
         <!-- About Link -->
-        <NuxtLink
-          to="/about"
-          class="flex items-center justify-center p-2 rounded-md text-slate-400 hover:bg-slate-800 hover:text-white transition-colors relative group"
-          :class="{
-            'text-white bg-slate-800': route.path === '/about',
-          }"
-        >
-          <UIcon name="i-heroicons-information-circle" class="flex-shrink-0 w-5 h-5" />
-
-          <!-- Tooltip for collapsed state -->
-          <div
-            v-if="navigationStore.isCollapsed && !navigationStore.isHovered"
-            class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-slate-600"
+        <UTooltip text="About" :shortcuts="[]">
+          <NuxtLink
+            to="/about"
+            class="flex items-center justify-center p-2 rounded-md text-slate-400 hover:bg-slate-800 hover:text-white transition-colors relative group"
+            :class="{
+              'text-white bg-slate-800': route.path === '/about',
+            }"
           >
-            About
-            <div
-              class="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-0 h-0 border-r-4 border-r-slate-800 border-t-2 border-b-2 border-t-transparent border-b-transparent"
-            ></div>
-          </div>
-        </NuxtLink>
+            <UIcon name="i-heroicons-information-circle" class="flex-shrink-0 w-5 h-5" />
+          </NuxtLink>
+        </UTooltip>
       </div>
     </div>
   </div>

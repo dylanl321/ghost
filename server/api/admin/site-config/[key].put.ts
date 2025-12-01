@@ -5,13 +5,13 @@
  */
 
 import { defineEventHandler, readBody, getRouterParam } from 'h3';
-import { requireAdmin } from '~/server/utils/user-roles';
-import { updateSiteConfig } from '~/server/utils/site-config';
-import type { SiteConfigUpdateRequest, SiteConfigUpdateResponse } from '~/shared/types/site-config';
+import { requireAdmin } from '../../../utils/user-roles';
+import { updateSiteConfig } from '../../../utils/site-config';
+import type { SiteConfigUpdateRequest, SiteConfigUpdateResponse } from '../../../../shared/types/site-config';
 
 export default defineEventHandler(async (event) => {
   // Require admin access
-  const user = await requireAdmin(event);
+  await requireAdmin(event);
 
   try {
     // Get the config key from URL params
@@ -35,8 +35,10 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    // Get username for audit trail
-    const username = user.email || user.preferred_username || 'unknown';
+    // Get username for audit trail from session
+    const auth = event.context.auth;
+    const user = auth?.user;
+    const username = user?.email || user?.preferred_username || 'unknown';
 
     // Update the configuration
     const updated = await updateSiteConfig(

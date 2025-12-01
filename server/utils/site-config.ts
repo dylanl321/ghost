@@ -6,8 +6,8 @@
  */
 
 import { getItem, putItem, scanItems, batchPutItems } from './dynamodb';
-import type { SiteConfigItem } from '~/shared/types/site-config';
-import { DEFAULT_SITE_CONFIG } from '~/shared/types/site-config';
+import type { SiteConfigItem } from '../../shared/types/site-config';
+import { DEFAULT_SITE_CONFIG } from '../../shared/types/site-config';
 
 const TABLE_NAME = 'ghost-site-config';
 const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
@@ -17,12 +17,13 @@ const configCache = new Map<string, { value: SiteConfigItem; expiresAt: number }
 
 /**
  * Get the appropriate AWS environment and account ID for site config
- * Site config is stored in GovCloud master account
+ * Site config is stored in GovCloud deployment account (Account B - where ECS runs)
+ * Uses role assumption from org account (Account A) to deployment account (Account B)
  */
 function getSiteConfigContext() {
   return {
     environment: 'govcloud' as const,
-    accountId: '374673712317', // GovCloud master account
+    accountId: process.env.AWS_DEPLOYMENT_ACCOUNT_ID || '461760157232',
   };
 }
 
@@ -99,9 +100,15 @@ export async function getAllSiteConfig(useCache = true): Promise<SiteConfigItem[
 
     // Merge with defaults to ensure all keys exist
     return mergeWithDefaults(items);
-  } catch (error) {
+  } catch (error: any) {
+    // If table doesn't exist yet, return defaults
+    if (error.name === 'ResourceNotFoundException' || error.message?.includes('not found')) {
+      console.warn(`Site config table '${TABLE_NAME}' not found, using defaults. Run 'npx tsx scripts/init-site-config.ts' to initialize.`);
+      return DEFAULT_SITE_CONFIG;
+    }
+
     console.error('Error fetching all site config:', error);
-    // Return defaults on error
+    // Return defaults on any error
     return DEFAULT_SITE_CONFIG;
   }
 }
@@ -147,7 +154,12 @@ export async function updateSiteConfig(
     configCache.delete(key);
 
     return updated;
-  } catch (error) {
+  } catch (error: any) {
+    // If table doesn't exist, provide helpful error message
+    if (error.name === 'ResourceNotFoundException' || error.message?.includes('not found')) {
+      throw new Error(`Site config table '${TABLE_NAME}' not found. Please run 'npx tsx scripts/init-site-config.ts' to initialize the table.`);
+    }
+
     console.error(`Error updating site config for key ${key}:`, error);
     throw error;
   }

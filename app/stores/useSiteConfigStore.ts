@@ -193,8 +193,9 @@ export const useSiteConfigStore = defineStore('siteConfig', {
     },
   },
 
-  // Persist in session storage (cleared on logout)
+  // Persist in storage (survives page refresh, cleared on logout)
   persist: {
-    storage: persistedState.sessionStorage,
+    key: 'ghost-site-config',
+    storage: process.client ? sessionStorage : undefined,
   },
 });

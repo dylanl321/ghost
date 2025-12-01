@@ -142,7 +142,7 @@ registerEndpoint('/api/strands/chat', 'POST', {
 
 export default defineEventHandler(handleAsync(async (event) => {
   // Check if Strands chat is enabled
-  const { getConfigValue } = await import('~/server/utils/site-config')
+  const { getConfigValue } = await import('../../utils/site-config')
   const strandsEnabled = await getConfigValue<boolean>('features.strandsChat.enabled', true)
 
   if (!strandsEnabled) {

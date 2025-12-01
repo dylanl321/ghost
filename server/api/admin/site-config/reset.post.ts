@@ -6,8 +6,8 @@
  */
 
 import { defineEventHandler, readBody } from 'h3';
-import { requireAdmin } from '~/server/utils/user-roles';
-import { resetSiteConfig, resetAllSiteConfig } from '~/server/utils/site-config';
+import { requireAdmin } from '../../../utils/user-roles';
+import { resetSiteConfig, resetAllSiteConfig } from '../../../utils/site-config';
 
 interface ResetRequest {
   key?: string; // If provided, reset only this key. Otherwise reset all.
@@ -15,13 +15,15 @@ interface ResetRequest {
 
 export default defineEventHandler(async (event) => {
   // Require admin access
-  const user = await requireAdmin(event);
+  await requireAdmin(event);
 
   try {
     const body = await readBody<ResetRequest>(event);
 
-    // Get username for audit trail
-    const username = user.email || user.preferred_username || 'unknown';
+    // Get username for audit trail from session
+    const auth = event.context.auth;
+    const user = auth?.user;
+    const username = user?.email || user?.preferred_username || 'unknown';
 
     if (body.key) {
       // Reset single key

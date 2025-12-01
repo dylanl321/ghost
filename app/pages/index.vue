@@ -9,40 +9,63 @@
         <div class="relative z-10">
           <div class="flex items-start justify-between">
             <div class="flex-1">
-              <p class="text-sm text-gray-400 mb-1">{{ currentGreeting }}</p>
+              <ClientOnly>
+                <p class="text-sm text-gray-400 mb-1">{{ currentGreeting }}</p>
+                <template #fallback>
+                  <p class="text-sm text-gray-400 mb-1">Hello</p>
+                </template>
+              </ClientOnly>
               <h1 class="text-3xl font-bold mb-2 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
                 {{ user?.claims?.given_name || 'User' }}
               </h1>
-              <p class="text-sm text-gray-400 flex items-center gap-2">
-                <UIcon name="i-heroicons-calendar" class="w-4 h-4" />
-                {{ currentDate }}
-              </p>
+              <ClientOnly>
+                <p class="text-sm text-gray-400 flex items-center gap-2">
+                  <UIcon name="i-heroicons-calendar" class="w-4 h-4" />
+                  {{ currentDate }}
+                </p>
+                <template #fallback>
+                  <p class="text-sm text-gray-400 flex items-center gap-2">
+                    <UIcon name="i-heroicons-calendar" class="w-4 h-4" />
+                    Loading...
+                  </p>
+                </template>
+              </ClientOnly>
             </div>
 
             <!-- Quick Stats Summary - User's Personal Stats -->
-            <div v-if="userAccountCount > 0" class="flex items-center gap-3">
-              <div class="text-right">
-                <p class="text-xs text-gray-500 uppercase tracking-wide">My Accounts</p>
-                <p class="text-2xl font-bold text-white">{{ userAccountCount }}</p>
+            <ClientOnly>
+              <div v-if="userAccountCount > 0" class="flex items-center gap-3">
+                <div class="text-right">
+                  <p class="text-xs text-gray-500 uppercase tracking-wide">My Accounts</p>
+                  <p class="text-2xl font-bold text-white">{{ userAccountCount }}</p>
+                </div>
+                <div class="w-px h-12 bg-gray-700"></div>
+                <div class="text-right">
+                  <p class="text-xs text-gray-500 uppercase tracking-wide">My MTD Cost</p>
+                  <p class="text-2xl font-bold text-white">{{ formatCurrency(userTotalCost, 0) }}</p>
+                </div>
               </div>
-              <div class="w-px h-12 bg-gray-700"></div>
-              <div class="text-right">
-                <p class="text-xs text-gray-500 uppercase tracking-wide">My MTD Cost</p>
-                <p class="text-2xl font-bold text-white">{{ formatCurrency(userTotalCost, 0) }}</p>
+              <!-- Fallback to org stats if user has no accounts -->
+              <div v-else class="flex items-center gap-3">
+                <div class="text-right">
+                  <p class="text-xs text-gray-500 uppercase tracking-wide">Org Accounts</p>
+                  <p class="text-2xl font-bold text-white">{{ activeAccounts }}</p>
+                </div>
+                <div class="w-px h-12 bg-gray-700"></div>
+                <div class="text-right">
+                  <p class="text-xs text-gray-500 uppercase tracking-wide">Org MTD</p>
+                  <p class="text-2xl font-bold text-white">{{ formatCurrency(mtdTotal, 0) }}</p>
+                </div>
               </div>
-            </div>
-            <!-- Fallback to org stats if user has no accounts -->
-            <div v-else class="flex items-center gap-3">
-              <div class="text-right">
-                <p class="text-xs text-gray-500 uppercase tracking-wide">Org Accounts</p>
-                <p class="text-2xl font-bold text-white">{{ activeAccounts }}</p>
-              </div>
-              <div class="w-px h-12 bg-gray-700"></div>
-              <div class="text-right">
-                <p class="text-xs text-gray-500 uppercase tracking-wide">Org MTD</p>
-                <p class="text-2xl font-bold text-white">{{ formatCurrency(mtdTotal, 0) }}</p>
-              </div>
-            </div>
+              <template #fallback>
+                <div class="flex items-center gap-3">
+                  <div class="text-right">
+                    <p class="text-xs text-gray-500 uppercase tracking-wide">Loading...</p>
+                    <p class="text-2xl font-bold text-white">--</p>
+                  </div>
+                </div>
+              </template>
+            </ClientOnly>
           </div>
 
           <!-- Quick Actions -->

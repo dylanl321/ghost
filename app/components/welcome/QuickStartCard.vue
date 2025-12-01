@@ -40,7 +40,7 @@
 
           <UButton
             icon="i-heroicons-building-office"
-            to="/org"
+            to="/account/org-chart"
             color="purple"
             variant="soft"
             size="lg"

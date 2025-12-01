@@ -6,9 +6,9 @@
  */
 
 import { defineEventHandler } from 'h3';
-import { requireAdmin } from '~/server/utils/user-roles';
-import { getAllSiteConfig, buildNestedConfig } from '~/server/utils/site-config';
-import type { SiteConfigListResponse } from '~/shared/types/site-config';
+import { requireAdmin } from '../../../utils/user-roles';
+import { getAllSiteConfig, buildNestedConfig } from '../../../utils/site-config';
+import type { SiteConfigListResponse } from '../../../../shared/types/site-config';
 
 export default defineEventHandler(async (event) => {
   // Require admin access

@@ -6,7 +6,7 @@
  */
 
 import { defineEventHandler } from 'h3';
-import { getPublicSiteConfig, buildNestedConfig } from '~/server/utils/site-config';
+import { getPublicSiteConfig, buildNestedConfig } from '../../utils/site-config';
 
 export default defineEventHandler(async (event) => {
   try {

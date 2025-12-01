@@ -52,19 +52,21 @@
       </footer>
     </div>
 
-    <!-- Global AI Assistant Popup -->
+    <!-- Global AI Assistant Popup (feature flag controlled) -->
     <ClientOnly>
-      <StrandsChatPopup />
+      <StrandsChatPopup v-if="siteConfigStore.isStrandsChatPopupEnabled" />
     </ClientOnly>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useNavigationStore } from '~/stores/useNavigationStore'
+import { useSiteConfigStore } from '~/stores/useSiteConfigStore'
 import WelcomeBanner from '~/components/welcome/WelcomeBanner.vue'
 
 const route = useRoute()
 const navigationStore = useNavigationStore()
+const siteConfigStore = useSiteConfigStore()
 const sideNavRef = ref()
 
 // Detect explorer page to adjust layout
