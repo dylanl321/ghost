@@ -3,7 +3,7 @@
  * POST /api/dataset-reports/share
  */
 
-import type { DatasetReportConfig } from '#shared/types/dataset-reports'
+import type { DatasetReportConfig } from '../../../shared/types/dataset-reports'
 import { createShortLink } from '../../lib/shortlinks'
 import { getTableConfig } from '../../lib/dynamodb-config'
 import { uploadReportToS3 } from '../../utils/s3-reports-storage'

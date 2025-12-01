@@ -5,6 +5,7 @@
  */
 
 import { logger } from './logger'
+import { getConfigValue } from './site-config'
 import type {
   StrandsQueryRequest,
   StrandsQueryResponse,
@@ -20,7 +21,6 @@ import type {
 async function getStrandsConfig(): Promise<StrandsClientConfig> {
   // Try to get config from site config system
   try {
-    const { getConfigValue } = await import('./site-config')
 
     const serverUrl = await getConfigValue<string>('services.strands.serverUrl') ||
       process.env.STRANDS_SERVER_URL

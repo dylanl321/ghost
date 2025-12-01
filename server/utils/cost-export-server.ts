@@ -5,7 +5,7 @@
  */
 
 import type { NormalizedDataset } from '~/types/costs'
-import type { DataExportConfig, SheetConfig, ColumnConfig, ExportMetadata } from '~/shared/types/export'
+import type { DataExportConfig, SheetConfig, ColumnConfig, ExportMetadata } from '../../shared/types/export'
 import {
   formatTimeframe,
   formatScope,
@@ -16,7 +16,7 @@ import {
   createMonthlyBreakdownSheet,
   createForecastSheet,
   createYearEndSummarySheet
-} from '#shared/utils/cost-sheet-builders'
+} from '../../shared/utils/cost-sheet-builders'
 
 export function createCostExportConfig(
   dataset: NormalizedDataset,

@@ -83,7 +83,7 @@ export type AWSConfigResourceType = typeof AWS_CONFIG_RESOURCE_TYPES[number] | s
 /**
  * Config rule compliance status
  */
-export type ComplianceStatus =
+export type ConfigComplianceStatus =
   | 'COMPLIANT'
   | 'NON_COMPLIANT'
   | 'NOT_APPLICABLE'
@@ -95,7 +95,7 @@ export type ComplianceStatus =
 export interface ComplianceEvaluation {
   complianceResourceType: string
   complianceResourceId: string
-  complianceType: ComplianceStatus
+  complianceType: ConfigComplianceStatus
   annotation?: string  // Reason for compliance status
   orderingTimestamp: Date
   configRuleInvokedTime: Date
@@ -207,7 +207,7 @@ export interface ConfigAggregatorFilters {
   accountIds?: string[]
   regions?: string[]
   resourceTypes?: AWSConfigResourceType[]
-  complianceType?: ComplianceStatus
+  complianceType?: ConfigComplianceStatus
   configRuleNames?: string[]
 }
 
@@ -223,7 +223,7 @@ export interface ResourceInventoryResult {
     resourceName?: string
     tags?: Record<string, string>
     configurationItemCaptureTime: string
-    complianceStatus?: ComplianceStatus
+    complianceStatus?: ConfigComplianceStatus
     complianceRules?: string[]
   }>
   totalCount: number
@@ -240,7 +240,7 @@ export interface ComplianceDetailsResult {
     configRuleName: string
     resourceType: string
     resourceId: string
-    complianceType: ComplianceStatus
+    complianceType: ConfigComplianceStatus
     annotation?: string
     orderingTimestamp: string
   }>

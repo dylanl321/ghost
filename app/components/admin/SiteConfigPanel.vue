@@ -12,6 +12,12 @@
       </div>
       <div class="flex gap-2">
         <UButton
+          icon="i-heroicons-clock"
+          label="History"
+          variant="outline"
+          @click="showHistory = true"
+        />
+        <UButton
           icon="i-heroicons-arrow-path"
           label="Refresh"
           variant="outline"
@@ -27,6 +33,29 @@
           @click="confirmResetAll"
         />
       </div>
+    </div>
+
+    <!-- Search and Filters -->
+    <div class="flex gap-3 items-center">
+      <UInput
+        v-model="searchQuery"
+        placeholder="Search settings..."
+        icon="i-heroicons-magnifying-glass"
+        class="flex-1"
+      />
+      <USelect
+        v-model="categoryFilter"
+        :options="categoryOptions"
+        placeholder="All Categories"
+        class="w-48"
+      />
+      <UButton
+        :label="showModifiedOnly ? 'Modified Only' : 'Show All'"
+        :color="showModifiedOnly ? 'primary' : 'gray'"
+        variant="outline"
+        icon="i-heroicons-funnel"
+        @click="showModifiedOnly = !showModifiedOnly"
+      />
     </div>
 
     <!-- Loading State -->
@@ -59,88 +88,24 @@
       @close="successMessage = null"
     />
 
-    <!-- Configuration by Category -->
-    <div v-if="!loading || configs.length" class="space-y-6">
-      <!-- Features -->
-      <UCard>
-        <template #header>
-          <div class="flex items-center gap-2">
-            <UIcon name="i-heroicons-flag" class="text-xl" />
-            <h3 class="text-lg font-semibold">Feature Flags</h3>
-          </div>
-        </template>
-
-        <div class="space-y-4">
-          <ConfigItem
-            v-for="config in getConfigsByCategory('features')"
-            :key="config.key"
-            :config="config"
-            @update="handleUpdate"
-            @reset="handleReset"
-          />
-        </div>
-      </UCard>
-
-      <!-- Services -->
-      <UCard>
-        <template #header>
-          <div class="flex items-center gap-2">
-            <UIcon name="i-heroicons-server-stack" class="text-xl" />
-            <h3 class="text-lg font-semibold">Service Configuration</h3>
-          </div>
-        </template>
-
-        <div class="space-y-4">
-          <ConfigItem
-            v-for="config in getConfigsByCategory('services')"
-            :key="config.key"
-            :config="config"
-            @update="handleUpdate"
-            @reset="handleReset"
-          />
-        </div>
-      </UCard>
-
-      <!-- Performance -->
-      <UCard>
-        <template #header>
-          <div class="flex items-center gap-2">
-            <UIcon name="i-heroicons-bolt" class="text-xl" />
-            <h3 class="text-lg font-semibold">Performance Settings</h3>
-          </div>
-        </template>
-
-        <div class="space-y-4">
-          <ConfigItem
-            v-for="config in getConfigsByCategory('performance')"
-            :key="config.key"
-            :config="config"
-            @update="handleUpdate"
-            @reset="handleReset"
-          />
-        </div>
-      </UCard>
-
-      <!-- UI Customization -->
-      <UCard>
-        <template #header>
-          <div class="flex items-center gap-2">
-            <UIcon name="i-heroicons-paint-brush" class="text-xl" />
-            <h3 class="text-lg font-semibold">UI Customization</h3>
-          </div>
-        </template>
-
-        <div class="space-y-4">
-          <ConfigItem
-            v-for="config in getConfigsByCategory('ui')"
-            :key="config.key"
-            :config="config"
-            @update="handleUpdate"
-            @reset="handleReset"
-          />
-        </div>
-      </UCard>
+    <!-- Configuration Grid -->
+    <div v-if="!loading || configs.length">
+      <div v-if="filteredConfigs.length === 0" class="text-center py-12 text-gray-500">
+        No settings match your search criteria
+      </div>
+      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <ConfigItem
+          v-for="config in filteredConfigs"
+          :key="config.key"
+          :config="config"
+          @update="handleUpdate"
+          @reset="handleReset"
+        />
+      </div>
     </div>
+
+    <!-- Change History Modal -->
+    <ChangeHistoryModal v-model="showHistory" />
   </div>
 </template>
 
@@ -152,6 +117,53 @@ const loading = ref(false);
 const resetting = ref(false);
 const error = ref<string | null>(null);
 const successMessage = ref<string | null>(null);
+const showHistory = ref(false);
+
+// Search and filter state
+const searchQuery = ref('');
+const categoryFilter = ref('');
+const showModifiedOnly = ref(false);
+
+// Category options for filter
+const categoryOptions = [
+  { label: 'All Categories', value: '' },
+  { label: 'Feature Flags', value: 'features' },
+  { label: 'Service Configuration', value: 'services' },
+  { label: 'Performance Settings', value: 'performance' },
+  { label: 'UI Customization', value: 'ui' },
+];
+
+// Filtered configs based on search and filters
+const filteredConfigs = computed(() => {
+  let filtered = configs.value;
+
+  // Apply category filter
+  if (categoryFilter.value) {
+    filtered = filtered.filter((c) => c.category === categoryFilter.value);
+  }
+
+  // Apply search query
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase();
+    filtered = filtered.filter((c) => {
+      return (
+        c.label.toLowerCase().includes(query) ||
+        c.key.toLowerCase().includes(query) ||
+        c.description.toLowerCase().includes(query)
+      );
+    });
+  }
+
+  // Apply modified only filter
+  if (showModifiedOnly.value) {
+    filtered = filtered.filter((c) => {
+      // Compare current value with defaultValue stored in the config itself
+      return JSON.stringify(c.value) !== JSON.stringify(c.defaultValue);
+    });
+  }
+
+  return filtered;
+});
 
 // Load configuration on mount
 onMounted(() => {
@@ -175,10 +187,6 @@ async function loadConfig() {
   } finally {
     loading.value = false;
   }
-}
-
-function getConfigsByCategory(category: string): SiteConfigItem[] {
-  return configs.value.filter((c) => c.category === category);
 }
 
 async function handleUpdate(key: string, value: any) {

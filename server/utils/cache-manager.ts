@@ -49,21 +49,41 @@ class CacheManager {
     oldestEntry: 0,
     newestEntry: 0
   }
-  
+
   private config: CacheConfig = {
     defaultTTL: 300, // 5 minutes
     maxEntries: 1000,
     enableAnalytics: true,
     enableCompression: false
   }
-  
+
+  private cleanupInterval: NodeJS.Timeout | null = null
+
   constructor(config?: Partial<CacheConfig>) {
     if (config) {
       this.config = { ...this.config, ...config }
     }
-    
-    // Start cleanup interval
-    setInterval(() => this.cleanup(), 60000) // Clean every minute
+
+    // Start cleanup interval with proper reference for cleanup
+    this.cleanupInterval = setInterval(() => this.cleanup(), 60000) // Clean every minute
+
+    // Unref the interval in production to prevent keeping Node.js process alive
+    if (process.env.NODE_ENV === 'production' && this.cleanupInterval.unref) {
+      this.cleanupInterval.unref()
+    }
+  }
+
+  /**
+   * Destroy the cache manager and clear the cleanup interval
+   * Call this when the cache manager is no longer needed
+   */
+  destroy(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval)
+      this.cleanupInterval = null
+    }
+    this.cache.clear()
+    this.resetStats()
   }
   
   /**
@@ -351,20 +371,59 @@ class CacheManager {
   }
 }
 
-// Create global cache instances
-export const organizationCache = new CacheManager({
+// Track all cache instances for cleanup on HMR
+const allCacheInstances: CacheManager[] = []
+const MAX_CACHE_INSTANCES = 20 // Prevent unbounded growth
+
+function createTrackedCache(config?: Partial<CacheConfig>): CacheManager {
+  const cache = new CacheManager(config)
+  allCacheInstances.push(cache)
+
+  // Prevent memory leak from unbounded array growth
+  if (allCacheInstances.length > MAX_CACHE_INSTANCES) {
+    logger.warn(`Cache instance limit exceeded (${allCacheInstances.length}/${MAX_CACHE_INSTANCES}). Destroying oldest instance.`)
+    const oldest = allCacheInstances.shift()
+    oldest?.destroy()
+  }
+
+  return cache
+}
+
+// Clean up on module reload (Hot Module Replacement)
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    allCacheInstances.forEach(cache => cache.destroy())
+    allCacheInstances.length = 0
+  })
+}
+
+// Clean up on process exit (production)
+if (process.env.NODE_ENV === 'production') {
+  const cleanupAllCaches = () => {
+    logger.info('Cleaning up cache instances on shutdown...')
+    allCacheInstances.forEach(cache => cache.destroy())
+    allCacheInstances.length = 0
+  }
+
+  process.on('SIGTERM', cleanupAllCaches)
+  process.on('SIGINT', cleanupAllCaches)
+  process.on('exit', cleanupAllCaches)
+}
+
+// Create global cache instances with proper cleanup tracking
+export const organizationCache = createTrackedCache({
   defaultTTL: 300, // 5 minutes for organization data
   maxEntries: 500,
   enableAnalytics: true
 })
 
-export const accountCache = new CacheManager({
+export const accountCache = createTrackedCache({
   defaultTTL: 600, // 10 minutes for account data
   maxEntries: 1000,
   enableAnalytics: true
 })
 
-export const costCache = new CacheManager({
+export const costCache = createTrackedCache({
   defaultTTL: 900, // 15 minutes for cost data
   maxEntries: 200,
   enableAnalytics: true
@@ -420,8 +479,8 @@ export const CacheTags = {
   BUDGETS: 'budgets'
 }
 
-// Default cache manager instance
-const defaultCacheManager = new CacheManager({
+// Default cache manager instance with cleanup tracking
+const defaultCacheManager = createTrackedCache({
   defaultTTL: 600, // 10 minutes default
   maxEntries: 2000,
   enableAnalytics: true

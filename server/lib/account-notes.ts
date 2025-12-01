@@ -3,7 +3,7 @@
  * CRUD operations for admin notes on AWS accounts
  */
 
-import type { AccountNote, CreateNoteRequest, UpdateNoteRequest, ListNotesQuery } from '#shared/types/account-notes'
+import type { AccountNote, CreateNoteRequest, UpdateNoteRequest, ListNotesQuery } from '../../shared/types/account-notes'
 import { getTableName, getTableEnvironment, getTableAccountId } from './dynamodb-config'
 import { putItem, getItem, deleteItem, queryItems } from '../utils/dynamodb'
 import { v4 as uuidv4 } from 'uuid'

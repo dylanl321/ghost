@@ -5,8 +5,17 @@
  * Provides CRUD operations with caching for performance.
  */
 
-import { getItem, putItem, scanItems, batchPutItems } from './dynamodb';
-import type { SiteConfigItem } from '../../shared/types/site-config';
+import {
+  DynamoDBClient,
+  GetItemCommand,
+  PutItemCommand,
+  ScanCommand,
+  BatchWriteItemCommand,
+  QueryCommand
+} from '@aws-sdk/client-dynamodb';
+import { STSClient, AssumeRoleCommand } from '@aws-sdk/client-sts';
+import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
+import type { SiteConfigItem, SiteConfigHistoryEntry } from '../../shared/types/site-config';
 import { DEFAULT_SITE_CONFIG } from '../../shared/types/site-config';
 
 const TABLE_NAME = 'ghost-site-config';
@@ -14,6 +23,75 @@ const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
 // In-memory cache for config values
 const configCache = new Map<string, { value: SiteConfigItem; expiresAt: number }>();
+
+// Cached DynamoDB client to avoid circular dependencies with aws-client-factory
+let cachedDynamoDBClient: DynamoDBClient | null = null;
+
+/**
+ * Get DynamoDB client directly without aws-client-factory to avoid circular deps
+ * CRITICAL: Do not use aws-client-factory here as it would create infinite loop:
+ * site-config -> dynamodb -> aws-client-factory -> site-config
+ *
+ * Site config is stored in GovCloud deployment account (Account B - where ECS runs)
+ * Uses role assumption from org account (Account A) to deployment account (Account B)
+ * Returns null if credentials are not available
+ */
+async function getDynamoDBClientDirect(): Promise<DynamoDBClient | null> {
+  // Check if base credentials are available
+  const hasCredentials = process.env.AWS_GOVCLOUD_ACCESS_KEY_ID &&
+                         process.env.AWS_GOVCLOUD_SECRET_ACCESS_KEY;
+
+  if (!hasCredentials) {
+    return null; // No credentials, will fall back to defaults
+  }
+
+  if (!cachedDynamoDBClient) {
+    const region = process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1';
+    const deploymentAccountId = process.env.AWS_DEPLOYMENT_ACCOUNT_ID || '461760157232';
+    const roleName = process.env.AWS_ASSUME_ROLE_NAME || 'GDMSOrganizationsRole';
+
+    try {
+      // Create STS client with base credentials (org account)
+      const stsClient = new STSClient({
+        region,
+        credentials: {
+          accessKeyId: process.env.AWS_GOVCLOUD_ACCESS_KEY_ID!,
+          secretAccessKey: process.env.AWS_GOVCLOUD_SECRET_ACCESS_KEY!,
+        },
+      });
+
+      // Assume role in deployment account
+      const assumeRoleCommand = new AssumeRoleCommand({
+        RoleArn: `arn:aws-us-gov:iam::${deploymentAccountId}:role/${roleName}`,
+        RoleSessionName: `site-config-${Date.now()}`,
+        DurationSeconds: 3600,
+      });
+
+      const assumeRoleResponse = await stsClient.send(assumeRoleCommand);
+
+      if (!assumeRoleResponse.Credentials) {
+        console.error('Failed to assume role for site-config access');
+        return null;
+      }
+
+      // Create DynamoDB client with assumed role credentials
+      cachedDynamoDBClient = new DynamoDBClient({
+        region,
+        credentials: {
+          accessKeyId: assumeRoleResponse.Credentials.AccessKeyId!,
+          secretAccessKey: assumeRoleResponse.Credentials.SecretAccessKey!,
+          sessionToken: assumeRoleResponse.Credentials.SessionToken!,
+        },
+      });
+
+      console.log(`[Site Config] Created DynamoDB client for deployment account ${deploymentAccountId}`);
+    } catch (error) {
+      console.error('Error assuming role for site-config:', error);
+      return null;
+    }
+  }
+  return cachedDynamoDBClient;
+}
 
 /**
  * Get the appropriate AWS environment and account ID for site config
@@ -40,13 +118,20 @@ export async function getSiteConfig(key: string, useCache = true): Promise<SiteC
   }
 
   try {
-    const { environment, accountId } = getSiteConfigContext();
-    const item = await getItem<SiteConfigItem>(
-      TABLE_NAME,
-      { key },
-      environment,
-      accountId
-    );
+    const client = await getDynamoDBClientDirect();
+
+    // If no client (no credentials), return default
+    if (!client) {
+      return getDefaultConfig(key);
+    }
+
+    const command = new GetItemCommand({
+      TableName: TABLE_NAME,
+      Key: marshall({ key }, { removeUndefinedValues: true })
+    });
+
+    const response = await client.send(command);
+    const item = response.Item ? unmarshall(response.Item) as SiteConfigItem : null;
 
     if (item) {
       // Cache the result
@@ -71,18 +156,20 @@ export async function getSiteConfig(key: string, useCache = true): Promise<SiteC
  */
 export async function getAllSiteConfig(useCache = true): Promise<SiteConfigItem[]> {
   try {
-    const { environment, accountId } = getSiteConfigContext();
+    const client = await getDynamoDBClientDirect();
 
-    const { items } = await scanItems<SiteConfigItem>(
-      TABLE_NAME,
-      undefined, // no filter
-      undefined, // no limit
-      undefined, // no lastEvaluatedKey
-      environment,
-      undefined, // no expressionAttributeNames
-      undefined, // no expressionAttributeValues
-      accountId
-    );
+    // If no client (no credentials), return defaults
+    if (!client) {
+      console.warn('AWS credentials not available, using default site config');
+      return DEFAULT_SITE_CONFIG;
+    }
+
+    const command = new ScanCommand({
+      TableName: TABLE_NAME
+    });
+
+    const response = await client.send(command);
+    const items = response.Items ? response.Items.map(item => unmarshall(item) as SiteConfigItem) : [];
 
     // If DB is empty or has fewer items than defaults, merge with defaults
     if (items.length === 0) {
@@ -147,8 +234,18 @@ export async function updateSiteConfig(
       updatedBy,
     };
 
-    const { environment, accountId } = getSiteConfigContext();
-    await putItem(TABLE_NAME, updated, environment, accountId);
+    const client = await getDynamoDBClientDirect();
+
+    // If no client (no credentials), throw error
+    if (!client) {
+      throw new Error('AWS credentials not configured. Cannot update site config in DynamoDB.');
+    }
+
+    const command = new PutItemCommand({
+      TableName: TABLE_NAME,
+      Item: marshall(updated, { removeUndefinedValues: true })
+    });
+    await client.send(command);
 
     // Clear cache for this key
     configCache.delete(key);
@@ -189,8 +286,27 @@ export async function resetAllSiteConfig(updatedBy?: string): Promise<void> {
     updatedBy,
   }));
 
-  const { environment, accountId } = getSiteConfigContext();
-  await batchPutItems(TABLE_NAME, resetConfigs, environment, accountId);
+  // Batch write in chunks of 25 (DynamoDB limit)
+  const client = await getDynamoDBClientDirect();
+
+  // If no client (no credentials), throw error
+  if (!client) {
+    throw new Error('AWS credentials not configured. Cannot reset site config in DynamoDB.');
+  }
+
+  for (let i = 0; i < resetConfigs.length; i += 25) {
+    const chunk = resetConfigs.slice(i, i + 25);
+    const command = new BatchWriteItemCommand({
+      RequestItems: {
+        [TABLE_NAME]: chunk.map(item => ({
+          PutRequest: {
+            Item: marshall(item, { removeUndefinedValues: true })
+          }
+        }))
+      }
+    });
+    await client.send(command);
+  }
 
   // Clear entire cache
   configCache.clear();
@@ -209,8 +325,27 @@ export async function initializeSiteConfig(): Promise<void> {
       updatedAt: timestamp,
     }));
 
-    const { environment, accountId } = getSiteConfigContext();
-    await batchPutItems(TABLE_NAME, initialConfigs, environment, accountId);
+    // Batch write in chunks of 25 (DynamoDB limit)
+    const client = await getDynamoDBClientDirect();
+
+    // If no client (no credentials), throw error
+    if (!client) {
+      throw new Error('AWS credentials not configured. Cannot initialize site config in DynamoDB.');
+    }
+
+    for (let i = 0; i < initialConfigs.length; i += 25) {
+      const chunk = initialConfigs.slice(i, i + 25);
+      const command = new BatchWriteItemCommand({
+        RequestItems: {
+          [TABLE_NAME]: chunk.map(item => ({
+            PutRequest: {
+              Item: marshall(item, { removeUndefinedValues: true })
+            }
+          }))
+        }
+      });
+      await client.send(command);
+    }
 
     console.log('Site config initialized successfully');
   } catch (error) {
@@ -323,4 +458,130 @@ function validateConfigValue(config: SiteConfigItem, value: any): void {
  */
 export function clearSiteConfigCache(): void {
   configCache.clear();
+}
+
+/**
+ * Save a change history entry to DynamoDB
+ * History entries use a composite key: PK=CONFIG#key, SK=HISTORY#timestamp
+ */
+export async function saveConfigHistory(
+  key: string,
+  oldValue: any,
+  newValue: any,
+  changedBy: string,
+  reason?: string
+): Promise<void> {
+  try {
+    const client = await getDynamoDBClientDirect();
+
+    if (!client) {
+      console.warn('Cannot save config history: AWS credentials not available');
+      return;
+    }
+
+    const timestamp = new Date().toISOString();
+    const historyEntry: SiteConfigHistoryEntry = {
+      key,
+      oldValue,
+      newValue,
+      changedBy,
+      changedAt: timestamp,
+      reason,
+    };
+
+    // Store history with composite key for efficient querying
+    const historyItem = {
+      PK: `CONFIG#${key}`,
+      SK: `HISTORY#${timestamp}`,
+      ...historyEntry,
+    };
+
+    const command = new PutItemCommand({
+      TableName: TABLE_NAME,
+      Item: marshall(historyItem, { removeUndefinedValues: true }),
+    });
+
+    await client.send(command);
+  } catch (error) {
+    console.error('Error saving config history:', error);
+    // Don't throw - history is nice-to-have, not critical
+  }
+}
+
+/**
+ * Get change history for a specific configuration key
+ */
+export async function getConfigHistory(key: string, limit = 50): Promise<SiteConfigHistoryEntry[]> {
+  try {
+    const client = await getDynamoDBClientDirect();
+
+    if (!client) {
+      console.warn('Cannot retrieve config history: AWS credentials not available');
+      return [];
+    }
+
+    const command = new QueryCommand({
+      TableName: TABLE_NAME,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      ExpressionAttributeValues: marshall({
+        ':pk': `CONFIG#${key}`,
+        ':sk': 'HISTORY#',
+      }),
+      ScanIndexFilter: undefined,
+      Limit: limit,
+      ScanIndexForward: false, // Most recent first
+    });
+
+    const response = await client.send(command);
+    const items = response.Items ? response.Items.map(item => {
+      const unmarshalled = unmarshall(item);
+      // Remove DynamoDB keys from result
+      const { PK, SK, ...historyEntry } = unmarshalled;
+      return historyEntry as SiteConfigHistoryEntry;
+    }) : [];
+
+    return items;
+  } catch (error) {
+    console.error(`Error fetching config history for key ${key}:`, error);
+    return [];
+  }
+}
+
+/**
+ * Get change history for all configuration changes
+ */
+export async function getAllConfigHistory(limit = 100): Promise<SiteConfigHistoryEntry[]> {
+  try {
+    const client = await getDynamoDBClientDirect();
+
+    if (!client) {
+      console.warn('Cannot retrieve config history: AWS credentials not available');
+      return [];
+    }
+
+    const command = new ScanCommand({
+      TableName: TABLE_NAME,
+      FilterExpression: 'begins_with(SK, :sk)',
+      ExpressionAttributeValues: marshall({
+        ':sk': 'HISTORY#',
+      }),
+      Limit: limit,
+    });
+
+    const response = await client.send(command);
+    const items = response.Items ? response.Items.map(item => {
+      const unmarshalled = unmarshall(item);
+      // Remove DynamoDB keys from result
+      const { PK, SK, ...historyEntry } = unmarshalled;
+      return historyEntry as SiteConfigHistoryEntry;
+    }) : [];
+
+    // Sort by timestamp descending (most recent first)
+    items.sort((a, b) => new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime());
+
+    return items;
+  } catch (error) {
+    console.error('Error fetching all config history:', error);
+    return [];
+  }
 }

@@ -3,7 +3,7 @@
  * POST /api/scheduled-reports/create
  */
 
-import type { CreateReportRequest } from '~/shared/types/scheduled-reports'
+import type { CreateReportRequest } from '../../../shared/types/scheduled-reports'
 import { createReport } from '../../utils/scheduled-reports'
 import { validateEmails } from '../../utils/email-service'
 import { isUserAdmin, getUserEmail } from '../../utils/user-roles'

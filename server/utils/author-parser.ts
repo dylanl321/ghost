@@ -3,7 +3,7 @@
  * Handles "Name <email@domain.com>" format from GitLab commit authors
  */
 
-import type { AuthorInfo } from '~/shared/types/pipelines'
+import type { AuthorInfo } from '../../shared/types/pipelines'
 
 /**
  * Parse author field from GitLab format: "Name <email@domain.com>"

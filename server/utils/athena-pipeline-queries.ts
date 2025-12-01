@@ -18,7 +18,7 @@ import type {
   ResourceChange,
   ErrorDetail,
   PipelineSummary
-} from '~/shared/types/pipelines'
+} from '../../shared/types/pipelines'
 
 // Configuration
 export function getPipelineEnvironmentConfig(environment: 'commercial' | 'govcloud' = 'govcloud'): PipelineEnvironmentConfig {

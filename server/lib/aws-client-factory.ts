@@ -31,11 +31,26 @@ import { SNSClient } from '@aws-sdk/client-sns'
 import { EventBridgeClient } from '@aws-sdk/client-eventbridge'
 import { logger } from '../utils/logger'
 
-import type { 
-  AWSEnvironmentType, 
-  AWSServiceType, 
+import type {
+  AWSEnvironmentType,
+  AWSServiceType,
   AWSCredentials
 } from '../types/aws'
+
+/**
+ * Get config value from environment variables only
+ * DO NOT use site-config here to avoid circular dependencies
+ * (site-config -> dynamodb -> aws-client-factory -> site-config = infinite loop)
+ */
+function getConfigValue<T>(key: string, envVarFallback?: string, defaultValue?: T): T {
+  // Use environment variable
+  if (envVarFallback && process.env[envVarFallback]) {
+    return process.env[envVarFallback] as T
+  }
+
+  // Final fallback to default
+  return defaultValue as T
+}
 
 // Service client type mapping
 const SERVICE_CLIENT_MAP = {
@@ -159,29 +174,40 @@ export function hasCredentials(environment: AWSEnvironmentType): boolean {
 
 /**
  * Get default region for an environment
+ * Reads from site config with env var fallback
  */
-function getDefaultRegion(environment: AWSEnvironmentType): string {
-  const prefix = environment === 'commercial' ? 'AWS_COMMERCIAL' : 'AWS_GOVCLOUD'
-  const defaultRegion = process.env[`${prefix}_REGION`] || 
-    (environment === 'commercial' ? 'us-east-1' : 'us-gov-west-1')
-  
+async function getDefaultRegion(environment: AWSEnvironmentType): Promise<string> {
+  const configKey = environment === 'commercial' ? 'aws.commercial.region' : 'aws.govcloud.region'
+  const envVar = environment === 'commercial' ? 'AWS_COMMERCIAL_REGION' : 'AWS_GOVCLOUD_REGION'
+  const fallbackDefault = environment === 'commercial' ? 'us-east-1' : 'us-gov-west-1'
+
+  const defaultRegion = getConfigValue<string>(configKey, envVar, fallbackDefault)
+
   // Validate the default region
   try {
     validateRegionForPartition(defaultRegion, environment)
   } catch (error) {
     logger.error(`[AWS Client Factory] Invalid default region configuration: ${error.message}`)
     // Fall back to safe defaults
-    return environment === 'commercial' ? 'us-east-1' : 'us-gov-west-1'
+    return fallbackDefault
   }
-  
+
   return defaultRegion
 }
 
 /**
- * Get assume role name from environment
+ * Get assume role name from site config with env fallback
  */
-function getAssumeRoleName(): string {
-  return process.env.AWS_ASSUME_ROLE_NAME || 'GDMSOrganizationsRole'
+async function getAssumeRoleName(): Promise<string> {
+  return getConfigValue<string>('aws.roleAssumption.roleName', 'AWS_ASSUME_ROLE_NAME', 'GDMSOrganizationsRole')
+}
+
+/**
+ * Get assume role duration from site config with env fallback
+ */
+async function getAssumeRoleDuration(): Promise<number> {
+  const duration = getConfigValue<number>('aws.roleAssumption.duration', 'AWS_ASSUME_ROLE_DURATION', 3600)
+  return typeof duration === 'string' ? parseInt(duration) : duration
 }
 
 /**
@@ -209,14 +235,15 @@ async function assumeRole(
   
   // Determine role ARN based on environment
   const partition = environment === 'commercial' ? 'aws' : 'aws-us-gov'
-  const roleName = getAssumeRoleName()
+  const roleName = await getAssumeRoleName()
   const roleArn = `arn:${partition}:iam::${targetAccountId}:role/${roleName}`
-  
+
   // Prepare assume role request
+  const duration = await getAssumeRoleDuration()
   const assumeRoleParams: any = {
     RoleArn: roleArn,
     RoleSessionName: sessionName || `gdms-${environment}-${Date.now()}`,
-    DurationSeconds: parseInt(process.env.AWS_ASSUME_ROLE_DURATION || '3600')
+    DurationSeconds: duration
   }
   
   // Add external ID if configured
@@ -271,8 +298,8 @@ export async function getClient<T = any>(
   }
   
   // Use default region if not specified
-  const targetRegion = region || getDefaultRegion(environment)
-  
+  const targetRegion = region || await getDefaultRegion(environment)
+
   // Critical validation: Ensure region matches the partition
   validateRegionForPartition(targetRegion, environment)
 

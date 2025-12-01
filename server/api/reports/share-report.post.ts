@@ -3,7 +3,7 @@
  * POST /api/reports/share-report
  */
 
-import type { CreateShareReportRequest, CreateShareReportResponse } from '~/shared/types/shared-reports'
+import type { CreateShareReportRequest, CreateShareReportResponse } from '../../../shared/types/shared-reports'
 import { createShortLink } from '../../lib/shortlinks'
 import { getTableConfig } from '../../lib/dynamodb-config'
 import { v4 as uuidv4 } from 'uuid'

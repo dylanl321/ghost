@@ -60,6 +60,33 @@ export default defineNuxtConfig({
   //   fonts: false // Prevent NuxtUI from fetching fonts, which causes a certificate error
   // },
 
+  vite: {
+    optimizeDeps: {
+      include: [
+        // Pre-bundle large AWS SDK packages to speed up dev server
+        '@aws-sdk/client-dynamodb',
+        '@aws-sdk/client-cost-explorer',
+        '@aws-sdk/client-organizations',
+        '@aws-sdk/client-s3',
+        '@aws-sdk/client-sts',
+        '@aws-sdk/client-ec2',
+        '@aws-sdk/client-iam',
+        '@aws-sdk/util-dynamodb',
+        // Pre-bundle Vue ecosystem
+        'vue',
+        'pinia',
+        '@vueuse/core',
+        // Pre-bundle UI libraries
+        'echarts',
+        'd3'
+      ]
+    },
+    build: {
+      // Increase chunk size warning limit for large dependencies
+      chunkSizeWarningLimit: 1000
+    }
+  },
+
   nitro: {
     noExternal: ['gray-matter']
   },

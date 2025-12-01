@@ -4,7 +4,7 @@
  */
 
 import { getTableConfig } from '../../../lib/dynamodb-config'
-import type { SharedReport } from '~/shared/types/shared-reports'
+import type { SharedReport } from '../../../shared/types/shared-reports'
 import { logger } from '../../../utils/logger'
 
 export default defineEventHandler(async (event) => {

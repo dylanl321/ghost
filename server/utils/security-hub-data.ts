@@ -18,8 +18,8 @@ import { logger } from './logger'
 import type {
   SecurityHubFindingRecord,
   SecurityHubDatasetFilters,
-} from '#shared/types/dataset-reports'
-import type { FindingSeverity, WorkflowStatus } from '#shared/types/security-hub'
+} from '../../shared/types/dataset-reports'
+import type { FindingSeverity, WorkflowStatus } from '../../shared/types/security-hub'
 
 /**
  * Get Security Hub client for the Security Lake aggregation account

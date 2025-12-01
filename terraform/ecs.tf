@@ -52,7 +52,9 @@ resource "aws_ecs_task_definition" "main" {
           name  = "DYNAMODB_CONFIG_SECRET_NAME"
           value = aws_secretsmanager_secret.dynamodb_config.name
         },
-        # AWS Regions (moved from Secrets Manager - not sensitive)
+        # AWS Configuration (now managed via Site Config DynamoDB table)
+        # These env vars serve as fallbacks only - primary config is in ghost-site-config table
+        # To update: Use Admin Panel > System > Site Configuration > AWS Configuration
         {
           name  = "AWS_COMMERCIAL_REGION"
           value = "us-east-1"
@@ -61,7 +63,6 @@ resource "aws_ecs_task_definition" "main" {
           name  = "AWS_GOVCLOUD_REGION"
           value = "us-gov-west-1"
         },
-        # AWS Account IDs
         {
           name  = "AWS_COMMERCIAL_ORGANIZATIONS_ACCOUNT_ID"
           value = "205950196477"
@@ -82,7 +83,6 @@ resource "aws_ecs_task_definition" "main" {
           name  = "AWS_DEPLOYMENT_ACCOUNT_ID"
           value = local.child_account_id
         },
-        # Cross-Account Role Configuration
         {
           name  = "AWS_ASSUME_ROLE_NAME"
           value = "GDMSOrganizationsRole"
@@ -91,7 +91,6 @@ resource "aws_ecs_task_definition" "main" {
           name  = "AWS_ASSUME_ROLE_DURATION"
           value = "3600"
         },
-        # AWS Config Service Aggregators
         {
           name  = "AWS_COMMERCIAL_CONFIG_AGGREGATOR"
           value = "CommercialAggregator"
@@ -188,7 +187,9 @@ resource "aws_ecs_task_definition" "main" {
           name  = "API_KEYS_STORAGE_ENV"
           value = "govcloud"
         },
-        # SES Configuration
+        # SES Configuration (now managed via Site Config DynamoDB table)
+        # These env vars serve as fallbacks only - primary config is in ghost-site-config table
+        # To update: Use Admin Panel > System > Site Configuration > Email & Notifications
         {
           name  = "AWS_SES_FROM_EMAIL"
           value = "aws-ghost@gd-ms.com"
@@ -201,11 +202,10 @@ resource "aws_ecs_task_definition" "main" {
           name  = "AWS_SES_REPLY_TO"
           value = "aws-ghost@gd-ms.com"
         },
-        # Configuration set is optional - comment out if not created in SES yet
-        # {
-        #   name  = "AWS_SES_CONFIGURATION_SET"
-        #   value = "ghost-scheduled-reports-${var.env}"
-        # },
+        {
+          name  = "AWS_SES_CONFIGURATION_SET"
+          value = "ghost-scheduled-reports-${var.env}"
+        },
         {
           name  = "AWS_SES_REGION"
           value = "us-gov-west-1"

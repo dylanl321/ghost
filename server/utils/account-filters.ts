@@ -5,7 +5,7 @@
 
 import { getAllAccountsUnified } from './accounts-consolidated'
 import type { UnifiedAccount } from '../schemas/account-schema'
-import type { LOBSummary, DepartmentSummary } from '#shared/types/accounts'
+import type { LOBSummary, DepartmentSummary } from '../../shared/types/accounts'
 import { getLOBFullName } from './lob-mapping'
 import { findAccountByIdentifierOptimized } from './account-lookup-optimized'
 import { logger } from './logger'

@@ -5,7 +5,7 @@ import { logger } from './logger'
 import type {
   EntraUserRecord,
   EntraUsersDatasetFilters
-} from '#shared/types/dataset-reports'
+} from '../../shared/types/dataset-reports'
 
 /**
  * Fetches Entra ID user-to-account access mappings

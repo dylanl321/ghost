@@ -4,7 +4,7 @@
  * Reuses the existing export system from the frontend
  */
 
-import type { ReportConfig } from '~/shared/types/scheduled-reports'
+import type { ReportConfig } from '../../shared/types/scheduled-reports'
 import type { NormalizedDataset } from '~/types/costs'
 import { getCostAndUsage } from './cost-explorer'
 import { getAllAccountsUnified } from './accounts-consolidated'

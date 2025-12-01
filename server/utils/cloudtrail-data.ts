@@ -18,7 +18,7 @@ import { logger } from './logger'
 import type {
   CloudTrailEventRecord,
   CloudTrailDatasetFilters,
-} from '#shared/types/dataset-reports'
+} from '../../shared/types/dataset-reports'
 
 import {
   StartQueryExecutionCommand,

@@ -3,7 +3,7 @@
  * Manages execution of scheduled reports
  */
 
-import type { ScheduledReport } from '~/shared/types/scheduled-reports'
+import type { ScheduledReport } from '../../shared/types/scheduled-reports'
 import {
   getUpcomingReports,
   updateReportRunStatus,

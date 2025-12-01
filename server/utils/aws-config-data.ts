@@ -19,8 +19,8 @@ import { logger } from './logger'
 import type {
   ConfigResourceRecord,
   ConfigDatasetFilters,
-} from '#shared/types/dataset-reports'
-import type { AWSConfigResourceType, ComplianceStatus } from '#shared/types/aws-config'
+} from '../../shared/types/dataset-reports'
+import type { AWSConfigResourceType, ComplianceStatus } from '../../shared/types/aws-config'
 
 /**
  * Get environment-specific Config aggregator name

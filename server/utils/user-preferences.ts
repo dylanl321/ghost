@@ -3,7 +3,7 @@
  * CRUD operations for user preferences with auto-creation
  */
 
-import type { UserPreferences, UpdatePreferencesRequest } from '#shared/types/user-preferences'
+import type { UserPreferences, UpdatePreferencesRequest } from '../../shared/types/user-preferences'
 import { getItem, putItem, scanItems } from './dynamodb'
 import { getTableName, getTableEnvironment, getTableAccountId } from '../lib/dynamodb-config'
 import type { H3Event } from 'h3'

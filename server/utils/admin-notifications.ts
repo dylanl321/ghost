@@ -13,6 +13,7 @@
 import { v4 as uuidv4 } from 'uuid'
 import { sendEmail, renderTemplate } from './email-service'
 import { getDynamoDBClient } from '../lib/aws-client-factory'
+import { getConfigValue } from './site-config'
 import { PutItemCommand, GetItemCommand, QueryCommand } from '@aws-sdk/client-dynamodb'
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb'
 import { logger } from './logger'
@@ -72,11 +73,21 @@ export interface SendNotificationOptions {
 
 // Configuration
 const NOTIFICATIONS_TABLE = process.env.NOTIFICATIONS_TABLE_NAME || 'ghost_admin_notifications'
-const ADMIN_EMAILS = process.env.ADMIN_NOTIFICATION_EMAILS || 'dylan.lewis@gd-ms.com'
-const NOTIFICATIONS_ENABLED = process.env.ADMIN_NOTIFICATIONS_ENABLED !== 'false'
 const SITE_URL = process.env.NUXT_PUBLIC_SITE_URL || 'https://ghost.gd-ms.com'
 const DEPLOYMENT_ACCOUNT_ID = '461760157232' // GovCloud deployment account where notifications table lives
 const REGION = 'us-gov-west-1'
+
+/**
+ * Get admin notification configuration from site config with env var fallback
+ */
+async function getNotificationConfig() {
+  const emails = (await getConfigValue<string[]>('email.admin.notificationEmails')) ||
+                 (process.env.ADMIN_NOTIFICATION_EMAILS || 'dylan.lewis@gd-ms.com').split(',').map(e => e.trim())
+  const enabled = (await getConfigValue<boolean>('email.admin.enabled')) ??
+                  (process.env.ADMIN_NOTIFICATIONS_ENABLED !== 'false')
+
+  return { emails, enabled }
+}
 
 /**
  * Send admin notification email and track in DynamoDB
@@ -84,8 +95,11 @@ const REGION = 'us-gov-west-1'
 export async function sendAdminNotification(
   options: SendNotificationOptions
 ): Promise<{ success: boolean; notificationId?: string; error?: string }> {
+  // Get notification configuration
+  const config = await getNotificationConfig()
+
   // Check if notifications are enabled
-  if (!NOTIFICATIONS_ENABLED) {
+  if (!config.enabled) {
     logger.info('Admin notifications are disabled')
     return { success: true }
   }
@@ -94,7 +108,7 @@ export async function sendAdminNotification(
   const timestamp = new Date().toISOString()
 
   // Get recipients
-  const recipients = options.recipients || ADMIN_EMAILS.split(',').map(e => e.trim()).filter(Boolean)
+  const recipients = options.recipients || config.emails
 
   if (recipients.length === 0) {
     logger.warn('No admin notification recipients configured')

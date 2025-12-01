@@ -5,7 +5,7 @@
 
 import { updateUserPreferences } from '../../../utils/user-preferences'
 import { isUserAdmin } from '../../../utils/user-roles'
-import type { UpdatePreferencesRequest } from '#shared/types/user-preferences'
+import type { UpdatePreferencesRequest } from '../../../shared/types/user-preferences'
 import { logger } from '../../../utils/logger'
 
 export default defineEventHandler(async (event) => {

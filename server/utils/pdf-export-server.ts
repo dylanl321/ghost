@@ -3,8 +3,8 @@
  * Uses the shared PDF generator with server-specific features
  */
 
-import type { DataExportConfig, ExportResult } from '~/shared/types/export'
-import { createPDF, type PDFGeneratorHooks } from '#shared/utils/pdf-generator'
+import type { DataExportConfig, ExportResult } from '../../shared/types/export'
+import { createPDF, type PDFGeneratorHooks } from '../../shared/utils/pdf-generator'
 import { logger } from './logger'
 
 /**

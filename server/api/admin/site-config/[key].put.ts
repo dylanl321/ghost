@@ -6,7 +6,7 @@
 
 import { defineEventHandler, readBody, getRouterParam } from 'h3';
 import { requireAdmin } from '../../../utils/user-roles';
-import { updateSiteConfig } from '../../../utils/site-config';
+import { updateSiteConfig, getSiteConfig, saveConfigHistory } from '../../../utils/site-config';
 import type { SiteConfigUpdateRequest, SiteConfigUpdateResponse } from '../../../../shared/types/site-config';
 
 export default defineEventHandler(async (event) => {
@@ -40,12 +40,26 @@ export default defineEventHandler(async (event) => {
     const user = auth?.user;
     const username = user?.email || user?.preferred_username || 'unknown';
 
+    // Get the old value before updating (for change history)
+    const oldConfig = await getSiteConfig(decodedKey, false);
+    const oldValue = oldConfig?.value;
+
     // Update the configuration
     const updated = await updateSiteConfig(
       decodedKey,
       body.value,
       username
     );
+
+    // Save change history (non-blocking, errors won't affect the update)
+    if (oldValue !== undefined) {
+      saveConfigHistory(
+        decodedKey,
+        oldValue,
+        body.value,
+        username
+      ).catch(err => console.error('Failed to save config history:', err));
+    }
 
     return {
       success: true,

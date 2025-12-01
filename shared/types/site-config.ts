@@ -150,7 +150,7 @@ export const DEFAULT_SITE_CONFIG: SiteConfigItem[] = [
   // Service Configuration
   {
     key: 'services.strands.serverUrl',
-    value: process.env.STRANDS_SERVER_URL || 'http://internal-lz-mcp-servers-dev-alb-1428009891.us-gov-west-1.elb.amazonaws.com:80',
+    value: 'http://internal-lz-mcp-servers-dev-alb-1428009891.us-gov-west-1.elb.amazonaws.com:80',
     type: 'string',
     category: 'services',
     label: 'Strands Server URL',
@@ -301,4 +301,36 @@ export interface SiteConfigUpdateRequest {
 export interface SiteConfigUpdateResponse {
   success: boolean;
   config: SiteConfigItem;
+}
+
+/**
+ * Change history entry for audit trail
+ */
+export interface SiteConfigHistoryEntry {
+  /** Configuration key that was changed */
+  key: string;
+
+  /** Previous value before the change */
+  oldValue: any;
+
+  /** New value after the change */
+  newValue: any;
+
+  /** User who made the change */
+  changedBy: string;
+
+  /** When the change occurred */
+  changedAt: string;
+
+  /** Optional reason or note for the change */
+  reason?: string;
+}
+
+/**
+ * Change history API response
+ */
+export interface SiteConfigHistoryResponse {
+  success: boolean;
+  history: SiteConfigHistoryEntry[];
+  count: number;
 }

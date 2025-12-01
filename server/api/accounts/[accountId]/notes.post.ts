@@ -8,7 +8,7 @@ import { isUserAdmin } from '../../../utils/user-roles'
 import { getUserSession } from '../../../utils/entra/session'
 import { createAccountNote } from '../../../lib/account-notes'
 import { sendEmail } from '../../../utils/email-service'
-import type { CreateNoteRequest } from '#shared/types/account-notes'
+import type { CreateNoteRequest } from '../../../shared/types/account-notes'
 import { logger } from '../../../utils/logger'
 
 export default defineEventHandler(async (event) => {

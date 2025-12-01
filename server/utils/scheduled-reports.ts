@@ -10,7 +10,7 @@ import type {
   CreateReportRequest,
   UpdateReportRequest,
   ReportStatistics
-} from '~/shared/types/scheduled-reports'
+} from '../../shared/types/scheduled-reports'
 import {
   getItem,
   putItem,

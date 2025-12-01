@@ -10,8 +10,9 @@
 
 import { SendRawEmailCommand } from '@aws-sdk/client-ses'
 import { getSESClient } from '../lib/aws-client-factory'
-import type { TemplateContext } from '~/shared/types/email-templates'
-import type { EmailDeliveryRecipient, EmailDeliveryDetails } from '~/shared/types/scheduled-reports'
+import { getConfigValue } from './site-config'
+import type { TemplateContext } from '../../shared/types/email-templates'
+import type { EmailDeliveryRecipient, EmailDeliveryDetails } from '../../shared/types/scheduled-reports'
 import { logger } from './logger'
 
 interface EmailAttachment {
@@ -29,11 +30,18 @@ interface SendEmailOptions {
   replyTo?: string
 }
 
-const SES_REGION = process.env.AWS_SES_REGION || process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1'
-const SES_FROM_EMAIL = process.env.AWS_SES_FROM_EMAIL || 'aws-ghost@gd-ms.com'
-const SES_FROM_NAME = process.env.AWS_SES_FROM_NAME || 'GHOST AWS Dashboard'
-const SES_REPLY_TO = process.env.AWS_SES_REPLY_TO || 'aws-ghost@gd-ms.com'
-const SES_CONFIG_SET = process.env.AWS_SES_CONFIGURATION_SET // Optional - only if configured
+/**
+ * Get SES configuration from site config with env var fallback
+ */
+async function getSESConfig() {
+  const region = (await getConfigValue<string>('email.ses.region')) || process.env.AWS_SES_REGION || process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1'
+  const fromEmail = (await getConfigValue<string>('email.ses.fromEmail')) || process.env.AWS_SES_FROM_EMAIL || 'aws-ghost@gd-ms.com'
+  const fromName = (await getConfigValue<string>('email.ses.fromName')) || process.env.AWS_SES_FROM_NAME || 'GHOST AWS Dashboard'
+  const replyTo = (await getConfigValue<string>('email.ses.replyTo')) || process.env.AWS_SES_REPLY_TO || 'aws-ghost@gd-ms.com'
+  const configSet = (await getConfigValue<string>('email.ses.configurationSet')) || process.env.AWS_SES_CONFIGURATION_SET || ''
+
+  return { region, fromEmail, fromName, replyTo, configSet }
+}
 
 /**
  * Render email template with variable substitution
@@ -65,22 +73,23 @@ export function renderTemplate(template: string, context: TemplateContext): stri
 /**
  * Build MIME email message with attachments
  */
-function buildMimeMessage(options: SendEmailOptions): string {
+async function buildMimeMessage(options: SendEmailOptions): Promise<string> {
+  const config = await getSESConfig()
   const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).substring(7)}`
   const altBoundary = `----=_Part_Alt_${Date.now()}_${Math.random().toString(36).substring(7)}`
 
   const headers = [
-    `From: ${SES_FROM_NAME} <${SES_FROM_EMAIL}>`,
+    `From: ${config.fromName} <${config.fromEmail}>`,
     `To: ${options.to.join(', ')}`,
-    `Reply-To: ${options.replyTo || SES_REPLY_TO}`,
+    `Reply-To: ${options.replyTo || config.replyTo}`,
     `Subject: ${options.subject}`,
     `MIME-Version: 1.0`,
     `Content-Type: multipart/mixed; boundary="${boundary}"`
   ]
 
   // Only add configuration set header if one is configured
-  if (SES_CONFIG_SET) {
-    headers.push(`X-SES-CONFIGURATION-SET: ${SES_CONFIG_SET}`)
+  if (config.configSet) {
+    headers.push(`X-SES-CONFIGURATION-SET: ${config.configSet}`)
   }
 
   let message = [
@@ -146,15 +155,18 @@ export async function sendEmail(options: SendEmailOptions): Promise<{
   error?: string
 }> {
   try {
+    // Get SES configuration
+    const config = await getSESConfig()
+
     // Get SES client using base credentials (SES is in same account as credentials)
-    const client = await getSESClient('govcloud', SES_REGION)
-    const mimeMessage = buildMimeMessage(options)
+    const client = await getSESClient('govcloud', config.region)
+    const mimeMessage = await buildMimeMessage(options)
 
     const command = new SendRawEmailCommand({
       RawMessage: {
         Data: Buffer.from(mimeMessage)
       },
-      Source: `${SES_FROM_NAME} <${SES_FROM_EMAIL}>`,
+      Source: `${config.fromName} <${config.fromEmail}>`,
       Destinations: options.to
     })
 

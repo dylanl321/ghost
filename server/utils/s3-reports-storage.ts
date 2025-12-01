@@ -4,13 +4,13 @@
  */
 
 import { uploadToS3, getPresignedDownloadUrl, deleteFromS3, listObjectsByPrefix, type S3UploadResult } from './s3-storage'
-import type { ReportConfig } from '~/shared/types/scheduled-reports'
+import type { ReportConfig } from '../../shared/types/scheduled-reports'
 import { logger } from './logger'
 
 /**
- * Report type for S3 storage
+ * Report storage type for S3 storage
  */
-export type ReportType = 'scheduled' | 'shared'
+export type ReportStorageType = 'scheduled' | 'shared'
 
 /**
  * Report metadata for S3 upload
@@ -36,7 +36,7 @@ export interface ReportUploadResult extends S3UploadResult {
  * Generate S3 key for a report
  */
 function generateReportKey(
-  type: ReportType,
+  type: ReportStorageType,
   metadata: ReportMetadata,
   timestamp?: number
 ): string {
@@ -65,7 +65,7 @@ function getContentType(format: 'pdf' | 'csv'): string {
  *                               If false, presigned URLs generated on-demand (for shared reports accessed via shortlink)
  */
 export async function uploadReportToS3(
-  type: ReportType,
+  type: ReportStorageType,
   buffer: Buffer,
   metadata: ReportMetadata,
   timestamp?: number,
@@ -159,7 +159,7 @@ export async function deleteReportFromS3(s3Key: string): Promise<{ success: bool
  */
 export async function listUserReportFiles(
   userId: string,
-  type: ReportType = 'shared',
+  type: ReportStorageType = 'shared',
   maxKeys: number = 100
 ): Promise<Array<{ key: string; size: number; lastModified: Date }>> {
   const prefix = `reports/${type}/${userId}/`

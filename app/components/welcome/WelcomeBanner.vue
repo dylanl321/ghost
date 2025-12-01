@@ -1,21 +1,32 @@
 <template>
-  <div
-    v-if="visible"
-    class="px-4 md:px-6 pt-3"
-    role="region"
-    aria-label="Welcome to GHOST quick overview"
+  <Transition
+    enter-active-class="transition-all duration-300"
+    enter-from-class="opacity-0 -translate-y-2"
+    enter-to-class="opacity-100 translate-y-0"
+    leave-active-class="transition-all duration-300"
+    leave-from-class="opacity-100 translate-y-0"
+    leave-to-class="opacity-0 -translate-y-2"
   >
     <div
-      class="w-full rounded-lg border border-blue-200/40 dark:border-blue-900/40 bg-blue-50/60 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100"
+      v-if="visible"
+      class="px-4 md:px-6 pt-3"
+      role="region"
+      aria-label="Welcome to GHOST quick overview"
     >
+      <div
+        :class="[
+          'w-full rounded-lg border border-blue-200/40 dark:border-blue-900/40 bg-blue-50/60 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100 transition-all duration-300',
+          isHighlighted && 'ring-2 ring-blue-400 shadow-lg'
+        ]"
+      >
       <div class="flex items-start gap-3 p-3 md:p-4">
         <UIcon name="i-heroicons-sparkles" class="w-5 h-5 mt-0.5 text-blue-600 dark:text-blue-300" />
         <div class="flex-1 min-w-0">
           <p class="font-medium truncate">
-            Welcome to GHOST
+            {{ siteConfigStore.siteName }}
           </p>
           <p class="text-sm opacity-90">
-            New here? See a quick overview of how to navigate and use key features. You can dismiss this anytime.
+            {{ siteConfigStore.welcomeMessage }}
           </p>
         </div>
         <div class="flex items-center gap-2 shrink-0">
@@ -39,25 +50,54 @@
         </div>
       </div>
     </div>
-  </div>
+    </div>
+  </Transition>
 </template>
 
 <script setup lang="ts">
+import { useSiteConfigStore } from '~/stores/useSiteConfigStore'
+
 const route = useRoute()
 const router = useRouter()
 const { getPreference, setPreference, initialized } = useUserPreferences()
+const siteConfigStore = useSiteConfigStore()
 
 const visible = ref(false)
 const hasIncrementedThisSession = ref(false)
+const isHighlighted = ref(false)
 
-// Re-compute visibility when preferences change
-watch(initialized, (isInitialized) => {
+// Highlight effect when UI settings change
+let highlightTimer: NodeJS.Timeout | null = null
+function triggerHighlight() {
+  isHighlighted.value = true
+  if (highlightTimer) clearTimeout(highlightTimer)
+  highlightTimer = setTimeout(() => {
+    isHighlighted.value = false
+  }, 1500)
+}
+
+// Watch for UI setting changes to trigger highlights
+watch(() => siteConfigStore.siteName, () => {
+  if (visible.value) triggerHighlight()
+})
+
+watch(() => siteConfigStore.welcomeMessage, () => {
+  if (visible.value) triggerHighlight()
+})
+
+// Re-compute visibility when preferences change OR when site config changes
+watch([initialized, () => siteConfigStore.showWelcomeCard], ([isInitialized]) => {
   if (isInitialized && !route.path.startsWith('/support')) {
     visible.value = computeVisibility()
   }
 })
 
 function computeVisibility(): boolean {
+  // Respect site config setting for showWelcomeCard
+  if (!siteConfigStore.showWelcomeCard) {
+    return false
+  }
+
   const pref = getPreference<any>('welcomeBanner', null) || {}
   const dismissed = pref?.dismissed === true
   const seenCount = Number(pref?.seenCount || 0)

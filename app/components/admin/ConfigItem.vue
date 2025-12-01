@@ -1,101 +1,125 @@
 <template>
-  <div class="flex items-start justify-between gap-4 p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-    <div class="flex-1 min-w-0">
-      <!-- Label and Badge -->
-      <div class="flex items-center gap-2 mb-1">
-        <h4 class="font-medium text-gray-900 dark:text-white">
-          {{ config.label }}
-        </h4>
-        <UBadge
-          v-if="!config.isPublic"
-          color="orange"
-          variant="soft"
-          size="xs"
-        >
-          Admin Only
-        </UBadge>
-        <UBadge
-          v-if="!config.isEditable"
-          color="gray"
-          variant="soft"
-          size="xs"
-        >
-          Read Only
-        </UBadge>
+  <UCard class="hover:shadow-md transition-all duration-200 group">
+    <div class="space-y-3">
+      <!-- Header with icon and label -->
+      <div class="flex items-start justify-between gap-2">
+        <div class="flex items-center gap-2 flex-1 min-w-0">
+          <UIcon
+            :name="getTypeIcon(config.type)"
+            class="text-lg text-gray-400 dark:text-gray-500 flex-shrink-0"
+          />
+          <h4 class="font-semibold text-sm text-gray-900 dark:text-white truncate">
+            {{ config.label }}
+          </h4>
+        </div>
+        <div class="flex items-center gap-1 flex-shrink-0">
+          <UBadge
+            v-if="!config.isPublic"
+            color="orange"
+            variant="soft"
+            size="xs"
+          >
+            Admin
+          </UBadge>
+          <UBadge
+            v-if="!isDefaultValue"
+            color="blue"
+            variant="soft"
+            size="xs"
+          >
+            Modified
+          </UBadge>
+        </div>
       </div>
 
       <!-- Description -->
-      <p class="text-sm text-gray-500 dark:text-gray-400 mb-2">
+      <p class="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
         {{ config.description }}
       </p>
 
-      <!-- Config Key -->
-      <code class="text-xs text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
-        {{ config.key }}
-      </code>
+      <!-- Value Editor -->
+      <div class="pt-2 border-t border-gray-100 dark:border-gray-800">
+        <!-- Boolean Toggle -->
+        <div v-if="config.type === 'boolean'" class="flex items-center justify-between">
+          <span class="text-xs font-medium text-gray-700 dark:text-gray-300">
+            {{ localValue ? 'Enabled' : 'Disabled' }}
+          </span>
+          <UToggle
+            :model-value="localValue"
+            :disabled="!config.isEditable || saving"
+            @update:model-value="handleBooleanChange"
+          />
+        </div>
 
-      <!-- Metadata -->
-      <div v-if="config.updatedAt" class="mt-2 text-xs text-gray-400 dark:text-gray-500">
-        Last updated: {{ formatDate(config.updatedAt) }}
+        <!-- Number Input -->
+        <div v-else-if="config.type === 'number'" class="space-y-1">
+          <label class="text-xs font-medium text-gray-700 dark:text-gray-300">Value</label>
+          <UInput
+            v-model="localValue"
+            type="number"
+            :min="config.validation?.min"
+            :max="config.validation?.max"
+            :disabled="!config.isEditable || saving"
+            size="sm"
+            @blur="handleInputChange"
+          />
+          <p v-if="config.validation?.min !== undefined || config.validation?.max !== undefined" class="text-xs text-gray-400">
+            Range: {{ config.validation?.min ?? '∞' }} - {{ config.validation?.max ?? '∞' }}
+          </p>
+        </div>
+
+        <!-- String Input -->
+        <div v-else-if="config.type === 'string'" class="space-y-1">
+          <label class="text-xs font-medium text-gray-700 dark:text-gray-300">Value</label>
+          <UInput
+            v-model="localValue"
+            type="text"
+            :disabled="!config.isEditable || saving"
+            :placeholder="String(config.defaultValue)"
+            size="sm"
+            @blur="handleInputChange"
+          />
+        </div>
+      </div>
+
+      <!-- Footer with actions and metadata -->
+      <div class="flex items-center justify-between gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+        <div class="flex items-center gap-2 flex-1 min-w-0">
+          <!-- Config Key -->
+          <code class="text-xs text-gray-500 dark:text-gray-400 truncate">
+            {{ config.key }}
+          </code>
+        </div>
+
+        <div class="flex items-center gap-1 flex-shrink-0">
+          <!-- Save Indicator -->
+          <div v-if="saving" class="flex items-center gap-1 text-xs text-primary-500 mr-2">
+            <UIcon name="i-heroicons-arrow-path" class="animate-spin" />
+            <span>Saving</span>
+          </div>
+
+          <!-- Reset Button -->
+          <UTooltip text="Reset to default">
+            <UButton
+              icon="i-heroicons-arrow-uturn-left"
+              color="gray"
+              variant="ghost"
+              size="xs"
+              :disabled="!config.isEditable || saving || isDefaultValue"
+              :loading="resetting"
+              @click="handleReset"
+            />
+          </UTooltip>
+        </div>
+      </div>
+
+      <!-- Metadata tooltip on hover -->
+      <div v-if="config.updatedAt" class="text-xs text-gray-400 dark:text-gray-500">
+        Updated {{ formatDate(config.updatedAt) }}
         <span v-if="config.updatedBy"> by {{ config.updatedBy }}</span>
       </div>
     </div>
-
-    <!-- Value Editor -->
-    <div class="flex items-center gap-2">
-      <!-- Boolean Toggle -->
-      <UToggle
-        v-if="config.type === 'boolean'"
-        :model-value="localValue"
-        :disabled="!config.isEditable || saving"
-        @update:model-value="handleBooleanChange"
-      />
-
-      <!-- Number Input -->
-      <div v-else-if="config.type === 'number'" class="flex items-center gap-2">
-        <UInput
-          v-model="localValue"
-          type="number"
-          :min="config.validation?.min"
-          :max="config.validation?.max"
-          :disabled="!config.isEditable || saving"
-          class="w-32"
-          @blur="handleInputChange"
-        />
-      </div>
-
-      <!-- String Input -->
-      <div v-else-if="config.type === 'string'" class="flex items-center gap-2">
-        <UInput
-          v-model="localValue"
-          type="text"
-          :disabled="!config.isEditable || saving"
-          :placeholder="String(config.defaultValue)"
-          class="w-64"
-          @blur="handleInputChange"
-        />
-      </div>
-
-      <!-- Reset Button -->
-      <UTooltip text="Reset to default">
-        <UButton
-          icon="i-heroicons-arrow-uturn-left"
-          color="gray"
-          variant="ghost"
-          size="sm"
-          :disabled="!config.isEditable || saving || isDefaultValue"
-          :loading="resetting"
-          @click="handleReset"
-        />
-      </UTooltip>
-
-      <!-- Save Indicator -->
-      <div v-if="saving" class="flex items-center gap-1 text-xs text-gray-500">
-        <UIcon name="i-heroicons-arrow-path" class="animate-spin" />
-        <span>Saving...</span>
-      </div>
-    </div>
-  </div>
+  </UCard>
 </template>
 
 <script setup lang="ts">
@@ -179,5 +203,16 @@ function formatDate(dateString: string): string {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date);
+}
+
+function getTypeIcon(type: string): string {
+  const icons: Record<string, string> = {
+    boolean: 'i-heroicons-check-circle',
+    number: 'i-heroicons-hashtag',
+    string: 'i-heroicons-document-text',
+    object: 'i-heroicons-cube',
+    array: 'i-heroicons-queue-list',
+  };
+  return icons[type] || 'i-heroicons-cog';
 }
 </script>

@@ -3,7 +3,7 @@
  * POST /api/dataset-reports/create
  */
 
-import type { DatasetReportConfig } from '#shared/types/dataset-reports'
+import type { DatasetReportConfig } from '../../../shared/types/dataset-reports'
 import { createReport } from '../../utils/scheduled-reports'
 import { validateEmails } from '../../utils/email-service'
 import { getUserEmail } from '../../utils/user-roles'

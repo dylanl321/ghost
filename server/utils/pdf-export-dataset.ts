@@ -6,7 +6,7 @@
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime'
 import { getBedrockRuntimeClient } from '../lib/aws-client-factory'
 import { logger } from './logger'
-import type { DatasetReportData, DatasetReportConfig } from '#shared/types/dataset-reports'
+import type { DatasetReportData, DatasetReportConfig } from '../../shared/types/dataset-reports'
 
 /**
  * Analyze dataset report using AI (AWS Bedrock - Claude)

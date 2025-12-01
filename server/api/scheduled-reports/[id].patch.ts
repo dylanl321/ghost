@@ -3,7 +3,7 @@
  * PATCH /api/scheduled-reports/:id
  */
 
-import type { UpdateReportRequest } from '~/shared/types/scheduled-reports'
+import type { UpdateReportRequest } from '../../../shared/types/scheduled-reports'
 import { getReport, updateReport } from '../../utils/scheduled-reports'
 import { validateEmails } from '../../utils/email-service'
 import { isUserAdmin } from '../../utils/user-roles'

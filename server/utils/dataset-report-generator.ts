@@ -3,7 +3,7 @@
  * Generates AWS dataset reports (Config, Security Hub, CloudTrail) for scheduled delivery
  */
 
-import type { DatasetReportConfig, DatasetReportData } from '#shared/types/dataset-reports'
+import type { DatasetReportConfig, DatasetReportData } from '../../shared/types/dataset-reports'
 import { getConfigResources, getConfigComplianceSummary, getConfigResourceTypeSummary } from './aws-config-data'
 import { getSecurityHubFindings } from './security-hub-data'
 import { getCloudTrailEvents } from './cloudtrail-data'

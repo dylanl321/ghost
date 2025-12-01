@@ -8,7 +8,7 @@ import { defineEventHandler, readBody, setHeader } from 'h3'
 import { generateDatasetReport } from '../../utils/dataset-report-generator'
 import { errors } from '../../utils/api-response'
 import { logger } from '../../utils/logger'
-import type { DatasetReportConfig } from '#shared/types/dataset-reports'
+import type { DatasetReportConfig } from '../../../shared/types/dataset-reports'
 
 interface ExportRequest {
   accountIds: string[]

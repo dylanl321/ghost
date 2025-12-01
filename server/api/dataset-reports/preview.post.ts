@@ -11,7 +11,7 @@ import { getConfigResources } from '../../utils/aws-config-data'
 import { getSecurityHubFindings } from '../../utils/security-hub-data'
 import { getCloudTrailEvents } from '../../utils/cloudtrail-data'
 import { logger } from '../../utils/logger'
-import type { DatasetReportConfig } from '#shared/types/dataset-reports'
+import type { DatasetReportConfig } from '../../../shared/types/dataset-reports'
 
 interface PreviewRequest {
   accountIds: string[]
