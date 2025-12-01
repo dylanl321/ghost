@@ -240,16 +240,17 @@ const showGroupDetails = (account: any) => {
 const handleExportCSV = () => {
   if (!userProfile.value || !userAccessRef.value) return
 
-  // Use the shared flattened export function
-  exportFlattenedUserAccessToCSV([{
-    userProfile: userProfile.value,
-    accounts: userAccessRef.value.accounts || [],
-    userTags: userTags.value || []
-  }], {
-    filename: `${userProfile.value.displayName.replace(/[^a-zA-Z0-9]/g, '_')}_detailed_access_${new Date().toISOString().split('T')[0]}.csv`,
-    includeGroupDetails: true,
-    includeTags: true
-  })
+  // Prepare user data in the correct format
+  const userData = {
+    displayName: userProfile.value.displayName,
+    userPrincipalName: userProfile.value.userPrincipalName,
+    department: userProfile.value.department,
+    awsAccounts: userAccessRef.value.accounts || []
+  }
+
+  const filename = `${userProfile.value.displayName.replace(/[^a-zA-Z0-9]/g, '_')}_detailed_access_${new Date().toISOString().split('T')[0]}.csv`
+
+  exportFlattenedUserAccessToCSV(userData, userAccessRef.value.accounts || [], filename)
 }
 
 // Handle navigation back to search
@@ -300,14 +301,6 @@ const updateBreadcrumbs = () => {
 
 <template>
   <div class="space-y-4 p-6">
-    <!-- Breadcrumb Navigation -->
-    <div class="flex items-center gap-2 text-sm text-gray-400">
-      <NuxtLink to="/account/user" class="hover:text-white flex items-center gap-1">
-        <UIcon name="i-heroicons-arrow-left" class="w-4 h-4" />
-        <span>Back to Search</span>
-      </NuxtLink>
-    </div>
-
     <!-- Loading State -->
     <div v-if="loading" class="flex items-center justify-center py-16">
       <div class="text-center">
@@ -340,21 +333,40 @@ const updateBreadcrumbs = () => {
             <!-- User Info Section (Columns 1-7) -->
             <div class="lg:col-span-7">
               <div class="flex items-start gap-4">
-                <UserAvatar 
+                <UserAvatar
                   :user-principal-name="userProfile.userPrincipalName"
                   :display-name="userProfile.displayName"
                   size="xl"
                   class="flex-shrink-0"
                 />
                 <div class="flex-1 min-w-0">
-                  <h1 class="text-2xl font-bold text-white truncate">{{ userProfile.displayName }}</h1>
-                  <p class="text-gray-400 truncate mb-2">{{ userProfile.userPrincipalName }}</p>
-                  
-                  <div class="space-y-1 text-sm text-gray-400 mb-4">
-                    <div v-if="userProfile.jobTitle" class="truncate">{{ userProfile.jobTitle }}</div>
-                    <div v-if="userProfile.department" class="truncate">{{ userProfile.department }}</div>
+                  <div class="flex items-start gap-3 mb-2">
+                    <div class="flex-1 min-w-0">
+                      <h1 class="text-2xl font-bold text-white truncate">{{ userProfile.displayName }}</h1>
+                      <p class="text-gray-400 truncate">{{ userProfile.userPrincipalName }}</p>
+                    </div>
+                    <!-- Quick Stats Badges -->
+                    <div class="flex items-center gap-2 flex-shrink-0">
+                      <UBadge color="blue" variant="subtle" size="sm">
+                        {{ accessSummary.totalAccounts }} accounts
+                      </UBadge>
+                      <UBadge color="emerald" variant="subtle" size="sm">
+                        {{ accessSummary.totalRoles }} roles
+                      </UBadge>
+                    </div>
                   </div>
-                  
+
+                  <div class="space-y-1 text-sm text-gray-400 mb-4">
+                    <div v-if="userProfile.jobTitle" class="truncate flex items-center gap-1">
+                      <UIcon name="i-heroicons-briefcase" class="w-4 h-4" />
+                      {{ userProfile.jobTitle }}
+                    </div>
+                    <div v-if="userProfile.department" class="truncate flex items-center gap-1">
+                      <UIcon name="i-heroicons-building-office" class="w-4 h-4" />
+                      {{ userProfile.department }}
+                    </div>
+                  </div>
+
                   <!-- Contact Actions -->
                   <div class="flex items-center gap-2 flex-wrap">
                     <UButton
@@ -375,15 +387,24 @@ const updateBreadcrumbs = () => {
                     >
                       Teams
                     </UButton>
-                    <NuxtLink :to="`/account/user/${username}/access-history`">
-                      <UButton icon="i-heroicons-clock" variant="outline" size="sm">
-                        History
+
+                    <!-- More Actions Dropdown -->
+                    <UDropdown :items="[
+                      [{
+                        label: 'Access History',
+                        icon: 'i-heroicons-clock',
+                        to: `/account/user/${username}/access-history`
+                      }],
+                      [{
+                        label: 'Share Profile',
+                        icon: 'i-heroicons-share',
+                        click: () => {} // UserShareButton functionality would go here
+                      }]
+                    ]">
+                      <UButton icon="i-heroicons-ellipsis-horizontal" variant="outline" size="sm">
+                        More
                       </UButton>
-                    </NuxtLink>
-                    <UserShareButton
-                      :username="username"
-                      :display-name="userProfile.displayName"
-                    />
+                    </UDropdown>
                   </div>
                 </div>
               </div>
@@ -392,33 +413,46 @@ const updateBreadcrumbs = () => {
             <!-- AWS Stats Summary - Simplified (Columns 8-12) -->
             <div class="lg:col-span-5">
               <div class="space-y-3">
-                <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wide">
+                <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wide flex items-center gap-2">
+                  <UIcon name="i-simple-icons-amazonaws" class="w-4 h-4" />
                   AWS Access Summary
                 </h3>
 
-                <!-- Simplified stats with subtle AWS accent -->
-                <div class="bg-gray-800/30 rounded-lg p-4 space-y-3 border-l-4 border-blue-500/50">
+                <!-- Simplified stats with icons -->
+                <div class="bg-gray-800/30 rounded-lg p-4 space-y-2.5 border-l-4 border-blue-500/50">
                   <div class="flex items-center justify-between">
-                    <span class="text-sm text-gray-400">Accounts</span>
+                    <span class="text-sm text-gray-400 flex items-center gap-2">
+                      <UIcon name="i-heroicons-server-stack" class="w-4 h-4" />
+                      Accounts
+                    </span>
                     <span class="text-lg font-semibold text-white">{{ accessSummary.totalAccounts }}</span>
                   </div>
                   <div class="flex items-center justify-between">
-                    <span class="text-sm text-gray-400">Total Roles</span>
+                    <span class="text-sm text-gray-400 flex items-center gap-2">
+                      <UIcon name="i-heroicons-key" class="w-4 h-4" />
+                      Roles
+                    </span>
                     <span class="text-lg font-semibold text-white">{{ accessSummary.totalRoles }}</span>
                   </div>
                   <div class="flex items-center justify-between pt-2 border-t border-gray-700">
-                    <span class="text-xs text-gray-500">GovCloud</span>
+                    <span class="text-xs text-gray-500 flex items-center gap-1.5">
+                      <UIcon name="i-heroicons-shield-check" class="w-3.5 h-3.5" />
+                      GovCloud
+                    </span>
                     <span class="text-sm font-medium text-gray-300">{{ userAccessRef?.accessSummary?.govCloudAccounts || 0 }}</span>
                   </div>
                   <div class="flex items-center justify-between">
-                    <span class="text-xs text-gray-500">Multi-Environment</span>
+                    <span class="text-xs text-gray-500 flex items-center gap-1.5">
+                      <UIcon name="i-heroicons-globe-alt" class="w-3.5 h-3.5" />
+                      Multi-Env
+                    </span>
                     <span class="text-sm font-medium text-gray-300">{{ userAccessRef?.accessSummary?.multiEnvAccounts || 0 }}</span>
                   </div>
                 </div>
-                
+
                 <!-- User Tags -->
-                <div v-if="userTags.length > 0" class="pt-2 border-t border-gray-700">
-                  <span class="text-sm text-gray-400 mb-2 block">User Tags</span>
+                <div v-if="userTags.length > 0" class="pt-2">
+                  <span class="text-xs text-gray-500 uppercase tracking-wide mb-2 block">Tags</span>
                   <div class="flex flex-wrap gap-1">
                     <UTooltip
                       v-for="tag in userTags"
@@ -432,10 +466,10 @@ const updateBreadcrumbs = () => {
                         size="xs"
                         class="font-medium cursor-help"
                       >
-                        <UIcon 
+                        <UIcon
                           v-if="tag.icon"
-                          :name="tag.icon" 
-                          class="w-3 h-3 mr-1" 
+                          :name="tag.icon"
+                          class="w-3 h-3 mr-1"
                         />
                         {{ tag.title }}
                       </UBadge>
@@ -450,54 +484,45 @@ const updateBreadcrumbs = () => {
 
       <!-- Account Access Controls (Above the groups) -->
       <div class="flex items-center justify-between py-4">
-        <div class="flex items-center gap-4">
+        <div class="flex items-center gap-3">
           <h2 class="text-xl font-semibold text-white">AWS Account Access</h2>
-          
-          <!-- View Toggle -->
-          <UButton 
-            :icon="userAccessRef?.viewMode === 'cards' ? 'i-heroicons-table-cells' : 'i-heroicons-squares-2x2'"
-            variant="outline"
-            size="sm"
-            @click="userAccessRef?.toggleViewMode()"
-          >
-            {{ userAccessRef?.viewMode === 'cards' ? 'Table View' : 'Card View' }}
-          </UButton>
-          
-          <!-- Refresh Button -->
-          <UButton 
-            :loading="userAccessRef?.loading" 
-            icon="i-heroicons-arrow-path" 
-            variant="ghost" 
-            size="sm" 
-            @click="userAccessRef?.loadUserAccess()"
-          />
         </div>
 
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2">
           <!-- Role Filter -->
-          <div v-if="userAccessRef?.allRoles?.length > 5" class="flex items-center gap-2">
-            <label class="text-sm text-gray-400">Filter by Role:</label>
-            <USelectMenu 
-              v-model="userAccessRef.selectedRoleFilter" 
-              :options="[
-                { label: 'All Roles', value: '' },
-                ...userAccessRef.allRoles.map((role: string) => ({ label: role, value: role }))
-              ]"
-              placeholder="All Roles"
-              size="sm"
-              class="w-48"
-              value-attribute="value"
-              option-attribute="label"
-            />
-          </div>
+          <USelectMenu
+            v-if="userAccessRef?.allRoles?.length > 5"
+            v-model="userAccessRef.selectedRoleFilter"
+            :options="[
+              { label: 'All Roles', value: '' },
+              ...userAccessRef.allRoles.map((role: string) => ({ label: role, value: role }))
+            ]"
+            placeholder="All Roles"
+            size="sm"
+            class="w-40"
+            value-attribute="value"
+            option-attribute="label"
+          />
+
+          <!-- View Toggle -->
+          <UButton
+            :icon="userAccessRef?.viewMode === 'cards' ? 'i-heroicons-table-cells' : 'i-heroicons-squares-2x2'"
+            variant="ghost"
+            size="sm"
+            @click="userAccessRef?.toggleViewMode()"
+          />
+
+          <!-- Refresh Button -->
+          <UButton
+            :loading="userAccessRef?.loading"
+            icon="i-heroicons-arrow-path"
+            variant="ghost"
+            size="sm"
+            @click="userAccessRef?.loadUserAccess()"
+          />
 
           <!-- Export Options -->
           <UDropdown :items="[
-            [{
-              label: 'Export Options',
-              slot: 'account',
-              disabled: true
-            }],
             [{
               label: 'Detailed CSV',
               icon: 'i-heroicons-document-text',
@@ -517,12 +542,12 @@ const updateBreadcrumbs = () => {
               click: handleExportCSV
             }]
           ]" :popper="{ placement: 'bottom-end' }">
-            <UButton 
+            <UButton
               icon="i-heroicons-arrow-down-tray"
               variant="outline"
               size="sm"
             >
-              Export Data
+              Export
             </UButton>
           </UDropdown>
         </div>

@@ -37,13 +37,26 @@
               </a>
             </div>
           </div>
-          <div v-if="msg.metadata?.toolsUsed && msg.metadata.toolsUsed.length > 0" class="tools-used">
-            <div class="tools-label">Tools used:</div>
-            <div class="tools-list">
-              <span v-for="(tool, toolIndex) in msg.metadata.toolsUsed" :key="toolIndex" class="tool-badge">
-                {{ tool }}
+          <div v-if="msg.metadata && (msg.metadata.accountId || msg.metadata.mcpUsed)" class="tools-used">
+            <div class="metadata-container">
+              <span v-if="msg.metadata.accountId" class="metadata-badge account-badge">
+                <UIcon name="i-heroicons-building-library" class="w-3 h-3" />
+                Account: {{ msg.metadata.accountId }}
+              </span>
+              <span v-if="msg.metadata.mcpUsed" class="metadata-badge mcp-badge" :class="{ 'permanent-mcp': msg.metadata.mcpType === 'permanent', 'temporary-mcp': msg.metadata.mcpType === 'temporary' }">
+                <UIcon :name="msg.metadata.mcpType === 'permanent' ? 'i-heroicons-server-stack' : 'i-heroicons-cpu-chip'" class="w-3 h-3" />
+                {{ msg.metadata.mcpUsed }}
               </span>
             </div>
+          </div>
+
+          <!-- Suggested Links -->
+          <div v-if="msg.suggestedLinks && msg.suggestedLinks.length > 0" class="suggested-links">
+            <StrandsLinkCard
+              v-for="(link, linkIdx) in msg.suggestedLinks"
+              :key="linkIdx"
+              :link="link"
+            />
           </div>
         </div>
 
@@ -86,7 +99,7 @@
 <script setup lang="ts">
 // Reactive state
 const messages = ref([{
-  text: "Hello! I'm a Strands agent connected to AWS MCP servers. I can help you with AWS cost analysis, configuration lookups, security hub queries, and more. Type \"help\" for example questions.",
+  text: "Hello! I'm a Strands agent connected to AWS MCP servers. I can help you with AWS cost analysis, configuration lookups, security hub queries, and more.\n\nFor best results, be explicit about AWS account IDs in your queries. Type \"help\" for example questions.\n\nNote: First-time queries for new accounts may take 2+ minutes while the MCP server initializes.",
   links: [],
   sender: 'bot',
   metadata: {}
@@ -105,12 +118,13 @@ const sessionId = ref<string | undefined>(undefined)
 const endpoint = "/api/strands/chat"
 
 // Example questions list for Strands agent
+// Note: Be explicit about account IDs for best results
 const exampleQuestionsList = [
-  "What are my AWS costs for this month?",
-  "Show me security findings from Security Hub",
-  "What EC2 instances are running in us-east-1?",
-  "Analyze my AWS costs by service",
-  "Check my S3 bucket configurations",
+  "What are the AWS costs for account 374673712317 this month?",
+  "Show me security findings from Security Hub for the Gov Master account",
+  "List EC2 instances in account 205950196477",
+  "Analyze costs by service for account 083876038518",
+  "What S3 buckets exist in account 374673712317?",
 ]
 
 // Build conversation history from messages
@@ -207,7 +221,8 @@ const fetchData = async (inputVal: string) => {
       text: message,
       links: uniqueLinks,
       sender: 'bot' as const,
-      metadata: data.data.metadata || {}
+      metadata: data.data.metadata || {},
+      suggestedLinks: data.data.suggestedLinks || []
     }
 
     messages.value.push(botMessage)
@@ -344,16 +359,32 @@ watch(isLoading, (newLoading) => {
   @apply mt-2 pt-2 border-t border-gray-200 dark:border-gray-600;
 }
 
-.tools-label {
-  @apply text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1;
+.metadata-container {
+  @apply flex flex-wrap gap-2 items-center;
 }
 
-.tools-list {
-  @apply flex flex-wrap gap-1;
+.metadata-badge {
+  @apply text-xs px-2 py-1 rounded flex items-center gap-1;
 }
 
-.tool-badge {
-  @apply text-xs bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 px-2 py-0.5 rounded;
+.account-badge {
+  @apply bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200;
+}
+
+.mcp-badge {
+  @apply bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300;
+}
+
+.permanent-mcp {
+  @apply bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200;
+}
+
+.temporary-mcp {
+  @apply bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200;
+}
+
+.suggested-links {
+  @apply mt-3 space-y-2;
 }
 
 .example-questions {

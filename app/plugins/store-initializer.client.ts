@@ -18,6 +18,7 @@ export default defineNuxtPlugin(async (nuxtApp) => {
     const { user, loggedIn } = useOidcAuth()
     const userGroupStore = useUserGroupStore()
     const enclaveStore = useEnclaveStore()
+    const siteConfigStore = useSiteConfigStore()
     const route = useRoute()
     const router = useRouter()
     
@@ -40,29 +41,35 @@ export default defineNuxtPlugin(async (nuxtApp) => {
 
     // Initialize stores if they're empty (not if they're "stale")
     // This prevents infinite loops while ensuring stores have data
-    
+
     try {
       // Check if stores have any data at all
       const hasGroups = userGroupStore.roleGroups && Object.keys(userGroupStore.roleGroups).length > 0
       const hasEnclaves = enclaveStore.enclaves && Object.keys(enclaveStore.enclaves).length > 0
-      
+      const hasConfig = siteConfigStore.loaded
+
       // Only force initialization if stores are completely empty
-      if (!hasGroups || !hasEnclaves) {
+      if (!hasGroups || !hasEnclaves || !hasConfig) {
         console.log('Stores are empty, initializing...')
-        
+
         // Initialize in parallel for better performance
         const initPromises = []
-        
+
         if (!hasGroups) {
           console.log('Initializing user groups...')
           initPromises.push(userGroupStore.initializeGroups(user.value.accessToken, true))
         }
-        
+
         if (!hasEnclaves) {
           console.log('Initializing enclaves...')
           initPromises.push(enclaveStore.initialize(true))
         }
-        
+
+        if (!hasConfig) {
+          console.log('Initializing site configuration...')
+          initPromises.push(siteConfigStore.fetchConfig())
+        }
+
         // Wait for initialization
         await Promise.all(initPromises)
         
@@ -90,8 +97,16 @@ export default defineNuxtPlugin(async (nuxtApp) => {
         if (enclaveStore.lastFetch && enclaveStore.lastFetch < fiveMinutesAgo) {
           console.log('Enclave data is stale, refreshing in background...')
           // Refresh in background without blocking
-          enclaveStore.initialize(true).catch(err => 
+          enclaveStore.initialize(true).catch(err =>
             console.warn('Background refresh of enclaves failed:', err)
+          )
+        }
+
+        if (siteConfigStore.isStale) {
+          console.log('Site config is stale, refreshing in background...')
+          // Refresh in background without blocking
+          siteConfigStore.refresh().catch(err =>
+            console.warn('Background refresh of site config failed:', err)
           )
         }
       }

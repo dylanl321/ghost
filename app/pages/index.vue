@@ -1,21 +1,108 @@
 <template>
   <div class="space-y-6 p-6">
-    <UCard>
+    <!-- Enhanced Welcome Card -->
+    <UCard class="overflow-hidden relative border-gray-800">
+      <!-- Gradient Background -->
+      <div class="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-purple-500/5 to-transparent pointer-events-none" />
+
       <template #header>
-        <div>
-          <h1 class="text-2xl font-bold mb-1">Welcome, {{ user?.claims?.given_name }}</h1>
-          <p class="text-sm text-gray-400">
-            Organization Cloud Dashboard
-          </p>
+        <div class="relative z-10">
+          <div class="flex items-start justify-between">
+            <div class="flex-1">
+              <p class="text-sm text-gray-400 mb-1">{{ currentGreeting }}</p>
+              <h1 class="text-3xl font-bold mb-2 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                {{ user?.claims?.given_name || 'User' }}
+              </h1>
+              <p class="text-sm text-gray-400 flex items-center gap-2">
+                <UIcon name="i-heroicons-calendar" class="w-4 h-4" />
+                {{ currentDate }}
+              </p>
+            </div>
+
+            <!-- Quick Stats Summary - User's Personal Stats -->
+            <div v-if="userAccountCount > 0" class="flex items-center gap-3">
+              <div class="text-right">
+                <p class="text-xs text-gray-500 uppercase tracking-wide">My Accounts</p>
+                <p class="text-2xl font-bold text-white">{{ userAccountCount }}</p>
+              </div>
+              <div class="w-px h-12 bg-gray-700"></div>
+              <div class="text-right">
+                <p class="text-xs text-gray-500 uppercase tracking-wide">My MTD Cost</p>
+                <p class="text-2xl font-bold text-white">{{ formatCurrency(userTotalCost, 0) }}</p>
+              </div>
+            </div>
+            <!-- Fallback to org stats if user has no accounts -->
+            <div v-else class="flex items-center gap-3">
+              <div class="text-right">
+                <p class="text-xs text-gray-500 uppercase tracking-wide">Org Accounts</p>
+                <p class="text-2xl font-bold text-white">{{ activeAccounts }}</p>
+              </div>
+              <div class="w-px h-12 bg-gray-700"></div>
+              <div class="text-right">
+                <p class="text-xs text-gray-500 uppercase tracking-wide">Org MTD</p>
+                <p class="text-2xl font-bold text-white">{{ formatCurrency(mtdTotal, 0) }}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Actions -->
+          <div class="flex items-center gap-2 mt-4 pt-4 border-t border-gray-800">
+            <NuxtLink to="/account/explorer">
+              <UButton icon="i-heroicons-magnifying-glass" size="sm" variant="soft" color="blue">
+                Search Accounts
+              </UButton>
+            </NuxtLink>
+            <NuxtLink to="/account/costs">
+              <UButton icon="i-heroicons-chart-bar" size="sm" variant="soft" color="purple">
+                Cost Reports
+              </UButton>
+            </NuxtLink>
+            <NuxtLink to="/account/user">
+              <UButton icon="i-heroicons-users" size="sm" variant="soft" color="emerald">
+                User Access
+              </UButton>
+            </NuxtLink>
+            <NuxtLink to="/support/docs">
+              <UButton icon="i-heroicons-book-open" size="sm" variant="ghost">
+                Support
+              </UButton>
+            </NuxtLink>
+
+            <!-- FUTURE: Notifications Bell (when notification system is implemented)
+            <div class="ml-auto">
+              <UButton icon="i-heroicons-bell" size="sm" variant="ghost">
+                <UBadge color="red" size="xs" class="absolute -top-1 -right-1">3</UBadge>
+              </UButton>
+            </div>
+            -->
+          </div>
         </div>
       </template>
     </UCard>
+
+    <!-- Quick Start Card for New Users -->
+    <QuickStartCard />
+
+    <!-- FUTURE: Recent Activity Feed
+         When implementing notifications/activity tracking:
+         1. Create a new component: ActivityFeed.vue
+         2. Display recent events like:
+            - New accounts created
+            - Budget threshold alerts
+            - Cost anomaly detections
+            - Account status changes
+         3. Store events in DynamoDB with timestamp, type, severity
+         4. Add API endpoint: /api/activity/recent.get.ts
+         5. Show max 5 items with "View All" link to dedicated activity page
+         6. Color code by severity (info=blue, warning=yellow, critical=red)
+    -->
+
 
     <!-- Metric Displays -->
     <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
 
       <!-- Month to Date -->
-      <UCard class="p-2">
+      <UCard class="p-2 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 border-l-4 border-blue-500">
         <div class="flex justify-between">
           <p class="text-sm font-medium text-gray-400">Month to Date Cost</p>
           <UTooltip v-if="monthToDateTrend !== 0" text="Comparison to same days last month">
@@ -33,22 +120,28 @@
         </p>
 
         <!-- Progress bar for month elapsed -->
-        <div class="space-y-1">
-          <div class="w-full bg-gray-700 rounded-full h-1.5">
-            <div
-              class="bg-blue-500 h-1.5 rounded-full transition-all"
-              :style="{ width: `${monthProgressPercent}%` }"
-            />
+        <ClientOnly>
+          <div class="space-y-1">
+            <div class="w-full bg-gray-700 rounded-full h-1.5">
+              <div
+                class="bg-blue-500 h-1.5 rounded-full transition-all"
+                :style="{ width: `${monthProgressPercent}%` }"
+              />
+            </div>
+            <div class="flex justify-between text-xs text-gray-400">
+              <span>Day {{ currentDayOfMonth }}</span>
+              <span>{{ monthProgressPercent }}% of month</span>
+            </div>
           </div>
-          <div class="flex justify-between text-xs text-gray-400">
-            <span>Day {{ currentDayOfMonth }}</span>
-            <span>{{ monthProgressPercent }}% of month</span>
-          </div>
-        </div>
+        </ClientOnly>
       </UCard>
 
       <!-- Projected Spend -->
-      <UCard class="p-2">
+      <UCard :class="`p-2 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 border-l-4 ${
+        projectedSpend > budgetHealth.totalBudget && budgetHealth.totalBudget > 0 ? 'border-red-500' :
+        projectedSpend > budgetHealth.totalBudget * 0.9 && budgetHealth.totalBudget > 0 ? 'border-yellow-500' :
+        'border-purple-500'
+      }`">
         <div class="flex justify-between">
           <UTooltip text="AWS Cost Explorer ML forecast">
             <p class="text-sm font-medium text-gray-400">Forecasted Cost</p>
@@ -85,7 +178,7 @@
       </UCard>
 
       <!-- Previous Month -->
-      <UCard class="p-2">
+      <UCard class="p-2 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 border-l-4 border-gray-500">
         <div class="flex justify-between items-start">
           <p class="text-sm font-medium text-gray-400">Previous Month</p>
           <UTooltip text="Full month actual cost">
@@ -113,7 +206,7 @@
       </UCard>
 
       <!-- Active Accounts -->
-      <UCard class="p-2">
+      <UCard class="p-2 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 border-l-4 border-emerald-500">
         <div class="flex justify-between items-start">
           <p class="text-sm font-medium text-gray-400">Active Accounts</p>
           <UTooltip :text="`${budgetHealth.accountsWithBudget} with budgets`">
@@ -140,7 +233,11 @@
       </UCard>
 
       <!-- Budget Health -->
-      <UCard class="p-2">
+      <UCard :class="`p-2 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 border-l-4 ${
+        budgetHealth.burnRateVsBudget > 10 ? 'border-red-500' :
+        budgetHealth.burnRateVsBudget > 0 ? 'border-yellow-500' :
+        'border-green-500'
+      }`">
         <div class="flex justify-between items-start mb-2">
           <UTooltip text="Daily burn rate vs budget (excludes day 1 savings plan charges)">
             <p class="text-sm font-medium text-gray-400">Budget Health</p>
@@ -215,7 +312,7 @@
 <script setup lang="ts">
 
 const { user } = useOidcAuth()
-// const userGroupStore = useUserGroupStore()
+const userGroupStore = useUserGroupStore()
 const enclaveStore = useEnclaveStore()
 
 interface OverviewResponse {
@@ -316,6 +413,41 @@ const topAccounts = computed(() => {
     name: enclaveStore.enclaves[acct.accountId]?.projectName || "Unknown Name",
     percentOfTotal: (acct.cost / mtdTotal.value) * 100
   }))
+})
+
+// Dynamic greeting based on time of day
+const currentGreeting = computed(() => {
+  const hour = new Date().getHours()
+  if (hour < 12) return 'Good morning'
+  if (hour < 18) return 'Good afternoon'
+  return 'Good evening'
+})
+
+// Formatted current date
+const currentDate = computed(() => {
+  const now = new Date()
+  return now.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  })
+})
+
+// User's personal account stats
+const userAccountCount = computed(() => {
+  return Object.keys(userGroupStore.myEnclaves).length
+})
+
+const userTotalCost = computed(() => {
+  if (!orgOverview.value?.data?.topAccounts) return 0
+
+  const userAccountIds = Object.keys(userGroupStore.myEnclaves)
+  const userAccounts = orgOverview.value.data.topAccounts.filter(acct =>
+    userAccountIds.includes(acct.accountId)
+  )
+
+  return userAccounts.reduce((sum, acct) => sum + acct.cost, 0)
 })
 
 async function fetchOverview(onlyAccounts = false) {

@@ -124,70 +124,141 @@ onMounted(async () => {
 });
 </script>
 
+<style scoped>
+/* Grid background pattern */
+.grid-background {
+  background-image:
+    linear-gradient(to right, rgba(148, 163, 184, 0.1) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.1) 1px, transparent 1px);
+  background-size: 60px 60px;
+  animation: grid-flow 20s linear infinite;
+}
+
+@keyframes grid-flow {
+  0% {
+    transform: translate(0, 0);
+  }
+  100% {
+    transform: translate(60px, 60px);
+  }
+}
+
+/* Slow pulse animation */
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.05);
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 3s ease-in-out infinite;
+}
+
+/* Shimmer animation for progress bar */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+</style>
+
 <template>
   <!-- Ensure full-screen display with fixed positioning -->
   <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-secondary/50 to-primary-50/30 dark:from-slate-900/50 dark:to-primary-950/50 backdrop-blur-lg"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900"
   >
-    <div
-      class="text-center p-12 rounded-xl shadow-xl bg-emerald-800/20 w-full max-w-md mx-4"
-    >
-      <div class="mb-8">
-        <!-- Loading spinner icon -->
-        <UIcon
-          v-if="!error"
-          name="i-heroicons-arrow-path"
-          class="w-12 h-12 animate-spin text-primary-500 mx-auto mb-4"
-        />
-        <!-- Error icon -->
-        <UIcon
-          v-else
-          name="i-heroicons-exclamation-triangle"
-          class="w-12 h-12 text-red-500 mx-auto mb-4"
-        />
-      </div>
+    <!-- Animated Background Pattern -->
+    <div class="absolute inset-0 overflow-hidden opacity-10">
+      <div class="absolute inset-0 grid-background"></div>
+    </div>
 
-      <p
-        class="text-2xl font-bold mb-8"
-        :class="error ? 'text-red-500' : 'text-black dark:text-white'"
-      >
-        {{ error || step }}
-      </p>
-
-      <!-- Progress bar for non-error states -->
-      <div
-        v-if="!error"
-        class="mt-4 bg-gray-200 dark:bg-emerald-900 rounded-full h-2.5 mb-4 overflow-hidden"
-      >
+    <!-- Main Content Container -->
+    <div class="relative w-full max-w-md mx-4">
+      <!-- Base glow effect - always visible -->
+      <div class="absolute inset-0 flex items-center justify-center -z-10">
         <div
-          class="bg-gradient-to-r from-primary-600 via-primary-500 to-primary-600 h-2.5 rounded-full transition-all duration-700 ease-in-out"
-          :style="{
-            width: `${progress}%`,
-            backgroundSize: '200% 100%',
-            animation: 'shimmer 2s infinite linear',
-          }"
-        />
+          class="blur-3xl rounded-full opacity-30 animate-pulse-slow w-96 h-96"
+          :class="error ? 'bg-red-500' : 'bg-primary'"
+        ></div>
       </div>
 
-      <!-- Error actions -->
-      <!-- <div v-if="error" class="mt-6 space-y-3">
-        <UButton
-          @click="() => window.location.reload()"
-          color="red"
-          variant="solid"
-          class="w-full"
+      <!-- Card with backdrop blur -->
+      <div
+        class="relative text-center p-12 rounded-xl shadow-xl bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm border border-slate-700/50"
+      >
+        <!-- Icon glow - always visible -->
+        <div class="absolute top-12 left-1/2 -translate-x-1/2 -z-10">
+          <div
+            class="blur-2xl rounded-full opacity-40 w-24 h-24 transition-all duration-500"
+            :class="error ? 'bg-red-500' : 'bg-primary'"
+          ></div>
+        </div>
+
+        <div class="mb-8 relative">
+          <!-- Loading spinner icon -->
+          <UIcon
+            v-if="!error"
+            name="i-heroicons-arrow-path"
+            class="w-12 h-12 animate-spin text-primary mx-auto mb-4 drop-shadow-2xl"
+          />
+          <!-- Error icon -->
+          <UIcon
+            v-else
+            name="i-heroicons-exclamation-triangle"
+            class="w-12 h-12 text-red-500 mx-auto mb-4 drop-shadow-2xl"
+          />
+        </div>
+
+        <p
+          class="text-2xl font-bold mb-8 transition-colors duration-300"
+          :class="error ? 'text-red-500' : 'text-white'"
         >
-          Try Again
-        </UButton>
-        <UButton
-          @click="() => (window.location.href = '/')"
-          color="gray"
-          variant="soft"
-          class="w-full"
+          {{ error || step }}
+        </p>
+
+        <!-- Progress bar for non-error states -->
+        <div
+          v-if="!error"
+          class="mt-4 bg-slate-700/50 rounded-full h-2.5 mb-4 overflow-hidden"
         >
-          Go to Dashboard
-        </UButton>
-      </div> -->
+          <div
+            class="bg-gradient-to-r from-primary-600 via-primary-500 to-primary-600 h-2.5 rounded-full transition-all duration-700 ease-in-out"
+            :style="{
+              width: `${progress}%`,
+              backgroundSize: '200% 100%',
+              animation: 'shimmer 2s infinite linear',
+            }"
+          />
+        </div>
+
+        <!-- Error actions -->
+        <!-- <div v-if="error" class="mt-6 space-y-3">
+          <UButton
+            @click="() => window.location.reload()"
+            color="red"
+            variant="solid"
+            class="w-full"
+          >
+            Try Again
+          </UButton>
+          <UButton
+            @click="() => (window.location.href = '/')"
+            color="gray"
+            variant="soft"
+            class="w-full"
+          >
+            Go to Dashboard
+          </UButton>
+        </div> -->
+      </div>
     </div>
   </div>
 </template>

@@ -1,15 +1,36 @@
 <template>
   <div class="space-y-6 p-6 max-w-[1600px] mx-auto">
-    <UCard>
-      <div class="p-2">
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-          Strands Agent
-        </h1>
-        <p class="text-gray-600 dark:text-gray-400">
-          Conversational AI agent powered by Strands with AWS MCP tool integration. Ask questions about AWS costs, configurations, security findings, and more.
+    <!-- Feature Disabled Notice -->
+    <UCard v-if="!strandsEnabled">
+      <div class="p-8 text-center">
+        <UIcon name="i-heroicons-no-symbol" class="w-16 h-16 text-gray-400 mx-auto mb-4" />
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+          Strands Chat is Currently Disabled
+        </h2>
+        <p class="text-gray-600 dark:text-gray-400 mb-6">
+          This feature has been temporarily disabled by an administrator.
+          Please check back later or contact support if you need access.
         </p>
+        <UButton
+          icon="i-heroicons-home"
+          label="Return to Dashboard"
+          @click="navigateTo('/')"
+        />
       </div>
     </UCard>
+
+    <!-- Strands Chat Content (when enabled) -->
+    <template v-else>
+      <UCard>
+        <div class="p-2">
+          <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+            Strands Agent
+          </h1>
+          <p class="text-gray-600 dark:text-gray-400">
+            Conversational AI agent powered by Strands with AWS MCP tool integration. Ask questions about AWS costs, configurations, security findings, and more.
+          </p>
+        </div>
+      </UCard>
 
     <!-- Help Section -->
     <UCard>
@@ -71,28 +92,33 @@
       </div>
     </UCard>
 
-    <!-- Chatbot Component -->
-    <StrandsChatbot />
+      <!-- Chatbot Component -->
+      <StrandsChatbot />
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
+// Check if Strands chat is enabled
+const siteConfigStore = useSiteConfigStore()
+const strandsEnabled = computed(() => siteConfigStore.isStrandsChatEnabled)
+
 // Page metadata
 definePageMeta({
   title: 'Strands Agent',
   description: 'Conversational AI agent with AWS MCP tool integration for cost analysis, config lookups, and security queries'
 })
 
-// Example questions
+// Example questions - Be explicit about account IDs
 const exampleQuestions = [
-  'What are my AWS costs for this month?',
-  'Show me security findings from Security Hub',
-  'What EC2 instances are running in us-east-1?',
-  'Analyze my AWS costs by service',
-  'Check my S3 bucket configurations',
-  'What are the top cost drivers this quarter?',
-  'Show me compliance findings from Config',
-  'Compare costs between commercial and GovCloud'
+  'What are the AWS costs for account 374673712317 this month?',
+  'Show me security findings from Security Hub for account 374673712317',
+  'List EC2 instances in account 205950196477',
+  'Analyze costs by service for account 083876038518',
+  'What S3 buckets exist in account 374673712317?',
+  'Show me the top cost drivers for Gov Master account this quarter',
+  'What compliance findings exist in account 205950196477?',
+  'Compare costs between account 374673712317 and 205950196477'
 ]
 </script>
 

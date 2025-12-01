@@ -26,3 +26,4 @@ logs
 # Other
 dev-notes.md
 *.sh
+.cursor/worktrees.json

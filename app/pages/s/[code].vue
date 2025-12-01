@@ -88,7 +88,12 @@ onMounted(async () => {
 
       // Fetch the report and generate presigned URL, then redirect
       try {
-        const downloadResponse = await $fetch<{ presignedUrl: string }>(`/api/reports/download/${reportData.shareId}`)
+        // Check if this is a dataset report or cost report
+        const downloadEndpoint = 'reportType' in reportData && reportData.reportType === 'dataset'
+          ? `/api/dataset-reports/download/${reportData.shareId}`
+          : `/api/reports/download/${reportData.shareId}`
+
+        const downloadResponse = await $fetch<{ presignedUrl: string }>(downloadEndpoint)
 
         // Redirect to S3 directly
         window.location.href = downloadResponse.presignedUrl

@@ -1,39 +1,26 @@
 /**
  * TypeScript type definitions for Strands server integration
+ * Based on: http://internal-lz-mcp-servers-dev-alb-1428009891.us-gov-west-1.elb.amazonaws.com:80/query
  */
 
 /**
- * Chat message structure for Strands conversation
+ * Request to send to Strands ALB endpoint
+ * The agent infers account_id from the query text
  */
-export interface StrandsMessage {
-  role: 'user' | 'assistant' | 'system'
-  content: string
-  timestamp?: string
+export interface StrandsQueryRequest {
+  query: string
+  mcp_id?: string // Optional: 'account-specific' to force local MCP spawn
 }
 
 /**
- * Request to send to Strands server
+ * Response from Strands ALB endpoint
+ * Based on QueryResponse model from Strands agent
  */
-export interface StrandsChatRequest {
-  messages: StrandsMessage[]
-  sessionId?: string
-  stream?: boolean
-}
-
-/**
- * Response from Strands server
- */
-export interface StrandsChatResponse {
-  message: string
-  sessionId?: string
-  metadata?: {
-    model?: string
-    tokens?: {
-      input?: number
-      output?: number
-    }
-    toolsUsed?: string[]
-  }
+export interface StrandsQueryResponse {
+  account_id: string
+  mcp_used: string // e.g., "account-specific [stdio]" or permanent MCP name
+  result: string | null
+  error: string | null
 }
 
 /**
@@ -51,9 +38,18 @@ export interface StrandsErrorResponse {
  * Configuration for Strands client
  */
 export interface StrandsClientConfig {
-  serverUrl: string
-  timeout: number
+  serverUrl: string // ALB URL without trailing slash
+  timeout: number // Request timeout in ms (default: 300000 for 5 min)
   retries?: number
   retryDelay?: number
+}
+
+/**
+ * Metadata extracted from Strands result
+ */
+export interface StrandsMetadata {
+  accountId?: string
+  mcpUsed?: string
+  mcpType?: 'permanent' | 'temporary'
 }
 

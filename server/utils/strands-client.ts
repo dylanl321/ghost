@@ -1,30 +1,61 @@
 /**
- * Strands Server HTTP Client
- * Simple HTTP client for communicating with Strands server
+ * Strands Agent HTTP Client
+ * Client for communicating with Strands ECS service via ALB
+ * Endpoint: http://internal-lz-mcp-servers-dev-alb-1428009891.us-gov-west-1.elb.amazonaws.com:80/query
  */
 
 import { logger } from './logger'
 import type {
-  StrandsChatRequest,
-  StrandsChatResponse,
+  StrandsQueryRequest,
+  StrandsQueryResponse,
   StrandsErrorResponse,
-  StrandsClientConfig
+  StrandsClientConfig,
+  StrandsMetadata
 } from '../types/strands'
 
 /**
- * Get Strands client configuration from environment
+ * Get Strands client configuration
+ * Priority: Site config (DynamoDB) > Environment variables > Defaults
  */
-function getStrandsConfig(): StrandsClientConfig {
-  const serverUrl = process.env.STRANDS_SERVER_URL
-  if (!serverUrl) {
-    throw new Error('STRANDS_SERVER_URL environment variable is required')
-  }
+async function getStrandsConfig(): Promise<StrandsClientConfig> {
+  // Try to get config from site config system
+  try {
+    const { getConfigValue } = await import('./site-config')
 
-  return {
-    serverUrl: serverUrl.replace(/\/$/, ''), // Remove trailing slash
-    timeout: parseInt(process.env.STRANDS_TIMEOUT || '30000', 10),
-    retries: parseInt(process.env.STRANDS_RETRIES || '2', 10),
-    retryDelay: parseInt(process.env.STRANDS_RETRY_DELAY || '1000', 10)
+    const serverUrl = await getConfigValue<string>('services.strands.serverUrl') ||
+      process.env.STRANDS_SERVER_URL
+    const timeout = await getConfigValue<number>('services.strands.timeout') ||
+      parseInt(process.env.STRANDS_TIMEOUT || '300000', 10)
+    const retries = await getConfigValue<number>('services.strands.retries') ||
+      parseInt(process.env.STRANDS_RETRIES || '2', 10)
+    const retryDelay = await getConfigValue<number>('services.strands.retryDelay') ||
+      parseInt(process.env.STRANDS_RETRY_DELAY || '2000', 10)
+
+    if (!serverUrl) {
+      throw new Error('STRANDS_SERVER_URL must be configured in site config or environment variables')
+    }
+
+    return {
+      serverUrl: serverUrl.replace(/\/$/, ''), // Remove trailing slash
+      timeout,
+      retries,
+      retryDelay
+    }
+  } catch (error) {
+    // Fallback to environment variables if site config fails
+    logger.warn('[Strands Client] Failed to load site config, using environment variables:', error)
+
+    const serverUrl = process.env.STRANDS_SERVER_URL
+    if (!serverUrl) {
+      throw new Error('STRANDS_SERVER_URL environment variable is required')
+    }
+
+    return {
+      serverUrl: serverUrl.replace(/\/$/, ''),
+      timeout: parseInt(process.env.STRANDS_TIMEOUT || '300000', 10),
+      retries: parseInt(process.env.STRANDS_RETRIES || '2', 10),
+      retryDelay: parseInt(process.env.STRANDS_RETRY_DELAY || '2000', 10)
+    }
   }
 }
 
@@ -44,20 +75,32 @@ export class StrandsClientError extends Error {
 }
 
 /**
- * Send a chat request to Strands server
+ * Send a query to Strands ALB endpoint
+ * The agent will infer the AWS account ID from the query text
+ * For more explicit queries, mention the account ID in the query
+ *
+ * Architecture:
+ * - 3 permanent MCP servers: 374673712317 (Gov Master), 083876038518 (Monitoring), 205950196477 (Commercial Master)
+ * - Temporary stdio MCP servers spawned for other accounts (~2 min startup, 15 min idle timeout)
+ * - Use mcp_id: 'account-specific' to force local MCP spawn
  */
-export async function sendStrandsChatRequest(
-  request: StrandsChatRequest
-): Promise<StrandsChatResponse> {
-  const config = getStrandsConfig()
-  const url = `${config.serverUrl}/chat`
+export async function sendStrandsQuery(
+  query: string,
+  mcpId?: string
+): Promise<StrandsQueryResponse> {
+  const config = await getStrandsConfig()
+  const url = `${config.serverUrl}/query`
 
-  logger.debug('[Strands Client] Sending request to:', url)
-  logger.debug('[Strands Client] Request payload:', {
-    messageCount: request.messages.length,
-    sessionId: request.sessionId,
-    stream: request.stream
-  })
+  const request: StrandsQueryRequest = { query }
+  if (mcpId) {
+    request.mcp_id = mcpId
+  }
+
+  logger.debug('[Strands Client] Sending query to:', url)
+  logger.debug('[Strands Client] Query:', query.substring(0, 100) + (query.length > 100 ? '...' : ''))
+  if (mcpId) {
+    logger.debug('[Strands Client] MCP ID:', mcpId)
+  }
 
   let lastError: Error | null = null
   const maxRetries = config.retries || 2
@@ -117,13 +160,24 @@ export async function sendStrandsChatRequest(
         throw lastError
       }
 
-      const data = await response.json() as StrandsChatResponse
+      const data = await response.json() as StrandsQueryResponse
 
       logger.debug('[Strands Client] Response received:', {
-        messageLength: data.message?.length,
-        sessionId: data.sessionId,
-        toolsUsed: data.metadata?.toolsUsed?.length || 0
+        accountId: data.account_id,
+        mcpUsed: data.mcp_used,
+        hasResult: !!data.result,
+        hasError: !!data.error
       })
+
+      // If Strands returned an error, throw it
+      if (data.error) {
+        throw new StrandsClientError(
+          data.error,
+          'STRANDS_QUERY_ERROR',
+          200, // HTTP succeeded but query failed
+          { accountId: data.account_id, mcpUsed: data.mcp_used }
+        )
+      }
 
       return data
 
@@ -131,7 +185,7 @@ export async function sendStrandsChatRequest(
       // Handle abort (timeout)
       if (error.name === 'AbortError') {
         lastError = new StrandsClientError(
-          `Request timeout after ${config.timeout}ms`,
+          `Request timeout after ${config.timeout}ms. Strands MCP operations can take 2+ minutes for new accounts.`,
           'TIMEOUT',
           408
         )
@@ -167,6 +221,21 @@ export async function sendStrandsChatRequest(
 
   // This should never be reached, but TypeScript needs it
   throw lastError || new StrandsClientError('Unknown error', 'UNKNOWN_ERROR')
+}
+
+/**
+ * Extract metadata from Strands response
+ */
+export function extractStrandsMetadata(response: StrandsQueryResponse): StrandsMetadata {
+  const mcpType = response.mcp_used.toLowerCase().includes('stdio')
+    ? 'temporary' as const
+    : 'permanent' as const
+
+  return {
+    accountId: response.account_id,
+    mcpUsed: response.mcp_used,
+    mcpType
+  }
 }
 
 /**

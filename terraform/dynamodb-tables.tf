@@ -250,6 +250,53 @@ resource "aws_dynamodb_table" "user_preferences" {
 }
 
 # ============================================================================
+# Site Configuration Table (GovCloud Environment)
+# ============================================================================
+# Stores feature flags and site-wide configuration
+# Allows runtime configuration changes without code deployment
+resource "aws_dynamodb_table" "site_config" {
+  provider       = aws.target_deployment_account
+  name           = "ghost-site-config"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "key"
+
+  attribute {
+    name = "key"
+    type = "S"
+  }
+
+  attribute {
+    name = "category"
+    type = "S"
+  }
+
+  # GSI for querying config by category
+  global_secondary_index {
+    name            = "CategoryIndex"
+    hash_key        = "category"
+    projection_type = "ALL"
+  }
+
+  # Enable encryption at rest
+  server_side_encryption {
+    enabled = true
+  }
+
+  # Enable point-in-time recovery
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Name        = "GHOST Site Configuration"
+    Environment = local.environment
+    ManagedBy   = "Terraform"
+    Service     = "GHOST"
+    Component   = "SiteConfiguration"
+  }
+}
+
+# ============================================================================
 # Admin Notifications Table (GovCloud Environment)
 # ============================================================================
 # Tracks all admin notifications sent (feedback, errors, alerts, etc.)
@@ -384,4 +431,14 @@ output "admin_notifications_table_name" {
 output "admin_notifications_table_arn" {
   description = "ARN of the DynamoDB table for admin notifications"
   value       = aws_dynamodb_table.admin_notifications.arn
+}
+
+output "site_config_table_name" {
+  description = "Name of the DynamoDB table for site configuration"
+  value       = aws_dynamodb_table.site_config.name
+}
+
+output "site_config_table_arn" {
+  description = "ARN of the DynamoDB table for site configuration"
+  value       = aws_dynamodb_table.site_config.arn
 }

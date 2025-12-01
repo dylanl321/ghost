@@ -18,6 +18,19 @@ export default defineNuxtConfig({
     '#shared': fileURLToPath(new URL('./shared', import.meta.url))
   },
 
+  app: {
+    head: {
+      link: [
+        { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' }
+      ],
+      title: 'GHOST - AWS Dashboard',
+      meta: [
+        { name: 'description', content: 'General Data Hosting and Orchestration System Technology - AWS Dashboard' }
+      ]
+    }
+  },
+
   modules: [
     "@nuxt/ui",
     "@nuxt/eslint",
@@ -73,6 +86,9 @@ export default defineNuxtConfig({
     adminNotificationEmails: process.env.ADMIN_NOTIFICATION_EMAILS || 'dylan.lewis@gd-ms.com',
     adminNotificationsEnabled: process.env.ADMIN_NOTIFICATIONS_ENABLED !== 'false',
     notificationsTableName: process.env.NOTIFICATIONS_TABLE_NAME || 'ghost_admin_notifications',
+
+    // Site Configuration
+    siteConfigTableName: process.env.SITE_CONFIG_TABLE_NAME || 'ghost-site-config',
 
     public: {
       environment: process.env.NODE_ENV || "local",

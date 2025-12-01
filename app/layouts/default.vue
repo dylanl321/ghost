@@ -34,26 +34,28 @@
       <!-- Footer -->
       <footer class="bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 h-[53px] flex items-center">
         <div class="px-6 flex justify-between items-center w-full text-sm text-gray-500 dark:text-gray-400">
-          <span>A product of the GDMS AWS Landing Zone Team</span>
-          <FeedbackModal />
-          <!-- <div class="flex items-center gap-4">
-            <NuxtLink
-              to="/changelog"
-              class="flex items-center gap-1 hover:text-white transition-colors"
-            >
-              <UIcon name="i-heroicons-document-text" class="h-3 w-3" />
-              <span>v0.1</span>
-            </NuxtLink>
-            <NuxtLink
-              to="/changelog"
-              class="text-xs hover:text-white transition-colors"
-            >
-              What's New
-            </NuxtLink>
-          </div> -->
+          <!-- Left: GHOST Branding -->
+          <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2">
+              <UIcon name="i-fa6-solid-ghost" class="h-4 w-4 text-emerald-400" />
+              <span class="font-medium text-gray-300">GHOST</span>
+            </div>
+            <span class="text-gray-600">|</span>
+            <span class="text-xs">A product of the GDMS AWS Landing Zone Team</span>
+          </div>
+
+          <!-- Right: Feedback Only -->
+          <div class="flex items-center">
+            <FeedbackModal />
+          </div>
         </div>
       </footer>
     </div>
+
+    <!-- Global AI Assistant Popup -->
+    <ClientOnly>
+      <StrandsChatPopup />
+    </ClientOnly>
   </div>
 </template>
 
@@ -66,7 +68,10 @@ const navigationStore = useNavigationStore()
 const sideNavRef = ref()
 
 // Detect explorer page to adjust layout
-const isExplorerPage = computed(() => route.path === '/account/explorer')
+const isExplorerPage = computed(() => 
+  route.path === '/account/explorer' || 
+  route.path === '/reports/datasets'
+)
 
 // Mobile menu handler
 const handleMobileMenuToggle = () => {

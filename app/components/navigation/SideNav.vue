@@ -27,59 +27,60 @@
     @mouseleave="handleMouseLeave"
   >
     <!-- Logo Section -->
-    <div
-      class="h-16 border-b border-slate-700 flex items-center justify-center px-4 flex-shrink-0 relative overflow-hidden"
-    >
-      <!-- Expanded state content -->
-      <div
-        class="flex items-center justify-between w-full transition-all duration-300"
-        :class="{
-          'opacity-0 pointer-events-none':
-            navigationStore.isCollapsed && !navigationStore.isHovered,
-          'opacity-100':
-            !navigationStore.isCollapsed || navigationStore.isHovered,
-        }"
-      >
-        <div class="flex items-center gap-3 min-w-0">
-          <img
-            src="@/assets/images/MS-logoWhite.png"
-            alt="Logo"
-            class="h-8 w-auto flex-shrink-0"
+    <div class="border-b border-slate-700 flex-shrink-0">
+      <div class="h-16 flex items-center px-4 relative overflow-hidden">
+        <!-- Expanded state content -->
+        <div
+          class="flex items-center justify-between w-full transition-all duration-300"
+          :class="{
+            'opacity-0 pointer-events-none':
+              navigationStore.isCollapsed && !navigationStore.isHovered,
+            'opacity-100':
+              !navigationStore.isCollapsed || navigationStore.isHovered,
+          }"
+        >
+          <div class="flex flex-col gap-1 min-w-0">
+            <img
+              src="@/assets/images/MS-logoWhite.png"
+              alt="Logo"
+              class="h-8 w-auto flex-shrink-0"
+            />
+          </div>
+
+          <!-- Collapse Toggle Button -->
+          <UButton
+            v-if="canCollapse"
+            variant="ghost"
+            color="gray"
+            size="xs"
+            :icon="
+              navigationStore.isCollapsed
+                ? 'i-heroicons-chevron-right'
+                : 'i-heroicons-chevron-left'
+            "
+            class="flex-shrink-0 transition-all duration-200 opacity-60 hover:opacity-100"
+            @click="toggleSidebar"
+            :title="getToggleTooltip()"
           />
         </div>
 
-        <!-- Collapse Toggle Button -->
-        <UButton
-          v-if="canCollapse"
-          variant="ghost"
-          color="gray"
-          size="xs"
-          :icon="
-            navigationStore.isCollapsed
-              ? 'i-heroicons-chevron-right'
-              : 'i-heroicons-chevron-left'
-          "
-          class="flex-shrink-0 transition-all duration-200 opacity-60 hover:opacity-100"
-          @click="toggleSidebar"
-          :title="getToggleTooltip()"
-        />
-      </div>
-
-      <!-- Collapsed state icon -->
-      <div
-        class="absolute inset-0 flex items-center justify-center transition-all duration-300"
-        :class="{
-          'opacity-100':
-            navigationStore.isCollapsed && !navigationStore.isHovered,
-          'opacity-0 pointer-events-none':
-            !navigationStore.isCollapsed || navigationStore.isHovered,
-        }"
-      >
-        <img
-          src="@/assets/images/MS-logoWhite-icon.png"
-          alt="Logo"
-          class="w-8 h-8 flex-shrink-0"
-        />
+        <!-- Collapsed state icon -->
+        <div
+          class="absolute inset-0 flex flex-col items-center justify-center gap-1 transition-all duration-300"
+          :class="{
+            'opacity-100':
+              navigationStore.isCollapsed && !navigationStore.isHovered,
+            'opacity-0 pointer-events-none':
+              !navigationStore.isCollapsed || navigationStore.isHovered,
+          }"
+        >
+          <img
+            src="@/assets/images/MS-logoWhite-icon.png"
+            alt="Logo"
+            class="w-8 h-8 flex-shrink-0"
+          />
+          <UIcon name="i-fa6-solid-ghost" class="h-3 w-3 text-emerald-400" />
+        </div>
       </div>
     </div>
 
@@ -88,103 +89,12 @@
       <nav class="space-y-1 px-3 min-w-0 flex-shrink-0">
         <template v-for="item in navigationItems" :key="item.label">
           <!-- Menu Item -->
-          <div class="text-slate-400">
-            <!-- Parent Item -->
-            <div
-              class="flex items-center px-3 py-2 rounded-md cursor-pointer hover:bg-slate-800 transition-colors relative group overflow-hidden"
-              :class="{ 'text-white bg-slate-800': isActive(item) }"
-              @click="toggleDropdown(item)"
-            >
-              <UIcon :name="item.icon" class="flex-shrink-0 w-5 h-5" />
-              <div
-                class="flex items-center justify-between flex-1 ml-3 min-w-0 transition-all duration-300"
-                :class="{
-                  'opacity-0 w-0':
-                    navigationStore.isCollapsed && !navigationStore.isHovered,
-                  'opacity-100 w-full':
-                    !navigationStore.isCollapsed || navigationStore.isHovered,
-                }"
-              >
-                <span class="text-sm font-medium truncate">
-                  {{ item.label }}
-                </span>
-                <div class="flex items-center gap-2 flex-shrink-0">
-                  <UBadge
-                    v-if="item.inDevelopment"
-                    color="yellow"
-                    size="xs"
-                    :title="item.developmentMessage"
-                  >
-                    WIP
-                  </UBadge>
-                  <UIcon
-                    v-if="item.children"
-                    :name="
-                      isOpen(item)
-                        ? 'i-heroicons-chevron-down'
-                        : 'i-heroicons-chevron-right'
-                    "
-                    class="w-4 h-4"
-                  />
-                </div>
-              </div>
-
-              <!-- Tooltip for collapsed state -->
-              <div
-                v-if="navigationStore.isCollapsed && !navigationStore.isHovered"
-                class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-slate-600"
-              >
-                {{ item.label }}
-                <div
-                  class="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-0 h-0 border-r-4 border-r-slate-800 border-t-2 border-b-2 border-t-transparent border-b-transparent"
-                ></div>
-              </div>
-            </div>
-
-            <!-- Dropdown Items (delay showing on hover expansion) -->
-            <div
-              v-if="item.children"
-              v-show="
-                isOpen(item) &&
-                (!navigationStore.isCollapsed ||
-                  (navigationStore.isHovered && showChildrenAfterHover))
-              "
-              class="mt-1 ml-4 space-y-1 transition-all duration-200"
-            >
-              <template v-for="child in item.children" :key="child.label">
-                <ClientOnly v-if="child.label === 'Pipeline Analytics'">
-                  <NuxtLink
-                    :to="child.to"
-                    class="flex items-center gap-3 px-3 py-2 rounded-md text-sm hover:bg-slate-800 transition-colors relative group"
-                    :class="{ 'text-white bg-slate-800': isActive(child) }"
-                    @click.stop
-                  >
-                    <UIcon :name="child.icon" class="flex-shrink-0 w-4 h-4" />
-                    <span class="font-medium transition-opacity duration-200">{{
-                      child.label
-                    }}</span>
-                  </NuxtLink>
-                </ClientOnly>
-                <NuxtLink
-                  v-else
-                  :to="child.to"
-                  class="flex items-center gap-3 px-3 py-2 rounded-md text-sm hover:bg-slate-800 transition-colors relative group"
-                  :class="{ 'text-white bg-slate-800': isActive(child) }"
-                  @click.stop
-                >
-                  <UIcon :name="child.icon" class="flex-shrink-0 w-4 h-4" />
-                  <span class="font-medium transition-opacity duration-200">{{
-                    child.label
-                  }}</span>
-                </NuxtLink>
-              </template>
-            </div>
-
-            <!-- Single Item Link -->
+          <!-- AI Assistant - Controlled by feature flag -->
+          <ClientOnly v-if="item.label === 'AI Assistant'">
             <NuxtLink
-              v-else
+              v-if="strandsEnabled"
               :to="item.to"
-              class="flex items-center px-3 py-2 rounded-md text-sm hover:bg-slate-800 transition-colors relative group overflow-hidden"
+              class="flex items-center px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors relative group overflow-hidden"
               :class="{ 'text-white bg-slate-800': isActive(item) }"
             >
               <UIcon :name="item.icon" class="flex-shrink-0 w-5 h-5" />
@@ -211,7 +121,72 @@
                 ></div>
               </div>
             </NuxtLink>
-          </div>
+          </ClientOnly>
+
+          <!-- Pipeline Analytics - Admin only -->
+          <ClientOnly v-else-if="item.label === 'Pipeline Analytics'">
+            <NuxtLink
+              v-if="isAdmin"
+              :to="item.to"
+              class="flex items-center px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors relative group overflow-hidden"
+              :class="{ 'text-white bg-slate-800': isActive(item) }"
+            >
+              <UIcon :name="item.icon" class="flex-shrink-0 w-5 h-5" />
+              <span
+                class="font-medium ml-3 truncate transition-all duration-300"
+                :class="{
+                  'opacity-0 w-0':
+                    navigationStore.isCollapsed && !navigationStore.isHovered,
+                  'opacity-100 w-full':
+                    !navigationStore.isCollapsed || navigationStore.isHovered,
+                }"
+              >
+                {{ item.label }}
+              </span>
+
+              <!-- Tooltip for collapsed state -->
+              <div
+                v-if="navigationStore.isCollapsed && !navigationStore.isHovered"
+                class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-slate-600"
+              >
+                {{ item.label }}
+                <div
+                  class="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-0 h-0 border-r-4 border-r-slate-800 border-t-2 border-b-2 border-t-transparent border-b-transparent"
+                ></div>
+              </div>
+            </NuxtLink>
+          </ClientOnly>
+
+          <NuxtLink
+            v-else
+            :to="item.to"
+            class="flex items-center px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors relative group overflow-hidden"
+            :class="{ 'text-white bg-slate-800': isActive(item) }"
+          >
+            <UIcon :name="item.icon" class="flex-shrink-0 w-5 h-5" />
+            <span
+              class="font-medium ml-3 truncate transition-all duration-300"
+              :class="{
+                'opacity-0 w-0':
+                  navigationStore.isCollapsed && !navigationStore.isHovered,
+                'opacity-100 w-full':
+                  !navigationStore.isCollapsed || navigationStore.isHovered,
+              }"
+            >
+              {{ item.label }}
+            </span>
+
+            <!-- Tooltip for collapsed state -->
+            <div
+              v-if="navigationStore.isCollapsed && !navigationStore.isHovered"
+              class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-slate-600"
+            >
+              {{ item.label }}
+              <div
+                class="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-0 h-0 border-r-4 border-r-slate-800 border-t-2 border-b-2 border-t-transparent border-b-transparent"
+              ></div>
+            </div>
+          </NuxtLink>
         </template>
       </nav>
 
@@ -225,35 +200,74 @@
     </div>
 
     <!-- Footer Links -->
-    <div class="border-t border-slate-700 flex-shrink-0">
-      <!-- Support Link -->
-      <div class="px-3 py-2">
+    <div class="border-t border-slate-700 flex-shrink-0 h-[53px]">
+      <div
+        class="h-full flex items-center justify-center gap-1 px-2 transition-all duration-300"
+        :class="{
+          'justify-center': navigationStore.isCollapsed && !navigationStore.isHovered,
+          'justify-around': !navigationStore.isCollapsed || navigationStore.isHovered,
+        }"
+      >
+        <!-- Documentation Link -->
         <NuxtLink
-          to="/support"
-          class="flex items-center px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors w-full relative group overflow-hidden"
+          to="/support/docs"
+          class="flex items-center justify-center p-2 rounded-md text-slate-400 hover:bg-slate-800 hover:text-white transition-colors relative group"
           :class="{
-            'text-white bg-slate-800': route.path.startsWith('/support'),
+            'text-white bg-slate-800': route.path.startsWith('/support/docs'),
           }"
         >
-          <UIcon name="i-heroicons-lifebuoy" class="flex-shrink-0 w-5 h-5" />
-          <span
-            class="font-medium ml-3 truncate transition-all duration-300"
-            :class="{
-              'opacity-0 w-0':
-                navigationStore.isCollapsed && !navigationStore.isHovered,
-              'opacity-100 w-full':
-                !navigationStore.isCollapsed || navigationStore.isHovered,
-            }"
-          >
-            Support & Help
-          </span>
+          <UIcon name="i-heroicons-document-text" class="flex-shrink-0 w-5 h-5" />
 
           <!-- Tooltip for collapsed state -->
           <div
             v-if="navigationStore.isCollapsed && !navigationStore.isHovered"
             class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-slate-600"
           >
-            Support & Help
+            Documentation
+            <div
+              class="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-0 h-0 border-r-4 border-r-slate-800 border-t-2 border-b-2 border-t-transparent border-b-transparent"
+            ></div>
+          </div>
+        </NuxtLink>
+
+        <!-- Support Link -->
+        <NuxtLink
+          to="/support"
+          class="flex items-center justify-center p-2 rounded-md text-slate-400 hover:bg-slate-800 hover:text-white transition-colors relative group"
+          :class="{
+            'text-white bg-slate-800': route.path === '/support' || route.path.startsWith('/support/'),
+          }"
+        >
+          <UIcon name="i-heroicons-lifebuoy" class="flex-shrink-0 w-5 h-5" />
+
+          <!-- Tooltip for collapsed state -->
+          <div
+            v-if="navigationStore.isCollapsed && !navigationStore.isHovered"
+            class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-slate-600"
+          >
+            Support
+            <div
+              class="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-0 h-0 border-r-4 border-r-slate-800 border-t-2 border-b-2 border-t-transparent border-b-transparent"
+            ></div>
+          </div>
+        </NuxtLink>
+
+        <!-- About Link -->
+        <NuxtLink
+          to="/about"
+          class="flex items-center justify-center p-2 rounded-md text-slate-400 hover:bg-slate-800 hover:text-white transition-colors relative group"
+          :class="{
+            'text-white bg-slate-800': route.path === '/about',
+          }"
+        >
+          <UIcon name="i-heroicons-information-circle" class="flex-shrink-0 w-5 h-5" />
+
+          <!-- Tooltip for collapsed state -->
+          <div
+            v-if="navigationStore.isCollapsed && !navigationStore.isHovered"
+            class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-slate-600"
+          >
+            About
             <div
               class="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-0 h-0 border-r-4 border-r-slate-800 border-t-2 border-b-2 border-t-transparent border-b-transparent"
             ></div>
@@ -273,6 +287,10 @@ import { useUserRoles } from "~/composables/useUserRoles";
 const route = useRoute();
 const navigationStore = useNavigationStore();
 const { isAdmin } = useUserRoles();
+const siteConfigStore = useSiteConfigStore();
+
+// Check if Strands chat is enabled
+const strandsEnabled = computed(() => siteConfigStore.isStrandsChatEnabled);
 
 // Mobile detection - SSR safe
 const isMobile = computed(() => {
@@ -284,7 +302,6 @@ const isMobile = computed(() => {
     (typeof window !== "undefined" && window.innerWidth < 768)
   );
 });
-const openItems = ref(new Set(["Accounts"])); // Keep Accounts dropdown open by default
 
 // Computed properties
 const canCollapse = computed(() => {
@@ -300,49 +317,16 @@ const isActive = (item) => {
   if (item.to) {
     return route.path === item.to;
   }
-  if (item.children) {
-    return item.children.some((child) => route.path === child.to);
-  }
   return false;
 };
 
-const isOpen = (item) => {
-  return openItems.value.has(item.label);
-};
-
-const toggleDropdown = (item) => {
-  if (!item.children) return;
-
-  // If sidebar is collapsed and not hovered, expand the sidebar instead
-  if (navigationStore.isCollapsed && !navigationStore.isHovered) {
-    navigationStore.expand();
-    return;
-  }
-
-  if (openItems.value.has(item.label)) {
-    openItems.value.delete(item.label);
-  } else {
-    openItems.value.add(item.label);
-  }
-};
-
 // Mouse interaction handlers
-const showChildrenAfterHover = ref(false);
-
 const handleMouseEnter = () => {
   navigationStore.setHovered(true);
-  // add a short delay before showing children to avoid flicker
-  showChildrenAfterHover.value = false;
-  setTimeout(() => {
-    if (navigationStore.isHovered) {
-      showChildrenAfterHover.value = true;
-    }
-  }, 120);
 };
 
 const handleMouseLeave = () => {
   navigationStore.setHovered(false);
-  showChildrenAfterHover.value = false;
 };
 
 // Toggle sidebar with protection check
@@ -470,15 +454,14 @@ if (process.client) {
 }
 
 const navigationItems = computed(() => {
-  // Base navigation items
-  const accountsChildren = [
+  return [
     {
       label: "Overview",
       to: "/",
       icon: "i-heroicons-home",
     },
     {
-      label: "Explorer",
+      label: "Account Explorer",
       to: "/account/explorer",
       icon: "i-heroicons-magnifying-glass",
     },
@@ -491,10 +474,10 @@ const navigationItems = computed(() => {
       label: "Cost Dashboard",
       to: "/account/costs",
       icon: "i-heroicons-currency-dollar",
-      collapseRule: "default-collapsed", // This page benefits from more screen space
+      collapseRule: "default-collapsed",
     },
     {
-      label: "Users",
+      label: "Users & Access",
       to: "/account/user",
       icon: "i-heroicons-users",
     },
@@ -502,69 +485,19 @@ const navigationItems = computed(() => {
       label: "Dataset Reports",
       to: "/reports/datasets",
       icon: "i-heroicons-server-stack",
-    }
-  ];
-
-  // Add Pipeline Analytics for admins only (client-side only to avoid hydration mismatch)
-  if (process.client && isAdmin.value) {
-    accountsChildren.push({
+    },
+    {
+      label: "AI Assistant",
+      to: "/strands-chat",
+      icon: "i-heroicons-sparkles",
+    },
+    // Always include Pipeline Analytics in structure to avoid hydration mismatch
+    // Visibility controlled by ClientOnly in template
+    {
       label: "Pipeline Analytics",
       to: "/admin/pipelines",
       icon: "i-heroicons-arrow-path",
-    });
-  }
-
-  return [
-    {
-      label: "Accounts",
-      icon: "i-heroicons-squares-2x2",
-      defaultOpen: true,
-      collapsed: false,
-      children: accountsChildren,
-    },
-  // {
-  //   label: 'Reports',
-  //   icon: 'i-heroicons-currency-dollar',
-  //   children: [
-  //     {
-  //       label: 'Generator',
-  //       to: '/reports',
-  //       icon: 'i-heroicons-presentation-chart-line'
-  //     },
-  //     {
-  //       label: 'Saved Reports',
-  //       to: '/reports/saved',
-  //       icon: 'i-heroicons-document-magnifying-glass'
-  //     },
-  //     {
-  //       label: 'Scheduled Reports',
-  //       to: '/reports/scheduled',
-  //       icon: 'i-heroicons-document-chart-bar'
-  //     }
-  //   ]
-  // },
-  // {
-  //   label: 'Costs',
-  //   icon: 'i-heroicons-currency-dollar',
-  //   children: [
-  //     {
-  //       label: 'Overview',
-  //       to: '/costs',
-  //       icon: 'i-heroicons-presentation-chart-line'
-  //     }
-  //   ]
-  // },
-  // {
-  //   label: 'System',
-  //   icon: 'i-heroicons-cog-6-tooth',
-  //   children: [
-  //     {
-  //       label: 'Changelog',
-  //       to: '/changelog',
-  //       icon: 'i-heroicons-document-text'
-  //     }
-  //   ]
-  // }
+    }
   ];
 });
 

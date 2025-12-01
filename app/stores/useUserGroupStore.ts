@@ -28,6 +28,9 @@ export interface UserGroupState {
   distributionGroups: Record<string, DistributionGroupStructure>,
   awsRoles: Record<string, AwsRoleInfo>
   allEntraGroups: string[] // All Entra ID group names for role/permission evaluation
+  // Cached account IDs for quick filtering
+  myAccountIds: string[] // All accounts user has access to
+  myAdminAccountIds: string[] // Accounts where user is admin (from enclave data)
 }
 
 const GOV_IDENTIFIER = ' | gov'
@@ -46,7 +49,9 @@ export const useUserGroupStore = defineStore('userGroups', {
     roleGroups: {},
     distributionGroups: {},
     awsRoles: {},
-    allEntraGroups: []
+    allEntraGroups: [],
+    myAccountIds: [],
+    myAdminAccountIds: []
   }),
 
   getters: {
@@ -194,6 +199,33 @@ export const useUserGroupStore = defineStore('userGroups', {
           }
         }
       }
+
+      // Build cached account ID lists for quick filtering
+      const accountIdsSet = new Set<string>()
+      const adminAccountIdsSet = new Set<string>()
+
+      for (const accountId in this.awsRoles) {
+        const roleInfo = this.awsRoles[accountId]
+
+        // Use standard (commercial) account ID as the primary identifier
+        const primaryAccountId = roleInfo.standardAccountId || accountId
+        accountIdsSet.add(primaryAccountId)
+
+        // Check if user has admin roles
+        const hasAdminRole = roleInfo.roles.some(role =>
+          role.toLowerCase().includes('admin') ||
+          role.toLowerCase().includes('poweruser')
+        )
+
+        if (hasAdminRole) {
+          adminAccountIdsSet.add(primaryAccountId)
+        }
+      }
+
+      this.myAccountIds = Array.from(accountIdsSet)
+      this.myAdminAccountIds = Array.from(adminAccountIdsSet)
+
+      console.log(`Cached ${this.myAccountIds.length} total accounts and ${this.myAdminAccountIds.length} admin accounts`)
 
       if (this.awsRoles) {
         this.awsRolesLastFetch = Date.now()

@@ -1663,19 +1663,28 @@ const applySharedStateFromUrl = () => {
   const route = useRoute()
 
   // Check for share parameters in URL
-  // Support both 'account' (single, clean) and 'accounts' (array, legacy)
+  // Support 'account' (single), 'accounts' (comma-separated or JSON array)
   if (route.query.account && typeof route.query.account === 'string') {
     // Single account - clean URL format: ?account=123456789012
     selectedAccounts.value = [route.query.account]
   } else if (route.query.accounts) {
-    // Multiple accounts - legacy format: ?accounts=["123","456"]
-    try {
-      const accounts = JSON.parse(route.query.accounts as string)
-      if (Array.isArray(accounts)) {
-        selectedAccounts.value = accounts
+    // Multiple accounts - support comma-separated (from smart links) or JSON array (legacy)
+    if (typeof route.query.accounts === 'string') {
+      // Try comma-separated first: ?accounts=123,456,789
+      if (route.query.accounts.includes(',')) {
+        selectedAccounts.value = route.query.accounts.split(',').map(id => id.trim())
+      } else {
+        // Try JSON array: ?accounts=["123","456"]
+        try {
+          const accounts = JSON.parse(route.query.accounts)
+          if (Array.isArray(accounts)) {
+            selectedAccounts.value = accounts
+          }
+        } catch (err) {
+          // If not JSON, treat as single account ID
+          selectedAccounts.value = [route.query.accounts]
+        }
       }
-    } catch (err) {
-      console.warn('Invalid accounts parameter in URL:', err)
     }
   }
 

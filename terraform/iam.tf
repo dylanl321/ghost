@@ -239,6 +239,37 @@ resource "aws_iam_role_policy" "ecs_admin_notifications_dynamodb" {
   })
 }
 
+# DynamoDB permissions for site configuration (read/write)
+resource "aws_iam_role_policy" "ecs_site_config_dynamodb" {
+  provider = aws.target_deployment_account
+  name     = "${var.app_name}_site_config_dynamodb"
+  role     = aws_iam_role.ecs_task_execution_role.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "SiteConfigDynamoDB"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan",
+          "dynamodb:BatchGetItem",
+          "dynamodb:BatchWriteItem"
+        ]
+        Resource = [
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-site-config",
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-site-config/index/*"
+        ]
+      }
+    ]
+  })
+}
+
 # S3 permissions for application storage (reports, exports, attachments)
 resource "aws_iam_role_policy" "ecs_s3_app_storage" {
   provider = aws.target_deployment_account

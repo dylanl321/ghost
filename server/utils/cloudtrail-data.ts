@@ -156,7 +156,8 @@ function buildWhereClause(
 /**
  * Client-side filtering for events
  *
- * CloudTrail API has limited filter support, so we apply additional filters client-side.
+ * Most filters are now applied at the SQL level.
+ * These remaining filters handle cases not easily done in SQL.
  */
 function applyClientSideFilters(
   events: CloudTrailEventRecord[],
@@ -164,37 +165,25 @@ function applyClientSideFilters(
 ): CloudTrailEventRecord[] {
   let filtered = events
 
-  // Filter by event types
+  // Filter by event types (class_name in OCSF)
   if (filters.eventTypes && filters.eventTypes.length > 0) {
     filtered = filtered.filter(e => filters.eventTypes!.includes(e.eventType))
   }
 
-  // Filter by event names (multi-value)
-  if (filters.eventNames && filters.eventNames.length > 1) {
-    filtered = filtered.filter(e => filters.eventNames!.includes(e.eventName))
-  }
-
-  // Filter by event sources (multi-value)
-  if (filters.eventSources && filters.eventSources.length > 1) {
-    filtered = filtered.filter(e => filters.eventSources!.includes(e.eventSource))
-  }
-
-  // Filter by user identities (multi-value)
-  if (filters.userIdentities && filters.userIdentities.length > 1) {
+  // Filter by user identities
+  if (filters.userIdentities && filters.userIdentities.length > 0) {
     filtered = filtered.filter(e =>
       e.userIdentityUserName && filters.userIdentities!.includes(e.userIdentityUserName)
     )
   }
 
-  // Filter by errors only
+  // Filter by errors only (if not already filtered at SQL level)
   if (filters.errorsOnly) {
     filtered = filtered.filter(e => e.errorCode !== undefined)
   }
 
-  // Filter by regions
-  if (filters.regions && filters.regions.length > 0) {
-    filtered = filtered.filter(e => filters.regions!.includes(e.region))
-  }
+  // Note: Event names, event sources, regions, and write-only filters
+  // are now applied at the SQL level for better performance
 
   return filtered
 }
@@ -245,7 +234,7 @@ async function querySecurityLakeForEvents(
         class_name,
         activity_name,
         severity,
-        status,
+        status_code,
         api.service.name as service_name,
         actor.user.name as user_name,
         actor.user.type as user_type,
