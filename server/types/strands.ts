@@ -5,22 +5,29 @@
 
 /**
  * Request to send to Strands ALB endpoint
- * The agent infers account_id from the query text
+ * The agent infers account_id from the query text, but account_identifier is recommended
  */
 export interface StrandsQueryRequest {
   query: string
   mcp_id?: string // Optional: 'account-specific' to force local MCP spawn
+  account_identifier?: string // Optional but recommended: AWS account ID to query
+  conversationHistory?: Array<{
+    role: 'user' | 'assistant'
+    content: string
+  }>
+  sessionId?: string
 }
 
 /**
  * Response from Strands ALB endpoint
  * Based on QueryResponse model from Strands agent
+ * Note: Strands may return nested format with 'data' wrapper or flat format
  */
 export interface StrandsQueryResponse {
-  account_id: string
-  mcp_used: string // e.g., "account-specific [stdio]" or permanent MCP name
-  result: string | null
-  error: string | null
+  account_id?: string
+  mcp_used?: string // e.g., "account-specific [stdio]" or permanent MCP name
+  result?: string | null
+  error?: string | null
 }
 
 /**

@@ -147,9 +147,9 @@ const filteredConfigs = computed(() => {
     const query = searchQuery.value.toLowerCase();
     filtered = filtered.filter((c) => {
       return (
-        c.label.toLowerCase().includes(query) ||
-        c.key.toLowerCase().includes(query) ||
-        c.description.toLowerCase().includes(query)
+        (c.label && c.label.toLowerCase().includes(query)) ||
+        (c.key && c.key.toLowerCase().includes(query)) ||
+        (c.description && c.description.toLowerCase().includes(query))
       );
     });
   }
@@ -178,6 +178,12 @@ async function loadConfig() {
     const response = await $fetch('/api/admin/site-config/all');
     if (response.success) {
       configs.value = response.configs;
+
+      // Debug: Log the first config to check structure
+      if (configs.value.length > 0) {
+        console.log('[SiteConfigPanel] Sample config:', configs.value[0]);
+        console.log('[SiteConfigPanel] Total configs loaded:', configs.value.length);
+      }
     } else {
       throw new Error('Failed to load configuration');
     }

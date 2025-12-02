@@ -76,8 +76,8 @@ export class StrandsClientError extends Error {
 
 /**
  * Send a query to Strands ALB endpoint
- * The agent will infer the AWS account ID from the query text
- * For more explicit queries, mention the account ID in the query
+ * The agent will infer the AWS account ID from the query text if not provided
+ * For best results, always provide accountIdentifier explicitly
  *
  * Architecture:
  * - 3 permanent MCP servers: 374673712317 (Gov Master), 083876038518 (Monitoring), 205950196477 (Commercial Master)
@@ -86,7 +86,10 @@ export class StrandsClientError extends Error {
  */
 export async function sendStrandsQuery(
   query: string,
-  mcpId?: string
+  mcpId?: string,
+  accountIdentifier?: string,
+  conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
+  sessionId?: string
 ): Promise<StrandsQueryResponse> {
   const config = await getStrandsConfig()
   const url = `${config.serverUrl}/query`
@@ -95,11 +98,23 @@ export async function sendStrandsQuery(
   if (mcpId) {
     request.mcp_id = mcpId
   }
+  if (accountIdentifier) {
+    request.account_identifier = accountIdentifier
+  }
+  if (conversationHistory) {
+    request.conversationHistory = conversationHistory
+  }
+  if (sessionId) {
+    request.sessionId = sessionId
+  }
 
   logger.debug('[Strands Client] Sending query to:', url)
   logger.debug('[Strands Client] Query:', query.substring(0, 100) + (query.length > 100 ? '...' : ''))
   if (mcpId) {
     logger.debug('[Strands Client] MCP ID:', mcpId)
+  }
+  if (accountIdentifier) {
+    logger.debug('[Strands Client] Account Identifier:', accountIdentifier)
   }
 
   let lastError: Error | null = null
@@ -123,14 +138,28 @@ export async function sendStrandsQuery(
 
       if (!response.ok) {
         let errorData: StrandsErrorResponse | null = null
+        let rawErrorBody: string | null = null
         try {
-          errorData = await response.json() as StrandsErrorResponse
-        } catch {
-          // If response is not JSON, use status text
+          const text = await response.text()
+          rawErrorBody = text
+          errorData = JSON.parse(text) as StrandsErrorResponse
+        } catch (e) {
+          // If response is not JSON, log the raw response
+          logger.error('[Strands Client] Non-JSON error response:', rawErrorBody || response.statusText)
         }
 
         const errorMessage = errorData?.error?.message || `HTTP ${response.status}: ${response.statusText}`
         const errorCode = errorData?.error?.code || `HTTP_${response.status}`
+
+        // Log detailed error info for 500 errors
+        if (response.status >= 500) {
+          logger.error('[Strands Client] Server error details:', {
+            status: response.status,
+            statusText: response.statusText,
+            errorData,
+            rawBody: rawErrorBody?.substring(0, 500)
+          })
+        }
 
         // Don't retry on client errors (4xx)
         if (response.status >= 400 && response.status < 500) {
@@ -160,7 +189,11 @@ export async function sendStrandsQuery(
         throw lastError
       }
 
-      const data = await response.json() as StrandsQueryResponse
+      const rawData = await response.json()
+
+      // Strands may return nested format with 'data' wrapper
+      // Check if response has 'data' property and unwrap if needed
+      const data = rawData.data ? rawData.data : rawData as StrandsQueryResponse
 
       logger.debug('[Strands Client] Response received:', {
         accountId: data.account_id,
@@ -227,7 +260,8 @@ export async function sendStrandsQuery(
  * Extract metadata from Strands response
  */
 export function extractStrandsMetadata(response: StrandsQueryResponse): StrandsMetadata {
-  const mcpType = response.mcp_used.toLowerCase().includes('stdio')
+  // Handle cases where mcp_used might be undefined (e.g., error responses)
+  const mcpType = response.mcp_used?.toLowerCase().includes('stdio')
     ? 'temporary' as const
     : 'permanent' as const
 

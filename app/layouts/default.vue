@@ -69,10 +69,11 @@ const navigationStore = useNavigationStore()
 const siteConfigStore = useSiteConfigStore()
 const sideNavRef = ref()
 
-// Detect explorer page to adjust layout
-const isExplorerPage = computed(() => 
-  route.path === '/account/explorer' || 
-  route.path === '/reports/datasets'
+// Detect full-height pages that need special layout (no padding, overflow handled by page)
+const isExplorerPage = computed(() =>
+  route.path === '/account/explorer' ||
+  route.path === '/reports/datasets' ||
+  route.path === '/strands-chat'
 )
 
 // Mobile menu handler

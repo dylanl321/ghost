@@ -33,12 +33,15 @@
       </div>
 
       <!-- Description -->
-      <p class="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
+      <p v-if="config.description" class="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
         {{ config.description }}
+      </p>
+      <p v-else class="text-xs text-gray-400 italic">
+        No description available
       </p>
 
       <!-- Value Editor -->
-      <div class="pt-2 border-t border-gray-100 dark:border-gray-800">
+      <div v-if="config.type" class="pt-2 border-t border-gray-100 dark:border-gray-800">
         <!-- Boolean Toggle -->
         <div v-if="config.type === 'boolean'" class="flex items-center justify-between">
           <span class="text-xs font-medium text-gray-700 dark:text-gray-300">
@@ -80,6 +83,21 @@
             @blur="handleInputChange"
           />
         </div>
+
+        <!-- Unknown/Unsupported Type -->
+        <div v-else class="text-xs text-gray-500 italic">
+          Unsupported config type: {{ config.type }}
+          <div class="mt-2 p-2 bg-gray-100 dark:bg-gray-800 rounded">
+            <code class="text-xs">{{ JSON.stringify(config.value) }}</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- No type specified -->
+      <div v-else class="pt-2 border-t border-gray-100 dark:border-gray-800">
+        <p class="text-xs text-red-500">
+          Error: Configuration type not specified
+        </p>
       </div>
 
       <!-- Footer with actions and metadata -->

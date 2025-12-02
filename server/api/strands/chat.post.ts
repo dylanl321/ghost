@@ -37,6 +37,7 @@ export interface StrandsChatResponse {
   }
   references?: Array<{ document: string }>
   suggestedLinks?: SuggestedLink[]
+  error?: string | null
 }
 
 // Register OpenAPI documentation
@@ -89,13 +90,13 @@ registerEndpoint('/api/strands/chat', 'POST', {
   },
   responses: {
     200: {
-      description: 'Successful response from Strands agent',
+      description: 'Response from Strands agent (may include error in data.error field)',
       content: {
         'application/json': {
           schema: {
             type: 'object',
             properties: {
-              responseBody: { type: 'string', description: 'The agent response text' },
+              responseBody: { type: 'string', description: 'The agent response text (null if error)' },
               sessionId: { type: 'string' },
               metadata: {
                 type: 'object',
@@ -127,7 +128,8 @@ registerEndpoint('/api/strands/chat', 'POST', {
                     type: { type: 'string', enum: ['cost', 'explorer', 'users', 'org-chart', 'reports', 'security'] }
                   }
                 }
-              }
+              },
+              error: { type: 'string', description: 'Error message if query failed (null on success)', nullable: true }
             }
           }
         }
@@ -139,6 +141,16 @@ registerEndpoint('/api/strands/chat', 'POST', {
     503: { $ref: '#/components/schemas/Error' }
   }
 })
+
+/**
+ * Extract AWS account ID from message text
+ * Looks for 12-digit numbers which are AWS account IDs
+ */
+function extractAccountId(message: string): string | undefined {
+  const accountRegex = /\b\d{12}\b/
+  const match = message.match(accountRegex)
+  return match ? match[0] : undefined
+}
 
 export default defineEventHandler(handleAsync(async (event) => {
   // Check if Strands chat is enabled
@@ -171,20 +183,72 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.badRequest(event, 'Message exceeds maximum length of 10,000 characters')
   }
 
+  // Extract account ID from user message for better reliability
+  // Strands recommends sending account_identifier explicitly rather than parsing enhanced queries
+  const accountId = extractAccountId(message)
+
+  logger.info('[Strands Chat API] Extracted account ID:', accountId || 'none')
+
   // Build the full query with conversation context + GHOST site schema
   // This helps the AI understand GHOST's structure and generate relevant guidance
   let fullQuery = message
 
   // Add GHOST application context to help AI understand what pages/features are available
   const ghostContext = `
-You are an AI assistant for the GHOST (GDMS AWS Operations & Support Hub) application.
+You are an AI assistant for the GHOST application - the centralized AWS operations and analytics platform for GDMS.
+
+## About GHOST
+
+**GHOST** stands for:
+- **G**overnance - Comprehensive policy management and compliance oversight
+- **H**ealth - Real-time monitoring of resource health and security findings
+- **O**perations - Streamlined account management and operational workflows
+- **S**pend - Advanced cost analytics, forecasting, and budget tracking
+- **T**asks - Automated workflows, scheduled reports, and intelligent task management
+
+**Built by:** GDMS AWS Product Team (AWS Landing Zone Team)
+
+**Purpose:** GHOST is the centralized platform for managing, monitoring, and optimizing AWS infrastructure across the entire GDMS organization. It provides unified access to AWS cost data, security findings, resource configurations, and operational insights across multiple AWS accounts in both commercial and GovCloud regions.
+
+**Primary Users:**
+- **IT Leadership** - Executive visibility into AWS spending, security posture, and resource utilization
+- **Project Managers** - Track project costs, resource allocation, and budget forecasting
+- **Engineering Groups** - Access to AWS resource configurations, deployment tracking, and operational data
+- **Finance Teams** - Detailed cost breakdowns, billing analysis, and budget management
+- **Security Teams** - Security Hub findings, compliance tracking, and vulnerability management
+- **Cloud Administrators** - Multi-account management, resource inventory, and operational oversight
+
+**Key Capabilities:**
+- **Multi-Account Management** - Unified view across AWS Organizations (374+ accounts)
+- **Cost Analytics** - Real-time cost tracking, forecasting, and optimization recommendations
+- **Security Monitoring** - Centralized Security Hub findings and compliance status
+- **Resource Inventory** - AWS Config aggregation for resource tracking across all accounts
+- **User Access Management** - Entra ID integration with role-based access control
+- **Reporting & Analytics** - Custom dataset reports from CloudTrail, Config, and Security Hub data
+- **AI-Powered Assistance** - Natural language queries for AWS operations (this chat interface)
+
+**AWS Integration:**
+GHOST integrates with AWS Organizations, Cost Explorer, Security Hub, AWS Config, CloudTrail, EC2, S3, Lambda, RDS, and other AWS services across both commercial and GovCloud environments.
+
+**Important Context:**
+- All cost data is sourced from AWS Cost Explorer
+- Security findings come from AWS Security Hub aggregation
+- Configuration data comes from AWS Config Aggregator
+- The system supports both GovCloud and Commercial AWS regions
+- Account IDs should be 12-digit numbers (e.g., 374673712317)
+
+## How to Help Users
+
+When users ask questions:
+1. **Answer their AWS questions directly** using your knowledge and MCP tools
+2. **Reference specific account IDs** when discussing resources or costs
+3. **Suggest relevant GHOST pages** where they can explore data visually
+4. **Provide actionable insights** - not just data, but recommendations
+5. **Be aware of GDMS context** - government agency with strict security/compliance requirements
+
+When suggesting GHOST pages, explain what they'll find there and why it's useful.
 
 ${getSchemaForAI()}
-
-When answering queries about AWS resources, you can suggest users navigate to relevant GHOST pages.
-For example, if they ask about costs, mention they can view detailed cost analysis in the Cost Dashboard.
-If they ask about users or permissions, mention the Users & Access page.
-Always be helpful and guide them to the right tools within GHOST.
 `
 
   if (conversationHistory.length > 0) {
@@ -201,13 +265,41 @@ Always be helpful and guide them to the right tools within GHOST.
 
   // Call Strands ALB endpoint
   try {
-    const strandsResponse = await sendStrandsQuery(fullQuery, mcpId)
+    const strandsResponse = await sendStrandsQuery(
+      fullQuery,
+      mcpId,
+      accountId,
+      conversationHistory,
+      sessionId
+    )
 
     logger.info('[Strands Chat API] Response received', {
-      accountId: strandsResponse.account_id,
-      mcpUsed: strandsResponse.mcp_used,
-      resultLength: strandsResponse.result?.length || 0
+      accountId: strandsResponse.account_id || 'unknown',
+      mcpUsed: strandsResponse.mcp_used || 'unknown',
+      resultLength: strandsResponse.result?.length || 0,
+      hasError: !!strandsResponse.error
     })
+
+    // Check for error field in response (Strands returns errors with HTTP 200)
+    if (strandsResponse.error) {
+      logger.error('[Strands Chat API] Query error from Strands:', strandsResponse.error)
+      throw new StrandsClientError(
+        strandsResponse.error,
+        'STRANDS_QUERY_ERROR',
+        200,
+        { accountId: strandsResponse.account_id, mcpUsed: strandsResponse.mcp_used }
+      )
+    }
+
+    // Check if response is missing required fields
+    if (!strandsResponse.result && !strandsResponse.error) {
+      logger.error('[Strands Chat API] Invalid response format:', strandsResponse)
+      throw new StrandsClientError(
+        'Invalid response from Strands: missing both result and error fields',
+        'INVALID_RESPONSE',
+        200
+      )
+    }
 
     // Extract metadata
     const metadata = extractStrandsMetadata(strandsResponse)

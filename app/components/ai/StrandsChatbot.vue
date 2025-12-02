@@ -193,6 +193,7 @@ const fetchData = async (inputVal: string) => {
           toolsUsed?: string[]
         }
         references?: Array<{ document: string }>
+        error?: string | null
       }
     }>(endpoint, {
       method: 'POST',
@@ -203,6 +204,18 @@ const fetchData = async (inputVal: string) => {
     // Update session ID if provided
     if (data.data?.sessionId) {
       sessionId.value = data.data.sessionId
+    }
+
+    // Check for error field first (Strands returns errors with HTTP 200)
+    if (data.data?.error) {
+      const errorMessage = {
+        text: data.data.error,
+        links: [],
+        sender: 'bot' as const,
+        metadata: data.data.metadata || {}
+      }
+      messages.value.push(errorMessage)
+      return
     }
 
     let message = data.data.responseBody || 'No response generated'
