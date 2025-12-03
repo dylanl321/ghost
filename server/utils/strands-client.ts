@@ -220,6 +220,12 @@ export async function sendStrandsQuery(
         data.result = data.responseBody
       }
 
+      // CRITICAL: Extract sessionId from data.sessionId (not metadata)
+      // Backend now generates sessionId if not provided
+      if (!data.sessionId && rawData.data?.sessionId) {
+        data.sessionId = rawData.data.sessionId
+      }
+
       // Extract account_id from metadata if not at top level
       if (!data.account_id && data.metadata?.accountId) {
         data.account_id = data.metadata.accountId
@@ -231,10 +237,12 @@ export async function sendStrandsQuery(
       }
 
       logger.debug('[Strands Client] Response received:', {
+        sessionId: data.sessionId,
         accountId: data.account_id,
         mcpUsed: data.mcp_used,
         hasResult: !!(data.result || data.responseBody),
-        hasError: !!data.error
+        hasError: !!data.error,
+        hasDisambiguation: !!data.disambiguation
       })
 
       // If Strands returned an error, throw it

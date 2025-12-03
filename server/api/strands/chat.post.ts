@@ -349,10 +349,14 @@ ${getSchemaForAI()}
         matchCount: strandsResponse.disambiguation.matches.length
       })
 
+      // CRITICAL: Extract sessionId from strandsResponse.sessionId (not from metadata or account_id)
+      // Backend now generates sessionId if not provided
+      const responseSessionId = strandsResponse.sessionId || sessionId
+
       // Return disambiguation response to frontend
       const response: StrandsChatResponse = {
         responseBody: '', // No response yet, waiting for account selection
-        sessionId: sessionId || strandsResponse.account_id,
+        sessionId: responseSessionId,
         metadata: extractStrandsMetadata(strandsResponse),
         references: [],
         suggestedLinks: [],
@@ -394,10 +398,14 @@ ${getSchemaForAI()}
       linkTypes: suggestedLinks.map(l => l.type)
     })
 
+    // CRITICAL: Extract sessionId from strandsResponse.sessionId (not from metadata or account_id)
+    // Backend now generates sessionId if not provided
+    const responseSessionId = strandsResponse.sessionId || sessionId
+
     // Format response for frontend
     const response: StrandsChatResponse = {
       responseBody: strandsResponse.result || 'No response generated',
-      sessionId: sessionId || strandsResponse.account_id, // Use account ID as session if not provided
+      sessionId: responseSessionId,
       metadata,
       references: [], // Strands doesn't provide document references in current implementation
       suggestedLinks

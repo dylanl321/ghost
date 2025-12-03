@@ -20,13 +20,13 @@ registerEndpoint('/api/strands/account/select', 'POST', {
       'application/json': {
         schema: {
           type: 'object',
-          required: ['session_id', 'request_id'],
+          required: ['sessionId', 'requestId'],
           properties: {
-            session_id: {
+            sessionId: {
               type: 'string',
               description: 'Session identifier from disambiguation response'
             },
-            request_id: {
+            requestId: {
               type: 'string',
               description: 'Selected account\'s request_id from disambiguation matches'
             }
@@ -85,23 +85,23 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.badRequest(event, 'Strands chat is currently disabled. Please contact an administrator.')
   }
 
-  // Parse request body
+  // Parse request body (camelCase from GHOST UI)
   const body = await readBody(event) as AccountSelectionRequest
 
   logger.info('[Strands Account Select API] Request received', {
-    sessionId: body.session_id,
-    requestId: body.request_id
+    sessionId: body.sessionId,
+    requestId: body.requestId
   })
 
   // Validate input
-  if (!body.session_id || typeof body.session_id !== 'string' || body.session_id.trim().length === 0) {
-    logger.error('[Strands Account Select API] Invalid session_id:', body.session_id)
-    return errors.badRequest(event, 'session_id is required and must be a non-empty string')
+  if (!body.sessionId || typeof body.sessionId !== 'string' || body.sessionId.trim().length === 0) {
+    logger.error('[Strands Account Select API] Invalid sessionId:', body.sessionId)
+    return errors.badRequest(event, 'sessionId is required and must be a non-empty string')
   }
 
-  if (!body.request_id || typeof body.request_id !== 'string' || body.request_id.trim().length === 0) {
-    logger.error('[Strands Account Select API] Invalid request_id:', body.request_id)
-    return errors.badRequest(event, 'request_id is required and must be a non-empty string')
+  if (!body.requestId || typeof body.requestId !== 'string' || body.requestId.trim().length === 0) {
+    logger.error('[Strands Account Select API] Invalid requestId:', body.requestId)
+    return errors.badRequest(event, 'requestId is required and must be a non-empty string')
   }
 
   // Get Strands server configuration
@@ -113,7 +113,7 @@ export default defineEventHandler(handleAsync(async (event) => {
 
     logger.debug('[Strands Account Select API] Sending request to:', url)
 
-    // Forward request to Strands server
+    // Forward request to Strands server (camelCase format as per Strands team update)
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), config.timeout)
 
@@ -122,7 +122,10 @@ export default defineEventHandler(handleAsync(async (event) => {
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        sessionId: body.sessionId,
+        requestId: body.requestId
+      }),
       signal: controller.signal
     })
 
@@ -155,7 +158,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     const data = await response.json() as AccountSelectionResponse
 
     logger.info('[Strands Account Select API] Account selected successfully', {
-      sessionId: body.session_id,
+      sessionId: body.sessionId,
       accountAlias: data.account?.account_alias
     })
 

@@ -109,10 +109,11 @@ export interface AccountDisambiguationOption {
 
 /**
  * Request to select an account after disambiguation
+ * NOTE: Uses camelCase for GHOST UI compatibility (not snake_case)
  */
 export interface AccountSelectionRequest {
-  session_id: string // Session identifier
-  request_id: string // Selected account's request ID from disambiguation
+  sessionId: string // Session identifier
+  requestId: string // Selected account's request ID from disambiguation
 }
 
 /**
