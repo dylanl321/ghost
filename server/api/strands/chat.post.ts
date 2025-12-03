@@ -21,10 +21,14 @@ export interface StrandsChatRequest {
   message: string
   conversationHistory?: Array<{
     role: 'user' | 'assistant'
-    content: string
+    content: string | object | any[]
   }>
   sessionId?: string
   mcpId?: string // Optional: 'account-specific' to force local MCP spawn
+  timezone?: string // Optional: IANA timezone (e.g., "America/New_York")
+  region?: string // Optional: AWS region (e.g., "us-gov-west-1")
+  accountIdentifier?: string // Optional: Explicit account identifier
+  preferGovcloud?: boolean // Optional: Prefer GovCloud account ID
 }
 
 export interface StrandsChatResponse {
@@ -37,6 +41,7 @@ export interface StrandsChatResponse {
   }
   references?: Array<{ document: string }>
   suggestedLinks?: SuggestedLink[]
+  disambiguation?: import('../../types/strands').AccountDisambiguation
   error?: string | null
 }
 
@@ -82,6 +87,25 @@ registerEndpoint('/api/strands/chat', 'POST', {
               type: 'string',
               description: 'Optional MCP ID. Use "account-specific" to force local stdio MCP spawn.',
               enum: ['account-specific']
+            },
+            timezone: {
+              type: 'string',
+              description: 'Optional IANA timezone (e.g., "America/New_York", "America/Los_Angeles"). Used for interpreting "today", "this month", etc.',
+              example: 'America/New_York'
+            },
+            region: {
+              type: 'string',
+              description: 'Optional AWS region (e.g., "us-gov-west-1")',
+              example: 'us-gov-west-1'
+            },
+            accountIdentifier: {
+              type: 'string',
+              description: 'Optional explicit account identifier (account ID, alias, name)',
+              example: '374673712317'
+            },
+            preferGovcloud: {
+              type: 'boolean',
+              description: 'Prefer GovCloud account ID over commercial (default: true)'
             }
           }
         }
@@ -129,6 +153,29 @@ registerEndpoint('/api/strands/chat', 'POST', {
                   }
                 }
               },
+              disambiguation: {
+                type: 'object',
+                description: 'Account disambiguation data if multiple accounts match',
+                properties: {
+                  search_term: { type: 'string', description: 'What user searched for' },
+                  message: { type: 'string', description: 'Instructions for user' },
+                  matches: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        request_id: { type: 'string' },
+                        account_alias: { type: 'string' },
+                        govcloud_account_id: { type: 'string' },
+                        commercial_account_id: { type: 'string' },
+                        display_name: { type: 'string' },
+                        match_score: { type: 'number' },
+                        match_reason: { type: 'string' }
+                      }
+                    }
+                  }
+                }
+              },
               error: { type: 'string', description: 'Error message if query failed (null on success)', nullable: true }
             }
           }
@@ -164,13 +211,25 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   // Parse request body
   const body = await readBody(event) as StrandsChatRequest
-  const { message, conversationHistory = [], sessionId, mcpId } = body
+  const {
+    message,
+    conversationHistory = [],
+    sessionId,
+    mcpId,
+    timezone,
+    region,
+    accountIdentifier,
+    preferGovcloud
+  } = body
 
   logger.info('[Strands Chat API] Request received', {
     messageLength: message?.length,
     historyLength: conversationHistory.length,
     sessionId,
-    mcpId
+    mcpId,
+    timezone,
+    region,
+    accountIdentifier
   })
 
   // Validate input
@@ -183,11 +242,11 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.badRequest(event, 'Message exceeds maximum length of 10,000 characters')
   }
 
-  // Extract account ID from user message for better reliability
+  // Use explicit accountIdentifier if provided, otherwise try to extract from message
   // Strands recommends sending account_identifier explicitly rather than parsing enhanced queries
-  const accountId = extractAccountId(message)
+  const accountId = accountIdentifier || extractAccountId(message)
 
-  logger.info('[Strands Chat API] Extracted account ID:', accountId || 'none')
+  logger.info('[Strands Chat API] Account identifier:', accountId || 'none (will be inferred by agent)')
 
   // Build the full query with conversation context + GHOST site schema
   // This helps the AI understand GHOST's structure and generate relevant guidance
@@ -265,20 +324,43 @@ ${getSchemaForAI()}
 
   // Call Strands ALB endpoint
   try {
-    const strandsResponse = await sendStrandsQuery(
-      fullQuery,
-      mcpId,
-      accountId,
+    const strandsResponse = await sendStrandsQuery(fullQuery, {
+      accountIdentifier: accountId,
       conversationHistory,
-      sessionId
-    )
+      sessionId,
+      timezone,
+      region,
+      mcpId,
+      preferGovcloud
+    })
 
     logger.info('[Strands Chat API] Response received', {
       accountId: strandsResponse.account_id || 'unknown',
       mcpUsed: strandsResponse.mcp_used || 'unknown',
       resultLength: strandsResponse.result?.length || 0,
-      hasError: !!strandsResponse.error
+      hasError: !!strandsResponse.error,
+      hasDisambiguation: !!strandsResponse.disambiguation
     })
+
+    // Check for disambiguation first (user needs to select account)
+    if (strandsResponse.disambiguation) {
+      logger.info('[Strands Chat API] Disambiguation required', {
+        searchTerm: strandsResponse.disambiguation.search_term,
+        matchCount: strandsResponse.disambiguation.matches.length
+      })
+
+      // Return disambiguation response to frontend
+      const response: StrandsChatResponse = {
+        responseBody: '', // No response yet, waiting for account selection
+        sessionId: sessionId || strandsResponse.account_id,
+        metadata: extractStrandsMetadata(strandsResponse),
+        references: [],
+        suggestedLinks: [],
+        disambiguation: strandsResponse.disambiguation
+      }
+
+      return sendSuccess(event, response)
+    }
 
     // Check for error field in response (Strands returns errors with HTTP 200)
     if (strandsResponse.error) {

@@ -18,7 +18,7 @@ import type {
  * Get Strands client configuration
  * Priority: Site config (DynamoDB) > Environment variables > Defaults
  */
-async function getStrandsConfig(): Promise<StrandsClientConfig> {
+export async function getStrandsConfig(): Promise<StrandsClientConfig> {
   // Try to get config from site config system
   try {
 
@@ -83,38 +83,57 @@ export class StrandsClientError extends Error {
  * - 3 permanent MCP servers: 374673712317 (Gov Master), 083876038518 (Monitoring), 205950196477 (Commercial Master)
  * - Temporary stdio MCP servers spawned for other accounts (~2 min startup, 15 min idle timeout)
  * - Use mcp_id: 'account-specific' to force local MCP spawn
+ *
+ * @param message - User's query/question
+ * @param options - Optional parameters (accountIdentifier, conversationHistory, sessionId, timezone, region, mcpId, preferGovcloud)
  */
 export async function sendStrandsQuery(
-  query: string,
-  mcpId?: string,
-  accountIdentifier?: string,
-  conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
-  sessionId?: string
+  message: string,
+  options?: {
+    accountIdentifier?: string
+    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string | object | any[] }>
+    sessionId?: string
+    timezone?: string
+    region?: string
+    mcpId?: string
+    preferGovcloud?: boolean
+  }
 ): Promise<StrandsQueryResponse> {
   const config = await getStrandsConfig()
   const url = `${config.serverUrl}/query`
 
-  const request: StrandsQueryRequest = { query }
-  if (mcpId) {
-    request.mcp_id = mcpId
-  }
-  if (accountIdentifier) {
-    request.account_identifier = accountIdentifier
-  }
-  if (conversationHistory) {
-    request.conversationHistory = conversationHistory
-  }
-  if (sessionId) {
-    request.sessionId = sessionId
+  // Build request with all supported fields
+  const request: StrandsQueryRequest = {
+    message,
+    sessionId: options?.sessionId,
+    account_identifier: options?.accountIdentifier,
+    region: options?.region,
+    mcp_id: options?.mcpId,
+    prefer_govcloud: options?.preferGovcloud,
+    timezone: options?.timezone,
+    conversationHistory: options?.conversationHistory
   }
 
+  // Remove undefined fields to keep request clean
+  Object.keys(request).forEach(key => {
+    if (request[key as keyof StrandsQueryRequest] === undefined) {
+      delete request[key as keyof StrandsQueryRequest]
+    }
+  })
+
   logger.debug('[Strands Client] Sending query to:', url)
-  logger.debug('[Strands Client] Query:', query.substring(0, 100) + (query.length > 100 ? '...' : ''))
-  if (mcpId) {
-    logger.debug('[Strands Client] MCP ID:', mcpId)
+  logger.debug('[Strands Client] Message:', message.substring(0, 100) + (message.length > 100 ? '...' : ''))
+  if (options?.mcpId) {
+    logger.debug('[Strands Client] MCP ID:', options.mcpId)
   }
-  if (accountIdentifier) {
-    logger.debug('[Strands Client] Account Identifier:', accountIdentifier)
+  if (options?.accountIdentifier) {
+    logger.debug('[Strands Client] Account Identifier:', options.accountIdentifier)
+  }
+  if (options?.timezone) {
+    logger.debug('[Strands Client] Timezone:', options.timezone)
+  }
+  if (options?.region) {
+    logger.debug('[Strands Client] Region:', options.region)
   }
 
   let lastError: Error | null = null

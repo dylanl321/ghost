@@ -8,14 +8,28 @@
  * The agent infers account_id from the query text, but account_identifier is recommended
  */
 export interface StrandsQueryRequest {
-  query: string
-  mcp_id?: string // Optional: 'account-specific' to force local MCP spawn
-  account_identifier?: string // Optional but recommended: AWS account ID to query
+  // Required fields
+  message: string // User's query/question (renamed from 'query' to match API spec)
+
+  // Optional session management
+  sessionId?: string // Session identifier for context
+
+  // Optional account identification
+  account_identifier?: string // Account ID, alias, name, email, username
+
+  // Optional AWS configuration
+  region?: string // AWS region (e.g., "us-gov-west-1")
+  mcp_id?: string // Explicit MCP server to use ('account-specific' to force local MCP spawn)
+  prefer_govcloud?: boolean // Prefer GovCloud account ID (default: true)
+
+  // Optional user context
+  timezone?: string // IANA timezone (e.g., "America/New_York", "America/Los_Angeles")
+
+  // Optional conversation context
   conversationHistory?: Array<{
     role: 'user' | 'assistant'
-    content: string
+    content: string | object | any[]
   }>
-  sessionId?: string
 }
 
 /**
@@ -38,6 +52,7 @@ export interface StrandsQueryResponse {
   }
   references?: Array<{ document: string }>
   suggestedLinks?: any[]
+  disambiguation?: AccountDisambiguation // If multiple accounts match
 }
 
 /**
@@ -68,5 +83,44 @@ export interface StrandsMetadata {
   accountId?: string
   mcpUsed?: string
   mcpType?: 'permanent' | 'temporary'
+}
+
+/**
+ * Account disambiguation when multiple accounts match
+ */
+export interface AccountDisambiguation {
+  search_term: string // What user searched for
+  message: string // Instructions for user
+  matches: AccountDisambiguationOption[] // List of matching accounts
+}
+
+/**
+ * Single account option in disambiguation response
+ */
+export interface AccountDisambiguationOption {
+  request_id: string // Unique identifier for selection
+  account_alias: string // Account name
+  govcloud_account_id?: string // GovCloud ID if exists
+  commercial_account_id?: string // Commercial ID if exists
+  display_name: string // Formatted for display
+  match_score: number // Relevance score (0-100)
+  match_reason: string // Why it matched
+}
+
+/**
+ * Request to select an account after disambiguation
+ */
+export interface AccountSelectionRequest {
+  session_id: string // Session identifier
+  request_id: string // Selected account's request ID from disambiguation
+}
+
+/**
+ * Response from account selection
+ */
+export interface AccountSelectionResponse {
+  status: 'success'
+  message: string // Confirmation message
+  account: AccountDisambiguationOption
 }
 

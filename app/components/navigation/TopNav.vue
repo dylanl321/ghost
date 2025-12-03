@@ -39,6 +39,18 @@
             <UniversalSearch />
           </div>
 
+          <!-- AI Assistant Chat Button -->
+          <UButton
+            v-if="siteConfigStore.isStrandsChatEnabled"
+            variant="ghost"
+            color="gray"
+            size="sm"
+            icon="i-heroicons-chat-bubble-left-right"
+            :title="chatSidebar.isOpen.value ? 'Close AI Assistant' : 'Open AI Assistant'"
+            @click="chatSidebar.toggle()"
+            class="transition-all duration-200 opacity-70 hover:opacity-100"
+          />
+
           <div class="relative">
             <UDropdown
               :items="userMenuItems"
@@ -70,6 +82,7 @@
 
 <script setup lang="ts">
 import { useNavigationStore } from '~/stores/useNavigationStore'
+import { useSiteConfigStore } from '~/stores/useSiteConfigStore'
 import UserAvatar from '~/components/ui/UserAvatar.vue'
 
 interface Props {
@@ -83,6 +96,8 @@ const emit = defineEmits<{
 
 const { user, logout } = useOidcAuth()
 const navigationStore = useNavigationStore()
+const siteConfigStore = useSiteConfigStore()
+const chatSidebar = useChatSidebar()
 const route = useRoute()
 const { can, isAdmin } = useUserRoles()
 

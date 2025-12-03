@@ -370,6 +370,83 @@ resource "aws_dynamodb_table" "admin_notifications" {
 }
 
 # ============================================================================
+# Chat Threads Table (GovCloud Environment)
+# ============================================================================
+# Stores user chat conversations with the Strands AI assistant
+# Supports multiple threads per user, sharing, and export
+resource "aws_dynamodb_table" "chat_threads" {
+  provider       = aws.target_deployment_account
+  name           = "ghost-chat-threads"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "threadId"
+  range_key      = "createdAt"
+
+  attribute {
+    name = "threadId"
+    type = "S"
+  }
+
+  attribute {
+    name = "createdAt"
+    type = "S"
+  }
+
+  attribute {
+    name = "userId"
+    type = "S"
+  }
+
+  attribute {
+    name = "lastMessageAt"
+    type = "S"
+  }
+
+  attribute {
+    name = "shareId"
+    type = "S"
+  }
+
+  # GSI for querying threads by user (sorted by recent activity)
+  global_secondary_index {
+    name            = "UserIdIndex"
+    hash_key        = "userId"
+    range_key       = "lastMessageAt"
+    projection_type = "ALL"
+  }
+
+  # GSI for accessing shared threads (public links)
+  global_secondary_index {
+    name            = "ShareIdIndex"
+    hash_key        = "shareId"
+    projection_type = "ALL"
+  }
+
+  # Enable TTL to auto-delete old threads (90 days default, configurable)
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  # Enable encryption at rest
+  server_side_encryption {
+    enabled = true
+  }
+
+  # Enable point-in-time recovery
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Name        = "GHOST Chat Threads"
+    Environment = local.environment
+    ManagedBy   = "Terraform"
+    Service     = "GHOST"
+    Component   = "ChatThreads"
+  }
+}
+
+# ============================================================================
 # Outputs
 # ============================================================================
 
@@ -441,4 +518,14 @@ output "site_config_table_name" {
 output "site_config_table_arn" {
   description = "ARN of the DynamoDB table for site configuration"
   value       = aws_dynamodb_table.site_config.arn
+}
+
+output "chat_threads_table_name" {
+  description = "Name of the DynamoDB table for chat threads"
+  value       = aws_dynamodb_table.chat_threads.name
+}
+
+output "chat_threads_table_arn" {
+  description = "ARN of the DynamoDB table for chat threads"
+  value       = aws_dynamodb_table.chat_threads.arn
 }

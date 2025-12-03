@@ -203,6 +203,15 @@
     @click="toggleChat"
     class="fixed inset-0 bg-black/20 z-30 md:hidden"
   ></div>
+
+  <!-- Account Disambiguation Modal -->
+  <AccountDisambiguationModal
+    v-if="showDisambiguation && disambiguationData"
+    :disambiguation="disambiguationData"
+    :sessionId="sessionId || ''"
+    @selected="handleAccountSelected"
+    @cancel="handleDisambiguationCancel"
+  />
 </template>
 
 <script setup lang="ts">
@@ -226,6 +235,16 @@ const isLoading = ref(false)
 const errorMessage = ref('')
 const sessionId = ref('')
 const messagesContainer = ref<HTMLElement>()
+
+// Detect user's timezone
+const userTimezone = ref<string>(
+  Intl.DateTimeFormat().resolvedOptions().timeZone
+)
+
+// Disambiguation state
+const showDisambiguation = ref(false)
+const disambiguationData = ref<any>(null)
+const pendingMessage = ref<string>('')
 
 // Example questions
 const exampleQuestions = [
@@ -321,13 +340,23 @@ async function sendMessage() {
       body: {
         message: userMessage,
         conversationHistory: messages.value.slice(-6), // Last 6 messages for context
-        sessionId: sessionId.value || undefined
+        sessionId: sessionId.value || undefined,
+        timezone: userTimezone.value // Send user's timezone
       }
     })
 
     // Update session ID
     if (response.sessionId) {
       sessionId.value = response.sessionId
+    }
+
+    // Check for disambiguation first
+    if (response.disambiguation) {
+      disambiguationData.value = response.disambiguation
+      pendingMessage.value = userMessage
+      showDisambiguation.value = true
+      isLoading.value = false
+      return
     }
 
     // Add assistant response
@@ -351,6 +380,43 @@ async function sendMessage() {
   } finally {
     isLoading.value = false
   }
+}
+
+// Handle account selection from disambiguation modal
+async function handleAccountSelected(requestId: string) {
+  try {
+    // Submit selection to backend
+    await $fetch('/api/strands/account/select', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: {
+        session_id: sessionId.value,
+        request_id: requestId
+      }
+    })
+
+    // Close modal
+    showDisambiguation.value = false
+
+    // Re-execute the original query with the selected account
+    isLoading.value = true
+    await sendMessage(pendingMessage.value, false) // Don't push message again
+    pendingMessage.value = ''
+
+  } catch (error: any) {
+    console.error('Error selecting account:', error)
+    errorMessage.value = error.data?.error?.message || 'Failed to select account. Please try again.'
+    showDisambiguation.value = false
+    isLoading.value = false
+  }
+}
+
+// Handle disambiguation cancel
+function handleDisambiguationCancel() {
+  showDisambiguation.value = false
+  disambiguationData.value = null
+  pendingMessage.value = ''
+  isLoading.value = false
 }
 
 // Format message with basic markdown

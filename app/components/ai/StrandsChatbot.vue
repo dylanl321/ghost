@@ -26,7 +26,7 @@
     <div id="chat-container" :class="visible">
       <div id="chat-box" :class="isFullScreen" ref="chatBoxRef">
         <div v-for="(msg, index) in messages" :key="index" :class="`message ${msg.sender}`">
-          <div class="markdown-container" v-html="formatMessage(msg.text)"></div>
+          <div class="markdown-container" v-html="formatMessage(msg.text)" @click="handleLinkClick"></div>
           <div v-if="msg.links && msg.links.length > 0">
             <br />
             <div v-for="(link, linkIndex) in msg.links" :key="linkIndex" class="link-box">
@@ -93,10 +93,22 @@
         </button>
       </form>
     </div>
+
+    <!-- Account Disambiguation Modal -->
+    <AccountDisambiguationModal
+      v-if="showDisambiguation && disambiguationData"
+      :disambiguation="disambiguationData"
+      :sessionId="sessionId || ''"
+      @selected="handleAccountSelected"
+      @cancel="handleDisambiguationCancel"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
+// Use the markdown link parser composable
+const { parseMarkdownWithLinks, handleLinkClick } = useMarkdownLinkParser()
+
 // Reactive state
 const messages = ref([{
   text: "Hello! I'm a Strands agent connected to AWS MCP servers. I can help you with AWS cost analysis, configuration lookups, security hub queries, and more.\n\nFor best results, be explicit about AWS account IDs in your queries. Type \"help\" for example questions.\n\nNote: First-time queries for new accounts may take 2+ minutes while the MCP server initializes.",
@@ -113,6 +125,16 @@ const exampleQuestions = ref(false)
 const chatBoxRef = ref(null)
 const inputRef = ref(null)
 const sessionId = ref<string | undefined>(undefined)
+
+// Detect user's timezone
+const userTimezone = ref<string>(
+  Intl.DateTimeFormat().resolvedOptions().timeZone
+)
+
+// Disambiguation state
+const showDisambiguation = ref(false)
+const disambiguationData = ref<any>(null)
+const pendingMessage = ref<string>('')
 
 // Configuration
 const endpoint = "/api/strands/chat"
@@ -177,7 +199,8 @@ const fetchData = async (inputVal: string) => {
     const requestData = {
       message: inputVal,
       conversationHistory,
-      sessionId: sessionId.value
+      sessionId: sessionId.value,
+      timezone: userTimezone.value // Send user's timezone
     }
 
     const data = await $fetch<{
@@ -193,6 +216,8 @@ const fetchData = async (inputVal: string) => {
           toolsUsed?: string[]
         }
         references?: Array<{ document: string }>
+        disambiguation?: any
+        suggestedLinks?: any[]
         error?: string | null
       }
     }>(endpoint, {
@@ -206,7 +231,16 @@ const fetchData = async (inputVal: string) => {
       sessionId.value = data.data.sessionId
     }
 
-    // Check for error field first (Strands returns errors with HTTP 200)
+    // Check for disambiguation first
+    if (data.data?.disambiguation) {
+      disambiguationData.value = data.data.disambiguation
+      pendingMessage.value = inputVal
+      showDisambiguation.value = true
+      isLoading.value = false
+      return
+    }
+
+    // Check for error field (Strands returns errors with HTTP 200)
     if (data.data?.error) {
       const errorMessage = {
         text: data.data.error,
@@ -267,14 +301,10 @@ function toggleFullscreen() {
   visible.value = newFullScreen === "fullscreen" ? "open" : visible.value
 }
 
-// Format message content
+// Format message content using the link parser (handles markdown + internal links)
 const formatMessage = (content: string) => {
   if (!content) return ''
-  return content
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/`(.*?)`/g, '<code>$1</code>')
-    .replace(/\n/g, '<br>')
+  return parseMarkdownWithLinks(content)
 }
 
 // Auto scroll down
@@ -292,6 +322,49 @@ watch(isLoading, (newLoading) => {
     inputRef.value.focus()
   }
 })
+
+// Handle account selection from disambiguation modal
+const handleAccountSelected = async (requestId: string) => {
+  try {
+    // Submit selection to backend
+    await $fetch('/api/strands/account/select', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: {
+        session_id: sessionId.value,
+        request_id: requestId
+      }
+    })
+
+    // Close modal
+    showDisambiguation.value = false
+
+    // Re-execute the original query with the selected account
+    isLoading.value = true
+    await fetchData(pendingMessage.value)
+    pendingMessage.value = ''
+
+  } catch (error: any) {
+    console.error('Error selecting account:', error)
+    const errorMessage = {
+      text: error.data?.error?.message || 'Failed to select account. Please try again.',
+      links: [],
+      sender: 'bot' as const,
+      metadata: {}
+    }
+    messages.value.push(errorMessage)
+    showDisambiguation.value = false
+    isLoading.value = false
+  }
+}
+
+// Handle disambiguation cancel
+const handleDisambiguationCancel = () => {
+  showDisambiguation.value = false
+  disambiguationData.value = null
+  pendingMessage.value = ''
+  isLoading.value = false
+}
 </script>
 
 <style scoped>
@@ -467,6 +540,103 @@ watch(isLoading, (newLoading) => {
 
 #chat-box::-webkit-scrollbar-thumb:hover {
   @apply bg-gray-400 dark:bg-gray-500;
+}
+
+/* Markdown Content Styling (matching GHOST MarkdownContent component) */
+.markdown-container :deep(h1) {
+  @apply text-2xl font-bold text-gray-900 dark:text-white mb-3 mt-4 first:mt-0 pb-2 border-b-2 border-gray-200 dark:border-gray-600;
+}
+
+.markdown-container :deep(h2) {
+  @apply text-xl font-bold text-gray-900 dark:text-white mb-2 mt-3 pb-1 border-b border-gray-200 dark:border-gray-600;
+}
+
+.markdown-container :deep(h3) {
+  @apply text-lg font-semibold text-blue-600 dark:text-blue-400 mb-2 mt-3;
+}
+
+.markdown-container :deep(h4) {
+  @apply text-base font-semibold text-gray-800 dark:text-gray-200 mb-2 mt-2;
+}
+
+.markdown-container :deep(h5) {
+  @apply text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1 mt-2;
+}
+
+.markdown-container :deep(h6) {
+  @apply text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1 mt-1;
+}
+
+.markdown-container :deep(p) {
+  @apply text-sm leading-normal mb-2 text-gray-700 dark:text-gray-300;
+}
+
+.markdown-container :deep(ul) {
+  @apply space-y-1 mb-3 pl-5 list-disc;
+}
+
+.markdown-container :deep(ol) {
+  @apply space-y-1 mb-3 pl-5 list-decimal;
+}
+
+.markdown-container :deep(li) {
+  @apply text-sm text-gray-700 dark:text-gray-300 leading-relaxed;
+}
+
+.markdown-container :deep(ul li::marker) {
+  @apply text-blue-500 dark:text-blue-400;
+}
+
+.markdown-container :deep(ol li::marker) {
+  @apply text-blue-600 dark:text-blue-400 font-semibold;
+}
+
+.markdown-container :deep(code) {
+  @apply bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded font-mono text-xs text-blue-600 dark:text-blue-400 border border-gray-300 dark:border-gray-600;
+}
+
+.markdown-container :deep(pre) {
+  @apply bg-gray-900 dark:bg-gray-950 p-3 rounded-lg overflow-x-auto my-3 border border-gray-700;
+}
+
+.markdown-container :deep(pre code) {
+  @apply bg-transparent border-0 text-gray-100 text-xs leading-normal block p-0;
+}
+
+.markdown-container :deep(a) {
+  @apply text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline decoration-blue-400/50 hover:decoration-blue-600 underline-offset-2 transition-colors;
+}
+
+.markdown-container :deep(blockquote) {
+  @apply border-l-4 border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20 pl-3 pr-2 py-2 my-3 italic text-sm text-gray-700 dark:text-gray-300 rounded-r;
+}
+
+.markdown-container :deep(hr) {
+  @apply my-4 border-0 border-t-2 border-gray-300 dark:border-gray-600;
+}
+
+.markdown-container :deep(strong) {
+  @apply font-semibold text-gray-900 dark:text-white;
+}
+
+.markdown-container :deep(em) {
+  @apply italic text-gray-600 dark:text-gray-400;
+}
+
+.markdown-container :deep(table) {
+  @apply w-full my-3 border-collapse bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-sm text-sm;
+}
+
+.markdown-container :deep(th) {
+  @apply bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 px-2 py-1 text-left font-semibold text-gray-900 dark:text-white text-xs;
+}
+
+.markdown-container :deep(td) {
+  @apply border border-gray-300 dark:border-gray-600 px-2 py-1 text-gray-700 dark:text-gray-300 text-xs;
+}
+
+.markdown-container :deep(tbody tr) {
+  @apply hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors;
 }
 </style>
 
