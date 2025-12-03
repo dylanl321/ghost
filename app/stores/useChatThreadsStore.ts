@@ -435,10 +435,9 @@ export const useChatThreadsStore = defineStore('chatThreads', {
     clearError() {
       this.error = null
     }
-  },
-
+  }
+}, {
   persist: {
-    storage: persistedState.localStorage,
-    paths: ['activeThreadId'] // Only persist active thread ID
+    pick: ['activeThreadId'] // Only persist active thread ID
   }
 })

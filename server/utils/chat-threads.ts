@@ -211,19 +211,35 @@ export async function getUserThreads(
   }
 
   // Query using UserIdIndex GSI (sorted by lastMessageAt descending)
-  const result = await queryItems({
-    tableName: THREADS_TABLE,
-    indexName: 'UserIdIndex',
-    queryExpression: 'userId = :userId',
-    filterExpression: filterParts.length > 0 ? filterParts.join(' AND ') : undefined,
-    expressionAttributeNames: Object.keys(expressionAttributeNames).length > 0 ? expressionAttributeNames : undefined,
-    expressionAttributeValues,
-    limit: filters.limit || 50,
-    scanIndexForward: false, // Descending order (most recent first)
-    nextToken: filters.lastKey ? Buffer.from(JSON.stringify(filters.lastKey)).toString('base64') : undefined
-  }, 'govcloud')
+  let result
+  let threads: ChatThread[] = []
 
-  const threads = result.items as ChatThread[]
+  try {
+    result = await queryItems({
+      tableName: THREADS_TABLE,
+      indexName: 'UserIdIndex',
+      queryExpression: 'userId = :userId',
+      filterExpression: filterParts.length > 0 ? filterParts.join(' AND ') : undefined,
+      expressionAttributeNames: Object.keys(expressionAttributeNames).length > 0 ? expressionAttributeNames : undefined,
+      expressionAttributeValues,
+      limit: filters.limit || 50,
+      scanIndexForward: false, // Descending order (most recent first)
+      nextToken: filters.lastKey ? Buffer.from(JSON.stringify(filters.lastKey)).toString('base64') : undefined
+    }, 'govcloud')
+
+    threads = result.items as ChatThread[]
+  } catch (error: any) {
+    // If table doesn't exist yet, return empty list instead of throwing
+    if (error.name === 'ResourceNotFoundException' || error.message?.includes('Requested resource not found')) {
+      logger.warn(`[Chat Threads] Table ${THREADS_TABLE} not found - returning empty list`)
+      return {
+        threads: [],
+        hasMore: false
+      }
+    }
+    // Re-throw other errors
+    throw error
+  }
 
   // Apply search filter if provided (client-side filtering)
   let filteredThreads = threads
