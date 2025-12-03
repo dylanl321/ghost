@@ -31,6 +31,9 @@ export interface DynamoDBConfig {
   externalAccounts: DynamoDBTableConfig
   userPreferences: DynamoDBTableConfig
   accountNotes: DynamoDBTableConfig
+  chatThreads: DynamoDBTableConfig
+  siteConfig: DynamoDBTableConfig
+  adminNotifications: DynamoDBTableConfig
 }
 
 // Cache the configuration to avoid repeated Secrets Manager calls
@@ -151,6 +154,24 @@ function loadFromEnvironment(): DynamoDBConfig {
     },
     accountNotes: {
       tableName: process.env.ACCOUNT_NOTES_TABLE || 'ghost-account-notes',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
+    },
+    chatThreads: {
+      tableName: process.env.CHAT_THREADS_TABLE_NAME || 'ghost-chat-threads',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
+    },
+    siteConfig: {
+      tableName: process.env.SITE_CONFIG_TABLE || 'ghost-site-config',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
+    },
+    adminNotifications: {
+      tableName: process.env.ADMIN_NOTIFICATIONS_TABLE || 'ghost_admin_notifications',
       environment: 'govcloud',
       region: govCloudRegion,
       accountId: deploymentAccountId
