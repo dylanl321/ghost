@@ -22,12 +22,22 @@ export interface StrandsQueryRequest {
  * Response from Strands ALB endpoint
  * Based on QueryResponse model from Strands agent
  * Note: Strands may return nested format with 'data' wrapper or flat format
+ * Update: Strands now returns responseBody instead of result
  */
 export interface StrandsQueryResponse {
   account_id?: string
   mcp_used?: string // e.g., "account-specific [stdio]" or permanent MCP name
   result?: string | null
+  responseBody?: string | null // New field name from Strands
   error?: string | null
+  sessionId?: string
+  metadata?: {
+    accountId?: string
+    mcpUsed?: string
+    mcpType?: 'permanent' | 'temporary'
+  }
+  references?: Array<{ document: string }>
+  suggestedLinks?: any[]
 }
 
 /**

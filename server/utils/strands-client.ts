@@ -195,10 +195,26 @@ export async function sendStrandsQuery(
       // Check if response has 'data' property and unwrap if needed
       const data = rawData.data ? rawData.data : rawData as StrandsQueryResponse
 
+      // Handle new responseBody field (Strands now uses this instead of result)
+      // Normalize the response to use 'result' for backward compatibility
+      if (data.responseBody && !data.result) {
+        data.result = data.responseBody
+      }
+
+      // Extract account_id from metadata if not at top level
+      if (!data.account_id && data.metadata?.accountId) {
+        data.account_id = data.metadata.accountId
+      }
+
+      // Extract mcp_used from metadata if not at top level
+      if (!data.mcp_used && data.metadata?.mcpUsed) {
+        data.mcp_used = data.metadata.mcpUsed
+      }
+
       logger.debug('[Strands Client] Response received:', {
         accountId: data.account_id,
         mcpUsed: data.mcp_used,
-        hasResult: !!data.result,
+        hasResult: !!(data.result || data.responseBody),
         hasError: !!data.error
       })
 
