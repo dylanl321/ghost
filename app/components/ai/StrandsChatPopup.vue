@@ -143,10 +143,10 @@
             <div v-if="msg.role === 'assistant' && msg.metadata" class="flex gap-2 mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
               <UBadge
                 v-if="msg.metadata.accountId"
-                color="blue"
+                :color="msg.metadata.accountId === 'aggregated' ? 'purple' : 'blue'"
                 size="xs"
               >
-                {{ msg.metadata.accountId }}
+                {{ msg.metadata.accountId === 'aggregated' ? 'Organization-wide' : msg.metadata.accountId }}
               </UBadge>
               <UBadge
                 v-if="msg.metadata.mcpType"
@@ -258,7 +258,7 @@ const {
 } = useStrandsChat({
   initialGreeting: "", // No initial greeting for popup
   threadsStore: threadsStore,
-  loadMessagesFromThread: !!threadsStore.currentThread
+  loadMessagesFromThread: true // Always load messages from thread in popup
 })
 
 // UI state (specific to popup)

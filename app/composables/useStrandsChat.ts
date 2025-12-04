@@ -190,13 +190,20 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
 
   // Build conversation history from messages
   const getConversationHistory = () => {
-    return messages.value
+    const history = messages.value
       .filter(msg => msg.sender === 'user' || msg.sender === 'bot')
       .map(msg => ({
         role: msg.sender === 'user' ? 'user' as const : 'assistant' as const,
         content: msg.text
       }))
-      .slice(1) // Skip the initial greeting message
+
+    // Only skip the first message if we have an initial greeting
+    // Popup has no greeting, so we need all messages
+    if (initialGreeting && history.length > 0 && history[0].role === 'assistant') {
+      return history.slice(1)
+    }
+
+    return history
   }
 
   // Execute query (core API logic)
@@ -265,6 +272,12 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
           metadata: data.data.metadata || {}
         }
         messages.value.push(errorMessage)
+        scrollTrigger.value++
+
+        // Save error message to thread if using threads store
+        if (threadsStore) {
+          await threadsStore.addMessage(convertChatMessageToThreadMessage(errorMessage))
+        }
         return
       }
 

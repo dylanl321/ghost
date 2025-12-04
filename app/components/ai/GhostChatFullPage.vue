@@ -21,8 +21,8 @@
           <div v-if="msg.metadata && (msg.metadata.accountId || msg.metadata.mcpUsed)" class="tools-used">
             <div class="metadata-container">
               <span v-if="msg.metadata.accountId" class="metadata-badge account-badge">
-                <UIcon name="i-heroicons-building-library" class="w-3 h-3" />
-                Account: {{ msg.metadata.accountId }}
+                <UIcon :name="msg.metadata.accountId === 'aggregated' ? 'i-heroicons-building-office-2' : 'i-heroicons-building-library'" class="w-3 h-3" />
+                {{ msg.metadata.accountId === 'aggregated' ? 'Organization-wide' : `Account: ${msg.metadata.accountId}` }}
               </span>
               <span v-if="msg.metadata.mcpUsed" class="metadata-badge mcp-badge" :class="{ 'permanent-mcp': msg.metadata.mcpType === 'permanent', 'temporary-mcp': msg.metadata.mcpType === 'temporary' }">
                 <UIcon :name="msg.metadata.mcpType === 'permanent' ? 'i-heroicons-server-stack' : 'i-heroicons-cpu-chip'" class="w-3 h-3" />

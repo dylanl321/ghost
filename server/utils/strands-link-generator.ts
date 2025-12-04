@@ -247,9 +247,17 @@ async function parseEntities(
   // Filter to use commercial IDs only
   accountIds = await filterToCommercialAccountIds(accountIds)
 
-  // If metadata provides an account ID, prioritize it (add to front if not already present)
-  if (metadata?.accountId && !accountIds.includes(metadata.accountId)) {
-    accountIds.unshift(metadata.accountId)
+  // If metadata provides an account ID, convert to commercial and prioritize it
+  // Skip "aggregated" since it's not a real account ID
+  if (metadata?.accountId && metadata.accountId !== 'aggregated') {
+    // Convert the metadata account ID to commercial if needed
+    const metadataCommercialIds = await filterToCommercialAccountIds([metadata.accountId])
+    const commercialId = metadataCommercialIds[0]
+
+    // Add to front if not already present
+    if (commercialId && !accountIds.includes(commercialId)) {
+      accountIds.unshift(commercialId)
+    }
   }
 
   return {

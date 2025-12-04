@@ -118,9 +118,9 @@
             <!-- Metadata -->
             <div v-if="msg.metadata && (msg.metadata.accountId || msg.metadata.mcpUsed)" class="mt-2 pt-2 border-t border-gray-200/50 dark:border-gray-700/50">
               <div class="flex flex-wrap gap-2 text-xs">
-                <span v-if="msg.metadata.accountId" class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
-                  <UIcon name="i-heroicons-building-library" class="w-3 h-3" />
-                  {{ msg.metadata.accountId }}
+                <span v-if="msg.metadata.accountId" :class="msg.metadata.accountId === 'aggregated' ? 'inline-flex items-center gap-1 px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' : 'inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'">
+                  <UIcon :name="msg.metadata.accountId === 'aggregated' ? 'i-heroicons-building-office-2' : 'i-heroicons-building-library'" class="w-3 h-3" />
+                  {{ msg.metadata.accountId === 'aggregated' ? 'Organization-wide' : msg.metadata.accountId }}
                 </span>
                 <span v-if="msg.metadata.mcpUsed" class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
                   <UIcon name="i-heroicons-cpu-chip" class="w-3 h-3" />
