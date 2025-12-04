@@ -16,6 +16,7 @@ import { logger } from '../../utils/logger'
 import { sendStrandsQuery, extractStrandsMetadata, StrandsClientError } from '../../utils/strands-client'
 import { generateSmartLinks, type SuggestedLink } from '../../utils/strands-link-generator'
 import { getSchemaForAI } from '../../utils/ghost-site-schema'
+import { extractFollowUpPrompts, type SuggestedPrompt } from '../../utils/bedrock-prompt-extractor'
 
 export interface StrandsChatRequest {
   message: string
@@ -41,6 +42,7 @@ export interface StrandsChatResponse {
   }
   references?: Array<{ document: string }>
   suggestedLinks?: SuggestedLink[]
+  suggestedPrompts?: SuggestedPrompt[]
   disambiguation?: import('../../types/strands').AccountDisambiguation
   error?: string | null
 }
@@ -451,6 +453,14 @@ ${getSchemaForAI()}
       accountId: metadata.accountId
     })
 
+    // Extract follow-up prompts using Bedrock (async, don't block response)
+    const suggestedPrompts = await extractFollowUpPrompts(strandsResponse.result || '', 3)
+
+    logger.info('[Strands Chat API] Extracted follow-up prompts', {
+      promptCount: suggestedPrompts.length,
+      prompts: suggestedPrompts.map(p => p.text)
+    })
+
     // CRITICAL: Extract sessionId from strandsResponse.sessionId (not from metadata or account_id)
     // Backend now generates sessionId if not provided
     const responseSessionId = strandsResponse.sessionId || sessionId
@@ -461,7 +471,8 @@ ${getSchemaForAI()}
       sessionId: responseSessionId,
       metadata,
       references: [], // Strands doesn't provide document references in current implementation
-      suggestedLinks
+      suggestedLinks,
+      suggestedPrompts
     }
 
     return sendSuccess(event, response)

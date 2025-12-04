@@ -6,6 +6,15 @@
 import type { SuggestedLink } from '~/server/utils/strands-link-generator'
 
 /**
+ * Suggested follow-up prompt extracted from AI response
+ */
+export interface SuggestedPrompt {
+  text: string
+  type: 'question' | 'action' | 'clarification'
+  priority: number
+}
+
+/**
  * Individual message in a chat thread
  */
 export interface ChatMessage {
@@ -25,6 +34,7 @@ export interface ChatMessage {
   }
   links?: string[] // External reference links
   suggestedLinks?: SuggestedLink[] // GHOST page links
+  suggestedPrompts?: SuggestedPrompt[] // Follow-up prompts for user
 }
 
 /**

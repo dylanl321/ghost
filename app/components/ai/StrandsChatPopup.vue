@@ -166,17 +166,43 @@
                 @click="toggleChat"
               />
             </div>
+
+            <!-- Suggested Prompts for bot responses -->
+            <div v-if="msg.role === 'assistant' && msg.suggestedPrompts && msg.suggestedPrompts.length > 0" class="mt-3 space-y-2">
+              <p class="text-xs text-gray-600 dark:text-gray-400 mb-1.5 flex items-center gap-1">
+                <UIcon name="i-heroicons-chat-bubble-bottom-center-text" class="w-3.5 h-3.5" />
+                Continue:
+              </p>
+              <div class="flex flex-wrap gap-1.5">
+                <button
+                  v-for="(prompt, promptIdx) in msg.suggestedPrompts"
+                  :key="promptIdx"
+                  @click="handlePromptClick(prompt.text)"
+                  class="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md border border-purple-200 dark:border-purple-800 bg-white dark:bg-purple-900/20 hover:bg-purple-50 dark:hover:bg-purple-900/40 text-purple-700 dark:text-purple-300 transition-colors"
+                  :class="{
+                    'hover:scale-105': true
+                  }"
+                >
+                  <UIcon
+                    :name="prompt.type === 'question' ? 'i-heroicons-question-mark-circle' : prompt.type === 'action' ? 'i-heroicons-arrow-right-circle' : 'i-heroicons-information-circle'"
+                    class="w-3 h-3 flex-shrink-0"
+                  />
+                  <span>{{ prompt.text }}</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
         <!-- Loading indicator -->
         <div v-if="isLoading" class="flex justify-start">
           <div class="bg-gray-100 dark:bg-gray-800 rounded-lg px-3 py-2">
-            <div class="flex items-center gap-1">
+            <div class="flex items-center gap-2 mb-1">
               <div class="w-2 h-2 bg-purple-600 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
               <div class="w-2 h-2 bg-purple-600 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
               <div class="w-2 h-2 bg-purple-600 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
             </div>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Complex queries may take 30-120 seconds</p>
           </div>
         </div>
 
@@ -270,6 +296,12 @@ const errorMessage = ref('')
 const messagesContainer = ref<HTMLElement>()
 
 // Convert chat messages to popup format
+interface SuggestedPrompt {
+  text: string
+  type: 'question' | 'action' | 'clarification'
+  priority: number
+}
+
 interface PopupMessage {
   role: 'user' | 'assistant'
   content: string
@@ -278,6 +310,7 @@ interface PopupMessage {
     mcpType?: 'permanent' | 'temporary'
   }
   suggestedLinks?: any[]
+  suggestedPrompts?: SuggestedPrompt[]
 }
 
 const messages = computed<PopupMessage[]>(() => {
@@ -285,7 +318,8 @@ const messages = computed<PopupMessage[]>(() => {
     role: msg.sender === 'user' ? 'user' as const : 'assistant' as const,
     content: msg.text,
     metadata: msg.metadata,
-    suggestedLinks: msg.suggestedLinks
+    suggestedLinks: msg.suggestedLinks,
+    suggestedPrompts: msg.suggestedPrompts
   }))
 })
 
@@ -366,6 +400,12 @@ async function clearChat() {
 function sendExample(example: string) {
   userInput.value = example
   showExamples.value = false
+  sendMessage()
+}
+
+// Handle suggested prompt clicks
+function handlePromptClick(promptText: string) {
+  userInput.value = promptText
   sendMessage()
 }
 

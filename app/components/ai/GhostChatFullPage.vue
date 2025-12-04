@@ -39,6 +39,31 @@
               :link="link"
             />
           </div>
+
+          <!-- Suggested Prompts -->
+          <div v-if="msg.suggestedPrompts && msg.suggestedPrompts.length > 0" class="mt-4">
+            <p class="text-xs text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-1.5">
+              <UIcon name="i-heroicons-chat-bubble-bottom-center-text" class="w-4 h-4" />
+              Continue the conversation:
+            </p>
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-for="(prompt, promptIdx) in msg.suggestedPrompts"
+                :key="promptIdx"
+                @click="handlePromptClick(prompt.text)"
+                class="inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-700 dark:text-purple-300 transition-colors"
+                :class="{
+                  'hover:scale-105': true
+                }"
+              >
+                <UIcon
+                  :name="prompt.type === 'question' ? 'i-heroicons-question-mark-circle' : prompt.type === 'action' ? 'i-heroicons-arrow-right-circle' : 'i-heroicons-information-circle'"
+                  class="w-4 h-4 flex-shrink-0"
+                />
+                <span>{{ prompt.text }}</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -75,7 +100,10 @@
               <div class="ghost-dot"></div>
             </div>
           </div>
-          <span class="ghost-loading-text">GHOST is thinking...</span>
+          <div class="flex flex-col gap-1">
+            <span class="ghost-loading-text">GHOST is thinking...</span>
+            <span class="text-xs text-gray-500 dark:text-gray-400">Complex queries may take 30-120 seconds to complete</span>
+          </div>
         </div>
       </div>
     </div>
@@ -374,6 +402,12 @@ const handleSubmit = async (e) => {
 const handleExampleClick = async (message: string) => {
   exampleQuestions.value = false
   await sendChatMessage(message)
+}
+
+// Handle suggested prompt clicks
+const handlePromptClick = async (promptText: string) => {
+  inputValue.value = promptText
+  await handleSubmit(new Event('submit'))
 }
 
 // Format message content using the link parser (handles markdown + internal links)

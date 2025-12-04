@@ -137,6 +137,28 @@
                 :link="link"
               />
             </div>
+
+            <!-- Suggested Prompts -->
+            <div v-if="msg.suggestedPrompts && msg.suggestedPrompts.length > 0" class="mt-2 space-y-2">
+              <p class="text-xs text-gray-600 dark:text-gray-400 mb-1.5 flex items-center gap-1">
+                <UIcon name="i-heroicons-chat-bubble-bottom-center-text" class="w-3.5 h-3.5" />
+                Continue:
+              </p>
+              <div class="flex flex-wrap gap-1.5">
+                <button
+                  v-for="(prompt, promptIdx) in msg.suggestedPrompts"
+                  :key="promptIdx"
+                  @click="handlePromptClick(prompt.text)"
+                  class="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md border border-purple-200 dark:border-purple-800 bg-white dark:bg-purple-900/20 hover:bg-purple-50 dark:hover:bg-purple-900/40 text-purple-700 dark:text-purple-300 transition-colors"
+                >
+                  <UIcon
+                    :name="prompt.type === 'question' ? 'i-heroicons-question-mark-circle' : prompt.type === 'action' ? 'i-heroicons-arrow-right-circle' : 'i-heroicons-information-circle'"
+                    class="w-3 h-3 flex-shrink-0"
+                  />
+                  <span>{{ prompt.text }}</span>
+                </button>
+              </div>
+            </div>
           </div>
 
           <!-- Timestamp -->
@@ -153,7 +175,10 @@
             <div class="ghost-dot-sidebar"></div>
             <div class="ghost-dot-sidebar"></div>
           </div>
-          <span class="text-sm text-gray-500 dark:text-gray-400 italic">GHOST is thinking...</span>
+          <div class="flex flex-col gap-1">
+            <span class="text-sm text-gray-500 dark:text-gray-400 italic">GHOST is thinking...</span>
+            <span class="text-xs text-gray-400 dark:text-gray-500">Complex queries may take 30-120 seconds</span>
+          </div>
         </div>
       </div>
 
@@ -370,6 +395,7 @@ async function loadThread(threadId: string) {
       sender: msg.role === 'user' ? 'user' : 'bot',
       metadata: msg.metadata,
       suggestedLinks: msg.suggestedLinks,
+      suggestedPrompts: msg.suggestedPrompts,
       timestamp: msg.timestamp
     }))
 
@@ -514,6 +540,11 @@ function handleMentionClick(account: any) {
   })
 }
 
+// Handle suggested prompt clicks
+function handlePromptClick(promptText: string) {
+  inputValue.value = promptText
+  handleSubmit()
+}
 
 // Handle message submission
 async function handleSubmit() {
@@ -560,7 +591,9 @@ async function handleSubmit() {
 
     const response = await $fetch('/api/strands/chat', {
       method: 'POST',
-      body: requestBody
+      body: requestBody,
+      // Match backend timeout (5 minutes) - Strands MCP operations can take 2+ minutes
+      timeout: 300000
     })
 
     // Update session ID
@@ -590,6 +623,7 @@ async function handleSubmit() {
         mcpType: response.metadata?.mcpType
       },
       suggestedLinks: response.suggestedLinks || [],
+      suggestedPrompts: response.suggestedPrompts || [],
       timestamp: new Date().toISOString()
     })
 
@@ -602,7 +636,8 @@ async function handleSubmit() {
         mcpUsed: response.metadata?.mcpUsed || response.mcp_used,
         mcpType: response.metadata?.mcpType
       },
-      suggestedLinks: response.suggestedLinks
+      suggestedLinks: response.suggestedLinks,
+      suggestedPrompts: response.suggestedPrompts
     })
 
     nextTick(() => scrollToBottom())
@@ -641,7 +676,9 @@ async function handleAccountSelected(accountId: string) {
         sessionId: sessionId.value,
         timezone: userTimezone.value,
         selectedAccountId: accountId
-      }
+      },
+      // Match backend timeout (5 minutes) - Strands MCP operations can take 2+ minutes
+      timeout: 300000
     })
 
     const botResponse = response.result || response.responseBody || 'No response received'
@@ -655,6 +692,7 @@ async function handleAccountSelected(accountId: string) {
         mcpType: response.metadata?.mcpType
       },
       suggestedLinks: response.suggestedLinks || [],
+      suggestedPrompts: response.suggestedPrompts || [],
       timestamp: new Date().toISOString()
     })
 
@@ -666,7 +704,8 @@ async function handleAccountSelected(accountId: string) {
         mcpUsed: response.metadata?.mcpUsed || response.mcp_used,
         mcpType: response.metadata?.mcpType
       },
-      suggestedLinks: response.suggestedLinks
+      suggestedLinks: response.suggestedLinks,
+      suggestedPrompts: response.suggestedPrompts
     })
 
     nextTick(() => scrollToBottom())

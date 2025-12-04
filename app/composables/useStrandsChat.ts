@@ -14,7 +14,8 @@ function convertThreadMessagesToChatMessages(threadMessages: ThreadChatMessage[]
     links: msg.links || [],
     sender: msg.role === 'user' ? 'user' : 'bot',
     metadata: msg.metadata || {},
-    suggestedLinks: msg.suggestedLinks || []
+    suggestedLinks: msg.suggestedLinks || [],
+    suggestedPrompts: msg.suggestedPrompts || []
   }))
 }
 
@@ -27,8 +28,15 @@ function convertChatMessageToThreadMessage(chatMsg: ChatMessage): Omit<ThreadCha
     content: chatMsg.text,
     metadata: chatMsg.metadata,
     links: chatMsg.links,
-    suggestedLinks: chatMsg.suggestedLinks
+    suggestedLinks: chatMsg.suggestedLinks,
+    suggestedPrompts: chatMsg.suggestedPrompts
   }
+}
+
+export interface SuggestedPrompt {
+  text: string
+  type: 'question' | 'action' | 'clarification'
+  priority: number
 }
 
 export interface ChatMessage {
@@ -41,6 +49,7 @@ export interface ChatMessage {
     mcpType?: 'permanent' | 'temporary'
   }
   suggestedLinks?: any[]
+  suggestedPrompts?: SuggestedPrompt[]
 }
 
 export interface StrandsChatOptions {
@@ -235,12 +244,15 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
           references?: Array<{ document: string }>
           disambiguation?: any
           suggestedLinks?: any[]
+          suggestedPrompts?: SuggestedPrompt[]
           error?: string | null
         }
       }>(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: requestData,
+        // Match backend timeout (5 minutes) - Strands MCP operations can take 2+ minutes
+        timeout: 300000
       })
 
       // Update session ID if provided
@@ -298,7 +310,8 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
         links: uniqueLinks,
         sender: 'bot',
         metadata: data.data.metadata || {},
-        suggestedLinks: data.data.suggestedLinks || []
+        suggestedLinks: data.data.suggestedLinks || [],
+        suggestedPrompts: data.data.suggestedPrompts || []
       }
 
       messages.value.push(botMessage)
@@ -310,8 +323,20 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
       }
     } catch (error: any) {
       console.error('Strands API error:', error)
+
+      // Provide more helpful error messages based on error type
+      let errorText = 'Sorry, something went wrong. The GHOST Chat service may be unavailable.'
+
+      if (error.name === 'AbortError' || error.code === 'ETIMEDOUT' || error.message?.includes('timeout')) {
+        errorText = 'The request timed out. This can happen with complex queries or when accessing accounts for the first time (MCP startup can take 2+ minutes). Please try your query again.'
+      } else if (error.statusCode === 503) {
+        errorText = 'The GHOST Chat service is temporarily unavailable. Please try again in a moment.'
+      } else if (error.data?.error?.message) {
+        errorText = error.data.error.message
+      }
+
       const errorMessage: ChatMessage = {
-        text: error.data?.error?.message || 'Sorry, something went wrong. The GHOST Chat service may be unavailable.',
+        text: errorText,
         links: [],
         sender: 'bot',
         metadata: {}
