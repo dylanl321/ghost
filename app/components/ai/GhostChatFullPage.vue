@@ -64,14 +64,18 @@
         </div>
       </div>
 
-      <!-- Typing Indicator -->
+      <!-- Ghost Loading Indicator -->
       <div v-if="isLoading" class="message bot">
-        <div class="message-content">
-          <div class="typing">
-            <div class="typing-dot"></div>
-            <div class="typing-dot"></div>
-            <div class="typing-dot"></div>
+        <div class="message-content ghost-loading-container">
+          <div class="ghost-loading">
+            <UIcon name="i-fa6-solid-ghost" class="ghost-icon" />
+            <div class="ghost-dots">
+              <div class="ghost-dot"></div>
+              <div class="ghost-dot"></div>
+              <div class="ghost-dot"></div>
+            </div>
           </div>
+          <span class="ghost-loading-text">GHOST is thinking...</span>
         </div>
       </div>
     </div>
@@ -144,12 +148,17 @@
 </template>
 
 <script setup lang="ts">
+import { useChatThreadsStore } from '~/stores/useChatThreadsStore'
+
 // Use the markdown link parser composable
 const { parseMarkdownWithLinks, handleLinkClick } = useMarkdownLinkParser()
 
 // Get user's favorite and recent accounts for personalized prompts
 const { favorites } = useFavoriteAccounts()
 const { recentAccounts } = useRecentAccounts()
+
+// Get the threads store to persist messages
+const threadsStore = useChatThreadsStore()
 
 // Use account mention composable
 const {
@@ -168,7 +177,7 @@ const {
   setMentionIndex
 } = useChatAccountMention()
 
-// Use shared chat logic
+// Use shared chat logic with thread persistence
 const {
   messages: chatMessages,
   isLoading,
@@ -180,7 +189,9 @@ const {
   handleDisambiguationCancel,
   scrollTrigger
 } = useStrandsChat({
-  initialGreeting: "Hello! I'm GHOST Chat, your AI assistant for AWS operations. I can help you with:\n\n• **Cost Analysis** - Query spending and forecasts\n• **Configuration** - Look up resource configurations\n• **Security** - Check security findings and compliance\n• **Resources** - List and analyze AWS resources\n\nClick any example below to get started, or ask your own question. For best results, be explicit about AWS account IDs."
+  initialGreeting: "Hello! I'm GHOST Chat, your AI assistant for AWS operations. I can help you with:\n\n• **Cost Analysis** - Query spending and forecasts\n• **Configuration** - Look up resource configurations\n• **Security** - Check security findings and compliance\n• **Resources** - List and analyze AWS resources\n\nClick any example below to get started, or ask your own question. For best results, be explicit about AWS account IDs.",
+  threadsStore: threadsStore,
+  loadMessagesFromThread: !!threadsStore.currentThread
 })
 
 // Convert to component message format
@@ -491,21 +502,63 @@ onMounted(() => {
   @apply text-sm text-gray-700 dark:text-gray-300;
 }
 
-.typing {
-  @apply flex justify-start gap-1 py-2;
+/* Ghost Loading Animation */
+.ghost-loading-container {
+  @apply flex flex-col items-start gap-2;
 }
 
-.typing-dot {
-  @apply w-2 h-2 bg-gray-400 rounded-full animate-bounce;
-  animation-delay: 0.1s;
+.ghost-loading {
+  @apply flex items-center gap-3;
 }
 
-.typing-dot:nth-child(2) {
+.ghost-icon {
+  @apply w-6 h-6 text-emerald-400;
+  animation: ghostFloat 2s ease-in-out infinite;
+}
+
+.ghost-dots {
+  @apply flex gap-1;
+}
+
+.ghost-dot {
+  @apply w-2 h-2 bg-emerald-400 rounded-full;
+  animation: ghostDotPulse 1.4s ease-in-out infinite;
+}
+
+.ghost-dot:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.ghost-dot:nth-child(2) {
   animation-delay: 0.2s;
 }
 
-.typing-dot:nth-child(3) {
-  animation-delay: 0.3s;
+.ghost-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+.ghost-loading-text {
+  @apply text-xs text-gray-500 dark:text-gray-400 italic;
+}
+
+@keyframes ghostFloat {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes ghostDotPulse {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
 }
 
 .chat-input-container {

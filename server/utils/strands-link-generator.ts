@@ -25,11 +25,72 @@ interface ParsedEntities {
 
 /**
  * Extract account IDs from text (12-digit AWS account numbers)
+ * NOTE: This may include both commercial and GovCloud IDs
  */
 function extractAccountIds(text: string): string[] {
   const accountRegex = /\b\d{12}\b/g
   const matches = text.match(accountRegex) || []
   return [...new Set(matches)] // Remove duplicates
+}
+
+/**
+ * Get account data to filter commercial vs GovCloud IDs
+ * Returns a map of accountId -> account data
+ */
+async function getAccountDataMap(): Promise<Map<string, any>> {
+  try {
+    const { getAllAccounts } = await import('./accounts-consolidated')
+    const accounts = await getAllAccounts()
+
+    const accountMap = new Map()
+    for (const account of accounts) {
+      // Map both commercial and GovCloud IDs to the account
+      if (account.accountId) {
+        accountMap.set(account.accountId, account)
+      }
+      if (account.awsStandardAccountID) {
+        accountMap.set(account.awsStandardAccountID, account)
+      }
+      if (account.awsGovCloudAccountID) {
+        accountMap.set(account.awsGovCloudAccountID, account)
+      }
+    }
+
+    return accountMap
+  } catch (error) {
+    console.error('[Link Generator] Error loading account data:', error)
+    return new Map()
+  }
+}
+
+/**
+ * Filter account IDs to prefer commercial IDs over GovCloud
+ * If an extracted ID is a GovCloud ID, replace it with the corresponding commercial ID
+ */
+async function filterToCommercialAccountIds(accountIds: string[]): Promise<string[]> {
+  if (accountIds.length === 0) return []
+
+  const accountMap = await getAccountDataMap()
+  const commercialIds = new Set<string>()
+
+  for (const id of accountIds) {
+    const account = accountMap.get(id)
+    if (account) {
+      // Prefer commercial ID (accountId or awsStandardAccountID)
+      const commercialId = account.accountId || account.awsStandardAccountID
+      if (commercialId) {
+        commercialIds.add(commercialId)
+      } else {
+        // No commercial ID found, keep the original
+        commercialIds.add(id)
+      }
+    } else {
+      // Account not found in our data, keep the original
+      commercialIds.add(id)
+    }
+  }
+
+  return Array.from(commercialIds)
 }
 
 /**
@@ -169,12 +230,30 @@ function extractResourceTypes(text: string): string[] {
 
 /**
  * Parse query and response to extract entities
+ * @param query - User query
+ * @param response - Strands response
+ * @param metadata - Optional metadata with pre-identified account ID
  */
-function parseEntities(query: string, response: string): ParsedEntities {
+async function parseEntities(
+  query: string,
+  response: string,
+  metadata?: { accountId?: string }
+): Promise<ParsedEntities> {
   const combinedText = `${query} ${response}`
 
+  // Extract account IDs from text
+  let accountIds = extractAccountIds(combinedText)
+
+  // Filter to use commercial IDs only
+  accountIds = await filterToCommercialAccountIds(accountIds)
+
+  // If metadata provides an account ID, prioritize it (add to front if not already present)
+  if (metadata?.accountId && !accountIds.includes(metadata.accountId)) {
+    accountIds.unshift(metadata.accountId)
+  }
+
   return {
-    accountIds: extractAccountIds(combinedText),
+    accountIds,
     dateRange: parseDateRange(query),
     services: extractServices(combinedText),
     resourceTypes: extractResourceTypes(combinedText),
@@ -405,9 +484,14 @@ function buildUrlFromSchema(page: PageSchema, entities: ParsedEntities): string 
 /**
  * Schema-based smart link generation (NEW APPROACH)
  * Uses page schema and keyword matching to generate intelligent links
+ * @param metadata - Optional metadata with account ID from Strands response
  */
-export function generateSmartLinksFromSchema(query: string, response: string): SuggestedLink[] {
-  const entities = parseEntities(query, response)
+export async function generateSmartLinksFromSchema(
+  query: string,
+  response: string,
+  metadata?: { accountId?: string }
+): Promise<SuggestedLink[]> {
+  const entities = await parseEntities(query, response, metadata)
   const combinedText = `${query} ${response}`.toLowerCase()
 
   // Find matching pages from schema
@@ -445,11 +529,16 @@ export function generateSmartLinksFromSchema(query: string, response: string): S
 
 /**
  * Main function to generate smart links based on query and response
- * UPDATED: Now uses schema-based approach by default
+ * UPDATED: Now uses schema-based approach by default and filters to commercial account IDs
+ * @param metadata - Optional metadata with account ID from Strands response
  */
-export function generateSmartLinks(query: string, response: string): SuggestedLink[] {
+export async function generateSmartLinks(
+  query: string,
+  response: string,
+  metadata?: { accountId?: string }
+): Promise<SuggestedLink[]> {
   // Use new schema-based approach
-  const schemaLinks = generateSmartLinksFromSchema(query, response)
+  const schemaLinks = await generateSmartLinksFromSchema(query, response, metadata)
 
   // If we get good results from schema, return those
   if (schemaLinks.length > 0) {
@@ -457,7 +546,7 @@ export function generateSmartLinks(query: string, response: string): SuggestedLi
   }
 
   // Fallback to old hardcoded approach if needed
-  const entities = parseEntities(query, response)
+  const entities = await parseEntities(query, response, metadata)
   const intents = detectIntent(query)
   const links: SuggestedLink[] = []
 

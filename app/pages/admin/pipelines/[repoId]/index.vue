@@ -258,6 +258,7 @@ import PipelinesAuthorBadge from '~/components/pipelines/AuthorBadge.vue'
 
 // Admin-only access control
 definePageMeta({
+  layout: 'admin',
   middleware: 'auth-permission',
   permission: 'admin.logs'
 })

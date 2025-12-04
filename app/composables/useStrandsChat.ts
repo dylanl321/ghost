@@ -3,6 +3,34 @@
  * Used by: StrandsChatbot, StrandsChatPopup, GhostChatFullPage
  */
 
+import type { ChatMessage as ThreadChatMessage } from '~/shared/types/chat-threads'
+
+/**
+ * Convert thread messages to component chat messages
+ */
+function convertThreadMessagesToChatMessages(threadMessages: ThreadChatMessage[]): ChatMessage[] {
+  return threadMessages.map(msg => ({
+    text: msg.content,
+    links: msg.links || [],
+    sender: msg.role === 'user' ? 'user' : 'bot',
+    metadata: msg.metadata || {},
+    suggestedLinks: msg.suggestedLinks || []
+  }))
+}
+
+/**
+ * Convert component chat message to thread message format
+ */
+function convertChatMessageToThreadMessage(chatMsg: ChatMessage): Omit<ThreadChatMessage, 'messageId' | 'timestamp'> {
+  return {
+    role: chatMsg.sender === 'user' ? 'user' : 'assistant',
+    content: chatMsg.text,
+    metadata: chatMsg.metadata,
+    links: chatMsg.links,
+    suggestedLinks: chatMsg.suggestedLinks
+  }
+}
+
 export interface ChatMessage {
   text: string
   links: string[]
@@ -18,26 +46,32 @@ export interface ChatMessage {
 export interface StrandsChatOptions {
   initialGreeting?: string
   endpoint?: string
+  threadsStore?: any // Optional Pinia store for persisting messages
+  loadMessagesFromThread?: boolean // If true, load messages from thread instead of using initialGreeting
 }
 
 export function useStrandsChat(options: StrandsChatOptions = {}) {
   const {
     initialGreeting = "Hello! I'm GHOST Chat, your AI assistant for AWS operations. I can help you with cost analysis, configuration lookups, security findings, and more.\n\nFor best results, be explicit about AWS account IDs in your queries.",
-    endpoint = '/api/strands/chat'
+    endpoint = '/api/strands/chat',
+    threadsStore = null,
+    loadMessagesFromThread = false
   } = options
 
-  // State
+  // State - Initialize from thread if available, otherwise use greeting
   const messages = ref<ChatMessage[]>(
-    initialGreeting ? [{
-      text: initialGreeting,
-      links: [],
-      sender: 'bot',
-      metadata: {}
-    }] : []
+    loadMessagesFromThread && threadsStore?.currentThread?.messages
+      ? convertThreadMessagesToChatMessages(threadsStore.currentThread.messages)
+      : initialGreeting ? [{
+          text: initialGreeting,
+          links: [],
+          sender: 'bot',
+          metadata: {}
+        }] : []
   )
 
   const isLoading = ref(false)
-  const sessionId = ref<string | undefined>(undefined)
+  const sessionId = ref<string | undefined>(threadsStore?.currentThread?.sessionId || undefined)
   const scrollTrigger = ref(0) // Increment to trigger scroll in components
 
   // Detect user's timezone
@@ -49,6 +83,33 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
   const showDisambiguation = ref(false)
   const disambiguationData = ref<any>(null)
   const pendingMessage = ref<string>('')
+
+  // Watch for thread changes and reload messages when switching threads
+  if (threadsStore) {
+    watch(
+      () => threadsStore.activeThreadId,
+      (newThreadId, oldThreadId) => {
+        // Only reload if switching to a different thread
+        if (newThreadId && newThreadId !== oldThreadId && threadsStore.currentThread) {
+          const thread = threadsStore.currentThread
+          if (thread.messages.length > 0) {
+            // Thread has messages - reload them
+            messages.value = convertThreadMessagesToChatMessages(thread.messages)
+            sessionId.value = thread.sessionId
+          } else {
+            // New empty thread - show welcome message
+            messages.value = initialGreeting ? [{
+              text: initialGreeting,
+              links: [],
+              sender: 'bot',
+              metadata: {}
+            }] : []
+            sessionId.value = thread.sessionId
+          }
+        }
+      }
+    )
+  }
 
   // Build conversation history from messages
   const getConversationHistory = () => {
@@ -101,6 +162,12 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
       // Update session ID if provided
       if (data.data?.sessionId) {
         sessionId.value = data.data.sessionId
+
+        // Update thread with session ID if using threads store
+        if (threadsStore?.activeThreadId && threadsStore.currentThread) {
+          // Store session ID in thread (we'll update the thread metadata)
+          threadsStore.currentThread.sessionId = data.data.sessionId
+        }
       }
 
       // Check for disambiguation first
@@ -146,6 +213,11 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
 
       messages.value.push(botMessage)
       scrollTrigger.value++ // Trigger scroll after bot message
+
+      // Save bot message to thread if using threads store
+      if (threadsStore) {
+        await threadsStore.addMessage(convertChatMessageToThreadMessage(botMessage))
+      }
     } catch (error: any) {
       console.error('Strands API error:', error)
       const errorMessage: ChatMessage = {
@@ -156,6 +228,11 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
       }
       messages.value.push(errorMessage)
       scrollTrigger.value++ // Trigger scroll after error message
+
+      // Save error message to thread if using threads store
+      if (threadsStore) {
+        await threadsStore.addMessage(convertChatMessageToThreadMessage(errorMessage))
+      }
     } finally {
       isLoading.value = false
     }
@@ -173,6 +250,12 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
     }
     messages.value.push(userMessage)
     scrollTrigger.value++ // Trigger scroll after user message
+
+    // Save user message to thread if using threads store
+    // The store will auto-create a thread if one doesn't exist
+    if (threadsStore) {
+      await threadsStore.addMessage(convertChatMessageToThreadMessage(userMessage))
+    }
 
     isLoading.value = true
     await executeQuery(userInput.trim(), mentionedAccount)

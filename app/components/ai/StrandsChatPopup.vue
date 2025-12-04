@@ -215,10 +215,15 @@
 </template>
 
 <script setup lang="ts">
+import { useChatThreadsStore } from '~/stores/useChatThreadsStore'
+
 // Use markdown link parser composable
 const { parseMarkdownWithLinks, handleLinkClick } = useMarkdownLinkParser()
 
-// Use shared chat logic
+// Get the threads store to persist messages
+const threadsStore = useChatThreadsStore()
+
+// Use shared chat logic with thread persistence
 const {
   messages: chatMessages,
   isLoading,
@@ -231,7 +236,9 @@ const {
   clearChat: clearChatMessages,
   scrollTrigger
 } = useStrandsChat({
-  initialGreeting: "" // No initial greeting for popup
+  initialGreeting: "", // No initial greeting for popup
+  threadsStore: threadsStore,
+  loadMessagesFromThread: !!threadsStore.currentThread
 })
 
 // UI state (specific to popup)
@@ -270,8 +277,9 @@ const exampleQuestions = [
   "Analyze security findings for monitoring account"
 ]
 
-// Check if this is first visit
-onMounted(() => {
+// Initialize on mount
+onMounted(async () => {
+  // Show hint for first-time users
   const hasVisited = localStorage.getItem('strands-popup-visited')
   if (!hasVisited) {
     showHint.value = true
@@ -282,37 +290,15 @@ onMounted(() => {
     }, 5000)
   }
 
-  // Load conversation from local storage (persists across page navigation and sessions)
-  const saved = localStorage.getItem('strands-popup-chat')
-  if (saved) {
-    try {
-      const parsed = JSON.parse(saved)
-      if (parsed.messages && parsed.messages.length > 0) {
-        // Convert saved messages back to chat format
-        chatMessages.value = parsed.messages.map((msg: PopupMessage) => ({
-          text: msg.content,
-          links: [],
-          sender: msg.role === 'user' ? 'user' as const : 'bot' as const,
-          metadata: msg.metadata || {},
-          suggestedLinks: msg.suggestedLinks || []
-        }))
-      }
-      if (parsed.sessionId) {
-        sessionId.value = parsed.sessionId
-      }
-    } catch (e) {
-      // Ignore parse errors
-    }
+  // Load active thread from store if exists
+  // This ensures popup shows the same conversation as the /chat page
+  if (threadsStore.activeThreadId && !threadsStore.currentThread) {
+    await threadsStore.loadThread(threadsStore.activeThreadId)
   }
-})
 
-// Save conversation to local storage (persists across pages and sessions)
-watch(messages, (newMessages) => {
-  localStorage.setItem('strands-popup-chat', JSON.stringify({
-    messages: newMessages,
-    sessionId: sessionId.value
-  }))
-}, { deep: true })
+  // Clean up old localStorage-based persistence (migration)
+  localStorage.removeItem('strands-popup-chat')
+})
 
 // Toggle chat window
 function toggleChat() {
@@ -323,10 +309,15 @@ function toggleChat() {
 }
 
 // Clear chat
-function clearChat() {
-  clearChatMessages()
+async function clearChat() {
+  if (threadsStore.activeThreadId) {
+    // Clear messages from the thread in database
+    await threadsStore.clearThread(threadsStore.activeThreadId)
+  } else {
+    // No thread yet, just clear local messages
+    clearChatMessages()
+  }
   errorMessage.value = ''
-  localStorage.removeItem('strands-popup-chat')
 }
 
 // Send example question

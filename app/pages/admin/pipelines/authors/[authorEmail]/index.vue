@@ -153,6 +153,7 @@ import PipelinesAuthorContactIcons from '~/components/pipelines/AuthorContactIco
 import PipelinesTimeline from '~/components/pipelines/PipelineTimeline.vue'
 
 definePageMeta({
+  layout: 'admin',
   middleware: ['auth', 'auth-permission'],
   permission: 'admin'
 })

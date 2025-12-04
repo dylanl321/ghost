@@ -148,15 +148,15 @@ export interface ShareThreadResponse {
 }
 
 /**
- * Export format options
+ * Export format options for chat threads
  */
-export type ExportFormat = 'json' | 'markdown'
+export type ChatExportFormat = 'json' | 'markdown'
 
 /**
  * Request to export a thread
  */
 export interface ExportThreadRequest {
-  format: ExportFormat
+  format: ChatExportFormat
 }
 
 /**

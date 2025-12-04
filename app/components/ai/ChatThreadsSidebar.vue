@@ -143,14 +143,15 @@
           </div>
         </div>
 
-        <!-- Loading Indicator -->
-        <div v-if="isLoading" class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+        <!-- Ghost Loading Indicator -->
+        <div v-if="isLoading" class="ghost-loading-sidebar">
+          <UIcon name="i-fa6-solid-ghost" class="ghost-icon-sidebar" />
           <div class="flex gap-1">
-            <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
-            <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
-            <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
+            <div class="ghost-dot-sidebar"></div>
+            <div class="ghost-dot-sidebar"></div>
+            <div class="ghost-dot-sidebar"></div>
           </div>
-          <span class="text-sm">Thinking...</span>
+          <span class="text-sm text-gray-500 dark:text-gray-400 italic">GHOST is thinking...</span>
         </div>
       </div>
 
@@ -732,5 +733,52 @@ function handleDisambiguationCancel() {
 
 .mention-empty-sidebar {
   @apply px-3 py-2 text-xs text-gray-500 dark:text-gray-400 text-center;
+}
+
+/* Ghost Loading Animation for Sidebar */
+.ghost-loading-sidebar {
+  @apply flex items-center gap-2 p-3 bg-gray-50 dark:bg-slate-800 rounded-lg;
+}
+
+.ghost-icon-sidebar {
+  @apply w-5 h-5 text-emerald-400;
+  animation: ghostFloat 2s ease-in-out infinite;
+}
+
+.ghost-dot-sidebar {
+  @apply w-2 h-2 bg-emerald-400 rounded-full;
+  animation: ghostDotPulse 1.4s ease-in-out infinite;
+}
+
+.ghost-dot-sidebar:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.ghost-dot-sidebar:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.ghost-dot-sidebar:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes ghostFloat {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes ghostDotPulse {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
 }
 </style>

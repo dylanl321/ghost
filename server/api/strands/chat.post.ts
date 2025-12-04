@@ -438,11 +438,17 @@ ${getSchemaForAI()}
     const metadata = extractStrandsMetadata(strandsResponse)
 
     // Generate smart links based on query and response
-    const suggestedLinks = generateSmartLinks(message, strandsResponse.result || '')
+    // Pass the account ID from metadata to ensure we use commercial IDs in links
+    const suggestedLinks = await generateSmartLinks(
+      message,
+      strandsResponse.result || '',
+      { accountId: metadata.accountId }
+    )
 
     logger.info('[Strands Chat API] Generated smart links', {
       linkCount: suggestedLinks.length,
-      linkTypes: suggestedLinks.map(l => l.type)
+      linkTypes: suggestedLinks.map(l => l.type),
+      accountId: metadata.accountId
     })
 
     // CRITICAL: Extract sessionId from strandsResponse.sessionId (not from metadata or account_id)

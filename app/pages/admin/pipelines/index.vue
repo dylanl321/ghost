@@ -240,6 +240,7 @@ import PipelinesAuthorSelector from '~/components/pipelines/AuthorSelector.vue'
 
 // Admin-only access control
 definePageMeta({
+  layout: 'admin',
   middleware: 'auth-permission',
   permission: 'admin.logs'
 })

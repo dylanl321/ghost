@@ -4,7 +4,7 @@
  */
 
 import { scanItems, queryItems } from "./dynamodb";
-import type { ChatThread, ChatMessage } from "~/shared/types/chat-threads";
+import type { ChatThread, ChatMessage, ChatMetrics } from "~/shared/types/chat-threads";
 import { logger } from "./logger";
 import {
   getTableName,
@@ -43,39 +43,6 @@ function periodToMs(period: MetricsPeriod): number | null {
     default:
       return 7 * 24 * 60 * 60 * 1000; // Default to 7 days
   }
-}
-
-/**
- * Chat metrics interface
- */
-export interface ChatMetrics {
-  period: MetricsPeriod;
-  startDate: string;
-  endDate: string;
-  totalThreads: number;
-  totalMessages: number;
-  totalQueries: number; // User messages only
-  uniqueUsers: number;
-  averageMessagesPerThread: number;
-  averageResponseTime?: number; // If available from metadata
-  mcpTypeDistribution: {
-    permanent: number;
-    temporary: number;
-    unknown: number;
-  };
-  topAccounts: Array<{
-    accountId: string;
-    queryCount: number;
-  }>;
-  topUsers: Array<{
-    userId: string;
-    threadCount: number;
-    messageCount: number;
-  }>;
-  errorRate: number; // Percentage of failed requests
-  sharedThreadsCount: number;
-  pinnedThreadsCount: number;
-  archivedThreadsCount: number;
 }
 
 /**

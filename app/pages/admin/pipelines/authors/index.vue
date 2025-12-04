@@ -146,6 +146,7 @@ import { getAuthorInitials } from '~/utils/author-helpers'
 import PipelinesAuthorContactIcons from '~/components/pipelines/AuthorContactIcons.vue'
 
 definePageMeta({
+  layout: 'admin',
   middleware: 'auth-permission',
   permission: 'admin.logs'
 })

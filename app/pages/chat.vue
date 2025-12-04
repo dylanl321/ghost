@@ -140,7 +140,6 @@
       <!-- Chat Component -->
       <div class="flex-1 min-h-0">
         <GhostChatFullPage
-          :key="threadsStore.activeThreadId"
           @message-sent="handleMessageSent"
         />
       </div>
@@ -236,6 +235,7 @@ onMounted(async () => {
   if (threadsStore.activeThreadId) {
     await threadsStore.loadThread(threadsStore.activeThreadId)
   }
+  // Note: If no active thread, one will be auto-created when the user sends their first message
 })
 
 // Handle thread selection
