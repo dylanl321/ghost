@@ -461,7 +461,7 @@ const navigationItems = computed(() => {
     },
     {
       label: "AI Assistant",
-      to: "/strands-chat",
+      to: "/chat",
       icon: "i-heroicons-sparkles",
     },
     // Always include Pipeline Analytics in structure to avoid hydration mismatch

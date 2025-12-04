@@ -78,7 +78,7 @@ const sideNavRef = ref()
 const isExplorerPage = computed(() =>
   route.path === '/account/explorer' ||
   route.path === '/reports/datasets' ||
-  route.path === '/strands-chat'
+  route.path === '/chat'
 )
 
 // Mobile menu handler

@@ -71,7 +71,7 @@
         <!-- Link to Full Page -->
         <div class="mt-3">
           <NuxtLink
-            to="/strands-chat"
+            to="/chat"
             class="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
             @click="chatSidebar.close()"
           >
@@ -156,21 +156,56 @@
 
       <!-- Input Form -->
       <div class="p-4 border-t border-gray-200 dark:border-slate-700">
-        <form @submit.prevent="handleSubmit" class="flex gap-2">
-          <UInput
-            v-model="inputValue"
-            placeholder="Ask about AWS costs, config, security..."
-            :disabled="isLoading"
-            class="flex-1"
-            size="lg"
-          />
-          <UButton
-            type="submit"
-            icon="i-heroicons-paper-airplane"
-            :disabled="isLoading || !inputValue.trim()"
-            color="purple"
-            size="lg"
-          />
+        <form @submit.prevent="handleSubmit" class="flex flex-col gap-2">
+          <div class="flex gap-2 relative">
+            <!-- Account Mention Dropdown -->
+            <div
+              v-if="showMentionDropdown"
+              class="mention-dropdown-sidebar"
+            >
+              <div
+                v-for="(account, index) in filteredAccounts"
+                :key="account.accountId"
+                :class="['mention-item-sidebar', { 'mention-item-selected': index === selectedMentionIndex }]"
+                @click="handleMentionClick(account)"
+                @mouseenter="setMentionIndex(index)"
+              >
+                <UIcon name="i-heroicons-building-library" class="w-4 h-4 text-blue-500 flex-shrink-0" />
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium text-gray-900 dark:text-white truncate">
+                    {{ getAccountDisplay(account) }}
+                  </div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400 truncate">
+                    {{ getAccountSubtitle(account) }}
+                  </div>
+                </div>
+              </div>
+              <div v-if="filteredAccounts.length === 0" class="mention-empty-sidebar">
+                No accounts found
+              </div>
+            </div>
+
+            <input
+              v-model="inputValue"
+              placeholder="Ask about AWS costs, config... (use @ to mention accounts)"
+              :disabled="isLoading"
+              class="sidebar-input"
+              ref="inputRef"
+              @input="handleInputUpdate"
+              @keydown="handleKeyDown"
+            />
+            <UButton
+              type="submit"
+              icon="i-heroicons-paper-airplane"
+              :disabled="isLoading || !inputValue.trim()"
+              color="purple"
+              size="lg"
+            />
+          </div>
+          <p v-if="selectedAccountForMessage" class="text-xs text-gray-600 dark:text-gray-400 flex items-center gap-1 px-2">
+            <UIcon name="i-heroicons-building-library" class="w-3 h-3 text-blue-500" />
+            Context: {{ getAccountDisplay(selectedAccountForMessage) }}
+          </p>
         </form>
       </div>
     </div>
@@ -222,11 +257,29 @@ const threadsStore = useChatThreadsStore()
 const { parseMarkdownWithLinks, handleLinkClick } = useMarkdownLinkParser()
 const toast = useToast()
 
+// Use account mention composable
+const {
+  showMentionDropdown,
+  filteredAccounts,
+  selectedAccountForMessage,
+  selectedMentionIndex,
+  handleInputChange,
+  selectAccount,
+  navigateMentions,
+  selectHighlightedAccount,
+  closeMentionDropdown,
+  clearSelectedAccount,
+  getAccountDisplay,
+  getAccountSubtitle,
+  setMentionIndex
+} = useChatAccountMention()
+
 // Chat state
 const messages = ref<any[]>([])
 const inputValue = ref('')
 const isLoading = ref(false)
 const chatBoxRef = ref<HTMLElement | null>(null)
+const inputRef = ref<HTMLElement | null>(null)
 const sessionId = ref<string | undefined>(undefined)
 const userTimezone = ref<string>(Intl.DateTimeFormat().resolvedOptions().timeZone)
 
@@ -397,12 +450,64 @@ function scrollToBottom() {
   }
 }
 
+// Handle input updates for @ mention detection
+function handleInputUpdate(event: Event) {
+  const target = event.target as HTMLInputElement
+  const cursorPosition = target.selectionStart || 0
+  handleInputChange(inputValue.value, cursorPosition)
+}
+
+// Handle keyboard events for mention navigation
+function handleKeyDown(event: KeyboardEvent) {
+  if (!showMentionDropdown.value) return
+
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    navigateMentions('down')
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    navigateMentions('up')
+  } else if (event.key === 'Enter' && showMentionDropdown.value) {
+    event.preventDefault()
+    const newValue = selectHighlightedAccount(inputValue.value)
+    if (newValue) {
+      inputValue.value = newValue
+      nextTick(() => {
+        if (inputRef.value) {
+          inputRef.value.focus()
+          const length = inputValue.value.length
+          inputRef.value.setSelectionRange(length, length)
+        }
+      })
+    }
+  } else if (event.key === 'Escape') {
+    closeMentionDropdown()
+  }
+}
+
+// Handle mention click
+function handleMentionClick(account: any) {
+  const newValue = selectAccount(account, inputValue.value)
+  inputValue.value = newValue
+  nextTick(() => {
+    if (inputRef.value) {
+      inputRef.value.focus()
+      const length = inputValue.value.length
+      inputRef.value.setSelectionRange(length, length)
+    }
+  })
+}
+
+
 // Handle message submission
 async function handleSubmit() {
   if (!inputValue.value.trim() || isLoading.value) return
 
   const userMessage = inputValue.value.trim()
+  const mentionedAccount = selectedAccountForMessage.value
+
   inputValue.value = ''
+  clearSelectedAccount()
 
   // Add user message to UI
   messages.value.push({
@@ -423,13 +528,23 @@ async function handleSubmit() {
     })
 
     // Call Strands API
+    const requestBody: any = {
+      message: userMessage,
+      sessionId: sessionId.value,
+      timezone: userTimezone.value
+    }
+
+    // Add mentioned account context if available
+    if (mentionedAccount) {
+      requestBody.mentionedAccount = {
+        accountId: mentionedAccount.accountId,
+        accountName: getAccountDisplay(mentionedAccount)
+      }
+    }
+
     const response = await $fetch('/api/strands/chat', {
       method: 'POST',
-      body: {
-        message: userMessage,
-        sessionId: sessionId.value,
-        timezone: userTimezone.value
-      }
+      body: requestBody
     })
 
     // Update session ID
@@ -595,5 +710,27 @@ function handleDisambiguationCancel() {
 
 :deep(.prose-invert a) {
   @apply text-blue-300 hover:text-blue-200;
+}
+
+/* Sidebar Input Styling */
+.sidebar-input {
+  @apply flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm;
+}
+
+/* Mention Dropdown Styles for Sidebar */
+.mention-dropdown-sidebar {
+  @apply absolute bottom-full left-0 right-14 mb-2 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg shadow-lg max-h-48 overflow-y-auto z-[100];
+}
+
+.mention-item-sidebar {
+  @apply flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-600 transition-colors border-b border-gray-200 dark:border-slate-600 last:border-b-0;
+}
+
+.mention-item-selected {
+  @apply bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/30;
+}
+
+.mention-empty-sidebar {
+  @apply px-3 py-2 text-xs text-gray-500 dark:text-gray-400 text-center;
 }
 </style>

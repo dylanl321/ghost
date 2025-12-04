@@ -222,7 +222,11 @@ export default defineEventHandler(handleAsync(async (event) => {
     preferGovcloud
   } = body
 
+  const requestStartTime = Date.now()
+  const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(7)}`
+
   logger.info('[Strands Chat API] Request received', {
+    requestId,
     messageLength: message?.length,
     historyLength: conversationHistory.length,
     sessionId,
@@ -230,6 +234,24 @@ export default defineEventHandler(handleAsync(async (event) => {
     timezone,
     region,
     accountIdentifier
+  })
+
+  // Log full request payload for admin debugging
+  logger.info(`[Strands Chat Debug] ${requestId}`, {
+    type: 'REQUEST',
+    requestId,
+    timestamp: new Date().toISOString(),
+    userId: event.context.auth?.user?.email || 'unknown',
+    payload: {
+      message,
+      conversationHistory: conversationHistory.length,
+      sessionId,
+      mcpId,
+      timezone,
+      region,
+      accountIdentifier,
+      preferGovcloud
+    }
   })
 
   // Validate input
@@ -334,12 +356,37 @@ ${getSchemaForAI()}
       preferGovcloud
     })
 
+    const responseTime = Date.now() - requestStartTime
+
     logger.info('[Strands Chat API] Response received', {
+      requestId,
       accountId: strandsResponse.account_id || 'unknown',
       mcpUsed: strandsResponse.mcp_used || 'unknown',
       resultLength: strandsResponse.result?.length || 0,
       hasError: !!strandsResponse.error,
-      hasDisambiguation: !!strandsResponse.disambiguation
+      hasDisambiguation: !!strandsResponse.disambiguation,
+      responseTimeMs: responseTime
+    })
+
+    // Log full response payload for admin debugging
+    logger.info(`[Strands Chat Debug] ${requestId}`, {
+      type: 'RESPONSE',
+      requestId,
+      timestamp: new Date().toISOString(),
+      responseTimeMs: responseTime,
+      userId: event.context.auth?.user?.email || 'unknown',
+      metadata: {
+        accountId: strandsResponse.account_id,
+        mcpUsed: strandsResponse.mcp_used,
+        mcpType: strandsResponse.mcp_type,
+        sessionId: strandsResponse.sessionId
+      },
+      payload: {
+        resultLength: strandsResponse.result?.length || 0,
+        hasError: !!strandsResponse.error,
+        hasDisambiguation: !!strandsResponse.disambiguation,
+        error: strandsResponse.error || null
+      }
     })
 
     // Check for disambiguation first (user needs to select account)
@@ -414,7 +461,24 @@ ${getSchemaForAI()}
     return sendSuccess(event, response)
 
   } catch (error: any) {
+    const responseTime = Date.now() - requestStartTime
+
     logger.error('[Strands Chat API] Error:', error)
+
+    // Log error for admin debugging
+    logger.error(`[Strands Chat Debug] ${requestId}`, {
+      type: 'ERROR',
+      requestId,
+      timestamp: new Date().toISOString(),
+      responseTimeMs: responseTime,
+      userId: event.context.auth?.user?.email || 'unknown',
+      error: {
+        message: error.message,
+        statusCode: error.statusCode,
+        code: error.code,
+        stack: error.stack?.split('\n').slice(0, 3).join('\n') // First 3 lines of stack
+      }
+    })
 
     // Handle Strands-specific errors
     if (error instanceof StrandsClientError) {

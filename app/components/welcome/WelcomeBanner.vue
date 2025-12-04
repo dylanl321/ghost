@@ -64,6 +64,7 @@ const siteConfigStore = useSiteConfigStore()
 
 const visible = ref(false)
 const hasIncrementedThisSession = ref(false)
+const isSettingVisibility = ref(false) // Prevents watcher from overriding during increment
 const isHighlighted = ref(false)
 
 // Highlight effect when UI settings change
@@ -86,8 +87,9 @@ watch(() => siteConfigStore.welcomeMessage, () => {
 })
 
 // Re-compute visibility when preferences change OR when site config changes
+// Only recompute if we're not actively setting visibility from onMounted/increment
 watch([initialized, () => siteConfigStore.showWelcomeCard], ([isInitialized]) => {
-  if (isInitialized && !route.path.startsWith('/support')) {
+  if (isInitialized && !route.path.startsWith('/support') && !isSettingVisibility.value) {
     visible.value = computeVisibility()
   }
 })
@@ -107,17 +109,24 @@ function computeVisibility(): boolean {
 
 async function incrementSeenIfNeeded() {
   if (hasIncrementedThisSession.value) return
-  hasIncrementedThisSession.value = true
 
-  const nowIso = new Date().toISOString()
-  const current = getPreference<any>('welcomeBanner', {}) || {}
-  const next = {
-    ...current,
-    seenCount: Number(current.seenCount || 0) + 1,
-    firstSeenAt: current.firstSeenAt || nowIso,
-    lastShownAt: nowIso
+  try {
+    hasIncrementedThisSession.value = true
+
+    const nowIso = new Date().toISOString()
+    const current = getPreference<any>('welcomeBanner', {}) || {}
+    const next = {
+      ...current,
+      seenCount: Number(current.seenCount || 0) + 1,
+      firstSeenAt: current.firstSeenAt || nowIso,
+      lastShownAt: nowIso
+    }
+    await setPreference('welcomeBanner', next)
+  } catch (error) {
+    // Reset flag so it can retry on next page load
+    hasIncrementedThisSession.value = false
+    console.error('Failed to increment welcome banner seen count:', error)
   }
-  await setPreference('welcomeBanner', next)
 }
 
 async function handleDismiss() {
@@ -147,15 +156,25 @@ onMounted(async () => {
     return
   }
 
-  // Wait for preferences to be fully loaded before checking visibility
-  const { initialized, load } = useUserPreferences()
-  if (!initialized.value) {
-    await load()
-  }
+  // Set flag to prevent watcher from overriding during initialization
+  isSettingVisibility.value = true
 
-  visible.value = computeVisibility()
-  if (visible.value) {
-    await incrementSeenIfNeeded()
+  try {
+    // Wait for preferences to be fully loaded before checking visibility
+    const { initialized, load } = useUserPreferences()
+    if (!initialized.value) {
+      await load()
+    }
+
+    visible.value = computeVisibility()
+    if (visible.value) {
+      await incrementSeenIfNeeded()
+    }
+  } finally {
+    // Small delay to ensure API call completes before allowing watcher to run
+    setTimeout(() => {
+      isSettingVisibility.value = false
+    }, 200)
   }
 })
 </script>

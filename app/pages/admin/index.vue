@@ -103,6 +103,17 @@
           </button>
 
           <button
+            @click="activeSection = 'aichat'"
+            class="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors"
+            :class="activeSection === 'aichat'
+              ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'"
+          >
+            <Icon name="i-heroicons-chat-bubble-left-right" class="w-5 h-5" />
+            AI Chat Monitor
+          </button>
+
+          <button
             @click="activeSection = 'issues'"
             class="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors"
             :class="activeSection === 'issues'
@@ -217,6 +228,7 @@
         <ApiKeysPanel v-else-if="activeSection === 'apikeys'" />
         <RolesPanel v-else-if="activeSection === 'roles'" />
         <SystemLogsPanel v-else-if="activeSection === 'logs'" />
+        <AIChatMonitorPanel v-else-if="activeSection === 'aichat'" />
         <IssuesPanel v-else-if="activeSection === 'issues'" />
         <NotificationsPanel v-else-if="activeSection === 'notifications'" />
         <ScheduledReportsPanel v-else-if="activeSection === 'scheduledreports'" />
@@ -241,6 +253,7 @@ import StoredReportsPanel from '~/components/admin/StoredReportsPanel.vue'
 import UserPreferencesPanel from '~/components/admin/UserPreferencesPanel.vue'
 import ValidationPanel from '~/components/admin/ValidationPanel.vue'
 import SiteConfigPanel from '~/components/admin/SiteConfigPanel.vue'
+import AIChatMonitorPanel from '~/components/admin/AIChatMonitorPanel.vue'
 
 // Page meta
 definePageMeta({

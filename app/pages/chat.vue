@@ -1,142 +1,396 @@
 <template>
-  <div class="space-y-6 p-6 max-w-[1600px] mx-auto">
+  <!-- Feature Disabled Notice -->
+  <div v-if="!strandsEnabled" class="disabled-notice">
     <UCard>
-      <div class="p-2">
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-          AWS Assistant
-        </h1>
-        <p class="text-gray-600 dark:text-gray-400">
-          Get help with AWS services, cost optimization, and cloud architecture. The chatbot will appear in the bottom right corner.
+      <div class="p-8 text-center">
+        <UIcon name="i-heroicons-no-symbol" class="w-16 h-16 text-gray-400 mx-auto mb-4" />
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+          GHOST Chat is Currently Disabled
+        </h2>
+        <p class="text-gray-600 dark:text-gray-400 mb-6">
+          This feature has been temporarily disabled by an administrator.
+          Please check back later or contact support if you need access.
         </p>
+        <UButton
+          icon="i-heroicons-home"
+          label="Return to Dashboard"
+          @click="navigateTo('/')"
+        />
       </div>
     </UCard>
+  </div>
 
-    <!-- Help Section -->
-    <UCard>
-      <template #header>
-        <div class="flex items-center gap-2 p-2">
-          <UIcon name="i-heroicons-information-circle" class="w-5 h-5 text-emerald-500" />
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">How to use AWS Assistant</h3>
-            </div>
-          </template>
-          
-          <div class="help-content">
-            <div class="help-grid">
-              <div class="help-item">
-                <UIcon name="i-heroicons-currency-dollar" class="w-6 h-6 text-green-500 mb-2" />
-                <h4 class="font-medium text-gray-900 dark:text-white">Cost Optimization</h4>
-                <p class="text-sm text-gray-600 dark:text-gray-400">
-                  Ask about cost analysis, budget optimization, and resource efficiency
-                </p>
-              </div>
-              
-              <div class="help-item">
-                <UIcon name="i-heroicons-server" class="w-6 h-6 text-blue-500 mb-2" />
-                <h4 class="font-medium text-gray-900 dark:text-white">AWS Services</h4>
-                <p class="text-sm text-gray-600 dark:text-gray-400">
-                  Get guidance on EC2, S3, Lambda, and other AWS services
-                </p>
-              </div>
-              
-              <div class="help-item">
-                <UIcon name="i-heroicons-shield-check" class="w-6 h-6 text-purple-500 mb-2" />
-                <h4 class="font-medium text-gray-900 dark:text-white">Security & Compliance</h4>
-                <p class="text-sm text-gray-600 dark:text-gray-400">
-                  Learn about IAM, security best practices, and compliance
-                </p>
-              </div>
-              
-              <div class="help-item">
-                <UIcon name="i-heroicons-cog-6-tooth" class="w-6 h-6 text-orange-500 mb-2" />
-                <h4 class="font-medium text-gray-900 dark:text-white">Architecture</h4>
-                <p class="text-sm text-gray-600 dark:text-gray-400">
-                  Design patterns, best practices, and architectural guidance
-                </p>
-              </div>
-            </div>
-            
-            <div class="help-examples">
-              <h4 class="font-medium text-gray-900 dark:text-white mb-3">Example Questions:</h4>
-              <div class="example-list">
-                <div 
-                  v-for="example in exampleQuestions"
-                  :key="example"
-                  class="example-item"
+  <!-- Full-Page Chat with Thread Management (when enabled) -->
+  <div v-else class="flex h-full overflow-hidden">
+    <!-- Thread List Sidebar -->
+    <ThreadListSidebar
+      @thread-selected="handleThreadSelected"
+      @new-thread="handleNewThread"
+      @share-thread="handleShareThread"
+      @export-thread="handleExportThread"
+    />
+
+    <!-- Main Chat Area -->
+    <div class="flex-1 flex flex-col min-w-0">
+      <!-- Chat Header with Thread Info and Actions -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+        <!-- Thread Info -->
+        <div class="flex items-center gap-3 min-w-0">
+          <UIcon name="i-heroicons-chat-bubble-left-right" class="w-6 h-6 text-purple-500 flex-shrink-0" />
+          <div class="min-w-0 flex-1">
+            <!-- Editable Title -->
+            <div class="flex items-center gap-2 group min-w-0">
+              <!-- Edit Mode: Input Field -->
+              <input
+                v-if="isEditingTitle"
+                ref="titleInputRef"
+                v-model="editingTitle"
+                type="text"
+                class="inline-title-input flex-1 min-w-0"
+                @keydown.enter="saveTitle"
+                @keydown.escape="cancelEdit"
+                @blur="saveTitle"
+              />
+
+              <!-- View Mode: Title -->
+              <h1
+                v-else
+                class="text-lg font-semibold text-gray-900 dark:text-white truncate cursor-text hover:text-purple-600 dark:hover:text-purple-400 transition-colors flex-1 min-w-0"
+                @click="startEditingTitle"
+              >
+                {{ currentThreadTitle }}
+              </h1>
+
+              <!-- Edit Icon -->
+              <button
+                v-if="threadsStore.currentThread && !isEditingTitle"
+                @click="startEditingTitle"
+                class="flex items-center justify-center p-1 rounded text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all opacity-0 group-hover:opacity-100 flex-shrink-0"
+                title="Rename thread"
+              >
+                <UIcon name="i-heroicons-pencil" class="w-4 h-4" />
+              </button>
+
+              <!-- Save/Cancel icons when editing -->
+              <div v-if="isEditingTitle" class="flex items-center gap-1 flex-shrink-0">
+                <button
+                  @mousedown.prevent
+                  @click="saveTitle"
+                  class="flex items-center justify-center p-1 rounded text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-900/20 transition-all"
+                  title="Save (Enter)"
                 >
-                  <UIcon name="i-heroicons-chat-bubble-left" class="w-4 h-4 text-gray-400" />
-                  <span class="text-sm text-gray-600 dark:text-gray-400">{{ example }}</span>
-                </div>
+                  <UIcon name="i-heroicons-check" class="w-4 h-4" />
+                </button>
+                <button
+                  @mousedown.prevent
+                  @click="cancelEdit"
+                  class="flex items-center justify-center p-1 rounded text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
+                  title="Cancel (Esc)"
+                >
+                  <UIcon name="i-heroicons-x-mark" class="w-4 h-4" />
+                </button>
               </div>
+            </div>
+
+            <div class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+              <span>{{ currentThreadInfo }}</span>
+              <span class="text-gray-400">•</span>
+              <UBadge color="green" variant="subtle" size="xs">
+                <div class="flex items-center gap-1">
+                  <div class="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                  <span>Connected</span>
+                </div>
+              </UBadge>
             </div>
           </div>
-    </UCard>
+        </div>
 
-    <!-- Chatbot Component -->
-    <!-- <ClientOnly>
-      <Chatbot />
-    </ClientOnly> -->
-    <ChatBot />
+        <!-- Thread Actions -->
+        <div class="flex items-center gap-1 flex-shrink-0">
+          <UButton
+            v-if="threadsStore.currentThread"
+            icon="i-heroicons-arrow-down-tray"
+            variant="ghost"
+            color="gray"
+            size="sm"
+            title="Export conversation"
+            @click="handleExportCurrentThread"
+          />
+          <UButton
+            v-if="threadsStore.currentThread"
+            icon="i-heroicons-share"
+            variant="ghost"
+            color="gray"
+            size="sm"
+            title="Share conversation"
+            @click="handleShareCurrentThread"
+          />
+          <UButton
+            v-if="threadsStore.currentThread"
+            icon="i-heroicons-trash"
+            variant="ghost"
+            color="gray"
+            size="sm"
+            title="Clear messages"
+            @click="showClearConfirm = true"
+          />
+        </div>
+      </div>
+
+      <!-- Chat Component -->
+      <div class="flex-1 min-h-0">
+        <GhostChatFullPage
+          :key="threadsStore.activeThreadId"
+          @message-sent="handleMessageSent"
+        />
+      </div>
+    </div>
+
+    <!-- Share Modal -->
+    <ChatShareModal
+      v-model="showShareModal"
+      :thread-id="shareThreadId"
+      @close="showShareModal = false"
+      @unshared="handleThreadUnshared"
+    />
+
+    <!-- Export Modal -->
+    <ChatExportModal
+      v-model="showExportModal"
+      :thread-id="exportThreadId"
+      @close="showExportModal = false"
+    />
+
+    <!-- Clear Confirmation Modal -->
+    <UModal v-model="showClearConfirm" :ui="{ width: 'max-w-md' }">
+      <UCard>
+        <template #header>
+          <div class="flex items-center gap-2">
+            <UIcon name="i-heroicons-exclamation-triangle" class="w-5 h-5 text-yellow-500" />
+            <h3 class="text-lg font-semibold">Clear conversation?</h3>
+          </div>
+        </template>
+
+        <p class="text-gray-600 dark:text-gray-400">
+          This will remove all messages from the current thread. The thread itself will remain in your history.
+        </p>
+
+        <template #footer>
+          <div class="flex justify-end gap-2">
+            <UButton variant="ghost" color="gray" @click="showClearConfirm = false">
+              Cancel
+            </UButton>
+            <UButton color="red" @click="confirmClearThread">
+              Clear Messages
+            </UButton>
+          </div>
+        </template>
+      </UCard>
+    </UModal>
   </div>
 </template>
 
 <script setup lang="ts">
-// Page metadata
-definePageMeta({
-  title: 'AWS Assistant',
-  description: 'Get help with AWS services, cost optimization, and cloud architecture'
+import { useChatThreadsStore } from '~/stores/useChatThreadsStore'
+import { useSiteConfigStore } from '~/stores/useSiteConfigStore'
+
+// Stores
+const siteConfigStore = useSiteConfigStore()
+const threadsStore = useChatThreadsStore()
+const toast = useToast()
+
+// Check if Strands chat is enabled
+const strandsEnabled = computed(() => siteConfigStore.isStrandsChatEnabled)
+
+// Modal states
+const showShareModal = ref(false)
+const showExportModal = ref(false)
+const showClearConfirm = ref(false)
+const shareThreadId = ref<string | null>(null)
+const exportThreadId = ref<string | null>(null)
+
+// Inline title editing state
+const isEditingTitle = ref(false)
+const editingTitle = ref('')
+const titleInputRef = ref<HTMLInputElement | null>(null)
+
+// Current thread computed properties
+const currentThreadTitle = computed(() => {
+  return threadsStore.currentThread?.title || 'New Conversation'
 })
 
-// Example questions
-const exampleQuestions = [
-  'How much does EC2 cost per hour?',
-  'What are the current S3 storage pricing tiers?',
-  'Compare RDS vs DynamoDB pricing for my workload',
-  'How can I reduce my AWS costs?',
-  'What are the pricing differences between regions?',
-  'Show me Lambda pricing and free tier limits',
-  'How much does CloudFront cost for content delivery?',
-  'What are the best practices for cost optimization?'
-]
+const currentThreadInfo = computed(() => {
+  if (!threadsStore.currentThread) {
+    return 'Start a conversation with GHOST AI Assistant'
+  }
+  const count = threadsStore.currentThread.messageCount
+  const date = new Date(threadsStore.currentThread.createdAt).toLocaleDateString()
+  return `${count} message${count !== 1 ? 's' : ''} • Created ${date}`
+})
+
+// Initialize on mount
+onMounted(async () => {
+  await threadsStore.fetchThreads()
+
+  // Load active thread if exists
+  if (threadsStore.activeThreadId) {
+    await threadsStore.loadThread(threadsStore.activeThreadId)
+  }
+})
+
+// Handle thread selection
+async function handleThreadSelected(threadId: string) {
+  await threadsStore.loadThread(threadId)
+}
+
+// Handle new thread
+async function handleNewThread() {
+  const thread = await threadsStore.createThread()
+  if (thread) {
+    toast.add({
+      title: 'New conversation started',
+      color: 'green'
+    })
+  }
+}
+
+// Handle share thread (from sidebar)
+function handleShareThread(threadId: string) {
+  shareThreadId.value = threadId
+  showShareModal.value = true
+}
+
+// Handle share current thread (from header)
+function handleShareCurrentThread() {
+  if (threadsStore.activeThreadId) {
+    shareThreadId.value = threadsStore.activeThreadId
+    showShareModal.value = true
+  }
+}
+
+// Handle export thread (from sidebar)
+function handleExportThread(threadId: string) {
+  exportThreadId.value = threadId
+  showExportModal.value = true
+}
+
+// Handle export current thread (from header)
+function handleExportCurrentThread() {
+  if (threadsStore.activeThreadId) {
+    exportThreadId.value = threadsStore.activeThreadId
+    showExportModal.value = true
+  }
+}
+
+// Handle thread unshared
+function handleThreadUnshared() {
+  toast.add({
+    title: 'Sharing removed',
+    description: 'The share link has been disabled',
+    color: 'green'
+  })
+}
+
+// Handle clear thread
+async function confirmClearThread() {
+  if (!threadsStore.activeThreadId) return
+
+  const success = await threadsStore.clearThread(threadsStore.activeThreadId)
+
+  if (success) {
+    toast.add({
+      title: 'Conversation cleared',
+      color: 'green'
+    })
+  } else {
+    toast.add({
+      title: 'Failed to clear conversation',
+      color: 'red'
+    })
+  }
+
+  showClearConfirm.value = false
+}
+
+// Handle message sent (save to thread)
+async function handleMessageSent(message: any) {
+  // This will be called when a message is sent from GhostChatFullPage
+  // Messages should already be saved via the store
+}
+
+// Inline title editing functions
+function startEditingTitle() {
+  if (!threadsStore.currentThread) return
+
+  editingTitle.value = threadsStore.currentThread.title
+  isEditingTitle.value = true
+
+  // Focus the input after it's rendered
+  nextTick(() => {
+    if (titleInputRef.value) {
+      titleInputRef.value.focus()
+      titleInputRef.value.select()
+    }
+  })
+}
+
+async function saveTitle() {
+  if (!threadsStore.activeThreadId || !editingTitle.value.trim()) {
+    cancelEdit()
+    return
+  }
+
+  // Don't save if unchanged
+  if (editingTitle.value.trim() === threadsStore.currentThread?.title) {
+    isEditingTitle.value = false
+    return
+  }
+
+  const success = await threadsStore.updateThread(threadsStore.activeThreadId, {
+    title: editingTitle.value.trim()
+  })
+
+  if (success) {
+    toast.add({
+      title: 'Thread renamed',
+      color: 'green',
+      timeout: 2000
+    })
+  } else {
+    toast.add({
+      title: 'Failed to rename thread',
+      color: 'red'
+    })
+  }
+
+  isEditingTitle.value = false
+}
+
+function cancelEdit() {
+  isEditingTitle.value = false
+  editingTitle.value = ''
+}
+
+// Page metadata
+definePageMeta({
+  title: 'GHOST Chat',
+  description: 'AI-powered assistant for AWS operations - ask questions about costs, configurations, security, and more'
+})
 </script>
 
 <style scoped>
-.chat-page {
-  @apply min-h-screen bg-gray-50 dark:bg-gray-900;
+.disabled-notice {
+  @apply flex items-center justify-center p-6;
 }
 
-.page-content {
-  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8;
+.inline-title-input {
+  @apply text-lg font-semibold text-gray-900 dark:text-white bg-transparent border-none outline-none focus:outline-none px-0 py-0;
+  @apply border-b-2 border-purple-500 dark:border-purple-400;
+  min-width: 0;
 }
 
-.page-header {
-  @apply text-center mb-8;
-}
-
-.help-section {
-  @apply max-w-4xl mx-auto;
-}
-
-.help-content {
-  @apply space-y-6;
-}
-
-.help-grid {
-  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4;
-}
-
-.help-item {
-  @apply text-center p-4 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700;
-}
-
-.help-examples {
-  @apply bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700;
-}
-
-.example-list {
-  @apply space-y-2;
-}
-
-.example-item {
-  @apply flex items-center gap-3 p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors;
+.inline-title-input:focus {
+  @apply ring-0;
 }
 </style>
+

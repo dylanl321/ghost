@@ -62,15 +62,20 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
   }
 
   // Execute query (core API logic)
-  const executeQuery = async (userMessage: string) => {
+  const executeQuery = async (userMessage: string, mentionedAccount?: { accountId: string; accountName: string }) => {
     try {
       const conversationHistory = getConversationHistory()
 
-      const requestData = {
+      const requestData: any = {
         message: userMessage,
         conversationHistory,
         sessionId: sessionId.value,
         timezone: userTimezone.value
+      }
+
+      // Add mentioned account context if available
+      if (mentionedAccount) {
+        requestData.mentionedAccount = mentionedAccount
       }
 
       const data = await $fetch<{
@@ -157,7 +162,7 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
   }
 
   // Send message (adds user message then executes query)
-  const sendMessage = async (userInput: string) => {
+  const sendMessage = async (userInput: string, mentionedAccount?: { accountId: string; accountName: string }) => {
     if (!userInput.trim() || isLoading.value) return
 
     const userMessage: ChatMessage = {
@@ -170,7 +175,7 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
     scrollTrigger.value++ // Trigger scroll after user message
 
     isLoading.value = true
-    await executeQuery(userInput.trim())
+    await executeQuery(userInput.trim(), mentionedAccount)
   }
 
   // Handle account selection from disambiguation modal

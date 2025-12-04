@@ -172,3 +172,103 @@ export interface ChatThreadSummary {
   isArchived: boolean
   isShared: boolean
 }
+
+// =============================================================================
+// Admin Monitoring Types
+// =============================================================================
+
+/**
+ * Chat metrics for admin monitoring
+ */
+export interface ChatMetrics {
+  period: '24h' | '7d' | '30d' | 'all'
+  startDate: string
+  endDate: string
+  totalThreads: number
+  totalMessages: number
+  totalQueries: number
+  uniqueUsers: number
+  averageMessagesPerThread: number
+  averageResponseTime?: number // In seconds
+  mcpTypeDistribution: {
+    permanent: number
+    temporary: number
+    unknown: number
+  }
+  topAccounts: Array<{
+    accountId: string
+    queryCount: number
+  }>
+  topUsers: Array<{
+    userId: string
+    threadCount: number
+    messageCount: number
+  }>
+  errorRate: number
+  sharedThreadsCount: number
+  pinnedThreadsCount: number
+  archivedThreadsCount: number
+}
+
+/**
+ * CloudWatch log event (formatted)
+ */
+export interface CloudWatchLogEntry {
+  timestamp?: number
+  logStreamName?: string
+  message?: string
+  eventId?: string
+  level: string // 'INFO', 'ERROR', 'WARN', 'DEBUG'
+  parsedJSON?: any
+  isJSON: boolean
+}
+
+/**
+ * Chat request log for admin debugging
+ */
+export interface ChatRequestLog {
+  requestId: string
+  userId: string
+  timestamp: number // Unix timestamp
+  request: {
+    message?: string
+    conversationHistory?: number
+    sessionId?: string
+    mcpId?: string
+    timezone?: string
+    region?: string
+    accountIdentifier?: string
+    preferGovcloud?: boolean
+  } | null
+  response: {
+    resultLength?: number
+    hasError?: boolean
+    hasDisambiguation?: boolean
+    error?: string | null
+    metadata?: {
+      accountId?: string
+      mcpUsed?: string
+      mcpType?: 'permanent' | 'temporary'
+      sessionId?: string
+    }
+    responseTimeMs?: number
+  } | null
+  error: {
+    message?: string
+    statusCode?: number
+    code?: string
+    stack?: string
+    responseTimeMs?: number
+  } | null
+}
+
+/**
+ * Admin thread summary with additional fields
+ */
+export interface AdminThreadSummary extends ChatThreadSummary {
+  userId: string
+  createdAt: string
+  sessionId?: string
+  shareId?: string
+  lastQuery?: string
+}

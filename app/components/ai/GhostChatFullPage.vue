@@ -1,30 +1,5 @@
 <template>
   <div class="ghost-chat-container">
-    <!-- Chat Header -->
-    <div class="chat-header">
-      <div class="chat-header-content">
-        <div class="flex items-center gap-3">
-          <UIcon name="i-heroicons-chat-bubble-left-right" class="w-8 h-8 text-purple-500" />
-          <div>
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
-              GHOST Chat
-            </h1>
-            <p class="text-sm text-gray-600 dark:text-gray-400">
-              AI-powered assistant for AWS operations
-            </p>
-          </div>
-        </div>
-        <div class="flex items-center gap-2">
-          <UBadge color="green" variant="subtle">
-            <div class="flex items-center gap-1">
-              <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span>Connected</span>
-            </div>
-          </UBadge>
-        </div>
-      </div>
-    </div>
-
     <!-- Chat Messages Area -->
     <div class="chat-messages" ref="chatBoxRef">
       <div v-for="(msg, index) in messages" :key="index" :class="`message ${msg.sender}`">
@@ -105,20 +80,54 @@
     <div class="chat-input-container">
       <form @submit.prevent="handleSubmit" class="input-form">
         <div class="input-wrapper">
+          <!-- Account Mention Dropdown -->
+          <div
+            v-if="showMentionDropdown"
+            class="mention-dropdown"
+            ref="mentionDropdownRef"
+          >
+            <div
+              v-for="(account, index) in filteredAccounts"
+              :key="account.accountId"
+              :class="['mention-item', { 'mention-item-selected': index === selectedMentionIndex }]"
+              @click="handleMentionClick(account)"
+              @mouseenter="setMentionIndex(index)"
+            >
+              <UIcon name="i-heroicons-building-library" class="w-4 h-4 text-blue-500 flex-shrink-0" />
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium text-gray-900 dark:text-white truncate">
+                  {{ getAccountDisplay(account) }}
+                </div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 truncate">
+                  {{ getAccountSubtitle(account) }}
+                </div>
+              </div>
+            </div>
+            <div v-if="filteredAccounts.length === 0" class="mention-empty">
+              No accounts found
+            </div>
+          </div>
+
           <input
             v-model="inputValue"
             type="text"
             :disabled="isLoading"
-            placeholder="Ask about AWS costs, configurations, security..."
+            placeholder="Ask about AWS costs, configurations, security... (use @ to mention accounts)"
             ref="inputRef"
             class="chat-input"
+            @input="handleInputUpdate"
+            @keydown="handleKeyDown"
           />
           <button type="submit" :disabled="isLoading || !inputValue.trim()" class="send-button">
             <UIcon name="i-heroicons-paper-airplane" class="w-5 h-5" />
           </button>
         </div>
         <p class="input-hint">
-          Tip: Be specific about account IDs for best results. Type "help" for examples.
+          Tip: Use <kbd class="kbd">@</kbd> to mention accounts or type "help" for examples.
+          <span v-if="selectedAccountForMessage" class="ml-2 inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs">
+            <UIcon name="i-heroicons-building-library" class="w-3 h-3" />
+            Context: {{ getAccountDisplay(selectedAccountForMessage) }}
+          </span>
         </p>
       </form>
     </div>
@@ -137,6 +146,27 @@
 <script setup lang="ts">
 // Use the markdown link parser composable
 const { parseMarkdownWithLinks, handleLinkClick } = useMarkdownLinkParser()
+
+// Get user's favorite and recent accounts for personalized prompts
+const { favorites } = useFavoriteAccounts()
+const { recentAccounts } = useRecentAccounts()
+
+// Use account mention composable
+const {
+  showMentionDropdown,
+  filteredAccounts,
+  selectedAccountForMessage,
+  selectedMentionIndex,
+  handleInputChange,
+  selectAccount,
+  navigateMentions,
+  selectHighlightedAccount,
+  closeMentionDropdown,
+  clearSelectedAccount,
+  getAccountDisplay,
+  getAccountSubtitle,
+  setMentionIndex
+} = useChatAccountMention()
 
 // Use shared chat logic
 const {
@@ -161,15 +191,131 @@ const inputValue = ref('')
 const exampleQuestions = ref(true) // Show examples by default
 const chatBoxRef = ref(null)
 const inputRef = ref(null)
+const mentionDropdownRef = ref(null)
 
-// Example questions list
-const exampleQuestionsList = [
-  "What are the AWS costs for account 374673712317 this month?",
-  "Show me security findings from Security Hub for the Gov Master account",
-  "List EC2 instances in account 205950196477",
-  "Analyze costs by service for account 083876038518",
-  "What S3 buckets exist in account 374673712317?",
+// Default prompts (used when no personalized accounts available)
+const defaultPrompts = [
+  "What are the AWS costs for this month?",
+  "Show me security findings from Security Hub",
+  "List all EC2 instances across accounts",
+  "What are the top cost drivers this month?",
+  "Show me recent CloudTrail events",
 ]
+
+// Personalized example questions based on user's accounts
+const exampleQuestionsList = computed(() => {
+  const prompts: string[] = []
+
+  // Get accounts for personalization (prefer favorites, fall back to recent)
+  const userAccounts = favorites.value.length > 0
+    ? favorites.value
+    : recentAccounts.value
+
+  if (userAccounts.length === 0) {
+    // No user accounts, return default prompts
+    return defaultPrompts
+  }
+
+  // Build personalized prompts using user's accounts
+  const account1 = userAccounts[0]
+  const account2 = userAccounts[1]
+  const account3 = userAccounts[2]
+
+  // Prompt 1: Cost analysis for first account
+  if (account1) {
+    prompts.push(
+      `What are the AWS costs for ${account1.projectName || account1.accountId} this month?`
+    )
+  }
+
+  // Prompt 2: Security findings
+  if (account1) {
+    prompts.push(
+      `Show me security findings from Security Hub for ${account1.projectName || account1.accountId}`
+    )
+  }
+
+  // Prompt 3: EC2 instances for second account or first
+  if (account2) {
+    prompts.push(
+      `List EC2 instances in ${account2.projectName || account2.accountId}`
+    )
+  } else if (account1) {
+    prompts.push(
+      `List EC2 instances in ${account1.projectName || account1.accountId}`
+    )
+  }
+
+  // Prompt 4: Cost by service
+  if (account3 || account2 || account1) {
+    const account = account3 || account2 || account1
+    prompts.push(
+      `Analyze costs by service for ${account.projectName || account.accountId}`
+    )
+  }
+
+  // Prompt 5: S3 buckets
+  if (account1) {
+    prompts.push(
+      `What S3 buckets exist in ${account1.projectName || account1.accountId}?`
+    )
+  }
+
+  // Fill remaining slots with default prompts if needed
+  while (prompts.length < 5) {
+    prompts.push(defaultPrompts[prompts.length])
+  }
+
+  return prompts
+})
+
+// Handle input updates for @ mention detection
+function handleInputUpdate(event: Event) {
+  const target = event.target as HTMLInputElement
+  const cursorPosition = target.selectionStart || 0
+  handleInputChange(inputValue.value, cursorPosition)
+}
+
+// Handle keyboard events for mention navigation
+function handleKeyDown(event: KeyboardEvent) {
+  if (!showMentionDropdown.value) return
+
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    navigateMentions('down')
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    navigateMentions('up')
+  } else if (event.key === 'Enter' && showMentionDropdown.value) {
+    event.preventDefault()
+    const newValue = selectHighlightedAccount(inputValue.value)
+    if (newValue) {
+      inputValue.value = newValue
+      // Move cursor to end
+      nextTick(() => {
+        if (inputRef.value) {
+          inputRef.value.focus()
+          inputRef.value.setSelectionRange(inputValue.value.length, inputValue.value.length)
+        }
+      })
+    }
+  } else if (event.key === 'Escape') {
+    closeMentionDropdown()
+  }
+}
+
+// Handle mention click
+function handleMentionClick(account: any) {
+  const newValue = selectAccount(account, inputValue.value)
+  inputValue.value = newValue
+  // Move cursor to end
+  nextTick(() => {
+    if (inputRef.value) {
+      inputRef.value.focus()
+      inputRef.value.setSelectionRange(inputValue.value.length, inputValue.value.length)
+    }
+  })
+}
 
 // Handle form submission
 const handleSubmit = async (e) => {
@@ -183,10 +329,21 @@ const handleSubmit = async (e) => {
   }
 
   const userInput = inputValue.value
+  const mentionedAccount = selectedAccountForMessage.value
+
   inputValue.value = ''
   exampleQuestions.value = false
+  clearSelectedAccount()
 
-  await sendChatMessage(userInput)
+  // If account was mentioned, add context to the message
+  if (mentionedAccount) {
+    await sendChatMessage(userInput, {
+      accountId: mentionedAccount.accountId,
+      accountName: getAccountDisplay(mentionedAccount)
+    })
+  } else {
+    await sendChatMessage(userInput)
+  }
 }
 
 // Handle example question clicks
@@ -228,14 +385,6 @@ onMounted(() => {
 <style scoped>
 .ghost-chat-container {
   @apply flex flex-col h-full bg-white dark:bg-gray-900;
-}
-
-.chat-header {
-  @apply flex-shrink-0 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800;
-}
-
-.chat-header-content {
-  @apply flex items-center justify-between p-4 max-w-[1400px] mx-auto;
 }
 
 .chat-messages {
@@ -368,7 +517,7 @@ onMounted(() => {
 }
 
 .input-wrapper {
-  @apply flex gap-3 items-center;
+  @apply flex gap-3 items-center relative;
 }
 
 .chat-input {
@@ -381,6 +530,27 @@ onMounted(() => {
 
 .input-hint {
   @apply text-xs text-gray-500 dark:text-gray-400 mt-2;
+}
+
+.kbd {
+  @apply inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-mono bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded border border-gray-300 dark:border-gray-600;
+}
+
+/* Mention Dropdown Styles */
+.mention-dropdown {
+  @apply absolute bottom-full left-0 right-0 mb-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-64 overflow-y-auto z-50;
+}
+
+.mention-item {
+  @apply flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-b border-gray-200 dark:border-gray-700 last:border-b-0;
+}
+
+.mention-item-selected {
+  @apply bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/30;
+}
+
+.mention-empty {
+  @apply px-4 py-3 text-sm text-gray-500 dark:text-gray-400 text-center;
 }
 
 @keyframes fade-in {
