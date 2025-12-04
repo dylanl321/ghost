@@ -34,6 +34,8 @@
             v-model="selectedThreadId"
             :options="threadOptions"
             placeholder="Select thread..."
+            value-attribute="value"
+            option-attribute="label"
             class="flex-1"
             size="sm"
             @update:model-value="handleThreadChange"
@@ -298,12 +300,13 @@ const currentThread = computed(() => threadsStore.currentThread)
 
 // Thread options for dropdown
 const threadOptions = computed(() => {
-  const options = []
+  const options: any[] = []
 
   // Add pinned threads
   if (threadsStore.pinnedThreads.length > 0) {
     options.push({
       label: 'Pinned',
+      value: null, // Null value prevents selection
       disabled: true
     })
     threadsStore.pinnedThreads.forEach(thread => {
@@ -320,6 +323,7 @@ const threadOptions = computed(() => {
     if (options.length > 0) {
       options.push({
         label: 'Recent',
+        value: null, // Null value prevents selection
         disabled: true
       })
     }
@@ -359,7 +363,9 @@ async function loadThread(threadId: string) {
 
   if (success && threadsStore.currentThread) {
     // Convert thread messages to display format
-    messages.value = threadsStore.currentThread.messages.map(msg => ({
+    // Handle case where messages might be undefined (empty array was sanitized)
+    const threadMessages = threadsStore.currentThread.messages || []
+    messages.value = threadMessages.map(msg => ({
       text: msg.content,
       sender: msg.role === 'user' ? 'user' : 'bot',
       metadata: msg.metadata,
@@ -372,8 +378,17 @@ async function loadThread(threadId: string) {
 }
 
 // Handle thread change
-async function handleThreadChange(threadId: string) {
-  if (threadId) {
+async function handleThreadChange(threadIdOrOption: string | any) {
+  // Ignore null/undefined selections (disabled header items)
+  if (!threadIdOrOption) return
+
+  // Extract thread ID if an option object is passed
+  const threadId = typeof threadIdOrOption === 'string'
+    ? threadIdOrOption
+    : threadIdOrOption?.value || threadIdOrOption?.threadId
+
+  // Only load if we have a valid string thread ID
+  if (threadId && typeof threadId === 'string' && threadId.length > 0) {
     await loadThread(threadId)
   }
 }

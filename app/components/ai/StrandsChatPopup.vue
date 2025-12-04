@@ -43,6 +43,7 @@
 
         <div class="flex items-center gap-1">
           <button
+            v-if="messages.length === 0"
             @click="showExamples = !showExamples"
             class="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
             title="Example questions"
@@ -66,9 +67,9 @@
         </div>
       </div>
 
-      <!-- Example Questions (collapsible) -->
+      <!-- Example Questions (collapsible) - only show when conversation is empty -->
       <div
-        v-if="showExamples"
+        v-if="showExamples && messages.length === 0"
         class="p-3 bg-purple-50 dark:bg-purple-900/20 border-b border-purple-200 dark:border-purple-800"
       >
         <p class="text-xs font-medium text-purple-900 dark:text-purple-100 mb-2">Try asking:</p>
@@ -100,6 +101,25 @@
           <p class="text-xs text-gray-600 dark:text-gray-400 max-w-xs mx-auto">
             Ask me about AWS costs, resources, users, or anything related to your accounts.
           </p>
+        </div>
+
+        <!-- Sample Prompts (only show when no messages) -->
+        <div v-if="shouldShowSamples" class="space-y-2 px-2">
+          <div class="flex items-center gap-1.5 mb-2">
+            <UIcon name="i-heroicons-light-bulb" class="w-4 h-4 text-purple-500" />
+            <p class="text-xs font-medium text-gray-700 dark:text-gray-300">Try asking:</p>
+          </div>
+          <button
+            v-for="(sample, idx) in samplePrompts"
+            :key="idx"
+            @click="sendExample(sample)"
+            class="w-full text-left text-xs px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800/50 hover:bg-purple-50 dark:hover:bg-purple-900/20 text-gray-700 dark:text-gray-300 transition-colors border border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700"
+          >
+            <div class="flex items-start gap-2">
+              <UIcon name="i-heroicons-chat-bubble-left-right" class="w-3.5 h-3.5 text-purple-500 flex-shrink-0 mt-0.5" />
+              <span class="flex-1">{{ sample }}</span>
+            </div>
+          </button>
         </div>
 
         <!-- Chat messages -->
@@ -269,7 +289,20 @@ const messages = computed<PopupMessage[]>(() => {
   }))
 })
 
-// Example questions
+// Sample prompts for new conversations
+const samplePrompts = [
+  "What are the top AWS cost drivers this month?",
+  "Show me security findings from Security Hub",
+  "List all EC2 instances across accounts",
+  "What are recent CloudTrail events?"
+]
+
+// Only show samples when there are no messages (empty conversation)
+const shouldShowSamples = computed(() => {
+  return messages.value.length === 0
+})
+
+// Example questions (kept for the collapsible examples section)
 const exampleQuestions = [
   "What are costs for account 374673712317 this month?",
   "List EC2 instances in account 205950196477",
@@ -292,12 +325,21 @@ onMounted(async () => {
 
   // Load active thread from store if exists
   // This ensures popup shows the same conversation as the /chat page
-  if (threadsStore.activeThreadId && !threadsStore.currentThread) {
+  if (threadsStore.activeThreadId) {
+    // Always reload to ensure we have latest messages
     await threadsStore.loadThread(threadsStore.activeThreadId)
   }
 
   // Clean up old localStorage-based persistence (migration)
   localStorage.removeItem('strands-popup-chat')
+})
+
+// Watch for when popup opens - reload thread to get latest messages
+watch(isOpen, async (newValue) => {
+  if (newValue && threadsStore.activeThreadId) {
+    // Reload thread when popup opens to sync with full page
+    await threadsStore.loadThread(threadsStore.activeThreadId)
+  }
 })
 
 // Toggle chat window

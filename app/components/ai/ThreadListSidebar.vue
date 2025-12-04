@@ -7,13 +7,52 @@
           <UIcon name="i-heroicons-chat-bubble-left-right" class="w-5 h-5 text-purple-500" />
           Conversations
         </h2>
-        <UButton
-          icon="i-heroicons-plus"
-          color="purple"
-          size="sm"
-          label="New"
-          @click="handleNewThread"
-        />
+        <div class="flex items-center gap-2">
+          <UButton
+            v-if="!selectionMode"
+            icon="i-heroicons-check-circle"
+            variant="ghost"
+            color="gray"
+            size="sm"
+            title="Select multiple"
+            @click="enterSelectionMode"
+          />
+          <UButton
+            v-if="!selectionMode"
+            icon="i-heroicons-plus"
+            color="purple"
+            size="sm"
+            label="New"
+            @click="handleNewThread"
+          />
+        </div>
+      </div>
+
+      <!-- Selection Mode Actions -->
+      <div v-if="selectionMode" class="mb-3 flex items-center justify-between gap-2 p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+        <span class="text-sm text-purple-900 dark:text-purple-100 font-medium">
+          {{ selectedThreadIds.size }} selected
+        </span>
+        <div class="flex items-center gap-2">
+          <UButton
+            icon="i-heroicons-trash"
+            color="red"
+            size="xs"
+            :disabled="selectedThreadIds.size === 0"
+            @click="handleBulkDelete"
+          >
+            Delete
+          </UButton>
+          <UButton
+            icon="i-heroicons-x-mark"
+            variant="ghost"
+            color="gray"
+            size="xs"
+            @click="exitSelectionMode"
+          >
+            Cancel
+          </UButton>
+        </div>
       </div>
 
       <!-- Search Bar -->
@@ -92,7 +131,10 @@
               :key="thread.threadId"
               :thread="thread"
               :active="thread.threadId === threadsStore.activeThreadId"
+              :selection-mode="selectionMode"
+              :selected="selectedThreadIds.has(thread.threadId)"
               @select="selectThread(thread.threadId)"
+              @toggle-selection="toggleThreadSelection(thread.threadId)"
               @pin="handlePin(thread.threadId, false)"
               @unpin="handlePin(thread.threadId, false)"
               @archive="handleArchive(thread.threadId, true)"
@@ -119,7 +161,10 @@
               :key="thread.threadId"
               :thread="thread"
               :active="thread.threadId === threadsStore.activeThreadId"
+              :selection-mode="selectionMode"
+              :selected="selectedThreadIds.has(thread.threadId)"
               @select="selectThread(thread.threadId)"
+              @toggle-selection="toggleThreadSelection(thread.threadId)"
               @pin="handlePin(thread.threadId, true)"
               @unpin="handlePin(thread.threadId, false)"
               @archive="handleArchive(thread.threadId, true)"
@@ -146,7 +191,10 @@
               :key="thread.threadId"
               :thread="thread"
               :active="thread.threadId === threadsStore.activeThreadId"
+              :selection-mode="selectionMode"
+              :selected="selectedThreadIds.has(thread.threadId)"
               @select="selectThread(thread.threadId)"
+              @toggle-selection="toggleThreadSelection(thread.threadId)"
               @pin="handlePin(thread.threadId, true)"
               @unpin="handlePin(thread.threadId, false)"
               @archive="handleArchive(thread.threadId, true)"
@@ -215,6 +263,33 @@
         </template>
       </UCard>
     </UModal>
+
+    <!-- Bulk Delete Confirmation Modal -->
+    <UModal v-model="showBulkDeleteConfirm" :ui="{ width: 'max-w-md' }">
+      <UCard>
+        <template #header>
+          <div class="flex items-center gap-2">
+            <UIcon name="i-heroicons-exclamation-triangle" class="w-5 h-5 text-red-500" />
+            <h3 class="text-lg font-semibold">Delete Multiple Threads?</h3>
+          </div>
+        </template>
+
+        <p class="text-gray-600 dark:text-gray-400">
+          This will permanently delete <strong>{{ selectedThreadIds.size }} thread{{ selectedThreadIds.size > 1 ? 's' : '' }}</strong> and all their messages. This action cannot be undone.
+        </p>
+
+        <template #footer>
+          <div class="flex justify-end gap-2">
+            <UButton variant="ghost" color="gray" @click="showBulkDeleteConfirm = false">
+              Cancel
+            </UButton>
+            <UButton color="red" @click="confirmBulkDelete" :loading="bulkDeleteLoading">
+              Delete {{ selectedThreadIds.size }} Thread{{ selectedThreadIds.size > 1 ? 's' : '' }}
+            </UButton>
+          </div>
+        </template>
+      </UCard>
+    </UModal>
   </div>
 </template>
 
@@ -239,8 +314,14 @@ const activeFilter = ref<'all' | 'pinned' | 'archived'>('all')
 // Modal state
 const showRenameModal = ref(false)
 const showDeleteConfirm = ref(false)
+const showBulkDeleteConfirm = ref(false)
 const activeThreadIdForAction = ref<string | null>(null)
 const renameTitle = ref('')
+const bulkDeleteLoading = ref(false)
+
+// Selection mode state
+const selectionMode = ref(false)
+const selectedThreadIds = ref(new Set<string>())
 
 // Computed thread lists
 const pinnedThreads = computed(() => {
@@ -433,6 +514,75 @@ async function confirmDelete() {
 
   showDeleteConfirm.value = false
   activeThreadIdForAction.value = null
+}
+
+// Selection mode functions
+function enterSelectionMode() {
+  selectionMode.value = true
+  selectedThreadIds.value.clear()
+}
+
+function exitSelectionMode() {
+  selectionMode.value = false
+  selectedThreadIds.value.clear()
+}
+
+function toggleThreadSelection(threadId: string) {
+  if (selectedThreadIds.value.has(threadId)) {
+    selectedThreadIds.value.delete(threadId)
+  } else {
+    selectedThreadIds.value.add(threadId)
+  }
+  // Force reactivity update
+  selectedThreadIds.value = new Set(selectedThreadIds.value)
+}
+
+// Handle bulk delete
+function handleBulkDelete() {
+  if (selectedThreadIds.value.size === 0) return
+  showBulkDeleteConfirm.value = true
+}
+
+async function confirmBulkDelete() {
+  if (selectedThreadIds.value.size === 0) return
+
+  bulkDeleteLoading.value = true
+  let successCount = 0
+  let failCount = 0
+
+  const threadsToDelete = Array.from(selectedThreadIds.value)
+
+  // Delete threads one by one
+  for (const threadId of threadsToDelete) {
+    const success = await threadsStore.deleteThread(threadId)
+    if (success) {
+      successCount++
+    } else {
+      failCount++
+    }
+  }
+
+  bulkDeleteLoading.value = false
+  showBulkDeleteConfirm.value = false
+  exitSelectionMode()
+
+  // Show result toast
+  if (failCount === 0) {
+    toast.add({
+      title: `Successfully deleted ${successCount} thread${successCount > 1 ? 's' : ''}`,
+      color: 'green'
+    })
+  } else if (successCount === 0) {
+    toast.add({
+      title: `Failed to delete ${failCount} thread${failCount > 1 ? 's' : ''}`,
+      color: 'red'
+    })
+  } else {
+    toast.add({
+      title: `Deleted ${successCount} thread${successCount > 1 ? 's' : ''}, ${failCount} failed`,
+      color: 'yellow'
+    })
+  }
 }
 </script>
 

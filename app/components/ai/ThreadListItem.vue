@@ -4,11 +4,22 @@
       'thread-item group relative p-3 rounded-lg transition-all cursor-pointer',
       active
         ? 'bg-purple-100 dark:bg-purple-900/30 border-l-4 border-purple-600'
+        : selected
+        ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500'
         : 'bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 border-l-4 border-transparent'
     ]"
-    @click="$emit('select')"
+    @click="handleClick"
   >
     <div class="flex items-start justify-between gap-2">
+      <!-- Selection Checkbox (visible in selection mode) -->
+      <div v-if="selectionMode" class="flex-shrink-0 pt-1">
+        <UCheckbox
+          :model-value="selected"
+          color="primary"
+          @click.stop
+          @update:model-value="$emit('toggle-selection')"
+        />
+      </div>
       <div class="flex-1 min-w-0">
         <!-- Title with Pin Icon -->
         <div class="flex items-center gap-2 mb-1">
@@ -51,8 +62,8 @@
         </div>
       </div>
 
-      <!-- Quick Actions (visible on hover) -->
-      <div class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+      <!-- Quick Actions (visible on hover, hidden in selection mode) -->
+      <div v-if="!selectionMode" class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
         <UDropdown
           :items="actionItems"
           :popper="{ placement: 'bottom-end' }"
@@ -76,12 +87,18 @@ import type { ChatThreadSummary } from '~/shared/types/chat-threads'
 interface Props {
   thread: ChatThreadSummary
   active?: boolean
+  selectionMode?: boolean
+  selected?: boolean
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  selectionMode: false,
+  selected: false
+})
 
 const emit = defineEmits<{
   select: []
+  'toggle-selection': []
   pin: []
   unpin: []
   archive: []
@@ -91,6 +108,15 @@ const emit = defineEmits<{
   delete: []
   rename: []
 }>()
+
+// Handle click behavior based on selection mode
+function handleClick() {
+  if (props.selectionMode) {
+    emit('toggle-selection')
+  } else {
+    emit('select')
+  }
+}
 
 // Compute last message preview
 const lastMessagePreview = computed(() => {

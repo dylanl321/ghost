@@ -73,9 +73,13 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
   // If we have a thread with messages, load them after component mount
   // This handles the case where the thread exists but messages weren't loaded initially
   if (threadsStore?.currentThread?.messages && threadsStore.currentThread.messages.length > 0) {
+    // Use nextTick to ensure reactive updates are processed
     nextTick(() => {
-      messages.value = convertThreadMessagesToChatMessages(threadsStore.currentThread.messages)
-      sessionId.value = threadsStore.currentThread.sessionId
+      // Double-check the thread still exists and has messages
+      if (threadsStore.currentThread?.messages && threadsStore.currentThread.messages.length > 0) {
+        messages.value = convertThreadMessagesToChatMessages(threadsStore.currentThread.messages)
+        sessionId.value = threadsStore.currentThread.sessionId
+      }
     })
   }
 
@@ -107,7 +111,7 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
         // 2. Don't reload when going from null -> UUID (first message creation)
         if (newThreadId && oldThreadId && newThreadId !== oldThreadId && threadsStore.currentThread) {
           const thread = threadsStore.currentThread
-          if (thread.messages.length > 0) {
+          if (thread.messages && thread.messages.length > 0) {
             // Thread has messages - reload them
             messages.value = convertThreadMessagesToChatMessages(thread.messages)
             sessionId.value = thread.sessionId
@@ -125,6 +129,44 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
       }
     )
 
+    // Watch for currentThread.messages changes to sync across components
+    // This ensures popup and full page stay in sync
+    watch(
+      () => threadsStore.currentThread?.messages,
+      (newMessages, oldMessages) => {
+        // Don't reload if we're in the middle of sending a message
+        if (isSendingMessage.value) return
+
+        // Only sync if the messages array actually changed
+        if (!newMessages || !threadsStore.currentThread) return
+
+        // Calculate actual message count (excluding welcome message)
+        const currentMsgCount = messages.value.filter(m =>
+          !(m.sender === 'bot' && m.text === initialGreeting)
+        ).length
+
+        const threadMsgCount = newMessages.length
+
+        // Sync if thread has different message count than our local state
+        if (threadMsgCount !== currentMsgCount) {
+          if (threadMsgCount > 0) {
+            messages.value = convertThreadMessagesToChatMessages(newMessages)
+            sessionId.value = threadsStore.currentThread.sessionId
+          } else {
+            // Thread was cleared - show welcome message
+            messages.value = initialGreeting ? [{
+              text: initialGreeting,
+              links: [],
+              sender: 'bot',
+              metadata: {}
+            }] : []
+            sessionId.value = threadsStore.currentThread.sessionId
+          }
+        }
+      },
+      { deep: true, immediate: true }
+    )
+
     // Also watch for currentThread changes (handles initial load case)
     watch(
       () => threadsStore.currentThread,
@@ -133,7 +175,7 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
         if (isSendingMessage.value) return
 
         // Only reload if we don't have messages yet and the thread has messages
-        if (newThread && newThread.messages.length > 0 && messages.value.length <= 1) {
+        if (newThread && newThread.messages && newThread.messages.length > 0 && messages.value.length <= 1) {
           // Check if we only have the welcome message
           const hasOnlyWelcome = messages.value.length === 1 && messages.value[0].sender === 'bot'
           if (hasOnlyWelcome || messages.value.length === 0) {

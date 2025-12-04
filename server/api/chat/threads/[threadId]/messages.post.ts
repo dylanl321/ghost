@@ -114,15 +114,25 @@ export default defineEventHandler(handleAsync(async (event) => {
     contentLength: body.message.content.length
   })
 
-  // Add message
-  const updated = await addMessageToThread(threadId, userId, body.message)
+  try {
+    // Add message
+    const updated = await addMessageToThread(threadId, userId, body.message)
 
-  if (!updated) {
-    logger.warn(`[Chat Threads API] Thread ${threadId} not found or access denied`)
-    return errors.notFound(event, 'Thread not found')
+    if (!updated) {
+      logger.warn(`[Chat Threads API] Thread ${threadId} not found or access denied`)
+      return errors.notFound(event, 'Thread not found')
+    }
+
+    logger.info(`[Chat Threads API] Message added to thread ${threadId}`)
+
+    return sendSuccess(event, updated)
+  } catch (error: any) {
+    logger.error(`[Chat Threads API] Error adding message to thread ${threadId}:`, {
+      error: error.message,
+      stack: error.stack,
+      name: error.name,
+      role: body.message.role
+    })
+    throw error
   }
-
-  logger.info(`[Chat Threads API] Message added to thread ${threadId}`)
-
-  return sendSuccess(event, updated)
 }))

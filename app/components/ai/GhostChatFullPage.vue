@@ -199,10 +199,23 @@ const messages = computed(() => chatMessages.value)
 
 // UI state (specific to full page)
 const inputValue = ref('')
-const exampleQuestions = ref(true) // Show examples by default
 const chatBoxRef = ref(null)
 const inputRef = ref(null)
 const mentionDropdownRef = ref(null)
+
+// Only show example questions when there are no messages (or only the initial greeting)
+const exampleQuestions = computed(() => {
+  // Show examples if no messages at all
+  if (messages.value.length === 0) return true
+
+  // Show examples if only one message and it's the initial greeting
+  if (messages.value.length === 1 && messages.value[0].sender === 'bot') {
+    return true
+  }
+
+  // Hide examples if there are any user messages or bot responses
+  return false
+})
 
 // Default prompts (used when no personalized accounts available)
 const defaultPrompts = [

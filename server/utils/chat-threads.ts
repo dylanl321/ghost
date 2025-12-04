@@ -45,7 +45,7 @@ function generateDefaultTitle(): string {
 
 /**
  * Generate a title from the first user message
- * Truncates to 60 characters and removes markdown formatting
+ * Truncates to 35 characters and removes markdown formatting
  */
 function generateTitleFromMessage(content: string): string {
   // Remove markdown formatting
@@ -54,9 +54,9 @@ function generateTitleFromMessage(content: string): string {
     .replace(/\n+/g, ' ') // Replace newlines with spaces
     .trim()
 
-  // Truncate to 60 characters
-  if (cleaned.length > 60) {
-    cleaned = cleaned.substring(0, 57) + '...'
+  // Truncate to 35 characters
+  if (cleaned.length > 35) {
+    cleaned = cleaned.substring(0, 32) + '...'
   }
 
   return cleaned || 'New Conversation'
@@ -278,7 +278,7 @@ export async function getUserThreads(
     const query = filters.searchQuery.toLowerCase()
     filteredThreads = threads.filter(thread =>
       thread.title.toLowerCase().includes(query) ||
-      thread.messages.some(msg => msg.content.toLowerCase().includes(query))
+      (thread.messages || []).some(msg => msg.content.toLowerCase().includes(query))
     )
   }
 
@@ -350,7 +350,9 @@ export async function addMessageToThread(
   }
 
   // Update messages array and metadata
-  const updatedMessages = [...thread.messages, fullMessage]
+  // Handle case where messages might be undefined (empty array was sanitized)
+  const existingMessages = thread.messages || []
+  const updatedMessages = [...existingMessages, fullMessage]
   const now = new Date().toISOString()
 
   const updates: Record<string, any> = {
@@ -371,16 +373,49 @@ export async function addMessageToThread(
   }
 
   const config = await getThreadsTableConfig()
-  const updated = await updateItem(
-    config.tableName,
-    { threadId, createdAt: thread.createdAt },
-    updates,
-    config.environment,
-    config.accountId
-  )
 
-  logger.info(`[Chat Threads] Added message to thread ${threadId}`)
-  return updated as ChatThread
+  try {
+    logger.info(`[Chat Threads] About to update DynamoDB`, {
+      threadId,
+      messageCount: updatedMessages.length,
+      updateKeys: Object.keys(updates),
+      lastMessagePreview: JSON.stringify(updatedMessages[updatedMessages.length - 1]).substring(0, 200)
+    })
+
+    // Log the updates object structure for debugging
+    logger.info(`[Chat Threads] Update payload structure`, {
+      threadId,
+      messagesCount: updates.messages?.length,
+      messageCount: updates.messageCount,
+      hasTitle: !!updates.title,
+      titleLength: updates.title?.length
+    })
+
+    // Log full update data for debugging (first message only)
+    if (updates.messages && updates.messages.length > 0) {
+      logger.info(`[Chat Threads] First message structure:`, {
+        message: JSON.stringify(updates.messages[0], null, 2).substring(0, 300)
+      })
+    }
+
+    const updated = await updateItem(
+      config.tableName,
+      { threadId, createdAt: thread.createdAt },
+      updates,
+      config.environment,
+      config.accountId
+    )
+
+    logger.info(`[Chat Threads] Added message to thread ${threadId}`)
+    return updated as ChatThread
+  } catch (error: any) {
+    logger.error(`[Chat Threads] Failed to add message to thread ${threadId}`, {
+      error: error.message,
+      stack: error.stack,
+      name: error.name
+    })
+    throw error
+  }
 }
 
 /**
@@ -522,7 +557,8 @@ export async function unshareThread(
  * Get thread summaries for list views (lightweight)
  */
 export function getThreadSummary(thread: ChatThread): ChatThreadSummary {
-  const lastMessage = thread.messages[thread.messages.length - 1]
+  const messages = thread.messages || []
+  const lastMessage = messages[messages.length - 1]
   const lastMessagePreview = lastMessage?.content.substring(0, 100) || ''
 
   return {

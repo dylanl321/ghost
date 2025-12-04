@@ -20,6 +20,46 @@ import type { DynamoDBQueryParams } from '../types'
 import { logger } from './logger'
 
 /**
+ * Recursively sanitize data for DynamoDB
+ * Removes undefined values, null values, and empty strings
+ * DynamoDB does not support empty strings as attribute values
+ */
+function sanitizeForDynamoDB(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return undefined
+  }
+
+  if (typeof obj === 'string') {
+    // Convert empty strings to undefined (will be removed)
+    return obj === '' ? undefined : obj
+  }
+
+  if (Array.isArray(obj)) {
+    // Filter out undefined/null values and recursively sanitize
+    const sanitizedArray = obj
+      .map(item => sanitizeForDynamoDB(item))
+      .filter(item => item !== undefined && item !== null)
+    // Return undefined for empty arrays (they will be filtered out)
+    return sanitizedArray.length === 0 ? undefined : sanitizedArray
+  }
+
+  if (typeof obj === 'object') {
+    const sanitized: Record<string, any> = {}
+    for (const [key, value] of Object.entries(obj)) {
+      const sanitizedValue = sanitizeForDynamoDB(value)
+      // Only include if not undefined or null
+      if (sanitizedValue !== undefined && sanitizedValue !== null) {
+        sanitized[key] = sanitizedValue
+      }
+    }
+    // Return undefined for empty objects (they will be filtered out)
+    return Object.keys(sanitized).length === 0 ? undefined : sanitized
+  }
+
+  return obj
+}
+
+/**
  * Get a single item from DynamoDB
  */
 export async function getItem(
@@ -29,14 +69,14 @@ export async function getItem(
   accountId?: string
 ) {
   const client = await getDynamoDBClient(environment, undefined, accountId)
-  
+
   const command = new GetItemCommand({
     TableName: tableName,
-    Key: marshall(key, { removeUndefinedValues: true })
+    Key: marshall(key, { removeUndefinedValues: true, convertEmptyValues: true })
   })
 
   const response = await client.send(command)
-  return response.Item ? unmarshall(response.Item) : null
+  return response.Item ? unmarshall(response.Item, { wrapNumbers: false }) : null
 }
 
 /**
@@ -49,14 +89,17 @@ export async function putItem(
   accountId?: string
 ) {
   const client = await getDynamoDBClient(environment, undefined, accountId)
-  
+
+  // Sanitize item before marshalling
+  const sanitizedItem = sanitizeForDynamoDB(item)
+
   const command = new PutItemCommand({
     TableName: tableName,
-    Item: marshall(item, { removeUndefinedValues: true })
+    Item: marshall(sanitizedItem, { removeUndefinedValues: true, convertEmptyValues: true })
   })
 
   await client.send(command)
-  return item
+  return sanitizedItem
 }
 
 /**
@@ -71,31 +114,107 @@ export async function updateItem(
 ) {
   const client = await getDynamoDBClient(environment, undefined, accountId)
   
+  // Sanitize updates before marshalling
+  const sanitizedUpdates = sanitizeForDynamoDB(updates)
+
+  // Debug logging for serialization issues
+  logger.info('[DynamoDB updateItem] Pre-sanitization data:', {
+    tableName,
+    key,
+    updateFieldCount: Object.keys(updates).length,
+    sanitizedFieldCount: Object.keys(sanitizedUpdates).length
+  })
+
+  // Check if all fields were removed during sanitization
+  if (Object.keys(sanitizedUpdates).length === 0) {
+    logger.warn('[DynamoDB updateItem] All update fields were removed during sanitization', {
+      tableName,
+      originalUpdates: updates
+    })
+    throw new Error('No valid fields to update after sanitization')
+  }
+
   // Build update expression
   const updateExpressionParts: string[] = []
   const expressionAttributeNames: Record<string, string> = {}
-  const expressionAttributeValues: Record<string, AttributeValue> = {}
-  
-  Object.entries(updates).forEach(([field, value], index) => {
+  const valueMap: Record<string, any> = {}
+
+  Object.entries(sanitizedUpdates).forEach(([field, value], index) => {
     const attrName = `#attr${index}`
     const attrValue = `:val${index}`
-    
+
     updateExpressionParts.push(`${attrName} = ${attrValue}`)
     expressionAttributeNames[attrName] = field
-    expressionAttributeValues[attrValue] = marshall(value, { removeUndefinedValues: true })
+    valueMap[attrValue] = value
   })
 
-  const command = new UpdateItemCommand({
+  // Log key before marshalling to check for issues
+  logger.info('[DynamoDB updateItem] Key before marshalling:', {
+    tableName,
+    key: JSON.stringify(key),
+    keyType: typeof key,
+    keyKeys: Object.keys(key)
+  })
+
+  // Marshall all values at once to ensure proper DynamoDB format
+  const expressionAttributeValues = marshall(valueMap, {
+    removeUndefinedValues: true,
+    convertEmptyValues: true  // Convert empty strings to NULL
+  }) as Record<string, AttributeValue>
+
+  const commandParams = {
     TableName: tableName,
-    Key: marshall(key, { removeUndefinedValues: true }),
+    Key: marshall(key, { removeUndefinedValues: true, convertEmptyValues: true }),
     UpdateExpression: `SET ${updateExpressionParts.join(', ')}`,
     ExpressionAttributeNames: expressionAttributeNames,
     ExpressionAttributeValues: expressionAttributeValues,
-    ReturnValues: 'ALL_NEW'
+    ReturnValues: 'ALL_NEW' as const
+  }
+
+  // Log command details for debugging
+  logger.info('[DynamoDB updateItem] Command parameters:', {
+    tableName,
+    updateExpression: commandParams.UpdateExpression,
+    attributeNameCount: Object.keys(expressionAttributeNames).length,
+    attributeValueCount: Object.keys(expressionAttributeValues).length,
+    attributeNames: Object.keys(expressionAttributeNames).map(k => `${k}=${expressionAttributeNames[k]}`),
+    keySize: JSON.stringify(commandParams.Key).length,
+    valuesSize: JSON.stringify(commandParams.ExpressionAttributeValues).length
   })
 
-  const response = await client.send(command)
-  return response.Attributes ? unmarshall(response.Attributes) : null
+  // Log the actual marshalled values (first 500 chars for debugging)
+  try {
+    const marshalledStr = JSON.stringify(commandParams.ExpressionAttributeValues)
+    logger.info('[DynamoDB updateItem] Marshalled values sample:', marshalledStr.substring(0, 500))
+  } catch (e) {
+    logger.warn('[DynamoDB updateItem] Could not stringify marshalled values')
+  }
+
+  const command = new UpdateItemCommand(commandParams)
+
+  try {
+    const response = await client.send(command)
+    return response.Attributes ? unmarshall(response.Attributes, { wrapNumbers: false }) : null
+  } catch (error: any) {
+    logger.error('[DynamoDB updateItem] Command send failed:', {
+      tableName,
+      error: error.message,
+      errorName: error.name,
+      errorCode: error.code,
+      errorType: error.$metadata?.httpStatusCode,
+      updateExpression: commandParams.UpdateExpression,
+      fullError: JSON.stringify(error, Object.getOwnPropertyNames(error)).substring(0, 1000)
+    })
+
+    // Log the full command for debugging serialization issues
+    logger.error('[DynamoDB updateItem] Failed command details:', {
+      key: JSON.stringify(commandParams.Key),
+      expressionAttributeNames: JSON.stringify(commandParams.ExpressionAttributeNames),
+      expressionAttributeValuesKeys: Object.keys(commandParams.ExpressionAttributeValues)
+    })
+
+    throw error
+  }
 }
 
 /**
@@ -111,12 +230,12 @@ export async function deleteItem(
   
   const command = new DeleteItemCommand({
     TableName: tableName,
-    Key: marshall(key, { removeUndefinedValues: true }),
+    Key: marshall(key, { removeUndefinedValues: true, convertEmptyValues: true }),
     ReturnValues: 'ALL_OLD'
   })
 
   const response = await client.send(command)
-  return response.Attributes ? unmarshall(response.Attributes) : null
+  return response.Attributes ? unmarshall(response.Attributes, { wrapNumbers: false }) : null
 }
 
 /**
@@ -137,7 +256,7 @@ export async function queryItems(
     ProjectionExpression: params.projectionExpression,
     ExpressionAttributeNames: params.expressionAttributeNames,
     ExpressionAttributeValues: params.expressionAttributeValues
-      ? marshall(params.expressionAttributeValues, { removeUndefinedValues: true })
+      ? marshall(params.expressionAttributeValues, { removeUndefinedValues: true, convertEmptyValues: true })
       : undefined,
     Limit: params.limit,
     ScanIndexForward: params.scanIndexForward,
@@ -147,7 +266,7 @@ export async function queryItems(
   const response = await client.send(command)
 
   return {
-    items: response.Items?.map(item => unmarshall(item)) || [],
+    items: response.Items?.map(item => unmarshall(item, { wrapNumbers: false })) || [],
     nextToken: response.LastEvaluatedKey
       ? Buffer.from(JSON.stringify(response.LastEvaluatedKey)).toString('base64')
       : undefined,
@@ -173,7 +292,7 @@ export async function scanItems(
   // Marshall expression attribute values if provided
   let marshalledValues
   if (expressionAttributeValues) {
-    marshalledValues = marshall(expressionAttributeValues, { removeUndefinedValues: true })
+    marshalledValues = marshall(expressionAttributeValues, { removeUndefinedValues: true, convertEmptyValues: true })
     // Check if marshalling resulted in empty object
     if (Object.keys(marshalledValues).length === 0) {
       marshalledValues = undefined
@@ -192,7 +311,7 @@ export async function scanItems(
   const response = await client.send(command)
 
   return {
-    items: response.Items?.map(item => unmarshall(item)) || [],
+    items: response.Items?.map(item => unmarshall(item, { wrapNumbers: false })) || [],
     nextToken: response.LastEvaluatedKey
       ? Buffer.from(JSON.stringify(response.LastEvaluatedKey)).toString('base64')
       : undefined,
@@ -221,9 +340,9 @@ export async function batchWriteItems(
     const requestItems = {
       [tableName]: batch.map(item => {
         if (item.putRequest) {
-          return { PutRequest: { Item: marshall(item.putRequest, { removeUndefinedValues: true }) } }
+          return { PutRequest: { Item: marshall(item.putRequest, { removeUndefinedValues: true, convertEmptyValues: true }) } }
         } else if (item.deleteRequest) {
-          return { DeleteRequest: { Key: marshall(item.deleteRequest, { removeUndefinedValues: true }) } }
+          return { DeleteRequest: { Key: marshall(item.deleteRequest, { removeUndefinedValues: true, convertEmptyValues: true }) } }
         }
         throw new Error('Invalid batch item')
       })
@@ -261,13 +380,13 @@ export async function batchGetItems(
     const command = new BatchGetItemCommand({
       RequestItems: {
         [tableName]: {
-          Keys: batch.map(key => marshall(key, { removeUndefinedValues: true }))
+          Keys: batch.map(key => marshall(key, { removeUndefinedValues: true, convertEmptyValues: true }))
         }
       }
     })
 
     const response = await client.send(command)
-    const items = response.Responses?.[tableName]?.map(item => unmarshall(item)) || []
+    const items = response.Responses?.[tableName]?.map(item => unmarshall(item, { wrapNumbers: false })) || []
     allItems.push(...items)
   }
   
@@ -313,7 +432,7 @@ export async function batchPutItems(
           const requestItems = {
             [tableName]: currentBatch.map(item => ({
               PutRequest: {
-                Item: marshall(item, { removeUndefinedValues: true })
+                Item: marshall(item, { removeUndefinedValues: true, convertEmptyValues: true })
               }
             }))
           }
@@ -323,11 +442,11 @@ export async function batchPutItems(
           })
 
           const response = await client.send(command)
-          
+
           // Check for unprocessed items
           if (response.UnprocessedItems && response.UnprocessedItems[tableName]) {
-            currentBatch = response.UnprocessedItems[tableName].map((req: any) => 
-              unmarshall(req.PutRequest.Item)
+            currentBatch = response.UnprocessedItems[tableName].map((req: any) =>
+              unmarshall(req.PutRequest.Item, { wrapNumbers: false })
             )
             retryCount++
             
@@ -416,7 +535,7 @@ export async function batchDeleteItems(
           const requestItems = {
             [tableName]: currentBatch.map(key => ({
               DeleteRequest: {
-                Key: marshall(key, { removeUndefinedValues: true })
+                Key: marshall(key, { removeUndefinedValues: true, convertEmptyValues: true })
               }
             }))
           }
@@ -426,11 +545,11 @@ export async function batchDeleteItems(
           })
 
           const response = await client.send(command)
-          
+
           // Check for unprocessed items
           if (response.UnprocessedItems && response.UnprocessedItems[tableName]) {
-            currentBatch = response.UnprocessedItems[tableName].map((req: any) => 
-              unmarshall(req.DeleteRequest.Key)
+            currentBatch = response.UnprocessedItems[tableName].map((req: any) =>
+              unmarshall(req.DeleteRequest.Key, { wrapNumbers: false })
             )
             retryCount++
             
