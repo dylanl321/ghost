@@ -39,8 +39,8 @@ function extractAccountIds(text: string): string[] {
  */
 async function getAccountDataMap(): Promise<Map<string, any>> {
   try {
-    const { getAllAccounts } = await import('./accounts-consolidated')
-    const accounts = await getAllAccounts()
+    const { getAllAccountsUnified } = await import('./accounts-consolidated')
+    const accounts = await getAllAccountsUnified()
 
     const accountMap = new Map()
     for (const account of accounts) {

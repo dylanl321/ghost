@@ -60,7 +60,7 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
 
   // State - Initialize from thread if available, otherwise use greeting
   const messages = ref<ChatMessage[]>(
-    loadMessagesFromThread && threadsStore?.currentThread?.messages
+    loadMessagesFromThread && threadsStore?.currentThread?.messages && threadsStore.currentThread.messages.length > 0
       ? convertThreadMessagesToChatMessages(threadsStore.currentThread.messages)
       : initialGreeting ? [{
           text: initialGreeting,
@@ -70,9 +70,19 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
         }] : []
   )
 
+  // If we have a thread with messages, load them after component mount
+  // This handles the case where the thread exists but messages weren't loaded initially
+  if (threadsStore?.currentThread?.messages && threadsStore.currentThread.messages.length > 0) {
+    nextTick(() => {
+      messages.value = convertThreadMessagesToChatMessages(threadsStore.currentThread.messages)
+      sessionId.value = threadsStore.currentThread.sessionId
+    })
+  }
+
   const isLoading = ref(false)
   const sessionId = ref<string | undefined>(threadsStore?.currentThread?.sessionId || undefined)
   const scrollTrigger = ref(0) // Increment to trigger scroll in components
+  const isSendingMessage = ref(false) // Track if we're in the middle of sending a message
 
   // Detect user's timezone
   const userTimezone = ref<string>(
@@ -89,8 +99,13 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
     watch(
       () => threadsStore.activeThreadId,
       (newThreadId, oldThreadId) => {
-        // Only reload if switching to a different thread
-        if (newThreadId && newThreadId !== oldThreadId && threadsStore.currentThread) {
+        // Don't reload if we're in the middle of sending a message
+        if (isSendingMessage.value) return
+
+        // Only reload if:
+        // 1. Switching from one existing thread to another (both have values)
+        // 2. Don't reload when going from null -> UUID (first message creation)
+        if (newThreadId && oldThreadId && newThreadId !== oldThreadId && threadsStore.currentThread) {
           const thread = threadsStore.currentThread
           if (thread.messages.length > 0) {
             // Thread has messages - reload them
@@ -108,6 +123,26 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
           }
         }
       }
+    )
+
+    // Also watch for currentThread changes (handles initial load case)
+    watch(
+      () => threadsStore.currentThread,
+      (newThread) => {
+        // Don't reload if we're in the middle of sending a message
+        if (isSendingMessage.value) return
+
+        // Only reload if we don't have messages yet and the thread has messages
+        if (newThread && newThread.messages.length > 0 && messages.value.length <= 1) {
+          // Check if we only have the welcome message
+          const hasOnlyWelcome = messages.value.length === 1 && messages.value[0].sender === 'bot'
+          if (hasOnlyWelcome || messages.value.length === 0) {
+            messages.value = convertThreadMessagesToChatMessages(newThread.messages)
+            sessionId.value = newThread.sessionId
+          }
+        }
+      },
+      { immediate: true }
     )
   }
 
@@ -242,23 +277,34 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
   const sendMessage = async (userInput: string, mentionedAccount?: { accountId: string; accountName: string }) => {
     if (!userInput.trim() || isLoading.value) return
 
-    const userMessage: ChatMessage = {
-      text: userInput.trim(),
-      links: [],
-      sender: 'user',
-      metadata: {}
-    }
-    messages.value.push(userMessage)
-    scrollTrigger.value++ // Trigger scroll after user message
+    // Set flag to prevent watch from interfering
+    isSendingMessage.value = true
 
-    // Save user message to thread if using threads store
-    // The store will auto-create a thread if one doesn't exist
-    if (threadsStore) {
-      await threadsStore.addMessage(convertChatMessageToThreadMessage(userMessage))
-    }
+    try {
+      const userMessage: ChatMessage = {
+        text: userInput.trim(),
+        links: [],
+        sender: 'user',
+        metadata: {}
+      }
+      messages.value.push(userMessage)
+      scrollTrigger.value++ // Trigger scroll after user message
 
-    isLoading.value = true
-    await executeQuery(userInput.trim(), mentionedAccount)
+      // Save user message to thread if using threads store
+      // The store will auto-create a thread if one doesn't exist
+      if (threadsStore) {
+        await threadsStore.addMessage(convertChatMessageToThreadMessage(userMessage))
+      }
+
+      isLoading.value = true
+      await executeQuery(userInput.trim(), mentionedAccount)
+    } catch (error) {
+      console.error('Error sending message:', error)
+      // Don't rethrow - let executeQuery handle errors
+    } finally {
+      isSendingMessage.value = false
+      // Note: isLoading is set to false in executeQuery's finally block
+    }
   }
 
   // Handle account selection from disambiguation modal
