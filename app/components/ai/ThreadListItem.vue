@@ -56,13 +56,13 @@
         <UDropdown
           :items="actionItems"
           :popper="{ placement: 'bottom-end' }"
+          @click.stop
         >
           <UButton
             icon="i-heroicons-ellipsis-vertical"
             variant="ghost"
             color="gray"
             size="xs"
-            @click.stop
           />
         </UDropdown>
       </div>

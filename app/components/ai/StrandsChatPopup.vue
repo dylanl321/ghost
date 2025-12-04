@@ -106,18 +106,18 @@
         <div
           v-for="(msg, idx) in messages"
           :key="idx"
-          class="flex"
+          class="flex gap-2"
           :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
         >
           <div
-            class="max-w-[85%] rounded-lg px-3 py-2"
+            class="max-w-[80%] rounded-2xl px-4 py-2.5 shadow-sm"
             :class="
               msg.role === 'user'
-                ? 'bg-purple-600 text-white'
-                : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white'
+                ? 'bg-purple-600 text-white rounded-br-sm'
+                : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 rounded-bl-sm'
             "
           >
-            <div class="text-sm whitespace-pre-wrap" v-html="formatMessage(msg.content)"></div>
+            <div class="text-sm leading-relaxed prose prose-sm max-w-none" :class="msg.role === 'user' ? 'prose-invert' : ''" v-html="parseMarkdownWithLinks(msg.content)" @click="handleLinkClick"></div>
 
             <!-- Metadata for bot responses -->
             <div v-if="msg.role === 'assistant' && msg.metadata" class="flex gap-2 mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
@@ -215,7 +215,35 @@
 </template>
 
 <script setup lang="ts">
-interface ChatMessage {
+// Use markdown link parser composable
+const { parseMarkdownWithLinks, handleLinkClick } = useMarkdownLinkParser()
+
+// Use shared chat logic
+const {
+  messages: chatMessages,
+  isLoading,
+  sessionId,
+  showDisambiguation,
+  disambiguationData,
+  sendMessage: sendChatMessage,
+  handleAccountSelected,
+  handleDisambiguationCancel,
+  clearChat: clearChatMessages,
+  scrollTrigger
+} = useStrandsChat({
+  initialGreeting: "" // No initial greeting for popup
+})
+
+// UI state (specific to popup)
+const isOpen = ref(false)
+const showExamples = ref(false)
+const showHint = ref(false)
+const userInput = ref('')
+const errorMessage = ref('')
+const messagesContainer = ref<HTMLElement>()
+
+// Convert chat messages to popup format
+interface PopupMessage {
   role: 'user' | 'assistant'
   content: string
   metadata?: {
@@ -225,26 +253,14 @@ interface ChatMessage {
   suggestedLinks?: any[]
 }
 
-// State
-const isOpen = ref(false)
-const showExamples = ref(false)
-const showHint = ref(false)
-const userInput = ref('')
-const messages = ref<ChatMessage[]>([])
-const isLoading = ref(false)
-const errorMessage = ref('')
-const sessionId = ref('')
-const messagesContainer = ref<HTMLElement>()
-
-// Detect user's timezone
-const userTimezone = ref<string>(
-  Intl.DateTimeFormat().resolvedOptions().timeZone
-)
-
-// Disambiguation state
-const showDisambiguation = ref(false)
-const disambiguationData = ref<any>(null)
-const pendingMessage = ref<string>('')
+const messages = computed<PopupMessage[]>(() => {
+  return chatMessages.value.map(msg => ({
+    role: msg.sender === 'user' ? 'user' as const : 'assistant' as const,
+    content: msg.text,
+    metadata: msg.metadata,
+    suggestedLinks: msg.suggestedLinks
+  }))
+})
 
 // Example questions
 const exampleQuestions = [
@@ -266,22 +282,33 @@ onMounted(() => {
     }, 5000)
   }
 
-  // Load conversation from session storage
-  const saved = sessionStorage.getItem('strands-popup-chat')
+  // Load conversation from local storage (persists across page navigation and sessions)
+  const saved = localStorage.getItem('strands-popup-chat')
   if (saved) {
     try {
       const parsed = JSON.parse(saved)
-      messages.value = parsed.messages || []
-      sessionId.value = parsed.sessionId || ''
+      if (parsed.messages && parsed.messages.length > 0) {
+        // Convert saved messages back to chat format
+        chatMessages.value = parsed.messages.map((msg: PopupMessage) => ({
+          text: msg.content,
+          links: [],
+          sender: msg.role === 'user' ? 'user' as const : 'bot' as const,
+          metadata: msg.metadata || {},
+          suggestedLinks: msg.suggestedLinks || []
+        }))
+      }
+      if (parsed.sessionId) {
+        sessionId.value = parsed.sessionId
+      }
     } catch (e) {
       // Ignore parse errors
     }
   }
 })
 
-// Save conversation to session storage
+// Save conversation to local storage (persists across pages and sessions)
 watch(messages, (newMessages) => {
-  sessionStorage.setItem('strands-popup-chat', JSON.stringify({
+  localStorage.setItem('strands-popup-chat', JSON.stringify({
     messages: newMessages,
     sessionId: sessionId.value
   }))
@@ -297,10 +324,9 @@ function toggleChat() {
 
 // Clear chat
 function clearChat() {
-  messages.value = []
-  sessionId.value = ''
+  clearChatMessages()
   errorMessage.value = ''
-  sessionStorage.removeItem('strands-popup-chat')
+  localStorage.removeItem('strands-popup-chat')
 }
 
 // Send example question
@@ -310,124 +336,24 @@ function sendExample(example: string) {
   sendMessage()
 }
 
+// Auto-scroll when messages change or scrollTrigger increments
+watch(scrollTrigger, () => {
+  nextTick(() => {
+    if (messagesContainer.value) {
+      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    }
+  })
+})
+
 // Send message
 async function sendMessage() {
   if (!userInput.value.trim() || isLoading.value) return
 
   const userMessage = userInput.value.trim()
   userInput.value = ''
-  errorMessage.value = ''
 
-  // Add user message
-  messages.value.push({
-    role: 'user',
-    content: userMessage
-  })
-
-  // Scroll to bottom
-  nextTick(() => {
-    if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-    }
-  })
-
-  // Call API
-  isLoading.value = true
-
-  try {
-    const response = await $fetch('/api/strands/chat', {
-      method: 'POST',
-      body: {
-        message: userMessage,
-        conversationHistory: messages.value.slice(-6), // Last 6 messages for context
-        sessionId: sessionId.value || undefined,
-        timezone: userTimezone.value // Send user's timezone
-      }
-    })
-
-    // Update session ID
-    if (response.sessionId) {
-      sessionId.value = response.sessionId
-    }
-
-    // Check for disambiguation first
-    if (response.disambiguation) {
-      disambiguationData.value = response.disambiguation
-      pendingMessage.value = userMessage
-      showDisambiguation.value = true
-      isLoading.value = false
-      return
-    }
-
-    // Add assistant response
-    messages.value.push({
-      role: 'assistant',
-      content: response.responseBody,
-      metadata: response.metadata,
-      suggestedLinks: response.suggestedLinks
-    })
-
-    // Scroll to bottom
-    nextTick(() => {
-      if (messagesContainer.value) {
-        messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-      }
-    })
-
-  } catch (error: any) {
-    console.error('Strands API error:', error)
-    errorMessage.value = error.data?.message || 'Failed to get response. Please try again.'
-  } finally {
-    isLoading.value = false
-  }
+  await sendChatMessage(userMessage)
 }
 
-// Handle account selection from disambiguation modal
-async function handleAccountSelected(requestId: string) {
-  try {
-    // Submit selection to backend
-    await $fetch('/api/strands/account/select', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: {
-        session_id: sessionId.value,
-        request_id: requestId
-      }
-    })
 
-    // Close modal
-    showDisambiguation.value = false
-
-    // Re-execute the original query with the selected account
-    isLoading.value = true
-    await sendMessage(pendingMessage.value, false) // Don't push message again
-    pendingMessage.value = ''
-
-  } catch (error: any) {
-    console.error('Error selecting account:', error)
-    errorMessage.value = error.data?.error?.message || 'Failed to select account. Please try again.'
-    showDisambiguation.value = false
-    isLoading.value = false
-  }
-}
-
-// Handle disambiguation cancel
-function handleDisambiguationCancel() {
-  showDisambiguation.value = false
-  disambiguationData.value = null
-  pendingMessage.value = ''
-  isLoading.value = false
-}
-
-// Format message with basic markdown
-function formatMessage(text: string): string {
-  // Bold
-  text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-  // Italic
-  text = text.replace(/\*(.*?)\*/g, '<em>$1</em>')
-  // Code
-  text = text.replace(/`(.*?)`/g, '<code class="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">$1</code>')
-
-  return text
-}
 </script>

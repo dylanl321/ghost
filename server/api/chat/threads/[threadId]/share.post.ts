@@ -3,7 +3,7 @@
  * Share a thread and generate a public link
  */
 
-import { defineEventHandler, readBody } from 'h3'
+import { defineEventHandler, readBody, getHeader } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../../../utils/api-response'
 import { requireUserSession } from '../../../../utils/entra/session'
 import { shareThread, updateThread, getThreadById } from '../../../../utils/chat-threads'
@@ -118,9 +118,11 @@ export default defineEventHandler(handleAsync(async (event) => {
     description: `Shared chat: ${thread.title}`
   })
 
-  // Get base URL from environment or request
-  const baseUrl = process.env.NUXT_PUBLIC_SITE_URL || process.env.SITE_URL || 'https://ghost.gdms.cloud'
-  const shortUrl = `${baseUrl}/s/${shortlink.shortCode}`
+  // Build base URL dynamically from request headers
+  // This ensures the share link uses the current domain (dev/staging/prod)
+  const host = getHeader(event, 'host') || 'localhost:3000'
+  const protocol = getHeader(event, 'x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https')
+  const shortUrl = `${protocol}://${host}/s/${shortlink.shortCode}`
 
   // Update thread with shortlink info
   await updateThread(threadId, userId, {

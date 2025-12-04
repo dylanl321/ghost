@@ -13,12 +13,15 @@ import type {
   ChatThreadSummary
 } from '~/shared/types/chat-threads'
 import { logger } from './logger'
-import { getTableConfig } from '../lib/dynamodb-config'
+import { getTableName, getTableEnvironment, getTableAccountId } from '../lib/dynamodb-config'
 
 // Get table configuration using centralized config system
-async function getThreadsTableName(): Promise<string> {
-  const config = await getTableConfig('chatThreads')
-  return config.tableName
+// Returns tableName, environment, and accountId for proper role assumption
+async function getThreadsTableConfig() {
+  const tableName = await getTableName('chatThreads')
+  const environment = await getTableEnvironment('chatThreads')
+  const accountId = await getTableAccountId('chatThreads')
+  return { tableName, environment, accountId }
 }
 
 // Default TTL: 90 days
@@ -37,8 +40,26 @@ function calculateTTL(days: number = DEFAULT_TTL_DAYS): number {
  * Generate a default thread title based on timestamp
  */
 function generateDefaultTitle(): string {
-  const now = new Date()
-  return `Conversation from ${now.toLocaleDateString()} ${now.toLocaleTimeString()}`
+  return 'New Conversation'
+}
+
+/**
+ * Generate a title from the first user message
+ * Truncates to 60 characters and removes markdown formatting
+ */
+function generateTitleFromMessage(content: string): string {
+  // Remove markdown formatting
+  let cleaned = content
+    .replace(/[#*_`~\[\]]/g, '') // Remove markdown symbols
+    .replace(/\n+/g, ' ') // Replace newlines with spaces
+    .trim()
+
+  // Truncate to 60 characters
+  if (cleaned.length > 60) {
+    cleaned = cleaned.substring(0, 57) + '...'
+  }
+
+  return cleaned || 'New Conversation'
 }
 
 /**
@@ -51,7 +72,7 @@ export async function createThread(
     initialMessage?: ChatMessage
   } = {}
 ): Promise<ChatThread> {
-  const threadsTable = await getThreadsTableName()
+  const config = await getThreadsTableConfig()
   const threadId = uuidv4()
   const now = new Date().toISOString()
 
@@ -71,7 +92,7 @@ export async function createThread(
     expiresAt: new Date(Date.now() + (DEFAULT_TTL_DAYS * 24 * 60 * 60 * 1000)).toISOString()
   }
 
-  await putItem(threadsTable, thread, 'govcloud')
+  await putItem(config.tableName, thread, config.environment, config.accountId)
 
   logger.info(`[Chat Threads] Created thread ${threadId} for user ${userId}`)
   return thread
@@ -85,11 +106,12 @@ export async function getThread(
   userId: string,
   options: { allowShared?: boolean } = {}
 ): Promise<ChatThread | null> {
-  const threadsTable = await getThreadsTableName()
+  const config = await getThreadsTableConfig()
   const thread = await getItem(
-    threadsTable,
+    config.tableName,
     { threadId, createdAt: '*' }, // We need to query since we don't have exact createdAt
-    'govcloud'
+    config.environment,
+    config.accountId
   )
 
   if (!thread) {
@@ -112,16 +134,16 @@ export async function getThreadById(
   threadId: string,
   userId?: string
 ): Promise<ChatThread | null> {
-  const threadsTable = await getThreadsTableName()
+  const config = await getThreadsTableConfig()
   // Query by threadId (hash key)
   const result = await queryItems({
-    tableName: threadsTable,
+    tableName: config.tableName,
     queryExpression: 'threadId = :threadId',
     expressionAttributeValues: {
       ':threadId': threadId
     },
     limit: 1
-  }, 'govcloud')
+  }, config.environment, config.accountId)
 
   if (!result.items || result.items.length === 0) {
     return null
@@ -142,16 +164,16 @@ export async function getThreadById(
  * Get a thread by share ID (for public access)
  */
 export async function getThreadByShareId(shareId: string): Promise<ChatThread | null> {
-  const threadsTable = await getThreadsTableName()
+  const config = await getThreadsTableConfig()
   const result = await queryItems({
-    tableName: threadsTable,
+    tableName: config.tableName,
     indexName: 'ShareIdIndex',
     queryExpression: 'shareId = :shareId',
     expressionAttributeValues: {
       ':shareId': shareId
     },
     limit: 1
-  }, 'govcloud')
+  }, config.environment, config.accountId)
 
   if (!result.items || result.items.length === 0) {
     return null
@@ -219,13 +241,13 @@ export async function getUserThreads(
   }
 
   // Query using UserIdIndex GSI (sorted by lastMessageAt descending)
-  const threadsTable = await getThreadsTableName()
+  const config = await getThreadsTableConfig()
   let result
   let threads: ChatThread[] = []
 
   try {
     result = await queryItems({
-      tableName: threadsTable,
+      tableName: config.tableName,
       indexName: 'UserIdIndex',
       queryExpression: 'userId = :userId',
       filterExpression: filterParts.length > 0 ? filterParts.join(' AND ') : undefined,
@@ -234,13 +256,13 @@ export async function getUserThreads(
       limit: filters.limit || 50,
       scanIndexForward: false, // Descending order (most recent first)
       nextToken: filters.lastKey ? Buffer.from(JSON.stringify(filters.lastKey)).toString('base64') : undefined
-    }, 'govcloud')
+    }, config.environment, config.accountId)
 
     threads = result.items as ChatThread[]
   } catch (error: any) {
     // If table doesn't exist yet, return empty list instead of throwing
     if (error.name === 'ResourceNotFoundException' || error.message?.includes('Requested resource not found')) {
-      logger.warn(`[Chat Threads] Table ${threadsTable} not found - returning empty list`)
+      logger.warn(`[Chat Threads] Table ${config.tableName} not found - returning empty list`)
       return {
         threads: [],
         hasMore: false
@@ -293,12 +315,13 @@ export async function updateThread(
   }
 
   // Update the thread
-  const threadsTable = await getThreadsTableName()
+  const config = await getThreadsTableConfig()
   const updated = await updateItem(
-    threadsTable,
+    config.tableName,
     { threadId, createdAt: thread.createdAt },
     updateData,
-    'govcloud'
+    config.environment,
+    config.accountId
   )
 
   logger.info(`[Chat Threads] Updated thread ${threadId} for user ${userId}`)
@@ -330,19 +353,30 @@ export async function addMessageToThread(
   const updatedMessages = [...thread.messages, fullMessage]
   const now = new Date().toISOString()
 
-  const updates = {
+  const updates: Record<string, any> = {
     messages: updatedMessages,
     messageCount: updatedMessages.length,
     lastMessageAt: now,
     lastModifiedAt: now
   }
 
-  const threadsTable = await getThreadsTableName()
+  // Auto-generate title from first user message
+  if (
+    message.role === 'user' &&
+    thread.messageCount === 0 &&
+    (thread.title === 'New Conversation' || thread.title.startsWith('Conversation from'))
+  ) {
+    updates.title = generateTitleFromMessage(message.content)
+    logger.info(`[Chat Threads] Auto-generated title for thread ${threadId}: "${updates.title}"`)
+  }
+
+  const config = await getThreadsTableConfig()
   const updated = await updateItem(
-    threadsTable,
+    config.tableName,
     { threadId, createdAt: thread.createdAt },
     updates,
-    'govcloud'
+    config.environment,
+    config.accountId
   )
 
   logger.info(`[Chat Threads] Added message to thread ${threadId}`)
@@ -371,12 +405,13 @@ export async function clearThreadMessages(
     lastModifiedAt: now
   }
 
-  const threadsTable = await getThreadsTableName()
+  const config = await getThreadsTableConfig()
   const updated = await updateItem(
-    threadsTable,
+    config.tableName,
     { threadId, createdAt: thread.createdAt },
     updates,
-    'govcloud'
+    config.environment,
+    config.accountId
   )
 
   logger.info(`[Chat Threads] Cleared messages in thread ${threadId}`)
@@ -396,11 +431,12 @@ export async function deleteThread(
     return false
   }
 
-  const threadsTable = await getThreadsTableName()
+  const config = await getThreadsTableConfig()
   await deleteItem(
-    threadsTable,
+    config.tableName,
     { threadId, createdAt: thread.createdAt },
-    'govcloud'
+    config.environment,
+    config.accountId
   )
 
   logger.info(`[Chat Threads] Deleted thread ${threadId} for user ${userId}`)
@@ -433,12 +469,13 @@ export async function shareThread(
     lastModifiedAt: now.toISOString()
   }
 
-  const threadsTable = await getThreadsTableName()
+  const config = await getThreadsTableConfig()
   await updateItem(
-    threadsTable,
+    config.tableName,
     { threadId, createdAt: thread.createdAt },
     updates,
-    'govcloud'
+    config.environment,
+    config.accountId
   )
 
   logger.info(`[Chat Threads] Shared thread ${threadId} with shareId ${shareId}`)
@@ -468,12 +505,13 @@ export async function unshareThread(
     lastModifiedAt: new Date().toISOString()
   }
 
-  const threadsTable = await getThreadsTableName()
+  const config = await getThreadsTableConfig()
   await updateItem(
-    threadsTable,
+    config.tableName,
     { threadId, createdAt: thread.createdAt },
     updates,
-    'govcloud'
+    config.environment,
+    config.accountId
   )
 
   logger.info(`[Chat Threads] Unshared thread ${threadId}`)

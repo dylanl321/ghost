@@ -109,38 +109,30 @@
 // Use the markdown link parser composable
 const { parseMarkdownWithLinks, handleLinkClick } = useMarkdownLinkParser()
 
-// Reactive state
-const messages = ref([{
-  text: "Hello! I'm a Strands agent connected to AWS MCP servers. I can help you with AWS cost analysis, configuration lookups, security hub queries, and more.\n\nFor best results, be explicit about AWS account IDs in your queries. Type \"help\" for example questions.\n\nNote: First-time queries for new accounts may take 2+ minutes while the MCP server initializes.",
-  links: [],
-  sender: 'bot',
-  metadata: {}
-}])
+// Use shared chat logic
+const {
+  messages,
+  isLoading,
+  sessionId,
+  showDisambiguation,
+  disambiguationData,
+  sendMessage,
+  handleAccountSelected,
+  handleDisambiguationCancel,
+  scrollTrigger
+} = useStrandsChat({
+  initialGreeting: "Hello! I'm a Strands agent connected to AWS MCP servers. I can help you with AWS cost analysis, configuration lookups, security hub queries, and more.\n\nFor best results, be explicit about AWS account IDs in your queries. Type \"help\" for example questions.\n\nNote: First-time queries for new accounts may take 2+ minutes while the MCP server initializes."
+})
 
+// UI state (specific to this widget)
 const inputValue = ref('')
-const isLoading = ref(false)
 const isFullScreen = ref('normal')
 const visible = ref('closed')
 const exampleQuestions = ref(false)
 const chatBoxRef = ref(null)
 const inputRef = ref(null)
-const sessionId = ref<string | undefined>(undefined)
-
-// Detect user's timezone
-const userTimezone = ref<string>(
-  Intl.DateTimeFormat().resolvedOptions().timeZone
-)
-
-// Disambiguation state
-const showDisambiguation = ref(false)
-const disambiguationData = ref<any>(null)
-const pendingMessage = ref<string>('')
-
-// Configuration
-const endpoint = "/api/strands/chat"
 
 // Example questions list for Strands agent
-// Note: Be explicit about account IDs for best results
 const exampleQuestionsList = [
   "What are the AWS costs for account 374673712317 this month?",
   "Show me security findings from Security Hub for the Gov Master account",
@@ -148,17 +140,6 @@ const exampleQuestionsList = [
   "Analyze costs by service for account 083876038518",
   "What S3 buckets exist in account 374673712317?",
 ]
-
-// Build conversation history from messages
-const getConversationHistory = () => {
-  return messages.value
-    .filter(msg => msg.sender === 'user' || msg.sender === 'bot')
-    .map(msg => ({
-      role: msg.sender === 'user' ? 'user' as const : 'assistant' as const,
-      content: msg.text
-    }))
-    .slice(1) // Skip the initial greeting message
-}
 
 // Handle form submission
 const handleSubmit = async (e) => {
@@ -171,120 +152,17 @@ const handleSubmit = async (e) => {
     return
   }
 
-  const userMessage = { text: inputValue.value, links: [], sender: 'user' as const, metadata: {} }
-  messages.value.push(userMessage)
   const userInput = inputValue.value
   inputValue.value = ''
-  isLoading.value = true
   exampleQuestions.value = false
 
-  await fetchData(userInput)
+  await sendMessage(userInput)
 }
 
 // Handle example question clicks
-const handleExampleClick = async (message) => {
-  const userMessage = { text: message, sender: 'user' as const, links: [], metadata: {} }
-  messages.value.push(userMessage)
-  isLoading.value = true
+const handleExampleClick = async (message: string) => {
   exampleQuestions.value = false
-
-  await fetchData(message)
-}
-
-// Fetch data from API
-const fetchData = async (inputVal: string) => {
-  try {
-    const conversationHistory = getConversationHistory()
-
-    const requestData = {
-      message: inputVal,
-      conversationHistory,
-      sessionId: sessionId.value,
-      timezone: userTimezone.value // Send user's timezone
-    }
-
-    const data = await $fetch<{
-      data: {
-        responseBody: string
-        sessionId?: string
-        metadata?: {
-          model?: string
-          tokens?: {
-            input?: number
-            output?: number
-          }
-          toolsUsed?: string[]
-        }
-        references?: Array<{ document: string }>
-        disambiguation?: any
-        suggestedLinks?: any[]
-        error?: string | null
-      }
-    }>(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: requestData,
-    })
-
-    // Update session ID if provided
-    if (data.data?.sessionId) {
-      sessionId.value = data.data.sessionId
-    }
-
-    // Check for disambiguation first
-    if (data.data?.disambiguation) {
-      disambiguationData.value = data.data.disambiguation
-      pendingMessage.value = inputVal
-      showDisambiguation.value = true
-      isLoading.value = false
-      return
-    }
-
-    // Check for error field (Strands returns errors with HTTP 200)
-    if (data.data?.error) {
-      const errorMessage = {
-        text: data.data.error,
-        links: [],
-        sender: 'bot' as const,
-        metadata: data.data.metadata || {}
-      }
-      messages.value.push(errorMessage)
-      return
-    }
-
-    let message = data.data.responseBody || 'No response generated'
-
-    // Remove any markdown code spans from response
-    message = message.replaceAll("```markdown", "")
-    message = message.replaceAll("```", "")
-
-    // Handle references if provided
-    const links = (data.data.references || []).map(ref => ref.document)
-
-    // Remove duplicates
-    const uniqueLinks = [...new Set(links)]
-
-    const botMessage = {
-      text: message,
-      links: uniqueLinks,
-      sender: 'bot' as const,
-      metadata: data.data.metadata || {},
-      suggestedLinks: data.data.suggestedLinks || []
-    }
-
-    messages.value.push(botMessage)
-  } catch (error: any) {
-    console.error('Error:', error)
-    const errorMessage = {
-      text: error.data?.error?.message || 'Sorry, something went wrong. The Strands server may be unavailable.',
-      links: [],
-      sender: 'bot' as const,
-      metadata: {}
-    }
-    messages.value.push(errorMessage)
-  } finally {
-    isLoading.value = false
-  }
+  await sendMessage(message)
 }
 
 // Toggle visibility
@@ -307,8 +185,8 @@ const formatMessage = (content: string) => {
   return parseMarkdownWithLinks(content)
 }
 
-// Auto scroll down
-watch([messages, exampleQuestions], () => {
+// Auto scroll down when messages change or scrollTrigger increments
+watch([scrollTrigger, exampleQuestions], () => {
   nextTick(() => {
     if (chatBoxRef.value) {
       chatBoxRef.value.scrollTop = chatBoxRef.value.scrollHeight
@@ -322,49 +200,6 @@ watch(isLoading, (newLoading) => {
     inputRef.value.focus()
   }
 })
-
-// Handle account selection from disambiguation modal
-const handleAccountSelected = async (requestId: string) => {
-  try {
-    // Submit selection to backend
-    await $fetch('/api/strands/account/select', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: {
-        session_id: sessionId.value,
-        request_id: requestId
-      }
-    })
-
-    // Close modal
-    showDisambiguation.value = false
-
-    // Re-execute the original query with the selected account
-    isLoading.value = true
-    await fetchData(pendingMessage.value)
-    pendingMessage.value = ''
-
-  } catch (error: any) {
-    console.error('Error selecting account:', error)
-    const errorMessage = {
-      text: error.data?.error?.message || 'Failed to select account. Please try again.',
-      links: [],
-      sender: 'bot' as const,
-      metadata: {}
-    }
-    messages.value.push(errorMessage)
-    showDisambiguation.value = false
-    isLoading.value = false
-  }
-}
-
-// Handle disambiguation cancel
-const handleDisambiguationCancel = () => {
-  showDisambiguation.value = false
-  disambiguationData.value = null
-  pendingMessage.value = ''
-  isLoading.value = false
-}
 </script>
 
 <style scoped>
