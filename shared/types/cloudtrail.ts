@@ -89,8 +89,6 @@ export interface CloudTrailEvent {
   }
 
   // Additional metadata
-  recipientAccountId?: string
-  sharedEventID?: string
   insightDetails?: {
     state?: string
     eventSource?: string

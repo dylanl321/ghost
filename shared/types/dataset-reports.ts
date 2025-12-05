@@ -40,6 +40,17 @@ export interface ConfigDatasetFilters {
    * Empty array = all regions
    */
   regions?: string[]
+
+  /**
+   * Quick filters for common scenarios
+   */
+  quickFilters?: {
+    publicIpOnly?: boolean
+    publicAccessEnabled?: boolean
+    openToInternet?: boolean
+    unencryptedOnly?: boolean
+    noMfaOnly?: boolean
+  }
 }
 
 /**
@@ -130,6 +141,36 @@ export interface CloudTrailDatasetFilters {
    * Filter by specific regions
    */
   regions?: string[]
+
+  /**
+   * Start time for event filtering (ISO 8601)
+   */
+  startTime?: string
+
+  /**
+   * End time for event filtering (ISO 8601)
+   */
+  endTime?: string
+}
+
+/**
+ * Entra ID (Azure AD) user filter options
+ */
+export interface EntraUsersDatasetFilters {
+  /**
+   * Filter by specific role names
+   */
+  roles?: string[]
+
+  /**
+   * Only include active users
+   */
+  activeOnly?: boolean
+
+  /**
+   * Lookback period in days for activity
+   */
+  lookbackDays?: number
 }
 
 /**
@@ -158,6 +199,14 @@ export interface DatasetSelection {
   cloudtrail?: {
     enabled: boolean
     filters?: CloudTrailDatasetFilters
+  }
+
+  /**
+   * Include Entra ID (Azure AD) users
+   */
+  entraUsers?: {
+    enabled: boolean
+    filters?: EntraUsersDatasetFilters
   }
 }
 

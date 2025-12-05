@@ -5,14 +5,9 @@
  */
 
 import { findMatchingPages, GHOST_SITE_SCHEMA, type PageSchema } from './ghost-site-schema'
+import type { SuggestedLink } from '#shared/types/chat-threads'
 
-export interface SuggestedLink {
-  label: string
-  url: string
-  description: string
-  icon: string
-  type: 'cost' | 'explorer' | 'users' | 'org-chart' | 'reports' | 'security' | 'admin' | 'organization' | 'accounts'
-}
+export type { SuggestedLink }
 
 interface ParsedEntities {
   accountIds: string[]

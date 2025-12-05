@@ -353,8 +353,278 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
     }
   }
 
+  // Check if streaming is enabled for this user
+  const isStreamingEnabled = async (): Promise<boolean> => {
+    try {
+      const { getConfigValue } = await import('~/server/utils/site-config')
+
+      // Check global streaming enable
+      const enabled = await getConfigValue<boolean>('features.strandsChat.streaming.enabled', true)
+      if (!enabled) return false
+
+      // Check rollout percentage
+      const rolloutPercentage = await getConfigValue<number>('features.strandsChat.streaming.rolloutPercentage', 100)
+
+      // Check allowed users list
+      const allowedUsers = await getConfigValue<string[]>('features.strandsChat.streaming.allowedUsers', [])
+
+      // If specific users are listed, check if current user is in the list
+      if (allowedUsers.length > 0) {
+        // TODO: Get current user email from auth context
+        // For now, return based on percentage
+        return Math.random() * 100 < rolloutPercentage
+      }
+
+      // Use percentage-based rollout
+      return Math.random() * 100 < rolloutPercentage
+    } catch (error) {
+      console.error('[useStrandsChat] Error checking streaming config:', error)
+      return true // Default to enabled if config check fails
+    }
+  }
+
+  // Send message with SSE streaming (with reconnection support)
+  const sendMessageStreaming = async (
+    userInput: string,
+    mentionedAccount?: { accountId: string; accountName: string },
+    reconnectAttempt = 0
+  ) => {
+    if (!userInput.trim() || isLoading.value) return
+
+    // Set flag to prevent watch from interfering
+    isSendingMessage.value = true
+
+    const toast = useToast()
+
+    try {
+      const userMessage: ChatMessage = {
+        text: userInput.trim(),
+        links: [],
+        sender: 'user',
+        metadata: {}
+      }
+      messages.value.push(userMessage)
+      scrollTrigger.value++ // Trigger scroll after user message
+
+      // Save user message to thread if using threads store
+      if (threadsStore) {
+        await threadsStore.addMessage(convertChatMessageToThreadMessage(userMessage))
+      }
+
+      // Create placeholder for bot response
+      const botMessageId = `msg-${Date.now()}-${Math.random().toString(36).substring(7)}`
+      if (threadsStore && threadsStore.activeThreadId) {
+        threadsStore.startStreamingMessage(
+          threadsStore.activeThreadId,
+          botMessageId,
+          'assistant'
+        )
+      }
+
+      isLoading.value = true
+
+      // Build conversation history
+      const conversationHistory = getConversationHistory()
+
+      // Connect to SSE endpoint
+      const requestData: any = {
+        message: userInput,
+        conversationHistory,
+        sessionId: sessionId.value,
+        timezone: userTimezone.value
+      }
+
+      if (mentionedAccount) {
+        requestData.mentionedAccount = mentionedAccount
+      }
+
+      const response = await fetch('/api/strands/chat/stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream'
+        },
+        body: JSON.stringify(requestData)
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      if (!response.body) {
+        throw new Error('Response body is empty')
+      }
+
+      // Read SSE stream
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (!line.trim()) continue
+
+          const [eventLine, dataLine] = line.split('\n')
+          if (!eventLine?.startsWith('event:') || !dataLine?.startsWith('data:')) {
+            continue
+          }
+
+          const eventType = eventLine.substring(7).trim()
+          const data = JSON.parse(dataLine.substring(6))
+
+          // Handle events
+          switch (eventType) {
+            case 'status':
+              if (threadsStore) {
+                const currentStatus = threadsStore.getStreamingMessage(botMessageId)?.status
+                threadsStore.updateStreamingStatus(botMessageId, {
+                  status: 'streaming',
+                  progress: data.message,
+                  toolsCalled: currentStatus?.toolsCalled || []
+                })
+              }
+              break
+
+            case 'tool_call':
+              if (threadsStore) {
+                const currentStatus = threadsStore.getStreamingMessage(botMessageId)?.status
+                threadsStore.updateStreamingStatus(botMessageId, {
+                  status: 'streaming',
+                  progress: data.message,
+                  toolsCalled: [...(currentStatus?.toolsCalled || []), data.tool_name]
+                })
+              }
+              break
+
+            case 'response':
+              if (threadsStore) {
+                threadsStore.appendStreamingContent(botMessageId, data.delta)
+              }
+              scrollTrigger.value++
+              break
+
+            case 'complete':
+              if (threadsStore) {
+                await threadsStore.completeStreamingMessage(
+                  botMessageId,
+                  data.response,
+                  data.metadata,
+                  data.suggestedLinks,
+                  data.suggestedPrompts
+                )
+              }
+              if (data.sessionId) {
+                sessionId.value = data.sessionId
+              }
+              scrollTrigger.value++
+              break
+
+            case 'error':
+              if (threadsStore) {
+                threadsStore.handleStreamingError(botMessageId, data.message)
+              }
+              scrollTrigger.value++
+              break
+
+            case 'disambiguation':
+              disambiguationData.value = data
+              pendingMessage.value = userInput
+              showDisambiguation.value = true
+              if (threadsStore) {
+                threadsStore.handleStreamingError(botMessageId, 'Account disambiguation required')
+              }
+              break
+          }
+        }
+      }
+    } catch (error: any) {
+      console.error('[useStrandsChat] Streaming error:', error)
+
+      // Check if this is a connection error that should trigger reconnection
+      const isConnectionError = error.name === 'AbortError' ||
+                               error.message?.includes('timeout') ||
+                               error.message?.includes('network') ||
+                               error.message?.includes('connection')
+
+      // Get max reconnect attempts from config
+      const { getConfigValue } = await import('~/server/utils/site-config')
+      const maxAttempts = await getConfigValue<number>('features.strandsChat.streaming.maxReconnectAttempts', 3)
+      const showIndicator = await getConfigValue<boolean>('features.strandsChat.streaming.showReconnectIndicator', true)
+
+      if (isConnectionError && reconnectAttempt < maxAttempts) {
+        // Show reconnection toast
+        if (showIndicator) {
+          toast.add({
+            title: 'Connection Lost',
+            description: `Reconnecting... (Attempt ${reconnectAttempt + 1}/${maxAttempts})`,
+            icon: 'i-heroicons-arrow-path',
+            color: 'orange',
+            timeout: 3000
+          })
+        }
+
+        // Wait with exponential backoff
+        const delayMs = Math.pow(2, reconnectAttempt) * 1000 // 1s, 2s, 4s
+        await new Promise(resolve => setTimeout(resolve, delayMs))
+
+        // Retry
+        isSendingMessage.value = false // Reset flag before retry
+        return sendMessageStreaming(userInput, mentionedAccount, reconnectAttempt + 1)
+      }
+
+      // Max retries exceeded or non-connection error
+      if (reconnectAttempt >= maxAttempts && showIndicator) {
+        toast.add({
+          title: 'Connection Failed',
+          description: `Unable to reconnect after ${maxAttempts} attempts. Please try again.`,
+          icon: 'i-heroicons-exclamation-triangle',
+          color: 'red',
+          timeout: 5000,
+          actions: [{
+            label: 'Retry',
+            click: () => {
+              sendMessage(userInput, mentionedAccount)
+            }
+          }]
+        })
+      }
+
+      // Create error message
+      const errorMessage: ChatMessage = {
+        text: reconnectAttempt >= maxAttempts
+          ? `Connection failed after ${maxAttempts} attempts. Please try again.`
+          : error.message || 'An error occurred while processing your query',
+        links: [],
+        sender: 'bot',
+        metadata: {}
+      }
+      messages.value.push(errorMessage)
+      scrollTrigger.value++
+
+      if (threadsStore) {
+        await threadsStore.addMessage(convertChatMessageToThreadMessage(errorMessage))
+      }
+    } finally {
+      isLoading.value = false
+      isSendingMessage.value = false
+    }
+  }
+
   // Send message (adds user message then executes query)
   const sendMessage = async (userInput: string, mentionedAccount?: { accountId: string; accountName: string }) => {
+    // Check if streaming is enabled and use it if threads store is available
+    if (threadsStore && await isStreamingEnabled()) {
+      return sendMessageStreaming(userInput, mentionedAccount)
+    }
+
+    // Fallback to legacy non-streaming
     if (!userInput.trim() || isLoading.value) return
 
     // Set flag to prevent watch from interfering

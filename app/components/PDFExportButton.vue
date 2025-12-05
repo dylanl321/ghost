@@ -13,7 +13,7 @@
 </template>
 
 <script setup lang="ts">
-import type { PDFExportOptions } from '~/utils/pdfExport'
+import type { PDFExportOptions } from '~/utils/pdfExport.client'
 
 interface Props {
   data?: any
@@ -23,9 +23,9 @@ interface Props {
   rows?: any[][]
   options?: PDFExportOptions
   icon?: string
-  color?: string
-  variant?: string
-  size?: string
+  color?: any
+  variant?: any
+  size?: any
   label?: string
   disabled?: boolean
   onExport?: () => Promise<any> | any
@@ -66,13 +66,13 @@ const handleExport = async () => {
         result = await exportHTML(props.html || dataToExport, props.options)
         break
       case 'json':
-        result = exportJSON(dataToExport, props.options)
+        result = await exportJSON(dataToExport, props.options)
         break
       case 'table':
         if (props.headers && props.rows) {
-          result = exportTable(props.headers, props.rows, props.options)
+          result = await exportTable(props.headers, props.rows, props.options)
         } else if (dataToExport?.headers && dataToExport?.rows) {
-          result = exportTable(dataToExport.headers, dataToExport.rows, props.options)
+          result = await exportTable(dataToExport.headers, dataToExport.rows, props.options)
         } else {
           throw new Error('Table export requires headers and rows')
         }

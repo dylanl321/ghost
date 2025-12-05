@@ -416,8 +416,11 @@
               @update:model-value="setFilter(editingFilter.field, $event)"
               :options="getFilterOptions(editingFilter.field)"
               multiple
-              :placeholder="`Select ${editingFilter.label}`"
+              :placeholder="getFilterPlaceholder(editingFilter)"
             />
+            <div v-if="getFilterHelperText(editingFilter)" class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              {{ getFilterHelperText(editingFilter) }}
+            </div>
           </div>
 
           <!-- Single select -->
@@ -429,8 +432,11 @@
               :model-value="(filterState[editingFilter.field] as string[])?.[0] || null"
               @update:model-value="setFilter(editingFilter.field, $event ? [$event] : [])"
               :options="['', ...getFilterOptions(editingFilter.field)]"
-              :placeholder="`Select ${editingFilter.label}`"
+              :placeholder="getFilterPlaceholder(editingFilter)"
             />
+            <div v-if="getFilterHelperText(editingFilter)" class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              {{ getFilterHelperText(editingFilter) }}
+            </div>
           </div>
 
           <!-- Boolean -->
@@ -471,8 +477,11 @@
             <UInput
               :model-value="(filterState[editingFilter.field] as string) || ''"
               @update:model-value="setFilter(editingFilter.field, $event || '')"
-              :placeholder="`Enter ${editingFilter.label.toLowerCase()}...`"
+              :placeholder="getFilterPlaceholder(editingFilter)"
             />
+            <div v-if="getFilterHelperText(editingFilter)" class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              {{ getFilterHelperText(editingFilter) }}
+            </div>
           </div>
 
           <div class="text-xs text-gray-500 dark:text-gray-400">
@@ -481,8 +490,16 @@
         </div>
 
         <template #footer>
-          <div class="flex justify-end gap-2">
-            <UButton color="gray" variant="ghost" @click="showFilterEditDialog = false">
+          <div class="flex justify-between gap-2">
+            <UButton
+              color="gray"
+              variant="ghost"
+              icon="i-heroicons-arrow-left"
+              @click="goBackToFilterList"
+            >
+              Back to Filter List
+            </UButton>
+            <UButton color="emerald" variant="solid" @click="showFilterEditDialog = false">
               Done
             </UButton>
           </div>
@@ -495,7 +512,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { advancedFilterConfigs, getFiltersByCategory, getUniqueFieldValues } from '~/utils/advancedFilterConfig'
+import { advancedFilterConfigs, getFiltersByCategory, getUniqueFieldValues, getPlaceholderWithExamples, getHelperText } from '~/utils/advancedFilterConfig'
 import AddFilterModal from '~/components/accounts/AddFilterModal.vue'
 
 const enclaveStore = useEnclaveStore()
@@ -552,6 +569,26 @@ const getFilterOptions = (field: keyof AWSEnclaveData) => {
 // Helper to get filter config by field
 const getFilterConfig = (field: string) => {
   return advancedFilterConfigs.find(c => c.field === field)
+}
+
+// Get placeholder with examples from actual data
+const getFilterPlaceholder = (config: any) => {
+  const actualValues = getFilterOptions(config.field)
+  return getPlaceholderWithExamples(config, actualValues)
+}
+
+// Get helper text showing available values
+const getFilterHelperText = (config: any) => {
+  const actualValues = getFilterOptions(config.field)
+  return getHelperText(actualValues)
+}
+
+// Handle going back to filter list
+const goBackToFilterList = () => {
+  showFilterEditDialog.value = false
+  setTimeout(() => {
+    showFilterModal.value = true
+  }, 100)
 }
 
 // Handle filter selection from modal

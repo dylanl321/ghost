@@ -15,15 +15,15 @@
     <!-- Summary Stats -->
     <div v-if="!loading && hasSummary" class="grid grid-cols-3 gap-3 mb-4">
       <div class="stat-card critical">
-        <div class="text-2xl font-bold text-white">{{ summary.critical }}</div>
+        <div class="text-2xl font-bold text-white">{{ summary?.critical || 0 }}</div>
         <div class="text-xs text-gray-400">Critical</div>
       </div>
       <div class="stat-card high">
-        <div class="text-2xl font-bold text-white">{{ summary.high }}</div>
+        <div class="text-2xl font-bold text-white">{{ summary?.high || 0 }}</div>
         <div class="text-xs text-gray-400">High</div>
       </div>
       <div class="stat-card medium">
-        <div class="text-2xl font-bold text-white">{{ summary.medium }}</div>
+        <div class="text-2xl font-bold text-white">{{ summary?.medium || 0 }}</div>
         <div class="text-xs text-gray-400">Medium</div>
       </div>
     </div>

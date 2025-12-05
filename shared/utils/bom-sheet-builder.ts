@@ -141,6 +141,9 @@ export function createAssumptionsSheet(): WorkSheet {
  */
 function monthLabelToExcelSerial(monthLabel: string): number {
   const [year, month] = monthLabel.split('-').map(Number)
+  if (!year || !month) {
+    throw new Error(`Invalid month label format: ${monthLabel}`)
+  }
   const date = new Date(Date.UTC(year, month - 1, 1)) // month is 1-12, convert to 0-11
   const epoch = new Date(Date.UTC(1899, 11, 30)) // Excel epoch in UTC
   const msPerDay = 24 * 60 * 60 * 1000

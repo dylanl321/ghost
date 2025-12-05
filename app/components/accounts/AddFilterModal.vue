@@ -54,9 +54,12 @@
                 <UBadge color="gray" variant="subtle" size="xs">
                   {{ getFilterTypeLabel(config.type) }}
                 </UBadge>
-                <span class="text-xs text-gray-400" v-if="getAvailableValuesCount(config.field) > 0">
-                  {{ getAvailableValuesCount(config.field) }} options
-                </span>
+              </div>
+              <div
+                v-if="config.type !== 'boolean' && getValuesPreviewText(config)"
+                class="text-xs text-gray-500 dark:text-gray-400 mt-2 font-mono"
+              >
+                {{ getValuesPreviewText(config) }}
               </div>
             </div>
             <UButton
@@ -80,7 +83,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { advancedFilterConfigs, getUniqueFieldValues } from '~/utils/advancedFilterConfig'
+import { advancedFilterConfigs, getUniqueFieldValues, getValuesPreview } from '~/utils/advancedFilterConfig'
 import type { FilterConfig } from '~/utils/advancedFilterConfig'
 
 // Props
@@ -144,6 +147,12 @@ const getFilterTypeLabel = (type: string) => {
     'text': 'Text search'
   }
   return labels[type] || type
+}
+
+// Get values preview text for filter card
+const getValuesPreviewText = (config: FilterConfig) => {
+  const values = getUniqueFieldValues(props.enclaves, config.field)
+  return getValuesPreview(values)
 }
 
 // Handle filter selection

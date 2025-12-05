@@ -447,6 +447,74 @@ resource "aws_dynamodb_table" "chat_threads" {
 }
 
 # ============================================================================
+# Streaming Metrics Table (GovCloud Environment)
+# ============================================================================
+# Stores SSE streaming chat metrics for monitoring and analytics
+# Tracks performance, usage, and errors with 90-day retention
+resource "aws_dynamodb_table" "streaming_metrics" {
+  provider       = aws.target_deployment_account
+  name           = "ghost-streaming-metrics"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "metricDate"
+  range_key      = "metricType"
+
+  attribute {
+    name = "metricDate"
+    type = "S"
+  }
+
+  attribute {
+    name = "metricType"
+    type = "S"
+  }
+
+  # Enable TTL to auto-delete old metrics (90 days)
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  # Enable encryption at rest
+  server_side_encryption {
+    enabled = true
+  }
+
+  # Enable point-in-time recovery
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Name        = "GHOST Streaming Metrics"
+    Environment = local.environment
+    ManagedBy   = "Terraform"
+    Service     = "GHOST"
+    Component   = "StreamingMetrics"
+  }
+}
+
+# ============================================================================
+# Strands Agent Metrics Table (GovCloud Environment)
+# ============================================================================
+# NOTE: This table is OWNED and MANAGED by the Strands team's Terraform
+#
+# Table name: strands-agent-metrics-{environment}
+# Example: strands-agent-metrics-dev, strands-agent-metrics-prod
+#
+# GHOST only READS from this table via API endpoints in:
+#   - /server/api/admin/strands-agent/dashboard.get.ts
+#   - /server/api/admin/strands-agent/session-trace.get.ts
+#   - /server/api/admin/strands-agent/account-metrics.get.ts
+#
+# The Strands team's implementation details:
+#   - File: strands_metrics_integration.md
+#   - Their Terraform: terraform/dynamodb.tf (in Strands repo)
+#   - Python metrics service: agent/services/metrics_service.py
+#
+# DO NOT uncomment this resource - it will conflict with the Strands team's
+# Terraform state. GHOST only needs read-only IAM permissions to query the table.
+
+# ============================================================================
 # Outputs
 # ============================================================================
 
@@ -529,3 +597,17 @@ output "chat_threads_table_arn" {
   description = "ARN of the DynamoDB table for chat threads"
   value       = aws_dynamodb_table.chat_threads.arn
 }
+
+output "streaming_metrics_table_name" {
+  description = "Name of the DynamoDB table for streaming metrics"
+  value       = aws_dynamodb_table.streaming_metrics.name
+}
+
+output "streaming_metrics_table_arn" {
+  description = "ARN of the DynamoDB table for streaming metrics"
+  value       = aws_dynamodb_table.streaming_metrics.arn
+}
+
+# NOTE: strands_agent_metrics table outputs removed
+# That table is managed by the Strands team's Terraform, not GHOST
+# GHOST only needs read-only access to query it via API endpoints

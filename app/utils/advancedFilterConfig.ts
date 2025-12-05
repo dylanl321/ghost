@@ -171,3 +171,77 @@ export function getFiltersByCategory() {
 
   return grouped
 }
+
+/**
+ * Get top N unique values for a field from enclave data
+ * Used for showing preview of available options
+ */
+export function getTopFieldValues(
+  enclaves: Record<string, AWSEnclaveData>,
+  field: keyof AWSEnclaveData,
+  limit: number = 5
+): string[] {
+  const allValues = getUniqueFieldValues(enclaves, field)
+  return allValues.slice(0, limit)
+}
+
+/**
+ * Generate placeholder text with example values from actual data
+ * Returns: "Select Platform Type (e.g., AWS, Azure)"
+ */
+export function getPlaceholderWithExamples(
+  config: FilterConfig,
+  actualValues: string[]
+): string {
+  if (config.type === 'text') {
+    // For text inputs, show an actual example if available
+    if (actualValues.length > 0) {
+      return `Search ${config.label} (e.g., ${actualValues[0]})`
+    }
+    return `Search ${config.label}`
+  }
+
+  if (actualValues.length > 0) {
+    // Show first 2 examples from actual data in placeholder
+    const examples = actualValues.slice(0, 2).join(', ')
+    return `Select ${config.label} (e.g., ${examples})`
+  }
+
+  return `Select ${config.label}`
+}
+
+/**
+ * Generate helper text showing available values from actual data
+ * Returns: "Available: AWS, Azure, GCP, and 5 more"
+ */
+export function getHelperText(actualValues: string[]): string {
+  if (actualValues.length === 0) {
+    return ''
+  }
+
+  if (actualValues.length <= 3) {
+    return `Available: ${actualValues.join(', ')}`
+  }
+
+  const preview = actualValues.slice(0, 3).join(', ')
+  const remaining = actualValues.length - 3
+  return `Available: ${preview}, and ${remaining} more`
+}
+
+/**
+ * Format values preview for filter card in AddFilterModal
+ * Returns: "5 options: AWS, Azure, GCP..."
+ */
+export function getValuesPreview(actualValues: string[]): string {
+  if (actualValues.length === 0) {
+    return 'No options available'
+  }
+
+  if (actualValues.length === 1) {
+    return `1 option: ${actualValues[0]}`
+  }
+
+  const preview = actualValues.slice(0, 3).join(', ')
+  const suffix = actualValues.length > 3 ? '...' : ''
+  return `${actualValues.length} options: ${preview}${suffix}`
+}

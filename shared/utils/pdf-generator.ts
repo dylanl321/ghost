@@ -365,7 +365,7 @@ function createExecutiveSummary(pdf: any, config: DataExportConfig): void {
         totalBudget = summarySheet.data.reduce((sum: number, row: any) =>
           sum + (row.budget || 0), 0
         )
-        if (totalBudget > 0) {
+        if (totalBudget && totalBudget > 0 && totalCost) {
           budgetUtilization = (totalCost / totalBudget) * 100
         }
       }

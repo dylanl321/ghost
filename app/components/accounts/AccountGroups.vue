@@ -45,11 +45,11 @@ const { user } = useOidcAuth()
 const { fetchMembersForGroup } = useGroupMembers()
 
 // Parse AWS group role from display name
-const parseAwsGroupRole = (groupName: string, accountId: string): string | null => {
+const parseAwsGroupRole = (groupName: string, accountId: string): string => {
   // Support both AWS-ID_ROLE and AWS-ID-ROLE patterns
   const awsGroupRegex = new RegExp(`^AWS-${accountId}[_-](.+)$`)
   const match = groupName.match(awsGroupRegex)
-  return match ? match[1] : null
+  return match?.[1] || 'other'
 }
 
 // Computed filtered groups
@@ -127,14 +127,16 @@ const environmentOptions = computed(() => {
 const toggleGroupMembers = async (groupIndex: number) => {
   const allGroups = filteredGroups.value
   const group = allGroups[groupIndex]
-  
+
+  if (!group) return
+
   if (group.expanded) {
     group.expanded = false
     return
   }
-  
+
   group.expanded = true
-  
+
   if (group.members.length === 0 && group.memberCount > 0) {
     await loadGroupMembers(group)
   }
@@ -253,7 +255,7 @@ const loadAccountGroups = async () => {
             const memberCount = memberResponse.members ? memberResponse.members.length : 0
             
             // Parse description for owners and clean description
-            const { cleanDescription, owners } = parseGroupDescription(group.description || '')
+            const { description: cleanDescription, owners } = parseGroupDescription(group.description || '')
             
             allGroups.push({
               id: group.id,
@@ -276,7 +278,7 @@ const loadAccountGroups = async () => {
             const role = parseAwsGroupRole(group.displayName, accountId) || 'other'
             const isGovCloud = props.govCloudAccountId === accountId
             const accountType = isGovCloud ? 'govcloud' : 'commercial'
-            const { cleanDescription, owners } = parseGroupDescription(group.description || '')
+            const { description: cleanDescription, owners } = parseGroupDescription(group.description || '')
             
             allGroups.push({
               id: group.id,
@@ -302,14 +304,14 @@ const loadAccountGroups = async () => {
     
     // Sort groups by role hierarchy and name
     groups.value = allGroups.sort((a, b) => {
-      const roleOrder = { 'admin': 0, 'poweruser': 1, 'readonly': 2, 'other': 3 }
+      const roleOrder: Record<string, number> = { 'admin': 0, 'poweruser': 1, 'readonly': 2, 'other': 3 }
       const aRole = a.role || 'other'
       const bRole = b.role || 'other'
-      
+
       if (aRole !== bRole) {
         return (roleOrder[aRole] || 999) - (roleOrder[bRole] || 999)
       }
-      
+
       return a.displayName.localeCompare(b.displayName)
     })
     

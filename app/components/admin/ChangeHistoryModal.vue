@@ -113,7 +113,7 @@
 </template>
 
 <script setup lang="ts">
-import type { SiteConfigHistoryEntry } from '~/shared/types/site-config';
+import type { SiteConfigHistoryEntry } from '#shared/types/site-config';
 
 const isOpen = defineModel<boolean>();
 

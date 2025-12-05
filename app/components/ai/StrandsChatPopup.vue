@@ -137,7 +137,27 @@
                 : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 rounded-bl-sm'
             "
           >
+            <!-- Streaming status indicator -->
+            <div v-if="msg.status?.status === 'streaming'" class="streaming-status">
+              <div class="status-indicator">
+                <UIcon name="i-heroicons-arrow-path" class="w-3.5 h-3.5 animate-spin text-purple-500" />
+                <span class="text-xs text-gray-600 dark:text-gray-400">{{ msg.status.progress }}</span>
+              </div>
+              <div v-if="msg.status.toolsCalled && msg.status.toolsCalled.length > 0" class="tools-called">
+                <span v-for="tool in msg.status.toolsCalled" :key="tool" class="tool-badge">
+                  {{ tool }}
+                </span>
+              </div>
+            </div>
+
             <div class="text-sm leading-relaxed prose prose-sm max-w-none" :class="msg.role === 'user' ? 'prose-invert' : ''" v-html="parseMarkdownWithLinks(msg.content)" @click="handleLinkClick"></div>
+            <span v-if="msg.streamBuffer && msg.status?.status === 'streaming'" class="cursor-blink">|</span>
+
+            <!-- Error status -->
+            <div v-if="msg.status?.status === 'error'" class="error-status">
+              <UIcon name="i-heroicons-exclamation-triangle" class="w-3.5 h-3.5 text-red-500" />
+              <span class="text-xs text-red-600 dark:text-red-400">{{ msg.status.error }}</span>
+            </div>
 
             <!-- Metadata for bot responses -->
             <div v-if="msg.role === 'assistant' && msg.metadata" class="flex gap-2 mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
@@ -410,13 +430,16 @@ function handlePromptClick(promptText: string) {
 }
 
 // Auto-scroll when messages change or scrollTrigger increments
-watch(scrollTrigger, () => {
+watch([scrollTrigger, messages], () => {
   nextTick(() => {
-    if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-    }
+    // Use a second nextTick to ensure DOM is fully rendered
+    nextTick(() => {
+      if (messagesContainer.value) {
+        messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+      }
+    })
   })
-})
+}, { deep: true })
 
 // Send message
 async function sendMessage() {
@@ -430,3 +453,30 @@ async function sendMessage() {
 
 
 </script>
+
+<style scoped>
+/* Streaming UI Styles */
+.streaming-status {
+  @apply mb-2 pb-2 border-b border-gray-200 dark:border-gray-700;
+}
+
+.status-indicator {
+  @apply flex items-center gap-1.5 mb-1;
+}
+
+.tools-called {
+  @apply flex flex-wrap gap-1 mt-1.5;
+}
+
+.tool-badge {
+  @apply text-xs px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 font-mono;
+}
+
+.cursor-blink {
+  @apply inline-block ml-0.5 text-purple-600 dark:text-purple-400 animate-pulse font-bold;
+}
+
+.error-status {
+  @apply flex items-center gap-1.5 mt-2 p-2 bg-red-50 dark:bg-red-900/20 rounded text-xs;
+}
+</style>

@@ -17,6 +17,7 @@ import { sendStrandsQuery, extractStrandsMetadata, StrandsClientError } from '..
 import { generateSmartLinks, type SuggestedLink } from '../../utils/strands-link-generator'
 import { getSchemaForAI } from '../../utils/ghost-site-schema'
 import { extractFollowUpPrompts, type SuggestedPrompt } from '../../utils/bedrock-prompt-extractor'
+import { buildUserContextForAI, formatUserContextForAI } from '../../utils/user-context-builder'
 
 export interface StrandsChatRequest {
   message: string
@@ -272,6 +273,10 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   logger.info('[Strands Chat API] Account identifier:', accountId || 'none (will be inferred by agent)')
 
+  // Build user context for personalized responses
+  const userContext = await buildUserContextForAI(event)
+  const userContextText = formatUserContextForAI(userContext)
+
   // Build the full query with conversation context + GHOST site schema
   // This helps the AI understand GHOST's structure and generate relevant guidance
   let fullQuery = message
@@ -341,9 +346,9 @@ ${getSchemaForAI()}
       `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`
     )
 
-    fullQuery = `${ghostContext}\n\nPrevious conversation:\n${contextParts.join('\n')}\n\nCurrent query: ${message}`
+    fullQuery = `${ghostContext}\n\n${userContextText}\n\nPrevious conversation:\n${contextParts.join('\n')}\n\nCurrent query: ${message}`
   } else {
-    fullQuery = `${ghostContext}\n\nUser query: ${message}`
+    fullQuery = `${ghostContext}\n\n${userContextText}\n\nUser query: ${message}`
   }
 
   // Call Strands ALB endpoint

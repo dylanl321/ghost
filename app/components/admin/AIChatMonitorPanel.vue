@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AdminThreadSummary, ChatThread, ChatRequestLog, CloudWatchLogEntry } from '~/shared/types/chat-threads'
+import type { AdminThreadSummary, ChatThread, ChatRequestLog, CloudWatchLogEntry } from '#shared/types/chat-threads'
 
 // Composable
 const {

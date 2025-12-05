@@ -98,7 +98,7 @@ export function createCurrentMonthSheet(dataset: NormalizedDataset): SheetConfig
   if (byAccount.length === 0) return null
 
   // Get YTD data if available
-  const ytdSummaryData = (dataset.ytdSummary as any)?.data || dataset.ytdSummary
+  const ytdSummaryData = (dataset.summary as any)?.data || dataset.summary
   const ytdByAccount = new Map<string, number>()
 
   if (ytdSummaryData?.resultsByTime) {
@@ -205,7 +205,7 @@ export function createCurrentMonthSheet(dataset: NormalizedDataset): SheetConfig
   })
 
   // Sort by highest current cost first
-  data.sort((a, b) => (b.totalCost || 0) - (a.totalCost || 0))
+  data.sort((a: any, b: any) => (b.totalCost || 0) - (a.totalCost || 0))
 
   return {
     name: 'Current Month Summary',

@@ -1558,7 +1558,8 @@ const matchesSearchTerm = (account: Account, term: string): boolean => {
   const stdIdMatch = (account.awsStandardAccountID ?? '').toLowerCase().includes(term)
   const lobMatch = (account.linesOfBusiness ?? '').toLowerCase().includes(term)
   const deptMatch = (account.departmentNumber ?? '').toLowerCase().includes(term)
-  return nameMatch || projectMatch || idMatch || stdIdMatch || lobMatch || deptMatch
+  const requestIdMatch = (account.requestID ?? account.requestId)?.toString().includes(term)
+  return nameMatch || projectMatch || idMatch || stdIdMatch || lobMatch || deptMatch || requestIdMatch
 }
 
 const getTabLabel = (tabId: string): string => {

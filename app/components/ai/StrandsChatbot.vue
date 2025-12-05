@@ -26,7 +26,29 @@
     <div id="chat-container" :class="visible">
       <div id="chat-box" :class="isFullScreen" ref="chatBoxRef">
         <div v-for="(msg, index) in messages" :key="index" :class="`message ${msg.sender}`">
+          <!-- Streaming status indicator -->
+          <div v-if="msg.status?.status === 'streaming'" class="streaming-status">
+            <div class="status-indicator">
+              <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin text-purple-500" />
+              <span class="text-xs text-gray-600 dark:text-gray-400">{{ msg.status.progress }}</span>
+            </div>
+            <div v-if="msg.status.toolsCalled && msg.status.toolsCalled.length > 0" class="tools-called">
+              <span v-for="tool in msg.status.toolsCalled" :key="tool" class="tool-badge">
+                {{ tool }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Message content with typewriter cursor for streaming -->
           <div class="markdown-container" v-html="formatMessage(msg.text)" @click="handleLinkClick"></div>
+          <span v-if="msg.streamBuffer && msg.status?.status === 'streaming'" class="cursor-blink">|</span>
+
+          <!-- Error status -->
+          <div v-if="msg.status?.status === 'error'" class="error-status">
+            <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-red-500" />
+            <span class="text-xs text-red-600 dark:text-red-400">{{ msg.status.error }}</span>
+          </div>
+
           <div v-if="msg.links && msg.links.length > 0">
             <br />
             <div v-for="(link, linkIndex) in msg.links" :key="linkIndex" class="link-box">
@@ -129,8 +151,8 @@ const inputValue = ref('')
 const isFullScreen = ref('normal')
 const visible = ref('closed')
 const exampleQuestions = ref(false)
-const chatBoxRef = ref(null)
-const inputRef = ref(null)
+const chatBoxRef = ref<HTMLDivElement | null>(null)
+const inputRef = ref<HTMLInputElement | null>(null)
 
 // Example questions list for Strands agent
 const exampleQuestionsList = [
@@ -142,7 +164,7 @@ const exampleQuestionsList = [
 ]
 
 // Handle form submission
-const handleSubmit = async (e) => {
+const handleSubmit = async (e: Event) => {
   e.preventDefault()
   if (!inputValue.value.trim()) return
 
@@ -186,13 +208,16 @@ const formatMessage = (content: string) => {
 }
 
 // Auto scroll down when messages change or scrollTrigger increments
-watch([scrollTrigger, exampleQuestions], () => {
+watch([scrollTrigger, exampleQuestions, messages], () => {
   nextTick(() => {
-    if (chatBoxRef.value) {
-      chatBoxRef.value.scrollTop = chatBoxRef.value.scrollHeight
-    }
+    // Use a second nextTick to ensure DOM is fully rendered
+    nextTick(() => {
+      if (chatBoxRef.value) {
+        chatBoxRef.value.scrollTop = chatBoxRef.value.scrollHeight
+      }
+    })
   })
-})
+}, { deep: true })
 
 // Refocus after done loading
 watch(isLoading, (newLoading) => {
@@ -472,6 +497,31 @@ watch(isLoading, (newLoading) => {
 
 .markdown-container :deep(tbody tr) {
   @apply hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors;
+}
+
+/* Streaming UI Styles */
+.streaming-status {
+  @apply mb-2 pb-2 border-b border-gray-200 dark:border-gray-600;
+}
+
+.status-indicator {
+  @apply flex items-center gap-2 mb-1;
+}
+
+.tools-called {
+  @apply flex flex-wrap gap-1 mt-2;
+}
+
+.tool-badge {
+  @apply text-xs px-2 py-0.5 rounded bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200;
+}
+
+.cursor-blink {
+  @apply inline-block ml-1 text-purple-600 dark:text-purple-400 animate-pulse;
+}
+
+.error-status {
+  @apply flex items-center gap-2 mt-2 p-2 bg-red-50 dark:bg-red-900/20 rounded;
 }
 </style>
 

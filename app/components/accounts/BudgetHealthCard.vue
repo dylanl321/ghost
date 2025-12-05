@@ -236,12 +236,15 @@ const exactBudgetExceed = computed(() => {
       );
 
     for (let i = 0; i < sortedDailyCosts.length; i++) {
-      cumulative += sortedDailyCosts[i].cost;
+      const dayCost = sortedDailyCosts[i];
+      if (!dayCost) continue;
+
+      cumulative += dayCost.cost;
 
       if (cumulative > props.budget) {
-        const endDate = new Date(sortedDailyCosts[i].date);
+        const endDate = new Date(dayCost.date);
         return {
-          date: sortedDailyCosts[i].date,
+          date: dayCost.date,
           label: endDate.toLocaleDateString("en-US", {
             month: "short",
             day: "numeric",
@@ -313,7 +316,7 @@ const forecastTimeline = computed(() => {
       );
 
     // Add start of month marker if historical data doesn't start on day 1
-    const hasStartOfMonth = sortedDailyCosts.some(day => day.date === startOfMonthStr);
+    const hasStartOfMonth = sortedDailyCosts.some(day => day?.date === startOfMonthStr);
     if (!hasStartOfMonth && sortedDailyCosts.length > 0) {
       timeline.push({
         date: startOfMonthStr,
@@ -355,7 +358,7 @@ const forecastTimeline = computed(() => {
   }
 
   // Add today's actual spend
-  const todayDateStr = now.toISOString().split('T')[0];
+  const todayDateStr = now.toISOString().split('T')[0] || '';
 
   timeline.push({
     date: todayDateStr,
@@ -414,14 +417,17 @@ const exactExceedPosition = computed(() => {
   let nextIndex = -1;
 
   for (let i = 0; i < timeline.length; i++) {
-    const dotDate = new Date(timeline[i].date).getTime();
+    const timelineItem = timeline[i];
+    if (!timelineItem) continue;
+
+    const dotDate = new Date(timelineItem.date).getTime();
 
     if (dotDate <= exceedDate) {
-      prevDot = timeline[i];
+      prevDot = timelineItem;
       prevIndex = i;
     }
     if (dotDate >= exceedDate && nextDot === null) {
-      nextDot = timeline[i];
+      nextDot = timelineItem;
       nextIndex = i;
       break;
     }

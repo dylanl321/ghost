@@ -87,7 +87,7 @@
 
 <script setup lang="ts">
 import { convertToUsernameSlug } from '~/utils/userUtils'
-import type { IDCUserSession } from '~/shared/types/idc-sessions'
+import type { IDCUserSession } from '#shared/types/idc-sessions'
 
 interface GraphUser {
   displayName: string

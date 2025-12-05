@@ -67,6 +67,14 @@ export interface SiteConfig {
   features: {
     strandsChat: {
       enabled: boolean;
+      streaming: {
+        enabled: boolean;
+        rolloutPercentage: number;
+        allowedUsers: string[];
+        showReconnectIndicator: boolean;
+        maxReconnectAttempts: number;
+        streamTimeout: number;
+      };
     };
     strandsChatPopup: {
       enabled: boolean;
@@ -123,6 +131,86 @@ export const DEFAULT_SITE_CONFIG: SiteConfigItem[] = [
     defaultValue: false,
     isPublic: true,
     isEditable: true,
+  },
+
+  // Strands Streaming Configuration
+  {
+    key: 'features.strandsChat.streaming.enabled',
+    value: true,
+    type: 'boolean',
+    category: 'features',
+    label: 'Strands Streaming',
+    description: 'Enable SSE streaming for real-time progress updates in chat queries',
+    defaultValue: true,
+    isPublic: true,
+    isEditable: true,
+  },
+  {
+    key: 'features.strandsChat.streaming.rolloutPercentage',
+    value: 100,
+    type: 'number',
+    category: 'features',
+    label: 'Streaming Rollout %',
+    description: 'Percentage of users to enable streaming for (0-100). Use for gradual rollout.',
+    defaultValue: 100,
+    isPublic: false,
+    isEditable: true,
+    validation: {
+      min: 0,
+      max: 100,
+    },
+  },
+  {
+    key: 'features.strandsChat.streaming.allowedUsers',
+    value: [],
+    type: 'array',
+    category: 'features',
+    label: 'Streaming Allowed Users',
+    description: 'List of user emails to enable streaming for. Leave empty for percentage-based rollout.',
+    defaultValue: [],
+    isPublic: false,
+    isEditable: true,
+  },
+  {
+    key: 'features.strandsChat.streaming.showReconnectIndicator',
+    value: true,
+    type: 'boolean',
+    category: 'features',
+    label: 'Show Reconnect Indicator',
+    description: 'Show toast notification when streaming connection drops and reconnects',
+    defaultValue: true,
+    isPublic: false,
+    isEditable: true,
+  },
+  {
+    key: 'features.strandsChat.streaming.maxReconnectAttempts',
+    value: 3,
+    type: 'number',
+    category: 'features',
+    label: 'Max Reconnect Attempts',
+    description: 'Maximum number of automatic reconnection attempts before showing error',
+    defaultValue: 3,
+    isPublic: false,
+    isEditable: true,
+    validation: {
+      min: 0,
+      max: 5,
+    },
+  },
+  {
+    key: 'features.strandsChat.streaming.streamTimeout',
+    value: 300000,
+    type: 'number',
+    category: 'features',
+    label: 'Stream Timeout (ms)',
+    description: 'Maximum duration for streaming connection before timeout (5 minutes)',
+    defaultValue: 300000,
+    isPublic: false,
+    isEditable: true,
+    validation: {
+      min: 60000,
+      max: 600000,
+    },
   },
   {
     key: 'features.reportScheduler.enabled',

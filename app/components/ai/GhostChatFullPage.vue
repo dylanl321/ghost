@@ -4,7 +4,27 @@
     <div class="chat-messages" ref="chatBoxRef">
       <div v-for="(msg, index) in messages" :key="index" :class="`message ${msg.sender}`">
         <div class="message-content">
+          <!-- Streaming status indicator -->
+          <div v-if="msg.status?.status === 'streaming'" class="streaming-status">
+            <div class="status-indicator">
+              <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin text-purple-500" />
+              <span class="text-xs text-gray-600 dark:text-gray-400">{{ msg.status.progress }}</span>
+            </div>
+            <div v-if="msg.status.toolsCalled && msg.status.toolsCalled.length > 0" class="tools-called">
+              <span v-for="tool in msg.status.toolsCalled" :key="tool" class="tool-badge">
+                {{ tool }}
+              </span>
+            </div>
+          </div>
+
           <div class="markdown-container" v-html="formatMessage(msg.text)" @click="handleLinkClick"></div>
+          <span v-if="msg.streamBuffer && msg.status?.status === 'streaming'" class="cursor-blink">|</span>
+
+          <!-- Error status -->
+          <div v-if="msg.status?.status === 'error'" class="error-status">
+            <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-red-500" />
+            <span class="text-xs text-red-600 dark:text-red-400">{{ msg.status.error }}</span>
+          </div>
 
           <!-- External Links -->
           <div v-if="msg.links && msg.links.length > 0" class="mt-3">
@@ -227,9 +247,9 @@ const messages = computed(() => chatMessages.value)
 
 // UI state (specific to full page)
 const inputValue = ref('')
-const chatBoxRef = ref(null)
-const inputRef = ref(null)
-const mentionDropdownRef = ref(null)
+const chatBoxRef = ref<HTMLDivElement | null>(null)
+const inputRef = ref<HTMLInputElement | null>(null)
+const mentionDropdownRef = ref<HTMLDivElement | null>(null)
 
 // Only show example questions when there are no messages (or only the initial greeting)
 const exampleQuestions = computed(() => {
@@ -370,7 +390,7 @@ function handleMentionClick(account: any) {
 }
 
 // Handle form submission
-const handleSubmit = async (e) => {
+const handleSubmit = async (e: Event) => {
   e.preventDefault()
   if (!inputValue.value.trim()) return
 
@@ -417,13 +437,16 @@ const formatMessage = (content: string) => {
 }
 
 // Auto scroll down when messages change or scrollTrigger increments
-watch([scrollTrigger, exampleQuestions], () => {
+watch([scrollTrigger, exampleQuestions, messages], () => {
   nextTick(() => {
-    if (chatBoxRef.value) {
-      chatBoxRef.value.scrollTop = chatBoxRef.value.scrollHeight
-    }
+    // Use a second nextTick to ensure DOM is fully rendered
+    nextTick(() => {
+      if (chatBoxRef.value) {
+        chatBoxRef.value.scrollTop = chatBoxRef.value.scrollHeight
+      }
+    })
   })
-})
+}, { deep: true })
 
 // Refocus after done loading
 watch(isLoading, (newLoading) => {
@@ -780,5 +803,30 @@ onMounted(() => {
 
 .markdown-container :deep(tbody tr) {
   @apply hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors;
+}
+
+/* Streaming UI Styles */
+.streaming-status {
+  @apply mb-3 pb-2 border-b border-gray-200 dark:border-gray-700;
+}
+
+.status-indicator {
+  @apply flex items-center gap-2 mb-1;
+}
+
+.tools-called {
+  @apply flex flex-wrap gap-2 mt-2;
+}
+
+.tool-badge {
+  @apply text-xs px-2 py-1 rounded bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 font-mono;
+}
+
+.cursor-blink {
+  @apply inline-block ml-1 text-purple-600 dark:text-purple-400 animate-pulse font-bold;
+}
+
+.error-status {
+  @apply flex items-center gap-2 mt-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg;
 }
 </style>

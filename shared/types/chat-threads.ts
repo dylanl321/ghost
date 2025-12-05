@@ -3,7 +3,16 @@
  * Shared between frontend and backend
  */
 
-import type { SuggestedLink } from '~/server/utils/strands-link-generator'
+/**
+ * Suggested link to GHOST pages
+ */
+export interface SuggestedLink {
+  label: string
+  url: string
+  description: string
+  icon: string
+  type: 'cost' | 'explorer' | 'users' | 'org-chart' | 'reports' | 'security' | 'admin' | 'organization' | 'accounts'
+}
 
 /**
  * Suggested follow-up prompt extracted from AI response
@@ -281,4 +290,90 @@ export interface AdminThreadSummary extends ChatThreadSummary {
   sessionId?: string
   shareId?: string
   lastQuery?: string
+}
+
+// =============================================================================
+// SSE Streaming Types
+// =============================================================================
+
+/**
+ * SSE event types from Strands streaming endpoint
+ */
+export type SSEEventType =
+  | 'status'           // Progress updates
+  | 'tool_call'        // Tool invocation
+  | 'response'         // Partial text chunks
+  | 'complete'         // Final result
+  | 'error'            // Error occurred
+  | 'disambiguation'   // Multiple accounts match
+
+/**
+ * Status event data - progress updates during query execution
+ */
+export interface StatusEvent {
+  message: string
+  step: string
+  account_id?: string
+  account_alias?: string
+  mcp_id?: string
+  mcp_name?: string
+}
+
+/**
+ * Tool call event data - when agent calls an AWS MCP tool
+ */
+export interface ToolCallEvent {
+  tool_name: string
+  tool_input: any
+  message: string
+}
+
+/**
+ * Response event data - streaming text chunks for typewriter effect
+ */
+export interface ResponseEvent {
+  delta: string           // New text chunk
+  accumulated: string     // Full text so far
+}
+
+/**
+ * Complete event data - final query result
+ */
+export interface CompleteEvent {
+  response: string
+  sessionId: string
+  metadata: {
+    accountId: string
+    mcpUsed: string
+    mcpType: 'permanent' | 'temporary'
+    toolCallsCount: number
+  }
+  suggestedLinks?: SuggestedLink[]
+  suggestedPrompts?: SuggestedPrompt[]
+}
+
+/**
+ * Error event data - query failure
+ */
+export interface ErrorEvent {
+  message: string
+  step?: string
+}
+
+/**
+ * Message status for streaming UI
+ */
+export interface MessageStatus {
+  status: 'pending' | 'streaming' | 'complete' | 'error'
+  progress?: string          // Current step (e.g., "Resolving account...")
+  toolsCalled?: string[]     // List of tools used
+  error?: string             // Error message if failed
+}
+
+/**
+ * Enhanced chat message for streaming support
+ */
+export interface StreamingChatMessage extends ChatMessage {
+  status?: MessageStatus
+  streamBuffer?: string     // Partial content being streamed
 }

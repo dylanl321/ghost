@@ -461,6 +461,40 @@
               </div>
             </UCard>
 
+            <!-- AI Chat Metrics Category -->
+            <UCard
+              class="hover:shadow-lg transition-shadow cursor-pointer"
+              @click="navigateTo('/admin/metrics')"
+            >
+              <div class="space-y-4">
+                <div class="flex items-start justify-between">
+                  <div class="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                    <Icon name="i-heroicons-chart-pie" class="w-8 h-8 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <Icon name="i-heroicons-arrow-right" class="w-5 h-5 text-gray-400" />
+                </div>
+                <div>
+                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                    AI Chat Metrics
+                  </h3>
+                  <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                    Monitor streaming performance, agent execution, and user activity
+                  </p>
+                  <div class="flex flex-wrap gap-2">
+                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
+                      Streaming
+                    </span>
+                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
+                      Agent Performance
+                    </span>
+                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
+                      User Analytics
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </UCard>
+
             <!-- Monitoring & Support Category -->
             <UCard
               class="hover:shadow-lg transition-shadow cursor-pointer"
@@ -553,6 +587,7 @@ const categories = [
   { id: 'users', label: 'User Management', icon: 'i-heroicons-user-group', to: '/admin/users' },
   { id: 'content', label: 'Content & Reports', icon: 'i-heroicons-document-duplicate', to: '/admin/content' },
   { id: 'ai-data', label: 'AI & Data', icon: 'i-heroicons-sparkles', to: '/admin/ai-data' },
+  { id: 'metrics', label: 'AI Chat Metrics', icon: 'i-heroicons-chart-pie', to: '/admin/metrics' },
   { id: 'monitoring', label: 'Monitoring & Support', icon: 'i-heroicons-chart-bar', to: '/admin/monitoring' },
   { id: 'pipelines', label: 'Pipeline Analytics', icon: 'i-heroicons-arrow-path', to: '/admin/pipelines' },
 ]
