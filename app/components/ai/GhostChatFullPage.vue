@@ -17,7 +17,7 @@
             </div>
           </div>
 
-          <div class="markdown-container" v-html="formatMessage(msg.text)" @click="handleLinkClick"></div>
+          <div class="markdown-container" v-html="formatMessage(msg.text)" @click="handleEnrichedClick"></div>
           <span v-if="msg.streamBuffer && msg.status?.status === 'streaming'" class="cursor-blink">|</span>
 
           <!-- Error status -->
@@ -192,14 +192,17 @@
       @selected="handleAccountSelected"
       @cancel="handleDisambiguationCancel"
     />
+
+    <!-- Entity Popover -->
+    <EntityPopover />
   </div>
 </template>
 
 <script setup lang="ts">
 import { useChatThreadsStore } from '~/stores/useChatThreadsStore'
 
-// Use the markdown link parser composable
-const { parseMarkdownWithLinks, handleLinkClick } = useMarkdownLinkParser()
+// Use the entity-aware response enricher
+const { enrichStrandsResponse, handleEnrichedClick } = useStrandsResponseEnricher()
 
 // Get user's favorite and recent accounts for personalized prompts
 const { favorites } = useFavoriteAccounts()
@@ -430,10 +433,10 @@ const handlePromptClick = async (promptText: string) => {
   await handleSubmit(new Event('submit'))
 }
 
-// Format message content using the link parser (handles markdown + internal links)
+// Format message content using the entity-aware enricher (handles markdown + internal links + entity detection)
 const formatMessage = (content: string) => {
   if (!content) return ''
-  return parseMarkdownWithLinks(content)
+  return enrichStrandsResponse(content)
 }
 
 // Auto scroll down when messages change or scrollTrigger increments

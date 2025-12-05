@@ -6,6 +6,7 @@ import {
   DescribeLogGroupsCommand,
 } from "@aws-sdk/client-cloudwatch-logs";
 import { logger } from "./logger";
+import { assumeChildAccountRole } from "./credentials/awsAccountCredentials";
 
 const config = useRuntimeConfig();
 

@@ -150,7 +150,7 @@
               </div>
             </div>
 
-            <div class="text-sm leading-relaxed prose prose-sm max-w-none" :class="msg.role === 'user' ? 'prose-invert' : ''" v-html="parseMarkdownWithLinks(msg.content)" @click="handleLinkClick"></div>
+            <div class="text-sm leading-relaxed prose prose-sm max-w-none" :class="msg.role === 'user' ? 'prose-invert' : ''" v-html="enrichStrandsResponse(msg.content)" @click="handleEnrichedClick"></div>
             <span v-if="msg.streamBuffer && msg.status?.status === 'streaming'" class="cursor-blink">|</span>
 
             <!-- Error status -->
@@ -278,13 +278,16 @@
     @selected="handleAccountSelected"
     @cancel="handleDisambiguationCancel"
   />
+
+  <!-- Entity Popover -->
+  <EntityPopover />
 </template>
 
 <script setup lang="ts">
 import { useChatThreadsStore } from '~/stores/useChatThreadsStore'
 
-// Use markdown link parser composable
-const { parseMarkdownWithLinks, handleLinkClick } = useMarkdownLinkParser()
+// Use the entity-aware response enricher
+const { enrichStrandsResponse, handleEnrichedClick } = useStrandsResponseEnricher()
 
 // Get the threads store to persist messages
 const threadsStore = useChatThreadsStore()

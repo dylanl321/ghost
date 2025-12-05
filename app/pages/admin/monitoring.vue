@@ -35,13 +35,15 @@
     <!-- Tab Content -->
     <div class="mt-6">
       <SystemLogsPanel v-if="activeTab === 0" />
-      <IssuesPanel v-else-if="activeTab === 1" />
+      <StrandsLogsViewer v-else-if="activeTab === 1" />
+      <IssuesPanel v-else-if="activeTab === 2" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import SystemLogsPanel from '~/components/admin/SystemLogsPanel.vue'
+import StrandsLogsViewer from '~/components/admin/StrandsLogsViewer.vue'
 import IssuesPanel from '~/components/admin/IssuesPanel.vue'
 
 // Page meta - using admin layout
@@ -59,6 +61,10 @@ const tabs = [
   {
     label: 'System Logs',
     icon: 'i-heroicons-document-text'
+  },
+  {
+    label: 'Strands Agent Logs',
+    icon: 'i-heroicons-server'
   },
   {
     label: 'Issues & Tickets',

@@ -354,33 +354,11 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
   }
 
   // Check if streaming is enabled for this user
+  // Note: Streaming is enabled by default. Configuration is managed server-side.
   const isStreamingEnabled = async (): Promise<boolean> => {
-    try {
-      const { getConfigValue } = await import('~/server/utils/site-config')
-
-      // Check global streaming enable
-      const enabled = await getConfigValue<boolean>('features.strandsChat.streaming.enabled', true)
-      if (!enabled) return false
-
-      // Check rollout percentage
-      const rolloutPercentage = await getConfigValue<number>('features.strandsChat.streaming.rolloutPercentage', 100)
-
-      // Check allowed users list
-      const allowedUsers = await getConfigValue<string[]>('features.strandsChat.streaming.allowedUsers', [])
-
-      // If specific users are listed, check if current user is in the list
-      if (allowedUsers.length > 0) {
-        // TODO: Get current user email from auth context
-        // For now, return based on percentage
-        return Math.random() * 100 < rolloutPercentage
-      }
-
-      // Use percentage-based rollout
-      return Math.random() * 100 < rolloutPercentage
-    } catch (error) {
-      console.error('[useStrandsChat] Error checking streaming config:', error)
-      return true // Default to enabled if config check fails
-    }
+    // Streaming is enabled by default
+    // The server will handle any rollout logic if needed
+    return true
   }
 
   // Send message with SSE streaming (with reconnection support)
@@ -553,10 +531,9 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
                                error.message?.includes('network') ||
                                error.message?.includes('connection')
 
-      // Get max reconnect attempts from config
-      const { getConfigValue } = await import('~/server/utils/site-config')
-      const maxAttempts = await getConfigValue<number>('features.strandsChat.streaming.maxReconnectAttempts', 3)
-      const showIndicator = await getConfigValue<boolean>('features.strandsChat.streaming.showReconnectIndicator', true)
+      // Use hardcoded defaults for reconnection config
+      const maxAttempts = 3
+      const showIndicator = true
 
       if (isConnectionError && reconnectAttempt < maxAttempts) {
         // Show reconnection toast
