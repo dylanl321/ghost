@@ -36,7 +36,8 @@
     <div class="mt-6">
       <SystemLogsPanel v-if="activeTab === 0" />
       <StrandsLogsViewer v-else-if="activeTab === 1" />
-      <IssuesPanel v-else-if="activeTab === 2" />
+      <StrandsHealthCheck v-else-if="activeTab === 2" />
+      <IssuesPanel v-else-if="activeTab === 3" />
     </div>
   </div>
 </template>
@@ -44,6 +45,7 @@
 <script setup lang="ts">
 import SystemLogsPanel from '~/components/admin/SystemLogsPanel.vue'
 import StrandsLogsViewer from '~/components/admin/StrandsLogsViewer.vue'
+import StrandsHealthCheck from '~/components/admin/StrandsHealthCheck.vue'
 import IssuesPanel from '~/components/admin/IssuesPanel.vue'
 
 // Page meta - using admin layout
@@ -65,6 +67,10 @@ const tabs = [
   {
     label: 'Strands Agent Logs',
     icon: 'i-heroicons-server'
+  },
+  {
+    label: 'Service Health',
+    icon: 'i-heroicons-heart'
   },
   {
     label: 'Issues & Tickets',

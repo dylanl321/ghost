@@ -589,6 +589,7 @@ const categories = [
   { id: 'ai-data', label: 'AI & Data', icon: 'i-heroicons-sparkles', to: '/admin/ai-data' },
   { id: 'metrics', label: 'AI Chat Metrics', icon: 'i-heroicons-chart-pie', to: '/admin/metrics' },
   { id: 'monitoring', label: 'Monitoring & Support', icon: 'i-heroicons-chart-bar', to: '/admin/monitoring' },
+  { id: 'agent-test', label: 'Agent Testing', icon: 'i-heroicons-wrench-screwdriver', to: '/admin/agent-test' },
   { id: 'pipelines', label: 'Pipeline Analytics', icon: 'i-heroicons-arrow-path', to: '/admin/pipelines' },
 ]
 

@@ -78,7 +78,7 @@ export function useStreamingNotifications() {
    * Get count of active background streams
    */
   const activeBackgroundStreamCount = computed(() => {
-    return threadsStore.getActiveStreamCount()
+    return threadsStore.getActiveStreamCount // Use getter, not method
   })
 
   /**

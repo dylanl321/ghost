@@ -29,7 +29,7 @@ export default defineEventHandler(async (event) => {
     // Query all metrics with metricType starting with "account:"
     const result = await scanItems(
       TABLE_NAME,
-      '#metricType BEGINS_WITH :accountPrefix AND #metricDate BETWEEN :startDate AND :endDate',
+      'begins_with(#metricType, :accountPrefix) AND #metricDate BETWEEN :startDate AND :endDate',
       limit * 10, // Fetch more than limit to allow aggregation
       undefined,
       'govcloud',

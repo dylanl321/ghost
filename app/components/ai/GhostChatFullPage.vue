@@ -2,23 +2,37 @@
   <div class="ghost-chat-container">
     <!-- Chat Messages Area -->
     <div class="chat-messages" ref="chatBoxRef">
-      <div v-for="(msg, index) in messages" :key="index" :class="`message ${msg.sender}`">
+      <div v-for="(msg, index) in messages" :key="index" :class="`message ${msg.sender || (msg.role === 'assistant' ? 'bot' : msg.role)}`">
         <div class="message-content">
-          <!-- Streaming status indicator -->
-          <div v-if="msg.status?.status === 'streaming'" class="streaming-status">
-            <div class="status-indicator">
-              <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin text-purple-500" />
-              <span class="text-xs text-gray-600 dark:text-gray-400">{{ msg.status.progress }}</span>
+          <!-- Streaming status indicator (GHOST thinking) -->
+          <div v-if="msg.status?.status === 'pending' || msg.status?.status === 'streaming'" class="streaming-status mb-3">
+            <div class="flex items-center gap-3 mb-2">
+              <div class="ghost-loading">
+                <UIcon name="i-fa6-solid-ghost" class="ghost-icon text-emerald-400" style="width: 24px; height: 24px;" />
+                <div class="ghost-dots">
+                  <div class="ghost-dot"></div>
+                  <div class="ghost-dot"></div>
+                  <div class="ghost-dot"></div>
+                </div>
+              </div>
+              <div class="flex flex-col gap-1">
+                <span class="text-sm font-medium text-gray-700 dark:text-gray-300">GHOST is thinking...</span>
+                <span class="text-xs text-gray-600 dark:text-gray-400">{{ msg.status.progress || 'Starting...' }}</span>
+              </div>
             </div>
-            <div v-if="msg.status.toolsCalled && msg.status.toolsCalled.length > 0" class="tools-called">
-              <span v-for="tool in msg.status.toolsCalled" :key="tool" class="tool-badge">
+            <div v-if="msg.status.toolsCalled && msg.status.toolsCalled.length > 0" class="flex flex-wrap gap-1.5">
+              <span v-for="tool in msg.status.toolsCalled" :key="tool" class="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
+                <UIcon name="i-heroicons-wrench-screwdriver" class="w-3 h-3" />
                 {{ tool }}
               </span>
             </div>
+            <div class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              Complex queries may take 30-120 seconds to complete
+            </div>
           </div>
 
-          <div class="markdown-container" v-html="formatMessage(msg.text)" @click="handleEnrichedClick"></div>
-          <span v-if="msg.streamBuffer && msg.status?.status === 'streaming'" class="cursor-blink">|</span>
+          <div class="markdown-container" v-html="formatMessage(msg.text || msg.content)" @click="handleEnrichedClick"></div>
+          <span v-if="msg.streamBuffer && (msg.status?.status === 'pending' || msg.status?.status === 'streaming')" class="cursor-blink">|</span>
 
           <!-- Error status -->
           <div v-if="msg.status?.status === 'error'" class="error-status">
@@ -109,8 +123,8 @@
         </div>
       </div>
 
-      <!-- Ghost Loading Indicator -->
-      <div v-if="isLoading" class="message bot">
+      <!-- Ghost Loading Indicator (only for non-streaming fallback) -->
+      <div v-if="isLoading && !hasStreamingMessage" class="message bot">
         <div class="message-content ghost-loading-container">
           <div class="ghost-loading">
             <UIcon name="i-fa6-solid-ghost" class="ghost-icon" />
@@ -245,8 +259,21 @@ const {
   loadMessagesFromThread: !!threadsStore.currentThread
 })
 
-// Convert to component message format
-const messages = computed(() => chatMessages.value)
+// Use messages from threads store (includes streaming status)
+// Fall back to chatMessages for compatibility when no thread exists
+const messages = computed(() => {
+  if (threadsStore.currentThread?.messages) {
+    return threadsStore.currentThread.messages
+  }
+  return chatMessages.value
+})
+
+// Check if there's a streaming message (to hide separate loader)
+const hasStreamingMessage = computed(() => {
+  return messages.value.some(msg =>
+    msg.status?.status === 'pending' || msg.status?.status === 'streaming'
+  )
+})
 
 // UI state (specific to full page)
 const inputValue = ref('')
@@ -254,19 +281,25 @@ const chatBoxRef = ref<HTMLDivElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
 const mentionDropdownRef = ref<HTMLDivElement | null>(null)
 
-// Only show example questions when there are no messages (or only the initial greeting)
-const exampleQuestions = computed(() => {
-  // Show examples if no messages at all
-  if (messages.value.length === 0) return true
+// Control example questions visibility with immediate local state
+// This prevents flashing during async state updates
+const showExamples = ref(true)
 
-  // Show examples if only one message and it's the initial greeting
-  if (messages.value.length === 1 && messages.value[0].sender === 'bot') {
-    return true
+// Sync showExamples with actual message state (but only show, never re-show once hidden)
+watch(messages, (newMessages) => {
+  // Once examples are hidden, they stay hidden for this session
+  if (!showExamples.value) return
+
+  // Check if we should hide examples based on messages
+  if (newMessages.length > 1) {
+    showExamples.value = false
+  } else if (newMessages.length === 1 && newMessages[0].sender !== 'bot') {
+    showExamples.value = false
   }
+}, { immediate: true })
 
-  // Hide examples if there are any user messages or bot responses
-  return false
-})
+// Keep backward compatibility with existing code that references exampleQuestions
+const exampleQuestions = computed(() => showExamples.value)
 
 // Default prompts (used when no personalized accounts available)
 const defaultPrompts = [
@@ -398,7 +431,7 @@ const handleSubmit = async (e: Event) => {
   if (!inputValue.value.trim()) return
 
   if (inputValue.value.trim().toLowerCase() === "help") {
-    exampleQuestions.value = true
+    showExamples.value = true
     inputValue.value = ''
     return
   }
@@ -406,8 +439,9 @@ const handleSubmit = async (e: Event) => {
   const userInput = inputValue.value
   const mentionedAccount = selectedAccountForMessage.value
 
+  // Hide examples immediately (before any async operations)
+  showExamples.value = false
   inputValue.value = ''
-  exampleQuestions.value = false
   clearSelectedAccount()
 
   // If account was mentioned, add context to the message
@@ -423,7 +457,8 @@ const handleSubmit = async (e: Event) => {
 
 // Handle example question clicks
 const handleExampleClick = async (message: string) => {
-  exampleQuestions.value = false
+  // Hide examples immediately (before any async operations)
+  showExamples.value = false
   await sendChatMessage(message)
 }
 
@@ -440,15 +475,26 @@ const formatMessage = (content: string) => {
 }
 
 // Auto scroll down when messages change or scrollTrigger increments
+// Use a debounced approach to prevent multiple rapid scrolls
+let scrollTimeoutId: NodeJS.Timeout | null = null
 watch([scrollTrigger, exampleQuestions, messages], () => {
-  nextTick(() => {
-    // Use a second nextTick to ensure DOM is fully rendered
+  // Clear existing timeout to debounce
+  if (scrollTimeoutId) {
+    clearTimeout(scrollTimeoutId)
+  }
+
+  // Schedule scroll for next frame
+  scrollTimeoutId = setTimeout(() => {
     nextTick(() => {
       if (chatBoxRef.value) {
-        chatBoxRef.value.scrollTop = chatBoxRef.value.scrollHeight
+        chatBoxRef.value.scrollTo({
+          top: chatBoxRef.value.scrollHeight,
+          behavior: 'smooth' // Smooth scroll for better UX
+        })
       }
+      scrollTimeoutId = null
     })
-  })
+  }, 50) // 50ms debounce
 }, { deep: true })
 
 // Refocus after done loading

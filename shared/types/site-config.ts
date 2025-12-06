@@ -64,44 +64,44 @@ export interface SiteConfigItem {
  * Type-safe configuration structure
  */
 export interface SiteConfig {
-  features: {
-    strandsChat: {
-      enabled: boolean;
-      streaming: {
-        enabled: boolean;
-        rolloutPercentage: number;
-        allowedUsers: string[];
-        showReconnectIndicator: boolean;
-        maxReconnectAttempts: number;
-        streamTimeout: number;
+  features?: {
+    strandsChat?: {
+      enabled?: boolean;
+      streaming?: {
+        enabled?: boolean;
+        rolloutPercentage?: number;
+        allowedUsers?: string[];
+        showReconnectIndicator?: boolean;
+        maxReconnectAttempts?: number;
+        streamTimeout?: number;
       };
     };
-    strandsChatPopup: {
-      enabled: boolean;
+    strandsChatPopup?: {
+      enabled?: boolean;
     };
-    reportScheduler: {
-      enabled: boolean;
+    reportScheduler?: {
+      enabled?: boolean;
     };
-    adminNotifications: {
-      enabled: boolean;
-    };
-  };
-  services: {
-    strands: {
-      serverUrl: string;
-      timeout: number;
-      retries: number;
-      retryDelay: number;
+    adminNotifications?: {
+      enabled?: boolean;
     };
   };
-  performance: {
-    apiTimeout: number;
-    cacheTimeout: number;
+  services?: {
+    strands?: {
+      serverUrl?: string;
+      timeout?: number;
+      retries?: number;
+      retryDelay?: number;
+    };
   };
-  ui: {
-    siteName: string;
-    welcomeMessage: string;
-    showWelcomeCard: boolean;
+  performance?: {
+    apiTimeout?: number;
+    cacheTimeout?: number;
+  };
+  ui?: {
+    siteName?: string;
+    welcomeMessage?: string;
+    showWelcomeCard?: boolean;
   };
 }
 

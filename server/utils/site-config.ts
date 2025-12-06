@@ -134,12 +134,15 @@ export async function getSiteConfig(key: string, useCache = true): Promise<SiteC
     const item = response.Item ? unmarshall(response.Item) as SiteConfigItem : null;
 
     if (item) {
-      // Cache the result
+      // Merge with default metadata
+      const merged = mergeSingleItemWithDefault(item);
+
+      // Cache the merged result
       configCache.set(key, {
-        value: item,
+        value: merged,
         expiresAt: Date.now() + CACHE_TTL,
       });
-      return item;
+      return merged;
     }
 
     // If not found in DB, return default value
@@ -247,10 +250,19 @@ export async function updateSiteConfig(
     });
     await client.send(command);
 
-    // Clear cache for this key
+    // Clear cache for this key and update with merged version
     configCache.delete(key);
 
-    return updated;
+    // Ensure the updated item has all metadata from defaults
+    const mergedUpdated = mergeSingleItemWithDefault(updated);
+
+    // Cache the merged result
+    configCache.set(key, {
+      value: mergedUpdated,
+      expiresAt: Date.now() + CACHE_TTL,
+    });
+
+    return mergedUpdated;
   } catch (error: any) {
     // If table doesn't exist, provide helpful error message
     if (error.name === 'ResourceNotFoundException' || error.message?.includes('not found')) {
@@ -394,17 +406,67 @@ function getDefaultConfig(key: string): SiteConfigItem | null {
 }
 
 /**
+ * Helper: Merge a single DB item with its default metadata
+ */
+function mergeSingleItemWithDefault(dbItem: SiteConfigItem): SiteConfigItem {
+  const defaultItem = DEFAULT_SITE_CONFIG.find((c) => c.key === dbItem.key);
+
+  if (!defaultItem) {
+    // DB item not in defaults - validate it has required fields
+    if (!dbItem.type) {
+      console.warn(`[Site Config] Orphaned config item "${dbItem.key}" is missing required type field. Skipping...`);
+      // Return a minimal valid item to prevent crashes
+      return {
+        ...dbItem,
+        type: 'string', // Default to string if type is missing
+        category: dbItem.category || 'system',
+        label: dbItem.label || dbItem.key,
+        description: dbItem.description || 'Legacy configuration item (no longer in use)',
+        defaultValue: dbItem.value,
+        isPublic: dbItem.isPublic ?? false,
+        isEditable: dbItem.isEditable ?? false,
+      };
+    }
+    // Has type, return as-is
+    return dbItem;
+  }
+
+  // Merge: keep DB value but use default metadata if missing
+  return {
+    ...defaultItem, // Start with all default fields
+    ...dbItem,      // Override with DB values
+    // Ensure critical metadata comes from defaults if missing in DB
+    type: dbItem.type || defaultItem.type,
+    category: dbItem.category || defaultItem.category,
+    label: dbItem.label || defaultItem.label,
+    description: dbItem.description || defaultItem.description,
+    defaultValue: defaultItem.defaultValue,
+    isPublic: dbItem.isPublic !== undefined ? dbItem.isPublic : defaultItem.isPublic,
+    isEditable: dbItem.isEditable !== undefined ? dbItem.isEditable : defaultItem.isEditable,
+    validation: dbItem.validation || defaultItem.validation,
+  };
+}
+
+/**
  * Helper: Merge DB items with defaults
  */
 function mergeWithDefaults(dbItems: SiteConfigItem[]): SiteConfigItem[] {
-  const dbKeys = new Set(dbItems.map((item) => item.key));
-  const merged = [...dbItems];
+  const defaultsMap = new Map(DEFAULT_SITE_CONFIG.map((item) => [item.key, item]));
+  const merged: SiteConfigItem[] = [];
 
-  // Add missing defaults
-  DEFAULT_SITE_CONFIG.forEach((defaultItem) => {
-    if (!dbKeys.has(defaultItem.key)) {
-      merged.push(defaultItem);
-    }
+  // Merge DB items with default metadata
+  dbItems.forEach((dbItem) => {
+    // Use the single-item merge helper for consistency
+    const mergedItem = mergeSingleItemWithDefault(dbItem);
+    merged.push(mergedItem);
+
+    // Mark default as processed if it exists
+    defaultsMap.delete(dbItem.key);
+  });
+
+  // Add missing defaults that weren't in DB
+  defaultsMap.forEach((defaultItem) => {
+    merged.push(defaultItem);
   });
 
   return merged;
@@ -414,6 +476,13 @@ function mergeWithDefaults(dbItems: SiteConfigItem[]): SiteConfigItem[] {
  * Helper: Validate config value against validation rules
  */
 function validateConfigValue(config: SiteConfigItem, value: any): void {
+  // Ensure config has type defined
+  if (!config.type) {
+    throw new Error(
+      `Configuration item ${config.key} is missing type metadata. This should not happen - check database and defaults.`
+    );
+  }
+
   // Type check
   const valueType = Array.isArray(value) ? 'array' : typeof value;
   if (valueType !== config.type && config.type !== 'object') {

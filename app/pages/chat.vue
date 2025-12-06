@@ -139,9 +139,11 @@
 
       <!-- Chat Component -->
       <div class="flex-1 min-h-0">
-        <GhostChatFullPage
-          @message-sent="handleMessageSent"
-        />
+        <ClientOnly>
+          <GhostChatFullPage
+            @message-sent="handleMessageSent"
+          />
+        </ClientOnly>
       </div>
     </div>
 

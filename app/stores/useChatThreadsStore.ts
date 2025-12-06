@@ -24,6 +24,7 @@ interface ChatThreadsState {
   // Streaming state
   streamingMessages: Map<string, StreamingChatMessage>
   activeStreams: Set<string>
+  activeStreamCount: number // Simple counter for reactivity
 }
 
 export const useChatThreadsStore = defineStore('chatThreads', {
@@ -39,7 +40,8 @@ export const useChatThreadsStore = defineStore('chatThreads', {
     },
     // Streaming state
     streamingMessages: new Map(),
-    activeStreams: new Set()
+    activeStreams: new Set(),
+    activeStreamCount: 0
   }),
 
   getters: {
@@ -91,6 +93,14 @@ export const useChatThreadsStore = defineStore('chatThreads', {
         isArchived: thread.isArchived,
         isShared: thread.isShared
       }))
+    },
+
+    /**
+     * Get count of active streams (reactive getter)
+     * Uses a simple counter for reactivity (Set.size isn't reactive in Vue 3)
+     */
+    getActiveStreamCount: (state): number => {
+      return state.activeStreamCount
     }
   },
 
@@ -467,6 +477,7 @@ export const useChatThreadsStore = defineStore('chatThreads', {
 
       this.streamingMessages.set(messageId, message)
       this.activeStreams.add(messageId)
+      this.activeStreamCount++ // Increment counter for reactivity
 
       // Add to current thread's messages if this is the active thread
       if (this.currentThread?.threadId === threadId) {
@@ -480,6 +491,7 @@ export const useChatThreadsStore = defineStore('chatThreads', {
      * Update streaming message status
      */
     updateStreamingStatus(messageId: string, status: MessageStatus) {
+      console.log('[Store] updateStreamingStatus called:', messageId, status)
       const message = this.streamingMessages.get(messageId)
       if (message) {
         message.status = status
@@ -489,8 +501,13 @@ export const useChatThreadsStore = defineStore('chatThreads', {
           const msgIndex = this.currentThread.messages.findIndex(m => m.messageId === messageId)
           if (msgIndex !== -1) {
             this.currentThread.messages[msgIndex].status = status
+            console.log('[Store] Updated status in currentThread.messages at index:', msgIndex)
+          } else {
+            console.warn('[Store] Message not found in currentThread.messages:', messageId)
           }
         }
+      } else {
+        console.warn('[Store] Message not found in streamingMessages:', messageId)
       }
     },
 
@@ -498,10 +515,12 @@ export const useChatThreadsStore = defineStore('chatThreads', {
      * Append content chunk to streaming message
      */
     appendStreamingContent(messageId: string, delta: string) {
+      console.log('[Store] appendStreamingContent called, delta length:', delta?.length)
       const message = this.streamingMessages.get(messageId)
       if (message) {
         message.streamBuffer = (message.streamBuffer || '') + delta
         message.content = message.streamBuffer
+        console.log('[Store] New content length:', message.content.length)
 
         // Update in current thread messages too
         if (this.currentThread) {
@@ -509,8 +528,11 @@ export const useChatThreadsStore = defineStore('chatThreads', {
           if (msgIndex !== -1) {
             this.currentThread.messages[msgIndex].content = message.content
             this.currentThread.messages[msgIndex].streamBuffer = message.streamBuffer
+            console.log('[Store] Updated content in currentThread.messages at index:', msgIndex)
           }
         }
+      } else {
+        console.warn('[Store] Message not found in appendStreamingContent:', messageId)
       }
     },
 
@@ -524,8 +546,12 @@ export const useChatThreadsStore = defineStore('chatThreads', {
       suggestedLinks?: any[],
       suggestedPrompts?: any[]
     ): Promise<boolean> {
+      console.log('[Store] completeStreamingMessage called:', messageId, 'content length:', finalContent?.length)
       const message = this.streamingMessages.get(messageId)
-      if (!message) return false
+      if (!message) {
+        console.warn('[Store] Message not found in completeStreamingMessage:', messageId)
+        return false
+      }
 
       // Update final content and metadata
       message.content = finalContent
@@ -539,25 +565,38 @@ export const useChatThreadsStore = defineStore('chatThreads', {
       if (this.currentThread) {
         const msgIndex = this.currentThread.messages.findIndex(m => m.messageId === messageId)
         if (msgIndex !== -1) {
-          this.currentThread.messages[msgIndex] = message
+          // Update the message in place (keep it as a regular ChatMessage)
+          this.currentThread.messages[msgIndex] = {
+            messageId: message.messageId,
+            role: message.role,
+            content: message.content,
+            timestamp: message.timestamp,
+            metadata: message.metadata,
+            links: message.links,
+            suggestedLinks: message.suggestedLinks,
+            suggestedPrompts: message.suggestedPrompts
+            // No status - it's complete, don't show streaming indicator
+          }
+          console.log('[Store] Completed message in currentThread.messages at index:', msgIndex)
+        } else {
+          console.warn('[Store] Message not found in currentThread.messages for completion:', messageId)
         }
       }
 
-      // Save to database (remove messageId and timestamp as they're generated by backend)
-      const success = await this.addMessage({
-        role: message.role,
-        content: message.content,
-        metadata: message.metadata,
-        links: message.links,
-        suggestedLinks: message.suggestedLinks,
-        suggestedPrompts: message.suggestedPrompts
-      })
+      // NOTE: We don't save to database during streaming to prevent message flicker
+      // Messages persist in memory for the session. They'll be saved when:
+      // - Thread is explicitly saved by user
+      // - Thread is archived
+      // - Session ends
+      // This prevents the "disappearing bubble" issue caused by DB replacing temp messageId
 
-      // Cleanup
+      // Cleanup streaming state immediately (removes "query running" indicator)
       this.streamingMessages.delete(messageId)
       this.activeStreams.delete(messageId)
+      this.activeStreamCount = Math.max(0, this.activeStreamCount - 1) // Decrement counter (prevent negatives)
+      console.log('[Store] Cleaned up streaming state, activeStreamCount:', this.activeStreamCount)
 
-      return success
+      return true
     },
 
     /**
@@ -583,6 +622,7 @@ export const useChatThreadsStore = defineStore('chatThreads', {
       }
 
       this.activeStreams.delete(messageId)
+      this.activeStreamCount = Math.max(0, this.activeStreamCount - 1) // Decrement counter (prevent negatives)
     },
 
     /**
@@ -597,13 +637,6 @@ export const useChatThreadsStore = defineStore('chatThreads', {
      */
     getStreamingMessage(messageId: string): StreamingChatMessage | undefined {
       return this.streamingMessages.get(messageId)
-    },
-
-    /**
-     * Get count of active streams
-     */
-    getActiveStreamCount(): number {
-      return this.activeStreams.size
     }
   }
 }, {

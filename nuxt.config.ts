@@ -88,7 +88,9 @@ export default defineNuxtConfig({
   },
 
   nitro: {
-    noExternal: ['gray-matter']
+    externals: {
+      inline: ['gray-matter']
+    }
   },
 
   // nitro: {

@@ -137,21 +137,35 @@
                 : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 rounded-bl-sm'
             "
           >
-            <!-- Streaming status indicator -->
-            <div v-if="msg.status?.status === 'streaming'" class="streaming-status">
-              <div class="status-indicator">
-                <UIcon name="i-heroicons-arrow-path" class="w-3.5 h-3.5 animate-spin text-purple-500" />
-                <span class="text-xs text-gray-600 dark:text-gray-400">{{ msg.status.progress }}</span>
+            <!-- Streaming status indicator (GHOST thinking) -->
+            <div v-if="msg.status?.status === 'pending' || msg.status?.status === 'streaming'" class="streaming-status mb-2">
+              <div class="flex items-center gap-2 mb-1.5">
+                <div class="ghost-loading">
+                  <UIcon name="i-fa6-solid-ghost" class="ghost-icon text-emerald-400" style="width: 20px; height: 20px;" />
+                  <div class="ghost-dots">
+                    <div class="ghost-dot"></div>
+                    <div class="ghost-dot"></div>
+                    <div class="ghost-dot"></div>
+                  </div>
+                </div>
+                <div class="flex flex-col gap-0.5">
+                  <span class="text-xs font-medium text-gray-700 dark:text-gray-300">GHOST is thinking...</span>
+                  <span class="text-xs text-gray-600 dark:text-gray-400">{{ msg.status.progress || 'Starting...' }}</span>
+                </div>
               </div>
-              <div v-if="msg.status.toolsCalled && msg.status.toolsCalled.length > 0" class="tools-called">
-                <span v-for="tool in msg.status.toolsCalled" :key="tool" class="tool-badge">
+              <div v-if="msg.status.toolsCalled && msg.status.toolsCalled.length > 0" class="flex flex-wrap gap-1">
+                <span v-for="tool in msg.status.toolsCalled" :key="tool" class="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
+                  <UIcon name="i-heroicons-wrench-screwdriver" class="w-3 h-3" />
                   {{ tool }}
                 </span>
+              </div>
+              <div class="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
+                Complex queries may take 30-120 seconds
               </div>
             </div>
 
             <div class="text-sm leading-relaxed prose prose-sm max-w-none" :class="msg.role === 'user' ? 'prose-invert' : ''" v-html="enrichStrandsResponse(msg.content)" @click="handleEnrichedClick"></div>
-            <span v-if="msg.streamBuffer && msg.status?.status === 'streaming'" class="cursor-blink">|</span>
+            <span v-if="msg.streamBuffer && (msg.status?.status === 'pending' || msg.status?.status === 'streaming')" class="cursor-blink">|</span>
 
             <!-- Error status -->
             <div v-if="msg.status?.status === 'error'" class="error-status">
@@ -214,8 +228,8 @@
           </div>
         </div>
 
-        <!-- Loading indicator -->
-        <div v-if="isLoading" class="flex justify-start">
+        <!-- Loading indicator (only for non-streaming fallback) -->
+        <div v-if="isLoading && !hasStreamingMessage" class="flex justify-start">
           <div class="bg-gray-100 dark:bg-gray-800 rounded-lg px-3 py-2">
             <div class="flex items-center gap-2 mb-1">
               <div class="w-2 h-2 bg-purple-600 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
@@ -334,9 +348,30 @@ interface PopupMessage {
   }
   suggestedLinks?: any[]
   suggestedPrompts?: SuggestedPrompt[]
+  status?: {
+    status: 'pending' | 'streaming' | 'complete' | 'error'
+    progress?: string
+    toolsCalled?: string[]
+    error?: string
+  }
+  streamBuffer?: string
 }
 
 const messages = computed<PopupMessage[]>(() => {
+  // Use messages from threads store if available (includes streaming status)
+  if (threadsStore.currentThread?.messages) {
+    return threadsStore.currentThread.messages.map(msg => ({
+      role: msg.role === 'user' ? 'user' as const : 'assistant' as const,
+      content: msg.content,
+      metadata: msg.metadata,
+      suggestedLinks: msg.suggestedLinks,
+      suggestedPrompts: msg.suggestedPrompts,
+      status: msg.status, // Include streaming status
+      streamBuffer: msg.streamBuffer // Include stream buffer for cursor
+    }))
+  }
+
+  // Fall back to chatMessages for compatibility
   return chatMessages.value.map(msg => ({
     role: msg.sender === 'user' ? 'user' as const : 'assistant' as const,
     content: msg.text,
@@ -344,6 +379,13 @@ const messages = computed<PopupMessage[]>(() => {
     suggestedLinks: msg.suggestedLinks,
     suggestedPrompts: msg.suggestedPrompts
   }))
+})
+
+// Check if there's a streaming message (to hide separate loader)
+const hasStreamingMessage = computed(() => {
+  return messages.value.some(msg =>
+    msg.status?.status === 'pending' || msg.status?.status === 'streaming'
+  )
 })
 
 // Sample prompts for new conversations
@@ -460,19 +502,58 @@ async function sendMessage() {
 <style scoped>
 /* Streaming UI Styles */
 .streaming-status {
-  @apply mb-2 pb-2 border-b border-gray-200 dark:border-gray-700;
+  @apply pb-2 border-b border-gray-200 dark:border-gray-700;
 }
 
-.status-indicator {
-  @apply flex items-center gap-1.5 mb-1;
+/* Ghost Loading Animation */
+.ghost-loading {
+  @apply flex items-center gap-2;
 }
 
-.tools-called {
-  @apply flex flex-wrap gap-1 mt-1.5;
+.ghost-icon {
+  @apply w-5 h-5 text-emerald-400;
+  animation: ghostFloat 2s ease-in-out infinite;
 }
 
-.tool-badge {
-  @apply text-xs px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 font-mono;
+.ghost-dots {
+  @apply flex gap-1;
+}
+
+.ghost-dot {
+  @apply w-1.5 h-1.5 bg-emerald-400 rounded-full;
+  animation: ghostDotPulse 1.4s ease-in-out infinite;
+}
+
+.ghost-dot:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.ghost-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.ghost-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes ghostFloat {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes ghostDotPulse {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
 }
 
 .cursor-blink {

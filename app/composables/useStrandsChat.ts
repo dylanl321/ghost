@@ -3,7 +3,7 @@
  * Used by: StrandsChatbot, StrandsChatPopup, GhostChatFullPage
  */
 
-import type { ChatMessage as ThreadChatMessage } from '~/shared/types/chat-threads'
+import type { ChatMessage as ThreadChatMessage } from '@/shared/types/chat-threads'
 
 /**
  * Convert thread messages to component chat messages
@@ -107,6 +107,9 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
   const disambiguationData = ref<any>(null)
   const pendingMessage = ref<string>('')
 
+  // Track last synced thread to prevent duplicate reloads
+  let lastSyncedThreadId: string | null = null
+
   // Watch for thread changes and reload messages when switching threads
   if (threadsStore) {
     watch(
@@ -115,11 +118,16 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
         // Don't reload if we're in the middle of sending a message
         if (isSendingMessage.value) return
 
+        // Don't reload if we already synced this thread
+        if (newThreadId === lastSyncedThreadId) return
+
         // Only reload if:
         // 1. Switching from one existing thread to another (both have values)
         // 2. Don't reload when going from null -> UUID (first message creation)
         if (newThreadId && oldThreadId && newThreadId !== oldThreadId && threadsStore.currentThread) {
           const thread = threadsStore.currentThread
+          lastSyncedThreadId = newThreadId
+
           if (thread.messages && thread.messages.length > 0) {
             // Thread has messages - reload them
             messages.value = convertThreadMessagesToChatMessages(thread.messages)
@@ -140,56 +148,78 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
 
     // Watch for currentThread.messages changes to sync across components
     // This ensures popup and full page stay in sync
+    // Use a debounced approach to prevent rapid fire updates during streaming
+    let syncTimeoutId: NodeJS.Timeout | null = null
     watch(
       () => threadsStore.currentThread?.messages,
-      (newMessages, oldMessages) => {
+      (newMessages) => {
         // Don't reload if we're in the middle of sending a message
         if (isSendingMessage.value) return
 
         // Only sync if the messages array actually changed
         if (!newMessages || !threadsStore.currentThread) return
 
-        // Calculate actual message count (excluding welcome message)
-        const currentMsgCount = messages.value.filter(m =>
-          !(m.sender === 'bot' && m.text === initialGreeting)
-        ).length
-
-        const threadMsgCount = newMessages.length
-
-        // Sync if thread has different message count than our local state
-        if (threadMsgCount !== currentMsgCount) {
-          if (threadMsgCount > 0) {
-            messages.value = convertThreadMessagesToChatMessages(newMessages)
-            sessionId.value = threadsStore.currentThread.sessionId
-          } else {
-            // Thread was cleared - show welcome message
-            messages.value = initialGreeting ? [{
-              text: initialGreeting,
-              links: [],
-              sender: 'bot',
-              metadata: {}
-            }] : []
-            sessionId.value = threadsStore.currentThread.sessionId
-          }
+        // Clear existing timeout
+        if (syncTimeoutId) {
+          clearTimeout(syncTimeoutId)
         }
+
+        // Debounce the sync to prevent rapid updates during streaming
+        syncTimeoutId = setTimeout(() => {
+          // Recheck thread availability after timeout
+          if (!threadsStore.currentThread) {
+            syncTimeoutId = null
+            return
+          }
+
+          // Calculate actual message count (excluding welcome message)
+          const currentMsgCount = messages.value.filter(m =>
+            !(m.sender === 'bot' && m.text === initialGreeting)
+          ).length
+
+          const threadMsgCount = newMessages.length
+
+          // Sync if thread has different message count than our local state
+          if (threadMsgCount !== currentMsgCount) {
+            if (threadMsgCount > 0) {
+              messages.value = convertThreadMessagesToChatMessages(newMessages)
+              sessionId.value = threadsStore.currentThread.sessionId
+            } else {
+              // Thread was cleared - show welcome message
+              messages.value = initialGreeting ? [{
+                text: initialGreeting,
+                links: [],
+                sender: 'bot',
+                metadata: {}
+              }] : []
+              sessionId.value = threadsStore.currentThread.sessionId
+            }
+          }
+          syncTimeoutId = null
+        }, 100) // 100ms debounce
       },
       { deep: true, immediate: true }
     )
 
     // Also watch for currentThread changes (handles initial load case)
+    // This only runs on initial load or when thread object itself changes
     watch(
       () => threadsStore.currentThread,
       (newThread) => {
         // Don't reload if we're in the middle of sending a message
         if (isSendingMessage.value) return
 
+        // Don't reload if we already synced this thread
+        if (newThread?.threadId === lastSyncedThreadId) return
+
         // Only reload if we don't have messages yet and the thread has messages
-        if (newThread && newThread.messages && newThread.messages.length > 0 && messages.value.length <= 1) {
+        if (newThread?.messages && newThread.messages.length > 0 && messages.value.length <= 1) {
           // Check if we only have the welcome message
-          const hasOnlyWelcome = messages.value.length === 1 && messages.value[0].sender === 'bot'
+          const hasOnlyWelcome = messages.value.length === 1 && messages.value[0]?.sender === 'bot'
           if (hasOnlyWelcome || messages.value.length === 0) {
             messages.value = convertThreadMessagesToChatMessages(newThread.messages)
             sessionId.value = newThread.sessionId
+            lastSyncedThreadId = newThread.threadId
           }
         }
       },
@@ -208,7 +238,7 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
 
     // Only skip the first message if we have an initial greeting
     // Popup has no greeting, so we need all messages
-    if (initialGreeting && history.length > 0 && history[0].role === 'assistant') {
+    if (initialGreeting && history.length > 0 && history[0]?.role === 'assistant') {
       return history.slice(1)
     }
 
@@ -426,99 +456,214 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        // Create user-friendly error messages for common HTTP errors
+        let errorMessage = `HTTP error! status: ${response.status}`
+
+        switch (response.status) {
+          case 503:
+            errorMessage = 'The AI service is temporarily unavailable. This usually resolves in a few minutes. Please try again shortly.'
+            break
+          case 502:
+            errorMessage = 'The AI service is experiencing connectivity issues. Please try again in a moment.'
+            break
+          case 504:
+            errorMessage = 'The AI service request timed out. Please try again with a simpler query or wait a moment.'
+            break
+          case 500:
+            errorMessage = 'The AI service encountered an internal error. Please try again.'
+            break
+          case 429:
+            errorMessage = 'Too many requests. Please wait a moment before trying again.'
+            break
+          case 401:
+          case 403:
+            errorMessage = 'Authentication error. Please refresh the page and try again.'
+            break
+        }
+
+        throw new Error(errorMessage)
       }
 
       if (!response.body) {
         throw new Error('Response body is empty')
       }
 
-      // Read SSE stream
+      // Read SSE stream (spec-compliant parsing)
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
 
+      // SSE parsing state
+      let currentEvent: string | null = null
+      let currentDataLines: string[] = []
+
       while (true) {
         const { done, value } = await reader.read()
-        if (done) break
+
+        if (done) {
+          // Process any remaining buffered event before closing
+          if (currentEvent && currentDataLines.length > 0) {
+            try {
+              const data = JSON.parse(currentDataLines.join('\n'))
+              const eventType = currentEvent
+
+              console.log('[useStrandsChat] Received FINAL SSE event:', eventType, data)
+
+              // Handle the final event
+              switch (eventType) {
+                case 'status':
+                  console.log('[useStrandsChat] Processing FINAL status event:', data.message)
+                  if (threadsStore) {
+                    const currentStatus = threadsStore.getStreamingMessage(botMessageId)?.status
+                    threadsStore.updateStreamingStatus(botMessageId, {
+                      status: 'streaming',
+                      progress: data.message,
+                      toolsCalled: currentStatus?.toolsCalled || []
+                    })
+                  }
+                  break
+
+                case 'response':
+                  console.log('[useStrandsChat] Processing FINAL response event, delta length:', data.delta?.length)
+                  if (threadsStore) {
+                    threadsStore.appendStreamingContent(botMessageId, data.delta)
+                  }
+                  scrollTrigger.value++
+                  break
+
+                case 'complete':
+                  console.log('[useStrandsChat] Processing FINAL complete event, response length:', data.response?.length)
+                  if (threadsStore) {
+                    await threadsStore.completeStreamingMessage(
+                      botMessageId,
+                      data.response,
+                      data.metadata,
+                      data.suggestedLinks,
+                      data.suggestedPrompts
+                    )
+                  }
+                  if (data.sessionId) {
+                    sessionId.value = data.sessionId
+                  }
+                  scrollTrigger.value++
+                  break
+
+                case 'error':
+                  console.log('[useStrandsChat] Processing FINAL error event:', data.message)
+                  if (threadsStore) {
+                    threadsStore.handleStreamingError(botMessageId, data.message)
+                  }
+                  scrollTrigger.value++
+                  break
+              }
+            } catch (parseError: any) {
+              console.error('[useStrandsChat] Failed to parse FINAL SSE event:', {
+                eventType: currentEvent,
+                dataLines: currentDataLines,
+                error: parseError.message
+              })
+            }
+          }
+          break
+        }
 
         buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n\n')
-        buffer = lines.pop() || ''
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || '' // Keep last incomplete line
 
         for (const line of lines) {
-          if (!line.trim()) continue
+          if (line.startsWith('event:')) {
+            currentEvent = line.substring(6).trim()
+          } else if (line.startsWith('data:')) {
+            currentDataLines.push(line.substring(5).trim())
+          } else if (line === '' && currentEvent) {
+            // Empty line = event complete
+            try {
+              const data = JSON.parse(currentDataLines.join('\n'))
+              const eventType = currentEvent
 
-          const [eventLine, dataLine] = line.split('\n')
-          if (!eventLine?.startsWith('event:') || !dataLine?.startsWith('data:')) {
-            continue
-          }
+              // Handle events
+              console.log('[useStrandsChat] Received SSE event:', eventType, data)
 
-          const eventType = eventLine.substring(7).trim()
-          const data = JSON.parse(dataLine.substring(6))
+              switch (eventType) {
+                case 'status':
+                  console.log('[useStrandsChat] Processing status event:', data.message)
+                  if (threadsStore) {
+                    const currentStatus = threadsStore.getStreamingMessage(botMessageId)?.status
+                    threadsStore.updateStreamingStatus(botMessageId, {
+                      status: 'streaming',
+                      progress: data.message,
+                      toolsCalled: currentStatus?.toolsCalled || []
+                    })
+                  }
+                  break
 
-          // Handle events
-          switch (eventType) {
-            case 'status':
-              if (threadsStore) {
-                const currentStatus = threadsStore.getStreamingMessage(botMessageId)?.status
-                threadsStore.updateStreamingStatus(botMessageId, {
-                  status: 'streaming',
-                  progress: data.message,
-                  toolsCalled: currentStatus?.toolsCalled || []
-                })
+                case 'tool_call':
+                  console.log('[useStrandsChat] Processing tool_call event:', data.tool_name)
+                  if (threadsStore) {
+                    const currentStatus = threadsStore.getStreamingMessage(botMessageId)?.status
+                    threadsStore.updateStreamingStatus(botMessageId, {
+                      status: 'streaming',
+                      progress: data.message || 'Calling tool...',
+                      toolsCalled: [...(currentStatus?.toolsCalled || []), data.tool_name]
+                    })
+                  }
+                  break
+
+                case 'response':
+                  console.log('[useStrandsChat] Processing response event, delta length:', data.delta?.length)
+                  if (threadsStore) {
+                    threadsStore.appendStreamingContent(botMessageId, data.delta)
+                  }
+                  scrollTrigger.value++
+                  break
+
+                case 'complete':
+                  console.log('[useStrandsChat] Processing complete event, response length:', data.response?.length)
+                  if (threadsStore) {
+                    await threadsStore.completeStreamingMessage(
+                      botMessageId,
+                      data.response,
+                      data.metadata,
+                      data.suggestedLinks,
+                      data.suggestedPrompts
+                    )
+                  }
+                  if (data.sessionId) {
+                    sessionId.value = data.sessionId
+                  }
+                  scrollTrigger.value++
+                  break
+
+                case 'error':
+                  console.log('[useStrandsChat] Processing error event:', data.message)
+                  if (threadsStore) {
+                    threadsStore.handleStreamingError(botMessageId, data.message)
+                  }
+                  scrollTrigger.value++
+                  break
+
+                case 'disambiguation':
+                  console.log('[useStrandsChat] Processing disambiguation event')
+                  disambiguationData.value = data
+                  pendingMessage.value = userInput
+                  showDisambiguation.value = true
+                  if (threadsStore) {
+                    threadsStore.handleStreamingError(botMessageId, 'Account disambiguation required')
+                  }
+                  break
               }
-              break
-
-            case 'tool_call':
-              if (threadsStore) {
-                const currentStatus = threadsStore.getStreamingMessage(botMessageId)?.status
-                threadsStore.updateStreamingStatus(botMessageId, {
-                  status: 'streaming',
-                  progress: data.message,
-                  toolsCalled: [...(currentStatus?.toolsCalled || []), data.tool_name]
-                })
-              }
-              break
-
-            case 'response':
-              if (threadsStore) {
-                threadsStore.appendStreamingContent(botMessageId, data.delta)
-              }
-              scrollTrigger.value++
-              break
-
-            case 'complete':
-              if (threadsStore) {
-                await threadsStore.completeStreamingMessage(
-                  botMessageId,
-                  data.response,
-                  data.metadata,
-                  data.suggestedLinks,
-                  data.suggestedPrompts
-                )
-              }
-              if (data.sessionId) {
-                sessionId.value = data.sessionId
-              }
-              scrollTrigger.value++
-              break
-
-            case 'error':
-              if (threadsStore) {
-                threadsStore.handleStreamingError(botMessageId, data.message)
-              }
-              scrollTrigger.value++
-              break
-
-            case 'disambiguation':
-              disambiguationData.value = data
-              pendingMessage.value = userInput
-              showDisambiguation.value = true
-              if (threadsStore) {
-                threadsStore.handleStreamingError(botMessageId, 'Account disambiguation required')
-              }
-              break
+            } catch (parseError: any) {
+              console.error('[useStrandsChat] Failed to parse SSE event:', {
+                eventType: currentEvent,
+                dataLines: currentDataLines,
+                error: parseError.message
+              })
+            } finally {
+              // Reset state for next event
+              currentEvent = null
+              currentDataLines = []
+            }
           }
         }
       }
@@ -526,10 +671,14 @@ export function useStrandsChat(options: StrandsChatOptions = {}) {
       console.error('[useStrandsChat] Streaming error:', error)
 
       // Check if this is a connection error that should trigger reconnection
-      const isConnectionError = error.name === 'AbortError' ||
+      // Note: 503/502/504 are service errors, not connection errors - don't retry these
+      const isConnectionError = (error.name === 'AbortError' ||
                                error.message?.includes('timeout') ||
                                error.message?.includes('network') ||
-                               error.message?.includes('connection')
+                               error.message?.includes('connection')) &&
+                               !error.message?.includes('503') &&
+                               !error.message?.includes('502') &&
+                               !error.message?.includes('504')
 
       // Use hardcoded defaults for reconnection config
       const maxAttempts = 3

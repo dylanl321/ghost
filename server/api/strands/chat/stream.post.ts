@@ -9,6 +9,8 @@
  * - Generates smart links and follow-up prompts on completion
  */
 
+import http from 'http'
+import https from 'https'
 import { defineEventHandler, readBody, setResponseHeaders, createError } from 'h3'
 import { registerEndpoint } from '../../../plugins/swagger'
 import { logger } from '../../../utils/logger'
@@ -19,7 +21,7 @@ import { extractFollowUpPrompts } from '../../../utils/bedrock-prompt-extractor'
 import { collectStreamMetrics, createStreamSession } from '../../../utils/streaming-metrics-collector'
 import { buildUserContextForAI, formatUserContextForAI } from '../../../utils/user-context-builder'
 import type { StrandsChatRequest } from '../chat.post'
-import type { StreamEvent } from '#shared/types/streaming-metrics'
+import type { StreamEvent } from '../../../../shared/types/streaming-metrics'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/strands/chat/stream', 'POST', {
@@ -229,8 +231,21 @@ ${getSchemaForAI()}
 
           const message = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`
           controller.enqueue(encoder.encode(message))
-        } catch (error) {
-          logger.error('[Strands Streaming] Error encoding event:', error)
+
+          logger.info('[Strands Streaming] Event enqueued to client', {
+            requestId,
+            eventType,
+            messageLength: message.length
+          })
+        } catch (error: any) {
+          logger.error('[Strands Streaming] Error sending event to client:', {
+            requestId,
+            eventType,
+            error: error.message,
+            stack: error.stack?.split('\n').slice(0, 3).join('\n')
+          })
+          // Re-throw to stop stream if client disconnected
+          throw error
         }
       }
 
@@ -289,7 +304,7 @@ ${getSchemaForAI()}
         })
 
         // Build request body for Strands
-        const strandsRequestBody = {
+        const strandsRequestBody: any = {
           message: fullQuery,
           account_identifier: accountId,
           sessionId,
@@ -299,107 +314,303 @@ ${getSchemaForAI()}
           prefer_govcloud: preferGovcloud
         }
 
+        // Remove undefined fields to keep request clean (Strands may reject undefined/null fields)
+        Object.keys(strandsRequestBody).forEach(key => {
+          if (strandsRequestBody[key] === undefined) {
+            delete strandsRequestBody[key]
+          }
+        })
+
         logger.info('[Strands Streaming] Calling Strands API', {
           requestId,
-          endpoint: `${config.serverUrl}/query/stream`
+          endpoint: `${config.serverUrl}/query/stream`,
+          payloadKeys: Object.keys(strandsRequestBody),
+          messageLength: strandsRequestBody.message?.length,
+          messagePreview: strandsRequestBody.message?.substring(0, 200)
         })
 
-        // Call Strands streaming endpoint
-        const strandsResponse = await fetch(`${config.serverUrl}/query/stream`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'text/event-stream'
-          },
-          body: JSON.stringify(strandsRequestBody),
-          // @ts-ignore - Node fetch supports signal
-          signal: AbortSignal.timeout(config.timeout)
+        // Log config before making request
+        logger.info('[Strands Streaming] Config values', {
+          requestId,
+          serverUrl: config.serverUrl,
+          timeout: config.timeout,
+          timeoutMinutes: Math.round(config.timeout / 60000)
         })
 
-        if (!strandsResponse.ok) {
-          throw new Error(`Strands API returned ${strandsResponse.status}: ${strandsResponse.statusText}`)
+        // Call Strands streaming endpoint using native http/https module to avoid fetch buffering issues
+        const fetchStartTime = Date.now()
+        
+        logger.info('[Strands Streaming] Making native http request', {
+          requestId,
+          url: `${config.serverUrl}/query/stream`,
+          payloadSize: JSON.stringify(strandsRequestBody).length
+        })
+
+        const url = new URL(`${config.serverUrl}/query/stream`)
+        const requestModule = url.protocol === 'https:' ? https : http
+        
+        // Create a custom agent to ensure keep-alive and proper socket handling
+        const agent = new requestModule.Agent({
+            keepAlive: true,
+            keepAliveMsecs: 1000,
+            maxSockets: Infinity // Don't limit sockets for streaming
+        })
+
+        const options = {
+            method: 'POST',
+            agent, // Use custom agent
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'text/event-stream',
+              'Cache-Control': 'no-cache',
+              'Connection': 'keep-alive',
+              'X-Accel-Buffering': 'no',
+              'Accept-Encoding': 'identity' // CRITICAL: Disable compression
+            },
+            timeout: 60000 // Connection timeout
         }
 
-        if (!strandsResponse.body) {
-          throw new Error('Strands API returned empty response body')
-        }
+        const req = requestModule.request(url, options, (res) => {
+             // Clear connection timeout once headers are received
+             // Note: req.setTimeout only handles socket inactivity, but we want to ensure we get a response start
+        })
 
-        // Read Strands SSE stream
-        const reader = strandsResponse.body.getReader()
-        const decoder = new TextDecoder()
+        // Force disable Nagle's algorithm (no buffering) on the socket
+        req.on('socket', (socket) => {
+            socket.setNoDelay(true)
+            socket.setKeepAlive(true, 1000)
+        })
+
+        req.on('timeout', () => {
+             logger.error('[Strands Streaming] Request connection timeout', { requestId })
+             req.destroy(new Error('Connection timeout to Strands server'))
+        })
+        
+        req.on('error', (error) => {
+            logger.error('[Strands Streaming] Request error:', {
+              requestId,
+              error: error.message
+            })
+             // If we haven't started streaming to client yet, we can send an error event
+             // But if we are inside the stream loop, we need to handle it there.
+             // Since we use a promise wrapper below, the rejection handles it.
+        })
+
+        // Write body and start request
+        req.write(JSON.stringify(strandsRequestBody))
+        req.end()
+
         let buffer = ''
         let lastResponseContent = ''
         let lastMetadata: any = null
+        
+        // SSE parsing state
+        let currentEvent: string | null = null
+        let currentDataLines: string[] = []
+        
+        // Stream reading metrics
+        let totalBytesRead = 0
+        let lastReadTime = Date.now()
+        let chunkCount = 0
 
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
+        logger.info('[Strands Streaming] Starting to read stream', { requestId })
 
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n\n')
-          buffer = lines.pop() || ''
+        try {
+            await new Promise<void>((resolve, reject) => {
+                req.on('response', (res) => {
+                    logger.info('[Strands Streaming] Response headers received', {
+                      requestId,
+                      status: res.statusCode,
+                      headers: res.headers,
+                      fetchDuration: Date.now() - fetchStartTime
+                    })
 
-          for (const line of lines) {
-            if (!line.trim()) continue
+                    if (res.statusCode !== 200) {
+                        reject(new Error(`Strands API returned ${res.statusCode}: ${res.statusMessage}`))
+                        return
+                    }
 
-            const [eventLine, dataLine] = line.split('\n')
-            if (!eventLine?.startsWith('event:') || !dataLine?.startsWith('data:')) {
-              continue
+                    // Remove timeout on response start, but set a longer socket timeout for idle streams
+                    req.setTimeout(0) // Disable default timeout
+                    res.setTimeout(0) // Disable response timeout
+
+                    res.on('data', async (chunk) => {
+                        try {
+                            const chunkStartTime = Date.now()
+                            chunkCount++
+                            const chunkBytes = chunk.length
+                            totalBytesRead += chunkBytes
+                            lastReadTime = chunkStartTime
+
+                            const decodedChunk = chunk.toString('utf8')
+                            buffer += decodedChunk
+
+                            logger.info('[Strands Streaming] Processing chunk', {
+                              requestId,
+                              chunkCount,
+                              chunkBytes,
+                              bufferSize: buffer.length
+                            })
+
+            const lines = buffer.split('\n')
+            buffer = lines.pop() || ''
+
+            for (const line of lines) {
+              if (line.startsWith('event:')) {
+                currentEvent = line.substring(6).trim()
+              } else if (line.startsWith('data:')) {
+                currentDataLines.push(line.substring(5).trim())
+              } else if (line === '' && currentEvent) {
+                // Empty line with event/data present -> complete event
+                try {
+                  const data = JSON.parse(currentDataLines.join('\n'))
+                  const eventType = currentEvent
+
+                  logger.info('[Strands Streaming] Received event', {
+                    requestId,
+                    eventType,
+                    willForward: true
+                  })
+
+                  if (eventType === 'response') {
+                    lastResponseContent = data.accumulated || lastResponseContent
+                  }
+
+                  if (eventType === 'complete') {
+                    lastMetadata = data.metadata
+                    lastResponseContent = data.response || lastResponseContent
+                    streamStatus = 'completed'
+                    finalResponse = lastResponseContent
+                    detectedAccountId = lastMetadata?.accountId || detectedAccountId
+
+                    const suggestedLinks = await generateSmartLinks(
+                      message,
+                      lastResponseContent,
+                      { accountId: lastMetadata?.accountId }
+                    )
+                    const suggestedPrompts = await extractFollowUpPrompts(lastResponseContent, 3)
+
+                    sendEvent('complete', {
+                      ...data,
+                      suggestedLinks,
+                      suggestedPrompts
+                    })
+                  } else {
+                    sendEvent(eventType, data)
+                  }
+                } catch (parseError: any) {
+                  logger.error('[Strands Streaming] Failed to parse SSE event:', {
+                    eventType: currentEvent,
+                    error: parseError.message
+                  })
+                } finally {
+                  currentEvent = null
+                  currentDataLines = []
+                }
+              } else if (line === '' && !currentEvent && currentDataLines.length === 0) {
+                // Heartbeat (comment/empty frame) -> forward as heartbeat to keep connection alive
+                sendEvent('heartbeat', { message: 'keep-alive' })
+              }
             }
+                        } catch (error: any) {
+                            logger.error('[Strands Streaming] Chunk processing error:', error.message)
+                            // Don't reject here, try to continue processing stream
+                        }
+                    })
 
-            const eventType = eventLine.substring(7).trim()
-            const data = JSON.parse(dataLine.substring(6))
+                    res.on('end', () => {
+                        resolve()
+                    })
 
-            // Forward most events directly
-            if (eventType === 'status' || eventType === 'tool_call' || eventType === 'response' || eventType === 'error' || eventType === 'disambiguation') {
-              sendEvent(eventType, data)
-            }
+                    res.on('error', (err) => {
+                        reject(err)
+                    })
+                })
+                
+                req.on('error', (err) => {
+                    reject(err)
+                })
+            })
+        } catch (error: any) {
+            logger.error('[Strands Streaming] Stream error:', {
+              requestId,
+              error: error.message
+            })
+            throw error
+        } finally {
+             // Log completion metrics
+            const streamDuration = Date.now() - fetchStartTime
+            logger.info('[Strands Streaming] Stream ended by remote (Strands)', {
+              requestId,
+              totalChunks: chunkCount,
+              totalBytesRead,
+              streamDuration,
+              streamDurationSeconds: Math.round(streamDuration / 1000),
+              hasCurrentEvent: !!currentEvent,
+              bufferLength: buffer.length
+            })
 
-            // Store data for post-processing
-            if (eventType === 'response') {
-              lastResponseContent = data.accumulated || lastResponseContent
-            }
-
-            if (eventType === 'complete') {
-              lastMetadata = data.metadata
-              lastResponseContent = data.response || lastResponseContent
-
-              // Mark stream as completed
-              streamStatus = 'completed'
-              finalResponse = lastResponseContent
-              detectedAccountId = lastMetadata?.accountId || detectedAccountId
-
-              // Generate smart links based on query and response
-              const suggestedLinks = await generateSmartLinks(
-                message,
-                lastResponseContent,
-                { accountId: lastMetadata?.accountId }
-              )
-
-              logger.info('[Strands Streaming] Generated smart links', {
+            // Check if stream ended prematurely (before complete event)
+            if ((streamStatus as string) !== 'completed') {
+              logger.warn('[Strands Streaming] Stream closed without complete event', {
                 requestId,
-                linkCount: suggestedLinks.length
-              })
-
-              // Extract follow-up prompts
-              const suggestedPrompts = await extractFollowUpPrompts(lastResponseContent, 3)
-
-              logger.info('[Strands Streaming] Extracted follow-up prompts', {
-                requestId,
-                promptCount: suggestedPrompts.length
-              })
-
-              // Send enhanced complete event with suggestions
-              sendEvent('complete', {
-                ...data,
-                suggestedLinks,
-                suggestedPrompts
+                streamStatus: streamStatus as string,
+                eventCount: events.length
               })
             }
-          }
+            
+            // Process any remaining buffered data that didn't end with a newline
+            if (buffer.trim()) {
+                const lines = buffer.split('\n')
+                for (const line of lines) {
+                    if (line.startsWith('event:')) {
+                         currentEvent = line.substring(6).trim()
+                    } else if (line.startsWith('data:')) {
+                         currentDataLines.push(line.substring(5).trim())
+                    }
+                }
+            }
+            
+            // Handle any final buffered event (if any)
+             if (currentEvent && currentDataLines.length > 0) {
+                 try {
+                     const data = JSON.parse(currentDataLines.join('\n'))
+                     const eventType = currentEvent
+                     
+                     logger.info('[Strands Streaming] Processing FINAL buffered event', {
+                        requestId,
+                        eventType
+                     })
+
+                     if (eventType === 'complete') {
+                          lastMetadata = data.metadata
+                          lastResponseContent = data.response || lastResponseContent
+                          streamStatus = 'completed'
+                          finalResponse = lastResponseContent
+                          detectedAccountId = lastMetadata?.accountId || detectedAccountId
+                          
+                          const suggestedLinks = await generateSmartLinks(
+                             message,
+                             lastResponseContent,
+                             { accountId: lastMetadata?.accountId }
+                          )
+                          const suggestedPrompts = await extractFollowUpPrompts(lastResponseContent, 3)
+                          
+                          sendEvent('complete', {
+                             ...data,
+                             suggestedLinks,
+                             suggestedPrompts
+                          })
+                     } else {
+                         sendEvent(eventType, data)
+                     }
+                 } catch (e: any) {
+                     logger.error('[Strands Streaming] Failed to parse FINAL SSE event', { error: e.message })
+                 }
+             }
         }
 
-        logger.info('[Strands Streaming] Stream completed successfully', { requestId })
+        logger.info('[Strands Streaming] Stream processing finished', { requestId })
 
         // Collect metrics asynchronously (non-blocking)
         collectMetrics().catch(err => {
