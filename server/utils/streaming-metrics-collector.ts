@@ -9,10 +9,8 @@ import type {
   CollectMetricsRequest
 } from '#shared/types/streaming-metrics'
 import { getItem, putItem, updateItem } from './dynamodb'
+import { getTableConfig } from '../lib/dynamodb-config'
 import { logger } from './logger'
-
-// Table name with fallback default
-const TABLE_NAME = process.env.STREAMING_METRICS_TABLE_NAME || 'ghost-streaming-metrics'
 
 /**
  * Collect metrics from a completed stream session
@@ -22,11 +20,14 @@ export async function collectStreamMetrics(request: CollectMetricsRequest): Prom
   const { streamSession, metricDate } = request
 
   try {
+    // Get table config to ensure we have the deployment account ID
+    const tableConfig = await getTableConfig('streamingMetrics')
+
     // Collect metrics at different aggregation levels
     await Promise.all([
-      collectDailyMetrics(streamSession, metricDate),
-      collectUserMetrics(streamSession, metricDate),
-      streamSession.accountId ? collectAccountMetrics(streamSession, metricDate) : Promise.resolve()
+      collectDailyMetrics(streamSession, metricDate, tableConfig.accountId),
+      collectUserMetrics(streamSession, metricDate, tableConfig.accountId),
+      streamSession.accountId ? collectAccountMetrics(streamSession, metricDate, tableConfig.accountId) : Promise.resolve()
     ])
 
     logger.info('[StreamingMetrics] Metrics collected successfully', {
@@ -48,27 +49,27 @@ export async function collectStreamMetrics(request: CollectMetricsRequest): Prom
 /**
  * Collect daily aggregated metrics
  */
-async function collectDailyMetrics(session: StreamSession, metricDate: string): Promise<void> {
+async function collectDailyMetrics(session: StreamSession, metricDate: string, deploymentAccountId: string): Promise<void> {
   const metricType = 'daily'
-  await updateMetricsRecord(session, metricDate, metricType)
+  await updateMetricsRecord(session, metricDate, metricType, deploymentAccountId)
 }
 
 /**
  * Collect user-level metrics
  */
-async function collectUserMetrics(session: StreamSession, metricDate: string): Promise<void> {
+async function collectUserMetrics(session: StreamSession, metricDate: string, deploymentAccountId: string): Promise<void> {
   const metricType = `user:${session.userId}`
-  await updateMetricsRecord(session, metricDate, metricType)
+  await updateMetricsRecord(session, metricDate, metricType, deploymentAccountId)
 }
 
 /**
  * Collect account-level metrics
  */
-async function collectAccountMetrics(session: StreamSession, metricDate: string): Promise<void> {
+async function collectAccountMetrics(session: StreamSession, metricDate: string, deploymentAccountId: string): Promise<void> {
   if (!session.accountId) return
 
   const metricType = `account:${session.accountId}`
-  await updateMetricsRecord(session, metricDate, metricType)
+  await updateMetricsRecord(session, metricDate, metricType, deploymentAccountId)
 }
 
 /**
@@ -78,19 +79,26 @@ async function collectAccountMetrics(session: StreamSession, metricDate: string)
 async function updateMetricsRecord(
   session: StreamSession,
   metricDate: string,
-  metricType: string
+  metricType: string,
+  deploymentAccountId: string
 ): Promise<void> {
+  const tableConfig = await getTableConfig('streamingMetrics')
   const key = { metricDate, metricType }
 
-  // Try to get existing record
-  const existing = await getItem(TABLE_NAME, key, 'govcloud') as StreamingMetrics | null
+  // Try to get existing record with deployment account ID
+  const existing = await getItem(
+    tableConfig.tableName,
+    key,
+    tableConfig.environment,
+    deploymentAccountId
+  ) as StreamingMetrics | null
 
   if (existing) {
     // Update existing record
-    await updateExistingMetrics(existing, session, key)
+    await updateExistingMetrics(existing, session, key, deploymentAccountId)
   } else {
     // Create new record
-    await createNewMetrics(session, metricDate, metricType)
+    await createNewMetrics(session, metricDate, metricType, deploymentAccountId)
   }
 }
 
@@ -100,8 +108,10 @@ async function updateMetricsRecord(
 async function updateExistingMetrics(
   existing: StreamingMetrics,
   session: StreamSession,
-  key: { metricDate: string; metricType: string }
+  key: { metricDate: string; metricType: string },
+  deploymentAccountId: string
 ): Promise<void> {
+  const tableConfig = await getTableConfig('streamingMetrics')
   const duration = session.duration || 0
 
   // Update counters
@@ -156,7 +166,7 @@ async function updateExistingMetrics(
 
   // Update the record
   await updateItem(
-    TABLE_NAME,
+    tableConfig.tableName,
     key,
     {
       totalStreams,
@@ -178,7 +188,8 @@ async function updateExistingMetrics(
       timestamp: new Date().toISOString(),
       ttl: Math.floor(Date.now() / 1000) + (90 * 24 * 60 * 60) // 90 days
     },
-    'govcloud'
+    tableConfig.environment,
+    deploymentAccountId
   )
 }
 
@@ -188,8 +199,10 @@ async function updateExistingMetrics(
 async function createNewMetrics(
   session: StreamSession,
   metricDate: string,
-  metricType: string
+  metricType: string,
+  deploymentAccountId: string
 ): Promise<void> {
+  const tableConfig = await getTableConfig('streamingMetrics')
   const duration = session.duration || 0
 
   // Build event breakdown
@@ -233,7 +246,7 @@ async function createNewMetrics(
     ttl: Math.floor(Date.now() / 1000) + (90 * 24 * 60 * 60) // 90 days
   }
 
-  await putItem(TABLE_NAME, metrics, 'govcloud')
+  await putItem(tableConfig.tableName, metrics, tableConfig.environment, deploymentAccountId)
 }
 
 /**
@@ -244,10 +257,12 @@ export async function getMetrics(
   metricType: string
 ): Promise<StreamingMetrics | null> {
   try {
+    const tableConfig = await getTableConfig('streamingMetrics')
     const result = await getItem(
-      TABLE_NAME,
+      tableConfig.tableName,
       { metricDate, metricType },
-      'govcloud'
+      tableConfig.environment,
+      tableConfig.accountId
     ) as StreamingMetrics | null
 
     return result

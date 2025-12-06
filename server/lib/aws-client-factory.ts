@@ -204,9 +204,11 @@ async function getAssumeRoleName(): Promise<string> {
 
 /**
  * Get assume role duration from site config with env fallback
+ * Default: 43200 seconds (12 hours) - max for role chaining
+ * AWS allows up to 12 hours for assumed role sessions when using role chaining
  */
 async function getAssumeRoleDuration(): Promise<number> {
-  const duration = getConfigValue<number>('aws.roleAssumption.duration', 'AWS_ASSUME_ROLE_DURATION', 3600)
+  const duration = getConfigValue<number>('aws.roleAssumption.duration', 'AWS_ASSUME_ROLE_DURATION', 43200)
   return typeof duration === 'string' ? parseInt(duration) : duration
 }
 

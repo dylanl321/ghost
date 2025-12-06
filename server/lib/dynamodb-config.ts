@@ -34,6 +34,7 @@ export interface DynamoDBConfig {
   chatThreads: DynamoDBTableConfig
   siteConfig: DynamoDBTableConfig
   adminNotifications: DynamoDBTableConfig
+  streamingMetrics: DynamoDBTableConfig
 }
 
 // Cache the configuration to avoid repeated Secrets Manager calls
@@ -172,6 +173,12 @@ function loadFromEnvironment(): DynamoDBConfig {
     },
     adminNotifications: {
       tableName: process.env.ADMIN_NOTIFICATIONS_TABLE || 'ghost_admin_notifications',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
+    },
+    streamingMetrics: {
+      tableName: process.env.STREAMING_METRICS_TABLE_NAME || 'ghost-streaming-metrics',
       environment: 'govcloud',
       region: govCloudRegion,
       accountId: deploymentAccountId

@@ -166,6 +166,11 @@ export const useChatThreadsStore = defineStore('chatThreads', {
           body: { title, initialMessage }
         })
 
+        // Ensure messages array is initialized
+        if (!data.messages) {
+          data.messages = []
+        }
+
         // Add to threads list
         this.threads.unshift(data)
 
@@ -193,8 +198,16 @@ export const useChatThreadsStore = defineStore('chatThreads', {
       try {
         const { data } = await $fetch<{ data: ChatThread }>(`/api/chat/threads/${threadId}`)
 
+        // Ensure messages array exists first
+        if (!data.messages) {
+          data.messages = []
+        }
+
         // Preserve any in-memory streaming messages before loading
-        const inMemoryStreamingMessages = this.currentThread?.threadId === threadId
+        // Defensive check: ensure currentThread and messages exist before filtering
+        const inMemoryStreamingMessages = (this.currentThread?.threadId === threadId &&
+                                          this.currentThread.messages &&
+                                          Array.isArray(this.currentThread.messages))
           ? this.currentThread.messages.filter(m =>
               m.status && (m.status.status === 'pending' || m.status.status === 'streaming')
             )
@@ -267,6 +280,10 @@ export const useChatThreadsStore = defineStore('chatThreads', {
         if (!thread) {
           return false
         }
+        // Ensure messages array is initialized after thread creation
+        if (!this.currentThread.messages) {
+          this.currentThread.messages = []
+        }
       }
 
       try {
@@ -275,11 +292,19 @@ export const useChatThreadsStore = defineStore('chatThreads', {
           body: { message }
         })
 
+        // Ensure messages array exists
+        if (!data.messages) {
+          data.messages = []
+        }
+
         // Merge messages from DB with any in-memory streaming messages to prevent loss
         // This fixes the bug where streaming messages would disappear when reloading from DB
-        const inMemoryStreamingMessages = this.currentThread.messages.filter(m =>
-          m.status && (m.status.status === 'pending' || m.status.status === 'streaming')
-        )
+        // Defensive check: ensure currentThread and messages exist before filtering
+        const inMemoryStreamingMessages = (this.currentThread && Array.isArray(this.currentThread.messages))
+          ? this.currentThread.messages.filter(m =>
+              m.status && (m.status.status === 'pending' || m.status.status === 'streaming')
+            )
+          : []
 
         // Update current thread metadata but preserve streaming messages
         if (this.currentThread) {
@@ -300,6 +325,9 @@ export const useChatThreadsStore = defineStore('chatThreads', {
           } else {
             this.currentThread.messages = data.messages
           }
+        } else {
+          // No current thread yet (shouldn't happen, but be defensive)
+          this.currentThread = data
         }
 
         // Update in threads list
@@ -522,6 +550,10 @@ export const useChatThreadsStore = defineStore('chatThreads', {
 
       // Add to current thread's messages if this is the active thread
       if (this.currentThread?.threadId === threadId) {
+        // Ensure messages array exists before pushing
+        if (!this.currentThread.messages) {
+          this.currentThread.messages = []
+        }
         this.currentThread.messages.push(message)
       }
 
@@ -538,7 +570,7 @@ export const useChatThreadsStore = defineStore('chatThreads', {
         message.status = status
 
         // Update in current thread messages too
-        if (this.currentThread) {
+        if (this.currentThread?.messages && Array.isArray(this.currentThread.messages)) {
           const msgIndex = this.currentThread.messages.findIndex(m => m.messageId === messageId)
           if (msgIndex !== -1) {
             this.currentThread.messages[msgIndex].status = status
@@ -564,7 +596,7 @@ export const useChatThreadsStore = defineStore('chatThreads', {
         console.log('[Store] New content length:', message.content.length)
 
         // Update in current thread messages too
-        if (this.currentThread) {
+        if (this.currentThread?.messages && Array.isArray(this.currentThread.messages)) {
           const msgIndex = this.currentThread.messages.findIndex(m => m.messageId === messageId)
           if (msgIndex !== -1) {
             this.currentThread.messages[msgIndex].content = message.content
@@ -616,7 +648,7 @@ export const useChatThreadsStore = defineStore('chatThreads', {
       }
 
       // Update in current thread messages
-      if (this.currentThread) {
+      if (this.currentThread?.messages && Array.isArray(this.currentThread.messages)) {
         const msgIndex = this.currentThread.messages.findIndex(m => m.messageId === messageId)
         if (msgIndex !== -1) {
           // Update the message in place (keep it as a regular ChatMessage)
@@ -682,7 +714,7 @@ export const useChatThreadsStore = defineStore('chatThreads', {
         message.content = error
 
         // Update in current thread messages too
-        if (this.currentThread) {
+        if (this.currentThread?.messages && Array.isArray(this.currentThread.messages)) {
           const msgIndex = this.currentThread.messages.findIndex(m => m.messageId === messageId)
           if (msgIndex !== -1) {
             this.currentThread.messages[msgIndex].content = error
