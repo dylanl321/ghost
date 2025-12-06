@@ -270,6 +270,67 @@ resource "aws_iam_role_policy" "ecs_site_config_dynamodb" {
   })
 }
 
+# DynamoDB permissions for chat threads (read/write)
+resource "aws_iam_role_policy" "ecs_chat_threads_dynamodb" {
+  provider = aws.target_deployment_account
+  name     = "${var.app_name}_chat_threads_dynamodb"
+  role     = aws_iam_role.ecs_task_execution_role.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "ChatThreadsDynamoDB"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan",
+          "dynamodb:BatchGetItem",
+          "dynamodb:BatchWriteItem"
+        ]
+        Resource = [
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-chat-threads",
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-chat-threads/index/*"
+        ]
+      }
+    ]
+  })
+}
+
+# DynamoDB permissions for streaming metrics (read/write)
+resource "aws_iam_role_policy" "ecs_streaming_metrics_dynamodb" {
+  provider = aws.target_deployment_account
+  name     = "${var.app_name}_streaming_metrics_dynamodb"
+  role     = aws_iam_role.ecs_task_execution_role.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "StreamingMetricsDynamoDB"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan",
+          "dynamodb:BatchGetItem",
+          "dynamodb:BatchWriteItem"
+        ]
+        Resource = [
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-streaming-metrics"
+        ]
+      }
+    ]
+  })
+}
+
 # S3 permissions for application storage (reports, exports, attachments)
 resource "aws_iam_role_policy" "ecs_s3_app_storage" {
   provider = aws.target_deployment_account

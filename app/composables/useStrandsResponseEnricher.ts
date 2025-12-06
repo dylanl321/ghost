@@ -371,31 +371,83 @@ export function useStrandsResponseEnricher() {
   }
 
   /**
+   * Replace entities in HTML (post-markdown processing)
+   * This carefully replaces entities only in text nodes, not in HTML tags or attributes
+   */
+  function replaceEntitiesInHTML(html: string, config: EnricherConfig = defaultConfig): string {
+    // Split HTML into segments: text and tags
+    // Pattern: match HTML tags (including attributes) OR text between tags
+    const segments: { type: 'tag' | 'text', content: string }[] = []
+    const htmlRegex = /(<[^>]+>)/g
+    let lastIndex = 0
+    let match
+
+    while ((match = htmlRegex.exec(html)) !== null) {
+      // Add text before tag
+      if (match.index > lastIndex) {
+        segments.push({
+          type: 'text',
+          content: html.substring(lastIndex, match.index)
+        })
+      }
+      // Add tag
+      segments.push({
+        type: 'tag',
+        content: match[0]
+      })
+      lastIndex = match.index + match[0].length
+    }
+
+    // Add remaining text
+    if (lastIndex < html.length) {
+      segments.push({
+        type: 'text',
+        content: html.substring(lastIndex)
+      })
+    }
+
+    // Replace entities only in text segments
+    return segments.map(segment => {
+      if (segment.type === 'text') {
+        return replaceEntitiesInText(segment.content, config)
+      }
+      return segment.content
+    }).join('')
+  }
+
+  /**
    * Main function: Parse markdown and enrich with entity detection
    */
   function enrichStrandsResponse(content: string, config: EnricherConfig = defaultConfig): string {
     if (!content) return ''
 
-    // STEP 1: Detect and replace email addresses with placeholders BEFORE markdown processing
-    // This prevents markdown from auto-linking emails with mailto:
-    // Use HTML comment format which markdown will preserve
-    const emailPlaceholders = new Map<string, string>()
-    const emailRegex = /\b([a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b/g
+    // STEP 1: Replace entity values with unique placeholders BEFORE markdown processing
+    // This prevents markdown from interfering with entity detection (e.g., bold around account IDs)
+    const entityPlaceholders = new Map<string, { entity: DetectedEntity, pattern: EntityPattern }>()
     let placeholderIndex = 0
 
-    let contentWithPlaceholders = content.replace(emailRegex, (match) => {
-      const placeholder = `<!--EMAIL_${placeholderIndex}-->`
-      emailPlaceholders.set(placeholder, match)
-      placeholderIndex++
-      return placeholder
-    })
+    // Detect all entities in the raw content
+    const detectedEntities = detectEntities(content, config)
+
+    // Replace entities with placeholders
+    let contentWithPlaceholders = content
+    for (let i = detectedEntities.length - 1; i >= 0; i--) {
+      const entity = detectedEntities[i]
+      const pattern = entityPatterns.find(p => p.type === entity.type)
+      if (pattern) {
+        const placeholder = `___ENTITY_${placeholderIndex}___`
+        entityPlaceholders.set(placeholder, { entity, pattern })
+        placeholderIndex++
+
+        // Replace entity value with placeholder
+        contentWithPlaceholders =
+          contentWithPlaceholders.substring(0, entity.startIndex) +
+          placeholder +
+          contentWithPlaceholders.substring(entity.endIndex)
+      }
+    }
 
     const renderer = new marked.Renderer()
-
-    // Override text rendering to detect entities
-    renderer.text = ({ text }) => {
-      return replaceEntitiesInText(text, config)
-    }
 
     // Override link rendering (preserve existing markdown links, but skip mailto: links)
     renderer.link = ({ href, title, text }) => {
@@ -425,14 +477,14 @@ export function useStrandsResponseEnricher() {
     })
 
     try {
+      // STEP 2: Parse markdown with placeholders
       let result = marked.parse(contentWithPlaceholders) as string
 
-      // STEP 2: Replace email placeholders back with enriched email entities
-      // HTML comments are preserved by markdown, so we can replace them now
-      emailPlaceholders.forEach((email, placeholder) => {
-        const enrichedEmail = replaceEntitiesInText(email, config)
+      // STEP 3: Replace placeholders with enriched entity HTML
+      entityPlaceholders.forEach(({ entity, pattern }, placeholder) => {
+        const enrichedEntity = enrichEntity(entity, pattern, config)
         // Use replaceAll to ensure all instances are replaced
-        result = result.replaceAll(placeholder, enrichedEmail)
+        result = result.replaceAll(placeholder, enrichedEntity)
       })
 
       return result

@@ -193,6 +193,19 @@ export const useChatThreadsStore = defineStore('chatThreads', {
       try {
         const { data } = await $fetch<{ data: ChatThread }>(`/api/chat/threads/${threadId}`)
 
+        // Preserve any in-memory streaming messages before loading
+        const inMemoryStreamingMessages = this.currentThread?.threadId === threadId
+          ? this.currentThread.messages.filter(m =>
+              m.status && (m.status.status === 'pending' || m.status.status === 'streaming')
+            )
+          : []
+
+        // Merge DB messages with in-memory streaming messages
+        if (inMemoryStreamingMessages.length > 0) {
+          data.messages = [...data.messages, ...inMemoryStreamingMessages]
+          console.log('[Store] Preserved', inMemoryStreamingMessages.length, 'streaming messages during loadThread')
+        }
+
         this.currentThread = data
         this.activeThreadId = threadId
 
@@ -262,13 +275,41 @@ export const useChatThreadsStore = defineStore('chatThreads', {
           body: { message }
         })
 
-        // Update current thread
-        this.currentThread = data
+        // Merge messages from DB with any in-memory streaming messages to prevent loss
+        // This fixes the bug where streaming messages would disappear when reloading from DB
+        const inMemoryStreamingMessages = this.currentThread.messages.filter(m =>
+          m.status && (m.status.status === 'pending' || m.status.status === 'streaming')
+        )
+
+        // Update current thread metadata but preserve streaming messages
+        if (this.currentThread) {
+          this.currentThread.threadId = data.threadId
+          this.currentThread.userId = data.userId
+          this.currentThread.title = data.title
+          this.currentThread.messageCount = data.messageCount
+          this.currentThread.lastMessageAt = data.lastMessageAt
+          this.currentThread.lastModifiedAt = data.lastModifiedAt
+          this.currentThread.isPinned = data.isPinned
+          this.currentThread.isArchived = data.isArchived
+          this.currentThread.isShared = data.isShared
+
+          // Merge DB messages with in-memory streaming messages
+          if (inMemoryStreamingMessages.length > 0) {
+            this.currentThread.messages = [...data.messages, ...inMemoryStreamingMessages]
+            console.log('[Store] Preserved', inMemoryStreamingMessages.length, 'streaming messages during addMessage')
+          } else {
+            this.currentThread.messages = data.messages
+          }
+        }
 
         // Update in threads list
         const index = this.threads.findIndex(t => t.threadId === this.activeThreadId)
         if (index !== -1) {
-          this.threads[index] = data
+          this.threads[index] = { ...data }
+          // Also preserve streaming messages in the threads list
+          if (inMemoryStreamingMessages.length > 0) {
+            this.threads[index].messages = [...data.messages, ...inMemoryStreamingMessages]
+          }
         }
 
         return true
@@ -561,34 +602,63 @@ export const useChatThreadsStore = defineStore('chatThreads', {
       message.status = { status: 'complete' }
       delete message.streamBuffer
 
+      // Create the completed message object
+      const completedMessage = {
+        messageId: message.messageId,
+        role: message.role,
+        content: message.content,
+        timestamp: message.timestamp,
+        metadata: message.metadata,
+        links: message.links,
+        suggestedLinks: message.suggestedLinks,
+        suggestedPrompts: message.suggestedPrompts
+        // No status - it's complete, don't show streaming indicator
+      }
+
       // Update in current thread messages
       if (this.currentThread) {
         const msgIndex = this.currentThread.messages.findIndex(m => m.messageId === messageId)
         if (msgIndex !== -1) {
           // Update the message in place (keep it as a regular ChatMessage)
-          this.currentThread.messages[msgIndex] = {
-            messageId: message.messageId,
-            role: message.role,
-            content: message.content,
-            timestamp: message.timestamp,
-            metadata: message.metadata,
-            links: message.links,
-            suggestedLinks: message.suggestedLinks,
-            suggestedPrompts: message.suggestedPrompts
-            // No status - it's complete, don't show streaming indicator
-          }
+          this.currentThread.messages[msgIndex] = completedMessage
           console.log('[Store] Completed message in currentThread.messages at index:', msgIndex)
         } else {
           console.warn('[Store] Message not found in currentThread.messages for completion:', messageId)
         }
       }
 
-      // NOTE: We don't save to database during streaming to prevent message flicker
-      // Messages persist in memory for the session. They'll be saved when:
-      // - Thread is explicitly saved by user
-      // - Thread is archived
-      // - Session ends
-      // This prevents the "disappearing bubble" issue caused by DB replacing temp messageId
+      // Save the completed message to database immediately to prevent disappearing on next addMessage
+      // This fixes the bug where completed messages would disappear when the thread is reloaded from DB
+      if (this.activeThreadId && this.currentThread) {
+        try {
+          const { data } = await $fetch<{ data: ChatThread }>(`/api/chat/threads/${this.activeThreadId}/messages`, {
+            method: 'POST',
+            body: {
+              message: {
+                role: completedMessage.role,
+                content: completedMessage.content,
+                metadata: completedMessage.metadata,
+                links: completedMessage.links,
+                suggestedLinks: completedMessage.suggestedLinks,
+                suggestedPrompts: completedMessage.suggestedPrompts
+              }
+            }
+          })
+          console.log('[Store] Saved completed streaming message to database')
+
+          // Don't replace currentThread with DB data to avoid losing any other in-memory state
+          // Just update the message count and timestamp
+          if (data.messageCount) {
+            this.currentThread.messageCount = data.messageCount
+          }
+          if (data.lastMessageAt) {
+            this.currentThread.lastMessageAt = data.lastMessageAt
+          }
+        } catch (err: any) {
+          console.error('[Store] Failed to save completed streaming message:', err)
+          // Don't fail the completion - the message is still in memory
+        }
+      }
 
       // Cleanup streaming state immediately (removes "query running" indicator)
       this.streamingMessages.delete(messageId)
