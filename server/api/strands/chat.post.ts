@@ -15,7 +15,6 @@ import { registerEndpoint } from '../../plugins/swagger'
 import { logger } from '../../utils/logger'
 import { sendStrandsQuery, extractStrandsMetadata, StrandsClientError } from '../../utils/strands-client'
 import { generateSmartLinks, type SuggestedLink } from '../../utils/strands-link-generator'
-import { getSchemaForAI } from '../../utils/ghost-site-schema'
 import { extractFollowUpPrompts, type SuggestedPrompt } from '../../utils/bedrock-prompt-extractor'
 import { buildUserContextForAI, formatUserContextForAI } from '../../utils/user-context-builder'
 
@@ -277,67 +276,10 @@ export default defineEventHandler(handleAsync(async (event) => {
   const userContext = await buildUserContextForAI(event)
   const userContextText = formatUserContextForAI(userContext)
 
-  // Build the full query with conversation context + GHOST site schema
-  // This helps the AI understand GHOST's structure and generate relevant guidance
+  // Build the full query with user context only
+  // NOTE: GHOST context and navigation schema are now configured as system prompt on Strands server
+  // This reduces payload size from ~11KB to ~1-2KB per request
   let fullQuery = message
-
-  // Add GHOST application context to help AI understand what pages/features are available
-  const ghostContext = `
-You are an AI assistant for the GHOST application - the centralized AWS operations and analytics platform for GDMS.
-
-## About GHOST
-
-**GHOST** stands for:
-- **G**overnance - Comprehensive policy management and compliance oversight
-- **H**ealth - Real-time monitoring of resource health and security findings
-- **O**perations - Streamlined account management and operational workflows
-- **S**pend - Advanced cost analytics, forecasting, and budget tracking
-- **T**asks - Automated workflows, scheduled reports, and intelligent task management
-
-**Built by:** GDMS AWS Product Team (AWS Landing Zone Team)
-
-**Purpose:** GHOST is the centralized platform for managing, monitoring, and optimizing AWS infrastructure across the entire GDMS organization. It provides unified access to AWS cost data, security findings, resource configurations, and operational insights across multiple AWS accounts in both commercial and GovCloud regions.
-
-**Primary Users:**
-- **IT Leadership** - Executive visibility into AWS spending, security posture, and resource utilization
-- **Project Managers** - Track project costs, resource allocation, and budget forecasting
-- **Engineering Groups** - Access to AWS resource configurations, deployment tracking, and operational data
-- **Finance Teams** - Detailed cost breakdowns, billing analysis, and budget management
-- **Security Teams** - Security Hub findings, compliance tracking, and vulnerability management
-- **Cloud Administrators** - Multi-account management, resource inventory, and operational oversight
-
-**Key Capabilities:**
-- **Multi-Account Management** - Unified view across AWS Organizations (374+ accounts)
-- **Cost Analytics** - Real-time cost tracking, forecasting, and optimization recommendations
-- **Security Monitoring** - Centralized Security Hub findings and compliance status
-- **Resource Inventory** - AWS Config aggregation for resource tracking across all accounts
-- **User Access Management** - Entra ID integration with role-based access control
-- **Reporting & Analytics** - Custom dataset reports from CloudTrail, Config, and Security Hub data
-- **AI-Powered Assistance** - Natural language queries for AWS operations (this chat interface)
-
-**AWS Integration:**
-GHOST integrates with AWS Organizations, Cost Explorer, Security Hub, AWS Config, CloudTrail, EC2, S3, Lambda, RDS, and other AWS services across both commercial and GovCloud environments.
-
-**Important Context:**
-- All cost data is sourced from AWS Cost Explorer
-- Security findings come from AWS Security Hub aggregation
-- Configuration data comes from AWS Config Aggregator
-- The system supports both GovCloud and Commercial AWS regions
-- Account IDs should be 12-digit numbers (e.g., 374673712317)
-
-## How to Help Users
-
-When users ask questions:
-1. **Answer their AWS questions directly** using your knowledge and MCP tools
-2. **Reference specific account IDs** when discussing resources or costs
-3. **Suggest relevant GHOST pages** where they can explore data visually
-4. **Provide actionable insights** - not just data, but recommendations
-5. **Be aware of GDMS context** - government agency with strict security/compliance requirements
-
-When suggesting GHOST pages, explain what they'll find there and why it's useful.
-
-${getSchemaForAI()}
-`
 
   if (conversationHistory.length > 0) {
     // Include recent conversation history for context (last 3 exchanges)
@@ -346,9 +288,9 @@ ${getSchemaForAI()}
       `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`
     )
 
-    fullQuery = `${ghostContext}\n\n${userContextText}\n\nPrevious conversation:\n${contextParts.join('\n')}\n\nCurrent query: ${message}`
+    fullQuery = `${userContextText}\n\nPrevious conversation:\n${contextParts.join('\n')}\n\nCurrent query: ${message}`
   } else {
-    fullQuery = `${ghostContext}\n\n${userContextText}\n\nUser query: ${message}`
+    fullQuery = `${userContextText}\n\nUser query: ${message}`
   }
 
   // Call Strands ALB endpoint

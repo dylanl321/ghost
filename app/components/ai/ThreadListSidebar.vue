@@ -498,11 +498,13 @@ function handleDelete(threadId: string) {
 async function confirmDelete() {
   if (!activeThreadIdForAction.value) return
 
-  const success = await threadsStore.deleteThread(activeThreadIdForAction.value)
+  // Use deleteThreadAndCreateNew to ensure user always has an active thread
+  const newThread = await threadsStore.deleteThreadAndCreateNew(activeThreadIdForAction.value)
 
-  if (success) {
+  if (newThread) {
     toast.add({
       title: 'Thread deleted',
+      description: 'New conversation started',
       color: 'green'
     })
   } else {

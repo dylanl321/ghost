@@ -252,7 +252,11 @@ const {
   sendMessage: sendChatMessage,
   handleAccountSelected,
   handleDisambiguationCancel,
-  scrollTrigger
+  scrollTrigger,
+  isRecovering,
+  connectionFailed,
+  currentStreamSessionId,
+  attemptRecovery
 } = useStrandsChat({
   initialGreeting: "Hello! I'm GHOST Chat, your AI assistant for AWS operations. I can help you with:\n\n• **Cost Analysis** - Query spending and forecasts\n• **Configuration** - Look up resource configurations\n• **Security** - Check security findings and compliance\n• **Resources** - List and analyze AWS resources\n\nClick any example below to get started, or ask your own question. For best results, be explicit about AWS account IDs.",
   threadsStore: threadsStore,
@@ -284,16 +288,32 @@ const mentionDropdownRef = ref<HTMLDivElement | null>(null)
 // Control example questions visibility with immediate local state
 // This prevents flashing during async state updates
 const showExamples = ref(true)
+const currentThreadId = ref<string | null>(null)
 
-// Sync showExamples with actual message state (but only show, never re-show once hidden)
-watch(messages, (newMessages) => {
-  // Once examples are hidden, they stay hidden for this session
-  if (!showExamples.value) return
+// Sync showExamples with actual message state and thread changes
+// RULE: Show welcome when thread has no user messages
+// RULE: Hide welcome once user sends first message
+// RULE: Reset welcome state when switching threads
+watch([messages, () => threadsStore.activeThreadId], ([newMessages, newThreadId]) => {
+  // Thread changed - reset welcome state
+  if (newThreadId !== currentThreadId.value) {
+    currentThreadId.value = newThreadId
 
-  // Check if we should hide examples based on messages
-  if (newMessages.length > 1) {
+    // Show welcome if thread is empty or only has bot greeting
+    if (newMessages.length === 0) {
+      showExamples.value = true
+    } else if (newMessages.length === 1 && newMessages[0].sender === 'bot') {
+      showExamples.value = true
+    } else {
+      showExamples.value = false
+    }
+    return
+  }
+
+  // Same thread - hide examples if user has sent a message
+  if (showExamples.value && newMessages.length > 1) {
     showExamples.value = false
-  } else if (newMessages.length === 1 && newMessages[0].sender !== 'bot') {
+  } else if (showExamples.value && newMessages.length === 1 && newMessages[0].sender !== 'bot') {
     showExamples.value = false
   }
 }, { immediate: true })
@@ -425,6 +445,27 @@ function handleMentionClick(account: any) {
   })
 }
 
+// Handle recovery retry
+function handleRetryRecovery() {
+  // Get the last bot message ID for recovery
+  const lastBotMessage = threadsStore.currentThread?.messages?.findLast(
+    (m: any) => m.role === 'assistant'
+  )
+  if (lastBotMessage && currentStreamSessionId) {
+    attemptRecovery(currentStreamSessionId.value, lastBotMessage.messageId)
+  } else {
+    // If we can't recover, just suggest starting over
+    const toast = useToast()
+    toast.add({
+      title: 'Cannot Retry',
+      description: 'Unable to find the message to recover. Please try sending your message again.',
+      icon: 'i-heroicons-information-circle',
+      color: 'amber',
+      timeout: 5000
+    })
+  }
+}
+
 // Handle form submission
 const handleSubmit = async (e: Event) => {
   e.preventDefault()
@@ -469,9 +510,21 @@ const handlePromptClick = async (promptText: string) => {
 }
 
 // Format message content using the entity-aware enricher (handles markdown + internal links + entity detection)
+// Ensures all messages (streaming, DB, cached) go through same rendering pipeline
 const formatMessage = (content: string) => {
-  if (!content) return ''
-  return enrichStrandsResponse(content)
+  // Safety check: handle null/undefined/empty content
+  if (!content || typeof content !== 'string') {
+    return ''
+  }
+
+  try {
+    // Always use enrichStrandsResponse for consistent rendering
+    return enrichStrandsResponse(content)
+  } catch (error) {
+    // Fallback: if enrichment fails, return escaped content with line breaks
+    console.error('[GhostChat] Error enriching message content:', error)
+    return content.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')
+  }
 }
 
 // Auto scroll down when messages change or scrollTrigger increments
@@ -515,6 +568,25 @@ onMounted(() => {
 <style scoped>
 .ghost-chat-container {
   @apply flex flex-col h-full bg-white dark:bg-gray-900;
+}
+
+/* Recovery Banner */
+.recovery-banner {
+  @apply bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3 shadow-sm;
+  z-index: 10;
+}
+
+.recovery-indicator,
+.connection-error {
+  @apply flex items-center gap-3 justify-center;
+}
+
+.recovery-indicator {
+  @apply text-blue-700 dark:text-blue-400;
+}
+
+.connection-error {
+  @apply text-red-700 dark:text-red-400;
 }
 
 .chat-messages {

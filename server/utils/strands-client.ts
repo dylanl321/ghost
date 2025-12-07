@@ -320,7 +320,7 @@ export function extractStrandsMetadata(response: StrandsQueryResponse): StrandsM
  */
 export async function checkStrandsHealth(): Promise<boolean> {
   try {
-    const config = getStrandsConfig()
+    const config = await getStrandsConfig()
     const url = `${config.serverUrl}/health`
 
     const controller = new AbortController()
@@ -335,6 +335,150 @@ export async function checkStrandsHealth(): Promise<boolean> {
     return response.ok
   } catch {
     return false
+  }
+}
+
+/**
+ * Submit async query to Strands (for polling-based approach)
+ * Returns jobId that can be polled for status
+ */
+export async function sendStrandsAsyncQuery(
+  message: string,
+  options?: {
+    accountIdentifier?: string
+    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string | object | any[] }>
+    timezone?: string
+    region?: string
+    preferGovcloud?: boolean
+  }
+): Promise<{ jobId: string; status: string; pollUrl?: string }> {
+  const config = await getStrandsConfig()
+  const url = `${config.serverUrl}/query/async`
+
+  const request: any = {
+    message,
+    account_identifier: options?.accountIdentifier,
+    region: options?.region,
+    prefer_govcloud: options?.preferGovcloud,
+    timezone: options?.timezone,
+    conversationHistory: options?.conversationHistory
+  }
+
+  // Remove undefined fields
+  Object.keys(request).forEach(key => {
+    if (request[key] === undefined) {
+      delete request[key]
+    }
+  })
+
+  logger.debug('[Strands Client] Submitting async query to:', url)
+  logger.debug('[Strands Client] Message:', message.substring(0, 100) + (message.length > 100 ? '...' : ''))
+
+  try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), config.timeout)
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(request),
+      signal: controller.signal
+    })
+
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new StrandsClientError(
+        `Failed to submit async query: ${response.statusText}`,
+        `HTTP_${response.status}`,
+        response.status,
+        errorText
+      )
+    }
+
+    const data = await response.json()
+
+    logger.debug('[Strands Client] Async query submitted:', {
+      jobId: data.jobId,
+      status: data.status
+    })
+
+    return data
+
+  } catch (error: any) {
+    logger.error('[Strands Client] Failed to submit async query:', error)
+    throw error instanceof StrandsClientError ? error : new StrandsClientError(
+      error.message || 'Network error',
+      'NETWORK_ERROR',
+      undefined,
+      error
+    )
+  }
+}
+
+/**
+ * Poll async job status from Strands
+ */
+export async function pollStrandsJobStatus(
+  jobId: string
+): Promise<{
+  jobId: string
+  status: 'queued' | 'running' | 'complete' | 'error'
+  currentStep: string
+  progressPercent: number
+  eventCount: number
+  response: string | null
+  errorMessage: string | null
+  metadata?: any
+  createdAt: string
+  lastUpdated: string
+}> {
+  const config = await getStrandsConfig()
+  const url = `${config.serverUrl}/query/status/${jobId}`
+
+  try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10s timeout
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      signal: controller.signal
+    })
+
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      throw new StrandsClientError(
+        `Failed to poll job status: ${response.statusText}`,
+        `HTTP_${response.status}`,
+        response.status
+      )
+    }
+
+    const data = await response.json()
+
+    logger.debug('[Strands Client] Job status polled:', {
+      jobId,
+      status: data.status,
+      progressPercent: data.progressPercent
+    })
+
+    return data
+
+  } catch (error: any) {
+    logger.error('[Strands Client] Failed to poll job status:', error)
+    throw error instanceof StrandsClientError ? error : new StrandsClientError(
+      error.message || 'Network error',
+      'NETWORK_ERROR',
+      undefined,
+      error
+    )
   }
 }
 

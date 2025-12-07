@@ -196,6 +196,28 @@ export const useChatThreadsStore = defineStore('chatThreads', {
       this.error = null
 
       try {
+        // Clean up any lingering streaming state for this thread BEFORE loading
+        // This prevents stuck "GHOST is thinking" indicators
+        const streamingMessagesToCleanup: string[] = []
+        for (const [messageId, msg] of this.streamingMessages.entries()) {
+          // Check if this streaming message belongs to the thread we're loading
+          // or if it's been in 'complete' status (shouldn't happen but defensive)
+          if (msg.threadId === threadId || msg.status?.status === 'complete') {
+            streamingMessagesToCleanup.push(messageId)
+          }
+        }
+
+        // Cleanup identified messages
+        for (const messageId of streamingMessagesToCleanup) {
+          this.streamingMessages.delete(messageId)
+          this.activeStreams.delete(messageId)
+          this.activeStreamCount = Math.max(0, this.activeStreamCount - 1)
+        }
+
+        if (streamingMessagesToCleanup.length > 0) {
+          console.log('[Store] Cleaned up', streamingMessagesToCleanup.length, 'lingering streaming messages for thread', threadId)
+        }
+
         const { data } = await $fetch<{ data: ChatThread }>(`/api/chat/threads/${threadId}`)
 
         // Ensure messages array exists first
@@ -399,6 +421,34 @@ export const useChatThreadsStore = defineStore('chatThreads', {
         this.error = err.data?.error?.message || 'Failed to delete thread'
         console.error('[Chat Threads Store] Error deleting thread:', err)
         return false
+      }
+    },
+
+    /**
+     * Delete a thread and automatically create a new one
+     * This ensures the user always has an active thread
+     */
+    async deleteThreadAndCreateNew(threadId: string): Promise<ChatThread | null> {
+      try {
+        // First delete the thread
+        const deleteSuccess = await this.deleteThread(threadId)
+        if (!deleteSuccess) {
+          return null
+        }
+
+        // Then create a new empty thread
+        const newThread = await this.createThread('New Conversation')
+        if (!newThread) {
+          console.error('[Chat Threads Store] Failed to create new thread after deletion')
+          return null
+        }
+
+        console.log('[Chat Threads Store] Deleted thread and created new thread:', newThread.threadId)
+        return newThread
+      } catch (err: any) {
+        this.error = err.data?.error?.message || 'Failed to delete thread and create new'
+        console.error('[Chat Threads Store] Error in deleteThreadAndCreateNew:', err)
+        return null
       }
     },
 

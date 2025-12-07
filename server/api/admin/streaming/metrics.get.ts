@@ -1,21 +1,19 @@
 /**
  * GET /api/admin/streaming/metrics
  *
- * Get aggregated streaming metrics for the admin dashboard
+ * Get aggregated async chat metrics for the admin dashboard
  * Supports querying by time period (24h, 7d, 30d)
+ * Updated for async polling (no longer SSE streaming)
  */
 
 import { defineEventHandler, getQuery } from 'h3'
 import { requireAdmin } from '../../../utils/user-roles'
-import { getMetrics, getMetricsRange } from '../../../utils/streaming-metrics-collector'
+import { getDailyMetrics } from '../../../utils/async-metrics-collector'
 import { queryItems } from '../../../utils/dynamodb'
-import type {
-  StreamingDashboardMetrics,
-  StreamingMetrics
-} from '~/shared/types/streaming-metrics'
+import type { AggregatedMetrics } from '../../../utils/async-metrics-collector'
 import { logger } from '../../../utils/logger'
 
-const TABLE_NAME = process.env.STREAMING_METRICS_TABLE_NAME || 'ghost-streaming-metrics'
+const TABLE_NAME = process.env.AWS_ASYNC_METRICS_TABLE_NAME || 'ghost-async-metrics'
 
 export default defineEventHandler(async (event) => {
   // Require admin access
@@ -88,38 +86,37 @@ function getDateRange(period: '24h' | '7d' | '30d'): {
 /**
  * Fetch daily metrics for date range
  */
-async function fetchDailyMetrics(startDate: string, endDate: string): Promise<StreamingMetrics[]> {
+async function fetchDailyMetrics(startDate: string, endDate: string): Promise<AggregatedMetrics[]> {
   const dates = generateDateRange(startDate, endDate)
 
-  const promises = dates.map(date => getMetrics(date, 'daily'))
+  const promises = dates.map(date => getDailyMetrics(date))
   const results = await Promise.all(promises)
 
-  return results.filter(Boolean) as StreamingMetrics[]
+  return results.filter(Boolean) as AggregatedMetrics[]
 }
 
 /**
  * Calculate dashboard metrics from daily metrics
  */
 function calculateDashboardMetrics(
-  dailyMetrics: StreamingMetrics[],
+  dailyMetrics: AggregatedMetrics[],
   period: '24h' | '7d' | '30d',
   startDate: string,
   endDate: string,
   days: number
-): StreamingDashboardMetrics {
+): any {
   // Sum up totals
-  const totalStreams = dailyMetrics.reduce((sum, m) => sum + m.totalStreams, 0)
-  const completedStreams = dailyMetrics.reduce((sum, m) => sum + m.completedStreams, 0)
-  const erroredStreams = dailyMetrics.reduce((sum, m) => sum + m.erroredStreams, 0)
-  const timeoutStreams = dailyMetrics.reduce((sum, m) => sum + m.timeoutStreams, 0)
-  const reconnectStreams = dailyMetrics.reduce((sum, m) => sum + m.reconnectStreams, 0)
+  const totalQueries = dailyMetrics.reduce((sum, m) => sum + m.totalQueries, 0)
+  const completedQueries = dailyMetrics.reduce((sum, m) => sum + m.completedQueries, 0)
+  const erroredQueries = dailyMetrics.reduce((sum, m) => sum + m.erroredQueries, 0)
+  const timeoutQueries = dailyMetrics.reduce((sum, m) => sum + m.timeoutQueries, 0)
 
-  // Calculate average duration across all streams
-  const totalDuration = dailyMetrics.reduce((sum, m) => sum + m.totalDuration, 0)
-  const avgDuration = totalStreams > 0 ? totalDuration / totalStreams : 0
+  // Calculate average duration across all queries
+  const totalDuration = dailyMetrics.reduce((sum, m) => sum + m.totalDurationMs, 0)
+  const avgDuration = totalQueries > 0 ? totalDuration / totalQueries : 0
 
   // Calculate percentile durations (approximation from daily data)
-  const allDurations = dailyMetrics.flatMap(m => [m.minDuration, m.avgDuration, m.maxDuration])
+  const allDurations = dailyMetrics.flatMap(m => [m.minDurationMs, m.avgDurationMs, m.maxDurationMs])
   allDurations.sort((a, b) => a - b)
 
   const p50Duration = allDurations[Math.floor(allDurations.length * 0.5)] || 0
@@ -127,23 +124,18 @@ function calculateDashboardMetrics(
   const p99Duration = allDurations[Math.floor(allDurations.length * 0.99)] || 0
 
   // Calculate rates
-  const completionRate = totalStreams > 0 ? (completedStreams / totalStreams) * 100 : 0
-  const errorRate = totalStreams > 0 ? (erroredStreams / totalStreams) * 100 : 0
-  const timeoutRate = totalStreams > 0 ? (timeoutStreams / totalStreams) * 100 : 0
-  const reconnectSuccessRate = reconnectStreams > 0 ? (reconnectStreams / totalStreams) * 100 : 0
+  const completionRate = totalQueries > 0 ? (completedQueries / totalQueries) * 100 : 0
+  const errorRate = totalQueries > 0 ? (erroredQueries / totalQueries) * 100 : 0
+  const timeoutRate = totalQueries > 0 ? (timeoutQueries / totalQueries) * 100 : 0
 
-  // Calculate average events per stream
-  const totalStatusEvents = dailyMetrics.reduce((sum, m) => sum + m.statusEvents, 0)
-  const totalToolCallEvents = dailyMetrics.reduce((sum, m) => sum + m.toolCallEvents, 0)
-  const totalResponseEvents = dailyMetrics.reduce((sum, m) => sum + m.responseEvents, 0)
-
-  const avgEventsPerStream = totalStreams > 0
-    ? (totalStatusEvents + totalToolCallEvents + totalResponseEvents) / totalStreams
-    : 0
-  const avgToolCallsPerStream = totalStreams > 0 ? totalToolCallEvents / totalStreams : 0
+  // Calculate average poll count
+  const avgPollCount = dailyMetrics.reduce((sum, m) => sum + m.avgPollCount, 0) / (dailyMetrics.length || 1)
 
   // Aggregate tools used
   const topTools = aggregateTopTools(dailyMetrics)
+
+  // Aggregate top accounts
+  const topAccounts = aggregateTopAccounts(dailyMetrics)
 
   // Build hourly stats for charts (approximation from daily data)
   const hourlyStats = buildHourlyStats(dailyMetrics, days)
@@ -152,24 +144,23 @@ function calculateDashboardMetrics(
     period,
     startDate,
     endDate,
-    totalStreams,
-    activeStreams: 0, // Will be populated by active streams endpoint
-    completedStreams,
-    erroredStreams,
+    totalQueries,
+    activeQueries: 0, // Would need separate tracking
+    completedQueries,
+    erroredQueries,
+    timeoutQueries,
     avgDuration,
+    avgPollCount,
     p50Duration,
     p95Duration,
     p99Duration,
     completionRate,
     errorRate,
     timeoutRate,
-    reconnectSuccessRate,
-    avgEventsPerStream,
-    avgToolCallsPerStream,
-    topUsers: [], // Will be populated separately if needed
-    topAccounts: [], // Will be populated separately if needed
+    topUsers: [], // Would need separate user tracking
+    topAccounts,
     topTools,
-    recentErrors: [], // Will be populated by logs endpoint
+    recentErrors: [], // Would need separate error logging
     hourlyStats
   }
 }
@@ -178,7 +169,7 @@ function calculateDashboardMetrics(
  * Aggregate top tools from daily metrics
  */
 function aggregateTopTools(
-  dailyMetrics: StreamingMetrics[]
+  dailyMetrics: AggregatedMetrics[]
 ): Array<{ toolName: string; usageCount: number; avgExecutionTime: number }> {
   const toolsMap = new Map<string, number>()
 
@@ -202,17 +193,43 @@ function aggregateTopTools(
 }
 
 /**
+ * Aggregate top accounts from daily metrics
+ */
+function aggregateTopAccounts(
+  dailyMetrics: AggregatedMetrics[]
+): Array<{ accountId: string; queryCount: number }> {
+  const accountsMap = new Map<string, number>()
+
+  for (const metric of dailyMetrics) {
+    for (const [account, count] of Object.entries(metric.accountsQueried)) {
+      accountsMap.set(account, (accountsMap.get(account) || 0) + count)
+    }
+  }
+
+  // Convert to array and sort by usage
+  const accounts = Array.from(accountsMap.entries())
+    .map(([accountId, queryCount]) => ({
+      accountId,
+      queryCount
+    }))
+    .sort((a, b) => b.queryCount - a.queryCount)
+    .slice(0, 10) // Top 10
+
+  return accounts
+}
+
+/**
  * Build hourly stats from daily metrics
  */
 function buildHourlyStats(
-  dailyMetrics: StreamingMetrics[],
+  dailyMetrics: AggregatedMetrics[],
   days: number
-): Array<{ hour: string; streamCount: number; completionRate: number; avgDuration: number }> {
+): Array<{ hour: string; queryCount: number; completionRate: number; avgDuration: number }> {
   // For daily data, we'll approximate by distributing across hours
   // In production, you'd want to store hourly breakdowns
   const hourlyStats: Array<{
     hour: string
-    streamCount: number
+    queryCount: number
     completionRate: number
     avgDuration: number
   }> = []
@@ -221,9 +238,9 @@ function buildHourlyStats(
     // Create one entry per day (approximation)
     hourlyStats.push({
       hour: metric.metricDate + 'T12:00:00Z',
-      streamCount: metric.totalStreams,
+      queryCount: metric.totalQueries,
       completionRate: metric.completionRate,
-      avgDuration: metric.avgDuration
+      avgDuration: metric.avgDurationMs
     })
   }
 

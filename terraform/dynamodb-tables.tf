@@ -447,13 +447,85 @@ resource "aws_dynamodb_table" "chat_threads" {
 }
 
 # ============================================================================
-# Streaming Metrics Table (GovCloud Environment)
+# Async Chat Jobs Table (GovCloud Environment)
 # ============================================================================
-# Stores SSE streaming chat metrics for monitoring and analytics
-# Tracks performance, usage, and errors with 90-day retention
-resource "aws_dynamodb_table" "streaming_metrics" {
+# Stores async polling job status for Strands AI chat queries
+# Jobs expire after 24 hours via TTL
+resource "aws_dynamodb_table" "async_chat_jobs" {
   provider       = aws.target_deployment_account
-  name           = "ghost-streaming-metrics"
+  name           = "ghost-async-chat-jobs"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "jobId"
+
+  attribute {
+    name = "jobId"
+    type = "S"
+  }
+
+  attribute {
+    name = "userId"
+    type = "S"
+  }
+
+  attribute {
+    name = "status"
+    type = "S"
+  }
+
+  attribute {
+    name = "createdAt"
+    type = "S"
+  }
+
+  # GSI for querying jobs by user
+  global_secondary_index {
+    name            = "UserIdIndex"
+    hash_key        = "userId"
+    range_key       = "createdAt"
+    projection_type = "ALL"
+  }
+
+  # GSI for querying jobs by status
+  global_secondary_index {
+    name            = "StatusIndex"
+    hash_key        = "status"
+    range_key       = "createdAt"
+    projection_type = "ALL"
+  }
+
+  # Enable TTL to auto-delete old jobs (24 hours)
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  # Enable encryption at rest
+  server_side_encryption {
+    enabled = true
+  }
+
+  # Enable point-in-time recovery
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Name        = "GHOST Async Chat Jobs"
+    Environment = local.environment
+    ManagedBy   = "Terraform"
+    Service     = "GHOST"
+    Component   = "AsyncChatJobs"
+  }
+}
+
+# ============================================================================
+# Async Chat Metrics Table (GovCloud Environment)
+# ============================================================================
+# Stores async polling chat metrics for monitoring and analytics
+# Tracks performance, usage, and errors with 90-day retention
+resource "aws_dynamodb_table" "async_metrics" {
+  provider       = aws.target_deployment_account
+  name           = "ghost-async-metrics"
   billing_mode   = "PAY_PER_REQUEST"
   hash_key       = "metricDate"
   range_key      = "metricType"
@@ -485,11 +557,11 @@ resource "aws_dynamodb_table" "streaming_metrics" {
   }
 
   tags = {
-    Name        = "GHOST Streaming Metrics"
+    Name        = "GHOST Async Chat Metrics"
     Environment = local.environment
     ManagedBy   = "Terraform"
     Service     = "GHOST"
-    Component   = "StreamingMetrics"
+    Component   = "AsyncMetrics"
   }
 }
 
@@ -598,14 +670,24 @@ output "chat_threads_table_arn" {
   value       = aws_dynamodb_table.chat_threads.arn
 }
 
-output "streaming_metrics_table_name" {
-  description = "Name of the DynamoDB table for streaming metrics"
-  value       = aws_dynamodb_table.streaming_metrics.name
+output "async_chat_jobs_table_name" {
+  description = "Name of the DynamoDB table for async chat jobs"
+  value       = aws_dynamodb_table.async_chat_jobs.name
 }
 
-output "streaming_metrics_table_arn" {
-  description = "ARN of the DynamoDB table for streaming metrics"
-  value       = aws_dynamodb_table.streaming_metrics.arn
+output "async_chat_jobs_table_arn" {
+  description = "ARN of the DynamoDB table for async chat jobs"
+  value       = aws_dynamodb_table.async_chat_jobs.arn
+}
+
+output "async_metrics_table_name" {
+  description = "Name of the DynamoDB table for async metrics"
+  value       = aws_dynamodb_table.async_metrics.name
+}
+
+output "async_metrics_table_arn" {
+  description = "ARN of the DynamoDB table for async metrics"
+  value       = aws_dynamodb_table.async_metrics.arn
 }
 
 # NOTE: strands_agent_metrics table outputs removed

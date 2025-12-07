@@ -230,7 +230,45 @@ export function useStrandsResponseEnricher() {
   }
 
   /**
-   * Detect entities in text
+   * Find all markdown link URL ranges to exclude from entity detection
+   * Matches [text](url) syntax and returns the URL portion ranges
+   */
+  function getMarkdownLinkUrlRanges(text: string): Array<{ start: number, end: number }> {
+    const ranges: Array<{ start: number, end: number }> = []
+    // Match [text](url) - capture the URL part
+    const markdownLinkRegex = /\[([^\]]+)\]\(([^)]+)\)/g
+
+    let match
+    while ((match = markdownLinkRegex.exec(text)) !== null) {
+      // match.index points to the '[' character
+      // match[0] is the full match "[text](url)"
+      // match[2] is the URL content
+
+      // Find where the URL starts: after ']('
+      const urlStart = match.index + match[1].length + 2 // +2 for ']('
+      const urlEnd = urlStart + match[2].length
+
+      ranges.push({ start: urlStart, end: urlEnd })
+    }
+
+    return ranges
+  }
+
+  /**
+   * Check if a position is within any excluded range
+   */
+  function isInExcludedRange(startIndex: number, endIndex: number, excludedRanges: Array<{ start: number, end: number }>): boolean {
+    for (const range of excludedRanges) {
+      // Entity overlaps with excluded range if it starts before range ends AND ends after range starts
+      if (startIndex < range.end && endIndex > range.start) {
+        return true
+      }
+    }
+    return false
+  }
+
+  /**
+   * Detect entities in text, excluding those inside markdown link URLs
    */
   function detectEntities(text: string, config: EnricherConfig = defaultConfig): DetectedEntity[] {
     const entities: DetectedEntity[] = []
@@ -238,19 +276,28 @@ export function useStrandsResponseEnricher() {
       config.detectEntities.includes(p.type)
     )
 
+    // Get markdown link URL ranges to exclude from entity detection
+    const excludedRanges = getMarkdownLinkUrlRanges(text)
+
     for (const pattern of enabledPatterns) {
       const matches = text.matchAll(pattern.regex)
 
       for (const match of matches) {
         const value = match[0]
         const startIndex = match.index || 0
+        const endIndex = startIndex + value.length
+
+        // Skip entities that are inside markdown link URLs
+        if (isInExcludedRange(startIndex, endIndex, excludedRanges)) {
+          continue
+        }
 
         entities.push({
           type: pattern.type,
           value,
           displayText: value,
           startIndex,
-          endIndex: startIndex + value.length,
+          endIndex,
           link: pattern.linkBuilder ? pattern.linkBuilder(value) : undefined
         })
       }
