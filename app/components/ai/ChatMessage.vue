@@ -12,7 +12,7 @@
               <div class="ghost-dot"></div>
             </div>
           </div>
-          <div class="flex flex-col gap-1">
+          <div class="flex flex-col gap-1 flex-1">
             <span class="text-sm font-medium text-gray-700 dark:text-gray-300">GHOST is thinking...</span>
             <span class="text-xs text-gray-600 dark:text-gray-400">{{ message.status.progress || 'Starting...' }}</span>
             <!-- Status History with gradient -->
@@ -32,6 +32,14 @@
               </div>
             </div>
           </div>
+          <button
+            @click="$emit('cancel')"
+            class="px-3 py-1.5 text-xs rounded-lg bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 transition-colors flex items-center gap-1.5 flex-shrink-0"
+            title="Cancel query"
+          >
+            <UIcon name="i-heroicons-x-circle" class="w-4 h-4" />
+            Cancel
+          </button>
         </div>
         <div v-if="message.status.toolsCalled && message.status.toolsCalled.length > 0" class="flex flex-wrap gap-1.5">
           <span v-for="tool in message.status.toolsCalled" :key="tool" class="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
@@ -170,6 +178,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'retry'): void
+  (e: 'cancel'): void
   (e: 'copy', message: any): void
   (e: 'prompt-click', text: string): void
   (e: 'enriched-click', event: MouseEvent): void

@@ -127,6 +127,7 @@
           :message="msg"
           :view-mode="'popup'"
           @retry="retryLastMessage"
+          @cancel="cancelQuery"
           @copy="copyMessageMarkdown"
           @prompt-click="handlePromptClick"
           @enriched-click="handleEnrichedClick"
@@ -134,15 +135,25 @@
 
         <!-- Loading indicator (fallback) -->
         <div v-if="showLoader" class="flex justify-start">
-          <div class="bg-gray-100 dark:bg-gray-800 rounded-lg px-3 py-2">
-            <div class="flex items-center gap-2 mb-1">
-              <div class="w-2 h-2 bg-purple-600 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
-              <div class="w-2 h-2 bg-purple-600 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
-              <div class="w-2 h-2 bg-purple-600 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
-              <span class="text-xs text-gray-700 dark:text-gray-200">
-                {{ pollingProgress || 'Processing...' }}
-                <span v-if="pollingPercent">({{ pollingPercent }}%)</span>
-              </span>
+          <div class="bg-gray-100 dark:bg-gray-800 rounded-lg px-3 py-2 w-full">
+            <div class="flex items-start gap-2 mb-1">
+              <div class="flex items-center gap-2 flex-1">
+                <div class="w-2 h-2 bg-purple-600 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
+                <div class="w-2 h-2 bg-purple-600 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
+                <div class="w-2 h-2 bg-purple-600 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
+                <span class="text-xs text-gray-700 dark:text-gray-200">
+                  {{ pollingProgress || 'Processing...' }}
+                  <span v-if="pollingPercent">({{ pollingPercent }}%)</span>
+                </span>
+              </div>
+              <button
+                @click="cancelQuery"
+                class="px-2 py-1 text-[11px] rounded bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 transition-colors flex items-center gap-1 flex-shrink-0"
+                title="Cancel query"
+              >
+                <UIcon name="i-heroicons-x-circle" class="w-3 h-3" />
+                Cancel
+              </button>
             </div>
             <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Complex queries may take 30-120 seconds</p>
             <div v-if="pollingToolsCalled && pollingToolsCalled.length" class="flex flex-wrap gap-1 mt-1">
@@ -241,8 +252,9 @@ const {
   // Actions
   sendMessage,
   retryLastMessage,
+  cancelQuery,
   clearConversation,
-  
+
   // Disambiguation
   showDisambiguation,
   disambiguationData,

@@ -8,6 +8,7 @@
         :message="msg"
         :view-mode="'fullpage'"
         @retry="retryLastMessage"
+        @cancel="cancelQuery"
         @copy="copyMessageMarkdown"
         @prompt-click="handlePromptClick"
         @enriched-click="handleEnrichedClick"
@@ -38,30 +39,40 @@
       <!-- Ghost Loading Indicator (only for non-streaming fallback) -->
       <div v-if="showLoader" class="message bot">
         <div class="message-content ghost-loading-container">
-          <div class="ghost-loading">
-            <UIcon name="i-fa6-solid-ghost" class="ghost-icon" />
-            <div class="ghost-dots">
-              <div class="ghost-dot"></div>
-              <div class="ghost-dot"></div>
-              <div class="ghost-dot"></div>
+          <div class="flex items-start gap-3 mb-2">
+            <div class="ghost-loading">
+              <UIcon name="i-fa6-solid-ghost" class="ghost-icon" />
+              <div class="ghost-dots">
+                <div class="ghost-dot"></div>
+                <div class="ghost-dot"></div>
+                <div class="ghost-dot"></div>
+              </div>
             </div>
-          </div>
-          <div class="flex flex-col gap-1">
-            <span class="ghost-loading-text">
-              {{ pollingProgress || 'GHOST is thinking...' }}
-              <span v-if="pollingPercent">({{ pollingPercent }}%)</span>
-            </span>
-            <span class="text-xs text-gray-500 dark:text-gray-400">Complex queries may take 30-120 seconds to complete</span>
-            <div v-if="pollingToolsCalled && pollingToolsCalled.length" class="flex flex-wrap gap-1 mt-1">
-              <span
-                v-for="tool in pollingToolsCalled"
-                :key="tool"
-                class="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
-              >
-                <UIcon name="i-heroicons-wrench-screwdriver" class="w-3 h-3" />
-                {{ tool }}
+            <div class="flex flex-col gap-1 flex-1">
+              <span class="ghost-loading-text">
+                {{ pollingProgress || 'GHOST is thinking...' }}
+                <span v-if="pollingPercent">({{ pollingPercent }}%)</span>
               </span>
+              <span class="text-xs text-gray-500 dark:text-gray-400">Complex queries may take 30-120 seconds to complete</span>
+              <div v-if="pollingToolsCalled && pollingToolsCalled.length" class="flex flex-wrap gap-1 mt-1">
+                <span
+                  v-for="tool in pollingToolsCalled"
+                  :key="tool"
+                  class="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
+                >
+                  <UIcon name="i-heroicons-wrench-screwdriver" class="w-3 h-3" />
+                  {{ tool }}
+                </span>
+              </div>
             </div>
+            <button
+              @click="cancelQuery"
+              class="px-3 py-1.5 text-xs rounded-lg bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 transition-colors flex items-center gap-1.5 flex-shrink-0"
+              title="Cancel query"
+            >
+              <UIcon name="i-heroicons-x-circle" class="w-4 h-4" />
+              Cancel
+            </button>
           </div>
         </div>
       </div>
@@ -268,7 +279,8 @@ const {
   // Actions
   sendMessage,
   retryLastMessage,
-  
+  cancelQuery,
+
   // Mention system
   showMentionDropdown,
   filteredAccounts,
@@ -447,12 +459,18 @@ async function handleSubmit(e: Event) {
 
 // Handle example question clicks
 async function handleExampleClick(message: string) {
-  await sendMessage(message)
+  console.log('[GhostChatFullPage] Example clicked:', message)
+  // Set the input value so sendMessage can use it
+  inputValue.value = message
+  await sendMessage()
 }
 
 // Handle suggested prompt clicks
 async function handlePromptClick(promptText: string) {
-  await sendMessage(promptText)
+  console.log('[GhostChatFullPage] Prompt clicked:', promptText)
+  // Set the input value so sendMessage can use it
+  inputValue.value = promptText
+  await sendMessage()
 }
 
 // Auto scroll when messages change

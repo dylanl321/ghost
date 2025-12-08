@@ -122,17 +122,10 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     // Touch the trigger to ensure reactivity
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const _ = messagesTrigger.value
-    
+
     const threadMessages = threadsStore.currentThread?.messages || []
-    // If no messages and we have an initial greeting, return the greeting
-    if (threadMessages.length === 0 && initialGreeting && viewMode !== 'sidebar') {
-      return [{
-        messageId: 'greeting',
-        role: 'assistant' as const,
-        content: initialGreeting,
-        timestamp: new Date().toISOString()
-      }]
-    }
+    // Don't show initial greeting - it causes rendering issues
+    // The welcome screen will be shown via showWelcome computed instead
     return threadMessages
   })
 
@@ -812,6 +805,52 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     await sendMessage(lastUserMsg.content)
   }
 
+  async function cancelQuery(): Promise<void> {
+    console.log('[useChatUI] Canceling query')
+
+    // Abort polling
+    if (sharedPollingState.pollAbortToken) {
+      sharedPollingState.pollAbortToken.aborted = true
+    }
+
+    // Unregister from background polling
+    if (currentJobId.value) {
+      backgroundPolling.unregisterJob(currentJobId.value)
+    }
+
+    // Find pending message and update to canceled
+    const threadMessages = threadsStore.currentThread?.messages || []
+    const pendingIndex = threadMessages.findIndex(m =>
+      m.status?.status === 'pending' || m.status?.status === 'streaming'
+    )
+    if (pendingIndex !== -1) {
+      threadMessages[pendingIndex].content = '⚠️ Query canceled by user'
+      threadMessages[pendingIndex].status = { status: 'error', error: 'Canceled' }
+      messagesTrigger.value++
+    }
+
+    // Save cancellation to DB
+    try {
+      await threadsStore.addMessage({
+        role: 'assistant',
+        content: '⚠️ Query canceled by user',
+        metadata: { canceled: true }
+      })
+    } catch (err) {
+      console.error('[useChatUI] Failed to save cancellation message:', err)
+    }
+
+    // Reset state
+    chatState.value = 'idle'
+    currentJobId.value = null
+    pollingProgress.value = 'Starting...'
+    pollingPercent.value = 0
+    pollingToolsCalled.value = []
+    errorMessage.value = ''
+    clearPendingJob()
+    scrollTrigger.value++
+  }
+
   async function clearConversation(): Promise<void> {
     if (threadsStore.activeThreadId) {
       await threadsStore.clearThread(threadsStore.activeThreadId)
@@ -950,6 +989,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     // Core actions
     sendMessage,
     retryLastMessage,
+    cancelQuery,
     clearConversation,
 
     // Mention system
