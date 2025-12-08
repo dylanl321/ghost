@@ -23,6 +23,16 @@ async function getThreadsTableConfig() {
 }
 
 /**
+ * Get table configuration for async chat jobs
+ */
+async function getAsyncJobsTableConfig() {
+  const tableName = await getTableName("asyncChatJobs");
+  const environment = await getTableEnvironment("asyncChatJobs");
+  const accountId = await getTableAccountId("asyncChatJobs");
+  return { tableName, environment, accountId };
+}
+
+/**
  * Time period options for metrics
  */
 export type MetricsPeriod = "24h" | "7d" | "30d" | "all";
@@ -129,6 +139,9 @@ export async function getChatMetrics(
   let archivedCount = 0;
   let totalResponseTimes = 0;
   let responseTimeCount = 0;
+  let cancelledQueriesCount = 0;
+  let reasoningCount = 0;
+  let totalAssistantMessages = 0;
 
   for (const thread of allThreads) {
     // Track unique users
@@ -158,6 +171,21 @@ export async function getChatMetrics(
       // Count user queries
       if (message.role === "user") {
         totalQueries++;
+      }
+
+      // Count assistant messages for reasoning rate calculation
+      if (message.role === "assistant") {
+        totalAssistantMessages++;
+
+        // Track reasoning usage
+        if ((message as any).reasoning) {
+          reasoningCount++;
+        }
+
+        // Track cancelled queries
+        if ((message as any).status?.status === "error" && (message as any).status?.error?.toLowerCase().includes("cancel")) {
+          cancelledQueriesCount++;
+        }
       }
 
       // Track accounts queried
@@ -227,9 +255,84 @@ export async function getChatMetrics(
   const averageResponseTime =
     responseTimeCount > 0 ? totalResponseTimes / responseTimeCount : undefined;
 
+  // Calculate reasoning usage rate
+  const reasoningUsageRate =
+    totalAssistantMessages > 0 ? (reasoningCount / totalAssistantMessages) * 100 : 0;
+
   // Error rate (for now, we don't track explicit errors in threads)
   // This would need to be enhanced if we store error status
   const errorRate = 0;
+
+  // Fetch async job metrics
+  let asyncJobsQueued = 0;
+  let asyncJobsRunning = 0;
+  let asyncJobsComplete = 0;
+  let asyncJobsErrored = 0;
+  const asyncDurations: number[] = [];
+
+  try {
+    const asyncConfig = await getAsyncJobsTableConfig();
+    const cutoffTime = periodMs ? Date.now() - periodMs : 0;
+
+    const asyncResult = await scanItems(
+      asyncConfig.tableName,
+      undefined,
+      1000,
+      undefined,
+      asyncConfig.environment,
+      undefined,
+      undefined,
+      asyncConfig.accountId
+    );
+
+    // Filter jobs by time period and aggregate stats
+    const jobs = asyncResult.items.filter((job: any) => {
+      if (!periodMs) return true; // Include all for "all" period
+      const jobTime = new Date(job.createdAt).getTime();
+      return jobTime >= cutoffTime;
+    });
+
+    jobs.forEach((job: any) => {
+      switch (job.status) {
+        case "queued":
+          asyncJobsQueued++;
+          break;
+        case "running":
+          asyncJobsRunning++;
+          break;
+        case "complete":
+          asyncJobsComplete++;
+          if (job.startedAt && job.completedAt) {
+            const duration =
+              (new Date(job.completedAt).getTime() - new Date(job.startedAt).getTime()) / 1000;
+            asyncDurations.push(duration);
+          }
+          break;
+        case "error":
+          asyncJobsErrored++;
+          break;
+      }
+    });
+
+    logger.info(
+      `[Chat Metrics] Async jobs: ${asyncJobsQueued} queued, ${asyncJobsRunning} running, ${asyncJobsComplete} complete, ${asyncJobsErrored} errored`
+    );
+  } catch (error: any) {
+    if (
+      error.name === "ResourceNotFoundException" ||
+      error.message?.includes("Requested resource not found")
+    ) {
+      logger.warn("[Chat Metrics] Async jobs table not found - using zeros");
+    } else {
+      logger.error("[Chat Metrics] Error fetching async jobs:", error);
+    }
+    // Continue with zeros if table doesn't exist or error occurs
+  }
+
+  const averageAsyncDuration =
+    asyncDurations.length > 0
+      ? asyncDurations.reduce((a, b) => a + b, 0) / asyncDurations.length
+      : undefined;
 
   return {
     period,
@@ -254,8 +357,19 @@ export async function getChatMetrics(
     sharedThreadsCount: sharedCount,
     pinnedThreadsCount: pinnedCount,
     archivedThreadsCount: archivedCount,
+    // New metrics
+    asyncJobsQueued,
+    asyncJobsRunning,
+    asyncJobsComplete,
+    asyncJobsErrored,
+    averageAsyncDuration,
+    cancelledQueriesCount,
+    reasoningUsageRate: parseFloat(reasoningUsageRate.toFixed(2)),
   };
 }
+
+// TODO: Future - Add caching for expensive aggregations
+// TODO: Future - Add incremental updates instead of full scans
 
 /**
  * Get metrics for a specific user
@@ -356,6 +470,13 @@ function getEmptyMetrics(
     sharedThreadsCount: 0,
     pinnedThreadsCount: 0,
     archivedThreadsCount: 0,
+    asyncJobsQueued: 0,
+    asyncJobsRunning: 0,
+    asyncJobsComplete: 0,
+    asyncJobsErrored: 0,
+    averageAsyncDuration: undefined,
+    cancelledQueriesCount: 0,
+    reasoningUsageRate: 0,
   };
 }
 

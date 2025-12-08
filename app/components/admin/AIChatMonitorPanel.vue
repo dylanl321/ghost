@@ -8,6 +8,7 @@ const {
   selectedThread,
   requestLogs,
   cloudWatchLogs,
+  asyncJobs,
   loading,
   error,
   autoRefresh,
@@ -17,6 +18,7 @@ const {
   fetchThreadDetails,
   fetchRequestLogs,
   fetchCloudWatchLogs,
+  fetchAsyncJobs,
   startAutoRefresh,
   stopAutoRefresh,
   exportAsJSON,
@@ -26,12 +28,13 @@ const {
 } = useAIChatMonitoring()
 
 // State
-const activeTab = ref(0) // 0 = overview, 1 = threads, 2 = cloudwatch, 3 = requests
+const activeTab = ref(0) // 0 = overview, 1 = threads, 2 = async, 3 = cloudwatch, 4 = requests
 const selectedPeriod = ref<'24h' | '7d' | '30d' | 'all'>('7d')
 const selectedLogLevel = ref('ALL')
 const includeHealthChecks = ref(false) // Default: hide health check logs
 const userFilter = ref('')
 const accountFilter = ref('')
+const statusFilter = ref('ALL') // For async jobs filtering
 const expandedThreadId = ref<string | null>(null)
 const expandedRequestId = ref<string | null>(null)
 const expandedLogIndex = ref<number | null>(null)
@@ -55,14 +58,21 @@ async function loadData() {
         period: selectedPeriod.value
       })
       break
-    case 2: // cloudwatch
+    case 2: // async jobs
+      await fetchAsyncJobs({
+        userId: userFilter.value || undefined,
+        status: statusFilter.value !== 'ALL' ? statusFilter.value : undefined,
+        period: selectedPeriod.value
+      })
+      break
+    case 3: // cloudwatch
       await fetchCloudWatchLogs({
         period: selectedPeriod.value,
         logLevel: selectedLogLevel.value,
         includeHealthChecks: includeHealthChecks.value
       })
       break
-    case 3: // requests
+    case 4: // requests
       await fetchRequestLogs({
         userId: userFilter.value || undefined,
         period: selectedPeriod.value
@@ -112,11 +122,18 @@ function handleExportThreads() {
 }
 
 function handleExportLogs() {
-  if (activeTab.value === 2) { // cloudwatch
+  if (activeTab.value === 2) { // async jobs
+    exportAsJSON(asyncJobs.value, `async-jobs-${Date.now()}.json`)
+  } else if (activeTab.value === 3) { // cloudwatch
     exportAsJSON(cloudWatchLogs.value, `cloudwatch-logs-${Date.now()}.json`)
-  } else if (activeTab.value === 3) { // requests
+  } else if (activeTab.value === 4) { // requests
     exportAsJSON(requestLogs.value, `request-logs-${Date.now()}.json`)
   }
+}
+
+function copyToClipboard(text: string) {
+  navigator.clipboard.writeText(text)
+  // TODO: Future - Add toast notification for copy success
 }
 
 // Lifecycle
@@ -129,7 +146,7 @@ watch([activeTab, selectedPeriod], () => {
 })
 
 watch([selectedLogLevel, includeHealthChecks], () => {
-  if (activeTab.value === 2) { // cloudwatch tab
+  if (activeTab.value === 3) { // cloudwatch tab
     fetchCloudWatchLogs({
       period: selectedPeriod.value,
       logLevel: selectedLogLevel.value,
@@ -183,7 +200,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Metrics Cards (always visible) -->
-    <div v-if="metrics" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div v-if="metrics" class="grid grid-cols-1 md:grid-cols-6 gap-4">
       <UCard>
         <div class="space-y-2">
           <p class="text-sm text-gray-500 dark:text-gray-400">Total Queries</p>
@@ -235,6 +252,48 @@ onUnmounted(() => {
           </div>
         </div>
       </UCard>
+
+      <UCard>
+        <div class="space-y-2">
+          <p class="text-sm text-gray-500 dark:text-gray-400">Async Jobs</p>
+          <div class="space-y-1">
+            <div class="flex justify-between text-xs">
+              <span class="text-gray-600 dark:text-gray-400">Running:</span>
+              <span class="font-semibold text-blue-600">{{ metrics.asyncJobsRunning }}</span>
+            </div>
+            <div class="flex justify-between text-xs">
+              <span class="text-gray-600 dark:text-gray-400">Complete:</span>
+              <span class="font-semibold text-green-600">{{ metrics.asyncJobsComplete }}</span>
+            </div>
+            <div class="flex justify-between text-xs">
+              <span class="text-gray-600 dark:text-gray-400">Errored:</span>
+              <span class="font-semibold text-red-600">{{ metrics.asyncJobsErrored }}</span>
+            </div>
+          </div>
+          <!-- TODO: Future - Add click to filter async jobs by status -->
+        </div>
+      </UCard>
+
+      <UCard>
+        <div class="space-y-2">
+          <p class="text-sm text-gray-500 dark:text-gray-400">Query Stats</p>
+          <div class="space-y-1">
+            <div class="flex justify-between text-xs">
+              <span class="text-gray-600 dark:text-gray-400">Cancelled:</span>
+              <span class="font-semibold">{{ metrics.cancelledQueriesCount }}</span>
+            </div>
+            <div class="flex justify-between text-xs">
+              <span class="text-gray-600 dark:text-gray-400">With Reasoning:</span>
+              <span class="font-semibold">{{ metrics.reasoningUsageRate.toFixed(1) }}%</span>
+            </div>
+            <div class="flex justify-between text-xs">
+              <span class="text-gray-600 dark:text-gray-400">Avg Async:</span>
+              <span class="font-semibold">{{ metrics.averageAsyncDuration ? `${metrics.averageAsyncDuration.toFixed(1)}s` : 'N/A' }}</span>
+            </div>
+          </div>
+          <!-- TODO: Future - Add trend indicators -->
+        </div>
+      </UCard>
     </div>
 
     <!-- Error Display -->
@@ -253,6 +312,7 @@ onUnmounted(() => {
       :items="[
         { label: 'Overview', icon: 'i-heroicons-chart-bar' },
         { label: 'Threads', icon: 'i-heroicons-chat-bubble-left-right' },
+        { label: 'Async Jobs', icon: 'i-heroicons-clock' },
         { label: 'CloudWatch Logs', icon: 'i-heroicons-server' },
         { label: 'Raw Requests', icon: 'i-heroicons-code-bracket' }
       ]"
@@ -406,6 +466,34 @@ onUnmounted(() => {
                 </div>
               </div>
 
+              <!-- Share Info Section -->
+              <div v-if="selectedThread.isShared" class="border-t dark:border-gray-700 pt-3 pb-3">
+                <h4 class="text-sm font-semibold mb-2">Share Info</h4>
+                <div class="space-y-2">
+                  <div class="flex items-center gap-2">
+                    <UBadge color="blue" size="sm">Shared</UBadge>
+                    <code class="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+                      {{ selectedThread.shortUrl || selectedThread.shareId }}
+                    </code>
+                    <UButton
+                      icon="i-heroicons-clipboard"
+                      size="2xs"
+                      variant="ghost"
+                      @click="copyToClipboard(selectedThread.shortUrl || selectedThread.shareId || '')"
+                    />
+                  </div>
+                  <div class="text-xs text-gray-500">
+                    Shared: {{ new Date(selectedThread.sharedAt || '').toLocaleString() }}
+                    <span v-if="selectedThread.shareExpiresAt">
+                      • Expires: {{ new Date(selectedThread.shareExpiresAt).toLocaleString() }}
+                    </span>
+                  </div>
+                </div>
+                <!-- TODO: Future - Add button to revoke share -->
+                <!-- TODO: Future - Add share analytics (views, clicks) -->
+              </div>
+
+              <!-- Enhanced Conversation Display -->
               <div class="border-t dark:border-gray-700 pt-3">
                 <h4 class="text-sm font-semibold mb-2">Conversation</h4>
                 <div class="space-y-2 max-h-96 overflow-y-auto">
@@ -419,15 +507,76 @@ onUnmounted(() => {
                       <span class="text-xs font-semibold uppercase">{{ message.role }}</span>
                       <span class="text-xs text-gray-500">{{ new Date(message.timestamp).toLocaleString() }}</span>
                     </div>
+
+                    <!-- AI Reasoning -->
+                    <div v-if="message.reasoning" class="mb-2 p-2 bg-purple-50 dark:bg-purple-900/20 rounded border border-purple-200 dark:border-purple-800">
+                      <div class="flex items-center gap-1 mb-1">
+                        <UIcon name="i-heroicons-light-bulb" class="w-3 h-3 text-purple-600" />
+                        <span class="text-xs font-medium text-purple-700 dark:text-purple-300">AI Reasoning</span>
+                      </div>
+                      <p class="text-xs text-purple-600 dark:text-purple-400 whitespace-pre-wrap">{{ message.reasoning }}</p>
+                    </div>
+
                     <p class="text-sm whitespace-pre-wrap">{{ message.content }}</p>
-                    <div v-if="message.metadata" class="mt-2 flex gap-2">
+
+                    <!-- Message Status -->
+                    <div v-if="message.status" class="mt-2 flex items-center gap-2">
+                      <UBadge
+                        :color="message.status.status === 'error' ? 'red' : message.status.status === 'streaming' ? 'blue' : 'gray'"
+                        size="xs"
+                      >
+                        {{ message.status.status }}
+                      </UBadge>
+                      <span v-if="message.status.progress" class="text-xs text-gray-500">{{ message.status.progress }}</span>
+                    </div>
+
+                    <!-- Metadata -->
+                    <div v-if="message.metadata" class="mt-2 flex gap-2 flex-wrap">
                       <UBadge v-if="message.metadata.accountId" size="xs" color="gray">
                         {{ message.metadata.accountId }}
                       </UBadge>
                       <UBadge v-if="message.metadata.mcpType" size="xs" :color="message.metadata.mcpType === 'permanent' ? 'green' : 'yellow'">
                         {{ message.metadata.mcpType }}
                       </UBadge>
+                      <UBadge v-if="message.metadata.tokens" size="xs" color="indigo">
+                        {{ message.metadata.tokens.input + message.metadata.tokens.output }} tokens
+                      </UBadge>
                     </div>
+
+                    <!-- Suggested Links -->
+                    <div v-if="message.suggestedLinks && message.suggestedLinks.length > 0" class="mt-2 space-y-1">
+                      <p class="text-xs font-medium text-gray-600 dark:text-gray-400">Suggested Links:</p>
+                      <div class="flex flex-wrap gap-1">
+                        <UBadge
+                          v-for="(link, linkIdx) in message.suggestedLinks"
+                          :key="linkIdx"
+                          size="xs"
+                          color="blue"
+                          variant="soft"
+                        >
+                          {{ link.label }}
+                        </UBadge>
+                      </div>
+                    </div>
+
+                    <!-- Suggested Prompts -->
+                    <div v-if="message.suggestedPrompts && message.suggestedPrompts.length > 0" class="mt-2 space-y-1">
+                      <p class="text-xs font-medium text-gray-600 dark:text-gray-400">Suggested Prompts:</p>
+                      <div class="flex flex-wrap gap-1">
+                        <UBadge
+                          v-for="(prompt, promptIdx) in message.suggestedPrompts"
+                          :key="promptIdx"
+                          size="xs"
+                          color="purple"
+                          variant="soft"
+                        >
+                          {{ prompt.text.substring(0, 50) }}{{ prompt.text.length > 50 ? '...' : '' }}
+                        </UBadge>
+                      </div>
+                    </div>
+
+                    <!-- TODO: Future - Add collapsible sections for long content -->
+                    <!-- TODO: Future - Add message actions (flag, copy, export) -->
                   </div>
                 </div>
               </div>
@@ -436,8 +585,101 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- CloudWatch Logs Tab -->
+      <!-- Async Jobs Tab -->
       <div v-else-if="activeTab === 2">
+        <div class="space-y-4 py-4">
+          <!-- Filters -->
+          <div class="flex gap-3">
+            <UInput
+              v-model="userFilter"
+              icon="i-heroicons-magnifying-glass"
+              placeholder="Filter by user email..."
+              class="flex-1"
+              @update:model-value="loadData"
+            />
+            <USelect
+              v-model="statusFilter"
+              :options="['ALL', 'queued', 'running', 'complete', 'error']"
+              class="w-40"
+              @update:model-value="loadData"
+            />
+            <UButton
+              icon="i-heroicons-arrow-down-tray"
+              @click="handleExportLogs"
+            >
+              Export
+            </UButton>
+            <!-- TODO: Future - Add date range picker -->
+            <!-- TODO: Future - Add bulk actions (retry failed jobs) -->
+          </div>
+
+          <!-- Jobs Table -->
+          <UCard>
+            <UTable
+              :rows="asyncJobs"
+              :columns="[
+                { key: 'createdAt', label: 'Created' },
+                { key: 'userId', label: 'User' },
+                { key: 'jobId', label: 'Job ID' },
+                { key: 'status', label: 'Status' },
+                { key: 'progress', label: 'Progress' },
+                { key: 'duration', label: 'Duration' }
+              ]"
+              :loading="loading"
+            >
+              <template #createdAt-data="{ row }">
+                {{ formatTimestamp(row.createdAt) }}
+              </template>
+
+              <template #jobId-data="{ row }">
+                <code class="text-xs">{{ row.jobId.substring(0, 8) }}...</code>
+              </template>
+
+              <template #status-data="{ row }">
+                <UBadge
+                  :color="row.status === 'complete' ? 'green' : row.status === 'error' ? 'red' : row.status === 'running' ? 'blue' : 'gray'"
+                  size="xs"
+                >
+                  {{ row.status.toUpperCase() }}
+                </UBadge>
+              </template>
+
+              <template #progress-data="{ row }">
+                <div v-if="row.status === 'running'" class="flex items-center gap-2">
+                  <div class="w-32 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div
+                      class="bg-blue-600 h-2 rounded-full transition-all"
+                      :style="{ width: `${row.progressPercent || 0}%` }"
+                    ></div>
+                  </div>
+                  <span class="text-xs">{{ row.progressPercent || 0 }}%</span>
+                </div>
+                <span v-else-if="row.error" class="text-xs text-red-600 dark:text-red-400 truncate max-w-xs">
+                  {{ row.error }}
+                </span>
+                <span v-else class="text-xs text-gray-500">
+                  {{ row.currentStep || '-' }}
+                </span>
+              </template>
+
+              <template #duration-data="{ row }">
+                <span v-if="row.duration" class="text-xs">
+                  {{ formatDuration(row.duration * 1000) }}
+                </span>
+                <span v-else-if="row.status === 'running'" class="text-xs text-blue-600">
+                  In progress...
+                </span>
+                <span v-else class="text-xs text-gray-400">-</span>
+              </template>
+            </UTable>
+            <!-- TODO: Future - Add expandable row details showing toolsCalled -->
+            <!-- TODO: Future - Add link to thread if threadId exists -->
+          </UCard>
+        </div>
+      </div>
+
+      <!-- CloudWatch Logs Tab -->
+      <div v-else-if="activeTab === 3">
         <div class="space-y-4 py-4">
           <!-- Filters -->
           <div class="flex gap-3 items-center">
@@ -506,7 +748,7 @@ onUnmounted(() => {
       </div>
 
       <!-- Raw Requests Tab -->
-      <div v-else-if="activeTab === 3">
+      <div v-else-if="activeTab === 4">
         <div class="space-y-4 py-4">
           <!-- Filters -->
           <div class="flex gap-3">

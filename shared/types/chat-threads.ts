@@ -227,6 +227,22 @@ export interface ChatMetrics {
   sharedThreadsCount: number
   pinnedThreadsCount: number
   archivedThreadsCount: number
+
+  // Async job tracking (PRIORITY 1)
+  asyncJobsQueued: number
+  asyncJobsRunning: number
+  asyncJobsComplete: number
+  asyncJobsErrored: number
+  averageAsyncDuration?: number  // seconds
+
+  // Query cancellation tracking (PRIORITY 2)
+  cancelledQueriesCount: number
+
+  // AI reasoning usage (PRIORITY 2)
+  reasoningUsageRate: number  // percentage of responses with reasoning
+
+  // TODO: Future - Add token usage aggregates
+  // TODO: Future - Add streaming performance metrics
 }
 
 /**
@@ -279,6 +295,26 @@ export interface ChatRequestLog {
     stack?: string
     responseTimeMs?: number
   } | null
+}
+
+/**
+ * Admin view of async chat jobs
+ */
+export interface AdminAsyncJobSummary {
+  jobId: string
+  userId: string
+  threadId?: string
+  status: 'queued' | 'running' | 'complete' | 'error'
+  progress?: string
+  progressPercent?: number
+  currentStep?: string
+  toolsCalled?: string[]
+  createdAt: string
+  startedAt?: string
+  completedAt?: string
+  duration?: number  // seconds
+  error?: string
+  // TODO: Future - Add resource usage metrics
 }
 
 /**

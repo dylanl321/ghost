@@ -9,6 +9,7 @@ import type {
   ChatThread,
   ChatRequestLog,
   CloudWatchLogEntry,
+  AdminAsyncJobSummary,
 } from "~/shared/types/chat-threads";
 
 export interface MonitoringFilters {
@@ -18,6 +19,7 @@ export interface MonitoringFilters {
   endDate?: string;
   isShared?: boolean;
   logLevel?: string;
+  status?: string;  // For async jobs filtering
   period?: "24h" | "7d" | "30d" | "all";
   includeHealthChecks?: boolean;
 }
@@ -32,6 +34,7 @@ export function useAIChatMonitoring() {
   const requestLogs = ref<ChatRequestLog[]>([]);
   const cloudWatchLogs = ref<CloudWatchLogEntry[]>([]);
   const logStreams = ref<any[]>([]);
+  const asyncJobs = ref<AdminAsyncJobSummary[]>([]);
 
   const loading = ref(false);
   const error = ref<string | null>(null);
@@ -184,6 +187,39 @@ export function useAIChatMonitoring() {
       loading.value = false;
     }
   }
+
+  /**
+   * Fetch async chat jobs
+   */
+  async function fetchAsyncJobs(filters: MonitoringFilters = {}) {
+    loading.value = true;
+    error.value = null;
+
+    try {
+      const response = await $fetch<{
+        jobs: AdminAsyncJobSummary[];
+        totalCount: number;
+      }>(`/api/admin/chat/async-jobs`, {
+        params: {
+          userId: filters.userId,
+          status: filters.status,
+          startDate: filters.startDate,
+          endDate: filters.endDate,
+          limit: 100,
+        },
+      });
+
+      asyncJobs.value = response.jobs;
+    } catch (err: any) {
+      error.value = err.message || "Failed to fetch async jobs";
+      console.error("Error fetching async jobs:", err);
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  // TODO: Future - Add real-time job status updates via polling
+  // TODO: Future - Add job cancellation from admin panel
 
   /**
    * Fetch available log streams
@@ -348,6 +384,7 @@ export function useAIChatMonitoring() {
     requestLogs,
     cloudWatchLogs,
     logStreams,
+    asyncJobs,
     loading,
     error,
     autoRefresh,
@@ -359,6 +396,7 @@ export function useAIChatMonitoring() {
     fetchThreadDetails,
     fetchRequestLogs,
     fetchCloudWatchLogs,
+    fetchAsyncJobs,
     fetchLogStreams,
     startAutoRefresh,
     stopAutoRefresh,
