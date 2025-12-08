@@ -72,12 +72,15 @@ export default defineEventHandler(async (event) => {
           extractFollowUpPrompts(job.response)
         ])
 
-        response.suggestedLinks = smartLinks
+        // Merge embedded links from Strands response with generated smart links
+        const embeddedLinks = (job.metadata as any)?.embeddedLinks || []
+        response.suggestedLinks = [...embeddedLinks, ...smartLinks]
         response.suggestedPrompts = followUpPrompts
       } catch (linkError: any) {
         logger.warn('[Async Chat API] Failed to generate links/prompts:', linkError.message)
-        // Don't fail the whole request if link generation fails
-        response.suggestedLinks = []
+        // Still include embedded links even if generation fails
+        const embeddedLinks = (job.metadata as any)?.embeddedLinks || []
+        response.suggestedLinks = embeddedLinks
         response.suggestedPrompts = []
       }
     }

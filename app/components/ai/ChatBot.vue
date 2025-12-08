@@ -96,6 +96,7 @@ const inputRef = ref(null)
 
 // Configuration
 const endpoint = "/api/ai/chat"
+const { enrichStrandsResponse } = useStrandsResponseEnricher()
 
 // Example questions list
 const exampleQuestionsList = [
@@ -106,42 +107,35 @@ const exampleQuestionsList = [
   "What is a VPC?",
 ]
 
-// Handle form submission
-const handleSubmit = async (e) => {
-  console.log("handling submit")
-  
-  e.preventDefault()
-  if (!inputValue.value.trim()) return // Can't submit with empty input box
-
-  if (inputValue.value.trim().toLowerCase() === "help") {
-    exampleQuestions.value = true
-    inputValue.value = ''
-    return
-  }
-
-  const userMessage = { text: inputValue.value, links: [], sender: 'user' }
+// Handle submission + example clicks with shared path
+const runUserMessage = async (text: string) => {
+  if (!text.trim()) return
+  const userMessage = { text, links: [], sender: 'user' }
   messages.value.push(userMessage)
   inputValue.value = ''
   isLoading.value = true
   exampleQuestions.value = false
 
-  await fetchData(userMessage.text)
+  await fetchData(text)
 }
 
-// Handle example question clicks
-const handleExampleClick = async (message) => {
-  const userMessage = { text: message, sender: 'user' }
-  messages.value.push(userMessage)
-  isLoading.value = true
-  exampleQuestions.value = false
+const handleSubmit = async (e) => {
+  e.preventDefault()
+  if (!inputValue.value.trim()) return
+  if (inputValue.value.trim().toLowerCase() === "help") {
+    exampleQuestions.value = true
+    inputValue.value = ''
+    return
+  }
+  await runUserMessage(inputValue.value)
+}
 
-  await fetchData(message)
+const handleExampleClick = async (message) => {
+  await runUserMessage(message)
 }
 
 // Fetch data from API
 const fetchData = async (inputVal) => {
-  console.log("Fetching data")
-
   const requestData = { userInput: inputVal }
 
   try {
@@ -150,23 +144,16 @@ const fetchData = async (inputVal) => {
       headers: { 'Content-Type': 'application/json' },
       body: requestData,
     })
-    
-    console.log(data)
 
-    let message = data.responseBody
+    let message = data.responseBody || ''
 
     // Remove any markdown code spans from response
     message = message.replaceAll("```markdown", "")
     message = message.replaceAll("```", "")
 
-    // Remove .md from all links
-    const links = data.references.map(reference => reference.document.replace(".md", ""))
-
-    // Remove duplicates with Set()
-    const uniqueLinks = [...new Set(links)]
-
-    // Remove any links that begin with "new"
-    const filteredLinks = uniqueLinks.filter(link => link.split("/")[0] !== "new")
+    const refs = Array.isArray(data.references) ? data.references : []
+    const links = refs.map(reference => reference.document?.replace(".md", "")).filter(Boolean)
+    const filteredLinks = [...new Set(links)].filter(link => link.split("/")[0] !== "new")
 
     const botMessage = { text: message, links: filteredLinks, sender: 'bot' }
 
@@ -197,11 +184,7 @@ function toggleFullscreen() {
 // Format message content
 const formatMessage = (content) => {
   if (!content) return ''
-  return content
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/`(.*?)`/g, '<code>$1</code>')
-    .replace(/\n/g, '<br>')
+  return enrichStrandsResponse(content)
 }
 
 // Auto scroll down

@@ -482,7 +482,8 @@ export function useStrandsResponseEnricher() {
       const entity = detectedEntities[i]
       const pattern = entityPatterns.find(p => p.type === entity.type)
       if (pattern) {
-        const placeholder = `___ENTITY_${placeholderIndex}___`
+        // Use HTML comment format to prevent markdown interpretation
+        const placeholder = `<!--ENTITY${placeholderIndex}-->`
         entityPlaceholders.set(placeholder, { entity, pattern })
         placeholderIndex++
 

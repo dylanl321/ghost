@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { logger } from './logger'
 import { getStrandsConfig, StrandsClientError } from './strands-client'
 import { putItem, getItem, updateItem } from './dynamodb'
+import { getTableName, getTableEnvironment, getTableAccountId } from '../lib/dynamodb-config'
 import type {
   AsyncChatJob,
   AsyncChatJobStatus,
@@ -15,8 +16,17 @@ import type {
   StrandsAsyncStatusResponse
 } from '../types/strands-async'
 
-const ASYNC_JOBS_TABLE = process.env.AWS_ASYNC_JOBS_TABLE_NAME || 'ghost-async-chat-jobs'
 const JOB_TTL_HOURS = 24
+
+/**
+ * Get async jobs table configuration
+ */
+async function getJobsTableConfig() {
+  const tableName = await getTableName('asyncChatJobs')
+  const environment = await getTableEnvironment('asyncChatJobs')
+  const accountId = await getTableAccountId('asyncChatJobs')
+  return { tableName, environment, accountId }
+}
 
 /**
  * Submit an async query to Strands
@@ -120,7 +130,8 @@ export async function submitAsyncQuery(
       ttl
     }
 
-    await putItem(ASYNC_JOBS_TABLE, job)
+    const tableConfig = await getJobsTableConfig()
+    await putItem(tableConfig.tableName, job, tableConfig.environment, tableConfig.accountId)
 
     logger.info('[Async Processor] Job created successfully', {
       jobId,
@@ -153,7 +164,8 @@ export async function submitAsyncQuery(
       ttl
     }
 
-    await putItem(ASYNC_JOBS_TABLE, job)
+    const tableConfig = await getJobsTableConfig()
+    await putItem(tableConfig.tableName, job, tableConfig.environment, tableConfig.accountId)
 
     return job
   }
@@ -166,8 +178,10 @@ export async function submitAsyncQuery(
 export async function pollJobStatus(jobId: string, userId: string): Promise<AsyncChatJob | null> {
   logger.debug('[Async Processor] Polling job status', { jobId, userId })
 
+  const tableConfig = await getJobsTableConfig()
+
   // Get job from DynamoDB
-  const job = await getItem<AsyncChatJob>(ASYNC_JOBS_TABLE, { jobId })
+  const job = await getItem<AsyncChatJob>(tableConfig.tableName, { jobId }, tableConfig.environment, tableConfig.accountId)
 
   if (!job) {
     logger.warn('[Async Processor] Job not found', { jobId })
@@ -220,7 +234,72 @@ export async function pollJobStatus(jobId: string, userId: string): Promise<Asyn
       )
     }
 
-    const statusData: StrandsAsyncStatusResponse = await response.json()
+    const statusData: any = await response.json()
+
+    // Log FULL Strands response for debugging
+    logger.info('[Async Processor] Full Strands status response', {
+      jobId,
+      strandsJobId: job.strandsJobId,
+      fullResponse: JSON.stringify(statusData).substring(0, 1000)
+    })
+
+    // Extract response text - try multiple field names
+    let responseText = statusData.response || statusData.result || statusData.output || null
+    let embeddedLinks: any[] = []
+
+    // Extract and remove embedded JSON links from response
+    if (responseText && typeof responseText === 'string') {
+      // Pattern: lines starting with bullet followed by JSON object
+      // Support multiple bullet characters: •, -, *, and also handle whitespace
+      const lines = responseText.split('\n')
+      const cleanedLines: string[] = []
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        // Check if line starts with bullet (•, -, *) and contains JSON
+        const startsWithBullet = /^[•\-*]\s*\{/.test(trimmed)
+
+        if (startsWithBullet && trimmed.includes('}')) {
+          try {
+            // Extract JSON part (after the bullet and any whitespace)
+            const jsonStr = trimmed.replace(/^[•\-*]\s*/, '')
+            const linkObj = JSON.parse(jsonStr)
+
+            // Validate it looks like a link object (has url field)
+            if (linkObj.url || linkObj.type || linkObj.label) {
+              embeddedLinks.push(linkObj)
+              logger.debug('[Async Processor] Extracted embedded link:', {
+                label: linkObj.label,
+                type: linkObj.type
+              })
+              // Don't add this line to cleanedLines - we're removing it
+              continue
+            } else {
+              // Not a link object, keep the line
+              cleanedLines.push(line)
+            }
+          } catch (parseError) {
+            // Not valid JSON, keep the line
+            logger.debug('[Async Processor] Failed to parse potential link line:', {
+              line: trimmed.substring(0, 100)
+            })
+            cleanedLines.push(line)
+          }
+        } else {
+          cleanedLines.push(line)
+        }
+      }
+
+      responseText = cleanedLines.join('\n')
+    }
+
+    logger.debug('[Async Processor] Response extraction', {
+      hasResponse: !!statusData.response,
+      hasResult: !!statusData.result,
+      hasOutput: !!statusData.output,
+      extractedLength: responseText?.length || 0,
+      embeddedLinksCount: embeddedLinks.length
+    })
 
     // Map Strands status to our status
     let newStatus: AsyncChatJobStatus
@@ -236,21 +315,49 @@ export async function pollJobStatus(jobId: string, userId: string): Promise<Asyn
 
     const now = new Date().toISOString()
 
-    // Update job in DynamoDB
-    const updatedJob: AsyncChatJob = {
-      ...job,
+    // Build update object with only the fields to update (excluding keys)
+    // Merge embedded links into metadata if they exist
+    const updatedMetadata = statusData.metadata || job.metadata || {}
+    if (embeddedLinks.length > 0) {
+      updatedMetadata.embeddedLinks = embeddedLinks
+    }
+
+    const updates: Partial<AsyncChatJob> = {
       status: newStatus,
       progress: statusData.currentStep || job.progress,
       progressPercent: statusData.progressPercent || job.progressPercent,
       eventCount: statusData.eventCount || job.eventCount,
-      response: statusData.response || job.response,
+      response: responseText || job.response,  // Use cleaned responseText
       errorMessage: statusData.errorMessage || job.errorMessage,
-      metadata: statusData.metadata || job.metadata,
+      metadata: updatedMetadata,
       lastUpdated: now,
-      completedAt: (newStatus === 'complete' || newStatus === 'error') ? now : job.completedAt
+      completedAt: (newStatus === 'complete' || newStatus === 'error') ? now : job.completedAt,
+      toolsCalled: statusData.toolsCalled || job.toolsCalled
     }
 
-    await updateItem(ASYNC_JOBS_TABLE, { jobId }, updatedJob)
+    // Update job in DynamoDB
+    await updateItem(tableConfig.tableName, { jobId }, updates, tableConfig.environment, tableConfig.accountId)
+
+    // Return updated job object (merge original with updates, keeping all required fields)
+    const updatedJob: AsyncChatJob = {
+      jobId: job.jobId,
+      strandsJobId: job.strandsJobId,
+      userId: job.userId,
+      query: job.query,
+      queryOptions: job.queryOptions,
+      createdAt: job.createdAt,
+      ttl: job.ttl,
+      status: newStatus,
+      progress: updates.progress!,
+      progressPercent: updates.progressPercent!,
+      eventCount: updates.eventCount!,
+      response: updates.response!,
+      errorMessage: updates.errorMessage!,
+      metadata: updates.metadata!,
+      lastUpdated: now,
+      completedAt: updates.completedAt!,
+      toolsCalled: updates.toolsCalled
+    }
 
     logger.debug('[Async Processor] Job status updated', {
       jobId,
@@ -277,11 +384,14 @@ export async function pollJobStatus(jobId: string, userId: string): Promise<Asyn
  * Get job by ID (no polling, just returns cached state)
  */
 export async function getJob(jobId: string, userId: string): Promise<AsyncChatJob | null> {
-  const job = await getItem<AsyncChatJob>(ASYNC_JOBS_TABLE, { jobId })
+  const tableConfig = await getJobsTableConfig()
+  const result = await getItem(tableConfig.tableName, { jobId }, tableConfig.environment, tableConfig.accountId)
 
-  if (!job) {
+  if (!result) {
     return null
   }
+
+  const job = result as AsyncChatJob
 
   // Verify user owns this job
   if (job.userId !== userId) {
@@ -307,14 +417,15 @@ export async function cancelJob(jobId: string, userId: string): Promise<boolean>
     return false
   }
 
+  const tableConfig = await getJobsTableConfig()
   const now = new Date().toISOString()
 
-  await updateItem(ASYNC_JOBS_TABLE, { jobId }, {
+  await updateItem(tableConfig.tableName, { jobId }, {
     status: 'error',
     errorMessage: 'Cancelled by user',
     lastUpdated: now,
     completedAt: now
-  })
+  }, tableConfig.environment, tableConfig.accountId)
 
   logger.info('[Async Processor] Job cancelled', { jobId, userId })
 

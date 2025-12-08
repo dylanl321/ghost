@@ -35,6 +35,8 @@ export interface DynamoDBConfig {
   siteConfig: DynamoDBTableConfig
   adminNotifications: DynamoDBTableConfig
   streamingMetrics: DynamoDBTableConfig
+  asyncChatJobs: DynamoDBTableConfig
+  asyncMetrics: DynamoDBTableConfig
 }
 
 // Cache the configuration to avoid repeated Secrets Manager calls
@@ -179,6 +181,18 @@ function loadFromEnvironment(): DynamoDBConfig {
     },
     streamingMetrics: {
       tableName: process.env.STREAMING_METRICS_TABLE_NAME || 'ghost-streaming-metrics',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
+    },
+    asyncChatJobs: {
+      tableName: process.env.AWS_ASYNC_JOBS_TABLE_NAME || 'ghost-async-chat-jobs',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
+    },
+    asyncMetrics: {
+      tableName: process.env.AWS_ASYNC_METRICS_TABLE_NAME || 'ghost-async-metrics',
       environment: 'govcloud',
       region: govCloudRegion,
       accountId: deploymentAccountId

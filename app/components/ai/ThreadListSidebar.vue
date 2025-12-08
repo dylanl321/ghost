@@ -96,7 +96,7 @@
     <!-- Thread List -->
     <div class="flex-1 overflow-y-auto p-3 space-y-2">
       <!-- Loading State -->
-      <div v-if="threadsStore.loading" class="flex items-center justify-center p-8">
+      <div v-if="threadsStore.loading && threadsStore.threads.length === 0" class="flex items-center justify-center p-8">
         <div class="flex flex-col items-center gap-3">
           <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 text-purple-500 animate-spin" />
           <p class="text-sm text-gray-500 dark:text-gray-400">Loading threads...</p>

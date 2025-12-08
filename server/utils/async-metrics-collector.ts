@@ -6,8 +6,17 @@
 
 import { logger } from './logger'
 import { putItem, getItem, updateItem } from './dynamodb'
+import { getTableName, getTableEnvironment, getTableAccountId } from '../lib/dynamodb-config'
 
-const METRICS_TABLE = process.env.AWS_ASYNC_METRICS_TABLE_NAME || 'ghost-async-metrics'
+/**
+ * Get async metrics table configuration
+ */
+async function getMetricsTableConfig() {
+  const tableName = await getTableName('asyncMetrics')
+  const environment = await getTableEnvironment('asyncMetrics')
+  const accountId = await getTableAccountId('asyncMetrics')
+  return { tableName, environment, accountId }
+}
 
 export interface AsyncQueryMetrics {
   jobId: string
@@ -106,10 +115,11 @@ async function updateAggregateMetrics(
   metricType: string,
   metrics: AsyncQueryMetrics
 ): Promise<void> {
+  const tableConfig = await getMetricsTableConfig()
   const key = { metricDate: date, metricType }
 
   // Get existing metrics
-  let aggregate = await getItem<AggregatedMetrics>(METRICS_TABLE, key)
+  let aggregate = await getItem<AggregatedMetrics>(tableConfig.tableName, key, tableConfig.environment, tableConfig.accountId)
 
   if (!aggregate) {
     // Create new aggregate
@@ -172,37 +182,40 @@ async function updateAggregateMetrics(
   aggregate.lastUpdated = new Date().toISOString()
 
   // Save updated aggregate
-  await putItem(METRICS_TABLE, aggregate)
+  await putItem(tableConfig.tableName, aggregate, tableConfig.environment, tableConfig.accountId)
 }
 
 /**
  * Get daily metrics
  */
 export async function getDailyMetrics(date: string): Promise<AggregatedMetrics | null> {
-  return await getItem<AggregatedMetrics>(METRICS_TABLE, {
+  const tableConfig = await getMetricsTableConfig()
+  return await getItem<AggregatedMetrics>(tableConfig.tableName, {
     metricDate: date,
     metricType: 'daily'
-  })
+  }, tableConfig.environment, tableConfig.accountId)
 }
 
 /**
  * Get user metrics
  */
 export async function getUserMetrics(date: string, userId: string): Promise<AggregatedMetrics | null> {
-  return await getItem<AggregatedMetrics>(METRICS_TABLE, {
+  const tableConfig = await getMetricsTableConfig()
+  return await getItem<AggregatedMetrics>(tableConfig.tableName, {
     metricDate: date,
     metricType: `user:${userId}`
-  })
+  }, tableConfig.environment, tableConfig.accountId)
 }
 
 /**
  * Get account metrics
  */
 export async function getAccountMetrics(date: string, accountId: string): Promise<AggregatedMetrics | null> {
-  return await getItem<AggregatedMetrics>(METRICS_TABLE, {
+  const tableConfig = await getMetricsTableConfig()
+  return await getItem<AggregatedMetrics>(tableConfig.tableName, {
     metricDate: date,
     metricType: `account:${accountId}`
-  })
+  }, tableConfig.environment, tableConfig.accountId)
 }
 
 /**

@@ -1,84 +1,31 @@
 /**
  * Composable for handling streaming chat notifications
- * Shows toast notifications when background queries complete
+ * Provides UI state about active background queries
+ * 
+ * This composable integrates with useBackgroundPolling to:
+ * - Show the number of active queries in the footer
+ * - Initialize the background polling service on app mount
  */
 
-import { useChatThreadsStore } from '~/stores/useChatThreadsStore'
+import { useBackgroundPolling } from './useBackgroundPolling'
 
 export function useStreamingNotifications() {
-  const threadsStore = useChatThreadsStore()
-  const toast = useToast()
-  const router = useRouter()
-
-  // Track which streams we've already notified about
-  const notifiedStreams = new Set<string>()
-
-  /**
-   * Check for completed background streams and show notifications
-   */
-  const checkBackgroundStreams = () => {
-    threadsStore.streamingMessages.forEach((message, messageId) => {
-      // Skip if we've already notified
-      if (notifiedStreams.has(messageId)) return
-
-      // Only notify for completed or errored messages
-      if (message.status?.status === 'complete') {
-        notifiedStreams.add(messageId)
-
-        toast.add({
-          title: 'Query Complete',
-          description: 'Your AI chat query finished while you were away',
-          icon: 'i-heroicons-check-circle',
-          color: 'green',
-          timeout: 5000,
-          actions: [{
-            label: 'View Response',
-            click: () => {
-              router.push('/chat')
-            }
-          }]
-        })
-      } else if (message.status?.status === 'error') {
-        notifiedStreams.add(messageId)
-
-        toast.add({
-          title: 'Query Failed',
-          description: message.status.error || 'An error occurred',
-          icon: 'i-heroicons-exclamation-circle',
-          color: 'red',
-          timeout: 5000,
-          actions: [{
-            label: 'View Details',
-            click: () => {
-              router.push('/chat')
-            }
-          }]
-        })
-      }
-    })
-  }
+  const backgroundPolling = useBackgroundPolling()
 
   /**
    * Start monitoring for background streams
    * Call this in app layout or root component
    */
   const startMonitoring = () => {
-    // Check every 2 seconds for completed streams
-    const interval = setInterval(() => {
-      checkBackgroundStreams()
-    }, 2000)
-
-    // Cleanup on unmount
-    onUnmounted(() => {
-      clearInterval(interval)
-    })
+    // Initialize background polling (loads pending jobs from storage and resumes polling)
+    backgroundPolling.initialize()
   }
 
   /**
-   * Get count of active background streams
+   * Get count of active background queries
    */
   const activeBackgroundStreamCount = computed(() => {
-    return threadsStore.getActiveStreamCount // Use getter, not method
+    return backgroundPolling.activeJobCount.value
   })
 
   /**
@@ -90,7 +37,7 @@ export function useStreamingNotifications() {
 
   return {
     startMonitoring,
-    checkBackgroundStreams,
+    checkBackgroundStreams: () => {}, // No-op, kept for compatibility
     activeBackgroundStreamCount,
     hasActiveStreams
   }

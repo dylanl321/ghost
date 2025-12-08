@@ -24,8 +24,12 @@ const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 // In-memory cache for config values
 const configCache = new Map<string, { value: SiteConfigItem; expiresAt: number }>();
 
-// Cached DynamoDB client to avoid circular dependencies with aws-client-factory
-let cachedDynamoDBClient: DynamoDBClient | null = null;
+// Cached DynamoDB client with expiration tracking to avoid circular dependencies with aws-client-factory
+interface CachedDynamoDBClient {
+  client: DynamoDBClient;
+  expiration: Date;
+}
+let cachedDynamoDBClient: CachedDynamoDBClient | null = null;
 
 /**
  * Get DynamoDB client directly without aws-client-factory to avoid circular deps
@@ -45,52 +49,74 @@ async function getDynamoDBClientDirect(): Promise<DynamoDBClient | null> {
     return null; // No credentials, will fall back to defaults
   }
 
-  if (!cachedDynamoDBClient) {
-    const region = process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1';
-    const deploymentAccountId = process.env.AWS_DEPLOYMENT_ACCOUNT_ID || '461760157232';
-    const roleName = process.env.AWS_ASSUME_ROLE_NAME || 'GDMSOrganizationsRole';
+  // Check if we have a cached client and if credentials are still valid (with 5 minute buffer)
+  if (cachedDynamoDBClient) {
+    const now = new Date();
+    const expiresWithBuffer = new Date(cachedDynamoDBClient.expiration.getTime() - 5 * 60 * 1000);
 
-    try {
-      // Create STS client with base credentials (org account)
-      const stsClient = new STSClient({
-        region,
-        credentials: {
-          accessKeyId: process.env.AWS_GOVCLOUD_ACCESS_KEY_ID!,
-          secretAccessKey: process.env.AWS_GOVCLOUD_SECRET_ACCESS_KEY!,
-        },
-      });
+    if (now < expiresWithBuffer) {
+      return cachedDynamoDBClient.client;
+    }
 
-      // Assume role in deployment account
-      const assumeRoleCommand = new AssumeRoleCommand({
-        RoleArn: `arn:aws-us-gov:iam::${deploymentAccountId}:role/${roleName}`,
-        RoleSessionName: `site-config-${Date.now()}`,
-        DurationSeconds: 3600,
-      });
+    // Credentials expired or about to expire, clear cache
+    console.log('[Site Config] DynamoDB client credentials expired, refreshing...');
+    cachedDynamoDBClient = null;
+  }
 
-      const assumeRoleResponse = await stsClient.send(assumeRoleCommand);
+  // Create new client with fresh credentials
+  const region = process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1';
+  const deploymentAccountId = process.env.AWS_DEPLOYMENT_ACCOUNT_ID || '461760157232';
+  const roleName = process.env.AWS_ASSUME_ROLE_NAME || 'GDMSOrganizationsRole';
 
-      if (!assumeRoleResponse.Credentials) {
-        console.error('Failed to assume role for site-config access');
-        return null;
-      }
+  try {
+    // Create STS client with base credentials (org account)
+    const stsClient = new STSClient({
+      region,
+      credentials: {
+        accessKeyId: process.env.AWS_GOVCLOUD_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.AWS_GOVCLOUD_SECRET_ACCESS_KEY!,
+      },
+    });
 
-      // Create DynamoDB client with assumed role credentials
-      cachedDynamoDBClient = new DynamoDBClient({
-        region,
-        credentials: {
-          accessKeyId: assumeRoleResponse.Credentials.AccessKeyId!,
-          secretAccessKey: assumeRoleResponse.Credentials.SecretAccessKey!,
-          sessionToken: assumeRoleResponse.Credentials.SessionToken!,
-        },
-      });
+    // Assume role in deployment account
+    // Use 1 hour duration (safe default that works with most role configurations)
+    // The client will auto-refresh before expiration
+    const assumeRoleCommand = new AssumeRoleCommand({
+      RoleArn: `arn:aws-us-gov:iam::${deploymentAccountId}:role/${roleName}`,
+      RoleSessionName: `site-config-${Date.now()}`,
+      DurationSeconds: 3600, // 1 hour (auto-refreshes before expiration)
+    });
 
-      console.log(`[Site Config] Created DynamoDB client for deployment account ${deploymentAccountId}`);
-    } catch (error) {
-      console.error('Error assuming role for site-config:', error);
+    const assumeRoleResponse = await stsClient.send(assumeRoleCommand);
+
+    if (!assumeRoleResponse.Credentials || !assumeRoleResponse.Credentials.Expiration) {
+      console.error('Failed to assume role for site-config access');
       return null;
     }
+
+    // Create DynamoDB client with assumed role credentials
+    const client = new DynamoDBClient({
+      region,
+      credentials: {
+        accessKeyId: assumeRoleResponse.Credentials.AccessKeyId!,
+        secretAccessKey: assumeRoleResponse.Credentials.SecretAccessKey!,
+        sessionToken: assumeRoleResponse.Credentials.SessionToken!,
+      },
+    });
+
+    // Cache the client with expiration tracking
+    cachedDynamoDBClient = {
+      client,
+      expiration: assumeRoleResponse.Credentials.Expiration,
+    };
+
+    console.log(`[Site Config] Created DynamoDB client for deployment account ${deploymentAccountId}, expires at ${assumeRoleResponse.Credentials.Expiration.toISOString()}`);
+
+    return client;
+  } catch (error) {
+    console.error('Error assuming role for site-config:', error);
+    return null;
   }
-  return cachedDynamoDBClient;
 }
 
 /**

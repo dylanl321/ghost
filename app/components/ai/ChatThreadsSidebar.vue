@@ -86,7 +86,7 @@
       <!-- Chat Messages -->
       <div class="flex-1 overflow-y-auto p-4" ref="chatBoxRef">
         <!-- Welcome Message -->
-        <div v-if="!chatSidebar.hasSeenWelcome.value && messages.length === 0" class="mb-4 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+        <div v-if="!chatSidebar.hasSeenWelcome.value && showWelcome" class="mb-4 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
           <div class="flex items-start gap-3">
             <UIcon name="i-heroicons-sparkles" class="w-5 h-5 text-purple-600 dark:text-purple-400 mt-0.5" />
             <div>
@@ -99,21 +99,62 @@
         </div>
 
         <!-- Messages -->
-        <div v-for="(msg, index) in messages" :key="index" :class="`mb-4 ${msg.sender === 'user' ? 'text-right' : ''}`">
+        <div
+          v-for="(msg, index) in messages"
+          :key="msg.messageId || `msg-${index}`"
+          :class="`mb-4 ${msg.role === 'user' ? 'text-right' : ''}`"
+        >
           <div
             :class="[
               'inline-block max-w-[85%] rounded-lg p-3',
-              msg.sender === 'user'
+              msg.role === 'user'
                 ? 'bg-purple-600 text-white'
                 : 'bg-gray-100 dark:bg-slate-700 text-gray-900 dark:text-gray-100'
             ]"
           >
+            <!-- Streaming status indicator -->
+            <div v-if="msg.status?.status === 'pending' || msg.status?.status === 'streaming'" class="streaming-status-sidebar mb-2">
+              <div class="flex items-center gap-2 mb-1.5">
+                <div class="ghost-loading-sidebar-inline">
+                  <UIcon name="i-fa6-solid-ghost" class="ghost-icon-sidebar" />
+                  <div class="flex gap-1">
+                    <div class="ghost-dot-sidebar"></div>
+                    <div class="ghost-dot-sidebar"></div>
+                    <div class="ghost-dot-sidebar"></div>
+                  </div>
+                </div>
+                <div class="flex flex-col gap-0.5">
+                  <span class="text-xs font-medium text-gray-700 dark:text-gray-300">GHOST is thinking...</span>
+                  <span class="text-xs text-gray-600 dark:text-gray-400">{{ msg.status.progress || pollingProgress || 'Starting...' }}</span>
+                </div>
+              </div>
+              <div v-if="(msg.status.toolsCalled && msg.status.toolsCalled.length > 0) || (pollingToolsCalled && pollingToolsCalled.length > 0)" class="flex flex-wrap gap-1">
+                <span v-for="tool in (msg.status.toolsCalled || pollingToolsCalled)" :key="tool" class="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
+                  <UIcon name="i-heroicons-wrench-screwdriver" class="w-3 h-3" />
+                  {{ tool }}
+                </span>
+              </div>
+              <div class="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
+                Complex queries may take 30-120 seconds
+              </div>
+            </div>
+
             <div
               class="prose prose-sm dark:prose-invert max-w-none"
-              :class="{ 'prose-invert': msg.sender === 'user' }"
-              v-html="formatMessage(msg.text)"
+              :class="{ 'prose-invert': msg.role === 'user' }"
+              v-html="formatMessage(msg.content)"
               @click="handleLinkClick"
             ></div>
+            <span v-if="msg.streamBuffer && (msg.status?.status === 'pending' || msg.status?.status === 'streaming')" class="cursor-blink">|</span>
+
+            <!-- Error status with retry -->
+            <div v-if="msg.status?.status === 'error'" class="error-status-sidebar">
+              <UIcon name="i-heroicons-exclamation-triangle" class="w-3.5 h-3.5 text-red-500" />
+              <span class="text-xs text-red-600 dark:text-red-400">{{ msg.status.error }}</span>
+              <button @click="retryLastMessage" class="ml-2 text-xs text-blue-600 dark:text-blue-400 hover:underline">
+                Retry
+              </button>
+            </div>
 
             <!-- Metadata -->
             <div v-if="msg.metadata && (msg.metadata.accountId || msg.metadata.mcpUsed)" class="mt-2 pt-2 border-t border-gray-200/50 dark:border-gray-700/50">
@@ -167,8 +208,8 @@
           </div>
         </div>
 
-        <!-- Ghost Loading Indicator -->
-        <div v-if="isLoading" class="ghost-loading-sidebar">
+        <!-- Ghost Loading Indicator (fallback) -->
+        <div v-if="showLoader" class="ghost-loading-sidebar">
           <UIcon name="i-fa6-solid-ghost" class="ghost-icon-sidebar" />
           <div class="flex gap-1">
             <div class="ghost-dot-sidebar"></div>
@@ -176,8 +217,21 @@
             <div class="ghost-dot-sidebar"></div>
           </div>
           <div class="flex flex-col gap-1">
-            <span class="text-sm text-gray-500 dark:text-gray-400 italic">GHOST is thinking...</span>
+            <span class="text-sm text-gray-500 dark:text-gray-400 italic">
+              {{ pollingProgress || 'GHOST is thinking...' }}
+              <span v-if="pollingPercent">({{ pollingPercent }}%)</span>
+            </span>
             <span class="text-xs text-gray-400 dark:text-gray-500">Complex queries may take 30-120 seconds</span>
+            <div v-if="pollingToolsCalled && pollingToolsCalled.length" class="flex flex-wrap gap-1 mt-1">
+              <span
+                v-for="tool in pollingToolsCalled"
+                :key="tool"
+                class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] rounded bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-200"
+              >
+                <UIcon name="i-heroicons-wrench-screwdriver" class="w-3 h-3" />
+                {{ tool }}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -271,57 +325,83 @@
       :disambiguation="disambiguationData"
       :sessionId="sessionId || ''"
       @selected="handleAccountSelected"
-      @cancel="handleDisambiguationCancel"
+      @cancel="cancelDisambiguation"
     />
   </USlideover>
 </template>
 
 <script setup lang="ts">
+/**
+ * ChatThreadsSidebar - Slide-over chat sidebar
+ * Uses unified useChatUI composable for all logic
+ * Now uses async polling instead of legacy sync API!
+ */
+
 import { useChatThreadsStore } from '~/stores/useChatThreadsStore'
-import type { ChatMessage } from '~/shared/types/chat-threads'
 
 const chatSidebar = useChatSidebar()
 const threadsStore = useChatThreadsStore()
 const { parseMarkdownWithLinks, handleLinkClick } = useMarkdownLinkParser()
 const toast = useToast()
 
-// Use account mention composable
+// Get unified chat logic
 const {
+  // Core state
+  messages,
+  showWelcome,
+  isLoading,
+  showLoader,
+  scrollTrigger,
+  inputValue,
+  
+  // Polling state  
+  pollingProgress,
+  pollingPercent,
+  pollingToolsCalled,
+  
+  // Actions
+  sendMessage,
+  retryLastMessage,
+  clearConversation,
+  switchThread,
+  createNewThread,
+  
+  // Mention system
   showMentionDropdown,
   filteredAccounts,
   selectedAccountForMessage,
   selectedMentionIndex,
-  handleInputChange,
+  handleMentionInput,
   selectAccount,
   navigateMentions,
   selectHighlightedAccount,
   closeMentionDropdown,
-  clearSelectedAccount,
   getAccountDisplay,
   getAccountSubtitle,
-  setMentionIndex
-} = useChatAccountMention()
+  setMentionIndex,
+  
+  // Disambiguation
+  showDisambiguation,
+  disambiguationData,
+  handleAccountSelected,
+  cancelDisambiguation,
+  
+  // Session
+  sessionId,
+  
+  // Thread management
+  currentThread,
+  activeThreadId,
+  
+  // Initialize
+  initialize
+} = useChatUI({ viewMode: 'sidebar', initialGreeting: '' })
 
-// Chat state
-const messages = ref<any[]>([])
-const inputValue = ref('')
-const isLoading = ref(false)
+// Local UI state
 const chatBoxRef = ref<HTMLElement | null>(null)
-const inputRef = ref<HTMLElement | null>(null)
-const sessionId = ref<string | undefined>(undefined)
-const userTimezone = ref<string>(Intl.DateTimeFormat().resolvedOptions().timeZone)
-
-// Disambiguation state
-const showDisambiguation = ref(false)
-const disambiguationData = ref<any>(null)
-const pendingMessage = ref<string>('')
-
-// Clear confirmation
+const inputRef = ref<HTMLInputElement | null>(null)
 const showClearConfirm = ref(false)
-
-// Thread selection
 const selectedThreadId = ref<string | null>(null)
-const currentThread = computed(() => threadsStore.currentThread)
 
 // Thread options for dropdown
 const threadOptions = computed(() => {
@@ -331,7 +411,7 @@ const threadOptions = computed(() => {
   if (threadsStore.pinnedThreads.length > 0) {
     options.push({
       label: 'Pinned',
-      value: null, // Null value prevents selection
+      value: null,
       disabled: true
     })
     threadsStore.pinnedThreads.forEach(thread => {
@@ -348,7 +428,7 @@ const threadOptions = computed(() => {
     if (options.length > 0) {
       options.push({
         label: 'Recent',
-        value: null, // Null value prevents selection
+        value: null,
         disabled: true
       })
     }
@@ -366,73 +446,38 @@ const threadOptions = computed(() => {
 // Initialize on mount
 onMounted(async () => {
   chatSidebar.initialize()
-  await threadsStore.fetchThreads()
-
-  // Load active thread if exists
-  if (threadsStore.activeThreadId) {
-    await loadThread(threadsStore.activeThreadId)
-  }
+  await initialize()
+  selectedThreadId.value = activeThreadId.value
 })
 
-// Watch for active thread changes
-watch(() => threadsStore.activeThreadId, async (newId) => {
-  if (newId) {
-    await loadThread(newId)
-  }
+// Sync selected thread with active thread
+watch(activeThreadId, (newId) => {
+  selectedThreadId.value = newId
 })
 
-// Load thread messages
-async function loadThread(threadId: string) {
-  selectedThreadId.value = threadId
-  const success = await threadsStore.loadThread(threadId)
-
-  if (success && threadsStore.currentThread) {
-    // Convert thread messages to display format
-    // Handle case where messages might be undefined (empty array was sanitized)
-    const threadMessages = threadsStore.currentThread.messages || []
-    messages.value = threadMessages.map(msg => ({
-      text: msg.content,
-      sender: msg.role === 'user' ? 'user' : 'bot',
-      metadata: msg.metadata,
-      suggestedLinks: msg.suggestedLinks,
-      suggestedPrompts: msg.suggestedPrompts,
-      timestamp: msg.timestamp
-    }))
-
-    nextTick(() => scrollToBottom())
-  }
-}
-
-// Handle thread change
+// Handle thread change from dropdown
 async function handleThreadChange(threadIdOrOption: string | any) {
-  // Ignore null/undefined selections (disabled header items)
   if (!threadIdOrOption) return
 
-  // Extract thread ID if an option object is passed
   const threadId = typeof threadIdOrOption === 'string'
     ? threadIdOrOption
     : threadIdOrOption?.value || threadIdOrOption?.threadId
 
-  // Only load if we have a valid string thread ID
   if (threadId && typeof threadId === 'string' && threadId.length > 0) {
-    await loadThread(threadId)
+    await switchThread(threadId)
+    selectedThreadId.value = threadId
   }
 }
 
 // Handle new thread
 async function handleNewThread() {
-  const thread = await threadsStore.createThread()
-  if (thread) {
-    selectedThreadId.value = thread.threadId
-    messages.value = []
-    sessionId.value = undefined
-    inputValue.value = ''
+  await createNewThread()
+  selectedThreadId.value = activeThreadId.value
 
-    toast.add({
-      title: 'New conversation started',
-      color: 'green'
-    })
-  }
+  toast.add({
+    title: 'New conversation started',
+    color: 'green'
+  })
 }
 
 // Handle clear thread
@@ -443,23 +488,18 @@ function handleClearThread() {
 async function confirmClearThread() {
   showClearConfirm.value = false
 
-  if (selectedThreadId.value) {
-    const success = await threadsStore.clearThread(selectedThreadId.value)
+  const success = await clearConversation()
 
-    if (success) {
-      messages.value = []
-      sessionId.value = undefined
-
-      toast.add({
-        title: 'Conversation cleared',
-        color: 'green'
-      })
-    } else {
-      toast.add({
-        title: 'Failed to clear conversation',
-        color: 'red'
-      })
-    }
+  if (success !== false) {
+    toast.add({
+      title: 'Conversation cleared',
+      color: 'green'
+    })
+  } else {
+    toast.add({
+      title: 'Failed to clear conversation',
+      color: 'red'
+    })
   }
 }
 
@@ -496,7 +536,7 @@ function scrollToBottom() {
 function handleInputUpdate(event: Event) {
   const target = event.target as HTMLInputElement
   const cursorPosition = target.selectionStart || 0
-  handleInputChange(inputValue.value, cursorPosition)
+  handleMentionInput(inputValue.value, cursorPosition)
 }
 
 // Handle keyboard events for mention navigation
@@ -511,17 +551,14 @@ function handleKeyDown(event: KeyboardEvent) {
     navigateMentions('up')
   } else if (event.key === 'Enter' && showMentionDropdown.value) {
     event.preventDefault()
-    const newValue = selectHighlightedAccount(inputValue.value)
-    if (newValue) {
-      inputValue.value = newValue
-      nextTick(() => {
-        if (inputRef.value) {
-          inputRef.value.focus()
-          const length = inputValue.value.length
-          inputRef.value.setSelectionRange(length, length)
-        }
-      })
-    }
+    selectHighlightedAccount()
+    nextTick(() => {
+      if (inputRef.value) {
+        inputRef.value.focus()
+        const length = inputValue.value.length
+        inputRef.value.setSelectionRange(length, length)
+      }
+    })
   } else if (event.key === 'Escape') {
     closeMentionDropdown()
   }
@@ -529,8 +566,7 @@ function handleKeyDown(event: KeyboardEvent) {
 
 // Handle mention click
 function handleMentionClick(account: any) {
-  const newValue = selectAccount(account, inputValue.value)
-  inputValue.value = newValue
+  selectAccount(account)
   nextTick(() => {
     if (inputRef.value) {
       inputRef.value.focus()
@@ -541,195 +577,24 @@ function handleMentionClick(account: any) {
 }
 
 // Handle suggested prompt clicks
-function handlePromptClick(promptText: string) {
-  inputValue.value = promptText
-  handleSubmit()
+async function handlePromptClick(promptText: string) {
+  await sendMessage(promptText)
 }
 
-// Handle message submission
+// Handle form submission
 async function handleSubmit() {
   if (!inputValue.value.trim() || isLoading.value) return
+  await sendMessage()
+}
 
-  const userMessage = inputValue.value.trim()
-  const mentionedAccount = selectedAccountForMessage.value
-
-  inputValue.value = ''
-  clearSelectedAccount()
-
-  // Add user message to UI
-  messages.value.push({
-    text: userMessage,
-    sender: 'user',
-    timestamp: new Date().toISOString()
+// Auto scroll when messages change
+watch([scrollTrigger, messages], () => {
+  nextTick(() => {
+    nextTick(() => {
+      scrollToBottom()
+    })
   })
-
-  nextTick(() => scrollToBottom())
-
-  isLoading.value = true
-
-  try {
-    // Save user message to thread
-    await threadsStore.addMessage({
-      role: 'user',
-      content: userMessage
-    })
-
-    // Call Strands API
-    const requestBody: any = {
-      message: userMessage,
-      sessionId: sessionId.value,
-      timezone: userTimezone.value
-    }
-
-    // Add mentioned account context if available
-    if (mentionedAccount) {
-      requestBody.mentionedAccount = {
-        accountId: mentionedAccount.accountId,
-        accountName: getAccountDisplay(mentionedAccount)
-      }
-    }
-
-    const response = await $fetch('/api/strands/chat', {
-      method: 'POST',
-      body: requestBody,
-      // Match backend timeout (5 minutes) - Strands MCP operations can take 2+ minutes
-      timeout: 300000
-    })
-
-    // Update session ID
-    if (response.sessionId) {
-      sessionId.value = response.sessionId
-    }
-
-    // Check for disambiguation
-    if (response.needsDisambiguation) {
-      showDisambiguation.value = true
-      disambiguationData.value = response
-      pendingMessage.value = userMessage
-      isLoading.value = false
-      return
-    }
-
-    // Extract response
-    const botResponse = response.result || response.responseBody || 'No response received'
-
-    // Add bot message to UI
-    messages.value.push({
-      text: botResponse,
-      sender: 'bot',
-      metadata: {
-        accountId: response.metadata?.accountId || response.account_id,
-        mcpUsed: response.metadata?.mcpUsed || response.mcp_used,
-        mcpType: response.metadata?.mcpType
-      },
-      suggestedLinks: response.suggestedLinks || [],
-      suggestedPrompts: response.suggestedPrompts || [],
-      timestamp: new Date().toISOString()
-    })
-
-    // Save assistant message to thread
-    await threadsStore.addMessage({
-      role: 'assistant',
-      content: botResponse,
-      metadata: {
-        accountId: response.metadata?.accountId || response.account_id,
-        mcpUsed: response.metadata?.mcpUsed || response.mcp_used,
-        mcpType: response.metadata?.mcpType
-      },
-      suggestedLinks: response.suggestedLinks,
-      suggestedPrompts: response.suggestedPrompts
-    })
-
-    nextTick(() => scrollToBottom())
-  } catch (error: any) {
-    console.error('Error sending message:', error)
-
-    messages.value.push({
-      text: `Error: ${error.data?.error?.message || 'Failed to send message'}`,
-      sender: 'bot',
-      timestamp: new Date().toISOString()
-    })
-
-    toast.add({
-      title: 'Failed to send message',
-      description: error.data?.error?.message || 'Please try again',
-      color: 'red'
-    })
-  } finally {
-    isLoading.value = false
-  }
-}
-
-// Handle account disambiguation
-async function handleAccountSelected(accountId: string) {
-  showDisambiguation.value = false
-
-  if (!pendingMessage.value) return
-
-  isLoading.value = true
-
-  try {
-    const response = await $fetch('/api/strands/chat', {
-      method: 'POST',
-      body: {
-        message: pendingMessage.value,
-        sessionId: sessionId.value,
-        timezone: userTimezone.value,
-        selectedAccountId: accountId
-      },
-      // Match backend timeout (5 minutes) - Strands MCP operations can take 2+ minutes
-      timeout: 300000
-    })
-
-    const botResponse = response.result || response.responseBody || 'No response received'
-
-    messages.value.push({
-      text: botResponse,
-      sender: 'bot',
-      metadata: {
-        accountId: response.metadata?.accountId || response.account_id,
-        mcpUsed: response.metadata?.mcpUsed || response.mcp_used,
-        mcpType: response.metadata?.mcpType
-      },
-      suggestedLinks: response.suggestedLinks || [],
-      suggestedPrompts: response.suggestedPrompts || [],
-      timestamp: new Date().toISOString()
-    })
-
-    await threadsStore.addMessage({
-      role: 'assistant',
-      content: botResponse,
-      metadata: {
-        accountId: response.metadata?.accountId || response.account_id,
-        mcpUsed: response.metadata?.mcpUsed || response.mcp_used,
-        mcpType: response.metadata?.mcpType
-      },
-      suggestedLinks: response.suggestedLinks,
-      suggestedPrompts: response.suggestedPrompts
-    })
-
-    nextTick(() => scrollToBottom())
-  } catch (error: any) {
-    console.error('Error after disambiguation:', error)
-
-    messages.value.push({
-      text: `Error: ${error.data?.error?.message || 'Failed to send message'}`,
-      sender: 'bot',
-      timestamp: new Date().toISOString()
-    })
-  } finally {
-    isLoading.value = false
-    pendingMessage.value = ''
-    disambiguationData.value = null
-  }
-}
-
-function handleDisambiguationCancel() {
-  showDisambiguation.value = false
-  disambiguationData.value = null
-  pendingMessage.value = ''
-  isLoading.value = false
-}
+}, { deep: true })
 </script>
 
 <style scoped>
@@ -794,6 +659,10 @@ function handleDisambiguationCancel() {
   @apply flex items-center gap-2 p-3 bg-gray-50 dark:bg-slate-800 rounded-lg;
 }
 
+.ghost-loading-sidebar-inline {
+  @apply flex items-center gap-2;
+}
+
 .ghost-icon-sidebar {
   @apply w-5 h-5 text-emerald-400;
   animation: ghostFloat 2s ease-in-out infinite;
@@ -834,5 +703,18 @@ function handleDisambiguationCancel() {
     opacity: 1;
     transform: scale(1.2);
   }
+}
+
+/* Streaming status */
+.streaming-status-sidebar {
+  @apply pb-2 border-b border-gray-200 dark:border-gray-600;
+}
+
+.cursor-blink {
+  @apply inline-block ml-0.5 text-purple-600 dark:text-purple-400 animate-pulse font-bold;
+}
+
+.error-status-sidebar {
+  @apply flex items-center gap-1.5 mt-2 p-2 bg-red-50 dark:bg-red-900/20 rounded text-xs;
 }
 </style>

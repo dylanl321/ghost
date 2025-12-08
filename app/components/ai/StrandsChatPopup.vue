@@ -7,8 +7,6 @@
       :title="'Open AI Assistant'"
     >
       <UIcon name="i-heroicons-sparkles" class="w-6 h-6" />
-
-      <!-- Notification badge (if we want to add hints) -->
       <span
         v-if="showHint"
         class="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse"
@@ -43,15 +41,15 @@
 
         <div class="flex items-center gap-1">
           <button
-            v-if="messages.length === 0"
-            @click="showExamples = !showExamples"
+            v-if="showWelcome"
+            @click="localShowExamples = !localShowExamples"
             class="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
             title="Example questions"
           >
             <UIcon name="i-heroicons-light-bulb" class="w-4 h-4 text-white" />
           </button>
           <button
-            @click="clearChat"
+            @click="handleClearChat"
             class="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
             title="Clear chat"
           >
@@ -67,9 +65,9 @@
         </div>
       </div>
 
-      <!-- Example Questions (collapsible) - only show when conversation is empty -->
+      <!-- Example Questions (collapsible) -->
       <div
-        v-if="showExamples && messages.length === 0"
+        v-if="localShowExamples && showWelcome"
         class="p-3 bg-purple-50 dark:bg-purple-900/20 border-b border-purple-200 dark:border-purple-800"
       >
         <p class="text-xs font-medium text-purple-900 dark:text-purple-100 mb-2">Try asking:</p>
@@ -77,7 +75,7 @@
           <button
             v-for="(example, idx) in exampleQuestions"
             :key="idx"
-            @click="sendExample(example)"
+            @click="handleExampleClick(example)"
             class="block w-full text-left text-xs px-2 py-1.5 rounded bg-white dark:bg-gray-800 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-gray-700 dark:text-gray-300 transition-colors"
           >
             {{ example }}
@@ -91,7 +89,7 @@
         class="flex-1 overflow-y-auto p-4 space-y-3"
       >
         <!-- Welcome message -->
-        <div v-if="messages.length === 0" class="text-center py-8">
+        <div v-if="showWelcome" class="text-center py-8">
           <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
             <UIcon name="i-heroicons-sparkles" class="w-8 h-8 text-purple-600 dark:text-purple-400" />
           </div>
@@ -104,7 +102,7 @@
         </div>
 
         <!-- Sample Prompts (only show when no messages) -->
-        <div v-if="shouldShowSamples" class="space-y-2 px-2">
+        <div v-if="showWelcome" class="space-y-2 px-2">
           <div class="flex items-center gap-1.5 mb-2">
             <UIcon name="i-heroicons-light-bulb" class="w-4 h-4 text-purple-500" />
             <p class="text-xs font-medium text-gray-700 dark:text-gray-300">Try asking:</p>
@@ -112,7 +110,7 @@
           <button
             v-for="(sample, idx) in samplePrompts"
             :key="idx"
-            @click="sendExample(sample)"
+            @click="handleExampleClick(sample)"
             class="w-full text-left text-xs px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800/50 hover:bg-purple-50 dark:hover:bg-purple-900/20 text-gray-700 dark:text-gray-300 transition-colors border border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700"
           >
             <div class="flex items-start gap-2">
@@ -125,7 +123,7 @@
         <!-- Chat messages -->
         <div
           v-for="(msg, idx) in messages"
-          :key="idx"
+          :key="msg.messageId || `msg-${idx}`"
           class="flex gap-2"
           :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
         >
@@ -137,7 +135,7 @@
                 : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 rounded-bl-sm'
             "
           >
-            <!-- Streaming status indicator (GHOST thinking) -->
+            <!-- Streaming status indicator -->
             <div v-if="msg.status?.status === 'pending' || msg.status?.status === 'streaming'" class="streaming-status mb-2">
               <div class="flex items-center gap-2 mb-1.5">
                 <div class="ghost-loading">
@@ -150,11 +148,11 @@
                 </div>
                 <div class="flex flex-col gap-0.5">
                   <span class="text-xs font-medium text-gray-700 dark:text-gray-300">GHOST is thinking...</span>
-                  <span class="text-xs text-gray-600 dark:text-gray-400">{{ msg.status.progress || 'Starting...' }}</span>
+                  <span class="text-xs text-gray-600 dark:text-gray-400">{{ msg.status.progress || pollingProgress || 'Starting...' }}</span>
                 </div>
               </div>
-              <div v-if="msg.status.toolsCalled && msg.status.toolsCalled.length > 0" class="flex flex-wrap gap-1">
-                <span v-for="tool in msg.status.toolsCalled" :key="tool" class="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
+              <div v-if="(msg.status.toolsCalled && msg.status.toolsCalled.length > 0) || (pollingToolsCalled && pollingToolsCalled.length > 0)" class="flex flex-wrap gap-1">
+                <span v-for="tool in (msg.status.toolsCalled || pollingToolsCalled)" :key="tool" class="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
                   <UIcon name="i-heroicons-wrench-screwdriver" class="w-3 h-3" />
                   {{ tool }}
                 </span>
@@ -171,10 +169,13 @@
             <div v-if="msg.status?.status === 'error'" class="error-status">
               <UIcon name="i-heroicons-exclamation-triangle" class="w-3.5 h-3.5 text-red-500" />
               <span class="text-xs text-red-600 dark:text-red-400">{{ msg.status.error }}</span>
+              <button @click="retryLastMessage" class="ml-2 text-xs text-blue-600 dark:text-blue-400 hover:underline">
+                Retry
+              </button>
             </div>
 
             <!-- Metadata for bot responses -->
-            <div v-if="msg.role === 'assistant' && msg.metadata" class="flex gap-2 mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+            <div v-if="msg.role === 'assistant' && msg.metadata && (msg.metadata.accountId || msg.metadata.mcpType)" class="flex gap-2 mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
               <UBadge
                 v-if="msg.metadata.accountId"
                 :color="msg.metadata.accountId === 'aggregated' ? 'purple' : 'blue'"
@@ -191,7 +192,7 @@
               </UBadge>
             </div>
 
-            <!-- Suggested links for bot responses -->
+            <!-- Suggested links -->
             <div v-if="msg.role === 'assistant' && msg.suggestedLinks && msg.suggestedLinks.length > 0" class="mt-3 space-y-2">
               <StrandsLinkCard
                 v-for="(link, linkIdx) in msg.suggestedLinks"
@@ -201,7 +202,7 @@
               />
             </div>
 
-            <!-- Suggested Prompts for bot responses -->
+            <!-- Suggested Prompts -->
             <div v-if="msg.role === 'assistant' && msg.suggestedPrompts && msg.suggestedPrompts.length > 0" class="mt-3 space-y-2">
               <p class="text-xs text-gray-600 dark:text-gray-400 mb-1.5 flex items-center gap-1">
                 <UIcon name="i-heroicons-chat-bubble-bottom-center-text" class="w-3.5 h-3.5" />
@@ -212,10 +213,7 @@
                   v-for="(prompt, promptIdx) in msg.suggestedPrompts"
                   :key="promptIdx"
                   @click="handlePromptClick(prompt.text)"
-                  class="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md border border-purple-200 dark:border-purple-800 bg-white dark:bg-purple-900/20 hover:bg-purple-50 dark:hover:bg-purple-900/40 text-purple-700 dark:text-purple-300 transition-colors"
-                  :class="{
-                    'hover:scale-105': true
-                  }"
+                  class="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md border border-purple-200 dark:border-purple-800 bg-white dark:bg-purple-900/20 hover:bg-purple-50 dark:hover:bg-purple-900/40 text-purple-700 dark:text-purple-300 transition-colors hover:scale-105"
                 >
                   <UIcon
                     :name="prompt.type === 'question' ? 'i-heroicons-question-mark-circle' : prompt.type === 'action' ? 'i-heroicons-arrow-right-circle' : 'i-heroicons-information-circle'"
@@ -228,15 +226,29 @@
           </div>
         </div>
 
-        <!-- Loading indicator (only for non-streaming fallback) -->
-        <div v-if="isLoading && !hasStreamingMessage" class="flex justify-start">
+        <!-- Loading indicator (fallback) -->
+        <div v-if="showLoader" class="flex justify-start">
           <div class="bg-gray-100 dark:bg-gray-800 rounded-lg px-3 py-2">
             <div class="flex items-center gap-2 mb-1">
               <div class="w-2 h-2 bg-purple-600 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
               <div class="w-2 h-2 bg-purple-600 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
               <div class="w-2 h-2 bg-purple-600 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
+              <span class="text-xs text-gray-700 dark:text-gray-200">
+                {{ pollingProgress || 'Processing...' }}
+                <span v-if="pollingPercent">({{ pollingPercent }}%)</span>
+              </span>
             </div>
             <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Complex queries may take 30-120 seconds</p>
+            <div v-if="pollingToolsCalled && pollingToolsCalled.length" class="flex flex-wrap gap-1 mt-1">
+              <span
+                v-for="tool in pollingToolsCalled"
+                :key="tool"
+                class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] rounded bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-200"
+              >
+                <UIcon name="i-heroicons-wrench-screwdriver" class="w-3 h-3" />
+                {{ tool }}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -253,7 +265,7 @@
 
       <!-- Input -->
       <div class="p-4 border-t border-gray-200 dark:border-gray-700">
-        <form @submit.prevent="sendMessage" class="flex gap-2">
+        <form @submit.prevent="handleSendMessage" class="flex gap-2">
           <input
             v-model="userInput"
             type="text"
@@ -290,7 +302,7 @@
     :disambiguation="disambiguationData"
     :sessionId="sessionId || ''"
     @selected="handleAccountSelected"
-    @cancel="handleDisambiguationCancel"
+    @cancel="cancelDisambiguation"
   />
 
   <!-- Entity Popover -->
@@ -298,97 +310,55 @@
 </template>
 
 <script setup lang="ts">
-import { useChatThreadsStore } from '~/stores/useChatThreadsStore'
+/**
+ * StrandsChatPopup - Floating chat popup
+ * Uses unified useChatUI composable for all logic
+ */
 
-// Use the entity-aware response enricher
-const { enrichStrandsResponse, handleEnrichedClick } = useStrandsResponseEnricher()
-
-// Get the threads store to persist messages
-const threadsStore = useChatThreadsStore()
-
-// Use shared chat logic with thread persistence
+// Get unified chat logic
 const {
-  messages: chatMessages,
+  // Core state
+  messages,
+  showWelcome,
   isLoading,
-  sessionId,
+  showLoader,
+  errorMessage,
+  scrollTrigger,
+  
+  // Polling state
+  pollingProgress,
+  pollingPercent,
+  pollingToolsCalled,
+  
+  // Actions
+  sendMessage,
+  retryLastMessage,
+  clearConversation,
+  
+  // Disambiguation
   showDisambiguation,
   disambiguationData,
-  sendMessage: sendChatMessage,
   handleAccountSelected,
-  handleDisambiguationCancel,
-  clearChat: clearChatMessages,
-  scrollTrigger
-} = useStrandsChat({
-  initialGreeting: "", // No initial greeting for popup
-  threadsStore: threadsStore,
-  loadMessagesFromThread: true // Always load messages from thread in popup
-})
+  cancelDisambiguation,
+  
+  // Session
+  sessionId,
+  
+  // Initialize
+  initialize
+} = useChatUI({ viewMode: 'popup', initialGreeting: '' })
 
-// UI state (specific to popup)
+// Entity enrichment
+const { enrichStrandsResponse, handleEnrichedClick } = useStrandsResponseEnricher()
+
+// Local UI state (popup-specific)
 const isOpen = ref(false)
-const showExamples = ref(false)
+const localShowExamples = ref(false)
 const showHint = ref(false)
 const userInput = ref('')
-const errorMessage = ref('')
 const messagesContainer = ref<HTMLElement>()
 
-// Convert chat messages to popup format
-interface SuggestedPrompt {
-  text: string
-  type: 'question' | 'action' | 'clarification'
-  priority: number
-}
-
-interface PopupMessage {
-  role: 'user' | 'assistant'
-  content: string
-  metadata?: {
-    accountId?: string
-    mcpType?: 'permanent' | 'temporary'
-  }
-  suggestedLinks?: any[]
-  suggestedPrompts?: SuggestedPrompt[]
-  status?: {
-    status: 'pending' | 'streaming' | 'complete' | 'error'
-    progress?: string
-    toolsCalled?: string[]
-    error?: string
-  }
-  streamBuffer?: string
-}
-
-const messages = computed<PopupMessage[]>(() => {
-  // Use messages from threads store if available (includes streaming status)
-  if (threadsStore.currentThread?.messages) {
-    return threadsStore.currentThread.messages.map(msg => ({
-      role: msg.role === 'user' ? 'user' as const : 'assistant' as const,
-      content: msg.content,
-      metadata: msg.metadata,
-      suggestedLinks: msg.suggestedLinks,
-      suggestedPrompts: msg.suggestedPrompts,
-      status: msg.status, // Include streaming status
-      streamBuffer: msg.streamBuffer // Include stream buffer for cursor
-    }))
-  }
-
-  // Fall back to chatMessages for compatibility
-  return chatMessages.value.map(msg => ({
-    role: msg.sender === 'user' ? 'user' as const : 'assistant' as const,
-    content: msg.text,
-    metadata: msg.metadata,
-    suggestedLinks: msg.suggestedLinks,
-    suggestedPrompts: msg.suggestedPrompts
-  }))
-})
-
-// Check if there's a streaming message (to hide separate loader)
-const hasStreamingMessage = computed(() => {
-  return messages.value.some(msg =>
-    msg.status?.status === 'pending' || msg.status?.status === 'streaming'
-  )
-})
-
-// Sample prompts for new conversations
+// Sample prompts
 const samplePrompts = [
   "What are the top AWS cost drivers this month?",
   "Show me security findings from Security Hub",
@@ -396,50 +366,12 @@ const samplePrompts = [
   "What are recent CloudTrail events?"
 ]
 
-// Only show samples when there are no messages (empty conversation)
-const shouldShowSamples = computed(() => {
-  return messages.value.length === 0
-})
-
-// Example questions (kept for the collapsible examples section)
 const exampleQuestions = [
   "What are costs for account 374673712317 this month?",
   "List EC2 instances in account 205950196477",
   "Show me S3 buckets in the Gov Master account",
   "Analyze security findings for monitoring account"
 ]
-
-// Initialize on mount
-onMounted(async () => {
-  // Show hint for first-time users
-  const hasVisited = localStorage.getItem('strands-popup-visited')
-  if (!hasVisited) {
-    showHint.value = true
-    // Auto-dismiss hint after 5 seconds
-    setTimeout(() => {
-      showHint.value = false
-      localStorage.setItem('strands-popup-visited', 'true')
-    }, 5000)
-  }
-
-  // Load active thread from store if exists
-  // This ensures popup shows the same conversation as the /chat page
-  if (threadsStore.activeThreadId) {
-    // Always reload to ensure we have latest messages
-    await threadsStore.loadThread(threadsStore.activeThreadId)
-  }
-
-  // Clean up old localStorage-based persistence (migration)
-  localStorage.removeItem('strands-popup-chat')
-})
-
-// Watch for when popup opens - reload thread to get latest messages
-watch(isOpen, async (newValue) => {
-  if (newValue && threadsStore.activeThreadId) {
-    // Reload thread when popup opens to sync with full page
-    await threadsStore.loadThread(threadsStore.activeThreadId)
-  }
-})
 
 // Toggle chat window
 function toggleChat() {
@@ -450,34 +382,32 @@ function toggleChat() {
 }
 
 // Clear chat
-async function clearChat() {
-  if (threadsStore.activeThreadId) {
-    // Clear messages from the thread in database
-    await threadsStore.clearThread(threadsStore.activeThreadId)
-  } else {
-    // No thread yet, just clear local messages
-    clearChatMessages()
-  }
-  errorMessage.value = ''
+async function handleClearChat() {
+  await clearConversation()
 }
 
-// Send example question
-function sendExample(example: string) {
-  userInput.value = example
-  showExamples.value = false
-  sendMessage()
+// Send message
+async function handleSendMessage() {
+  if (!userInput.value.trim() || isLoading.value) return
+  const message = userInput.value.trim()
+  userInput.value = ''
+  await sendMessage(message)
 }
 
-// Handle suggested prompt clicks
-function handlePromptClick(promptText: string) {
-  userInput.value = promptText
-  sendMessage()
+// Handle example click
+async function handleExampleClick(example: string) {
+  localShowExamples.value = false
+  await sendMessage(example)
 }
 
-// Auto-scroll when messages change or scrollTrigger increments
+// Handle suggested prompt click
+async function handlePromptClick(promptText: string) {
+  await sendMessage(promptText)
+}
+
+// Auto-scroll when messages change
 watch([scrollTrigger, messages], () => {
   nextTick(() => {
-    // Use a second nextTick to ensure DOM is fully rendered
     nextTick(() => {
       if (messagesContainer.value) {
         messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
@@ -486,17 +416,28 @@ watch([scrollTrigger, messages], () => {
   })
 }, { deep: true })
 
-// Send message
-async function sendMessage() {
-  if (!userInput.value.trim() || isLoading.value) return
+// Initialize on mount
+onMounted(async () => {
+  // Show hint for first-time users
+  const hasVisited = localStorage.getItem('strands-popup-visited')
+  if (!hasVisited) {
+    showHint.value = true
+    setTimeout(() => {
+      showHint.value = false
+      localStorage.setItem('strands-popup-visited', 'true')
+    }, 5000)
+  }
 
-  const userMessage = userInput.value.trim()
-  userInput.value = ''
+  await initialize()
+  localStorage.removeItem('strands-popup-chat')
+})
 
-  await sendChatMessage(userMessage)
-}
-
-
+// Reload thread when popup opens
+watch(isOpen, async (newValue) => {
+  if (newValue) {
+    await initialize()
+  }
+})
 </script>
 
 <style scoped>

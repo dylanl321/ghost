@@ -2,7 +2,11 @@
   <div class="ghost-chat-container">
     <!-- Chat Messages Area -->
     <div class="chat-messages" ref="chatBoxRef">
-      <div v-for="(msg, index) in messages" :key="index" :class="`message ${msg.sender || (msg.role === 'assistant' ? 'bot' : msg.role)}`">
+      <div
+        v-for="(msg, index) in messages"
+        :key="msg.messageId || `msg-${index}`"
+        :class="`message ${msg.role === 'user' ? 'user' : 'bot'}`"
+      >
         <div class="message-content">
           <!-- Streaming status indicator (GHOST thinking) -->
           <div v-if="msg.status?.status === 'pending' || msg.status?.status === 'streaming'" class="streaming-status mb-3">
@@ -17,11 +21,11 @@
               </div>
               <div class="flex flex-col gap-1">
                 <span class="text-sm font-medium text-gray-700 dark:text-gray-300">GHOST is thinking...</span>
-                <span class="text-xs text-gray-600 dark:text-gray-400">{{ msg.status.progress || 'Starting...' }}</span>
+                <span class="text-xs text-gray-600 dark:text-gray-400">{{ msg.status.progress || pollingProgress || 'Starting...' }}</span>
               </div>
             </div>
-            <div v-if="msg.status.toolsCalled && msg.status.toolsCalled.length > 0" class="flex flex-wrap gap-1.5">
-              <span v-for="tool in msg.status.toolsCalled" :key="tool" class="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
+            <div v-if="(msg.status.toolsCalled && msg.status.toolsCalled.length > 0) || (pollingToolsCalled && pollingToolsCalled.length > 0)" class="flex flex-wrap gap-1.5">
+              <span v-for="tool in (msg.status.toolsCalled || pollingToolsCalled)" :key="tool" class="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
                 <UIcon name="i-heroicons-wrench-screwdriver" class="w-3 h-3" />
                 {{ tool }}
               </span>
@@ -31,13 +35,22 @@
             </div>
           </div>
 
-          <div class="markdown-container" v-html="formatMessage(msg.text || msg.content)" @click="handleEnrichedClick"></div>
+          <!-- AI Thinking Block (for assistant messages with thinking text) -->
+          <AIThinkingBlock 
+            v-if="msg.role === 'assistant' && !msg.status?.status" 
+            :thinking="getParsedResponse(msg.content).thinking" 
+          />
+
+          <div class="markdown-container" v-html="formatMessage(msg.content, msg.role)" @click="handleEnrichedClick"></div>
           <span v-if="msg.streamBuffer && (msg.status?.status === 'pending' || msg.status?.status === 'streaming')" class="cursor-blink">|</span>
 
           <!-- Error status -->
           <div v-if="msg.status?.status === 'error'" class="error-status">
             <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-red-500" />
             <span class="text-xs text-red-600 dark:text-red-400">{{ msg.status.error }}</span>
+            <button @click="retryLastMessage" class="ml-2 text-xs text-blue-600 dark:text-blue-400 hover:underline">
+              Retry
+            </button>
           </div>
 
           <!-- External Links -->
@@ -85,10 +98,7 @@
                 v-for="(prompt, promptIdx) in msg.suggestedPrompts"
                 :key="promptIdx"
                 @click="handlePromptClick(prompt.text)"
-                class="inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-700 dark:text-purple-300 transition-colors"
-                :class="{
-                  'hover:scale-105': true
-                }"
+                class="inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-700 dark:text-purple-300 transition-colors hover:scale-105"
               >
                 <UIcon
                   :name="prompt.type === 'question' ? 'i-heroicons-question-mark-circle' : prompt.type === 'action' ? 'i-heroicons-arrow-right-circle' : 'i-heroicons-information-circle'"
@@ -101,8 +111,8 @@
         </div>
       </div>
 
-      <!-- Example Questions -->
-      <div v-if="exampleQuestions" class="example-questions">
+      <!-- Example Questions (when welcome is shown) -->
+      <div v-if="showWelcome" class="example-questions">
         <div class="flex items-center gap-2 mb-3">
           <UIcon name="i-heroicons-light-bulb" class="w-5 h-5 text-purple-500" />
           <p class="text-sm font-medium text-gray-700 dark:text-gray-300">Try these examples (click to use):</p>
@@ -124,7 +134,7 @@
       </div>
 
       <!-- Ghost Loading Indicator (only for non-streaming fallback) -->
-      <div v-if="isLoading && !hasStreamingMessage" class="message bot">
+      <div v-if="showLoader" class="message bot">
         <div class="message-content ghost-loading-container">
           <div class="ghost-loading">
             <UIcon name="i-fa6-solid-ghost" class="ghost-icon" />
@@ -135,8 +145,21 @@
             </div>
           </div>
           <div class="flex flex-col gap-1">
-            <span class="ghost-loading-text">GHOST is thinking...</span>
+            <span class="ghost-loading-text">
+              {{ pollingProgress || 'GHOST is thinking...' }}
+              <span v-if="pollingPercent">({{ pollingPercent }}%)</span>
+            </span>
             <span class="text-xs text-gray-500 dark:text-gray-400">Complex queries may take 30-120 seconds to complete</span>
+            <div v-if="pollingToolsCalled && pollingToolsCalled.length" class="flex flex-wrap gap-1 mt-1">
+              <span
+                v-for="tool in pollingToolsCalled"
+                :key="tool"
+                class="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
+              >
+                <UIcon name="i-heroicons-wrench-screwdriver" class="w-3 h-3" />
+                {{ tool }}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -204,7 +227,7 @@
       :disambiguation="disambiguationData"
       :sessionId="sessionId || ''"
       @selected="handleAccountSelected"
-      @cancel="handleDisambiguationCancel"
+      @cancel="cancelDisambiguation"
     />
 
     <!-- Entity Popover -->
@@ -213,115 +236,73 @@
 </template>
 
 <script setup lang="ts">
-import { useChatThreadsStore } from '~/stores/useChatThreadsStore'
+/**
+ * GhostChatFullPage - Full-page chat interface
+ * Uses unified useChatUI composable for all logic
+ */
 
-// Use the entity-aware response enricher
+import { parseAIResponse, type ParsedAIResponse } from '~/utils/parseAIResponse'
+
+// Get unified chat logic
+const {
+  // Core state
+  messages,
+  chatState,
+  inputValue,
+  showWelcome,
+  isLoading,
+  showLoader,
+  scrollTrigger,
+  
+  // Polling state
+  pollingProgress,
+  pollingPercent,
+  pollingToolsCalled,
+  
+  // Actions
+  sendMessage,
+  retryLastMessage,
+  
+  // Mention system
+  showMentionDropdown,
+  filteredAccounts,
+  selectedAccountForMessage,
+  selectedMentionIndex,
+  handleMentionInput,
+  selectAccount,
+  navigateMentions,
+  selectHighlightedAccount,
+  closeMentionDropdown,
+  getAccountDisplay,
+  getAccountSubtitle,
+  setMentionIndex,
+  
+  // Disambiguation
+  showDisambiguation,
+  disambiguationData,
+  handleAccountSelected,
+  cancelDisambiguation,
+  
+  // Session
+  sessionId,
+  
+  // Initialize
+  initialize
+} = useChatUI({ viewMode: 'fullpage' })
+
+// Entity enrichment for message rendering
 const { enrichStrandsResponse, handleEnrichedClick } = useStrandsResponseEnricher()
 
 // Get user's favorite and recent accounts for personalized prompts
 const { favorites } = useFavoriteAccounts()
 const { recentAccounts } = useRecentAccounts()
 
-// Get the threads store to persist messages
-const threadsStore = useChatThreadsStore()
-
-// Use account mention composable
-const {
-  showMentionDropdown,
-  filteredAccounts,
-  selectedAccountForMessage,
-  selectedMentionIndex,
-  handleInputChange,
-  selectAccount,
-  navigateMentions,
-  selectHighlightedAccount,
-  closeMentionDropdown,
-  clearSelectedAccount,
-  getAccountDisplay,
-  getAccountSubtitle,
-  setMentionIndex
-} = useChatAccountMention()
-
-// Use shared chat logic with thread persistence
-const {
-  messages: chatMessages,
-  isLoading,
-  sessionId,
-  showDisambiguation,
-  disambiguationData,
-  sendMessage: sendChatMessage,
-  handleAccountSelected,
-  handleDisambiguationCancel,
-  scrollTrigger,
-  isRecovering,
-  connectionFailed,
-  currentStreamSessionId,
-  attemptRecovery
-} = useStrandsChat({
-  initialGreeting: "Hello! I'm GHOST Chat, your AI assistant for AWS operations. I can help you with:\n\n• **Cost Analysis** - Query spending and forecasts\n• **Configuration** - Look up resource configurations\n• **Security** - Check security findings and compliance\n• **Resources** - List and analyze AWS resources\n\nClick any example below to get started, or ask your own question. For best results, be explicit about AWS account IDs.",
-  threadsStore: threadsStore,
-  loadMessagesFromThread: !!threadsStore.currentThread
-})
-
-// Use messages from threads store (includes streaming status)
-// Fall back to chatMessages for compatibility when no thread exists
-const messages = computed(() => {
-  if (threadsStore.currentThread?.messages) {
-    return threadsStore.currentThread.messages
-  }
-  return chatMessages.value
-})
-
-// Check if there's a streaming message (to hide separate loader)
-const hasStreamingMessage = computed(() => {
-  return messages.value.some(msg =>
-    msg.status?.status === 'pending' || msg.status?.status === 'streaming'
-  )
-})
-
-// UI state (specific to full page)
-const inputValue = ref('')
+// Local UI refs
 const chatBoxRef = ref<HTMLDivElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
 const mentionDropdownRef = ref<HTMLDivElement | null>(null)
 
-// Control example questions visibility with immediate local state
-// This prevents flashing during async state updates
-const showExamples = ref(true)
-const currentThreadId = ref<string | null>(null)
-
-// Sync showExamples with actual message state and thread changes
-// RULE: Show welcome when thread has no user messages
-// RULE: Hide welcome once user sends first message
-// RULE: Reset welcome state when switching threads
-watch([messages, () => threadsStore.activeThreadId], ([newMessages, newThreadId]) => {
-  // Thread changed - reset welcome state
-  if (newThreadId !== currentThreadId.value) {
-    currentThreadId.value = newThreadId
-
-    // Show welcome if thread is empty or only has bot greeting
-    if (newMessages.length === 0) {
-      showExamples.value = true
-    } else if (newMessages.length === 1 && newMessages[0].sender === 'bot') {
-      showExamples.value = true
-    } else {
-      showExamples.value = false
-    }
-    return
-  }
-
-  // Same thread - hide examples if user has sent a message
-  if (showExamples.value && newMessages.length > 1) {
-    showExamples.value = false
-  } else if (showExamples.value && newMessages.length === 1 && newMessages[0].sender !== 'bot') {
-    showExamples.value = false
-  }
-}, { immediate: true })
-
-// Keep backward compatibility with existing code that references exampleQuestions
-const exampleQuestions = computed(() => showExamples.value)
-
-// Default prompts (used when no personalized accounts available)
+// Default prompts
 const defaultPrompts = [
   "What are the AWS costs for this month?",
   "Show me security findings from Security Hub",
@@ -330,66 +311,39 @@ const defaultPrompts = [
   "Show me recent CloudTrail events",
 ]
 
-// Personalized example questions based on user's accounts
+// Personalized example questions
 const exampleQuestionsList = computed(() => {
   const prompts: string[] = []
-
-  // Get accounts for personalization (prefer favorites, fall back to recent)
-  const userAccounts = favorites.value.length > 0
-    ? favorites.value
-    : recentAccounts.value
+  const userAccounts = favorites.value.length > 0 ? favorites.value : recentAccounts.value
 
   if (userAccounts.length === 0) {
-    // No user accounts, return default prompts
     return defaultPrompts
   }
 
-  // Build personalized prompts using user's accounts
   const account1 = userAccounts[0]
   const account2 = userAccounts[1]
   const account3 = userAccounts[2]
 
-  // Prompt 1: Cost analysis for first account
   if (account1) {
-    prompts.push(
-      `What are the AWS costs for ${account1.projectName || account1.accountId} this month?`
-    )
+    prompts.push(`What are the AWS costs for ${account1.projectName || account1.accountId} this month?`)
+    prompts.push(`Show me security findings from Security Hub for ${account1.projectName || account1.accountId}`)
   }
 
-  // Prompt 2: Security findings
-  if (account1) {
-    prompts.push(
-      `Show me security findings from Security Hub for ${account1.projectName || account1.accountId}`
-    )
-  }
-
-  // Prompt 3: EC2 instances for second account or first
   if (account2) {
-    prompts.push(
-      `List EC2 instances in ${account2.projectName || account2.accountId}`
-    )
+    prompts.push(`List EC2 instances in ${account2.projectName || account2.accountId}`)
   } else if (account1) {
-    prompts.push(
-      `List EC2 instances in ${account1.projectName || account1.accountId}`
-    )
+    prompts.push(`List EC2 instances in ${account1.projectName || account1.accountId}`)
   }
 
-  // Prompt 4: Cost by service
   if (account3 || account2 || account1) {
     const account = account3 || account2 || account1
-    prompts.push(
-      `Analyze costs by service for ${account.projectName || account.accountId}`
-    )
+    prompts.push(`Analyze costs by service for ${account.projectName || account.accountId}`)
   }
 
-  // Prompt 5: S3 buckets
   if (account1) {
-    prompts.push(
-      `What S3 buckets exist in ${account1.projectName || account1.accountId}?`
-    )
+    prompts.push(`What S3 buckets exist in ${account1.projectName || account1.accountId}?`)
   }
 
-  // Fill remaining slots with default prompts if needed
   while (prompts.length < 5) {
     prompts.push(defaultPrompts[prompts.length])
   }
@@ -397,11 +351,47 @@ const exampleQuestionsList = computed(() => {
   return prompts
 })
 
+// Cache for parsed responses to avoid re-parsing
+const parsedResponseCache = new Map<string, ParsedAIResponse>()
+
+// Get parsed response (with caching)
+function getParsedResponse(content: string): ParsedAIResponse {
+  if (!content) return { content: '', thinking: null, hasThinking: false }
+  
+  // Check cache first
+  if (parsedResponseCache.has(content)) {
+    return parsedResponseCache.get(content)!
+  }
+  
+  // Parse and cache
+  const parsed = parseAIResponse(content)
+  parsedResponseCache.set(content, parsed)
+  return parsed
+}
+
+// Format message content using entity-aware enricher
+function formatMessage(content: string, role?: string): string {
+  if (!content || typeof content !== 'string') {
+    return ''
+  }
+  try {
+    // For assistant messages, use the parsed content (without thinking text)
+    const textToFormat = role === 'assistant' 
+      ? getParsedResponse(content).content 
+      : content
+    
+    return enrichStrandsResponse(textToFormat)
+  } catch (error) {
+    console.error('[GhostChat] Error enriching message content:', error)
+    return content.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')
+  }
+}
+
 // Handle input updates for @ mention detection
 function handleInputUpdate(event: Event) {
   const target = event.target as HTMLInputElement
   const cursorPosition = target.selectionStart || 0
-  handleInputChange(inputValue.value, cursorPosition)
+  handleMentionInput(inputValue.value, cursorPosition)
 }
 
 // Handle keyboard events for mention navigation
@@ -416,17 +406,13 @@ function handleKeyDown(event: KeyboardEvent) {
     navigateMentions('up')
   } else if (event.key === 'Enter' && showMentionDropdown.value) {
     event.preventDefault()
-    const newValue = selectHighlightedAccount(inputValue.value)
-    if (newValue) {
-      inputValue.value = newValue
-      // Move cursor to end
-      nextTick(() => {
-        if (inputRef.value) {
-          inputRef.value.focus()
-          inputRef.value.setSelectionRange(inputValue.value.length, inputValue.value.length)
-        }
-      })
-    }
+    selectHighlightedAccount()
+    nextTick(() => {
+      if (inputRef.value) {
+        inputRef.value.focus()
+        inputRef.value.setSelectionRange(inputValue.value.length, inputValue.value.length)
+      }
+    })
   } else if (event.key === 'Escape') {
     closeMentionDropdown()
   }
@@ -434,9 +420,7 @@ function handleKeyDown(event: KeyboardEvent) {
 
 // Handle mention click
 function handleMentionClick(account: any) {
-  const newValue = selectAccount(account, inputValue.value)
-  inputValue.value = newValue
-  // Move cursor to end
+  selectAccount(account)
   nextTick(() => {
     if (inputRef.value) {
       inputRef.value.focus()
@@ -445,120 +429,64 @@ function handleMentionClick(account: any) {
   })
 }
 
-// Handle recovery retry
-function handleRetryRecovery() {
-  // Get the last bot message ID for recovery
-  const lastBotMessage = threadsStore.currentThread?.messages?.findLast(
-    (m: any) => m.role === 'assistant'
-  )
-  if (lastBotMessage && currentStreamSessionId) {
-    attemptRecovery(currentStreamSessionId.value, lastBotMessage.messageId)
-  } else {
-    // If we can't recover, just suggest starting over
-    const toast = useToast()
-    toast.add({
-      title: 'Cannot Retry',
-      description: 'Unable to find the message to recover. Please try sending your message again.',
-      icon: 'i-heroicons-information-circle',
-      color: 'amber',
-      timeout: 5000
-    })
-  }
-}
-
 // Handle form submission
-const handleSubmit = async (e: Event) => {
+async function handleSubmit(e: Event) {
   e.preventDefault()
   if (!inputValue.value.trim()) return
 
   if (inputValue.value.trim().toLowerCase() === "help") {
-    showExamples.value = true
+    // Show examples - the welcome computed will handle this based on messages
     inputValue.value = ''
     return
   }
 
-  const userInput = inputValue.value
-  const mentionedAccount = selectedAccountForMessage.value
-
-  // Hide examples immediately (before any async operations)
-  showExamples.value = false
-  inputValue.value = ''
-  clearSelectedAccount()
-
-  // If account was mentioned, add context to the message
-  if (mentionedAccount) {
-    await sendChatMessage(userInput, {
-      accountId: mentionedAccount.accountId,
-      accountName: getAccountDisplay(mentionedAccount)
-    })
-  } else {
-    await sendChatMessage(userInput)
-  }
+  await sendMessage()
 }
 
 // Handle example question clicks
-const handleExampleClick = async (message: string) => {
-  // Hide examples immediately (before any async operations)
-  showExamples.value = false
-  await sendChatMessage(message)
+async function handleExampleClick(message: string) {
+  await sendMessage(message)
 }
 
 // Handle suggested prompt clicks
-const handlePromptClick = async (promptText: string) => {
-  inputValue.value = promptText
-  await handleSubmit(new Event('submit'))
+async function handlePromptClick(promptText: string) {
+  await sendMessage(promptText)
 }
 
-// Format message content using the entity-aware enricher (handles markdown + internal links + entity detection)
-// Ensures all messages (streaming, DB, cached) go through same rendering pipeline
-const formatMessage = (content: string) => {
-  // Safety check: handle null/undefined/empty content
-  if (!content || typeof content !== 'string') {
-    return ''
-  }
+// Auto scroll when messages change
+watch(scrollTrigger, () => {
+  nextTick(() => {
+    if (chatBoxRef.value) {
+      chatBoxRef.value.scrollTo({
+        top: chatBoxRef.value.scrollHeight,
+        behavior: 'smooth'
+      })
+    }
+  })
+})
 
-  try {
-    // Always use enrichStrandsResponse for consistent rendering
-    return enrichStrandsResponse(content)
-  } catch (error) {
-    // Fallback: if enrichment fails, return escaped content with line breaks
-    console.error('[GhostChat] Error enriching message content:', error)
-    return content.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')
-  }
-}
-
-// Auto scroll down when messages change or scrollTrigger increments
-// Use a debounced approach to prevent multiple rapid scrolls
-let scrollTimeoutId: NodeJS.Timeout | null = null
-watch([scrollTrigger, exampleQuestions, messages], () => {
-  // Clear existing timeout to debounce
-  if (scrollTimeoutId) {
-    clearTimeout(scrollTimeoutId)
-  }
-
-  // Schedule scroll for next frame
-  scrollTimeoutId = setTimeout(() => {
-    nextTick(() => {
-      if (chatBoxRef.value) {
-        chatBoxRef.value.scrollTo({
-          top: chatBoxRef.value.scrollHeight,
-          behavior: 'smooth' // Smooth scroll for better UX
-        })
-      }
-      scrollTimeoutId = null
-    })
-  }, 50) // 50ms debounce
+// Also scroll on messages change
+watch(messages, () => {
+  nextTick(() => {
+    if (chatBoxRef.value) {
+      chatBoxRef.value.scrollTo({
+        top: chatBoxRef.value.scrollHeight,
+        behavior: 'smooth'
+      })
+    }
+  })
 }, { deep: true })
 
-// Refocus after done loading
+// Refocus input after loading completes
 watch(isLoading, (newLoading) => {
   if (!newLoading && inputRef.value) {
     inputRef.value.focus()
   }
 })
 
-// Auto-focus input on mount
-onMounted(() => {
+// Initialize on mount
+onMounted(async () => {
+  await initialize()
   if (inputRef.value) {
     inputRef.value.focus()
   }
@@ -568,25 +496,6 @@ onMounted(() => {
 <style scoped>
 .ghost-chat-container {
   @apply flex flex-col h-full bg-white dark:bg-gray-900;
-}
-
-/* Recovery Banner */
-.recovery-banner {
-  @apply bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3 shadow-sm;
-  z-index: 10;
-}
-
-.recovery-indicator,
-.connection-error {
-  @apply flex items-center gap-3 justify-center;
-}
-
-.recovery-indicator {
-  @apply text-blue-700 dark:text-blue-400;
-}
-
-.connection-error {
-  @apply text-red-700 dark:text-red-400;
 }
 
 .chat-messages {
@@ -829,7 +738,7 @@ onMounted(() => {
   @apply bg-gray-400 dark:bg-gray-500;
 }
 
-/* Markdown Content Styling (matching GHOST MarkdownContent component) */
+/* Markdown Content Styling */
 .markdown-container :deep(h1) {
   @apply text-2xl font-bold text-gray-900 dark:text-white mb-3 mt-4 first:mt-0 pb-2 border-b-2 border-gray-200 dark:border-gray-600;
 }
@@ -929,18 +838,6 @@ onMounted(() => {
 /* Streaming UI Styles */
 .streaming-status {
   @apply mb-3 pb-2 border-b border-gray-200 dark:border-gray-700;
-}
-
-.status-indicator {
-  @apply flex items-center gap-2 mb-1;
-}
-
-.tools-called {
-  @apply flex flex-wrap gap-2 mt-2;
-}
-
-.tool-badge {
-  @apply text-xs px-2 py-1 rounded bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 font-mono;
 }
 
 .cursor-blink {

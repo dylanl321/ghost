@@ -25,28 +25,31 @@
 
     <div id="chat-container" :class="visible">
       <div id="chat-box" :class="isFullScreen" ref="chatBoxRef">
-        <div v-for="(msg, index) in messages" :key="index" :class="`message ${msg.sender}`">
+        <div v-for="(msg, index) in messages" :key="msg.messageId || `msg-${index}`" :class="`message ${msg.role === 'user' ? 'user' : 'bot'}`">
           <!-- Streaming status indicator -->
-          <div v-if="msg.status?.status === 'streaming'" class="streaming-status">
+          <div v-if="msg.status?.status === 'pending' || msg.status?.status === 'streaming'" class="streaming-status">
             <div class="status-indicator">
               <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin text-purple-500" />
-              <span class="text-xs text-gray-600 dark:text-gray-400">{{ msg.status.progress }}</span>
+              <span class="text-xs text-gray-600 dark:text-gray-400">{{ msg.status.progress || pollingProgress || 'Processing...' }}</span>
             </div>
-            <div v-if="msg.status.toolsCalled && msg.status.toolsCalled.length > 0" class="tools-called">
-              <span v-for="tool in msg.status.toolsCalled" :key="tool" class="tool-badge">
+            <div v-if="(msg.status.toolsCalled && msg.status.toolsCalled.length > 0) || (pollingToolsCalled && pollingToolsCalled.length > 0)" class="tools-called">
+              <span v-for="tool in (msg.status.toolsCalled || pollingToolsCalled)" :key="tool" class="tool-badge">
                 {{ tool }}
               </span>
             </div>
           </div>
 
           <!-- Message content with typewriter cursor for streaming -->
-          <div class="markdown-container" v-html="formatMessage(msg.text)" @click="handleEnrichedClick"></div>
-          <span v-if="msg.streamBuffer && msg.status?.status === 'streaming'" class="cursor-blink">|</span>
+          <div class="markdown-container" v-html="formatMessage(msg.content)" @click="handleEnrichedClick"></div>
+          <span v-if="msg.streamBuffer && (msg.status?.status === 'pending' || msg.status?.status === 'streaming')" class="cursor-blink">|</span>
 
           <!-- Error status -->
           <div v-if="msg.status?.status === 'error'" class="error-status">
             <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-red-500" />
             <span class="text-xs text-red-600 dark:text-red-400">{{ msg.status.error }}</span>
+            <button @click="retryLastMessage" class="ml-2 text-xs text-blue-600 dark:text-blue-400 hover:underline">
+              Retry
+            </button>
           </div>
 
           <div v-if="msg.links && msg.links.length > 0">
@@ -82,7 +85,7 @@
           </div>
         </div>
 
-        <div v-if="exampleQuestions" class="example-questions">
+        <div v-if="localShowExamples" class="example-questions">
           <div
             v-for="(question, index) in exampleQuestionsList"
             :key="index"
@@ -95,16 +98,22 @@
           </div>
         </div>
 
-        <div v-if="isLoading" class="typing">
-          <div class="typing-dot"></div>
-          <div class="typing-dot"></div>
-          <div class="typing-dot"></div>
+        <div v-if="showLoader" class="typing">
+          <div class="flex gap-1">
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+          </div>
+          <span v-if="pollingProgress" class="typing-text">
+            {{ pollingProgress }}
+            <span v-if="pollingPercent">({{ pollingPercent }}%)</span>
+          </span>
         </div>
       </div>
 
       <form @submit.prevent="handleSubmit" class="input-form">
         <input
-          v-model="inputValue"
+          v-model="userInput"
           type="text"
           :disabled="isLoading"
           placeholder="Ask about AWS costs, config, security..."
@@ -122,7 +131,7 @@
       :disambiguation="disambiguationData"
       :sessionId="sessionId || ''"
       @selected="handleAccountSelected"
-      @cancel="handleDisambiguationCancel"
+      @cancel="cancelDisambiguation"
     />
 
     <!-- Entity Popover -->
@@ -131,29 +140,41 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * StrandsChatbot - Floating chat widget (legacy)
+ * Uses unified useChatUI composable for all logic
+ */
+
 // Use the entity-aware response enricher
 const { enrichStrandsResponse, handleEnrichedClick } = useStrandsResponseEnricher()
 
-// Use shared chat logic
+// Use unified chat logic
 const {
   messages,
   isLoading,
+  showLoader,
   sessionId,
   showDisambiguation,
   disambiguationData,
+  pollingProgress,
+  pollingPercent,
+  pollingToolsCalled,
   sendMessage,
+  retryLastMessage,
   handleAccountSelected,
-  handleDisambiguationCancel,
-  scrollTrigger
-} = useStrandsChat({
+  cancelDisambiguation,
+  scrollTrigger,
+  initialize
+} = useChatUI({
+  viewMode: 'popup',
   initialGreeting: "Hello! I'm a Strands agent connected to AWS MCP servers. I can help you with AWS cost analysis, configuration lookups, security hub queries, and more.\n\nFor best results, be explicit about AWS account IDs in your queries. Type \"help\" for example questions.\n\nNote: First-time queries for new accounts may take 2+ minutes while the MCP server initializes."
 })
 
 // UI state (specific to this widget)
-const inputValue = ref('')
+const userInput = ref('')
 const isFullScreen = ref('normal')
 const visible = ref('closed')
-const exampleQuestions = ref(false)
+const localShowExamples = ref(false)
 const chatBoxRef = ref<HTMLDivElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
 
@@ -169,24 +190,24 @@ const exampleQuestionsList = [
 // Handle form submission
 const handleSubmit = async (e: Event) => {
   e.preventDefault()
-  if (!inputValue.value.trim()) return
+  if (!userInput.value.trim()) return
 
-  if (inputValue.value.trim().toLowerCase() === "help") {
-    exampleQuestions.value = true
-    inputValue.value = ''
+  if (userInput.value.trim().toLowerCase() === "help") {
+    localShowExamples.value = true
+    userInput.value = ''
     return
   }
 
-  const userInput = inputValue.value
-  inputValue.value = ''
-  exampleQuestions.value = false
+  const messageToSend = userInput.value
+  userInput.value = ''
+  localShowExamples.value = false
 
-  await sendMessage(userInput)
+  await sendMessage(messageToSend)
 }
 
 // Handle example question clicks
 const handleExampleClick = async (message: string) => {
-  exampleQuestions.value = false
+  localShowExamples.value = false
   await sendMessage(message)
 }
 
@@ -204,16 +225,15 @@ function toggleFullscreen() {
   visible.value = newFullScreen === "fullscreen" ? "open" : visible.value
 }
 
-// Format message content using the entity-aware enricher (handles markdown + internal links + entity detection)
+// Format message content using the entity-aware enricher
 const formatMessage = (content: string) => {
   if (!content) return ''
   return enrichStrandsResponse(content)
 }
 
 // Auto scroll down when messages change or scrollTrigger increments
-watch([scrollTrigger, exampleQuestions, messages], () => {
+watch([scrollTrigger, localShowExamples, messages], () => {
   nextTick(() => {
-    // Use a second nextTick to ensure DOM is fully rendered
     nextTick(() => {
       if (chatBoxRef.value) {
         chatBoxRef.value.scrollTop = chatBoxRef.value.scrollHeight
@@ -227,6 +247,11 @@ watch(isLoading, (newLoading) => {
   if (!newLoading && inputRef.value) {
     inputRef.value.focus()
   }
+})
+
+// Initialize on mount
+onMounted(async () => {
+  await initialize()
 })
 </script>
 
@@ -345,7 +370,7 @@ watch(isLoading, (newLoading) => {
 }
 
 .typing {
-  @apply flex justify-center gap-1 p-3;
+  @apply flex flex-col items-center gap-2 p-3;
 }
 
 .typing-dot {
@@ -359,6 +384,10 @@ watch(isLoading, (newLoading) => {
 
 .typing-dot:nth-child(3) {
   animation-delay: 0.3s;
+}
+
+.typing-text {
+  @apply text-sm text-gray-600 dark:text-gray-400 mt-1;
 }
 
 .input-form {
@@ -405,7 +434,7 @@ watch(isLoading, (newLoading) => {
   @apply bg-gray-400 dark:bg-gray-500;
 }
 
-/* Markdown Content Styling (matching GHOST MarkdownContent component) */
+/* Markdown Content Styling */
 .markdown-container :deep(h1) {
   @apply text-2xl font-bold text-gray-900 dark:text-white mb-3 mt-4 first:mt-0 pb-2 border-b-2 border-gray-200 dark:border-gray-600;
 }
@@ -527,4 +556,3 @@ watch(isLoading, (newLoading) => {
   @apply flex items-center gap-2 mt-2 p-2 bg-red-50 dark:bg-red-900/20 rounded;
 }
 </style>
-

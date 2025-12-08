@@ -44,15 +44,12 @@
             <span class="text-xs">A product of the GDMS AWS Landing Zone Team</span>
           </div>
 
-          <!-- Right: Feedback & Streaming Indicator -->
+          <!-- Right: Feedback & Active Queries -->
           <div class="flex items-center gap-3">
-            <!-- Active Streams Indicator -->
-            <div v-if="activeBackgroundStreamCount > 0" class="flex items-center gap-2 text-xs">
-              <div class="flex items-center gap-1.5 px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full">
-                <UIcon name="i-heroicons-arrow-path" class="w-3 h-3 animate-spin" />
-                <span class="font-medium">{{ activeBackgroundStreamCount }} {{ activeBackgroundStreamCount === 1 ? 'query' : 'queries' }} running</span>
-              </div>
-            </div>
+            <!-- Active Queries Indicator (with popover) -->
+            <ClientOnly>
+              <ActiveQueriesIndicator />
+            </ClientOnly>
 
             <FeedbackModal />
           </div>
@@ -82,8 +79,8 @@ const navigationStore = useNavigationStore()
 const siteConfigStore = useSiteConfigStore()
 const sideNavRef = ref()
 
-// Initialize streaming notifications monitoring
-const { startMonitoring, activeBackgroundStreamCount } = useStreamingNotifications()
+// Initialize streaming notifications monitoring (background polling for chat queries)
+const { startMonitoring } = useStreamingNotifications()
 
 // Start monitoring on mount
 onMounted(() => {
