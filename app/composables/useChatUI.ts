@@ -661,7 +661,10 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     // Resume local polling (also register with background polling for redundancy)
     currentJobId.value = pendingJob.jobId
     backgroundPolling.registerJob(pendingJob.jobId, pendingJob.threadId, pendingJob.userMessage)
-    
+
+    // CRITICAL: Mark as handled locally to prevent background polling from saving duplicates
+    backgroundPolling.markAsHandledLocally(pendingJob.jobId)
+
     // Start polling in background (don't await to not block initialization)
     pollJobStatus(pendingJob.jobId).catch(err => {
       console.error('[useChatUI] Recovery polling failed:', err)

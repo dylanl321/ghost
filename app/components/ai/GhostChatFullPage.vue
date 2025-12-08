@@ -2,114 +2,16 @@
   <div class="ghost-chat-container">
     <!-- Chat Messages Area -->
     <div class="chat-messages" ref="chatBoxRef">
-      <div
+      <ChatMessage
         v-for="(msg, index) in messages"
         :key="msg.messageId || `msg-${index}`"
-        :class="`message ${msg.role === 'user' ? 'user' : 'bot'}`"
-      >
-        <div class="message-content">
-          <!-- Streaming status indicator (GHOST thinking) -->
-          <div v-if="msg.status?.status === 'pending' || msg.status?.status === 'streaming'" class="streaming-status mb-3">
-            <div class="flex items-center gap-3 mb-2">
-              <div class="ghost-loading">
-                <UIcon name="i-fa6-solid-ghost" class="ghost-icon text-emerald-400" style="width: 24px; height: 24px;" />
-                <div class="ghost-dots">
-                  <div class="ghost-dot"></div>
-                  <div class="ghost-dot"></div>
-                  <div class="ghost-dot"></div>
-                </div>
-              </div>
-              <div class="flex flex-col gap-1">
-                <span class="text-sm font-medium text-gray-700 dark:text-gray-300">GHOST is thinking...</span>
-                <span class="text-xs text-gray-600 dark:text-gray-400">{{ msg.status.progress || pollingProgress || 'Starting...' }}</span>
-              </div>
-            </div>
-            <div v-if="(msg.status.toolsCalled && msg.status.toolsCalled.length > 0) || (pollingToolsCalled && pollingToolsCalled.length > 0)" class="flex flex-wrap gap-1.5">
-              <span v-for="tool in (msg.status.toolsCalled || pollingToolsCalled)" :key="tool" class="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
-                <UIcon name="i-heroicons-wrench-screwdriver" class="w-3 h-3" />
-                {{ tool }}
-              </span>
-            </div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 mt-2">
-              Complex queries may take 30-120 seconds to complete
-            </div>
-          </div>
-
-          <!-- AI Thinking Block (for assistant messages with thinking text) -->
-          <AIThinkingBlock 
-            v-if="msg.role === 'assistant' && !msg.status?.status" 
-            :thinking="getParsedResponse(msg.content).thinking" 
-          />
-
-          <div class="markdown-container" v-html="formatMessage(msg.content, msg.role)" @click="handleEnrichedClick"></div>
-          <span v-if="msg.streamBuffer && (msg.status?.status === 'pending' || msg.status?.status === 'streaming')" class="cursor-blink">|</span>
-
-          <!-- Error status -->
-          <div v-if="msg.status?.status === 'error'" class="error-status">
-            <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-red-500" />
-            <span class="text-xs text-red-600 dark:text-red-400">{{ msg.status.error }}</span>
-            <button @click="retryLastMessage" class="ml-2 text-xs text-blue-600 dark:text-blue-400 hover:underline">
-              Retry
-            </button>
-          </div>
-
-          <!-- External Links -->
-          <div v-if="msg.links && msg.links.length > 0" class="mt-3">
-            <div v-for="(link, linkIndex) in msg.links" :key="linkIndex" class="link-box">
-              <span class="bullet">•</span>
-              <a :href="link" target="_blank" class="external-link">
-                {{ link }}
-                <UIcon name="i-heroicons-arrow-top-right-on-square" class="external-link-icon" />
-              </a>
-            </div>
-          </div>
-
-          <!-- Metadata -->
-          <div v-if="msg.metadata && (msg.metadata.accountId || msg.metadata.mcpUsed)" class="tools-used">
-            <div class="metadata-container">
-              <span v-if="msg.metadata.accountId" class="metadata-badge account-badge">
-                <UIcon :name="msg.metadata.accountId === 'aggregated' ? 'i-heroicons-building-office-2' : 'i-heroicons-building-library'" class="w-3 h-3" />
-                {{ msg.metadata.accountId === 'aggregated' ? 'Organization-wide' : `Account: ${msg.metadata.accountId}` }}
-              </span>
-              <span v-if="msg.metadata.mcpUsed" class="metadata-badge mcp-badge" :class="{ 'permanent-mcp': msg.metadata.mcpType === 'permanent', 'temporary-mcp': msg.metadata.mcpType === 'temporary' }">
-                <UIcon :name="msg.metadata.mcpType === 'permanent' ? 'i-heroicons-server-stack' : 'i-heroicons-cpu-chip'" class="w-3 h-3" />
-                {{ msg.metadata.mcpUsed }}
-              </span>
-            </div>
-          </div>
-
-          <!-- Suggested Links -->
-          <div v-if="msg.suggestedLinks && msg.suggestedLinks.length > 0" class="suggested-links">
-            <StrandsLinkCard
-              v-for="(link, linkIdx) in msg.suggestedLinks"
-              :key="linkIdx"
-              :link="link"
-            />
-          </div>
-
-          <!-- Suggested Prompts -->
-          <div v-if="msg.suggestedPrompts && msg.suggestedPrompts.length > 0" class="mt-4">
-            <p class="text-xs text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-1.5">
-              <UIcon name="i-heroicons-chat-bubble-bottom-center-text" class="w-4 h-4" />
-              Continue the conversation:
-            </p>
-            <div class="flex flex-wrap gap-2">
-              <button
-                v-for="(prompt, promptIdx) in msg.suggestedPrompts"
-                :key="promptIdx"
-                @click="handlePromptClick(prompt.text)"
-                class="inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-700 dark:text-purple-300 transition-colors hover:scale-105"
-              >
-                <UIcon
-                  :name="prompt.type === 'question' ? 'i-heroicons-question-mark-circle' : prompt.type === 'action' ? 'i-heroicons-arrow-right-circle' : 'i-heroicons-information-circle'"
-                  class="w-4 h-4 flex-shrink-0"
-                />
-                <span>{{ prompt.text }}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+        :message="msg"
+        :view-mode="'fullpage'"
+        @retry="retryLastMessage"
+        @copy="copyMessageMarkdown"
+        @prompt-click="handlePromptClick"
+        @enriched-click="handleEnrichedClick"
+      />
 
       <!-- Example Questions (when welcome is shown) -->
       <div v-if="showWelcome" class="example-questions">
@@ -232,6 +134,110 @@
 
     <!-- Entity Popover -->
     <EntityPopover />
+
+    <!-- Mermaid Fullscreen Modal -->
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition-opacity duration-200"
+        enter-from-class="opacity-0"
+        enter-to-class="opacity-100"
+        leave-active-class="transition-opacity duration-150"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
+      >
+        <div
+          v-if="fullscreenMermaid"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          @click="closeMermaidFullscreen"
+        >
+          <div
+            class="relative w-[95vw] h-[95vh] bg-white dark:bg-gray-900 rounded-xl shadow-2xl overflow-hidden flex flex-col"
+            @click.stop
+          >
+            <!-- Header -->
+            <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+              <div class="flex items-center gap-3">
+                <UIcon name="i-heroicons-chart-bar" class="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Diagram Viewer</h3>
+                <span class="text-xs text-gray-500 dark:text-gray-400">{{ Math.round(mermaidZoom * 100) }}%</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <!-- Zoom controls -->
+                <div class="flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                  <button
+                    @click="zoomOut"
+                    class="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+                    title="Zoom out"
+                  >
+                    <UIcon name="i-heroicons-minus" class="w-4 h-4 text-gray-700 dark:text-gray-300" />
+                  </button>
+                  <button
+                    @click="resetZoom"
+                    class="px-2 py-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors text-xs text-gray-700 dark:text-gray-300"
+                    title="Reset zoom"
+                  >
+                    Reset
+                  </button>
+                  <button
+                    @click="zoomIn"
+                    class="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+                    title="Zoom in"
+                  >
+                    <UIcon name="i-heroicons-plus" class="w-4 h-4 text-gray-700 dark:text-gray-300" />
+                  </button>
+                </div>
+                <button
+                  @click="copyToClipboard(fullscreenMermaid.code)"
+                  class="px-3 py-1.5 text-xs rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 transition-colors flex items-center gap-1.5"
+                  title="Copy diagram code"
+                >
+                  <UIcon name="i-heroicons-clipboard-document" class="w-3.5 h-3.5" />
+                  Copy Code
+                </button>
+                <button
+                  @click="closeMermaidFullscreen"
+                  class="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  title="Close fullscreen"
+                >
+                  <UIcon name="i-heroicons-x-mark" class="w-5 h-5 text-gray-700 dark:text-gray-300" />
+                </button>
+              </div>
+            </div>
+
+            <!-- Diagram Content with Pan/Zoom -->
+            <div
+              class="flex-1 overflow-hidden bg-gray-50 dark:bg-gray-900 relative"
+              @mousedown="startPan"
+              @mousemove="doPan"
+              @mouseup="endPan"
+              @mouseleave="endPan"
+              @wheel="handleWheel"
+              :style="{ cursor: isPanning ? 'grabbing' : 'grab' }"
+            >
+              <div class="absolute inset-0 flex items-center justify-center">
+                <div
+                  class="mermaid-fullscreen-content transition-transform"
+                  :style="{
+                    transform: `translate(${mermaidPan.x}px, ${mermaidPan.y}px) scale(${mermaidZoom})`,
+                    transformOrigin: 'center center'
+                  }"
+                  v-html="fullscreenMermaid.svg"
+                ></div>
+              </div>
+
+              <!-- Instructions overlay -->
+              <div class="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/70 text-white px-4 py-2 rounded-lg text-xs backdrop-blur-sm">
+                <div class="flex items-center gap-4">
+                  <span>🖱️ Drag to pan</span>
+                  <span>🔍 Scroll to zoom</span>
+                  <span>⌨️ ESC to close</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -241,7 +247,7 @@
  * Uses unified useChatUI composable for all logic
  */
 
-import { parseAIResponse, type ParsedAIResponse } from '~/utils/parseAIResponse'
+import mermaid from 'mermaid'
 
 // Get unified chat logic
 const {
@@ -290,8 +296,8 @@ const {
   initialize
 } = useChatUI({ viewMode: 'fullpage' })
 
-// Entity enrichment for message rendering
-const { enrichStrandsResponse, handleEnrichedClick } = useStrandsResponseEnricher()
+// Entity enrichment for click handling only
+const { handleEnrichedClick } = useStrandsResponseEnricher()
 
 // Get user's favorite and recent accounts for personalized prompts
 const { favorites } = useFavoriteAccounts()
@@ -351,39 +357,35 @@ const exampleQuestionsList = computed(() => {
   return prompts
 })
 
-// Cache for parsed responses to avoid re-parsing
-const parsedResponseCache = new Map<string, ParsedAIResponse>()
-
-// Get parsed response (with caching)
-function getParsedResponse(content: string): ParsedAIResponse {
-  if (!content) return { content: '', thinking: null, hasThinking: false }
-  
-  // Check cache first
-  if (parsedResponseCache.has(content)) {
-    return parsedResponseCache.get(content)!
-  }
-  
-  // Parse and cache
-  const parsed = parseAIResponse(content)
-  parsedResponseCache.set(content, parsed)
-  return parsed
-}
-
-// Format message content using entity-aware enricher
-function formatMessage(content: string, role?: string): string {
-  if (!content || typeof content !== 'string') {
-    return ''
-  }
+// Copy message markdown to clipboard
+const toast = useToast()
+async function copyMessageMarkdown(message: any) {
   try {
-    // For assistant messages, use the parsed content (without thinking text)
-    const textToFormat = role === 'assistant' 
-      ? getParsedResponse(content).content 
-      : content
-    
-    return enrichStrandsResponse(textToFormat)
-  } catch (error) {
-    console.error('[GhostChat] Error enriching message content:', error)
-    return content.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')
+    // Combine reasoning and content for full context
+    let fullText = ''
+    if (message.reasoning) {
+      fullText = `## AI Reasoning\n\n${message.reasoning}\n\n## Response\n\n${message.content}`
+    } else {
+      fullText = message.content
+    }
+
+    await navigator.clipboard.writeText(fullText)
+    toast.add({
+      title: 'Copied to clipboard',
+      description: message.reasoning ? 'Full markdown copied (including AI reasoning)' : 'Message copied',
+      icon: 'i-heroicons-clipboard-document-check',
+      color: 'green',
+      timeout: 3000
+    })
+  } catch (err) {
+    console.error('Failed to copy:', err)
+    toast.add({
+      title: 'Copy failed',
+      description: 'Please try selecting and copying manually',
+      icon: 'i-heroicons-exclamation-triangle',
+      color: 'red',
+      timeout: 3000
+    })
   }
 }
 
@@ -465,16 +467,94 @@ watch(scrollTrigger, () => {
   })
 })
 
-// Also scroll on messages change
-watch(messages, () => {
-  nextTick(() => {
-    if (chatBoxRef.value) {
-      chatBoxRef.value.scrollTo({
-        top: chatBoxRef.value.scrollHeight,
-        behavior: 'smooth'
-      })
+// Also scroll on messages change and render mermaid charts
+watch(messages, async () => {
+  await nextTick()
+
+  // Render mermaid charts
+  const mermaidElements = document.querySelectorAll('.mermaid-chart')
+  for (const element of mermaidElements) {
+    // Skip already rendered
+    if (element.getAttribute('data-rendered') === 'true') continue
+
+    try {
+      const code = element.textContent || ''
+      const id = element.id
+      const { svg } = await mermaid.render(id + '-svg', code)
+
+      // Store the original code as a data attribute for fullscreen
+      element.setAttribute('data-mermaid-code', code)
+
+      // Create wrapper with fullscreen button
+      element.innerHTML = `
+        <div class="relative group">
+          <div class="mermaid-svg-container">${svg}</div>
+          <button
+            class="absolute top-2 right-2 p-2 bg-white dark:bg-gray-800 rounded-lg shadow-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-50 dark:hover:bg-gray-700 z-10"
+            onclick="this.closest('.mermaid-chart').dispatchEvent(new CustomEvent('mermaid-fullscreen', { bubbles: true }))"
+            title="View fullscreen"
+          >
+            <svg class="w-4 h-4 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+            </svg>
+          </button>
+        </div>
+      `
+      element.setAttribute('data-rendered', 'true')
+
+      // FIX: Reorder SVG elements to move text/labels to the end (renders on top)
+      await nextTick()
+      const svgElement = element.querySelector('svg')
+      if (svgElement) {
+        // Get all text-containing groups
+        const labelGroups = svgElement.querySelectorAll('g.label, g.cluster-label, g.edgeLabel, g.nodeLabel')
+        const textElements = svgElement.querySelectorAll('text')
+
+        // Move all label groups to the end of their parent
+        labelGroups.forEach(group => {
+          const parent = group.parentNode
+          if (parent) {
+            parent.appendChild(group)
+          }
+        })
+
+        // Move all text elements to the end of their parent
+        textElements.forEach(text => {
+          const parent = text.parentNode
+          if (parent && parent !== svgElement) {
+            parent.appendChild(text)
+          }
+        })
+      }
+    } catch (error) {
+      console.error('Error rendering mermaid chart:', error)
+      const code = element.textContent || ''
+      element.innerHTML = `
+        <div class="p-3 bg-red-50 dark:bg-red-900/20 rounded border border-red-200 dark:border-red-800">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="text-xs font-medium text-red-700 dark:text-red-300">
+              Unable to render chart
+            </span>
+          </div>
+          <details class="text-xs text-gray-600 dark:text-gray-400">
+            <summary class="cursor-pointer hover:text-gray-900 dark:hover:text-gray-200">
+              Show diagram code
+            </summary>
+            <pre class="mt-2 p-2 bg-gray-900 text-gray-100 rounded overflow-x-auto text-[10px]"><code>${code}</code></pre>
+          </details>
+        </div>
+      `
+      element.setAttribute('data-rendered', 'true')
     }
-  })
+  }
+
+  // Auto scroll
+  if (chatBoxRef.value) {
+    chatBoxRef.value.scrollTo({
+      top: chatBoxRef.value.scrollHeight,
+      behavior: 'smooth'
+    })
+  }
 }, { deep: true })
 
 // Refocus input after loading completes
@@ -484,9 +564,169 @@ watch(isLoading, (newLoading) => {
   }
 })
 
+// Mermaid fullscreen state
+const fullscreenMermaid = ref<{ svg: string; code: string } | null>(null)
+const mermaidZoom = ref(1)
+const mermaidPan = ref({ x: 0, y: 0 })
+const isPanning = ref(false)
+const panStart = ref({ x: 0, y: 0 })
+
+function openMermaidFullscreen(svg: string, code: string) {
+  fullscreenMermaid.value = { svg, code }
+  mermaidZoom.value = 1
+  mermaidPan.value = { x: 0, y: 0 }
+}
+
+function closeMermaidFullscreen() {
+  fullscreenMermaid.value = null
+  mermaidZoom.value = 1
+  mermaidPan.value = { x: 0, y: 0 }
+}
+
+function zoomIn() {
+  mermaidZoom.value = Math.min(mermaidZoom.value + 0.2, 3)
+}
+
+function zoomOut() {
+  mermaidZoom.value = Math.max(mermaidZoom.value - 0.2, 0.5)
+}
+
+function resetZoom() {
+  mermaidZoom.value = 1
+  mermaidPan.value = { x: 0, y: 0 }
+}
+
+function startPan(e: MouseEvent) {
+  isPanning.value = true
+  panStart.value = { x: e.clientX - mermaidPan.value.x, y: e.clientY - mermaidPan.value.y }
+}
+
+function doPan(e: MouseEvent) {
+  if (!isPanning.value) return
+  mermaidPan.value = {
+    x: e.clientX - panStart.value.x,
+    y: e.clientY - panStart.value.y
+  }
+}
+
+function endPan() {
+  isPanning.value = false
+}
+
+function handleWheel(e: WheelEvent) {
+  e.preventDefault()
+  const delta = e.deltaY > 0 ? -0.1 : 0.1
+  mermaidZoom.value = Math.max(0.5, Math.min(3, mermaidZoom.value + delta))
+}
+
+// Copy to clipboard helper
+async function copyToClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+    toast.add({
+      title: 'Copied to clipboard',
+      description: 'Diagram code copied',
+      icon: 'i-heroicons-clipboard-document-check',
+      color: 'green',
+      timeout: 2000
+    })
+  } catch (err) {
+    console.error('Failed to copy:', err)
+    toast.add({
+      title: 'Copy failed',
+      icon: 'i-heroicons-exclamation-triangle',
+      color: 'red',
+      timeout: 2000
+    })
+  }
+}
+
 // Initialize on mount
 onMounted(async () => {
   await initialize()
+
+  // Initialize mermaid with dark mode support
+  // Detect if user prefers dark mode
+  const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+  const htmlElement = document.documentElement
+  const hasDataTheme = htmlElement.getAttribute('data-theme')
+  const hasDarkClass = htmlElement.classList.contains('dark')
+  const prefersDark = isDark || hasDataTheme === 'dark' || hasDarkClass
+
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: prefersDark ? 'dark' : 'default',
+    securityLevel: 'loose',
+    themeVariables: prefersDark ? {
+      // Dark mode customization with enhanced visibility
+      darkMode: true,
+      background: '#1f2937',
+      primaryColor: '#a855f7',
+      primaryTextColor: '#fff',
+      primaryBorderColor: '#9333ea',
+      // IMPROVED: Much brighter lines for better visibility
+      lineColor: '#d1d5db', // gray-300 (was gray-500)
+      edgeLabelBackground: '#374151',
+      clusterBkg: '#374151',
+      clusterBorder: '#9ca3af',
+      defaultLinkColor: '#d1d5db', // gray-300 for all connection lines
+      titleColor: '#fff',
+      // Shape colors
+      secondaryColor: '#7c3aed', // purple-600
+      tertiaryColor: '#6366f1', // indigo-500
+      textColor: '#f3f4f6', // gray-100 for better text visibility
+      mainBkg: '#4b5563', // gray-600
+      secondBkg: '#6b7280', // gray-500
+      border1: '#9ca3af', // gray-400
+      border2: '#d1d5db', // gray-300
+      arrowheadColor: '#d1d5db', // gray-300
+      // Notes and special elements
+      note: '#312e81',
+      noteBkgColor: '#4c1d95',
+      noteBorderColor: '#8b5cf6', // purple-500
+      noteTextColor: '#e0e7ff',
+      // Actor/participant colors (for sequence diagrams)
+      actorBkg: '#4b5563',
+      actorBorder: '#9ca3af',
+      actorTextColor: '#f3f4f6',
+      actorLineColor: '#d1d5db',
+      signalColor: '#d1d5db',
+      signalTextColor: '#f3f4f6',
+      labelBoxBkgColor: '#374151',
+      labelBoxBorderColor: '#9ca3af',
+      labelTextColor: '#f3f4f6',
+      loopTextColor: '#f3f4f6',
+      activationBorderColor: '#9ca3af',
+      activationBkgColor: '#4b5563',
+      sequenceNumberColor: '#fff',
+      // Font
+      fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+      fontSize: '14px'
+    } : {
+      // Light mode - also improve line visibility
+      lineColor: '#374151', // gray-700
+      defaultLinkColor: '#374151',
+      fontSize: '14px'
+    }
+  })
+
+  // Add event listener for mermaid fullscreen
+  document.addEventListener('mermaid-fullscreen', (e: Event) => {
+    const target = e.target as HTMLElement
+    const code = target.getAttribute('data-mermaid-code')
+    const svgContainer = target.querySelector('.mermaid-svg-container')
+    if (code && svgContainer) {
+      openMermaidFullscreen(svgContainer.innerHTML, code)
+    }
+  })
+
+  // Add ESC key handler for closing fullscreen
+  document.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && fullscreenMermaid.value) {
+      closeMermaidFullscreen()
+    }
+  })
+
   if (inputRef.value) {
     inputRef.value.focus()
   }
@@ -500,90 +740,6 @@ onMounted(async () => {
 
 .chat-messages {
   @apply flex-1 overflow-y-auto p-6 space-y-6 max-w-[1400px] mx-auto w-full min-h-0;
-}
-
-.message {
-  @apply flex;
-}
-
-.message.user {
-  @apply justify-end;
-}
-
-.message.bot {
-  @apply justify-start;
-}
-
-.message-content {
-  @apply max-w-[80%] p-4 rounded-lg;
-}
-
-.message.user .message-content {
-  @apply bg-purple-600 text-white;
-}
-
-.message.bot .message-content {
-  @apply bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700;
-}
-
-.markdown-container {
-  @apply prose prose-sm dark:prose-invert max-w-none;
-}
-
-.message.user .markdown-container {
-  @apply text-white;
-}
-
-.message.user .markdown-container strong {
-  @apply text-white font-bold;
-}
-
-.message.user .markdown-container code {
-  @apply bg-purple-700 text-purple-100 px-1 py-0.5 rounded;
-}
-
-.link-box {
-  @apply flex items-center gap-2 mt-2;
-}
-
-.bullet {
-  @apply text-gray-500;
-}
-
-.external-link {
-  @apply text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 text-sm;
-}
-
-.tools-used {
-  @apply mt-3 pt-3 border-t border-gray-200 dark:border-gray-600;
-}
-
-.metadata-container {
-  @apply flex flex-wrap gap-2 items-center;
-}
-
-.metadata-badge {
-  @apply text-xs px-2 py-1 rounded flex items-center gap-1;
-}
-
-.account-badge {
-  @apply bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200;
-}
-
-.mcp-badge {
-  @apply bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300;
-}
-
-.permanent-mcp {
-  @apply bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200;
-}
-
-.temporary-mcp {
-  @apply bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200;
-}
-
-.suggested-links {
-  @apply mt-3 space-y-2;
 }
 
 .example-questions {
@@ -602,63 +758,93 @@ onMounted(async () => {
   @apply text-sm text-gray-700 dark:text-gray-300;
 }
 
-/* Ghost Loading Animation */
-.ghost-loading-container {
-  @apply flex flex-col items-start gap-2;
+/* Mermaid charts (keep styling for mermaid rendering) */
+.markdown-container :deep(.mermaid-chart) {
+  @apply my-4 p-4 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-x-auto;
 }
 
-.ghost-loading {
-  @apply flex items-center gap-3;
+.markdown-container :deep(.mermaid-chart svg) {
+  @apply max-w-full h-auto mx-auto;
 }
 
-.ghost-icon {
-  @apply w-6 h-6 text-emerald-400;
-  animation: ghostFloat 2s ease-in-out infinite;
+/* Mermaid fullscreen viewer */
+.mermaid-fullscreen-content :deep(svg) {
+  @apply w-full h-auto;
+  min-width: 800px; /* Ensure diagrams are large enough */
+  max-width: none; /* Allow full width scaling */
 }
 
-.ghost-dots {
-  @apply flex gap-1;
+/* Ensure mermaid diagrams are visible in dark mode */
+.markdown-container :deep(.mermaid-chart svg),
+.mermaid-fullscreen-content :deep(svg) {
+  /* Override any inline styles that might conflict with dark mode */
+  background-color: transparent !important;
 }
 
-.ghost-dot {
-  @apply w-2 h-2 bg-emerald-400 rounded-full;
-  animation: ghostDotPulse 1.4s ease-in-out infinite;
+/* Fix text layering issues in mermaid diagrams */
+.markdown-container :deep(.mermaid-chart svg text),
+.mermaid-fullscreen-content :deep(svg text) {
+  /* Force text to render on top with paint-order */
+  paint-order: stroke fill markers;
+  stroke: none !important;
+  fill: currentColor !important;
+  pointer-events: none;
 }
 
-.ghost-dot:nth-child(1) {
-  animation-delay: 0s;
+/* Ensure all text groups are rendered last */
+.markdown-container :deep(.mermaid-chart svg g.label),
+.mermaid-fullscreen-content :deep(svg g.label) {
+  /* Move to front by re-appending (done via JS) */
+  isolation: isolate;
 }
 
-.ghost-dot:nth-child(2) {
-  animation-delay: 0.2s;
+/* Subgraph titles and labels */
+.markdown-container :deep(.mermaid-chart svg .cluster-label text),
+.mermaid-fullscreen-content :deep(svg .cluster-label text) {
+  font-weight: 600 !important;
+  font-size: 16px !important;
+  fill: currentColor !important;
+  stroke: none !important;
 }
 
-.ghost-dot:nth-child(3) {
-  animation-delay: 0.4s;
+/* Node labels */
+.markdown-container :deep(.mermaid-chart svg .nodeLabel),
+.mermaid-fullscreen-content :deep(svg .nodeLabel) {
+  fill: currentColor !important;
+  stroke: none !important;
 }
 
-.ghost-loading-text {
-  @apply text-xs text-gray-500 dark:text-gray-400 italic;
+/* Edge labels */
+.markdown-container :deep(.mermaid-chart svg .edgeLabel),
+.mermaid-fullscreen-content :deep(svg .edgeLabel) {
+  background-color: transparent !important;
 }
 
-@keyframes ghostFloat {
-  0%, 100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-8px);
-  }
+.markdown-container :deep(.mermaid-chart svg .edgeLabel text),
+.mermaid-fullscreen-content :deep(svg .edgeLabel text) {
+  fill: currentColor !important;
+  stroke: none !important;
 }
 
-@keyframes ghostDotPulse {
-  0%, 100% {
-    opacity: 0.3;
-    transform: scale(0.8);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.2);
-  }
+/* Improve line visibility with thicker strokes */
+.markdown-container :deep(.mermaid-chart svg path.flowchart-link),
+.mermaid-fullscreen-content :deep(svg path.flowchart-link) {
+  stroke-width: 2.5px !important; /* Thicker connection lines */
+}
+
+.markdown-container :deep(.mermaid-chart svg line),
+.mermaid-fullscreen-content :deep(svg line) {
+  stroke-width: 2px !important; /* Thicker lines */
+}
+
+.markdown-container :deep(.mermaid-chart svg .arrow),
+.mermaid-fullscreen-content :deep(svg .arrow) {
+  stroke-width: 2.5px !important; /* Thicker arrows */
+}
+
+/* Hover effect for fullscreen button container */
+.markdown-container :deep(.mermaid-chart .group:hover button) {
+  opacity: 1;
 }
 
 .chat-input-container {

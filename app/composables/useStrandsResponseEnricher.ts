@@ -516,6 +516,18 @@ export function useStrandsResponseEnricher() {
       }
     }
 
+    // Override code block rendering to detect mermaid
+    renderer.code = ({ text, lang }) => {
+      if (lang === 'mermaid') {
+        // Generate unique ID for this mermaid chart
+        const mermaidId = `mermaid-chat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+        // Return placeholder that will be rendered by mermaid on the client
+        return `<div class="mermaid-chart" id="${mermaidId}" data-rendered="false">${text}</div>`
+      }
+      // Default code rendering for other languages
+      return `<pre class="code-block"><code>${text}</code></pre>`
+    }
+
     marked.setOptions({
       gfm: true,
       breaks: true,

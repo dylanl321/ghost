@@ -27,6 +27,7 @@ export interface PendingJob {
   progress?: string
   progressPercent?: number
   toolsCalled?: string[]
+  statusHistory?: Array<{ text: string; timestamp: number }>
   // Flag to indicate local polling is handling this job (don't save from background)
   handledLocally?: boolean
 }
@@ -227,8 +228,22 @@ export function useBackgroundPolling() {
         return
       }
 
+      // Track status history before updating progress
+      const newProgress = status.currentStep || 'Processing...'
+      if (job.progress && newProgress !== job.progress) {
+        if (!job.statusHistory) job.statusHistory = []
+        job.statusHistory.push({
+          text: job.progress,
+          timestamp: Date.now()
+        })
+        // Keep only last 5
+        if (job.statusHistory.length > 5) {
+          job.statusHistory.shift()
+        }
+      }
+
       // Update job progress
-      job.progress = status.currentStep || 'Processing...'
+      job.progress = newProgress
       job.progressPercent = status.progressPercent || 0
       job.toolsCalled = status.toolsCalled || []
 

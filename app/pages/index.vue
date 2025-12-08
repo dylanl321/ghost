@@ -376,13 +376,13 @@ const loading = ref(true)
 const accountsLoading = ref(false)
 const useProforma = ref(true) // Default to proforma
 
-const mtdTotal = computed(() => orgOverview.value?.data.monthToDateTotal || 0)
-const previousMTDTotal = computed(() => orgOverview.value?.data.previousMonthToDateTotal || 0)
-const projectedSpend = computed(() => orgOverview.value?.data.forecastedTotal || 0)
-const previousMonthSpend = computed(() => orgOverview.value?.data.previousMonthTotal || 0)
-const activeAccounts = computed(() => orgOverview.value?.data.activeAccounts || 0)
-const last14DaysSpend = computed(() => orgOverview.value?.data.rolling14Daily || [])
-const budgetHealth = computed(() => orgOverview.value?.data.budgetHealth || {
+const mtdTotal = computed(() => orgOverview.value?.data?.monthToDateTotal || 0)
+const previousMTDTotal = computed(() => orgOverview.value?.data?.previousMonthToDateTotal || 0)
+const projectedSpend = computed(() => orgOverview.value?.data?.forecastedTotal || 0)
+const previousMonthSpend = computed(() => orgOverview.value?.data?.previousMonthTotal || 0)
+const activeAccounts = computed(() => orgOverview.value?.data?.activeAccounts || 0)
+const last14DaysSpend = computed(() => orgOverview.value?.data?.rolling14Daily || [])
+const budgetHealth = computed(() => orgOverview.value?.data?.budgetHealth || {
   totalBudget: 0,
   accountsOverBudget: 0,
   actualDailyBurnRate: 0,
@@ -483,9 +483,22 @@ async function fetchOverview(onlyAccounts = false) {
   try {
     const url = `/api/organization/overview-simplified?proforma=${useProforma.value}`
     const response = await fetch(url)
-    orgOverview.value = await response.json();
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+
+    const result = await response.json()
+
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to fetch overview')
+    }
+
+    orgOverview.value = result
   } catch (err) {
     console.error('Failed to fetch overview:', err)
+    // Ensure orgOverview has a valid structure even on error
+    orgOverview.value = null
   } finally {
     if (onlyAccounts) {
       accountsLoading.value = false

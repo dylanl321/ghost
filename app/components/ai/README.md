@@ -9,7 +9,8 @@ The Ghost Chat UI is a sophisticated multi-threaded conversational AI interface 
 ### Primary Components
 
 - **GhostChatFullPage.vue** - Full-page chat interface with advanced features
-- **StrandsChatbot.vue** - Legacy popup chat widget (being phased out)
+- **StrandsChatPopup.vue** - Popup chat widget for floating chat
+- **ChatMessage.vue** - Shared message rendering component used by both views
 - **ThreadListSidebar.vue** - Full-featured thread management sidebar
 - **ChatThreadsSidebar.vue** - Simple popup thread selector
 

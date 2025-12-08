@@ -2,18 +2,18 @@
   <div v-if="thinking" class="ai-thinking-block mb-3">
     <button
       @click="isExpanded = !isExpanded"
-      class="flex items-center gap-2 w-full px-3 py-2 text-left bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors group"
+      class="flex items-center gap-2 w-full px-2 py-1.5 text-left bg-gray-50 dark:bg-gray-900/50 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors group font-mono"
     >
-      <UIcon 
-        name="i-heroicons-light-bulb" 
-        class="w-4 h-4 text-amber-500 flex-shrink-0" 
+      <UIcon
+        name="i-heroicons-bug-ant"
+        class="w-3.5 h-3.5 text-gray-500 flex-shrink-0"
       />
-      <span class="text-xs font-medium text-amber-700 dark:text-amber-300 flex-1">
-        AI's Reasoning Process
+      <span class="text-[10px] font-medium text-gray-600 dark:text-gray-400 flex-1">
+        Debug: AI Reasoning
       </span>
-      <UIcon 
-        :name="isExpanded ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" 
-        class="w-4 h-4 text-amber-500 opacity-50 group-hover:opacity-100 transition-opacity" 
+      <UIcon
+        :name="isExpanded ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'"
+        class="w-3.5 h-3.5 text-gray-500 opacity-50 group-hover:opacity-100 transition-opacity"
       />
     </button>
     
@@ -26,8 +26,8 @@
       leave-to-class="opacity-0 max-h-0"
     >
       <div v-show="isExpanded" class="overflow-hidden">
-        <div class="mt-2 px-3 py-2 bg-amber-50/50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/50 rounded-lg">
-          <p class="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap leading-relaxed">
+        <div class="mt-2 px-2 py-1.5 bg-gray-50/50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-800 rounded-lg">
+          <p class="text-[10px] text-gray-600 dark:text-gray-400 whitespace-pre-wrap leading-relaxed font-mono">
             {{ formattedThinking }}
           </p>
         </div>

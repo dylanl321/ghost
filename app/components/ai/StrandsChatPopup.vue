@@ -121,110 +121,16 @@
         </div>
 
         <!-- Chat messages -->
-        <div
+        <ChatMessage
           v-for="(msg, idx) in messages"
           :key="msg.messageId || `msg-${idx}`"
-          class="flex gap-2"
-          :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
-        >
-          <div
-            class="max-w-[80%] rounded-2xl px-4 py-2.5 shadow-sm"
-            :class="
-              msg.role === 'user'
-                ? 'bg-purple-600 text-white rounded-br-sm'
-                : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 rounded-bl-sm'
-            "
-          >
-            <!-- Streaming status indicator -->
-            <div v-if="msg.status?.status === 'pending' || msg.status?.status === 'streaming'" class="streaming-status mb-2">
-              <div class="flex items-center gap-2 mb-1.5">
-                <div class="ghost-loading">
-                  <UIcon name="i-fa6-solid-ghost" class="ghost-icon text-emerald-400" style="width: 20px; height: 20px;" />
-                  <div class="ghost-dots">
-                    <div class="ghost-dot"></div>
-                    <div class="ghost-dot"></div>
-                    <div class="ghost-dot"></div>
-                  </div>
-                </div>
-                <div class="flex flex-col gap-0.5">
-                  <span class="text-xs font-medium text-gray-700 dark:text-gray-300">GHOST is thinking...</span>
-                  <span class="text-xs text-gray-600 dark:text-gray-400">{{ msg.status.progress || pollingProgress || 'Starting...' }}</span>
-                </div>
-              </div>
-              <div v-if="(msg.status.toolsCalled && msg.status.toolsCalled.length > 0) || (pollingToolsCalled && pollingToolsCalled.length > 0)" class="flex flex-wrap gap-1">
-                <span v-for="tool in (msg.status.toolsCalled || pollingToolsCalled)" :key="tool" class="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
-                  <UIcon name="i-heroicons-wrench-screwdriver" class="w-3 h-3" />
-                  {{ tool }}
-                </span>
-              </div>
-              <div class="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
-                Complex queries may take 30-120 seconds
-              </div>
-            </div>
-
-            <div class="text-sm leading-relaxed prose prose-sm max-w-none" :class="msg.role === 'user' ? 'prose-invert' : ''" v-html="enrichStrandsResponse(msg.content)" @click="handleEnrichedClick"></div>
-            <span v-if="msg.streamBuffer && (msg.status?.status === 'pending' || msg.status?.status === 'streaming')" class="cursor-blink">|</span>
-
-            <!-- Error status -->
-            <div v-if="msg.status?.status === 'error'" class="error-status">
-              <UIcon name="i-heroicons-exclamation-triangle" class="w-3.5 h-3.5 text-red-500" />
-              <span class="text-xs text-red-600 dark:text-red-400">{{ msg.status.error }}</span>
-              <button @click="retryLastMessage" class="ml-2 text-xs text-blue-600 dark:text-blue-400 hover:underline">
-                Retry
-              </button>
-            </div>
-
-            <!-- Metadata for bot responses -->
-            <div v-if="msg.role === 'assistant' && msg.metadata && (msg.metadata.accountId || msg.metadata.mcpType)" class="flex gap-2 mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-              <UBadge
-                v-if="msg.metadata.accountId"
-                :color="msg.metadata.accountId === 'aggregated' ? 'purple' : 'blue'"
-                size="xs"
-              >
-                {{ msg.metadata.accountId === 'aggregated' ? 'Organization-wide' : msg.metadata.accountId }}
-              </UBadge>
-              <UBadge
-                v-if="msg.metadata.mcpType"
-                :color="msg.metadata.mcpType === 'permanent' ? 'green' : 'orange'"
-                size="xs"
-              >
-                {{ msg.metadata.mcpType === 'permanent' ? 'Permanent MCP' : 'Temporary MCP' }}
-              </UBadge>
-            </div>
-
-            <!-- Suggested links -->
-            <div v-if="msg.role === 'assistant' && msg.suggestedLinks && msg.suggestedLinks.length > 0" class="mt-3 space-y-2">
-              <StrandsLinkCard
-                v-for="(link, linkIdx) in msg.suggestedLinks"
-                :key="linkIdx"
-                :link="link"
-                @click="toggleChat"
-              />
-            </div>
-
-            <!-- Suggested Prompts -->
-            <div v-if="msg.role === 'assistant' && msg.suggestedPrompts && msg.suggestedPrompts.length > 0" class="mt-3 space-y-2">
-              <p class="text-xs text-gray-600 dark:text-gray-400 mb-1.5 flex items-center gap-1">
-                <UIcon name="i-heroicons-chat-bubble-bottom-center-text" class="w-3.5 h-3.5" />
-                Continue:
-              </p>
-              <div class="flex flex-wrap gap-1.5">
-                <button
-                  v-for="(prompt, promptIdx) in msg.suggestedPrompts"
-                  :key="promptIdx"
-                  @click="handlePromptClick(prompt.text)"
-                  class="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md border border-purple-200 dark:border-purple-800 bg-white dark:bg-purple-900/20 hover:bg-purple-50 dark:hover:bg-purple-900/40 text-purple-700 dark:text-purple-300 transition-colors hover:scale-105"
-                >
-                  <UIcon
-                    :name="prompt.type === 'question' ? 'i-heroicons-question-mark-circle' : prompt.type === 'action' ? 'i-heroicons-arrow-right-circle' : 'i-heroicons-information-circle'"
-                    class="w-3 h-3 flex-shrink-0"
-                  />
-                  <span>{{ prompt.text }}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+          :message="msg"
+          :view-mode="'popup'"
+          @retry="retryLastMessage"
+          @copy="copyMessageMarkdown"
+          @prompt-click="handlePromptClick"
+          @enriched-click="handleEnrichedClick"
+        />
 
         <!-- Loading indicator (fallback) -->
         <div v-if="showLoader" class="flex justify-start">
@@ -315,6 +221,8 @@
  * Uses unified useChatUI composable for all logic
  */
 
+import mermaid from 'mermaid'
+
 // Get unified chat logic
 const {
   // Core state
@@ -348,8 +256,11 @@ const {
   initialize
 } = useChatUI({ viewMode: 'popup', initialGreeting: '' })
 
-// Entity enrichment
-const { enrichStrandsResponse, handleEnrichedClick } = useStrandsResponseEnricher()
+// Entity enrichment for click handling only
+const { handleEnrichedClick } = useStrandsResponseEnricher()
+
+// Toast notifications
+const toast = useToast()
 
 // Local UI state (popup-specific)
 const isOpen = ref(false)
@@ -405,6 +316,37 @@ async function handlePromptClick(promptText: string) {
   await sendMessage(promptText)
 }
 
+// Copy message markdown to clipboard
+async function copyMessageMarkdown(message: any) {
+  try {
+    // Combine reasoning and content for full context
+    let fullText = ''
+    if (message.reasoning) {
+      fullText = `## AI Reasoning\n\n${message.reasoning}\n\n## Response\n\n${message.content}`
+    } else {
+      fullText = message.content
+    }
+
+    await navigator.clipboard.writeText(fullText)
+    toast.add({
+      title: 'Copied to clipboard',
+      description: message.reasoning ? 'Full markdown copied (including AI reasoning)' : 'Message copied',
+      icon: 'i-heroicons-clipboard-document-check',
+      color: 'green',
+      timeout: 3000
+    })
+  } catch (err) {
+    console.error('Failed to copy:', err)
+    toast.add({
+      title: 'Copy failed',
+      description: 'Please try selecting and copying manually',
+      icon: 'i-heroicons-exclamation-triangle',
+      color: 'red',
+      timeout: 3000
+    })
+  }
+}
+
 // Auto-scroll when messages change
 watch([scrollTrigger, messages], () => {
   nextTick(() => {
@@ -416,8 +358,138 @@ watch([scrollTrigger, messages], () => {
   })
 }, { deep: true })
 
+// Watch for mermaid chart rendering
+watch(messages, async () => {
+  await nextTick()
+
+  // Render mermaid charts
+  const mermaidElements = document.querySelectorAll('.mermaid-chart')
+  for (const element of mermaidElements) {
+    // Skip already rendered
+    if (element.getAttribute('data-rendered') === 'true') continue
+
+    try {
+      const code = element.textContent || ''
+      const id = element.id
+      const { svg } = await mermaid.render(id + '-svg', code)
+
+      // Store the original code as a data attribute
+      element.setAttribute('data-mermaid-code', code)
+
+      // Create wrapper with expand button
+      element.innerHTML = `
+        <div class="relative group">
+          <div class="mermaid-svg-container">${svg}</div>
+          <button
+            class="absolute top-1 right-1 p-1.5 bg-white dark:bg-gray-800 rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-50 dark:hover:bg-gray-700 z-10"
+            onclick="window.open('/chat', '_blank')"
+            title="View in full page"
+          >
+            <svg class="w-3 h-3 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+            </svg>
+          </button>
+        </div>
+      `
+      element.setAttribute('data-rendered', 'true')
+
+      // FIX: Reorder SVG elements to move text/labels to the end (renders on top)
+      await nextTick()
+      const svgElement = element.querySelector('svg')
+      if (svgElement) {
+        // Get all text-containing groups
+        const labelGroups = svgElement.querySelectorAll('g.label, g.cluster-label, g.edgeLabel, g.nodeLabel')
+        const textElements = svgElement.querySelectorAll('text')
+
+        // Move all label groups to the end of their parent
+        labelGroups.forEach(group => {
+          const parent = group.parentNode
+          if (parent) {
+            parent.appendChild(group)
+          }
+        })
+
+        // Move all text elements to the end of their parent
+        textElements.forEach(text => {
+          const parent = text.parentNode
+          if (parent && parent !== svgElement) {
+            parent.appendChild(text)
+          }
+        })
+      }
+    } catch (error) {
+      console.error('Error rendering mermaid chart:', error)
+      element.innerHTML = `
+        <div class="p-2 bg-red-50 dark:bg-red-900/20 rounded border border-red-200 dark:border-red-800 text-xs">
+          <span class="text-red-700 dark:text-red-300">Unable to render chart</span>
+        </div>
+      `
+      element.setAttribute('data-rendered', 'true')
+    }
+  }
+}, { deep: true })
+
 // Initialize on mount
 onMounted(async () => {
+  // Initialize mermaid with dark mode support
+  const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+  const htmlElement = document.documentElement
+  const hasDataTheme = htmlElement.getAttribute('data-theme')
+  const hasDarkClass = htmlElement.classList.contains('dark')
+  const prefersDark = isDark || hasDataTheme === 'dark' || hasDarkClass
+
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: prefersDark ? 'dark' : 'default',
+    securityLevel: 'loose',
+    themeVariables: prefersDark ? {
+      // Dark mode customization with enhanced visibility
+      darkMode: true,
+      background: '#1f2937',
+      primaryColor: '#a855f7',
+      primaryTextColor: '#fff',
+      primaryBorderColor: '#9333ea',
+      // IMPROVED: Much brighter lines for better visibility
+      lineColor: '#d1d5db', // gray-300
+      edgeLabelBackground: '#374151',
+      clusterBkg: '#374151',
+      clusterBorder: '#9ca3af',
+      defaultLinkColor: '#d1d5db',
+      titleColor: '#fff',
+      secondaryColor: '#7c3aed',
+      tertiaryColor: '#6366f1',
+      textColor: '#f3f4f6',
+      mainBkg: '#4b5563',
+      secondBkg: '#6b7280',
+      border1: '#9ca3af',
+      border2: '#d1d5db',
+      arrowheadColor: '#d1d5db',
+      note: '#312e81',
+      noteBkgColor: '#4c1d95',
+      noteBorderColor: '#8b5cf6',
+      noteTextColor: '#e0e7ff',
+      actorBkg: '#4b5563',
+      actorBorder: '#9ca3af',
+      actorTextColor: '#f3f4f6',
+      actorLineColor: '#d1d5db',
+      signalColor: '#d1d5db',
+      signalTextColor: '#f3f4f6',
+      labelBoxBkgColor: '#374151',
+      labelBoxBorderColor: '#9ca3af',
+      labelTextColor: '#f3f4f6',
+      loopTextColor: '#f3f4f6',
+      activationBorderColor: '#9ca3af',
+      activationBkgColor: '#4b5563',
+      sequenceNumberColor: '#fff',
+      fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+      fontSize: '12px'
+    } : {
+      lineColor: '#374151',
+      defaultLinkColor: '#374151',
+      fontSize: '12px'
+    }
+  })
+
   // Show hint for first-time users
   const hasVisited = localStorage.getItem('strands-popup-visited')
   if (!hasVisited) {
@@ -441,67 +513,68 @@ watch(isOpen, async (newValue) => {
 </script>
 
 <style scoped>
-/* Streaming UI Styles */
-.streaming-status {
-  @apply pb-2 border-b border-gray-200 dark:border-gray-700;
+/* Mermaid charts (keep styling for mermaid rendering) */
+.markdown-container :deep(.mermaid-chart) {
+  @apply my-2 p-2 bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700 overflow-x-auto text-xs;
 }
 
-/* Ghost Loading Animation */
-.ghost-loading {
-  @apply flex items-center gap-2;
+.markdown-container :deep(.mermaid-chart svg) {
+  @apply max-w-full h-auto mx-auto;
 }
 
-.ghost-icon {
-  @apply w-5 h-5 text-emerald-400;
-  animation: ghostFloat 2s ease-in-out infinite;
+/* Ensure mermaid diagrams are visible in dark mode */
+.markdown-container :deep(.mermaid-chart svg) {
+  background-color: transparent !important;
 }
 
-.ghost-dots {
-  @apply flex gap-1;
+/* Fix text layering issues in mermaid diagrams */
+.markdown-container :deep(.mermaid-chart svg text) {
+  paint-order: stroke fill markers;
+  stroke: none !important;
+  fill: currentColor !important;
+  pointer-events: none;
 }
 
-.ghost-dot {
-  @apply w-1.5 h-1.5 bg-emerald-400 rounded-full;
-  animation: ghostDotPulse 1.4s ease-in-out infinite;
+.markdown-container :deep(.mermaid-chart svg g.label) {
+  isolation: isolate;
 }
 
-.ghost-dot:nth-child(1) {
-  animation-delay: 0s;
+.markdown-container :deep(.mermaid-chart svg .cluster-label text) {
+  font-weight: 600 !important;
+  font-size: 14px !important;
+  fill: currentColor !important;
+  stroke: none !important;
 }
 
-.ghost-dot:nth-child(2) {
-  animation-delay: 0.2s;
+.markdown-container :deep(.mermaid-chart svg .nodeLabel) {
+  fill: currentColor !important;
+  stroke: none !important;
 }
 
-.ghost-dot:nth-child(3) {
-  animation-delay: 0.4s;
+.markdown-container :deep(.mermaid-chart svg .edgeLabel) {
+  background-color: transparent !important;
 }
 
-@keyframes ghostFloat {
-  0%, 100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-6px);
-  }
+.markdown-container :deep(.mermaid-chart svg .edgeLabel text) {
+  fill: currentColor !important;
+  stroke: none !important;
 }
 
-@keyframes ghostDotPulse {
-  0%, 100% {
-    opacity: 0.3;
-    transform: scale(0.8);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.2);
-  }
+/* Improve line visibility with thicker strokes */
+.markdown-container :deep(.mermaid-chart svg path.flowchart-link) {
+  stroke-width: 2.5px !important;
 }
 
-.cursor-blink {
-  @apply inline-block ml-0.5 text-purple-600 dark:text-purple-400 animate-pulse font-bold;
+.markdown-container :deep(.mermaid-chart svg line) {
+  stroke-width: 2px !important;
 }
 
-.error-status {
-  @apply flex items-center gap-1.5 mt-2 p-2 bg-red-50 dark:bg-red-900/20 rounded text-xs;
+.markdown-container :deep(.mermaid-chart svg .arrow) {
+  stroke-width: 2.5px !important;
+}
+
+/* Hover effect for expand button */
+.markdown-container :deep(.mermaid-chart .group:hover button) {
+  opacity: 1;
 }
 </style>
