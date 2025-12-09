@@ -733,10 +733,14 @@ export function useChatUI(options: UseChatUIOptions = {}) {
       backgroundPolling.unregisterJobCallbacks(currentJobId.value)
     }
 
-    // Reset state
+    // Reset ALL state including polling display state
     chatState.value = 'idle'
     currentJobId.value = null
     pendingBotMessageId.value = null
+    pollingProgress.value = 'Starting...'
+    pollingPercent.value = 0
+    pollingToolsCalled.value = []
+    pollingStatusHistory.value = []
     errorMessage.value = ''
 
     await threadsStore.createThread()

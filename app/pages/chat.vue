@@ -194,11 +194,15 @@
 <script setup lang="ts">
 import { useChatThreadsStore } from '~/stores/useChatThreadsStore'
 import { useSiteConfigStore } from '~/stores/useSiteConfigStore'
+import { useChatUI } from '~/composables/useChatUI'
 
 // Stores
 const siteConfigStore = useSiteConfigStore()
 const threadsStore = useChatThreadsStore()
 const toast = useToast()
+
+// Chat UI composable - used to properly handle thread creation with callback cleanup
+const chatUI = useChatUI({ viewMode: 'fullpage' })
 
 // Check if Strands chat is enabled
 const strandsEnabled = computed(() => siteConfigStore.isStrandsChatEnabled)
@@ -240,20 +244,18 @@ onMounted(async () => {
   // Note: If no active thread, one will be auto-created when the user sends their first message
 })
 
-// Handle thread selection
+// Handle thread selection - use chatUI to properly handle callback registration for active jobs
 async function handleThreadSelected(threadId: string) {
-  await threadsStore.loadThread(threadId)
+  await chatUI.switchThread(threadId)
 }
 
-// Handle new thread
+// Handle new thread - use chatUI to properly cleanup polling callbacks and reset UI state
 async function handleNewThread() {
-  const thread = await threadsStore.createThread()
-  if (thread) {
-    toast.add({
-      title: 'New conversation started',
-      color: 'green'
-    })
-  }
+  await chatUI.createNewThread()
+  toast.add({
+    title: 'New conversation started',
+    color: 'green'
+  })
 }
 
 // Handle share thread (from sidebar)
