@@ -361,6 +361,21 @@ export function useChatUI(options: UseChatUIOptions = {}) {
       threadMessages[pendingIndex].suggestedPrompts = suggestedPrompts || []
       threadMessages[pendingIndex].status = { status: 'complete' }
       delete threadMessages[pendingIndex].streamBuffer
+    } else {
+      // No pending message found - add the response directly
+      // This can happen if the thread was reloaded during polling
+      console.log('[useChatUI] No pending message found, adding response directly')
+      if (threadsStore.currentThread?.messages) {
+        threadsStore.currentThread.messages.push({
+          messageId: `response-${Date.now()}`,
+          role: 'assistant',
+          content: response,
+          timestamp: new Date().toISOString(),
+          metadata,
+          suggestedLinks: suggestedLinks || [],
+          suggestedPrompts: suggestedPrompts || []
+        } as any)
+      }
     }
 
     // Reset state
@@ -376,10 +391,9 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     // Trigger scroll
     scrollTrigger.value++
 
-    // Reload thread to get fresh data from server
-    if (threadsStore.activeThreadId) {
-      threadsStore.loadThread(threadsStore.activeThreadId)
-    }
+    // NOTE: Don't reload thread here - the message is being saved by useBackgroundPolling
+    // and there's a race condition. The local update above is sufficient for UI display.
+    // The message will be persisted by useBackgroundPolling.handleJobComplete() via API.
   }
 
   /**
