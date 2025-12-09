@@ -176,18 +176,17 @@ export const useChatThreadsStore = defineStore('chatThreads', {
       try {
         const { data } = await $fetch<{ data: ChatThread }>(`/api/chat/threads/${threadId}`)
 
-        // Ensure messages array exists
-        if (!data.messages) {
-          data.messages = []
-        }
+        // Ensure messages array exists and is a new reference for reactivity
+        data.messages = data.messages ? [...data.messages] : []
 
-        this.currentThread = data
+        // Completely replace current thread (not mutate) to trigger reactivity
+        this.currentThread = { ...data }
         this.activeThreadId = threadId
 
-        // Update in threads list if exists
+        // Update in threads list if exists (also create new reference)
         const index = this.threads.findIndex(t => t.threadId === threadId)
         if (index !== -1) {
-          this.threads[index] = data
+          this.threads[index] = { ...data }
         }
 
         return true

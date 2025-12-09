@@ -275,7 +275,7 @@ export function useBackgroundPolling() {
   // ============================================================================
 
   async function handleJobComplete(job: PendingJob, status: any) {
-    console.log('[BackgroundPolling] Job complete:', job.jobId, 'handledLocally:', job.handledLocally)
+    console.log('[BackgroundPolling] Job complete:', job.jobId, 'threadId:', job.threadId, 'current:', threadsStore.activeThreadId, 'handledLocally:', job.handledLocally)
     // Note: job.status already set to 'complete' before calling this
 
     // If local polling is handling this job, skip everything (local polling will save AND add to recent)
@@ -288,37 +288,35 @@ export function useBackgroundPolling() {
     const botResponse = status.response || 'No response received.'
     const metadata = status.metadata || {}
     const duration = Math.round((Date.now() - job.timestamp) / 1000)
+    const originalThreadId = threadsStore.activeThreadId
+    const isViewingJobThread = originalThreadId === job.threadId
 
-    // Update thread in store if it's loaded
-    const isCurrentThread = threadsStore.activeThreadId === job.threadId
-    
-    if (isCurrentThread && threadsStore.currentThread?.messages) {
-      // Find and update the pending message
-      const messages = threadsStore.currentThread.messages
-      const pendingIndex = messages.findIndex(m =>
-        m.status?.status === 'pending' || m.status?.status === 'streaming'
-      )
-
-      if (pendingIndex !== -1) {
-        messages[pendingIndex].content = botResponse
-        messages[pendingIndex].metadata = metadata
-        messages[pendingIndex].suggestedLinks = status.suggestedLinks || []
-        messages[pendingIndex].suggestedPrompts = status.suggestedPrompts || []
-        messages[pendingIndex].status = { status: 'complete' }
-        delete messages[pendingIndex].streamBuffer
-      }
-    }
-
-    // Save to database (only if not handled locally)
+    // Save to database
     try {
-      // Temporarily switch to the job's thread if needed
-      const originalThreadId = threadsStore.activeThreadId
-      
-      if (threadsStore.activeThreadId !== job.threadId) {
-        // Load the thread to add the message
+      // Temporarily switch to job's thread if needed
+      if (!isViewingJobThread) {
+        console.log('[BackgroundPolling] Temporarily switching to thread', job.threadId, 'to save message')
         await threadsStore.loadThread(job.threadId)
       }
 
+      // Update pending message in currentThread if it exists
+      if (threadsStore.currentThread?.messages) {
+        const messages = threadsStore.currentThread.messages
+        const pendingIndex = messages.findIndex(m =>
+          m.status?.status === 'pending' || m.status?.status === 'streaming'
+        )
+
+        if (pendingIndex !== -1) {
+          messages[pendingIndex].content = botResponse
+          messages[pendingIndex].metadata = metadata
+          messages[pendingIndex].suggestedLinks = status.suggestedLinks || []
+          messages[pendingIndex].suggestedPrompts = status.suggestedPrompts || []
+          messages[pendingIndex].status = { status: 'complete' }
+          delete messages[pendingIndex].streamBuffer
+        }
+      }
+
+      // Save to database
       await threadsStore.addMessage({
         role: 'assistant',
         content: botResponse,
@@ -327,14 +325,18 @@ export function useBackgroundPolling() {
         suggestedPrompts: status.suggestedPrompts || []
       })
 
-      // Restore original thread if we switched
-      if (originalThreadId && originalThreadId !== job.threadId) {
-        await threadsStore.loadThread(originalThreadId)
-      }
+      // IMPORTANT: Reload the thread to ensure fresh data and proper reactivity
+      await threadsStore.loadThread(job.threadId)
 
       console.log('[BackgroundPolling] Saved response to thread:', job.threadId)
     } catch (err) {
       console.error('[BackgroundPolling] Failed to save message:', err)
+    } finally {
+      // Restore original view if we switched
+      if (!isViewingJobThread && originalThreadId) {
+        console.log('[BackgroundPolling] Restoring original thread', originalThreadId)
+        await threadsStore.loadThread(originalThreadId)
+      }
     }
 
     // Format the query for display
@@ -386,7 +388,7 @@ export function useBackgroundPolling() {
   }
 
   async function handleJobError(job: PendingJob, errorMsg: string) {
-    console.error('[BackgroundPolling] Job error:', job.jobId, errorMsg, 'handledLocally:', job.handledLocally)
+    console.error('[BackgroundPolling] Job error:', job.jobId, 'threadId:', job.threadId, 'current:', threadsStore.activeThreadId, errorMsg, 'handledLocally:', job.handledLocally)
     job.status = 'error'
 
     // If local polling is handling this job, skip saving (it will save)
@@ -399,36 +401,39 @@ export function useBackgroundPolling() {
 
     const duration = Math.round((Date.now() - job.timestamp) / 1000)
     const isTimeout = errorMsg.toLowerCase().includes('timeout')
-
-    // Update thread in store if it's loaded
-    if (threadsStore.activeThreadId === job.threadId && threadsStore.currentThread?.messages) {
-      const messages = threadsStore.currentThread.messages
-      const pendingIndex = messages.findIndex(m =>
-        m.status?.status === 'pending' || m.status?.status === 'streaming'
-      )
-
-      if (pendingIndex !== -1) {
-        messages[pendingIndex].content = `❌ ${errorMsg}`
-        messages[pendingIndex].status = { status: 'error', error: errorMsg }
-      }
-    }
+    const originalThreadId = threadsStore.activeThreadId
+    const isViewingJobThread = originalThreadId === job.threadId
 
     // Save error to database with context
-    const errorContent = isTimeout 
+    const errorContent = isTimeout
       ? `⏱️ Query timed out after ${duration} seconds.\n\nOriginal query: "${job.userMessage}"\n\nPlease try a more specific query or break it into smaller parts.`
       : `❌ ${errorMsg}\n\nOriginal query: "${job.userMessage}"`
 
     try {
-      const originalThreadId = threadsStore.activeThreadId
-      
-      if (threadsStore.activeThreadId !== job.threadId) {
+      // Temporarily switch to job's thread if needed
+      if (!isViewingJobThread) {
+        console.log('[BackgroundPolling] Temporarily switching to thread', job.threadId, 'to save error')
         await threadsStore.loadThread(job.threadId)
       }
 
+      // Update pending message if it exists
+      if (threadsStore.currentThread?.messages) {
+        const messages = threadsStore.currentThread.messages
+        const pendingIndex = messages.findIndex(m =>
+          m.status?.status === 'pending' || m.status?.status === 'streaming'
+        )
+
+        if (pendingIndex !== -1) {
+          messages[pendingIndex].content = `❌ ${errorMsg}`
+          messages[pendingIndex].status = { status: 'error', error: errorMsg }
+        }
+      }
+
+      // Save to database
       await threadsStore.addMessage({
         role: 'assistant',
         content: errorContent,
-        metadata: { 
+        metadata: {
           error: true,
           errorType: isTimeout ? 'timeout' : 'error',
           duration,
@@ -436,11 +441,18 @@ export function useBackgroundPolling() {
         }
       })
 
-      if (originalThreadId && originalThreadId !== job.threadId) {
-        await threadsStore.loadThread(originalThreadId)
-      }
+      // IMPORTANT: Reload the thread to ensure fresh data
+      await threadsStore.loadThread(job.threadId)
+
+      console.log('[BackgroundPolling] Saved error to thread:', job.threadId)
     } catch (err) {
       console.error('[BackgroundPolling] Failed to save error message:', err)
+    } finally {
+      // Restore original view if we switched
+      if (!isViewingJobThread && originalThreadId) {
+        console.log('[BackgroundPolling] Restoring original thread', originalThreadId)
+        await threadsStore.loadThread(originalThreadId)
+      }
     }
 
     // Format query preview
@@ -533,6 +545,13 @@ export function useBackgroundPolling() {
     getJobsForThread: (threadId: string) => {
       return Array.from(activeJobs.value.values()).filter(j => j.threadId === threadId)
     },
+
+    // Check if a thread has active jobs (for sidebar indicators)
+    hasActiveJobsForThread: (threadId: string) => {
+      return Array.from(activeJobs.value.values()).some(
+        job => job.threadId === threadId && job.status === 'polling'
+      )
+    },
     
     // Mark a job as being handled by local polling (prevents duplicate saves)
     markAsHandledLocally: (jobId: string) => {
@@ -540,6 +559,16 @@ export function useBackgroundPolling() {
       if (job) {
         job.handledLocally = true
         console.log('[BackgroundPolling] Marked job as handled locally:', jobId)
+      }
+    },
+
+    // Un-mark a job from local handling (allows background polling to take over)
+    markAsNotHandledLocally: (jobId: string) => {
+      const job = activeJobs.value.get(jobId)
+      if (job) {
+        job.handledLocally = false
+        console.log('[BackgroundPolling] Un-marked job from local handling:', jobId)
+        savePendingJobs()  // Persist the change
       }
     },
     

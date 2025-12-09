@@ -21,7 +21,7 @@
         />
       </div>
       <div class="flex-1 min-w-0">
-        <!-- Title with Pin Icon -->
+        <!-- Title with Pin Icon and Loading Indicator -->
         <div class="flex items-center gap-2 mb-1">
           <UIcon
             v-if="thread.isPinned"
@@ -36,6 +36,13 @@
           >
             {{ thread.title }}
           </h4>
+          <!-- Active Query Indicator -->
+          <UIcon
+            v-if="hasActiveJob"
+            name="i-heroicons-arrow-path"
+            class="w-4 h-4 text-purple-500 animate-spin ml-auto flex-shrink-0"
+            title="Query in progress"
+          />
         </div>
 
         <!-- Last Message Preview -->
@@ -83,6 +90,7 @@
 
 <script setup lang="ts">
 import type { ChatThreadSummary } from '~/shared/types/chat-threads'
+import { useBackgroundPolling } from '~/composables/useBackgroundPolling'
 
 interface Props {
   thread: ChatThreadSummary
@@ -108,6 +116,12 @@ const emit = defineEmits<{
   delete: []
   rename: []
 }>()
+
+// Check if this thread has active background jobs
+const backgroundPolling = useBackgroundPolling()
+const hasActiveJob = computed(() => {
+  return backgroundPolling.hasActiveJobsForThread(props.thread.threadId)
+})
 
 // Handle click behavior based on selection mode
 function handleClick() {

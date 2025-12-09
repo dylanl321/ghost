@@ -57,6 +57,7 @@ interface PendingJobInfo {
 // ============================================================================
 const sharedPollingState = {
   currentJobId: null as string | null,
+  currentThreadId: null as string | null,  // Track which thread owns the polling
   pollAbortToken: null as { aborted: boolean } | null,
   isPolling: false
 }
@@ -82,6 +83,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
 
   // Polling state (local refs for UI, but actual polling uses shared state)
   const currentJobId = ref<string | null>(null)
+  const pollingThreadId = ref<string | null>(null) // Track which thread owns the polling
   const pollingProgress = ref('Starting...')
   const pollingPercent = ref(0)
   const pollingToolsCalled = ref<string[]>([])
@@ -307,30 +309,34 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   // POLLING LOGIC
   // ============================================================================
 
-  async function pollJobStatus(jobId: string): Promise<void> {
-    console.log('[useChatUI] Starting polling for job:', jobId)
-    
+  async function pollJobStatus(jobId: string, threadId: string): Promise<void> {
+    console.log('[useChatUI] Starting polling for job:', jobId, 'thread:', threadId)
+
+    // Store which thread owns this polling operation
+    pollingThreadId.value = threadId
+
     // Check if another polling is already active for this job
     if (sharedPollingState.isPolling && sharedPollingState.currentJobId === jobId) {
       console.log('[useChatUI] Polling already active for this job, skipping')
       return
     }
-    
+
     // Abort any existing polling for a different job
     if (sharedPollingState.pollAbortToken) {
       sharedPollingState.pollAbortToken.aborted = true
     }
-    
+
     const maxAttempts = 300 // 5 minutes maximum
     const pollUrl = `/api/strands/chat/async/${jobId}`
     let attempts = 0
     let pollInterval = 1000
     const maxInterval = 5000
     const abortToken = { aborted: false }
-    
+
     // Set shared state
     sharedPollingState.pollAbortToken = abortToken
     sharedPollingState.currentJobId = jobId
+    sharedPollingState.currentThreadId = threadId  // Track thread ownership
     sharedPollingState.isPolling = true
 
     chatState.value = 'polling'
@@ -380,8 +386,8 @@ export function useChatUI(options: UseChatUIOptions = {}) {
             status.toolsCalled || []
           )
 
-          // Update message status in-place and trigger reactivity
-          updatePendingMessageStatus(status.currentStep, status.progressPercent, status.toolsCalled)
+          // Update message status in-place and trigger reactivity (only if viewing this thread)
+          updatePendingMessageStatus(status.currentStep, status.progressPercent, status.toolsCalled, threadId)
 
           // Check if complete
           if (status.status === 'complete') {
@@ -436,12 +442,19 @@ export function useChatUI(options: UseChatUIOptions = {}) {
       if (sharedPollingState.currentJobId === jobId) {
         sharedPollingState.isPolling = false
         sharedPollingState.currentJobId = null
+        sharedPollingState.currentThreadId = null
         sharedPollingState.pollAbortToken = null
       }
     }
   }
 
-  function updatePendingMessageStatus(progress?: string, percent?: number, tools?: string[]) {
+  function updatePendingMessageStatus(progress?: string, percent?: number, tools?: string[], targetThreadId?: string) {
+    // Only update if we're viewing the target thread
+    if (targetThreadId && threadsStore.currentThread?.threadId !== targetThreadId) {
+      console.log('[useChatUI] Not updating message status - viewing different thread (target:', targetThreadId, 'current:', threadsStore.currentThread?.threadId, ')')
+      return
+    }
+
     const threadMessages = threadsStore.currentThread?.messages
     if (!threadMessages) return
 
@@ -604,24 +617,33 @@ export function useChatUI(options: UseChatUIOptions = {}) {
 
     console.log('[useChatUI] Found pending job to recover:', pendingJob.jobId)
 
+    // Don't recover jobs from less than 5 seconds ago (likely just switched away)
+    const timeSinceCreation = Date.now() - pendingJob.timestamp
+    if (timeSinceCreation < 5000) {
+      console.log('[useChatUI] Job too recent (', timeSinceCreation, 'ms), skipping recovery')
+      clearPendingJob()
+      return false
+    }
+
+    // Ensure job belongs to current thread
+    if (threadsStore.activeThreadId !== pendingJob.threadId) {
+      console.log('[useChatUI] Thread mismatch, skipping recovery')
+      clearPendingJob()
+      return false
+    }
+
     // Check if background polling is already handling this job
     const backgroundJob = backgroundPolling.getJob(pendingJob.jobId)
     if (backgroundJob) {
       console.log('[useChatUI] Background polling already handling job:', pendingJob.jobId)
       // Just update local state to show the polling indicator
       currentJobId.value = pendingJob.jobId
+      pollingThreadId.value = pendingJob.threadId
       chatState.value = 'polling'
       pollingProgress.value = backgroundJob.progress || 'Processing...'
       pollingPercent.value = backgroundJob.progressPercent || 0
       pollingToolsCalled.value = backgroundJob.toolsCalled || []
       return true
-    }
-
-    // Make sure we're on the right thread
-    if (threadsStore.activeThreadId !== pendingJob.threadId) {
-      console.log('[useChatUI] Thread mismatch, skipping local recovery')
-      clearPendingJob()
-      return false
     }
 
     // Check if there's already a pending message in the thread
@@ -659,7 +681,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     backgroundPolling.markAsHandledLocally(pendingJob.jobId)
 
     // Start polling in background (don't await to not block initialization)
-    pollJobStatus(pendingJob.jobId).catch(err => {
+    pollJobStatus(pendingJob.jobId, pendingJob.threadId).catch(err => {
       console.error('[useChatUI] Recovery polling failed:', err)
     })
 
@@ -772,7 +794,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
 
       // Start local polling for live UI updates
       console.log('[useChatUI] Starting polling for job:', response.jobId)
-      await pollJobStatus(response.jobId)
+      await pollJobStatus(response.jobId, threadsStore.activeThreadId!)
 
     } catch (error: any) {
       console.error('[useChatUI] Error sending message:', error)
@@ -899,24 +921,47 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   // ============================================================================
 
   async function switchThread(threadId: string): Promise<void> {
-    // Abort any current polling
-    if (sharedPollingState.pollAbortToken) {
-      sharedPollingState.pollAbortToken.aborted = true
+    const oldThreadId = threadsStore.activeThreadId
+    const oldJobId = currentJobId.value
+    const wasPollingLocally = chatState.value === 'polling' && currentJobId.value
+
+    // Step 1: If we're locally polling, DON'T abort completely - transfer to background
+    if (wasPollingLocally && oldJobId) {
+      console.log('[useChatUI] Transferring local polling to background:', oldJobId)
+
+      // Remove the handledLocally flag so background can take over
+      const job = backgroundPolling.getJob(oldJobId)
+      if (job && job.handledLocally) {
+        backgroundPolling.markAsNotHandledLocally(oldJobId)
+      }
+
+      // Abort LOCAL polling (so UI updates stop) but job continues in background
+      if (sharedPollingState.pollAbortToken) {
+        sharedPollingState.pollAbortToken.aborted = true
+      }
+    } else {
+      // Not currently polling, safe to abort any lingering state
+      if (sharedPollingState.pollAbortToken) {
+        sharedPollingState.pollAbortToken.aborted = true
+      }
     }
 
-    // Reset state
+    // Step 2: Reset LOCAL state (polling continues in background if transferred)
     chatState.value = 'idle'
     currentJobId.value = null
+    pollingThreadId.value = null
     pollingProgress.value = 'Starting...'
     pollingPercent.value = 0
     pollingToolsCalled.value = []
     errorMessage.value = ''
+    // DON'T clear localStorage - background polling needs it for the transferred job
 
+    // Step 3: Load new thread
     await threadsStore.loadThread(threadId)
     messagesTrigger.value++
     scrollTrigger.value++
 
-    // Check for pending job recovery after thread switch
+    // Step 4: Check for pending job recovery
     await checkAndRecoverPendingJob()
   }
 
