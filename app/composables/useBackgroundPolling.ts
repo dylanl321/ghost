@@ -1,22 +1,30 @@
 /**
  * Global Background Polling Service
- * 
- * This composable manages async chat polling that continues even when
- * navigating away from the chat page. It stores pending jobs and polls
- * them in the background, updating the store when complete.
- * 
- * Usage:
- * - Call `registerJob()` when submitting an async query
- * - The service will poll in the background until complete
- * - Results are stored in the thread via the store
- * - Toast notifications inform the user of completion
+ *
+ * SINGLE source of truth for all async chat polling.
+ * Handles polling whether user is on chat page or navigates away.
+ * Uses callback pattern for live UI updates.
+ *
+ * Architecture:
+ * - All polling goes through this service
+ * - UI components register callbacks for real-time updates
+ * - Saves messages directly via API (no thread switching)
+ * - Toast notifications for background completions
  */
 
-import { useChatThreadsStore } from '~/stores/useChatThreadsStore'
 import type { ChatMessage } from '~/shared/types/chat-threads'
 
 // Storage key for pending jobs
 const PENDING_JOBS_KEY = 'ghost-chat-pending-jobs'
+
+/**
+ * Callbacks for UI updates during polling
+ */
+export interface PollingCallbacks {
+  onProgress?: (jobId: string, progress: string, percent: number, tools: string[]) => void
+  onComplete?: (jobId: string, response: string, metadata: any, suggestedLinks?: any[], suggestedPrompts?: any[]) => void
+  onError?: (jobId: string, error: string) => void
+}
 
 export interface PendingJob {
   jobId: string
@@ -28,12 +36,11 @@ export interface PendingJob {
   progressPercent?: number
   toolsCalled?: string[]
   statusHistory?: Array<{ text: string; timestamp: number }>
-  // Flag to indicate local polling is handling this job (don't save from background)
-  handledLocally?: boolean
 }
 
 // Singleton state - shared across all instances
 const activeJobs = ref<Map<string, PendingJob>>(new Map())
+const jobCallbacks = ref<Map<string, PollingCallbacks>>(new Map())
 const recentCompletions = ref<Array<{ job: PendingJob; completedAt: number; success: boolean; response?: string }>>([])
 const isPollingActive = ref(false)
 const pollIntervalId = ref<NodeJS.Timeout | null>(null)
@@ -42,9 +49,35 @@ const pollIntervalId = ref<NodeJS.Timeout | null>(null)
 const MAX_RECENT_COMPLETIONS = 10
 
 export function useBackgroundPolling() {
-  const threadsStore = useChatThreadsStore()
   const toast = useToast()
   const router = useRouter()
+
+  // ============================================================================
+  // CALLBACK MANAGEMENT
+  // ============================================================================
+
+  /**
+   * Register callbacks for a job to receive live UI updates
+   */
+  function registerJobCallbacks(jobId: string, callbacks: PollingCallbacks) {
+    jobCallbacks.value.set(jobId, callbacks)
+    console.log('[BackgroundPolling] Registered callbacks for job:', jobId)
+  }
+
+  /**
+   * Unregister callbacks (e.g., when switching threads)
+   */
+  function unregisterJobCallbacks(jobId: string) {
+    jobCallbacks.value.delete(jobId)
+    console.log('[BackgroundPolling] Unregistered callbacks for job:', jobId)
+  }
+
+  /**
+   * Check if a job has callbacks registered (UI is actively watching)
+   */
+  function hasCallbacks(jobId: string): boolean {
+    return jobCallbacks.value.has(jobId)
+  }
 
   // ============================================================================
   // PERSISTENCE
@@ -247,6 +280,21 @@ export function useBackgroundPolling() {
       job.progressPercent = status.progressPercent || 0
       job.toolsCalled = status.toolsCalled || []
 
+      // Call progress callback if registered
+      const callbacks = jobCallbacks.value.get(job.jobId)
+      if (callbacks?.onProgress) {
+        try {
+          callbacks.onProgress(
+            job.jobId,
+            newProgress,
+            status.progressPercent || 0,
+            status.toolsCalled || []
+          )
+        } catch (err) {
+          console.error('[BackgroundPolling] Error in onProgress callback:', err)
+        }
+      }
+
       console.log('[BackgroundPolling] Job', job.jobId, 'status:', status.status, 'progress:', job.progress)
 
       // Check if complete
@@ -275,234 +323,191 @@ export function useBackgroundPolling() {
   // ============================================================================
 
   async function handleJobComplete(job: PendingJob, status: any) {
-    console.log('[BackgroundPolling] Job complete:', job.jobId, 'threadId:', job.threadId, 'current:', threadsStore.activeThreadId, 'handledLocally:', job.handledLocally)
-    // Note: job.status already set to 'complete' before calling this
-
-    // If local polling is handling this job, skip everything (local polling will save AND add to recent)
-    if (job.handledLocally) {
-      console.log('[BackgroundPolling] Skipping save - handled by local polling')
-      unregisterJob(job.jobId)
-      return
-    }
-
     const botResponse = status.response || 'No response received.'
     const metadata = status.metadata || {}
     const duration = Math.round((Date.now() - job.timestamp) / 1000)
-    const originalThreadId = threadsStore.activeThreadId
-    const isViewingJobThread = originalThreadId === job.threadId
+    const callbacks = jobCallbacks.value.get(job.jobId)
 
-    // Save to database
-    try {
-      // Temporarily switch to job's thread if needed
-      if (!isViewingJobThread) {
-        console.log('[BackgroundPolling] Temporarily switching to thread', job.threadId, 'to save message')
-        await threadsStore.loadThread(job.threadId)
-      }
+    console.log('[BackgroundPolling] Job complete:', job.jobId, 'hasCallbacks:', !!callbacks)
 
-      // Update pending message in currentThread if it exists
-      if (threadsStore.currentThread?.messages) {
-        const messages = threadsStore.currentThread.messages
-        const pendingIndex = messages.findIndex(m =>
-          m.status?.status === 'pending' || m.status?.status === 'streaming'
+    // Call UI callbacks first (if registered)
+    if (callbacks?.onComplete) {
+      try {
+        callbacks.onComplete(
+          job.jobId,
+          botResponse,
+          metadata,
+          status.suggestedLinks || [],
+          status.suggestedPrompts || []
         )
-
-        if (pendingIndex !== -1) {
-          messages[pendingIndex].content = botResponse
-          messages[pendingIndex].metadata = metadata
-          messages[pendingIndex].suggestedLinks = status.suggestedLinks || []
-          messages[pendingIndex].suggestedPrompts = status.suggestedPrompts || []
-          messages[pendingIndex].status = { status: 'complete' }
-          delete messages[pendingIndex].streamBuffer
-        }
-      }
-
-      // Save to database
-      await threadsStore.addMessage({
-        role: 'assistant',
-        content: botResponse,
-        metadata,
-        suggestedLinks: status.suggestedLinks || [],
-        suggestedPrompts: status.suggestedPrompts || []
-      })
-
-      // IMPORTANT: Reload the thread to ensure fresh data and proper reactivity
-      await threadsStore.loadThread(job.threadId)
-
-      console.log('[BackgroundPolling] Saved response to thread:', job.threadId)
-    } catch (err) {
-      console.error('[BackgroundPolling] Failed to save message:', err)
-    } finally {
-      // Restore original view if we switched
-      if (!isViewingJobThread && originalThreadId) {
-        console.log('[BackgroundPolling] Restoring original thread', originalThreadId)
-        await threadsStore.loadThread(originalThreadId)
+        console.log('[BackgroundPolling] Called onComplete callback for job:', job.jobId)
+      } catch (err) {
+        console.error('[BackgroundPolling] Error in onComplete callback:', err)
       }
     }
 
-    // Format the query for display
-    const queryPreview = job.userMessage.length > 60 
-      ? job.userMessage.substring(0, 60) + '...' 
-      : job.userMessage
-
-    // Format tools used for display
-    const toolsInfo = job.toolsCalled && job.toolsCalled.length > 0
-      ? `Used ${job.toolsCalled.length} tool${job.toolsCalled.length > 1 ? 's' : ''}: ${job.toolsCalled.slice(0, 3).join(', ')}${job.toolsCalled.length > 3 ? '...' : ''}`
-      : ''
-
-    // Show rich toast notification
-    toast.add({
-      title: '✅ Query Complete',
-      description: queryPreview,
-      icon: 'i-heroicons-check-circle',
-      color: 'green',
-      timeout: 10000,
-      ui: {
-        description: 'line-clamp-2'
-      },
-      actions: [{
-        label: 'View Response',
-        click: () => {
-          router.push('/chat')
+    // Save to database directly via API (no thread switching!)
+    try {
+      await $fetch(`/api/chat/threads/${job.threadId}/messages`, {
+        method: 'POST',
+        body: {
+          message: {
+            role: 'assistant',
+            content: botResponse,
+            metadata,
+            suggestedLinks: status.suggestedLinks || [],
+            suggestedPrompts: status.suggestedPrompts || []
+          }
         }
-      }]
-    })
+      })
+      console.log('[BackgroundPolling] Saved response to thread via API:', job.threadId)
+    } catch (err) {
+      console.error('[BackgroundPolling] Failed to save message via API:', err)
+    }
 
-    // If tools were used, show a secondary info toast
-    if (toolsInfo) {
-      setTimeout(() => {
-        toast.add({
-          title: `Completed in ${duration}s`,
-          description: toolsInfo,
-          icon: 'i-heroicons-wrench-screwdriver',
-          color: 'gray',
-          timeout: 5000
-        })
-      }, 500)
+    // Show toast only if no UI callbacks (user navigated away)
+    if (!callbacks) {
+      const queryPreview = job.userMessage.length > 60
+        ? job.userMessage.substring(0, 60) + '...'
+        : job.userMessage
+
+      toast.add({
+        title: '✅ Query Complete',
+        description: queryPreview,
+        icon: 'i-heroicons-check-circle',
+        color: 'green',
+        timeout: 10000,
+        ui: {
+          description: 'line-clamp-2'
+        },
+        actions: [{
+          label: 'View Response',
+          click: () => {
+            router.push('/chat')
+          }
+        }]
+      })
+
+      const toolsInfo = job.toolsCalled && job.toolsCalled.length > 0
+        ? `Used ${job.toolsCalled.length} tool${job.toolsCalled.length > 1 ? 's' : ''}: ${job.toolsCalled.slice(0, 3).join(', ')}${job.toolsCalled.length > 3 ? '...' : ''}`
+        : ''
+
+      if (toolsInfo) {
+        setTimeout(() => {
+          toast.add({
+            title: `Completed in ${duration}s`,
+            description: toolsInfo,
+            icon: 'i-heroicons-wrench-screwdriver',
+            color: 'gray',
+            timeout: 5000
+          })
+        }, 500)
+      }
     }
 
     // Add to recent completions for history
     addToRecentCompletions(job, true, botResponse)
 
-    // Remove from active jobs
+    // Cleanup
+    unregisterJobCallbacks(job.jobId)
     unregisterJob(job.jobId)
   }
 
   async function handleJobError(job: PendingJob, errorMsg: string) {
-    console.error('[BackgroundPolling] Job error:', job.jobId, 'threadId:', job.threadId, 'current:', threadsStore.activeThreadId, errorMsg, 'handledLocally:', job.handledLocally)
-    job.status = 'error'
-
-    // If local polling is handling this job, skip saving (it will save)
-    if (job.handledLocally) {
-      console.log('[BackgroundPolling] Skipping error save - handled by local polling')
-      addToRecentCompletions(job, false, errorMsg)
-      unregisterJob(job.jobId)
-      return
-    }
-
     const duration = Math.round((Date.now() - job.timestamp) / 1000)
     const isTimeout = errorMsg.toLowerCase().includes('timeout')
-    const originalThreadId = threadsStore.activeThreadId
-    const isViewingJobThread = originalThreadId === job.threadId
+    const callbacks = jobCallbacks.value.get(job.jobId)
+    job.status = 'error'
 
-    // Save error to database with context
+    console.error('[BackgroundPolling] Job error:', job.jobId, 'hasCallbacks:', !!callbacks, errorMsg)
+
+    // Call UI callbacks first (if registered)
+    if (callbacks?.onError) {
+      try {
+        callbacks.onError(job.jobId, errorMsg)
+        console.log('[BackgroundPolling] Called onError callback for job:', job.jobId)
+      } catch (err) {
+        console.error('[BackgroundPolling] Error in onError callback:', err)
+      }
+    }
+
+    // Build error content for database
     const errorContent = isTimeout
       ? `⏱️ Query timed out after ${duration} seconds.\n\nOriginal query: "${job.userMessage}"\n\nPlease try a more specific query or break it into smaller parts.`
       : `❌ ${errorMsg}\n\nOriginal query: "${job.userMessage}"`
 
+    // Save to database directly via API (no thread switching!)
     try {
-      // Temporarily switch to job's thread if needed
-      if (!isViewingJobThread) {
-        console.log('[BackgroundPolling] Temporarily switching to thread', job.threadId, 'to save error')
-        await threadsStore.loadThread(job.threadId)
-      }
-
-      // Update pending message if it exists
-      if (threadsStore.currentThread?.messages) {
-        const messages = threadsStore.currentThread.messages
-        const pendingIndex = messages.findIndex(m =>
-          m.status?.status === 'pending' || m.status?.status === 'streaming'
-        )
-
-        if (pendingIndex !== -1) {
-          messages[pendingIndex].content = `❌ ${errorMsg}`
-          messages[pendingIndex].status = { status: 'error', error: errorMsg }
-        }
-      }
-
-      // Save to database
-      await threadsStore.addMessage({
-        role: 'assistant',
-        content: errorContent,
-        metadata: {
-          error: true,
-          errorType: isTimeout ? 'timeout' : 'error',
-          duration,
-          originalQuery: job.userMessage
+      await $fetch(`/api/chat/threads/${job.threadId}/messages`, {
+        method: 'POST',
+        body: {
+          message: {
+            role: 'assistant',
+            content: errorContent,
+            metadata: {
+              error: true,
+              errorType: isTimeout ? 'timeout' : 'error',
+              duration,
+              originalQuery: job.userMessage
+            }
+          }
         }
       })
-
-      // IMPORTANT: Reload the thread to ensure fresh data
-      await threadsStore.loadThread(job.threadId)
-
-      console.log('[BackgroundPolling] Saved error to thread:', job.threadId)
+      console.log('[BackgroundPolling] Saved error to thread via API:', job.threadId)
     } catch (err) {
-      console.error('[BackgroundPolling] Failed to save error message:', err)
-    } finally {
-      // Restore original view if we switched
-      if (!isViewingJobThread && originalThreadId) {
-        console.log('[BackgroundPolling] Restoring original thread', originalThreadId)
-        await threadsStore.loadThread(originalThreadId)
-      }
+      console.error('[BackgroundPolling] Failed to save error message via API:', err)
     }
 
-    // Format query preview
-    const queryPreview = job.userMessage.length > 50 
-      ? job.userMessage.substring(0, 50) + '...' 
-      : job.userMessage
+    // Show toast only if no UI callbacks (user navigated away)
+    if (!callbacks) {
+      const queryPreview = job.userMessage.length > 50
+        ? job.userMessage.substring(0, 50) + '...'
+        : job.userMessage
 
-    // Show appropriate toast notification
-    if (isTimeout) {
-      toast.add({
-        title: '⏱️ Query Timed Out',
-        description: `"${queryPreview}" took too long (${duration}s). Try a more specific query.`,
-        icon: 'i-heroicons-clock',
-        color: 'orange',
-        timeout: 12000,
-        actions: [
-          {
-            label: 'View Details',
-            click: () => router.push('/chat')
-          },
-          {
-            label: 'Retry',
-            click: () => router.push('/chat')
-          }
-        ]
-      })
-    } else {
-      toast.add({
-        title: '❌ Query Failed',
-        description: `"${queryPreview}"\n${errorMsg.substring(0, 80)}`,
-        icon: 'i-heroicons-exclamation-circle',
-        color: 'red',
-        timeout: 12000,
-        actions: [
-          {
-            label: 'View Details',
-            click: () => router.push('/chat')
-          },
-          {
-            label: 'Try Again',
-            click: () => router.push('/chat')
-          }
-        ]
-      })
+      if (isTimeout) {
+        toast.add({
+          title: '⏱️ Query Timed Out',
+          description: `"${queryPreview}" took too long (${duration}s). Try a more specific query.`,
+          icon: 'i-heroicons-clock',
+          color: 'orange',
+          timeout: 12000,
+          actions: [
+            {
+              label: 'View Details',
+              click: () => router.push('/chat')
+            },
+            {
+              label: 'Retry',
+              click: () => router.push('/chat')
+            }
+          ]
+        })
+      } else {
+        toast.add({
+          title: '❌ Query Failed',
+          description: `"${queryPreview}"\n${errorMsg.substring(0, 80)}`,
+          icon: 'i-heroicons-exclamation-circle',
+          color: 'red',
+          timeout: 12000,
+          actions: [
+            {
+              label: 'View Details',
+              click: () => router.push('/chat')
+            },
+            {
+              label: 'Try Again',
+              click: () => router.push('/chat')
+            }
+          ]
+        })
+      }
     }
 
     // Add to recent completions for history
     addToRecentCompletions(job, false, errorMsg)
 
-    // Remove from active jobs
+    // Cleanup
+    unregisterJobCallbacks(job.jobId)
     unregisterJob(job.jobId)
   }
 
@@ -531,9 +536,16 @@ export function useBackgroundPolling() {
     isPolling: readonly(isPollingActive),
     recentCompletions: readonly(recentCompletions),
 
-    // Methods
+    // Job registration
     registerJob,
     unregisterJob,
+
+    // Callback management (for UI updates)
+    registerJobCallbacks,
+    unregisterJobCallbacks,
+    hasCallbacks,
+
+    // Lifecycle
     initialize,
     startPolling,
     stopPolling,
@@ -552,44 +564,10 @@ export function useBackgroundPolling() {
         job => job.threadId === threadId && job.status === 'polling'
       )
     },
-    
-    // Mark a job as being handled by local polling (prevents duplicate saves)
-    markAsHandledLocally: (jobId: string) => {
-      const job = activeJobs.value.get(jobId)
-      if (job) {
-        job.handledLocally = true
-        console.log('[BackgroundPolling] Marked job as handled locally:', jobId)
-      }
-    },
 
-    // Un-mark a job from local handling (allows background polling to take over)
-    markAsNotHandledLocally: (jobId: string) => {
-      const job = activeJobs.value.get(jobId)
-      if (job) {
-        job.handledLocally = false
-        console.log('[BackgroundPolling] Un-marked job from local handling:', jobId)
-        savePendingJobs()  // Persist the change
-      }
-    },
-    
-    // Update job progress (for UI updates from local polling)
-    updateJobProgress: (jobId: string, progress: string, percent: number, tools: string[]) => {
-      const job = activeJobs.value.get(jobId)
-      if (job) {
-        job.progress = progress
-        job.progressPercent = percent
-        job.toolsCalled = tools
-      }
-    },
-    
     // Clear recent completions
     clearRecentCompletions: () => {
       recentCompletions.value = []
-    },
-    
-    // Add to recent completions (for local polling to call)
-    addToRecentCompletions: (job: { jobId: string, threadId: string, userMessage: string, timestamp: number }, success: boolean, response?: string) => {
-      addToRecentCompletions(job as PendingJob, success, response)
     }
   }
 }
