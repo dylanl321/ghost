@@ -1,0 +1,200 @@
+<template>
+  <UCard>
+    <template #header>
+      <div class="flex justify-between items-center">
+        <div class="text-lg font-semibold">Pipeline Success Rate</div>
+        <UBadge color="gray" variant="soft" size="sm">
+          {{ dateRangeLabel }}
+        </UBadge>
+      </div>
+    </template>
+
+    <CenteredLoadingSpinner v-if="loading" />
+    <div v-else-if="!dailyMetrics || dailyMetrics.length === 0" class="text-center py-8 text-gray-400">
+      No pipeline data available for the selected time period
+    </div>
+    <div v-else>
+      <VChart :option="chartOptions" class="h-80" autoresize />
+
+      <!-- Summary metrics -->
+      <div class="border-t border-gray-700 mt-4 pt-4 grid grid-cols-4 gap-4">
+        <div>
+          <div class="text-gray-400 text-sm">Total Runs</div>
+          <div class="text-white text-lg font-semibold">{{ totalRuns }}</div>
+        </div>
+        <div>
+          <div class="text-gray-400 text-sm">Successful</div>
+          <div class="text-green-400 text-lg font-semibold">
+            {{ successfulRuns }} ({{ successRate }}%)
+          </div>
+        </div>
+        <div>
+          <div class="text-gray-400 text-sm">Failed</div>
+          <div class="text-red-400 text-lg font-semibold">
+            {{ failedRuns }} ({{ failureRate }}%)
+          </div>
+        </div>
+        <div>
+          <div class="text-gray-400 text-sm">Avg Daily Runs</div>
+          <div class="text-blue-400 text-lg font-semibold">{{ avgDailyRuns }}</div>
+        </div>
+      </div>
+    </div>
+  </UCard>
+</template>
+
+<script setup lang="ts">
+import * as echarts from 'echarts/core'
+import { LineChart, BarChart } from 'echarts/charts'
+import {
+  TitleComponent,
+  TooltipComponent,
+  GridComponent,
+  LegendComponent
+} from 'echarts/components'
+
+// Register required ECharts modules
+echarts.use([
+  LineChart,
+  BarChart,
+  TitleComponent,
+  TooltipComponent,
+  GridComponent,
+  LegendComponent
+])
+
+interface DailyMetric {
+  date: string
+  total: number
+  successful: number
+  failed: number
+}
+
+const props = defineProps<{
+  dailyMetrics: DailyMetric[]
+  loading: boolean
+}>()
+
+const dateRangeLabel = computed(() => {
+  if (!props.dailyMetrics?.length) return 'No data'
+  const sortedMetrics = [...props.dailyMetrics].sort((a, b) => a.date.localeCompare(b.date))
+  // Parse date strings directly to avoid timezone issues
+  const fmt = (dateStr: string) => {
+    // Handle both "YYYY-MM-DD" and "YYYY-MM-DDTHH:MM:SSZ" formats
+    const datePart = dateStr.split('T')[0]
+    const [year, month, day] = datePart.split('-').map(Number)
+    return `${month}/${day}`
+  }
+  return `${fmt(sortedMetrics[0].date)} - ${fmt(sortedMetrics[sortedMetrics.length - 1].date)}`
+})
+
+// Summary metrics
+const totalRuns = computed(() =>
+  props.dailyMetrics.reduce((sum, m) => sum + (m.total || 0), 0)
+)
+
+const successfulRuns = computed(() =>
+  props.dailyMetrics.reduce((sum, m) => sum + (m.successful || 0), 0)
+)
+
+const failedRuns = computed(() =>
+  props.dailyMetrics.reduce((sum, m) => sum + (m.failed || 0), 0)
+)
+
+const successRate = computed(() => {
+  if (totalRuns.value === 0) return 0
+  return Math.round((successfulRuns.value / totalRuns.value) * 100)
+})
+
+const failureRate = computed(() => {
+  if (totalRuns.value === 0) return 0
+  return Math.round((failedRuns.value / totalRuns.value) * 100)
+})
+
+const avgDailyRuns = computed(() => {
+  if (!props.dailyMetrics.length) return 0
+  return Math.round(totalRuns.value / props.dailyMetrics.length)
+})
+
+const chartOptions = computed(() => {
+  // Sort by date ascending
+  const sortedMetrics = [...props.dailyMetrics].sort((a, b) => a.date.localeCompare(b.date))
+  const dates = sortedMetrics.map(m => m.date)
+  const totalData = sortedMetrics.map(m => m.total || 0)
+  const successData = sortedMetrics.map(m => m.successful || 0)
+  const failedData = sortedMetrics.map(m => m.failed || 0)
+
+  return {
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params: any) => {
+        // Parse date string directly to avoid timezone issues
+        const dateStr = params[0].axisValue
+        // Handle both "YYYY-MM-DD" and "YYYY-MM-DDTHH:MM:SSZ" formats
+        const datePart = dateStr.split('T')[0]
+        const [year, month, day] = datePart.split('-').map(Number)
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        const dateLabel = `${monthNames[month - 1]} ${day}`
+
+        let result = `<strong>${dateLabel}</strong><br/>`
+        params.forEach((p: any) => {
+          result += `${p.marker} ${p.seriesName}: ${p.data}<br/>`
+        })
+
+        return result
+      }
+    },
+    legend: {
+      bottom: 0,
+      textStyle: { color: '#9ca3af' }
+    },
+    xAxis: {
+      type: 'category',
+      data: dates,
+      axisLabel: {
+        formatter: (value: string) => {
+          // Parse date string directly to avoid timezone issues
+          // Handle both "YYYY-MM-DD" and "YYYY-MM-DDTHH:MM:SSZ" formats
+          const datePart = value.split('T')[0]
+          const [year, month, day] = datePart.split('-').map(Number)
+          return `${month}/${day}`
+        },
+        color: '#9ca3af'
+      }
+    },
+    yAxis: {
+      type: 'value',
+      axisLabel: {
+        formatter: (val: number) => val.toString(),
+        color: '#9ca3af'
+      },
+      splitLine: { lineStyle: { color: '#374151' } }
+    },
+    grid: { left: '8%', right: '2%', bottom: '20%', top: '5%' },
+    series: [
+      {
+        name: 'Total Runs',
+        type: 'line',
+        data: totalData,
+        lineStyle: { color: '#3b82f6', width: 2 },
+        itemStyle: { color: '#3b82f6' },
+        smooth: true
+      },
+      {
+        name: 'Successful',
+        type: 'bar',
+        data: successData,
+        itemStyle: { color: '#10b981' },
+        stack: 'status'
+      },
+      {
+        name: 'Failed',
+        type: 'bar',
+        data: failedData,
+        itemStyle: { color: '#ef4444' },
+        stack: 'status'
+      }
+    ]
+  }
+})
+</script>

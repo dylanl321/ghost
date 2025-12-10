@@ -1,0 +1,128 @@
+import type { DataMode } from '~/types/costs'
+
+interface ShareLinkState {
+  selectedAccounts: string[]
+  timeframe: string
+  view: string
+  tab: string
+  dataMode: DataMode
+}
+
+interface ShareLinkOptions {
+  selectedAccounts: Ref<string[]>
+  selectedTimeframe: Ref<string>
+  selectedView: Ref<string>
+  activeTab: Ref<string>
+  dataMode: Ref<DataMode>
+}
+
+/**
+ * Composable for creating shareable links for the costs page
+ * Captures current page state and generates a short link via the API
+ */
+export const useShareLink = (options: ShareLinkOptions) => {
+  const isLoading = ref(false)
+  const error = ref<string | null>(null)
+  const shortUrl = ref<string | null>(null)
+
+  /**
+   * Captures the current page state
+   */
+  const captureState = (): ShareLinkState => {
+    return {
+      selectedAccounts: [...options.selectedAccounts.value],
+      timeframe: options.selectedTimeframe.value,
+      view: options.selectedView.value,
+      tab: options.activeTab.value,
+      dataMode: options.dataMode.value
+    }
+  }
+
+  /**
+   * Generates a shareable link by calling the shortlinks API
+   */
+  const generateShareLink = async (): Promise<string | null> => {
+    console.log('generateShareLink: Starting...')
+    isLoading.value = true
+    error.value = null
+    shortUrl.value = null
+    console.log('generateShareLink: Reset state - shortUrl:', shortUrl.value, 'error:', error.value)
+
+    try {
+      // Capture current state
+      const state = captureState()
+      console.log('Generating share link with state:', state)
+      
+      // Build the original URL path
+      const route = useRoute()
+      const originalUrl = route.fullPath
+      
+      // Create the short link via API
+      const response = await $fetch<{
+        success: boolean
+        data: {
+          shortCode: string
+          shortUrl: string
+        }
+      }>('/api/shortlinks', {
+        method: 'POST',
+        body: {
+          originalUrl,
+          pagePath: '/account/costs',
+          configData: state,
+          description: 'Cost Analytics Share Link',
+          expiresInDays: 30 // Links expire in 30 days
+        }
+      })
+
+      console.log('Share link API response:', response)
+
+      if (response.success && response.data) {
+        shortUrl.value = response.data.shortUrl
+        console.log('Share URL set to:', shortUrl.value)
+        console.log('shortUrl.value after assignment:', shortUrl.value)
+        return response.data.shortUrl
+      } else {
+        console.error('API response missing success or data:', response)
+        throw new Error('Failed to create share link')
+      }
+    } catch (err: any) {
+      console.error('Error creating share link:', err)
+      error.value = err?.data?.statusMessage || err?.message || 'Failed to create share link'
+      return null
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  /**
+   * Applies shared state to current page
+   * Used when loading a page from a shared link
+   */
+  const applySharedState = (state: ShareLinkState) => {
+    if (state.selectedAccounts) {
+      options.selectedAccounts.value = [...state.selectedAccounts]
+    }
+    if (state.timeframe) {
+      options.selectedTimeframe.value = state.timeframe
+    }
+    if (state.view) {
+      options.selectedView.value = state.view
+    }
+    if (state.tab) {
+      options.activeTab.value = state.tab
+    }
+    if (state.dataMode) {
+      options.dataMode.value = state.dataMode
+    }
+  }
+
+  return {
+    isLoading,
+    error,
+    shortUrl,
+    generateShareLink,
+    applySharedState,
+    captureState
+  }
+}

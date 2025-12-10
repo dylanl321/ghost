@@ -1,0 +1,246 @@
+/**
+ * GET /api/forecast/data
+ * Retrieve forecast data with filtering options
+ */
+
+import { defineEventHandler, getQuery } from 'h3'
+import { scanItems, queryItems } from '../../utils/dynamodb'
+import { sendPaginated, parseQueryParams, errors, handleAsync } from '../../utils/api-response'
+import { registerEndpoint } from '../../plugins/swagger'
+import { logger } from '../../utils/logger'
+
+// Register OpenAPI documentation
+registerEndpoint('/api/forecast/data', 'GET', {
+  summary: 'Get forecast data',
+  description: 'Retrieve forecast data with optional filtering',
+  tags: ['Forecast'],
+  parameters: [
+    { $ref: '#/components/parameters/Environment' },
+    { $ref: '#/components/parameters/Limit' },
+    { $ref: '#/components/parameters/NextToken' },
+    {
+      name: 'accountId',
+      in: 'query',
+      required: false,
+      schema: { type: 'string' },
+      description: 'Filter by account ID'
+    },
+    {
+      name: 'period',
+      in: 'query',
+      required: false,
+      schema: { type: 'string' },
+      description: 'Filter by period (YYYY-MM format)'
+    },
+    {
+      name: 'status',
+      in: 'query',
+      required: false,
+      schema: { type: 'string' },
+      description: 'Filter by status'
+    }
+  ],
+  responses: {
+    200: {
+      description: 'Forecast data retrieved successfully',
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    accountId: { type: 'string' },
+                    accountName: { type: 'string' },
+                    enclaveId: { type: 'string' },
+                    projectType: { type: 'string' },
+                    lob: { type: 'string' },
+                    deptNumber: { type: 'string' },
+                    projNumber: { type: 'string' },
+                    taskNumber: { type: 'string' },
+                    govAccountId: { type: 'string' },
+                    comAccountId: { type: 'string' },
+                    forecasts: { 
+                      type: 'object',
+                      description: 'Monthly forecast amounts keyed by period (YYYY-MM)'
+                    },
+                    totalAmount: { type: 'number' },
+                    status: { type: 'string' },
+                    source: { type: 'string' },
+                    uploadedAt: { type: 'string' },
+                    createdAt: { type: 'string' },
+                    updatedAt: { type: 'string' }
+                  }
+                }
+              },
+              pagination: { $ref: '#/components/schemas/PaginationInfo' }
+            }
+          }
+        }
+      }
+    },
+    400: { $ref: '#/components/schemas/Error' },
+    500: { $ref: '#/components/schemas/Error' }
+  }
+})
+
+export default defineEventHandler(handleAsync(async (event) => {
+  const query = getQuery(event)
+  const { limit, nextToken } = parseQueryParams(event)
+  // Forecast table is in GovCloud
+  const environment = 'govcloud'
+  
+  const accountId = query.accountId as string | undefined
+  const period = query.period as string | undefined
+  const status = query.status as string | undefined
+
+  try {
+    let result
+
+    if (accountId) {
+      // Query by account ID using PK
+      result = await queryItems(
+        'ghost-dashboard-forecast-data',
+        {
+          KeyConditionExpression: 'PK = :pk',
+          ExpressionAttributeValues: {
+            ':pk': `FORECAST#${accountId}`
+          }
+        },
+        limit,
+        nextToken,
+        environment
+      )
+    } else if (period) {
+      // Query by period using GSI1
+      result = await queryItems(
+        'ghost-dashboard-forecast-data',
+        {
+          IndexName: 'GSI1',
+          KeyConditionExpression: 'GSI1PK = :gsi1pk',
+          ExpressionAttributeValues: {
+            ':gsi1pk': `PERIOD#${period}`
+          }
+        },
+        limit,
+        nextToken,
+        environment
+      )
+    } else if (status) {
+      // Query by status using GSI2
+      result = await queryItems(
+        'ghost-dashboard-forecast-data',
+        {
+          IndexName: 'GSI2',
+          KeyConditionExpression: 'GSI2PK = :gsi2pk',
+          ExpressionAttributeValues: {
+            ':gsi2pk': `STATUS#${status}`
+          }
+        },
+        limit,
+        nextToken,
+        environment
+      )
+    } else {
+      // Scan all items - fetch ALL records if no limit specified or limit is >= 1000
+      const fetchAll = !limit || limit >= 1000
+      
+      if (fetchAll) {
+        // Fetch all records by handling pagination internally
+        const allItems: any[] = []
+        let currentNextToken: string | undefined = nextToken
+        let hasMore = true
+        
+        while (hasMore) {
+          const scanResult = await scanItems(
+            'ghost-dashboard-forecast-data',
+            undefined, // no filter for now
+            1000, // fetch in batches of 1000
+            currentNextToken,
+            environment
+          )
+          
+          allItems.push(...scanResult.items)
+          
+          if (scanResult.nextToken) {
+            currentNextToken = scanResult.nextToken
+          } else {
+            hasMore = false
+          }
+          
+          // Safety limit to prevent infinite loops
+          if (allItems.length > 10000) {
+            logger.warn('Reached safety limit of 10000 items')
+            hasMore = false
+          }
+        }
+        
+        result = {
+          items: allItems,
+          count: allItems.length,
+          nextToken: undefined
+        }
+      } else {
+        // Original logic for paginated results
+        let filterExpression: string | undefined
+        const expressionAttributeValues: Record<string, any> = {}
+
+        if (accountId || period || status) {
+          const conditions: string[] = []
+          
+          if (accountId) {
+            conditions.push('accountId = :accountId')
+            expressionAttributeValues[':accountId'] = accountId
+          }
+          
+          if (period) {
+            conditions.push('period = :period')
+            expressionAttributeValues[':period'] = period
+          }
+          
+          if (status) {
+            conditions.push('#status = :status')
+            expressionAttributeValues[':status'] = status
+          }
+
+          if (conditions.length > 0) {
+            filterExpression = conditions.join(' AND ')
+          }
+        }
+
+        result = await scanItems(
+          'ghost-dashboard-forecast-data',
+          filterExpression,
+          limit,
+          nextToken,
+          environment
+        )
+      }
+    }
+
+    // Calculate pagination
+    const page = nextToken ? 2 : 1
+
+    return sendPaginated(
+      event,
+      result.items,
+      {
+        page,
+        limit,
+        total: result.count
+      },
+      {
+        nextToken: result.nextToken
+      }
+    )
+
+  } catch (err: any) {
+    logger.error('Forecast data fetch error:', err)
+    return errors.serverError(event, `Failed to fetch forecast data: ${err.message}`)
+  }
+}))

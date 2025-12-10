@@ -1,0 +1,71 @@
+export interface EnclaveState {
+  lastFetch: number | null
+  enclaves: Record<string, AWSEnclaveData>
+}
+
+// Time until the data needs to be refreshed
+// This only gets checked when the user first "loads" the website (e.g. first visit, hard refresh, new tab, etc.). This is done via the "init-check.client.ts" custom plugin.
+const timeToLiveSeconds = 60 * 60 * 24
+
+export const useEnclaveStore = defineStore('enclaveStore', {
+  state: (): EnclaveState => ({
+    lastFetch: null,
+    enclaves: {},
+  }),
+
+  getters: {
+    needsRefresh: (state) => {
+      if (!state.lastFetch) return true
+      return Date.now() - state.lastFetch > timeToLiveSeconds * 1000
+    },
+  },
+
+  actions: {
+    async initialize(force: boolean = false) {
+      if (!import.meta.client) return // only run on client-side
+      if (!this.needsRefresh && !force) {
+        console.log('Using cached enclave data.')
+        return
+      }
+
+      console.log('Initializing enclaves')
+
+      const json = await $fetch('/api/accounts/list?includeDecommissioned=true')
+
+      const accounts: AWSEnclaveData[] = json.data
+
+      const dict: Record<string, AWSEnclaveData> = {}
+      for (const acct of accounts) {
+        const id = acct.accountId || acct.awsStandardAccountID
+        if (!id) continue // skip if neither exists
+
+        /* There is a special case where some accounts were not added to Appian, so to keep track of them we put them in DynamoDB and gave them a 9xxx request ID.
+        Later, some of these accounts were then added into Appian (e.g. Auditing 887522691420) and their new request ID got synced to dynamoDB. These accounts have two
+        records in DynamoDB and will thus return two results from the API. We want to handle this by getting whichever version has more data (source == both) */
+        if (id in dict) {
+          if (dict[id]!.source === "both") {
+            continue // If it has data from both DynamoDB and Organizations we choose this result from the API
+          }
+        }
+        dict[id] = acct
+      }
+
+      this.enclaves = dict
+      console.log(`Collected information for ${Object.keys(dict).length} enclaves.`)
+
+      if (this.enclaves) {
+        this.lastFetch = Date.now()
+      } else {
+        console.error('Unable to fetch enclaves.')
+      }
+    },
+
+    clear() {
+      this.enclaves = {}
+      this.lastFetch = null
+      console.log('Enclave store cleared')
+    }
+  },
+
+  persist: true
+})
