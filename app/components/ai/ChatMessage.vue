@@ -14,7 +14,8 @@
           </div>
           <div class="flex flex-col gap-1 flex-1">
             <span class="text-sm font-medium text-gray-700 dark:text-gray-300">GHOST is thinking...</span>
-            <span class="text-xs text-gray-600 dark:text-gray-400">{{ message.status.progress || 'Starting...' }}</span>
+            <span v-if="message.status.progress && message.status.progress !== 'Starting...'" class="text-xs text-gray-600 dark:text-gray-400">{{ message.status.progress }}</span>
+            <span v-else class="text-xs text-gray-600 dark:text-gray-400">Processing your request...</span>
             <!-- Status History with gradient -->
             <div v-if="message.status?.statusHistory && message.status.statusHistory.length > 0"
                  class="mt-1 space-y-0.5">

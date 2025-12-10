@@ -7,6 +7,8 @@
  * - Uses useBackgroundPolling as the SINGLE polling system
  * - Registers callbacks for live UI updates when viewing a thread
  * - No local polling - all polling goes through background service
+ * - SHARED STATE: Core polling/loading state is shared across all instances
+ *   to prevent state leakage between components
  */
 
 import { ref, computed, watch, nextTick, readonly } from 'vue'
@@ -17,6 +19,18 @@ import type { AWSEnclaveData } from '#shared/types/accounts'
 
 // Chat state enum
 export type ChatState = 'idle' | 'sending' | 'polling' | 'error'
+
+// ============================================================================
+// SHARED SINGLETON STATE (prevents multiple instances from having different states)
+// ============================================================================
+const sharedChatState = ref<ChatState>('idle')
+const sharedCurrentJobId = ref<string | null>(null)
+const sharedPollingProgress = ref('Starting...')
+const sharedPollingPercent = ref(0)
+const sharedPollingToolsCalled = ref<string[]>([])
+const sharedPollingStatusHistory = ref<Array<{ text: string; timestamp: number }>>([])
+const sharedPendingBotMessageId = ref<string | null>(null)
+const sharedErrorMessage = ref('')
 
 // Options for the composable
 export interface UseChatUIOptions {
@@ -58,21 +72,21 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   const backgroundPolling = useBackgroundPolling()
 
   // ============================================================================
-  // CORE STATE
+  // CORE STATE (using shared singleton refs for core polling state)
   // ============================================================================
 
-  const chatState = ref<ChatState>('idle')
+  // Use shared state for polling/loading to prevent state leakage between instances
+  const chatState = sharedChatState
+  const errorMessage = sharedErrorMessage
+  const currentJobId = sharedCurrentJobId
+  const pollingProgress = sharedPollingProgress
+  const pollingPercent = sharedPollingPercent
+  const pollingToolsCalled = sharedPollingToolsCalled
+  const pollingStatusHistory = sharedPollingStatusHistory
+  const pendingBotMessageId = sharedPendingBotMessageId
+
+  // Local state (per-instance, ok to be separate)
   const inputValue = ref('')
-  const errorMessage = ref('')
-
-  // Current job tracking (owned by background polling)
-  const currentJobId = ref<string | null>(null)
-
-  // UI-only polling display state (updated via callbacks)
-  const pollingProgress = ref('Starting...')
-  const pollingPercent = ref(0)
-  const pollingToolsCalled = ref<string[]>([])
-  const pollingStatusHistory = ref<Array<{ text: string; timestamp: number }>>([])
 
   // Session state
   const sessionId = ref<string | undefined>(undefined)
@@ -85,9 +99,6 @@ export function useChatUI(options: UseChatUIOptions = {}) {
 
   // Scroll trigger for components to react to
   const scrollTrigger = ref(0)
-
-  // Pending message tracking (for UI only - not persisted)
-  const pendingBotMessageId = ref<string | null>(null)
 
   // ============================================================================
   // MENTION SYSTEM STATE
@@ -601,7 +612,31 @@ export function useChatUI(options: UseChatUIOptions = {}) {
 
     } catch (error: any) {
       console.error('[useChatUI] Error sending message:', error)
-      await handleJobError(error.message || 'Failed to send message')
+      // Handle local error (not from polling)
+      const errorMsg = error.message || 'Failed to send message'
+
+      // Find and update the pending message if it exists
+      const threadMessages = threadsStore.currentThread?.messages || []
+      const pendingIndex = threadMessages.findIndex(m =>
+        m.status?.status === 'pending' || m.status?.status === 'streaming'
+      )
+
+      if (pendingIndex !== -1) {
+        threadMessages[pendingIndex].content = `❌ ${errorMsg}`
+        threadMessages[pendingIndex].status = { status: 'error', error: errorMsg }
+      }
+
+      // Reset state
+      chatState.value = 'error'
+      errorMessage.value = errorMsg
+      currentJobId.value = null
+      pendingBotMessageId.value = null
+      pollingProgress.value = 'Starting...'
+      pollingPercent.value = 0
+      pollingToolsCalled.value = []
+      pollingStatusHistory.value = []
+
+      scrollTrigger.value++
     }
   }
 
@@ -716,11 +751,28 @@ export function useChatUI(options: UseChatUIOptions = {}) {
 
   async function switchThread(threadId: string): Promise<void> {
     const oldJobId = currentJobId.value
+    const oldThreadId = threadsStore.activeThreadId
 
     // Unregister callbacks if we had an active job (polling continues in background)
     if (oldJobId) {
       console.log('[useChatUI] Unregistering callbacks for job:', oldJobId)
       backgroundPolling.unregisterJobCallbacks(oldJobId)
+    }
+
+    // Clean up pending messages from the old thread before switching
+    // This prevents stale loading indicators from appearing
+    if (oldThreadId && threadsStore.currentThread?.messages) {
+      const oldMessages = threadsStore.currentThread.messages
+      const pendingIndices: number[] = []
+      oldMessages.forEach((m, idx) => {
+        if (m.status?.status === 'pending' || m.status?.status === 'streaming') {
+          pendingIndices.push(idx)
+        }
+      })
+      // Remove pending messages in reverse order to maintain indices
+      for (let i = pendingIndices.length - 1; i >= 0; i--) {
+        oldMessages.splice(pendingIndices[i], 1)
+      }
     }
 
     // Reset LOCAL state (polling continues in background)
@@ -745,6 +797,22 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     // Unregister callbacks if we had an active job
     if (currentJobId.value) {
       backgroundPolling.unregisterJobCallbacks(currentJobId.value)
+    }
+
+    // Clean up pending messages from the current thread before creating a new one
+    // This prevents stale loading indicators from leaking
+    if (threadsStore.currentThread?.messages) {
+      const oldMessages = threadsStore.currentThread.messages
+      const pendingIndices: number[] = []
+      oldMessages.forEach((m, idx) => {
+        if (m.status?.status === 'pending' || m.status?.status === 'streaming') {
+          pendingIndices.push(idx)
+        }
+      })
+      // Remove pending messages in reverse order to maintain indices
+      for (let i = pendingIndices.length - 1; i >= 0; i--) {
+        oldMessages.splice(pendingIndices[i], 1)
+      }
     }
 
     // Reset ALL state including polling display state
