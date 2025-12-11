@@ -20,8 +20,8 @@ resource "aws_secretsmanager_secret" "dynamodb_config" {
 # Create a version with placeholder values
 # In production, these should be updated via AWS Console, CLI, or CI/CD
 resource "aws_secretsmanager_secret_version" "dynamodb_config" {
-  provider      = aws.target_deployment_account
-  secret_id     = aws_secretsmanager_secret.dynamodb_config.id
+  provider  = aws.target_deployment_account
+  secret_id = aws_secretsmanager_secret.dynamodb_config.id
   secret_string = jsonencode({
     # Scheduled Reports Tables (GovCloud)
     scheduledReports = {
@@ -96,7 +96,7 @@ resource "aws_secretsmanager_secret_version" "dynamodb_config" {
   })
 
   lifecycle {
-    ignore_changes = [secret_string]  # Don't overwrite manual updates
+    ignore_changes = [secret_string] # Don't overwrite manual updates
   }
 }
 

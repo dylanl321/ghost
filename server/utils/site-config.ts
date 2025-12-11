@@ -18,7 +18,7 @@ import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import type { SiteConfigItem, SiteConfigHistoryEntry } from '../../shared/types/site-config';
 import { DEFAULT_SITE_CONFIG } from '../../shared/types/site-config';
 
-const TABLE_NAME = 'ghost-site-config';
+const TABLE_NAME = process.env.SITE_CONFIG_TABLE || 'ghost-site-config';
 const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
 // In-memory cache for config values

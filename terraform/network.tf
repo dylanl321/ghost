@@ -5,17 +5,17 @@ resource "aws_security_group" "ecs_service" {
   vpc_id      = var.vpc
 
   ingress {
-    protocol    = "tcp"
-    from_port   = var.app_port
-    to_port     = var.app_port
-    security_groups = [aws_security_group.lb.id]   # Allow traffic from load balancer security group
+    protocol        = "tcp"
+    from_port       = var.app_port
+    to_port         = var.app_port
+    security_groups = [aws_security_group.lb.id] # Allow traffic from load balancer security group
   }
 
   egress {
-      protocol    = "-1"              # All protocols
-      from_port   = 0                 # All ports
-      to_port     = 0
-      cidr_blocks = ["0.0.0.0/0"]     # All IPs
+    protocol    = "-1" # All protocols
+    from_port   = 0    # All ports
+    to_port     = 0
+    cidr_blocks = ["0.0.0.0/0"] # All IPs
   }
 }
 
@@ -27,15 +27,15 @@ resource "aws_security_group" "lb" {
 
   ingress {
     protocol    = "tcp"
-    from_port   = 443                 # HTTPS port
+    from_port   = 443 # HTTPS port
     to_port     = 443
     cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
-      protocol    = "-1"
-      from_port   = 0
-      to_port     = 0
-      cidr_blocks = ["0.0.0.0/0"]
+    protocol    = "-1"
+    from_port   = 0
+    to_port     = 0
+    cidr_blocks = ["0.0.0.0/0"]
   }
 }

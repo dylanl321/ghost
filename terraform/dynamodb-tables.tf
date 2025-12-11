@@ -8,10 +8,10 @@
 # API Keys Table (Commercial Environment)
 # ============================================================================
 resource "aws_dynamodb_table" "api_keys" {
-  provider       = aws.target_deployment_account
-  name           = "ghost-api-keys"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "id"
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-api-keys-prod" : "ghost-api-keys"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "id"
 
   attribute {
     name = "id"
@@ -65,11 +65,11 @@ resource "aws_dynamodb_table" "api_keys" {
 # API Keys Usage History Table (Commercial Environment)
 # ============================================================================
 resource "aws_dynamodb_table" "api_keys_usage" {
-  provider       = aws.target_deployment_account
-  name           = "ghost-api-keys-usage"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "keyId"
-  range_key      = "timestamp"
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-api-keys-usage-prod" : "ghost-api-keys-usage"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "keyId"
+  range_key    = "timestamp"
 
   attribute {
     name = "keyId"
@@ -118,10 +118,10 @@ resource "aws_dynamodb_table" "api_keys_usage" {
 # Shortlinks Table (GovCloud Environment)
 # ============================================================================
 resource "aws_dynamodb_table" "shortlinks" {
-  provider       = aws.target_deployment_account
-  name           = "ghost-dashboard-shortlinks"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "shortCode"
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-dashboard-shortlinks-prod" : "ghost-dashboard-shortlinks"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "shortCode"
 
   attribute {
     name = "shortCode"
@@ -169,10 +169,10 @@ resource "aws_dynamodb_table" "shortlinks" {
 # Shared Reports Table (GovCloud Environment)
 # ============================================================================
 resource "aws_dynamodb_table" "shared_reports" {
-  provider       = aws.target_deployment_account
-  name           = "ghost-shared-reports"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "shareId"
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-shared-reports-prod" : "ghost-shared-reports"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "shareId"
 
   attribute {
     name = "shareId"
@@ -220,10 +220,10 @@ resource "aws_dynamodb_table" "shared_reports" {
 # User Preferences Table (GovCloud Environment)
 # ============================================================================
 resource "aws_dynamodb_table" "user_preferences" {
-  provider       = aws.target_deployment_account
-  name           = "ghost-user-preferences"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "userId"
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-user-preferences-prod" : "ghost-user-preferences"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "userId"
 
   attribute {
     name = "userId"
@@ -255,10 +255,10 @@ resource "aws_dynamodb_table" "user_preferences" {
 # Stores feature flags and site-wide configuration
 # Allows runtime configuration changes without code deployment
 resource "aws_dynamodb_table" "site_config" {
-  provider       = aws.target_deployment_account
-  name           = "ghost-site-config"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "key"
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-site-config-prod" : "ghost-site-config"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "key"
 
   attribute {
     name = "key"
@@ -302,11 +302,11 @@ resource "aws_dynamodb_table" "site_config" {
 # Tracks all admin notifications sent (feedback, errors, alerts, etc.)
 # for audit trail and notification history viewing
 resource "aws_dynamodb_table" "admin_notifications" {
-  provider       = aws.target_deployment_account
-  name           = "ghost_admin_notifications"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "id"
-  range_key      = "timestamp"
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-admin-notifications-prod" : "ghost_admin_notifications"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "id"
+  range_key    = "timestamp"
 
   attribute {
     name = "id"
@@ -375,11 +375,11 @@ resource "aws_dynamodb_table" "admin_notifications" {
 # Stores user chat conversations with the Strands AI assistant
 # Supports multiple threads per user, sharing, and export
 resource "aws_dynamodb_table" "chat_threads" {
-  provider       = aws.target_deployment_account
-  name           = "ghost-chat-threads"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "threadId"
-  range_key      = "createdAt"
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-chat-threads-prod" : "ghost-chat-threads"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "threadId"
+  range_key    = "createdAt"
 
   attribute {
     name = "threadId"
@@ -452,10 +452,10 @@ resource "aws_dynamodb_table" "chat_threads" {
 # Stores async polling job status for Strands AI chat queries
 # Jobs expire after 24 hours via TTL
 resource "aws_dynamodb_table" "async_chat_jobs" {
-  provider       = aws.target_deployment_account
-  name           = "ghost-async-chat-jobs"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "jobId"
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-async-chat-jobs-prod" : "ghost-async-chat-jobs"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "jobId"
 
   attribute {
     name = "jobId"
@@ -524,11 +524,11 @@ resource "aws_dynamodb_table" "async_chat_jobs" {
 # Stores async polling chat metrics for monitoring and analytics
 # Tracks performance, usage, and errors with 90-day retention
 resource "aws_dynamodb_table" "async_metrics" {
-  provider       = aws.target_deployment_account
-  name           = "ghost-async-metrics"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "metricDate"
-  range_key      = "metricType"
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-async-metrics-prod" : "ghost-async-metrics"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "metricDate"
+  range_key    = "metricType"
 
   attribute {
     name = "metricDate"

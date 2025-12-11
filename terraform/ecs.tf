@@ -5,7 +5,7 @@ locals {
 
 resource "aws_ecs_cluster" "main" {
   provider = aws.target_deployment_account
-  name     = "${var.app_name}"
+  name     = var.app_name
 }
 
 resource "aws_ecs_task_definition" "main" {
@@ -20,24 +20,24 @@ resource "aws_ecs_task_definition" "main" {
 
   container_definitions = jsonencode([
     {
-      name             = var.app_name
-      image            = "${aws_ecr_repository.main.repository_url}:${var.env}"
-      essential        = true
+      name      = var.app_name
+      image     = "${aws_ecr_repository.main.repository_url}:${var.env}"
+      essential = true
       logConfiguration = {
         logDriver = "awslogs"
-        options   = {
+        options = {
           awslogs-group         = "/ecs/${var.app_name}"
           awslogs-region        = "${local.child_region}"
           awslogs-stream-prefix = "ecs"
         }
       }
-      portMappings     = [
+      portMappings = [
         {
           containerPort = var.app_port
           hostPort      = var.app_port
         }
       ]
-      environment      = [
+      environment = [
         {
           name  = "NODE_ENV"
           value = var.env
@@ -184,8 +184,37 @@ resource "aws_ecs_task_definition" "main" {
           value = aws_dynamodb_table.api_keys.name
         },
         {
+          name  = "DYNAMODB_API_KEY_USAGE_TABLE"
+          value = aws_dynamodb_table.api_keys_usage.name
+        },
+        {
           name  = "API_KEYS_STORAGE_ENV"
           value = "govcloud"
+        },
+        # Additional DynamoDB Tables
+        {
+          name  = "SHORTLINKS_TABLE"
+          value = aws_dynamodb_table.shortlinks.name
+        },
+        {
+          name  = "SITE_CONFIG_TABLE"
+          value = aws_dynamodb_table.site_config.name
+        },
+        {
+          name  = "CHAT_THREADS_TABLE_NAME"
+          value = aws_dynamodb_table.chat_threads.name
+        },
+        {
+          name  = "ADMIN_NOTIFICATIONS_TABLE"
+          value = aws_dynamodb_table.admin_notifications.name
+        },
+        {
+          name  = "AWS_ASYNC_JOBS_TABLE_NAME"
+          value = aws_dynamodb_table.async_chat_jobs.name
+        },
+        {
+          name  = "AWS_ASYNC_METRICS_TABLE_NAME"
+          value = aws_dynamodb_table.async_metrics.name
         },
         # SES Configuration (now managed via Site Config DynamoDB table)
         # These env vars serve as fallbacks only - primary config is in ghost-site-config table
@@ -226,6 +255,10 @@ resource "aws_ecs_task_definition" "main" {
         {
           name  = "REPORT_EXECUTIONS_TABLE"
           value = aws_dynamodb_table.report_executions.name
+        },
+        {
+          name  = "REPORT_EXECUTION_LOCKS_TABLE"
+          value = aws_dynamodb_table.report_execution_locks.name
         },
         {
           name  = "SHARED_REPORTS_TABLE"
@@ -280,47 +313,47 @@ resource "aws_ecs_task_definition" "main" {
           valueFrom = "${aws_secretsmanager_secret.dynamodb_config.arn}"
         },
         {
-          name  = "NUXT_OIDC_PROVIDERS_ENTRA_CLIENT_ID"
+          name      = "NUXT_OIDC_PROVIDERS_ENTRA_CLIENT_ID"
           valueFrom = "${local.secret_arn}:entra_client_id::"
         },
         {
-          name  = "NUXT_OIDC_PROVIDERS_ENTRA_CLIENT_SECRET"
+          name      = "NUXT_OIDC_PROVIDERS_ENTRA_CLIENT_SECRET"
           valueFrom = "${local.secret_arn}:entra_client_secret::"
         },
         {
-          name  = "NUXT_OIDC_PROVIDERS_ENTRA_REDIRECT_URI"
+          name      = "NUXT_OIDC_PROVIDERS_ENTRA_REDIRECT_URI"
           valueFrom = "${local.secret_arn}:entra_redirect_uri::"
         },
         {
-          name  = "NUXT_OIDC_PROVIDERS_ENTRA_CALLBACK_REDIRECT_URL"
+          name      = "NUXT_OIDC_PROVIDERS_ENTRA_CALLBACK_REDIRECT_URL"
           valueFrom = "${local.secret_arn}:entra_callback_redirect_url::"
         },
         {
-          name  = "AWS_COMMERCIAL_ACCESS_KEY_ID"
+          name      = "AWS_COMMERCIAL_ACCESS_KEY_ID"
           valueFrom = "${local.secret_arn}:commercial_aws_access_key_id::"
         },
         {
-          name  = "AWS_COMMERCIAL_SECRET_ACCESS_KEY"
+          name      = "AWS_COMMERCIAL_SECRET_ACCESS_KEY"
           valueFrom = "${local.secret_arn}:commercial_aws_secret_access_key::"
         },
         {
-          name  = "AWS_GOVCLOUD_ACCESS_KEY_ID"
+          name      = "AWS_GOVCLOUD_ACCESS_KEY_ID"
           valueFrom = "${local.secret_arn}:govcloud_aws_access_key_id::"
         },
         {
-          name  = "AWS_GOVCLOUD_SECRET_ACCESS_KEY"
+          name      = "AWS_GOVCLOUD_SECRET_ACCESS_KEY"
           valueFrom = "${local.secret_arn}:govcloud_aws_secret_access_key::"
         },
         {
-          name  = "NUXT_OIDC_TOKEN_KEY"
+          name      = "NUXT_OIDC_TOKEN_KEY"
           valueFrom = "${local.secret_arn}:oidc_token_key::"
         },
         {
-          name  = "NUXT_OIDC_SESSION_SECRET"
+          name      = "NUXT_OIDC_SESSION_SECRET"
           valueFrom = "${local.secret_arn}:oidc_session_secret::"
         },
         {
-          name  = "NUXT_OIDC_AUTH_SESSION_SECRET"
+          name      = "NUXT_OIDC_AUTH_SESSION_SECRET"
           valueFrom = "${local.secret_arn}:oidc_auth_session_secret::"
         },
       ]
@@ -383,7 +416,7 @@ resource "aws_secretsmanager_secret" "secret" {
 
 # Attach autoscaling target to ECS service
 resource "aws_appautoscaling_target" "ecs" {
-  provider = aws.target_deployment_account
+  provider           = aws.target_deployment_account
   max_capacity       = 3
   min_capacity       = 1
   resource_id        = "service/${aws_ecs_cluster.main.name}/${aws_ecs_service.main.name}"
@@ -393,7 +426,7 @@ resource "aws_appautoscaling_target" "ecs" {
 
 # Autoscaling policy based on average CPU
 resource "aws_appautoscaling_policy" "cpu_scale" {
-  provider = aws.target_deployment_account
+  provider           = aws.target_deployment_account
   name               = "cpu-target-scaling"
   policy_type        = "TargetTrackingScaling"
   resource_id        = aws_appautoscaling_target.ecs.resource_id
@@ -401,7 +434,7 @@ resource "aws_appautoscaling_policy" "cpu_scale" {
   service_namespace  = aws_appautoscaling_target.ecs.service_namespace
 
   target_tracking_scaling_policy_configuration {
-    target_value       = 70
+    target_value = 70
     predefined_metric_specification {
       predefined_metric_type = "ECSServiceAverageCPUUtilization"
     }
