@@ -1,6 +1,6 @@
 resource "aws_ecr_repository" "main" {
   provider     = aws.target_deployment_account
-  name         = "${var.app_name}"
+  name         = var.app_name
   force_delete = true
 }
 

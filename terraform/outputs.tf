@@ -11,6 +11,6 @@ output "ecr_repository_url" {
 }
 
 output "deployment_account_id" {
-  value = local.child_account_id
+  value       = local.child_account_id
   description = "The AWS account ID where the resources are being deployed"
 }

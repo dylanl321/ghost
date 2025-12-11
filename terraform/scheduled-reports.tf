@@ -1,10 +1,10 @@
 # DynamoDB Table for Scheduled Reports
 resource "aws_dynamodb_table" "scheduled_reports" {
-  provider       = aws.target_deployment_account
-  name           = "ghost-scheduled-reports"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "reportId"
-  range_key      = "createdAt"
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-scheduled-reports-prod" : "ghost-scheduled-reports"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "reportId"
+  range_key    = "createdAt"
 
   attribute {
     name = "reportId"
@@ -56,11 +56,11 @@ resource "aws_dynamodb_table" "scheduled_reports" {
 
 # DynamoDB Table for Email Templates
 resource "aws_dynamodb_table" "email_templates" {
-  provider       = aws.target_deployment_account
-  name           = "ghost-email-templates"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "templateId"
-  range_key      = "createdAt"
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-email-templates-prod" : "ghost-email-templates"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "templateId"
+  range_key    = "createdAt"
 
   attribute {
     name = "templateId"
@@ -95,11 +95,11 @@ resource "aws_dynamodb_table" "email_templates" {
 
 # DynamoDB Table for Report Execution History
 resource "aws_dynamodb_table" "report_executions" {
-  provider       = aws.target_deployment_account
-  name           = "ghost-report-executions"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "reportId"
-  range_key      = "executionTime"
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-report-executions-prod" : "ghost-report-executions"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "reportId"
+  range_key    = "executionTime"
 
   attribute {
     name = "reportId"
@@ -126,10 +126,10 @@ resource "aws_dynamodb_table" "report_executions" {
 
 # DynamoDB Table for Report Execution Locks (prevent duplicate execution in multi-container setup)
 resource "aws_dynamodb_table" "report_execution_locks" {
-  provider       = aws.target_deployment_account
-  name           = "ghost-report-execution-locks"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "lockId"
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-report-execution-locks-prod" : "ghost-report-execution-locks"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "lockId"
 
   attribute {
     name = "lockId"

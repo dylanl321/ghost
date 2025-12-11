@@ -5,7 +5,7 @@ resource "aws_lb" "main" {
   load_balancer_type = "application"
   security_groups    = [aws_security_group.lb.id]
   subnets            = var.subnets
-  idle_timeout       = 600  # 10 minutes - increased for long-running AI queries (Strands can take 5-10 min)
+  idle_timeout       = 600 # 10 minutes - increased for long-running AI queries (Strands can take 5-10 min)
 }
 
 resource "aws_lb_listener" "main" {
@@ -13,7 +13,7 @@ resource "aws_lb_listener" "main" {
   load_balancer_arn = aws_lb.main.arn
   port              = 443
   protocol          = "HTTPS"
-  certificate_arn = data.aws_acm_certificate.cert.arn
+  certificate_arn   = data.aws_acm_certificate.cert.arn
 
   default_action {
     type             = "forward"

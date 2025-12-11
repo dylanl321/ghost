@@ -5,10 +5,10 @@
 # Supports tagging other admins and categorization
 
 resource "aws_dynamodb_table" "account_notes" {
-  provider       = aws.target_deployment_account
-  name           = "ghost-account-notes"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "noteId"
+  provider     = aws.target_deployment_account
+  name         = "ghost-account-notes"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "noteId"
 
   attribute {
     name = "noteId"

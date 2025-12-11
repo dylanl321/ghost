@@ -1,7 +1,7 @@
 terraform {
   required_providers {
     aws = {
-      source = "hashicorp/aws"
+      source  = "hashicorp/aws"
       version = "~> 5.0"
     }
   }
@@ -41,12 +41,12 @@ data "aws_region" "org_region" { provider = aws.org_account }
 data "aws_caller_identity" "org_identity" { provider = aws.org_account }
 
 locals {
-  child_partition  = data.aws_partition.child_partition.partition         # Partition associated with target account (Commercial or GovCloud environment). Examples: "aws", "aws-us-gov"
-  child_region     = data.aws_region.child_region.name                    # AWS region configured on the provider
-  child_account_id = data.aws_caller_identity.child_identity.account_id   # Target account ID
-  environment      = var.env                                               # Environment name (dev/prod) for resource tagging
+  child_partition  = data.aws_partition.child_partition.partition       # Partition associated with target account (Commercial or GovCloud environment). Examples: "aws", "aws-us-gov"
+  child_region     = data.aws_region.child_region.name                  # AWS region configured on the provider
+  child_account_id = data.aws_caller_identity.child_identity.account_id # Target account ID
+  environment      = var.env                                            # Environment name (dev/prod) for resource tagging
 
-  org_partition    = data.aws_partition.org_partition.partition           # Org account partition
-  org_region       = data.aws_region.org_region.name                      # Org account region
-  org_account_id   = data.aws_caller_identity.org_identity.account_id     # Org account ID (Account A)
+  org_partition  = data.aws_partition.org_partition.partition       # Org account partition
+  org_region     = data.aws_region.org_region.name                  # Org account region
+  org_account_id = data.aws_caller_identity.org_identity.account_id # Org account ID (Account A)
 }
