@@ -256,6 +256,8 @@ const availableColumns = computed(() => [
   { key: 'variance', label: 'GDMS Variance', default: true, format: (v: number) => formatCurrency(v), class: 'text-right' },
   { key: 'status', label: 'GDMS Status', default: false },
   { key: 'endOfMonthForecast', label: 'End of Month AWS Projection', default: true, format: (v: number) => formatCurrency(v), class: 'text-right', helpTooltip: 'AWS ML projection for end of current month' },
+  { key: 'projectedVsBudget', label: 'Projected vs Budget', default: true, format: (v: number) => formatCurrencyWithSign(v), class: 'text-right', helpTooltip: 'End of Month AWS Projection minus GDMS Forecast (positive = over, negative = under)' },
+  { key: 'lastMonthTotal', label: 'Last Month Total', default: true, format: (v: number) => formatCurrency(v), class: 'text-right', helpTooltip: 'Total cost from the previous month' },
   { key: 'ytdTotal', label: 'YTD Total', default: true, format: (v: number) => formatCurrency(v), class: 'text-right', helpTooltip: 'Year-to-date total (Jan 1 - today)' },
   { key: 'fullYearEstimate', label: 'Full Year Estimate', default: true, format: (v: number) => formatCurrency(v), class: 'text-right', helpTooltip: 'Projected full year total (YTD actuals + remaining months forecast)' },
   { key: 'departmentNumber', label: 'Department', default: false },
@@ -298,6 +300,7 @@ const tableData = computed(() => {
   const forecast = props.dataset.forecast as any
   const yearEndForecast = props.dataset.yearEndForecast as any
   const ytdSummary = props.dataset.ytdSummary as any // YTD per-account data
+  const lastMonthSummary = props.dataset.lastMonthSummary as any // Last month per-account data
 
   // Get the correct data based on mode
   let analysisData = analysis?.data || analysis
@@ -305,6 +308,7 @@ const tableData = computed(() => {
   let forecastData = forecast?.data || forecast
   let yearEndForecastData = yearEndForecast?.data || yearEndForecast
   let ytdSummaryData = ytdSummary?.data || ytdSummary
+  let lastMonthSummaryData = lastMonthSummary?.data || lastMonthSummary
 
   if (props.mode === 'proforma') {
     // In proforma mode, data might be nested
@@ -322,6 +326,9 @@ const tableData = computed(() => {
     }
     if (ytdSummaryData?.proforma) {
       ytdSummaryData = ytdSummaryData.proforma
+    }
+    if (lastMonthSummaryData?.proforma) {
+      lastMonthSummaryData = lastMonthSummaryData.proforma
     }
   }
 
@@ -355,6 +362,14 @@ const tableData = computed(() => {
 
   ytdAccounts.forEach((acc: any) => {
     ytdByAccount.set(acc.accountId, acc.totalCost || 0)
+  })
+
+  // Get last month totals from lastMonthSummary API
+  const lastMonthByAccount = new Map<string, number>()
+  const lastMonthAccounts = lastMonthSummaryData?.accounts || []
+
+  lastMonthAccounts.forEach((acc: any) => {
+    lastMonthByAccount.set(acc.accountId, acc.totalCost || 0)
   })
 
   const currentAccounts = summaryData?.accounts || []
@@ -402,6 +417,9 @@ const tableData = computed(() => {
       const overagePercent = item.budgetedCost > 0 ? Math.max(0, ((item.actualCost - item.budgetedCost) / item.budgetedCost) * 100) : 0
       const overageAmount = Math.max(0, item.actualCost - item.budgetedCost)
 
+      const endOfMonthForecast = endOfMonthForecastByAccount.get(item.accountId) || item.actualCost
+      const projectedVsBudget = endOfMonthForecast - (item.budgetedCost || 0)
+
       return {
         ...item,
         accountName: cachedAccount?.accountName || item.accountName || item.accountId,
@@ -411,7 +429,9 @@ const tableData = computed(() => {
         overageAmount,
         variance: item.actualCost - item.budgetedCost,
         status: getStatus(item),
-        endOfMonthForecast: endOfMonthForecastByAccount.get(item.accountId) || item.actualCost,
+        endOfMonthForecast,
+        projectedVsBudget,
+        lastMonthTotal: lastMonthByAccount.get(item.accountId) || 0,
         ytdTotal: ytdByAccount.get(item.accountId) || item.actualCost,
         fullYearEstimate: fullYearEstimateByAccount.get(item.accountId) || 0
       }
@@ -430,6 +450,9 @@ const tableData = computed(() => {
       const overagePercent = budget > 0 ? Math.max(0, ((totalCost - budget) / budget) * 100) : 0
       const overageAmount = Math.max(0, totalCost - budget)
 
+      const endOfMonthForecast = endOfMonthForecastByAccount.get(item.accountId) || totalCost
+      const projectedVsBudget = endOfMonthForecast - budget
+
       return {
         accountId: item.accountId,
         accountName: cachedAccount?.accountName || item.accountName || item.accountId,
@@ -447,7 +470,9 @@ const tableData = computed(() => {
         linesOfBusiness: item.linesOfBusiness,
         projectName: item.projectName,
         environment: item.environment,
-        endOfMonthForecast: endOfMonthForecastByAccount.get(item.accountId) || totalCost,
+        endOfMonthForecast,
+        projectedVsBudget,
+        lastMonthTotal: lastMonthByAccount.get(item.accountId) || 0,
         ytdTotal: ytdByAccount.get(item.accountId) || totalCost,
         fullYearEstimate: fullYearEstimateByAccount.get(item.accountId) || 0
       }
@@ -592,6 +617,18 @@ const formatCurrency = (value: number) => {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(value)
+}
+
+const formatCurrencyWithSign = (value: number) => {
+  if (typeof value !== 'number') return '-'
+  const formatted = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    signDisplay: 'exceptZero'
+  }).format(value)
+  return formatted
 }
 
 const getStatus = (item: any) => {

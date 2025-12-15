@@ -27,3 +27,7 @@ logs
 dev-notes.md
 *.sh
 .cursor/worktrees.json
+/.kiro
+/.vscode
+CLAUDE.md
+DEPLOYMENT_STEPS.md

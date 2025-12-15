@@ -16,18 +16,16 @@
             <span class="text-sm font-medium text-gray-700 dark:text-gray-300">GHOST is thinking...</span>
             <span v-if="message.status.progress && message.status.progress !== 'Starting...'" class="text-xs text-gray-600 dark:text-gray-400">{{ message.status.progress }}</span>
             <span v-else class="text-xs text-gray-600 dark:text-gray-400">Processing your request...</span>
-            <!-- Status History with gradient -->
-            <div v-if="message.status?.statusHistory && message.status.statusHistory.length > 0"
-                 class="mt-1 space-y-0.5">
+            <!-- Status History with fixed height container -->
+            <div class="status-history-container">
               <div
-                v-for="(historyItem, idx) in message.status.statusHistory.slice(-3).reverse()"
-                :key="idx"
+                v-for="(historyItem, idx) in statusHistoryDisplay"
+                :key="historyItem.timestamp || idx"
                 :style="{
-                  opacity: [0.7, 0.4, 0.2][idx],
-                  fontSize: ['11px', '10px', '9px'][idx]
+                  opacity: [0.7, 0.4, 0.2][idx] || 0
                 }"
-                class="text-gray-500 dark:text-gray-500 font-mono truncate transition-opacity"
-                :title="historyItem.text"
+                class="status-history-item"
+                :title="historyItem.text || ''"
               >
                 {{ historyItem.text }}
               </div>
@@ -62,13 +60,41 @@
       <div class="markdown-container" v-html="formattedContent" @click="$emit('enriched-click', $event)"></div>
       <span v-if="message.streamBuffer && (message.status?.status === 'pending' || message.status?.status === 'streaming')" class="cursor-blink">|</span>
 
-      <!-- Error status -->
-      <div v-if="message.status?.status === 'error'" class="error-status">
-        <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-red-500" />
-        <span class="text-xs text-red-600 dark:text-red-400">{{ message.status.error }}</span>
-        <button @click="$emit('retry')" class="ml-2 text-xs text-blue-600 dark:text-blue-400 hover:underline">
-          Retry
-        </button>
+      <!-- Cancellation Status -->
+      <div v-if="message.status?.status === 'canceled'" class="canceled-status">
+        <UIcon name="i-heroicons-x-circle" class="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
+        <span class="text-xs text-yellow-700 dark:text-yellow-300">Query was canceled</span>
+      </div>
+
+      <!-- Enhanced Error Display -->
+      <div v-if="message.status?.status === 'error'" class="error-container">
+        <div class="error-content">
+          <UIcon :name="getErrorIcon(message.status.errorType || classifyError(message.status.error || ''))" class="error-icon" />
+          <div class="error-message">
+            <p class="error-title">{{ getErrorTitle(message.status.error || '', message.status.errorType) }}</p>
+            <p class="error-description">{{ getErrorDescription(message.status.error || '', message.status.errorType) }}</p>
+          </div>
+        </div>
+        <div class="error-actions">
+          <button 
+            v-if="(message.status.errorType || classifyError(message.status.error || '')) !== 'disambiguation'"
+            @click="$emit('retry')" 
+            class="retry-button"
+            :title="`${getErrorActionText(message.status.errorType || classifyError(message.status.error || ''))} this query`"
+          >
+            <UIcon name="i-heroicons-arrow-path" class="w-4 h-4" />
+            {{ getErrorActionText(message.status.errorType || classifyError(message.status.error || '')) }}
+          </button>
+          <button 
+            v-if="(message.status.errorType || classifyError(message.status.error || '')) === 'disambiguation'"
+            @click="$emit('disambiguate')" 
+            class="disambiguate-button"
+            title="Choose the specific account you meant"
+          >
+            <UIcon name="i-heroicons-question-mark-circle" class="w-4 h-4" />
+            {{ getErrorActionText('disambiguation') }}
+          </button>
+        </div>
       </div>
 
       <!-- External Links -->
@@ -168,7 +194,7 @@
  * - Suggested links and prompts
  */
 
-import type { ChatMessage as ChatMessageType } from '~/shared/types/chat-threads'
+import type { ChatMessage as ChatMessageType, ErrorType } from '~/shared/types/chat-threads'
 
 const props = defineProps<{
   message: ChatMessageType & {
@@ -183,7 +209,17 @@ const emit = defineEmits<{
   (e: 'copy', message: any): void
   (e: 'prompt-click', text: string): void
   (e: 'enriched-click', event: MouseEvent): void
+  (e: 'disambiguate'): void
 }>()
+
+// Import error handling utilities from useChatUI
+const { 
+  classifyError, 
+  getErrorIcon, 
+  getErrorTitle, 
+  getErrorDescription, 
+  getErrorActionText 
+} = useChatUI()
 
 // Entity enrichment for message rendering
 const { enrichStrandsResponse } = useStrandsResponseEnricher()
@@ -202,6 +238,31 @@ const formattedContent = computed(() => {
     console.error('[ChatMessage] Error enriching message content:', error)
     return props.message.content.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')
   }
+})
+
+// Status history display with fixed 3-item structure to prevent dimension changes
+const statusHistoryDisplay = computed(() => {
+  const history = props.message.status?.statusHistory || []
+  const recent = history.slice(-3).reverse()
+  
+  // Always return exactly 3 items to maintain consistent container dimensions
+  const result = []
+  for (let i = 0; i < 3; i++) {
+    if (i < recent.length && recent[i]) {
+      result.push({
+        text: recent[i].text || '',
+        timestamp: recent[i].timestamp || Date.now() + i
+      })
+    } else {
+      // Add empty placeholder to maintain structure
+      result.push({
+        text: '',
+        timestamp: Date.now() + i
+      })
+    }
+  }
+  
+  return result
 })
 </script>
 
@@ -353,7 +414,79 @@ const formattedContent = computed(() => {
   @apply inline-block ml-1 text-purple-600 dark:text-purple-400 animate-pulse font-bold;
 }
 
-.error-status {
-  @apply flex items-center gap-2 mt-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg;
+/* Cancellation Status Styles */
+.canceled-status {
+  @apply flex items-center gap-2 mt-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg;
+}
+
+/* Enhanced Error Display Styles */
+.error-container {
+  @apply mt-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg;
+}
+
+.error-content {
+  @apply flex items-start gap-3 mb-3;
+}
+
+.error-icon {
+  @apply w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5;
+}
+
+.error-message {
+  @apply flex-1 min-w-0;
+}
+
+.error-title {
+  @apply text-sm font-semibold text-red-800 dark:text-red-200 mb-1;
+}
+
+.error-description {
+  @apply text-xs text-red-700 dark:text-red-300 leading-relaxed;
+}
+
+.error-actions {
+  @apply flex items-center gap-2;
+}
+
+.retry-button {
+  @apply inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md bg-red-600 hover:bg-red-700 text-white transition-colors;
+}
+
+.disambiguate-button {
+  @apply inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md bg-blue-600 hover:bg-blue-700 text-white transition-colors;
+}
+
+/* Fixed height status history container - reserves space for exactly 3 items */
+.status-history-container {
+  @apply mt-1;
+  height: 48px; /* Fixed height for exactly 3 lines (14px each + 2px gap between) */
+  min-height: 48px;
+  max-height: 48px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px; /* Fixed gap between items */
+}
+
+.status-history-item {
+  @apply text-gray-500 dark:text-gray-500 font-mono;
+  height: 14px; /* Fixed height per line */
+  line-height: 14px;
+  font-size: 11px; /* Consistent font size */
+  flex-shrink: 0; /* Prevent items from shrinking */
+  white-space: nowrap; /* Ensure single line */
+  overflow: hidden; /* Hide overflow text */
+  text-overflow: ellipsis; /* Show ellipsis for long text */
+  
+  /* Fixed width to prevent layout changes from long text */
+  width: 100%;
+  max-width: 100%;
+  min-width: 0; /* Allow text to shrink and truncate */
+  
+  /* Opacity-only transition - no layout properties */
+  transition: opacity 300ms ease-in-out;
+  /* Explicitly prevent transitions on layout properties */
+  transition-property: opacity;
+  will-change: opacity; /* Optimize for opacity changes only */
 }
 </style>

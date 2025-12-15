@@ -397,13 +397,25 @@ export interface ErrorEvent {
 }
 
 /**
+ * Error type classification for enhanced error handling
+ */
+export type ErrorType = 'timeout' | 'network' | 'disambiguation' | 'server' | 'unknown'
+
+/**
  * Message status for streaming UI
  */
 export interface MessageStatus {
-  status: 'pending' | 'streaming' | 'complete' | 'error'
+  status: 'pending' | 'streaming' | 'complete' | 'error' | 'canceled'
+  /**
+   * Async job id that produced this message (used to correctly map progress/completion
+   * events back onto the right placeholder while users switch threads).
+   */
+  jobId?: string
   progress?: string          // Current step (e.g., "Resolving account...")
   toolsCalled?: string[]     // List of tools used
+  statusHistory?: Array<{ text: string; timestamp: number }> // Recent step history (optional)
   error?: string             // Error message if failed
+  errorType?: ErrorType      // Classified error type for enhanced display
 }
 
 /**

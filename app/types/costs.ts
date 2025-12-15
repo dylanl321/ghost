@@ -84,6 +84,8 @@ export interface NormalizedDataset {
   historical: CostsHistoricalResponse | null
   orgWideHistorical?: CostsHistoricalResponse | null // Unfiltered historical data for contextual charts
   currentMonthOrgWide?: CostsSummaryResponse | null // Current month org-wide summary for Year-End chart
+  ytdSummary?: CostsSummaryResponse | null // YTD per-account summary for data table
+  lastMonthSummary?: CostsSummaryResponse | null // Last month per-account summary for data table
   forecast: CostsForecastResponse | null
   extendedForecast: CostsForecastResponse | null // 3-month forecast for trend analysis
   analysis: CostsAnalysisResponse | null

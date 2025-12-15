@@ -671,6 +671,106 @@ const budgetHealthByDepartment: TableDefinition = {
   }
 }
 
+// Table: Budget by Project (individual accounts with project info)
+const budgetByProject: TableDefinition = {
+  id: 'budgetByProject',
+  title: 'Budget by Project',
+  description: 'Individual accounts with project information and budget comparison',
+  context: 'budget-health',
+  layout: { width: 'full', priority: 3.5 },
+  columns: [
+    { key: 'projectName', label: 'Project', default: true },
+    { key: 'accountName', label: 'Account Name', default: true },
+    { key: 'accountId', label: 'Account ID', default: false },
+    {
+      key: 'actualCost',
+      label: 'Actual Cost',
+      align: 'right',
+      format: (v: number) => formatCurrency(v),
+      default: true
+    },
+    {
+      key: 'budgetedCost',
+      label: 'GDMS Forecast',
+      align: 'right',
+      format: (v: number) => formatCurrency(v),
+      default: true
+    },
+    {
+      key: 'variance',
+      label: 'Variance',
+      align: 'right',
+      format: (v: number) => formatCurrency(v),
+      default: true
+    },
+    {
+      key: 'utilization',
+      label: 'Utilization',
+      align: 'right',
+      format: (v: number) => formatPercent(v),
+      default: true
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      align: 'center',
+      default: true
+    }
+  ],
+  extractor: (dataset: NormalizedDataset, dataMode: DataMode = 'billable', accountsList?: AccountMetadata[]) => {
+    const analysisSource = extractAnalysisData(dataset, dataMode)
+
+    if (!analysisSource?.budgetAnalysis?.byAccount) {
+      return []
+    }
+
+    // Create account lookup map for project name enrichment
+    const accountLookup = new Map<string, any>()
+    if (accountsList) {
+      accountsList.forEach(acc => {
+        if (acc.accountId) accountLookup.set(acc.accountId, acc)
+        if (acc.awsStandardAccountID) accountLookup.set(acc.awsStandardAccountID, acc)
+      })
+    }
+
+    // Build accounts list with project info
+    const accounts = analysisSource.budgetAnalysis.byAccount
+      .map((acc: any) => {
+        const metadata = accountLookup.get(acc.accountId) || {}
+        const projectName = (metadata as any).projectName || 'No Project'
+        const utilization = acc.budgetedCost > 0 ? (acc.actualCost / acc.budgetedCost) * 100 : 0
+
+        return {
+          projectName,
+          accountName: acc.accountName || acc.accountId,
+          accountId: acc.accountId,
+          actualCost: acc.actualCost || 0,
+          budgetedCost: acc.budgetedCost || 0,
+          variance: (acc.actualCost || 0) - (acc.budgetedCost || 0),
+          utilization,
+          status: acc.budgetedCost > 0 ? getStatusText(utilization) : 'No Budget'
+        }
+      })
+      // Sort by project name, then by actual cost descending
+      .sort((a: any, b: any) => {
+        if (a.projectName !== b.projectName) {
+          return a.projectName.localeCompare(b.projectName)
+        }
+        return b.actualCost - a.actualCost
+      })
+
+    return accounts
+  },
+  config: {
+    searchable: true,
+    sortable: true,
+    paginated: true,
+    columnToggle: true,
+    exportCsv: true,
+    emptyMessage: 'No account data available'
+  }
+}
+
 // Table: Organization Budget Summary
 const organizationBudgetSummary: TableDefinition = {
   id: 'organizationBudgetSummary',
@@ -1063,6 +1163,7 @@ const allTables: TableDefinition[] = [
   budgetOverageAccounts,
   severeOverageAccounts,
   underutilizedBudgets,
+  budgetByProject,
   budgetHealthByLOB,
   budgetHealthByDepartment,
   organizationBudgetSummary,
@@ -1084,6 +1185,7 @@ const selectTablesForContext = (context: 'smart' | 'budget', scenario: string, t
       severeOverageAccounts,
       budgetOverageAccounts,
       underutilizedBudgets,
+      budgetByProject,
       budgetHealthByLOB,
       budgetHealthByDepartment,
       organizationBudgetSummary

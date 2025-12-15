@@ -12,6 +12,7 @@
         @copy="copyMessageMarkdown"
         @prompt-click="handlePromptClick"
         @enriched-click="handleEnrichedClick"
+        @disambiguate="handleDisambiguate"
       />
 
       <!-- Example Questions (when welcome is shown) -->
@@ -71,7 +72,7 @@
               </div>
             </div>
             <div v-if="filteredAccounts.length === 0" class="mention-empty">
-              No accounts found
+              No active accounts found
             </div>
           </div>
 
@@ -85,8 +86,12 @@
             @input="handleInputUpdate"
             @keydown="handleKeyDown"
           />
-          <button type="submit" :disabled="isLoading || !inputValue.trim()" class="send-button">
-            <UIcon name="i-heroicons-paper-airplane" class="w-5 h-5" />
+          <button type="submit" :disabled="chatState === 'sending' || !inputValue.trim()" class="send-button">
+            <UIcon 
+              :name="chatState === 'sending' ? 'i-heroicons-arrow-path' : 'i-heroicons-paper-airplane'" 
+              class="w-5 h-5"
+              :class="{ 'animate-spin': chatState === 'sending' }"
+            />
           </button>
         </div>
         <p class="input-hint">
@@ -436,6 +441,16 @@ async function handlePromptClick(promptText: string) {
   // Set the input value so sendMessage can use it
   inputValue.value = promptText
   await sendMessage()
+}
+
+// Handle disambiguation request
+function handleDisambiguate() {
+  // Show the disambiguation modal if we have disambiguation data
+  if (disambiguationData.value) {
+    showDisambiguation.value = true
+  } else {
+    console.warn('[GhostChatFullPage] No disambiguation data available')
+  }
 }
 
 // Auto scroll when messages change

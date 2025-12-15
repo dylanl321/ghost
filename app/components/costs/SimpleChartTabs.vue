@@ -85,14 +85,72 @@
       </div>
 
       <!-- Budget Health Tab -->
-      <div v-else-if="activeTab === 'budget-health'" class="animate-fadeIn">
-        <TablesRenderer
-          :tables="budgetTables"
+      <div v-else-if="activeTab === 'budget-health'" class="animate-fadeIn space-y-6">
+        <!-- Summary KPI Cards -->
+        <BudgetHealthSummaryCards
           :dataset="dataset"
           :data-mode="dataMode"
-          :accounts-list="accountsList"
-          :selected-accounts="[]"
         />
+
+        <!-- Section: Critical Issues -->
+        <div class="space-y-4">
+          <div class="flex items-center gap-2 border-b border-gray-700 pb-2">
+            <Icon name="i-heroicons-exclamation-triangle" class="w-5 h-5 text-red-400" />
+            <h3 class="text-lg font-semibold text-gray-200">Critical Issues</h3>
+          </div>
+          <TablesRenderer
+            :tables="budgetTables.filter(t => ['severeOverageAccounts', 'budgetOverageAccounts'].includes(t.id))"
+            :dataset="dataset"
+            :data-mode="dataMode"
+            :accounts-list="accountsList"
+            :selected-accounts="[]"
+          />
+        </div>
+
+        <!-- Section: Budget by Project -->
+        <div class="space-y-4">
+          <div class="flex items-center gap-2 border-b border-gray-700 pb-2">
+            <Icon name="i-heroicons-folder" class="w-5 h-5 text-purple-400" />
+            <h3 class="text-lg font-semibold text-gray-200">Budget by Project</h3>
+          </div>
+          <TablesRenderer
+            :tables="budgetTables.filter(t => t.id === 'budgetByProject')"
+            :dataset="dataset"
+            :data-mode="dataMode"
+            :accounts-list="accountsList"
+            :selected-accounts="[]"
+          />
+        </div>
+
+        <!-- Section: Organizational View -->
+        <div class="space-y-4">
+          <div class="flex items-center gap-2 border-b border-gray-700 pb-2">
+            <Icon name="i-heroicons-building-office-2" class="w-5 h-5 text-blue-400" />
+            <h3 class="text-lg font-semibold text-gray-200">Organizational View</h3>
+          </div>
+          <TablesRenderer
+            :tables="budgetTables.filter(t => ['budgetHealthByLOB', 'budgetHealthByDepartment'].includes(t.id))"
+            :dataset="dataset"
+            :data-mode="dataMode"
+            :accounts-list="accountsList"
+            :selected-accounts="[]"
+          />
+        </div>
+
+        <!-- Section: Underutilized & Summary -->
+        <div class="space-y-4">
+          <div class="flex items-center gap-2 border-b border-gray-700 pb-2">
+            <Icon name="i-heroicons-chart-pie" class="w-5 h-5 text-green-400" />
+            <h3 class="text-lg font-semibold text-gray-200">Budget Optimization</h3>
+          </div>
+          <TablesRenderer
+            :tables="budgetTables.filter(t => ['underutilizedBudgets', 'organizationBudgetSummary'].includes(t.id))"
+            :dataset="dataset"
+            :data-mode="dataMode"
+            :accounts-list="accountsList"
+            :selected-accounts="[]"
+          />
+        </div>
       </div>
 
       <!-- Data Table Tab -->
@@ -122,6 +180,7 @@ import OrganizationalCharts from './OrganizationalCharts.vue'
 import HistoricalTrends from './HistoricalTrends.vue'
 import CostDataTable from './CostDataTable.vue'
 import ForecastDataTable from './ForecastDataTable.vue'
+import BudgetHealthSummaryCards from './BudgetHealthSummaryCards.vue'
 import type { ChartDefinition } from '~/composables/useChartRegistry'
 import { useTableRegistry } from '~/composables/useTableRegistry'
 import { useCostScenario } from '~/composables/useCostScenario'

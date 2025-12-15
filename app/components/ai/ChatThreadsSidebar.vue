@@ -147,6 +147,12 @@
             ></div>
             <span v-if="msg.streamBuffer && (msg.status?.status === 'pending' || msg.status?.status === 'streaming')" class="cursor-blink">|</span>
 
+            <!-- Canceled status -->
+            <div v-if="msg.status?.status === 'canceled'" class="canceled-status-sidebar">
+              <UIcon name="i-heroicons-x-circle" class="w-3.5 h-3.5 text-yellow-500" />
+              <span class="text-xs text-yellow-600 dark:text-yellow-400">Canceled</span>
+            </div>
+
             <!-- Error status with retry -->
             <div v-if="msg.status?.status === 'error'" class="error-status-sidebar">
               <UIcon name="i-heroicons-exclamation-triangle" class="w-3.5 h-3.5 text-red-500" />
@@ -263,7 +269,7 @@
                 </div>
               </div>
               <div v-if="filteredAccounts.length === 0" class="mention-empty-sidebar">
-                No accounts found
+                No active accounts found
               </div>
             </div>
 
@@ -712,6 +718,10 @@ watch([scrollTrigger, messages], () => {
 
 .cursor-blink {
   @apply inline-block ml-0.5 text-purple-600 dark:text-purple-400 animate-pulse font-bold;
+}
+
+.canceled-status-sidebar {
+  @apply flex items-center gap-1.5 mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded text-xs;
 }
 
 .error-status-sidebar {

@@ -131,6 +131,7 @@
           @copy="copyMessageMarkdown"
           @prompt-click="handlePromptClick"
           @enriched-click="handleEnrichedClick"
+          @disambiguate="handleDisambiguate"
         />
 
         <!-- Loading indicator (fallback) -->
@@ -192,13 +193,13 @@
           />
           <button
             type="submit"
-            :disabled="!userInput.trim() || isLoading"
+            :disabled="!userInput.trim() || chatState === 'sending'"
             class="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white rounded-lg transition-colors disabled:cursor-not-allowed flex items-center justify-center"
           >
             <UIcon
-              :name="isLoading ? 'i-heroicons-arrow-path' : 'i-heroicons-paper-airplane'"
+              :name="chatState === 'sending' ? 'i-heroicons-arrow-path' : 'i-heroicons-paper-airplane'"
               class="w-4 h-4"
-              :class="{ 'animate-spin': isLoading }"
+              :class="{ 'animate-spin': chatState === 'sending' }"
             />
           </button>
         </form>
@@ -238,6 +239,7 @@ import mermaid from 'mermaid'
 const {
   // Core state
   messages,
+  chatState,
   showWelcome,
   isLoading,
   showLoader,
@@ -321,6 +323,16 @@ async function handleSendMessage() {
 async function handleExampleClick(example: string) {
   localShowExamples.value = false
   await sendMessage(example)
+}
+
+// Handle disambiguation request
+function handleDisambiguate() {
+  // Show the disambiguation modal if we have disambiguation data
+  if (disambiguationData.value) {
+    showDisambiguation.value = true
+  } else {
+    console.warn('[StrandsChatPopup] No disambiguation data available')
+  }
 }
 
 // Handle suggested prompt click
@@ -441,6 +453,9 @@ watch(messages, async () => {
   }
 }, { deep: true })
 
+// User preferences for popup behavior
+const userPreferences = useUserPreferences()
+
 // Initialize on mount
 onMounted(async () => {
   // Initialize mermaid with dark mode support
@@ -502,19 +517,62 @@ onMounted(async () => {
     }
   })
 
-  // Show hint for first-time users
-  const hasVisited = localStorage.getItem('strands-popup-visited')
-  if (!hasVisited) {
-    showHint.value = true
-    setTimeout(() => {
-      showHint.value = false
-      localStorage.setItem('strands-popup-visited', 'true')
-    }, 5000)
-  }
+  // Handle first-time popup behavior with user preferences
+  await handleFirstTimePopupBehavior()
 
   await initialize()
   localStorage.removeItem('strands-popup-chat')
 })
+
+// Handle first-time popup behavior
+async function handleFirstTimePopupBehavior() {
+  try {
+    // Load user preferences
+    await userPreferences.load()
+    
+    // Check if user has seen the popup before
+    const hasSeenPopup = userPreferences.getPreference('chatPopupSeen', false)
+    
+    if (!hasSeenPopup) {
+      // First time - auto-open popup and show hint
+      isOpen.value = true
+      showHint.value = true
+      
+      // Save preference after a short delay (user has seen it)
+      setTimeout(async () => {
+        try {
+          await userPreferences.setPreference('chatPopupSeen', true)
+          showHint.value = false
+        } catch (error) {
+          console.warn('Failed to save chatPopupSeen preference:', error)
+          // Fallback to localStorage
+          localStorage.setItem('strands-popup-visited', 'true')
+          showHint.value = false
+        }
+      }, 2000)
+    } else {
+      // Subsequent visits - keep popup closed
+      isOpen.value = false
+    }
+  } catch (error) {
+    console.warn('Failed to load user preferences, falling back to localStorage:', error)
+    
+    // Fallback to localStorage if user preferences fail
+    const hasVisited = localStorage.getItem('strands-popup-visited')
+    if (!hasVisited) {
+      // First time with localStorage fallback - auto-open popup
+      isOpen.value = true
+      showHint.value = true
+      setTimeout(() => {
+        showHint.value = false
+        localStorage.setItem('strands-popup-visited', 'true')
+      }, 5000)
+    } else {
+      // Subsequent visits with localStorage - keep popup closed
+      isOpen.value = false
+    }
+  }
+}
 
 // Reload thread when popup opens
 watch(isOpen, async (newValue) => {

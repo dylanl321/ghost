@@ -10,6 +10,14 @@
  */
 export type ConfigValueType = 'boolean' | 'string' | 'number' | 'object' | 'array';
 
+export type ConfigTakesEffect =
+  | 'immediate'
+  | 'next_request'
+  | 'next_refresh'
+  | 'next_reload'
+  | 'next_login'
+  | 'not_wired';
+
 /**
  * Configuration categories for organization in admin panel
  */
