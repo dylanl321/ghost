@@ -3,7 +3,7 @@
   <div v-if="!isOpen" class="fixed bottom-6 right-6 z-40">
     <button
       @click="toggleChat"
-      class="w-14 h-14 rounded-full bg-purple-600 hover:bg-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center group hover:scale-110"
+      class="w-14 h-14 rounded-full bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center group hover:scale-110 active:scale-105"
       :title="'Open AI Assistant'"
     >
       <UIcon name="i-heroicons-sparkles" class="w-6 h-6" />
@@ -43,21 +43,21 @@
           <button
             v-if="showWelcome"
             @click="localShowExamples = !localShowExamples"
-            class="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
+            class="p-1.5 hover:bg-white/10 active:bg-white/20 rounded-lg transition-all duration-150 active:scale-95"
             title="Example questions"
           >
             <UIcon name="i-heroicons-light-bulb" class="w-4 h-4 text-white" />
           </button>
           <button
             @click="handleClearChat"
-            class="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
+            class="p-1.5 hover:bg-white/10 active:bg-white/20 rounded-lg transition-all duration-150 active:scale-95"
             title="Clear chat"
           >
             <UIcon name="i-heroicons-trash" class="w-4 h-4 text-white" />
           </button>
           <button
             @click="toggleChat"
-            class="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
+            class="p-1.5 hover:bg-white/10 active:bg-white/20 rounded-lg transition-all duration-150 active:scale-95"
             title="Close"
           >
             <UIcon name="i-heroicons-x-mark" class="w-4 h-4 text-white" />
@@ -65,31 +65,48 @@
         </div>
       </div>
 
-      <!-- Example Questions (collapsible) -->
-      <div
-        v-if="localShowExamples && showWelcome"
-        class="p-3 bg-purple-50 dark:bg-purple-900/20 border-b border-purple-200 dark:border-purple-800"
+      <!-- Example Questions (collapsible) with fade transition -->
+      <Transition
+        enter-active-class="transition-all duration-300 ease-out"
+        enter-from-class="opacity-0 -translate-y-2"
+        enter-to-class="opacity-100 translate-y-0"
+        leave-active-class="transition-all duration-200 ease-in"
+        leave-from-class="opacity-100 translate-y-0"
+        leave-to-class="opacity-0 -translate-y-2"
       >
+        <div
+          v-if="localShowExamples && showWelcome"
+          class="p-3 bg-purple-50 dark:bg-purple-900/20 border-b border-purple-200 dark:border-purple-800"
+        >
         <p class="text-xs font-medium text-purple-900 dark:text-purple-100 mb-2">Try asking:</p>
         <div class="space-y-1">
           <button
             v-for="(example, idx) in exampleQuestions"
             :key="idx"
             @click="handleExampleClick(example)"
-            class="block w-full text-left text-xs px-2 py-1.5 rounded bg-white dark:bg-gray-800 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-gray-700 dark:text-gray-300 transition-colors"
+            class="block w-full text-left text-xs px-2 py-1.5 rounded bg-white dark:bg-gray-800 hover:bg-purple-100 dark:hover:bg-purple-900/40 active:bg-purple-200 dark:active:bg-purple-900/60 text-gray-700 dark:text-gray-300 transition-all duration-150 active:scale-98"
           >
             {{ example }}
           </button>
         </div>
       </div>
+      </Transition>
 
       <!-- Messages -->
       <div
         ref="messagesContainer"
         class="flex-1 overflow-y-auto p-4 space-y-3"
       >
-        <!-- Welcome message -->
-        <div v-if="showWelcome" class="text-center py-8">
+        <!-- Welcome message with fade transition -->
+        <Transition
+          enter-active-class="transition-opacity duration-400 ease-in-out"
+          enter-from-class="opacity-0"
+          enter-to-class="opacity-100"
+          leave-active-class="transition-opacity duration-300 ease-in-out"
+          leave-from-class="opacity-100"
+          leave-to-class="opacity-0"
+        >
+          <div v-if="showWelcome" class="text-center py-8">
           <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
             <UIcon name="i-heroicons-sparkles" class="w-8 h-8 text-purple-600 dark:text-purple-400" />
           </div>
@@ -100,9 +117,18 @@
             Ask me about AWS costs, resources, users, or anything related to your accounts.
           </p>
         </div>
+        </Transition>
 
-        <!-- Sample Prompts (only show when no messages) -->
-        <div v-if="showWelcome" class="space-y-2 px-2">
+        <!-- Sample Prompts (only show when no messages) with fade transition -->
+        <Transition
+          enter-active-class="transition-opacity duration-400 ease-in-out"
+          enter-from-class="opacity-0"
+          enter-to-class="opacity-100"
+          leave-active-class="transition-opacity duration-300 ease-in-out"
+          leave-from-class="opacity-100"
+          leave-to-class="opacity-0"
+        >
+          <div v-if="showWelcome" class="space-y-2 px-2">
           <div class="flex items-center gap-1.5 mb-2">
             <UIcon name="i-heroicons-light-bulb" class="w-4 h-4 text-purple-500" />
             <p class="text-xs font-medium text-gray-700 dark:text-gray-300">Try asking:</p>
@@ -111,7 +137,7 @@
             v-for="(sample, idx) in samplePrompts"
             :key="idx"
             @click="handleExampleClick(sample)"
-            class="w-full text-left text-xs px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800/50 hover:bg-purple-50 dark:hover:bg-purple-900/20 text-gray-700 dark:text-gray-300 transition-colors border border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700"
+            class="w-full text-left text-xs px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800/50 hover:bg-purple-50 dark:hover:bg-purple-900/20 active:bg-purple-100 dark:active:bg-purple-900/30 text-gray-700 dark:text-gray-300 transition-all duration-150 border border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700 active:scale-98"
           >
             <div class="flex items-start gap-2">
               <UIcon name="i-heroicons-chat-bubble-left-right" class="w-3.5 h-3.5 text-purple-500 flex-shrink-0 mt-0.5" />
@@ -119,6 +145,7 @@
             </div>
           </button>
         </div>
+        </Transition>
 
         <!-- Chat messages -->
         <ChatMessage
@@ -134,8 +161,16 @@
           @disambiguate="handleDisambiguate"
         />
 
-        <!-- Loading indicator (fallback) -->
-        <div v-if="showLoader" class="flex justify-start">
+        <!-- Loading indicator (fallback) with fade transition -->
+        <Transition
+          enter-active-class="transition-opacity duration-300 ease-in-out"
+          enter-from-class="opacity-0"
+          enter-to-class="opacity-100"
+          leave-active-class="transition-opacity duration-200 ease-in-out"
+          leave-from-class="opacity-100"
+          leave-to-class="opacity-0"
+        >
+          <div v-if="showLoader" class="flex justify-start">
           <div class="bg-gray-100 dark:bg-gray-800 rounded-lg px-3 py-2 w-full">
             <div class="flex items-start gap-2 mb-1">
               <div class="flex items-center gap-2 flex-1">
@@ -149,7 +184,7 @@
               </div>
               <button
                 @click="cancelQuery"
-                class="px-2 py-1 text-[11px] rounded bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 transition-colors flex items-center gap-1 flex-shrink-0"
+                class="px-2 py-1 text-[11px] rounded bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 active:bg-red-300 dark:active:bg-red-900/70 text-red-700 dark:text-red-300 transition-all duration-150 flex items-center gap-1 flex-shrink-0 active:scale-95"
                 title="Cancel query"
               >
                 <UIcon name="i-heroicons-x-circle" class="w-3 h-3" />
@@ -169,9 +204,18 @@
             </div>
           </div>
         </div>
+        </Transition>
 
-        <!-- Error message -->
-        <div v-if="errorMessage" class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+        <!-- Error message with fade transition -->
+        <Transition
+          enter-active-class="transition-opacity duration-300 ease-in-out"
+          enter-from-class="opacity-0"
+          enter-to-class="opacity-100"
+          leave-active-class="transition-opacity duration-200 ease-in-out"
+          leave-from-class="opacity-100"
+          leave-to-class="opacity-0"
+        >
+          <div v-if="errorMessage" class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
           <div class="flex items-start gap-2">
             <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
             <div class="flex-1 min-w-0">
@@ -179,6 +223,7 @@
             </div>
           </div>
         </div>
+        </Transition>
       </div>
 
       <!-- Input -->
@@ -194,7 +239,7 @@
           <button
             type="submit"
             :disabled="!userInput.trim() || chatState === 'sending'"
-            class="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white rounded-lg transition-colors disabled:cursor-not-allowed flex items-center justify-center"
+            class="px-4 py-2 bg-purple-600 hover:bg-purple-700 active:bg-purple-800 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white rounded-lg transition-all duration-150 disabled:cursor-not-allowed flex items-center justify-center active:scale-95"
           >
             <UIcon
               :name="chatState === 'sending' ? 'i-heroicons-arrow-path' : 'i-heroicons-paper-airplane'"

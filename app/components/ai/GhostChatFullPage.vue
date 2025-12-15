@@ -15,8 +15,16 @@
         @disambiguate="handleDisambiguate"
       />
 
-      <!-- Example Questions (when welcome is shown) -->
-      <div v-if="showWelcome" class="example-questions">
+      <!-- Example Questions (when welcome is shown) with fade transition -->
+      <Transition
+        enter-active-class="transition-opacity duration-400 ease-in-out"
+        enter-from-class="opacity-0"
+        enter-to-class="opacity-100"
+        leave-active-class="transition-opacity duration-300 ease-in-out"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
+      >
+        <div v-if="showWelcome" class="example-questions">
         <div class="flex items-center gap-2 mb-3">
           <UIcon name="i-heroicons-light-bulb" class="w-5 h-5 text-purple-500" />
           <p class="text-sm font-medium text-gray-700 dark:text-gray-300">Try these examples (click to use):</p>
@@ -36,6 +44,7 @@
           <UIcon name="i-heroicons-arrow-right" class="w-4 h-4 text-gray-400 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
       </div>
+      </Transition>
 
       <!--
         NOTE: Loading indicators are now shown ONLY inside ChatMessage component
@@ -48,12 +57,20 @@
     <div class="chat-input-container">
       <form @submit.prevent="handleSubmit" class="input-form">
         <div class="input-wrapper">
-          <!-- Account Mention Dropdown -->
-          <div
-            v-if="showMentionDropdown"
-            class="mention-dropdown"
-            ref="mentionDropdownRef"
+          <!-- Account Mention Dropdown with fade transition -->
+          <Transition
+            enter-active-class="transition-all duration-200 ease-out"
+            enter-from-class="opacity-0 -translate-y-2"
+            enter-to-class="opacity-100 translate-y-0"
+            leave-active-class="transition-all duration-150 ease-in"
+            leave-from-class="opacity-100 translate-y-0"
+            leave-to-class="opacity-0 -translate-y-2"
           >
+            <div
+              v-if="showMentionDropdown"
+              class="mention-dropdown"
+              ref="mentionDropdownRef"
+            >
             <div
               v-for="(account, index) in filteredAccounts"
               :key="account.accountId"
@@ -75,6 +92,7 @@
               No active accounts found
             </div>
           </div>
+          </Transition>
 
           <input
             v-model="inputValue"
@@ -86,7 +104,7 @@
             @input="handleInputUpdate"
             @keydown="handleKeyDown"
           />
-          <button type="submit" :disabled="chatState === 'sending' || !inputValue.trim()" class="send-button">
+          <button type="submit" :disabled="chatState === 'sending' || !inputValue.trim()" class="send-button active:scale-95">
             <UIcon 
               :name="chatState === 'sending' ? 'i-heroicons-arrow-path' : 'i-heroicons-paper-airplane'" 
               class="w-5 h-5"
@@ -745,7 +763,7 @@ onMounted(async () => {
 }
 
 .example-question {
-  @apply flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg cursor-pointer transition-all duration-200 border border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-600 animate-fade-in hover:shadow-md hover:scale-[1.02] active:scale-[0.98];
+  @apply flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800 hover:bg-purple-50 dark:hover:bg-purple-900/20 active:bg-purple-100 dark:active:bg-purple-900/30 rounded-lg cursor-pointer transition-all duration-200 border border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-600 animate-fade-in hover:shadow-md hover:scale-[1.02] active:scale-[0.98];
 }
 
 .example-question:hover {
@@ -862,7 +880,7 @@ onMounted(async () => {
 }
 
 .send-button {
-  @apply p-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  @apply p-3 bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white rounded-lg transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
 .input-hint {

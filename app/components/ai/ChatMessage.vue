@@ -1,8 +1,16 @@
 <template>
   <div :class="`message ${message.role === 'user' ? 'user' : 'bot'}`">
     <div class="message-content">
-      <!-- Streaming status indicator (GHOST thinking) -->
-      <div v-if="message.status?.status === 'pending' || message.status?.status === 'streaming'" class="streaming-status mb-3">
+      <!-- Streaming status indicator (GHOST thinking) with fade transition -->
+      <Transition
+        enter-active-class="transition-opacity duration-300 ease-in-out"
+        enter-from-class="opacity-0"
+        enter-to-class="opacity-100"
+        leave-active-class="transition-opacity duration-200 ease-in-out"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
+      >
+        <div v-if="message.status?.status === 'pending' || message.status?.status === 'streaming'" class="streaming-status mb-3">
         <div class="flex items-center gap-3 mb-2">
           <div class="ghost-loading">
             <UIcon name="i-fa6-solid-ghost" class="ghost-icon text-emerald-400" style="width: 24px; height: 24px;" />
@@ -33,7 +41,7 @@
           </div>
           <button
             @click="$emit('cancel')"
-            class="px-3 py-1.5 text-xs rounded-lg bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 transition-colors flex items-center gap-1.5 flex-shrink-0"
+            class="px-3 py-1.5 text-xs rounded-lg bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 active:bg-red-300 dark:active:bg-red-900/70 text-red-700 dark:text-red-300 transition-all duration-150 flex items-center gap-1.5 flex-shrink-0 active:scale-95"
             title="Cancel query"
           >
             <UIcon name="i-heroicons-x-circle" class="w-4 h-4" />
@@ -50,6 +58,7 @@
           Complex queries may take 30-120 seconds to complete
         </div>
       </div>
+      </Transition>
 
       <!-- AI Thinking Block (for assistant messages with reasoning from API) -->
       <AIThinkingBlock
@@ -60,14 +69,31 @@
       <div class="markdown-container" v-html="formattedContent" @click="$emit('enriched-click', $event)"></div>
       <span v-if="message.streamBuffer && (message.status?.status === 'pending' || message.status?.status === 'streaming')" class="cursor-blink">|</span>
 
-      <!-- Cancellation Status -->
-      <div v-if="message.status?.status === 'canceled'" class="canceled-status">
+      <!-- Cancellation Status with fade transition -->
+      <Transition
+        enter-active-class="transition-opacity duration-300 ease-in-out"
+        enter-from-class="opacity-0"
+        enter-to-class="opacity-100"
+        leave-active-class="transition-opacity duration-200 ease-in-out"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
+      >
+        <div v-if="message.status?.status === 'canceled'" class="canceled-status">
         <UIcon name="i-heroicons-x-circle" class="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
         <span class="text-xs text-yellow-700 dark:text-yellow-300">Query was canceled</span>
       </div>
+      </Transition>
 
-      <!-- Enhanced Error Display -->
-      <div v-if="message.status?.status === 'error'" class="error-container">
+      <!-- Enhanced Error Display with fade transition -->
+      <Transition
+        enter-active-class="transition-opacity duration-300 ease-in-out"
+        enter-from-class="opacity-0"
+        enter-to-class="opacity-100"
+        leave-active-class="transition-opacity duration-200 ease-in-out"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
+      >
+        <div v-if="message.status?.status === 'error'" class="error-container">
         <div class="error-content">
           <UIcon :name="getErrorIcon(message.status.errorType || classifyError(message.status.error || ''))" class="error-icon" />
           <div class="error-message">
@@ -96,6 +122,7 @@
           </button>
         </div>
       </div>
+      </Transition>
 
       <!-- External Links -->
       <div v-if="message.links && message.links.length > 0" class="mt-3">
@@ -166,7 +193,7 @@
             v-for="(prompt, promptIdx) in message.suggestedPrompts"
             :key="promptIdx"
             @click="$emit('prompt-click', prompt.text)"
-            class="inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/40 text-purple-700 dark:text-purple-300 transition-colors hover:scale-105"
+            class="inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/40 active:bg-purple-200 dark:active:bg-purple-900/60 text-purple-700 dark:text-purple-300 transition-all duration-150 hover:scale-105 active:scale-100"
           >
             <UIcon
               :name="prompt.type === 'question' ? 'i-heroicons-question-mark-circle' : prompt.type === 'action' ? 'i-heroicons-arrow-right-circle' : 'i-heroicons-information-circle'"
@@ -348,7 +375,7 @@ const statusHistoryDisplay = computed(() => {
 }
 
 .copy-badge {
-  @apply bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300;
+  @apply bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 active:scale-95;
 }
 
 .suggested-links {
@@ -449,11 +476,11 @@ const statusHistoryDisplay = computed(() => {
 }
 
 .retry-button {
-  @apply inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md bg-red-600 hover:bg-red-700 text-white transition-colors;
+  @apply inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md bg-red-600 hover:bg-red-700 active:bg-red-800 text-white transition-all duration-150 active:scale-95;
 }
 
 .disambiguate-button {
-  @apply inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md bg-blue-600 hover:bg-blue-700 text-white transition-colors;
+  @apply inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white transition-all duration-150 active:scale-95;
 }
 
 /* Fixed height status history container - reserves space for exactly 3 items */
