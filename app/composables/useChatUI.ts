@@ -1385,6 +1385,10 @@ export function useChatUI(options: UseChatUIOptions = {}) {
 
     if (threadsStore.activeThreadId) {
       await threadsStore.loadThread(threadsStore.activeThreadId)
+    } else {
+      // Create a new thread if none exists so the input works immediately
+      console.log('[useChatUI] No active thread, creating one')
+      await threadsStore.createThread()
     }
 
     // Check for pending job recovery on initialization

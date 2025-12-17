@@ -95,7 +95,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 
-const { getPreference, setPreference } = useUserPreferences()
+const { getPreference, setPreference, initialized, load } = useUserPreferences()
 
 interface QuickStartCardPreference {
   dismissCount: number
@@ -115,6 +115,11 @@ const shouldShow = computed(() => {
 })
 
 onMounted(async () => {
+  // Wait for preferences to be fully loaded before reading
+  if (!initialized.value) {
+    await load()
+  }
+
   // Load preference from user preferences
   const stored = getPreference<QuickStartCardPreference>('quickStartCard')
 

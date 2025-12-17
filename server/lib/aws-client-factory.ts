@@ -365,12 +365,19 @@ export async function getClient<T = any>(
   if (!ClientClass) {
     throw new Error(`Unsupported service: ${service}`)
   }
-  
-  // Create the client
-  const client = new ClientClass({
+
+  // Create the client with FIPS endpoints for GovCloud
+  const clientConfig: any = {
     region: targetRegion,
     credentials
-  })
+  }
+
+  // GovCloud requires FIPS endpoints for most services
+  if (environment === 'govcloud') {
+    clientConfig.useFipsEndpoint = true
+  }
+
+  const client = new ClientClass(clientConfig)
   
   // Cache the client with expiration tracking
   clientCache.set(cacheKey, {

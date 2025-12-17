@@ -142,7 +142,20 @@ export function useStrandsResponseEnricher() {
       linkBuilder: (instanceId: string) => `/account/explorer?resourceId=${instanceId}&type=ec2`,
       popoverDataFetcher: async (instanceId: string) => {
         try {
-          return await $fetch(`/api/resources/ec2/${instanceId}/summary`)
+          // Use the existing instances API endpoint
+          const response = await $fetch<any>(`/api/instances/${instanceId}`)
+          // Transform to popover format
+          const instance = response?.data?.instance
+          if (instance) {
+            return {
+              name: instance.instanceName || instance.resourceName,
+              instanceType: instance.instanceType,
+              state: instance.instanceState,
+              accountId: instance.accountId,
+              region: instance.region
+            }
+          }
+          return null
         } catch {
           return null
         }

@@ -12,20 +12,20 @@
 import { defineEventHandler, getRouterParam, getQuery } from 'h3'
 import { sendSuccess, errors, handleAsync, parseQueryParams } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
-import { 
-  enrichInstanceData, 
+import {
+  enrichInstanceData,
   generateTagSuggestions,
-  type EnrichedInstanceData 
+  type EnrichedInstanceData
 } from '../../utils/instance-enrichment'
 import {
   getResourceConfig,
+  queryResources,
   type ResourceDetail
 } from '../../utils/config-service'
 import {
   getBatchOptimizationRecommendations,
   generateOptimizationSummaryText
 } from '../../utils/compute-optimizer'
-import { parseAndValidateAccountFilters, filterAccounts } from '../../utils/account-filters'
 import type { AWSEnvironmentType } from '../../types'
 import { logger } from '../../utils/logger'
 
@@ -192,92 +192,151 @@ registerEndpoint('/api/instances/[instanceId]', 'GET', {
   }
 })
 
+/**
+ * Search for an instance in a specific environment using Config aggregator
+ */
+async function searchInstanceInEnvironment(
+  instanceId: string,
+  env: AWSEnvironmentType,
+  specificAccountId?: string
+): Promise<{ resource: ResourceDetail | null; accountId?: string; environment: AWSEnvironmentType }> {
+  const aggregatorName = env === 'commercial'
+    ? (process.env.AWS_COMMERCIAL_CONFIG_AGGREGATOR || 'CommercialAggregator')
+    : (process.env.AWS_GOVCLOUD_CONFIG_AGGREGATOR || 'GDMSAggregator')
+
+  const region = env === 'commercial'
+    ? (process.env.AWS_COMMERCIAL_REGION || 'us-east-1')
+    : (process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1')
+
+  if (specificAccountId) {
+    // Direct lookup if account ID is provided
+    const resourceIdentifier = {
+      SourceAccountId: specificAccountId,
+      SourceRegion: region,
+      ResourceId: instanceId,
+      ResourceType: 'AWS::EC2::Instance'
+    }
+
+    const resource = await getResourceConfig(aggregatorName, resourceIdentifier, env, region)
+    return { resource, accountId: specificAccountId, environment: env }
+  }
+
+  // Use SQL query to search across all accounts
+  const sqlQuery = `SELECT resourceId, resourceType, resourceName, accountId, awsRegion, arn, resourceCreationTime, tags, configuration WHERE resourceType = 'AWS::EC2::Instance' AND resourceId = '${instanceId}'`
+
+  try {
+    const queryResult = await queryResources(aggregatorName, sqlQuery, env, region, 1)
+
+    if (queryResult.results && queryResult.results.length > 0) {
+      const rawResult = typeof queryResult.results[0] === 'string'
+        ? JSON.parse(queryResult.results[0])
+        : queryResult.results[0]
+
+      // Parse configuration
+      let configuration = {}
+      if (rawResult.configuration) {
+        try {
+          configuration = typeof rawResult.configuration === 'string'
+            ? JSON.parse(rawResult.configuration)
+            : rawResult.configuration
+        } catch {
+          configuration = rawResult.configuration
+        }
+      }
+
+      // Convert tags from Config format if needed
+      let tags: Record<string, string> = {}
+      if (rawResult.tags) {
+        if (Array.isArray(rawResult.tags)) {
+          for (const tag of rawResult.tags) {
+            if (tag.key && tag.value !== undefined) {
+              tags[tag.key] = tag.value
+            }
+          }
+        } else if (typeof rawResult.tags === 'object') {
+          tags = rawResult.tags
+        }
+      }
+
+      return {
+        resource: {
+          resourceId: rawResult.resourceId,
+          resourceType: rawResult.resourceType,
+          resourceName: rawResult.resourceName,
+          accountId: rawResult.accountId,
+          region: rawResult.awsRegion,
+          arn: rawResult.arn,
+          resourceCreationTime: rawResult.resourceCreationTime,
+          tags,
+          configuration
+        },
+        accountId: rawResult.accountId,
+        environment: env
+      }
+    }
+  } catch (error) {
+    logger.debug(`[Instance Details] Search in ${env} failed: ${error.message}`)
+  }
+
+  return { resource: null, environment: env }
+}
+
 export default defineEventHandler(handleAsync(async (event) => {
   try {
     const instanceId = getRouterParam(event, 'instanceId')
     const query = getQuery(event)
-    
+
     if (!instanceId) {
       return errors.badRequest(event, 'Instance ID is required')
     }
-    
-    // Validate instance ID format
-    if (!instanceId.match(/^i-[a-f0-9]{17}$/)) {
+
+    // Validate instance ID format (8 or 17 hex chars after i-)
+    if (!instanceId.match(/^i-[a-f0-9]{8,17}$/)) {
       return errors.badRequest(event, 'Invalid instance ID format')
     }
-    
-    const { environment } = parseQueryParams(event)
+
+    const { environment: requestedEnv } = parseQueryParams(event)
     const includeOptimization = query.includeOptimization !== 'false'
     const includeTagSuggestions = query.includeTagSuggestions !== 'false'
     const specificAccountId = query.accountId as string | undefined
-    
-    logger.info(`[Instance Details] Looking for instance ${instanceId} in ${environment}`)
-    
-    // Get environment-specific aggregator and region
-    const aggregatorName = environment === 'commercial' 
-      ? (process.env.AWS_COMMERCIAL_CONFIG_AGGREGATOR || 'CommercialAggregator')
-      : (process.env.AWS_GOVCLOUD_CONFIG_AGGREGATOR || 'GDMSAggregator')
-      
-    const region = environment === 'commercial'
-      ? (process.env.AWS_COMMERCIAL_REGION || 'us-east-1')
-      : (process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1')
-    
-    // If no specific account provided, we need to search across accounts
-    let accountIds: string[] = []
-    if (specificAccountId) {
-      accountIds = [specificAccountId]
-    } else {
-      // Get all accounts for this environment to search
-      const allAccounts = await filterAccounts({})
-      accountIds = allAccounts.map(acc => {
-        if (environment === 'govcloud') {
-          return acc.govCloudAccountId || acc.awsGovCloudAccountID || acc.govId
-        } else {
-          return acc.accountId || acc.awsStandardAccountID || acc.id
-        }
-      }).filter(Boolean)
-      
-      logger.info(`[Instance Details] Searching across ${accountIds.length} accounts`)
-    }
-    
-    // Search for the instance across accounts
+
+    logger.info(`[Instance Details] Looking for instance ${instanceId}`)
+
     let instanceResource: ResourceDetail | null = null
     let foundInAccount: string | undefined
-    
-    for (const accountId of accountIds) {
-      try {
-        const resourceIdentifier = {
-          SourceAccountId: accountId,
-          SourceRegion: region,
-          ResourceId: instanceId,
-          ResourceType: 'AWS::EC2::Instance'
-        }
-        
-        const resource = await getResourceConfig(
-          aggregatorName,
-          resourceIdentifier,
-          environment,
-          region
-        )
-        
-        if (resource) {
-          instanceResource = resource
-          foundInAccount = accountId
-          logger.debug(`[Instance Details] Found instance in account ${accountId}`)
-          break
-        }
-      } catch (error) {
-        // Continue searching in other accounts
-        logger.debug(`[Instance Details] Instance not found in account ${accountId}`)
+    let actualEnvironment: AWSEnvironmentType = requestedEnv
+
+    // If specific environment requested, search only there
+    if (query.environment) {
+      const result = await searchInstanceInEnvironment(instanceId, requestedEnv, specificAccountId)
+      instanceResource = result.resource
+      foundInAccount = result.accountId
+      actualEnvironment = result.environment
+    } else {
+      // Try GovCloud first (more likely for this org), then commercial
+      logger.info(`[Instance Details] Searching GovCloud first...`)
+      let result = await searchInstanceInEnvironment(instanceId, 'govcloud', specificAccountId)
+
+      if (!result.resource) {
+        logger.info(`[Instance Details] Not found in GovCloud, trying commercial...`)
+        result = await searchInstanceInEnvironment(instanceId, 'commercial', specificAccountId)
+      }
+
+      instanceResource = result.resource
+      foundInAccount = result.accountId
+      actualEnvironment = result.environment
+
+      if (instanceResource) {
+        logger.info(`[Instance Details] Found instance in ${actualEnvironment} account ${foundInAccount}`)
       }
     }
-    
+
     if (!instanceResource) {
       return errors.notFound(event, `EC2 instance ${instanceId}`)
     }
-    
+
     // Enrich the instance data
-    const enrichedInstance = await enrichInstanceData(instanceResource, environment)
+    const enrichedInstance = await enrichInstanceData(instanceResource, actualEnvironment)
     
     logger.info(`[Instance Details] Enriched instance: ${enrichedInstance.instanceName || instanceId}`)
     
@@ -290,13 +349,13 @@ export default defineEventHandler(handleAsync(async (event) => {
     if (includeOptimization) {
       try {
         logger.info('[Instance Details] Fetching optimization recommendations')
-        
-        const partition = environment === 'govcloud' ? 'aws-us-gov' : 'aws'
+
+        const partition = actualEnvironment === 'govcloud' ? 'aws-us-gov' : 'aws'
         const arn = `arn:${partition}:ec2:${instanceResource.region}:${foundInAccount}:instance/${instanceId}`
-        
+
         const optimizationResults = await getBatchOptimizationRecommendations(
           [{ arn, type: 'EC2_INSTANCE' }],
-          environment
+          actualEnvironment
         )
         
         if (optimizationResults.recommendations.length > 0) {
@@ -336,7 +395,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     return sendSuccess(event, responseData, {
       message: `Instance details for ${enrichedInstance.instanceName || instanceId}`,
       foundInAccount,
-      environment
+      environment: actualEnvironment
     })
     
   } catch (error) {

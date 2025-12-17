@@ -1049,6 +1049,11 @@ export async function enhanceCostData(costData: any, includeDecommissioned: bool
   // Enhanced account summary
   const accountSummary: any[] = []
   const accountTotals = new Map<string, { cost: number, usage: number, periods: number }>()
+
+  // Track unmatched accounts (accounts in cost data but not in DynamoDB/Organizations)
+  let unmatchedCost = 0
+  let unmatchedUsage = 0
+  const unmatchedAccounts: string[] = []
   
   // Aggregate costs by account across all time periods
   if (costData.resultsByTime) {
@@ -1075,18 +1080,29 @@ export async function enhanceCostData(costData: any, includeDecommissioned: bool
   // Build enhanced summary based on grouping dimension
   for (const [itemKey, totals] of accountTotals.entries()) {
     let itemData: any = {}
-    
+
     if (groupByDimension === 'LINKED_ACCOUNT') {
       const account = accountMap.get(itemKey)
-      const ceDescription = dimensionMap.get(itemKey)
+
+      // Filter out accounts not in DynamoDB/Organizations (ghost accounts)
+      if (!account) {
+        unmatchedCost += totals.cost
+        unmatchedUsage += totals.usage
+        if (!unmatchedAccounts.includes(itemKey)) {
+          unmatchedAccounts.push(itemKey)
+        }
+        logger.warn(`[enhanceCostData] Skipping unmatched account: ${itemKey} (cost: $${totals.cost.toFixed(2)})`)
+        continue  // Skip ghost accounts - don't add to accountSummary
+      }
+
       itemData = {
         accountId: itemKey,
-        accountName: account?.name || ceDescription || 'Unknown',
-        organizationalUnit: account?.organizationalUnitPath || null,
-        departmentNumber: account?.departmentNumber || null,
-        linesOfBusiness: account?.linesOfBusiness || null,
-        enclaveStatus: account?.enclaveStatus || null,
-        estimatedMonthlyBudget: account?.estimatedMonthlyCharge || null,
+        accountName: account.name || 'Unknown',
+        organizationalUnit: account.organizationalUnitPath || null,
+        departmentNumber: account.departmentNumber || null,
+        linesOfBusiness: account.linesOfBusiness || null,
+        enclaveStatus: account.enclaveStatus || null,
+        estimatedMonthlyBudget: account.estimatedMonthlyCharge || null,
       }
     } else if (groupByDimension === 'SERVICE') {
       itemData = {
@@ -1170,19 +1186,43 @@ export async function enhanceCostData(costData: any, includeDecommissioned: bool
                          groupByDimension === 'REGION' ? 'averageCostPerRegion' :
                          'averageCostPerItem'
   
+  // Log summary of data quality for visibility
+  if (groupByDimension === 'LINKED_ACCOUNT') {
+    logger.info(`[enhanceCostData] Account matching summary:`, {
+      totalAccountsInCostData: accountTotals.size,
+      matchedAccounts: accountSummary.length,
+      unmatchedAccounts: unmatchedAccounts.length,
+      unmatchedCost: `$${unmatchedCost.toFixed(2)}`,
+      unmatchedAccountIds: unmatchedAccounts.slice(0, 5) // Log first 5 for visibility
+    })
+  }
+
+  // Calculate matched accounts stats (for LINKED_ACCOUNT grouping)
+  const matchedTotalCost = groupByDimension === 'LINKED_ACCOUNT'
+    ? accountSummary.reduce((sum, acc) => sum + acc.totalCost, 0)
+    : totalCost
+  const matchedAccountCount = accountSummary.length
+
   return {
     summary: {
-      totalCost,
-      totalCostFormatted: `$${totalCost.toFixed(2)}`,
-      [itemCountLabel]: totalAccounts,
-      [avgPerItemLabel]: averageCostPerAccount,
-      [`${avgPerItemLabel}Formatted`]: `$${averageCostPerAccount.toFixed(2)}`,
+      totalCost: matchedTotalCost,
+      totalCostFormatted: `$${matchedTotalCost.toFixed(2)}`,
+      [itemCountLabel]: matchedAccountCount,
+      [avgPerItemLabel]: matchedAccountCount > 0 ? matchedTotalCost / matchedAccountCount : 0,
+      [`${avgPerItemLabel}Formatted`]: matchedAccountCount > 0 ? `$${(matchedTotalCost / matchedAccountCount).toFixed(2)}` : '$0.00',
       periodsAnalyzed: timePeriods.length,
       dateRange: {
         start: timePeriods[0]?.start,
         end: timePeriods[timePeriods.length - 1]?.end
       },
-      groupedBy: groupByDimension
+      groupedBy: groupByDimension,
+      // Unmatched account tracking (only relevant for LINKED_ACCOUNT grouping)
+      ...(groupByDimension === 'LINKED_ACCOUNT' ? {
+        unmatchedCost,
+        unmatchedCostFormatted: `$${unmatchedCost.toFixed(2)}`,
+        unmatchedAccountCount: unmatchedAccounts.length,
+        unmatchedAccountIds: unmatchedAccounts
+      } : {})
     },
     [itemsLabel]: accountSummary,
     timePeriods,
