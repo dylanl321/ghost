@@ -200,12 +200,17 @@ export async function getAllAccountsUnified(
     if (!includeDecommissioned && dynamoAccount.enclaveStatus === 'Decommissioned') {
       continue
     }
-    
+
     const commercialId = dynamoAccount.awsStandardAccountID
     const govCloudId = dynamoAccount.awsGovCloudAccountID
-    
+
+    // Skip accounts without a commercial account ID - no account ID means no costs possible
+    if (!commercialId) {
+      continue
+    }
+
     // Get Organizations data if available
-    const orgData = commercialId ? orgAccountsMap.get(commercialId) : null
+    const orgData = orgAccountsMap.get(commercialId)
     
     // Create unified account with normalized fields
     const unified: UnifiedAccount = {
@@ -222,13 +227,11 @@ export async function getAllAccountsUnified(
     }
     
     unifiedAccounts.push(unified)
-    
-    // Mark as processed
-    if (commercialId) {
-      orgAccountsMap.delete(commercialId)
-    }
+
+    // Mark as processed (commercialId is guaranteed to exist at this point)
+    orgAccountsMap.delete(commercialId)
   }
-  
+
   // Add any Organizations-only accounts (not in DynamoDB)
   for (const [accountId, orgAccount] of orgAccountsMap) {
     if (!includeDecommissioned && orgAccount.accountStatus !== 'ACTIVE') {
