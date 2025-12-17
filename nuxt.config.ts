@@ -40,6 +40,13 @@ export default defineNuxtConfig({
     "nuxt-echarts",
   ], // Modules are used to extend the functionality of Nuxt (https://nuxt.com/docs/4.x/guide/concepts/modules)
 
+  // Force dark mode - disable light mode entirely
+  colorMode: {
+    preference: 'dark',
+    fallback: 'dark',
+    classSuffix: '',
+  },
+
   echarts: {
     charts: ["BarChart", "LineChart", "PieChart", "GaugeChart"],
     components: [

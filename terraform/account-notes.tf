@@ -6,7 +6,7 @@
 
 resource "aws_dynamodb_table" "account_notes" {
   provider     = aws.target_deployment_account
-  name         = "ghost-account-notes"
+  name         = var.env == "prod" ? "ghost-account-notes-prod" : "ghost-account-notes"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "noteId"
 

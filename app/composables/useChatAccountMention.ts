@@ -20,15 +20,23 @@ export function useChatAccountMention() {
    * Search accounts based on query
    */
   function searchAccounts(query: string): AWSEnclaveData[] {
+    const enclaves = Object.values(enclaveStore.enclaves || {})
+
+    // Filter out decommissioned accounts first
+    const activeEnclaves = enclaves.filter(e => {
+      const enclaveStatus = (e.enclaveStatus || '').toLowerCase()
+      const accountStatus = (e.accountStatus || '').toLowerCase()
+      return !enclaveStatus.includes('decommission') &&
+        !accountStatus.includes('decommission')
+    })
+
     if (!query) {
-      // Return all accounts if no query
-      return Object.values(enclaveStore.enclaves || {}).slice(0, 10)
+      // Return active accounts if no query
+      return activeEnclaves.slice(0, 10)
     }
 
     const lowerQuery = query.toLowerCase()
-    const enclaves = Object.values(enclaveStore.enclaves || {})
-
-    return enclaves
+    return activeEnclaves
       .filter(e =>
         e.projectName?.toLowerCase().includes(lowerQuery) ||
         e.awsGovCloudAccountID?.includes(query) ||

@@ -4,15 +4,13 @@
   "private": true,
   "scripts": {
     "build": "npm run bundle:support && nuxt build",
-    "dev": "NODE_OPTIONS='--max-old-space-size=12288' nuxt dev",
+    "dev": "cross-env NODE_OPTIONS='--max-old-space-size=12288' nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "start": "nuxt start",
     "bundle:support": "tsx scripts/bundle-support-articles.ts",
     "seed:email-templates": "tsx scripts/seed-email-templates.ts",
-    "test:email": "tsx scripts/test-email.ts",
-    "test:scheduled-report": "tsx scripts/test-scheduled-report.ts",
     "validate": "tsx scripts/validate-codebase.ts",
     "validate:fix": "tsx scripts/validate-codebase.ts --fix",
     "check:types": "npx nuxi typecheck",
@@ -99,7 +97,8 @@
     "vue": "^3.5.18",
     "vue-echarts": "^8.0.0-beta.1",
     "vue-router": "^4.5.1",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "cross-env": "^10.1.0"
   },
   "devDependencies": {
     "@iconify-json/simple-icons": "^1.2.59",

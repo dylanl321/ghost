@@ -96,6 +96,17 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     return `/api/costs/summary?${params.toString()}`
   }
 
+  // Build last month summary for per-account last month costs in data table
+  const buildLastMonthSummaryUrl = () => {
+    const params = new URLSearchParams()
+    params.set('period', 'lastMonth')
+    params.set('proforma', String(query.value.mode === 'proforma'))
+    params.set('groupBy', 'LINKED_ACCOUNT')
+    params.set('enhanced', 'true')
+    // No account filtering - get all accounts for comprehensive comparison
+    return `/api/costs/summary?${params.toString()}`
+  }
+
   const buildForecastUrl = () => {
     const params = new URLSearchParams()
     // Get forecast for remaining days of current month with daily granularity
@@ -183,6 +194,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
       historical: buildHistoricalUrl(),
       orgWideHistorical: buildOrgWideHistoricalUrl(),
       ytdSummary: buildYtdSummaryUrl(),
+      lastMonthSummary: buildLastMonthSummaryUrl(),
       currentMonthOrgWide: buildCurrentMonthOrgWideSummaryUrl(),
       forecast: buildForecastUrl(),
       extendedForecast: buildExtendedForecastUrl(),
@@ -195,11 +207,12 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     console.log('Forecast URL specifically:', urls.forecast)
 
     try {
-      const [summaryRes, historicalRes, orgWideHistoricalRes, ytdSummaryRes, currentMonthOrgWideRes, forecastRes, extendedForecastRes, yearEndForecastRes, analysisRes, servicesRes] = await Promise.all([
+      const [summaryRes, historicalRes, orgWideHistoricalRes, ytdSummaryRes, lastMonthSummaryRes, currentMonthOrgWideRes, forecastRes, extendedForecastRes, yearEndForecastRes, analysisRes, servicesRes] = await Promise.all([
         $fetch(urls.summary),
         $fetch(urls.historical),
         $fetch(urls.orgWideHistorical),
         $fetch(urls.ytdSummary),
+        $fetch(urls.lastMonthSummary),
         $fetch(urls.currentMonthOrgWide),
         $fetch(urls.forecast),
         $fetch(urls.extendedForecast),
@@ -217,6 +230,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
         historical: historicalRes as any,
         orgWideHistorical: orgWideHistoricalRes as any, // Unfiltered org-wide data for contextual charts
         ytdSummary: ytdSummaryRes as any, // YTD per-account data for data table
+        lastMonthSummary: lastMonthSummaryRes as any, // Last month per-account data for data table
         currentMonthOrgWide: currentMonthOrgWideRes as any, // Current month org-wide for Year-End chart
         forecast: forecastRes as any,
         extendedForecast: extendedForecastRes as any, // 3-month forecast for trend analysis

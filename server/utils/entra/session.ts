@@ -8,6 +8,25 @@ import { createError } from 'h3'
 import { logger } from '../logger'
 
 /**
+ * Validate JWT token expiration
+ */
+function isTokenExpired(token: string): boolean {
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 3) return true
+    
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString())
+    if (!payload.exp) return false // No expiration claim, assume valid
+    
+    const now = Math.floor(Date.now() / 1000)
+    return payload.exp < now
+  } catch (error) {
+    logger.warn('Failed to parse token for expiration check:', error)
+    return true // Treat unparseable tokens as expired
+  }
+}
+
+/**
  * Get user session with access token
  * Supports both OIDC sessions and development mode
  * 
@@ -24,6 +43,13 @@ export async function getUserSession(event: H3Event): Promise<{
   const authHeader = event.node.req.headers.authorization
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.substring(7)
+    
+    // Validate token expiration
+    if (isTokenExpired(token)) {
+      logger.debug('Bearer token is expired')
+      return null
+    }
+    
     return {
       accessToken: token,
       user: {
@@ -114,6 +140,12 @@ export async function getUserSession(event: H3Event): Promise<{
       if (!hasIdentity) {
         return null
       }
+    }
+
+    // Validate token expiration if we have an access token
+    if (accessToken && isTokenExpired(accessToken)) {
+      logger.debug('Session access token is expired')
+      return null
     }
 
     // Log successful authentication (useful for security auditing)

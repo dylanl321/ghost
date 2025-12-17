@@ -25,9 +25,9 @@ resource "aws_iam_role_policy" "ecs_task_execution_role_policy" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid      = "AllowSecretsManager"
-        Effect   = "Allow"
-        Action   = "secretsmanager:GetSecretValue"
+        Sid    = "AllowSecretsManager"
+        Effect = "Allow"
+        Action = "secretsmanager:GetSecretValue"
         Resource = [
           "arn:${local.child_partition}:secretsmanager:${local.child_region}:${local.child_account_id}:secret:ghost*"
         ]
@@ -37,20 +37,20 @@ resource "aws_iam_role_policy" "ecs_task_execution_role_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_attachment" {
-  provider  = aws.target_deployment_account
-  role      = aws_iam_role.ecs_task_execution_role.name
+  provider   = aws.target_deployment_account
+  role       = aws_iam_role.ecs_task_execution_role.name
   policy_arn = "arn:aws-us-gov:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
 resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_step_fuction_permission" {
-  provider  = aws.target_deployment_account
-  role      = aws_iam_role.ecs_task_execution_role.name
+  provider   = aws.target_deployment_account
+  role       = aws_iam_role.ecs_task_execution_role.name
   policy_arn = "arn:${local.child_partition}:iam::aws:policy/AWSStepFunctionsFullAccess"
 }
 
 resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_dynamodb_read_only" {
-  provider  = aws.target_deployment_account
-  role      = aws_iam_role.ecs_task_execution_role.name
+  provider   = aws.target_deployment_account
+  role       = aws_iam_role.ecs_task_execution_role.name
   policy_arn = "arn:${local.child_partition}:iam::aws:policy/AmazonDynamoDBReadOnlyAccess"
 }
 

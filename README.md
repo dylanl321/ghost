@@ -4,7 +4,7 @@ GHOST is a web dashboard to provide a centralized location for useful data and f
 
 ## How can I contribute?
 
-Please read `DEVELOPER_GUIDE.md`.
+See `DEPLOYMENT_STEPS.md` for deployment and environment setup notes.
 
 ## Quick start guide
 
@@ -38,4 +38,4 @@ App secrets are stored in an AWS Secret's Manager secret. These secrets get pass
 
 ## Developer guide
 
-See `DEVELOPER_GUIDE.md` for detailed instructions on how to contribute to GHOST.
+For local development, see the scripts in `package.json` (e.g. `npm run dev`, `npm run check:lint`, `npm run check:types`).
