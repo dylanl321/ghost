@@ -851,10 +851,26 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     ) as any
 
     if (pendingMsg && pendingMsg.status) {
+      // Initialize history array if not present
+      if (!pendingMsg.status.statusHistory) {
+        pendingMsg.status.statusHistory = []
+      }
+
+      // Push old progress to history before updating (if different and not empty)
+      const oldProgress = pendingMsg.status.progress
+      if (oldProgress && oldProgress !== progress && oldProgress !== 'Starting...') {
+        pendingMsg.status.statusHistory.push({
+          text: oldProgress,
+          timestamp: Date.now()
+        })
+        // Keep only the last 5 history items
+        if (pendingMsg.status.statusHistory.length > 5) {
+          pendingMsg.status.statusHistory.shift()
+        }
+      }
+
       pendingMsg.status.progress = progress
       pendingMsg.status.toolsCalled = tools
-      // Keep per-message history if present, otherwise just mirror the visible job history
-      pendingMsg.status.statusHistory = pendingMsg.status.statusHistory || []
     }
   }
 
@@ -1385,6 +1401,10 @@ export function useChatUI(options: UseChatUIOptions = {}) {
 
     if (threadsStore.activeThreadId) {
       await threadsStore.loadThread(threadsStore.activeThreadId)
+    } else {
+      // Create a new thread if none exists so the input works immediately
+      console.log('[useChatUI] No active thread, creating one')
+      await threadsStore.createThread()
     }
 
     // Check for pending job recovery on initialization

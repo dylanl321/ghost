@@ -775,7 +775,7 @@ import ChartTabs from '~/components/costs/SimpleChartTabs.vue'
 import ForecastDataTable from '~/components/costs/ForecastDataTable.vue'
 import { startCostTour } from '~/components/tutorial/CostTour'
 
-const { getPreference, setPreference, load: loadPreferences } = useUserPreferences()
+const { getPreference, setPreference, load: loadPreferences, authError } = useUserPreferences()
 const tourStartedThisSession = ref(false)
 const lastResetTimestamp = ref<string | null>(null)
 
@@ -1730,8 +1730,9 @@ onMounted(async () => {
     // 1. Force start from URL (?tour=1)
     // 2. Admin reset the tour
     // 3. User has NEVER started the tour before (no startedAt and no completed)
+    // 4. NOT currently experiencing auth errors (prevents repeat tours when preferences fail to load)
     const neverStarted = !tourPref?.startedAt && !tourPref?.completed
-    const shouldAutoStart = (forceStart || wasReset || neverStarted) && !tourStartedThisSession.value
+    const shouldAutoStart = (forceStart || wasReset || neverStarted) && !tourStartedThisSession.value && !authError.value
 
     if (shouldAutoStart) {
       // Wait for DOM elements to be ready
