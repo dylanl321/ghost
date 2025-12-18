@@ -1019,7 +1019,8 @@ export async function enhanceCostData(costData: any, includeDecommissioned: bool
   })
 
   // Get account data for enrichment
-  const accounts = await getAllAccountsUnified(includeDecommissioned)
+  // Always include decommissioned accounts - costs are real regardless of account status
+  const accounts = await getAllAccountsUnified(true)
   const accountMap = new Map()
   
   // Create lookup map by account ID (using correct field names)
@@ -1054,6 +1055,10 @@ export async function enhanceCostData(costData: any, includeDecommissioned: bool
   let unmatchedCost = 0
   let unmatchedUsage = 0
   const unmatchedAccounts: string[] = []
+
+  // Track decommissioned accounts that still have costs (potential issue)
+  let decommissionedCost = 0
+  const decommissionedAccountsWithCosts: string[] = []
   
   // Aggregate costs by account across all time periods
   if (costData.resultsByTime) {
@@ -1095,6 +1100,18 @@ export async function enhanceCostData(costData: any, includeDecommissioned: bool
         continue  // Skip ghost accounts - don't add to accountSummary
       }
 
+      // Check if account is decommissioned
+      const isDecommissioned = account.enclaveStatus === 'Decommissioned'
+
+      // Track decommissioned accounts that still have costs
+      if (isDecommissioned && totals.cost > 0) {
+        decommissionedCost += totals.cost
+        if (!decommissionedAccountsWithCosts.includes(itemKey)) {
+          decommissionedAccountsWithCosts.push(itemKey)
+        }
+        logger.warn(`[enhanceCostData] Decommissioned account with costs: ${itemKey} (cost: $${totals.cost.toFixed(2)})`)
+      }
+
       itemData = {
         accountId: itemKey,
         accountName: account.name || 'Unknown',
@@ -1103,6 +1120,7 @@ export async function enhanceCostData(costData: any, includeDecommissioned: bool
         linesOfBusiness: account.linesOfBusiness || null,
         enclaveStatus: account.enclaveStatus || null,
         estimatedMonthlyBudget: account.estimatedMonthlyCharge || null,
+        isDecommissioned,
       }
     } else if (groupByDimension === 'SERVICE') {
       itemData = {
@@ -1221,7 +1239,12 @@ export async function enhanceCostData(costData: any, includeDecommissioned: bool
         unmatchedCost,
         unmatchedCostFormatted: `$${unmatchedCost.toFixed(2)}`,
         unmatchedAccountCount: unmatchedAccounts.length,
-        unmatchedAccountIds: unmatchedAccounts
+        unmatchedAccountIds: unmatchedAccounts,
+        // Decommissioned accounts that still have costs (potential issue requiring attention)
+        decommissionedCost,
+        decommissionedCostFormatted: `$${decommissionedCost.toFixed(2)}`,
+        decommissionedAccountCount: decommissionedAccountsWithCosts.length,
+        decommissionedAccountIds: decommissionedAccountsWithCosts
       } : {})
     },
     [itemsLabel]: accountSummary,

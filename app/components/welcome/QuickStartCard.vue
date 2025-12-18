@@ -97,6 +97,9 @@ import { ref, computed, onMounted } from 'vue'
 
 const { getPreference, setPreference, initialized, load } = useUserPreferences()
 
+// localStorage cache key for resilience when API fails
+const QUICK_START_CACHE_KEY = 'ghost-quickstart-preference'
+
 interface QuickStartCardPreference {
   dismissCount: number
   viewCount: number
@@ -114,30 +117,83 @@ const shouldShow = computed(() => {
   return preference.value.dismissCount < 3 && preference.value.viewCount < 5
 })
 
+/**
+ * Cache preference to localStorage for resilience
+ */
+function cacheToLocalStorage(pref: QuickStartCardPreference): void {
+  try {
+    localStorage.setItem(QUICK_START_CACHE_KEY, JSON.stringify(pref))
+  } catch (e) {
+    console.warn('Failed to cache quickstart preference:', e)
+  }
+}
+
+/**
+ * Get cached preference from localStorage
+ */
+function getCachedPreference(): QuickStartCardPreference | null {
+  try {
+    const cached = localStorage.getItem(QUICK_START_CACHE_KEY)
+    if (!cached) return null
+    return JSON.parse(cached)
+  } catch (e) {
+    console.warn('Failed to read cached quickstart preference:', e)
+    return null
+  }
+}
+
 onMounted(async () => {
-  // Wait for preferences to be fully loaded before reading
-  if (!initialized.value) {
-    await load()
-  }
-
-  // Load preference from user preferences
-  const stored = getPreference<QuickStartCardPreference>('quickStartCard')
-
-  if (stored) {
-    preference.value = stored
-  }
-
-  // Increment view count if showing
-  if (shouldShow.value) {
-    const now = new Date().toISOString()
-    const updated: QuickStartCardPreference = {
-      ...preference.value,
-      viewCount: preference.value.viewCount + 1,
-      firstSeenAt: preference.value.firstSeenAt || now,
+  try {
+    // Wait for preferences to be fully loaded before reading
+    if (!initialized.value) {
+      await load()
     }
 
-    preference.value = updated
-    await setPreference('quickStartCard', updated)
+    // Load preference from user preferences
+    const stored = getPreference<QuickStartCardPreference>('quickStartCard')
+
+    if (stored) {
+      preference.value = stored
+      // Cache to localStorage on successful load
+      cacheToLocalStorage(stored)
+    } else {
+      // Check localStorage fallback if no server preference
+      const cached = getCachedPreference()
+      if (cached) {
+        console.log('QuickStartCard: Using cached preference from localStorage')
+        preference.value = cached
+      }
+    }
+
+    // Increment view count if showing
+    if (shouldShow.value) {
+      const now = new Date().toISOString()
+      const updated: QuickStartCardPreference = {
+        ...preference.value,
+        viewCount: preference.value.viewCount + 1,
+        firstSeenAt: preference.value.firstSeenAt || now,
+      }
+
+      preference.value = updated
+
+      // Try to save to server, but don't fail the UI if it fails
+      setPreference('quickStartCard', updated).then(success => {
+        if (success) {
+          cacheToLocalStorage(updated)
+        }
+      }).catch(() => {
+        // Fallback: save locally anyway
+        cacheToLocalStorage(updated)
+      })
+    }
+  } catch (error) {
+    console.warn('QuickStartCard: Failed to load preferences, using localStorage fallback:', error)
+    // Fallback to localStorage
+    const cached = getCachedPreference()
+    if (cached) {
+      preference.value = cached
+    }
+    // If no cached preference, use defaults (show card for new users)
   }
 })
 
@@ -150,6 +206,11 @@ const handleDismiss = async () => {
   }
 
   preference.value = updated
+
+  // Always save to localStorage immediately for resilience
+  cacheToLocalStorage(updated)
+
+  // Also try to save to server
   await setPreference('quickStartCard', updated)
 }
 
