@@ -35,7 +35,7 @@ const includeHealthChecks = ref(false) // Default: hide health check logs
 const userFilter = ref('')
 const accountFilter = ref('')
 const statusFilter = ref('ALL') // For async jobs filtering
-const expandedThreadId = ref<string | null>(null)
+const showThreadModal = ref(false)
 const expandedRequestId = ref<string | null>(null)
 const expandedLogIndex = ref<number | null>(null)
 
@@ -82,13 +82,13 @@ async function loadData() {
 }
 
 async function handleThreadClick(threadId: string) {
-  if (expandedThreadId.value === threadId) {
-    expandedThreadId.value = null
-    selectedThread.value = null
-  } else {
-    expandedThreadId.value = threadId
-    await fetchThreadDetails(threadId)
-  }
+  await fetchThreadDetails(threadId)
+  showThreadModal.value = true
+}
+
+function closeThreadModal() {
+  showThreadModal.value = false
+  selectedThread.value = null
 }
 
 function toggleAutoRefresh() {
@@ -432,156 +432,6 @@ onUnmounted(() => {
             </UTable>
           </UCard>
 
-          <!-- Expanded Thread Details -->
-          <UCard v-if="selectedThread && expandedThreadId">
-            <template #header>
-              <div class="flex items-center justify-between">
-                <h3 class="text-lg font-semibold">Thread Details: {{ selectedThread.title }}</h3>
-                <UButton
-                  icon="i-heroicons-x-mark"
-                  size="xs"
-                  variant="ghost"
-                  @click="expandedThreadId = null"
-                />
-              </div>
-            </template>
-
-            <div class="space-y-3">
-              <div class="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span class="text-gray-500 dark:text-gray-400">User:</span>
-                  <span class="ml-2 font-medium">{{ selectedThread.userId }}</span>
-                </div>
-                <div>
-                  <span class="text-gray-500 dark:text-gray-400">Created:</span>
-                  <span class="ml-2 font-medium">{{ new Date(selectedThread.createdAt).toLocaleString() }}</span>
-                </div>
-                <div>
-                  <span class="text-gray-500 dark:text-gray-400">Session ID:</span>
-                  <span class="ml-2 font-mono text-xs">{{ selectedThread.sessionId || 'N/A' }}</span>
-                </div>
-                <div>
-                  <span class="text-gray-500 dark:text-gray-400">Messages:</span>
-                  <span class="ml-2 font-medium">{{ selectedThread.messageCount }}</span>
-                </div>
-              </div>
-
-              <!-- Share Info Section -->
-              <div v-if="selectedThread.isShared" class="border-t dark:border-gray-700 pt-3 pb-3">
-                <h4 class="text-sm font-semibold mb-2">Share Info</h4>
-                <div class="space-y-2">
-                  <div class="flex items-center gap-2">
-                    <UBadge color="blue" size="sm">Shared</UBadge>
-                    <code class="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
-                      {{ selectedThread.shortUrl || selectedThread.shareId }}
-                    </code>
-                    <UButton
-                      icon="i-heroicons-clipboard"
-                      size="2xs"
-                      variant="ghost"
-                      @click="copyToClipboard(selectedThread.shortUrl || selectedThread.shareId || '')"
-                    />
-                  </div>
-                  <div class="text-xs text-gray-500">
-                    Shared: {{ new Date(selectedThread.sharedAt || '').toLocaleString() }}
-                    <span v-if="selectedThread.shareExpiresAt">
-                      • Expires: {{ new Date(selectedThread.shareExpiresAt).toLocaleString() }}
-                    </span>
-                  </div>
-                </div>
-                <!-- TODO: Future - Add button to revoke share -->
-                <!-- TODO: Future - Add share analytics (views, clicks) -->
-              </div>
-
-              <!-- Enhanced Conversation Display -->
-              <div class="border-t dark:border-gray-700 pt-3">
-                <h4 class="text-sm font-semibold mb-2">Conversation</h4>
-                <div class="space-y-2 max-h-96 overflow-y-auto">
-                  <div
-                    v-for="(message, idx) in selectedThread.messages"
-                    :key="idx"
-                    class="p-3 rounded-lg"
-                    :class="message.role === 'user' ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-gray-50 dark:bg-gray-800'"
-                  >
-                    <div class="flex items-center justify-between mb-1">
-                      <span class="text-xs font-semibold uppercase">{{ message.role }}</span>
-                      <span class="text-xs text-gray-500">{{ new Date(message.timestamp).toLocaleString() }}</span>
-                    </div>
-
-                    <!-- AI Reasoning -->
-                    <div v-if="message.reasoning" class="mb-2 p-2 bg-purple-50 dark:bg-purple-900/20 rounded border border-purple-200 dark:border-purple-800">
-                      <div class="flex items-center gap-1 mb-1">
-                        <UIcon name="i-heroicons-light-bulb" class="w-3 h-3 text-purple-600" />
-                        <span class="text-xs font-medium text-purple-700 dark:text-purple-300">AI Reasoning</span>
-                      </div>
-                      <p class="text-xs text-purple-600 dark:text-purple-400 whitespace-pre-wrap">{{ message.reasoning }}</p>
-                    </div>
-
-                    <p class="text-sm whitespace-pre-wrap">{{ message.content }}</p>
-
-                    <!-- Message Status -->
-                    <div v-if="message.status" class="mt-2 flex items-center gap-2">
-                      <UBadge
-                        :color="message.status.status === 'error' ? 'red' : message.status.status === 'streaming' ? 'blue' : 'gray'"
-                        size="xs"
-                      >
-                        {{ message.status.status }}
-                      </UBadge>
-                      <span v-if="message.status.progress" class="text-xs text-gray-500">{{ message.status.progress }}</span>
-                    </div>
-
-                    <!-- Metadata -->
-                    <div v-if="message.metadata" class="mt-2 flex gap-2 flex-wrap">
-                      <UBadge v-if="message.metadata.accountId" size="xs" color="gray">
-                        {{ message.metadata.accountId }}
-                      </UBadge>
-                      <UBadge v-if="message.metadata.mcpType" size="xs" :color="message.metadata.mcpType === 'permanent' ? 'green' : 'yellow'">
-                        {{ message.metadata.mcpType }}
-                      </UBadge>
-                      <UBadge v-if="message.metadata.tokens" size="xs" color="indigo">
-                        {{ message.metadata.tokens.input + message.metadata.tokens.output }} tokens
-                      </UBadge>
-                    </div>
-
-                    <!-- Suggested Links -->
-                    <div v-if="message.suggestedLinks && message.suggestedLinks.length > 0" class="mt-2 space-y-1">
-                      <p class="text-xs font-medium text-gray-600 dark:text-gray-400">Suggested Links:</p>
-                      <div class="flex flex-wrap gap-1">
-                        <UBadge
-                          v-for="(link, linkIdx) in message.suggestedLinks"
-                          :key="linkIdx"
-                          size="xs"
-                          color="blue"
-                          variant="soft"
-                        >
-                          {{ link.label }}
-                        </UBadge>
-                      </div>
-                    </div>
-
-                    <!-- Suggested Prompts -->
-                    <div v-if="message.suggestedPrompts && message.suggestedPrompts.length > 0" class="mt-2 space-y-1">
-                      <p class="text-xs font-medium text-gray-600 dark:text-gray-400">Suggested Prompts:</p>
-                      <div class="flex flex-wrap gap-1">
-                        <UBadge
-                          v-for="(prompt, promptIdx) in message.suggestedPrompts"
-                          :key="promptIdx"
-                          size="xs"
-                          color="purple"
-                          variant="soft"
-                        >
-                          {{ prompt.text.substring(0, 50) }}{{ prompt.text.length > 50 ? '...' : '' }}
-                        </UBadge>
-                      </div>
-                    </div>
-
-                    <!-- TODO: Future - Add collapsible sections for long content -->
-                    <!-- TODO: Future - Add message actions (flag, copy, export) -->
-                  </div>
-                </div>
-              </div>
-            </div>
-          </UCard>
         </div>
       </div>
 
@@ -836,5 +686,186 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+
+    <!-- Thread Details Modal -->
+    <UModal v-model="showThreadModal" :ui="{ width: 'sm:max-w-4xl' }">
+      <UCard v-if="selectedThread">
+        <template #header>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                <UIcon name="i-heroicons-chat-bubble-left-right" class="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ selectedThread.title }}</h3>
+                <p class="text-sm text-gray-500 dark:text-gray-400">{{ selectedThread.userId }}</p>
+              </div>
+            </div>
+            <UButton
+              icon="i-heroicons-x-mark"
+              color="gray"
+              variant="ghost"
+              @click="closeThreadModal"
+            />
+          </div>
+        </template>
+
+        <div class="space-y-4">
+          <!-- Thread Info Grid -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <p class="text-xs text-gray-500 dark:text-gray-400">Created</p>
+              <p class="text-sm font-medium text-gray-900 dark:text-white">{{ new Date(selectedThread.createdAt).toLocaleString() }}</p>
+            </div>
+            <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <p class="text-xs text-gray-500 dark:text-gray-400">Messages</p>
+              <p class="text-sm font-medium text-gray-900 dark:text-white">{{ selectedThread.messageCount }}</p>
+            </div>
+            <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <p class="text-xs text-gray-500 dark:text-gray-400">Session ID</p>
+              <p class="text-xs font-mono text-gray-900 dark:text-white truncate">{{ selectedThread.sessionId || 'N/A' }}</p>
+            </div>
+            <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <p class="text-xs text-gray-500 dark:text-gray-400">Status</p>
+              <div class="flex gap-1 mt-1">
+                <UBadge v-if="selectedThread.isShared" color="blue" size="xs">Shared</UBadge>
+                <UBadge v-if="selectedThread.isPinned" color="yellow" size="xs">Pinned</UBadge>
+                <UBadge v-if="selectedThread.isArchived" color="gray" size="xs">Archived</UBadge>
+                <UBadge v-if="!selectedThread.isShared && !selectedThread.isPinned && !selectedThread.isArchived" color="green" size="xs">Active</UBadge>
+              </div>
+            </div>
+          </div>
+
+          <!-- Share Info Section -->
+          <div v-if="selectedThread.isShared" class="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-blue-900 dark:text-blue-100">Shared Thread</p>
+                <code class="text-xs bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded mt-1 inline-block">
+                  {{ selectedThread.shortUrl || selectedThread.shareId }}
+                </code>
+              </div>
+              <UButton
+                icon="i-heroicons-clipboard"
+                size="sm"
+                color="blue"
+                variant="soft"
+                @click="copyToClipboard(selectedThread.shortUrl || selectedThread.shareId || '')"
+              >
+                Copy
+              </UButton>
+            </div>
+            <p class="text-xs text-blue-700 dark:text-blue-300 mt-2">
+              Shared: {{ new Date(selectedThread.sharedAt || '').toLocaleString() }}
+              <span v-if="selectedThread.shareExpiresAt">
+                | Expires: {{ new Date(selectedThread.shareExpiresAt).toLocaleString() }}
+              </span>
+            </p>
+          </div>
+
+          <!-- Conversation -->
+          <div>
+            <h4 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Conversation</h4>
+            <div class="space-y-3 max-h-[50vh] overflow-y-auto pr-2">
+              <div
+                v-for="(message, idx) in selectedThread.messages"
+                :key="idx"
+                class="p-3 rounded-lg"
+                :class="message.role === 'user' ? 'bg-blue-50 dark:bg-blue-900/20 ml-8' : 'bg-gray-50 dark:bg-gray-800 mr-8'"
+              >
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-2">
+                    <UIcon
+                      :name="message.role === 'user' ? 'i-heroicons-user' : 'i-heroicons-sparkles'"
+                      class="w-4 h-4"
+                      :class="message.role === 'user' ? 'text-blue-600' : 'text-purple-600'"
+                    />
+                    <span class="text-xs font-semibold uppercase" :class="message.role === 'user' ? 'text-blue-700 dark:text-blue-300' : 'text-purple-700 dark:text-purple-300'">
+                      {{ message.role }}
+                    </span>
+                  </div>
+                  <span class="text-xs text-gray-500">{{ new Date(message.timestamp).toLocaleString() }}</span>
+                </div>
+
+                <!-- AI Reasoning -->
+                <div v-if="message.reasoning" class="mb-2 p-2 bg-purple-50 dark:bg-purple-900/30 rounded border border-purple-200 dark:border-purple-700">
+                  <div class="flex items-center gap-1 mb-1">
+                    <UIcon name="i-heroicons-light-bulb" class="w-3 h-3 text-purple-600" />
+                    <span class="text-xs font-medium text-purple-700 dark:text-purple-300">AI Reasoning</span>
+                  </div>
+                  <p class="text-xs text-purple-600 dark:text-purple-400 whitespace-pre-wrap">{{ message.reasoning }}</p>
+                </div>
+
+                <p class="text-sm whitespace-pre-wrap text-gray-900 dark:text-white">{{ message.content }}</p>
+
+                <!-- Message Status -->
+                <div v-if="message.status" class="mt-2 flex items-center gap-2">
+                  <UBadge
+                    :color="message.status.status === 'error' ? 'red' : message.status.status === 'streaming' ? 'blue' : 'gray'"
+                    size="xs"
+                  >
+                    {{ message.status.status }}
+                  </UBadge>
+                  <span v-if="message.status.progress" class="text-xs text-gray-500">{{ message.status.progress }}</span>
+                </div>
+
+                <!-- Metadata -->
+                <div v-if="message.metadata" class="mt-2 flex gap-2 flex-wrap">
+                  <UBadge v-if="message.metadata.accountId" size="xs" color="gray">
+                    {{ message.metadata.accountId }}
+                  </UBadge>
+                  <UBadge v-if="message.metadata.mcpType" size="xs" :color="message.metadata.mcpType === 'permanent' ? 'green' : 'yellow'">
+                    {{ message.metadata.mcpType }}
+                  </UBadge>
+                  <UBadge v-if="message.metadata.tokens" size="xs" color="indigo">
+                    {{ message.metadata.tokens.input + message.metadata.tokens.output }} tokens
+                  </UBadge>
+                </div>
+
+                <!-- Suggested Links -->
+                <div v-if="message.suggestedLinks && message.suggestedLinks.length > 0" class="mt-2">
+                  <p class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Suggested Links:</p>
+                  <div class="flex flex-wrap gap-1">
+                    <UBadge
+                      v-for="(link, linkIdx) in message.suggestedLinks"
+                      :key="linkIdx"
+                      size="xs"
+                      color="blue"
+                      variant="soft"
+                    >
+                      {{ link.label }}
+                    </UBadge>
+                  </div>
+                </div>
+
+                <!-- Suggested Prompts -->
+                <div v-if="message.suggestedPrompts && message.suggestedPrompts.length > 0" class="mt-2">
+                  <p class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Suggested Prompts:</p>
+                  <div class="flex flex-wrap gap-1">
+                    <UBadge
+                      v-for="(prompt, promptIdx) in message.suggestedPrompts"
+                      :key="promptIdx"
+                      size="xs"
+                      color="purple"
+                      variant="soft"
+                    >
+                      {{ prompt.text.substring(0, 50) }}{{ prompt.text.length > 50 ? '...' : '' }}
+                    </UBadge>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <template #footer>
+          <div class="flex justify-end gap-2">
+            <UButton color="gray" variant="soft" @click="closeThreadModal">
+              Close
+            </UButton>
+          </div>
+        </template>
+      </UCard>
+    </UModal>
   </div>
 </template>

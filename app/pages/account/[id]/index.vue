@@ -143,6 +143,11 @@
               </div>
             </div>
           </div>
+
+          <!-- Budget Alert History - full width -->
+          <div v-if="accountId" class="col-span-1 lg:col-span-3" data-tour="account-alerts">
+            <AccountAlertHistory :account-id="accountId" />
+          </div>
         </div>
       </template>
 

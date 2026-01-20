@@ -88,8 +88,12 @@
                 </div>
               </div>
             </div>
-            <div v-if="filteredAccounts.length === 0" class="mention-empty">
-              No active accounts found
+            <div v-if="filteredAccounts.length === 0 && mentionQuery.length === 0" class="mention-empty">
+              <UIcon name="i-heroicons-magnifying-glass" class="w-4 h-4 inline-block mr-1" />
+              Type to search for accounts...
+            </div>
+            <div v-else-if="filteredAccounts.length === 0" class="mention-empty">
+              No matching accounts found
             </div>
           </div>
           </Transition>
@@ -274,6 +278,7 @@ const {
   filteredAccounts,
   selectedAccountForMessage,
   selectedMentionIndex,
+  mentionQuery,
   handleMentionInput,
   selectAccount,
   navigateMentions,

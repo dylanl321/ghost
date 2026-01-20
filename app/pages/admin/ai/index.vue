@@ -17,11 +17,11 @@
           <Icon name="i-heroicons-sparkles" class="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
         </div>
         <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
-          AI & Data
+          AI Operations
         </h1>
       </div>
       <p class="text-gray-600 dark:text-gray-400">
-        Monitor AI chat activity and validate data quality
+        Monitor AI chat activity, test agents, and view performance metrics
       </p>
     </div>
 
@@ -35,7 +35,10 @@
     <!-- Tab Content -->
     <div class="mt-6">
       <AIChatMonitorPanel v-if="activeTab === 0" />
-      <ValidationPanel v-else-if="activeTab === 1" />
+      <StrandsLogsViewer v-else-if="activeTab === 1" />
+      <ValidationPanel v-else-if="activeTab === 2" />
+      <StrandsAgentTester v-else-if="activeTab === 3" />
+      <AIMetricsPanel v-else-if="activeTab === 4" />
     </div>
   </div>
 </template>
@@ -43,26 +46,38 @@
 <script setup lang="ts">
 import AIChatMonitorPanel from '~/components/admin/AIChatMonitorPanel.vue'
 import ValidationPanel from '~/components/admin/ValidationPanel.vue'
+import StrandsLogsViewer from '~/components/admin/StrandsLogsViewer.vue'
+import StrandsAgentTester from '~/components/admin/StrandsAgentTester.vue'
+import AIMetricsPanel from '~/components/admin/AIMetricsPanel.vue'
 
-// Page meta - using admin layout
 definePageMeta({
   layout: 'admin',
-  title: 'AI & Data',
-  description: 'Monitor AI chat activity and validate data quality'
+  title: 'AI Operations',
+  description: 'Monitor AI chat activity, test agents, and view performance metrics'
 })
 
-// Active tab state
 const activeTab = ref(0)
 
-// Tab configuration
 const tabs = [
   {
-    label: 'AI Chat Monitor',
+    label: 'Chat Monitor',
     icon: 'i-heroicons-chat-bubble-left-right'
+  },
+  {
+    label: 'Agent Logs',
+    icon: 'i-heroicons-document-text'
   },
   {
     label: 'Data Validation',
     icon: 'i-heroicons-clipboard-document-check'
+  },
+  {
+    label: 'Agent Testing',
+    icon: 'i-heroicons-beaker'
+  },
+  {
+    label: 'Metrics Dashboard',
+    icon: 'i-heroicons-chart-bar'
   }
 ]
 </script>

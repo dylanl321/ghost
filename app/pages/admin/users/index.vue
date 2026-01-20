@@ -44,17 +44,14 @@
 import UserPreferencesPanel from '~/components/admin/UserPreferencesPanel.vue'
 import RolesPanel from '~/components/admin/RolesPanel.vue'
 
-// Page meta - using admin layout
 definePageMeta({
   layout: 'admin',
   title: 'User Management',
   description: 'Manage user preferences, roles, and permissions'
 })
 
-// Active tab state
 const activeTab = ref(0)
 
-// Tab configuration
 const tabs = [
   {
     label: 'User Preferences',

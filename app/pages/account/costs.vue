@@ -721,6 +721,11 @@
             />
           </div>
 
+          <!-- Budget Alerts Section -->
+          <div data-tour="cost-alerts" class="mt-6">
+            <CostDashboardAlerts :account-ids="selectedAccounts" />
+          </div>
+
           <div v-if="isCostPending" class="bg-gray-900 border border-amber-600 rounded-lg p-4 text-amber-400 flex items-center gap-2">
             <Icon name="i-heroicons-clock" class="w-5 h-5 animate-pulse" />
             <span>Waiting for account selection to complete...</span>

@@ -37,7 +37,34 @@ export interface DynamoDBConfig {
   streamingMetrics: DynamoDBTableConfig
   asyncChatJobs: DynamoDBTableConfig
   asyncMetrics: DynamoDBTableConfig
+  budgetAlerts: DynamoDBTableConfig
 }
+
+// -----------------------------------------------------------------------------
+// Budget Alerts Configuration
+// -----------------------------------------------------------------------------
+
+/**
+ * Budget alerts table name (environment variable or default)
+ * Table lives in Commercial AWS proforma/monitoring account
+ */
+export const BUDGET_ALERTS_TABLE = process.env.BUDGET_ALERTS_TABLE_NAME || 'budget-alert-history'
+
+/**
+ * GSI names for budget alerts table queries
+ * - MONTH_INDEX: Query alerts by month (PK: month, SK: created_at)
+ * - ALERT_TYPE_INDEX: Query alerts by type (PK: alert_type, SK: timestamp)
+ */
+export const BUDGET_ALERTS_INDEXES = {
+  MONTH_INDEX: 'month-index',
+  ALERT_TYPE_INDEX: 'alert-type-index'
+} as const
+
+/**
+ * Proforma account ID where budget alerts table is hosted
+ * This is the Commercial AWS monitoring account
+ */
+export const PROFORMA_ACCOUNT_ID = process.env.PROFORMA_ACCOUNT_ID || ''
 
 // Cache the configuration to avoid repeated Secrets Manager calls
 let cachedConfig: DynamoDBConfig | null = null
@@ -196,6 +223,14 @@ function loadFromEnvironment(): DynamoDBConfig {
       environment: 'govcloud',
       region: govCloudRegion,
       accountId: deploymentAccountId
+    },
+    // Budget alerts table is in Commercial AWS (proforma/monitoring account)
+    budgetAlerts: {
+      tableName: BUDGET_ALERTS_TABLE,
+      environment: 'commercial',
+      region: commercialRegion,
+      accountId: process.env.PROFORMA_ACCOUNT_ID || commercialAccountId,
+      readOnly: true  // GHOST only reads alert history, doesn't create alerts
     }
   }
 }

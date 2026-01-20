@@ -40,6 +40,7 @@
             </div>
           </div>
           <button
+            v-if="!readOnly"
             @click="$emit('cancel')"
             class="px-3 py-1.5 text-xs rounded-lg bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 active:bg-red-300 dark:active:bg-red-900/70 text-red-700 dark:text-red-300 transition-all duration-150 flex items-center gap-1.5 flex-shrink-0 active:scale-95"
             title="Cancel query"
@@ -101,19 +102,19 @@
             <p class="error-description">{{ getErrorDescription(message.status.error || '', message.status.errorType) }}</p>
           </div>
         </div>
-        <div class="error-actions">
-          <button 
+        <div v-if="!readOnly" class="error-actions">
+          <button
             v-if="(message.status.errorType || classifyError(message.status.error || '')) !== 'disambiguation'"
-            @click="$emit('retry')" 
+            @click="$emit('retry')"
             class="retry-button"
             :title="`${getErrorActionText(message.status.errorType || classifyError(message.status.error || ''))} this query`"
           >
             <UIcon name="i-heroicons-arrow-path" class="w-4 h-4" />
             {{ getErrorActionText(message.status.errorType || classifyError(message.status.error || '')) }}
           </button>
-          <button 
+          <button
             v-if="(message.status.errorType || classifyError(message.status.error || '')) === 'disambiguation'"
-            @click="$emit('disambiguate')" 
+            @click="$emit('disambiguate')"
             class="disambiguate-button"
             title="Choose the specific account you meant"
           >
@@ -182,8 +183,8 @@
         />
       </div>
 
-      <!-- Suggested Prompts -->
-      <div v-if="message.suggestedPrompts && message.suggestedPrompts.length > 0" class="mt-4">
+      <!-- Suggested Prompts (hidden in read-only mode) -->
+      <div v-if="!readOnly && message.suggestedPrompts && message.suggestedPrompts.length > 0" class="mt-4">
         <p class="text-xs text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-1.5">
           <UIcon name="i-heroicons-chat-bubble-bottom-center-text" class="w-4 h-4" />
           Continue the conversation:
@@ -228,6 +229,7 @@ const props = defineProps<{
     reasoning?: string | null  // New API field for AI thinking
   }
   viewMode: 'fullpage' | 'popup'
+  readOnly?: boolean  // For shared/public views - disables interactive elements
 }>()
 
 const emit = defineEmits<{

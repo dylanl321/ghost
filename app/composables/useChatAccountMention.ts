@@ -18,11 +18,12 @@ export function useChatAccountMention() {
 
   /**
    * Search accounts based on query
+   * Uses search-first UX: requires at least 1 character to show results
    */
   function searchAccounts(query: string): AWSEnclaveData[] {
     const enclaves = Object.values(enclaveStore.enclaves || {})
 
-    // Filter out decommissioned accounts first
+    // Filter out decommissioned accounts
     const activeEnclaves = enclaves.filter(e => {
       const enclaveStatus = (e.enclaveStatus || '').toLowerCase()
       const accountStatus = (e.accountStatus || '').toLowerCase()
@@ -30,9 +31,9 @@ export function useChatAccountMention() {
         !accountStatus.includes('decommission')
     })
 
-    if (!query) {
-      // Return active accounts if no query
-      return activeEnclaves.slice(0, 10)
+    // Require at least 1 character to search (search-first UX)
+    if (!query || query.length === 0) {
+      return []
     }
 
     const lowerQuery = query.toLowerCase()
@@ -43,7 +44,8 @@ export function useChatAccountMention() {
         e.awsStandardAccountID?.includes(query) ||
         e.awsAccountEmail?.toLowerCase().includes(lowerQuery)
       )
-      .slice(0, 10) // Limit to 10 results
+      .sort((a, b) => (a.projectName || '').localeCompare(b.projectName || ''))
+      .slice(0, 25)
   }
 
   /**
@@ -80,7 +82,8 @@ export function useChatAccountMention() {
     mentionPosition.value = lastAtIndex
     filteredAccounts.value = searchAccounts(textAfterAt)
     selectedMentionIndex.value = 0
-    showMentionDropdown.value = filteredAccounts.value.length > 0
+    // Always show dropdown when @ is typed (to show search hint or results)
+    showMentionDropdown.value = true
 
     return true
   }

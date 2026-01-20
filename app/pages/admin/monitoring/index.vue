@@ -17,11 +17,11 @@
           <Icon name="i-heroicons-chart-bar" class="w-6 h-6 text-red-600 dark:text-red-400" />
         </div>
         <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
-          Monitoring & Support
+          System Monitoring
         </h1>
       </div>
       <p class="text-gray-600 dark:text-gray-400">
-        View system logs and manage issues & tickets
+        View system logs, health checks, and manage issues
       </p>
     </div>
 
@@ -35,37 +35,40 @@
     <!-- Tab Content -->
     <div class="mt-6">
       <SystemLogsPanel v-if="activeTab === 0" />
-      <StrandsLogsViewer v-else-if="activeTab === 1" />
-      <StrandsHealthCheck v-else-if="activeTab === 2" />
-      <IssuesPanel v-else-if="activeTab === 3" />
+      <UserJourneyVisualizer v-else-if="activeTab === 1" />
+      <StrandsLogsViewer v-else-if="activeTab === 2" />
+      <StrandsHealthCheck v-else-if="activeTab === 3" />
+      <IssuesPanel v-else-if="activeTab === 4" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import SystemLogsPanel from '~/components/admin/SystemLogsPanel.vue'
+import UserJourneyVisualizer from '~/components/admin/UserJourneyVisualizer.vue'
 import StrandsLogsViewer from '~/components/admin/StrandsLogsViewer.vue'
 import StrandsHealthCheck from '~/components/admin/StrandsHealthCheck.vue'
 import IssuesPanel from '~/components/admin/IssuesPanel.vue'
 
-// Page meta - using admin layout
 definePageMeta({
   layout: 'admin',
-  title: 'Monitoring & Support',
-  description: 'View system logs and manage issues & tickets'
+  title: 'System Monitoring',
+  description: 'View system logs, health checks, and manage issues'
 })
 
-// Active tab state
 const activeTab = ref(0)
 
-// Tab configuration
 const tabs = [
   {
-    label: 'System Logs',
+    label: 'Activity Logs',
     icon: 'i-heroicons-document-text'
   },
   {
-    label: 'Strands Agent Logs',
+    label: 'User Journeys',
+    icon: 'i-heroicons-map'
+  },
+  {
+    label: 'Agent Logs',
     icon: 'i-heroicons-server'
   },
   {

@@ -165,8 +165,9 @@ export async function getChatMetrics(
     if (thread.isArchived) archivedCount++;
 
     // Analyze messages
-    for (let i = 0; i < thread.messages.length; i++) {
-      const message = thread.messages[i];
+    const messages = thread.messages || [];
+    for (let i = 0; i < messages.length; i++) {
+      const message = messages[i];
 
       // Count user queries
       if (message.role === "user") {

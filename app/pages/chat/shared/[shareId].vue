@@ -81,8 +81,8 @@
           :key="msg.messageId || `msg-${index}`"
           :message="msg"
           :view-mode="'fullpage'"
+          :read-only="true"
           @copy="copyMessageMarkdown"
-          @enriched-click="handleEnrichedClick"
         />
       </div>
 
@@ -109,9 +109,6 @@
         </div>
       </div>
     </div>
-
-    <!-- Entity Popover -->
-    <EntityPopover />
   </div>
 </template>
 
@@ -133,8 +130,6 @@ const isLoading = ref(true)
 const error = ref<string | null>(null)
 const threadData = ref<ChatThread | null>(null)
 
-// Entity enrichment for click handling
-const { handleEnrichedClick } = useStrandsResponseEnricher()
 
 // Toast notifications
 const toast = useToast()
@@ -287,9 +282,9 @@ async function renderMermaidCharts() {
   }
 }
 
-// Set page metadata
+// Set page metadata - use public layout for isolated, read-only view
 definePageMeta({
-  layout: 'default',
+  layout: 'public',
   auth: false // No authentication required for shared threads
 })
 

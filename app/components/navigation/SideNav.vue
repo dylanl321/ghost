@@ -464,6 +464,11 @@ const navigationItems = computed(() => {
       to: "/chat",
       icon: "i-heroicons-sparkles",
     },
+    {
+      label: "Settings",
+      to: "/settings",
+      icon: "i-heroicons-cog-6-tooth",
+    },
     // Always include Pipeline Analytics in structure to avoid hydration mismatch
     // Visibility controlled by ClientOnly in template
     {

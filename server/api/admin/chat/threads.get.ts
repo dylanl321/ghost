@@ -124,7 +124,7 @@ export default defineEventHandler(async (event) => {
     // Client-side filtering for accountId (since it's in message metadata)
     if (accountId) {
       threads = threads.filter((thread) =>
-        thread.messages.some(
+        (thread.messages || []).some(
           (msg) => msg.metadata?.accountId === accountId
         )
       );
@@ -139,7 +139,7 @@ export default defineEventHandler(async (event) => {
 
     // Return thread summaries (without full message content for performance)
     const threadSummaries = threads.map((thread) => {
-      const lastUserMessage = thread.messages
+      const lastUserMessage = (thread.messages || [])
         .slice()
         .reverse()
         .find((m) => m.role === "user");

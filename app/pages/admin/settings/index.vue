@@ -17,7 +17,7 @@
           <Icon name="i-heroicons-cog-6-tooth" class="w-6 h-6 text-orange-600 dark:text-orange-400" />
         </div>
         <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
-          System Configuration
+          System Settings
         </h1>
       </div>
       <p class="text-gray-600 dark:text-gray-400">
@@ -37,6 +37,9 @@
       <ApiKeysPanel v-if="activeTab === 0" />
       <SiteConfigPanel v-else-if="activeTab === 1" />
       <NotificationsPanel v-else-if="activeTab === 2" />
+      <BudgetAlertsPanel v-else-if="activeTab === 3" />
+      <AlertMetricsPanel v-else-if="activeTab === 4" />
+      <AlertSettingsPanel v-else-if="activeTab === 5" />
     </div>
   </div>
 </template>
@@ -45,30 +48,42 @@
 import ApiKeysPanel from '~/components/admin/ApiKeysPanel.vue'
 import SiteConfigPanel from '~/components/admin/SiteConfigPanel.vue'
 import NotificationsPanel from '~/components/admin/NotificationsPanel.vue'
+import BudgetAlertsPanel from '~/components/admin/BudgetAlertsPanel.vue'
+import AlertMetricsPanel from '~/components/admin/AlertMetricsPanel.vue'
+import AlertSettingsPanel from '~/components/admin/AlertSettingsPanel.vue'
 
-// Page meta - using admin layout
 definePageMeta({
   layout: 'admin',
-  title: 'System Configuration',
+  title: 'System Settings',
   description: 'Configure API keys, system settings, and notifications'
 })
 
-// Active tab state
 const activeTab = ref(0)
 
-// Tab configuration
 const tabs = [
   {
     label: 'API Keys',
     icon: 'i-heroicons-key'
   },
   {
-    label: 'System Settings',
+    label: 'Site Configuration',
     icon: 'i-heroicons-cog-6-tooth'
   },
   {
     label: 'Notifications',
     icon: 'i-heroicons-bell'
+  },
+  {
+    label: 'Budget Alerts',
+    icon: 'i-heroicons-bell-alert'
+  },
+  {
+    label: 'Alert Metrics',
+    icon: 'i-heroicons-chart-bar'
+  },
+  {
+    label: 'Alert Settings',
+    icon: 'i-heroicons-adjustments-horizontal'
   }
 ]
 </script>
