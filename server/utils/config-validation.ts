@@ -13,7 +13,7 @@ export interface ValidationResult {
 /**
  * Validate environment parameter
  */
-export function validateEnvironment(environment: any): ValidationResult {
+export function validateEnvironmentConfig(environment: any): ValidationResult {
   const errors: string[] = []
 
   if (environment && environment !== 'commercial' && environment !== 'govcloud') {
@@ -255,7 +255,7 @@ export function validateConfigResourcesQuery(query: Record<string, any>): Valida
 
   // Validate each parameter
   if (query.environment) {
-    const result = validateEnvironment(query.environment)
+    const result = validateEnvironmentConfig(query.environment)
     allErrors.push(...result.errors)
   }
 
@@ -308,7 +308,7 @@ export function validateConfigSummaryQuery(query: Record<string, any>): Validati
 
   // Validate each parameter
   if (query.environment) {
-    const result = validateEnvironment(query.environment)
+    const result = validateEnvironmentConfig(query.environment)
     allErrors.push(...result.errors)
   }
 

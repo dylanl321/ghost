@@ -44,47 +44,8 @@
       </UCard>
     </div>
 
-    <!-- Admin Dashboard with Sidebar -->
-    <div v-else class="flex h-full">
-      <!-- Collapsible Sidebar -->
-      <aside
-        class="bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-all duration-300"
-        :class="sidebarCollapsed ? 'w-16' : 'w-64'"
-      >
-        <div class="flex flex-col h-full">
-          <!-- Sidebar Header -->
-          <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-            <span v-if="!sidebarCollapsed" class="font-semibold text-gray-900 dark:text-white">Menu</span>
-            <UButton
-              color="gray"
-              variant="ghost"
-              size="sm"
-              icon="i-heroicons-bars-3"
-              @click="sidebarCollapsed = !sidebarCollapsed"
-            />
-          </div>
-
-          <!-- Navigation Links -->
-          <nav class="flex-1 overflow-y-auto p-3">
-            <div class="space-y-1">
-              <button
-                v-for="category in categories"
-                :key="category.id"
-                @click="navigateTo(category.to)"
-                class="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
-                :title="category.label"
-              >
-                <Icon :name="category.icon" class="w-5 h-5 flex-shrink-0" />
-                <span v-if="!sidebarCollapsed">{{ category.label }}</span>
-              </button>
-            </div>
-          </nav>
-        </div>
-      </aside>
-
-      <!-- Main Content -->
-      <main class="flex-1 overflow-y-auto">
-        <div class="container mx-auto px-6 py-8 max-w-7xl">
+    <!-- Admin Dashboard Content -->
+    <div v-else class="container mx-auto px-6 py-8 max-w-7xl">
           <!-- Header with Search -->
           <div class="mb-6">
             <div class="flex items-center justify-between mb-4">
@@ -529,8 +490,6 @@
               </div>
             </UCard>
           </div>
-        </div>
-      </main>
     </div>
   </div>
 </template>
@@ -548,20 +507,9 @@ const { isAdmin } = useUserRoles()
 // Check if user has admin access
 const hasAdminAccess = computed(() => isAdmin.value)
 
-// Sidebar state
-const sidebarCollapsed = ref(false)
+// Search and favorites state
 const searchQuery = ref('')
 const showFavorites = ref(false)
-
-// Categories for sidebar navigation - using consolidated routes
-const categories = [
-  { id: 'settings', label: 'System Settings', icon: 'i-heroicons-cog-6-tooth', to: '/admin/settings' },
-  { id: 'users', label: 'User Management', icon: 'i-heroicons-user-group', to: '/admin/users' },
-  { id: 'content', label: 'Content & Reports', icon: 'i-heroicons-document-duplicate', to: '/admin/content' },
-  { id: 'ai', label: 'AI Operations', icon: 'i-heroicons-sparkles', to: '/admin/ai' },
-  { id: 'monitoring', label: 'System Monitoring', icon: 'i-heroicons-chart-bar', to: '/admin/monitoring' },
-  { id: 'pipelines', label: 'Pipeline Analytics', icon: 'i-heroicons-arrow-path', to: '/admin/pipelines' },
-]
 
 // Favorite actions (could be loaded from user preferences)
 const favoriteActions = ref([

@@ -31,11 +31,9 @@ export default defineNuxtPlugin(async (nuxtApp) => {
 
     // Check if user is logged in
     if (!loggedIn.value || !user.value?.accessToken) {
-      console.log('User not logged in, skipping store initialization')
-      // Save current URL before redirecting to auth
-      const { saveReturnUrl } = useAuthRedirect()
-      saveReturnUrl(route.fullPath)
-      router.push('/auth/loading')
+      console.log('[GHOST-AUTH] Store init: User not logged in, skipping store initialization')
+      // Let the auth-redirect middleware handle authentication
+      // Don't save URL or redirect here - it conflicts with the middleware
       return
     }
 

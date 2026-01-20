@@ -14,7 +14,7 @@
 import { ref, computed, nextTick, readonly, onUnmounted, reactive } from 'vue'
 import { useChatThreadsStore } from '~/stores/useChatThreadsStore'
 import { useBackgroundPolling, type PollingCallbacks } from './useBackgroundPolling'
-import type { ChatMessage, StreamingChatMessage } from '~/shared/types/chat-threads'
+import type { ChatMessage, StreamingChatMessage, SuggestedPrompt } from '~/shared/types/chat-threads'
 import type { AWSEnclaveData } from '#shared/types/accounts'
 
 // Chat state enum
@@ -236,13 +236,6 @@ function removePlaceholder(threadId: string, jobId: string) {
 export interface UseChatUIOptions {
   viewMode?: 'fullpage' | 'popup' | 'sidebar'
   initialGreeting?: string
-}
-
-// Suggested prompt type
-export interface SuggestedPrompt {
-  text: string
-  type: 'question' | 'action' | 'clarification'
-  priority: number
 }
 
 // Disambiguation data type

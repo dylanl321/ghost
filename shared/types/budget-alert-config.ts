@@ -25,7 +25,7 @@ export interface ConfigItemBase {
   config_scope: string
   /** Sort key - Hierarchical identifier in format '{section}#{key}' */
   config_section: string
-  /** Type discriminator for GSI queries (e.g., 'settings', 'alerts', 'recipients') */
+  /** Type discriminator for GSI queries (e.g., 'settings', 'alerts', 'recipients_by_type') */
   section_type: ConfigSectionType
   /** Schema version for migrations */
   version?: number
@@ -41,7 +41,7 @@ export interface ConfigItemBase {
 export type ConfigSectionType =
   | 'settings'
   | 'alerts'
-  | 'recipients'
+  | 'recipients_by_type'
   | 'static_recipients'
   | 'lob_recipients'
   | 'custom_recipients'
@@ -52,6 +52,25 @@ export type ConfigSectionType =
   | 'theme'
   | 'anomaly_detection'
   | 'standalone_anomaly_alerts'
+
+/**
+ * Alert types for recipient routing
+ * - FORECAST: Projected overspend based on ML forecast (has severity levels)
+ * - ACTUAL: Budget already exceeded (has severity levels)
+ * - MONTHLY: Monthly summary reports (flat, no severity levels)
+ * - ANOMALY: Cost anomaly alerts (flat, no severity levels)
+ */
+export type RecipientAlertType = 'FORECAST' | 'ACTUAL' | 'MONTHLY' | 'ANOMALY'
+
+/**
+ * Conditional recipient - included only when conditions are met
+ */
+export interface ConditionalRecipient {
+  /** Role name to include */
+  role: string
+  /** Minimum overage amount to include this recipient */
+  min_overage_dollars: number
+}
 
 // -----------------------------------------------------------------------------
 // Settings Configuration (settings#main)
@@ -112,16 +131,43 @@ export interface AlertLevelConfig extends ConfigItemBase {
 }
 
 // -----------------------------------------------------------------------------
-// Recipients Configuration (recipients#{LEVEL})
+// Recipients by Type Configuration (recipients_by_type#{TYPE}#{LEVEL} or recipients_by_type#{TYPE})
 // -----------------------------------------------------------------------------
 
 /**
+ * Email recipients organized by alert type and severity level.
+ * FORECAST and ACTUAL alerts have severity levels, MONTHLY and ANOMALY are flat.
+ *
+ * Keys:
+ * - With severity levels: config_section=recipients_by_type#{FORECAST|ACTUAL}#{INFO|WARNING|CRITICAL|ESCALATION}
+ * - Flat (no levels): config_section=recipients_by_type#{MONTHLY|ANOMALY}
+ */
+export interface RecipientsByTypeConfig extends ConfigItemBase {
+  section_type: 'recipients_by_type'
+  /** Alert type (FORECAST, ACTUAL, MONTHLY, or ANOMALY) */
+  alert_type: RecipientAlertType
+  /** Severity level name (only for FORECAST and ACTUAL) */
+  level?: BudgetAlertLevel
+  /** Primary recipients (role names or emails) */
+  to: string[]
+  /** CC recipients (role names or emails) */
+  cc?: string[]
+  /** If true, completely replace with custom recipients */
+  override?: boolean
+  /** Recipients included only when conditions are met */
+  conditional_to?: ConditionalRecipient[]
+  /** CC recipients included only when conditions are met */
+  conditional_cc?: ConditionalRecipient[]
+}
+
+/**
+ * @deprecated Use RecipientsByTypeConfig instead - old format for backwards compatibility
  * Email recipients for a specific alert level
  *
  * Key: config_scope=GLOBAL, config_section=recipients#{INFO|WARNING|CRITICAL|ESCALATION}
  */
 export interface RecipientsConfig extends ConfigItemBase {
-  section_type: 'recipients'
+  section_type: 'recipients_by_type'
   /** Alert level name */
   level: BudgetAlertLevel
   /** Primary recipients (role names or emails) */
@@ -152,8 +198,35 @@ export interface StaticRecipientsConfig extends ConfigItemBase {
 // -----------------------------------------------------------------------------
 
 /**
+ * Recipient configuration for a specific alert type and level
+ */
+export interface RecipientTypeConfig {
+  /** Primary recipients (role names or emails) */
+  to?: string[]
+  /** CC recipients (role names or emails) */
+  cc?: string[]
+}
+
+/**
+ * Recipients organized by alert type with severity levels
+ * FORECAST and ACTUAL have level-specific configs, MONTHLY and ANOMALY are flat
+ */
+export interface RecipientsByTypeStructure {
+  /** FORECAST alert recipients by level */
+  FORECAST?: Partial<Record<BudgetAlertLevel, RecipientTypeConfig>>
+  /** ACTUAL alert recipients by level */
+  ACTUAL?: Partial<Record<BudgetAlertLevel, RecipientTypeConfig>>
+  /** MONTHLY report recipients (flat, no levels) */
+  MONTHLY?: RecipientTypeConfig
+  /** ANOMALY alert recipients (flat, no levels) */
+  ANOMALY?: RecipientTypeConfig
+}
+
+/**
  * Custom recipients for a specific Line of Business
- * Merged with default recipients unless override=true
+ * Supports two modes:
+ * 1. Flat structure: Same recipients for all alert types (uses to/cc)
+ * 2. Type-specific structure: Different recipients per alert type (uses by_type)
  *
  * Key: config_scope=GLOBAL, config_section=lob_recipients#{LOB_NAME}
  */
@@ -161,12 +234,14 @@ export interface LobRecipientsConfig extends ConfigItemBase {
   section_type: 'lob_recipients'
   /** Line of Business name (must match account metadata) */
   lob_name: string
-  /** Additional TO recipients */
+  /** Additional TO recipients (flat mode - applies to all alert types) */
   to?: string[]
-  /** Additional CC recipients */
+  /** Additional CC recipients (flat mode - applies to all alert types) */
   cc?: string[]
   /** If true, completely replace default recipients */
   override?: boolean
+  /** Type-specific recipients structure (overrides flat to/cc if present) */
+  by_type?: RecipientsByTypeStructure
 }
 
 // -----------------------------------------------------------------------------
@@ -176,17 +251,22 @@ export interface LobRecipientsConfig extends ConfigItemBase {
 /**
  * Custom recipients for a specific AWS account
  * Stored with account ID as partition key
+ * Supports two modes:
+ * 1. Flat structure: Same recipients for all alert types (uses to/cc)
+ * 2. Type-specific structure: Different recipients per alert type (uses by_type)
  *
  * Key: config_scope={ACCOUNT_ID}, config_section=custom_recipients#main
  */
 export interface AccountRecipientsConfig extends ConfigItemBase {
   section_type: 'custom_recipients'
-  /** TO recipients for this account */
+  /** TO recipients for this account (flat mode - applies to all alert types) */
   to?: string[]
-  /** CC recipients for this account */
+  /** CC recipients for this account (flat mode - applies to all alert types) */
   cc?: string[]
   /** If true, completely replace default and LOB recipients */
   override?: boolean
+  /** Type-specific recipients structure (overrides flat to/cc if present) */
+  by_type?: RecipientsByTypeStructure
 }
 
 // -----------------------------------------------------------------------------
@@ -378,7 +458,8 @@ export interface StandaloneAnomalyAlertsConfig extends ConfigItemBase {
 export type BudgetAlertConfigItem =
   | SettingsConfig
   | AlertLevelConfig
-  | RecipientsConfig
+  | RecipientsByTypeConfig
+  | RecipientsConfig // deprecated, kept for backwards compatibility
   | StaticRecipientsConfig
   | LobRecipientsConfig
   | AccountRecipientsConfig
@@ -409,10 +490,18 @@ export function isAlertLevelConfig(item: BudgetAlertConfigItem): item is AlertLe
 }
 
 /**
- * Type guard to check if config item is RecipientsConfig
+ * Type guard to check if config item is RecipientsByTypeConfig
+ */
+export function isRecipientsByTypeConfig(item: BudgetAlertConfigItem): item is RecipientsByTypeConfig {
+  return item.section_type === 'recipients_by_type' && 'alert_type' in item
+}
+
+/**
+ * @deprecated Use isRecipientsByTypeConfig instead
+ * Type guard to check if config item is RecipientsConfig (legacy format)
  */
 export function isRecipientsConfig(item: BudgetAlertConfigItem): item is RecipientsConfig {
-  return item.section_type === 'recipients'
+  return item.section_type === 'recipients_by_type' && !('alert_type' in item)
 }
 
 /**

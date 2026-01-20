@@ -7,8 +7,6 @@
 import { findMatchingPages, GHOST_SITE_SCHEMA, type PageSchema } from './ghost-site-schema'
 import type { SuggestedLink } from '#shared/types/chat-threads'
 
-export type { SuggestedLink }
-
 interface ParsedEntities {
   accountIds: string[]
   dateRange?: { start: string; end: string; label: string }

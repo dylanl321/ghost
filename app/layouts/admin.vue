@@ -6,14 +6,16 @@
       @toggle-mobile-menu="() => {}"
     />
 
-    <!-- Main Content Area -->
-    <main class="flex-1 min-h-0 flex flex-col bg-gray-50 dark:bg-slate-900 pt-4 overflow-auto">
-      <div class="relative h-full min-h-0">
-        <section class="transition-opacity duration-200 h-full min-h-0">
-          <slot />
-        </section>
-      </div>
-    </main>
+    <!-- Main Content Area with Admin Sidebar -->
+    <div class="flex-1 min-h-0 flex overflow-hidden">
+      <!-- Admin Sidebar Navigation -->
+      <AdminNav class="hidden md:flex" />
+
+      <!-- Page Content -->
+      <main class="flex-1 overflow-y-auto bg-gray-50 dark:bg-slate-900">
+        <slot />
+      </main>
+    </div>
 
     <!-- Footer -->
     <footer class="bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 h-[53px] flex items-center">

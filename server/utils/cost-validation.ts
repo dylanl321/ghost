@@ -37,7 +37,7 @@ export interface AccountComparison {
   notes: string
 }
 
-export interface ValidationResult {
+export interface CostValidationResult {
   timestamp: string
   dateRange: {
     startDate: string
@@ -404,7 +404,7 @@ export async function runValidation(
   includeProforma: boolean,
   masterAccountId: string = '205950196477',
   proformaAccountId: string = '253821132832'
-): Promise<ValidationResult> {
+): Promise<CostValidationResult> {
   const { startDate, endDate, description } = getRelativeDateRange(period)
   const tests: ValidationTest[] = []
 
@@ -466,7 +466,7 @@ export async function runValidation(
 /**
  * Generate CSV report from validation results
  */
-export function generateCsvReport(result: ValidationResult): string {
+export function generateCsvReport(result: CostValidationResult): string {
   const lines: string[] = []
 
   // Header

@@ -36,9 +36,8 @@
     <div class="mt-6">
       <SystemLogsPanel v-if="activeTab === 0" />
       <UserJourneyVisualizer v-else-if="activeTab === 1" />
-      <StrandsLogsViewer v-else-if="activeTab === 2" />
-      <StrandsHealthCheck v-else-if="activeTab === 3" />
-      <IssuesPanel v-else-if="activeTab === 4" />
+      <StrandsHealthCheck v-else-if="activeTab === 2" />
+      <IssuesPanel v-else-if="activeTab === 3" />
     </div>
   </div>
 </template>
@@ -46,7 +45,6 @@
 <script setup lang="ts">
 import SystemLogsPanel from '~/components/admin/SystemLogsPanel.vue'
 import UserJourneyVisualizer from '~/components/admin/UserJourneyVisualizer.vue'
-import StrandsLogsViewer from '~/components/admin/StrandsLogsViewer.vue'
 import StrandsHealthCheck from '~/components/admin/StrandsHealthCheck.vue'
 import IssuesPanel from '~/components/admin/IssuesPanel.vue'
 
@@ -56,6 +54,7 @@ definePageMeta({
   description: 'View system logs, health checks, and manage issues'
 })
 
+const route = useRoute()
 const activeTab = ref(0)
 
 const tabs = [
@@ -68,10 +67,6 @@ const tabs = [
     icon: 'i-heroicons-map'
   },
   {
-    label: 'Agent Logs',
-    icon: 'i-heroicons-server'
-  },
-  {
     label: 'Service Health',
     icon: 'i-heroicons-heart'
   },
@@ -80,4 +75,25 @@ const tabs = [
     icon: 'i-heroicons-exclamation-triangle'
   }
 ]
+
+// Read tab from query param on mount
+onMounted(() => {
+  const tabParam = route.query.tab
+  if (tabParam !== undefined) {
+    const tabIndex = parseInt(tabParam as string, 10)
+    if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex < tabs.length) {
+      activeTab.value = tabIndex
+    }
+  }
+})
+
+// Watch for query changes (e.g., back/forward navigation)
+watch(() => route.query.tab, (newTab) => {
+  if (newTab !== undefined) {
+    const tabIndex = parseInt(newTab as string, 10)
+    if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex < tabs.length) {
+      activeTab.value = tabIndex
+    }
+  }
+})
 </script>

@@ -6,86 +6,165 @@
         <div>
           <div class="flex items-center gap-3">
             <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Alert Configuration</h2>
-            <UBadge color="gray" variant="subtle">Read-Only</UBadge>
+            <UBadge v-if="isDryRunEnabled" color="yellow" variant="subtle">Dry Run Mode</UBadge>
+            <UBadge v-else color="green" variant="subtle">Live</UBadge>
           </div>
           <p class="mt-1 text-gray-600 dark:text-gray-400">
-            Manage budget alert thresholds, recipients, and system settings
+            Budget alert thresholds, recipients, and system settings from DynamoDB
           </p>
         </div>
-        <div class="p-3 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
-          <UIcon name="i-heroicons-cog-6-tooth" class="w-8 h-8 text-orange-600 dark:text-orange-400" />
+        <div class="flex items-center gap-3">
+          <UButton
+            color="gray"
+            variant="ghost"
+            icon="i-heroicons-arrow-path"
+            :loading="loading"
+            @click="refresh"
+          >
+            Refresh
+          </UButton>
+          <div class="p-3 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+            <UIcon name="i-heroicons-cog-6-tooth" class="w-8 h-8 text-orange-600 dark:text-orange-400" />
+          </div>
         </div>
       </div>
     </UCard>
 
-    <!-- Configuration Categories Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-      <UCard
-        v-for="category in configCategories"
-        :key="category.name"
-        class="hover:shadow-md transition-shadow"
-      >
-        <div class="flex items-start gap-4">
-          <div class="p-3 rounded-lg" :class="category.bgClass">
-            <UIcon :name="category.icon" class="w-6 h-6" :class="category.iconClass" />
-          </div>
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 mb-1">
-              <h3 class="font-medium text-gray-900 dark:text-white">{{ category.name }}</h3>
-              <UBadge color="purple" variant="subtle" size="xs">Coming Soon</UBadge>
-            </div>
-            <p class="text-sm text-gray-600 dark:text-gray-400">
-              {{ category.description }}
-            </p>
-          </div>
-        </div>
-      </UCard>
+    <!-- Loading State -->
+    <div v-if="loading && !config" class="space-y-4">
+      <USkeleton class="h-32" />
+      <USkeleton class="h-48" />
+      <USkeleton class="h-64" />
     </div>
 
-    <!-- Current Status Section -->
-    <UCard>
-      <template #header>
-        <div class="flex items-center gap-2">
-          <UIcon name="i-heroicons-information-circle" class="w-5 h-5 text-blue-500" />
-          <h3 class="font-semibold text-gray-900 dark:text-white">Current Status</h3>
-        </div>
+    <!-- Error State -->
+    <UAlert
+      v-else-if="error"
+      color="red"
+      icon="i-heroicons-exclamation-triangle"
+      title="Failed to load configuration"
+      :description="error.message || 'Unable to fetch alert configuration from DynamoDB'"
+      class="mb-6"
+    >
+      <template #actions>
+        <UButton color="red" variant="soft" @click="refresh">
+          Retry
+        </UButton>
       </template>
-      <div class="space-y-4">
-        <div class="flex items-start gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-          <UIcon name="i-heroicons-database" class="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
-          <div>
-            <p class="text-sm text-gray-700 dark:text-gray-300">
-              Alert settings are currently stored in the <code class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-xs font-mono">budget-alert-config</code> DynamoDB table.
-            </p>
-            <p class="text-sm text-gray-600 dark:text-gray-400 mt-2">
-              Configuration changes require direct database access. Contact your administrator to modify settings.
-            </p>
-          </div>
-        </div>
+    </UAlert>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <!-- Configuration Reference -->
-          <div class="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-            <div class="flex items-center gap-2 mb-2">
-              <UIcon name="i-heroicons-document-text" class="w-5 h-5 text-gray-500" />
-              <span class="font-medium text-gray-900 dark:text-white">Configuration Reference</span>
+    <!-- Configuration Display -->
+    <template v-else-if="config">
+      <!-- System Status Bar -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <UCard>
+          <div class="flex items-center gap-3">
+            <div class="p-2 rounded-lg" :class="isDryRunEnabled ? 'bg-yellow-100 dark:bg-yellow-900/30' : 'bg-green-100 dark:bg-green-900/30'">
+              <UIcon
+                :name="isDryRunEnabled ? 'i-heroicons-beaker' : 'i-heroicons-check-circle'"
+                class="w-5 h-5"
+                :class="isDryRunEnabled ? 'text-yellow-600 dark:text-yellow-400' : 'text-green-600 dark:text-green-400'"
+              />
             </div>
-            <p class="text-sm text-gray-600 dark:text-gray-400">
-              See <code class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-xs font-mono">alert_guide.md</code> for complete documentation of all configuration options.
-            </p>
+            <div>
+              <p class="text-xs text-gray-500 dark:text-gray-400">Mode</p>
+              <p class="font-semibold text-gray-900 dark:text-white">{{ isDryRunEnabled ? 'Dry Run' : 'Production' }}</p>
+            </div>
           </div>
+        </UCard>
 
-          <!-- Environment Info -->
-          <div class="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-            <div class="flex items-center gap-2 mb-2">
-              <UIcon name="i-heroicons-server-stack" class="w-5 h-5 text-gray-500" />
-              <span class="font-medium text-gray-900 dark:text-white">Environment</span>
+        <UCard>
+          <div class="flex items-center gap-3">
+            <div class="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+              <UIcon name="i-heroicons-adjustments-horizontal" class="w-5 h-5 text-blue-600 dark:text-blue-400" />
             </div>
-            <p class="text-sm text-gray-600 dark:text-gray-400">
-              Alert system runs in Commercial AWS (proforma account). Configuration changes take effect immediately.
-            </p>
+            <div>
+              <p class="text-xs text-gray-500 dark:text-gray-400">Alert Levels</p>
+              <p class="font-semibold text-gray-900 dark:text-white">{{ alertLevels.length }}</p>
+            </div>
           </div>
-        </div>
+        </UCard>
+
+        <UCard>
+          <div class="flex items-center gap-3">
+            <div class="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+              <UIcon name="i-heroicons-user-group" class="w-5 h-5 text-purple-600 dark:text-purple-400" />
+            </div>
+            <div>
+              <p class="text-xs text-gray-500 dark:text-gray-400">Recipient Configs</p>
+              <p class="font-semibold text-gray-900 dark:text-white">{{ recipientsByType.length }}</p>
+            </div>
+          </div>
+        </UCard>
+
+        <UCard>
+          <div class="flex items-center gap-3">
+            <div class="p-2 rounded-lg" :class="isAnomalyDetectionEnabled ? 'bg-green-100 dark:bg-green-900/30' : 'bg-gray-100 dark:bg-gray-900/30'">
+              <UIcon
+                name="i-heroicons-chart-bar-square"
+                class="w-5 h-5"
+                :class="isAnomalyDetectionEnabled ? 'text-green-600 dark:text-green-400' : 'text-gray-400'"
+              />
+            </div>
+            <div>
+              <p class="text-xs text-gray-500 dark:text-gray-400">Anomaly Detection</p>
+              <p class="font-semibold text-gray-900 dark:text-white">{{ isAnomalyDetectionEnabled ? 'Enabled' : 'Disabled' }}</p>
+            </div>
+          </div>
+        </UCard>
+      </div>
+
+      <!-- Configuration Sections Accordion -->
+      <UAccordion :items="accordionItems" multiple>
+        <!-- Settings Section -->
+        <template #settings>
+          <SettingsSection :settings="settings" />
+        </template>
+
+        <!-- Alert Levels Section -->
+        <template #alert-levels>
+          <AlertLevelsSection :levels="sortedAlertLevels" />
+        </template>
+
+        <!-- Recipients Section -->
+        <template #recipients>
+          <RecipientsSection
+            :recipients-by-type="recipientsByType"
+            :static-recipients="staticRecipients"
+            :lob-recipients="lobRecipients"
+            :account-recipients="accountRecipients"
+          />
+        </template>
+
+        <!-- Rate Limiting Section -->
+        <template #rate-limiting>
+          <RateLimitingSection :threshold-scaling="thresholdScaling" :pace-alerting="paceAlerting" :ml-config="mlConfig" />
+        </template>
+
+        <!-- Dry Run Section -->
+        <template #dry-run>
+          <DryRunSection :dry-run="dryRun" />
+        </template>
+
+        <!-- Anomaly Detection Section -->
+        <template #anomaly-detection>
+          <AnomalyDetectionSection
+            :anomaly-detection="anomalyDetection"
+            :standalone-anomaly-alerts="standaloneAnomalyAlerts"
+          />
+        </template>
+      </UAccordion>
+    </template>
+
+    <!-- Empty State -->
+    <UCard v-else>
+      <div class="text-center py-8">
+        <UIcon name="i-heroicons-inbox" class="w-12 h-12 text-gray-400 mx-auto mb-4" />
+        <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">No Configuration Found</h3>
+        <p class="text-gray-600 dark:text-gray-400 mb-4">
+          The budget alert configuration table appears to be empty.
+        </p>
+        <UButton @click="refresh">Refresh</UButton>
       </div>
     </UCard>
   </div>
@@ -93,62 +172,82 @@
 
 <script setup lang="ts">
 /**
- * AlertSettingsPanel - Placeholder component for budget alert configuration management
+ * AlertSettingsPanel - Admin panel for viewing budget alert configuration
  *
- * Shows configuration categories that will be editable in a future release.
- * Currently read-only, explaining that settings are stored in DynamoDB.
+ * Displays the complete alert configuration from DynamoDB including:
+ * - System settings (email, timezone, business hours)
+ * - Alert levels (thresholds, colors, limits)
+ * - Recipients (by type, LOB, account)
+ * - Rate limiting (threshold scaling, pace alerting)
+ * - Dry run mode
+ * - Anomaly detection
  */
 
-interface ConfigCategory {
-  name: string
-  description: string
-  icon: string
-  bgClass: string
-  iconClass: string
+const {
+  config,
+  loading,
+  error,
+  fetchConfig,
+  settings,
+  alertLevels,
+  recipientsByType,
+  staticRecipients,
+  lobRecipients,
+  accountRecipients,
+  thresholdScaling,
+  paceAlerting,
+  mlConfig,
+  dryRun,
+  anomalyDetection,
+  standaloneAnomalyAlerts,
+  isDryRunEnabled,
+  isAnomalyDetectionEnabled,
+  sortedAlertLevels
+} = useAlertConfig()
+
+// Fetch config on mount
+onMounted(() => {
+  fetchConfig()
+})
+
+// Refresh function
+async function refresh() {
+  await fetchConfig()
 }
 
-const configCategories: ConfigCategory[] = [
+// Accordion items configuration
+const accordionItems = [
   {
-    name: 'Thresholds & Levels',
-    description: 'Alert levels: INFO, WARNING, CRITICAL, ESCALATION thresholds',
+    label: 'System Settings',
+    icon: 'i-heroicons-cog-6-tooth',
+    slot: 'settings',
+    defaultOpen: true
+  },
+  {
+    label: 'Alert Levels',
     icon: 'i-heroicons-adjustments-horizontal',
-    bgClass: 'bg-blue-100 dark:bg-blue-900/30',
-    iconClass: 'text-blue-600 dark:text-blue-400'
+    slot: 'alert-levels'
   },
   {
-    name: 'Recipients',
-    description: 'Email routing by level, LOB, and account',
+    label: 'Recipients',
     icon: 'i-heroicons-user-group',
-    bgClass: 'bg-green-100 dark:bg-green-900/30',
-    iconClass: 'text-green-600 dark:text-green-400'
+    slot: 'recipients'
   },
   {
-    name: 'Rate Limiting',
-    description: 'Max alerts per month, cooldown intervals',
+    label: 'Rate Limiting',
     icon: 'i-heroicons-clock',
-    bgClass: 'bg-yellow-100 dark:bg-yellow-900/30',
-    iconClass: 'text-yellow-600 dark:text-yellow-400'
+    slot: 'rate-limiting'
   },
   {
-    name: 'Dry Run Mode',
-    description: 'Test configuration without sending production alerts',
+    label: 'Dry Run Mode',
     icon: 'i-heroicons-beaker',
-    bgClass: 'bg-purple-100 dark:bg-purple-900/30',
-    iconClass: 'text-purple-600 dark:text-purple-400'
+    slot: 'dry-run'
   },
   {
-    name: 'Anomaly Detection',
-    description: 'AWS Cost Anomaly Detection integration',
+    label: 'Anomaly Detection',
     icon: 'i-heroicons-chart-bar-square',
-    bgClass: 'bg-red-100 dark:bg-red-900/30',
-    iconClass: 'text-red-600 dark:text-red-400'
-  },
-  {
-    name: 'Email Theme',
-    description: 'Email template colors and branding',
-    icon: 'i-heroicons-paint-brush',
-    bgClass: 'bg-pink-100 dark:bg-pink-900/30',
-    iconClass: 'text-pink-600 dark:text-pink-400'
+    slot: 'anomaly-detection'
   }
 ]
 </script>
+

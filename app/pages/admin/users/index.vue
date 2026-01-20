@@ -50,6 +50,7 @@ definePageMeta({
   description: 'Manage user preferences, roles, and permissions'
 })
 
+const route = useRoute()
 const activeTab = ref(0)
 
 const tabs = [
@@ -62,4 +63,25 @@ const tabs = [
     icon: 'i-heroicons-shield-check'
   }
 ]
+
+// Read tab from query param on mount
+onMounted(() => {
+  const tabParam = route.query.tab
+  if (tabParam !== undefined) {
+    const tabIndex = parseInt(tabParam as string, 10)
+    if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex < tabs.length) {
+      activeTab.value = tabIndex
+    }
+  }
+})
+
+// Watch for query changes (e.g., back/forward navigation)
+watch(() => route.query.tab, (newTab) => {
+  if (newTab !== undefined) {
+    const tabIndex = parseInt(newTab as string, 10)
+    if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex < tabs.length) {
+      activeTab.value = tabIndex
+    }
+  }
+})
 </script>
