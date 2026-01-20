@@ -231,7 +231,7 @@ function loadFromEnvironment(): DynamoDBConfig {
       tableName: BUDGET_ALERTS_TABLE,
       environment: 'commercial',
       region: commercialRegion,
-      accountId: process.env.PROFORMA_ACCOUNT_ID || commercialAccountId,
+      accountId: PROFORMA_ACCOUNT_ID || commercialAccountId,
       readOnly: true  // GHOST only reads alert history, doesn't create alerts
     },
     // Budget alert configuration table (same account as budget alerts)
@@ -239,7 +239,7 @@ function loadFromEnvironment(): DynamoDBConfig {
       tableName: process.env.BUDGET_ALERT_CONFIG_TABLE || 'budget-alert-system-config-prod',
       environment: 'commercial',
       region: commercialRegion,
-      accountId: process.env.PROFORMA_ACCOUNT_ID || commercialAccountId,
+      accountId: PROFORMA_ACCOUNT_ID || commercialAccountId,
       readOnly: false  // Admin can modify alert configuration
     }
   }
