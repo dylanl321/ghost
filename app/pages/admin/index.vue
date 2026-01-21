@@ -44,47 +44,8 @@
       </UCard>
     </div>
 
-    <!-- Admin Dashboard with Sidebar -->
-    <div v-else class="flex h-full">
-      <!-- Collapsible Sidebar -->
-      <aside
-        class="bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-all duration-300"
-        :class="sidebarCollapsed ? 'w-16' : 'w-64'"
-      >
-        <div class="flex flex-col h-full">
-          <!-- Sidebar Header -->
-          <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-            <span v-if="!sidebarCollapsed" class="font-semibold text-gray-900 dark:text-white">Menu</span>
-            <UButton
-              color="gray"
-              variant="ghost"
-              size="sm"
-              icon="i-heroicons-bars-3"
-              @click="sidebarCollapsed = !sidebarCollapsed"
-            />
-          </div>
-
-          <!-- Navigation Links -->
-          <nav class="flex-1 overflow-y-auto p-3">
-            <div class="space-y-1">
-              <button
-                v-for="category in categories"
-                :key="category.id"
-                @click="navigateTo(category.to)"
-                class="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
-                :title="category.label"
-              >
-                <Icon :name="category.icon" class="w-5 h-5 flex-shrink-0" />
-                <span v-if="!sidebarCollapsed">{{ category.label }}</span>
-              </button>
-            </div>
-          </nav>
-        </div>
-      </aside>
-
-      <!-- Main Content -->
-      <main class="flex-1 overflow-y-auto">
-        <div class="container mx-auto px-6 py-8 max-w-7xl">
+    <!-- Admin Dashboard Content -->
+    <div v-else class="container mx-auto px-6 py-8 max-w-7xl">
           <!-- Header with Search -->
           <div class="mb-6">
             <div class="flex items-center justify-between mb-4">
@@ -147,7 +108,7 @@
               </h2>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <UCard class="cursor-pointer hover:shadow-lg transition-shadow" @click="navigateTo('/admin/system')">
+              <UCard class="cursor-pointer hover:shadow-lg transition-shadow" @click="navigateTo('/admin/settings')">
                 <div class="flex items-center gap-4">
                   <div class="p-3 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
                     <Icon name="i-heroicons-cog-6-tooth" class="w-6 h-6 text-orange-600 dark:text-orange-400" />
@@ -160,7 +121,7 @@
                 </div>
               </UCard>
 
-              <UCard class="cursor-pointer hover:shadow-lg transition-shadow" @click="navigateTo('/admin/system')">
+              <UCard class="cursor-pointer hover:shadow-lg transition-shadow" @click="navigateTo('/admin/settings')">
                 <div class="flex items-center gap-4">
                   <div class="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
                     <Icon name="i-heroicons-key" class="w-6 h-6 text-blue-600 dark:text-blue-400" />
@@ -173,7 +134,7 @@
                 </div>
               </UCard>
 
-              <UCard class="cursor-pointer hover:shadow-lg transition-shadow" @click="navigateTo('/admin/system')">
+              <UCard class="cursor-pointer hover:shadow-lg transition-shadow" @click="navigateTo('/admin/settings')">
                 <div class="flex items-center gap-4">
                   <div class="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
                     <Icon name="i-heroicons-bell" class="w-6 h-6 text-purple-600 dark:text-purple-400" />
@@ -331,10 +292,10 @@
 
           <!-- Category Cards Grid -->
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <!-- System Configuration - First Position -->
+            <!-- System Settings - First Position -->
             <UCard
               class="hover:shadow-lg transition-shadow cursor-pointer border-2 border-orange-200 dark:border-orange-800"
-              @click="navigateTo('/admin/system')"
+              @click="navigateTo('/admin/settings')"
             >
               <div class="space-y-4">
                 <div class="flex items-start justify-between">
@@ -348,17 +309,17 @@
                 </div>
                 <div>
                   <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    System Configuration
+                    System Settings
                   </h3>
                   <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                    Configure API keys, system settings, and notifications
+                    Configure API keys, site settings, and notifications
                   </p>
                   <div class="flex flex-wrap gap-2">
                     <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
                       API Keys
                     </span>
                     <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      Settings
+                      Site Config
                     </span>
                     <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
                       Notifications
@@ -392,7 +353,7 @@
                       User Preferences
                     </span>
                     <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      Roles
+                      Roles & Permissions
                     </span>
                   </div>
                 </div>
@@ -430,10 +391,10 @@
               </div>
             </UCard>
 
-            <!-- AI & Data Category -->
+            <!-- AI Operations Category (Consolidated) -->
             <UCard
               class="hover:shadow-lg transition-shadow cursor-pointer"
-              @click="navigateTo('/admin/ai-data')"
+              @click="navigateTo('/admin/ai')"
             >
               <div class="space-y-4">
                 <div class="flex items-start justify-between">
@@ -444,58 +405,27 @@
                 </div>
                 <div>
                   <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    AI & Data
+                    AI Operations
                   </h3>
                   <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                    Monitor AI chat activity and validate data quality
+                    Monitor AI chat, test agents, and view performance metrics
                   </p>
                   <div class="flex flex-wrap gap-2">
                     <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      AI Monitor
+                      Chat Monitor
                     </span>
                     <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      Validation
+                      Agent Testing
+                    </span>
+                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
+                      Metrics
                     </span>
                   </div>
                 </div>
               </div>
             </UCard>
 
-            <!-- AI Chat Metrics Category -->
-            <UCard
-              class="hover:shadow-lg transition-shadow cursor-pointer"
-              @click="navigateTo('/admin/metrics')"
-            >
-              <div class="space-y-4">
-                <div class="flex items-start justify-between">
-                  <div class="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                    <Icon name="i-heroicons-chart-pie" class="w-8 h-8 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <Icon name="i-heroicons-arrow-right" class="w-5 h-5 text-gray-400" />
-                </div>
-                <div>
-                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    AI Chat Metrics
-                  </h3>
-                  <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                    Monitor streaming performance, agent execution, and user activity
-                  </p>
-                  <div class="flex flex-wrap gap-2">
-                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      Streaming
-                    </span>
-                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      Agent Performance
-                    </span>
-                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      User Analytics
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </UCard>
-
-            <!-- Monitoring & Support Category -->
+            <!-- System Monitoring Category (Consolidated) -->
             <UCard
               class="hover:shadow-lg transition-shadow cursor-pointer"
               @click="navigateTo('/admin/monitoring')"
@@ -509,17 +439,57 @@
                 </div>
                 <div>
                   <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    Monitoring & Support
+                    System Monitoring
                   </h3>
                   <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                    View system logs and manage issues & tickets
+                    View logs, health checks, and manage issues
                   </p>
                   <div class="flex flex-wrap gap-2">
                     <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
                       System Logs
                     </span>
                     <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
+                      Health Checks
+                    </span>
+                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
                       Issues
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </UCard>
+
+            <!-- Budget Alerts Category -->
+            <UCard
+              class="hover:shadow-lg transition-shadow cursor-pointer"
+              @click="navigateTo('/admin/budget-alerts')"
+            >
+              <div class="space-y-4">
+                <div class="flex items-start justify-between">
+                  <div class="p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
+                    <Icon name="i-heroicons-currency-dollar" class="w-8 h-8 text-yellow-600 dark:text-yellow-400" />
+                  </div>
+                  <Icon name="i-heroicons-arrow-right" class="w-5 h-5 text-gray-400" />
+                </div>
+                <div>
+                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                    Budget Alerts
+                  </h3>
+                  <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                    Monitor budget alerts, view Lambda logs, and configure alert settings
+                  </p>
+                  <div class="flex flex-wrap gap-2">
+                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
+                      Org Overview
+                    </span>
+                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
+                      Alert History
+                    </span>
+                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
+                      Lambda Logs
+                    </span>
+                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
+                      Settings
                     </span>
                   </div>
                 </div>
@@ -557,8 +527,6 @@
               </div>
             </UCard>
           </div>
-        </div>
-      </main>
     </div>
   </div>
 </template>
@@ -576,27 +544,14 @@ const { isAdmin } = useUserRoles()
 // Check if user has admin access
 const hasAdminAccess = computed(() => isAdmin.value)
 
-// Sidebar state
-const sidebarCollapsed = ref(false)
+// Search and favorites state
 const searchQuery = ref('')
 const showFavorites = ref(false)
 
-// Categories for sidebar navigation
-const categories = [
-  { id: 'system', label: 'System Configuration', icon: 'i-heroicons-cog-6-tooth', to: '/admin/system' },
-  { id: 'users', label: 'User Management', icon: 'i-heroicons-user-group', to: '/admin/users' },
-  { id: 'content', label: 'Content & Reports', icon: 'i-heroicons-document-duplicate', to: '/admin/content' },
-  { id: 'ai-data', label: 'AI & Data', icon: 'i-heroicons-sparkles', to: '/admin/ai-data' },
-  { id: 'metrics', label: 'AI Chat Metrics', icon: 'i-heroicons-chart-pie', to: '/admin/metrics' },
-  { id: 'monitoring', label: 'Monitoring & Support', icon: 'i-heroicons-chart-bar', to: '/admin/monitoring' },
-  { id: 'agent-test', label: 'Agent Testing', icon: 'i-heroicons-wrench-screwdriver', to: '/admin/agent-test' },
-  { id: 'pipelines', label: 'Pipeline Analytics', icon: 'i-heroicons-arrow-path', to: '/admin/pipelines' },
-]
-
 // Favorite actions (could be loaded from user preferences)
 const favoriteActions = ref([
-  { id: 'settings', label: 'System Settings', icon: 'i-heroicons-cog-6-tooth', to: '/admin/system' },
-  { id: 'api-keys', label: 'API Keys', icon: 'i-heroicons-key', to: '/admin/system' },
+  { id: 'settings', label: 'System Settings', icon: 'i-heroicons-cog-6-tooth', to: '/admin/settings' },
+  { id: 'api-keys', label: 'API Keys', icon: 'i-heroicons-key', to: '/admin/settings' },
 ])
 
 // Real system health status

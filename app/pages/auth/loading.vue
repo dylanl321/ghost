@@ -11,7 +11,7 @@ const route = useRoute();
 const { user, loggedIn, logout } = useOidcAuth();
 const userGroupStore = useUserGroupStore();
 const enclaveStore = useEnclaveStore();
-const { getReturnUrl } = useAuthRedirect();
+const { getReturnUrl, clearReturnUrl } = useAuthRedirect();
 
 const step = ref("Validating login state...");
 const error = ref<string | null>(null);
@@ -19,19 +19,19 @@ const progress = ref(0);
 
 // Get the return URL with query parameter fallback support
 const getFinalReturnUrl = (): string => {
-  console.log('[Auth Loading] Determining return URL...')
-  console.log('[Auth Loading] Query params:', route.query)
+  console.log('[GHOST-AUTH] Loading: Determining return URL...')
+  console.log('[GHOST-AUTH] Loading: Query params:', route.query)
 
   // First check query parameters (support both 'returnTo' and 'redirect' for compatibility)
   const queryParam = route.query.returnTo || route.query.redirect
   if (queryParam && typeof queryParam === "string") {
-    console.log('[Auth Loading] Using query parameter:', queryParam)
+    console.log('[GHOST-AUTH] Loading: Using query parameter:', queryParam)
     return decodeURIComponent(queryParam);
   }
 
   // Then use the composable to check sessionStorage
   const savedUrl = getReturnUrl()
-  console.log('[Auth Loading] Return URL from composable:', savedUrl)
+  console.log('[GHOST-AUTH] Loading: Return URL from sessionStorage:', savedUrl)
 
   return savedUrl
 };
@@ -57,6 +57,10 @@ const validateLoginState = async (accessToken: string) => {
 };
 
 onMounted(async () => {
+  // CAPTURE URL IMMEDIATELY - before any async work that could cause re-render
+  const finalReturnUrl = getFinalReturnUrl()
+  console.log('[GHOST-AUTH] Loading: Final return URL captured:', finalReturnUrl)
+
   try {
     step.value = "Validating login state...";
 
@@ -111,13 +115,15 @@ onMounted(async () => {
     progress.value = 100;
     await new Promise((resolve) => setTimeout(resolve, 800));
 
+    // Clear the return URL from sessionStorage since we're about to use it
+    clearReturnUrl()
+
     // Redirect to the original URL the user was trying to access
-    const returnUrl = getFinalReturnUrl();
-    console.log("Redirecting to:", returnUrl);
+    console.log('[GHOST-AUTH] Loading: Redirecting to:', finalReturnUrl);
 
     // Use window.location.href to ensure full page navigation
     // This prevents the loading page from appearing in content areas
-    window.location.href = returnUrl;
+    window.location.href = finalReturnUrl;
   } catch {
     error.value = "Something went wrong";
   }

@@ -199,7 +199,7 @@ const chartOptions = computed(() => {
         }
       },
       // Make sure the Pro Forma sum is greater than 0 before displaying a line for it (this is specifically for the master account which does not have Pro Forma data)
-      (props.timeSeriesProforma && costsProforma.value.reduce((sum, val) => sum + val) > 0) && {
+      (props.timeSeriesProforma && costsProforma.value.length > 0 && costsProforma.value.reduce((sum, val) => sum + val, 0) > 0) && {
         name: 'Proforma Cost',
         type: 'line',
         smooth: true,

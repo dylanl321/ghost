@@ -197,9 +197,10 @@ export async function getDailyMetrics(date: string): Promise<AggregatedMetrics |
 }
 
 /**
- * Get user metrics
+ * Get stored user metrics from DynamoDB
+ * Named distinctly from chat-metrics-aggregator's getUserMetrics which aggregates live chat data
  */
-export async function getUserMetrics(date: string, userId: string): Promise<AggregatedMetrics | null> {
+export async function getStoredUserMetrics(date: string, userId: string): Promise<AggregatedMetrics | null> {
   const tableConfig = await getMetricsTableConfig()
   return await getItem<AggregatedMetrics>(tableConfig.tableName, {
     metricDate: date,

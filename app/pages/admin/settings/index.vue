@@ -17,7 +17,7 @@
           <Icon name="i-heroicons-cog-6-tooth" class="w-6 h-6 text-orange-600 dark:text-orange-400" />
         </div>
         <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
-          System Configuration
+          System Settings
         </h1>
       </div>
       <p class="text-gray-600 dark:text-gray-400">
@@ -38,6 +38,27 @@
       <SiteConfigPanel v-else-if="activeTab === 1" />
       <NotificationsPanel v-else-if="activeTab === 2" />
     </div>
+
+    <!-- Budget Alerts Link -->
+    <UCard class="mt-6">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
+            <UIcon name="i-heroicons-currency-dollar" class="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
+          </div>
+          <div>
+            <h3 class="font-semibold text-gray-900 dark:text-white">Budget Alerts</h3>
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+              Budget alert configuration has moved to its own dedicated admin section
+            </p>
+          </div>
+        </div>
+        <UButton color="yellow" variant="soft" @click="navigateTo('/admin/budget-alerts')">
+          Go to Budget Alerts
+          <UIcon name="i-heroicons-arrow-right" class="w-4 h-4 ml-2" />
+        </UButton>
+      </div>
+    </UCard>
   </div>
 </template>
 
@@ -46,24 +67,22 @@ import ApiKeysPanel from '~/components/admin/ApiKeysPanel.vue'
 import SiteConfigPanel from '~/components/admin/SiteConfigPanel.vue'
 import NotificationsPanel from '~/components/admin/NotificationsPanel.vue'
 
-// Page meta - using admin layout
 definePageMeta({
   layout: 'admin',
-  title: 'System Configuration',
+  title: 'System Settings',
   description: 'Configure API keys, system settings, and notifications'
 })
 
-// Active tab state
+const route = useRoute()
 const activeTab = ref(0)
 
-// Tab configuration
 const tabs = [
   {
     label: 'API Keys',
     icon: 'i-heroicons-key'
   },
   {
-    label: 'System Settings',
+    label: 'Site Configuration',
     icon: 'i-heroicons-cog-6-tooth'
   },
   {
@@ -71,4 +90,25 @@ const tabs = [
     icon: 'i-heroicons-bell'
   }
 ]
+
+// Read tab from query param on mount
+onMounted(() => {
+  const tabParam = route.query.tab
+  if (tabParam !== undefined) {
+    const tabIndex = parseInt(tabParam as string, 10)
+    if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex < tabs.length) {
+      activeTab.value = tabIndex
+    }
+  }
+})
+
+// Watch for query changes (e.g., back/forward navigation)
+watch(() => route.query.tab, (newTab) => {
+  if (newTab !== undefined) {
+    const tabIndex = parseInt(newTab as string, 10)
+    if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex < tabs.length) {
+      activeTab.value = tabIndex
+    }
+  }
+})
 </script>

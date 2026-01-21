@@ -94,4 +94,46 @@ export interface AWSEnclaveData {
   // projectCode?: string
   // accountType?: 'commercial-only' | 'govcloud-paired'
   //createdDate?: string
+
+  // IT PEP Data fields
+  pepActive?: boolean;
+  pepBudgetLatestYear?: number;
+  pepBudget2026AnnualTotal?: number;
+  pepBudget2026Monthly?: string; // JSON string with monthly breakdown
+  pepBusinessArea?: string;
+  pepChargeType?: string;
+  pepClassificationLevel?: string;
+  pepCloudComment?: string;
+  pepCloudRecordName?: string;
+  pepCloudType?: string;
+  pepContractAlias?: string;
+  pepContractHeaderID?: string;
+  pepContractLineOfBusiness?: string;
+  pepContractNumber?: string;
+  pepContractType?: string;
+  pepDepartment?: string;
+  pepEnvironmentName?: string;
+  pepEnvironmentStatus?: string;
+  pepExternalEnclaveID?: number;
+  pepExternalEnclaveSource?: string;
+  pepFSO?: string;
+  pepITPPM?: string;
+  pepLAAManager?: string;
+  pepLAAManagerName?: string;
+  pepLAAProposalLead?: string;
+  pepLob?: string;
+  pepLocationAddress?: string;
+  pepLocationCloudAddressID?: number;
+  pepLocationState?: string;
+  pepNetworkType?: string;
+  pepPMMigration?: string;
+  pepPMMigrationName?: string;
+  pepPrimaryITLAASA?: string;
+  pepProgramCAM?: string;
+  pepProgramEnvironmentOwner?: string;
+  pepProgramManager?: string;
+  pepProgramType?: string;
+  pepProjectNumber?: string;
+  pepSharedEnvironment?: boolean;
+  pepTaskNumber?: string;
 };

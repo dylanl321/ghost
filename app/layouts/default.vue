@@ -66,6 +66,11 @@
         v-if="siteConfigStore.isStrandsChatEnabled"
       />
     </ClientOnly>
+
+    <!-- Global Command Palette (Cmd+K) -->
+    <ClientOnly>
+      <CommandPalette />
+    </ClientOnly>
   </div>
 </template>
 

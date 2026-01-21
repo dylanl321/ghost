@@ -164,8 +164,10 @@ export default defineNuxtConfig({
       // customLoginPage: false,
     },
     session: {
+      expirationCheck: true, // Enable automatic expiration checking
+      automaticRefresh: true, // Enable automatic token refresh
       expirationThreshold: 300, // Allow the token to be refreshed early (within 5 minutes of expiration)
-      maxAge: 60 * 60 * 24 * 1, // 1 day
+      maxAge: 60 * 60 * 2, // 2 hours (aligned with typical token refresh patterns)
     },
   },
 });

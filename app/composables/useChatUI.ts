@@ -14,7 +14,7 @@
 import { ref, computed, nextTick, readonly, onUnmounted, reactive } from 'vue'
 import { useChatThreadsStore } from '~/stores/useChatThreadsStore'
 import { useBackgroundPolling, type PollingCallbacks } from './useBackgroundPolling'
-import type { ChatMessage, StreamingChatMessage } from '~/shared/types/chat-threads'
+import type { ChatMessage, StreamingChatMessage, SuggestedPrompt } from '~/shared/types/chat-threads'
 import type { AWSEnclaveData } from '#shared/types/accounts'
 
 // Chat state enum
@@ -236,13 +236,6 @@ function removePlaceholder(threadId: string, jobId: string) {
 export interface UseChatUIOptions {
   viewMode?: 'fullpage' | 'popup' | 'sidebar'
   initialGreeting?: string
-}
-
-// Suggested prompt type
-export interface SuggestedPrompt {
-  text: string
-  type: 'question' | 'action' | 'clarification'
-  priority: number
 }
 
 // Disambiguation data type
@@ -482,7 +475,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   function searchAccounts(query: string): AWSEnclaveData[] {
     const enclaves = Object.values(enclaveStore.enclaves || {})
 
-    // Filter out decommissioned accounts first
+    // Filter out decommissioned accounts
     const activeEnclaves = enclaves.filter(e => {
       const enclaveStatus = (e.enclaveStatus || '').toLowerCase()
       const accountStatus = (e.accountStatus || '').toLowerCase()
@@ -490,8 +483,9 @@ export function useChatUI(options: UseChatUIOptions = {}) {
         !accountStatus.includes('decommission')
     })
 
-    if (!query) {
-      return activeEnclaves.slice(0, 10)
+    // Require at least 1 character to search (search-first UX)
+    if (!query || query.length === 0) {
+      return []
     }
 
     const lowerQuery = query.toLowerCase()
@@ -502,7 +496,8 @@ export function useChatUI(options: UseChatUIOptions = {}) {
         e.awsStandardAccountID?.includes(query) ||
         e.awsAccountEmail?.toLowerCase().includes(lowerQuery)
       )
-      .slice(0, 10)
+      .sort((a, b) => (a.projectName || '').localeCompare(b.projectName || ''))
+      .slice(0, 25)
   }
 
   function handleMentionInput(value: string, cursorPosition: number): boolean {
@@ -532,7 +527,8 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     mentionPosition.value = lastAtIndex
     filteredAccounts.value = searchAccounts(textAfterAt)
     selectedMentionIndex.value = 0
-    showMentionDropdown.value = filteredAccounts.value.length > 0
+    // Always show dropdown when @ is typed (to show search hint or results)
+    showMentionDropdown.value = true
 
     return true
   }
@@ -1400,12 +1396,29 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     await threadsStore.fetchThreads()
 
     if (threadsStore.activeThreadId) {
-      await threadsStore.loadThread(threadsStore.activeThreadId)
-    } else {
-      // Create a new thread if none exists so the input works immediately
-      console.log('[useChatUI] No active thread, creating one')
-      await threadsStore.createThread()
+      // Try to load the persisted active thread
+      const loaded = await threadsStore.loadThread(threadsStore.activeThreadId)
+      if (!loaded) {
+        // Thread no longer exists - clear the stale reference
+        // Don't auto-create, let user send first message to create thread
+        console.log('[useChatUI] Persisted thread not found, clearing stale reference')
+        threadsStore.setActiveThread(null)
+
+        // Select most recent existing thread if available
+        if (threadsStore.threads.length > 0) {
+          const mostRecent = threadsStore.threads[0]
+          console.log('[useChatUI] Selecting most recent thread:', mostRecent.threadId)
+          await threadsStore.loadThread(mostRecent.threadId)
+        }
+      }
+    } else if (threadsStore.threads.length > 0) {
+      // No active thread but threads exist - select the most recent one
+      const mostRecent = threadsStore.threads[0]
+      console.log('[useChatUI] No active thread, selecting most recent:', mostRecent.threadId)
+      await threadsStore.loadThread(mostRecent.threadId)
     }
+    // If no active thread and no existing threads, don't create one
+    // A thread will be created when the user sends their first message
 
     // Check for pending job recovery on initialization
     await checkAndRecoverPendingJob()
@@ -1480,6 +1493,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     filteredAccounts: readonly(filteredAccounts),
     selectedAccountForMessage: readonly(selectedAccountForMessage),
     selectedMentionIndex: readonly(selectedMentionIndex),
+    mentionQuery: readonly(mentionQuery),
     handleMentionInput,
     selectAccount,
     navigateMentions,

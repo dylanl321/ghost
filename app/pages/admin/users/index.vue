@@ -44,17 +44,15 @@
 import UserPreferencesPanel from '~/components/admin/UserPreferencesPanel.vue'
 import RolesPanel from '~/components/admin/RolesPanel.vue'
 
-// Page meta - using admin layout
 definePageMeta({
   layout: 'admin',
   title: 'User Management',
   description: 'Manage user preferences, roles, and permissions'
 })
 
-// Active tab state
+const route = useRoute()
 const activeTab = ref(0)
 
-// Tab configuration
 const tabs = [
   {
     label: 'User Preferences',
@@ -65,4 +63,25 @@ const tabs = [
     icon: 'i-heroicons-shield-check'
   }
 ]
+
+// Read tab from query param on mount
+onMounted(() => {
+  const tabParam = route.query.tab
+  if (tabParam !== undefined) {
+    const tabIndex = parseInt(tabParam as string, 10)
+    if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex < tabs.length) {
+      activeTab.value = tabIndex
+    }
+  }
+})
+
+// Watch for query changes (e.g., back/forward navigation)
+watch(() => route.query.tab, (newTab) => {
+  if (newTab !== undefined) {
+    const tabIndex = parseInt(newTab as string, 10)
+    if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex < tabs.length) {
+      activeTab.value = tabIndex
+    }
+  }
+})
 </script>

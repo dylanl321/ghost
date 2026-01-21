@@ -41,7 +41,7 @@ const CACHE_KEYS = {
 export type ResourceType = 'EC2_INSTANCE' | 'EBS_VOLUME' | 'LAMBDA_FUNCTION' | 'AUTO_SCALING_GROUP' | 'ECS_SERVICE'
 export type Finding = 'OPTIMIZED' | 'UNDER_PROVISIONED' | 'OVER_PROVISIONED' | 'NOT_OPTIMIZED'
 
-export interface OptimizationRecommendation {
+export interface ComputeOptimizerRecommendation {
   resourceId: string
   resourceArn: string
   accountId: string
@@ -77,11 +77,11 @@ export interface OptimizationSummary {
   optimizedPercentage: number
   totalMonthlySavings: number
   avgSavingsPerResource: number
-  topSavingsOpportunities: OptimizationRecommendation[]
+  topSavingsOpportunities: ComputeOptimizerRecommendation[]
 }
 
 export interface BatchOptimizationResult {
-  recommendations: OptimizationRecommendation[]
+  recommendations: ComputeOptimizerRecommendation[]
   summary: OptimizationSummary
   errors: Array<{ resourceId: string; error: Error }>
 }
@@ -93,21 +93,21 @@ export async function getEC2Recommendations(
   instanceArns: string[],
   environment: AWSEnvironmentType = 'commercial',
   region?: string
-): Promise<OptimizationRecommendation[]> {
+): Promise<ComputeOptimizerRecommendation[]> {
   if (instanceArns.length === 0) return []
-  
+
   const cache = getCacheManager()
-  const recommendations: OptimizationRecommendation[] = []
+  const recommendations: ComputeOptimizerRecommendation[] = []
   const uncachedArns: string[] = []
-  
+
   // Check cache for each instance
   for (const arn of instanceArns) {
     const parts = arn.split(':')
     const accountId = parts[4]
     const instanceId = arn.split('/').pop()!
     const cacheKey = CACHE_KEYS.INSTANCE_REC(accountId, instanceId)
-    
-    const cached = await cache.get<OptimizationRecommendation>(cacheKey)
+
+    const cached = await cache.get<ComputeOptimizerRecommendation>(cacheKey)
     if (cached) {
       recommendations.push(cached)
     } else {
@@ -165,21 +165,21 @@ export async function getEBSRecommendations(
   volumeArns: string[],
   environment: AWSEnvironmentType = 'commercial',
   region?: string
-): Promise<OptimizationRecommendation[]> {
+): Promise<ComputeOptimizerRecommendation[]> {
   if (volumeArns.length === 0) return []
-  
+
   const cache = getCacheManager()
-  const recommendations: OptimizationRecommendation[] = []
+  const recommendations: ComputeOptimizerRecommendation[] = []
   const uncachedArns: string[] = []
-  
+
   // Check cache
   for (const arn of volumeArns) {
     const parts = arn.split(':')
     const accountId = parts[4]
     const volumeId = arn.split('/').pop()!
     const cacheKey = CACHE_KEYS.VOLUME_REC(accountId, volumeId)
-    
-    const cached = await cache.get<OptimizationRecommendation>(cacheKey)
+
+    const cached = await cache.get<ComputeOptimizerRecommendation>(cacheKey)
     if (cached) {
       recommendations.push(cached)
     } else {
@@ -231,20 +231,20 @@ export async function getLambdaRecommendations(
   functionArns: string[],
   environment: AWSEnvironmentType = 'commercial',
   region?: string
-): Promise<OptimizationRecommendation[]> {
+): Promise<ComputeOptimizerRecommendation[]> {
   if (functionArns.length === 0) return []
-  
+
   const cache = getCacheManager()
-  const recommendations: OptimizationRecommendation[] = []
+  const recommendations: ComputeOptimizerRecommendation[] = []
   const uncachedArns: string[] = []
-  
+
   // Check cache
   for (const arn of functionArns) {
     const parts = arn.split(':')
     const accountId = parts[4]
     const cacheKey = CACHE_KEYS.LAMBDA_REC(accountId, arn)
-    
-    const cached = await cache.get<OptimizationRecommendation>(cacheKey)
+
+    const cached = await cache.get<ComputeOptimizerRecommendation>(cacheKey)
     if (cached) {
       recommendations.push(cached)
     } else {
@@ -308,16 +308,16 @@ export async function getBatchOptimizationRecommendations(
     resourcesByTypeAndRegion.get(key)!.push(resource)
   }
   
-  const allRecommendations: OptimizationRecommendation[] = []
+  const allRecommendations: ComputeOptimizerRecommendation[] = []
   const errors: Array<{ resourceId: string; error: Error }> = []
-  
+
   // Fetch recommendations for each type/region combination
   for (const [key, regionResources] of resourcesByTypeAndRegion) {
     const [resourceType, region] = key.split(':')
     const arns = regionResources.map(r => r.arn)
-    
+
     try {
-      let recommendations: OptimizationRecommendation[] = []
+      let recommendations: ComputeOptimizerRecommendation[] = []
       
       switch (resourceType as ResourceType) {
         case 'EC2_INSTANCE':
@@ -358,7 +358,7 @@ export async function getBatchOptimizationRecommendations(
  * Calculate optimization summary from recommendations
  */
 export function calculateOptimizationSummary(
-  recommendations: OptimizationRecommendation[],
+  recommendations: ComputeOptimizerRecommendation[],
   accountId: string,
   resourceType?: ResourceType
 ): OptimizationSummary {
@@ -376,7 +376,7 @@ export function calculateOptimizationSummary(
     topSavingsOpportunities: []
   }
   
-  const savingsOpportunities: OptimizationRecommendation[] = []
+  const savingsOpportunities: ComputeOptimizerRecommendation[] = []
   
   for (const rec of recommendations) {
     switch (rec.finding) {
@@ -448,7 +448,7 @@ export function generateOptimizationSummaryText(summary: OptimizationSummary): s
 /**
  * Parse EC2 recommendation
  */
-function parseEC2Recommendation(rec: InstanceRecommendation): OptimizationRecommendation {
+function parseEC2Recommendation(rec: InstanceRecommendation): ComputeOptimizerRecommendation {
   const parts = rec.instanceArn!.split(':')
   const accountId = parts[4]
   const region = parts[3]
@@ -486,7 +486,7 @@ function parseEC2Recommendation(rec: InstanceRecommendation): OptimizationRecomm
 /**
  * Parse EBS recommendation
  */
-function parseEBSRecommendation(rec: VolumeRecommendation): OptimizationRecommendation {
+function parseEBSRecommendation(rec: VolumeRecommendation): ComputeOptimizerRecommendation {
   const parts = rec.volumeArn!.split(':')
   const accountId = parts[4]
   const region = parts[3]
@@ -519,7 +519,7 @@ function parseEBSRecommendation(rec: VolumeRecommendation): OptimizationRecommen
 /**
  * Parse Lambda recommendation
  */
-function parseLambdaRecommendation(rec: LambdaFunctionRecommendation): OptimizationRecommendation {
+function parseLambdaRecommendation(rec: LambdaFunctionRecommendation): ComputeOptimizerRecommendation {
   const parts = rec.functionArn!.split(':')
   const accountId = parts[4]
   const region = parts[3]

@@ -229,16 +229,24 @@ async function assumeRole(
   environment: AWSEnvironmentType,
   sessionName?: string
 ): Promise<AWSCredentials> {
+  logger.info('[AWS Client Factory] assumeRole called:', {
+    targetAccountId,
+    region,
+    environment
+  })
+
   // Create STS client with base credentials
   const stsClient = new STSClient({
     region,
     credentials: baseCredentials
   })
-  
+
   // Determine role ARN based on environment
   const partition = environment === 'commercial' ? 'aws' : 'aws-us-gov'
   const roleName = await getAssumeRoleName()
   const roleArn = `arn:${partition}:iam::${targetAccountId}:role/${roleName}`
+
+  logger.info('[AWS Client Factory] Assuming role:', { roleArn })
 
   // Prepare assume role request
   const duration = await getAssumeRoleDuration()
@@ -247,16 +255,18 @@ async function assumeRole(
     RoleSessionName: sessionName || `gdms-${environment}-${Date.now()}`,
     DurationSeconds: duration
   }
-  
+
   // Add external ID if configured
   const externalId = getAssumeRoleExternalId()
   if (externalId) {
     assumeRoleParams.ExternalId = externalId
   }
-  
+
   // Assume the role
+  logger.info('[AWS Client Factory] Sending AssumeRole command...')
   const command = new AssumeRoleCommand(assumeRoleParams)
   const response = await stsClient.send(command)
+  logger.info('[AWS Client Factory] AssumeRole succeeded')
   
   if (!response.Credentials) {
     throw new Error(`Failed to assume role in account ${targetAccountId}`)

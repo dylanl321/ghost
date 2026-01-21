@@ -6,12 +6,7 @@
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime'
 import { getBedrockRuntimeClient } from '../lib/aws-client-factory'
 import { logger } from './logger'
-
-export interface SuggestedPrompt {
-  text: string
-  type: 'question' | 'action' | 'clarification'
-  priority: number
-}
+import type { SuggestedPrompt } from '#shared/types/chat-threads'
 
 /**
  * Extract follow-up prompts from an AI response using Bedrock

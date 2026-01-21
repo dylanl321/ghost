@@ -23,16 +23,19 @@ export const useAuthRedirect = () => {
   const saveReturnUrl = (url?: string) => {
     const returnUrl = url || window.location.pathname + window.location.search
     sessionStorage.setItem('auth_return_url', returnUrl)
-    console.log('[Auth Redirect] Saved return URL:', returnUrl)
+    console.log('[GHOST-AUTH] Saved return URL:', returnUrl)
   }
 
   /**
    * Get the saved return URL or fallback
+   * NOTE: This does NOT remove the value - call clearReturnUrl() after successful navigation
    */
   const getReturnUrl = (): string => {
     const savedUrl = sessionStorage.getItem('auth_return_url')
+    console.log('[GHOST-AUTH] Getting return URL:', savedUrl)
     if (savedUrl) {
-      sessionStorage.removeItem('auth_return_url') // Clean up after use
+      // Don't remove here - clearReturnUrl() should be called after successful redirect
+      // This prevents issues with re-renders or multiple calls returning '/'
       return savedUrl
     }
     return '/'
@@ -67,8 +70,10 @@ export const useAuthRedirect = () => {
 
   /**
    * Clear any saved return URL
+   * Call this after successful navigation to the return URL
    */
   const clearReturnUrl = () => {
+    console.log('[GHOST-AUTH] Clearing return URL from sessionStorage')
     sessionStorage.removeItem('auth_return_url')
   }
 

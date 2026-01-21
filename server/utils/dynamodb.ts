@@ -246,7 +246,17 @@ export async function queryItems(
   environment: 'commercial' | 'govcloud' = 'govcloud',
   accountId?: string
 ) {
+  logger.info('[DynamoDB] queryItems called:', {
+    tableName: params.tableName,
+    indexName: params.indexName,
+    environment,
+    accountId,
+    limit: params.limit
+  })
+
+  logger.info('[DynamoDB] Getting DynamoDB client...')
   const client = await getDynamoDBClient(environment, undefined, accountId)
+  logger.info('[DynamoDB] Got DynamoDB client, sending query...')
 
   const command = new QueryCommand({
     TableName: params.tableName,
@@ -264,6 +274,11 @@ export async function queryItems(
   })
 
   const response = await client.send(command)
+  logger.info('[DynamoDB] Query response received:', {
+    itemCount: response.Items?.length || 0,
+    count: response.Count,
+    hasLastKey: !!response.LastEvaluatedKey
+  })
 
   return {
     items: response.Items?.map(item => unmarshall(item, { wrapNumbers: false })) || [],

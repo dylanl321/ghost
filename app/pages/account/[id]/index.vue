@@ -143,6 +143,11 @@
               </div>
             </div>
           </div>
+
+          <!-- Budget Alert History - full width -->
+          <div v-if="accountId" class="col-span-1 lg:col-span-3" data-tour="account-alerts">
+            <AccountAlertHistory :account-id="accountId" />
+          </div>
         </div>
       </template>
 
@@ -241,6 +246,35 @@ const { addRecentAccount } = useRecentAccounts()
 const { getPreference, setPreference, load: loadPreferences, authError } = useUserPreferences()
 const accountTourStartedThisSession = ref(false)
 const lastAccountResetTimestamp = ref<string | null>(null)
+
+// Robust tour detection - localStorage key for dual-storage verification
+const ACCOUNT_TOUR_SEEN_KEY = 'ghost-account-tour-seen'
+
+// Check if tour has been seen via localStorage (fail-closed: assume seen on error)
+function hasSeenAccountTourLocally(): boolean {
+  if (!import.meta.client) return false
+  try {
+    return localStorage.getItem(ACCOUNT_TOUR_SEEN_KEY) === 'true'
+  } catch {
+    return true // Fail closed - assume seen if localStorage unavailable
+  }
+}
+
+// Mark tour as seen in localStorage
+function markAccountTourSeenLocally(): void {
+  if (!import.meta.client) return
+  try {
+    localStorage.setItem(ACCOUNT_TOUR_SEEN_KEY, 'true')
+  } catch {}
+}
+
+// Clear localStorage marker (for admin reset)
+function clearAccountTourSeenLocally(): void {
+  if (!import.meta.client) return
+  try {
+    localStorage.removeItem(ACCOUNT_TOUR_SEEN_KEY)
+  } catch {}
+}
 
 const accountId = computed(() => route.params.id as string)
 const govCloudId = computed(() => enclaveStore.enclaves[accountId.value]?.awsGovCloudAccountID)
@@ -458,11 +492,15 @@ async function handleStartAccountTour() {
   
   if (wasReset) {
     lastAccountResetTimestamp.value = resetTimestamp
+    clearAccountTourSeenLocally() // Clear localStorage marker when admin resets
   }
   accountTourStartedThisSession.value = true
-  
+
+  // Mark tour as seen in localStorage BEFORE starting (robust detection)
+  markAccountTourSeenLocally()
+
   const startAt = Number(pref?.lastStep || 0)
-  
+
   try {
     await startAccountTour({
       startAtStep: isNaN(startAt) ? 0 : startAt,
@@ -539,13 +577,25 @@ onMounted(async () => {
   const forceStart = route.query.tour === '1'
   const wasReset = tourPref?.resetByAdminAt && tourPref?.resetByAdminAt !== lastAccountResetTimestamp.value
 
-  // Only auto-start if:
-  // 1. Force start from URL (?tour=1)
-  // 2. Admin reset the tour
-  // 3. User has NEVER started the tour before (no startedAt and no completed)
-  // 4. NOT currently experiencing auth errors (prevents repeat tours when preferences fail to load)
-  const neverStarted = !tourPref?.startedAt && !tourPref?.completed
-  const shouldAutoStart = (forceStart || wasReset || neverStarted) && !accountTourStartedThisSession.value && !authError.value
+  // Robust dual-storage verification: check BOTH localStorage AND API preferences
+  const seenLocally = hasSeenAccountTourLocally()
+  const seenInApi = tourPref?.startedAt || tourPref?.completed
+
+  // Sync localStorage from API for existing users (backwards compatibility)
+  if (seenInApi && !seenLocally) {
+    markAccountTourSeenLocally()
+  }
+
+  // Only first-time if BOTH indicate first-time AND no auth errors
+  // Philosophy: "When in doubt, don't auto-start"
+  const isGenuineFirstTime = !seenLocally && !seenInApi && !authError.value
+
+  // Admin reset clears localStorage marker to allow re-triggering
+  if (wasReset) {
+    clearAccountTourSeenLocally()
+  }
+
+  const shouldAutoStart = (forceStart || wasReset || isGenuineFirstTime) && !accountTourStartedThisSession.value
 
   if (shouldAutoStart) {
     // Wait for DOM elements to be ready
