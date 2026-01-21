@@ -37,10 +37,28 @@
       <ApiKeysPanel v-if="activeTab === 0" />
       <SiteConfigPanel v-else-if="activeTab === 1" />
       <NotificationsPanel v-else-if="activeTab === 2" />
-      <BudgetAlertsPanel v-else-if="activeTab === 3" />
-      <AlertMetricsPanel v-else-if="activeTab === 4" />
-      <AlertSettingsPanel v-else-if="activeTab === 5" />
     </div>
+
+    <!-- Budget Alerts Link -->
+    <UCard class="mt-6">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
+            <UIcon name="i-heroicons-currency-dollar" class="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
+          </div>
+          <div>
+            <h3 class="font-semibold text-gray-900 dark:text-white">Budget Alerts</h3>
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+              Budget alert configuration has moved to its own dedicated admin section
+            </p>
+          </div>
+        </div>
+        <UButton color="yellow" variant="soft" @click="navigateTo('/admin/budget-alerts')">
+          Go to Budget Alerts
+          <UIcon name="i-heroicons-arrow-right" class="w-4 h-4 ml-2" />
+        </UButton>
+      </div>
+    </UCard>
   </div>
 </template>
 
@@ -48,9 +66,6 @@
 import ApiKeysPanel from '~/components/admin/ApiKeysPanel.vue'
 import SiteConfigPanel from '~/components/admin/SiteConfigPanel.vue'
 import NotificationsPanel from '~/components/admin/NotificationsPanel.vue'
-import BudgetAlertsPanel from '~/components/admin/BudgetAlertsPanel.vue'
-import AlertMetricsPanel from '~/components/admin/AlertMetricsPanel.vue'
-import AlertSettingsPanel from '~/components/admin/AlertSettingsPanel.vue'
 
 definePageMeta({
   layout: 'admin',
@@ -73,18 +88,6 @@ const tabs = [
   {
     label: 'Notifications',
     icon: 'i-heroicons-bell'
-  },
-  {
-    label: 'Budget Alerts',
-    icon: 'i-heroicons-bell-alert'
-  },
-  {
-    label: 'Alert Metrics',
-    icon: 'i-heroicons-chart-bar'
-  },
-  {
-    label: 'Alert Settings',
-    icon: 'i-heroicons-adjustments-horizontal'
   }
 ]
 

@@ -459,6 +459,43 @@
               </div>
             </UCard>
 
+            <!-- Budget Alerts Category -->
+            <UCard
+              class="hover:shadow-lg transition-shadow cursor-pointer"
+              @click="navigateTo('/admin/budget-alerts')"
+            >
+              <div class="space-y-4">
+                <div class="flex items-start justify-between">
+                  <div class="p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
+                    <Icon name="i-heroicons-currency-dollar" class="w-8 h-8 text-yellow-600 dark:text-yellow-400" />
+                  </div>
+                  <Icon name="i-heroicons-arrow-right" class="w-5 h-5 text-gray-400" />
+                </div>
+                <div>
+                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                    Budget Alerts
+                  </h3>
+                  <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                    Monitor budget alerts, view Lambda logs, and configure alert settings
+                  </p>
+                  <div class="flex flex-wrap gap-2">
+                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
+                      Org Overview
+                    </span>
+                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
+                      Alert History
+                    </span>
+                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
+                      Lambda Logs
+                    </span>
+                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
+                      Settings
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </UCard>
+
             <!-- Pipeline Analytics Category -->
             <UCard
               class="hover:shadow-lg transition-shadow cursor-pointer"

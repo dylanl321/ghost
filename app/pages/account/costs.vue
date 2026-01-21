@@ -784,6 +784,35 @@ const { getPreference, setPreference, load: loadPreferences, authError } = useUs
 const tourStartedThisSession = ref(false)
 const lastResetTimestamp = ref<string | null>(null)
 
+// Robust tour detection - localStorage key for dual-storage verification
+const COST_TOUR_SEEN_KEY = 'ghost-cost-tour-seen'
+
+// Check if tour has been seen via localStorage (fail-closed: assume seen on error)
+function hasSeenTourLocally(): boolean {
+  if (!import.meta.client) return false
+  try {
+    return localStorage.getItem(COST_TOUR_SEEN_KEY) === 'true'
+  } catch {
+    return true // Fail closed - assume seen if localStorage unavailable
+  }
+}
+
+// Mark tour as seen in localStorage
+function markTourSeenLocally(): void {
+  if (!import.meta.client) return
+  try {
+    localStorage.setItem(COST_TOUR_SEEN_KEY, 'true')
+  } catch {}
+}
+
+// Clear localStorage marker (for admin reset)
+function clearTourSeenLocally(): void {
+  if (!import.meta.client) return
+  try {
+    localStorage.removeItem(COST_TOUR_SEEN_KEY)
+  } catch {}
+}
+
 async function handleStartTour(isManualStart = false) {
   const pref = getPreference<any>('costTour', {}) || {}
   const resetTimestamp = pref?.resetByAdminAt
@@ -796,8 +825,12 @@ async function handleStartTour(isManualStart = false) {
 
   if (wasReset) {
     lastResetTimestamp.value = resetTimestamp
+    clearTourSeenLocally() // Clear localStorage marker when admin resets
   }
   tourStartedThisSession.value = true
+
+  // Mark tour as seen in localStorage BEFORE starting (robust detection)
+  markTourSeenLocally()
 
   // Check if critical tour elements are ready
   const checkElements = () => {
@@ -1731,13 +1764,25 @@ onMounted(async () => {
     const forceStart = useRoute().query.tour === '1'
     const wasReset = tourPref?.resetByAdminAt && tourPref?.resetByAdminAt !== lastResetTimestamp.value
 
-    // Only auto-start if:
-    // 1. Force start from URL (?tour=1)
-    // 2. Admin reset the tour
-    // 3. User has NEVER started the tour before (no startedAt and no completed)
-    // 4. NOT currently experiencing auth errors (prevents repeat tours when preferences fail to load)
-    const neverStarted = !tourPref?.startedAt && !tourPref?.completed
-    const shouldAutoStart = (forceStart || wasReset || neverStarted) && !tourStartedThisSession.value && !authError.value
+    // Robust dual-storage verification: check BOTH localStorage AND API preferences
+    const seenLocally = hasSeenTourLocally()
+    const seenInApi = tourPref?.startedAt || tourPref?.completed
+
+    // Sync localStorage from API for existing users (backwards compatibility)
+    if (seenInApi && !seenLocally) {
+      markTourSeenLocally()
+    }
+
+    // Only first-time if BOTH indicate first-time AND no auth errors
+    // Philosophy: "When in doubt, don't auto-start"
+    const isGenuineFirstTime = !seenLocally && !seenInApi && !authError.value
+
+    // Admin reset clears localStorage marker to allow re-triggering
+    if (wasReset) {
+      clearTourSeenLocally()
+    }
+
+    const shouldAutoStart = (forceStart || wasReset || isGenuineFirstTime) && !tourStartedThisSession.value
 
     if (shouldAutoStart) {
       // Wait for DOM elements to be ready

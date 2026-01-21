@@ -12,7 +12,7 @@ if (import.meta.client) {
   if (!visibilityListenerAdded) {
     visibilityListenerAdded = true
 
-    document.addEventListener('visibilitychange', () => {
+    document.addEventListener('visibilitychange', async () => {
       if (document.visibilityState !== 'visible') return
 
       // Tab became visible - check if session is still valid
@@ -23,6 +23,7 @@ if (import.meta.client) {
       const accessToken = user.value?.accessToken
       if (!accessToken) return // No token to check
 
+      // First check local JWT expiration (fast check)
       try {
         const payload = JSON.parse(atob(accessToken.split('.')[1]))
         const now = Date.now() / 1000
@@ -32,10 +33,25 @@ if (import.meta.client) {
           const { saveReturnUrl } = useAuthRedirect()
           saveReturnUrl()
           window.location.href = '/auth/session-expired'
+          return
         }
       } catch {
         // Token parsing failed - let normal flow handle it
         console.warn('[GHOST-AUTH] Could not parse token for visibility check')
+      }
+
+      // Then validate server-side session (catches ECS restart scenario)
+      // This ensures we detect when in-memory sessions are lost
+      try {
+        await $fetch('/api/user/session-check', { method: 'HEAD' })
+      } catch (error: any) {
+        if (error?.statusCode === 401 || error?.status === 401) {
+          console.log('[GHOST-AUTH] Server session invalid after tab resume, redirecting')
+          const { saveReturnUrl } = useAuthRedirect()
+          saveReturnUrl()
+          window.location.href = '/auth/session-expired'
+        }
+        // Other errors (network, 500) - don't redirect, let normal flow handle
       }
     })
   }
