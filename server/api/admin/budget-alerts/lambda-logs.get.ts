@@ -7,7 +7,7 @@
 import {
   getBudgetAlertLogs,
   getBudgetAlertLogStreams,
-  formatLogEvent,
+  formatBudgetAlertLogEvent,
   getBudgetAlertLogConfig,
   type BudgetAlertLogQuery,
 } from '../../../utils/budget-alert-lambda-logs'
@@ -52,7 +52,7 @@ export default defineEventHandler(async (event) => {
     const rawEvents = await getBudgetAlertLogs(logQuery)
 
     // Format events for display
-    const formattedEvents = rawEvents.map(formatLogEvent)
+    const formattedEvents = rawEvents.map(formatBudgetAlertLogEvent)
 
     logger.info(
       `[Admin] Fetched ${formattedEvents.length} Budget Alert Lambda log events`

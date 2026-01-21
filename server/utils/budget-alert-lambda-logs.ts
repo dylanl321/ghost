@@ -234,7 +234,7 @@ export async function getBudgetAlertLogs(
 /**
  * Parse log level from log message
  */
-export function parseLogLevel(message: string): string {
+export function parseBudgetAlertLogLevel(message: string): string {
   const upperMessage = message.toUpperCase()
   if (upperMessage.includes('ERROR')) return 'ERROR'
   if (upperMessage.includes('WARN')) return 'WARN'
@@ -246,7 +246,7 @@ export function parseLogLevel(message: string): string {
 /**
  * Try to parse JSON from log message
  */
-export function tryParseJSON(message: string): any {
+export function tryParseBudgetAlertJSON(message: string): any {
   try {
     // Try to find JSON in the message (Lambda logs often have prefixes)
     const jsonMatch = message.match(/\{[\s\S]*\}/)
@@ -279,8 +279,8 @@ function extractInvocationId(logStreamName?: string, message?: string): string |
 /**
  * Format log event for display
  */
-export function formatLogEvent(event: FilteredLogEvent): FormattedLogEvent {
-  const parsedJSON = tryParseJSON(event.message || '')
+export function formatBudgetAlertLogEvent(event: FilteredLogEvent): FormattedLogEvent {
+  const parsedJSON = tryParseBudgetAlertJSON(event.message || '')
   const timestamp = event.timestamp || Date.now()
 
   return {
@@ -289,7 +289,7 @@ export function formatLogEvent(event: FilteredLogEvent): FormattedLogEvent {
     logStreamName: event.logStreamName || '',
     message: event.message || '',
     eventId: event.eventId || '',
-    level: parseLogLevel(event.message || ''),
+    level: parseBudgetAlertLogLevel(event.message || ''),
     parsedJSON,
     isJSON: !!parsedJSON,
     invocationId: extractInvocationId(event.logStreamName, event.message),
@@ -316,7 +316,7 @@ export async function getBudgetAlertLogsByInvocation(
   query: BudgetAlertLogQuery = {}
 ): Promise<{ invocationId: string; events: FormattedLogEvent[] }[]> {
   const events = await getBudgetAlertLogs(query)
-  const formattedEvents = events.map(formatLogEvent)
+  const formattedEvents = events.map(formatBudgetAlertLogEvent)
 
   // Group by log stream (which corresponds to Lambda invocation)
   const grouped = new Map<string, FormattedLogEvent[]>()

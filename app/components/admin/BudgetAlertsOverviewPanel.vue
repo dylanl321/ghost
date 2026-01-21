@@ -238,7 +238,7 @@
         </template>
 
         <!-- Utilization Progress Bar Column -->
-        <template #utilization-data="{ row }">
+        <template #budgetUtilization-data="{ row }">
           <div v-if="row.budget && row.budget > 0" class="w-24">
             <UProgress
               :value="Math.min(row.budgetUtilization || 0, 100)"
@@ -311,7 +311,7 @@ const columns = [
   { key: 'budget', label: 'Budget', sortable: true },
   { key: 'currentSpend', label: 'Spend MTD', sortable: true },
   { key: 'forecastedSpend', label: 'Forecast', sortable: true },
-  { key: 'utilization', label: 'Utilization' },
+  { key: 'budgetUtilization', label: 'Utilization', sortable: true },
 ]
 
 // Computed
