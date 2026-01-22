@@ -211,8 +211,7 @@ export async function getPipelineRunsForAccount(
       commit_author,
       terraform_version
     FROM ${config.database}.pipeline_runs
-    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
-      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
       AND contains(accounts_processed, '${accountId}')
     ORDER BY timestamp_start DESC
     LIMIT 100
@@ -245,8 +244,7 @@ export async function getAccountPlansForAccount(
       plan_status,
       applied_at
     FROM ${config.database}.account_plans
-    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
-      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
       AND account_id = '${accountId}'
     ORDER BY plan_created_at DESC
     LIMIT 100
@@ -277,8 +275,7 @@ export async function getResourceChangesForAccount(
       apply_success,
       timestamp
     FROM ${config.database}.resource_changes
-    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
-      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
       AND account_id = '${accountId}'
     ORDER BY timestamp DESC
     LIMIT 500
@@ -309,8 +306,7 @@ export async function getErrorDetailsForAccount(
       error_message,
       error_resource_type
     FROM ${config.database}.error_details
-    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
-      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
       AND account_id = '${accountId}'
     ORDER BY timestamp DESC
     LIMIT 100
@@ -407,8 +403,7 @@ export async function getDailyPipelineMetrics(
       SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful,
       SUM(CASE WHEN status IN ('failure', 'partial_failure') THEN 1 ELSE 0 END) as failed
     FROM ${config.database}.pipeline_runs
-    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
-      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
       AND contains(accounts_processed, '${accountId}')
     GROUP BY DATE(from_iso8601_timestamp(timestamp_start))
     ORDER BY date DESC
@@ -440,8 +435,7 @@ export async function getPipelineRunDetails(
       `
         SELECT *
         FROM ${config.database}.pipeline_runs
-        WHERE year >= CAST(year(date_add('day', -90, current_date)) AS VARCHAR)
-          AND month >= CAST(month(date_add('day', -90, current_date)) AS VARCHAR)
+        WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -90, current_date), '%Y%m')
           AND pipeline_id = '${pipelineId}'
           AND job_id = '${jobId}'
         LIMIT 1
@@ -449,8 +443,7 @@ export async function getPipelineRunDetails(
       `
         SELECT *
         FROM ${config.database}.resource_changes
-        WHERE year >= CAST(year(date_add('day', -90, current_date)) AS VARCHAR)
-          AND month >= CAST(month(date_add('day', -90, current_date)) AS VARCHAR)
+        WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -90, current_date), '%Y%m')
           AND plan_pipeline_id = '${pipelineId}'
           AND plan_job_id = '${jobId}'
           AND account_id = '${accountId}'
@@ -460,8 +453,7 @@ export async function getPipelineRunDetails(
       `
         SELECT *
         FROM ${config.database}.error_details
-        WHERE year >= CAST(year(date_add('day', -90, current_date)) AS VARCHAR)
-          AND month >= CAST(month(date_add('day', -90, current_date)) AS VARCHAR)
+        WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -90, current_date), '%Y%m')
           AND pipeline_id = '${pipelineId}'
           AND job_id = '${jobId}'
           AND account_id = '${accountId}'
@@ -507,8 +499,7 @@ export async function getOrganizationSummary(
         AVG(duration_total_seconds) as avg_duration,
         COUNT(DISTINCT pipeline_id) as unique_pipelines
       FROM ${config.database}.pipeline_runs
-      WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
-        AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+      WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
     ),
     plan_stats AS (
       SELECT
@@ -519,8 +510,7 @@ export async function getOrganizationSummary(
         SUM(changes_total) as total_changes,
         COUNT(DISTINCT account_id) as unique_accounts
       FROM ${config.database}.account_plans
-      WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
-        AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+      WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
     )
     SELECT
       r.total_runs,
@@ -570,8 +560,7 @@ export async function getOrganizationTimeline(
       commit_author,
       terraform_version
     FROM ${config.database}.pipeline_runs
-    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
-      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
     ORDER BY timestamp_start DESC
     LIMIT ${limit}
   `
@@ -742,8 +731,7 @@ export async function getAccountPlansForPipeline(
       failed_at,
       failure_reason
     FROM ${config.database}.account_plans
-    WHERE year >= CAST(year(date_add('day', -90, current_date)) AS VARCHAR)
-      AND month >= CAST(month(date_add('day', -90, current_date)) AS VARCHAR)
+    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -90, current_date), '%Y%m')
       AND plan_pipeline_id = ${pipelineId}
     ORDER BY plan_created_at ASC
   `
@@ -790,8 +778,7 @@ export async function getResourceChangesForPipeline(
         apply_success,
         timestamp
       FROM ${config.database}.resource_changes
-      WHERE year >= CAST(year(date_add('day', -90, current_date)) AS VARCHAR)
-        AND month >= CAST(month(date_add('day', -90, current_date)) AS VARCHAR)
+      WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -90, current_date), '%Y%m')
         AND account_id IN (${accountIdList})
         AND plan_pipeline_id = ${pipelineId}
       LIMIT ${limit}
@@ -831,8 +818,7 @@ export async function getErrorDetailsForPipeline(
       error_message,
       error_resource_type
     FROM ${config.database}.error_details
-    WHERE year >= CAST(year(date_add('day', -90, current_date)) AS VARCHAR)
-      AND month >= CAST(month(date_add('day', -90, current_date)) AS VARCHAR)
+    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -90, current_date), '%Y%m')
       AND pipeline_id = ${pipelineId}
     ORDER BY timestamp ASC
   `
@@ -880,8 +866,7 @@ export async function getModuleBreakdownForPipeline(
         SUM(CASE WHEN change_action = 'update' THEN 1 ELSE 0 END) as updates,
         SUM(CASE WHEN change_action = 'delete' OR change_action = 'destroy' THEN 1 ELSE 0 END) as destroys
       FROM ${config.database}.resource_changes
-      WHERE year >= CAST(year(date_add('day', -90, current_date)) AS VARCHAR)
-        AND month >= CAST(month(date_add('day', -90, current_date)) AS VARCHAR)
+      WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -90, current_date), '%Y%m')
         AND account_id IN (${accountIdList})
         AND plan_pipeline_id = ${pipelineId}
       GROUP BY module_name
@@ -923,8 +908,7 @@ export async function getAccountBreakdown(
       CAST(SUM(CASE WHEN plan_status = 'applied' THEN 1 ELSE 0 END) AS DOUBLE) / NULLIF(COUNT(*), 0) * 100 as success_rate,
       MAX(plan_created_at) as last_run
     FROM ${config.database}.account_plans
-    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
-      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
     GROUP BY account_id, account_name
     ORDER BY total_runs DESC
     LIMIT 50
@@ -951,8 +935,7 @@ export async function getOrganizationResourceBreakdown(
       change_action,
       COUNT(*) as count
     FROM ${config.database}.resource_changes
-    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
-      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
     GROUP BY resource_address, resource_type, change_action
     ORDER BY count DESC
     LIMIT 20
@@ -976,8 +959,7 @@ export async function getOrganizationErrorBreakdown(
       error_category,
       COUNT(*) as count
     FROM ${config.database}.error_details
-    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
-      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
     GROUP BY error_category
     ORDER BY count DESC
   `
@@ -1002,8 +984,7 @@ export async function getOrganizationDailyMetrics(
       SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful,
       SUM(CASE WHEN status IN ('failure', 'partial_failure') THEN 1 ELSE 0 END) as failed
     FROM ${config.database}.pipeline_runs
-    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
-      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
     GROUP BY DATE(from_iso8601_timestamp(timestamp_start))
     ORDER BY date DESC
   `
@@ -1030,8 +1011,7 @@ export async function getActivityHeatMap(
       SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count,
       SUM(CASE WHEN status IN ('failure', 'partial_failure') THEN 1 ELSE 0 END) as failure_count
     FROM ${config.database}.pipeline_runs
-    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
-      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
     GROUP BY DATE(from_iso8601_timestamp(timestamp_start)), HOUR(from_iso8601_timestamp(timestamp_start)), DAY_OF_WEEK(from_iso8601_timestamp(timestamp_start))
     ORDER BY date DESC, hour DESC
   `
@@ -1060,8 +1040,7 @@ export async function getRepositoryBreakdownWithAccounts(
       CAST(SUM(CASE WHEN plan_status = 'applied' THEN 1 ELSE 0 END) AS DOUBLE) / NULLIF(COUNT(*), 0) * 100 as account_success_rate,
       MAX(plan_created_at) as last_run
     FROM ${config.database}.account_plans
-    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
-      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
     GROUP BY plan_pipeline_id
     ORDER BY COUNT(DISTINCT account_id) DESC
     LIMIT 100
@@ -1098,8 +1077,7 @@ export async function getAllPipelineAuthors(
       SUM(account_count) as total_accounts,
       MAX(timestamp_start) as last_run
     FROM ${config.database}.pipeline_runs
-    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
-      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
       AND commit_author IS NOT NULL
       AND commit_author != ''
     GROUP BY commit_author
@@ -1146,8 +1124,7 @@ export async function getPipelineRunsByAuthor(
       commit_author,
       terraform_version
     FROM ${config.database}.pipeline_runs
-    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
-      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
       AND LOWER(commit_author) LIKE LOWER('%${authorEmail}%')
     ORDER BY timestamp_start DESC
     LIMIT ${limit}
@@ -1186,8 +1163,7 @@ export async function getAuthorSummary(
       SUM(account_count) as total_accounts,
       COUNT(DISTINCT pipeline_id) as unique_pipelines
     FROM ${config.database}.pipeline_runs
-    WHERE year >= CAST(year(date_add('day', -${days}, current_date)) AS VARCHAR)
-      AND month >= CAST(month(date_add('day', -${days}, current_date)) AS VARCHAR)
+    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
       AND LOWER(commit_author) LIKE LOWER('%${authorEmail}%')
   `
 
