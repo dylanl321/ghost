@@ -224,13 +224,7 @@ const relatedArticles = computed(() => {
 // Methods
 const selectArticle = (articleId: string) => {
   selectedArticleId.value = articleId
-  // Update URL with hash for shareable links
-  router.push({
-    path: '/support/docs',
-    hash: `#${articleId}`
-  })
-  // Scroll to top
-  window.scrollTo({ top: 0, behavior: 'smooth' })
+  // URL update and scroll handled by selectedArticleId watcher
 }
 
 const getArticlePreview = (article: SupportArticle): string => {
@@ -257,7 +251,7 @@ const openServiceNow = () => {
   window.open('https://gdms.servicenowservices.com/', '_blank', 'noopener,noreferrer')
 }
 
-// Watch for route hash changes
+// Watch for route hash changes (handles browser back/forward and direct URL navigation)
 watch(() => route.hash, (hash) => {
   if (hash) {
     const articleId = hash.slice(1) // Remove leading '#'
@@ -269,4 +263,19 @@ watch(() => route.hash, (hash) => {
     }
   }
 }, { immediate: true })
+
+// Watch for selectedArticleId changes (handles sidebar clicks via v-model)
+watch(selectedArticleId, (newId, oldId) => {
+  if (newId && newId !== oldId) {
+    const currentHash = route.hash ? route.hash.slice(1) : ''
+    // Only update URL if hash doesn't already match (prevents duplicate navigation)
+    if (currentHash !== newId) {
+      router.push({
+        path: '/support/docs',
+        hash: `#${newId}`
+      })
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+})
 </script>
