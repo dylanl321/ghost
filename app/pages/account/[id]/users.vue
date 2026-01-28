@@ -296,6 +296,7 @@ onMounted(async () => {
       :loading="usersLoading"
       :idc-sessions="idcSessionsData"
       :show-session-status="showSessionStatus"
+      show-all
     />
   </div>
 </template> 

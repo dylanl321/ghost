@@ -159,7 +159,7 @@ const popularArticles = [
     description: 'Learn how to track costs, use filters, and share reports',
     icon: 'i-heroicons-currency-dollar',
     color: 'text-blue-600 dark:text-blue-400',
-    link: '/support/docs?topic=cost-dashboard-guide'
+    link: '/support/docs#cost-dashboard-guide'
   },
   {
     id: 'reports-guide',
@@ -167,7 +167,7 @@ const popularArticles = [
     description: 'Generate shareable reports and automate recurring schedules',
     icon: 'i-heroicons-document-chart-bar',
     color: 'text-emerald-600 dark:text-emerald-400',
-    link: '/support/docs?topic=reports-guide'
+    link: '/support/docs#reports-guide'
   },
   {
     id: 'universal-search',
@@ -175,7 +175,7 @@ const popularArticles = [
     description: 'Find accounts, users, and resources quickly',
     icon: 'i-heroicons-magnifying-glass',
     color: 'text-purple-600 dark:text-purple-400',
-    link: '/support/docs?topic=universal-search'
+    link: '/support/docs#universal-search'
   },
   {
     id: 'favorites-guide',
@@ -183,7 +183,7 @@ const popularArticles = [
     description: 'Save and organize your most-used accounts',
     icon: 'i-heroicons-star',
     color: 'text-green-600 dark:text-green-400',
-    link: '/support/docs?topic=favorites-guide'
+    link: '/support/docs#favorites-guide'
   },
   {
     id: 'org-chart-guide',
@@ -191,7 +191,7 @@ const popularArticles = [
     description: 'Navigate your AWS account hierarchy',
     icon: 'i-heroicons-chart-bar',
     color: 'text-orange-600 dark:text-orange-400',
-    link: '/support/docs?topic=org-chart-guide'
+    link: '/support/docs#org-chart-guide'
   },
   {
     id: 'swagger-ui-guide',
@@ -199,7 +199,7 @@ const popularArticles = [
     description: 'Interactive API testing and exploration',
     icon: 'i-heroicons-code-bracket',
     color: 'text-indigo-600 dark:text-indigo-400',
-    link: '/support/docs?topic=swagger-ui-guide'
+    link: '/support/docs#swagger-ui-guide'
   }
 ]
 
