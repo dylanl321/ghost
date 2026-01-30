@@ -256,14 +256,21 @@ const exactBudgetExceed = computed(() => {
     }
   }
 
-  // If not exceeded yet, check forecast data
+  // If not exceeded yet, check forecast data (current month only)
   if (!props.forecastData?.projection?.forecastResultsByTime) return null;
 
   let cumulative = props.currentSpend;
   const periods = props.forecastData.projection.forecastResultsByTime || [];
 
-  for (let i = 0; i < periods.length; i++) {
-    const period = periods[i];
+  // Filter to only include periods within current month
+  const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const filteredPeriods = periods.filter((period: any) => {
+    const endDate = new Date(period.TimePeriod?.End || "");
+    return endDate <= currentMonthEnd;
+  });
+
+  for (let i = 0; i < filteredPeriods.length; i++) {
+    const period = filteredPeriods[i];
     const meanValue = parseFloat(period.MeanValue || "0");
     cumulative += meanValue;
 
@@ -276,7 +283,7 @@ const exactBudgetExceed = computed(() => {
           day: "numeric",
         }),
         dayIndex: i,
-        totalDays: periods.length,
+        totalDays: filteredPeriods.length,
         isHistorical: false,
       };
     }
@@ -368,19 +375,26 @@ const forecastTimeline = computed(() => {
     isToday: true,
   });
 
-  // Add forecast periods if available
+  // Add forecast periods if available (only for current month)
   if (props.forecastData?.projection?.forecastResultsByTime) {
     let cumulative = props.currentSpend;
     const periods = props.forecastData.projection.forecastResultsByTime || [];
 
+    // Filter to only include periods within current month
+    const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const filteredPeriods = periods.filter((period: any) => {
+      const endDate = new Date(period.TimePeriod?.End || "");
+      return endDate <= currentMonthEnd;
+    });
+
     // Show every 3rd day from forecast plus the last day
-    periods.forEach((period: any, index: number) => {
+    filteredPeriods.forEach((period: any, index: number) => {
       const meanValue = parseFloat(period.MeanValue || "0");
       cumulative += meanValue;
 
       // Show every 3rd day or the last day
       const isEvery3Days = (index + 1) % 3 === 0;
-      const isLastDay = index === periods.length - 1;
+      const isLastDay = index === filteredPeriods.length - 1;
 
       if (isEvery3Days || isLastDay) {
         const endDate = new Date(period.TimePeriod?.End || "");

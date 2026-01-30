@@ -4,20 +4,29 @@
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
           <div class="text-lg font-semibold">Budget Alert History</div>
-          <UBadge v-if="alerts.length > 0" color="emerald" variant="subtle">
-            {{ alerts.length }} alert{{ alerts.length !== 1 ? 's' : '' }}
+          <UBadge v-if="filteredAlerts.length > 0" color="emerald" variant="subtle">
+            {{ filteredAlerts.length }} alert{{ filteredAlerts.length !== 1 ? 's' : '' }}
           </UBadge>
         </div>
-        <UButton
-          color="gray"
-          variant="ghost"
-          icon="i-heroicons-arrow-path"
-          :loading="loading"
-          title="Refresh alerts"
-          @click="fetchAlerts"
-        >
-          Refresh
-        </UButton>
+        <div class="flex items-center gap-2">
+          <USelect
+            v-if="availableMonths.length > 0"
+            v-model="selectedMonth"
+            :options="availableMonths"
+            size="sm"
+            class="w-40"
+          />
+          <UButton
+            color="gray"
+            variant="ghost"
+            icon="i-heroicons-arrow-path"
+            :loading="loading"
+            title="Refresh alerts"
+            @click="fetchAlerts"
+          >
+            Refresh
+          </UButton>
+        </div>
       </div>
     </template>
 
@@ -27,15 +36,17 @@
     </div>
 
     <!-- Empty State -->
-    <div v-else-if="alerts.length === 0" class="flex flex-col items-center justify-center py-12 text-center">
+    <div v-else-if="filteredAlerts.length === 0" class="flex flex-col items-center justify-center py-12 text-center">
       <UIcon name="i-heroicons-bell-slash" class="w-12 h-12 text-gray-500 mb-4" />
-      <p class="text-gray-400">No budget alerts have been sent for this account</p>
+      <p class="text-gray-400">
+        {{ alerts.length === 0 ? 'No budget alerts have been sent for this account' : 'No alerts for selected month' }}
+      </p>
     </div>
 
     <!-- Alerts Table -->
     <UTable
       v-else
-      :rows="alerts"
+      :rows="filteredAlerts"
       :columns="columns"
       class="min-w-full"
     >
@@ -114,11 +125,11 @@
         </div>
 
         <!-- Email Content -->
-        <div v-else-if="emailHtml" class="flex-1 overflow-auto p-4">
-          <div class="bg-white rounded-lg">
+        <div v-else-if="emailHtml" class="flex-1 overflow-hidden p-4">
+          <div class="bg-white rounded-lg h-full">
             <iframe
               :srcdoc="emailHtml"
-              class="w-full h-full min-h-[600px] rounded-lg"
+              class="w-full h-full rounded-lg"
               sandbox="allow-same-origin"
             />
           </div>
@@ -134,7 +145,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useToast } from '#imports'
 import type { BudgetAlert } from '@/shared/types/budget-alerts'
 
@@ -145,6 +156,7 @@ const props = defineProps<{
 const toast = useToast()
 const loading = ref(false)
 const alerts = ref<BudgetAlert[]>([])
+const selectedMonth = ref<string>('')
 
 // Email preview state
 const showEmailModal = ref(false)
@@ -161,6 +173,55 @@ const columns = [
   { key: 'delivery_status', label: 'Status', sortable: true },
   { key: 'actions', label: '' }
 ]
+
+// Get current month key (YYYY-MM format)
+function getMonthKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+}
+
+// Format month for display (e.g., "January 2026")
+function formatMonthLabel(monthKey: string): string {
+  const [year, month] = monthKey.split('-')
+  const date = new Date(parseInt(year), parseInt(month) - 1)
+  return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+}
+
+// Available months from alerts data
+const availableMonths = computed(() => {
+  if (alerts.value.length === 0) return []
+
+  const monthsSet = new Set<string>()
+  alerts.value.forEach(alert => {
+    const date = new Date(alert.created_at)
+    monthsSet.add(getMonthKey(date))
+  })
+
+  // Sort months descending (newest first)
+  const sortedMonths = Array.from(monthsSet).sort((a, b) => b.localeCompare(a))
+
+  return sortedMonths.map(monthKey => ({
+    label: formatMonthLabel(monthKey),
+    value: monthKey
+  }))
+})
+
+// Filtered and sorted alerts
+const filteredAlerts = computed(() => {
+  let filtered = [...alerts.value]
+
+  // Filter by selected month
+  if (selectedMonth.value) {
+    filtered = filtered.filter(alert => {
+      const date = new Date(alert.created_at)
+      return getMonthKey(date) === selectedMonth.value
+    })
+  }
+
+  // Sort by date descending (latest first)
+  filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+  return filtered
+})
 
 // Format date as "Jan 15, 2026 2:30 PM"
 function formatDate(timestamp: string): string {
@@ -233,11 +294,21 @@ async function fetchAlerts() {
 
   try {
     loading.value = true
-    const res = await fetch(`/api/alerts/account/${props.accountId}?limit=20`)
+    const res = await fetch(`/api/alerts/account/${props.accountId}?limit=100`)
     const data = await res.json()
 
     if (data.success && data.data) {
       alerts.value = data.data
+
+      // Default to current month if it has alerts, otherwise first available month
+      const currentMonth = getMonthKey(new Date())
+      const months = availableMonths.value.map(m => m.value)
+
+      if (months.includes(currentMonth)) {
+        selectedMonth.value = currentMonth
+      } else if (months.length > 0) {
+        selectedMonth.value = months[0] // Most recent month with alerts
+      }
     } else {
       throw new Error(data.error || 'Failed to fetch alerts')
     }

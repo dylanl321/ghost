@@ -75,12 +75,12 @@
     <div v-else class="text-gray-400 text-sm">No users found for this account.</div>
 
     <div
-      v-if="users.length > maxVisible"
+      v-if="!showAll && users.length > maxVisible"
       class="flex justify-center mt-3 text-sm text-blue-400 font-medium cursor-pointer hover:underline"
     >
-      <ULink :to="`/account/${accountId}/users`">
+      <NuxtLink :to="`/account/${accountId}/users`">
         View all {{ users.length }} users
-      </ULink>
+      </NuxtLink>
     </div>
   </UCard>
 </template>
@@ -101,6 +101,7 @@ const props = defineProps<{
   loading: boolean
   idcSessions?: IDCUserSession[] // Optional IDC session data
   showSessionStatus?: boolean // Whether to show IDC session badges
+  showAll?: boolean // Show all users instead of limiting to maxVisible
 }>()
 
 // Helper to check if a user has an active IDC session
@@ -125,7 +126,9 @@ const getUserSessionInfo = (userPrincipalName: string): IDCUserSession | undefin
 }
 
 const maxVisible = 6
-const visibleUsers = computed(() => props.users.slice(0, maxVisible))
+const visibleUsers = computed(() =>
+  props.showAll ? props.users : props.users.slice(0, maxVisible)
+)
 
 const router = useRouter()
 function goToUser(userPrincipalName: string) {

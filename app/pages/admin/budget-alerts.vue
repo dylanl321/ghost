@@ -64,7 +64,7 @@
 import { ref, computed } from 'vue'
 
 definePageMeta({
-  layout: 'default',
+  layout: 'admin',
 })
 
 // Admin access check

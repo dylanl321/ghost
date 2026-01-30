@@ -304,9 +304,9 @@ const categories = [
     icon: 'i-heroicons-cog-6-tooth',
     to: '/admin/settings',
     children: [
-      { label: 'API Keys', icon: 'i-heroicons-key', to: '/admin/settings' },
-      { label: 'Site Config', icon: 'i-heroicons-cog', to: '/admin/settings' },
-      { label: 'Alert Settings', icon: 'i-heroicons-bell-alert', to: '/admin/settings' }
+      { label: 'API Keys', icon: 'i-heroicons-key', to: '/admin/settings?tab=api-keys' },
+      { label: 'Site Config', icon: 'i-heroicons-cog', to: '/admin/settings?tab=site-config' },
+      { label: 'Alert Settings', icon: 'i-heroicons-bell-alert', to: '/admin/settings?tab=alert-settings' }
     ]
   },
   {
@@ -315,8 +315,8 @@ const categories = [
     icon: 'i-heroicons-user-group',
     to: '/admin/users',
     children: [
-      { label: 'User Preferences', icon: 'i-heroicons-user', to: '/admin/users' },
-      { label: 'Roles & Permissions', icon: 'i-heroicons-shield-check', to: '/admin/users' }
+      { label: 'User Preferences', icon: 'i-heroicons-user', to: '/admin/users?tab=preferences' },
+      { label: 'Roles & Permissions', icon: 'i-heroicons-shield-check', to: '/admin/users?tab=roles' }
     ]
   },
   {
@@ -325,8 +325,8 @@ const categories = [
     icon: 'i-heroicons-document-duplicate',
     to: '/admin/content',
     children: [
-      { label: 'Share Links', icon: 'i-heroicons-link', to: '/admin/content' },
-      { label: 'Scheduled Reports', icon: 'i-heroicons-calendar', to: '/admin/content' }
+      { label: 'Share Links', icon: 'i-heroicons-link', to: '/admin/content?tab=share-links' },
+      { label: 'Scheduled Reports', icon: 'i-heroicons-calendar', to: '/admin/content?tab=reports' }
     ]
   },
   {
@@ -335,9 +335,9 @@ const categories = [
     icon: 'i-heroicons-sparkles',
     to: '/admin/ai',
     children: [
-      { label: 'Chat Monitor', icon: 'i-heroicons-chat-bubble-left-right', to: '/admin/ai' },
-      { label: 'Agent Testing', icon: 'i-heroicons-beaker', to: '/admin/ai' },
-      { label: 'AI Metrics', icon: 'i-heroicons-chart-bar', to: '/admin/ai' }
+      { label: 'Chat Monitor', icon: 'i-heroicons-chat-bubble-left-right', to: '/admin/ai?tab=chat-monitor' },
+      { label: 'Agent Testing', icon: 'i-heroicons-beaker', to: '/admin/ai?tab=agent-testing' },
+      { label: 'AI Metrics', icon: 'i-heroicons-chart-bar', to: '/admin/ai?tab=metrics' }
     ]
   },
   {
@@ -346,9 +346,9 @@ const categories = [
     icon: 'i-heroicons-chart-bar',
     to: '/admin/monitoring',
     children: [
-      { label: 'System Logs', icon: 'i-heroicons-document-text', to: '/admin/monitoring' },
-      { label: 'Health Checks', icon: 'i-heroicons-heart', to: '/admin/monitoring' },
-      { label: 'Issues', icon: 'i-heroicons-exclamation-triangle', to: '/admin/monitoring' }
+      { label: 'System Logs', icon: 'i-heroicons-document-text', to: '/admin/monitoring?tab=logs' },
+      { label: 'Health Checks', icon: 'i-heroicons-heart', to: '/admin/monitoring?tab=health' },
+      { label: 'Issues', icon: 'i-heroicons-exclamation-triangle', to: '/admin/monitoring?tab=issues' }
     ]
   },
   {
@@ -357,8 +357,8 @@ const categories = [
     icon: 'i-heroicons-arrow-path',
     to: '/admin/pipelines',
     children: [
-      { label: 'Repositories', icon: 'i-heroicons-folder', to: '/admin/pipelines' },
-      { label: 'Authors', icon: 'i-heroicons-users', to: '/admin/pipelines' }
+      { label: 'Repositories', icon: 'i-heroicons-folder', to: '/admin/pipelines?tab=repositories' },
+      { label: 'Authors', icon: 'i-heroicons-users', to: '/admin/pipelines?tab=authors' }
     ]
   }
 ]
@@ -382,18 +382,28 @@ const handleCategoryClick = (category: typeof categories[0]) => {
   }
 }
 
-// Check if a path is active
-const isActive = (path: string) => {
-  return route.path === path || route.path.startsWith(path + '/')
+// Check if a path is active (compares full URL including query params)
+const isActive = (pathWithQuery: string) => {
+  // Parse the target path to separate path and query
+  const [targetPath, targetQuery] = pathWithQuery.split('?')
+
+  // If target has query params, must match exactly
+  if (targetQuery) {
+    const targetParams = new URLSearchParams(targetQuery)
+    const currentTab = route.query.tab as string | undefined
+    const targetTab = targetParams.get('tab')
+    return route.path === targetPath && currentTab === targetTab
+  }
+
+  // No query params in target - match path only (for category headers)
+  return route.path === targetPath || route.path.startsWith(targetPath + '/')
 }
 
 // Check if a category is active (any of its routes match)
 const isCategoryActive = (category: typeof categories[0]) => {
-  if (isActive(category.to)) return true
-  if (category.children) {
-    return category.children.some(child => isActive(child.to))
-  }
-  return false
+  // Category is active if current path starts with category path
+  const categoryPath = category.to.split('?')[0]
+  return route.path === categoryPath || route.path.startsWith(categoryPath + '/')
 }
 
 // Expose methods for external control
