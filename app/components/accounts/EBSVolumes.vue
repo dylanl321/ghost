@@ -2,7 +2,7 @@
   <UCard class="h-full flex flex-col">
     <template #header>
       <div class="flex justify-between items-center">
-        <div class="text-lg font-semibold">EBS Volumes</div>
+        <div class="text-lg font-semibold text-gray-900 dark:text-white">EBS Volumes</div>
         <UBadge v-if="!loading" color="gray" variant="soft">
           {{ volumes.length }} volumes
         </UBadge>
@@ -10,29 +10,29 @@
     </template>
 
     <CenteredLoadingSpinner v-if="loading" />
-    <div v-else-if="volumes.length === 0" class="text-center text-gray-400 py-8">
+    <div v-else-if="volumes.length === 0" class="text-center text-gray-600 dark:text-gray-400 py-8">
       No EBS volumes found
     </div>
     <div v-else class="space-y-4">
       <!-- All Metrics in Single Row -->
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div class="bg-gray-800/50 rounded-lg p-3">
-          <div class="text-xs text-gray-400">Total Size</div>
-          <div class="text-xl font-bold text-blue-400">{{ totalSize }} GB</div>
+        <div class="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-3">
+          <div class="text-xs text-gray-600 dark:text-gray-400">Total Size</div>
+          <div class="text-xl font-bold text-blue-600 dark:text-blue-400">{{ totalSize }} GB</div>
         </div>
-        <div class="bg-gray-800/50 rounded-lg p-3">
-          <div class="text-xs text-gray-400">Available</div>
-          <div class="text-xl font-bold text-yellow-400">{{ availableCount }}</div>
+        <div class="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-3">
+          <div class="text-xs text-gray-600 dark:text-gray-400">Available</div>
+          <div class="text-xl font-bold text-yellow-600 dark:text-yellow-400">{{ availableCount }}</div>
           <div class="text-xs text-gray-500">Unattached</div>
         </div>
-        <div class="bg-gray-800/50 rounded-lg p-3">
-          <div class="text-xs text-gray-400">In Use</div>
-          <div class="text-xl font-bold text-green-400">{{ inUseCount }}</div>
+        <div class="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-3">
+          <div class="text-xs text-gray-600 dark:text-gray-400">In Use</div>
+          <div class="text-xl font-bold text-green-600 dark:text-green-400">{{ inUseCount }}</div>
         </div>
-        <div class="bg-gray-800/50 rounded-lg p-3">
-          <div class="text-xs text-gray-400">Unused Cost</div>
+        <div class="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-3">
+          <div class="text-xs text-gray-600 dark:text-gray-400">Unused Cost</div>
           <div v-if="loadingPricing" class="text-sm text-gray-500">Calculating...</div>
-          <div v-else-if="unusedVolumeCost !== null" class="text-xl font-bold text-red-400">
+          <div v-else-if="unusedVolumeCost !== null" class="text-xl font-bold text-red-600 dark:text-red-400">
             ${{ unusedVolumeCost.toFixed(2) }}
           </div>
           <div v-else class="text-sm text-gray-500">N/A</div>
@@ -42,9 +42,9 @@
 
       <!-- Volume Type Breakdown (Compact Row) -->
       <div class="flex flex-wrap gap-2 items-center">
-        <span class="text-xs font-semibold text-gray-400">Types:</span>
-        <div v-for="(count, type) in volumeTypeBreakdown" :key="type" class="flex items-center gap-1.5 px-2.5 py-1 bg-gray-800/30 rounded">
-          <span class="text-xs text-gray-300">{{ type }}</span>
+        <span class="text-xs font-semibold text-gray-600 dark:text-gray-400">Types:</span>
+        <div v-for="(count, type) in volumeTypeBreakdown" :key="type" class="flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 dark:bg-gray-800/30 rounded">
+          <span class="text-xs text-gray-700 dark:text-gray-300">{{ type }}</span>
           <UBadge color="blue" variant="soft" size="xs">{{ count }}</UBadge>
         </div>
       </div>
@@ -78,14 +78,14 @@
 
           <!-- Attached To -->
           <template #attachedTo-data="{ row }">
-            <div class="text-sm text-gray-400">
+            <div class="text-sm text-gray-600 dark:text-gray-400">
               {{ getAttachedInstance(row) || 'Not attached' }}
             </div>
           </template>
 
           <!-- Region -->
           <template #region-data="{ row }">
-            <div class="text-sm text-gray-400">{{ row.region }}</div>
+            <div class="text-sm text-gray-600 dark:text-gray-400">{{ row.region }}</div>
           </template>
         </UTable>
       </div>

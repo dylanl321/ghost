@@ -2,46 +2,88 @@
 
 /* Override driver.js default colors to match Ghost dark theme */
 :root {
-  --driver-overlay-color: rgba(0, 0, 0, 0.75);
+  /* driver.js variables */
+  --driver-overlay-color: rgba(0, 0, 0, 0.45);
   --driver-highlighted-element-border-radius: 8px;
+
+  /* Ghost tour tokens (light defaults) */
+  --ghost-tour-popover-bg: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  --ghost-tour-border: #e2e8f0;
+  --ghost-tour-shadow: 0 20px 25px -5px rgba(2, 6, 23, 0.15), 0 10px 10px -5px rgba(2, 6, 23, 0.12);
+  --ghost-tour-title-text: #0f172a;
+  --ghost-tour-body-text: #475569;
+  --ghost-tour-footer-bg: rgba(248, 250, 252, 0.85);
+  --ghost-tour-muted: #64748b;
+
+  --ghost-tour-prev-bg: #e2e8f0;
+  --ghost-tour-prev-border: #cbd5e1;
+  --ghost-tour-prev-text: #334155;
+
+  --ghost-tour-close-hover-bg: #e2e8f0;
+  --ghost-tour-close-text: #475569;
+  --ghost-tour-close-hover-text: #0f172a;
+
+  --ghost-tour-highlight: #3b82f6;
+  --ghost-tour-highlight-ring: rgba(59, 130, 246, 0.25);
+  --ghost-tour-highlight-glow: rgba(59, 130, 246, 0.25);
+}
+
+.dark {
+  --driver-overlay-color: rgba(0, 0, 0, 0.75);
+
+  --ghost-tour-popover-bg: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+  --ghost-tour-border: #374151;
+  --ghost-tour-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
+  --ghost-tour-title-text: #f9fafb;
+  --ghost-tour-body-text: #d1d5db;
+  --ghost-tour-footer-bg: rgba(17, 24, 39, 0.5);
+  --ghost-tour-muted: #9ca3af;
+
+  --ghost-tour-prev-bg: #374151;
+  --ghost-tour-prev-border: #4b5563;
+  --ghost-tour-prev-text: #d1d5db;
+
+  --ghost-tour-close-hover-bg: #374151;
+  --ghost-tour-close-text: #9ca3af;
+  --ghost-tour-close-hover-text: #f3f4f6;
 }
 
 /* Custom popover styling */
 .ghost-tour-popover.driver-popover {
-  background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
-  border: 1px solid #374151;
+  background: var(--ghost-tour-popover-bg);
+  border: 1px solid var(--ghost-tour-border);
   border-radius: 12px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--ghost-tour-shadow);
   max-width: 400px;
   padding: 0 !important;
 }
 
 /* Popover arrow styling */
 .ghost-tour-popover.driver-popover-arrow {
-  border-color: #1f2937;
+  border-color: transparent;
 }
 
 .ghost-tour-popover.driver-popover-arrow-side-left {
-  border-left-color: #1f2937;
+  border-left-color: transparent;
 }
 
 .ghost-tour-popover.driver-popover-arrow-side-right {
-  border-right-color: #1f2937;
+  border-right-color: transparent;
 }
 
 .ghost-tour-popover.driver-popover-arrow-side-top {
-  border-top-color: #1f2937;
+  border-top-color: transparent;
 }
 
 .ghost-tour-popover.driver-popover-arrow-side-bottom {
-  border-bottom-color: #1f2937;
+  border-bottom-color: transparent;
 }
 
 /* Title styling */
 .ghost-tour-popover .driver-popover-title {
   font-size: 1.125rem;
   font-weight: 600;
-  color: #f9fafb;
+  color: var(--ghost-tour-title-text);
   margin-bottom: 8px;
   padding: 16px 20px 0;
   background: linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%);
@@ -54,15 +96,15 @@
 .ghost-tour-popover .driver-popover-description {
   font-size: 0.9375rem;
   line-height: 1.6;
-  color: #d1d5db;
+  color: var(--ghost-tour-body-text);
   padding: 8px 20px 16px;
 }
 
 /* Footer (buttons area) styling */
 .ghost-tour-popover .driver-popover-footer {
   padding: 12px 16px;
-  border-top: 1px solid #374151;
-  background: rgba(17, 24, 39, 0.5);
+  border-top: 1px solid var(--ghost-tour-border);
+  background: var(--ghost-tour-footer-bg);
   border-radius: 0 0 12px 12px;
   display: flex;
   justify-content: space-between;
@@ -111,16 +153,14 @@
 
 /* Previous button (secondary action) */
 .ghost-tour-popover .driver-popover-prev-btn {
-  background: #374151;
-  color: #d1d5db;
-  border: 1px solid #4b5563;
+  background: var(--ghost-tour-prev-bg);
+  color: var(--ghost-tour-prev-text);
+  border: 1px solid var(--ghost-tour-prev-border);
   text-shadow: none !important;
 }
 
 .ghost-tour-popover .driver-popover-prev-btn:hover {
-  background: #4b5563;
-  color: #f3f4f6;
-  border-color: #6b7280;
+  filter: brightness(0.97);
   transform: translateY(-1px);
   text-shadow: none !important;
 }
@@ -133,7 +173,7 @@
 /* Close button styling */
 .ghost-tour-popover .driver-popover-close-btn {
   background: transparent;
-  color: #9ca3af;
+  color: var(--ghost-tour-close-text);
   width: 32px;
   height: 32px;
   border-radius: 6px;
@@ -148,38 +188,38 @@
 }
 
 .ghost-tour-popover .driver-popover-close-btn:hover {
-  background: #374151;
-  color: #f3f4f6;
-  border-color: #4b5563;
+  background: var(--ghost-tour-close-hover-bg);
+  color: var(--ghost-tour-close-hover-text);
+  border-color: var(--ghost-tour-prev-border);
   text-shadow: none !important;
 }
 
 .ghost-tour-popover .driver-popover-close-btn:active {
-  background: #4b5563;
+  filter: brightness(0.97);
   text-shadow: none !important;
 }
 
 /* Progress text styling */
 .ghost-tour-popover .driver-popover-progress-text {
   font-size: 0.8125rem;
-  color: #9ca3af;
+  color: var(--ghost-tour-muted);
   font-weight: 500;
   letter-spacing: 0.025em;
 }
 
 /* Highlighted element styling */
 .driver-highlighted-element {
-  border: 2px solid #3b82f6;
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2), 0 0 20px rgba(59, 130, 246, 0.3);
+  border: 2px solid var(--ghost-tour-highlight);
+  box-shadow: 0 0 0 4px var(--ghost-tour-highlight-ring), 0 0 20px var(--ghost-tour-highlight-glow);
 }
 
 /* Animation for highlighted element */
 @keyframes driver-pulse {
   0%, 100% {
-    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2), 0 0 20px rgba(59, 130, 246, 0.3);
+    box-shadow: 0 0 0 4px var(--ghost-tour-highlight-ring), 0 0 20px var(--ghost-tour-highlight-glow);
   }
   50% {
-    box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.3), 0 0 30px rgba(59, 130, 246, 0.4);
+    box-shadow: 0 0 0 6px var(--ghost-tour-highlight-ring), 0 0 30px var(--ghost-tour-highlight-glow);
   }
 }
 
@@ -207,9 +247,4 @@
   }
 }
 
-/* Dark mode adjustments (already dark, but ensuring consistency) */
-@media (prefers-color-scheme: dark) {
-  .ghost-tour-popover.driver-popover {
-    background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
-  }
-}
+/* Prefer explicit `.dark` tokens over OS media queries so user-selected theme wins. */

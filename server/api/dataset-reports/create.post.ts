@@ -6,7 +6,7 @@
 import type { DatasetReportConfig } from '../../../shared/types/dataset-reports'
 import { createReport } from '../../utils/scheduled-reports'
 import { validateEmails } from '../../utils/email-service'
-import { getUserEmail } from '../../utils/user-roles'
+import { getUserEmail, isUserAdmin } from '../../utils/user-roles'
 import { logger } from '../../utils/logger'
 
 interface CreateDatasetReportRequest {
@@ -95,8 +95,8 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Allow all authenticated users to create reports
-    const isAdmin = true
+    // Check if user has admin privileges (AWS-Product-Team membership)
+    const isAdmin = await isUserAdmin(event)
 
     // Convert to ReportConfig format (compatible with existing infrastructure)
     const reportRequest = {

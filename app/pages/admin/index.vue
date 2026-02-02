@@ -67,9 +67,19 @@
                 icon="i-heroicons-magnifying-glass"
                 class="flex-1"
                 size="lg"
-                @input="handleSearch"
               />
               <UButton
+                v-if="isSearching"
+                color="gray"
+                variant="soft"
+                icon="i-heroicons-x-mark"
+                size="lg"
+                @click="clearSearch"
+              >
+                Clear
+              </UButton>
+              <UButton
+                v-else
                 color="gray"
                 variant="soft"
                 icon="i-heroicons-star"
@@ -81,7 +91,7 @@
             </div>
 
             <!-- Favorites Quick Access (if enabled) -->
-            <div v-if="showFavorites && favoriteActions.length > 0" class="mt-4">
+            <div v-if="showFavorites && favoriteActions.length > 0 && !isSearching" class="mt-4">
               <UCard>
                 <div class="flex flex-wrap gap-2">
                   <UButton
@@ -98,6 +108,70 @@
                 </div>
               </UCard>
             </div>
+
+            <!-- Search Results -->
+            <div v-if="isSearching" class="mt-4">
+              <div v-if="filteredPanels.length > 0">
+                <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">
+                  {{ filteredPanels.length }} result{{ filteredPanels.length !== 1 ? 's' : '' }} for "{{ searchQuery }}"
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <UCard
+                    v-for="panel in filteredPanels"
+                    :key="panel.id"
+                    class="cursor-pointer hover:shadow-lg transition-shadow"
+                    @click="navigateToPanel(panel)"
+                  >
+                    <div class="flex items-center gap-3">
+                      <div class="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                        <Icon :name="panel.icon" class="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                      </div>
+                      <div class="flex-1 min-w-0">
+                        <h4 class="font-medium text-gray-900 dark:text-white truncate">
+                          {{ panel.label }}
+                        </h4>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 truncate">
+                          {{ panel.categoryLabel }}
+                        </p>
+                      </div>
+                      <Icon name="i-heroicons-arrow-right" class="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    </div>
+                  </UCard>
+                </div>
+              </div>
+              <div v-else class="text-center py-8">
+                <Icon name="i-heroicons-magnifying-glass" class="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                <p class="text-gray-500 dark:text-gray-400">
+                  No results for "{{ searchQuery }}"
+                </p>
+                <p class="text-sm text-gray-400 dark:text-gray-500 mt-1">
+                  Try searching for "api", "users", "logs", or "budget"
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Main Dashboard Content (hidden when searching) -->
+          <template v-if="!isSearching">
+          <!-- Error Alert -->
+          <div v-if="metricsError" class="mb-6">
+            <UAlert
+              color="red"
+              icon="i-heroicons-exclamation-triangle"
+              :title="metricsError"
+            >
+              <template #actions>
+                <UButton
+                  color="red"
+                  variant="soft"
+                  size="xs"
+                  @click="fetchMetrics"
+                  :loading="loading"
+                >
+                  Retry
+                </UButton>
+              </template>
+            </UAlert>
           </div>
 
           <!-- Quick Settings Section -->
@@ -187,7 +261,7 @@
                   <div class="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                     <div
                       class="bg-blue-500 h-2 rounded-full transition-all"
-                      :style="{ width: `${(day.users / 150) * 100}%` }"
+                      :style="{ width: `${Math.min(100, (day.users / maxActivityUsers) * 100)}%` }"
                     ></div>
                   </div>
                   <span class="text-xs font-medium text-gray-700 dark:text-gray-300 w-8">{{ day.users }}</span>
@@ -527,6 +601,7 @@
               </div>
             </UCard>
           </div>
+          </template>
     </div>
   </div>
 </template>
@@ -535,6 +610,8 @@
 // Page meta - using admin layout
 definePageMeta({
   layout: 'admin',
+  middleware: 'auth-permission',
+  permission: 'admin',
   title: 'Admin Dashboard',
   description: 'Manage GHOST application settings and system configuration'
 })
@@ -544,8 +621,10 @@ const { isAdmin } = useUserRoles()
 // Check if user has admin access
 const hasAdminAccess = computed(() => isAdmin.value)
 
-// Search and favorites state
-const searchQuery = ref('')
+// Use existing admin search composable
+const { searchQuery, filteredPanels, isSearching, navigateToPanel, clearSearch } = useAdminSearch()
+
+// Favorites state
 const showFavorites = ref(false)
 
 // Favorite actions (could be loaded from user preferences)
@@ -581,60 +660,100 @@ const aiChatSessions = ref(0)
 const aiChatsToday = ref(0)
 const scheduledReportsCount = ref(0)
 const loading = ref(true)
+const metricsError = ref<string | null>(null)
+
+// Computed max for activity bar scaling
+const maxActivityUsers = computed(() => Math.max(1, ...activityData.value.map(d => d.users)))
 
 // Shortlinks data
 const { total, fetchShortlinks } = useShortlinks()
 
-// Search handler
-const handleSearch = () => {
-  // Search functionality - filter categories or navigate
-  if (searchQuery.value) {
-    // Could implement fuzzy search here
-  }
-}
 
-// Fetch real metrics
+// Fetch real metrics with parallel requests
 const fetchMetrics = async () => {
   try {
     loading.value = true
+    metricsError.value = null
 
-    // Fetch user count (don't limit to get accurate total)
-    const userPrefsResponse = await $fetch('/api/admin/user-preferences')
-    totalUsers.value = userPrefsResponse.data.total || 0
+    // Fetch all metrics in parallel for faster loading
+    const [
+      userPrefsResult,
+      chatMetrics24hResult,
+      chatMetricsAllResult,
+      reportsResult,
+      chatMetrics7dResult,
+      strandsHealthResult
+    ] = await Promise.allSettled([
+      $fetch('/api/admin/user-preferences', { query: { limit: 5000 } }),
+      $fetch('/api/admin/chat/metrics', { query: { period: '24h' } }),
+      $fetch('/api/admin/chat/metrics', { query: { period: 'all' } }),
+      $fetch('/api/admin/scheduled-reports/stats'),
+      $fetch('/api/admin/chat/metrics', { query: { period: '7d' } }),
+      $fetch('/api/admin/strands-health')
+    ])
 
-    // Fetch shortlinks
+    // Fetch shortlinks separately (uses composable)
     await fetchShortlinks({ limit: 1 })
     shortlinksTotal.value = total.value
 
-    // Fetch chat metrics (24h)
-    const chatMetrics24h = await $fetch('/api/admin/chat/metrics', {
-      query: { period: '24h' }
-    })
-    aiChatsToday.value = chatMetrics24h.metrics.totalQueries || 0
+    // Extract values from fulfilled promises
+    if (userPrefsResult.status === 'fulfilled') {
+      totalUsers.value = userPrefsResult.value.data.total || 0
+    }
 
-    // Fetch chat metrics (all time)
-    const chatMetricsAll = await $fetch('/api/admin/chat/metrics', {
-      query: { period: 'all' }
-    })
-    aiChatSessions.value = chatMetricsAll.metrics.totalThreads || 0
+    if (chatMetrics24hResult.status === 'fulfilled') {
+      aiChatsToday.value = chatMetrics24hResult.value.metrics.totalQueries || 0
+    }
 
-    // Fetch scheduled reports stats
-    const reportsStats = await $fetch('/api/admin/scheduled-reports/stats')
-    scheduledReportsCount.value = reportsStats.data.totalReports || 0
+    if (chatMetricsAllResult.status === 'fulfilled') {
+      aiChatSessions.value = chatMetricsAllResult.value.metrics.totalThreads || 0
+    }
 
-    // Update activity data with real user activity (using chat metrics as proxy)
-    const chatMetrics7d = await $fetch('/api/admin/chat/metrics', {
-      query: { period: '7d' }
-    })
-    // Use uniqueUsers as a measure of activity
-    const dailyAvg = Math.floor((chatMetrics7d.metrics.uniqueUsers || 0) / 7)
-    activityData.value = activityData.value.map((day, idx) => ({
-      ...day,
-      users: Math.max(5, dailyAvg + Math.floor(Math.random() * 20 - 10)) // Some variation
-    }))
+    if (reportsResult.status === 'fulfilled') {
+      scheduledReportsCount.value = reportsResult.value.data.totalReports || 0
+    }
+
+    if (chatMetrics7dResult.status === 'fulfilled') {
+      // Use uniqueUsers as a measure of activity - show daily average evenly
+      const dailyAvg = Math.floor((chatMetrics7dResult.value.metrics.uniqueUsers || 0) / 7)
+      activityData.value = activityData.value.map((day) => ({
+        ...day,
+        users: dailyAvg
+      }))
+    }
+
+    // Update Strands AI health status with real data
+    if (strandsHealthResult.status === 'fulfilled') {
+      const healthData = strandsHealthResult.value as any
+      const strandsStatus = healthData?.healthy ? 'healthy' : 'degraded'
+      const strandsLatency = healthData?.results?.health?.service?.latency
+        ? `${healthData.results.health.service.latency}ms`
+        : 'N/A'
+
+      // Update Strands AI entry in systemHealth
+      const strandsIndex = systemHealth.value.findIndex(s => s.name === 'Strands AI')
+      if (strandsIndex !== -1) {
+        systemHealth.value[strandsIndex] = {
+          name: 'Strands AI',
+          status: strandsStatus,
+          responseTime: strandsLatency
+        }
+      }
+    } else {
+      // Mark as degraded if health check failed
+      const strandsIndex = systemHealth.value.findIndex(s => s.name === 'Strands AI')
+      if (strandsIndex !== -1) {
+        systemHealth.value[strandsIndex] = {
+          name: 'Strands AI',
+          status: 'degraded',
+          responseTime: 'Error'
+        }
+      }
+    }
 
   } catch (error) {
     console.error('Failed to fetch admin metrics:', error)
+    metricsError.value = 'Failed to load dashboard metrics. Please try again.'
   } finally {
     loading.value = false
   }

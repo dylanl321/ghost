@@ -35,11 +35,11 @@
                   :id="`col-${col.key}`"
                   v-model="visibleColumns[col.key]"
                   type="checkbox"
-                  class="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded"
+                  class="w-4 h-4 text-blue-600 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded"
                 >
                 <label
                   :for="`col-${col.key}`"
-                  class="text-sm text-gray-300 cursor-pointer"
+                  class="text-sm text-gray-700 dark:text-gray-300 cursor-pointer"
                 >
                   {{ col.label }}
                 </label>
@@ -74,19 +74,19 @@
     </div>
 
     <!-- Table -->
-    <div class="overflow-x-auto border border-gray-700 rounded-lg">
-      <table class="min-w-full divide-y divide-gray-700">
+    <div class="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+      <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
         <!-- Header -->
-        <thead class="bg-gray-800">
+        <thead class="bg-gray-50 dark:bg-gray-800">
           <tr>
             <th
               v-for="col in visibleColumnsArray"
               :key="col.key"
               :class="[
-                'px-4 py-3 text-xs font-medium text-gray-300 tracking-wider',
+                'px-4 py-3 text-xs font-medium text-gray-700 dark:text-gray-300 tracking-wider',
                 col.align === 'right' ? 'text-right' :
                 col.align === 'center' ? 'text-center' : 'text-left',
-                col.sortable !== false && config.sortable ? 'cursor-pointer hover:bg-gray-700' : ''
+                col.sortable !== false && config.sortable ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700' : ''
               ]"
               @click="col.sortable !== false && config.sortable ? sortBy(col.key) : null"
             >
@@ -98,7 +98,7 @@
                   class="w-3 h-3"
                 />
                 <UTooltip v-if="col.helpLink" :text="col.helpTooltip || 'Learn more'">
-                  <NuxtLink :to="col.helpLink" class="text-gray-400 hover:text-gray-300" @click.stop>
+                  <NuxtLink :to="col.helpLink" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300" @click.stop>
                     <UIcon name="i-heroicons-question-mark-circle" class="w-3.5 h-3.5" />
                   </NuxtLink>
                 </UTooltip>
@@ -108,11 +108,11 @@
         </thead>
 
         <!-- Body -->
-        <tbody class="bg-gray-900 divide-y divide-gray-700">
+        <tbody class="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
           <tr
             v-for="(row, idx) in paginatedData"
             :key="getRowKey(row, idx)"
-            class="hover:bg-gray-800"
+            class="hover:bg-gray-50 dark:hover:bg-gray-800"
           >
             <td
               v-for="col in visibleColumnsArray"
@@ -121,7 +121,7 @@
                 'px-4 py-3 text-sm',
                 col.align === 'right' ? 'text-right' :
                 col.align === 'center' ? 'text-center' : 'text-left',
-                col.class || 'text-gray-300'
+                col.class || 'text-gray-700 dark:text-gray-300'
               ]"
             >
               <!-- Custom slot if provided -->
@@ -142,7 +142,7 @@
           <tr v-if="paginatedData.length === 0">
             <td
               :colspan="visibleColumnsArray.length"
-              class="px-4 py-8 text-center text-gray-400"
+              class="px-4 py-8 text-center text-gray-600 dark:text-gray-400"
             >
               <Icon name="i-heroicons-inbox" class="w-8 h-8 mx-auto mb-2 text-gray-500" />
               <p>{{ config.emptyMessage || 'No data available' }}</p>
@@ -155,7 +155,7 @@
     <!-- Pagination -->
     <div v-if="config.paginated && filteredData.length > 0" class="flex items-center justify-between">
       <div class="flex items-center gap-2">
-        <span class="text-sm text-gray-400">Rows per page:</span>
+        <span class="text-sm text-gray-600 dark:text-gray-400">Rows per page:</span>
         <USelect
           v-model="pageSize"
           :options="pageSizeOptions"
@@ -165,7 +165,7 @@
       </div>
 
       <div class="flex items-center gap-4">
-        <span class="text-sm text-gray-400">
+        <span class="text-sm text-gray-600 dark:text-gray-400">
           Showing {{ startRow }} to {{ endRow }} of {{ filteredData.length }} rows
         </span>
         <div class="flex items-center gap-1">
@@ -176,7 +176,7 @@
             :disabled="currentPage === 1"
             @click="currentPage--"
           />
-          <span class="text-sm text-gray-300 px-2">
+          <span class="text-sm text-gray-700 dark:text-gray-300 px-2">
             Page {{ currentPage }} of {{ totalPages }}
           </span>
           <UButton

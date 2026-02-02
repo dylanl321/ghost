@@ -62,12 +62,40 @@ onMounted(async () => {
   console.log('[GHOST-AUTH] Loading: Final return URL captured:', finalReturnUrl)
 
   try {
+    // DEV MODE: Skip Graph API and AWS initialization
+    if (user.value?.provider === 'dev') {
+      step.value = "Dev mode - setting up mock session..."
+      progress.value = 50
+
+      // Log dev mode login
+      const email = user.value?.claims?.email || user.value?.userInfo?.email || 'dev@localhost'
+      const username = email.split("@")[0] || "DevUser"
+      logActivity(`Login (DevMode) - USER:${username}`)
+
+      // Set mock groups from env via runtime config
+      const config = useRuntimeConfig()
+      const devGroups = (config.public.devUserGroups || 'AWS-Product-Team')
+        .split(',')
+        .map((g: string) => g.trim())
+        .filter((g: string) => g.length > 0)
+
+      console.log('[GHOST-AUTH] Dev mode: Setting groups:', devGroups)
+      userGroupStore.setDevGroups(devGroups)
+
+      step.value = "All set! Taking you back..."
+      progress.value = 100
+      await new Promise((resolve) => setTimeout(resolve, 500))
+
+      clearReturnUrl()
+      console.log('[GHOST-AUTH] Loading: Dev mode redirecting to:', finalReturnUrl)
+      window.location.href = finalReturnUrl
+      return
+    }
+
+    // Normal auth flow for real Entra sessions
     step.value = "Validating login state...";
 
-    // Use mock user in bypass mode
-    let accessToken: string = "";
-
-    accessToken = user.value?.accessToken || "";
+    const accessToken = user.value?.accessToken || "";
 
     const validLogin = await validateLoginState(accessToken);
     if (!validLogin) {
@@ -99,15 +127,10 @@ onMounted(async () => {
     step.value = "Setting up user permissions...";
     progress.value = 80;
     const { debug: debugRoles } = useUserRoles();
-    
-    console.log("user", user.value);
-    console.log("role groups", userGroupStore.roleGroups);
-    console.log("dist groups", userGroupStore.distributionGroups);
-    console.log("enclaves", enclaveStore.enclaves);
-    console.log("aws roles", userGroupStore.awsRoles);
-    
-    // Debug roles in development
+
+    // Debug roles in development only (no sensitive data dumps in console)
     if (import.meta.dev) {
+      console.log('[GHOST-AUTH] Session loaded successfully')
       debugRoles();
     }
 

@@ -11,7 +11,7 @@ import type {
   ChatThreadFilters,
   ChatThreadSummary,
   ShareThreadResponse
-} from '~/shared/types/chat-threads'
+} from '#shared/types/chat-threads'
 
 interface ChatThreadsState {
   threads: ChatThread[]

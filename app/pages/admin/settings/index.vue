@@ -69,6 +69,8 @@ import NotificationsPanel from '~/components/admin/NotificationsPanel.vue'
 
 definePageMeta({
   layout: 'admin',
+  middleware: 'auth-permission',
+  permission: 'admin',
   title: 'System Settings',
   description: 'Configure API keys, system settings, and notifications'
 })
@@ -110,5 +112,10 @@ watch(() => route.query.tab, (newTab) => {
       activeTab.value = tabIndex
     }
   }
+})
+
+// Update URL when tab changes
+watch(activeTab, (newTab) => {
+  navigateTo({ query: { ...route.query, tab: newTab.toString() } }, { replace: true })
 })
 </script>

@@ -1,5 +1,5 @@
 <template>
-  <div class="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 shadow-sm">
+  <div class="bg-[var(--ghost-surface)] dark:bg-slate-800 border-b border-[color:var(--ghost-border)] dark:border-slate-700 shadow-sm">
     <div class="h-16 mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex justify-between items-center h-full">
         <!-- Left side - Mobile menu toggle + Breadcrumb -->
@@ -39,6 +39,38 @@
             <UniversalSearch />
           </div>
 
+          <!-- Theme (dark/light/system) -->
+          <button
+            type="button"
+            class="group relative inline-flex items-center justify-center rounded-lg p-2 transition-all duration-200 opacity-75 hover:opacity-100 hover:bg-gray-100 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            :title="`Theme: ${themeLabel} (click to cycle)`"
+            @click="cycleTheme"
+          >
+            <UIcon :name="themeIcon" class="w-5 h-5 text-gray-700 dark:text-gray-300" />
+
+            <!-- Tiny mode indicator (System / Light / Dark) -->
+            <span class="absolute -bottom-0.5 left-1/2 -translate-x-1/2 flex items-center gap-1">
+              <span
+                class="w-1.5 h-1.5 rounded-full border transition-colors"
+                :class="colorMode.preference === 'system'
+                  ? 'bg-gradient-to-br from-purple-500 to-blue-500 border-transparent'
+                  : 'bg-transparent border-gray-300 dark:border-gray-600'"
+              />
+              <span
+                class="w-1.5 h-1.5 rounded-full border transition-colors"
+                :class="colorMode.preference === 'light'
+                  ? 'bg-amber-400 border-transparent'
+                  : 'bg-transparent border-gray-300 dark:border-gray-600'"
+              />
+              <span
+                class="w-1.5 h-1.5 rounded-full border transition-colors"
+                :class="colorMode.preference === 'dark'
+                  ? 'bg-slate-700 dark:bg-slate-200 border-transparent'
+                  : 'bg-transparent border-gray-300 dark:border-gray-600'"
+              />
+            </span>
+          </button>
+
           <!-- AI Assistant Chat Button -->
           <UButton
             v-if="siteConfigStore.isStrandsChatEnabled"
@@ -56,18 +88,18 @@
               :items="userMenuItems"
               :popper="{ placement: 'bottom-end' }"
             >
-              <button class="flex items-center gap-3 text-gray-300 hover:text-white transition-colors">
+              <button class="flex items-center gap-3 text-gray-900 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-colors">
                 <div class="hidden sm:flex flex-col items-end">
                   <span class="text-sm font-medium leading-tight">
                     {{ user?.claims?.given_name }} {{ user?.claims?.family_name }}
                   </span>
-                  <span class="text-xs text-gray-400 leading-tight">
+                  <span class="text-xs text-gray-600 dark:text-gray-400 leading-tight">
                     {{ user?.claims?.email }}
                   </span>
                 </div>
                 <UserAvatar
-                  :user-principal-name="user?.claims?.email"
-                  :display-name="`${user?.claims?.given_name} ${user?.claims?.family_name}`"
+                  :user-principal-name="user?.claims?.email ? String(user.claims.email) : undefined"
+                  :display-name="`${String(user?.claims?.given_name || '')} ${String(user?.claims?.family_name || '')}`.trim()"
                   size="sm"
                 />
               </button>
@@ -85,8 +117,23 @@ import { useNavigationStore } from '~/stores/useNavigationStore'
 import { useSiteConfigStore } from '~/stores/useSiteConfigStore'
 import UserAvatar from '~/components/ui/UserAvatar.vue'
 
+type BreadcrumbItem = {
+  label: string
+  to?: string
+}
+
+type UserMenuItem = {
+  label: string
+  icon?: string
+  to?: string
+  href?: string
+  target?: string
+  description?: string
+  click?: () => void
+}
+
 interface Props {
-  breadcrumbs: Array<object>
+  breadcrumbs: BreadcrumbItem[]
 }
 
 const props = defineProps<Props>()
@@ -98,8 +145,39 @@ const { user, logout } = useOidcAuth()
 const navigationStore = useNavigationStore()
 const siteConfigStore = useSiteConfigStore()
 const chatSidebar = useChatSidebar()
+const colorMode = useColorMode()
 const route = useRoute()
 const { can, isAdmin } = useUserRoles()
+
+const themeIcon = computed(() => {
+  switch (colorMode.preference) {
+    case 'dark':
+      return 'i-heroicons-moon'
+    case 'light':
+      return 'i-heroicons-sun'
+    default:
+      return 'i-heroicons-computer-desktop'
+  }
+})
+
+const themeLabel = computed(() => {
+  switch (colorMode.preference) {
+    case 'dark':
+      return 'Dark'
+    case 'light':
+      return 'Light'
+    default:
+      return 'System'
+  }
+})
+
+function cycleTheme() {
+  const current = colorMode.preference || 'system'
+  colorMode.preference =
+    current === 'system' ? 'light'
+    : current === 'light' ? 'dark'
+    : 'system'
+}
 
 // Mobile detection - SSR safe
 const isMobile = computed(() => {
@@ -129,15 +207,15 @@ const toggleSidebar = () => {
 // Computed property for direct user profile link
 const myAccessLink = computed(() => {
   if (user.value?.claims?.email) {
-    const username = convertToUsernameSlug(user.value.claims.email)
+    const username = convertToUsernameSlug(String(user.value.claims.email))
     return `/account/user/${username}`
   }
   return '/account/user/my-access' // Fallback to redirect page
 })
 
 // Build AWS console links section
-const awsConsoleLinks = computed(() => {
-  const links = [
+const awsConsoleLinks = computed<UserMenuItem[]>(() => {
+  const links: UserMenuItem[] = [
     {
       label: 'AWS Commercial Console',
       icon: 'i-heroicons-cloud',
@@ -157,9 +235,9 @@ const awsConsoleLinks = computed(() => {
   return links
 })
 
-const userMenuItems = computed(() => {
+const userMenuItems = computed<UserMenuItem[][]>(() => {
   // Build main menu items
-  const mainMenuItems = [
+  const mainMenuItems: UserMenuItem[] = [
     {
       label: 'Profile',
       icon: 'i-heroicons-user-circle',

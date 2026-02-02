@@ -6,7 +6,7 @@
         <div class="flex items-center justify-between">
           <div>
             <h2 class="text-lg font-semibold">Lambda Execution Logs</h2>
-            <p class="text-sm text-gray-400">CloudWatch logs from {{ logConfig?.logGroup || 'budget-alert-system-prod' }}</p>
+            <p class="text-sm text-gray-600 dark:text-gray-400">CloudWatch logs from {{ logConfig?.logGroup || 'budget-alert-system-prod' }}</p>
           </div>
           <div class="flex items-center gap-3">
             <USelect v-model="timeRange" :options="timeRangeOptions" class="w-40" />
@@ -26,21 +26,21 @@
 
       <!-- Stats Row -->
       <div v-if="!loading && logs.length > 0" class="grid grid-cols-4 gap-4 mb-4">
-        <div class="text-center p-3 bg-gray-800 rounded-lg">
-          <p class="text-2xl font-bold">{{ logs.length }}</p>
-          <p class="text-xs text-gray-400">Total Events</p>
+        <div class="text-center p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
+          <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ logs.length }}</p>
+          <p class="text-xs text-gray-600 dark:text-gray-400">Total Events</p>
         </div>
         <div class="text-center p-3 bg-red-900/20 rounded-lg">
           <p class="text-2xl font-bold text-red-400">{{ errorCount }}</p>
-          <p class="text-xs text-gray-400">Errors</p>
+          <p class="text-xs text-gray-600 dark:text-gray-400">Errors</p>
         </div>
         <div class="text-center p-3 bg-yellow-900/20 rounded-lg">
           <p class="text-2xl font-bold text-yellow-400">{{ warnCount }}</p>
-          <p class="text-xs text-gray-400">Warnings</p>
+          <p class="text-xs text-gray-600 dark:text-gray-400">Warnings</p>
         </div>
         <div class="text-center p-3 bg-blue-900/20 rounded-lg">
           <p class="text-2xl font-bold text-blue-400">{{ infoCount }}</p>
-          <p class="text-xs text-gray-400">Info</p>
+          <p class="text-xs text-gray-600 dark:text-gray-400">Info</p>
         </div>
       </div>
 
@@ -70,14 +70,14 @@
       <!-- Error State -->
       <div v-else-if="error" class="flex flex-col items-center justify-center py-12 text-center">
         <UIcon name="i-heroicons-exclamation-circle" class="w-12 h-12 text-red-500 mb-4" />
-        <p class="text-gray-400 mb-4">{{ error }}</p>
+        <p class="text-gray-600 dark:text-gray-400 mb-4">{{ error }}</p>
         <UButton color="gray" @click="fetchLogs">Try Again</UButton>
       </div>
 
       <!-- Empty State -->
       <div v-else-if="filteredLogs.length === 0" class="flex flex-col items-center justify-center py-12 text-center">
         <UIcon name="i-heroicons-document-text" class="w-12 h-12 text-gray-500 mb-4" />
-        <p class="text-gray-400">No log events found for the selected time range</p>
+        <p class="text-gray-600 dark:text-gray-400">No log events found for the selected time range</p>
       </div>
 
       <!-- Logs List -->
@@ -85,7 +85,7 @@
         <div
           v-for="log in paginatedLogs"
           :key="log.eventId"
-          class="p-3 rounded-lg border border-gray-700 hover:border-gray-600 transition-colors"
+          class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
           :class="getLogBgClass(log.level)"
         >
           <div class="flex items-start gap-3">
@@ -100,11 +100,11 @@
             <div class="flex-1 min-w-0">
               <!-- Header -->
               <div class="flex items-center gap-2 mb-1">
-                <span class="text-xs text-gray-500">{{ log.timestampFormatted }}</span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">{{ log.timestampFormatted }}</span>
                 <UBadge :color="getLogLevelBadgeColor(log.level)" variant="subtle" size="xs">
                   {{ log.level }}
                 </UBadge>
-                <span v-if="log.invocationId" class="text-xs text-gray-600">
+                <span v-if="log.invocationId" class="text-xs text-gray-600 dark:text-gray-400">
                   Invocation: {{ log.invocationId }}
                 </span>
               </div>
@@ -112,7 +112,7 @@
               <!-- Message -->
               <div class="font-mono text-sm whitespace-pre-wrap break-all">
                 <template v-if="log.isJSON && log.parsedJSON">
-                  <pre class="text-xs bg-gray-900 p-2 rounded overflow-x-auto">{{ JSON.stringify(log.parsedJSON, null, 2) }}</pre>
+                  <pre class="text-xs bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-700 p-2 rounded overflow-x-auto">{{ JSON.stringify(log.parsedJSON, null, 2) }}</pre>
                 </template>
                 <template v-else>
                   {{ log.message }}
@@ -134,7 +134,7 @@
       </div>
 
       <!-- Pagination -->
-      <div v-if="filteredLogs.length > 0" class="flex justify-end items-center mt-4 pt-4 border-t border-gray-700">
+      <div v-if="filteredLogs.length > 0" class="flex justify-end items-center mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
         <UPagination
           v-model="page"
           :page-count="pageCount"
@@ -146,7 +146,7 @@
     <!-- Log Detail Modal -->
     <USlideover v-model="showLogModal" :ui="{ width: 'max-w-3xl' }">
       <div class="flex flex-col h-full">
-        <div class="flex items-center justify-between p-4 border-b border-gray-700">
+      <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
           <h3 class="text-lg font-semibold">Log Details</h3>
           <UButton
             color="gray"
@@ -158,26 +158,26 @@
         <div v-if="selectedLog" class="flex-1 overflow-auto p-4">
           <div class="space-y-4">
             <div>
-              <p class="text-sm text-gray-400 mb-1">Timestamp</p>
-              <p class="font-mono">{{ selectedLog.timestampFormatted }}</p>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">Timestamp</p>
+            <p class="font-mono text-gray-900 dark:text-white">{{ selectedLog.timestampFormatted }}</p>
             </div>
             <div>
-              <p class="text-sm text-gray-400 mb-1">Level</p>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">Level</p>
               <UBadge :color="getLogLevelBadgeColor(selectedLog.level)" variant="subtle">
                 {{ selectedLog.level }}
               </UBadge>
             </div>
             <div>
-              <p class="text-sm text-gray-400 mb-1">Log Stream</p>
-              <p class="font-mono text-xs break-all">{{ selectedLog.logStreamName }}</p>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">Log Stream</p>
+            <p class="font-mono text-xs break-all text-gray-900 dark:text-white">{{ selectedLog.logStreamName }}</p>
             </div>
             <div>
-              <p class="text-sm text-gray-400 mb-1">Message</p>
-              <pre class="font-mono text-sm bg-gray-900 p-4 rounded-lg overflow-x-auto whitespace-pre-wrap">{{ selectedLog.message }}</pre>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">Message</p>
+            <pre class="font-mono text-sm bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-700 p-4 rounded-lg overflow-x-auto whitespace-pre-wrap">{{ selectedLog.message }}</pre>
             </div>
             <div v-if="selectedLog.isJSON && selectedLog.parsedJSON">
-              <p class="text-sm text-gray-400 mb-1">Parsed JSON</p>
-              <pre class="font-mono text-sm bg-gray-900 p-4 rounded-lg overflow-x-auto">{{ JSON.stringify(selectedLog.parsedJSON, null, 2) }}</pre>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">Parsed JSON</p>
+            <pre class="font-mono text-sm bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-700 p-4 rounded-lg overflow-x-auto">{{ JSON.stringify(selectedLog.parsedJSON, null, 2) }}</pre>
             </div>
           </div>
         </div>

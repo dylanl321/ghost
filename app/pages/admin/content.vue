@@ -49,6 +49,8 @@ import StoredReportsPanel from '~/components/admin/StoredReportsPanel.vue'
 // Page meta - using admin layout
 definePageMeta({
   layout: 'admin',
+  middleware: 'auth-permission',
+  permission: 'admin',
   title: 'Content & Reports',
   description: 'Manage share links, scheduled reports, and stored reports'
 })
@@ -93,5 +95,10 @@ watch(() => route.query.tab, (newTab) => {
       activeTab.value = tabIndex
     }
   }
+})
+
+// Update URL when tab changes
+watch(activeTab, (newTab) => {
+  navigateTo({ query: { ...route.query, tab: newTab.toString() } }, { replace: true })
 })
 </script>

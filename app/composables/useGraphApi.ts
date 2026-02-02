@@ -14,8 +14,32 @@ interface GraphMemberOfResponse {
   '@odata.nextLink'?: string;
 }
 
+/**
+ * Check if we're in dev auth mode (mock authentication)
+ * In dev mode, Graph API calls won't work because we don't have a real token
+ */
+function isDevAuthMode(): boolean {
+  const { user } = useOidcAuth()
+  return user.value?.provider === 'dev'
+}
+
+/**
+ * Create a dev mode error
+ */
+function createDevModeError(operation: string): Error {
+  const error = new Error(`Graph API unavailable in dev mode: ${operation}`)
+  ;(error as any).devMode = true
+  return error
+}
+
 // Fetches all groups with detailed information on each one
 const fetchAllGroupsRaw = async (accessToken: string) => {
+  // Check for dev mode - return empty array instead of failing
+  if (isDevAuthMode()) {
+    console.log('[Graph API] Dev mode detected - returning empty groups')
+    return []
+  }
+
   const allGroups: GraphGroup[] = []
   let nextUrl = 'https://graph.microsoft.us/v1.0/me/memberOf?$top=999'
 
@@ -31,7 +55,7 @@ const fetchAllGroupsRaw = async (accessToken: string) => {
       const data: GraphMemberOfResponse = await response.json()
 
       if (!response.ok) throw new Error(JSON.stringify(data))
-      
+
       allGroups.push(...data.value) // Use spread operator to push each individual item into the array
 
       nextUrl = data['@odata.nextLink'] || ''
@@ -99,6 +123,12 @@ const parseAwsGroups = (groups: GraphGroup[]) => {
 
 export const useGraphApi = () => {
   const fetchAllGroupsWithPagination = async (accessToken: string): Promise<GraphGroup[]> => {
+    // Check for dev mode - return empty array instead of failing
+    if (isDevAuthMode()) {
+      console.log('[Graph API] Dev mode detected - returning empty groups for pagination')
+      return []
+    }
+
     const allGroups: GraphGroup[] = []
     let nextUrl = 'https://graph.microsoft.us/v1.0/me/memberOf?$top=999'
 
@@ -143,6 +173,12 @@ export const useGraphApi = () => {
   }
 
   const searchUsers = async (accessToken: string, searchQuery: string, top: number = 25) => {
+    // Check for dev mode - return empty array instead of failing
+    if (isDevAuthMode()) {
+      console.log('[Graph API] Dev mode detected - returning empty user search results')
+      return []
+    }
+
     try {
       const cleanQuery = searchQuery.trim().replace(/'/g, "''") // Escape single quotes
       const results = new Map() // Use Map to avoid duplicates
@@ -269,20 +305,39 @@ export const useGraphApi = () => {
   }
 
   const fetchUserProfile = async (userPrincipalName: string, accessToken: string) => {
+    // Check for dev mode - return mock profile instead of failing
+    if (isDevAuthMode()) {
+      console.log('[Graph API] Dev mode detected - returning mock user profile')
+      return {
+        id: 'dev-user-id',
+        displayName: 'Dev User',
+        userPrincipalName: 'dev@localhost',
+        mail: 'dev@localhost',
+        jobTitle: 'Developer',
+        department: 'Development'
+      }
+    }
+
     const url = `https://graph.microsoft.us/v1.0/users/${encodeURIComponent(userPrincipalName)}?$select=id,displayName,userPrincipalName,mail,jobTitle,department,businessPhones,mobilePhone,officeLocation,manager`
-    
+
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${accessToken}` }
     })
-    
+
     if (!response.ok) {
       throw new Error(`Failed to fetch user profile: ${response.statusText}`)
     }
-    
+
     return await response.json()
   }
 
   const fetchUserMemberOf = async (accessToken: string, userPrincipalName: string) => {
+    // Check for dev mode - return empty array instead of failing
+    if (isDevAuthMode()) {
+      console.log('[Graph API] Dev mode detected - returning empty memberOf')
+      return []
+    }
+
     const allGroups: GraphGroup[] = []
     let nextUrl = `https://graph.microsoft.us/v1.0/users/${encodeURIComponent(userPrincipalName)}/memberOf?$top=999`
 
@@ -298,7 +353,7 @@ export const useGraphApi = () => {
         const data: GraphMemberOfResponse = await response.json()
 
         if (!response.ok) throw new Error(JSON.stringify(data))
-        
+
         allGroups.push(...data.value)
 
         nextUrl = data['@odata.nextLink'] || ''
@@ -312,23 +367,42 @@ export const useGraphApi = () => {
   }
 
   const fetchGroupDetails = async (accessToken: string, groupId: string) => {
+    // Check for dev mode - return mock group instead of failing
+    if (isDevAuthMode()) {
+      console.log('[Graph API] Dev mode detected - returning mock group details')
+      return {
+        id: groupId,
+        displayName: 'Mock Group',
+        description: 'This is a mock group (dev mode)',
+        mail: null,
+        mailEnabled: false,
+        securityEnabled: true
+      }
+    }
+
     const url = `https://graph.microsoft.us/v1.0/groups/${encodeURIComponent(groupId)}?$select=id,displayName,description,mail,mailEnabled,securityEnabled`
-    
+
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${accessToken}` }
     })
-    
+
     if (!response.ok) {
       throw new Error(`Failed to fetch group details: ${response.statusText}`)
     }
-    
+
     return await response.json()
   }
 
   const fetchAllGroups = async (accessToken: string, searchQuery?: string, top: number = 100) => {
+    // Check for dev mode - return empty array instead of failing
+    if (isDevAuthMode()) {
+      console.log('[Graph API] Dev mode detected - returning empty groups list')
+      return []
+    }
+
     try {
       let url = `https://graph.microsoft.us/v1.0/groups?$top=${top}&$select=id,displayName,description,mailEnabled,securityEnabled,createdDateTime`
-      
+
       if (searchQuery) {
         const filter = `startswith(displayName,'${searchQuery}')`
         url += `&$filter=${encodeURIComponent(filter)}`

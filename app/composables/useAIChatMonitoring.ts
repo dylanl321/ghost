@@ -10,7 +10,7 @@ import type {
   ChatRequestLog,
   CloudWatchLogEntry,
   AdminAsyncJobSummary,
-} from "~/shared/types/chat-threads";
+} from "#shared/types/chat-threads";
 
 export interface MonitoringFilters {
   userId?: string;

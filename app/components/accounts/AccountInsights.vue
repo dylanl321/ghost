@@ -2,15 +2,15 @@
   <UCard>
     <template #header>
       <div class="flex justify-between items-center">
-        <div class="text-lg font-semibold">Top Accounts</div>
+        <div class="text-lg font-semibold text-gray-900 dark:text-white">Top Accounts</div>
         <div class="flex items-center gap-2">
-          <span class="text-xs text-gray-400">{{ showProforma ? 'Proforma' : 'Billable' }}</span>
+          <span class="text-xs text-gray-600 dark:text-gray-400">{{ showProforma ? 'Proforma' : 'Billable' }}</span>
           <UToggle
             v-model="showProforma"
             @update:model-value="handleToggle"
           />
           <UTooltip text="Learn about Billable vs Pro-forma data">
-            <NuxtLink to="/support/docs?topic=proforma-vs-billable" class="text-gray-400 hover:text-gray-300">
+            <NuxtLink to="/support/docs?topic=proforma-vs-billable" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
               <UIcon name="i-heroicons-question-mark-circle" class="w-4 h-4" />
             </NuxtLink>
           </UTooltip>
@@ -21,15 +21,15 @@
     <CenteredLoadingSpinner v-if="props.loading" />
     <div v-else>
       <NuxtLink v-for="(acct, idx) in sortedAccounts" :key="acct.accountId" :to="`/account/${acct.accountId}`"
-        class="block p-4 bg-gray-900 border-t border-gray-800 hover:bg-gray-700 transition-colors duration-200">
+        class="block p-4 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200">
         <div class="flex items-center justify-between flex-wrap lg:flex-nowrap gap-y-2">
           <div class="flex flex-col">
             <div class="flex gap-3 items-center">
-              <div class="text-sm text-gray-400">#{{ idx + 1 }}</div>
-              <div class="text-white text-base font-medium text-wrap">{{ acct.name }}</div>
+              <div class="text-sm text-gray-500 dark:text-gray-400">#{{ idx + 1 }}</div>
+              <div class="text-gray-900 dark:text-white text-base font-medium text-wrap">{{ acct.name }}</div>
             </div>
 
-            <div class="text-xs text-gray-400">{{ acct.accountId }}</div>
+            <div class="text-xs text-gray-600 dark:text-gray-400">{{ acct.accountId }}</div>
           </div>
 
           <div class="flex gap-1 items-center">
@@ -42,7 +42,7 @@
         </div>
 
         <!-- Progress bar -->
-        <div class="w-full h-2 bg-gray-800 rounded-full overflow-hidden mt-2">
+        <div class="w-full h-2 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden mt-2">
           <div class="h-full bg-green-500" :style="{ width: acct.percentOfTotal.toFixed(2) + '%' }"/>
         </div>
       </NuxtLink>

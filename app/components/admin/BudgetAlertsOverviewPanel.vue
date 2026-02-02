@@ -156,7 +156,7 @@
         <template #accountName-data="{ row }">
           <NuxtLink
             :to="`/account/${row.accountId}`"
-            class="text-blue-400 hover:text-blue-300 hover:underline"
+            class="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline"
           >
             {{ row.accountName }} - {{ row.accountId }}
           </NuxtLink>
@@ -171,30 +171,30 @@
             </div>
             <template #panel>
               <div class="p-3 min-w-[280px] max-w-[350px]">
-                <div class="text-sm font-semibold mb-2 text-gray-200">Recent Alerts</div>
+                <div class="text-sm font-semibold mb-2 text-gray-900 dark:text-gray-200">Recent Alerts</div>
                 <div v-if="row.recentAlerts && row.recentAlerts.length > 0" class="space-y-2">
                   <div
                     v-for="alert in row.recentAlerts"
                     :key="alert.alertId"
-                    class="p-2 bg-gray-800 rounded-lg hover:bg-gray-700 cursor-pointer transition-colors"
+                    class="p-2 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors border border-gray-200 dark:border-gray-700"
                     @click="viewAlertDetails(row.accountId, alert.alertId)"
                   >
                     <div class="flex items-center justify-between mb-1">
                       <UBadge :color="getLevelColor(alert.level)" variant="subtle" size="xs">
                         {{ alert.level }}
                       </UBadge>
-                      <span class="text-xs text-gray-400">{{ formatAlertDate(alert.createdAt) }}</span>
+                      <span class="text-xs text-gray-600 dark:text-gray-400">{{ formatAlertDate(alert.createdAt) }}</span>
                     </div>
-                    <div class="text-xs text-gray-300">
+                    <div class="text-xs text-gray-700 dark:text-gray-300">
                       {{ alert.type }} - {{ formatCurrency(alert.actualSpend) }} / {{ formatCurrency(alert.budget) }}
                     </div>
                   </div>
                 </div>
-                <div v-else class="text-sm text-gray-400">No recent alerts available</div>
-                <div v-if="row.alertsThisMonth > 5" class="mt-2 pt-2 border-t border-gray-700">
+                <div v-else class="text-sm text-gray-600 dark:text-gray-400">No recent alerts available</div>
+                <div v-if="row.alertsThisMonth > 5" class="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
                   <NuxtLink
                     :to="`/account/${row.accountId}?tab=alerts`"
-                    class="text-xs text-blue-400 hover:underline"
+                    class="text-xs text-blue-600 dark:text-blue-400 hover:underline"
                   >
                     View all {{ row.alertsThisMonth }} alerts
                   </NuxtLink>

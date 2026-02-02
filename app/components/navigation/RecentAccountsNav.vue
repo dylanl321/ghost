@@ -1,7 +1,7 @@
 <template>
   <div v-if="shouldShow">
     <!-- Separator -->
-    <div class="border-t border-slate-700 my-2"></div>
+    <div class="border-t border-slate-200 dark:border-slate-700 my-2"></div>
 
     <!-- Collapsed sidebar: Just the icon -->
     <div
@@ -9,24 +9,24 @@
       class="relative group py-2 px-3"
     >
       <button
-        class="w-full flex items-center justify-center p-2 rounded-md text-slate-400 hover:bg-slate-800 transition-colors"
+        class="w-full flex items-center justify-center p-2 rounded-md text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
         @click="navigationStore.expand()"
       >
         <UIcon name="i-heroicons-clock" class="w-5 h-5" />
       </button>
 
       <!-- Tooltip -->
-      <div class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-slate-600">
+      <div class="absolute left-full ml-2 px-2 py-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-slate-200 dark:border-slate-600 shadow-lg">
         Recent ({{ recentAccounts.length }})
-        <div class="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-0 h-0 border-r-4 border-r-slate-800 border-t-2 border-b-2 border-t-transparent border-b-transparent"></div>
+        <div class="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-0 h-0 border-r-4 border-r-white dark:border-r-slate-800 border-t-2 border-b-2 border-t-transparent border-b-transparent"></div>
       </div>
     </div>
 
     <!-- Expanded sidebar: Collapsible section -->
     <div v-else-if="!navigationStore.isCollapsed || navigationStore.isHovered" class="space-y-1 px-3">
       <button
-        class="w-full flex items-center px-3 py-2 rounded-md cursor-pointer hover:bg-slate-800 transition-colors relative group overflow-hidden text-slate-400"
-        :class="{ 'text-white bg-slate-800': isExpanded }"
+        class="w-full flex items-center px-3 py-2 rounded-md cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors relative group overflow-hidden text-slate-700 dark:text-slate-400"
+        :class="{ 'text-slate-900 bg-slate-100 dark:text-white dark:bg-slate-800': isExpanded }"
         @click="isExpanded = !isExpanded"
       >
         <UIcon name="i-heroicons-clock" class="flex-shrink-0 w-5 h-5" />
@@ -59,8 +59,8 @@
           >
             <NuxtLink
               :to="`/account/${account.accountId}`"
-              class="flex-1 flex items-center gap-2 px-3 py-2 rounded-md text-slate-400 hover:bg-slate-800 hover:text-white transition-colors text-sm"
-              :class="{ 'text-white bg-slate-800': isActiveAccount(account.accountId) }"
+              class="flex-1 flex items-center gap-2 px-3 py-2 rounded-md text-slate-700 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors text-sm"
+              :class="{ 'text-slate-900 bg-slate-100 dark:text-white dark:bg-slate-800': isActiveAccount(account.accountId) }"
             >
               <UIcon name="i-heroicons-building-office-2" class="w-4 h-4 flex-shrink-0" />
               <span class="truncate flex-1" :title="account.projectName || account.accountId">
@@ -73,7 +73,7 @@
               :title="`Remove ${account.projectName || account.accountId} from recent`"
               @click.stop="handleRemove(account.accountId)"
             >
-              <UIcon name="i-heroicons-x-mark" class="w-3 h-3 text-slate-500 hover:text-slate-300" />
+              <UIcon name="i-heroicons-x-mark" class="w-3 h-3 text-slate-500 hover:text-slate-900 dark:hover:text-slate-300" />
             </button>
           </div>
         </template>

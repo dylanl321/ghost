@@ -54,16 +54,20 @@ registerEndpoint('/api/organization/overview-simplified', 'GET', {
                   forecastedTotal: { type: 'number' },
                   previousMonthTotal: { type: 'number' },
                   previousMonthToDateTotal: { type: 'number' },
-                  topAccounts: { 
-                    type: 'array', 
-                    items: { 
+                  topAccounts: {
+                    type: 'array',
+                    items: {
                       type: 'object',
                       properties: {
                         accountId: { type: 'string' },
                         cost: { type: 'number' },
-                        // name: { type: 'string' },
                       }
-                    } 
+                    }
+                  },
+                  allAccountCosts: {
+                    type: 'object',
+                    additionalProperties: { type: 'number' },
+                    description: 'Map of all account IDs to their MTD costs'
                   },
                   rolling14Daily: {
                     type: 'array',
@@ -399,10 +403,16 @@ async function getOverview(useProforma: boolean = false) {
 
   const prevMtdTotal = parseFloat(prevMtd.ResultsByTime?.[0].Total?.UnblendedCost.Amount || "0");
 
-  const topAccounts = byAccountMonthly.ResultsByTime?.[0].Groups?.map((g: any) => ({
-    accountId: g.Keys[0],
-    cost: parseFloat(g.Metrics.UnblendedCost.Amount),
-  }))
+  // Build full map of account costs for accurate user cost calculation
+  const allAccountCosts: Record<string, number> = {}
+  const accountCostsList = byAccountMonthly.ResultsByTime?.[0].Groups?.map((g: any) => {
+    const accountId = g.Keys[0]
+    const cost = parseFloat(g.Metrics.UnblendedCost.Amount)
+    allAccountCosts[accountId] = cost
+    return { accountId, cost }
+  }) || []
+
+  const topAccounts = accountCostsList
     .sort((a, b) => b.cost - a.cost)
     .slice(0, 10);
 
@@ -414,6 +424,7 @@ async function getOverview(useProforma: boolean = false) {
     previousMonthTotal: prevTotal,
     previousMonthToDateTotal: prevMtdTotal,
     topAccounts: topAccounts,
+    allAccountCosts,
     rolling14Daily,
     budgetHealth,
   };

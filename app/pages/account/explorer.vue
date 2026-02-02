@@ -39,8 +39,27 @@
           </div>
         </div>
 
-        <!-- Right: Settings & Filter Button -->
+        <!-- Right: Search + Settings & Filter Button -->
         <div class="flex items-center gap-2">
+          <UInput
+            v-model="search"
+            placeholder="Search enclaves..."
+            icon="i-heroicons-magnifying-glass"
+            size="sm"
+            class="w-64"
+            :ui="{ icon: { trailing: { pointer: '' } } }"
+          >
+            <template #trailing>
+              <UButton
+                v-if="search"
+                icon="i-heroicons-x-mark"
+                color="gray"
+                variant="link"
+                size="2xs"
+                @click="search = ''"
+              />
+            </template>
+          </UInput>
           <UButton
             icon="i-heroicons-arrow-path"
             variant="ghost"
@@ -114,6 +133,13 @@
       <ClientOnly>
         <div class="flex-1 overflow-auto px-4">
           <UTable :rows="paginatedRows" :columns="columns" :loading="loading">
+
+          <!-- Request ID column -->
+          <template #requestId-data="{ row }">
+            <span class="font-mono text-sm text-gray-600 dark:text-gray-400">
+              {{ row.requestID ?? row.requestId ?? '—' }}
+            </span>
+          </template>
 
           <!-- Project Name column -->
           <template #projectName-data="{ row }">
@@ -622,6 +648,7 @@ const openFilterEditDialog = (config: any) => {
 // Column selection and pagination
 // All columns including actions (which is always visible)
 const allTableColumns = [
+  { key: 'requestId', label: 'Req ID' },
   { key: 'projectName', label: 'Project Name' },
   { key: 'accountIds', label: 'Account IDs' },
   { key: 'platformInfo', label: 'Platform Info' },
@@ -643,7 +670,7 @@ const allTableColumns = [
 const availableColumns = allTableColumns.filter(col => col.key !== 'actions')
 
 // Default selected columns (actions not included as it's always shown)
-const selectedColumns = ref(['projectName', 'accountIds', 'platformInfo', 'admins', 'lineOfBusiness'])
+const selectedColumns = ref(['requestId', 'projectName', 'accountIds', 'platformInfo', 'admins', 'lineOfBusiness'])
 
 // Compute visible columns based on selection + always include actions at the end
 const columns = computed(() => {
@@ -717,11 +744,25 @@ const allRows = computed(() => Object.values(enclaveStore.enclaves || {}))
 const filteredRows = computed(() => {
   const query = search.value.toLowerCase()
 
-  return allRows.value.filter(e => {
+  // Filter out dev accounts (request IDs 9100-9999)
+  const nonDevRows = allRows.value.filter(e => {
+    const reqId = e.requestID ?? e.requestId ?? 0
+    return reqId < 9100 || reqId > 9999
+  })
+
+  // Sort by requestID descending (newest accounts first)
+  const sortedRows = [...nonDevRows].sort((a, b) => {
+    const aReqId = a.requestID ?? a.requestId ?? 0
+    const bReqId = b.requestID ?? b.requestId ?? 0
+    return bReqId - aReqId
+  })
+
+  return sortedRows.filter(e => {
     let valuesToSearch: (string | undefined)[] = []
 
     if (searchScope.value === 'All Fields') {
       valuesToSearch = [
+        String(e.requestID ?? e.requestId ?? ''),
         e.projectName,
         e.awsStandardAccountID,
         e.awsGovCloudAccountID,

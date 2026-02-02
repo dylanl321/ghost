@@ -1,9 +1,9 @@
 <template>
-  <div class="bg-gray-800 rounded-lg p-4 space-y-4">
+  <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-4">
     <!-- Current User Info -->
     <div>
-      <h3 class="text-sm font-semibold text-gray-200 mb-2">Current User</h3>
-      <div class="text-xs text-gray-400 space-y-1">
+      <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-200 mb-2">Current User</h3>
+      <div class="text-xs text-gray-600 dark:text-gray-400 space-y-1">
         <div>Email: {{ userEmail }}</div>
         <div>Display Name: {{ displayName }}</div>
       </div>
@@ -11,7 +11,7 @@
 
     <!-- User Roles -->
     <div>
-      <h3 class="text-sm font-semibold text-gray-200 mb-2">Assigned Roles</h3>
+      <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-200 mb-2">Assigned Roles</h3>
       <div class="flex flex-wrap gap-2">
         <UBadge 
           v-for="role in userRoles" 
@@ -30,13 +30,13 @@
 
     <!-- User Permissions -->
     <div>
-      <h3 class="text-sm font-semibold text-gray-200 mb-2">Active Permissions</h3>
+      <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-200 mb-2">Active Permissions</h3>
       <div class="max-h-40 overflow-y-auto">
         <div class="grid grid-cols-2 gap-2">
           <div 
             v-for="permission in sortedPermissions" 
             :key="permission"
-            class="text-xs text-gray-400 flex items-center gap-1"
+            class="text-xs text-gray-700 dark:text-gray-400 flex items-center gap-1"
           >
             <Icon name="i-heroicons-check-circle" class="w-3 h-3 text-green-500" />
             {{ permission }}
@@ -50,7 +50,7 @@
 
     <!-- Groups -->
     <div>
-      <h3 class="text-sm font-semibold text-gray-200 mb-2">Group Memberships</h3>
+      <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-200 mb-2">Group Memberships</h3>
       <div class="max-h-32 overflow-y-auto">
         <div class="flex flex-wrap gap-1">
           <UBadge 
@@ -70,7 +70,7 @@
     </div>
 
     <!-- Debug Info -->
-    <div v-if="showDebug" class="pt-4 border-t border-gray-700">
+    <div v-if="showDebug" class="pt-4 border-t border-gray-200 dark:border-gray-700">
       <UButton 
         size="xs" 
         variant="ghost" 

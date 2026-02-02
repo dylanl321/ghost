@@ -3,7 +3,7 @@
     <template #header>
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <div class="text-lg font-semibold">Recent Budget Alerts</div>
+          <div class="text-lg font-semibold">Current Month Budget Alerts</div>
           <UBadge v-if="alerts.length > 0" color="emerald" variant="subtle">
             {{ alerts.length }} alert{{ alerts.length !== 1 ? 's' : '' }}
           </UBadge>
@@ -29,7 +29,7 @@
     <!-- Empty State -->
     <div v-else-if="alerts.length === 0" class="flex flex-col items-center justify-center py-8 text-center">
       <UIcon name="i-heroicons-bell-slash" class="w-10 h-10 text-gray-500 mb-3" />
-      <p class="text-gray-400 text-sm">No recent alerts</p>
+      <p class="text-gray-600 dark:text-gray-400 text-sm">No budget alerts this month</p>
     </div>
 
     <!-- Alerts Table -->
@@ -87,6 +87,12 @@ const alerts = ref<BudgetAlert[]>([])
 // Debounce timer for account selection changes
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
+// Get current month in YYYY-MM format for filtering
+function getCurrentMonth(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
 const columns = [
   { key: 'created_at', label: 'Date', sortable: true },
   { key: 'account_name', label: 'Account' },
@@ -139,15 +145,16 @@ function getTypeColor(type: string): string {
   }
 }
 
-// Fetch alerts from API
+// Fetch alerts from API - filtered to current month only
 async function fetchAlerts() {
   try {
     loading.value = true
+    const currentMonth = getCurrentMonth()
 
     if (props.accountIds.length === 0) {
-      // No accounts selected: fetch recent alerts across all accounts
+      // No accounts selected: fetch current month alerts across all accounts
       const res = await $fetch<{ success: boolean; data: BudgetAlert[] }>('/api/alerts/list', {
-        query: { limit: 10 }
+        query: { month: currentMonth, limit: 10 }
       })
 
       if (res.success && res.data) {
@@ -156,10 +163,10 @@ async function fetchAlerts() {
         alerts.value = []
       }
     } else {
-      // Accounts selected: fetch alerts for each account and merge
+      // Accounts selected: fetch current month alerts for each account and merge
       const fetchPromises = props.accountIds.map(accountId =>
         $fetch<{ success: boolean; data: BudgetAlert[] }>('/api/alerts/list', {
-          query: { accountId, limit: 5 }
+          query: { accountId, month: currentMonth, limit: 5 }
         }).catch(() => ({ success: false, data: [] as BudgetAlert[] }))
       )
 

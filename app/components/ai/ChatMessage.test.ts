@@ -11,7 +11,7 @@ import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { fc } from 'fast-check'
 import ChatMessage from './ChatMessage.vue'
-import type { ChatMessage as ChatMessageType } from '~/shared/types/chat-threads'
+import type { StreamingChatMessage as ChatMessageType } from '#shared/types/chat-threads'
 
 // Mock the composables used by ChatMessage
 const mockEnrichStrandsResponse = (content: string) => content

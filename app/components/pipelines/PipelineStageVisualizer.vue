@@ -222,16 +222,16 @@ function handleStageClick(stage: PipelineStage) {
 }
 
 .overflow-x-auto::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--ghost-scrollbar-track);
   border-radius: 3px;
 }
 
 .overflow-x-auto::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--ghost-scrollbar-thumb);
   border-radius: 3px;
 }
 
 .overflow-x-auto::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.5);
+  background: var(--ghost-scrollbar-thumb-hover);
 }
 </style>

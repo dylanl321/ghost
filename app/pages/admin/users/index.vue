@@ -36,6 +36,7 @@
     <div class="mt-6">
       <UserPreferencesPanel v-if="activeTab === 0" />
       <RolesPanel v-else-if="activeTab === 1" />
+      <UserActivityMetricsPanel v-else-if="activeTab === 2" />
     </div>
   </div>
 </template>
@@ -43,9 +44,12 @@
 <script setup lang="ts">
 import UserPreferencesPanel from '~/components/admin/UserPreferencesPanel.vue'
 import RolesPanel from '~/components/admin/RolesPanel.vue'
+import UserActivityMetricsPanel from '~/components/admin/UserActivityMetricsPanel.vue'
 
 definePageMeta({
   layout: 'admin',
+  middleware: 'auth-permission',
+  permission: 'admin',
   title: 'User Management',
   description: 'Manage user preferences, roles, and permissions'
 })
@@ -61,6 +65,10 @@ const tabs = [
   {
     label: 'Roles & Permissions',
     icon: 'i-heroicons-shield-check'
+  },
+  {
+    label: 'Activity Metrics',
+    icon: 'i-heroicons-chart-bar'
   }
 ]
 
@@ -83,5 +91,10 @@ watch(() => route.query.tab, (newTab) => {
       activeTab.value = tabIndex
     }
   }
+})
+
+// Update URL when tab changes
+watch(activeTab, (newTab) => {
+  navigateTo({ query: { ...route.query, tab: newTab.toString() } }, { replace: true })
 })
 </script>

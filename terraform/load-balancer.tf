@@ -31,7 +31,7 @@ resource "aws_lb_target_group" "main" {
 
   health_check {
     path                = "/api/health"
-    interval            = 300
+    interval            = 30
     timeout             = 5
     healthy_threshold   = 2
     unhealthy_threshold = 2

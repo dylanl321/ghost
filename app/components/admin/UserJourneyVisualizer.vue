@@ -256,17 +256,17 @@
               </svg>
 
               <!-- Legend -->
-              <div class="absolute bottom-4 left-4 bg-gray-800/80 backdrop-blur rounded-lg p-3">
-                <p class="text-xs text-gray-400 mb-2">Live Navigation Paths</p>
+              <div class="absolute bottom-4 left-4 bg-white/85 dark:bg-gray-800/80 border border-gray-200/70 dark:border-gray-700/60 backdrop-blur rounded-lg p-3">
+                <p class="text-xs text-gray-700 dark:text-gray-400 mb-2">Live Navigation Paths</p>
                 <div class="flex items-center gap-2">
                   <span class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span class="text-xs text-gray-300">Active navigation</span>
+                  <span class="text-xs text-gray-700 dark:text-gray-300">Active navigation</span>
                 </div>
               </div>
 
               <!-- Recent Activity Feed -->
-              <div class="absolute top-4 right-4 w-64 bg-gray-800/80 backdrop-blur rounded-lg p-3 max-h-[200px] overflow-y-auto">
-                <p class="text-xs text-gray-400 mb-2 font-medium">Recent Activity</p>
+              <div class="absolute top-4 right-4 w-64 bg-white/85 dark:bg-gray-800/80 border border-gray-200/70 dark:border-gray-700/60 backdrop-blur rounded-lg p-3 max-h-[200px] overflow-y-auto">
+                <p class="text-xs text-gray-700 dark:text-gray-400 mb-2 font-medium">Recent Activity</p>
                 <div class="space-y-2">
                   <div
                     v-for="(activity, idx) in recentActivity.slice(0, 5)"
@@ -275,8 +275,8 @@
                     :style="{ 'animation-delay': (idx * 0.1) + 's' }"
                   >
                     <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                    <span class="text-gray-300 truncate">{{ activity.user }}</span>
-                    <UIcon name="i-heroicons-arrow-right" class="w-3 h-3 text-gray-500" />
+                    <span class="text-gray-800 dark:text-gray-300 truncate">{{ activity.user }}</span>
+                    <UIcon name="i-heroicons-arrow-right" class="w-3 h-3 text-gray-500 dark:text-gray-500" />
                     <span class="text-emerald-400 truncate">{{ activity.path }}</span>
                   </div>
                 </div>

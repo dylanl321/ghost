@@ -34,15 +34,17 @@
 
     <!-- Tab Content -->
     <div class="mt-6">
-      <SystemLogsPanel v-if="activeTab === 0" />
-      <UserJourneyVisualizer v-else-if="activeTab === 1" />
-      <StrandsHealthCheck v-else-if="activeTab === 2" />
-      <IssuesPanel v-else-if="activeTab === 3" />
+      <SystemHealthPanel v-if="activeTab === 0" />
+      <SystemLogsPanel v-else-if="activeTab === 1" />
+      <UserJourneyVisualizer v-else-if="activeTab === 2" />
+      <StrandsHealthCheck v-else-if="activeTab === 3" />
+      <IssuesPanel v-else-if="activeTab === 4" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import SystemHealthPanel from '~/components/admin/SystemHealthPanel.vue'
 import SystemLogsPanel from '~/components/admin/SystemLogsPanel.vue'
 import UserJourneyVisualizer from '~/components/admin/UserJourneyVisualizer.vue'
 import StrandsHealthCheck from '~/components/admin/StrandsHealthCheck.vue'
@@ -50,6 +52,8 @@ import IssuesPanel from '~/components/admin/IssuesPanel.vue'
 
 definePageMeta({
   layout: 'admin',
+  middleware: 'auth-permission',
+  permission: 'admin',
   title: 'System Monitoring',
   description: 'View system logs, health checks, and manage issues'
 })
@@ -58,6 +62,10 @@ const route = useRoute()
 const activeTab = ref(0)
 
 const tabs = [
+  {
+    label: 'System Health',
+    icon: 'i-heroicons-server-stack'
+  },
   {
     label: 'Activity Logs',
     icon: 'i-heroicons-document-text'
@@ -95,5 +103,10 @@ watch(() => route.query.tab, (newTab) => {
       activeTab.value = tabIndex
     }
   }
+})
+
+// Update URL when tab changes
+watch(activeTab, (newTab) => {
+  navigateTo({ query: { ...route.query, tab: newTab.toString() } }, { replace: true })
 })
 </script>

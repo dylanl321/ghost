@@ -2,7 +2,7 @@
   <UCard>
     <template #header>
       <div class="flex justify-between">
-        <div class="text-lg font-semibold">{{ title }}</div>
+        <div class="text-lg font-semibold text-gray-900 dark:text-white">{{ title }}</div>
         <UBadge color="gray" variant="soft" size="sm">
           {{ dateRangeLabel }}
         </UBadge>
@@ -14,10 +14,10 @@
       <VChart :option="chartOptions" class="h-80" autoresize />
 
       <!-- Summary metrics -->
-      <div class="border-t border-gray-700 mt-4 pt-4 flex">
+      <div class="border-t border-gray-200 dark:border-gray-700 mt-4 pt-4 flex">
         <div class="w-1/3 text-left">
-          <div class="text-gray-400 text-sm">Total Cost (Last 14 Days)</div>
-          <div :class="`${totalCostProforma ? 'text-blue-400/80' : 'text-white'} text-lg font-semibold`">
+          <div class="text-gray-600 dark:text-gray-400 text-sm">Total Cost (Last 14 Days)</div>
+          <div :class="`${totalCostProforma ? 'text-blue-600/80 dark:text-blue-400/80' : 'text-gray-900 dark:text-white'} text-lg font-semibold`">
             {{ formatCurrency(totalCostBillable, 0) }}
           </div>
           <div v-if="totalCostProforma" class="text-green-400/80 text-lg font-semibold">
@@ -25,8 +25,8 @@
           </div>
         </div>
         <div class="w-1/3 text-left">
-          <div class="text-gray-400 text-sm">Average Daily</div>
-          <div :class="`${totalCostProforma ? 'text-blue-400/80' : 'text-white'} text-lg font-semibold`">
+          <div class="text-gray-600 dark:text-gray-400 text-sm">Average Daily</div>
+          <div :class="`${totalCostProforma ? 'text-blue-600/80 dark:text-blue-400/80' : 'text-gray-900 dark:text-white'} text-lg font-semibold`">
             {{ formatCurrency(avgCostBillable, 0) }}
           </div>
           <div v-if="avgCostProforma" class="text-green-400/80 text-lg font-semibold">
@@ -34,8 +34,8 @@
           </div>
         </div>
         <div class="w-1/3 text-left">
-          <div class="text-gray-400 text-sm">Peak Cost</div>
-          <div :class="`${totalCostProforma ? 'text-blue-400/80' : 'text-white'} text-lg font-semibold`">
+          <div class="text-gray-600 dark:text-gray-400 text-sm">Peak Cost</div>
+          <div :class="`${totalCostProforma ? 'text-blue-600/80 dark:text-blue-400/80' : 'text-gray-900 dark:text-white'} text-lg font-semibold`">
             {{ formatCurrency(peakCostBillable, 0) }}
           </div>
           <div v-if="peakCostProforma" class="text-green-400/80 text-lg font-semibold">

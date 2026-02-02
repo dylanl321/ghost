@@ -9,7 +9,6 @@
         :view-mode="'fullpage'"
         @retry="retryLastMessage"
         @cancel="cancelQuery"
-        @copy="copyMessageMarkdown"
         @prompt-click="handlePromptClick"
         @enriched-click="handleEnrichedClick"
         @disambiguate="handleDisambiguate"
@@ -54,7 +53,7 @@
     </div>
 
     <!-- Chat Input Area -->
-    <div class="chat-input-container">
+    <div class="chat-input-container [view-transition-name:chat-input]">
       <form @submit.prevent="handleSubmit" class="input-form">
         <div class="input-wrapper">
           <!-- Account Mention Dropdown with fade transition -->
@@ -291,6 +290,7 @@ const {
   // Disambiguation
   showDisambiguation,
   disambiguationData,
+  openDisambiguationModal,
   handleAccountSelected,
   cancelDisambiguation,
   
@@ -348,7 +348,9 @@ const exampleQuestionsList = computed(() => {
 
   if (account3 || account2 || account1) {
     const account = account3 || account2 || account1
-    prompts.push(`Analyze costs by service for ${account.projectName || account.accountId}`)
+    if (account) {
+      prompts.push(`Analyze costs by service for ${account.projectName || account.accountId}`)
+    }
   }
 
   if (account1) {
@@ -356,43 +358,13 @@ const exampleQuestionsList = computed(() => {
   }
 
   while (prompts.length < 5) {
-    prompts.push(defaultPrompts[prompts.length])
+    prompts.push(defaultPrompts[prompts.length % defaultPrompts.length] || defaultPrompts[0] || 'Help')
   }
 
   return prompts
 })
 
-// Copy message markdown to clipboard
 const toast = useToast()
-async function copyMessageMarkdown(message: any) {
-  try {
-    // Combine reasoning and content for full context
-    let fullText = ''
-    if (message.reasoning) {
-      fullText = `## AI Reasoning\n\n${message.reasoning}\n\n## Response\n\n${message.content}`
-    } else {
-      fullText = message.content
-    }
-
-    await navigator.clipboard.writeText(fullText)
-    toast.add({
-      title: 'Copied to clipboard',
-      description: message.reasoning ? 'Full markdown copied (including AI reasoning)' : 'Message copied',
-      icon: 'i-heroicons-clipboard-document-check',
-      color: 'green',
-      timeout: 3000
-    })
-  } catch (err) {
-    console.error('Failed to copy:', err)
-    toast.add({
-      title: 'Copy failed',
-      description: 'Please try selecting and copying manually',
-      icon: 'i-heroicons-exclamation-triangle',
-      color: 'red',
-      timeout: 3000
-    })
-  }
-}
 
 // Handle input updates for @ mention detection
 function handleInputUpdate(event: Event) {
@@ -470,7 +442,7 @@ async function handlePromptClick(promptText: string) {
 function handleDisambiguate() {
   // Show the disambiguation modal if we have disambiguation data
   if (disambiguationData.value) {
-    showDisambiguation.value = true
+    openDisambiguationModal()
   } else {
     console.warn('[GhostChatFullPage] No disambiguation data available')
   }
@@ -561,7 +533,7 @@ watch(messages, async () => {
             <summary class="cursor-pointer hover:text-gray-900 dark:hover:text-gray-200">
               Show diagram code
             </summary>
-            <pre class="mt-2 p-2 bg-gray-900 text-gray-100 rounded overflow-x-auto text-[10px]"><code>${code}</code></pre>
+            <pre class="mt-2 p-2 bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-700 rounded overflow-x-auto text-[10px]"><code>${code}</code></pre>
           </details>
         </div>
       `
@@ -657,7 +629,7 @@ async function copyToClipboard(text: string) {
       title: 'Copy failed',
       icon: 'i-heroicons-exclamation-triangle',
       color: 'red',
-      timeout: 2000
+      timeout: 0
     })
   }
 }
@@ -999,11 +971,11 @@ onMounted(async () => {
 }
 
 .markdown-container :deep(pre) {
-  @apply bg-gray-900 dark:bg-gray-950 p-3 rounded-lg overflow-x-auto my-3 border border-gray-700;
+  @apply bg-gray-50 dark:bg-gray-950 p-3 rounded-lg overflow-x-auto my-3 border border-gray-200 dark:border-gray-700;
 }
 
 .markdown-container :deep(pre code) {
-  @apply bg-transparent border-0 text-gray-100 text-xs leading-normal block p-0;
+  @apply bg-transparent border-0 text-gray-800 dark:text-gray-100 text-xs leading-normal block p-0;
 }
 
 .markdown-container :deep(a) {

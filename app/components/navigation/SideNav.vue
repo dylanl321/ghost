@@ -8,7 +8,7 @@
 
   <!-- Sidebar -->
   <div
-    class="fixed inset-y-0 left-0 bg-slate-900 flex flex-col transition-all duration-300 ease-in-out overflow-hidden shadow-xl"
+    class="fixed inset-y-0 left-0 bg-[var(--ghost-surface-2)] dark:bg-slate-900 border-r border-[color:var(--ghost-border)] dark:border-slate-700 flex flex-col transition-all duration-300 ease-in-out overflow-hidden shadow-sm dark:shadow-xl"
     :class="{
       // Desktop collapsed/expanded states
       'w-16 z-40':
@@ -16,7 +16,7 @@
       'w-64 z-40':
         !isMobile &&
         (!navigationStore.isCollapsed || navigationStore.isHovered),
-      'shadow-2xl':
+      'shadow-md':
         !isMobile && navigationStore.isCollapsed && navigationStore.isHovered,
 
       // Mobile states
@@ -27,7 +27,7 @@
     @mouseleave="handleMouseLeave"
   >
     <!-- Logo Section -->
-    <div class="border-b border-slate-700 flex-shrink-0">
+    <div class="border-b border-[color:var(--ghost-border)] dark:border-slate-700 flex-shrink-0">
       <div class="h-16 flex items-center px-4 relative overflow-hidden">
         <!-- Expanded state content -->
         <div
@@ -43,7 +43,7 @@
             <img
               src="@/assets/images/MS-logoWhite.png"
               alt="Logo"
-              class="h-8 w-auto flex-shrink-0"
+              class="h-8 w-auto flex-shrink-0 invert dark:invert-0"
             />
           </div>
 
@@ -77,7 +77,7 @@
           <img
             src="@/assets/images/MS-logoWhite-icon.png"
             alt="Logo"
-            class="w-8 h-8 flex-shrink-0"
+            class="w-8 h-8 flex-shrink-0 invert dark:invert-0"
           />
           <UIcon name="i-fa6-solid-ghost" class="h-3 w-3 text-emerald-400" />
         </div>
@@ -94,8 +94,8 @@
             <NuxtLink
               v-if="strandsEnabled"
               :to="item.to"
-              class="flex items-center px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors relative group overflow-hidden"
-              :class="{ 'text-white bg-slate-800': isActive(item) }"
+              class="flex items-center px-3 py-2 rounded-md text-sm text-slate-700 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors relative group overflow-hidden"
+              :class="{ 'text-slate-900 bg-slate-100 dark:text-white dark:bg-slate-800': isActive(item) }"
             >
               <UIcon :name="item.icon" class="flex-shrink-0 w-5 h-5" />
               <span
@@ -113,11 +113,11 @@
               <!-- Tooltip for collapsed state -->
               <div
                 v-if="navigationStore.isCollapsed && !navigationStore.isHovered"
-                class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-slate-600"
+                class="absolute left-full ml-2 px-2 py-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-slate-200 dark:border-slate-600 shadow-lg"
               >
                 {{ item.label }}
                 <div
-                  class="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-0 h-0 border-r-4 border-r-slate-800 border-t-2 border-b-2 border-t-transparent border-b-transparent"
+                  class="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-0 h-0 border-r-4 border-r-white dark:border-r-slate-800 border-t-2 border-b-2 border-t-transparent border-b-transparent"
                 ></div>
               </div>
             </NuxtLink>
@@ -128,8 +128,8 @@
             <NuxtLink
               v-if="isAdmin"
               :to="item.to"
-              class="flex items-center px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors relative group overflow-hidden"
-              :class="{ 'text-white bg-slate-800': isActive(item) }"
+              class="flex items-center px-3 py-2 rounded-md text-sm text-slate-700 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors relative group overflow-hidden"
+              :class="{ 'text-slate-900 bg-slate-100 dark:text-white dark:bg-slate-800': isActive(item) }"
             >
               <UIcon :name="item.icon" class="flex-shrink-0 w-5 h-5" />
               <span
@@ -147,11 +147,45 @@
               <!-- Tooltip for collapsed state -->
               <div
                 v-if="navigationStore.isCollapsed && !navigationStore.isHovered"
-                class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-slate-600"
+                class="absolute left-full ml-2 px-2 py-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-slate-200 dark:border-slate-600 shadow-lg"
               >
                 {{ item.label }}
                 <div
-                  class="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-0 h-0 border-r-4 border-r-slate-800 border-t-2 border-b-2 border-t-transparent border-b-transparent"
+                  class="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-0 h-0 border-r-4 border-r-white dark:border-r-slate-800 border-t-2 border-b-2 border-t-transparent border-b-transparent"
+                ></div>
+              </div>
+            </NuxtLink>
+          </ClientOnly>
+
+          <!-- Support Tools - Admin only -->
+          <ClientOnly v-else-if="item.label === 'Support Tools'">
+            <NuxtLink
+              v-if="isAdmin"
+              :to="item.to"
+              class="flex items-center px-3 py-2 rounded-md text-sm text-slate-700 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors relative group overflow-hidden"
+              :class="{ 'text-slate-900 bg-slate-100 dark:text-white dark:bg-slate-800': isActive(item) }"
+            >
+              <UIcon :name="item.icon" class="flex-shrink-0 w-5 h-5" />
+              <span
+                class="font-medium ml-3 truncate transition-all duration-300"
+                :class="{
+                  'opacity-0 w-0':
+                    navigationStore.isCollapsed && !navigationStore.isHovered,
+                  'opacity-100 w-full':
+                    !navigationStore.isCollapsed || navigationStore.isHovered,
+                }"
+              >
+                {{ item.label }}
+              </span>
+
+              <!-- Tooltip for collapsed state -->
+              <div
+                v-if="navigationStore.isCollapsed && !navigationStore.isHovered"
+                class="absolute left-full ml-2 px-2 py-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-slate-200 dark:border-slate-600 shadow-lg"
+              >
+                {{ item.label }}
+                <div
+                  class="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-0 h-0 border-r-4 border-r-white dark:border-r-slate-800 border-t-2 border-b-2 border-t-transparent border-b-transparent"
                 ></div>
               </div>
             </NuxtLink>
@@ -160,8 +194,8 @@
           <NuxtLink
             v-else
             :to="item.to"
-            class="flex items-center px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors relative group overflow-hidden"
-            :class="{ 'text-white bg-slate-800': isActive(item) }"
+            class="flex items-center px-3 py-2 rounded-md text-sm text-slate-700 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors relative group overflow-hidden"
+            :class="{ 'text-slate-900 bg-slate-100 dark:text-white dark:bg-slate-800': isActive(item) }"
           >
             <UIcon :name="item.icon" class="flex-shrink-0 w-5 h-5" />
             <span
@@ -179,11 +213,11 @@
             <!-- Tooltip for collapsed state -->
             <div
               v-if="navigationStore.isCollapsed && !navigationStore.isHovered"
-              class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-slate-600"
+              class="absolute left-full ml-2 px-2 py-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-slate-200 dark:border-slate-600 shadow-lg"
             >
               {{ item.label }}
               <div
-                class="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-0 h-0 border-r-4 border-r-slate-800 border-t-2 border-b-2 border-t-transparent border-b-transparent"
+                class="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-0 h-0 border-r-4 border-r-white dark:border-r-slate-800 border-t-2 border-b-2 border-t-transparent border-b-transparent"
               ></div>
             </div>
           </NuxtLink>
@@ -200,7 +234,7 @@
     </div>
 
     <!-- Footer Links -->
-    <div class="border-t border-slate-700 flex-shrink-0 h-[53px]">
+    <div class="border-t border-slate-200 dark:border-slate-700 flex-shrink-0 h-[53px]">
       <div
         class="h-full flex items-center justify-center gap-1 px-2 transition-all duration-300"
         :class="{
@@ -212,9 +246,9 @@
         <UTooltip text="Documentation" :shortcuts="[]">
           <NuxtLink
             to="/support/docs"
-            class="flex items-center justify-center p-2 rounded-md text-slate-400 hover:bg-slate-800 hover:text-white transition-colors relative group"
+            class="flex items-center justify-center p-2 rounded-md text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors relative group"
             :class="{
-              'text-white bg-slate-800': route.path.startsWith('/support/docs'),
+              'text-slate-900 bg-slate-100 dark:text-white dark:bg-slate-800': route.path.startsWith('/support/docs'),
             }"
           >
             <UIcon name="i-heroicons-document-text" class="flex-shrink-0 w-5 h-5" />
@@ -225,9 +259,9 @@
         <UTooltip text="Support" :shortcuts="[]">
           <NuxtLink
             to="/support"
-            class="flex items-center justify-center p-2 rounded-md text-slate-400 hover:bg-slate-800 hover:text-white transition-colors relative group"
+            class="flex items-center justify-center p-2 rounded-md text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors relative group"
             :class="{
-              'text-white bg-slate-800': route.path === '/support' || route.path.startsWith('/support/'),
+              'text-slate-900 bg-slate-100 dark:text-white dark:bg-slate-800': route.path === '/support' || route.path.startsWith('/support/'),
             }"
           >
             <UIcon name="i-heroicons-lifebuoy" class="flex-shrink-0 w-5 h-5" />
@@ -238,9 +272,9 @@
         <UTooltip text="About" :shortcuts="[]">
           <NuxtLink
             to="/about"
-            class="flex items-center justify-center p-2 rounded-md text-slate-400 hover:bg-slate-800 hover:text-white transition-colors relative group"
+            class="flex items-center justify-center p-2 rounded-md text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors relative group"
             :class="{
-              'text-white bg-slate-800': route.path === '/about',
+              'text-slate-900 bg-slate-100 dark:text-white dark:bg-slate-800': route.path === '/about',
             }"
           >
             <UIcon name="i-heroicons-information-circle" class="flex-shrink-0 w-5 h-5" />
@@ -475,6 +509,12 @@ const navigationItems = computed(() => {
       label: "Pipeline Analytics",
       to: "/admin/pipelines",
       icon: "i-heroicons-arrow-path",
+    },
+    // Support Tools - Admin only, visibility controlled by ClientOnly in template
+    {
+      label: "Support Tools",
+      to: "/support-tools",
+      icon: "i-heroicons-wrench-screwdriver",
     }
   ];
 });

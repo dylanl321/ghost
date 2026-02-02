@@ -168,9 +168,9 @@ onMounted(async () => {
   }
 })
 
-// Set page metadata
+// Set page metadata - use minimal public layout for redirect page
 definePageMeta({
-  layout: 'default'
+  layout: 'public'
 })
 
 useHead({

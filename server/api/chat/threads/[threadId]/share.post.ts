@@ -97,6 +97,28 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.notFound(event, 'Thread not found')
   }
 
+  // If thread is already shared and not expired, return existing share data
+  if (thread.isShared && thread.shareId && thread.shareExpiresAt) {
+    const expiresAt = new Date(thread.shareExpiresAt)
+    if (expiresAt > new Date()) {
+      logger.info(`[Chat Threads API] Thread ${threadId} already shared, returning existing share data`)
+
+      // Build short URL from existing data or construct it
+      const host = getHeader(event, 'host') || 'localhost:3000'
+      const protocol = getHeader(event, 'x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https')
+      const shortUrl = thread.shortUrl || (thread.shortCode ? `${protocol}://${host}/s/${thread.shortCode}` : '')
+
+      const response: ShareThreadResponse = {
+        shareId: thread.shareId,
+        shortCode: thread.shortCode || '',
+        shortUrl,
+        expiresAt: thread.shareExpiresAt
+      }
+
+      return sendSuccess(event, response)
+    }
+  }
+
   // Share the thread (marks as shared and generates shareId)
   const shareResult = await shareThread(threadId, userId, expiresInDays)
 

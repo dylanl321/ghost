@@ -2,6 +2,7 @@ import { computed } from 'vue'
 import type { Ref } from 'vue'
 import type { NormalizedDataset } from '~/types/costs'
 import type { Scenario } from '~/composables/useCostScenario'
+import { getAnnualBudgetArray, hasPerMonthBudget } from '#shared/utils/budget-utils'
 // import { calculateComprehensiveVariance, generateVarianceInsights } from '~/shared/utils/variance-calculator'
 
 export interface ChartDefinition {
@@ -3177,7 +3178,7 @@ export const useChartRegistry = (args: {
 
             // Process all future months in current year (including December)
             // Current month handled separately with currentMonthEndForecast
-            if (year === currentYear && monthIndex >= currentMonth) {
+            if (year === currentYear && monthIndex > currentMonth) {
               // Get confidence intervals if available (80% = p10 to p90)
               let upper = null
               let lower = null
@@ -3196,7 +3197,7 @@ export const useChartRegistry = (args: {
               upperBound[monthIndex] = upper
               lowerBound[monthIndex] = lower
             } else if (year === currentYear) {
-              console.log(`  ✗ Skipping current year month ${monthIndex} (before or at current month ${currentMonth})`)
+              console.log(`  ✗ Skipping current year month ${monthIndex} (at or before current month ${currentMonth}, handled separately)`)
             }
           })
 
@@ -3210,34 +3211,87 @@ export const useChartRegistry = (args: {
           console.log('YearEndForecast: NO FORECAST DATA in API response')
         }
 
-        // Calculate budget data for the budget line
-        // Budget represents the GDMS forecasted costs (estimatedMonthlyCharge from accounts)
+        // Calculate budget data for the budget line using per-month PEP data when available
+        // Falls back to flat estimatedMonthlyCharge, then to analysisData.budgetAnalysis
+        const accountsList = (dataset as any).accountsList || []
         const analysis = dataset.analysis as any
         const analysisData = analysis?.data || analysis
         const byAccount = analysisData?.budgetAnalysis?.byAccount || []
 
+        console.log('YearEndForecast: Budget data sources:', {
+          accountsListLength: accountsList.length,
+          byAccountLength: byAccount.length,
+          sampleAccount: accountsList[0] ? {
+            accountId: accountsList[0].accountId,
+            hasPepData: !!accountsList[0].pepBudget2026Monthly,
+            hasEstimated: !!accountsList[0].estimatedMonthlyCharge,
+            pepValue: accountsList[0].pepBudget2026Monthly?.substring(0, 50),
+            estimatedValue: accountsList[0].estimatedMonthlyCharge
+          } : 'no accounts',
+          sampleByAccount: byAccount[0] ? {
+            accountId: byAccount[0].accountId,
+            budgetedCost: byAccount[0].budgetedCost
+          } : 'no byAccount data'
+        })
+
+        let aggregatedMonthlyBudgets: number[] = Array(12).fill(0)
         let totalAnnualBudget = 0
         let monthlyBudget = 0
+        let anyAccountHasPepData = false
 
-        if (filterBySelection) {
-          // Sum budgets for selected accounts
-          totalAnnualBudget = byAccount
-            .filter((a: any) => selectedAccounts.includes(a.accountId))
-            .reduce((sum: number, a: any) => sum + (a.budgetedCost || 0), 0) * 12
+        // Try to use accountsList first (has PEP data)
+        if (accountsList.length > 0) {
+          const relevantAccounts = filterBySelection
+            ? accountsList.filter((acc: any) => selectedAccounts.includes(acc.accountId))
+            : accountsList
+
+          // Aggregate monthly budgets across all relevant accounts
+          relevantAccounts.forEach((account: any) => {
+            const { monthlyArray, isPepData } = getAnnualBudgetArray(account)
+            if (isPepData) anyAccountHasPepData = true
+
+            for (let i = 0; i < 12; i++) {
+              aggregatedMonthlyBudgets[i] += monthlyArray[i]
+            }
+          })
+
+          totalAnnualBudget = aggregatedMonthlyBudgets.reduce((sum, val) => sum + val, 0)
           monthlyBudget = totalAnnualBudget / 12
-        } else {
-          // Sum all account budgets for org-wide view
-          totalAnnualBudget = byAccount
-            .reduce((sum: number, a: any) => sum + (a.budgetedCost || 0), 0) * 12
-          monthlyBudget = totalAnnualBudget / 12
+
+          console.log('YearEndForecast: Budget from accountsList (PEP-enabled):', {
+            totalAnnualBudget,
+            monthlyBudget,
+            isPepData: anyAccountHasPepData,
+            accountsWithBudget: relevantAccounts.filter((a: any) => hasPerMonthBudget(a) || a.estimatedMonthlyCharge).length,
+            relevantAccountsCount: relevantAccounts.length,
+            filterBySelection,
+            monthlyBudgetsPreview: aggregatedMonthlyBudgets.slice(0, 3).map((v, i) => `${['Jan', 'Feb', 'Mar'][i]}: $${v.toFixed(0)}`)
+          })
         }
 
-        console.log('YearEndForecast: Budget calculation:', {
-          totalAnnualBudget,
-          monthlyBudget,
-          accountsWithBudget: byAccount.filter((a: any) => (a.budgetedCost || 0) > 0).length,
-          filterBySelection
-        })
+        // Fallback to analysis API budget data if accountsList didn't yield results
+        if (totalAnnualBudget === 0 && byAccount.length > 0) {
+          if (filterBySelection) {
+            // Sum budgets for selected accounts
+            totalAnnualBudget = byAccount
+              .filter((a: any) => selectedAccounts.includes(a.accountId))
+              .reduce((sum: number, a: any) => sum + (a.budgetedCost || 0), 0) * 12
+          } else {
+            // Sum all account budgets for org-wide view
+            totalAnnualBudget = byAccount
+              .reduce((sum: number, a: any) => sum + (a.budgetedCost || 0), 0) * 12
+          }
+          monthlyBudget = totalAnnualBudget / 12
+          aggregatedMonthlyBudgets = Array(12).fill(monthlyBudget)
+          anyAccountHasPepData = false
+
+          console.log('YearEndForecast: Budget from analysis API (legacy fallback):', {
+            totalAnnualBudget,
+            monthlyBudget,
+            accountsWithBudget: byAccount.filter((a: any) => (a.budgetedCost || 0) > 0).length,
+            filterBySelection
+          })
+        }
 
         // Generate next year projection data using actual AWS forecasts
         // AWS provides up to 12 months of forecasts from today, which may span into next year
@@ -3326,8 +3380,10 @@ export const useChartRegistry = (args: {
               lower: lowerBound
             },
             budget: {
+              monthlyArray: aggregatedMonthlyBudgets,
               monthly: monthlyBudget,
-              annual: totalAnnualBudget
+              annual: totalAnnualBudget,
+              isPepData: anyAccountHasPepData
             },
             metadata: {
               currentMonth: currentMonth + 1,
@@ -3361,8 +3417,10 @@ export const useChartRegistry = (args: {
               }
             ],
             budget: {
+              monthlyArray: aggregatedMonthlyBudgets,
               monthly: monthlyBudget,
-              annual: totalAnnualBudget
+              annual: totalAnnualBudget,
+              isPepData: anyAccountHasPepData
             },
             metadata: {
               filterBySelection,

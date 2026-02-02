@@ -1,7 +1,7 @@
 <template>
   <div class="chart-tabs-container">
     <!-- Tab Navigation with Show More Toggle -->
-    <div class="border-b border-gray-700 mb-4" data-tour="chart-tabs">
+    <div class="border-b border-gray-200 dark:border-gray-700 mb-4" data-tour="chart-tabs">
       <div class="flex items-center justify-between mb-2">
         <div class="flex-1"></div>
         <!-- Show Advanced Charts Toggle -->
@@ -24,7 +24,7 @@
           :class="[
             activeTab === tab.id
               ? 'border-blue-500 text-blue-500'
-              : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-300',
+              : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-300 hover:border-gray-300',
             'whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-150'
           ]"
         >
@@ -33,7 +33,7 @@
           <UTooltip v-if="tab.badge && tab.badgeTooltip" :text="tab.badgeTooltip">
             <NuxtLink
               :to="tab.badgeLink || '/support/docs?topic=proforma-vs-billable'"
-              class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
+              class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               @click.stop
             >
               {{ tab.badge }}
@@ -42,7 +42,7 @@
           </UTooltip>
           <span
             v-else-if="tab.badge"
-            class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-700 text-gray-300"
+            class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
           >
             {{ tab.badge }}
           </span>
@@ -74,7 +74,7 @@
 
       <!-- Organizational Overview Tab -->
       <div v-else-if="activeTab === 'organizational'" class="animate-fadeIn">
-        <div class="text-gray-400 text-center py-8">
+        <div class="text-gray-600 dark:text-gray-400 text-center py-8">
           <OrganizationalCharts />
         </div>
       </div>
@@ -94,9 +94,9 @@
 
         <!-- Section: Critical Issues -->
         <div class="space-y-4">
-          <div class="flex items-center gap-2 border-b border-gray-700 pb-2">
+          <div class="flex items-center gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
             <Icon name="i-heroicons-exclamation-triangle" class="w-5 h-5 text-red-400" />
-            <h3 class="text-lg font-semibold text-gray-200">Critical Issues</h3>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-200">Critical Issues</h3>
           </div>
           <TablesRenderer
             :tables="budgetTables.filter(t => ['severeOverageAccounts', 'budgetOverageAccounts'].includes(t.id))"
@@ -109,9 +109,9 @@
 
         <!-- Section: Budget by Project -->
         <div class="space-y-4">
-          <div class="flex items-center gap-2 border-b border-gray-700 pb-2">
+          <div class="flex items-center gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
             <Icon name="i-heroicons-folder" class="w-5 h-5 text-purple-400" />
-            <h3 class="text-lg font-semibold text-gray-200">Budget by Project</h3>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-200">Budget by Project</h3>
           </div>
           <TablesRenderer
             :tables="budgetTables.filter(t => t.id === 'budgetByProject')"
@@ -124,9 +124,9 @@
 
         <!-- Section: Organizational View -->
         <div class="space-y-4">
-          <div class="flex items-center gap-2 border-b border-gray-700 pb-2">
+          <div class="flex items-center gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
             <Icon name="i-heroicons-building-office-2" class="w-5 h-5 text-blue-400" />
-            <h3 class="text-lg font-semibold text-gray-200">Organizational View</h3>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-200">Organizational View</h3>
           </div>
           <TablesRenderer
             :tables="budgetTables.filter(t => ['budgetHealthByLOB', 'budgetHealthByDepartment'].includes(t.id))"
@@ -139,9 +139,9 @@
 
         <!-- Section: Underutilized & Summary -->
         <div class="space-y-4">
-          <div class="flex items-center gap-2 border-b border-gray-700 pb-2">
+          <div class="flex items-center gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
             <Icon name="i-heroicons-chart-pie" class="w-5 h-5 text-green-400" />
-            <h3 class="text-lg font-semibold text-gray-200">Budget Optimization</h3>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-200">Budget Optimization</h3>
           </div>
           <TablesRenderer
             :tables="budgetTables.filter(t => ['underutilizedBudgets', 'organizationBudgetSummary'].includes(t.id))"
@@ -151,6 +151,15 @@
             :selected-accounts="[]"
           />
         </div>
+
+        <!-- Section: Budget Alerts -->
+        <div class="space-y-4">
+          <div class="flex items-center gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
+            <Icon name="i-heroicons-bell-alert" class="w-5 h-5 text-amber-400" />
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-200">Budget Alerts</h3>
+          </div>
+          <CostDashboardAlerts :account-ids="selectedAccounts" />
+        </div>
       </div>
 
       <!-- Data Table Tab -->
@@ -158,7 +167,7 @@
         <CostDataTable
           :dataset="dataset"
           :selected-accounts="selectedAccounts"
-          :mode="dataMode"
+          :mode="dataMode || 'proforma'"
           :is-loading="smartChartsLoading"
           @refresh="$emit('refresh-data')"
         />
@@ -181,6 +190,7 @@ import HistoricalTrends from './HistoricalTrends.vue'
 import CostDataTable from './CostDataTable.vue'
 import ForecastDataTable from './ForecastDataTable.vue'
 import BudgetHealthSummaryCards from './BudgetHealthSummaryCards.vue'
+import CostDashboardAlerts from './CostDashboardAlerts.vue'
 import type { ChartDefinition } from '~/composables/useChartRegistry'
 import { useTableRegistry } from '~/composables/useTableRegistry'
 import { useCostScenario } from '~/composables/useCostScenario'

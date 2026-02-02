@@ -5,6 +5,39 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme tokens (light + dark) */
+@layer base {
+  :root {
+    /* Core surfaces */
+    --ghost-bg: #f1f5f9; /* slate-100 */
+    --ghost-surface: #ffffff;
+    --ghost-surface-2: #f8fafc; /* slate-50 */
+    --ghost-text: #0f172a; /* slate-900 */
+    --ghost-text-muted: #475569; /* slate-600 */
+    --ghost-border: #e2e8f0; /* slate-200 */
+
+    /* Scrollbars */
+    --ghost-scrollbar-track: #e2e8f0; /* slate-200 */
+    --ghost-scrollbar-thumb: #cbd5e1; /* slate-300 */
+    --ghost-scrollbar-thumb-hover: #94a3b8; /* slate-400 */
+  }
+
+  .dark {
+    /* Core surfaces */
+    --ghost-bg: #0f172a; /* slate-900 */
+    --ghost-surface: #111827; /* gray-900 */
+    --ghost-surface-2: #1f2937; /* gray-800 */
+    --ghost-text: #f9fafb; /* gray-50 */
+    --ghost-text-muted: #9ca3af; /* gray-400 */
+    --ghost-border: #334155; /* slate-700 */
+
+    /* Scrollbars */
+    --ghost-scrollbar-track: #1f2937; /* gray-800 */
+    --ghost-scrollbar-thumb: #374151; /* gray-700 */
+    --ghost-scrollbar-thumb-hover: #4b5563; /* gray-600 */
+  }
+}
+
 /* Custom Scrollbar Styles */
 @layer utilities {
   .overflow-y-auto::-webkit-scrollbar,
@@ -15,18 +48,18 @@
 
   .overflow-y-auto::-webkit-scrollbar-track,
   .overflow-x-auto::-webkit-scrollbar-track {
-    background: rgb(31, 41, 55); /* gray-800 */
+    background: var(--ghost-scrollbar-track);
     border-radius: 4px;
   }
 
   .overflow-y-auto::-webkit-scrollbar-thumb,
   .overflow-x-auto::-webkit-scrollbar-thumb {
-    background: rgb(55, 65, 81); /* gray-700 */
+    background: var(--ghost-scrollbar-thumb);
     border-radius: 4px;
   }
 
   .overflow-y-auto::-webkit-scrollbar-thumb:hover,
   .overflow-x-auto::-webkit-scrollbar-thumb:hover {
-    background: rgb(75, 85, 99); /* gray-600 */
+    background: var(--ghost-scrollbar-thumb-hover);
   }
 }

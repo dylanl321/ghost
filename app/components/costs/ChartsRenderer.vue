@@ -2773,22 +2773,6 @@ const getChartOptions = (chart: ChartDefinition) => {
                     barWidth: '60%',
                     z: 2
                 })
-
-                // Add trend line for next year forecasts
-                series.push({
-                    name: 'AWS Projection Trend',
-                    type: 'line',
-                    data: yearData.series[0].data,
-                    smooth: true,
-                    lineStyle: {
-                        color: '#059669',
-                        width: 2,
-                        type: 'dashed'
-                    },
-                    symbol: 'circle',
-                    symbolSize: 6,
-                    z: 3
-                })
             } else {
                 // Current year: stacked bars for actual + forecast
                 // Actual spend series (blue bars for past + current month)
@@ -2831,75 +2815,49 @@ const getChartOptions = (chart: ChartDefinition) => {
                     barWidth: '60%',
                     z: 2
                 })
-
-                // Add trend lines overlaying the bars
-                const actualLineData = yearData.series[0].data.map((v: number | null) => v)
-                const forecastLineData = yearData.series[1].data.map((v: number | null) => v)
-
-                // Actual trend line
-                series.push({
-                    name: 'Actual Trend',
-                    type: 'line',
-                    data: actualLineData,
-                    smooth: true,
-                    lineStyle: {
-                        color: '#1e40af',
-                        width: 2
-                    },
-                    symbol: 'circle',
-                    symbolSize: 6,
-                    z: 3
-                })
-
-                // AWS Projection trend line
-                series.push({
-                    name: 'AWS Projection Trend',
-                    type: 'line',
-                    data: forecastLineData,
-                    smooth: true,
-                    lineStyle: {
-                        color: '#059669',
-                        width: 2,
-                        type: 'dashed'
-                    },
-                    symbol: 'circle',
-                    symbolSize: 6,
-                    z: 3
-                })
             }
 
-            // Add GDMS Budget line if budget data is available
-            if (yearData.budget && yearData.budget.monthly > 0) {
-                const monthlyBudget = yearData.budget.monthly
-                // Create array with monthly budget for all 12 months
-                const budgetLineData = Array(12).fill(monthlyBudget)
+            // Add Budget line if budget data is available
+            // Uses per-month PEP data if available (varying line), otherwise flat estimatedMonthlyCharge
+            if (yearData.budget && yearData.budget.annual > 0) {
+                const isPepData = yearData.budget.isPepData
+                const budgetLineData = yearData.budget.monthlyArray || Array(12).fill(yearData.budget.monthly)
+
+                // Use different styling based on data source:
+                // - PEP Budget: Purple (more accurate per-month data)
+                // - GDMS Forecasted Costs: Orange (legacy flat estimate)
+                const budgetLineName = isPepData ? 'PEP Budget' : 'GDMS Forecasted Costs'
+                const budgetLineColor = isPepData ? 'rgba(168, 85, 247, 0.7)' : 'rgba(245, 158, 11, 0.6)'
+                const budgetLineColorSolid = isPepData ? '#a855f7' : '#f59e0b'
 
                 series.push({
-                    name: 'GDMS Forecasted Costs',
+                    name: budgetLineName,
                     type: 'line',
                     data: budgetLineData,
                     lineStyle: {
-                        color: 'rgba(245, 158, 11, 0.6)', // Orange with 60% opacity for discretion
+                        color: budgetLineColor,
                         width: 2,
                         type: 'dashed'
                     },
                     symbol: 'circle',
                     symbolSize: 4,
                     itemStyle: {
-                        color: 'rgba(245, 158, 11, 0.8)'
+                        color: budgetLineColorSolid
                     },
                     z: 4,
                     emphasis: {
                         lineStyle: {
-                            color: '#f59e0b',
+                            color: budgetLineColorSolid,
                             width: 3
                         }
                     }
                 })
 
-                console.log('[Chart Render] Added GDMS Budget line:', {
-                    monthlyBudget,
-                    annualBudget: yearData.budget.annual
+                console.log('[Chart Render] Added Budget line:', {
+                    isPepData,
+                    lineName: budgetLineName,
+                    annualBudget: yearData.budget.annual,
+                    monthlyValues: budgetLineData.slice(0, 3).map((v: number, i: number) => `${['Jan', 'Feb', 'Mar'][i]}: $${v.toFixed(0)}`)
                 })
             }
 
@@ -2915,7 +2873,8 @@ const getChartOptions = (chart: ChartDefinition) => {
             if (yearData.budget && yearData.budget.annual > 0) {
                 const annualBudget = formatCurrency(yearData.budget.annual, false)
                 const percentOfBudget = ((yearTotal / yearData.budget.annual) * 100).toFixed(0)
-                titleText += ` | GDMS Forecast: ${annualBudget} (${percentOfBudget}%)`
+                const budgetLabel = yearData.budget.isPepData ? 'PEP Budget' : 'GDMS Forecast'
+                titleText += ` | ${budgetLabel}: ${annualBudget} (${percentOfBudget}%)`
             }
 
             // Add note for next year if only partial data
@@ -2995,10 +2954,17 @@ const getChartOptions = (chart: ChartDefinition) => {
                             }
                         }
 
-                        // Show GDMS Budget line for all months (shown separately for clarity)
-                        if (yearData.budget && yearData.budget.monthly > 0) {
+                        // Show Budget line for all months (shown separately for clarity)
+                        // Uses per-month value when PEP data is available
+                        if (yearData.budget && yearData.budget.annual > 0) {
+                            const isPepData = yearData.budget.isPepData
+                            const budgetLabel = isPepData ? 'PEP Budget' : 'GDMS Forecasted Costs'
+                            const budgetColor = isPepData ? '#a855f7' : '#f59e0b'
+                            // Get the specific month's budget value from the array
+                            const monthBudgetValue = yearData.budget.monthlyArray?.[monthIndex] ?? yearData.budget.monthly
+
                             result += `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">`
-                            result += `<span style="color: #f59e0b; font-weight: 500;">⚊ GDMS Forecasted Costs: ${formatCurrency(yearData.budget.monthly)}/month</span>`
+                            result += `<span style="color: ${budgetColor}; font-weight: 500;">⚊ ${budgetLabel}: ${formatCurrency(monthBudgetValue)}/month</span>`
                             result += `</div>`
                         }
 
@@ -3016,15 +2982,12 @@ const getChartOptions = (chart: ChartDefinition) => {
                     data: isNextYear
                         ? [
                             'AWS Projection',
-                            'AWS Projection Trend',
-                            ...(yearData.budget && yearData.budget.monthly > 0 ? ['GDMS Forecasted Costs'] : [])
+                            ...(yearData.budget && yearData.budget.annual > 0 ? [yearData.budget.isPepData ? 'PEP Budget' : 'GDMS Forecasted Costs'] : [])
                         ]
                         : [
                             'Actual',
                             'AWS Projection',
-                            'Actual Trend',
-                            'AWS Projection Trend',
-                            ...(yearData.budget && yearData.budget.monthly > 0 ? ['GDMS Forecasted Costs'] : []),
+                            ...(yearData.budget && yearData.budget.annual > 0 ? [yearData.budget.isPepData ? 'PEP Budget' : 'GDMS Forecasted Costs'] : []),
                             ...(hasConfidenceBands ? ['80% Confidence Band'] : [])
                         ],
                     textStyle: { color: '#9ca3af', fontSize: 11 },

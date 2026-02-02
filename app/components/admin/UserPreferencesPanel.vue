@@ -35,7 +35,7 @@
     </div>
 
     <!-- Stats Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
       <UCard>
         <div class="flex items-center gap-3">
           <div class="p-2 bg-blue-500/10 rounded-lg">
@@ -83,7 +83,39 @@
           </div>
         </div>
       </UCard>
+
+      <UCard>
+        <div class="flex items-center gap-3">
+          <div class="p-2 bg-cyan-500/10 rounded-lg">
+            <Icon name="i-heroicons-clock" class="w-5 h-5 text-cyan-500" />
+          </div>
+          <div>
+            <p class="text-xs text-gray-600 dark:text-gray-400">Avg. session ({{ activityPeriod }})</p>
+            <p class="text-2xl font-bold text-gray-900 dark:text-white">
+              {{ activityMetricsLoading ? '…' : formatSessionDuration(globalAvgSessionMs) }}
+            </p>
+          </div>
+        </div>
+      </UCard>
+
+      <UCard>
+        <div class="flex items-center gap-3">
+          <div class="p-2 bg-amber-500/10 rounded-lg">
+            <Icon name="i-heroicons-map" class="w-5 h-5 text-amber-500" />
+          </div>
+          <div>
+            <p class="text-xs text-gray-600 dark:text-gray-400">Most active pages</p>
+            <p class="text-sm font-semibold text-gray-900 dark:text-white truncate max-w-[140px]" :title="globalTopPagesLabel">
+              {{ activityMetricsLoading ? '…' : globalTopPagesLabel || '—' }}
+            </p>
+          </div>
+        </div>
+      </UCard>
     </div>
+
+    <p v-if="activityMetricsError" class="text-sm text-amber-600 dark:text-amber-400 mb-4">
+      {{ activityMetricsError }}
+    </p>
 
     <!-- Search and Filters -->
     <UCard class="mb-6">
@@ -115,6 +147,16 @@
               v-model="sortBy"
               :options="sortOptions"
               size="lg"
+            />
+          </div>
+
+          <!-- Activity period -->
+          <div class="w-full sm:w-40">
+            <USelect
+              v-model="activityPeriod"
+              :options="[{ label: 'Last 7 days', value: '7d' }, { label: 'Last 30 days', value: '30d' }]"
+              size="lg"
+              @update:model-value="loadActivityMetrics"
             />
           </div>
         </div>
@@ -194,6 +236,8 @@
               <th class="pb-3 pr-4 font-medium text-gray-700 dark:text-gray-300">User</th>
               <th class="pb-3 pr-4 font-medium text-gray-700 dark:text-gray-300">Timezone</th>
               <th class="pb-3 pr-4 font-medium text-gray-700 dark:text-gray-300">Favorites</th>
+              <th class="pb-3 pr-4 font-medium text-gray-700 dark:text-gray-300">Avg. session</th>
+              <th class="pb-3 pr-4 font-medium text-gray-700 dark:text-gray-300">Most active page</th>
               <th class="pb-3 pr-4 font-medium text-gray-700 dark:text-gray-300">Last Login</th>
               <th class="pb-3 pr-4 font-medium text-gray-700 dark:text-gray-300">Created</th>
               <th class="pb-3 font-medium text-gray-700 dark:text-gray-300">Actions</th>
@@ -221,6 +265,12 @@
                     {{ getFavoriteCount(prefs) }}
                   </span>
                 </div>
+              </td>
+              <td class="py-3 pr-4 text-gray-600 dark:text-gray-400 text-xs">
+                {{ activityMetricsLoading ? '…' : formatSessionDuration(getUserAvgSessionMs(prefs.userId)) }}
+              </td>
+              <td class="py-3 pr-4 text-gray-600 dark:text-gray-400 text-xs max-w-[120px] truncate" :title="getUserTopPage(prefs.userId)">
+                {{ activityMetricsLoading ? '…' : getUserTopPage(prefs.userId) || '—' }}
               </td>
               <td class="py-3 pr-4 text-gray-600 dark:text-gray-400 text-xs">
                 {{ prefs.lastLoginAt ? formatDate(prefs.lastLoginAt) : 'Never' }}
@@ -349,6 +399,40 @@
                 <span class="text-sm text-gray-600 dark:text-gray-400">Last Updated</span>
                 <span class="text-sm text-gray-900 dark:text-white">{{ formatDate(viewingPrefs.updatedAt) }}</span>
               </div>
+            </div>
+          </div>
+
+          <!-- Activity metrics (last N days) -->
+          <div>
+            <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Activity ({{ activityPeriod === '7d' ? 'last 7 days' : 'last 30 days' }})</h4>
+            <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 space-y-3">
+              <div v-if="activityMetricsLoading" class="text-sm text-gray-500">Loading…</div>
+              <template v-else-if="viewingUserActivity">
+                <div class="flex justify-between items-center">
+                  <span class="text-sm text-gray-600 dark:text-gray-400">Avg. session length</span>
+                  <span class="text-sm text-gray-900 dark:text-white font-medium">{{ formatSessionDuration(viewingUserActivity.avgSessionLengthMs) }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-sm text-gray-600 dark:text-gray-400">Sessions</span>
+                  <span class="text-sm text-gray-900 dark:text-white font-medium">{{ viewingUserActivity.sessionCount }}</span>
+                </div>
+                <div v-if="viewingUserActivity.topPages.length">
+                  <span class="text-sm text-gray-600 dark:text-gray-400 block mb-2">Most active pages</span>
+                  <div class="flex flex-wrap gap-1">
+                    <UBadge
+                      v-for="p in viewingUserActivity.topPages.slice(0, 5)"
+                      :key="p.path"
+                      color="gray"
+                      variant="soft"
+                      size="xs"
+                    >
+                      {{ p.path }} ({{ p.count }})
+                    </UBadge>
+                  </div>
+                </div>
+                <div v-else class="text-sm text-gray-500 italic">No navigation data in this period</div>
+              </template>
+              <div v-else class="text-sm text-gray-500 italic">No activity in this period</div>
             </div>
           </div>
 
@@ -542,6 +626,15 @@ const searchQuery = ref('')
 const timezoneFilter = ref('')
 const sortBy = ref('lastLogin')
 
+// Activity metrics (admin)
+const activityPeriod = ref<'7d' | '30d'>('7d')
+const activityMetrics = ref<{
+  byUser: Array<{ userId: string; avgSessionLengthMs: number; sessionCount: number; topPages: Array<{ path: string; count: number }> }>
+  global: { avgSessionLengthMs: number; totalSessions: number; topPages: Array<{ path: string; count: number }> }
+} | null>(null)
+const activityMetricsLoading = ref(false)
+const activityMetricsError = ref<string | null>(null)
+
 // Computed properties for stats
 const activeToday = computed(() => {
   const today = new Date()
@@ -562,6 +655,18 @@ const usersWithFavorites = computed(() => {
 const uniqueTimezones = computed(() => {
   const timezones = new Set(allPreferences.value.map(p => p.timezone))
   return timezones.size
+})
+
+const globalAvgSessionMs = computed(() => activityMetrics.value?.global?.avgSessionLengthMs ?? 0)
+const globalTopPagesLabel = computed(() => {
+  const top = activityMetrics.value?.global?.topPages?.slice(0, 3)
+  if (!top?.length) return ''
+  return top.map(p => p.path).join(', ')
+})
+
+const viewingUserActivity = computed(() => {
+  if (!viewingPrefs.value || !activityMetrics.value) return null
+  return activityMetrics.value.byUser.find(u => u.userId === viewingPrefs.value!.userId) ?? null
 })
 
 // Timezone options for filter
@@ -883,11 +988,13 @@ function formatDate(dateStr: string): string {
 // Export to CSV
 function exportToCSV() {
   try {
-    const headers = ['User ID', 'Timezone', 'Favorite Count', 'Last Login', 'Created At', 'Updated At', 'Custom Preferences']
+    const headers = ['User ID', 'Timezone', 'Favorite Count', `Avg. Session (${activityPeriod.value})`, 'Most Active Page', 'Last Login', 'Created At', 'Updated At', 'Custom Preferences']
     const rows = filteredPreferences.value.map(prefs => [
       prefs.userId,
       prefs.timezone,
       getFavoriteCount(prefs).toString(),
+      formatSessionDuration(getUserAvgSessionMs(prefs.userId)),
+      getUserTopPage(prefs.userId) || '',
       prefs.lastLoginAt || 'Never',
       prefs.createdAt,
       prefs.updatedAt,
@@ -925,8 +1032,59 @@ function exportToCSV() {
   }
 }
 
+// Activity metrics functions
+async function loadActivityMetrics() {
+  activityMetricsLoading.value = true
+  activityMetricsError.value = null
+  try {
+    const res = await $fetch<{
+      success: boolean
+      data: {
+        byUser: Array<{ userId: string; avgSessionLengthMs: number; sessionCount: number; topPages: Array<{ path: string; count: number }> }>
+        global: { avgSessionLengthMs: number; totalSessions: number; topPages: Array<{ path: string; count: number }> }
+      }
+    }>('/api/admin/user-activity-metrics', { query: { period: activityPeriod.value } })
+    if (res.success && res.data) {
+      activityMetrics.value = {
+        byUser: res.data.byUser ?? [],
+        global: res.data.global ?? { avgSessionLengthMs: 0, totalSessions: 0, topPages: [] }
+      }
+    }
+  } catch {
+    activityMetrics.value = null
+    activityMetricsError.value = 'Activity metrics unavailable'
+  } finally {
+    activityMetricsLoading.value = false
+  }
+}
+
+function formatSessionDuration(ms: number): string {
+  if (ms <= 0 || !Number.isFinite(ms)) return '—'
+  const sec = Math.round(ms / 1000)
+  if (sec < 60) return `${sec}s`
+  const min = Math.floor(sec / 60)
+  const s = sec % 60
+  if (min < 60) return s ? `${min}m ${s}s` : `${min}m`
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  return m ? `${h}h ${m}m` : `${h}h`
+}
+
+function getUserAvgSessionMs(userId: string): number {
+  if (!activityMetrics.value) return 0
+  const user = activityMetrics.value.byUser.find(u => u.userId === userId)
+  return user?.avgSessionLengthMs ?? 0
+}
+
+function getUserTopPage(userId: string): string {
+  if (!activityMetrics.value) return ''
+  const user = activityMetrics.value.byUser.find(u => u.userId === userId)
+  return user?.topPages?.[0]?.path ?? ''
+}
+
 // Load on mount
 onMounted(() => {
   loadPreferences()
+  loadActivityMetrics()
 })
 </script>

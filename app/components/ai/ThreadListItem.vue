@@ -89,7 +89,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ChatThreadSummary } from '~/shared/types/chat-threads'
+import type { ChatThreadSummary } from '#shared/types/chat-threads'
 import { useBackgroundPolling } from '~/composables/useBackgroundPolling'
 
 interface Props {

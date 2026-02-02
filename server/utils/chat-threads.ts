@@ -300,6 +300,8 @@ export async function updateThread(
     description?: string
     isPinned?: boolean
     isArchived?: boolean
+    shortCode?: string
+    shortUrl?: string
   }
 ): Promise<ChatThread | null> {
   // First, get the thread to validate ownership and get createdAt

@@ -360,7 +360,14 @@ resource "aws_ecs_task_definition" "main" {
           name      = "NUXT_OIDC_AUTH_SESSION_SECRET"
           valueFrom = "${local.secret_arn}:oidc_auth_session_secret::"
         },
-      ]
+      ],
+      healthCheck = {
+        command     = ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 60
+      }
     }
   ])
 }

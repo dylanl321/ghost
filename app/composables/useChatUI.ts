@@ -14,7 +14,7 @@
 import { ref, computed, nextTick, readonly, onUnmounted, reactive } from 'vue'
 import { useChatThreadsStore } from '~/stores/useChatThreadsStore'
 import { useBackgroundPolling, type PollingCallbacks } from './useBackgroundPolling'
-import type { ChatMessage, StreamingChatMessage, SuggestedPrompt } from '~/shared/types/chat-threads'
+import type { ChatMessage, StreamingChatMessage, SuggestedPrompt } from '#shared/types/chat-threads'
 import type { AWSEnclaveData } from '#shared/types/accounts'
 
 // Chat state enum
@@ -414,6 +414,11 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   const showDisambiguation = ref(false)
   const disambiguationData = ref<DisambiguationData | null>(null)
   const pendingMessage = ref('')
+
+  function openDisambiguationModal() {
+    if (!disambiguationData.value) return
+    showDisambiguation.value = true
+  }
 
   // Scroll trigger for components to react to
   const scrollTrigger = ref(0)
@@ -1507,6 +1512,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     // Disambiguation
     showDisambiguation: readonly(showDisambiguation),
     disambiguationData: readonly(disambiguationData),
+    openDisambiguationModal,
     handleAccountSelected,
     cancelDisambiguation,
 

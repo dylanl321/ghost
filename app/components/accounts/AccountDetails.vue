@@ -2,7 +2,7 @@
   <UCard>
     <template #header>
       <div class="flex items-center justify-between">
-        <div class="text-lg font-semibold">Account Details</div>
+        <div class="text-lg font-semibold text-gray-900 dark:text-white">Account Details</div>
 
         <div class="flex items-center gap-2">
           <!-- Email Account Button -->
@@ -39,11 +39,11 @@
       <template #general>
         <div class="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4 pt-4">
           <!-- Project Details -->
-          <UCard class="bg-gray-800 md:row-span-2">
+          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 md:row-span-2">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-briefcase" class="text-blue-500 w-5 h-5" />
-                <h4 class="font-semibold">Project Details</h4>
+                <h4 class="font-semibold text-gray-900 dark:text-white">Project Details</h4>
               </div>
             </template>
 
@@ -60,11 +60,11 @@
           </UCard>
 
           <!-- Platform Info -->
-          <UCard class="bg-gray-800">
+          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
             <template #header>
               <div class="flex items-center gap-2">
-                <UIcon name="i-heroicons-shield-check" class="text-blue-200 w-5 h-5" />
-                <h4 class="font-semibold">Platform Info</h4>
+                <UIcon name="i-heroicons-shield-check" class="text-blue-500 w-5 h-5" />
+                <h4 class="font-semibold text-gray-900 dark:text-white">Platform Info</h4>
               </div>
             </template>
 
@@ -76,27 +76,27 @@
           </UCard>
 
           <!-- Cost Details -->
-          <UCard class="bg-gray-800">
+          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-currency-dollar" class="text-green-500 w-5 h-5" />
-                <h4 class="font-semibold">Cost Details</h4>
+                <h4 class="font-semibold text-gray-900 dark:text-white">Cost Details</h4>
               </div>
             </template>
 
             <div class="space-y-2 text-sm">
-              <AccountDetailsRow label="Budget" :value="formatCurrency(parseInt(enclave?.estimatedMonthlyCharge || '0'), 0)" />
+              <AccountDetailsRow label="Budget" :value="formatCurrency(getMonthlyBudget(enclave), 0)" />
               <AccountDetailsRow label="Current Spend (Proforma)" :value="formatCurrency(props.currentSpend, 0)" />
               <AccountDetailsRow label="Utilization" :value="utilization + '%'" />
             </div>
           </UCard>
 
           <!-- Network Config -->
-          <UCard class="bg-gray-800">
+          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-server" class="text-purple-500 w-5 h-5" />
-                <h4 class="font-semibold">Network Configuration</h4>
+                <h4 class="font-semibold text-gray-900 dark:text-white">Network Configuration</h4>
               </div>
             </template>
 
@@ -108,21 +108,21 @@
           </UCard>
 
           <!-- Account Admins -->
-          <UCard class="bg-gray-800">
+          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-user-group" class="text-orange-500 w-5 h-5" />
-                <h4 class="font-semibold">Account Admins</h4>
+                <h4 class="font-semibold text-gray-900 dark:text-white">Account Admins</h4>
               </div>
             </template>
 
             <div class="space-y-3 text-sm">
               <!-- Primary Admin -->
               <div v-if="enclave?.primaryAccountAdminUsername" class="flex items-center gap-2 gap-y-2 flex-wrap">
-                <span class="text-gray-400 text-xs min-w-[60px]">Primary:</span>
+                <span class="text-gray-600 dark:text-gray-400 text-xs min-w-[60px]">Primary:</span>
                 <NuxtLink
                   :to="`/account/user/${convertToUsernameSlug(enclave.primaryAccountAdminUsername)}`"
-                  class="flex items-center gap-2 hover:bg-gray-700 rounded"
+                  class="flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded"
                 >
                   <UserAvatar
                     :user-principal-name="`${enclave.primaryAccountAdminUsername}@gd-ms.com`"
@@ -130,16 +130,16 @@
                     size="xs"
                     class="flex-shrink-0"
                   />
-                  <span class="text-white truncate">{{ formatUsername(enclave.primaryAccountAdminUsername) }}</span>
+                  <span class="text-gray-900 dark:text-white truncate">{{ formatUsername(enclave.primaryAccountAdminUsername) }}</span>
                 </NuxtLink>
               </div>
 
               <!-- Delegate Admin -->
               <div v-if="enclave?.delegateAccountAdminUsername" class="flex items-center gap-2 gap-y-2 flex-wrap">
-                <span class="text-gray-400 text-xs min-w-[60px]">Delegate:</span>
+                <span class="text-gray-600 dark:text-gray-400 text-xs min-w-[60px]">Delegate:</span>
                 <NuxtLink
                   :to="`/account/user/${convertToUsernameSlug(enclave.delegateAccountAdminUsername)}`"
-                  class="flex items-center gap-2 hover:bg-gray-700 rounded"
+                  class="flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded"
                 >
                   <UserAvatar
                     :user-principal-name="`${enclave.delegateAccountAdminUsername}@gd-ms.com`"
@@ -147,16 +147,16 @@
                     size="xs"
                     class="flex-shrink-0"
                   />
-                  <span class="text-white truncate">{{ formatUsername(enclave.delegateAccountAdminUsername) }}</span>
+                  <span class="text-gray-900 dark:text-white truncate">{{ formatUsername(enclave.delegateAccountAdminUsername) }}</span>
                 </NuxtLink>
               </div>
 
               <!-- Cost Manager -->
               <div v-if="enclave?.costManagerUsername" class="flex items-center gap-2 gap-y-2 flex-wrap">
-                <span class="text-gray-400 text-xs min-w-[60px]">Cost Mgr:</span>
+                <span class="text-gray-600 dark:text-gray-400 text-xs min-w-[60px]">Cost Mgr:</span>
                 <NuxtLink
                   :to="`/account/user/${convertToUsernameSlug(enclave.costManagerUsername)}`"
-                  class="flex items-center gap-2 hover:bg-gray-700 rounded"
+                  class="flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded"
                 >
                   <UserAvatar
                     :user-principal-name="`${enclave.costManagerUsername}@gd-ms.com`"
@@ -164,7 +164,7 @@
                     size="xs"
                     class="flex-shrink-0"
                   />
-                  <span class="text-white truncate">{{ formatUsername(enclave.costManagerUsername) }}</span>
+                  <span class="text-gray-900 dark:text-white truncate">{{ formatUsername(enclave.costManagerUsername) }}</span>
                 </NuxtLink>
               </div>
             </div>
@@ -176,11 +176,11 @@
       <template #it-pep-data>
         <div class="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4 pt-4">
           <!-- Environment Info -->
-          <UCard class="bg-gray-800">
+          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-server-stack" class="text-blue-500 w-5 h-5" />
-                <h4 class="font-semibold">Environment Info</h4>
+                <h4 class="font-semibold text-gray-900 dark:text-white">Environment Info</h4>
               </div>
             </template>
 
@@ -195,11 +195,11 @@
           </UCard>
 
           <!-- Location -->
-          <UCard class="bg-gray-800">
+          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-map-pin" class="text-red-500 w-5 h-5" />
-                <h4 class="font-semibold">Location</h4>
+                <h4 class="font-semibold text-gray-900 dark:text-white">Location</h4>
               </div>
             </template>
 
@@ -211,11 +211,11 @@
           </UCard>
 
           <!-- Contract Details -->
-          <UCard class="bg-gray-800">
+          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-document-text" class="text-yellow-500 w-5 h-5" />
-                <h4 class="font-semibold">Contract Details</h4>
+                <h4 class="font-semibold text-gray-900 dark:text-white">Contract Details</h4>
               </div>
             </template>
 
@@ -229,11 +229,11 @@
           </UCard>
 
           <!-- Business Info -->
-          <UCard class="bg-gray-800">
+          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-building-office-2" class="text-indigo-500 w-5 h-5" />
-                <h4 class="font-semibold">Business Info</h4>
+                <h4 class="font-semibold text-gray-900 dark:text-white">Business Info</h4>
               </div>
             </template>
 
@@ -248,11 +248,11 @@
           </UCard>
 
           <!-- Budget -->
-          <UCard class="bg-gray-800 md:row-span-2">
+          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 md:row-span-2">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-banknotes" class="text-green-500 w-5 h-5" />
-                <h4 class="font-semibold">Budget</h4>
+                <h4 class="font-semibold text-gray-900 dark:text-white">Budget</h4>
               </div>
             </template>
 
@@ -262,10 +262,10 @@
 
               <!-- Monthly Budget Breakdown -->
               <div v-if="monthlyBudget && Object.keys(monthlyBudget).length > 0">
-                <span class="text-gray-400">Monthly Breakdown:</span>
+                <span class="text-gray-600 dark:text-gray-400">Monthly Breakdown:</span>
                 <div class="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
                   <div v-for="(amount, month) in monthlyBudget" :key="month" class="flex justify-between">
-                    <span class="text-gray-400">{{ month }}:</span>
+                    <span class="text-gray-600 dark:text-gray-400">{{ month }}:</span>
                     <span class="font-mono">{{ formatCurrency(amount, 0) }}</span>
                   </div>
                 </div>
@@ -277,22 +277,22 @@
           </UCard>
 
           <!-- Personnel -->
-          <UCard class="bg-gray-800 md:row-span-2">
+          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 md:row-span-2">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-users" class="text-orange-500 w-5 h-5" />
-                <h4 class="font-semibold">Personnel</h4>
+                <h4 class="font-semibold text-gray-900 dark:text-white">Personnel</h4>
               </div>
             </template>
 
             <div class="space-y-3 text-sm">
               <!-- LAA Manager -->
               <div class="flex items-center gap-2 gap-y-2 flex-wrap">
-                <span class="text-gray-400 text-xs min-w-[100px]">LAA Manager:</span>
+                <span class="text-gray-600 dark:text-gray-400 text-xs min-w-[100px]">LAA Manager:</span>
                 <template v-if="enclave?.pepLAAManager">
                   <NuxtLink
                     :to="`/account/user/${convertToUsernameSlug(enclave.pepLAAManager)}`"
-                    class="flex items-center gap-2 hover:bg-gray-700 rounded"
+                    class="flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded"
                   >
                     <UserAvatar
                       :user-principal-name="`${enclave.pepLAAManager}@gd-ms.com`"
@@ -300,7 +300,7 @@
                       size="xs"
                       class="flex-shrink-0"
                     />
-                    <span class="text-white truncate">{{ enclave.pepLAAManagerName || formatUsername(enclave.pepLAAManager) }}</span>
+                    <span class="text-gray-900 dark:text-white truncate">{{ enclave.pepLAAManagerName || formatUsername(enclave.pepLAAManager) }}</span>
                   </NuxtLink>
                 </template>
                 <span v-else class="font-mono">-</span>
@@ -308,11 +308,11 @@
 
               <!-- PM Migration -->
               <div class="flex items-center gap-2 gap-y-2 flex-wrap">
-                <span class="text-gray-400 text-xs min-w-[100px]">PM Migration:</span>
+                <span class="text-gray-600 dark:text-gray-400 text-xs min-w-[100px]">PM Migration:</span>
                 <template v-if="enclave?.pepPMMigration">
                   <NuxtLink
                     :to="`/account/user/${convertToUsernameSlug(enclave.pepPMMigration)}`"
-                    class="flex items-center gap-2 hover:bg-gray-700 rounded"
+                    class="flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded"
                   >
                     <UserAvatar
                       :user-principal-name="`${enclave.pepPMMigration}@gd-ms.com`"
@@ -320,7 +320,7 @@
                       size="xs"
                       class="flex-shrink-0"
                     />
-                    <span class="text-white truncate">{{ enclave.pepPMMigrationName || formatUsername(enclave.pepPMMigration) }}</span>
+                    <span class="text-gray-900 dark:text-white truncate">{{ enclave.pepPMMigrationName || formatUsername(enclave.pepPMMigration) }}</span>
                   </NuxtLink>
                 </template>
                 <span v-else class="font-mono">-</span>
@@ -350,11 +350,11 @@
           </UCard>
 
           <!-- Project -->
-          <UCard class="bg-gray-800">
+          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-folder" class="text-cyan-500 w-5 h-5" />
-                <h4 class="font-semibold">Project</h4>
+                <h4 class="font-semibold text-gray-900 dark:text-white">Project</h4>
               </div>
             </template>
 
@@ -367,11 +367,11 @@
           </UCard>
 
           <!-- Cloud Record -->
-          <UCard class="bg-gray-800">
+          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-cloud" class="text-sky-500 w-5 h-5" />
-                <h4 class="font-semibold">Cloud Record</h4>
+                <h4 class="font-semibold text-gray-900 dark:text-white">Cloud Record</h4>
               </div>
             </template>
 
@@ -389,6 +389,7 @@
 <script setup lang="ts">
 import { convertToUsernameSlug, formatUsername } from '~/utils/userUtils'
 import type { GraphUser } from '~/composables/useGroupMembers'
+import { getMonthlyBudget } from '#shared/utils/budget-utils'
 
 const enclaveStore = useEnclaveStore()
 

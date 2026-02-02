@@ -18,7 +18,7 @@
       <div class="flex gap-2 items-center justify-between">
         <div class="flex gap-2 items-center">
           <div :class="`w-3 h-3 rounded-full ${accountStatus !== 'Decommissioned' ? 'bg-green-500' : 'bg-red-500'}`" />
-          <h1 class="font-semibold text-2xl">{{ accountName ?? "Loading..." }}</h1>
+          <h1 class="font-semibold text-2xl text-gray-900 dark:text-white">{{ accountName ?? "Loading..." }}</h1>
         </div>
         <div class="flex gap-2">
           <!-- Favorite Button -->
@@ -112,11 +112,11 @@
               :loading="loading"
               :class="{ 'opacity-50 pointer-events-none': isAccountInactive }"
             />
-            <div v-if="isAccountInactive" class="absolute inset-0 flex items-center justify-center bg-gray-900/80 rounded-lg">
+            <div v-if="isAccountInactive" class="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-gray-900/80 rounded-lg">
               <div class="text-center p-4">
                 <UIcon name="i-heroicons-exclamation-triangle" class="w-12 h-12 text-yellow-400 mx-auto mb-2" />
-                <p class="text-white font-semibold mb-1">Account {{ accountStatus }}</p>
-                <p class="text-sm text-gray-400">Cost data is not available for inactive accounts</p>
+                <p class="text-gray-900 dark:text-white font-semibold mb-1">Account {{ accountStatus }}</p>
+                <p class="text-sm text-gray-600 dark:text-gray-400">Cost data is not available for inactive accounts</p>
               </div>
             </div>
           </div>
@@ -135,11 +135,11 @@
               :loading="loading"
               :class="{ 'opacity-50 pointer-events-none': isAccountInactive }"
             />
-            <div v-if="isAccountInactive" class="absolute inset-0 flex items-center justify-center bg-gray-900/80 rounded-lg">
+            <div v-if="isAccountInactive" class="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-gray-900/80 rounded-lg">
               <div class="text-center p-4">
                 <UIcon name="i-heroicons-exclamation-triangle" class="w-12 h-12 text-yellow-400 mx-auto mb-2" />
-                <p class="text-white font-semibold mb-1">Account {{ accountStatus }}</p>
-                <p class="text-sm text-gray-400">Cost trends are not available for inactive accounts</p>
+                <p class="text-gray-900 dark:text-white font-semibold mb-1">Account {{ accountStatus }}</p>
+                <p class="text-sm text-gray-600 dark:text-gray-400">Cost trends are not available for inactive accounts</p>
               </div>
             </div>
           </div>
@@ -180,8 +180,8 @@
         <div v-else class="flex items-center justify-center py-16">
           <div class="text-center">
             <UIcon name="i-heroicons-server-stack" class="w-16 h-16 text-gray-500 mx-auto mb-4 opacity-50" />
-            <h3 class="text-lg font-semibold text-white mb-2">Resources Unavailable</h3>
-            <p class="text-gray-400">This tab is disabled because the account is {{ accountStatus?.toLowerCase() }}.</p>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Resources Unavailable</h3>
+            <p class="text-gray-600 dark:text-gray-400">This tab is disabled because the account is {{ accountStatus?.toLowerCase() }}.</p>
           </div>
         </div>
       </template>
@@ -201,8 +201,8 @@
         <div v-else class="flex items-center justify-center py-16 mt-4">
           <div class="text-center">
             <UIcon name="i-heroicons-shield-check" class="w-16 h-16 text-gray-500 mx-auto mb-4 opacity-50" />
-            <h3 class="text-lg font-semibold text-white mb-2">Policies Unavailable</h3>
-            <p class="text-gray-400">This tab is disabled because the account is {{ accountStatus?.toLowerCase() }}.</p>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Policies Unavailable</h3>
+            <p class="text-gray-600 dark:text-gray-400">This tab is disabled because the account is {{ accountStatus?.toLowerCase() }}.</p>
           </div>
         </div>
       </template>
@@ -235,6 +235,7 @@
 import type { GraphUser } from '~/composables/useGroupMembers'
 import { getIdcRoleLink, getIdcLoginLink, getAdminSupportRoles, type RoleLink } from '~/utils/awsConsoleLinks'
 import { startAccountTour } from '~/components/tutorial/AccountTour'
+import { getMonthlyBudget } from '#shared/utils/budget-utils'
 
 const route = useRoute()
 const enclaveStore = useEnclaveStore()
@@ -443,8 +444,7 @@ const currentSpend = computed(() => costResponse.value?.data.proformaMonthToDate
 
 const budget = computed(() => {
   const enclave = enclaveStore.enclaves[accountId.value]
-  if (!enclave?.estimatedMonthlyCharge) return 0
-  return parseFloat(enclave.estimatedMonthlyCharge.toString().replace(/[^0-9.-]/g, '') || '0')
+  return getMonthlyBudget(enclave)
 })
 
 const billableTimeSeries = computed(() => {

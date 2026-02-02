@@ -15,6 +15,7 @@ import { getAllAccountsUnified, type UnifiedAccount } from '../../../utils/accou
 import { getCostAndUsage, getCostForecast } from '../../../utils/cost-explorer'
 import { requireAdmin } from '../../../utils/user-roles'
 import type { BudgetAlert, BudgetAlertLevel } from '@/shared/types/budget-alerts'
+import { getMonthlyBudget } from '../../../../shared/utils/budget-utils'
 
 /**
  * Recent alert summary for tooltip display
@@ -109,11 +110,9 @@ export default defineEventHandler(async (event) => {
       const latestAlert = accountAlerts[0] // For alert-specific data only
 
       // Get budget from account metadata first, fall back to alert data
-      // estimatedMonthlyCharge is the configured budget in account metadata
-      const budgetFromMetadata = account.estimatedMonthlyCharge
-        ? parseFloat(account.estimatedMonthlyCharge)
-        : null
-      const budget = budgetFromMetadata || latestAlert?.budget || null
+      // PEP budget is preferred, with fallback to estimatedMonthlyCharge
+      const budgetFromAccount = getMonthlyBudget(account)
+      const budget = budgetFromAccount > 0 ? budgetFromAccount : (latestAlert?.budget || null)
 
       // Calculate forecast based on current spend and days remaining
       // This gives us a forecast for ALL accounts, not just ones with alerts

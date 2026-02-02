@@ -5,11 +5,18 @@
     </template>
 
     <CenteredLoadingSpinner v-if="props.loading" />
+    <div v-else-if="tableData.length === 0" class="py-12 text-center">
+      <UIcon name="i-heroicons-folder-open" class="w-12 h-12 mx-auto text-gray-400 mb-4" />
+      <h3 class="text-lg font-medium text-gray-900 dark:text-gray-300 mb-2">No Account Access</h3>
+      <p class="text-gray-600 dark:text-gray-400 text-sm max-w-md mx-auto">
+        You don't have access to any AWS accounts yet. Contact your administrator to request access.
+      </p>
+    </div>
     <div v-else class="overflow-y-auto">
-      <UTable :rows="tableData" :columns="columns" :ui="{ thead: 'bg-gray-800 text-xs' }">
+      <UTable :rows="tableData" :columns="columns" :ui="{ thead: 'bg-gray-100 dark:bg-gray-800 text-xs' }">
         <template #enclave-data="{ row }">
           <div>
-            <div class="text-white text-sm font-sm text-wrap">{{ row.projectName }}</div>
+            <div class="text-gray-900 dark:text-white text-sm font-sm text-wrap">{{ row.projectName }}</div>
             <div class="text-gray-400 text-xs flex flex-wrap">
               <UTooltip text="Commercial Account ID">
                 <span class="text-blue-300 mr-2">{{ row.standardId }}</span>
@@ -32,14 +39,14 @@
         <template #roles-data="{ row }">
           <div class="flex flex-wrap gap-2 font-light text-xs">
             <div v-for="role in visibleRoles(row)" :key="role"
-              class="px-2 py-1 bg-gray-700 text-white rounded flex items-center">
+              class="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded flex items-center">
               <span v-if="role.includes(COMM_IDENTIFIER)" class="inline-block w-2 h-2 rounded-full bg-blue-500 mr-1" />
               <span v-if="role.includes(GOV_IDENTIFIER)" class="inline-block w-2 h-2 rounded-full bg-orange-500 mr-1" />
               <span>{{ role.split(" |")[0] }}</span>
             </div>
 
             <span v-if="!isExpanded(row) && row.roles.length > 2"
-              class="px-2 py-1 bg-gray-700 text-white rounded cursor-pointer" title="See all roles"
+              class="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded cursor-pointer" title="See all roles"
               @click="setExpanded(row)">
               +{{ row.roles.length - 2 }}
             </span>

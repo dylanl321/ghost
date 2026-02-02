@@ -11,7 +11,7 @@
         @focus="onFocus"
       />
       <UTooltip text="Learn how to use Universal Search">
-        <NuxtLink to="/support/docs?topic=universal-search" class="text-gray-400 hover:text-gray-300">
+        <NuxtLink to="/support/docs?topic=universal-search" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
           <UIcon name="i-heroicons-question-mark-circle" class="w-4 h-4" />
         </NuxtLink>
       </UTooltip>
@@ -21,10 +21,10 @@
     <div
       v-if="(results.length || loading) && showResults"
       ref="dropdown"
-      class="absolute z-10 mt-1 w-full rounded-lg shadow-lg p-2 max-h-[25rem] overflow-y-auto border border-gray-800 bg-[#0e1625]"
+      class="absolute z-10 mt-1 w-full rounded-lg shadow-lg p-2 max-h-[25rem] overflow-y-auto border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0e1625]"
     >
       <!-- Loading indicator -->
-      <div v-if="loading" class="px-2 py-2 text-sm text-gray-400 flex items-center gap-2">
+      <div v-if="loading" class="px-2 py-2 text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
         <UIcon name="i-heroicons-arrow-path" class="animate-spin w-4 h-4" />
         Searching...
       </div>
@@ -34,7 +34,7 @@
         <div
           v-for="result in results"
           :key="result.key"
-          class="px-2 py-2 text-sm text-white cursor-pointer rounded border-b border-gray-800 hover:bg-gray-800 transition"
+          class="px-2 py-2 text-sm text-gray-900 dark:text-white cursor-pointer rounded border-b border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
           @click="selectResult(result)"
         >
           <div class="flex gap-2 items-center">
@@ -42,7 +42,7 @@
             <UIcon v-if="result.type === 'account'" name="i-heroicons-cloud" class="text-orange-500 w-5 h-5"/>
             <div>
               <div class="font-medium">{{ result.label }}</div>
-              <div class="text-xs text-gray-400">{{ result.subLabel }}</div>
+              <div class="text-xs text-gray-500 dark:text-gray-400">{{ result.subLabel }}</div>
             </div>
           </div>
         </div>

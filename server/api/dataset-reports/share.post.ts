@@ -10,6 +10,7 @@ import { uploadReportToS3 } from '../../utils/s3-reports-storage'
 import { generateDatasetReport } from '../../utils/dataset-report-generator'
 import { v4 as uuidv4 } from 'uuid'
 import { logger } from '../../utils/logger'
+import { requireUserSession } from '../../utils/entra/session'
 
 interface CreateDatasetShareRequest {
   reportName: string

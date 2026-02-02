@@ -3,12 +3,15 @@
  * Generates AWS dataset reports (Config, Security Hub, CloudTrail) for scheduled delivery
  */
 
+import type { H3Event } from 'h3'
 import type { DatasetReportConfig, DatasetReportData } from '../../shared/types/dataset-reports'
 import { getConfigResources, getConfigComplianceSummary, getConfigResourceTypeSummary } from './aws-config-data'
 import { getSecurityHubFindings } from './security-hub-data'
 import { getCloudTrailEvents } from './cloudtrail-data'
+import { getEntraUsers } from './entra-users-data'
 import { getAllAccountsUnified } from './accounts-consolidated'
 import { exportDatasetToPDF } from './pdf-export-dataset'
+import { generateXLSXDatasetReport as generateXLSX } from './dataset-xlsx-exporter'
 import { logger } from './logger'
 
 /**
@@ -16,7 +19,8 @@ import { logger } from './logger'
  * Returns report as Buffer for email attachment
  */
 export async function generateDatasetReport(
-  config: DatasetReportConfig
+  config: DatasetReportConfig,
+  event?: H3Event  // Optional to maintain backward compatibility
 ): Promise<{
   success: boolean
   buffer?: Buffer
@@ -33,7 +37,7 @@ export async function generateDatasetReport(
     })
 
     // Step 1: Fetch all required dataset data
-    const reportData = await buildDatasetReport(config)
+    const reportData = await buildDatasetReport(config, event)
 
     // Step 2: Generate AI insights if enabled
     if (config.enableAI) {
@@ -64,7 +68,10 @@ export async function generateDatasetReport(
 /**
  * Build complete dataset report data
  */
-async function buildDatasetReport(config: DatasetReportConfig): Promise<DatasetReportData> {
+async function buildDatasetReport(
+  config: DatasetReportConfig,
+  event?: H3Event
+): Promise<DatasetReportData> {
   const startTime = Date.now()
 
   logger.info('[Dataset Report] Building dataset report')
@@ -278,6 +285,70 @@ async function buildDatasetReport(config: DatasetReportConfig): Promise<DatasetR
     )
   }
 
+  // Entra ID Users
+  if (config.datasets.entraUsers?.enabled) {
+    if (!event) {
+      logger.warn('[Dataset Report] Entra Users requested but H3Event not available - skipping')
+    } else {
+      datasetPromises.push(
+        (async () => {
+          logger.info('[Dataset Report] Fetching Entra Users data')
+          const filters = config.datasets.entraUsers!.filters || {}
+
+          try {
+            const records = await getEntraUsers(event, targetAccountIds, filters)
+
+            // Build statistics from records
+            const usersByRole: Record<string, number> = {}
+            const usersByDepartment: Record<string, number> = {}
+            let activeUsers = 0
+
+            for (const record of records) {
+              // Count by role
+              usersByRole[record.role] = (usersByRole[record.role] || 0) + 1
+
+              // Count by department
+              if (record.department) {
+                usersByDepartment[record.department] = (usersByDepartment[record.department] || 0) + 1
+              }
+
+              // Count active users (signed in within 30 days)
+              if (record.lastSignIn) {
+                const lastSignInDate = new Date(record.lastSignIn)
+                const thirtyDaysAgo = new Date()
+                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+                if (lastSignInDate > thirtyDaysAgo) {
+                  activeUsers++
+                }
+              }
+            }
+
+            reportData.entraUsers = {
+              enabled: true,
+              totalUsers: records.length,
+              usersByRole,
+              usersByDepartment,
+              activeUsers,
+              records
+            }
+
+            logger.info('[Dataset Report] Entra Users data fetched', {
+              totalUsers: records.length,
+              uniqueRoles: Object.keys(usersByRole).length,
+              activeUsers
+            })
+          } catch (error: any) {
+            logger.error('[Dataset Report] Entra Users fetch failed', {
+              error: error.message,
+              devMode: error.data?.devMode
+            })
+            // Continue without Entra data - don't fail entire report
+          }
+        })()
+      )
+    }
+  }
+
   // Wait for all datasets to complete
   await Promise.all(datasetPromises)
 
@@ -429,6 +500,28 @@ async function generateCSVDatasetReport(
     csvRows.push('')
   }
 
+  // Entra Users
+  if (reportData.entraUsers?.enabled && reportData.entraUsers.records.length > 0) {
+    csvRows.push('=== Entra ID Users ===')
+    csvRows.push('Display Name,Email,Principal Name,Account,Role,Group Name,Department,Job Title,Last Sign-In,Manager')
+
+    for (const record of reportData.entraUsers.records) {
+      csvRows.push([
+        record.displayName,
+        record.email,
+        record.userPrincipalName,
+        record.accountName,
+        record.role,
+        record.groupName,
+        record.department || '',
+        record.jobTitle || '',
+        record.lastSignIn || '',
+        record.manager || ''
+      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+    }
+    csvRows.push('')
+  }
+
   const csvContent = csvRows.join('\n')
   const buffer = Buffer.from(csvContent, 'utf-8')
   const timestamp = new Date().toISOString().split('T')[0]
@@ -470,7 +563,7 @@ async function generateJSONDatasetReport(
 }
 
 /**
- * Generate XLSX dataset report
+ * Generate XLSX dataset report using the XLSX exporter utility
  */
 async function generateXLSXDatasetReport(
   reportData: DatasetReportData,
@@ -483,14 +576,24 @@ async function generateXLSXDatasetReport(
 }> {
   logger.info('[Dataset Report] Generating XLSX')
 
-  // For now, fall back to CSV format with proper extension
-  // TODO: Implement proper XLSX generation when excel library is integrated
-  logger.warn('[Dataset Report] XLSX format not yet implemented, falling back to CSV')
-  const csvResult = await generateCSVDatasetReport(reportData, config)
+  try {
+    // Use the XLSX exporter utility for actual .xlsx generation
+    const result = await generateXLSX(reportData, config)
 
-  // Keep CSV format but update filename extension to match what user requested
-  return {
-    ...csvResult,
-    filename: csvResult.filename.replace('.csv', '.csv') // Keep as CSV for now
+    if (!result.success || !result.buffer) {
+      throw new Error(result.error || 'XLSX generation failed')
+    }
+
+    logger.info('[Dataset Report] XLSX generated successfully')
+    return {
+      success: true,
+      buffer: result.buffer,
+      filename: result.filename!,
+      mimeType: result.mimeType!
+    }
+  } catch (error: any) {
+    logger.error('[Dataset Report] XLSX generation error:', error)
+    // Fail explicitly - no silent fallback to CSV
+    throw new Error(`Failed to generate XLSX: ${error.message}`)
   }
 }

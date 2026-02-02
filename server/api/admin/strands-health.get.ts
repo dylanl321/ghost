@@ -13,18 +13,29 @@ export default defineEventHandler(async (event) => {
   // Require admin access
   await requireAdmin(event)
 
-  const strandsUrl = 'http://internal-lz-mcp-servers-dev-alb-1428009891.us-gov-west-1.elb.amazonaws.com:80'
+  // Get Strands URL from runtime config (set via STRANDS_SERVER_URL env var)
+  const config = useRuntimeConfig()
+  const strandsUrl = config.strandsServerUrl
+
+  if (!strandsUrl) {
+    return {
+      success: false,
+      healthy: false,
+      error: 'STRANDS_SERVER_URL not configured',
+      results: null,
+      recommendations: ['Configure STRANDS_SERVER_URL environment variable to enable health checks']
+    }
+  }
 
   const results = {
     timestamp: new Date().toISOString(),
     strandsUrl,
     health: {
-      alb: { reachable: false, status: null, latency: null, error: null },
-      service: { reachable: false, status: null, latency: null, error: null }
+      alb: { reachable: false, status: null as number | null, latency: null as number | null, error: null as string | null }
     }
   }
 
-  // Test 1: Can we reach the ALB at all?
+  // Test: Can we reach the ALB? Use lightweight GET to avoid triggering AI processing
   try {
     const albStart = Date.now()
     const albResponse = await fetch(`${strandsUrl}/`, {
@@ -45,37 +56,11 @@ export default defineEventHandler(async (event) => {
     logger.error('[Strands Health] ALB check failed:', error)
   }
 
-  // Test 2: Can we reach the /query/stream endpoint?
-  try {
-    const serviceStart = Date.now()
-    const serviceResponse = await fetch(`${strandsUrl}/query/stream`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'text/event-stream'
-      },
-      body: JSON.stringify({
-        message: 'health check'
-      }),
-      signal: AbortSignal.timeout(10000) // 10 second timeout
-    })
-    results.health.service.latency = Date.now() - serviceStart
-    results.health.service.reachable = true
-    results.health.service.status = serviceResponse.status
-
-    if (serviceResponse.status === 503) {
-      results.health.service.error = 'Service unavailable - ECS tasks not running or failing'
-    } else if (serviceResponse.status === 200) {
-      results.health.service.error = null // Success
-    }
-  } catch (error: any) {
-    results.health.service.error = error.message || 'Failed to connect to service'
-    logger.error('[Strands Health] Service check failed:', error)
-  }
-
-  // Determine overall health
-  const isHealthy = results.health.service.reachable &&
-                   results.health.service.status === 200
+  // Determine overall health based on ALB reachability
+  // We no longer POST to /query/stream as that triggers actual AI processing
+  const isHealthy = results.health.alb.reachable &&
+                   results.health.alb.status !== 503 &&
+                   results.health.alb.status !== 504
 
   return {
     success: true,
@@ -89,41 +74,26 @@ function getRecommendations(results: any): string[] {
   const recommendations: string[] = []
 
   if (!results.health.alb.reachable) {
-    recommendations.push('⚠️ Cannot reach ALB - Check network connectivity and security groups')
-    recommendations.push('   - Verify GHOST can access internal-lz-mcp-servers-dev-alb')
-    recommendations.push('   - Check VPC peering or network routing')
+    recommendations.push('Cannot reach ALB - Check network connectivity and security groups')
+    recommendations.push('- Verify GHOST can access the Strands ALB')
+    recommendations.push('- Check VPC peering or network routing')
   }
 
   if (results.health.alb.status === 503) {
-    recommendations.push('⚠️ ALB has no healthy targets')
-    recommendations.push('   - Check ECS service: aws ecs describe-services --cluster lz-mcp-servers-dev --services lz-mcp-servers-dev')
-    recommendations.push('   - Check ECS tasks: aws ecs list-tasks --cluster lz-mcp-servers-dev')
-    recommendations.push('   - View CloudWatch logs for task failures')
+    recommendations.push('ALB has no healthy targets')
+    recommendations.push('- Check ECS service status')
+    recommendations.push('- Check ECS tasks are running')
+    recommendations.push('- View CloudWatch logs for task failures')
   }
 
   if (results.health.alb.status === 504) {
-    recommendations.push('⚠️ ALB gateway timeout - ECS tasks not responding')
-    recommendations.push('   - Check ECS task health checks')
-    recommendations.push('   - Review CloudWatch logs for application errors')
+    recommendations.push('ALB gateway timeout - ECS tasks not responding')
+    recommendations.push('- Check ECS task health checks')
+    recommendations.push('- Review CloudWatch logs for application errors')
   }
 
-  if (results.health.service.status === 503) {
-    recommendations.push('⚠️ Service returned 503 - Application-level issue')
-    recommendations.push('   - Check ECS task logs in CloudWatch')
-    recommendations.push('   - Verify MCP server dependencies are healthy')
-  }
-
-  if (!results.health.service.reachable && results.health.alb.reachable) {
-    recommendations.push('⚠️ ALB reachable but /query/stream endpoint failing')
-    recommendations.push('   - Check ECS target group health')
-    recommendations.push('   - Verify Strands agent is listening on correct port')
-    recommendations.push('   - Check CloudWatch logs for application errors')
-  }
-
-  if (results.health.service.status === 200) {
-    recommendations.push('✅ Service is healthy - If you see 503 errors, they may be intermittent')
-    recommendations.push('   - Check CloudWatch metrics for request rate and errors')
-    recommendations.push('   - Consider scaling up ECS tasks if load is high')
+  if (results.health.alb.reachable && !results.health.alb.error) {
+    recommendations.push('ALB is reachable and responding')
   }
 
   return recommendations

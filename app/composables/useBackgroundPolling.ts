@@ -12,7 +12,7 @@
  * - Toast notifications for background completions
  */
 
-import type { ChatMessage } from '~/shared/types/chat-threads'
+import type { ChatMessage } from '#shared/types/chat-threads'
 
 // Storage key for pending jobs
 const PENDING_JOBS_KEY = 'ghost-chat-pending-jobs'

@@ -339,9 +339,9 @@
               </div>
 
               <!-- Monthly Charge -->
-              <div v-if="selectedAccountDetails.estimatedMonthlyCharge">
+              <div v-if="getMonthlyBudget(selectedAccountDetails) > 0">
                 <p class="text-xs text-gray-400 mb-1">Est. Monthly Charge</p>
-                <p class="text-xs text-white font-semibold">${{ formatCurrency(selectedAccountDetails.estimatedMonthlyCharge) }}</p>
+                <p class="text-xs text-white font-semibold">${{ formatCurrency(getMonthlyBudget(selectedAccountDetails)) }}</p>
               </div>
             </div>
 
@@ -596,6 +596,7 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useAccountCosts } from '~/composables/useAccountCosts'
 import { useD3TreeChart } from '~/composables/useD3TreeChart'
 import type { TreeNode } from '~/composables/useD3TreeChart'
+import { getMonthlyBudget } from '#shared/utils/budget-utils'
 import * as d3 from 'd3'
 
 // Composables
