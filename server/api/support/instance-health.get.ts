@@ -212,8 +212,19 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.badRequest(event, 'Environment must be "commercial" or "govcloud"')
   }
 
-  // Get account info
-  const account = await lookupAccountUnified({ accountId })
+  // Get account info - try lookup by commercial ID first, then by GovCloud ID
+  let account = await lookupAccountUnified({ accountId })
+
+  // If not found by commercial ID, the user might have passed a GovCloud ID directly
+  // Try to find the account by GovCloud ID
+  let commercialAccountId = accountId
+  if (!account) {
+    account = await lookupAccountUnified({ govCloudAccountId: accountId })
+    if (account) {
+      commercialAccountId = account.accountId
+    }
+  }
+
   const accountName = account?.name || account?.projectName
 
   // Use GovCloud account ID if querying govcloud environment
@@ -318,13 +329,13 @@ export default defineEventHandler(handleAsync(async (event) => {
     // Patch compliance
     getInstancePatchStatus(instanceId, targetAccountId, environment, targetRegion),
 
-    // Security Hub findings for this instance
-    getSecurityHubFindings([accountId], {
+    // Security Hub findings for this instance (pass commercial ID for proper lookup)
+    // Use resourceId filter at API level for efficiency
+    getSecurityHubFindings([commercialAccountId], {
       activeOnly: true,
-      lookbackDays: 30
-    }).then(findings => findings.filter(f =>
-      f.resourceId.includes(instanceId)
-    )),
+      lookbackDays: 30,
+      resourceId: instanceId
+    }),
 
     // Inspector vulnerabilities
     getInstanceVulnerabilities(instanceId, targetAccountId, environment, targetRegion),

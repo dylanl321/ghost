@@ -2773,22 +2773,6 @@ const getChartOptions = (chart: ChartDefinition) => {
                     barWidth: '60%',
                     z: 2
                 })
-
-                // Add trend line for next year forecasts
-                series.push({
-                    name: 'AWS Projection Trend',
-                    type: 'line',
-                    data: yearData.series[0].data,
-                    smooth: true,
-                    lineStyle: {
-                        color: '#059669',
-                        width: 2,
-                        type: 'dashed'
-                    },
-                    symbol: 'circle',
-                    symbolSize: 6,
-                    z: 3
-                })
             } else {
                 // Current year: stacked bars for actual + forecast
                 // Actual spend series (blue bars for past + current month)
@@ -2830,41 +2814,6 @@ const getChartOptions = (chart: ChartDefinition) => {
                     },
                     barWidth: '60%',
                     z: 2
-                })
-
-                // Add trend lines overlaying the bars
-                const actualLineData = yearData.series[0].data.map((v: number | null) => v)
-                const forecastLineData = yearData.series[1].data.map((v: number | null) => v)
-
-                // Actual trend line
-                series.push({
-                    name: 'Actual Trend',
-                    type: 'line',
-                    data: actualLineData,
-                    smooth: true,
-                    lineStyle: {
-                        color: '#1e40af',
-                        width: 2
-                    },
-                    symbol: 'circle',
-                    symbolSize: 6,
-                    z: 3
-                })
-
-                // AWS Projection trend line
-                series.push({
-                    name: 'AWS Projection Trend',
-                    type: 'line',
-                    data: forecastLineData,
-                    smooth: true,
-                    lineStyle: {
-                        color: '#059669',
-                        width: 2,
-                        type: 'dashed'
-                    },
-                    symbol: 'circle',
-                    symbolSize: 6,
-                    z: 3
                 })
             }
 
@@ -3033,14 +2982,11 @@ const getChartOptions = (chart: ChartDefinition) => {
                     data: isNextYear
                         ? [
                             'AWS Projection',
-                            'AWS Projection Trend',
                             ...(yearData.budget && yearData.budget.annual > 0 ? [yearData.budget.isPepData ? 'PEP Budget' : 'GDMS Forecasted Costs'] : [])
                         ]
                         : [
                             'Actual',
                             'AWS Projection',
-                            'Actual Trend',
-                            'AWS Projection Trend',
                             ...(yearData.budget && yearData.budget.annual > 0 ? [yearData.budget.isPepData ? 'PEP Budget' : 'GDMS Forecasted Costs'] : []),
                             ...(hasConfidenceBands ? ['80% Confidence Band'] : [])
                         ],

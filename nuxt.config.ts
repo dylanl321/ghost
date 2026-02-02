@@ -6,7 +6,11 @@ The '@nuxt/eslint' module is a linter that does static code analysis to detect i
 */
 
 import { fileURLToPath } from 'node:url'
+import { readFileSync } from 'node:fs'
 import { version } from './package.json'
+
+// Read changelog at build time so it's available in production
+const changelogContent = readFileSync('./CHANGELOG.md', 'utf-8')
 
 const entra_tenant_id = "7c5a26cf-ddf0-400c-9703-4070b4e3a54d";
 
@@ -116,6 +120,7 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     // Server-side only (not exposed to client)
+    changelogContent,
     strandsServerUrl: process.env.STRANDS_SERVER_URL || '',
     strandsTimeout: parseInt(process.env.STRANDS_TIMEOUT || '30000', 10),
 

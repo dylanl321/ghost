@@ -1,6 +1,3 @@
-import { readFile } from 'fs/promises'
-import { join } from 'path'
-
 interface ChangelogEntry {
   version: string
   date: string
@@ -8,14 +5,20 @@ interface ChangelogEntry {
   content: string
 }
 
-export default defineEventHandler(async (): Promise<ChangelogEntry[]> => {
+export default defineEventHandler((): ChangelogEntry[] => {
   try {
-    const changelogPath = join(process.cwd(), 'CHANGELOG.md')
-    const content = await readFile(changelogPath, 'utf-8')
+    // Changelog content is bundled at build time via runtimeConfig
+    const config = useRuntimeConfig()
+    const content = config.changelogContent
+
+    if (!content) {
+      console.warn('Changelog content not found in runtime config')
+      return []
+    }
 
     return parseChangelog(content)
   } catch (error) {
-    console.error('Error reading changelog:', error)
+    console.error('Error parsing changelog:', error)
     return []
   }
 })

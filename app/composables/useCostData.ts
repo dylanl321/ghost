@@ -297,6 +297,20 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     debouncedFetch()
   }, { deep: true })
 
+  // Watch for accountsList changes to update dataset without refetching
+  // This fixes a race condition where costs APIs return before accounts list
+  if (accountsList) {
+    watch(accountsList, (newList) => {
+      if (dataset.value && newList && newList.length > 0) {
+        console.log('AccountsList updated, patching dataset with', newList.length, 'accounts')
+        dataset.value = {
+          ...dataset.value,
+          accountsList: newList
+        }
+      }
+    }, { deep: true })
+  }
+
   // Watch for mode changes separately to clear cache
   watch(mode, async (newMode, oldMode) => {
     // Only clear cache if mode actually changed (not on initial mount)

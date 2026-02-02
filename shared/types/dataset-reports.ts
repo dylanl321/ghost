@@ -93,6 +93,17 @@ export interface SecurityHubDatasetFilters {
    * Lookback period in days (default: 30)
    */
   lookbackDays?: number
+
+  /**
+   * Filter by resource ID (e.g., instance ID, bucket name)
+   * Uses CONTAINS comparison to match partial IDs
+   */
+  resourceId?: string
+
+  /**
+   * Filter by specific regions
+   */
+  regions?: string[]
 }
 
 /**
