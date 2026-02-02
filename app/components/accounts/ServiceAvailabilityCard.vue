@@ -3,7 +3,7 @@
     <template #header>
       <div class="flex items-center gap-2">
         <UIcon name="i-heroicons-server-stack" class="text-purple-500 w-5 h-5" />
-        <h4 class="font-semibold">Service Availability</h4>
+        <h4 class="font-semibold text-gray-900 dark:text-white">Service Availability</h4>
       </div>
     </template>
 
@@ -12,42 +12,42 @@
     </div>
 
     <div v-else-if="error" class="text-center py-8">
-      <UIcon name="i-heroicons-exclamation-triangle" class="w-8 h-8 text-red-400 mx-auto mb-2" />
-      <p class="text-sm text-gray-400">{{ error }}</p>
+      <UIcon name="i-heroicons-exclamation-triangle" class="w-8 h-8 text-red-500 dark:text-red-400 mx-auto mb-2" />
+      <p class="text-sm text-gray-600 dark:text-gray-400">{{ error }}</p>
     </div>
 
     <div v-else class="space-y-4">
       <!-- Summary Stats -->
       <div class="grid grid-cols-2 gap-3">
-        <div class="bg-gray-800 rounded-lg p-3">
+        <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
           <div class="flex items-center gap-2 mb-1">
-            <UIcon name="i-heroicons-server-stack" class="w-4 h-4 text-blue-400" />
-            <span class="text-xs text-gray-400">Total Resources</span>
+            <UIcon name="i-heroicons-server-stack" class="w-4 h-4 text-blue-500 dark:text-blue-400" />
+            <span class="text-xs text-gray-600 dark:text-gray-400">Total Resources</span>
           </div>
-          <p class="text-2xl font-bold text-white">{{ totalResources }}</p>
+          <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ totalResources }}</p>
         </div>
 
-        <div class="bg-gray-800 rounded-lg p-3">
+        <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
           <div class="flex items-center gap-2 mb-1">
-            <UIcon name="i-heroicons-cube" class="w-4 h-4 text-purple-400" />
-            <span class="text-xs text-gray-400">Service Types</span>
+            <UIcon name="i-heroicons-cube" class="w-4 h-4 text-purple-500 dark:text-purple-400" />
+            <span class="text-xs text-gray-600 dark:text-gray-400">Service Types</span>
           </div>
-          <p class="text-2xl font-bold text-white">{{ serviceCount }}</p>
+          <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ serviceCount }}</p>
         </div>
       </div>
 
       <!-- Top Services -->
       <div v-if="topServices.length > 0">
-        <h5 class="text-xs font-semibold text-gray-400 mb-2">Top Services</h5>
+        <h5 class="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">Top Services</h5>
         <div class="space-y-2">
           <div
             v-for="service in topServices"
             :key="service.name"
-            class="flex items-center justify-between p-2 bg-gray-800 rounded-md hover:bg-gray-750 transition-colors"
+            class="flex items-center justify-between p-2 bg-gray-100 dark:bg-gray-800 rounded-md hover:bg-gray-200 dark:hover:bg-gray-750 transition-colors"
           >
             <div class="flex items-center gap-2 min-w-0 flex-1">
               <UIcon :name="getServiceIcon(service.name)" class="w-4 h-4 flex-shrink-0" :class="getServiceColor(service.name)" />
-              <span class="text-sm text-gray-300 truncate">{{ formatServiceName(service.name) }}</span>
+              <span class="text-sm text-gray-700 dark:text-gray-300 truncate">{{ formatServiceName(service.name) }}</span>
             </div>
             <UBadge color="gray" variant="subtle" size="xs">
               {{ service.count }}

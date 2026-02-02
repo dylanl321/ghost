@@ -163,15 +163,25 @@ function formatRequest(config: BedrockModelConfig, request: BedrockRequest): Rec
   } else {
     // Anthropic Claude format (with inference profile)
     const messages = [{ role: 'user', content: enhancedPrompt }]
-    
-    return {
+
+    // Build payload without conflicting sampling parameters
+    // Bedrock doesn't allow both temperature and top_p - temperature takes precedence
+    const payload: Record<string, unknown> = {
       anthropic_version: 'bedrock-2023-05-31',
       max_tokens: maxTokens ?? config.maxTokens,
-      temperature: temperature ?? config.temperature,
-      top_p: config.topP,
       system: systemPrompt || 'You are a helpful AI assistant analyzing AWS cost and usage data.',
       messages
     }
+
+    // Only include ONE sampling parameter - temperature takes precedence
+    if (temperature !== undefined) {
+      payload.temperature = temperature
+    } else if (config.temperature !== undefined) {
+      payload.temperature = config.temperature
+    }
+    // Don't include top_p when temperature is set to avoid Bedrock API conflict
+
+    return payload
   }
 }
 

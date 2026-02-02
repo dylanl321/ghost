@@ -1,0 +1,9 @@
+Pipeline Analytics seems to be stuck on 12/31 when today is 1/22. I have made sure athena has new partitions and ther is data there.
+    pipelines/authors and sub pages has odd margins for the conten. There is no spacing between the site and the content like the other pages. 
+
+The admin side nav shows the tabs but all sub menue items display as selected/green. And all sub items arent clickable. 
+
+Budget alerts is under the admin but the admin side menu dissapears and the normal one is showing. we should be showing the admin side nav.
+
+The gloabal universal search on the top nav needs to be reviewd. When searching the second and following items arent clickable. after typing the results are shown however when i click away it disapears as it should but when i click back in i dont see the results appear and have to retype or make a change. 
+

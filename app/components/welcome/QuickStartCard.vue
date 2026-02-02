@@ -1,17 +1,17 @@
 <template>
   <UCard
     v-if="shouldShow"
-    class="mb-6 border border-emerald-500/20 bg-gradient-to-r from-emerald-950/30 to-blue-950/30"
+    class="mb-6 border border-emerald-500/20 bg-gradient-to-r from-emerald-50 to-blue-50 dark:from-emerald-950/30 dark:to-blue-950/30"
   >
     <div class="flex items-start justify-between gap-4">
       <div class="flex-1">
         <div class="flex items-center gap-2 mb-2">
           <UIcon name="i-fa6-solid-ghost" class="h-6 w-6 text-emerald-400" />
-          <h2 class="text-xl font-semibold text-white">
+          <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
             Welcome to GHOST
           </h2>
         </div>
-        <p class="text-gray-300 mb-4">
+        <p class="text-gray-600 dark:text-gray-300 mb-4">
           Your centralized AWS Dashboard Hub for managing accounts, analyzing costs, and exploring your organization.
         </p>
 
@@ -72,7 +72,7 @@
             Take an Interactive Tour
           </UButton>
           <button
-            class="text-gray-400 hover:text-gray-300 transition-colors"
+            class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 transition-colors"
             @click="handleDismiss"
           >
             Hide this card

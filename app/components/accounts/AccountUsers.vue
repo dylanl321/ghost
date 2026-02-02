@@ -2,7 +2,7 @@
   <UCard>
     <template #header>
       <div class="flex items-center justify-between">
-        <div class="text-lg font-semibold">Account Users</div>
+        <div class="text-lg font-semibold text-gray-900 dark:text-white">Account Users</div>
         <UButton icon="i-heroicons-users" size="xs" variant="outline" color="primary" @click="goToAllUsers">
           View All
         </UButton>
@@ -17,7 +17,7 @@
       <div
         v-for="user in visibleUsers"
         :key="user.userPrincipalName"
-        class="flex items-center justify-between px-2 py-3 cursor-pointer border-b gap-y-2 flex-wrap 2xl:flex-nowrap border-gray-800 hover:bg-gray-700 transition"
+        class="flex items-center justify-between px-2 py-3 cursor-pointer border-b gap-y-2 flex-wrap 2xl:flex-nowrap border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
         @click="goToUser(user.userPrincipalName)"
       >
         <div class="flex items-center gap-3 min-w-0">
@@ -29,10 +29,10 @@
           />
 
           <div class="min-w-0">
-            <div class="text-white text-sm font-medium truncate">
+            <div class="text-gray-900 dark:text-white text-sm font-medium truncate">
               {{ user.displayName }}
             </div>
-            <div class="text-gray-400 text-xs truncate">
+            <div class="text-gray-500 dark:text-gray-400 text-xs truncate">
               {{ user.userPrincipalName }}
             </div>
           </div>
@@ -64,7 +64,7 @@
             v-if="user.roles.length > 1"
             size="xs"
             color="gray"
-            class="text-xs text-gray-300"
+            class="text-xs text-gray-700 dark:text-gray-300"
             variant="soft"
           >
             +{{ user.roles.length - 1 }}
@@ -72,7 +72,7 @@
         </div>
       </div>
     </div>
-    <div v-else class="text-gray-400 text-sm">No users found for this account.</div>
+    <div v-else class="text-gray-600 dark:text-gray-400 text-sm">No users found for this account.</div>
 
     <div
       v-if="!showAll && users.length > maxVisible"

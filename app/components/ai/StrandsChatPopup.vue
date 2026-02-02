@@ -155,7 +155,6 @@
           :view-mode="'popup'"
           @retry="retryLastMessage"
           @cancel="cancelQuery"
-          @copy="copyMessageMarkdown"
           @prompt-click="handlePromptClick"
           @enriched-click="handleEnrichedClick"
           @disambiguate="handleDisambiguate"
@@ -305,6 +304,7 @@ const {
   // Disambiguation
   showDisambiguation,
   disambiguationData,
+  openDisambiguationModal,
   handleAccountSelected,
   cancelDisambiguation,
   
@@ -374,7 +374,7 @@ async function handleExampleClick(example: string) {
 function handleDisambiguate() {
   // Show the disambiguation modal if we have disambiguation data
   if (disambiguationData.value) {
-    showDisambiguation.value = true
+    openDisambiguationModal()
   } else {
     console.warn('[StrandsChatPopup] No disambiguation data available')
   }
@@ -383,37 +383,6 @@ function handleDisambiguate() {
 // Handle suggested prompt click
 async function handlePromptClick(promptText: string) {
   await sendMessage(promptText)
-}
-
-// Copy message markdown to clipboard
-async function copyMessageMarkdown(message: any) {
-  try {
-    // Combine reasoning and content for full context
-    let fullText = ''
-    if (message.reasoning) {
-      fullText = `## AI Reasoning\n\n${message.reasoning}\n\n## Response\n\n${message.content}`
-    } else {
-      fullText = message.content
-    }
-
-    await navigator.clipboard.writeText(fullText)
-    toast.add({
-      title: 'Copied to clipboard',
-      description: message.reasoning ? 'Full markdown copied (including AI reasoning)' : 'Message copied',
-      icon: 'i-heroicons-clipboard-document-check',
-      color: 'green',
-      timeout: 3000
-    })
-  } catch (err) {
-    console.error('Failed to copy:', err)
-    toast.add({
-      title: 'Copy failed',
-      description: 'Please try selecting and copying manually',
-      icon: 'i-heroicons-exclamation-triangle',
-      color: 'red',
-      timeout: 3000
-    })
-  }
 }
 
 // Auto-scroll when messages change

@@ -119,7 +119,7 @@
  * No authentication required
  */
 
-import type { ChatThread } from '~/shared/types/chat-threads'
+import type { ChatThread } from '#shared/types/chat-threads'
 import mermaid from 'mermaid'
 
 const route = useRoute()

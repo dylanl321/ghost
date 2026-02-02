@@ -13,14 +13,20 @@ const props = defineProps<{
   content: string
 }>()
 
+const colorMode = useColorMode()
+
 // Mermaid chart counter for unique IDs
 let mermaidCounter = 0
+
+function getMermaidTheme(): 'default' | 'dark' {
+  return colorMode.value === 'dark' ? 'dark' : 'default'
+}
 
 // Initialize mermaid on client side only
 onMounted(() => {
   mermaid.initialize({
     startOnLoad: false,
-    theme: 'default',
+    theme: getMermaidTheme(),
     securityLevel: 'loose',
   })
 })
@@ -60,8 +66,7 @@ const renderedContent = computed(() => {
   }
 })
 
-// Render mermaid charts after content updates
-watch(renderedContent, async () => {
+async function renderMermaidCharts() {
   await nextTick()
   // Find all mermaid chart elements and render them
   const mermaidElements = document.querySelectorAll('.mermaid-chart')
@@ -76,7 +81,26 @@ watch(renderedContent, async () => {
       element.innerHTML = '<p class="text-red-500">Error rendering chart</p>'
     }
   }
+}
+
+// Render mermaid charts after content updates
+watch(renderedContent, async () => {
+  await renderMermaidCharts()
 })
+
+// Re-render mermaid when theme changes
+watch(
+  () => colorMode.value,
+  async () => {
+    if (!import.meta.client) return
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: getMermaidTheme(),
+      securityLevel: 'loose',
+    })
+    await renderMermaidCharts()
+  }
+)
 </script>
 
 <style scoped>
@@ -167,11 +191,11 @@ watch(renderedContent, async () => {
 
 /* Code blocks */
 :deep(pre.code-block) {
-  @apply bg-gray-900 dark:bg-gray-950 p-4 rounded-lg overflow-x-auto my-4 border border-gray-700;
+  @apply bg-gray-50 dark:bg-gray-950 p-4 rounded-lg overflow-x-auto my-4 border border-gray-200 dark:border-gray-700;
 }
 
 :deep(pre.code-block code) {
-  @apply bg-transparent border-0 text-gray-100 text-sm leading-normal block;
+  @apply bg-transparent border-0 text-gray-800 dark:text-gray-100 text-sm leading-normal block;
 }
 
 /* Links */

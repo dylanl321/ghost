@@ -6,6 +6,7 @@ The '@nuxt/eslint' module is a linter that does static code analysis to detect i
 */
 
 import { fileURLToPath } from 'node:url'
+import { version } from './package.json'
 
 const entra_tenant_id = "7c5a26cf-ddf0-400c-9703-4070b4e3a54d";
 
@@ -40,7 +41,7 @@ export default defineNuxtConfig({
     "nuxt-echarts",
   ], // Modules are used to extend the functionality of Nuxt (https://nuxt.com/docs/4.x/guide/concepts/modules)
 
-  // Force dark mode - disable light mode entirely
+  // Default to dark, but allow light/system (user preference) via @nuxtjs/color-mode
   colorMode: {
     preference: 'dark',
     fallback: 'dark',
@@ -127,8 +128,13 @@ export default defineNuxtConfig({
     siteConfigTableName: process.env.SITE_CONFIG_TABLE_NAME || 'ghost-site-config',
 
     public: {
+      appVersion: version,
+      buildDate: new Date().toISOString().split('T')[0],
       environment: process.env.NODE_ENV || "local",
       authBypass: process.env.AUTH_BYPASS === "true",
+      // Dev mode groups for frontend use
+      devUserGroups: process.env.DEV_USER_GROUPS || 'AWS-Product-Team',
+      devAuthEnabled: process.env.DEV_AUTH_ENABLED === 'true',
     },
   },
 
@@ -137,6 +143,27 @@ export default defineNuxtConfig({
   // NOTE: The 'globalMiddlewareEnabled' is set to 'true' by default, meaning Nuxt automatically redirects all requests to /auth/login if the user is not logged in
   oidc: {
     defaultProvider: "entra",
+    // Dev mode - creates mock session without Entra (only works in non-production)
+    devMode: {
+      enabled: process.env.DEV_AUTH_ENABLED === 'true',
+      userName: process.env.DEV_USER_NAME || 'Dev User',
+      // userInfo goes into user.value.userInfo
+      userInfo: {
+        email: process.env.DEV_USER_EMAIL || 'dev@localhost',
+        name: process.env.DEV_USER_NAME || 'Dev User',
+        given_name: 'Dev',
+        family_name: 'User',
+      },
+      // claims goes into user.value.claims (REQUIRED for loading.vue validation)
+      claims: {
+        email: process.env.DEV_USER_EMAIL || 'dev@localhost',
+        given_name: 'Dev',
+        family_name: 'User',
+        name: process.env.DEV_USER_NAME || 'Dev User',
+        sub: 'dev-user-id',
+      },
+      generateAccessToken: true,
+    },
     providers: {
       entra: {
         redirectUri: "", // Fields with empty strings as the values are automatically overridden by the environment variables passed in. See the .env file for more details.
@@ -164,7 +191,8 @@ export default defineNuxtConfig({
       // customLoginPage: false,
     },
     session: {
-      expirationCheck: true, // Enable automatic expiration checking
+      // Disable expiration check when using devMode (dev tokens don't expire)
+      expirationCheck: process.env.DEV_AUTH_ENABLED !== 'true',
       automaticRefresh: true, // Enable automatic token refresh
       expirationThreshold: 300, // Allow the token to be refreshed early (within 5 minutes of expiration)
       maxAge: 60 * 60 * 2, // 2 hours (aligned with typical token refresh patterns)

@@ -128,7 +128,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ShareThreadResponse } from '~/shared/types/chat-threads'
+import type { ShareThreadResponse } from '#shared/types/chat-threads'
 
 interface Props {
   threadId: string | null
@@ -152,35 +152,52 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const shareData = ref<ShareThreadResponse | null>(null)
 
-// Computed share URL
+// Computed share URL - points to the human-readable page, not the API endpoint
 const shareUrl = computed(() => {
   if (!shareData.value) return ''
   const origin = window.location.origin
-  return `${origin}/api/chat/threads/shared/${shareData.value.shareId}`
+  return `${origin}/chat/shared/${shareData.value.shareId}`
 })
 
-// Watch for thread ID changes and generate share link
-watch(() => props.threadId, async (newThreadId) => {
-  if (newThreadId && isOpen.value) {
+// Track the threadId that shareData belongs to, to clear stale data when thread changes
+const currentShareThreadId = ref<string | null>(null)
+
+// Watch for thread ID changes - clear stale share data and fetch if modal is open
+watch(() => props.threadId, async (newThreadId, oldThreadId) => {
+  // Clear share data if thread changed
+  if (newThreadId !== oldThreadId) {
+    shareData.value = null
+    currentShareThreadId.value = null
+    error.value = null
+  }
+
+  // Generate share link if modal is open and we don't have data for this thread
+  if (newThreadId && isOpen.value && currentShareThreadId.value !== newThreadId) {
     await generateShareLink()
   }
 }, { immediate: true })
 
 // Watch for modal open and generate link if needed
 watch(isOpen, async (open) => {
-  if (open && props.threadId && !shareData.value) {
+  if (open && props.threadId && currentShareThreadId.value !== props.threadId) {
     await generateShareLink()
   }
 })
 
-// Generate share link
+// Generate share link (or fetch existing)
 async function generateShareLink() {
   if (!props.threadId) return
+
+  // Skip if we already have share data for this thread
+  if (currentShareThreadId.value === props.threadId && shareData.value) {
+    return
+  }
 
   loading.value = true
   error.value = null
 
   try {
+    // The API returns existing share data if thread is already shared
     const response = await $fetch(`/api/chat/threads/${props.threadId}/share`, {
       method: 'POST',
       body: {
@@ -189,6 +206,7 @@ async function generateShareLink() {
     })
 
     shareData.value = response.data
+    currentShareThreadId.value = props.threadId
   } catch (err: any) {
     console.error('Error generating share link:', err)
     error.value = err.data?.error?.message || 'Failed to generate share link'
@@ -282,6 +300,7 @@ function formatExpirationDate(dateString: string) {
 function close() {
   isOpen.value = false
   shareData.value = null
+  currentShareThreadId.value = null
   error.value = null
   emit('close')
 }

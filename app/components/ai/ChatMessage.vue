@@ -67,7 +67,10 @@
         :thinking="message.reasoning"
       />
 
-      <div class="markdown-container" v-html="formattedContent" @click="$emit('enriched-click', $event)"></div>
+      <!-- Only render markdown for assistant messages to prevent XSS -->
+      <div v-if="message.role === 'assistant'" class="markdown-container" v-html="formattedContent" @click="$emit('enriched-click', $event)"></div>
+      <!-- User messages rendered as plain text (safely escaped by Vue) -->
+      <p v-else class="whitespace-pre-wrap text-sm">{{ message.content }}</p>
       <span v-if="message.streamBuffer && (message.status?.status === 'pending' || message.status?.status === 'streaming')" class="cursor-blink">|</span>
 
       <!-- Cancellation Status with fade transition -->
@@ -150,12 +153,12 @@
           <!-- Copy Markdown Button -->
           <button
             v-if="message.role === 'assistant' && !message.status?.status"
-            @click="$emit('copy', message)"
+            @click="handleCopy"
             class="metadata-badge copy-badge hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors cursor-pointer"
-            title="Copy full markdown including AI reasoning"
+            :title="copied ? 'Copied!' : 'Copy full markdown including AI reasoning'"
           >
-            <UIcon name="i-heroicons-clipboard-document" class="w-3 h-3" />
-            Copy
+            <UIcon :name="copied ? 'i-heroicons-check' : 'i-heroicons-clipboard-document'" class="w-3 h-3" :class="{ 'text-green-600 dark:text-green-400': copied }" />
+            {{ copied ? 'Copied!' : 'Copy' }}
           </button>
         </div>
       </div>
@@ -164,12 +167,12 @@
       <div v-else-if="message.role === 'assistant' && !message.status?.status" class="tools-used">
         <div class="metadata-container">
           <button
-            @click="$emit('copy', message)"
+            @click="handleCopy"
             class="metadata-badge copy-badge hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors cursor-pointer"
-            title="Copy full markdown including AI reasoning"
+            :title="copied ? 'Copied!' : 'Copy full markdown including AI reasoning'"
           >
-            <UIcon name="i-heroicons-clipboard-document" class="w-3 h-3" />
-            Copy Markdown
+            <UIcon :name="copied ? 'i-heroicons-check' : 'i-heroicons-clipboard-document'" class="w-3 h-3" :class="{ 'text-green-600 dark:text-green-400': copied }" />
+            {{ copied ? 'Copied!' : 'Copy Markdown' }}
           </button>
         </div>
       </div>
@@ -222,7 +225,7 @@
  * - Suggested links and prompts
  */
 
-import type { ChatMessage as ChatMessageType, ErrorType } from '~/shared/types/chat-threads'
+import type { StreamingChatMessage as ChatMessageType, ErrorType } from '#shared/types/chat-threads'
 
 const props = defineProps<{
   message: ChatMessageType & {
@@ -235,7 +238,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'retry'): void
   (e: 'cancel'): void
-  (e: 'copy', message: any): void
   (e: 'prompt-click', text: string): void
   (e: 'enriched-click', event: MouseEvent): void
   (e: 'disambiguate'): void
@@ -268,6 +270,45 @@ const formattedContent = computed(() => {
     return props.message.content.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')
   }
 })
+
+// Copy state for visual feedback
+const copied = ref(false)
+const toast = useToast()
+
+// Handle copy with visual feedback
+async function handleCopy() {
+  try {
+    // Combine reasoning and content for full context
+    let fullText = ''
+    if (props.message.reasoning) {
+      fullText = `## AI Reasoning\n\n${props.message.reasoning}\n\n## Response\n\n${props.message.content}`
+    } else {
+      fullText = props.message.content
+    }
+
+    await navigator.clipboard.writeText(fullText)
+    copied.value = true
+    toast.add({
+      title: 'Copied to clipboard',
+      description: props.message.reasoning ? 'Full markdown copied (including AI reasoning)' : 'Message copied',
+      icon: 'i-heroicons-clipboard-document-check',
+      color: 'green',
+      timeout: 2000
+    })
+    setTimeout(() => {
+      copied.value = false
+    }, 2000)
+  } catch (err) {
+    console.error('Failed to copy:', err)
+    toast.add({
+      title: 'Copy failed',
+      description: 'Please try selecting and copying manually',
+      icon: 'i-heroicons-exclamation-triangle',
+      color: 'red',
+      timeout: 0
+    })
+  }
+}
 
 // Status history display with fixed 3-item structure to prevent dimension changes
 const statusHistoryDisplay = computed(() => {
@@ -322,6 +363,14 @@ const statusHistoryDisplay = computed(() => {
 
 .markdown-container {
   @apply prose prose-sm dark:prose-invert max-w-none;
+}
+
+.markdown-container :deep(pre) {
+  @apply bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-700;
+}
+
+.markdown-container :deep(pre code) {
+  @apply text-gray-800 dark:text-gray-100;
 }
 
 .message.user .markdown-container {

@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-4">
     <!-- Quick Search Bar -->
-    <div class="bg-gray-800 rounded-lg p-3">
+    <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
       <div class="flex items-center gap-3">
         <div class="flex-1">
           <UInput
@@ -12,7 +12,7 @@
             :ui="{ icon: { trailing: { pointer: '' } } }"
           />
         </div>
-        <div class="flex items-center gap-2 text-xs text-gray-400">
+        <div class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
           <span>{{ filteredData.length }} results</span>
           <span v-if="quickSearch" class="text-blue-400">
             (filtered)
@@ -24,8 +24,8 @@
     <!-- Header -->
     <div class="flex items-center justify-between">
       <div>
-        <h3 class="text-lg font-semibold text-white">Forecast Data</h3>
-        <p class="text-sm text-gray-400">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Forecast Data</h3>
+        <p class="text-sm text-gray-600 dark:text-gray-400">
           {{ forecastData.length }} accounts • Total: {{ formatCurrency(grandTotal) }}
         </p>
       </div>
@@ -119,10 +119,10 @@
     </div>
 
     <!-- Filter Panel -->
-    <div v-if="showFilterPanel" class="bg-gray-800 rounded-lg p-4 mb-4">
+    <div v-if="showFilterPanel" class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 mb-4 border border-gray-200 dark:border-gray-700">
       <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <div>
-          <label class="block text-xs font-medium text-gray-400 mb-1">Account</label>
+          <label class="block text-xs font-medium text-gray-700 dark:text-gray-400 mb-1">Account</label>
           <UInput 
             v-model="filters.accountName" 
             size="sm" 
@@ -130,7 +130,7 @@
           />
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-400 mb-1">Enclave</label>
+          <label class="block text-xs font-medium text-gray-700 dark:text-gray-400 mb-1">Enclave</label>
           <UInput 
             v-model="filters.enclaveId" 
             size="sm" 
@@ -138,7 +138,7 @@
           />
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-400 mb-1">Project Type</label>
+          <label class="block text-xs font-medium text-gray-700 dark:text-gray-400 mb-1">Project Type</label>
           <UInput 
             v-model="filters.projectType" 
             size="sm" 
@@ -146,7 +146,7 @@
           />
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-400 mb-1">LOB</label>
+          <label class="block text-xs font-medium text-gray-700 dark:text-gray-400 mb-1">LOB</label>
           <UInput 
             v-model="filters.lob" 
             size="sm" 
@@ -154,7 +154,7 @@
           />
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-400 mb-1">Min Amount</label>
+          <label class="block text-xs font-medium text-gray-700 dark:text-gray-400 mb-1">Min Amount</label>
           <UInput 
             v-model.number="filters.minAmount" 
             type="number"
@@ -163,7 +163,7 @@
           />
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-400 mb-1">Max Amount</label>
+          <label class="block text-xs font-medium text-gray-700 dark:text-gray-400 mb-1">Max Amount</label>
           <UInput 
             v-model.number="filters.maxAmount" 
             type="number"
@@ -173,7 +173,7 @@
         </div>
       </div>
       <div class="flex justify-between items-center mt-4">
-        <p class="text-xs text-gray-400">
+        <p class="text-xs text-gray-600 dark:text-gray-400">
           Showing {{ filteredData.length }} of {{ forecastData.length }} accounts
         </p>
         <UButton 
@@ -187,20 +187,20 @@
     </div>
 
     <!-- Spreadsheet-style Table -->
-    <div ref="tableContainer" class="bg-gray-900 rounded-lg overflow-hidden">
+    <div ref="tableContainer" class="bg-white dark:bg-gray-900 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
       <!-- Drag Instruction -->
-      <div v-if="filteredData.length > 0" class="bg-gray-800/50 px-3 py-1 text-xs text-gray-400 border-b border-gray-700">
+      <div v-if="filteredData.length > 0" class="bg-gray-50 dark:bg-gray-800/50 px-3 py-1 text-xs text-gray-600 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
         <Icon name="i-heroicons-cursor-arrow-rays" class="w-3 h-3 inline mr-1" />
-        Hold <kbd class="px-1 py-0.5 bg-gray-700 rounded text-gray-300">Shift</kbd> or <kbd class="px-1 py-0.5 bg-gray-700 rounded text-gray-300">Alt</kbd> and drag to scroll • Middle-click and drag also works
+        Hold <kbd class="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-gray-700 dark:text-gray-300">Shift</kbd> or <kbd class="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-gray-700 dark:text-gray-300">Alt</kbd> and drag to scroll • Middle-click and drag also works
       </div>
       <div class="overflow-x-auto overflow-y-auto max-h-[calc(100vh-300px)]">
         <table class="w-full text-sm">
-          <thead class="bg-gray-800 sticky top-0 z-20">
+          <thead class="bg-white dark:bg-gray-800 sticky top-0 z-20">
             <!-- Column Headers -->
-            <tr class="border-b border-gray-700">
+            <tr class="border-b border-gray-200 dark:border-gray-700">
               <!-- Fixed columns -->
               <th 
-                class="sticky left-0 top-0 bg-gray-800 px-3 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider border-r border-gray-700 cursor-pointer hover:bg-gray-700 z-30"
+                class="sticky left-0 top-0 bg-white dark:bg-gray-800 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider border-r border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 z-30"
                 @click="handleSort('enclaveId')"
               >
                 <div class="flex items-center gap-1">
@@ -209,7 +209,7 @@
                 </div>
               </th>
               <th 
-                class="sticky left-16 top-0 bg-gray-800 px-3 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider min-w-[200px] border-r border-gray-700 cursor-pointer hover:bg-gray-700 z-30"
+                class="sticky left-16 top-0 bg-white dark:bg-gray-800 px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider min-w-[200px] border-r border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 z-30"
                 @click="handleSort('accountName')"
               >
                 <div class="flex items-center gap-1">
@@ -218,7 +218,7 @@
                 </div>
               </th>
               <th 
-                class="px-3 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider min-w-[150px] cursor-pointer hover:bg-gray-700"
+                class="px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider min-w-[150px] cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
                 @click="handleSort('projectType')"
               >
                 <div class="flex items-center gap-1">
@@ -227,7 +227,7 @@
                 </div>
               </th>
               <th 
-                class="px-3 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-700"
+                class="px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
                 @click="handleSort('lob')"
               >
                 <div class="flex items-center gap-1">
@@ -235,13 +235,13 @@
                   <Icon v-if="sortColumn === 'lob'" :name="sortDirection === 'asc' ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="w-3 h-3" />
                 </div>
               </th>
-              <th class="px-3 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+              <th class="px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                 Dept #
               </th>
-              <th class="px-3 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+              <th class="px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                 Proj #
               </th>
-              <th class="px-3 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider border-r border-gray-700">
+              <th class="px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider border-r border-gray-200 dark:border-gray-700">
                 Task #
               </th>
               
@@ -249,14 +249,14 @@
               <th 
                 v-for="month in monthColumns" 
                 :key="month"
-                class="px-3 py-2 text-right text-xs font-medium text-gray-300 uppercase tracking-wider min-w-[100px] border-r border-gray-600"
+                class="px-3 py-2 text-right text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider min-w-[100px] border-r border-gray-200 dark:border-gray-600"
               >
                 {{ formatMonth(month) }}
               </th>
               
               <!-- Row Total -->
               <th 
-                class="px-3 py-2 text-right text-xs font-medium text-gray-300 uppercase tracking-wider min-w-[120px] bg-gray-750 cursor-pointer hover:bg-gray-700"
+                class="px-3 py-2 text-right text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider min-w-[120px] bg-gray-50 dark:bg-gray-750 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
                 @click="handleSort('totalAmount')"
               >
                 <div class="flex items-center justify-end gap-1">
@@ -267,31 +267,31 @@
             </tr>
 
             <!-- Monthly Totals Row -->
-            <tr class="bg-gray-850 border-b border-gray-700 sticky top-[40px] z-10">
-              <td colspan="7" class="sticky left-0 bg-gray-850 px-3 py-2 text-xs font-semibold text-gray-300 z-30">
+            <tr class="bg-gray-50 dark:bg-gray-850 border-b border-gray-200 dark:border-gray-700 sticky top-[40px] z-10">
+              <td colspan="7" class="sticky left-0 bg-gray-50 dark:bg-gray-850 px-3 py-2 text-xs font-semibold text-gray-700 dark:text-gray-300 z-30">
                 Monthly Totals
               </td>
               <td 
                 v-for="month in monthColumns" 
                 :key="`total-${month}`"
-                class="px-3 py-2 text-right text-xs font-semibold text-blue-400 border-r border-gray-600 bg-gray-850"
+                class="px-3 py-2 text-right text-xs font-semibold text-blue-600 dark:text-blue-400 border-r border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-850"
               >
                 {{ formatCurrency(monthlyTotals[month] || 0, true) }}
               </td>
-              <td class="px-3 py-2 text-right text-xs font-semibold text-green-400 bg-gray-850">
+              <td class="px-3 py-2 text-right text-xs font-semibold text-green-600 dark:text-green-400 bg-gray-50 dark:bg-gray-850">
                 {{ formatCurrency(grandTotal, true) }}
               </td>
             </tr>
           </thead>
           
-          <tbody v-if="viewMode === 'detailed'" class="divide-y divide-gray-700">
+          <tbody v-if="viewMode === 'detailed'" class="divide-y divide-gray-200 dark:divide-gray-700">
             <template v-for="item in paginatedData" :key="item.id">
-              <tr class="hover:bg-gray-800/50 transition-colors">
+              <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
               <!-- Fixed columns -->
-              <td class="sticky left-0 bg-gray-900 px-3 py-2 text-xs text-gray-200 border-r border-gray-700">
+              <td class="sticky left-0 bg-white dark:bg-gray-900 px-3 py-2 text-xs text-gray-900 dark:text-gray-200 border-r border-gray-200 dark:border-gray-700">
                 {{ item.enclaveId || '-' }}
               </td>
-              <td class="sticky left-16 bg-gray-900 px-3 py-2 text-xs text-gray-200 min-w-[200px] border-r border-gray-700">
+              <td class="sticky left-16 bg-white dark:bg-gray-900 px-3 py-2 text-xs text-gray-900 dark:text-gray-200 min-w-[200px] border-r border-gray-200 dark:border-gray-700">
                 <div class="flex items-center justify-between">
                   <div class="flex-1">
                     <NuxtLink 
@@ -300,7 +300,7 @@
                     >
                       {{ item.accountName || 'Unknown' }}
                     </NuxtLink>
-                    <div class="flex items-center gap-1.5 text-gray-400">
+                    <div class="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
                       <UTooltip :text="getAccountStatusTooltip(item.enclaveStatus)">
                         <Icon 
                           :name="getAccountStatusIcon(item.enclaveStatus)" 
@@ -320,19 +320,19 @@
                   />
                 </div>
               </td>
-              <td class="px-3 py-2 text-xs text-gray-200">
+              <td class="px-3 py-2 text-xs text-gray-900 dark:text-gray-200">
                 {{ item.projectType || '-' }}
               </td>
-              <td class="px-3 py-2 text-xs text-gray-200">
+              <td class="px-3 py-2 text-xs text-gray-900 dark:text-gray-200">
                 {{ item.lob || '-' }}
               </td>
-              <td class="px-3 py-2 text-xs text-gray-200">
+              <td class="px-3 py-2 text-xs text-gray-900 dark:text-gray-200">
                 {{ item.deptNumber || '-' }}
               </td>
-              <td class="px-3 py-2 text-xs text-gray-200">
+              <td class="px-3 py-2 text-xs text-gray-900 dark:text-gray-200">
                 {{ item.projNumber || '-' }}
               </td>
-              <td class="px-3 py-2 text-xs text-gray-200 border-r border-gray-700">
+              <td class="px-3 py-2 text-xs text-gray-900 dark:text-gray-200 border-r border-gray-200 dark:border-gray-700">
                 {{ item.taskNumber || '-' }}
               </td>
               
@@ -340,25 +340,25 @@
               <td 
                 v-for="month in monthColumns" 
                 :key="`${item.id}-${month}`"
-                class="px-3 py-2 text-right text-xs border-r border-gray-600"
+                class="px-3 py-2 text-right text-xs border-r border-gray-200 dark:border-gray-600"
                 :class="getAmountClass(item.forecasts?.[month])"
               >
                 {{ formatAmount(item.forecasts?.[month]) }}
               </td>
               
               <!-- Row Total -->
-              <td class="px-3 py-2 text-right text-xs font-medium text-green-400 bg-gray-800/30">
+              <td class="px-3 py-2 text-right text-xs font-medium text-green-600 dark:text-green-400 bg-gray-50 dark:bg-gray-800/30">
                 {{ formatCurrency(item.totalAmount || 0, true) }}
               </td>
               </tr>
               
               <!-- Expanded Row Details -->
               <tr v-if="expandedRows.has(item.id)" class="border-0">
-                <td :colspan="7 + monthColumns.length + 1" class="bg-gray-800/50 p-4">
+                <td :colspan="7 + monthColumns.length + 1" class="bg-gray-50 dark:bg-gray-800/50 p-4">
                 <div class="space-y-4">
                   <!-- Mini Chart -->
-                  <div class="bg-gray-900 rounded-lg p-4">
-                    <h4 class="text-sm font-semibold text-white mb-3">Monthly Forecast Trend</h4>
+                  <div class="bg-white dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                    <h4 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Monthly Forecast Trend</h4>
                     <client-only>
                       <VChart 
                         :option="getChartOption(item)" 
@@ -371,25 +371,25 @@
                   <!-- Account Details Grid -->
                   <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
-                      <span class="text-xs text-gray-400">Total Forecast</span>
-                      <div class="text-lg font-semibold text-green-400">
+                      <span class="text-xs text-gray-600 dark:text-gray-400">Total Forecast</span>
+                      <div class="text-lg font-semibold text-green-600 dark:text-green-400">
                         {{ formatCurrency(item.totalAmount || 0) }}
                       </div>
                     </div>
                     <div>
-                      <span class="text-xs text-gray-400">Average Monthly</span>
+                      <span class="text-xs text-gray-600 dark:text-gray-400">Average Monthly</span>
                       <div class="text-lg font-semibold text-blue-400">
                         {{ formatCurrency((item.totalAmount || 0) / monthColumns.length) }}
                       </div>
                     </div>
                     <div>
-                      <span class="text-xs text-gray-400">Peak Month</span>
+                      <span class="text-xs text-gray-600 dark:text-gray-400">Peak Month</span>
                       <div class="text-lg font-semibold text-orange-400">
                         {{ getPeakMonth(item) }}
                       </div>
                     </div>
                     <div>
-                      <span class="text-xs text-gray-400">Non-Zero Months</span>
+                      <span class="text-xs text-gray-600 dark:text-gray-400">Non-Zero Months</span>
                       <div class="text-lg font-semibold text-purple-400">
                         {{ getNonZeroMonths(item) }} / {{ monthColumns.length }}
                       </div>
@@ -420,10 +420,10 @@
           </tbody>
           
           <!-- Grouped View -->
-          <tbody v-if="viewMode === 'grouped' && groupedData" class="divide-y divide-gray-700">
+          <tbody v-if="viewMode === 'grouped' && groupedData" class="divide-y divide-gray-200 dark:divide-gray-700">
             <template v-for="group in groupedData" :key="group.groupName">
               <!-- Group Header Row -->
-              <tr class="bg-gray-800 hover:bg-gray-750 transition-colors">
+              <tr class="bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
                 <td colspan="7" class="px-3 py-2">
                   <button
                     @click="toggleGroup(group.groupName)"
@@ -433,8 +433,8 @@
                       :name="group.expanded ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'" 
                       class="w-4 h-4"
                     />
-                    <span class="font-medium text-sm text-white">{{ group.groupName }}</span>
-                    <span class="text-xs text-gray-400 ml-2">({{ group.itemCount }} accounts)</span>
+                    <span class="font-medium text-sm text-gray-900 dark:text-white">{{ group.groupName }}</span>
+                    <span class="text-xs text-gray-600 dark:text-gray-400 ml-2">({{ group.itemCount }} accounts)</span>
                   </button>
                 </td>
                 
@@ -442,14 +442,14 @@
                 <td 
                   v-for="month in monthColumns" 
                   :key="`group-${group.groupName}-${month}`"
-                  class="px-3 py-2 text-right text-xs font-medium border-r border-gray-600"
+                  class="px-3 py-2 text-right text-xs font-medium border-r border-gray-200 dark:border-gray-600"
                   :class="getAmountClass(group.monthlyTotals[month])"
                 >
                   {{ formatAmount(group.monthlyTotals[month]) }}
                 </td>
                 
                 <!-- Group Total -->
-                <td class="px-3 py-2 text-right text-xs font-bold text-green-400 bg-gray-800/50">
+                <td class="px-3 py-2 text-right text-xs font-bold text-green-600 dark:text-green-400 bg-gray-50 dark:bg-gray-800/50">
                   {{ formatCurrency(group.totalAmount, true) }}
                 </td>
               </tr>
@@ -459,13 +459,13 @@
                 <tr
                   v-for="item in group.items"
                   :key="`${group.groupName}-${item.id}`"
-                  class="hover:bg-gray-800/30 transition-colors"
+                  class="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
                 >
                   <!-- Fixed columns -->
-                  <td class="sticky left-0 bg-gray-900 px-3 py-2 text-xs text-gray-400 pl-8 border-r border-gray-700">
+                  <td class="sticky left-0 bg-white dark:bg-gray-900 px-3 py-2 text-xs text-gray-600 dark:text-gray-400 pl-8 border-r border-gray-200 dark:border-gray-700">
                     {{ item.enclaveId || '-' }}
                   </td>
-                  <td class="sticky left-16 bg-gray-900 px-3 py-2 text-xs text-gray-400 min-w-[200px] border-r border-gray-700">
+                  <td class="sticky left-16 bg-white dark:bg-gray-900 px-3 py-2 text-xs text-gray-600 dark:text-gray-400 min-w-[200px] border-r border-gray-200 dark:border-gray-700">
                     <div>{{ item.accountName || 'Unknown' }}</div>
                     <div class="flex items-center gap-1.5 text-gray-500">
                       <UTooltip :text="getAccountStatusTooltip(item.enclaveStatus)">
@@ -478,19 +478,19 @@
                       <span>{{ item.accountId }}</span>
                     </div>
                   </td>
-                  <td class="px-3 py-2 text-xs text-gray-400">
+                  <td class="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">
                     {{ item.projectType || '-' }}
                   </td>
-                  <td class="px-3 py-2 text-xs text-gray-400">
+                  <td class="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">
                     {{ item.lob || '-' }}
                   </td>
-                  <td class="px-3 py-2 text-xs text-gray-400">
+                  <td class="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">
                     {{ item.deptNumber || '-' }}
                   </td>
-                  <td class="px-3 py-2 text-xs text-gray-400">
+                  <td class="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">
                     {{ item.projNumber || '-' }}
                   </td>
-                  <td class="px-3 py-2 text-xs text-gray-400 border-r border-gray-700">
+                  <td class="px-3 py-2 text-xs text-gray-600 dark:text-gray-400 border-r border-gray-200 dark:border-gray-700">
                     {{ item.taskNumber || '-' }}
                   </td>
                   
@@ -498,13 +498,13 @@
                   <td 
                     v-for="month in monthColumns" 
                     :key="`${group.groupName}-${item.id}-${month}`"
-                    class="px-3 py-2 text-right text-xs border-r border-gray-600 text-gray-400"
+                    class="px-3 py-2 text-right text-xs border-r border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-400"
                   >
                     {{ formatAmount(item.forecasts?.[month]) }}
                   </td>
                   
                   <!-- Row Total -->
-                  <td class="px-3 py-2 text-right text-xs text-gray-400 bg-gray-800/20">
+                  <td class="px-3 py-2 text-right text-xs text-gray-700 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/20">
                     {{ formatCurrency(item.totalAmount || 0, true) }}
                   </td>
                 </tr>
@@ -517,14 +517,14 @@
       <!-- Empty State -->
       <div v-if="filteredData.length === 0" class="p-8 text-center">
         <Icon name="i-heroicons-document-text" class="w-12 h-12 text-gray-500 mx-auto mb-4" />
-        <h3 class="text-lg font-medium text-gray-300 mb-2">No forecast data found</h3>
-        <p class="text-gray-400">Upload an Excel file to get started</p>
+        <h3 class="text-lg font-medium text-gray-900 dark:text-gray-300 mb-2">No forecast data found</h3>
+        <p class="text-gray-600 dark:text-gray-400">Upload an Excel file to get started</p>
       </div>
     </div>
 
     <!-- Pagination -->
     <div v-if="filteredData.length > 0" class="flex items-center justify-between">
-      <div class="text-sm text-gray-400">
+      <div class="text-sm text-gray-600 dark:text-gray-400">
         Showing {{ paginatedData.length }} of {{ filteredData.length }} accounts
       </div>
       <div class="flex items-center gap-2">
@@ -544,7 +544,7 @@
         >
           Previous
         </UButton>
-        <span class="text-sm text-gray-400">
+        <span class="text-sm text-gray-600 dark:text-gray-400">
           Page {{ currentPage }} of {{ totalPages }}
         </span>
         <UButton
@@ -570,9 +570,9 @@
     <UModal v-model="showClearDialog">
       <UCard>
         <template #header>
-          <h3 class="text-lg font-semibold text-white">Clear All Forecast Data</h3>
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Clear All Forecast Data</h3>
         </template>
-        <p class="text-gray-300">
+        <p class="text-gray-700 dark:text-gray-300">
           Are you sure you want to clear all forecast data? This action cannot be undone.
         </p>
         <template #footer>
@@ -614,8 +614,8 @@ const filters = ref({
   enclaveId: '',
   projectType: '',
   lob: '',
-  minAmount: null as number | null,
-  maxAmount: null as number | null
+  minAmount: undefined as number | undefined,
+  maxAmount: undefined as number | undefined
 })
 const showFilterPanel = ref(false)
 const quickSearch = ref('')
@@ -637,7 +637,7 @@ const groupByOptions = [
 const selectedGroupBy = computed({
   get: () => groupByOptions.find(opt => opt.value === groupBy.value) || groupByOptions[0],
   set: (option) => {
-    groupBy.value = typeof option === 'object' ? option.value : option
+    groupBy.value = typeof option === 'object' ? String((option as any).value ?? '') : String(option ?? '')
   }
 })
 
@@ -837,8 +837,9 @@ const formatMonth = (month: string) => {
   if (!month) return '-'
   const [year, monthNum] = month.split('-')
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-  const monthIndex = parseInt(monthNum) - 1
-  return `${monthNames[monthIndex]} ${year}`
+  const monthIndex = parseInt(monthNum || '', 10) - 1
+  const monthLabel = monthNames[monthIndex] || month
+  return `${monthLabel} ${year || ''}`.trim()
 }
 
 // Format currency
@@ -889,8 +890,8 @@ const clearFilters = () => {
     enclaveId: '',
     projectType: '',
     lob: '',
-    minAmount: null,
-    maxAmount: null
+    minAmount: undefined,
+    maxAmount: undefined
   }
   updateURL()
 }
@@ -1381,16 +1382,16 @@ const getAccountStatusTooltip = (status: string | undefined) => {
 }
 
 .overflow-x-auto::-webkit-scrollbar-track {
-  background: rgb(31, 41, 55);
+  background: var(--ghost-scrollbar-track);
 }
 
 .overflow-x-auto::-webkit-scrollbar-thumb {
-  background: rgb(75, 85, 99);
+  background: var(--ghost-scrollbar-thumb);
   border-radius: 4px;
 }
 
 .overflow-x-auto::-webkit-scrollbar-thumb:hover {
-  background: rgb(107, 114, 128);
+  background: var(--ghost-scrollbar-thumb-hover);
 }
 
 /* Sticky positioning for headers and columns */
@@ -1420,17 +1421,17 @@ th.sticky:after {
   right: 0;
   bottom: 0;
   width: 1px;
-  background: rgb(55, 65, 81);
+  background: var(--ghost-border);
 }
 
 /* Ensure proper background for sticky headers */
 thead th {
-  background-color: rgb(31, 41, 55);
+  background-color: var(--ghost-surface);
 }
 
 /* Monthly totals row styling */
 thead tr:nth-child(2) td {
-  background-color: rgb(31, 41, 55);
+  background-color: var(--ghost-surface-2);
 }
 
 /* Drag scrolling styles */

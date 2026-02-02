@@ -1,6 +1,8 @@
 import { sendSuccess, errors } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { logger } from '../../utils/logger'
+import { requireAdmin } from '../../utils/user-roles'
+import { getLogs } from '../../utils/log-manager'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/logging/activity-logs', 'GET', {
@@ -50,6 +52,7 @@ registerEndpoint('/api/logging/activity-logs', 'GET', {
 })
 
 export default defineEventHandler(async (event) => {
+  await requireAdmin(event)
   const startTime = Date.now()
 
   try {

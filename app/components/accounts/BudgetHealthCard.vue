@@ -1,17 +1,17 @@
 <template>
-  <UCard class="bg-gray-900 border border-gray-800">
+  <UCard class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
     <template #header>
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
           <UIcon name="i-heroicons-chart-pie" class="text-blue-500 w-5 h-5" />
-          <h3 class="font-semibold text-lg">GDMS Forecast Health</h3>
+          <h3 class="font-semibold text-lg text-gray-900 dark:text-white">GDMS Forecast Health</h3>
         </div>
         <UButton
           to="/support/docs?topic=gdms-forecast-health"
           variant="ghost"
           size="xs"
           icon="i-heroicons-question-mark-circle"
-          class="text-gray-400 hover:text-white"
+          class="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
         >
           Help
         </UButton>
@@ -21,7 +21,7 @@
     <div v-if="loading" class="flex items-center justify-center py-8">
       <UIcon
         name="i-heroicons-arrow-path"
-        class="w-6 h-6 animate-spin text-gray-400"
+        class="w-6 h-6 animate-spin text-gray-500 dark:text-gray-400"
       />
     </div>
 
@@ -29,12 +29,12 @@
       <!-- Progress Bar -->
       <div>
         <div class="flex justify-between items-baseline mb-2">
-          <span class="text-sm text-gray-400">GDMS Forecast Utilization</span>
+          <span class="text-sm text-gray-600 dark:text-gray-400">GDMS Forecast Utilization</span>
           <span :class="utilizationColorClass" class="text-2xl font-bold">
             {{ utilizationPercent }}%
           </span>
         </div>
-        <div class="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
+        <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
           <div
             :class="utilizationBgClass"
             class="h-3 rounded-full transition-all duration-500"
@@ -45,29 +45,29 @@
 
       <!-- Key Metrics Grid -->
       <div class="grid grid-cols-2 gap-4">
-        <div class="bg-gray-800/50 rounded-lg p-3">
-          <div class="text-xs text-gray-400 mb-1">Monthly GDMS Forecast</div>
-          <div class="text-lg font-semibold text-white">
+        <div class="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+          <div class="text-xs text-gray-600 dark:text-gray-400 mb-1">Monthly GDMS Forecast</div>
+          <div class="text-lg font-semibold text-gray-900 dark:text-white">
             {{ formatCurrency(budget) }}
           </div>
         </div>
 
-        <div class="bg-gray-800/50 rounded-lg p-3">
-          <div class="text-xs text-gray-400 mb-1">Current Spend</div>
-          <div class="text-lg font-semibold text-blue-400">
+        <div class="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+          <div class="text-xs text-gray-600 dark:text-gray-400 mb-1">Current Spend</div>
+          <div class="text-lg font-semibold text-blue-600 dark:text-blue-400">
             {{ formatCurrency(currentSpend) }}
           </div>
         </div>
 
-        <div class="bg-gray-800/50 rounded-lg p-3">
-          <div class="text-xs text-gray-400 mb-1">Daily Burn Rate</div>
-          <div class="text-lg font-semibold text-purple-400">
+        <div class="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+          <div class="text-xs text-gray-600 dark:text-gray-400 mb-1">Daily Burn Rate</div>
+          <div class="text-lg font-semibold text-purple-600 dark:text-purple-400">
             {{ formatCurrency(burnRate) }}/day
           </div>
         </div>
 
-        <div class="bg-gray-800/50 rounded-lg p-3">
-          <div class="text-xs text-gray-400 mb-1">AWS Projected MTD</div>
+        <div class="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+          <div class="text-xs text-gray-600 dark:text-gray-400 mb-1">AWS Projected MTD</div>
           <div :class="projectedColorClass" class="text-lg font-semibold">
             {{ formatCurrency(projectedSpend) }}
           </div>
@@ -77,11 +77,11 @@
       <!-- Simple Forecast Timeline -->
       <div
         v-if="forecastTimeline.length > 0 && budget > 0"
-        class="bg-gray-800/50 rounded-lg p-4"
+        class="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4"
       >
         <div class="flex items-center justify-between mb-4">
-          <div class="text-xs font-medium text-gray-300">AWS Spend Projection</div>
-          <div class="text-xs text-gray-400">
+          <div class="text-xs font-medium text-gray-700 dark:text-gray-300">AWS Spend Projection</div>
+          <div class="text-xs text-gray-600 dark:text-gray-400">
             GDMS Forecast: {{ formatCurrency(budget) }}
           </div>
         </div>
@@ -89,12 +89,12 @@
         <!-- Horizontal Timeline -->
         <div class="relative px-2 pb-8">
           <!-- Timeline line (grey) -->
-          <div class="absolute left-2 right-2 top-1.5 h-0.5 bg-gray-700" />
+          <div class="absolute left-2 right-2 top-1.5 h-0.5 bg-gray-200 dark:bg-gray-700" />
 
           <!-- Date markers -->
           <div class="relative flex justify-between">
             <div
-              v-for="(point, index) in forecastTimeline"
+              v-for="point in forecastTimeline"
               :key="point.date"
               class="flex flex-col items-center"
             >
@@ -109,14 +109,14 @@
               <!-- Date label -->
               <div
                 class="text-[10px] mt-2 whitespace-nowrap"
-                :class="point.isToday ? 'text-blue-400 font-semibold' : 'text-gray-400'"
+                :class="point.isToday ? 'text-blue-600 dark:text-blue-400 font-semibold' : 'text-gray-500 dark:text-gray-400'"
               >
                 {{ point.label }}
               </div>
               <!-- Amount -->
               <div
                 class="text-[10px] font-medium mt-0.5 whitespace-nowrap"
-                :class="point.isToday ? 'text-blue-300' : point.exceeds ? 'text-red-400' : 'text-gray-300'"
+                :class="point.isToday ? 'text-blue-600 dark:text-blue-300' : point.exceeds ? 'text-red-500 dark:text-red-400' : 'text-gray-700 dark:text-gray-300'"
               >
                 {{ formatCurrency(point.cumulative) }}
               </div>
@@ -136,7 +136,7 @@
                 :popper="{ placement: 'top' }"
               >
                 <div
-                  class="bg-gray-800 rounded-full p-0.5 ring-2 ring-orange-500/40 hover:ring-orange-500/60 transition-all"
+                  class="bg-white dark:bg-gray-800 rounded-full p-0.5 ring-2 ring-orange-500/40 hover:ring-orange-500/60 transition-all"
                 >
                   <UIcon
                     name="i-heroicons-exclamation-triangle-solid"
@@ -559,10 +559,10 @@ const statusBgClass = computed(() => {
   const budget = props.budget;
 
   if (projected > budget)
-    return "bg-red-900/20 text-red-300 border border-red-800";
+    return "bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800";
   if (utilizationPercent.value >= 90)
-    return "bg-yellow-900/20 text-yellow-300 border border-yellow-800";
-  return "bg-blue-900/20 text-blue-300 border border-blue-800";
+    return "bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 border border-yellow-300 dark:border-yellow-800";
+  return "bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-800";
 });
 
 const statusIcon = computed(() => {

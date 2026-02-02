@@ -109,6 +109,19 @@ export const useUserGroupStore = defineStore('userGroups', {
   },
 
   actions: {
+    // Set groups for dev mode (skips Graph API)
+    setDevGroups(groups: string[]) {
+      this.allEntraGroups = groups
+      this.roleGroups = {}
+      this.distributionGroups = {}
+      this.awsRoles = {}
+      this.myAccountIds = []
+      this.myAdminAccountIds = []
+      this.groupsLastFetch = Date.now()
+      this.awsRolesLastFetch = Date.now()
+      console.log('[GHOST-AUTH] Dev mode: Set mock groups:', groups)
+    },
+
     async initializeGroups(accessToken: string, force: boolean = false) {
       if (!import.meta.client) return // only run on client-side
       if (!this.groupsNeedRefresh && !force) {

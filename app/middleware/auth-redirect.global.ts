@@ -69,11 +69,10 @@ export default defineNuxtRouteMiddleware((to, from) => {
   if (to.path.startsWith('/s/')) return
 
   const { user, loggedIn } = useOidcAuth()
-  const { isBypassEnabled } = useDevAuth()
 
-  // Check if authentication is required
-  const needsAuth = !loggedIn.value && !isBypassEnabled()
-  
+  // Check if authentication is required (devMode handled by nuxt-oidc-auth)
+  const needsAuth = !loggedIn.value
+
   // If authentication is needed and we're not already going to auth
   if (needsAuth) {
     console.log('[GHOST-AUTH] Middleware: Auth required for:', to.fullPath)
@@ -82,23 +81,30 @@ export default defineNuxtRouteMiddleware((to, from) => {
     const { saveReturnUrl } = useAuthRedirect()
     saveReturnUrl(to.fullPath)
 
-    // Let OIDC's middleware handle the actual redirect to Entra
+    // Let OIDC's middleware handle the actual redirect to Entra (or dev login)
     // It will redirect to the configured callbackRedirectUrl after auth
-    // Don't manually redirect here - just abort and let OIDC handle it
     console.log('[GHOST-AUTH] Middleware: Aborting navigation, letting OIDC handle redirect')
     return abortNavigation()
   }
 
+  // Skip JWT expiration check for dev provider (dev tokens don't have real exp)
+  if (user.value?.provider === 'dev') {
+    // Log navigation for dev mode
+    const email = user.value?.claims?.email || user.value?.userInfo?.email || 'dev@localhost'
+    const username = email.split("@")[0] || "DevUser"
+    logActivity(`Navigation - USER:${username}, PATH:${to.fullPath}`)
+    return
+  }
+
   // Check for expired tokens or invalid auth state
   if (loggedIn.value && user.value) {
-    // Add token expiration check if available
     const accessToken = user.value.accessToken
     if (accessToken) {
       try {
         // Basic JWT expiration check (if using JWT tokens)
         const payload = JSON.parse(atob(accessToken.split('.')[1]))
         const now = Date.now() / 1000
-        
+
         if (payload.exp && payload.exp < now) {
           console.log('[GHOST-AUTH] Middleware: Token expired, redirecting to auth')
           const { saveReturnUrl } = useAuthRedirect()
@@ -112,9 +118,12 @@ export default defineNuxtRouteMiddleware((to, from) => {
     }
   }
 
-  // Log page navigation
-  const email = user.value?.claims?.email as string
-  const username = email.split("@")[0] || "UnknownUser";
-  const logMessage = `Navigation - USER:${username}, PATH:${to.fullPath}`;
-  logActivity(logMessage);
+  // Log page navigation (guarded - only when logged in with valid email)
+  if (loggedIn.value && user.value) {
+    const email = user.value?.claims?.email || user.value?.userInfo?.email || ''
+    if (email) {
+      const username = email.split("@")[0] || "UnknownUser"
+      logActivity(`Navigation - USER:${username}, PATH:${to.fullPath}`)
+    }
+  }
 })

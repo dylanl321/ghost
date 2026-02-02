@@ -1,5 +1,5 @@
 <template>
-  <div class="h-screen bg-gray-50 dark:bg-slate-900 flex overflow-hidden">
+  <div class="h-screen bg-[var(--ghost-bg)] dark:bg-slate-900 flex overflow-hidden">
     <!-- Side Navigation -->
     <SideNav ref="sideNavRef" />
 
@@ -18,7 +18,7 @@
 
       <!-- Main Content Area -->
       <main 
-        class="flex-1 min-h-0 flex flex-col bg-gray-50 dark:bg-slate-900"
+        class="flex-1 min-h-0 flex flex-col bg-[var(--ghost-bg)] dark:bg-slate-900"
         :class="isExplorerPage ? 'overflow-hidden' : 'pt-4 md:pt-4 overflow-auto'"
       >
         <!-- Page Content -->
@@ -32,16 +32,18 @@
       </main>
 
       <!-- Footer -->
-      <footer class="bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 h-[53px] flex items-center">
+      <footer class="bg-[var(--ghost-surface-2)] dark:bg-slate-800 border-t border-[color:var(--ghost-border)] dark:border-slate-700 h-[53px] flex items-center">
         <div class="px-6 flex justify-between items-center w-full text-sm text-gray-500 dark:text-gray-400">
           <!-- Left: GHOST Branding -->
           <div class="flex items-center gap-3">
             <div class="flex items-center gap-2">
               <UIcon name="i-fa6-solid-ghost" class="h-4 w-4 text-emerald-400" />
-              <span class="font-medium text-gray-300">GHOST</span>
+              <span class="font-medium text-gray-900 dark:text-gray-300">GHOST</span>
             </div>
-            <span class="text-gray-600">|</span>
+            <span class="text-gray-600 dark:text-gray-500">|</span>
             <span class="text-xs">A product of the GDMS AWS Landing Zone Team</span>
+            <span class="text-gray-400">•</span>
+            <NuxtLink to="/changelog" class="text-xs hover:text-primary transition-colors">v{{ $config.public.appVersion }}</NuxtLink>
           </div>
 
           <!-- Right: Feedback & Active Queries -->
@@ -65,6 +67,9 @@
       <ChatThreadsSidebar
         v-if="siteConfigStore.isStrandsChatEnabled"
       />
+
+      <!-- Dev Options Panel (only shows in dev auth mode) -->
+      <DevOptionsPanel />
     </ClientOnly>
 
     <!-- Global Command Palette (Cmd+K) -->

@@ -295,7 +295,7 @@
 
 <script setup lang="ts">
 import { useChatThreadsStore } from '~/stores/useChatThreadsStore'
-import type { ChatThreadSummary } from '~/shared/types/chat-threads'
+import type { ChatThread } from '#shared/types/chat-threads'
 
 const emit = defineEmits<{
   'thread-selected': [threadId: string]
@@ -304,7 +304,23 @@ const emit = defineEmits<{
   'export-thread': [threadId: string]
 }>()
 
-const threadsStore = useChatThreadsStore()
+type ChatThreadsStoreView = {
+  threads: ChatThread[]
+  activeThreadId: string | null
+  loading: boolean
+  pinnedThreads: ChatThread[]
+  unpinnedThreads: ChatThread[]
+  archivedThreads: ChatThread[]
+  fetchThreads: (filters?: unknown) => Promise<void>
+  updateThread: (
+    threadId: string,
+    updates: { title?: string; description?: string; isPinned?: boolean; isArchived?: boolean }
+  ) => Promise<boolean>
+  deleteThreadAndCreateNew: (threadId: string) => Promise<ChatThread | null>
+  deleteThread: (threadId: string) => Promise<boolean>
+}
+
+const threadsStore = useChatThreadsStore() as unknown as ChatThreadsStoreView
 const toast = useToast()
 
 // Search and filter state
@@ -382,6 +398,18 @@ const emptyStateMessage = computed(() => {
 // Initialize
 onMounted(async () => {
   await threadsStore.fetchThreads()
+
+  // Prefetch first 10 threads for faster switching
+  onNuxtReady(async () => {
+    const first10 = threadsStore.threads.slice(0, 10)
+    for (const thread of first10) {
+      try {
+        await $fetch(`/api/chat/threads/${thread.threadId}`)
+      } catch {
+        // Silently fail - this is just prefetching for cache
+      }
+    }
+  })
 })
 
 // Handle search
@@ -420,7 +448,8 @@ async function handlePin(threadId: string, pin: boolean) {
   } else {
     toast.add({
       title: 'Failed to update thread',
-      color: 'red'
+      color: 'red',
+      timeout: 0
     })
   }
 }
@@ -442,7 +471,8 @@ async function handleArchive(threadId: string, archive: boolean) {
   } else {
     toast.add({
       title: 'Failed to update thread',
-      color: 'red'
+      color: 'red',
+      timeout: 0
     })
   }
 }
@@ -480,7 +510,8 @@ async function confirmRename() {
   } else {
     toast.add({
       title: 'Failed to rename thread',
-      color: 'red'
+      color: 'red',
+      timeout: 0
     })
   }
 
@@ -510,7 +541,8 @@ async function confirmDelete() {
   } else {
     toast.add({
       title: 'Failed to delete thread',
-      color: 'red'
+      color: 'red',
+      timeout: 0
     })
   }
 
@@ -577,7 +609,8 @@ async function confirmBulkDelete() {
   } else if (successCount === 0) {
     toast.add({
       title: `Failed to delete ${failCount} thread${failCount > 1 ? 's' : ''}`,
-      color: 'red'
+      color: 'red',
+      timeout: 0
     })
   } else {
     toast.add({

@@ -171,6 +171,16 @@ export interface EntraUsersDatasetFilters {
    * Lookback period in days for activity
    */
   lookbackDays?: number
+
+  /**
+   * Filter by specific departments
+   */
+  departments?: string[]
+
+  /**
+   * Search by user name or email
+   */
+  userSearch?: string
 }
 
 /**
@@ -329,9 +339,41 @@ export interface CloudTrailEventRecord {
   responseElements?: Record<string, any>
 }
 
+/**
+ * Normalized Entra ID user record
+ * Represents one user-account-role mapping (expanded view)
+ */
+export interface EntraUserRecord {
+  userId: string
+  userPrincipalName: string
+  displayName: string
+  email: string
+  accountId: string
+  accountName: string
+  role: string
+  groupName: string
+  groupId: string
+  lastSignIn?: string
+  jobTitle?: string
+  department?: string
+  manager?: string
+}
+
 // ============================================================================
 // Dataset Report Results
 // ============================================================================
+
+/**
+ * Entra Users dataset result for reports
+ */
+export interface EntraUsersDatasetResult {
+  enabled: true
+  totalUsers: number
+  usersByRole: Record<string, number>
+  usersByDepartment: Record<string, number>
+  activeUsers: number
+  records: EntraUserRecord[]
+}
 
 /**
  * Complete dataset report data structure
@@ -412,6 +454,11 @@ export interface DatasetReportData {
   }
 
   /**
+   * Entra ID Users data (if enabled)
+   */
+  entraUsers?: EntraUsersDatasetResult
+
+  /**
    * AI-generated insights (if enabled)
    */
   aiInsights?: {
@@ -476,4 +523,17 @@ export const CLOUDTRAIL_COLUMNS: DatasetColumnConfig[] = [
   { key: 'readOnly', label: 'Read Only', width: 12, type: 'boolean' },
   { key: 'errorCode', label: 'Error Code', width: 20 },
   { key: 'region', label: 'Region', width: 15 },
+]
+
+export const ENTRA_USERS_COLUMNS: DatasetColumnConfig[] = [
+  { key: 'displayName', label: 'Display Name', width: 30 },
+  { key: 'email', label: 'Email', width: 35 },
+  { key: 'userPrincipalName', label: 'Principal Name', width: 35 },
+  { key: 'accountName', label: 'Account', width: 25 },
+  { key: 'role', label: 'Role', width: 25 },
+  { key: 'groupName', label: 'Group Name', width: 35 },
+  { key: 'department', label: 'Department', width: 20 },
+  { key: 'jobTitle', label: 'Job Title', width: 25 },
+  { key: 'lastSignIn', label: 'Last Sign-In', width: 20, type: 'date' },
+  { key: 'manager', label: 'Manager', width: 25 },
 ]

@@ -5,25 +5,57 @@
 
 import type { H3Event } from 'h3'
 import { createError } from 'h3'
-import type { 
-  EntraGroup, 
-  EntraUser, 
+import type {
+  EntraGroup,
+  EntraUser,
   GroupMembersResponse,
   GroupSearchFilters,
   EntraCacheTags
 } from '../../types/entra'
-import { 
-  getCacheKey, 
-  buildGroupFilter, 
+import {
+  getCacheKey,
+  buildGroupFilter,
   buildDistributionGroupFilter,
   GRAPH_SELECT_FIELDS,
   getGraphBaseUrl,
-  entraConfig 
+  entraConfig
 } from './config'
 import { groupByAccount } from './group-parser'
 import { accountCache, CacheTags } from '../cache-manager'
 import { getUserSession } from './session'
 import { logger } from '../logger'
+
+/**
+ * Check if the current session is in dev mode (using mock authentication)
+ * Dev mode sessions have an invalid token that won't work with real Graph API
+ */
+async function isDevModeSession(event: H3Event): Promise<boolean> {
+  try {
+    const { getUserSession: getOIDCUserSession } = await import('nuxt-oidc-auth/runtime/server/utils/session.js')
+    const oidcSession = await getOIDCUserSession(event)
+    return oidcSession?.provider === 'dev'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Create a dev mode error that gracefully informs the client
+ */
+function createDevModeError(operation: string) {
+  return createError({
+    statusCode: 503,
+    statusMessage: `Graph API unavailable in dev mode`,
+    data: {
+      devMode: true,
+      operation,
+      message: 'Microsoft Graph API calls are not available in development authentication mode. Use real Entra ID authentication to access user/group data.'
+    }
+  })
+}
+
+// Export for use in API handlers
+export { isDevModeSession }
 
 /**
  * Create headers for Graph API requests
@@ -71,18 +103,24 @@ export async function graphRequest<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
+  // Check if we're in dev mode - Graph API won't work with mock tokens
+  if (await isDevModeSession(event)) {
+    logger.info('Dev mode detected - skipping Graph API request')
+    throw createDevModeError(`graphRequest: ${endpoint}`)
+  }
+
   const baseUrl = getGraphBaseUrl()
   const url = `${baseUrl}${endpoint}`
-  
+
   // Check if the query uses advanced operators that require ConsistencyLevel header
-  const requiresConsistencyLevel = endpoint.includes('endsWith') || 
+  const requiresConsistencyLevel = endpoint.includes('endsWith') ||
                                    endpoint.includes('$count') ||
                                    endpoint.includes('$orderby') ||
                                    endpoint.includes('$search')
-  
+
   let retries = 0
   const maxRetries = entraConfig.search.maxRetries
-  
+
   logger.info(`Making Graph API request to: ${url}`)
   logger.info('Request options:', { method: options.method || 'GET', requiresConsistencyLevel })
 

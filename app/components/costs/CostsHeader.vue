@@ -1,13 +1,13 @@
 <template>
-  <div class="bg-gray-900 border-b border-gray-700 p-4 md:p-5 pt-0 md:pt-0" data-tour="costs-header">
+  <div class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 p-4 md:p-5 pt-0 md:pt-0" data-tour="costs-header">
     <div class="flex justify-between items-center">
       <div class="flex items-center gap-2">
         <div>
-          <h1 class="text-2xl font-bold text-white">Cost Analytics</h1>
-          <p class="text-gray-300 text-sm">Monitor and analyze account spending</p>
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Cost Analytics</h1>
+          <p class="text-gray-600 dark:text-gray-300 text-sm">Monitor and analyze account spending</p>
         </div>
         <UTooltip text="Learn how to use the Cost Dashboard">
-          <NuxtLink to="/support/docs?topic=cost-dashboard-guide" class="text-gray-400 hover:text-gray-300">
+          <NuxtLink to="/support/docs?topic=cost-dashboard-guide" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
             <UIcon name="i-heroicons-question-mark-circle" class="w-5 h-5" />
           </NuxtLink>
         </UTooltip>
@@ -38,7 +38,7 @@
         <!-- Reports Menu -->
         <UDropdown :items="reportsMenuItems" :popper="{ placement: 'bottom-end' }">
           <UButton
-            color="white"
+            color="gray"
             variant="ghost"
             :icon="isExporting ? 'i-heroicons-arrow-path' : 'i-heroicons-document-text'"
             trailing-icon="i-heroicons-chevron-down"
@@ -51,7 +51,7 @@
         <!-- Help Menu -->
         <span data-tour="costs-help">
           <UDropdown :items="helpMenuItems" :popper="{ placement: 'bottom-end' }">
-            <UButton color="white" variant="ghost" icon="i-heroicons-question-mark-circle" />
+            <UButton color="gray" variant="ghost" icon="i-heroicons-question-mark-circle" />
           </UDropdown>
         </span>
 
@@ -60,7 +60,7 @@
 
         <!-- Refresh -->
         <UTooltip text="Refresh data">
-          <UButton color="white" variant="ghost" icon="i-heroicons-arrow-path" @click="$emit('refresh')" />
+          <UButton color="gray" variant="ghost" icon="i-heroicons-arrow-path" @click="$emit('refresh')" />
         </UTooltip>
       </div>
     </div>
@@ -82,15 +82,15 @@
       <UCard
         :ui="{
           ring: '',
-          divide: 'divide-y divide-gray-700',
+          divide: 'divide-y divide-gray-200 dark:divide-gray-700',
           body: { base: 'p-0', padding: '' },
-          header: { base: 'py-4 px-6', background: 'bg-gray-900' },
-          footer: { base: 'py-4 px-6', background: 'bg-gray-900' }
+          header: { base: 'py-4 px-6', background: 'bg-white dark:bg-gray-900' },
+          footer: { base: 'py-4 px-6', background: 'bg-white dark:bg-gray-900' }
         }"
       >
         <template #header>
           <div class="flex items-center justify-between">
-            <h3 class="text-lg font-semibold text-white">Share Interactive View</h3>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Share Interactive View</h3>
             <UButton
               color="gray"
               variant="ghost"
@@ -106,7 +106,7 @@
           <div v-if="shareLoading" class="flex items-center justify-center py-8">
             <div class="text-center">
               <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-blue-500 mx-auto mb-2" />
-              <p class="text-sm text-gray-400">Creating share link...</p>
+              <p class="text-sm text-gray-600 dark:text-gray-400">Creating share link...</p>
             </div>
           </div>
 
@@ -118,7 +118,7 @@
             </div>
 
             <div class="space-y-2">
-              <label class="text-sm font-medium text-gray-300">Share URL</label>
+              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Share URL</label>
               <div class="flex gap-2">
                 <UInput
                   :model-value="generatedShareUrl"
@@ -137,7 +137,7 @@
               </div>
             </div>
 
-            <div class="bg-blue-900/20 border border-blue-700 rounded-lg p-3 text-xs text-blue-200">
+            <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3 text-xs text-blue-800 dark:text-blue-200">
               Link expires in 30 days and includes current view settings, selected accounts, and filters.
             </div>
           </div>
@@ -156,7 +156,7 @@
 
           <!-- Initial State -->
           <div v-else class="space-y-4">
-            <p class="text-sm text-gray-300">
+            <p class="text-sm text-gray-700 dark:text-gray-300">
               Create a shareable link that includes your current view settings, selected accounts, and filters.
             </p>
           </div>

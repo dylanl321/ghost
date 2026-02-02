@@ -1,11 +1,11 @@
 <template>
-  <div class="flex h-full min-h-0 bg-gray-950">
+  <div class="flex h-full min-h-0 bg-gray-50 dark:bg-gray-950">
     <!-- Sidebar -->
-    <div class="w-80 flex-shrink-0 border-r border-gray-700 h-full min-h-0 flex flex-col overflow-hidden" data-tour="account-selector">
-      <div class="flex-1 bg-gray-900 flex flex-col min-h-0">
+    <div class="w-80 flex-shrink-0 border-r border-gray-200 dark:border-gray-700 h-full min-h-0 flex flex-col overflow-hidden" data-tour="account-selector">
+      <div class="flex-1 bg-white dark:bg-gray-900 flex flex-col min-h-0">
         <!-- Header -->
-        <div class="flex items-center justify-between p-4 border-b border-gray-700">
-          <h2 class="text-lg font-semibold text-white">Account Selector</h2>
+        <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Account Selector</h2>
           <UButton 
             size="xs" 
             variant="ghost" 
@@ -17,35 +17,35 @@
         </div>
 
         <!-- Selected Accounts Indicator -->
-        <div v-if="selectedAccounts.length > 0" class="px-3 py-2 border-b border-gray-700">
+        <div v-if="selectedAccounts.length > 0" class="px-3 py-2 border-b border-gray-200 dark:border-gray-700">
           <UPopover mode="hover" :popper="{ placement: 'bottom-start', offsetDistance: 4 }">
             <button
-              class="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-gray-300 bg-blue-900/20 hover:bg-blue-900/30 rounded transition-colors"
+              class="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-gray-700 dark:text-gray-300 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors"
             >
               <Icon name="i-heroicons-check-circle" class="w-3.5 h-3.5 text-blue-400" />
               <span class="font-medium">{{ selectedAccounts.length }} account{{ selectedAccounts.length !== 1 ? 's' : '' }} selected</span>
-              <Icon name="i-heroicons-chevron-down" class="w-3 h-3 text-gray-400 ml-auto" />
+              <Icon name="i-heroicons-chevron-down" class="w-3 h-3 text-gray-500 dark:text-gray-400 ml-auto" />
             </button>
 
             <template #panel>
               <div class="p-2 w-72 max-h-64 overflow-y-auto">
-                <div class="text-xs font-medium text-gray-300 mb-2">Selected Accounts</div>
+                <div class="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Selected Accounts</div>
                 <div class="space-y-1">
                   <div
                     v-for="account in displayedSelectedAccounts"
                     :key="getAccountKey(account)"
-                    class="flex items-center justify-between gap-2 px-2 py-1.5 bg-blue-900/30 rounded text-xs group"
+                    class="flex items-center justify-between gap-2 px-2 py-1.5 bg-blue-50 dark:bg-blue-900/30 rounded text-xs group"
                   >
                     <div class="flex-1 min-w-0">
-                      <div class="text-gray-200 truncate font-medium">
+                      <div class="text-gray-900 dark:text-gray-200 truncate font-medium">
                         {{ formatAccountDisplayName(account) }}
                       </div>
-                      <div class="text-gray-400 text-[10px] truncate">
+                      <div class="text-gray-600 dark:text-gray-400 text-[10px] truncate">
                         {{ account.accountId || account.awsStandardAccountID }}
                       </div>
                     </div>
                     <button
-                      class="flex-shrink-0 p-0.5 rounded hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors"
+                      class="flex-shrink-0 p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
                       @click.stop="toggleAccount(getAccountKey(account))"
                     >
                       <Icon name="i-heroicons-x-mark" class="w-3.5 h-3.5" />
@@ -57,7 +57,7 @@
                   </div>
                 </div>
 
-                <div class="mt-2 pt-2 border-t border-gray-700">
+                <div class="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
                   <UButton
                     size="xs"
                     color="gray"
@@ -74,7 +74,7 @@
         </div>
 
         <!-- Search -->
-        <div class="p-3 border-b border-gray-700" data-tour="account-search">
+        <div class="p-3 border-b border-gray-200 dark:border-gray-700" data-tour="account-search">
           <UInput
             v-model="searchTerm"
             :placeholder="searchPlaceholder"
@@ -110,7 +110,7 @@
           </UInput>
           
           <!-- Search info when active -->
-          <div v-if="searchTerm && searchResults.total > 0" class="mt-2 text-xs text-gray-400">
+          <div v-if="searchTerm && searchResults.total > 0" class="mt-2 text-xs text-gray-600 dark:text-gray-400">
             <span v-if="searchScope === 'global'">
               Found {{ searchResults.total }} results across all categories
               <span v-if="searchResults.tabSpecific > 0">
@@ -130,13 +130,13 @@
           </div>
           
           <!-- No results message -->
-          <div v-if="searchTerm && searchResults.total === 0" class="mt-2 text-xs text-gray-400">
+          <div v-if="searchTerm && searchResults.total === 0" class="mt-2 text-xs text-gray-600 dark:text-gray-400">
             No results found. <button class="text-blue-400 hover:text-blue-300 underline" @click="searchScope = 'global'">Search all tabs?</button>
           </div>
         </div>
 
         <!-- Tabs -->
-        <div class="border-b border-gray-700" data-tour="account-tabs">
+        <div class="border-b border-gray-200 dark:border-gray-700" data-tour="account-tabs">
           <div class="flex">
             <button
               v-for="tab in tabs"
@@ -144,7 +144,7 @@
               class="flex-1 px-3 py-2 text-xs font-medium border-b-2 transition-colors flex items-center justify-center gap-1"
               :class="{
                 'text-blue-400 border-blue-400 bg-blue-900/20': activeTab === tab.id,
-                'text-gray-400 border-transparent hover:text-gray-300 hover:border-gray-600': activeTab !== tab.id
+                'text-gray-600 dark:text-gray-400 border-transparent hover:text-gray-900 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600': activeTab !== tab.id
               }"
               @click="activeTab = tab.id"
             >
@@ -160,7 +160,7 @@
           <!-- All Accounts Tab -->
           <div v-if="activeTab === 'all'" class="p-3">
             <div class="mb-3 flex justify-between items-center">
-              <span class="text-sm text-gray-300">All Accounts ({{ sortedFilteredAccounts.length }})</span>
+              <span class="text-sm text-gray-900 dark:text-gray-300">All Accounts ({{ sortedFilteredAccounts.length }})</span>
               <div class="flex gap-1 items-center">
                 <!-- Sort Popover -->
                 <UPopover mode="hover" :popper="{ placement: 'bottom-start' }">
@@ -176,15 +176,15 @@
                   
                   <template #panel="{ close }">
                     <div class="p-2 w-44">
-                      <div class="text-xs font-medium text-gray-300 mb-2">Sort by</div>
+                      <div class="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Sort by</div>
                       <div class="space-y-1">
                         <button
                           v-for="option in sortOptions"
                           :key="option.value"
-                          class="w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-gray-700 transition-colors"
+                          class="w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                           :class="{ 
                             'bg-blue-900/50 text-blue-300': accountSortBy === option.value,
-                            'text-gray-300': accountSortBy !== option.value
+                            'text-gray-700 dark:text-gray-300': accountSortBy !== option.value
                           }"
                           @click="accountSortBy = option.value as 'cost' | 'name' | 'budget' | 'utilization'; close()"
                         >
@@ -214,7 +214,7 @@
               <div 
                 v-for="account in sortedFilteredAccounts" 
                 :key="getAccountKey(account)"
-                class="flex items-center justify-between p-2 rounded hover:bg-gray-800 cursor-pointer text-sm"
+                class="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer text-sm"
                 :class="{ 'bg-blue-900/50': selectedAccounts.includes(getAccountKey(account)) }"
                 @click="toggleAccount(getAccountKey(account))"
               >
@@ -222,22 +222,22 @@
                   <input
                     type="checkbox"
                     :checked="selectedAccounts.includes(getAccountKey(account))"
-                    class="w-3 h-3 text-blue-600 bg-gray-700 border-gray-600 rounded"
+                    class="w-3 h-3 text-blue-600 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded"
                     @change="toggleAccount(getAccountKey(account))"
                     @click.stop
                   >
                   <div class="min-w-0 flex-1">
-                    <div class="text-gray-200 font-medium truncate">
+                    <div class="text-gray-900 dark:text-gray-200 font-medium truncate">
                       {{ account.accountName || account.projectName || account.name || 'Unnamed Account' }}
                     </div>
-                    <div class="text-xs text-gray-400">
+                    <div class="text-xs text-gray-600 dark:text-gray-400">
                       {{ account.accountId || account.awsStandardAccountID }}
                     </div>
                   </div>
                 </div>
                 <div class="text-right ml-2 flex flex-col space-y-1 items-end">
                   <UTooltip text="Budget">
-                    <div class="text-xs text-gray-300">
+                    <div class="text-xs text-gray-700 dark:text-gray-300">
                       {{ formatCurrency(getBudget(account)) }}
                     </div>
                   </UTooltip>
@@ -259,30 +259,30 @@
           <!-- Lines of Business Tab -->
           <div v-else-if="activeTab === 'lob'" class="p-3">
             <div class="mb-3">
-              <span class="text-sm text-gray-300">Lines of Business ({{ lobGroups.length }})</span>
+              <span class="text-sm text-gray-900 dark:text-gray-300">Lines of Business ({{ lobGroups.length }})</span>
             </div>
             
             <div class="space-y-2">
               <div
                 v-for="lob in lobGroups"
                 :key="lob.name"
-                class="bg-gray-800/50 rounded-lg"
+                class="bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-transparent"
               >
                 <div 
-                  class="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-800 rounded-t-lg min-h-[4rem]"
+                  class="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 rounded-t-lg min-h-[4rem]"
                   @click="toggleLOB(lob)"
                 >
                   <div class="flex items-center gap-2 min-w-0 flex-1">
                     <Icon name="i-heroicons-briefcase" class="w-4 h-4 text-blue-400 flex-shrink-0" />
                     <div class="min-w-0">
-                      <div class="font-medium text-gray-200 truncate">{{ lob.name || 'Unknown LOB' }}</div>
-                      <div class="text-xs text-gray-400">{{ lob.accounts.length }} accounts</div>
+                      <div class="font-medium text-gray-900 dark:text-gray-200 truncate">{{ lob.name || 'Unknown LOB' }}</div>
+                      <div class="text-xs text-gray-600 dark:text-gray-400">{{ lob.accounts.length }} accounts</div>
                     </div>
                   </div>
                   <div class="flex items-center gap-3">
                     <div class="text-right flex flex-col space-y-1 items-end">
                       <UTooltip text="Total Budget">
-                        <div class="text-xs text-gray-300">
+                        <div class="text-xs text-gray-700 dark:text-gray-300">
                           {{ formatCurrency(lob.totalBudget) }}
                         </div>
                       </UTooltip>
@@ -311,11 +311,11 @@
                 </div>
                 
                 <div v-if="expandedGroups.has('lob-' + lob.name)" class="px-3 pb-3">
-                  <div class="space-y-1 ml-4 border-l border-gray-600 pl-3">
+                  <div class="space-y-1 ml-4 border-l border-gray-200 dark:border-gray-600 pl-3">
                     <div
                       v-for="account in lob.accounts"
                       :key="getAccountKey(account)"
-                      class="flex items-center justify-between p-2 rounded hover:bg-gray-800 cursor-pointer text-sm"
+                      class="flex items-center justify-between p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer text-sm"
                       :class="{ 'bg-blue-900/50': selectedAccounts.includes(getAccountKey(account)) }"
                       @click="toggleAccount(getAccountKey(account))"
                     >
@@ -323,22 +323,22 @@
                         <input
                           type="checkbox"
                           :checked="selectedAccounts.includes(getAccountKey(account))"
-                          class="w-3 h-3 text-blue-600 bg-gray-700 border-gray-600 rounded"
+                          class="w-3 h-3 text-blue-600 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded"
                           @change="toggleAccount(getAccountKey(account))"
                           @click.stop
                         >
                         <div class="min-w-0 flex-1">
-                          <div class="text-gray-200 truncate">
+                          <div class="text-gray-900 dark:text-gray-200 truncate">
                             {{ account.accountName || account.projectName || 'Unnamed Account' }}
                           </div>
-                          <div class="text-xs text-gray-400">
+                          <div class="text-xs text-gray-600 dark:text-gray-400">
                             {{ account.accountId || account.awsStandardAccountID }}
                           </div>
                         </div>
                       </div>
                       <div class="text-right ml-2 flex flex-col space-y-1 items-end">
                         <UTooltip text="Budget">
-                          <div class="text-xs text-gray-300">
+                          <div class="text-xs text-gray-700 dark:text-gray-300">
                             {{ formatCurrency(getBudget(account)) }}
                           </div>
                         </UTooltip>
@@ -363,30 +363,30 @@
           <!-- Departments Tab -->
           <div v-else-if="activeTab === 'dept'" class="p-3">
             <div class="mb-3">
-              <span class="text-sm text-gray-300">Departments ({{ departmentGroups.length }})</span>
+              <span class="text-sm text-gray-900 dark:text-gray-300">Departments ({{ departmentGroups.length }})</span>
             </div>
             
             <div class="space-y-2">
               <div
                 v-for="dept in departmentGroups"
                 :key="dept.name"
-                class="bg-gray-800/50 rounded-lg"
+                class="bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-transparent"
               >
                 <div 
-                  class="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-800 rounded-t-lg min-h-[4rem]"
+                  class="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 rounded-t-lg min-h-[4rem]"
                   @click="toggleDepartment(dept)"
                 >
                   <div class="flex items-center gap-2 min-w-0 flex-1">
                     <Icon name="i-heroicons-building-office" class="w-4 h-4 text-green-400 flex-shrink-0" />
                     <div class="min-w-0">
-                      <div class="font-medium text-gray-200 truncate">{{ dept.name || 'Unknown Dept' }}</div>
-                      <div class="text-xs text-gray-400">{{ dept.accounts.length }} accounts</div>
+                      <div class="font-medium text-gray-900 dark:text-gray-200 truncate">{{ dept.name || 'Unknown Dept' }}</div>
+                      <div class="text-xs text-gray-600 dark:text-gray-400">{{ dept.accounts.length }} accounts</div>
                     </div>
                   </div>
                   <div class="flex items-center gap-3">
                     <div class="text-right flex flex-col space-y-1 items-end">
                       <UTooltip text="Total Budget">
-                        <div class="text-xs text-gray-300">
+                        <div class="text-xs text-gray-700 dark:text-gray-300">
                           {{ formatCurrency(dept.totalBudget) }}
                         </div>
                       </UTooltip>
@@ -415,11 +415,11 @@
                 </div>
                 
                 <div v-if="expandedGroups.has('dept-' + dept.name)" class="px-3 pb-3">
-                  <div class="space-y-1 ml-4 border-l border-gray-600 pl-3">
+                  <div class="space-y-1 ml-4 border-l border-gray-200 dark:border-gray-600 pl-3">
                     <div
                       v-for="account in dept.accounts"
                       :key="getAccountKey(account)"
-                      class="flex items-center justify-between p-2 rounded hover:bg-gray-800 cursor-pointer text-sm"
+                      class="flex items-center justify-between p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer text-sm"
                       :class="{ 'bg-blue-900/50': selectedAccounts.includes(getAccountKey(account)) }"
                       @click="toggleAccount(getAccountKey(account))"
                     >
@@ -427,22 +427,22 @@
                         <input
                           type="checkbox"
                           :checked="selectedAccounts.includes(getAccountKey(account))"
-                          class="w-3 h-3 text-blue-600 bg-gray-700 border-gray-600 rounded"
+                          class="w-3 h-3 text-blue-600 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded"
                           @change="toggleAccount(getAccountKey(account))"
                           @click.stop
                         >
                         <div class="min-w-0 flex-1">
-                          <div class="text-gray-200 truncate">
+                          <div class="text-gray-900 dark:text-gray-200 truncate">
                             {{ account.accountName || account.projectName || 'Unnamed Account' }}
                           </div>
-                          <div class="text-xs text-gray-400">
+                          <div class="text-xs text-gray-600 dark:text-gray-400">
                             {{ account.accountId || account.awsStandardAccountID }}
                           </div>
                         </div>
                       </div>
                       <div class="text-right ml-2 flex flex-col space-y-1 items-end">
                         <UTooltip text="Budget">
-                          <div class="text-xs text-gray-300">
+                          <div class="text-xs text-gray-700 dark:text-gray-300">
                             {{ formatCurrency(getBudget(account)) }}
                           </div>
                         </UTooltip>
@@ -467,38 +467,38 @@
           <!-- Smart Groupings Tab -->
           <div v-else-if="activeTab === 'smart'" class="p-3">
             <div class="mb-3">
-              <span class="text-sm text-gray-300">Smart Groupings ({{ smartGroups.length }})</span>
+              <span class="text-sm text-gray-900 dark:text-gray-300">Smart Groupings ({{ smartGroups.length }})</span>
             </div>
             
             <div class="space-y-2">
               <div
                 v-for="group in smartGroups"
                 :key="group.id"
-                class="bg-gray-800/50 rounded-lg"
+                class="bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-transparent"
               >
                 <div 
-                  class="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-800 rounded-t-lg min-h-[4rem]"
+                  class="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 rounded-t-lg min-h-[4rem]"
                   @click="toggleSmartGroup(group)"
                 >
                   <div class="flex items-center gap-2 min-w-0 flex-1">
                     <Icon :name="group.icon" class="w-4 h-4 flex-shrink-0" :class="group.iconColor" />
                     <div class="min-w-0">
-                      <div class="font-medium text-gray-200 truncate flex items-center gap-1">
+                      <div class="font-medium text-gray-900 dark:text-gray-200 truncate flex items-center gap-1">
                         {{ group.name }}
                         <UTooltip v-if="group.id === 'favorites'" text="Learn about favorites">
-                          <NuxtLink to="/support/docs?topic=favorites-guide" class="text-gray-400 hover:text-gray-300" @click.stop>
+                          <NuxtLink to="/support/docs?topic=favorites-guide" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300" @click.stop>
                             <UIcon name="i-heroicons-question-mark-circle" class="w-3.5 h-3.5" />
                           </NuxtLink>
                         </UTooltip>
                       </div>
-                      <div class="text-xs text-gray-400 truncate">{{ group.description }}</div>
-                      <div class="text-xs text-gray-400">{{ group.accounts.length }} accounts</div>
+                      <div class="text-xs text-gray-600 dark:text-gray-400 truncate">{{ group.description }}</div>
+                      <div class="text-xs text-gray-600 dark:text-gray-400">{{ group.accounts.length }} accounts</div>
                     </div>
                   </div>
                   <div class="flex items-center gap-3">
                     <div class="text-right flex flex-col space-y-1 items-end">
                       <UTooltip text="Total Budget">
-                        <div class="text-xs text-gray-300">
+                        <div class="text-xs text-gray-700 dark:text-gray-300">
                           {{ formatCurrency(group.totalBudget) }}
                         </div>
                       </UTooltip>
@@ -527,11 +527,11 @@
                 </div>
                 
                 <div v-if="expandedGroups.has('smart-' + group.id)" class="px-3 pb-3">
-                  <div class="space-y-1 ml-4 border-l border-gray-600 pl-3">
+                  <div class="space-y-1 ml-4 border-l border-gray-200 dark:border-gray-600 pl-3">
                     <div
                       v-for="account in group.accounts"
                       :key="getAccountKey(account)"
-                      class="flex items-center justify-between p-2 rounded hover:bg-gray-800 cursor-pointer text-sm"
+                      class="flex items-center justify-between p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer text-sm"
                       :class="{ 'bg-blue-900/50': selectedAccounts.includes(getAccountKey(account)) }"
                       @click="toggleAccount(getAccountKey(account))"
                     >
@@ -539,22 +539,22 @@
                         <input
                           type="checkbox"
                           :checked="selectedAccounts.includes(getAccountKey(account))"
-                          class="w-3 h-3 text-blue-600 bg-gray-700 border-gray-600 rounded"
+                          class="w-3 h-3 text-blue-600 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded"
                           @change="toggleAccount(getAccountKey(account))"
                           @click.stop
                         >
                         <div class="min-w-0 flex-1">
-                          <div class="text-gray-200 truncate">
+                          <div class="text-gray-900 dark:text-gray-200 truncate">
                             {{ account.accountName || account.projectName || 'Unnamed Account' }}
                           </div>
-                          <div class="text-xs text-gray-400">
+                          <div class="text-xs text-gray-600 dark:text-gray-400">
                             {{ account.accountId || account.awsStandardAccountID }}
                           </div>
                         </div>
                       </div>
                       <div class="text-right ml-2 flex flex-col space-y-1 items-end">
                         <UTooltip text="Budget">
-                          <div class="text-xs text-gray-300">
+                          <div class="text-xs text-gray-700 dark:text-gray-300">
                             {{ formatCurrency(getBudget(account)) }}
                           </div>
                         </UTooltip>
@@ -580,10 +580,10 @@
         </div>
 
         <!-- Selection Summary -->
-        <div class="p-3 border-t border-gray-700 bg-gray-800/50">
+        <div class="p-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
           <div class="space-y-2">
             <div class="flex justify-between items-center">
-              <span class="text-sm text-gray-300">
+              <span class="text-sm text-gray-700 dark:text-gray-300">
                 {{ selectedAccounts.length === 0 ? `Showing all ${accountsWithCosts.length} accounts` : `${selectedAccounts.length} of ${accountsWithCosts.length} selected` }}
               </span>
               <UButton 
@@ -621,7 +621,7 @@
         <div v-if="isLoading" class="flex items-center justify-center h-full">
           <div class="text-center">
             <Icon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-blue-500 mx-auto mb-2" />
-            <p class="text-gray-400">Loading cost data...</p>
+            <p class="text-gray-600 dark:text-gray-400">Loading cost data...</p>
           </div>
         </div>
 
@@ -721,19 +721,14 @@
             />
           </div>
 
-          <!-- Budget Alerts Section -->
-          <div data-tour="cost-alerts" class="mt-6">
-            <CostDashboardAlerts :account-ids="selectedAccounts" />
-          </div>
-
-          <div v-if="isCostPending" class="bg-gray-900 border border-amber-600 rounded-lg p-4 text-amber-400 flex items-center gap-2">
+          <div v-if="isCostPending" class="bg-white dark:bg-gray-900 border border-amber-300 dark:border-amber-600 rounded-lg p-4 text-amber-700 dark:text-amber-400 flex items-center gap-2">
             <Icon name="i-heroicons-clock" class="w-5 h-5 animate-pulse" />
             <span>Waiting for account selection to complete...</span>
           </div>
-          <div v-else-if="isCostFetching" class="bg-gray-900 border border-gray-700 rounded-lg p-6 text-gray-300">
+          <div v-else-if="isCostFetching" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-gray-700 dark:text-gray-300">
             Loading charts...
           </div>
-          <div v-else-if="costError" class="bg-gray-900 border border-gray-700 rounded-lg p-6 text-red-400">
+          <div v-else-if="costError" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-red-600 dark:text-red-400">
             {{ costError }}
           </div>
           <!-- =============================================================
@@ -779,6 +774,7 @@ import CostsSummaryCards from '~/components/costs/CostsSummaryCards.vue'
 import ChartTabs from '~/components/costs/SimpleChartTabs.vue'
 import ForecastDataTable from '~/components/costs/ForecastDataTable.vue'
 import { startCostTour } from '~/components/tutorial/CostTour'
+import { getMonthlyBudget } from '#shared/utils/budget-utils'
 
 const { getPreference, setPreference, load: loadPreferences, authError } = useUserPreferences()
 const tourStartedThisSession = ref(false)
@@ -1579,10 +1575,7 @@ const smartGroups = computed(() => {
 })
 
 // Helper functions to extract budget and spend from account objects
-const getBudget = (account: Account) => {
-  const budget = account.estimatedMonthlyCharge || account.budget || account.estimatedBudget || '0'
-  return parseFloat(budget.toString().replace(/[^0-9.-]/g, '') || '0')
-}
+const getBudget = (account: Account) => getMonthlyBudget(account)
 
 const getSpend = (account: Account) => {
   return account.currentSpend || account.totalSpend || account.spend || 0
@@ -1878,15 +1871,15 @@ useHead({
 }
 
 .overflow-y-auto::-webkit-scrollbar-track {
-  background: #374151;
+  background: var(--ghost-scrollbar-track);
 }
 
 .overflow-y-auto::-webkit-scrollbar-thumb {
-  background: #6b7280;
+  background: var(--ghost-scrollbar-thumb);
   border-radius: 2px;
 }
 
 .overflow-y-auto::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
+  background: var(--ghost-scrollbar-thumb-hover);
 }
 </style>

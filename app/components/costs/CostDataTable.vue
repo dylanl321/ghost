@@ -62,16 +62,16 @@
     </div>
 
     <!-- Data Table -->
-    <div class="border border-gray-700 rounded-lg overflow-hidden">
+    <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full">
-          <thead class="bg-gray-800 border-b border-gray-700">
+          <thead class="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
             <tr>
               <th
                 v-for="col in visibleColumns"
                 :key="col.key"
                 @click="sortBy(col.key)"
-                class="px-4 py-3 text-left text-xs font-medium text-gray-400 tracking-wider cursor-pointer hover:bg-gray-750"
+                class="px-4 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-400 tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-750"
               >
                 <div class="flex items-center gap-1">
                   {{ col.label }}
@@ -81,7 +81,7 @@
                     class="w-4 h-4"
                   />
                   <UTooltip v-if="col.helpLink" :text="col.helpTooltip || 'Learn more'">
-                    <NuxtLink :to="col.helpLink" class="text-gray-400 hover:text-gray-300" @click.stop>
+                    <NuxtLink :to="col.helpLink" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300" @click.stop>
                       <Icon name="i-heroicons-question-mark-circle" class="w-3.5 h-3.5" />
                     </NuxtLink>
                   </UTooltip>
@@ -92,11 +92,11 @@
               </th>
             </tr>
           </thead>
-          <tbody class="bg-gray-900 divide-y divide-gray-800">
+          <tbody class="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
             <tr
               v-for="(row, idx) in paginatedData"
               :key="row.accountId || idx"
-              class="hover:bg-gray-800 transition-colors"
+              class="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
             >
               <td
                 v-for="col in visibleColumns"
@@ -152,7 +152,7 @@
 
     <!-- Pagination -->
     <div class="flex justify-between items-center">
-      <div class="text-sm text-gray-400">
+      <div class="text-sm text-gray-600 dark:text-gray-400">
         Showing {{ startIndex + 1 }} to {{ endIndex }} of {{ filteredData.length }} entries
         <span v-if="searchQuery" class="ml-2">
           (filtered from {{ tableData.length }} total)

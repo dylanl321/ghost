@@ -309,7 +309,8 @@ async function confirmClearThread() {
   } else {
     toast.add({
       title: 'Failed to clear conversation',
-      color: 'red'
+      color: 'red',
+      timeout: 0
     })
   }
 
@@ -363,7 +364,8 @@ async function saveTitle() {
   } else {
     toast.add({
       title: 'Failed to rename thread',
-      color: 'red'
+      color: 'red',
+      timeout: 0
     })
   }
 
@@ -374,6 +376,14 @@ function cancelEdit() {
   isEditingTitle.value = false
   editingTitle.value = ''
 }
+
+// Keyboard shortcuts
+defineShortcuts({
+  c: {
+    handler: () => handleNewThread(),
+    usingInput: false
+  }
+})
 
 // Page metadata
 definePageMeta({

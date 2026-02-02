@@ -255,10 +255,10 @@
     <USlideover v-model="showEmailModal" :ui="{ width: 'max-w-3xl' }">
       <div class="flex flex-col h-full">
         <!-- Header -->
-        <div class="flex items-center justify-between p-4 border-b border-gray-700">
+        <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
           <div>
             <h3 class="text-lg font-semibold">Email Preview</h3>
-            <p v-if="emailSubject" class="text-sm text-gray-400 mt-1">{{ emailSubject }}</p>
+            <p v-if="emailSubject" class="text-sm text-gray-600 dark:text-gray-400 mt-1">{{ emailSubject }}</p>
           </div>
           <UButton
             color="gray"
@@ -286,7 +286,7 @@
 
         <!-- Error State -->
         <div v-else class="flex-1 flex items-center justify-center">
-          <p class="text-gray-400">Failed to load email content</p>
+          <p class="text-gray-600 dark:text-gray-400">Failed to load email content</p>
         </div>
       </div>
     </USlideover>

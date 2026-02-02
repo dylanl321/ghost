@@ -3,7 +3,7 @@
     <template #header>
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <div class="text-lg font-semibold">Budget Alert History</div>
+          <div class="text-lg font-semibold text-gray-900 dark:text-white">Budget Alert History</div>
           <UBadge v-if="filteredAlerts.length > 0" color="emerald" variant="subtle">
             {{ filteredAlerts.length }} alert{{ filteredAlerts.length !== 1 ? 's' : '' }}
           </UBadge>
@@ -37,8 +37,8 @@
 
     <!-- Empty State -->
     <div v-else-if="filteredAlerts.length === 0" class="flex flex-col items-center justify-center py-12 text-center">
-      <UIcon name="i-heroicons-bell-slash" class="w-12 h-12 text-gray-500 mb-4" />
-      <p class="text-gray-400">
+      <UIcon name="i-heroicons-bell-slash" class="w-12 h-12 text-gray-400 dark:text-gray-500 mb-4" />
+      <p class="text-gray-600 dark:text-gray-400">
         {{ alerts.length === 0 ? 'No budget alerts have been sent for this account' : 'No alerts for selected month' }}
       </p>
     </div>
@@ -106,10 +106,10 @@
     <USlideover v-model="showEmailModal" :ui="{ width: 'max-w-3xl' }">
       <div class="flex flex-col h-full">
         <!-- Header -->
-        <div class="flex items-center justify-between p-4 border-b border-gray-700">
+        <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
           <div>
-            <h3 class="text-lg font-semibold">Email Preview</h3>
-            <p v-if="emailSubject" class="text-sm text-gray-400 mt-1">{{ emailSubject }}</p>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Email Preview</h3>
+            <p v-if="emailSubject" class="text-sm text-gray-600 dark:text-gray-400 mt-1">{{ emailSubject }}</p>
           </div>
           <UButton
             color="gray"
@@ -137,7 +137,7 @@
 
         <!-- Error State -->
         <div v-else class="flex-1 flex items-center justify-center">
-          <p class="text-gray-400">Failed to load email content</p>
+          <p class="text-gray-600 dark:text-gray-400">Failed to load email content</p>
         </div>
       </div>
     </USlideover>
@@ -175,8 +175,9 @@ const columns = [
 ]
 
 // Get current month key (YYYY-MM format)
-function getMonthKey(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+function getCurrentMonthKey(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
 // Format month for display (e.g., "January 2026")
@@ -186,14 +187,19 @@ function formatMonthLabel(monthKey: string): string {
   return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 }
 
-// Available months from alerts data
+// Available months - always includes current month, plus any months with alerts
 const availableMonths = computed(() => {
-  if (alerts.value.length === 0) return []
-
   const monthsSet = new Set<string>()
+
+  // Always include current month so user can see it even if no alerts yet
+  const currentMonth = getCurrentMonthKey()
+  monthsSet.add(currentMonth)
+
+  // Add months from alerts data
   alerts.value.forEach(alert => {
-    const date = new Date(alert.created_at)
-    monthsSet.add(getMonthKey(date))
+    if (alert.month) {
+      monthsSet.add(alert.month)
+    }
   })
 
   // Sort months descending (newest first)
@@ -209,12 +215,9 @@ const availableMonths = computed(() => {
 const filteredAlerts = computed(() => {
   let filtered = [...alerts.value]
 
-  // Filter by selected month
+  // Filter by selected month using alert.month field directly
   if (selectedMonth.value) {
-    filtered = filtered.filter(alert => {
-      const date = new Date(alert.created_at)
-      return getMonthKey(date) === selectedMonth.value
-    })
+    filtered = filtered.filter(alert => alert.month === selectedMonth.value)
   }
 
   // Sort by date descending (latest first)
@@ -300,15 +303,8 @@ async function fetchAlerts() {
     if (data.success && data.data) {
       alerts.value = data.data
 
-      // Default to current month if it has alerts, otherwise first available month
-      const currentMonth = getMonthKey(new Date())
-      const months = availableMonths.value.map(m => m.value)
-
-      if (months.includes(currentMonth)) {
-        selectedMonth.value = currentMonth
-      } else if (months.length > 0) {
-        selectedMonth.value = months[0] // Most recent month with alerts
-      }
+      // Always default to current month (it's always in the dropdown now)
+      selectedMonth.value = getCurrentMonthKey()
     } else {
       throw new Error(data.error || 'Failed to fetch alerts')
     }

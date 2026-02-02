@@ -31,6 +31,9 @@ export type AWSServiceType =
   | 'ses'
   | 'sns'
   | 'eventbridge'
+  | 'ssm'
+  | 'inspector2'
+  | 'cloudwatch-logs'
 
 export interface AWSClientOptions {
   environment: AWSEnvironmentType

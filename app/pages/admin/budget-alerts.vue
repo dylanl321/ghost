@@ -37,22 +37,22 @@
       <UTabs v-model="activeTab" :items="tabs" class="mb-6" />
 
       <!-- Tab Content -->
-      <div v-show="activeTab === 0">
+      <div v-if="activeTab === 0">
         <!-- Organization Overview Tab -->
         <BudgetAlertsOverviewPanel @view-account="viewAccountAlerts" />
       </div>
 
-      <div v-show="activeTab === 1">
+      <div v-if="activeTab === 1">
         <!-- Alert History Tab -->
         <BudgetAlertsPanel />
       </div>
 
-      <div v-show="activeTab === 2">
+      <div v-if="activeTab === 2">
         <!-- Lambda Logs Tab -->
         <BudgetAlertLambdaLogsPanel />
       </div>
 
-      <div v-show="activeTab === 3">
+      <div v-if="activeTab === 3">
         <!-- Settings Tab -->
         <AlertSettingsPanel />
       </div>
@@ -65,6 +65,8 @@ import { ref, computed } from 'vue'
 
 definePageMeta({
   layout: 'admin',
+  middleware: 'auth-permission',
+  permission: 'admin',
 })
 
 // Admin access check

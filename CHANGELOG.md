@@ -1,0 +1,211 @@
+# Changelog
+
+All notable changes to GHOST are documented here.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.10.0] - 2026-02-02
+<!-- highlights: IT PEP Data, Budget Alert History, Chart Improvements -->
+
+### New Features
+- Account details now include IT PEP data from the centralized PEP database with environment info, contract details, budget breakdowns, and management contacts
+- New Budget Alert History section on account pages shows all past budget alerts with the ability to preview sent emails
+- Admin budget alerts dashboard displays organization-wide alert statistics and critical account tracking
+
+### Improvements
+- Cost trend charts now display both billable and pro forma costs side-by-side for better comparison
+- GDMS forecast health card shows daily burn rate and AWS projected month-to-date spending
+- Budget alert overview shows alert level breakdown (INFO, WARNING, CRITICAL, ESCALATION) with delivery success rates
+- Monthly budget data from PEP now appears with a visual breakdown by month
+
+### Bug Fixes
+- Fixed chart rendering issues when switching between date ranges
+- Resolved budget utilization calculations to properly account for pro forma adjustments
+
+---
+
+## [1.9.0] - 2026-02-02
+<!-- highlights: Changelog Page, Version Tracking -->
+
+### New Features
+- Added versioning system with changelog page accessible from the footer
+- You can now see the current GHOST version and review all past updates at `/changelog`
+
+### Improvements
+- Version number in footer now links directly to the changelog
+
+---
+
+## [1.8.0] - 2026-01-27
+<!-- highlights: Support Tools, CloudWatch Logs, IP Lookup -->
+
+### New Features
+- New Support Tools page for troubleshooting and diagnostics
+- CloudWatch log viewer lets you search and filter logs across your accounts
+- IP lookup tool to quickly identify which account owns a specific IP address
+- Instance health checker provides at-a-glance status of your EC2 instances
+
+### Improvements
+- Better error messages when AWS resources can't be accessed
+- Faster loading of account details pages
+
+---
+
+## [1.7.0] - 2026-01-20
+<!-- highlights: Entra User Export, Activity Metrics -->
+
+### New Features
+- Export Entra (Azure AD) user data alongside AWS account information in reports
+- New dataset report type for user access auditing
+- Admin panel now shows user activity metrics and login patterns
+
+### Improvements
+- Report generation is now faster and more reliable
+- Better handling of large data exports
+
+### Bug Fixes
+- Fixed an issue where some reports would fail to generate for accounts with special characters in their names
+
+---
+
+## [1.6.0] - 2026-01-13
+<!-- highlights: Chat Sharing, Conversation Export -->
+
+### New Features
+- Share AI chat conversations with your team using shareable links
+- Export chat conversations as markdown files for documentation
+- Chat history sidebar lets you quickly switch between past conversations
+
+### Improvements
+- AI assistant now provides more detailed and accurate responses about your AWS costs
+- Chat interface is more responsive on mobile devices
+- Conversations are automatically saved and can be resumed later
+
+### Bug Fixes
+- Fixed chat messages occasionally appearing out of order
+
+---
+
+## [1.5.0] - 2026-01-06
+<!-- highlights: Budget Alerts, Email Notifications -->
+
+### New Features
+- Budget alerts dashboard shows all accounts approaching or exceeding their budgets
+- Configure email notifications when budgets reach warning thresholds
+- View Lambda execution logs for budget alert processing in admin panel
+
+### Improvements
+- Budget health indicators now use color coding for quick status identification
+- Account cards show budget utilization percentage at a glance
+
+### Bug Fixes
+- Fixed budget calculations not accounting for credits and refunds
+
+---
+
+## [1.4.0] - 2025-12-23
+<!-- highlights: Universal Search, Command Palette, Favorites -->
+
+### New Features
+- Universal search (Cmd+K / Ctrl+K) lets you quickly find accounts, users, and pages
+- Command palette provides fast access to common actions
+- Favorite accounts for quick access to your most-used accounts
+- Recent accounts history remembers where you've been
+
+### Improvements
+- Navigation sidebar can now be collapsed for more screen space
+- Faster page transitions throughout the application
+- Better keyboard navigation support
+
+---
+
+## [1.3.0] - 2025-12-16
+<!-- highlights: AI Chat Assistant -->
+
+### New Features
+- AI-powered chat assistant helps answer questions about your AWS environment
+- Ask natural language questions like "Which accounts spent the most last month?"
+- Get recommendations for cost optimization directly in chat
+
+### Improvements
+- Dashboard loads faster with optimized data fetching
+- Charts render more smoothly with large datasets
+
+### Bug Fixes
+- Fixed timezone issues affecting cost date ranges for some users
+
+---
+
+## [1.2.0] - 2025-12-09
+<!-- highlights: Admin Panel, User Management -->
+
+### New Features
+- Admin settings panel for site-wide configuration
+- User management interface shows all users and their group memberships
+- Content management for help articles and documentation
+- Monitoring dashboard for system health and performance
+
+### Improvements
+- Better role-based access control throughout the application
+- Admin pages now have their own dedicated layout
+
+### Bug Fixes
+- Fixed an issue where non-admin users could see admin menu items
+
+---
+
+## [1.1.0] - 2025-12-02
+<!-- highlights: Cost Dashboard, Trend Charts, Forecasting -->
+
+### New Features
+- Interactive cost trend charts show spending patterns over time
+- Forecast view predicts future costs based on historical data
+- Cost breakdown by AWS service helps identify where money is going
+- Summary cards provide quick overview of total spend, changes, and top accounts
+
+### Improvements
+- Cost data tables now support sorting and filtering
+- Export cost data to CSV for further analysis
+- Date range selector lets you view costs for any time period
+
+### Bug Fixes
+- Fixed cost calculations being off by one day in some timezones
+
+---
+
+## [1.0.0] - 2025-11-25
+<!-- highlights: Account Explorer, User Enclaves, Help Center -->
+
+### New Features
+- View and manage all your AWS accounts from a single dashboard
+- Account Explorer lets you browse accounts by organization unit, line of business, or environment
+- Detailed account pages show instances, users, and configuration
+- User enclaves display which AWS environments you have access to
+- Support documentation with searchable help articles
+- Guided tours help new users learn the interface
+
+### Improvements
+- Dark mode support with automatic system preference detection
+- Responsive design works on desktop, tablet, and mobile
+- Fast, modern interface built for daily use
+
+### Other Updates
+- Initial public release of GHOST dashboard
+- Secure authentication via Entra ID (Azure AD)
+- Support for both AWS Commercial and GovCloud environments
+
+---
+
+## [0.9.0] - 2025-11-18 (Beta)
+<!-- highlights: Beta Release -->
+
+### New Features
+- Beta release for internal testing
+- Core account browsing and search functionality
+- Basic cost overview by account
+- User authentication with Entra ID
+
+### Known Issues
+- Some pages may load slowly with large account counts
+- Cost data refresh can take several minutes

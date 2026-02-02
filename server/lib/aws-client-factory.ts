@@ -29,6 +29,9 @@ import { PricingClient } from '@aws-sdk/client-pricing'
 import { SESClient } from '@aws-sdk/client-ses'
 import { SNSClient } from '@aws-sdk/client-sns'
 import { EventBridgeClient } from '@aws-sdk/client-eventbridge'
+import { SSMClient } from '@aws-sdk/client-ssm'
+import { Inspector2Client } from '@aws-sdk/client-inspector2'
+import { CloudWatchLogsClient } from '@aws-sdk/client-cloudwatch-logs'
 import { logger } from '../utils/logger'
 
 import type {
@@ -79,7 +82,10 @@ const SERVICE_CLIENT_MAP = {
   'pricing': PricingClient,
   'ses': SESClient,
   'sns': SNSClient,
-  'eventbridge': EventBridgeClient
+  'eventbridge': EventBridgeClient,
+  'ssm': SSMClient,
+  'inspector2': Inspector2Client,
+  'cloudwatch-logs': CloudWatchLogsClient
 } as const
 
 // Cache for AWS clients with expiration tracking
@@ -659,6 +665,30 @@ export async function getSESClient(
   accountId?: string
 ): Promise<SESClient> {
   return getClient(environment, 'ses', region, accountId)
+}
+
+export async function getSSMClient(
+  environment: AWSEnvironmentType = 'govcloud',
+  region?: string,
+  accountId?: string
+): Promise<SSMClient> {
+  return getClient(environment, 'ssm', region, accountId)
+}
+
+export async function getInspector2Client(
+  environment: AWSEnvironmentType = 'govcloud',
+  region?: string,
+  accountId?: string
+): Promise<Inspector2Client> {
+  return getClient(environment, 'inspector2', region, accountId)
+}
+
+export async function getCloudWatchLogsClient(
+  environment: AWSEnvironmentType = 'govcloud',
+  region?: string,
+  accountId?: string
+): Promise<CloudWatchLogsClient> {
+  return getClient(environment, 'cloudwatch-logs', region, accountId)
 }
 
 // Export validation functions for testing

@@ -125,7 +125,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ChatThread } from '~/shared/types/chat-threads'
+import type { ChatThread } from '#shared/types/chat-threads'
 
 interface Props {
   threadId: string | null

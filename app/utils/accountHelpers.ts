@@ -1,3 +1,5 @@
+import { getMonthlyBudget } from '#shared/utils/budget-utils'
+
 /**
  * Generate a comprehensive CSV export from account data
  * Includes all relevant fields from DynamoDB and Organizations
@@ -58,6 +60,7 @@ export function exportToCSV(enclaves: AWSEnclaveData[]) {
     'Cost Center',
     'Department Number',
     'Estimated Monthly Charge',
+    'Effective Monthly Budget',
 
     // External Collaboration
     'External Collab Approved',
@@ -142,6 +145,7 @@ export function exportToCSV(enclaves: AWSEnclaveData[]) {
     e.costCenter || '',
     e.departmentNumber || '',
     e.estimatedMonthlyCharge || '',
+    getMonthlyBudget(e) || '',
 
     // External Collaboration
     e.extCollabApproved ? 'Yes' : 'No',

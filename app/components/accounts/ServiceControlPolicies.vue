@@ -1,5 +1,5 @@
 <template>
-  <UCard class="bg-gray-900 border border-gray-800">
+  <UCard class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
     <template #header>
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
@@ -27,25 +27,25 @@
       <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-gray-400" />
     </div>
 
-    <div v-else-if="error" class="text-red-400 text-sm">
+    <div v-else-if="error" class="text-red-600 dark:text-red-400 text-sm">
       {{ error }}
     </div>
 
-    <div v-else-if="!orgData" class="text-gray-400 text-sm">
+    <div v-else-if="!orgData" class="text-gray-600 dark:text-gray-400 text-sm">
       No policy data available
     </div>
 
     <div v-else class="space-y-4">
       <!-- Environment Tabs if both exist -->
-      <div v-if="hasMultipleEnvironments" class="flex gap-2 border-b border-gray-700 pb-2 mb-4">
+      <div v-if="hasMultipleEnvironments" class="flex gap-2 border-b border-gray-200 dark:border-gray-700 pb-2 mb-4">
         <button
           v-for="env in availableEnvironments"
           :key="env"
           @click="selectedEnvironment = env"
           class="px-3 py-1.5 text-sm rounded-t transition-colors"
           :class="selectedEnvironment === env
-            ? 'bg-blue-900/50 text-blue-300 border-b-2 border-blue-400'
-            : 'text-gray-400 hover:text-gray-300'"
+            ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 border-b-2 border-blue-500 dark:border-blue-400'
+            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-300'"
         >
           {{ env === 'govcloud' ? 'GovCloud' : 'Commercial' }}
         </button>
@@ -54,12 +54,12 @@
       <!-- Policy Summary -->
       <div v-if="totalPolicies > 0" class="space-y-2">
         <div class="flex items-center justify-between text-sm">
-          <span class="text-gray-400">Direct Policies</span>
-          <span class="font-medium text-orange-300">{{ currentOrgContext?.directPolicies?.length || 0 }}</span>
+          <span class="text-gray-600 dark:text-gray-400">Direct Policies</span>
+          <span class="font-medium text-orange-600 dark:text-orange-300">{{ currentOrgContext?.directPolicies?.length || 0 }}</span>
         </div>
         <div class="flex items-center justify-between text-sm">
-          <span class="text-gray-400">Inherited Policies</span>
-          <span class="font-medium text-blue-300">{{ currentOrgContext?.inheritedPolicies?.length || 0 }}</span>
+          <span class="text-gray-600 dark:text-gray-400">Inherited Policies</span>
+          <span class="font-medium text-blue-600 dark:text-blue-300">{{ currentOrgContext?.inheritedPolicies?.length || 0 }}</span>
         </div>
       </div>
 
@@ -68,15 +68,15 @@
         <div
           v-for="policy in allPoliciesCompact"
           :key="policy.id"
-          class="flex items-center justify-between py-2 px-3 rounded hover:bg-gray-800/50 transition-colors"
+          class="flex items-center justify-between py-2 px-3 rounded hover:bg-gray-100 dark:hover:bg-gray-800/50 transition-colors"
         >
           <div class="flex items-center gap-2 min-w-0 flex-1">
             <UIcon
               :name="policy.source === 'direct' ? 'i-heroicons-paper-clip' : 'i-heroicons-arrow-down-on-square'"
-              :class="policy.source === 'direct' ? 'text-orange-400' : 'text-blue-400'"
+              :class="policy.source === 'direct' ? 'text-orange-500 dark:text-orange-400' : 'text-blue-500 dark:text-blue-400'"
               class="w-4 h-4 flex-shrink-0"
             />
-            <span class="text-sm text-white truncate">{{ policy.name }}</span>
+            <span class="text-sm text-gray-900 dark:text-white truncate">{{ policy.name }}</span>
           </div>
           <UBadge
             :color="policy.source === 'direct' ? 'orange' : 'blue'"
@@ -89,8 +89,8 @@
       </div>
 
       <!-- No Policies Message -->
-      <div v-if="totalPolicies === 0" class="text-center py-8 text-gray-400">
-        <UIcon name="i-heroicons-shield-check" class="w-12 h-12 mx-auto mb-2 text-green-400 opacity-50" />
+      <div v-if="totalPolicies === 0" class="text-center py-8 text-gray-600 dark:text-gray-400">
+        <UIcon name="i-heroicons-shield-check" class="w-12 h-12 mx-auto mb-2 text-green-500 dark:text-green-400 opacity-50" />
         <p class="text-sm">No security policies applied</p>
       </div>
     </div>

@@ -52,6 +52,8 @@ import AIMetricsPanel from '~/components/admin/AIMetricsPanel.vue'
 
 definePageMeta({
   layout: 'admin',
+  middleware: 'auth-permission',
+  permission: 'admin',
   title: 'AI Operations',
   description: 'Monitor AI chat activity, test agents, and view performance metrics'
 })
@@ -101,5 +103,10 @@ watch(() => route.query.tab, (newTab) => {
       activeTab.value = tabIndex
     }
   }
+})
+
+// Update URL when tab changes
+watch(activeTab, (newTab) => {
+  navigateTo({ query: { ...route.query, tab: newTab.toString() } }, { replace: true })
 })
 </script>

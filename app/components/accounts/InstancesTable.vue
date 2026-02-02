@@ -3,7 +3,7 @@
     <template #header>
       <div class="space-y-3">
         <div class="flex justify-between items-center">
-          <div class="text-lg font-semibold">EC2 Instances</div>
+          <div class="text-lg font-semibold text-gray-900 dark:text-white">EC2 Instances</div>
           <div class="flex gap-2 items-center">
             <UInput
               v-model="searchQuery"
@@ -21,32 +21,32 @@
         </div>
 
         <!-- Summary Stats -->
-        <div v-if="!loading && instanceSummary" class="grid grid-cols-3 gap-3 pt-2 border-t border-gray-700">
+        <div v-if="!loading && instanceSummary" class="grid grid-cols-3 gap-3 pt-2 border-t border-gray-200 dark:border-gray-700">
           <div class="text-sm">
-            <div class="text-gray-400">Total Instances</div>
-            <div class="text-lg font-semibold text-white">{{ instanceSummary.total }}</div>
+            <div class="text-gray-600 dark:text-gray-400">Total Instances</div>
+            <div class="text-lg font-semibold text-gray-900 dark:text-white">{{ instanceSummary.total }}</div>
           </div>
           <div class="text-sm">
-            <div class="text-gray-400">GDMS Managed</div>
-            <div class="text-lg font-semibold text-blue-400">
+            <div class="text-gray-600 dark:text-gray-400">GDMS Managed</div>
+            <div class="text-lg font-semibold text-blue-600 dark:text-blue-400">
               {{ instanceSummary.gdmsManaged }} / {{ instanceSummary.notManaged + instanceSummary.unknown }}
             </div>
-            <div class="text-xs text-gray-500">Managed / Not Managed</div>
+            <div class="text-xs text-gray-500 dark:text-gray-500">Managed / Not Managed</div>
           </div>
           <div class="text-sm">
-            <div class="text-gray-400">Monthly Cost Est.</div>
-            <div class="text-lg font-semibold text-green-400">${{ instanceSummary.totalCost?.toFixed(2) || 'N/A' }}</div>
+            <div class="text-gray-600 dark:text-gray-400">Monthly Cost Est.</div>
+            <div class="text-lg font-semibold text-green-600 dark:text-green-400">${{ instanceSummary.totalCost?.toFixed(2) || 'N/A' }}</div>
           </div>
         </div>
       </div>
     </template>
 
     <CenteredLoadingSpinner v-if="loading" />
-    <div v-else-if="filteredInstances.length === 0" class="text-center text-gray-400 py-8">
+    <div v-else-if="filteredInstances.length === 0" class="text-center text-gray-600 dark:text-gray-400 py-8">
       No instances found
     </div>
     <div v-else class="overflow-x-auto overflow-y-auto relative" style="max-height: 600px;">
-      <UTable :rows="filteredInstances" :columns="columns" :ui="{ wrapper: 'relative', thead: 'sticky top-0 z-10 bg-gray-900 shadow-md' }">
+      <UTable :rows="filteredInstances" :columns="columns" :ui="{ wrapper: 'relative', thead: 'sticky top-0 z-10 bg-gray-100 dark:bg-gray-900 shadow-md' }">
       <!-- Instance Name -->
       <template #instanceName-data="{ row }">
         <div class="flex items-center gap-2">
@@ -79,7 +79,7 @@
       <!-- IP Addresses -->
       <template #ipAddresses-data="{ row }">
         <div class="text-sm space-y-1">
-          <div v-if="row.networkInfo?.privateIpAddress" class="text-gray-300">
+          <div v-if="row.networkInfo?.privateIpAddress" class="text-gray-700 dark:text-gray-300">
             <span class="text-gray-500">Private:</span> {{ row.networkInfo.privateIpAddress }}
           </div>
           <div v-if="row.networkInfo?.publicIpAddress" class="text-green-400">
@@ -159,7 +159,7 @@
             color="gray"
             variant="outline"
             size="xs"
-            class="cursor-pointer hover:bg-gray-700"
+            class="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
             @click="showAllTags(row)"
           >
             +{{ otherTagsCount(row) }} more
@@ -169,7 +169,7 @@
 
       <!-- Region -->
       <template #region-data="{ row }">
-        <div class="text-sm text-gray-400">{{ row.region }}</div>
+        <div class="text-sm text-gray-600 dark:text-gray-400">{{ row.region }}</div>
       </template>
     </UTable>
     </div>
@@ -179,7 +179,7 @@
       <UCard>
         <template #header>
           <div class="flex justify-between items-center">
-            <h3 class="text-lg font-semibold">All Tags - {{ selectedInstance?.instanceName || selectedInstance?.resourceId }}</h3>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">All Tags - {{ selectedInstance?.instanceName || selectedInstance?.resourceId }}</h3>
             <UButton icon="i-heroicons-x-mark" color="gray" variant="ghost" @click="tagsModalOpen = false" />
           </div>
         </template>
@@ -188,13 +188,13 @@
           <div
             v-for="[key, value] in Object.entries(selectedInstance.metadata.tags)"
             :key="key"
-            class="flex justify-between items-start p-2 bg-gray-800/50 rounded"
+            class="flex justify-between items-start p-2 bg-gray-100 dark:bg-gray-800/50 rounded"
           >
             <div class="font-medium text-sm break-all">{{ key }}</div>
-            <div class="text-sm text-gray-400 ml-4 break-all">{{ value }}</div>
+            <div class="text-sm text-gray-600 dark:text-gray-400 ml-4 break-all">{{ value }}</div>
           </div>
         </div>
-        <div v-else class="text-center text-gray-400 py-4">
+        <div v-else class="text-center text-gray-600 dark:text-gray-400 py-4">
           No tags found
         </div>
       </UCard>

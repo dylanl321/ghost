@@ -43,22 +43,6 @@ function requiresAuthentication(url: string): boolean {
   return url.startsWith('/api/')
 }
 
-/**
- * Check if development mode is enabled
- */
-function isDevelopmentMode(): boolean {
-  // Allow dev bypass without explicit env var in development (handle both 'development' and 'dev')
-  const nodeEnv = process.env.NODE_ENV?.toLowerCase()
-  return nodeEnv === 'development' || nodeEnv === 'dev'
-}
-
-/**
- * Check if request has dev mode token
- */
-function hasDevModeToken(event: H3Event): boolean {
-  const authHeader = getHeader(event, 'authorization')
-  return authHeader?.includes('dev-mode-token-') || false
-}
 
 /**
  * Validate API key authentication
@@ -108,6 +92,38 @@ async function validateOIDCAuth(event: H3Event): Promise<AuthContext | null> {
       }
     }
 
+    // Check for nuxt-oidc-auth devMode session
+    // devMode sessions have a different structure - check for provider='dev'
+    try {
+      const { getUserSession: getOIDCUserSession } = await import('nuxt-oidc-auth/runtime/server/utils/session.js')
+      const oidcSession = await getOIDCUserSession(event)
+
+      if (oidcSession?.provider === 'dev') {
+        // Dev mode session - create auth context with mock groups
+        const devGroups = (process.env.DEV_USER_GROUPS || 'AWS-Product-Team')
+          .split(',')
+          .map(g => g.trim())
+          .filter(g => g.length > 0)
+
+        logger.debug('Dev mode session detected, using groups:', devGroups)
+
+        return {
+          isAuthenticated: true,
+          authType: 'oidc', // Treat as OIDC for permission checks
+          user: {
+            id: oidcSession.userName || 'dev-user',
+            displayName: oidcSession.userName || 'Dev User',
+            email: oidcSession.claims?.email || oidcSession.userInfo?.email || 'dev@localhost',
+            groups: devGroups,
+            claims: oidcSession.claims
+          },
+          scopes: ['*']
+        }
+      }
+    } catch {
+      // Ignore - devMode check is optional
+    }
+
     return null
   } catch (error) {
     logger.error('OIDC authentication check failed:', error)
@@ -115,21 +131,6 @@ async function validateOIDCAuth(event: H3Event): Promise<AuthContext | null> {
   }
 }
 
-/**
- * Development mode authentication bypass
- */
-function createDevAuthContext(): AuthContext {
-  return {
-    isAuthenticated: true,
-    authType: 'dev',
-    user: {
-      id: 'dev-user',
-      displayName: 'Development User',
-      email: 'dev@localhost'
-    },
-    scopes: ['read', 'write', 'admin']
-  }
-}
 
 /**
  * Main authentication middleware
@@ -141,25 +142,15 @@ export default defineEventHandler(async (event) => {
   }
 
   logger.debug(`API auth check for: ${event.node.req.url}`)
-  
+
   let authContext: AuthContext | null = null
-  
-  // Development mode bypass - check for dev token or dev environment
-  if (isDevelopmentMode() && hasDevModeToken(event)) {
-    authContext = createDevAuthContext()
-    logger.debug('Development mode: bypassing authentication with dev token')
-  } else if (isDevelopmentMode() && process.env.ENTRA_DEV_BYPASS === 'true') {
-    // Legacy env var check for backwards compatibility
-    authContext = createDevAuthContext()
-    logger.debug('Development mode: bypassing authentication (ENTRA_DEV_BYPASS=true)')
-  } else {
-    // Try API key authentication first
-    authContext = await validateAPIKeyAuth(event)
-    
-    // If no API key, try OIDC authentication
-    if (!authContext) {
-      authContext = await validateOIDCAuth(event)
-    }
+
+  // Try API key authentication first
+  authContext = await validateAPIKeyAuth(event)
+
+  // If no API key, try OIDC authentication (includes nuxt-oidc-auth devMode sessions)
+  if (!authContext) {
+    authContext = await validateOIDCAuth(event)
   }
   
   // If no valid authentication found

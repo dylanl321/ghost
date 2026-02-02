@@ -619,15 +619,15 @@ watch([scrollTrigger, messages], () => {
 }
 
 :deep(.prose code) {
-  @apply bg-gray-200 dark:bg-gray-700 px-1 py-0.5 rounded text-xs;
+  @apply bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-xs border border-gray-200 dark:border-gray-700;
 }
 
 :deep(.prose pre) {
-  @apply bg-gray-100 dark:bg-gray-800 p-2 rounded my-2 overflow-x-auto;
+  @apply bg-gray-50 dark:bg-gray-950 p-2 rounded my-2 overflow-x-auto border border-gray-200 dark:border-gray-700;
 }
 
 :deep(.prose pre code) {
-  @apply bg-transparent p-0;
+  @apply bg-transparent p-0 text-gray-800 dark:text-gray-100;
 }
 
 :deep(.prose a) {

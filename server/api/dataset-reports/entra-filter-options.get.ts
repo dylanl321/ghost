@@ -5,6 +5,15 @@
 
 export default defineEventHandler(async (event) => {
   try {
+    // Verify authentication
+    const auth = event.context.auth
+    if (!auth || !auth.isAuthenticated) {
+      throw createError({
+        statusCode: 401,
+        message: 'Authentication required'
+      })
+    }
+
     logger.info('[Entra Filter Options] Fetching available filter options')
 
     // Get all AWS role groups

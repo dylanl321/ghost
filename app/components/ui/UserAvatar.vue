@@ -217,9 +217,9 @@ const isDevelopment = computed(() => {
 <template>
   <div class="relative inline-block">
     <!-- Photo Avatar (if available, loaded, and not redirected) -->
-    <div 
-      v-if="shouldShowPhoto" 
-      :class="[sizeClasses, 'rounded-full overflow-hidden bg-gray-700 flex-shrink-0']"
+    <div
+      v-if="shouldShowPhoto"
+      :class="[sizeClasses, 'rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700 flex-shrink-0']"
     >
       <img
         :src="photoUrl || ''"
@@ -231,28 +231,28 @@ const isDevelopment = computed(() => {
     </div>
 
     <!-- Initials Avatar (fallback when photo fails, redirected, or not available) -->
-    <div 
+    <div
       v-else-if="shouldShowInitials"
       :class="[
-        sizeClasses, 
-        'rounded-full bg-gradient-to-br from-blue-500/20 to-purple-600/20 flex items-center justify-center flex-shrink-0 border border-gray-600'
+        sizeClasses,
+        'rounded-full bg-gradient-to-br from-blue-500/20 to-purple-600/20 flex items-center justify-center flex-shrink-0 border border-gray-300 dark:border-gray-600'
       ]"
       :title="isRedirected ? 'Photo redirected to default image - showing initials' : 'Photo not available - showing initials'"
     >
-      <span class="font-medium text-blue-300 select-none">
+      <span class="font-medium text-blue-600 dark:text-blue-300 select-none">
         {{ initials }}
       </span>
     </div>
 
     <!-- Icon Avatar (ultimate fallback) -->
-    <div 
+    <div
       v-else
       :class="[
-        sizeClasses, 
-        'rounded-full bg-gradient-to-br from-gray-600/20 to-gray-700/20 flex items-center justify-center flex-shrink-0 border border-gray-600'
+        sizeClasses,
+        'rounded-full bg-gradient-to-br from-gray-400/20 to-gray-500/20 dark:from-gray-600/20 dark:to-gray-700/20 flex items-center justify-center flex-shrink-0 border border-gray-300 dark:border-gray-600'
       ]"
     >
-      <UIcon name="i-heroicons-user" :class="[iconSize, 'text-gray-400']" />
+      <UIcon name="i-heroicons-user" :class="[iconSize, 'text-gray-500 dark:text-gray-400']" />
     </div>
 
     <!-- Hidden img for preloading photo -->
@@ -266,16 +266,16 @@ const isDevelopment = computed(() => {
     >
 
     <!-- Online Status Indicator (optional) -->
-    <div 
+    <div
       v-if="showOnlineStatus"
-      class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 border-2 border-gray-900 rounded-full"
+      class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 border-2 border-white dark:border-gray-900 rounded-full"
       title="Online"
     />
 
     <!-- Loading State (subtle) -->
-    <div 
+    <div
       v-if="isLoading && photoUrl && !isRedirected"
-      class="absolute inset-0 bg-gray-800/20 rounded-full animate-pulse"
+      class="absolute inset-0 bg-gray-400/20 dark:bg-gray-800/20 rounded-full animate-pulse"
     />
 
     <!-- Debug indicator (only in development) -->

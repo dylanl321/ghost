@@ -1,0 +1,169 @@
+/**
+ * GET /api/admin/user-activity-metrics
+ *
+ * Aggregates navigation activity from CloudWatch logs:
+ * - Average session length (length of stay) per user and globally
+ * - Most active pages per user and globally
+ * Admin only.
+ */
+
+import { getQuery } from 'h3'
+import { requireAdmin } from '../../utils/user-roles'
+import { getLogs } from '../../utils/log-manager'
+import { logger } from '../../utils/logger'
+
+const NAV_REGEX = /Navigation - USER:([\w.@-]+),?\s*PATH:(.+)/
+const SESSION_GAP_MS = 30 * 60 * 1000 // 30 minutes
+
+interface NavEntry {
+  timestamp: number
+  user: string
+  path: string
+}
+
+interface UserMetrics {
+  userId: string
+  avgSessionLengthMs: number
+  sessionCount: number
+  topPages: Array<{ path: string; count: number }>
+}
+
+interface GlobalMetrics {
+  avgSessionLengthMs: number
+  totalSessions: number
+  topPages: Array<{ path: string; count: number }>
+}
+
+export default defineEventHandler(async (event) => {
+  await requireAdmin(event)
+
+  try {
+    const query = getQuery(event)
+    const period = (query.period as '7d' | '30d') || '7d'
+    const limit = query.limit ? Math.min(100, parseInt(query.limit as string)) : 50
+
+    const durationSeconds = period === '30d' ? 30 * 86400 : 7 * 86400
+    const logs = await getLogs(durationSeconds)
+
+    const navEntries: NavEntry[] = logs
+      .filter((e: { message?: string }) => (e.message || '').startsWith('Navigation - USER:'))
+      .map((e: { message?: string; timestamp?: number }) => {
+        const match = (e.message || '').match(NAV_REGEX)
+        if (!match) return null
+        return {
+          timestamp: e.timestamp ?? 0,
+          user: match[1],
+          path: match[2].trim()
+        }
+      })
+      .filter(Boolean) as NavEntry[]
+
+    const byUser = aggregateByUser(navEntries)
+    const global = aggregateGlobal(byUser)
+
+    const byUserList = Object.entries(byUser)
+      .map(([userId, m]) => ({ userId, ...m }))
+      .sort((a, b) => b.sessionCount - a.sessionCount)
+      .slice(0, limit)
+
+    return {
+      success: true,
+      data: {
+        period,
+        startDate: new Date(Date.now() - durationSeconds * 1000).toISOString(),
+        endDate: new Date().toISOString(),
+        byUser: byUserList,
+        global
+      }
+    }
+  } catch (error: any) {
+    logger.error('[Admin] Error fetching user activity metrics:', error)
+    throw createError({
+      statusCode: 500,
+      message: 'Failed to fetch user activity metrics'
+    })
+  }
+})
+
+function aggregateByUser(entries: NavEntry[]): Record<string, Omit<UserMetrics, 'userId'>> {
+  const byUser: Record<string, NavEntry[]> = {}
+  for (const e of entries) {
+    if (!byUser[e.user]) byUser[e.user] = []
+    byUser[e.user].push(e)
+  }
+
+  const result: Record<string, Omit<UserMetrics, 'userId'>> = {}
+  for (const [user, list] of Object.entries(byUser)) {
+    const sorted = [...list].sort((a, b) => a.timestamp - b.timestamp)
+    const sessions: number[][] = []
+    let current: number[] = []
+
+    for (const e of sorted) {
+      const prevTs = current.length ? current[current.length - 1] : 0
+      if (current.length && e.timestamp - prevTs > SESSION_GAP_MS) {
+        sessions.push(current)
+        current = []
+      }
+      current.push(e.timestamp)
+    }
+    if (current.length) sessions.push(current)
+
+    const sessionDurations = sessions.map(s => (s.length ? s[s.length - 1]! - s[0]! : 0))
+    const totalMs = sessionDurations.reduce((a, b) => a + b, 0)
+    const sessionCount = sessions.length
+    const avgSessionLengthMs = sessionCount > 0 ? totalMs / sessionCount : 0
+
+    const pathCounts: Record<string, number> = {}
+    for (const e of list) {
+      const p = simplifyPath(e.path)
+      pathCounts[p] = (pathCounts[p] || 0) + 1
+    }
+    const topPages = Object.entries(pathCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([path, count]) => ({ path, count }))
+
+    result[user] = { avgSessionLengthMs, sessionCount, topPages }
+  }
+  return result
+}
+
+function aggregateGlobal(byUser: Record<string, Omit<UserMetrics, 'userId'>>): GlobalMetrics {
+  let totalSessions = 0
+  let weightedSumMs = 0
+  const pathCounts: Record<string, number> = {}
+
+  for (const m of Object.values(byUser)) {
+    totalSessions += m.sessionCount
+    weightedSumMs += m.avgSessionLengthMs * m.sessionCount
+    for (const { path, count } of m.topPages) {
+      pathCounts[path] = (pathCounts[path] || 0) + count
+    }
+  }
+
+  const avgSessionLengthMs = totalSessions > 0 ? weightedSumMs / totalSessions : 0
+  const topPages = Object.entries(pathCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([path, count]) => ({ path, count }))
+
+  return { avgSessionLengthMs, totalSessions, topPages }
+}
+
+function simplifyPath(path: string): string {
+  const p = path.replace(/^\//, '').split('/')[0] || 'home'
+  const labels: Record<string, string> = {
+    '': 'Dashboard',
+    home: 'Dashboard',
+    account: 'Account',
+    admin: 'Admin',
+    chat: 'AI Chat',
+    costs: 'Costs',
+    explorer: 'Explorer',
+    profile: 'Profile',
+    reports: 'Reports',
+    settings: 'Settings',
+    support: 'Support'
+  }
+  return labels[p] || p
+}

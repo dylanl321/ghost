@@ -33,12 +33,6 @@ export async function isUserAdmin(event: H3Event): Promise<boolean> {
     return false
   }
 
-  // In development, allow admin access (handle both 'development' and 'dev')
-  const nodeEnv = process.env.NODE_ENV?.toLowerCase()
-  if (nodeEnv === 'development' || nodeEnv === 'dev') {
-    return true
-  }
-
   // Allow admin bypass via environment variable for non-production deployments
   if (process.env.ADMIN_BYPASS === 'true') {
     logger.warn('⚠️  ADMIN_BYPASS enabled - all authenticated users have admin access')

@@ -17,6 +17,12 @@ interface ExportRequest {
 
 export default defineEventHandler(async (event) => {
   try {
+    // Verify authentication
+    const auth = event.context.auth
+    if (!auth || !auth.isAuthenticated) {
+      return errors.unauthorized(event, 'Authentication required')
+    }
+
     const body = await readBody<ExportRequest>(event)
     const { reportConfig } = body
 
@@ -30,8 +36,8 @@ export default defineEventHandler(async (event) => {
       datasets: Object.keys(reportConfig.datasets).filter(k => reportConfig.datasets[k as keyof typeof reportConfig.datasets]?.enabled)
     })
 
-    // Generate the report
-    const result = await generateDatasetReport(reportConfig)
+    // Generate the report (pass event for Entra Users Graph API access)
+    const result = await generateDatasetReport(reportConfig, event)
 
     if (!result.success || !result.buffer) {
       logger.error('[Dataset Export] Generation failed', { error: result.error })
