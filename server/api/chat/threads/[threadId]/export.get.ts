@@ -9,12 +9,12 @@ import { requireUserSession } from '../../../../utils/entra/session'
 import { getThreadById } from '../../../../utils/chat-threads'
 import { registerEndpoint } from '../../../../plugins/swagger'
 import { logger } from '../../../../utils/logger'
-import type { ChatThread, ExportFormat } from '~/shared/types/chat-threads'
+import type { ChatThread, ChatExportFormat } from '~/shared/types/chat-threads'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/chat/threads/{threadId}/export', 'GET', {
   summary: 'Export chat thread',
-  description: 'Export a chat thread as JSON or Markdown file',
+  description: 'Export a chat thread as JSON or Markdown file. Supports exporting all messages, selected messages, or just the last response.',
   tags: ['Chat', 'Threads', 'Export'],
   parameters: [
     {
@@ -30,6 +30,20 @@ registerEndpoint('/api/chat/threads/{threadId}/export', 'GET', {
       required: true,
       schema: { type: 'string', enum: ['json', 'markdown'] },
       description: 'Export format'
+    },
+    {
+      name: 'messageIds',
+      in: 'query',
+      required: false,
+      schema: { type: 'string' },
+      description: 'Comma-separated list of message IDs to include (for selective export)'
+    },
+    {
+      name: 'lastResponseOnly',
+      in: 'query',
+      required: false,
+      schema: { type: 'boolean' },
+      description: 'Export only the last assistant response'
     }
   ],
   responses: {
@@ -127,15 +141,20 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.badRequest(event, 'Thread ID is required')
   }
 
-  // Get format from query
+  // Get format and filtering options from query
   const query = getQuery(event)
-  const format = (query.format as ExportFormat) || 'json'
+  const format = (query.format as ChatExportFormat) || 'json'
+  const messageIdsParam = query.messageIds as string | undefined
+  const lastResponseOnly = query.lastResponseOnly === 'true'
 
   if (format !== 'json' && format !== 'markdown') {
     return errors.badRequest(event, 'Invalid format. Must be "json" or "markdown"')
   }
 
-  logger.info(`[Chat Threads API] Exporting thread ${threadId} as ${format} for user ${userId}`)
+  logger.info(`[Chat Threads API] Exporting thread ${threadId} as ${format} for user ${userId}`, {
+    messageIdsFilter: messageIdsParam ? 'yes' : 'no',
+    lastResponseOnly
+  })
 
   // Get thread
   const thread = await getThreadById(threadId, userId)
@@ -145,31 +164,51 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.notFound(event, 'Thread not found')
   }
 
+  // Filter messages based on query parameters
+  let filteredMessages = thread.messages
+
+  if (lastResponseOnly) {
+    // Get only the last assistant message
+    const lastAssistant = [...thread.messages].reverse().find(m => m.role === 'assistant')
+    filteredMessages = lastAssistant ? [lastAssistant] : []
+  } else if (messageIdsParam) {
+    // Filter to specific message IDs
+    const messageIds = new Set(messageIdsParam.split(',').map(id => id.trim()))
+    filteredMessages = thread.messages.filter(m => messageIds.has(m.messageId))
+  }
+
+  // Create a copy of thread with filtered messages for export
+  const exportThread = {
+    ...thread,
+    messages: filteredMessages,
+    messageCount: filteredMessages.length
+  }
+
   // Generate export based on format
   if (format === 'json') {
     // JSON export
     const filename = `chat-${threadId}-${Date.now()}.json`
-    const jsonContent = JSON.stringify(thread, null, 2)
+    const jsonContent = JSON.stringify(exportThread, null, 2)
     const buffer = Buffer.from(jsonContent, 'utf-8')
 
     setHeader(event, 'Content-Type', 'application/json')
     setHeader(event, 'Content-Disposition', `attachment; filename="${filename}"`)
     setHeader(event, 'Content-Length', buffer.length.toString())
 
-    logger.info(`[Chat Threads API] Thread ${threadId} exported as JSON`)
+    logger.info(`[Chat Threads API] Thread ${threadId} exported as JSON (${exportThread.messageCount} messages)`)
 
     return buffer
   } else {
     // Markdown export
     const filename = `chat-${threadId}-${Date.now()}.md`
-    const markdownContent = generateMarkdownExport(thread)
+    const markdownContent = generateMarkdownExport(exportThread)
     const buffer = Buffer.from(markdownContent, 'utf-8')
 
     setHeader(event, 'Content-Type', 'text/markdown')
     setHeader(event, 'Content-Disposition', `attachment; filename="${filename}"`)
     setHeader(event, 'Content-Length', buffer.length.toString())
 
-    logger.info(`[Chat Threads API] Thread ${threadId} exported as Markdown`)
+    logger.info(`[Chat Threads API] Thread ${threadId} exported as Markdown (${exportThread.messageCount} messages)`)
 
     return buffer
   }

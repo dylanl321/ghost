@@ -1,6 +1,9 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import html2canvas from 'html2canvas'
+import { marked } from 'marked'
+import type { Token, Tokens } from 'marked'
+import type { ChatMessage } from '#shared/types/chat-threads'
 
 export interface PDFExportOptions {
   filename?: string
@@ -656,5 +659,237 @@ export function createPDFFromTable(
 
   const exporter = new PDFExporter(defaultOptions)
   exporter.addData({ headers, rows })
+  return exporter.save()
+}
+
+// =============================================================================
+// Chat PDF Export
+// =============================================================================
+
+export interface ChatPDFExportOptions extends PDFExportOptions {
+  includeMetadata?: boolean
+  includeTimestamps?: boolean
+  isSummary?: boolean
+}
+
+/**
+ * Render markdown tokens to PDF using the exporter
+ */
+function renderMarkdownTokens(exporter: PDFExporter, tokens: Token[], options: ChatPDFExportOptions): void {
+  for (const token of tokens) {
+    switch (token.type) {
+      case 'heading': {
+        const headingToken = token as Tokens.Heading
+        const fontSizes: Record<number, number> = { 1: 16, 2: 14, 3: 13, 4: 12, 5: 11, 6: 11 }
+        exporter.addText(headingToken.text, {
+          fontSize: fontSizes[headingToken.depth] || 12,
+          bold: true,
+          color: options.colors?.primary || '#1e40af'
+        })
+        break
+      }
+
+      case 'paragraph': {
+        const paraToken = token as Tokens.Paragraph
+        // Clean up markdown syntax from text (bold, italic, links)
+        const cleanText = paraToken.text
+          .replace(/\*\*([^*]+)\*\*/g, '$1')  // Remove bold **text**
+          .replace(/\*([^*]+)\*/g, '$1')       // Remove italic *text*
+          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Remove links [text](url)
+          .replace(/`([^`]+)`/g, '$1')         // Remove inline code `text`
+        exporter.addText(cleanText)
+        break
+      }
+
+      case 'list': {
+        const listToken = token as Tokens.List
+        for (let i = 0; i < listToken.items.length; i++) {
+          const item = listToken.items[i]
+          const prefix = listToken.ordered ? `${i + 1}. ` : '• '
+          const itemText = item.text
+            .replace(/\*\*([^*]+)\*\*/g, '$1')
+            .replace(/\*([^*]+)\*/g, '$1')
+            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+            .replace(/`([^`]+)`/g, '$1')
+          exporter.addText(`${prefix}${itemText}`)
+        }
+        break
+      }
+
+      case 'table': {
+        const tableToken = token as Tokens.Table
+        const headers = tableToken.header.map(h => h.text)
+        const rows = tableToken.rows.map(row => row.map(cell => cell.text))
+        exporter.addData({ headers, rows })
+        break
+      }
+
+      case 'code': {
+        const codeToken = token as Tokens.Code
+        // Add code block with monospace styling
+        exporter.addText(`Code (${codeToken.lang || 'text'}):`, {
+          fontSize: 10,
+          bold: true,
+          color: '#64748b'
+        })
+        exporter.addText(codeToken.text, { fontSize: 9, color: '#374151' })
+        break
+      }
+
+      case 'blockquote': {
+        const quoteToken = token as Tokens.Blockquote
+        const quoteText = quoteToken.text
+          .replace(/\*\*([^*]+)\*\*/g, '$1')
+          .replace(/\*([^*]+)\*/g, '$1')
+        exporter.addText(`"${quoteText}"`, { color: '#64748b' })
+        break
+      }
+
+      case 'hr':
+        // Add a visual separator (extra spacing)
+        exporter.addText('─'.repeat(60), { fontSize: 8, color: '#d1d5db' })
+        break
+
+      case 'space':
+        // Skip empty space tokens
+        break
+
+      default:
+        // For any unhandled token types, try to render raw text
+        if ('text' in token && typeof (token as any).text === 'string') {
+          exporter.addText((token as any).text)
+        }
+        break
+    }
+  }
+}
+
+/**
+ * Format a timestamp for display in PDF
+ */
+function formatTimestamp(timestamp: string): string {
+  const date = new Date(timestamp)
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+/**
+ * Export chat messages to PDF format
+ * Handles markdown parsing and renders messages with proper styling
+ */
+export function exportChatToPDF(
+  messages: ChatMessage[],
+  options: ChatPDFExportOptions = {}
+): Blob | void {
+  const {
+    title = 'GHOST Chat Export',
+    subtitle,
+    includeMetadata = true,
+    includeTimestamps = true,
+    isSummary = false,
+    ...pdfOptions
+  } = options
+
+  // Build subtitle with message count and date
+  const messageCount = messages.length
+  const exportDate = new Date().toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  })
+
+  const defaultSubtitle = isSummary
+    ? `Summary generated on ${exportDate}`
+    : subtitle || `${messageCount} message${messageCount !== 1 ? 's' : ''} | Exported ${exportDate}`
+
+  const exporter = new PDFExporter({
+    title,
+    subtitle: defaultSubtitle,
+    footer: 'GHOST Chat | Page {page}',
+    colors: {
+      primary: '#7c3aed', // Purple for GHOST branding
+      secondary: '#64748b',
+      text: '#1f2937'
+    },
+    ...pdfOptions
+  })
+
+  // User message styling colors
+  const userColor = '#1e40af' // Blue for user
+  const assistantColor = '#7c3aed' // Purple for assistant
+
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i]
+    const isUser = message.role === 'user'
+
+    // Add separator between messages (except first)
+    if (i > 0) {
+      exporter.addText('', { fontSize: 4 }) // Small spacer
+    }
+
+    // Message header: Role and timestamp
+    const roleLabel = isUser ? 'YOU' : 'GHOST ASSISTANT'
+    const headerColor = isUser ? userColor : assistantColor
+
+    if (includeTimestamps && message.timestamp) {
+      exporter.addText(`${roleLabel}  •  ${formatTimestamp(message.timestamp)}`, {
+        fontSize: 10,
+        bold: true,
+        color: headerColor
+      })
+    } else {
+      exporter.addText(roleLabel, {
+        fontSize: 10,
+        bold: true,
+        color: headerColor
+      })
+    }
+
+    // Message content
+    if (isUser) {
+      // User messages are typically plain text
+      exporter.addText(message.content)
+    } else {
+      // Assistant messages may contain markdown - parse and render
+      try {
+        const tokens = marked.lexer(message.content)
+        renderMarkdownTokens(exporter, tokens, options)
+      } catch {
+        // Fallback to plain text if markdown parsing fails
+        exporter.addText(message.content)
+      }
+    }
+
+    // Optional metadata
+    if (includeMetadata && message.metadata) {
+      const metaParts: string[] = []
+      if (message.metadata.accountId) {
+        metaParts.push(`Account: ${message.metadata.accountId}`)
+      }
+      if (message.metadata.mcpUsed) {
+        metaParts.push(`Tool: ${message.metadata.mcpUsed}`)
+      }
+      if (metaParts.length > 0) {
+        exporter.addText(metaParts.join(' | '), {
+          fontSize: 9,
+          color: '#9ca3af'
+        })
+      }
+    }
+
+    // Suggested links (for assistant messages)
+    if (!isUser && message.suggestedLinks && message.suggestedLinks.length > 0) {
+      exporter.addText('Related Pages:', { fontSize: 9, bold: true, color: '#6b7280' })
+      for (const link of message.suggestedLinks) {
+        exporter.addText(`• ${link.label}: ${link.description}`, { fontSize: 9, color: '#6b7280' })
+      }
+    }
+  }
+
   return exporter.save()
 }
