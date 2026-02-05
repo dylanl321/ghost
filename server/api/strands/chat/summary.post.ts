@@ -98,31 +98,58 @@ export default defineEventHandler(handleAsync(async (event) => {
       ? conversationText.substring(0, maxLength) + '\n\n[... conversation truncated ...]'
       : conversationText
 
-    const prompt = `You are summarizing a conversation between a user and GHOST, an AI assistant for AWS operations. Create a concise summary that would be useful for sharing with non-technical stakeholders (like project managers).
+    const prompt = `You are creating a detailed document from a conversation between a user and GHOST, an AI assistant for AWS operations. This document will be shared with stakeholders.
 
 ## Conversation
 ${truncatedText}
 
 ## Instructions
-Create a summary with the following structure:
+Create a comprehensive, well-structured document using proper Markdown headers (##) for sections.
 
-1. **Overview**: 1-2 sentences describing what was discussed
-2. **Key Findings**: Bullet points of the most important discoveries or data points
-3. **Actions/Recommendations**: Any suggested actions or next steps mentioned
-4. **Additional Context**: Any relevant AWS accounts, services, or timeframes mentioned
+IMPORTANT: Preserve important details - do NOT over-summarize!
+- If the conversation contains specific numbers, costs, percentages, or metrics - INCLUDE THEM
+- If there are tables or data breakdowns - reproduce them or present the key data points
+- If there are specific account names, service names, or dates - INCLUDE THEM
+- For shorter conversations: include nearly all the substantive content
+- For longer conversations: prioritize data, findings, and actionable insights but still be thorough
 
-Keep the summary:
-- Professional and easy to understand
-- Focused on business impact and actionable insights
-- Free of technical jargon where possible
-- Formatted in clean Markdown
+Use this structure (adapt sections based on content):
 
-Summary:`
+## Overview
+Brief description of what was analyzed or discussed.
+
+## Key Data & Findings
+Present the important data points, metrics, and discoveries. Include:
+- Specific numbers and percentages
+- Cost figures with breakdowns if available
+- Service/resource details
+- Comparisons or trends mentioned
+
+## Analysis
+Deeper insights, patterns, or explanations from the conversation.
+
+## Recommendations
+Specific suggested actions or next steps, if any were discussed.
+
+## Additional Context
+- Relevant AWS accounts, services, regions, or timeframes
+- Any caveats or limitations mentioned
+
+Requirements:
+- Use ## for section headers (not bold text like **Header**)
+- Use bullet points (-) for lists
+- Include specific data points and metrics - these are valuable
+- Use tables (markdown format) if presenting comparative data
+- Keep language professional but preserve technical details that matter
+- Do NOT use emojis
+- Omit sections that don't apply (e.g., skip Recommendations if none were discussed)
+
+Document:`
 
     const payload = {
       anthropic_version: 'bedrock-2023-05-31',
-      max_tokens: 2000,
-      temperature: 0.3,
+      max_tokens: 4000,
+      temperature: 0.2,
       messages: [
         {
           role: 'user',

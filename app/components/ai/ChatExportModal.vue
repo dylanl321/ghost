@@ -110,45 +110,146 @@
         <div v-if="contentMode === 'selected' && threadData?.messages?.length" class="space-y-2">
           <div class="flex items-center justify-between">
             <label class="text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-              Select Messages ({{ selectedMessageIds.size }} selected)
+              Select Messages
             </label>
-            <div class="flex gap-2">
-              <UButton size="xs" variant="ghost" @click="selectAllMessages">Select All</UButton>
-              <UButton size="xs" variant="ghost" @click="deselectAllMessages">Clear</UButton>
+            <div class="flex items-center gap-3">
+              <span class="text-xs text-gray-500 dark:text-gray-400">
+                {{ selectedMessageIds.size }} of {{ threadData.messages.length }} selected
+              </span>
+              <div class="flex gap-1">
+                <UButton size="xs" variant="soft" color="gray" @click="selectAllMessages">All</UButton>
+                <UButton size="xs" variant="soft" color="gray" @click="deselectAllMessages">None</UButton>
+              </div>
             </div>
           </div>
-          <div class="max-h-48 overflow-y-auto border border-gray-200 dark:border-slate-700 rounded-lg divide-y divide-gray-100 dark:divide-slate-800">
+          <div class="max-h-48 overflow-y-auto border border-gray-200 dark:border-slate-700 rounded-lg">
             <div
-              v-for="message in threadData.messages"
+              v-for="(message, index) in threadData.messages"
               :key="message.messageId"
               :class="[
-                'p-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors',
-                selectedMessageIds.has(message.messageId) ? 'bg-purple-50 dark:bg-purple-900/20' : ''
+                'p-2.5 cursor-pointer transition-all flex items-start gap-3',
+                selectedMessageIds.has(message.messageId)
+                  ? 'bg-purple-100 dark:bg-purple-900/40 border-l-4 border-l-purple-500'
+                  : 'bg-white dark:bg-slate-900 border-l-4 border-l-transparent hover:bg-gray-50 dark:hover:bg-slate-800',
+                index > 0 ? 'border-t border-gray-100 dark:border-slate-800' : ''
               ]"
               @click="toggleMessageSelection(message.messageId)"
             >
-              <div class="flex items-start gap-2">
+              <!-- Checkbox -->
+              <div
+                :class="[
+                  'w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors',
+                  selectedMessageIds.has(message.messageId)
+                    ? 'bg-purple-500 border-purple-500'
+                    : 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600'
+                ]"
+              >
                 <UIcon
-                  :name="selectedMessageIds.has(message.messageId) ? 'i-heroicons-check-square' : 'i-heroicons-stop'"
-                  :class="[
-                    'w-4 h-4 mt-0.5 flex-shrink-0',
-                    selectedMessageIds.has(message.messageId) ? 'text-purple-600' : 'text-gray-400'
-                  ]"
+                  v-if="selectedMessageIds.has(message.messageId)"
+                  name="i-heroicons-check"
+                  class="w-3.5 h-3.5 text-white"
                 />
-                <div class="flex-1 min-w-0">
+              </div>
+              <!-- Message Content -->
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-0.5">
                   <span
                     :class="[
-                      'text-xs font-medium',
-                      message.role === 'user' ? 'text-blue-600' : 'text-purple-600'
+                      'text-xs font-semibold px-1.5 py-0.5 rounded',
+                      message.role === 'user'
+                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
+                        : 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300'
                     ]"
                   >
-                    {{ message.role === 'user' ? 'You' : 'GHOST' }}:
+                    {{ message.role === 'user' ? 'You' : 'GHOST' }}
                   </span>
-                  <p class="text-sm text-gray-700 dark:text-gray-300 truncate">
-                    {{ message.content.substring(0, 80) }}{{ message.content.length > 80 ? '...' : '' }}
-                  </p>
+                </div>
+                <p
+                  :class="[
+                    'text-sm truncate',
+                    selectedMessageIds.has(message.messageId)
+                      ? 'text-gray-900 dark:text-white'
+                      : 'text-gray-600 dark:text-gray-400'
+                  ]"
+                >
+                  {{ message.content.substring(0, 100) }}{{ message.content.length > 100 ? '...' : '' }}
+                </p>
+              </div>
+            </div>
+          </div>
+          <!-- Selection hint -->
+          <p v-if="selectedMessageIds.size === 0" class="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+            <UIcon name="i-heroicons-exclamation-triangle" class="w-3.5 h-3.5" />
+            Select at least one message to export
+          </p>
+        </div>
+
+        <!-- Presentation Style (only for PDF) -->
+        <div v-if="selectedFormat === 'pdf'" class="space-y-3">
+          <label class="text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+            Presentation Style
+          </label>
+
+          <div class="grid grid-cols-2 gap-2">
+            <!-- Conversation Style -->
+            <div
+              :class="[
+                'p-3 rounded-lg border-2 cursor-pointer transition-all',
+                presentationStyle === 'conversation'
+                  ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
+                  : 'border-gray-200 dark:border-slate-700 hover:border-purple-300'
+              ]"
+              @click="presentationStyle = 'conversation'"
+            >
+              <div class="flex items-center gap-2">
+                <UIcon
+                  :name="presentationStyle === 'conversation' ? 'i-heroicons-check-circle-solid' : 'i-heroicons-circle'"
+                  :class="['w-5 h-5', presentationStyle === 'conversation' ? 'text-purple-600' : 'text-gray-400']"
+                />
+                <div>
+                  <p class="font-medium text-sm text-gray-900 dark:text-white">Conversation</p>
+                  <p class="text-xs text-gray-500">Shows Q&A format with roles</p>
                 </div>
               </div>
+            </div>
+
+            <!-- Deliverable Style -->
+            <div
+              :class="[
+                'p-3 rounded-lg border-2 cursor-pointer transition-all',
+                presentationStyle === 'deliverable'
+                  ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
+                  : 'border-gray-200 dark:border-slate-700 hover:border-purple-300'
+              ]"
+              @click="presentationStyle = 'deliverable'"
+            >
+              <div class="flex items-center gap-2">
+                <UIcon
+                  :name="presentationStyle === 'deliverable' ? 'i-heroicons-check-circle-solid' : 'i-heroicons-circle'"
+                  :class="['w-5 h-5', presentationStyle === 'deliverable' ? 'text-purple-600' : 'text-gray-400']"
+                />
+                <div>
+                  <p class="font-medium text-sm text-gray-900 dark:text-white">Deliverable</p>
+                  <p class="text-xs text-gray-500">Clean document for sharing</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Deliverable info -->
+          <div v-if="presentationStyle === 'deliverable'" class="space-y-2">
+            <p class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5 bg-gray-50 dark:bg-slate-800 rounded-md px-2.5 py-2">
+              <UIcon name="i-heroicons-information-circle" class="w-4 h-4 text-blue-500 flex-shrink-0" />
+              <span>Formats as a professional document without conversation markers or AI attribution.</span>
+            </p>
+            <!-- Generated title preview -->
+            <div v-if="generatingTitle" class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2 px-2.5 py-2 bg-purple-50 dark:bg-purple-900/20 rounded-md">
+              <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin text-purple-500" />
+              <span>Generating document title...</span>
+            </div>
+            <div v-else-if="generatedTitle" class="text-xs bg-purple-50 dark:bg-purple-900/20 rounded-md px-2.5 py-2">
+              <p class="font-medium text-gray-900 dark:text-white">{{ generatedTitle.title }}</p>
+              <p class="text-gray-500 dark:text-gray-400">{{ generatedTitle.subtitle }}</p>
             </div>
           </div>
         </div>
@@ -268,8 +369,8 @@
           <UButton
             color="purple"
             icon="i-heroicons-arrow-down-tray"
-            :loading="downloading"
-            :disabled="contentMode === 'selected' && selectedMessageIds.size === 0"
+            :loading="downloading || generatingTitle"
+            :disabled="isExportDisabled"
             @click="handleDownload"
           >
             {{ downloadButtonText }}
@@ -303,11 +404,14 @@ type ContentMode = 'full' | 'selected' | 'lastResponse' | 'summary'
 // State
 const contentMode = ref<ContentMode>('full')
 const selectedFormat = ref<'pdf' | 'markdown' | 'json'>('pdf')
+const presentationStyle = ref<'conversation' | 'deliverable'>('conversation')
 const downloading = ref(false)
 const threadData = ref<ChatThread | null>(null)
 const selectedMessageIds = ref<Set<string>>(new Set())
 const generatingSummary = ref(false)
 const summaryContent = ref<string | null>(null)
+const generatingTitle = ref(false)
+const generatedTitle = ref<{ title: string; subtitle: string } | null>(null)
 
 // Number of messages to export based on content mode
 const exportMessageCount = computed(() => {
@@ -344,6 +448,19 @@ const estimatedFileSize = computed(() => {
   return Math.ceil(totalSize / 1024).toString()
 })
 
+// Check if export should be disabled
+const isExportDisabled = computed(() => {
+  // Disable if no messages selected in selected mode
+  if (contentMode.value === 'selected' && selectedMessageIds.value.size === 0) {
+    return true
+  }
+  // Disable if deliverable mode but title not yet generated
+  if (presentationStyle.value === 'deliverable' && selectedFormat.value === 'pdf' && !generatedTitle.value) {
+    return true
+  }
+  return false
+})
+
 // Watch for thread ID changes and load thread data
 watch(() => props.threadId, async (newThreadId) => {
   if (newThreadId && isOpen.value) {
@@ -359,8 +476,17 @@ watch(isOpen, async (open) => {
   if (!open) {
     // Reset state when modal closes
     contentMode.value = 'full'
+    presentationStyle.value = 'conversation'
     selectedMessageIds.value = new Set()
     summaryContent.value = null
+    generatedTitle.value = null
+  }
+})
+
+// Watch for deliverable mode selection - generate title
+watch(presentationStyle, async (style) => {
+  if (style === 'deliverable' && !generatedTitle.value && threadData.value?.messages) {
+    await generateTitle()
   }
 })
 
@@ -382,6 +508,43 @@ async function loadThreadData() {
       description: err.data?.error?.message || 'Please try again',
       color: 'red'
     })
+  }
+}
+
+// Generate document title for deliverable mode
+async function generateTitle() {
+  if (!threadData.value?.messages?.length) return
+
+  generatingTitle.value = true
+
+  try {
+    const conversationText = threadData.value.messages
+      .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+      .join('\n\n')
+
+    const response = await $fetch('/api/strands/chat/generate-title', {
+      method: 'POST',
+      body: {
+        conversationText,
+        existingTitle: threadData.value.title
+      }
+    })
+
+    if (response.success && response.data?.success) {
+      generatedTitle.value = {
+        title: response.data.title || 'Analysis Report',
+        subtitle: response.data.subtitle || new Date().toLocaleDateString()
+      }
+    }
+  } catch (err) {
+    console.error('Error generating title:', err)
+    // Use fallback title
+    generatedTitle.value = {
+      title: threadData.value.title || 'Analysis Report',
+      subtitle: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+    }
+  } finally {
+    generatingTitle.value = false
   }
 }
 
@@ -470,12 +633,12 @@ async function generateSummary(): Promise<string> {
       }
     })
 
-    if (!response.success || !response.summary) {
-      throw new Error(response.error || 'Failed to generate summary')
+    if (!response.success || !response.data?.success || !response.data?.summary) {
+      throw new Error(response.data?.error || 'Failed to generate summary')
     }
 
-    summaryContent.value = response.summary
-    return response.summary
+    summaryContent.value = response.data.summary
+    return response.data.summary
   } finally {
     generatingSummary.value = false
   }
@@ -511,17 +674,38 @@ async function handleDownload() {
 
     if (selectedFormat.value === 'pdf') {
       // Client-side PDF generation
-      const pdfTitle = contentMode.value === 'summary'
-        ? 'Conversation Summary'
-        : contentMode.value === 'lastResponse'
-          ? 'GHOST Analysis'
-          : threadData.value?.title || 'GHOST Chat Export'
+      const isDeliverable = presentationStyle.value === 'deliverable'
+
+      // For deliverable mode, generate title if not already done
+      if (isDeliverable && !generatedTitle.value) {
+        await generateTitle()
+      }
+
+      // Title varies based on presentation style
+      let pdfTitle: string
+      let pdfSubtitle: string | undefined
+
+      if (isDeliverable && generatedTitle.value) {
+        // Use AI-generated title for deliverables
+        pdfTitle = generatedTitle.value.title
+        pdfSubtitle = generatedTitle.value.subtitle
+      } else if (contentMode.value === 'summary') {
+        pdfTitle = isDeliverable ? 'Analysis Summary' : 'Conversation Summary'
+      } else if (contentMode.value === 'lastResponse') {
+        pdfTitle = isDeliverable ? 'Analysis Report' : 'GHOST Analysis'
+      } else {
+        pdfTitle = isDeliverable
+          ? (threadData.value?.title || 'Analysis Report')
+          : (threadData.value?.title || 'GHOST Chat Export')
+      }
 
       const blob = exportChatToPDF(messages, {
         title: pdfTitle,
-        filename: `ghost-chat-${titleSlug}${contentSuffix}-${timestamp}.pdf`,
+        subtitle: pdfSubtitle,
+        filename: `${isDeliverable ? 'report' : 'ghost-chat'}-${titleSlug}${contentSuffix}-${timestamp}.pdf`,
         isSummary: contentMode.value === 'summary',
-        includeTimestamps: contentMode.value !== 'summary',
+        includeTimestamps: !isDeliverable && contentMode.value !== 'summary',
+        isDeliverable,
         autoDownload: true
       })
 
