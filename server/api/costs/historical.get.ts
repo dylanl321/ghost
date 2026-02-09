@@ -245,7 +245,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     proforma,
     proformaAccountId: proforma ? proformaAccountId : null,
     masterAccountId: proforma ? masterAccountId : null,
-    filteredAccountIds: filteredAccountIds?.slice(0, 5) // Sample for uniqueness
+    filteredAccountIds: filteredAccountIds ? `${filteredAccountIds.length}:${filteredAccountIds.sort().join(',').substring(0, 100)}` : null // Hash for uniqueness
   })}`
 
   // Helper function to process results into historical format

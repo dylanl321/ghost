@@ -91,7 +91,7 @@ registerEndpoint('/api/auth/api-keys/{keyId}/usage', 'GET', {
 export default defineEventHandler(async (event): Promise<EntraAPIResponse<any>> => {
   try {
     // Require admin scope
-    requireScope(event, 'admin')
+    await requireScope(event, 'admin')
 
     // Get key ID from route params
     const keyId = getRouterParam(event, 'keyId')

@@ -284,6 +284,7 @@ async function renderMermaidCharts() {
 
 // Set page metadata - use public layout for isolated, read-only view
 definePageMeta({
+  keepalive: false,
   layout: 'public',
   auth: false // No authentication required for shared threads
 })

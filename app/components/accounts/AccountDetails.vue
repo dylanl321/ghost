@@ -102,8 +102,8 @@
 
             <div class="space-y-2 text-sm">
               <AccountDetailsRow label="Direct Connect VPC CIDR" :value="enclave?.dc_cidr" />
-              <AccountDetailsRow label="Subnet Mask" :value="'/' + enclave?.dc_subnet_mask" />
-              <AccountDetailsRow label="TGW Subnet Mask" :value="'/' + enclave?.dc_tgw_subnet_mask" />
+              <AccountDetailsRow label="Subnet Mask" :value="enclave?.dc_subnet_mask ? '/' + enclave.dc_subnet_mask : undefined" />
+              <AccountDetailsRow label="TGW Subnet Mask" :value="enclave?.dc_tgw_subnet_mask ? '/' + enclave.dc_tgw_subnet_mask : undefined" />
             </div>
           </UCard>
 
@@ -410,7 +410,7 @@ const tabs = [
 ]
 
 const utilization = computed(() => {
-  const budget = Number(enclave.value?.estimatedMonthlyCharge) || 0
+  const budget = getMonthlyBudget(enclave.value)
   return budget > 0 ? ((props.currentSpend / budget) * 100).toFixed(1) : '0'
 })
 

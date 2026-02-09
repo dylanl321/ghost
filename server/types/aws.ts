@@ -43,14 +43,6 @@ export interface AWSClientOptions {
   roleSessionName?: string
 }
 
-export interface AssumeRoleConfig {
-  roleArn: string
-  roleSessionName: string
-  region: string
-  externalId?: string
-  durationSeconds?: number
-}
-
 export interface AccountInfo {
   // Primary identifier (Commercial account ID from Organizations)
   accountId: string
@@ -96,20 +88,4 @@ export interface AWSCredentials {
   secretAccessKey: string
   sessionToken?: string
   expiration?: Date
-}
-
-export interface AWSConfigEnvironment {
-  type: AWSEnvironmentType
-  region: string
-  credentials: AWSCredentials
-  assumeRoleName?: string
-  assumeRoleExternalId?: string
-  organizationsAccountId?: string
-}
-
-export interface AWSGlobalConfig {
-  commercial?: AWSConfigEnvironment
-  govcloud?: AWSConfigEnvironment
-  accountsTableName: string
-  assumeRoleSessionDuration: number
 }

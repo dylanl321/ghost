@@ -802,7 +802,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     }
     
     // Cache the response
-    await cache.set(cacheKey, response, cacheTTL)
+    await cache.set(cacheKey, response, { ttl: cacheTTL })
     logger.info(`[Config Summary API] Cached summary for ${cacheTTL}s: ${cacheKey}`)
     
     logger.info(`[Config Summary API] Returning summary with ${stats.total} total resources across ${Object.keys(stats.byAccount).length} accounts`)

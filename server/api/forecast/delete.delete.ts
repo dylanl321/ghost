@@ -5,9 +5,10 @@
 
 import { defineEventHandler, readBody } from 'h3'
 import { deleteItem } from '../../utils/dynamodb'
-import { sendSuccess, parseQueryParams, errors, handleAsync } from '../../utils/api-response'
+import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { logger } from '../../utils/logger'
+import { requireScope } from '../../middleware/entra-auth'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/forecast/delete', 'DELETE', {
@@ -65,6 +66,9 @@ registerEndpoint('/api/forecast/delete', 'DELETE', {
 })
 
 export default defineEventHandler(handleAsync(async (event) => {
+  // Require admin scope for delete operations
+  await requireScope(event, 'admin')
+
   // Forecast table is in GovCloud
   const environment = 'govcloud'
   const body = await readBody(event)
@@ -80,7 +84,7 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   try {
     const deletedIds: string[] = []
-    const errors: string[] = []
+    const deleteErrors: string[] = []
 
     // Delete items one by one
     for (const id of ids) {
@@ -108,22 +112,22 @@ export default defineEventHandler(handleAsync(async (event) => {
           )
           deletedIds.push(id)
         } else {
-          errors.push(`Item with ID ${id} not found`)
+          deleteErrors.push(`Item with ID ${id} not found`)
         }
       } catch (err: any) {
         logger.error(`Error deleting item ${id}:`, err)
-        errors.push(`Failed to delete item ${id}: ${err.message}`)
+        deleteErrors.push(`Failed to delete item ${id}: ${err.message}`)
       }
     }
 
-    if (errors.length > 0 && deletedIds.length === 0) {
-      return errors.serverError(event, `Failed to delete any items: ${errors.join(', ')}`)
+    if (deleteErrors.length > 0 && deletedIds.length === 0) {
+      return errors.serverError(event, `Failed to delete any items: ${deleteErrors.join(', ')}`)
     }
 
     return sendSuccess(event, {
       deletedCount: deletedIds.length,
       deletedIds,
-      errors: errors.length > 0 ? errors : undefined
+      errors: deleteErrors.length > 0 ? deleteErrors : undefined
     }, {
       action: 'forecast_deleted',
       count: deletedIds.length

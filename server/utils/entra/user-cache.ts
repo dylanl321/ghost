@@ -5,6 +5,7 @@
 
 import type { H3Event } from 'h3'
 import type { EntraUser } from '../../types/entra'
+import { EntraCacheTags } from '../../types/entra'
 import { accountCache, CacheTags } from '../cache-manager'
 import { getUserDetails, searchUsers } from './graph-client'
 import { logger } from '../logger'
@@ -58,7 +59,7 @@ export async function getCachedUser(
         user,
         {
           ttl: 86400, // 24 hours for user data
-          tags: [CacheTags.ACCOUNTS, 'ENTRA', 'ENTRA_USERS']
+          tags: [CacheTags.ACCOUNTS, EntraCacheTags.ENTRA, EntraCacheTags.ENTRA_USERS]
         }
       )
     }
@@ -141,7 +142,7 @@ export async function searchAndCacheUsers(
       users,
       {
         ttl: 1800, // 30 minutes for search results
-        tags: [CacheTags.ACCOUNTS, 'ENTRA', 'ENTRA_USERS', 'ENTRA_SEARCH']
+        tags: [CacheTags.ACCOUNTS, EntraCacheTags.ENTRA, EntraCacheTags.ENTRA_USERS, EntraCacheTags.ENTRA_SEARCH]
       }
     )
     
@@ -156,7 +157,7 @@ export async function searchAndCacheUsers(
         user,
         {
           ttl: 86400, // 24 hours
-          tags: [CacheTags.ACCOUNTS, 'ENTRA', 'ENTRA_USERS']
+          tags: [CacheTags.ACCOUNTS, EntraCacheTags.ENTRA, EntraCacheTags.ENTRA_USERS]
         }
       )
     }
@@ -175,7 +176,7 @@ export async function clearUserCache(): Promise<void> {
   memoryCache.clear()
   memoryTimestamps.clear()
   
-  await accountCache.invalidateByTags(['ENTRA_USERS'])
+  await accountCache.invalidateByTags([EntraCacheTags.ENTRA_USERS])
   logger.info('User cache cleared')
 }
 

@@ -30,9 +30,6 @@ export const useBomExport = (dataset: NormalizedDataset) => {
       monthLabels.push(`${year}-${String(month + 1).padStart(2, '0')}`)
     }
 
-    console.log('BOM Export: Fetching 12-month forecast for account:', accountId)
-    console.log('BOM Export: Month range:', monthLabels[0], 'to', monthLabels[11])
-
     const params = new URLSearchParams()
     params.set('period', '12-months')
     params.set('granularity', 'MONTHLY')
@@ -43,8 +40,6 @@ export const useBomExport = (dataset: NormalizedDataset) => {
       // Fetch 12-month forecast (starts from first of next month)
       const response: any = await globalThis.$fetch(`/api/costs/forecast?${params.toString()}`)
       const results = response?.data?.forecast?.forecastResultsByTime || []
-
-      console.log('BOM Export: Forecast results count:', results.length)
 
       // Also fetch current month remainder
       const currentMonthParams = new URLSearchParams()
@@ -60,7 +55,6 @@ export const useBomExport = (dataset: NormalizedDataset) => {
       if (currentMonthResults.length > 0) {
         const currentMonthCost = parseFloat(currentMonthResults[0]?.MeanValue || currentMonthResults[0]?.meanValue || '0')
         costs[0] = Math.round(currentMonthCost)
-        console.log(`BOM Export: Current month (${monthLabels[0]}) remainder: $${costs[0]}`)
       }
 
       // Process 12-month forecast results (positions 1-11)
@@ -79,7 +73,6 @@ export const useBomExport = (dataset: NormalizedDataset) => {
         if (labelIndex >= 0 && labelIndex < 12) {
           // Add to existing value (for current month) or set new value
           costs[labelIndex] = Math.round((costs[labelIndex] || 0) + meanValue)
-          console.log(`BOM Export: ${periodMonth}: $${costs[labelIndex]}`)
         }
       })
 
@@ -91,7 +84,6 @@ export const useBomExport = (dataset: NormalizedDataset) => {
         for (let i = 0; i < 12; i++) {
           if (costs[i] === 0) {
             costs[i] = average
-            console.log(`BOM Export: Filled ${monthLabels[i]} with average: $${average}`)
           }
         }
       }
@@ -99,7 +91,6 @@ export const useBomExport = (dataset: NormalizedDataset) => {
       console.error('BOM Export: Failed to fetch forecast data:', error)
     }
 
-    console.log('BOM Export: Final 12-month forecast:', costs)
     return { costs, monthLabels }
   }
 

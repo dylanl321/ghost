@@ -563,7 +563,7 @@ async function handleProformaBillableExport() {
 
     const config = {
       title: 'Proforma vs Billable Cost Comparison',
-      subtitle: '2025 Actual + 2026 Forecast',
+      subtitle: `${new Date().getFullYear() - 1} Actual + ${new Date().getFullYear()} Forecast`,
       metadata: {
         generatedBy: `${user.value?.claims?.name || 'User'} via GHOST Cost Dashboard`,
         timestamp: new Date().toLocaleString('en-US', {
@@ -574,11 +574,11 @@ async function handleProformaBillableExport() {
           minute: '2-digit',
           timeZoneName: 'short'
         }),
-        timeframe: '2025 (Actual) + 2026 (Forecast)',
+        timeframe: `${new Date().getFullYear() - 1} (Actual) + ${new Date().getFullYear()} (Forecast)`,
         scope: 'Organization-Wide',
         filters: {
           'Report Type': 'Proforma vs Billable Comparison',
-          'Years': '2025 + 2026'
+          'Years': `${new Date().getFullYear() - 1} + ${new Date().getFullYear()}`
         }
       },
       sheets,

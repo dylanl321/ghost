@@ -22,7 +22,6 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
 import type { ExportFormat } from '~/shared/types/export'
 
 interface Props {

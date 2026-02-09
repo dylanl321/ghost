@@ -96,7 +96,7 @@ registerEndpoint('/api/auth/api-keys/create', 'POST', {
 export default defineEventHandler(async (event): Promise<EntraAPIResponse<CreateApiKeyResponse>> => {
   try {
     // Require admin scope to create API keys
-    requireScope(event, 'admin')
+    await requireScope(event, 'admin')
     
     // Get authenticated user context
     const authContext = getAuthContext(event)

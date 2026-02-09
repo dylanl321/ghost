@@ -46,7 +46,7 @@
                 ? 'bg-blue-600 text-white' 
                 : 'bg-gray-800 text-gray-300 hover:bg-gray-700 border border-gray-700'
             ]"
-            :title="`${lob.accounts.length} accounts, $${formatCurrency(lob.totalSpend)}`"
+            :title="`${formatCurrency(lob.totalSpend)}`"
           >
             {{ getLobDisplayName(lob.name) }}
             <span class="ml-1 opacity-70">({{ lob.accounts.length }})</span>
@@ -117,12 +117,12 @@
             </div>
             <div class="bg-gray-800 rounded p-3">
               <div class="text-gray-400 text-sm">Total Monthly Spend</div>
-              <div class="text-2xl font-bold text-gray-200">${{ formatCurrency(selectedLobData.totalSpend) }}</div>
+              <div class="text-2xl font-bold text-gray-200">{{ formatCurrency(selectedLobData.totalSpend) }}</div>
             </div>
             <div class="bg-gray-800 rounded p-3">
               <div class="text-gray-400 text-sm">Average per Account</div>
               <div class="text-2xl font-bold text-gray-200">
-                ${{ formatCurrency(selectedLobData.totalSpend / selectedLobData.accounts.length) }}
+                {{ formatCurrency(selectedLobData.totalSpend / selectedLobData.accounts.length) }}
               </div>
             </div>
           </div>
@@ -170,6 +170,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import VChart from 'vue-echarts'
+import { CHART_COLORS, CHART_THEME, getSeriesColor, getUtilizationColor } from '~/utils/chart-theme'
+
+// Props — when provided, data comes from the parent's shared pipeline
+const props = defineProps<{
+  dataset?: any | null
+  dataMode?: string
+}>()
 
 // State
 const loading = ref(true)
@@ -195,28 +202,113 @@ const fetchLobFullNames = async () => {
       }
     })
     lobFullNames.value = mapping
-    console.log('LOB full names loaded:', mapping)
   } catch (err) {
     console.error('Failed to fetch LOB full names:', err)
   }
 }
 
-// Fetch organizational data independently (only once)
+// Build LOB groups from summary accounts + historical monthly breakdown
+const buildLobGroups = (accountsWithCosts: any[], monthlyBreakdown: any[]) => {
+  const lobMap = new Map()
+
+  accountsWithCosts.forEach((account: any) => {
+    const lob = account.linesOfBusiness || account.lineOfBusiness || 'Unknown LOB'
+    if (!lobMap.has(lob)) {
+      lobMap.set(lob, {
+        name: lob,
+        accounts: [],
+        totalSpend: 0,
+        monthlyData: {},
+        historicalMonthlyData: monthlyBreakdown
+      })
+    }
+
+    const group = lobMap.get(lob)
+    group.accounts.push(account)
+
+    const cost = account.totalCost || account.estimatedMonthlyCharge || 0
+    group.totalSpend += cost
+  })
+
+  const groups = Array.from(lobMap.values())
+    .filter(g => g.totalSpend > 0)
+    .sort((a, b) => b.totalSpend - a.totalSpend)
+
+  // Ensure every group has the full historical monthly data
+  if (monthlyBreakdown.length) {
+    groups.forEach(group => {
+      group.historicalMonthlyData = monthlyBreakdown
+    })
+  }
+
+  return groups
+}
+
+// Process data that came from the parent dataset prop.
+// Returns true if meaningful data was found, false if dataset is incomplete.
+const processDatasetData = (dataset: any): boolean => {
+  loading.value = true
+  error.value = null
+
+  try {
+    // Extract summary accounts — try unwrapped .summary first, then fall back
+    const summaryData = dataset.summary?.data || dataset.summary || {}
+    const accountsWithCosts = summaryData.accounts || []
+
+    // If we have no accounts, the dataset isn't useful for org charts
+    if (accountsWithCosts.length === 0) {
+      loading.value = false
+      return false
+    }
+
+    // Extract historical monthly breakdown from the dataset
+    // Prefer orgWideHistorical (unfiltered) over historical (which may be account-filtered)
+    const historicalData = dataset.orgWideHistorical?.data || dataset.orgWideHistorical
+      || dataset.historical?.data || dataset.historical || {}
+    const monthlyBreakdown = historicalData.monthlyBreakdown || []
+
+    lobGroups.value = buildLobGroups(accountsWithCosts, monthlyBreakdown)
+
+    // Only mark as fetched if we got meaningful groups
+    if (lobGroups.value.length > 0) {
+      dataFetched.value = true
+      loading.value = false
+      return true
+    }
+
+    loading.value = false
+    return false
+  } catch (err: any) {
+    console.error('Error processing dataset for organizational charts:', err)
+    error.value = err.message || 'Failed to process organizational data'
+    loading.value = false
+    return false
+  }
+}
+
+// Fetch organizational data independently — used as fallback when no dataset prop
 const fetchOrganizationalData = async () => {
+  // If the parent already supplied a dataset with the key fields we need, use that
+  if (props.dataset) {
+    const summaryData = props.dataset.summary?.data || props.dataset.summary
+    const hasAccounts = (summaryData?.accounts?.length || 0) > 0
+    if (hasAccounts) {
+      const success = processDatasetData(props.dataset)
+      if (success) return
+      // If processDatasetData didn't produce groups, fall through to independent fetch
+    }
+  }
+
   // Don't refetch if already loaded
   if (dataFetched.value) {
-    console.log('Data already loaded, skipping fetch')
     return
   }
   
   loading.value = true
   error.value = null
   
-  console.log('Fetching organizational data for 24 months')
-  
   try {
     // Fetch 24 months of historical data
-    console.log('Fetching 24-month historical data...')
     const [historicalResponse, summaryResponse] = await Promise.all([
       $fetch('/api/costs/historical', {
         params: {
@@ -232,57 +324,20 @@ const fetchOrganizationalData = async () => {
         }
       })
     ])
-    
-    console.log('Historical response:', historicalResponse)
-    console.log('Summary response:', summaryResponse)
+
+    // If the watcher already processed dataset data while we were fetching, bail out
+    if (dataFetched.value) {
+      loading.value = false
+      return
+    }
     
     // Process the data
     const historicalData = (historicalResponse as any).data || historicalResponse || {}
     const summaryData = (summaryResponse as any).data || summaryResponse || {}
     const accountsWithCosts = summaryData.accounts || []
-    
-    console.log('Processing', accountsWithCosts.length, 'accounts with cost data')
-    console.log('Sample account:', accountsWithCosts[0])
-    
-    // Create LOB groups from the enhanced cost data
-    const lobMap = new Map()
-    
-    accountsWithCosts.forEach((account: any) => {
-      const lob = account.linesOfBusiness || account.lineOfBusiness || 'Unknown LOB'
-      if (!lobMap.has(lob)) {
-        lobMap.set(lob, {
-          name: lob,
-          accounts: [],
-          totalSpend: 0,
-          monthlyData: {},
-          historicalMonthlyData: historicalData.monthlyBreakdown || []
-        })
-      }
-      
-      const group = lobMap.get(lob)
-      group.accounts.push(account)
-      
-      // The account already has totalCost from the enhanced data
-      const cost = account.totalCost || account.estimatedMonthlyCharge || 0
-      group.totalSpend += cost
-      
-      console.log(`Account ${account.accountName} - LOB: ${lob}, Cost: ${cost}`)
-    })
-    
-    // Store the historical monthly breakdown for charts
-    lobGroups.value = Array.from(lobMap.values())
-      .filter(g => g.totalSpend > 0)
-      .sort((a, b) => b.totalSpend - a.totalSpend)
-    
-    // Store historical data globally for chart use
-    if (historicalData.monthlyBreakdown) {
-      lobGroups.value.forEach(group => {
-        group.historicalMonthlyData = historicalData.monthlyBreakdown
-      })
-    }
-    
-    console.log('LOB groups created:', lobGroups.value.length, 'groups')
-    console.log('LOB groups:', lobGroups.value)
+    const monthlyBreakdown = historicalData.monthlyBreakdown || []
+
+    lobGroups.value = buildLobGroups(accountsWithCosts, monthlyBreakdown)
     
     // Mark data as fetched
     dataFetched.value = true
@@ -298,8 +353,6 @@ const fetchOrganizationalData = async () => {
 // Fetch budget data for selected LOB (last month & current MTD)
 const fetchLobBudgetData = async (lobName: string) => {
   try {
-    console.log('Fetching budget data for LOB:', lobName)
-    
     // Get accounts for this LOB
     const lobData = lobGroups.value.find(g => g.name === lobName)
     if (!lobData) return
@@ -342,8 +395,6 @@ const fetchLobBudgetData = async (lobName: string) => {
       }
     }
     
-    console.log('LOB Budget data:', selectedLobBudgetData.value)
-    
   } catch (err) {
     console.error('Error fetching LOB budget data:', err)
   }
@@ -364,6 +415,17 @@ watch(selectedLob, async (newLob) => {
   }
 })
 
+// Re-process when the parent dataset's key fields change
+// Watch specific fields instead of deep-watching the entire large dataset object
+watch(
+  () => [props.dataset?.summary, props.dataset?.orgWideHistorical, props.dataset?.historical],
+  () => {
+    if (props.dataset) {
+      processDatasetData(props.dataset)
+    }
+  }
+)
+
 // Chart configurations - Overview charts (no budget logic, focus on spending patterns)
 const lobComparisonChart = computed(() => {
   const chart: any = {
@@ -374,14 +436,14 @@ const lobComparisonChart = computed(() => {
         const value = params[0].value
         const lobName = params[0].name
         const displayName = getLobDisplayName(lobName)
-        return `${displayName}: $${formatCurrency(value)}<br/><small>Click to view details</small>`
+        return `${displayName}: ${formatCurrency(value)}<br/><small>Click to view details</small>`
       }
     },
     xAxis: {
       type: 'category',
       data: lobGroups.value.map(g => g.name),
       axisLabel: { 
-        color: '#9ca3af', 
+        color: CHART_THEME.textColor, 
         rotate: 45,
         formatter: (value: string) => getLobDisplayName(value)
       }
@@ -389,8 +451,8 @@ const lobComparisonChart = computed(() => {
     yAxis: {
       type: 'value',
       axisLabel: { 
-        color: '#9ca3af',
-        formatter: (value: number) => `$${formatCurrency(value)}`
+        color: CHART_THEME.textColor,
+        formatter: (value: number) => `${formatCurrency(value)}`
       }
     },
     series: [{
@@ -401,7 +463,7 @@ const lobComparisonChart = computed(() => {
         name: g.name
       })),
       itemStyle: { 
-        color: '#3b82f6',
+        color: CHART_COLORS[0],
         emphasis: {
           color: '#60a5fa'
         }
@@ -429,11 +491,35 @@ const lobDistributionChart = computed(() => ({
       name: g.name,
       value: g.totalSpend
     })),
-    label: { color: '#9ca3af' }
+    label: { color: CHART_THEME.textColor }
   }]
 }))
 
-// Year-over-Year LOB Comparison Chart
+// Helper: extract real monthly costs for a LOB from historical data, grouped by year
+const getLobMonthlyByYear = (lob: any, year: number): number[] => {
+  const monthlyCosts = new Array(12).fill(0)
+  const monthlyData = lob.historicalMonthlyData || []
+
+  monthlyData.forEach((monthEntry: any) => {
+    const monthStr = monthEntry.month // e.g. "2025-03"
+    if (!monthStr) return
+    const [y, m] = monthStr.split('-').map(Number)
+    if (y === year && m >= 1 && m <= 12) {
+      // Sum costs for accounts in this LOB
+      const accountIds = new Set(lob.accounts.map((a: any) => a.accountId))
+      const breakdown = monthEntry.accountBreakdown || []
+      breakdown.forEach((entry: any) => {
+        if (accountIds.has(entry.accountId)) {
+          monthlyCosts[m - 1] += entry.cost || 0
+        }
+      })
+    }
+  })
+
+  return monthlyCosts
+}
+
+// Year-over-Year LOB Comparison Chart (uses real historical data)
 const lobYearOverYearChart = computed(() => {
   const currentYear = new Date().getFullYear()
   const lastYear = currentYear - 1
@@ -443,33 +529,23 @@ const lobYearOverYearChart = computed(() => {
   // Get top 3 LOBs for cleaner visualization
   const topLobs = lobGroups.value.slice(0, 3)
   
-  // Generate sample data for each LOB for both years
-  const generateYearData = (lob: any, yearOffset: number) => {
-    const baseValue = lob.totalSpend / 12
-    return months.map((_, i) => {
-      const growthFactor = 1 - (yearOffset * 0.15) // Decrease for older years
-      const seasonalVariation = Math.sin((i + 3) * 0.524) * baseValue * 0.15
-      const randomVariation = (Math.random() - 0.5) * baseValue * 0.1
-      return Math.max(0, baseValue * growthFactor + seasonalVariation + randomVariation)
-    })
-  }
-  
-  // Create series for each LOB and year
+  // Create series for each LOB and year using real data
   const series: any[] = []
   const colors: Record<number, string[]> = {
     [twoYearsAgo]: ['rgba(156, 163, 175, 0.6)', 'rgba(156, 163, 175, 0.5)', 'rgba(156, 163, 175, 0.4)'],
     [lastYear]: ['rgba(59, 130, 246, 0.6)', 'rgba(16, 185, 129, 0.6)', 'rgba(245, 158, 11, 0.6)'],
-    [currentYear]: ['#3b82f6', '#10b981', '#f59e0b']
+    [currentYear]: [CHART_COLORS[0], CHART_COLORS[1], CHART_COLORS[2]]
   }
   
   topLobs.forEach((lob, lobIndex) => {
     const lobName = getLobDisplayName(lob.name)
     
-    // Two years ago data
+    // Two years ago data (real)
+    const twoYearsAgoData = getLobMonthlyByYear(lob, twoYearsAgo)
     series.push({
       name: `${lobName} (${twoYearsAgo})`,
       type: 'line',
-      data: generateYearData(lob, 2),
+      data: twoYearsAgoData,
       lineStyle: { 
         width: 1,
         type: 'dashed',
@@ -483,11 +559,12 @@ const lobYearOverYearChart = computed(() => {
       symbolSize: 3
     })
     
-    // Last year data
+    // Last year data (real)
+    const lastYearData = getLobMonthlyByYear(lob, lastYear)
     series.push({
       name: `${lobName} (${lastYear})`,
       type: 'line',
-      data: generateYearData(lob, 1),
+      data: lastYearData,
       lineStyle: { 
         width: 2,
         type: 'dotted',
@@ -501,9 +578,9 @@ const lobYearOverYearChart = computed(() => {
       symbolSize: 4
     })
     
-    // Current year data (partial - up to current month)
+    // Current year data (real, partial - only months with data)
     const currentMonth = new Date().getMonth()
-    const currentYearData = generateYearData(lob, 0)
+    const currentYearData = getLobMonthlyByYear(lob, currentYear)
     series.push({
       name: `${lobName} (${currentYear})`,
       type: 'line',
@@ -544,7 +621,7 @@ const lobYearOverYearChart = computed(() => {
           }).forEach((item: any) => {
             if (item.value !== null && item.value !== undefined) {
               const year = item.seriesName.match(/\((\d{4})\)/)?.[1]
-              result += `${item.marker} ${year}: $${formatCurrency(item.value)}<br/>`
+              result += `${item.marker} ${year}: ${formatCurrency(item.value)}<br/>`
             }
           })
         })
@@ -554,7 +631,7 @@ const lobYearOverYearChart = computed(() => {
     },
     legend: {
       data: series.map(s => s.name),
-      textStyle: { color: '#9ca3af' },
+      textStyle: { color: CHART_THEME.textColor },
       type: 'scroll',
       bottom: 0,
       selected: {
@@ -575,7 +652,7 @@ const lobYearOverYearChart = computed(() => {
     xAxis: {
       type: 'category',
       data: months,
-      axisLabel: { color: '#9ca3af' },
+      axisLabel: { color: CHART_THEME.textColor },
       axisLine: {
         lineStyle: { color: 'rgba(156, 163, 175, 0.2)' }
       },
@@ -587,8 +664,8 @@ const lobYearOverYearChart = computed(() => {
     yAxis: {
       type: 'value',
       axisLabel: {
-        color: '#9ca3af',
-        formatter: (value: number) => `$${formatCurrency(value)}`
+        color: CHART_THEME.textColor,
+        formatter: (value: number) => `${formatCurrency(value)}`
       },
       axisLine: {
         lineStyle: { color: 'rgba(156, 163, 175, 0.2)' }
@@ -611,13 +688,7 @@ const lobTrendsChart = computed(() => {
   }
   
   // Define distinct colors for each LOB
-  const colors = [
-    '#3b82f6', // Blue
-    '#10b981', // Green
-    '#f59e0b', // Amber
-    '#ef4444', // Red
-    '#8b5cf6', // Purple
-  ]
+  const colors = CHART_COLORS.slice(0, 5)
   
   return {
     backgroundColor: 'transparent',
@@ -627,14 +698,14 @@ const lobTrendsChart = computed(() => {
         let result = params[0].axisValue + '<br/>'
         params.forEach((item: any) => {
           const displayName = getLobDisplayName(item.seriesName)
-          result += `${item.marker} ${displayName}: $${formatCurrency(item.value)}<br/>`
+          result += `${item.marker} ${displayName}: ${formatCurrency(item.value)}<br/>`
         })
         return result
       }
     },
     legend: {
       data: lobGroups.value.slice(0, 5).map(g => getLobDisplayName(g.name)),
-      textStyle: { color: '#9ca3af' },
+      textStyle: { color: CHART_THEME.textColor },
       type: 'scroll',
       bottom: 0
     },
@@ -649,7 +720,7 @@ const lobTrendsChart = computed(() => {
       type: 'category',
       data: months,
       axisLabel: { 
-        color: '#9ca3af',
+        color: CHART_THEME.textColor,
         interval: 2 // Show every 3rd month to avoid crowding
       },
       axisLine: {
@@ -663,8 +734,8 @@ const lobTrendsChart = computed(() => {
     yAxis: {
       type: 'value',
       axisLabel: { 
-        color: '#9ca3af',
-        formatter: (value: number) => `$${formatCurrency(value)}`
+        color: CHART_THEME.textColor,
+        formatter: (value: number) => `${formatCurrency(value)}`
       },
       axisLine: {
         lineStyle: { color: 'rgba(156, 163, 175, 0.2)' }
@@ -673,28 +744,45 @@ const lobTrendsChart = computed(() => {
         lineStyle: { color: 'rgba(156, 163, 175, 0.1)' } // Very subtle grid
       }
     },
-    series: lobGroups.value.slice(0, 5).map((g, index) => ({
-      name: g.name,
-      type: 'line',
-      smooth: true,
-      lineStyle: {
-        width: 2,
-        color: colors[index]
-      },
-      itemStyle: {
-        color: colors[index]
-      },
-      emphasis: {
-        lineStyle: { width: 3 }
-      },
-      data: months.map((_, i) => {
-        // Simulate trending data based on total spend with 2-year growth
-        const baseValue = g.totalSpend / 24
-        const growthFactor = 1 + (i / 24) * 0.3 // 30% growth over 2 years
-        const variation = Math.sin((i + index) * 0.3) * baseValue * 0.2
-        return Math.max(0, baseValue * growthFactor + variation)
+    series: lobGroups.value.slice(0, 5).map((g, index) => {
+      // Extract real monthly costs from historical data for this LOB
+      const accountIds = new Set(g.accounts.map((a: any) => a.accountId))
+      const monthlyData = (g.historicalMonthlyData || [])
+      
+      // Build a map of month label -> cost from the real data
+      const realCostsByMonth = new Map<string, number>()
+      monthlyData.forEach((monthEntry: any) => {
+        const monthStr = monthEntry.month
+        if (!monthStr) return
+        const d = new Date(monthStr + '-01')
+        const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+        const breakdown = monthEntry.accountBreakdown || []
+        let lobCost = 0
+        breakdown.forEach((entry: any) => {
+          if (accountIds.has(entry.accountId)) {
+            lobCost += entry.cost || 0
+          }
+        })
+        realCostsByMonth.set(label, (realCostsByMonth.get(label) || 0) + lobCost)
       })
-    }))
+      
+      return {
+        name: g.name,
+        type: 'line',
+        smooth: true,
+        lineStyle: {
+          width: 2,
+          color: colors[index]
+        },
+        itemStyle: {
+          color: colors[index]
+        },
+        emphasis: {
+          lineStyle: { width: 3 }
+        },
+        data: months.map(label => realCostsByMonth.get(label) || 0)
+      }
+    })
   }
 })
 
@@ -714,7 +802,7 @@ const selectedLobTrendChart = computed(() => {
     tooltip: { 
       trigger: 'axis',
       formatter: (params: any) => {
-        return `${params[0].axisValue}<br/>Spend: $${formatCurrency(params[0].value)}`
+        return `${params[0].axisValue}<br/>Spend: ${formatCurrency(params[0].value)}`
       }
     },
     grid: {
@@ -728,7 +816,7 @@ const selectedLobTrendChart = computed(() => {
       type: 'category',
       data: months,
       axisLabel: { 
-        color: '#9ca3af',
+        color: CHART_THEME.textColor,
         interval: 2 // Show every 3rd month
       },
       axisLine: {
@@ -742,8 +830,8 @@ const selectedLobTrendChart = computed(() => {
     yAxis: {
       type: 'value',
       axisLabel: { 
-        color: '#9ca3af',
-        formatter: (value: number) => `$${formatCurrency(value)}`
+        color: CHART_THEME.textColor,
+        formatter: (value: number) => `${formatCurrency(value)}`
       },
       axisLine: {
         lineStyle: { color: 'rgba(156, 163, 175, 0.2)' }
@@ -754,19 +842,35 @@ const selectedLobTrendChart = computed(() => {
     },
     series: [{
       type: 'line',
-      data: months.map((_, i) => {
-        // Simulate trending data based on LOB's total spend with 2-year growth
-        const baseValue = selectedLobData.value.totalSpend / 24
-        const growthFactor = 1 + (i / 24) * 0.25 // 25% growth over 2 years
-        const variation = Math.sin(i * 0.3) * baseValue * 0.15
-        return Math.max(0, baseValue * growthFactor + variation)
-      }),
+      data: (() => {
+        // Extract real monthly costs from historical data for this LOB
+        const accountIds = new Set(selectedLobData.value.accounts.map((a: any) => a.accountId))
+        const monthlyData = selectedLobData.value.historicalMonthlyData || []
+        
+        const realCostsByMonth = new Map<string, number>()
+        monthlyData.forEach((monthEntry: any) => {
+          const monthStr = monthEntry.month
+          if (!monthStr) return
+          const d = new Date(monthStr + '-01')
+          const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+          const breakdown = monthEntry.accountBreakdown || []
+          let lobCost = 0
+          breakdown.forEach((entry: any) => {
+            if (accountIds.has(entry.accountId)) {
+              lobCost += entry.cost || 0
+            }
+          })
+          realCostsByMonth.set(label, (realCostsByMonth.get(label) || 0) + lobCost)
+        })
+        
+        return months.map(label => realCostsByMonth.get(label) || 0)
+      })(),
       smooth: true,
       lineStyle: {
         width: 2,
-        color: '#10b981'
+        color: CHART_COLORS[1]
       },
-      itemStyle: { color: '#10b981' },
+      itemStyle: { color: CHART_COLORS[1] },
       areaStyle: {
         color: {
           type: 'linear',
@@ -791,20 +895,10 @@ const selectedLobYoYChart = computed(() => {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
   const currentMonth = new Date().getMonth()
   
-  // Generate data for each year
-  const generateYearData = (yearOffset: number) => {
-    const baseValue = selectedLobData.value.totalSpend / 12
-    return months.map((_, i) => {
-      const growthFactor = 1 - (yearOffset * 0.18) // 18% YoY growth
-      const seasonalVariation = Math.sin((i + 3) * 0.524) * baseValue * 0.2
-      const randomVariation = (Math.random() - 0.5) * baseValue * 0.1
-      return Math.max(0, baseValue * growthFactor + seasonalVariation + randomVariation)
-    })
-  }
-  
-  const twoYearsAgoData = generateYearData(2)
-  const lastYearData = generateYearData(1)
-  const currentYearData = generateYearData(0)
+  // Use real historical data for each year
+  const twoYearsAgoData = getLobMonthlyByYear(selectedLobData.value, twoYearsAgo)
+  const lastYearData = getLobMonthlyByYear(selectedLobData.value, lastYear)
+  const currentYearData = getLobMonthlyByYear(selectedLobData.value, currentYear)
   
   return {
     backgroundColor: 'transparent',
@@ -816,7 +910,7 @@ const selectedLobYoYChart = computed(() => {
           if (item.value !== null && item.value !== undefined) {
             const changeIcon = item.seriesIndex > 0 ? 
               (item.value > params[item.seriesIndex - 1].value ? '↑' : '↓') : ''
-            result += `${item.marker} ${item.seriesName}: $${formatCurrency(item.value)} ${changeIcon}<br/>`
+            result += `${item.marker} ${item.seriesName}: ${formatCurrency(item.value)} ${changeIcon}<br/>`
           }
         })
         
@@ -840,7 +934,7 @@ const selectedLobYoYChart = computed(() => {
     },
     legend: {
       data: [String(twoYearsAgo), String(lastYear), String(currentYear)],
-      textStyle: { color: '#9ca3af' }
+      textStyle: { color: CHART_THEME.textColor }
     },
     grid: {
       left: '3%',
@@ -851,7 +945,7 @@ const selectedLobYoYChart = computed(() => {
     xAxis: {
       type: 'category',
       data: months,
-      axisLabel: { color: '#9ca3af' },
+      axisLabel: { color: CHART_THEME.textColor },
       axisLine: {
         lineStyle: { color: 'rgba(156, 163, 175, 0.2)' }
       },
@@ -863,8 +957,8 @@ const selectedLobYoYChart = computed(() => {
     yAxis: {
       type: 'value',
       axisLabel: {
-        color: '#9ca3af',
-        formatter: (value: number) => `$${formatCurrency(value)}`
+        color: CHART_THEME.textColor,
+        formatter: (value: number) => `${formatCurrency(value)}`
       },
       axisLine: {
         lineStyle: { color: 'rgba(156, 163, 175, 0.2)' }
@@ -896,7 +990,7 @@ const selectedLobYoYChart = computed(() => {
         type: 'bar',
         data: currentYearData.map((val, i) => i <= currentMonth ? val : null),
         itemStyle: { 
-          color: '#3b82f6'
+          color: CHART_COLORS[0]
         },
         label: {
           show: true,
@@ -936,7 +1030,7 @@ const selectedLobAccountsChart = computed(() => {
     tooltip: { 
       trigger: 'axis',
       formatter: (params: any) => {
-        return `${params[0].name}: $${formatCurrency(params[0].value)}`
+        return `${params[0].name}: ${formatCurrency(params[0].value)}`
       }
     },
     grid: {
@@ -948,15 +1042,15 @@ const selectedLobAccountsChart = computed(() => {
     xAxis: {
       type: 'value',
       axisLabel: { 
-        color: '#9ca3af',
-        formatter: (value: number) => `$${formatCurrency(value)}`
+        color: CHART_THEME.textColor,
+        formatter: (value: number) => `${formatCurrency(value)}`
       }
     },
     yAxis: {
       type: 'category',
       data: topAccounts.map((a: any) => a.name),
       axisLabel: { 
-        color: '#9ca3af',
+        color: CHART_THEME.textColor,
         formatter: (value: string) => {
           return value.length > 20 ? value.substring(0, 20) + '...' : value
         }
@@ -978,8 +1072,8 @@ const selectedLobAccountsChart = computed(() => {
       label: {
         show: true,
         position: 'right',
-        formatter: (params: any) => `$${formatCurrency(params.value)}`,
-        color: '#9ca3af'
+        formatter: (params: any) => `${formatCurrency(params.value)}`,
+        color: CHART_THEME.textColor
       }
     }]
   }
@@ -998,13 +1092,13 @@ const lastMonthBudgetChart = computed(() => {
     xAxis: {
       type: 'category',
       data: ['Budget', 'Actual Spend'],
-      axisLabel: { color: '#9ca3af' }
+      axisLabel: { color: CHART_THEME.textColor }
     },
     yAxis: {
       type: 'value',
       axisLabel: { 
-        color: '#9ca3af',
-        formatter: (value: number) => `$${formatCurrency(value)}`
+        color: CHART_THEME.textColor,
+        formatter: (value: number) => `${formatCurrency(value)}`
       }
     },
     series: [{
@@ -1017,15 +1111,15 @@ const lastMonthBudgetChart = computed(() => {
         {
           value: data.spend,
           itemStyle: { 
-            color: utilization > 100 ? '#ef4444' : utilization > 90 ? '#f59e0b' : '#10b981'
+            color: getUtilizationColor(utilization)
           }
         }
       ],
       label: {
         show: true,
         position: 'top',
-        formatter: (params: any) => `$${formatCurrency(params.value)}`,
-        color: '#9ca3af'
+        formatter: (params: any) => `${formatCurrency(params.value)}`,
+        color: CHART_THEME.textColor
       }
     }]
   }
@@ -1046,13 +1140,13 @@ const currentMtdBudgetChart = computed(() => {
     xAxis: {
       type: 'category',
       data: ['Expected MTD', 'Actual MTD', 'Monthly Budget'],
-      axisLabel: { color: '#9ca3af', rotate: 45 }
+      axisLabel: { color: CHART_THEME.textColor, rotate: 45 }
     },
     yAxis: {
       type: 'value',
       axisLabel: { 
-        color: '#9ca3af',
-        formatter: (value: number) => `$${formatCurrency(value)}`
+        color: CHART_THEME.textColor,
+        formatter: (value: number) => `${formatCurrency(value)}`
       }
     },
     series: [{
@@ -1065,30 +1159,25 @@ const currentMtdBudgetChart = computed(() => {
         {
           value: data.spend,
           itemStyle: { 
-            color: data.spend > expectedSpend ? '#f59e0b' : '#10b981'
+            color: data.spend > expectedSpend ? '#f59e0b' : CHART_COLORS[1]
           }
         },
         {
           value: data.budget,
-          itemStyle: { color: '#3b82f6' }
+          itemStyle: { color: CHART_COLORS[0] }
         }
       ],
       label: {
         show: true,
         position: 'top',
-        formatter: (params: any) => `$${formatCurrency(params.value)}`,
-        color: '#9ca3af'
+        formatter: (params: any) => `${formatCurrency(params.value)}`,
+        color: CHART_THEME.textColor
       }
     }]
   }
 })
 
 // Helpers
-const formatCurrency = (value: number) => {
-  if (value >= 1000000) return `${(value / 1000000).toFixed(2)}M`
-  if (value >= 1000) return `${(value / 1000).toFixed(2)}K`
-  return value.toFixed(2)
-}
 
 // Get display name for LOB (full name if available, otherwise code)
 const getLobDisplayName = (lobCode: string) => {
@@ -1102,8 +1191,6 @@ const selectLob = (lobName: string) => {
 
 // Handle chart click events
 const handleChartClick = (params: any) => {
-  console.log('Chart clicked:', params)
-  
   // Get the LOB name from the click event
   let lobName = ''
   

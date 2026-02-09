@@ -1,11 +1,27 @@
 <template>
   <UCard>
     <template #header>
-      <div class="flex justify-between">
+      <div class="flex justify-between items-center">
         <div class="text-lg font-semibold text-gray-900 dark:text-white">{{ title }}</div>
-        <UBadge color="gray" variant="soft" size="sm">
-          {{ dateRangeLabel }}
-        </UBadge>
+        <div class="flex items-center gap-2">
+          <!-- Scope selector -->
+          <div v-if="scopeOptions.length > 1" class="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+            <button
+              v-for="option in scopeOptions"
+              :key="option.value"
+              @click="$emit('update:scope', option.value)"
+              class="px-2.5 py-1 text-[11px] font-medium rounded-md transition-all duration-150"
+              :class="scope === option.value
+                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+          <UBadge color="gray" variant="soft" size="sm">
+            {{ dateRangeLabel }}
+          </UBadge>
+        </div>
       </div>
     </template>
 
@@ -73,13 +89,33 @@ interface TimePoint {
   cost: number
 }
 
-const props = defineProps<{
+interface ScopeOption {
+  label: string
+  value: string
+}
+
+const props = withDefaults(defineProps<{
   title: string
   loading: boolean
   timeSeriesBillable: TimePoint[] // Billable
   timeSeriesProforma?: TimePoint[] // Pro Forma
+  scope?: string
+  scopeOptions?: ScopeOption[]
+}>(), {
+  scope: 'org',
+  scopeOptions: () => []
+})
+
+defineEmits<{
+  'update:scope': [value: string]
 }>()
 
+// Theme-aware chart colors
+const colorMode = useColorMode()
+const isDark = computed(() => colorMode.value === 'dark')
+const splitLineColor = computed(() => isDark.value ? '#4b5563' : '#e5e7eb')
+const axisLabelColor = computed(() => isDark.value ? '#9ca3af' : '#6b7280')
+const weekendLabelColor = computed(() => isDark.value ? '#4b5563' : '#9ca3af')
 const dateRangeLabel = computed(() => {
   if (!props.timeSeriesBillable?.length) return 'NA'
   const start = new Date(props.timeSeriesBillable[0]!.date)
@@ -172,9 +208,10 @@ const chartOptions = computed(() => {
     yAxis: {
       type: 'value',
       axisLabel: {
-        formatter: (val: number) => `$${val.toLocaleString()}`
+        formatter: (val: number) => `$${val.toLocaleString()}`,
+        color: axisLabelColor.value
       },
-      splitLine: { lineStyle: { color: '#4b5563' } }
+      splitLine: { lineStyle: { color: splitLineColor.value } }
     },
     grid: { left: '2%', right: '2%', bottom: '25%', top: '5%' },
     series: [
@@ -190,7 +227,7 @@ const chartOptions = computed(() => {
           itemStyle: { color: 'rgba(156, 163, 175, 0.15)' },
           label: {
             show: true,
-            color: '#4b5563',
+            color: weekendLabelColor.value,
             fontSize: 10,
             backgroundColor: 'transparent',
             borderColor: 'transparent'

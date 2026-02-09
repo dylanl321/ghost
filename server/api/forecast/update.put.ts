@@ -5,9 +5,10 @@
 
 import { defineEventHandler, readBody } from 'h3'
 import { updateItem } from '../../utils/dynamodb'
-import { sendSuccess, parseQueryParams, errors, handleAsync } from '../../utils/api-response'
+import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { logger } from '../../utils/logger'
+import { requireScope } from '../../middleware/entra-auth'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/forecast/update', 'PUT', {
@@ -64,6 +65,9 @@ registerEndpoint('/api/forecast/update', 'PUT', {
 })
 
 export default defineEventHandler(handleAsync(async (event) => {
+  // Require admin scope for write operations
+  await requireScope(event, 'admin')
+
   // Forecast table is in GovCloud
   const environment = 'govcloud'
   const body = await readBody(event)

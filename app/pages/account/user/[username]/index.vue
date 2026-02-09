@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, watch } from 'vue'
 import UserAccess from '~/components/accounts/UserAccess.vue'
-// import { exportFlattenedUserAccessToCSV } from '~/utils/csvExport'
 import { getEmailPatternsFromSlug, getSearchTermsFromSlug, isValidUsername, convertToUsernameSlug } from '~/utils/userUtils'
 import UserAvatar from '~/components/ui/UserAvatar.vue'
 
@@ -260,6 +258,7 @@ const goBackToSearch = () => {
 
 // Page metadata
 definePageMeta({
+  keepalive: false,
   title: 'User Profile',
   description: 'User profile and AWS access details'
 })

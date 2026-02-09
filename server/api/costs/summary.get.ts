@@ -315,7 +315,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     masterAccountId: proforma ? masterAccountId : null,
     enhanced,
     includeDecommissioned,
-    filteredAccountIds: filteredAccountIds?.slice(0, 5) // Sample for uniqueness
+    filteredAccountIds: filteredAccountIds ? `${filteredAccountIds.length}:${filteredAccountIds.sort().join(',').substring(0, 100)}` : null // Hash for uniqueness
   })}`
 
   // Get cost data with caching

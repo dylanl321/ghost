@@ -109,17 +109,98 @@ export const useUserGroupStore = defineStore('userGroups', {
   },
 
   actions: {
-    // Set groups for dev mode (skips Graph API)
+    // Set groups for dev mode (skips Graph API). Preserves existing account/role data if present.
     setDevGroups(groups: string[]) {
       this.allEntraGroups = groups
-      this.roleGroups = {}
-      this.distributionGroups = {}
+      this.groupsLastFetch = Date.now()
+      // Only reset account data if no accounts are currently assigned
+      if (Object.keys(this.awsRoles).length === 0) {
+        this.roleGroups = {}
+        this.distributionGroups = {}
+        this.awsRoles = {}
+        this.myAccountIds = []
+        this.myAdminAccountIds = []
+        this.awsRolesLastFetch = Date.now()
+      }
+      console.log('[GHOST-AUTH] Dev mode: Set mock groups:', groups)
+    },
+
+    // Set dev accounts with real enclave data - builds awsRoles so the user appears to have access
+    setDevAccounts(accountIds: string[], roles: string[], enclaveData: Record<string, AWSEnclaveData>) {
       this.awsRoles = {}
+      this.roleGroups = {}
       this.myAccountIds = []
       this.myAdminAccountIds = []
-      this.groupsLastFetch = Date.now()
+
+      const accountIdsSet = new Set<string>()
+      const adminAccountIdsSet = new Set<string>()
+
+      for (const accountId of accountIds) {
+        const enclave = enclaveData[accountId]
+        if (!enclave) continue
+
+        const standardAccountId = enclave.accountId || enclave.awsStandardAccountID || accountId
+        const govCloudAccountId = enclave.awsGovCloudAccountID || ''
+
+        // Add commercial account entry
+        this.awsRoles[standardAccountId] = {
+          roles: [...roles],
+          accountName: enclave.projectName || enclave.accountName || 'Unknown Account',
+          accountStatus: enclave.accountStatus || 'ACTIVE',
+          isGovCloud: !!govCloudAccountId,
+          standardAccountId,
+          govCloudAccountId,
+          distributionGroups: []
+        }
+
+        // Add govcloud account entry if paired
+        if (govCloudAccountId) {
+          this.awsRoles[govCloudAccountId] = {
+            roles: [...roles],
+            accountName: enclave.projectName || enclave.accountName || 'Unknown Account',
+            accountStatus: enclave.accountStatus || 'ACTIVE',
+            isGovCloud: true,
+            standardAccountId,
+            govCloudAccountId,
+            distributionGroups: []
+          }
+        }
+
+        accountIdsSet.add(standardAccountId)
+
+        const hasAdminRole = roles.some(role =>
+          role.toLowerCase().includes('admin') ||
+          role.toLowerCase().includes('poweruser')
+        )
+        if (hasAdminRole) {
+          adminAccountIdsSet.add(standardAccountId)
+        }
+
+        // Build matching roleGroups entries so the data looks realistic
+        for (const role of roles) {
+          const key = `${standardAccountId}-${role}`
+          this.roleGroups[key] = {
+            accountId: standardAccountId,
+            role,
+            groupName: `AWS-${standardAccountId}_GDSSO_${role}`
+          }
+          if (govCloudAccountId) {
+            const govKey = `${govCloudAccountId}-${role}`
+            this.roleGroups[govKey] = {
+              accountId: govCloudAccountId,
+              role,
+              groupName: `AWS-${govCloudAccountId}_GDSSO_${role}`
+            }
+          }
+        }
+      }
+
+      this.myAccountIds = Array.from(accountIdsSet)
+      this.myAdminAccountIds = Array.from(adminAccountIdsSet)
       this.awsRolesLastFetch = Date.now()
-      console.log('[GHOST-AUTH] Dev mode: Set mock groups:', groups)
+      this.groupsLastFetch = Date.now()
+
+      console.log(`[GHOST-AUTH] Dev mode: Set ${accountIds.length} accounts with roles [${roles.join(', ')}], ${this.myAccountIds.length} total, ${this.myAdminAccountIds.length} admin`)
     },
 
     async initializeGroups(accessToken: string, force: boolean = false) {

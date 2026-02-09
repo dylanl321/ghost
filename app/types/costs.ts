@@ -1,5 +1,22 @@
 export type DataMode = 'billable' | 'proforma'
 
+/** AWS Cost Explorer time period */
+export interface AwsTimePeriod {
+  Start: string
+  End: string
+}
+
+/** Single entry from AWS Cost Explorer ResultsByTime array */
+export interface AwsResultsByTime {
+  TimePeriod?: AwsTimePeriod
+  Total?: Record<string, { Amount: string; Unit?: string }>
+  Groups?: Array<{
+    Keys?: string[]
+    Metrics?: Record<string, { Amount: string; Unit?: string }>
+  }>
+  Estimated?: boolean
+}
+
 // API request params
 export interface CostsQuery {
   accounts: string[]
@@ -14,6 +31,7 @@ export interface SeriesPoint {
 }
 
 // Summary API response (server/api/costs/summary.get.ts)
+// The actual API response is wrapped in { data: ... } by sendSuccess
 export interface CostsSummaryItem {
   accountId: string
   accountName?: string
@@ -33,6 +51,13 @@ export interface CostsSummaryResponse {
     budget?: number
     forecast?: number
   }
+  // The actual API response often has these additional fields
+  data?: any // Wrapped data from sendSuccess
+  accounts?: any[] // Enhanced mode returns accounts array
+  summary?: any // Summary totals
+  rawData?: { resultsByTime?: any[] } // Raw AWS response data
+  proforma?: any // Proforma nested data when mode=proforma
+  billable?: any // Billable nested data when mode=proforma
 }
 
 // Historical API response (server/api/costs/historical.get.ts)
@@ -43,6 +68,11 @@ export interface CostsHistoricalSeries {
 
 export interface CostsHistoricalResponse {
   series: CostsHistoricalSeries[]
+  data?: any // Wrapped data from sendSuccess
+  monthlyBreakdown?: any[] // Monthly breakdown with account details
+  rawData?: { resultsByTime?: any[] }
+  proforma?: any
+  billable?: any
 }
 
 // Forecast API response (server/api/costs/forecast.get.ts)
@@ -53,6 +83,10 @@ export interface CostsForecastSeries {
 
 export interface CostsForecastResponse {
   series: CostsForecastSeries[]
+  data?: any // Wrapped data from sendSuccess
+  forecast?: any // Nested forecast object
+  total?: any // Total amount object
+  forecastResultsByTime?: any[] // AWS forecast periods
 }
 
 // Analysis API response (server/api/costs/analysis.get.ts)
@@ -72,6 +106,16 @@ export interface OptimizationItem {
 export interface CostsAnalysisResponse {
   anomalies: AnomalyItem[]
   optimizations: OptimizationItem[]
+  // The actual API response has these additional fields
+  data?: any // Wrapped data from sendSuccess
+  budgetAnalysis?: {
+    byAccount?: any[]
+    totalBudget?: number
+    totalActual?: number
+    totalVariance?: number
+  }
+  monthOverMonth?: any
+  costTrends?: any
 }
 
 // Normalized dataset for charts

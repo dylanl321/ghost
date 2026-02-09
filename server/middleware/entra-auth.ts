@@ -241,18 +241,24 @@ export function requireOIDCAuth(event: H3Event): void {
 }
 
 /**
- * Legacy scope functions - kept for backwards compatibility
- * Now simplified: authenticated = has all access
+ * Legacy scope functions - updated to perform actual scope checks
+ * For 'admin' scope, delegates to the real admin group membership check
  */
 export function hasScope(event: H3Event, requiredScope: string): boolean {
   return isAuthenticated(event)
 }
 
-export function requireScope(event: H3Event, requiredScope: string): void {
+export async function requireScope(event: H3Event, requiredScope: string): Promise<void> {
   if (!isAuthenticated(event)) {
     throw createError({
       statusCode: 401,
       statusMessage: 'Authentication required'
     })
+  }
+
+  // For admin scope, perform a real admin group membership check
+  if (requiredScope === 'admin') {
+    const { requireAdmin } = await import('../utils/user-roles')
+    await requireAdmin(event)
   }
 }

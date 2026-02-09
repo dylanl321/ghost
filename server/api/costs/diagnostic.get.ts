@@ -7,8 +7,12 @@ import { defineEventHandler, getQuery } from 'h3'
 import { getProformaCosts } from '../../utils/cost-explorer'
 import { getRelativeDateRange } from '../../utils/date-helpers'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
+import { requireScope } from '../../middleware/entra-auth'
 
 export default defineEventHandler(handleAsync(async (event) => {
+  // Require admin scope - this endpoint exposes internal data structure details
+  await requireScope(event, 'admin')
+
   const { startDate, endDate } = getRelativeDateRange('lastMonth')
 
   // Call getProformaCosts directly (no caching)

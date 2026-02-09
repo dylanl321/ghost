@@ -247,24 +247,24 @@ const availableColumns = computed(() => [
   { key: 'accountId', label: 'Account ID', default: true },
   { key: 'accountName', label: 'Account Name', default: true },
   { key: 'accountStatus', label: 'Account Status', default: true, format: (v: string) => v || 'Active', class: 'text-center' },
-  { key: 'actualCost', label: `${getTimeframeLabel()} Cost`, default: true, format: (v: number) => formatCurrency(v), class: 'text-right' },
-  { key: 'budgetedCost', label: 'GDMS Forecast', default: true, format: (v: number) => formatCurrency(v), class: 'text-right' },
+  { key: 'actualCost', label: `${getTimeframeLabel()} Cost`, default: true, format: (v: number) => formatCurrency(v, 2), class: 'text-right' },
+  { key: 'budgetedCost', label: 'GDMS Forecast', default: true, format: (v: number) => formatCurrency(v, 2), class: 'text-right' },
   { key: 'utilization', label: 'Utilization %', default: true, format: (v: number) => `${v.toFixed(1)}%`, class: 'text-right' },
   { key: 'overagePercent', label: 'Overage %', default: false, format: (v: number) => v > 0 ? `${v.toFixed(1)}%` : '-', class: 'text-right' },
   { key: 'riskScore', label: 'Risk Score', default: true, format: (v: number) => v.toFixed(0), class: 'text-right', helpLink: '/support/docs?topic=budget-risk-scoring', helpTooltip: 'Learn how Risk Scores are calculated' },
   { key: 'riskLevel', label: 'Risk Level', default: true, helpLink: '/support/docs?topic=budget-risk-scoring', helpTooltip: 'Learn about Risk Levels' },
-  { key: 'variance', label: 'GDMS Variance', default: true, format: (v: number) => formatCurrency(v), class: 'text-right' },
+  { key: 'variance', label: 'GDMS Variance', default: true, format: (v: number) => formatCurrency(v, 2), class: 'text-right' },
   { key: 'status', label: 'GDMS Status', default: false },
-  { key: 'endOfMonthForecast', label: 'End of Month AWS Projection', default: true, format: (v: number) => formatCurrency(v), class: 'text-right', helpTooltip: 'AWS ML projection for end of current month' },
+  { key: 'endOfMonthForecast', label: 'End of Month AWS Projection', default: true, format: (v: number) => formatCurrency(v, 2), class: 'text-right', helpTooltip: 'AWS ML projection for end of current month' },
   { key: 'projectedVsBudget', label: 'Projected vs Budget', default: true, format: (v: number) => formatCurrencyWithSign(v), class: 'text-right', helpTooltip: 'End of Month AWS Projection minus GDMS Forecast (positive = over, negative = under)' },
-  { key: 'lastMonthTotal', label: 'Last Month Total', default: true, format: (v: number) => formatCurrency(v), class: 'text-right', helpTooltip: 'Total cost from the previous month' },
-  { key: 'ytdTotal', label: 'YTD Total', default: true, format: (v: number) => formatCurrency(v), class: 'text-right', helpTooltip: 'Year-to-date total (Jan 1 - today)' },
-  { key: 'fullYearEstimate', label: 'Full Year Estimate', default: true, format: (v: number) => formatCurrency(v), class: 'text-right', helpTooltip: 'Projected full year total (YTD actuals + remaining months forecast)' },
+  { key: 'lastMonthTotal', label: 'Last Month Total', default: true, format: (v: number) => formatCurrency(v, 2), class: 'text-right', helpTooltip: 'Total cost from the previous month' },
+  { key: 'ytdTotal', label: 'YTD Total', default: true, format: (v: number) => formatCurrency(v, 2), class: 'text-right', helpTooltip: 'Year-to-date total (Jan 1 - today)' },
+  { key: 'fullYearEstimate', label: 'Full Year Estimate', default: true, format: (v: number) => formatCurrency(v, 2), class: 'text-right', helpTooltip: 'Projected full year total (YTD actuals + remaining months forecast)' },
   { key: 'departmentNumber', label: 'Department', default: false },
   { key: 'linesOfBusiness', label: 'Line of Business', default: false },
   { key: 'projectName', label: 'Project', default: false },
   { key: 'environment', label: 'Environment', default: false },
-  { key: 'forecastedCost', label: 'Forecast', default: false, format: (v: number) => formatCurrency(v), class: 'text-right' }
+  { key: 'forecastedCost', label: 'Forecast', default: false, format: (v: number) => formatCurrency(v, 2), class: 'text-right' }
 ])
 
 // State
@@ -609,16 +609,6 @@ const getNestedValue = (obj: any, path: string) => {
   return path.split('.').reduce((acc, part) => acc?.[part], obj)
 }
 
-const formatCurrency = (value: number) => {
-  if (typeof value !== 'number') return '-'
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(value)
-}
-
 const formatCurrencyWithSign = (value: number) => {
   if (typeof value !== 'number') return '-'
   const formatted = new Intl.NumberFormat('en-US', {
@@ -683,17 +673,17 @@ const generateDetailedReport = () => {
   csvContent += 'Number of Accounts,' + selectedAccountsData.length + '\n'
   csvContent += 'Active Accounts,' + selectedAccountsData.filter(acc => acc.accountStatus !== 'Decommissioned').length + '\n'
   csvContent += 'Decommissioned Accounts,' + selectedAccountsData.filter(acc => acc.accountStatus === 'Decommissioned').length + '\n'
-  csvContent += 'Total Cost,' + formatCurrency(totalCost) + '\n'
-  csvContent += 'Total GDMS Forecast,' + formatCurrency(totalBudget) + '\n'
+  csvContent += 'Total Cost,' + formatCurrency(totalCost, 2) + '\n'
+  csvContent += 'Total GDMS Forecast,' + formatCurrency(totalBudget, 2) + '\n'
   csvContent += 'GDMS Forecast Utilization,' + averageUtilization.toFixed(1) + '%\n'
-  csvContent += 'Average Cost per Account,' + formatCurrency(averageCost) + '\n'
+  csvContent += 'Average Cost per Account,' + formatCurrency(averageCost, 2) + '\n'
   csvContent += 'Over GDMS Forecast Accounts,' + selectedAccountsData.filter(acc => acc.status === 'over').length + '\n'
   csvContent += 'Under GDMS Forecast Accounts,' + selectedAccountsData.filter(acc => acc.status === 'under').length + '\n'
   csvContent += '\n'
   csvContent += '=== FORECAST DATA ===\n\n'
-  csvContent += 'Total End of Month AWS Projection,' + formatCurrency(selectedAccountsData.reduce((sum, acc) => sum + (acc.endOfMonthForecast || 0), 0)) + '\n'
-  csvContent += 'Total YTD,' + formatCurrency(selectedAccountsData.reduce((sum, acc) => sum + (acc.ytdTotal || 0), 0)) + '\n'
-  csvContent += 'Total Full Year Estimate,' + formatCurrency(selectedAccountsData.reduce((sum, acc) => sum + (acc.fullYearEstimate || 0), 0)) + '\n'
+  csvContent += 'Total End of Month AWS Projection,' + formatCurrency(selectedAccountsData.reduce((sum, acc) => sum + (acc.endOfMonthForecast || 0), 0), 2) + '\n'
+  csvContent += 'Total YTD,' + formatCurrency(selectedAccountsData.reduce((sum, acc) => sum + (acc.ytdTotal || 0), 0), 2) + '\n'
+  csvContent += 'Total Full Year Estimate,' + formatCurrency(selectedAccountsData.reduce((sum, acc) => sum + (acc.fullYearEstimate || 0), 0), 2) + '\n'
   csvContent += '\n\n'
   
   // Sheet 2: Account Details
@@ -708,14 +698,14 @@ const generateDetailedReport = () => {
       acc.accountStatus || 'Active',
       acc.departmentNumber || '',
       acc.linesOfBusiness || '',
-      formatCurrency(acc.actualCost || 0),
-      formatCurrency(acc.budgetedCost || 0),
+      formatCurrency(acc.actualCost || 0, 2),
+      formatCurrency(acc.budgetedCost || 0, 2),
       (acc.utilization || 0).toFixed(1) + '%',
-      formatCurrency(acc.variance || 0),
+      formatCurrency(acc.variance || 0, 2),
       acc.status || '',
-      formatCurrency(acc.endOfMonthForecast || 0),
-      formatCurrency(acc.ytdTotal || 0),
-      formatCurrency(acc.fullYearEstimate || 0)
+      formatCurrency(acc.endOfMonthForecast || 0, 2),
+      formatCurrency(acc.ytdTotal || 0, 2),
+      formatCurrency(acc.fullYearEstimate || 0, 2)
     ]
     csvContent += row.map(escapeCSV).join(',') + '\n'
   })
@@ -726,7 +716,7 @@ const generateDetailedReport = () => {
     csvContent += '=== TOP 20 SERVICES BY COST ===\n\n'
     csvContent += 'Service,Total Cost\n'
     serviceAnalysis.forEach(service => {
-      csvContent += escapeCSV(service.service) + ',' + formatCurrency(service.totalCost) + '\n'
+      csvContent += escapeCSV(service.service) + ',' + formatCurrency(service.totalCost, 2) + '\n'
     })
     csvContent += '\n\n'
   }
@@ -859,16 +849,16 @@ const exportToPDFHandler = async () => {
     'Total Accounts': dataToExport.length,
     'Active Accounts': dataToExport.filter(acc => acc.accountStatus !== 'Decommissioned').length,
     'Decommissioned Accounts': dataToExport.filter(acc => acc.accountStatus === 'Decommissioned').length,
-    'Total Actual Cost': formatCurrency(totalCost),
-    'Total GDMS Forecast': formatCurrency(totalBudget),
+    'Total Actual Cost': formatCurrency(totalCost, 2),
+    'Total GDMS Forecast': formatCurrency(totalBudget, 2),
     'Average Utilization': `${averageUtilization.toFixed(1)}%`,
     'Over GDMS Forecast Accounts': dataToExport.filter(acc => acc.status === 'over').length,
     'Under GDMS Forecast Accounts': dataToExport.filter(acc => acc.status === 'under').length,
     'Warning Accounts': dataToExport.filter(acc => acc.status === 'warning').length,
     '': '', // Spacer
-    'Total End of Month AWS Projection': formatCurrency(dataToExport.reduce((sum, acc) => sum + (acc.endOfMonthForecast || 0), 0)),
-    'Total YTD': formatCurrency(dataToExport.reduce((sum, acc) => sum + (acc.ytdTotal || 0), 0)),
-    'Total Full Year Estimate': formatCurrency(dataToExport.reduce((sum, acc) => sum + (acc.fullYearEstimate || 0), 0))
+    'Total End of Month AWS Projection': formatCurrency(dataToExport.reduce((sum, acc) => sum + (acc.endOfMonthForecast || 0), 0), 2),
+    'Total YTD': formatCurrency(dataToExport.reduce((sum, acc) => sum + (acc.ytdTotal || 0), 0), 2),
+    'Total Full Year Estimate': formatCurrency(dataToExport.reduce((sum, acc) => sum + (acc.fullYearEstimate || 0), 0), 2)
   }
   
   // Prepare table data
@@ -909,7 +899,7 @@ const exportToPDFHandler = async () => {
     const serviceHeaders = ['Service', 'Total Cost']
     const serviceRows = serviceAnalysis.slice(0, 20).map(s => [
       s.service,
-      formatCurrency(s.totalCost)
+      formatCurrency(s.totalCost, 2)
     ])
     
     pdfSections.push({
@@ -978,11 +968,11 @@ const exportToCSV = () => {
   csvContent += 'Timeframe,' + getTimeframeLabel() + '\n'
   csvContent += 'Total Accounts,' + filteredData.value.length + '\n'
   csvContent += '\n'
-  csvContent += 'Total ' + getTimeframeLabel() + ' Cost,' + formatCurrency(totalCost) + '\n'
-  csvContent += 'Total GDMS Forecast,' + formatCurrency(totalBudget) + '\n'
-  csvContent += 'Total End of Month AWS Projection,' + formatCurrency(totalEndOfMonth) + '\n'
-  csvContent += 'Total YTD,' + formatCurrency(totalYtd) + '\n'
-  csvContent += 'Total Full Year Estimate,' + formatCurrency(totalFullYear) + '\n'
+  csvContent += 'Total ' + getTimeframeLabel() + ' Cost,' + formatCurrency(totalCost, 2) + '\n'
+  csvContent += 'Total GDMS Forecast,' + formatCurrency(totalBudget, 2) + '\n'
+  csvContent += 'Total End of Month AWS Projection,' + formatCurrency(totalEndOfMonth, 2) + '\n'
+  csvContent += 'Total YTD,' + formatCurrency(totalYtd, 2) + '\n'
+  csvContent += 'Total Full Year Estimate,' + formatCurrency(totalFullYear, 2) + '\n'
   csvContent += '\n\n'
 
   // Account data table

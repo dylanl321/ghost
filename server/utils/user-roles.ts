@@ -54,7 +54,8 @@ export async function isUserAdmin(event: H3Event): Promise<boolean> {
   if (auth.authType === 'oidc') {
     // Try to get user ID from various possible locations in the session
     const userId = user.id || user.oid || user.sub ||
-                   user.claims?.id || user.claims?.oid || user.claims?.sub
+                   user.claims?.id || user.claims?.oid || user.claims?.sub ||
+                   user.email || user.claims?.email
     if (!userId) {
       logger.error('Cannot fetch groups: user ID not found in session. User object:', JSON.stringify(user, null, 2))
       return false
@@ -69,7 +70,7 @@ export async function isUserAdmin(event: H3Event): Promise<boolean> {
     // Fetch from Graph API
     try {
       // Fetch user's groups from Microsoft Graph
-      const { data: userGroups } = await getUserGroups(event, userId)
+      const userGroups = await getUserGroups(event, userId)
 
       // Check if user is in AWS-Product-Team group
       const isAdmin = userGroups.some(group => group.displayName === 'AWS-Product-Team')

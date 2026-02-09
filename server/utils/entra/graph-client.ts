@@ -10,8 +10,8 @@ import type {
   EntraUser,
   GroupMembersResponse,
   GroupSearchFilters,
-  EntraCacheTags
 } from '../../types/entra'
+import { EntraCacheTags } from '../../types/entra'
 import {
   getCacheKey,
   buildGroupFilter,
@@ -334,7 +334,7 @@ export async function getAWSGroups(
       parsed,
       {
         ttl: entraConfig.cache.ttl,
-        tags: [CacheTags.ACCOUNTS, 'ENTRA', 'ENTRA_GROUPS']
+        tags: [CacheTags.ACCOUNTS, EntraCacheTags.ENTRA, EntraCacheTags.ENTRA_GROUPS]
       }
     )
     
@@ -398,7 +398,7 @@ export async function getGroupMembers(
       response,
       {
         ttl: entraConfig.cache.ttl,
-        tags: [CacheTags.ACCOUNTS, 'ENTRA', 'ENTRA_USERS', 'ENTRA_MEMBERS']
+        tags: [CacheTags.ACCOUNTS, EntraCacheTags.ENTRA, EntraCacheTags.ENTRA_USERS, EntraCacheTags.ENTRA_MEMBERS]
       }
     )
     
@@ -434,7 +434,7 @@ export async function getUserDetails(
       user,
       {
         ttl: 86400, // 24 hours
-        tags: ['ENTRA', 'ENTRA_USERS']
+        tags: [CacheTags.ACCOUNTS, EntraCacheTags.ENTRA, EntraCacheTags.ENTRA_USERS]
       }
     )
     
@@ -507,7 +507,7 @@ export async function getUserGroups(
       awsGroups,
       {
         ttl: entraConfig.cache.ttl,
-        tags: ['ENTRA', 'ENTRA_GROUPS', 'ENTRA_USERS']
+        tags: [CacheTags.ACCOUNTS, EntraCacheTags.ENTRA, EntraCacheTags.ENTRA_GROUPS, EntraCacheTags.ENTRA_USERS]
       }
     )
     
@@ -522,16 +522,19 @@ export async function getUserGroups(
  * Clear Entra-related cache entries
  */
 export async function clearEntraCache(pattern?: string): Promise<number> {
-  const tags = ['ENTRA']
+  let tags: string[]
   
   if (pattern === 'groups') {
-    tags.push('ENTRA_GROUPS')
+    tags = [EntraCacheTags.ENTRA_GROUPS]
   } else if (pattern === 'users') {
-    tags.push('ENTRA_USERS')
+    tags = [EntraCacheTags.ENTRA_USERS]
+  } else {
+    // 'all' — clear everything tagged ENTRA
+    tags = [EntraCacheTags.ENTRA]
   }
   
   const invalidated = await accountCache.invalidateByTags(tags)
-  logger.debug(`Cleared ${invalidated} Entra cache entries`)
+  logger.debug(`Cleared ${invalidated} Entra cache entries (pattern: ${pattern || 'all'})`)
   
   return invalidated
 }

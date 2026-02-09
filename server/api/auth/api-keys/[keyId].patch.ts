@@ -78,7 +78,7 @@ registerEndpoint('/api/auth/api-keys/{keyId}', 'PATCH', {
 export default defineEventHandler(async (event): Promise<EntraAPIResponse<any>> => {
   try {
     // Require admin scope
-    requireScope(event, 'admin')
+    await requireScope(event, 'admin')
 
     // Get authenticated user
     const authContext = getAuthContext(event)

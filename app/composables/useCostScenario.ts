@@ -30,13 +30,6 @@ export const useCostScenario = (args: {
       detectedScenario = 'all-accounts' // fallback for large selections
     }
     
-    console.log('Scenario detection:', {
-      activeTab: tab,
-      selectedCount: count,
-      selectedAccounts: selectedAccounts.value.slice(0, 3), // Show first 3 for debug
-      scenario: detectedScenario
-    })
-    
     return detectedScenario
   })
 

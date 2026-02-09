@@ -211,370 +211,76 @@
             </div>
             
             <div class="space-y-1">
-              <div 
-                v-for="account in sortedFilteredAccounts" 
+              <SidebarAccountItem
+                v-for="account in sortedFilteredAccounts"
                 :key="getAccountKey(account)"
-                class="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer text-sm"
-                :class="{ 'bg-blue-900/50': selectedAccounts.includes(getAccountKey(account)) }"
-                @click="toggleAccount(getAccountKey(account))"
-              >
-                <div class="flex items-center gap-2 min-w-0">
-                  <input
-                    type="checkbox"
-                    :checked="selectedAccounts.includes(getAccountKey(account))"
-                    class="w-3 h-3 text-blue-600 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded"
-                    @change="toggleAccount(getAccountKey(account))"
-                    @click.stop
-                  >
-                  <div class="min-w-0 flex-1">
-                    <div class="text-gray-900 dark:text-gray-200 font-medium truncate">
-                      {{ account.accountName || account.projectName || account.name || 'Unnamed Account' }}
-                    </div>
-                    <div class="text-xs text-gray-600 dark:text-gray-400">
-                      {{ account.accountId || account.awsStandardAccountID }}
-                    </div>
-                  </div>
-                </div>
-                <div class="text-right ml-2 flex flex-col space-y-1 items-end">
-                  <UTooltip text="Budget">
-                    <div class="text-xs text-gray-700 dark:text-gray-300">
-                      {{ formatCurrency(getBudget(account)) }}
-                    </div>
-                  </UTooltip>
-                  <UTooltip text="Spend">
-                    <div class="text-xs text-green-400">
-                      {{ formatCurrency(getSpend(account)) }}
-                    </div>
-                  </UTooltip>
-                  <UTooltip v-if="accountSortBy === 'utilization' && getBudget(account) > 0" text="Utilization">
-                    <div class="text-xs" :class="getUtilizationColor(account)">
-                      {{ ((getSpend(account) / getBudget(account)) * 100).toFixed(0) }}%
-                    </div>
-                  </UTooltip>
-                </div>
-              </div>
+                :account="account"
+                :account-key="getAccountKey(account)"
+                :selected="selectedAccounts.includes(getAccountKey(account))"
+                :budget="getBudget(account)"
+                :spend="getSpend(account)"
+                :format-currency="formatCurrency"
+                :show-utilization="accountSortBy === 'utilization'"
+                :show-bold-name="true"
+                @toggle="toggleAccount"
+              />
             </div>
           </div>
 
           <!-- Lines of Business Tab -->
-          <div v-else-if="activeTab === 'lob'" class="p-3">
-            <div class="mb-3">
-              <span class="text-sm text-gray-900 dark:text-gray-300">Lines of Business ({{ lobGroups.length }})</span>
-            </div>
-            
-            <div class="space-y-2">
-              <div
-                v-for="lob in lobGroups"
-                :key="lob.name"
-                class="bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-transparent"
-              >
-                <div 
-                  class="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 rounded-t-lg min-h-[4rem]"
-                  @click="toggleLOB(lob)"
-                >
-                  <div class="flex items-center gap-2 min-w-0 flex-1">
-                    <Icon name="i-heroicons-briefcase" class="w-4 h-4 text-blue-400 flex-shrink-0" />
-                    <div class="min-w-0">
-                      <div class="font-medium text-gray-900 dark:text-gray-200 truncate">{{ lob.name || 'Unknown LOB' }}</div>
-                      <div class="text-xs text-gray-600 dark:text-gray-400">{{ lob.accounts.length }} accounts</div>
-                    </div>
-                  </div>
-                  <div class="flex items-center gap-3">
-                    <div class="text-right flex flex-col space-y-1 items-end">
-                      <UTooltip text="Total Budget">
-                        <div class="text-xs text-gray-700 dark:text-gray-300">
-                          {{ formatCurrency(lob.totalBudget) }}
-                        </div>
-                      </UTooltip>
-                      <UTooltip text="Total Spend">
-                        <div class="text-xs text-green-400">
-                          {{ formatCurrency(lob.totalSpend) }}
-                        </div>
-                      </UTooltip>
-                      <UTooltip v-if="lob.totalBudget > 0" text="Group Utilization">
-                        <div class="text-xs" :class="lob.totalSpend > lob.totalBudget ? 'text-red-400' : lob.totalSpend > lob.totalBudget * 0.9 ? 'text-yellow-400' : 'text-green-400'">
-                          {{ ((lob.totalSpend / lob.totalBudget) * 100).toFixed(2) }}%
-                        </div>
-                      </UTooltip>
-                    </div>
-                    <UTooltip text="Select Group">
-                      <UButton
-                        size="xs"
-                        variant="ghost"
-                        color="blue"
-                        icon="i-heroicons-check-circle"
-                        class="px-2"
-                        @click.stop="selectLOBGroup(lob)"
-                      />
-                    </UTooltip>
-                  </div>
-                </div>
-                
-                <div v-if="expandedGroups.has('lob-' + lob.name)" class="px-3 pb-3">
-                  <div class="space-y-1 ml-4 border-l border-gray-200 dark:border-gray-600 pl-3">
-                    <div
-                      v-for="account in lob.accounts"
-                      :key="getAccountKey(account)"
-                      class="flex items-center justify-between p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer text-sm"
-                      :class="{ 'bg-blue-900/50': selectedAccounts.includes(getAccountKey(account)) }"
-                      @click="toggleAccount(getAccountKey(account))"
-                    >
-                      <div class="flex items-center gap-2 min-w-0">
-                        <input
-                          type="checkbox"
-                          :checked="selectedAccounts.includes(getAccountKey(account))"
-                          class="w-3 h-3 text-blue-600 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded"
-                          @change="toggleAccount(getAccountKey(account))"
-                          @click.stop
-                        >
-                        <div class="min-w-0 flex-1">
-                          <div class="text-gray-900 dark:text-gray-200 truncate">
-                            {{ account.accountName || account.projectName || 'Unnamed Account' }}
-                          </div>
-                          <div class="text-xs text-gray-600 dark:text-gray-400">
-                            {{ account.accountId || account.awsStandardAccountID }}
-                          </div>
-                        </div>
-                      </div>
-                      <div class="text-right ml-2 flex flex-col space-y-1 items-end">
-                        <UTooltip text="Budget">
-                          <div class="text-xs text-gray-700 dark:text-gray-300">
-                            {{ formatCurrency(getBudget(account)) }}
-                          </div>
-                        </UTooltip>
-                        <UTooltip text="Spend">
-                          <div class="text-xs text-green-400">
-                            {{ formatCurrency(getSpend(account)) }}
-                          </div>
-                        </UTooltip>
-                        <UTooltip v-if="getBudget(account) > 0" text="Utilization">
-                          <div class="text-xs" :class="getUtilizationColor(account)">
-                            {{ ((getSpend(account) / getBudget(account)) * 100).toFixed(2) }}%
-                          </div>
-                        </UTooltip>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <SidebarGroupList
+            v-else-if="activeTab === 'lob'"
+            :groups="lobGroups"
+            :expanded-groups="expandedGroups"
+            :selected-accounts="selectedAccounts"
+            :format-currency="formatCurrency"
+            group-type="lob"
+            label="Lines of Business"
+            default-icon="i-heroicons-briefcase"
+            default-icon-color="text-blue-400"
+            :get-account-key="getAccountKey"
+            :get-budget="getBudget"
+            :get-spend="getSpend"
+            @toggle-group="handleToggleGroup"
+            @select-group="handleSelectGroup"
+            @toggle-account="toggleAccount"
+          />
 
           <!-- Departments Tab -->
-          <div v-else-if="activeTab === 'dept'" class="p-3">
-            <div class="mb-3">
-              <span class="text-sm text-gray-900 dark:text-gray-300">Departments ({{ departmentGroups.length }})</span>
-            </div>
-            
-            <div class="space-y-2">
-              <div
-                v-for="dept in departmentGroups"
-                :key="dept.name"
-                class="bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-transparent"
-              >
-                <div 
-                  class="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 rounded-t-lg min-h-[4rem]"
-                  @click="toggleDepartment(dept)"
-                >
-                  <div class="flex items-center gap-2 min-w-0 flex-1">
-                    <Icon name="i-heroicons-building-office" class="w-4 h-4 text-green-400 flex-shrink-0" />
-                    <div class="min-w-0">
-                      <div class="font-medium text-gray-900 dark:text-gray-200 truncate">{{ dept.name || 'Unknown Dept' }}</div>
-                      <div class="text-xs text-gray-600 dark:text-gray-400">{{ dept.accounts.length }} accounts</div>
-                    </div>
-                  </div>
-                  <div class="flex items-center gap-3">
-                    <div class="text-right flex flex-col space-y-1 items-end">
-                      <UTooltip text="Total Budget">
-                        <div class="text-xs text-gray-700 dark:text-gray-300">
-                          {{ formatCurrency(dept.totalBudget) }}
-                        </div>
-                      </UTooltip>
-                      <UTooltip text="Total Spend">
-                        <div class="text-xs text-green-400">
-                          {{ formatCurrency(dept.totalSpend) }}
-                        </div>
-                      </UTooltip>
-                      <UTooltip v-if="dept.totalBudget > 0" text="Group Utilization">
-                        <div class="text-xs" :class="dept.totalSpend > dept.totalBudget ? 'text-red-400' : dept.totalSpend > dept.totalBudget * 0.9 ? 'text-yellow-400' : 'text-green-400'">
-                          {{ ((dept.totalSpend / dept.totalBudget) * 100).toFixed(2) }}%
-                        </div>
-                      </UTooltip>
-                    </div>
-                    <UTooltip text="Select Group">
-                      <UButton
-                        size="xs"
-                        variant="ghost"
-                        color="blue"
-                        icon="i-heroicons-check-circle"
-                        class="px-2"
-                        @click.stop="selectDepartmentGroup(dept)"
-                      />
-                    </UTooltip>
-                  </div>
-                </div>
-                
-                <div v-if="expandedGroups.has('dept-' + dept.name)" class="px-3 pb-3">
-                  <div class="space-y-1 ml-4 border-l border-gray-200 dark:border-gray-600 pl-3">
-                    <div
-                      v-for="account in dept.accounts"
-                      :key="getAccountKey(account)"
-                      class="flex items-center justify-between p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer text-sm"
-                      :class="{ 'bg-blue-900/50': selectedAccounts.includes(getAccountKey(account)) }"
-                      @click="toggleAccount(getAccountKey(account))"
-                    >
-                      <div class="flex items-center gap-2 min-w-0">
-                        <input
-                          type="checkbox"
-                          :checked="selectedAccounts.includes(getAccountKey(account))"
-                          class="w-3 h-3 text-blue-600 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded"
-                          @change="toggleAccount(getAccountKey(account))"
-                          @click.stop
-                        >
-                        <div class="min-w-0 flex-1">
-                          <div class="text-gray-900 dark:text-gray-200 truncate">
-                            {{ account.accountName || account.projectName || 'Unnamed Account' }}
-                          </div>
-                          <div class="text-xs text-gray-600 dark:text-gray-400">
-                            {{ account.accountId || account.awsStandardAccountID }}
-                          </div>
-                        </div>
-                      </div>
-                      <div class="text-right ml-2 flex flex-col space-y-1 items-end">
-                        <UTooltip text="Budget">
-                          <div class="text-xs text-gray-700 dark:text-gray-300">
-                            {{ formatCurrency(getBudget(account)) }}
-                          </div>
-                        </UTooltip>
-                        <UTooltip text="Spend">
-                          <div class="text-xs text-green-400">
-                            {{ formatCurrency(getSpend(account)) }}
-                          </div>
-                        </UTooltip>
-                        <UTooltip v-if="getBudget(account) > 0" text="Utilization">
-                          <div class="text-xs" :class="getUtilizationColor(account)">
-                            {{ ((getSpend(account) / getBudget(account)) * 100).toFixed(2) }}%
-                          </div>
-                        </UTooltip>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <SidebarGroupList
+            v-else-if="activeTab === 'dept'"
+            :groups="departmentGroups"
+            :expanded-groups="expandedGroups"
+            :selected-accounts="selectedAccounts"
+            :format-currency="formatCurrency"
+            group-type="department"
+            label="Departments"
+            default-icon="i-heroicons-building-office"
+            default-icon-color="text-green-400"
+            :get-account-key="getAccountKey"
+            :get-budget="getBudget"
+            :get-spend="getSpend"
+            @toggle-group="handleToggleGroup"
+            @select-group="handleSelectGroup"
+            @toggle-account="toggleAccount"
+          />
 
           <!-- Smart Groupings Tab -->
-          <div v-else-if="activeTab === 'smart'" class="p-3">
-            <div class="mb-3">
-              <span class="text-sm text-gray-900 dark:text-gray-300">Smart Groupings ({{ smartGroups.length }})</span>
-            </div>
-            
-            <div class="space-y-2">
-              <div
-                v-for="group in smartGroups"
-                :key="group.id"
-                class="bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-transparent"
-              >
-                <div 
-                  class="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 rounded-t-lg min-h-[4rem]"
-                  @click="toggleSmartGroup(group)"
-                >
-                  <div class="flex items-center gap-2 min-w-0 flex-1">
-                    <Icon :name="group.icon" class="w-4 h-4 flex-shrink-0" :class="group.iconColor" />
-                    <div class="min-w-0">
-                      <div class="font-medium text-gray-900 dark:text-gray-200 truncate flex items-center gap-1">
-                        {{ group.name }}
-                        <UTooltip v-if="group.id === 'favorites'" text="Learn about favorites">
-                          <NuxtLink to="/support/docs?topic=favorites-guide" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300" @click.stop>
-                            <UIcon name="i-heroicons-question-mark-circle" class="w-3.5 h-3.5" />
-                          </NuxtLink>
-                        </UTooltip>
-                      </div>
-                      <div class="text-xs text-gray-600 dark:text-gray-400 truncate">{{ group.description }}</div>
-                      <div class="text-xs text-gray-600 dark:text-gray-400">{{ group.accounts.length }} accounts</div>
-                    </div>
-                  </div>
-                  <div class="flex items-center gap-3">
-                    <div class="text-right flex flex-col space-y-1 items-end">
-                      <UTooltip text="Total Budget">
-                        <div class="text-xs text-gray-700 dark:text-gray-300">
-                          {{ formatCurrency(group.totalBudget) }}
-                        </div>
-                      </UTooltip>
-                      <UTooltip text="Total Spend">
-                        <div class="text-xs text-green-400">
-                          {{ formatCurrency(group.totalSpend) }}
-                        </div>
-                      </UTooltip>
-                      <UTooltip v-if="group.totalBudget > 0" text="Group Utilization">
-                        <div class="text-xs" :class="group.totalSpend > group.totalBudget ? 'text-red-400' : group.totalSpend > group.totalBudget * 0.9 ? 'text-yellow-400' : 'text-green-400'">
-                          {{ ((group.totalSpend / group.totalBudget) * 100).toFixed(2) }}%
-                        </div>
-                      </UTooltip>
-                    </div>
-                    <UTooltip text="Select Group">
-                      <UButton
-                        size="xs"
-                        variant="ghost"
-                        color="blue"
-                        icon="i-heroicons-check-circle"
-                        class="px-2"
-                        @click.stop="selectSmartGroup(group)"
-                      />
-                    </UTooltip>
-                  </div>
-                </div>
-                
-                <div v-if="expandedGroups.has('smart-' + group.id)" class="px-3 pb-3">
-                  <div class="space-y-1 ml-4 border-l border-gray-200 dark:border-gray-600 pl-3">
-                    <div
-                      v-for="account in group.accounts"
-                      :key="getAccountKey(account)"
-                      class="flex items-center justify-between p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer text-sm"
-                      :class="{ 'bg-blue-900/50': selectedAccounts.includes(getAccountKey(account)) }"
-                      @click="toggleAccount(getAccountKey(account))"
-                    >
-                      <div class="flex items-center gap-2 min-w-0">
-                        <input
-                          type="checkbox"
-                          :checked="selectedAccounts.includes(getAccountKey(account))"
-                          class="w-3 h-3 text-blue-600 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded"
-                          @change="toggleAccount(getAccountKey(account))"
-                          @click.stop
-                        >
-                        <div class="min-w-0 flex-1">
-                          <div class="text-gray-900 dark:text-gray-200 truncate">
-                            {{ account.accountName || account.projectName || 'Unnamed Account' }}
-                          </div>
-                          <div class="text-xs text-gray-600 dark:text-gray-400">
-                            {{ account.accountId || account.awsStandardAccountID }}
-                          </div>
-                        </div>
-                      </div>
-                      <div class="text-right ml-2 flex flex-col space-y-1 items-end">
-                        <UTooltip text="Budget">
-                          <div class="text-xs text-gray-700 dark:text-gray-300">
-                            {{ formatCurrency(getBudget(account)) }}
-                          </div>
-                        </UTooltip>
-                        <UTooltip text="Spend">
-                          <div class="text-xs text-green-400">
-                            {{ formatCurrency(getSpend(account)) }}
-                          </div>
-                        </UTooltip>
-                        <UTooltip v-if="getBudget(account) > 0" text="Utilization">
-                          <div class="text-xs" :class="getUtilizationColor(account)">
-                            {{ ((getSpend(account) / getBudget(account)) * 100).toFixed(2) }}%
-                          </div>
-                        </UTooltip>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <SidebarGroupList
+            v-else-if="activeTab === 'smart'"
+            :groups="smartGroups"
+            :expanded-groups="expandedGroups"
+            :selected-accounts="selectedAccounts"
+            :format-currency="formatCurrency"
+            group-type="smart"
+            label="Smart Groupings"
+            :get-account-key="getAccountKey"
+            :get-budget="getBudget"
+            :get-spend="getSpend"
+            @toggle-group="handleToggleGroup"
+            @select-group="handleSelectGroup"
+            @toggle-account="toggleAccount"
+          />
 
 
         </div>
@@ -740,6 +446,11 @@
                Charts are dynamically selected based on scenario and timeframe
                ============================================================= -->
           <div v-else data-tour="costs-chart">
+            <!-- Subtle indicator while forecast/supplementary data loads in background -->
+            <div v-if="isDeferredLoading" class="mb-3 flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg text-xs text-blue-600 dark:text-blue-400">
+              <Icon name="i-heroicons-arrow-path" class="w-3.5 h-3.5 animate-spin flex-shrink-0" />
+              <span>Loading forecast and supplementary data...</span>
+            </div>
             <ChartTabs
               :smart-charts="charts"
               :dataset="dataset"
@@ -751,9 +462,10 @@
               :accounts-list="accountsList"
               :active-tab-prop="activeChartTab"
               :show-advanced-charts="showAdvancedCharts"
+              :sidebar-tab="activeTab"
               @toggle-regression-line="showRegressionLine = !showRegressionLine"
               @toggle-advanced-charts="showAdvancedCharts = !showAdvancedCharts; localStorage.setItem('showAdvancedCharts', String(showAdvancedCharts))"
-              @tab-changed="handleTabChange"
+              @tab-changed="activeChartTab = $event"
               @refresh-data="fetchCosts"
             />
           </div>
@@ -772,147 +484,18 @@
 import CostsHeader from '~/components/costs/CostsHeader.vue'
 import CostsSummaryCards from '~/components/costs/CostsSummaryCards.vue'
 import ChartTabs from '~/components/costs/SimpleChartTabs.vue'
-import ForecastDataTable from '~/components/costs/ForecastDataTable.vue'
-import { startCostTour } from '~/components/tutorial/CostTour'
-import { getMonthlyBudget } from '#shared/utils/budget-utils'
+import SidebarGroupList from '~/components/costs/SidebarGroupList.vue'
 
-const { getPreference, setPreference, load: loadPreferences, authError } = useUserPreferences()
-const tourStartedThisSession = ref(false)
-const lastResetTimestamp = ref<string | null>(null)
-
-// Robust tour detection - localStorage key for dual-storage verification
-const COST_TOUR_SEEN_KEY = 'ghost-cost-tour-seen'
-
-// Check if tour has been seen via localStorage (fail-closed: assume seen on error)
-function hasSeenTourLocally(): boolean {
-  if (!import.meta.client) return false
-  try {
-    return localStorage.getItem(COST_TOUR_SEEN_KEY) === 'true'
-  } catch {
-    return true // Fail closed - assume seen if localStorage unavailable
-  }
-}
-
-// Mark tour as seen in localStorage
-function markTourSeenLocally(): void {
-  if (!import.meta.client) return
-  try {
-    localStorage.setItem(COST_TOUR_SEEN_KEY, 'true')
-  } catch {}
-}
-
-// Clear localStorage marker (for admin reset)
-function clearTourSeenLocally(): void {
-  if (!import.meta.client) return
-  try {
-    localStorage.removeItem(COST_TOUR_SEEN_KEY)
-  } catch {}
-}
-
-async function handleStartTour(isManualStart = false) {
-  const pref = getPreference<any>('costTour', {}) || {}
-  const resetTimestamp = pref?.resetByAdminAt
-
-  // Allow tour to run if it was reset (even if started this session)
-  const wasReset = resetTimestamp && resetTimestamp !== lastResetTimestamp.value
-
-  // Only block auto-starts, not manual button clicks
-  if (!isManualStart && tourStartedThisSession.value && !wasReset) return
-
-  if (wasReset) {
-    lastResetTimestamp.value = resetTimestamp
-    clearTourSeenLocally() // Clear localStorage marker when admin resets
-  }
-  tourStartedThisSession.value = true
-
-  // Mark tour as seen in localStorage BEFORE starting (robust detection)
-  markTourSeenLocally()
-
-  // Check if critical tour elements are ready
-  const checkElements = () => {
-    const header = document.querySelector('[data-tour="costs-header"]')
-    const accountSelector = document.querySelector('[data-tour="account-selector"]')
-    const summary = document.querySelector('[data-tour="costs-summary"]')
-    const chart = document.querySelector('[data-tour="costs-chart"]')
-    const chartTabs = document.querySelector('[data-tour="chart-tabs"]')
-    const help = document.querySelector('[data-tour="costs-help"]')
-    return header && accountSelector && summary && chart && chartTabs && help
-  }
-
-  // For manual starts, wait for elements to be ready
-  if (isManualStart && !checkElements()) {
-    const toast = useToast()
-    toast.add({
-      title: 'Please Wait',
-      description: 'Waiting for page to finish loading...',
-      color: 'blue',
-      icon: 'i-heroicons-clock',
-      timeout: 2000
-    })
-
-    // Wait up to 5 seconds for elements to be ready
-    let attempts = 0
-    while (attempts < 10 && !checkElements()) {
-      await new Promise(resolve => setTimeout(resolve, 500))
-      attempts++
-    }
-
-    if (!checkElements()) {
-      toast.add({
-        title: 'Tour Unavailable',
-        description: 'Please select accounts and wait for data to load before starting the tour.',
-        color: 'amber',
-        icon: 'i-heroicons-exclamation-triangle'
-      })
-      tourStartedThisSession.value = false
-      return
-    }
-  }
-
-  // For manual starts, always start from the beginning
-  const startAt = isManualStart ? 0 : Number(pref?.lastStep || 0)
-
-  try {
-    await startCostTour({
-      startAtStep: isNaN(startAt) ? 0 : startAt,
-      onComplete: async () => {
-        await setPreference('costTour', {
-          ...(getPreference<any>('costTour', {}) || {}),
-          completed: true,
-          completedAt: new Date().toISOString()
-        })
-      },
-      onExit: async (currentStep) => {
-        await setPreference('costTour', {
-          ...(getPreference<any>('costTour', {}) || {}),
-          lastStep: currentStep,
-          startedAt: (getPreference<any>('costTour', {}) || {}).startedAt || new Date().toISOString()
-        })
-      }
-    })
-  } catch (error: any) {
-    console.error('Failed to start tour:', error)
-    const toast = useToast()
-    toast.add({
-      title: 'Tour Error',
-      description: error.message || 'Failed to start the guided tour. Please try again.',
-      color: 'red',
-      icon: 'i-heroicons-exclamation-triangle'
-    })
-    // Reset session flag so user can try again
-    tourStartedThisSession.value = false
-  }
-}
+const { handleStartTour, initTourOnMount } = useCostTour()
 
 // Core composables that power the chart system:
 // - useCostData: Fetches and manages cost data based on selected accounts/timeframe
 // - useCostScenario: Determines which charts to show based on selection context
 // - useChartRegistry: Contains all chart definitions and selection logic
-// - useCostFilters: Handles filtering accounts by cost thresholds
+// - useCostFilters (cost-filters.ts): Handles filtering accounts by cost thresholds
 import { useCostData } from '~/composables/useCostData'
 import { useCostScenario } from '~/composables/useCostScenario'
 import { useChartRegistry } from '~/composables/useChartRegistry'
-import { useCostFilters } from '~/composables/useCostFilters'
 import type { DataMode } from '~/types/costs'
 
 const { accounts, isLoading, error, fetchAccounts } = useAccountCosts()
@@ -959,7 +542,6 @@ const accountsList = computed<Account[]>(() => {
 // =============================================================================
 // Cost filtering setup - respects user's cost threshold settings
 const costSettingsStore = useCostSettingsStore()
-const { applyAccountFilters, formatCurrency: formatCurrencyWithSettings } = useCostFilters()
 
 // CRITICAL COMPUTED PROPERTY: Merges live cost data with account metadata
 // This is where account costs are populated from the dataset returned by API calls
@@ -969,11 +551,8 @@ const accountsWithCosts = computed<Account[]>(() => {
   
   // If no dataset available, return accounts as-is
   if (!dataset.value) {
-    console.log('No dataset available yet')
     return baseAccounts
   }
-  
-  console.log('AccountsWithCosts: recalculating for timeframe:', selectedTimeframe.value, 'mode:', dataMode.value)
   
   // Create a map of accountId -> cost data
   const costMap = new Map<string, number>()
@@ -991,7 +570,6 @@ const accountsWithCosts = computed<Account[]>(() => {
       : actualData
     
     if (analysisSource?.budgetAnalysis?.byAccount && Array.isArray(analysisSource.budgetAnalysis.byAccount)) {
-      console.log('Found budgetAnalysis data with', analysisSource.budgetAnalysis.byAccount.length, 'accounts')
       analysisSource.budgetAnalysis.byAccount.forEach((item: any) => {
         if (item.accountId && typeof item.actualCost === 'number') {
           costMap.set(item.accountId, item.actualCost)
@@ -1015,13 +593,11 @@ const accountsWithCosts = computed<Account[]>(() => {
       // Use proforma accounts for display
       if (actualData?.proforma?.accounts && Array.isArray(actualData.proforma.accounts)) {
         accountsData = actualData.proforma.accounts
-        console.log('Using proforma accounts data with', accountsData.length, 'accounts')
       }
     } else {
       // Standard billable mode - accounts at top level
       if (actualData?.accounts && Array.isArray(actualData.accounts)) {
         accountsData = actualData.accounts
-        console.log('Using billable accounts data with', accountsData.length, 'accounts')
       }
     }
     
@@ -1034,10 +610,7 @@ const accountsWithCosts = computed<Account[]>(() => {
     })
   }
   
-  console.log('Cost map has', costMap.size, 'entries, sample:', Array.from(costMap.entries()).slice(0, 3))
-  
   // Merge costs into accounts
-  let matchCount = 0
   const enrichedAccounts = baseAccounts.map(account => {
     // Try multiple ID fields to match
     const possibleIds = [
@@ -1051,7 +624,6 @@ const accountsWithCosts = computed<Account[]>(() => {
     for (const id of possibleIds) {
       if (id && costMap.has(id)) {
         costFromData = costMap.get(id) || 0
-        matchCount++
         break
       }
     }
@@ -1063,8 +635,6 @@ const accountsWithCosts = computed<Account[]>(() => {
       spend: costFromData
     }
   })
-  
-  console.log(`Matched costs for ${matchCount} out of ${baseAccounts.length} accounts`)
   
   // Apply cost filtering based on user settings
   return applyAccountFilters(enrichedAccounts, costSettingsStore.$state)
@@ -1294,304 +864,14 @@ const formatAccountDisplayName = (account: Account) => {
   return name.length > 20 ? name.substring(0, 20) + '...' : name
 }
 
-// Grouping computed properties with search filtering
-const lobGroups = computed(() => {
-  const groups = new Map<string, { name: string; accounts: Account[]; totalBudget: number; totalSpend: number }>()
-  
-  accountsWithCosts.value.forEach((account: Account) => {
-    const lobName = account.linesOfBusiness || account.lineOfBusiness || 'Unknown LOB'
-    
-    if (!groups.has(lobName)) {
-      groups.set(lobName, {
-        name: lobName,
-        accounts: [],
-        totalBudget: 0,
-        totalSpend: 0
-      })
-    }
-    
-    const group = groups.get(lobName)!
-    group.accounts.push(account)
-    group.totalBudget += getBudget(account)
-    group.totalSpend += getSpend(account)
-  })
-  
-  let allGroups = Array.from(groups.values()).sort((a, b) => b.totalBudget - a.totalBudget)
-  
-  // Apply search filtering if we're in global search mode or searching within LOB tab
-  if (searchTerm.value && (searchScope.value === 'global' || activeTab.value === 'lob')) {
-    const term = searchTerm.value.toLowerCase()
-    allGroups = allGroups.filter(group => {
-      const groupNameMatches = group.name.toLowerCase().includes(term)
-      const hasMatchingAccounts = group.accounts.some(acc => matchesSearchTerm(acc, term))
-      return groupNameMatches || hasMatchingAccounts
-    }).map(group => {
-      // If searching, filter accounts within groups too (unless group name matches)
-      if (!group.name.toLowerCase().includes(term)) {
-        return {
-          ...group,
-          accounts: group.accounts.filter(acc => matchesSearchTerm(acc, term))
-        }
-      }
-      return group
-    })
-  }
-  
-  return allGroups
+// Sidebar groups, helpers, and search matching -- extracted to composable
+const { lobGroups, departmentGroups, smartGroups, favoriteAccounts, matchesSearchTerm, getAccountKey, getBudget, getSpend } = useSidebarGroups({
+  accountsWithCosts,
+  favoriteIds,
+  searchTerm,
+  searchScope,
+  activeTab
 })
-
-// Favorite accounts computed property
-const favoriteAccounts = computed(() => {
-  if (favoriteIds.value.length === 0) return []
-
-  // Filter accounts that are in the favorites list
-  let favorites = accountsWithCosts.value.filter((account: Account) => {
-    const accountKey = getAccountKey(account)
-    return favoriteIds.value.includes(accountKey)
-  })
-
-  // Apply search filtering if we're in global search mode or searching within favorites tab
-  if (searchTerm.value && (searchScope.value === 'global' || activeTab.value === 'favorites')) {
-    const term = searchTerm.value.toLowerCase()
-    favorites = favorites.filter(acc => matchesSearchTerm(acc, term))
-  }
-
-  return favorites
-})
-
-const departmentGroups = computed(() => {
-  const groups = new Map<string, { name: string; accounts: Account[]; totalBudget: number; totalSpend: number }>()
-  
-  accountsWithCosts.value.forEach((account: Account) => {
-    const deptName = account.departmentNumber || account.department || 'Unknown Department'
-    
-    if (!groups.has(deptName)) {
-      groups.set(deptName, {
-        name: deptName,
-        accounts: [],
-        totalBudget: 0,
-        totalSpend: 0
-      })
-    }
-    
-    const group = groups.get(deptName)!
-    group.accounts.push(account)
-    group.totalBudget += getBudget(account)
-    group.totalSpend += getSpend(account)
-  })
-  
-  let allGroups = Array.from(groups.values()).sort((a, b) => b.totalBudget - a.totalBudget)
-  
-  // Apply search filtering for departments
-  if (searchTerm.value && (searchScope.value === 'global' || activeTab.value === 'dept')) {
-    const term = searchTerm.value.toLowerCase()
-    allGroups = allGroups.filter(group => {
-      const groupNameMatches = group.name.toLowerCase().includes(term)
-      const hasMatchingAccounts = group.accounts.some(acc => matchesSearchTerm(acc, term))
-      return groupNameMatches || hasMatchingAccounts
-    }).map(group => {
-      if (!group.name.toLowerCase().includes(term)) {
-        return {
-          ...group,
-          accounts: group.accounts.filter(acc => matchesSearchTerm(acc, term))
-        }
-      }
-      return group
-    })
-  }
-  
-  return allGroups
-})
-
-const smartGroups = computed(() => {
-  const groups: Array<{ id: string; name: string; description: string; icon: string; iconColor: string; accounts: Account[]; totalBudget: number; totalSpend: number }> = []
-
-  // Favorites (if any)
-  if (favoriteAccounts.value.length > 0) {
-    groups.push({
-      id: 'favorites',
-      name: 'My Favorites',
-      description: 'Your starred accounts',
-      icon: 'i-heroicons-star-solid',
-      iconColor: 'text-yellow-500',
-      accounts: favoriteAccounts.value,
-      totalBudget: favoriteAccounts.value.reduce((sum: number, acc: Account) => sum + getBudget(acc), 0),
-      totalSpend: favoriteAccounts.value.reduce((sum: number, acc: Account) => sum + getSpend(acc), 0)
-    })
-  }
-
-  // High Budget (>$10K/month)
-  const highBudgetAccounts = accountsWithCosts.value.filter((acc: Account) => getBudget(acc) > 10000)
-  if (highBudgetAccounts.length > 0) {
-    groups.push({
-      id: 'high-budget',
-      name: 'High Budget Accounts',
-      description: 'Monthly budget > $10K',
-      icon: 'i-heroicons-banknotes',
-      iconColor: 'text-blue-400',
-      accounts: highBudgetAccounts,
-      totalBudget: highBudgetAccounts.reduce((sum: number, acc: Account) => sum + getBudget(acc), 0),
-      totalSpend: highBudgetAccounts.reduce((sum: number, acc: Account) => sum + getSpend(acc), 0)
-    })
-  }
-  
-  // Over Budget
-  const overBudgetAccounts = accountsWithCosts.value.filter((acc: Account) => {
-    const budget = getBudget(acc)
-    const spend = getSpend(acc)
-    return budget > 0 && spend > budget
-  })
-  if (overBudgetAccounts.length > 0) {
-    groups.push({
-      id: 'over-budget',
-      name: 'Over Budget',
-      description: 'Spending exceeds budget',
-      icon: 'i-heroicons-exclamation-triangle',
-      iconColor: 'text-red-400',
-      accounts: overBudgetAccounts,
-      totalBudget: overBudgetAccounts.reduce((sum: number, acc: Account) => sum + getBudget(acc), 0),
-      totalSpend: overBudgetAccounts.reduce((sum: number, acc: Account) => sum + getSpend(acc), 0)
-    })
-  }
-  
-  // Under Budget Severely (< 50% utilization)
-  const underBudgetAccounts = accountsWithCosts.value.filter((acc: Account) => {
-    const budget = getBudget(acc)
-    const spend = getSpend(acc)
-    return budget > 0 && spend < (budget * 0.5)
-  })
-  if (underBudgetAccounts.length > 0) {
-    groups.push({
-      id: 'under-budget',
-      name: 'Severely Under Budget',
-      description: 'Less than 50% budget used',
-      icon: 'i-heroicons-arrow-trending-down',
-      iconColor: 'text-yellow-400',
-      accounts: underBudgetAccounts,
-      totalBudget: underBudgetAccounts.reduce((sum: number, acc: Account) => sum + getBudget(acc), 0),
-      totalSpend: underBudgetAccounts.reduce((sum: number, acc: Account) => sum + getSpend(acc), 0)
-    })
-  }
-  
-  // Similar Names (group accounts with similar project names)
-  const nameGroups = new Map<string, Account[]>()
-  const keywordGroups = new Map<string, Account[]>()
-  
-  accountsWithCosts.value.forEach((account: Account) => {
-    const name = account.projectName || account.accountName || ''
-    if (name && name.length > 2) {
-      
-      // Method 1: Extract common keywords/prefixes (like "SDA", "AWS", etc.)
-      const keywords = name.match(/^([A-Z]{2,4})|([A-Z]{2,4}[-_\s])|(\b[A-Z]{2,4}\b)/g)
-      if (keywords) {
-        keywords.forEach((keyword: string) => {
-          const cleanKeyword = keyword.replace(/[-_\s]/g, '').toUpperCase()
-          if (cleanKeyword.length >= 2) {
-            if (!keywordGroups.has(cleanKeyword)) {
-              keywordGroups.set(cleanKeyword, [])
-            }
-            keywordGroups.get(cleanKeyword)!.push(account)
-          }
-        })
-      }
-      
-      // Method 2: Base name extraction (improved)
-      const baseName = name
-        .replace(/[-_]\d+$/g, '')                    // Remove trailing numbers
-        .replace(/\s*\d+$/g, '')                     // Remove trailing numbers with spaces
-        .replace(/(dev|test|prod|staging|demo)$/i, '') // Remove environment suffixes
-        .replace(/[-_]+(dev|test|prod|staging|demo)$/i, '') // Remove environment suffixes with separators
-        .replace(/\s*[-_]+\s*$/g, '')                // Remove trailing separators
-        .trim()
-      
-      // Group by exact base name match
-      if (baseName.length > 2) {
-        if (!nameGroups.has(baseName)) {
-          nameGroups.set(baseName, [])
-        }
-        nameGroups.get(baseName)!.push(account)
-      }
-    }
-  })
-  
-  // Process keyword groups (like "SDA")
-  keywordGroups.forEach((accounts: Account[], keyword: string) => {
-    if (accounts.length >= 2) {
-      groups.push({
-        id: `keyword-${keyword.toLowerCase()}`,
-        name: `${keyword} Accounts`,
-        description: `${accounts.length} accounts containing "${keyword}"`,
-        icon: 'i-heroicons-tag',
-        iconColor: 'text-purple-400',
-        accounts,
-        totalBudget: accounts.reduce((sum: number, acc: Account) => sum + getBudget(acc), 0),
-        totalSpend: accounts.reduce((sum: number, acc: Account) => sum + getSpend(acc), 0)
-      })
-    }
-  })
-  
-  // Process base name groups
-  nameGroups.forEach((accounts: Account[], baseName: string) => {
-    // Skip if this group is already covered by keyword grouping
-    const hasKeywordGroup = Array.from(keywordGroups.keys()).some((keyword: string) => 
-      baseName.toUpperCase().includes(keyword) && (keywordGroups.get(keyword)!.length >= 2)
-    )
-    
-    if (accounts.length >= 2 && !hasKeywordGroup) {
-      groups.push({
-        id: `similar-${baseName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
-        name: `Similar: ${baseName}`,
-        description: `${accounts.length} accounts with similar base names`,
-        icon: 'i-heroicons-document-duplicate',
-        iconColor: 'text-indigo-400',
-        accounts,
-        totalBudget: accounts.reduce((sum: number, acc: Account) => sum + getBudget(acc), 0),
-        totalSpend: accounts.reduce((sum: number, acc: Account) => sum + getSpend(acc), 0)
-      })
-    }
-  })
-  
-  // Apply search filtering for smart groups
-  if (searchTerm.value && (searchScope.value === 'global' || activeTab.value === 'smart')) {
-    const term = searchTerm.value.toLowerCase()
-    return groups.filter(group => {
-      const nameMatches = group.name.toLowerCase().includes(term)
-      const descMatches = group.description.toLowerCase().includes(term)
-      const hasMatchingAccounts = group.accounts.some(acc => matchesSearchTerm(acc, term))
-      return nameMatches || descMatches || hasMatchingAccounts
-    }).map(group => {
-      // If group name/description doesn't match, filter accounts
-      if (!group.name.toLowerCase().includes(term) && !group.description.toLowerCase().includes(term)) {
-        return {
-          ...group,
-          accounts: group.accounts.filter(acc => matchesSearchTerm(acc, term))
-        }
-      }
-      return group
-    })
-  }
-  
-  return groups
-})
-
-// Helper functions to extract budget and spend from account objects
-const getBudget = (account: Account) => getMonthlyBudget(account)
-
-const getSpend = (account: Account) => {
-  return account.currentSpend || account.totalSpend || account.spend || 0
-}
-
-// Search helper functions
-const matchesSearchTerm = (account: Account, term: string): boolean => {
-  const nameMatch = (account.accountName ?? '').toLowerCase().includes(term)
-  const projectMatch = (account.projectName ?? '').toLowerCase().includes(term)
-  const idMatch = (account.accountId ?? '').toLowerCase().includes(term)
-  const stdIdMatch = (account.awsStandardAccountID ?? '').toLowerCase().includes(term)
-  const lobMatch = (account.linesOfBusiness ?? '').toLowerCase().includes(term)
-  const deptMatch = (account.departmentNumber ?? '').toLowerCase().includes(term)
-  const requestIdMatch = (account.requestID ?? account.requestId)?.toString().includes(term)
-  return nameMatch || projectMatch || idMatch || stdIdMatch || lobMatch || deptMatch || requestIdMatch
-}
 
 const getTabLabel = (tabId: string): string => {
   const tab = tabs.find(t => t.id === tabId)
@@ -1600,7 +880,7 @@ const getTabLabel = (tabId: string): string => {
 
 // Methods - Use dynamic formatting based on settings
 const formatCurrency = (value: number) => {
-  return formatCurrencyWithSettings(value, costSettingsStore.currencyFormat)
+  return formatCostValue(value, costSettingsStore.currencyFormat)
 }
 
 const toggleAccount = (accountId: string) => {
@@ -1637,21 +917,8 @@ const refreshData = async () => {
   await fetchAccounts({ includeDecommissioned, enrichment: 'full' })
 }
 
-// Helper functions for utilization colors
-const getUtilizationColor = (account: any) => {
-  const budget = getBudget(account)
-  const spend = getSpend(account)
-  if (budget === 0) return 'text-gray-400'
-  
-  const utilization = (spend / budget) * 100
-  if (utilization > 100) return 'text-red-400'
-  if (utilization > 90) return 'text-yellow-400'
-  return 'text-green-400'
-}
-
-// Group interaction methods
-const toggleLOB = (lob: any) => {
-  const groupKey = 'lob-' + lob.name
+// Group interaction methods - generic handlers for SidebarGroupList events
+const handleToggleGroup = (groupKey: string) => {
   if (expandedGroups.value.has(groupKey)) {
     expandedGroups.value.delete(groupKey)
   } else {
@@ -1659,35 +926,8 @@ const toggleLOB = (lob: any) => {
   }
 }
 
-const toggleDepartment = (dept: any) => {
-  const groupKey = 'dept-' + dept.name
-  if (expandedGroups.value.has(groupKey)) {
-    expandedGroups.value.delete(groupKey)
-  } else {
-    expandedGroups.value.add(groupKey)
-  }
-}
-
-const toggleSmartGroup = (group: any) => {
-  const groupKey = 'smart-' + group.id
-  if (expandedGroups.value.has(groupKey)) {
-    expandedGroups.value.delete(groupKey)
-  } else {
-    expandedGroups.value.add(groupKey)
-  }
-}
-
-// Group selection methods (clear existing selections and select group)
-const selectLOBGroup = (lob: any) => {
-  selectedAccounts.value = lob.accounts.map((acc: Account) => getAccountKey(acc))
-}
-
-const selectDepartmentGroup = (dept: any) => {
-  selectedAccounts.value = dept.accounts.map((acc: Account) => getAccountKey(acc))
-}
-
-const selectSmartGroup = (group: any) => {
-  selectedAccounts.value = group.accounts.map((acc: Account) => getAccountKey(acc))
+const handleSelectGroup = (accountIds: string[]) => {
+  selectedAccounts.value = accountIds
 }
 
 // Handle shared state from URL parameters
@@ -1743,65 +983,25 @@ const applySharedStateFromUrl = () => {
 // Initialize - only on client side to avoid SSR issues
 onMounted(async () => {
   if (import.meta.client) {
-    // Reload preferences to get fresh data (in case admin reset it)
-    await loadPreferences(true)
-    
     // Apply any shared state from URL first
     applySharedStateFromUrl()
     
     // Then refresh data with the applied state
     await refreshData()
 
-    // Auto-start tour only for first-time users, forced starts, or admin resets
-    const tourPref = getPreference<any>('costTour', {}) || {}
-    const forceStart = useRoute().query.tour === '1'
-    const wasReset = tourPref?.resetByAdminAt && tourPref?.resetByAdminAt !== lastResetTimestamp.value
+    // Trigger initial cost data fetch (watchers are not immediate)
+    await fetchCosts()
 
-    // Robust dual-storage verification: check BOTH localStorage AND API preferences
-    const seenLocally = hasSeenTourLocally()
-    const seenInApi = tourPref?.startedAt || tourPref?.completed
+    // Enable watchers now that URL state is applied and initial fetch is done
+    initialized.value = true
 
-    // Sync localStorage from API for existing users (backwards compatibility)
-    if (seenInApi && !seenLocally) {
-      markTourSeenLocally()
-    }
+    // Auto-start tour for first-time users or admin resets
+    await initTourOnMount()
 
-    // Only first-time if BOTH indicate first-time AND no auth errors
-    // Philosophy: "When in doubt, don't auto-start"
-    const isGenuineFirstTime = !seenLocally && !seenInApi && !authError.value
-
-    // Admin reset clears localStorage marker to allow re-triggering
-    if (wasReset) {
-      clearTourSeenLocally()
-    }
-
-    const shouldAutoStart = (forceStart || wasReset || isGenuineFirstTime) && !tourStartedThisSession.value
-
-    if (shouldAutoStart) {
-      // Wait for DOM elements to be ready
-      await nextTick()
-      // Check if all critical tour elements exist before starting
-      const checkElements = () => {
-        const header = document.querySelector('[data-tour="costs-header"]')
-        const accountSelector = document.querySelector('[data-tour="account-selector"]')
-        const summary = document.querySelector('[data-tour="costs-summary"]')
-        const chart = document.querySelector('[data-tour="costs-chart"]')
-        const chartTabs = document.querySelector('[data-tour="chart-tabs"]')
-        const help = document.querySelector('[data-tour="costs-help"]')
-        return header && accountSelector && summary && chart && chartTabs && help
-      }
-
-      // Try multiple times with increasing delays to wait for data loading
-      let attempts = 0
-      const tryStart = () => {
-        if (checkElements()) {
-          handleStartTour()
-        } else if (attempts < 10) {
-          attempts++
-          setTimeout(tryStart, 500)
-        }
-      }
-      setTimeout(tryStart, 500)
+    // Load advanced charts toggle state from localStorage
+    const saved = localStorage.getItem('showAdvancedCharts')
+    if (saved !== null) {
+      showAdvancedCharts.value = saved === 'true'
     }
   }
 })
@@ -1815,7 +1015,7 @@ onMounted(async () => {
 //    - Watches selectedAccounts and selectedTimeframe
 //    - Debounces requests to avoid excessive API calls
 //    - Returns dataset containing summary, analysis, historical, services, and forecast data
-const { mode: dataMode, isFetching: isCostFetching, isPending: isCostPending, fetchError: costError, dataset, fetchCosts } = useCostData({
+const { mode: dataMode, isFetching: isCostFetching, isDeferredLoading, isPending: isCostPending, fetchError: costError, dataset, fetchCosts, initialized } = useCostData({
   selectedAccounts,
   selectedTimeframe,
   initialMode: 'proforma',
@@ -1831,33 +1031,12 @@ const { scenario } = useCostScenario({ selectedAccounts, activeTab })
 // Advanced charts toggle (persisted in localStorage)
 const showAdvancedCharts = ref(false)
 
-// Load toggle state from localStorage on mount
-onMounted(() => {
-  if (import.meta.client) {
-    const saved = localStorage.getItem('showAdvancedCharts')
-    if (saved !== null) {
-      showAdvancedCharts.value = saved === 'true'
-    }
-  }
-})
-
 // 3. useChartRegistry: Contains all chart definitions and selects appropriate charts
 //    - Each chart has an extractor function that transforms dataset into chart data
 //    - Charts are selected based on the current scenario
 //    - Historical timeframes exclude budget-dependent charts
 //    - showAdvanced toggle includes power-user charts when enabled
 const { charts } = useChartRegistry({ scenario, timeframe: selectedTimeframe, mode: dataMode, showAdvanced: showAdvancedCharts })
-
-// Key helper to avoid undefined issues
-const getAccountKey = (account: Account): string => {
-  return account.accountId || account.awsStandardAccountID || ''
-}
-
-// Handle tab changes
-const handleTabChange = (tabId: string) => {
-  console.log('Tab changed to:', tabId)
-  // Can add analytics or additional logic here if needed
-}
 
 // Set page title
 useHead({

@@ -19,7 +19,7 @@ interface DeactivateResponse {
 export default defineEventHandler(async (event): Promise<EntraAPIResponse<DeactivateResponse>> => {
   try {
     // Require write access to deactivate API keys
-    requireScope(event, 'write')
+    await requireScope(event, 'write')
     
     // Get key ID from route
     const keyId = getRouterParam(event, 'keyId')

@@ -8,6 +8,7 @@
 import { defineEventHandler, readBody } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
+import { requireScope } from '../../middleware/entra-auth'
 import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
@@ -81,6 +82,9 @@ registerEndpoint('/api/cache/invalidate', 'POST', {
 })
 
 export default defineEventHandler(handleAsync(async (event) => {
+  // Require admin scope — cache invalidation is an administrative operation
+  await requireScope(event, 'admin')
+
   const body = await readBody(event)
   const tags = body?.tags || ['all']
   const reason = body?.reason || 'Manual invalidation'

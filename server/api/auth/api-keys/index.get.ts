@@ -19,7 +19,7 @@ interface ApiKeysResponse {
 export default defineEventHandler(async (event): Promise<EntraAPIResponse<ApiKeysResponse>> => {
   try {
     // Require read access to view API keys
-    requireScope(event, 'read')
+    await requireScope(event, 'read')
     
     // Get authenticated user context
     const authContext = getAuthContext(event)

@@ -62,10 +62,10 @@ onMounted(async () => {
   console.log('[GHOST-AUTH] Loading: Final return URL captured:', finalReturnUrl)
 
   try {
-    // DEV MODE: Skip Graph API and AWS initialization
+    // DEV MODE: Skip Graph API but still load enclave data for account selection
     if (user.value?.provider === 'dev') {
       step.value = "Dev mode - setting up mock session..."
-      progress.value = 50
+      progress.value = 30
 
       // Log dev mode login
       const email = user.value?.claims?.email || user.value?.userInfo?.email || 'dev@localhost'
@@ -81,6 +81,11 @@ onMounted(async () => {
 
       console.log('[GHOST-AUTH] Dev mode: Setting groups:', devGroups)
       userGroupStore.setDevGroups(devGroups)
+
+      // Load enclave data so accounts are available in the dev options panel
+      step.value = "Loading AWS account data..."
+      progress.value = 60
+      await enclaveStore.initialize()
 
       step.value = "All set! Taking you back..."
       progress.value = 100
@@ -269,24 +274,6 @@ onMounted(async () => {
         </div>
 
         <!-- Error actions -->
-        <!-- <div v-if="error" class="mt-6 space-y-3">
-          <UButton
-            @click="() => window.location.reload()"
-            color="red"
-            variant="solid"
-            class="w-full"
-          >
-            Try Again
-          </UButton>
-          <UButton
-            @click="() => (window.location.href = '/')"
-            color="gray"
-            variant="soft"
-            class="w-full"
-          >
-            Go to Dashboard
-          </UButton>
-        </div> -->
       </div>
     </div>
   </div>

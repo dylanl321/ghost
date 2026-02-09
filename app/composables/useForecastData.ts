@@ -206,18 +206,6 @@ export const useForecastData = () => {
   }
 
   /**
-   * Format currency with consistent styling
-   */
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(value)
-  }
-
-  /**
    * Clear all forecast data from local state
    */
   const clearData = () => {
@@ -244,7 +232,6 @@ export const useForecastData = () => {
     updateForecastData,
     getAccountForecastTotal,
     getPeriodForecastTotal,
-    formatCurrency,
     clearData
   }
 }

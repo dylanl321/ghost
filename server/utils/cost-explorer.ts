@@ -37,7 +37,19 @@ export async function getCostAndUsage(
   let dimensionValueAttributes: any[] = []
   let total: any = {}
   let nextPageToken: string | undefined = undefined
-  
+
+  // Start speculative total query in parallel when GroupBy is used.
+  // AWS never returns root totals with GroupBy, so we'll almost always need this.
+  const speculativeTotalPromise = (groupBy && groupBy.length > 0)
+    ? client.send(new GetCostAndUsageCommand({
+        TimePeriod: { Start: params.startDate, End: params.endDate },
+        Granularity: params.granularity as Granularity,
+        Metrics: params.metrics,
+        Filter: params.filter
+        // No GroupBy — returns totals
+      }))
+    : null
+
   do {
     const command = new GetCostAndUsageCommand({
       TimePeriod: {
@@ -72,22 +84,11 @@ export async function getCostAndUsage(
   logger.info(`Cost Explorer total results: ${allResultsByTime.length} time periods`)
   
   // IMPORTANT: When using GroupBy, AWS doesn't return a root-level Total
-  // We need to make a separate call without GroupBy to get the true total
-  if (groupBy && groupBy.length > 0 && Object.keys(total).length === 0) {
-    logger.info('GroupBy detected with no root Total - making separate call for total')
+  // Use the speculative total query started before the pagination loop
+  if (groupBy && groupBy.length > 0 && Object.keys(total).length === 0 && speculativeTotalPromise) {
+    logger.info('GroupBy detected with no root Total - awaiting speculative total query')
     try {
-      const totalCommand = new GetCostAndUsageCommand({
-        TimePeriod: {
-          Start: params.startDate,
-          End: params.endDate
-        },
-        Granularity: params.granularity as Granularity,
-        Metrics: params.metrics,
-        Filter: params.filter
-        // Explicitly NO GroupBy to get the total
-      })
-
-      const totalResponse: any = await client.send(totalCommand)
+      const totalResponse: any = await speculativeTotalPromise
 
       logger.debug('Separate total call response:', {
         hasResultsByTime: !!totalResponse.ResultsByTime,
@@ -408,27 +409,27 @@ export async function getProformaForecast(
   // Always use commercial environment for proforma data
   const environment = 'commercial'
 
-  // Get master account forecast (using base commercial credentials)
-  const masterForecast = await getCostForecast(startDate, endDate, metric, granularity, filter, environment)
-
-  // Get proforma account forecast (assume role)
-  const proformaClient = await getCostExplorerClient(environment, undefined, proformaAccountId)
-
-  const proformaCommand = new GetCostForecastCommand({
-    TimePeriod: {
-      Start: startDate,
-      End: endDate
-    },
-    Metric: metric,
-    Granularity: granularity as Granularity,
-    Filter: filter
-  })
-
-  const proformaResponse = await proformaClient.send(proformaCommand)
-  const proformaForecast = {
-    total: proformaResponse.Total,
-    forecastResultsByTime: proformaResponse.ForecastResultsByTime || []
-  }
+  // Run master and proforma forecast fetches in parallel — they hit different AWS accounts
+  const [masterForecast, proformaForecast] = await Promise.all([
+    getCostForecast(startDate, endDate, metric, granularity, filter, environment),
+    (async () => {
+      const proformaClient = await getCostExplorerClient(environment, undefined, proformaAccountId)
+      const proformaCommand = new GetCostForecastCommand({
+        TimePeriod: {
+          Start: startDate,
+          End: endDate
+        },
+        Metric: metric,
+        Granularity: granularity as Granularity,
+        Filter: filter
+      })
+      const proformaResponse = await proformaClient.send(proformaCommand)
+      return {
+        total: proformaResponse.Total,
+        forecastResultsByTime: proformaResponse.ForecastResultsByTime || []
+      }
+    })()
+  ])
 
   // Calculate master account only forecast (total - proforma)
   const masterTotal = parseFloat(masterForecast.total?.Amount || '0')
@@ -498,75 +499,87 @@ export async function getProformaCosts(
   // Always use commercial environment for proforma data
   const environment = 'commercial'
   
-  // Get billable costs from master account (using base commercial credentials)
-  const billableCosts = await getCostAndUsage(params, environment)
-  
-  // Get proforma costs from proforma account (assume role)
-  const proformaClient = await getCostExplorerClient(environment, undefined, proformaAccountId)
+  // Run billable and proforma fetches in parallel — they hit different AWS accounts
+  const [billableCosts, proformaRaw] = await Promise.all([
+    getCostAndUsage(params, environment),
+    (async () => {
+      const proformaClient = await getCostExplorerClient(environment, undefined, proformaAccountId)
+
+      const groupBy = params.groupBy?.map(group => ({
+        Type: group.type,
+        Key: group.key
+      }))
+
+      // Start speculative total query in parallel when GroupBy is used
+      const speculativeProformaTotalPromise = (groupBy && groupBy.length > 0)
+        ? proformaClient.send(new GetCostAndUsageCommand({
+            TimePeriod: { Start: params.startDate, End: params.endDate },
+            Granularity: params.granularity as Granularity,
+            Metrics: params.metrics,
+            Filter: params.filter
+            // No GroupBy — returns totals
+          }))
+        : null
+
+      let allProformaResultsByTime: any[] = []
+      let proformaDimensionValueAttributes: any[] = []
+      let proformaRootTotal: any = {}
+      let proformaNextPageToken: string | undefined = undefined
+
+      do {
+        const proformaCommand = new GetCostAndUsageCommand({
+          TimePeriod: {
+            Start: params.startDate,
+            End: params.endDate
+          },
+          Granularity: params.granularity as Granularity,
+          Metrics: params.metrics,
+          GroupBy: groupBy,
+          Filter: params.filter,
+          NextPageToken: proformaNextPageToken
+        })
+
+        const proformaResponse: any = await proformaClient.send(proformaCommand)
+
+        allProformaResultsByTime = allProformaResultsByTime.concat(proformaResponse.ResultsByTime || [])
+        proformaDimensionValueAttributes = proformaDimensionValueAttributes.concat(proformaResponse.DimensionValueAttributes || [])
+
+        if (proformaResponse.Total) {
+          proformaRootTotal = proformaResponse.Total
+        }
+
+        proformaNextPageToken = proformaResponse.NextPageToken
+        logger.debug(`Proforma pagination: fetched ${proformaResponse.ResultsByTime?.length || 0} results, nextToken: ${!!proformaNextPageToken}`)
+      } while (proformaNextPageToken)
+
+      logger.info(`Proforma total results: ${allProformaResultsByTime.length} time periods`)
+
+      return {
+        resultsByTime: allProformaResultsByTime,
+        dimensionValueAttributes: proformaDimensionValueAttributes,
+        total: proformaRootTotal,
+        speculativeTotalPromise: speculativeProformaTotalPromise
+      }
+    })()
+  ])
 
   const groupBy = params.groupBy?.map(group => ({
     Type: group.type,
     Key: group.key
   }))
 
-  // Handle pagination for proforma data (same as billable)
-  let allProformaResultsByTime: any[] = []
-  let proformaDimensionValueAttributes: any[] = []
-  let proformaRootTotal: any = {}
-  let proformaNextPageToken: string | undefined = undefined
-
-  do {
-    const proformaCommand = new GetCostAndUsageCommand({
-      TimePeriod: {
-        Start: params.startDate,
-        End: params.endDate
-      },
-      Granularity: params.granularity as Granularity,
-      Metrics: params.metrics,
-      GroupBy: groupBy,
-      Filter: params.filter,
-      NextPageToken: proformaNextPageToken
-    })
-
-    const proformaResponse: any = await proformaClient.send(proformaCommand)
-
-    // Accumulate results
-    allProformaResultsByTime = allProformaResultsByTime.concat(proformaResponse.ResultsByTime || [])
-    proformaDimensionValueAttributes = proformaDimensionValueAttributes.concat(proformaResponse.DimensionValueAttributes || [])
-
-    if (proformaResponse.Total) {
-      proformaRootTotal = proformaResponse.Total
-    }
-
-    proformaNextPageToken = proformaResponse.NextPageToken
-    logger.debug(`Proforma pagination: fetched ${proformaResponse.ResultsByTime?.length || 0} results, nextToken: ${!!proformaNextPageToken}`)
-  } while (proformaNextPageToken)
-
-  logger.info(`Proforma total results: ${allProformaResultsByTime.length} time periods`)
-
   let proformaCosts = {
-    resultsByTime: allProformaResultsByTime,
-    dimensionValueAttributes: proformaDimensionValueAttributes,
-    total: proformaRootTotal
+    resultsByTime: proformaRaw.resultsByTime,
+    dimensionValueAttributes: proformaRaw.dimensionValueAttributes,
+    total: proformaRaw.total
   }
   
   // IMPORTANT: When using GroupBy, AWS doesn't return a root-level Total
-  // Make a separate call without GroupBy to get the true total for proforma account
-  if (groupBy && groupBy.length > 0 && (!proformaRootTotal || Object.keys(proformaRootTotal).length === 0)) {
-    logger.info('Proforma: GroupBy detected with no root Total - making separate call for total')
+  // Use the speculative total query started inside the proforma closure
+  if (groupBy && groupBy.length > 0 && (!proformaRaw.total || Object.keys(proformaRaw.total).length === 0) && proformaRaw.speculativeTotalPromise) {
+    logger.info('Proforma: GroupBy detected with no root Total - awaiting speculative total query')
     try {
-      const proformaTotalCommand = new GetCostAndUsageCommand({
-        TimePeriod: {
-          Start: params.startDate,
-          End: params.endDate
-        },
-        Granularity: params.granularity as Granularity,
-        Metrics: params.metrics,
-        Filter: params.filter
-        // Explicitly NO GroupBy to get the total
-      })
-
-      const proformaTotalResponse: any = await proformaClient.send(proformaTotalCommand)
+      const proformaTotalResponse: any = await proformaRaw.speculativeTotalPromise
 
       logger.debug('Proforma separate total call response:', {
         hasResultsByTime: !!proformaTotalResponse.ResultsByTime,

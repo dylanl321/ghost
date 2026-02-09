@@ -26,7 +26,7 @@
       <div>
         <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Forecast Data</h3>
         <p class="text-sm text-gray-600 dark:text-gray-400">
-          {{ forecastData.length }} accounts • Total: {{ formatCurrency(grandTotal) }}
+          {{ forecastData.length }} accounts • Total: {{ formatCurrencyIntl(grandTotal) }}
         </p>
       </div>
       <div class="flex items-center gap-2">
@@ -276,10 +276,10 @@
                 :key="`total-${month}`"
                 class="px-3 py-2 text-right text-xs font-semibold text-blue-600 dark:text-blue-400 border-r border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-850"
               >
-                {{ formatCurrency(monthlyTotals[month] || 0, true) }}
+                {{ formatCurrency(monthlyTotals[month] || 0, { compact: true, uppercase: true }) }}
               </td>
               <td class="px-3 py-2 text-right text-xs font-semibold text-green-600 dark:text-green-400 bg-gray-50 dark:bg-gray-850">
-                {{ formatCurrency(grandTotal, true) }}
+                {{ formatCurrency(grandTotal, { compact: true, uppercase: true }) }}
               </td>
             </tr>
           </thead>
@@ -348,7 +348,7 @@
               
               <!-- Row Total -->
               <td class="px-3 py-2 text-right text-xs font-medium text-green-600 dark:text-green-400 bg-gray-50 dark:bg-gray-800/30">
-                {{ formatCurrency(item.totalAmount || 0, true) }}
+                {{ formatCurrency(item.totalAmount || 0, { compact: true, uppercase: true }) }}
               </td>
               </tr>
               
@@ -373,13 +373,13 @@
                     <div>
                       <span class="text-xs text-gray-600 dark:text-gray-400">Total Forecast</span>
                       <div class="text-lg font-semibold text-green-600 dark:text-green-400">
-                        {{ formatCurrency(item.totalAmount || 0) }}
+                        {{ formatCurrencyIntl(item.totalAmount || 0) }}
                       </div>
                     </div>
                     <div>
                       <span class="text-xs text-gray-600 dark:text-gray-400">Average Monthly</span>
                       <div class="text-lg font-semibold text-blue-400">
-                        {{ formatCurrency((item.totalAmount || 0) / monthColumns.length) }}
+                        {{ formatCurrencyIntl((item.totalAmount || 0) / monthColumns.length) }}
                       </div>
                     </div>
                     <div>
@@ -450,7 +450,7 @@
                 
                 <!-- Group Total -->
                 <td class="px-3 py-2 text-right text-xs font-bold text-green-600 dark:text-green-400 bg-gray-50 dark:bg-gray-800/50">
-                  {{ formatCurrency(group.totalAmount, true) }}
+                  {{ formatCurrency(group.totalAmount, { compact: true, uppercase: true }) }}
                 </td>
               </tr>
               
@@ -505,7 +505,7 @@
                   
                   <!-- Row Total -->
                   <td class="px-3 py-2 text-right text-xs text-gray-700 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/20">
-                    {{ formatCurrency(item.totalAmount || 0, true) }}
+                    {{ formatCurrency(item.totalAmount || 0, { compact: true, uppercase: true }) }}
                   </td>
                 </tr>
               </template>
@@ -664,12 +664,6 @@ const monthColumns = computed(() => {
       })
     }
   })
-  
-  // Debug logging
-  if (months.size > 0) {
-    console.log('Found months:', Array.from(months))
-    console.log('Sample forecast data:', forecastData.value[0]?.forecasts)
-  }
   
   return Array.from(months).sort()
 })
@@ -842,27 +836,16 @@ const formatMonth = (month: string) => {
   return `${monthLabel} ${year || ''}`.trim()
 }
 
-// Format currency
-const formatCurrency = (value: number, compact = false) => {
+// Format currency for non-compact display (e.g. $1,234)
+const formatCurrencyIntl = (value: number) => {
   if (!value) return '$0'
-  if (compact && value > 1000000) {
-    return `$${(value / 1000000).toFixed(1)}M`
-  }
-  if (compact && value > 1000) {
-    return `$${(value / 1000).toFixed(1)}K`
-  }
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(value)
+  return formatCurrency(value, 0)
 }
 
-// Format amount for cells
+// Format amount for cells (compact: $1.23K)
 const formatAmount = (value: number | undefined) => {
   if (!value || value === 0) return '-'
-  return formatCurrency(value, true)
+  return formatCurrency(value, { compact: true, uppercase: true })
 }
 
 // Get class for amount cells
@@ -926,7 +909,7 @@ const getChartOption = (item: any) => {
       trigger: 'axis',
       formatter: (params: any) => {
         const data = params[0]
-        return `${data.name}<br/>Forecast: ${formatCurrency(data.value)}`
+        return `${data.name}<br/>Forecast: ${formatCurrencyIntl(data.value)}`
       },
       backgroundColor: 'rgba(17, 24, 39, 0.9)',
       borderColor: 'rgba(156, 163, 175, 0.2)',
@@ -969,7 +952,7 @@ const getChartOption = (item: any) => {
       axisLabel: {
         color: '#9CA3AF',
         fontSize: 10,
-        formatter: (value: number) => formatCurrency(value, true)
+        formatter: (value: number) => formatCurrency(value, { compact: true, uppercase: true })
       }
     },
     series: [{
@@ -1015,7 +998,7 @@ const getPeakMonth = (item: any) => {
     }
   })
   
-  return maxMonth ? `${formatMonth(maxMonth)} (${formatCurrency(maxAmount, true)})` : 'N/A'
+  return maxMonth ? `${formatMonth(maxMonth)} (${formatCurrency(maxAmount, { compact: true, uppercase: true })})` : 'N/A'
 }
 
 // Get number of non-zero months
@@ -1246,10 +1229,7 @@ const handleMouseDown = (e: MouseEvent) => {
   
   if (!isInteractive && (isMiddleClick || isModifierHeld)) {
     const container = tableContainer.value?.querySelector('.overflow-x-auto') as HTMLElement
-    if (!container) {
-      console.log('Container not found')
-      return
-    }
+    if (!container) return
     
     isDragging.value = true
     hasDraggedBeyondThreshold.value = false
@@ -1264,12 +1244,6 @@ const handleMouseDown = (e: MouseEvent) => {
     
     e.preventDefault()
     
-    console.log('Drag started', { 
-      startX: startX.value, 
-      startY: startY.value,
-      scrollLeft: scrollLeft.value,
-      scrollTop: scrollTop.value
-    })
   }
 }
 
@@ -1297,9 +1271,6 @@ const handleMouseMove = (e: MouseEvent) => {
   
   container.scrollLeft = scrollLeft.value + walkX
   container.scrollTop = scrollTop.value + walkY
-  
-  // Visual feedback in console for debugging
-  console.log('Dragging', { walkX, walkY, scrollLeft: container.scrollLeft })
 }
 
 const handleMouseUp = (e: MouseEvent) => {
@@ -1312,8 +1283,6 @@ const handleMouseUp = (e: MouseEvent) => {
     
     e.preventDefault()
     e.stopPropagation()
-    
-    console.log('Drag ended')
   }
 }
 
@@ -1327,13 +1296,6 @@ const handleMouseLeave = (e: MouseEvent) => {
 onMounted(async () => {
   loadFromURL()
   await fetchForecastData()
-  
-  // Debug: Log data structure after loading
-  console.log('Forecast data loaded:', forecastData.value.length, 'records')
-  if (forecastData.value.length > 0) {
-    console.log('First record structure:', forecastData.value[0])
-    console.log('Available months:', monthColumns.value)
-  }
   
   // Set up drag scrolling listeners
   // Use document-level events for better tracking

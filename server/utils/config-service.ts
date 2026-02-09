@@ -212,7 +212,7 @@ export async function listAggregateResources(
 
     // Cache the result
     if (resources.length > 0) {
-      await cache.set(cacheKey, result, CACHE_TTL.RESOURCE_LIST)
+      await cache.set(cacheKey, result, { ttl: CACHE_TTL.RESOURCE_LIST })
       logger.info(`[Config] Cached resource list: ${cacheKey}`)
     }
 
@@ -267,7 +267,7 @@ export async function listAggregateResources(
 
   // Cache the result if it's not a paginated request
   if (!filter?.nextToken && resources.length > 0) {
-    await cache.set(cacheKey, result, CACHE_TTL.RESOURCE_LIST)
+    await cache.set(cacheKey, result, { ttl: CACHE_TTL.RESOURCE_LIST })
     logger.info(`[Config] Cached resource list: ${cacheKey}`)
   }
 
@@ -311,7 +311,7 @@ export async function getResourceConfig(
     const detail = parseConfigurationItem(item, resourceIdentifier)
     
     // Cache the result
-    await cache.set(cacheKey, detail, CACHE_TTL.RESOURCE_DETAIL)
+    await cache.set(cacheKey, detail, { ttl: CACHE_TTL.RESOURCE_DETAIL })
     logger.info(`[Config] Cached resource detail: ${cacheKey}`)
     
     return detail
@@ -390,7 +390,7 @@ export async function batchGetResourceConfigs(
                 aggregatorName,
                 `${identifier.SourceAccountId}:${identifier.ResourceId}`
               )
-              await cache.set(cacheKey, detail, CACHE_TTL.RESOURCE_DETAIL)
+              await cache.set(cacheKey, detail, { ttl: CACHE_TTL.RESOURCE_DETAIL })
             }
           }
         }
@@ -475,7 +475,7 @@ export async function queryResources(
   
   // Cache if not paginated
   if (!nextToken && results.length > 0) {
-    await cache.set(cacheKey, result, CACHE_TTL.RESOURCE_LIST)
+    await cache.set(cacheKey, result, { ttl: CACHE_TTL.RESOURCE_LIST })
   }
   
   return result

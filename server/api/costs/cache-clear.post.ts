@@ -9,7 +9,8 @@
 import { defineEventHandler, getQuery, readBody } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
-import { costCache, CacheTags } from '../../utils/cache-manager'
+import { requireScope } from '../../middleware/entra-auth'
+import { costCache, organizationCache, CacheTags } from '../../utils/cache-manager'
 import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
@@ -61,6 +62,9 @@ registerEndpoint('/api/costs/cache-clear', 'POST', {
 })
 
 export default defineEventHandler(handleAsync(async (event) => {
+  // Require admin scope — cache clearing is an administrative operation
+  await requireScope(event, 'admin')
+
   // Read request body to get optional tags
   let tags: string[] = [CacheTags.COSTS]
 
@@ -76,9 +80,12 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   logger.info(`Cache clear requested for tags: ${tags.join(', ')}`)
 
-  // Clear cache entries by tags
-  const clearedEntries = await costCache.invalidateByTags(tags)
-  logger.info(`Cleared ${clearedEntries} cache entries for tags: ${tags.join(', ')}`)
+  // Clear cache entries by tags from both cost and organization caches
+  // Organization cache stores entries with cost data (e.g., overview) that must also be invalidated
+  const clearedCostEntries = await costCache.invalidateByTags(tags)
+  const clearedOrgEntries = await organizationCache.invalidateByTags([CacheTags.COSTS])
+  const clearedEntries = clearedCostEntries + clearedOrgEntries
+  logger.info(`Cleared ${clearedEntries} cache entries (${clearedCostEntries} cost, ${clearedOrgEntries} org) for tags: ${tags.join(', ')}`)
 
   return sendSuccess(event, {
     clearedEntries,

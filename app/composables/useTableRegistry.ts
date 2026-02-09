@@ -2,6 +2,7 @@ import { computed, type ComputedRef } from 'vue'
 import type { NormalizedDataset } from '~/types/costs'
 import type { TableColumn } from '~/components/shared/DataTable.vue'
 import type { DataMode } from '~/shared/types/scheduled-reports'
+import { getAccountsFromAnalysis, unwrapCostData } from '~/utils/cost-data-unwrap'
 
 // Account metadata type (simplified for LOB/Department lookup)
 export interface AccountMetadata {
@@ -37,22 +38,6 @@ export interface TableDefinition {
   }
 }
 
-// Helper: Format currency
-const formatCurrency = (value: number): string => {
-  if (value >= 1000000) {
-    return `$${(value / 1000000).toFixed(2)}M`
-  }
-  if (value >= 1000) {
-    return `$${(value / 1000).toFixed(2)}k`
-  }
-  return `$${value.toFixed(2)}`
-}
-
-// Helper: Format percentage
-const formatPercent = (value: number): string => {
-  return `${value.toFixed(1)}%`
-}
-
 // Helper: Get status text
 const getStatusText = (utilization: number): string => {
   if (utilization > 120) return 'Critical'
@@ -62,14 +47,11 @@ const getStatusText = (utilization: number): string => {
   return 'Healthy'
 }
 
-// Helper: Extract analysis data with proforma mode handling
+// Helper: Extract analysis data using shared unwrap utility
+// Returns the analysis source object respecting the data mode (billable vs proforma)
 const extractAnalysisData = (dataset: NormalizedDataset, dataMode: DataMode = 'billable') => {
-  if (!dataset.analysis) return null
-
-  const analysisData = dataset.analysis as any
-
-  // The API returns data wrapped in { success: true, data: {...} }
-  const actualData = analysisData?.data || analysisData
+  const actualData = unwrapCostData(dataset, 'analysis')
+  if (!actualData) return null
 
   // Handle proforma mode - data is nested under proforma property
   const analysisSource = dataMode === 'proforma' && actualData?.proforma

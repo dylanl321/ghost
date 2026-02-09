@@ -1069,6 +1069,7 @@ interface UserProfile {
 
 // Page setup
 definePageMeta({
+  keepalive: false,
   title: 'AWS Access History',
   description: 'View user AWS access history and CloudTrail events'
 })

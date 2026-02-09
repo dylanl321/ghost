@@ -22,7 +22,7 @@ interface MigrationResponse {
 export default defineEventHandler(async (event): Promise<EntraAPIResponse<MigrationResponse>> => {
   try {
     // Require admin scope for table operations
-    requireScope(event, 'admin')
+    await requireScope(event, 'admin')
     
     const tableName = API_KEYS_TABLE_SCHEMA.TableName
     const environment = (process.env.API_KEYS_STORAGE_ENV as 'commercial' | 'govcloud') || 'commercial'

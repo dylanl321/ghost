@@ -103,22 +103,17 @@
           </div>
 
           <!-- Budget Health - with overlay for inactive accounts -->
-          <div class="col-span-1 relative" data-tour="account-budget">
-            <BudgetHealthCard
-              :budget="budget"
-              :current-spend="currentSpend"
-              :forecast-data="forecastData"
-              :daily-costs="proformaTimeSeries"
-              :loading="loading"
-              :class="{ 'opacity-50 pointer-events-none': isAccountInactive }"
-            />
-            <div v-if="isAccountInactive" class="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-gray-900/80 rounded-lg">
-              <div class="text-center p-4">
-                <UIcon name="i-heroicons-exclamation-triangle" class="w-12 h-12 text-yellow-400 mx-auto mb-2" />
-                <p class="text-gray-900 dark:text-white font-semibold mb-1">Account {{ accountStatus }}</p>
-                <p class="text-sm text-gray-600 dark:text-gray-400">Cost data is not available for inactive accounts</p>
-              </div>
-            </div>
+          <div class="col-span-1" data-tour="account-budget">
+            <InactiveAccountOverlay :active="isAccountInactive" :status="accountStatus" message="Cost data is not available for inactive accounts">
+              <BudgetHealthCard
+                :budget="budget"
+                :current-spend="currentSpend"
+                :forecast-data="forecastData"
+                :daily-costs="proformaTimeSeries"
+                :loading="loading"
+                :class="{ 'opacity-50 pointer-events-none': isAccountInactive }"
+              />
+            </InactiveAccountOverlay>
           </div>
 
           <!-- Account Users -->
@@ -127,21 +122,16 @@
           </div>
 
           <!-- Cost Trend Chart - with overlay for inactive accounts -->
-          <div class="col-span-1 lg:col-span-2 relative" data-tour="account-cost-trend">
-            <CostTrendChart
-              title="Account Cost Trends"
-              :time-series-billable="billableTimeSeries"
-              :time-series-proforma="proformaTimeSeries"
-              :loading="loading"
-              :class="{ 'opacity-50 pointer-events-none': isAccountInactive }"
-            />
-            <div v-if="isAccountInactive" class="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-gray-900/80 rounded-lg">
-              <div class="text-center p-4">
-                <UIcon name="i-heroicons-exclamation-triangle" class="w-12 h-12 text-yellow-400 mx-auto mb-2" />
-                <p class="text-gray-900 dark:text-white font-semibold mb-1">Account {{ accountStatus }}</p>
-                <p class="text-sm text-gray-600 dark:text-gray-400">Cost trends are not available for inactive accounts</p>
-              </div>
-            </div>
+          <div class="col-span-1 lg:col-span-2" data-tour="account-cost-trend">
+            <InactiveAccountOverlay :active="isAccountInactive" :status="accountStatus" message="Cost trends are not available for inactive accounts">
+              <CostTrendChart
+                title="Account Cost Trends"
+                :time-series-billable="billableTimeSeries"
+                :time-series-proforma="proformaTimeSeries"
+                :loading="loading"
+                :class="{ 'opacity-50 pointer-events-none': isAccountInactive }"
+              />
+            </InactiveAccountOverlay>
           </div>
 
           <!-- Budget Alert History - full width -->
@@ -232,50 +222,18 @@
 </template>
 
 <script setup lang="ts">
-import type { GraphUser } from '~/composables/useGroupMembers'
 import { getIdcRoleLink, getIdcLoginLink, getAdminSupportRoles, type RoleLink } from '~/utils/awsConsoleLinks'
-import { startAccountTour } from '~/components/tutorial/AccountTour'
-import { getMonthlyBudget } from '#shared/utils/budget-utils'
+
+definePageMeta({
+  keepalive: false
+})
 
 const route = useRoute()
+const router = useRouter()
 const enclaveStore = useEnclaveStore()
 const userGroupStore = useUserGroupStore()
-const groupMembers = useGroupMembers()
-const { user } = useOidcAuth()
 const favoritesComposable = useFavoriteAccounts()
 const { addRecentAccount } = useRecentAccounts()
-const { getPreference, setPreference, load: loadPreferences, authError } = useUserPreferences()
-const accountTourStartedThisSession = ref(false)
-const lastAccountResetTimestamp = ref<string | null>(null)
-
-// Robust tour detection - localStorage key for dual-storage verification
-const ACCOUNT_TOUR_SEEN_KEY = 'ghost-account-tour-seen'
-
-// Check if tour has been seen via localStorage (fail-closed: assume seen on error)
-function hasSeenAccountTourLocally(): boolean {
-  if (!import.meta.client) return false
-  try {
-    return localStorage.getItem(ACCOUNT_TOUR_SEEN_KEY) === 'true'
-  } catch {
-    return true // Fail closed - assume seen if localStorage unavailable
-  }
-}
-
-// Mark tour as seen in localStorage
-function markAccountTourSeenLocally(): void {
-  if (!import.meta.client) return
-  try {
-    localStorage.setItem(ACCOUNT_TOUR_SEEN_KEY, 'true')
-  } catch {}
-}
-
-// Clear localStorage marker (for admin reset)
-function clearAccountTourSeenLocally(): void {
-  if (!import.meta.client) return
-  try {
-    localStorage.removeItem(ACCOUNT_TOUR_SEEN_KEY)
-  } catch {}
-}
 
 const accountId = computed(() => route.params.id as string)
 const govCloudId = computed(() => enclaveStore.enclaves[accountId.value]?.awsGovCloudAccountID)
@@ -283,28 +241,37 @@ const accountName = computed(() => enclaveStore.enclaves[accountId.value]?.proje
 const accountStatus = computed(() => enclaveStore.enclaves[accountId.value]?.enclaveStatus)
 const isAccountInactive = computed(() => accountStatus.value === 'Decommissioned' || accountStatus.value === 'Inactive')
 
-// Check if user is admin
 const { isAdmin } = useUserRoles()
+
+// Tour composable
+const { startTour: handleStartAccountTour, maybeAutoStart: maybeAutoStartTour } = useAccountTour()
+
+// Data fetching composable
+const {
+  users,
+  resourceCounts,
+  forecastData,
+  loading,
+  currentSpend,
+  budget,
+  billableTimeSeries,
+  proformaTimeSeries,
+  fetchAll: fetchAccountData,
+} = useAccountData(accountId, govCloudId, isAccountInactive)
 
 // Get user's roles for this account
 const userAccountRoles = computed<RoleLink[]>(() => {
   if (!accountId.value) return []
 
   const roles: RoleLink[] = []
-
-  // Search through roleGroups for roles matching this account (commercial or GovCloud)
   Object.values(userGroupStore.roleGroups).forEach(roleGroup => {
-    // Check if this role group is for the commercial account
     if (roleGroup.accountId === accountId.value) {
       roles.push(getIdcRoleLink(accountId.value, roleGroup.role, false))
     }
-
-    // Check if this role group is for the GovCloud account
     if (govCloudId.value && roleGroup.accountId === govCloudId.value) {
       roles.push(getIdcRoleLink(govCloudId.value, roleGroup.role, true))
     }
   })
-
   return roles
 })
 
@@ -312,56 +279,42 @@ const userAccountRoles = computed<RoleLink[]>(() => {
 const consoleMenuItems = computed(() => {
   if (!accountId.value) return []
 
-  // Build menu items as array of arrays (each array is a section)
   const menuItems = []
 
-  // User's Role Links - Primary access method
   if (userAccountRoles.value.length > 0) {
-    const roleSection = [
-      {
-        label: 'My Roles',
-        slot: 'header'
-      },
+    menuItems.push([
+      { label: 'My Roles', slot: 'header' },
       ...userAccountRoles.value.map(roleLink => ({
         label: roleLink.label,
         icon: roleLink.icon,
         href: roleLink.url,
-        target: '_blank'
-      }))
-    ]
-    menuItems.push(roleSection)
+        target: '_blank',
+      })),
+    ])
   }
 
-  // Admin Support Roles (for central auditing accounts)
   if (isAdmin.value) {
     const targetName = accountName.value || undefined
     const supportRoles = getAdminSupportRoles(accountId.value, govCloudId.value, targetName)
-    const supportSection = [
-      {
-        label: 'Support Roles',
-        slot: 'header'
-      },
+    menuItems.push([
+      { label: 'Support Roles', slot: 'header' },
       ...supportRoles.map(roleLink => ({
         label: roleLink.label,
         icon: roleLink.icon,
         href: roleLink.url,
-        target: '_blank'
-      }))
-    ]
-    menuItems.push(supportSection)
+        target: '_blank',
+      })),
+    ])
   }
 
-  // IDC Portal Home - fallback option
   const hasGovCloud = !!govCloudId.value
   const idcLink = getIdcLoginLink(hasGovCloud)
-  menuItems.push([
-    {
-      label: idcLink.label,
-      icon: idcLink.icon,
-      href: idcLink.url,
-      target: '_blank'
-    }
-  ])
+  menuItems.push([{
+    label: idcLink.label,
+    icon: idcLink.icon,
+    href: idcLink.url,
+    target: '_blank',
+  }])
 
   return menuItems
 })
@@ -370,256 +323,65 @@ const consoleMenuItems = computed(() => {
 const selectedTab = ref(0)
 const tabs = computed(() => {
   const baseTabs = [
-    {
-      label: 'Overview',
-      slot: 'overview',
-      icon: 'i-heroicons-home',
-      disabled: false
-    },
-    {
-      label: 'Resources',
-      slot: 'resources',
-      icon: 'i-heroicons-server-stack',
-      disabled: isAccountInactive.value
-    },
-    {
-      label: 'Policies',
-      slot: 'policies',
-      icon: 'i-heroicons-shield-check',
-      disabled: isAccountInactive.value
-    }
+    { label: 'Overview', slot: 'overview', icon: 'i-heroicons-home', disabled: false },
+    { label: 'Resources', slot: 'resources', icon: 'i-heroicons-server-stack', disabled: isAccountInactive.value },
+    { label: 'Policies', slot: 'policies', icon: 'i-heroicons-shield-check', disabled: isAccountInactive.value },
   ]
 
-  // Add Pipelines tab for admins only
   if (isAdmin.value) {
-    baseTabs.push({
-      label: 'Pipelines',
-      slot: 'pipelines',
-      icon: 'i-heroicons-arrow-path',
-      disabled: false
-    })
-  }
-
-  // Add Notes tab for admins only
-  if (isAdmin.value) {
-    baseTabs.push({
-      label: 'Notes',
-      slot: 'notes',
-      icon: 'i-heroicons-document-text',
-      disabled: false
-    })
+    baseTabs.push({ label: 'Pipelines', slot: 'pipelines', icon: 'i-heroicons-arrow-path', disabled: false })
+    baseTabs.push({ label: 'Notes', slot: 'notes', icon: 'i-heroicons-document-text', disabled: false })
   }
 
   return baseTabs
 })
 
-interface InstanceResponse {
-  instances: Instance[]
-  summary: InstanceSummary
-}
-
-interface CostResponse {
-  success: boolean
-  data: CostData
-}
-interface CostData {
-  billableMonthToDateTotal: number
-  proformaMonthToDateTotal: number
-  billableLast14Days: CostDaily[]
-  proformaLast14Days: CostDaily[]
-}
-interface CostDaily {
-  date: string
-  cost: number
-}
-
-const users = ref<GraphUser[]>([])
-const instanceData = ref<InstanceResponse | null>(null)
-const costResponse = ref<CostResponse | null>(null)
-const resourceCounts = ref<ResourceCounts | null>(null)
-const forecastData = ref<any>(null)
-const loading = ref(true)
-
-const currentSpend = computed(() => costResponse.value?.data.proformaMonthToDateTotal || 0)
-
-const budget = computed(() => {
-  const enclave = enclaveStore.enclaves[accountId.value]
-  return getMonthlyBudget(enclave)
-})
-
-const billableTimeSeries = computed(() => {
-  if (!costResponse.value) return []
-  return costResponse.value.data.billableLast14Days
-})
-
-const proformaTimeSeries = computed(() => {
-  if (!costResponse.value) return []
-  return costResponse.value.data.proformaLast14Days
-})
-
-// Get the current tab name for the share button
 const currentTabName = computed(() => {
-  const tab = tabs.value.find((t, index) => index === selectedTab.value)
+  const tab = tabs.value.find((_, index) => index === selectedTab.value)
   return tab?.label || 'Overview'
 })
 
-const router = useRouter()
-
-// Navigate to costs page with this account pre-selected
 const navigateToCostsPage = () => {
   if (!accountId.value) return
-
-  // Build URL with query parameters to pre-select this account
-  const queryParams = {
-    accounts: JSON.stringify([accountId.value]),
-    timeframe: 'thisMonth',
-    tab: 'all'
-  }
-
   router.push({
     path: '/account/costs',
-    query: queryParams
+    query: {
+      accounts: JSON.stringify([accountId.value]),
+      timeframe: 'thisMonth',
+      tab: 'all',
+    },
   })
 }
 
-async function handleStartAccountTour() {
-  const pref = getPreference<any>('accountTour', {}) || {}
-  const resetTimestamp = pref?.resetByAdminAt
-  
-  // Allow tour to run if it was reset (even if started this session)
-  const wasReset = resetTimestamp && resetTimestamp !== lastAccountResetTimestamp.value
-  if (accountTourStartedThisSession.value && !wasReset) return
-  
-  if (wasReset) {
-    lastAccountResetTimestamp.value = resetTimestamp
-    clearAccountTourSeenLocally() // Clear localStorage marker when admin resets
-  }
-  accountTourStartedThisSession.value = true
-
-  // Mark tour as seen in localStorage BEFORE starting (robust detection)
-  markAccountTourSeenLocally()
-
-  const startAt = Number(pref?.lastStep || 0)
-
-  try {
-    await startAccountTour({
-      startAtStep: isNaN(startAt) ? 0 : startAt,
-      onComplete: async () => {
-        await setPreference('accountTour', {
-          ...(getPreference<any>('accountTour', {}) || {}),
-          completed: true,
-          completedAt: new Date().toISOString()
-        })
-      },
-      onExit: async (currentStep) => {
-        await setPreference('accountTour', {
-          ...(getPreference<any>('accountTour', {}) || {}),
-          lastStep: currentStep,
-          startedAt: (getPreference<any>('accountTour', {}) || {}).startedAt || new Date().toISOString()
-        })
-      }
-    })
-  } catch (error: any) {
-    console.error('Failed to start account tour:', error)
-    const toast = useToast()
-    toast.add({
-      title: 'Tour Error',
-      description: error.message || 'Failed to start the guided tour. Please try again.',
-      color: 'red',
-      icon: 'i-heroicons-exclamation-triangle'
-    })
-    // Reset session flag so user can try again
-    accountTourStartedThisSession.value = false
-  }
-}
-
 // Check if URL has GovCloud ID and redirect to commercial ID
-const checkAndRedirectIfGovCloudId = () => {
+function checkAndRedirectIfGovCloudId() {
   const urlId = route.params.id as string
+  if (enclaveStore.enclaves[urlId]) return
 
-  // Check if this ID exists in enclave store (commercial IDs are the keys)
-  if (enclaveStore.enclaves[urlId]) {
-    // Valid commercial ID, no redirect needed
-    return
-  }
-
-  // Search for enclave where GovCloud ID matches the URL ID
   const enclave = Object.values(enclaveStore.enclaves).find(
-    (enc: any) => enc.awsGovCloudAccountID === urlId
+    (enc: any) => enc.awsGovCloudAccountID === urlId,
   )
 
   if (enclave) {
-    // Found it - redirect to commercial ID
     const commercialId = enclave.accountId || enclave.awsStandardAccountID
     if (commercialId) {
-      console.log(`Redirecting from GovCloud ID ${urlId} to commercial ID ${commercialId}`)
       router.replace(`/account/${commercialId}`)
     }
   }
 }
 
 onMounted(async () => {
-  // Check for GovCloud ID redirect first
   checkAndRedirectIfGovCloudId()
 
-  // Track account visit in recent accounts
+  // Track recent account visit (fire-and-forget)
   if (accountId.value) {
-    addRecentAccount(accountId.value).catch(err => {
-      console.warn('Failed to track recent account:', err)
-    })
+    addRecentAccount(accountId.value).catch(() => {})
   }
 
-  // Reload preferences to get fresh data (in case admin reset it)
-  await loadPreferences(true)
-  
-  // Auto-start account tour only for first-time users, forced starts, or admin resets
-  const tourPref = getPreference<any>('accountTour', {}) || {}
-  const forceStart = route.query.tour === '1'
-  const wasReset = tourPref?.resetByAdminAt && tourPref?.resetByAdminAt !== lastAccountResetTimestamp.value
+  // Tour auto-start (handles preference loading internally)
+  maybeAutoStartTour()
 
-  // Robust dual-storage verification: check BOTH localStorage AND API preferences
-  const seenLocally = hasSeenAccountTourLocally()
-  const seenInApi = tourPref?.startedAt || tourPref?.completed
-
-  // Sync localStorage from API for existing users (backwards compatibility)
-  if (seenInApi && !seenLocally) {
-    markAccountTourSeenLocally()
-  }
-
-  // Only first-time if BOTH indicate first-time AND no auth errors
-  // Philosophy: "When in doubt, don't auto-start"
-  const isGenuineFirstTime = !seenLocally && !seenInApi && !authError.value
-
-  // Admin reset clears localStorage marker to allow re-triggering
-  if (wasReset) {
-    clearAccountTourSeenLocally()
-  }
-
-  const shouldAutoStart = (forceStart || wasReset || isGenuineFirstTime) && !accountTourStartedThisSession.value
-
-  if (shouldAutoStart) {
-    // Wait for DOM elements to be ready
-    await nextTick()
-    // Check if tour elements exist before starting
-    const checkElements = () => {
-      const header = document.querySelector('[data-tour="account-header"]')
-      return header !== null
-    }
-    
-    // Try multiple times with increasing delays
-    let attempts = 0
-    const tryStart = () => {
-      if (checkElements()) {
-        handleStartAccountTour()
-      } else if (attempts < 5) {
-        attempts++
-        setTimeout(tryStart, 300)
-      }
-    }
-    setTimeout(tryStart, 500)
-  }
-
-  // Check for tab query parameter from shared link
+  // Deep-link to tab from shared link query param
   const tabParam = route.query.tab
   if (tabParam !== undefined && tabParam !== null) {
     const tabIndex = parseInt(tabParam as string)
@@ -628,44 +390,7 @@ onMounted(async () => {
     }
   }
 
-  try {
-    // Skip data fetching for inactive/decommissioned accounts
-    if (isAccountInactive.value) {
-      console.log(`Account ${accountId.value} is ${accountStatus.value}, skipping data fetch`)
-      loading.value = false
-      return
-    }
-
-    if (accountId.value) {
-      users.value = await groupMembers.fetchEnclaveUsers(accountId.value, govCloudId.value || '', user.value?.accessToken || '')
-    }
-
-    // Fetch all data in parallel for better performance
-    // Use govCloudId for govcloud APIs, accountId (commercial) for commercial APIs
-    const [instancesRes, costsRes, resourcesRes, forecastRes] = await Promise.all([
-      fetch(`/api/instances?environment=govcloud&accountIds=${govCloudId.value || accountId.value}&limit=2000`),
-      fetch(`/api/accounts/dashboard-simplified?standard_account_id=${accountId.value}`),
-      fetch(`/api/config/summary-simplified?govcloud_account_id=${govCloudId.value}`),
-      fetch(`/api/costs/projections?period=current-month-remainder&accountIds=${accountId.value}&granularity=DAILY&environment=commercial`)
-    ])
-
-    const [instancesJson, costsJson, resourcesJson, forecastJson] = await Promise.all([
-      instancesRes.json(),
-      costsRes.json(),
-      resourcesRes.json(),
-      forecastRes.json()
-    ])
-
-    instanceData.value = instancesJson.data
-    costResponse.value = costsJson
-    resourceCounts.value = resourcesJson.data
-    forecastData.value = forecastJson.data
-
-    console.log('AWS projection data:', forecastData.value)
-  } catch (err) {
-    console.error('Error fetching account data:', err)
-  } finally {
-    loading.value = false
-  }
+  // Fetch page data
+  await fetchAccountData()
 })
 </script>

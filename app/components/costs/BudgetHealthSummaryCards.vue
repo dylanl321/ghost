@@ -145,15 +145,4 @@ const underutilizedCount = computed(() => summaryMetrics.value.underutilizedCoun
 const totalUnutilizedAmount = computed(() => summaryMetrics.value.totalUnutilizedAmount)
 const averageUtilization = computed(() => summaryMetrics.value.averageUtilization)
 const totalAccountsWithBudget = computed(() => summaryMetrics.value.totalAccountsWithBudget)
-
-// Format currency helper
-const formatCurrency = (value: number): string => {
-  if (value >= 1000000) {
-    return `$${(value / 1000000).toFixed(2)}M`
-  }
-  if (value >= 1000) {
-    return `$${(value / 1000).toFixed(1)}k`
-  }
-  return `$${value.toFixed(0)}`
-}
 </script>

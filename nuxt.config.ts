@@ -24,6 +24,9 @@ export default defineNuxtConfig({
   },
 
   app: {
+    keepalive: {
+      max: 10
+    },
     head: {
       link: [
         { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
@@ -68,10 +71,6 @@ export default defineNuxtConfig({
       pathPrefix: false, // Auto important components based only on name, ignoring path prefix
     },
   ],
-  // ui: {
-  //   fonts: false // Prevent NuxtUI from fetching fonts, which causes a certificate error
-  // },
-
   vite: {
     optimizeDeps: {
       include: [
@@ -104,19 +103,6 @@ export default defineNuxtConfig({
       inline: ['gray-matter']
     }
   },
-
-  // nitro: {
-  //   compatibilityDate: '2024-12-27',
-  //   routeRules: {
-  //     '/api/**': {
-  //       cors: true,
-  //       headers: {
-  //         'Access-Control-Allow-Credentials': 'true',
-  //         'Access-Control-Allow-Origin': 'http://localhost:3000'
-  //       }
-  //     }
-  //   }
-  // },
 
   runtimeConfig: {
     // Server-side only (not exposed to client)
@@ -187,14 +173,11 @@ export default defineNuxtConfig({
           "Directory.Read.All",
           "Group.Read.All",
         ],
-        optionalClaims: ["email", "given_name", "family_name"], // https://learn.microsoft.com/en-us/entra/identity-platform/optional-claims-reference
+        optionalClaims: ["email", "given_name", "family_name", "oid"], // https://learn.microsoft.com/en-us/entra/identity-platform/optional-claims-reference
         exposeAccessToken: true,
-        // userInfoUrl: 'https://graph.microsoft.us/oidc/userinfo',
       },
     },
-    middleware: {
-      // customLoginPage: false,
-    },
+    middleware: {},
     session: {
       // Disable expiration check when using devMode (dev tokens don't expire)
       expirationCheck: process.env.DEV_AUTH_ENABLED !== 'true',

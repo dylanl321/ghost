@@ -9,6 +9,7 @@ import type {
   DistributionGroup,
   EntraUser
 } from '../../types/entra'
+import { EntraCacheTags } from '../../types/entra'
 import { entraConfig, getCacheKey } from './config'
 import { parseGroupDescription } from './group-parser'
 import { graphRequest, getAllPages } from './graph-client'
@@ -95,7 +96,7 @@ export async function findDistributionGroup(
       distributionGroup,
       {
         ttl: entraConfig.cache.ttl,
-        tags: [CacheTags.ACCOUNTS, 'ENTRA', 'ENTRA_GROUPS']
+        tags: [CacheTags.ACCOUNTS, EntraCacheTags.ENTRA, EntraCacheTags.ENTRA_GROUPS]
       }
     )
     
@@ -153,7 +154,7 @@ export async function getAllDistributionGroups(
       distributionGroups,
       {
         ttl: entraConfig.cache.ttl,
-        tags: [CacheTags.ACCOUNTS, 'ENTRA', 'ENTRA_GROUPS']
+        tags: [CacheTags.ACCOUNTS, EntraCacheTags.ENTRA, EntraCacheTags.ENTRA_GROUPS]
       }
     )
     
@@ -197,7 +198,7 @@ export async function getDistributionGroupMembers(
       members,
       {
         ttl: entraConfig.cache.ttl,
-        tags: ['ENTRA', 'ENTRA_USERS']
+        tags: [CacheTags.ACCOUNTS, EntraCacheTags.ENTRA, EntraCacheTags.ENTRA_USERS]
       }
     )
     
