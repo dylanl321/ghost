@@ -321,6 +321,47 @@
         @start-tour="() => handleStartTour(true)"
       />
 
+      <!-- Selected Account Context Banner -->
+      <div v-if="selectedAccounts.length > 0" class="px-4 md:px-6 pt-4">
+        <div class="bg-blue-900/30 border border-blue-700 rounded-lg px-4 py-3 flex items-center justify-between gap-4">
+          <div class="flex items-center gap-3 min-w-0 flex-1">
+            <div class="flex-shrink-0 p-1.5 bg-blue-900/50 rounded-lg">
+              <Icon name="i-heroicons-funnel" class="w-4 h-4 text-blue-400" />
+            </div>
+            <div class="min-w-0 flex-1">
+              <template v-if="selectedAccounts.length === 1">
+                <div class="text-sm font-semibold text-white truncate">
+                  {{ getSelectedAccountName(selectedAccounts[0]) }}
+                </div>
+                <div class="text-xs text-blue-300">
+                  {{ selectedAccounts[0] }}
+                </div>
+              </template>
+              <template v-else-if="selectedAccounts.length <= 5">
+                <div class="text-sm font-semibold text-white">
+                  {{ selectedAccounts.length }} accounts selected
+                </div>
+                <div class="text-xs text-blue-300 truncate">
+                  {{ selectedAccounts.map(id => getSelectedAccountName(id)).join(', ') }}
+                </div>
+              </template>
+              <template v-else>
+                <div class="text-sm font-semibold text-white">
+                  {{ selectedAccounts.length }} accounts selected
+                </div>
+                <div class="text-xs text-blue-300">
+                  Filtered view — showing data for selected accounts only
+                </div>
+              </template>
+            </div>
+          </div>
+          <UButton size="xs" color="blue" variant="soft" @click="clearSelection">
+            <Icon name="i-heroicons-x-mark" class="w-3.5 h-3.5 mr-1" />
+            Clear
+          </UButton>
+        </div>
+      </div>
+
       <!-- Content Area -->
       <div class="flex-1 overflow-auto min-h-0 p-4 md:p-6">
         <!-- Loading State -->
@@ -862,6 +903,14 @@ const remainingSelectedCount = computed(() => {
 const formatAccountDisplayName = (account: Account) => {
   const name = account.accountName || account.projectName || account.name || 'Unnamed Account'
   return name.length > 20 ? name.substring(0, 20) + '...' : name
+}
+
+const getSelectedAccountName = (accountId: string): string => {
+  const account = accountsWithCosts.value.find(
+    (acc: Account) => getAccountKey(acc) === accountId
+  )
+  if (!account) return accountId
+  return account.accountName || account.projectName || account.name || accountId
 }
 
 // Sidebar groups, helpers, and search matching -- extracted to composable
