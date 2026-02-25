@@ -3,13 +3,24 @@
     <template #header>
       <div class="flex justify-between items-center">
         <h3 class="font-semibold">Account Performance</h3>
-        <USelectMenu
-          v-model="sortBy"
-          :options="sortOptions"
-          value-attribute="value"
-          option-attribute="label"
-          class="w-40"
-        />
+        <div class="flex items-center gap-2">
+          <UButton
+            size="xs"
+            :color="viewMode === 'table' ? 'primary' : 'gray'"
+            variant="ghost"
+            icon="i-heroicons-table-cells"
+            @click="viewMode = viewMode === 'table' ? 'chart' : 'table'"
+          >
+            {{ viewMode === 'table' ? 'Chart View' : 'Table View' }}
+          </UButton>
+          <USelectMenu
+            v-model="sortBy"
+            :options="sortOptions"
+            value-attribute="value"
+            option-attribute="label"
+            class="w-40"
+          />
+        </div>
       </div>
     </template>
 
@@ -18,11 +29,43 @@
       No account data available
     </div>
     <div v-else class="min-h-96">
-      <VChart v-if="displayedAccounts.length > 0" :option="chartOptions" class="h-96" autoresize />
+      <!-- Chart view (top 10) -->
+      <div v-if="viewMode === 'chart'">
+        <VChart v-if="chartAccounts.length > 0" :option="chartOptions" class="h-96" autoresize />
+      </div>
+
+      <!-- Table view (all, paginated) -->
+      <div v-else>
+        <UTable
+          :rows="paginatedAccounts"
+          :columns="accountTableColumns"
+        >
+          <template #success_rate-data="{ row }">
+            <div class="flex items-center gap-2">
+              <div class="w-16 h-2 bg-gray-700 rounded-full overflow-hidden">
+                <div class="h-full bg-green-500 rounded-full" :style="{ width: `${row.success_rate || 0}%` }" />
+              </div>
+              <span class="text-sm">{{ Math.round(row.success_rate || 0) }}%</span>
+            </div>
+          </template>
+        </UTable>
+        <div v-if="allSortedAccounts.length > accountPageSize" class="flex justify-between items-center mt-3">
+          <div class="text-sm text-gray-400">
+            Showing {{ accountTableStart }}-{{ accountTableEnd }} of {{ allSortedAccounts.length }} accounts
+          </div>
+          <UPagination
+            v-model="accountPage"
+            :page-count="accountPageSize"
+            :total="allSortedAccounts.length"
+          />
+        </div>
+      </div>
 
       <!-- Account summary -->
       <div class="border-t border-gray-700 mt-4 pt-4">
-        <div class="text-sm text-gray-400 mb-2">Showing top {{ displayedAccounts.length }} accounts</div>
+        <div class="text-sm text-gray-400 mb-2">
+          {{ viewMode === 'chart' ? `Showing top ${chartAccounts.length} accounts` : `${allSortedAccounts.length} accounts total` }}
+        </div>
         <div class="grid grid-cols-2 gap-4 text-sm">
           <div>
             <div class="text-gray-400">Avg Success Rate</div>
@@ -73,39 +116,61 @@ const props = defineProps<{
 }>()
 
 const sortBy = ref('total_runs')
+const viewMode = ref<'chart' | 'table'>('chart')
+const accountPage = ref(1)
+const accountPageSize = 20
+
 const sortOptions = [
   { label: 'Total Runs', value: 'total_runs' },
   { label: 'Success Rate', value: 'success_rate' }
 ]
 
-// Sort and limit accounts
-const displayedAccounts = computed(() => {
+const accountTableColumns = [
+  { key: 'account_name', label: 'Account' },
+  { key: 'account_id', label: 'Account ID' },
+  { key: 'total_runs', label: 'Total Runs', sortable: true },
+  { key: 'successful_runs', label: 'Successful', sortable: true },
+  { key: 'success_rate', label: 'Success Rate', sortable: true }
+]
+
+// All accounts sorted (no limit)
+const allSortedAccounts = computed(() => {
   if (!props.accountBreakdown?.length) return []
 
-  const sorted = [...props.accountBreakdown].sort((a, b) => {
+  return [...props.accountBreakdown].sort((a, b) => {
     if (sortBy.value === 'success_rate') {
       return b.success_rate - a.success_rate
     }
     return b.total_runs - a.total_runs
   })
-
-  return sorted.slice(0, 10) // Top 10 accounts
 })
 
-// Calculate averages
+// Chart uses top 10
+const chartAccounts = computed(() => allSortedAccounts.value.slice(0, 10))
+
+// Paginated for table view
+const paginatedAccounts = computed(() => {
+  const start = (accountPage.value - 1) * accountPageSize
+  return allSortedAccounts.value.slice(start, start + accountPageSize)
+})
+
+const accountTableStart = computed(() => allSortedAccounts.value.length === 0 ? 0 : (accountPage.value - 1) * accountPageSize + 1)
+const accountTableEnd = computed(() => Math.min(accountPage.value * accountPageSize, allSortedAccounts.value.length))
+
+// Calculate averages (from all accounts, not just displayed)
 const avgSuccessRate = computed(() => {
-  if (!displayedAccounts.value.length) return 0
-  const sum = displayedAccounts.value.reduce((acc, a) => acc + (a.success_rate || 0), 0)
-  return Math.round(sum / displayedAccounts.value.length)
+  if (!allSortedAccounts.value.length) return 0
+  const sum = allSortedAccounts.value.reduce((acc, a) => acc + (a.success_rate || 0), 0)
+  return Math.round(sum / allSortedAccounts.value.length)
 })
 
 const totalRuns = computed(() => {
-  if (!displayedAccounts.value.length) return 0
-  return displayedAccounts.value.reduce((acc, a) => acc + (a.total_runs || 0), 0)
+  if (!allSortedAccounts.value.length) return 0
+  return allSortedAccounts.value.reduce((acc, a) => acc + (a.total_runs || 0), 0)
 })
 
 const chartOptions = computed(() => {
-  const accounts = displayedAccounts.value
+  const accounts = chartAccounts.value
   // Parse and shorten account names for display
   const accountNames = accounts.map(a => getShortAccountName(a.account_name || a.account_id, 25))
   // Keep full names for tooltips

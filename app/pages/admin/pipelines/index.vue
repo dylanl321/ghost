@@ -192,12 +192,23 @@
         />
         <UCard>
           <template #header>
-            <h3 class="font-semibold">Resource Changes</h3>
+            <div class="flex justify-between items-center">
+              <h3 class="font-semibold">Resource Changes</h3>
+              <UButton
+                v-if="resourceBreakdown && resourceBreakdown.length > 10"
+                size="xs"
+                :color="showAllResources ? 'primary' : 'gray'"
+                variant="ghost"
+                @click="showAllResources = !showAllResources"
+              >
+                {{ showAllResources ? 'Show Top 10' : `View All (${resourceBreakdown.length})` }}
+              </UButton>
+            </div>
           </template>
           <div v-if="resourceBreakdown && resourceBreakdown.length > 0" class="space-y-2">
             <div
-              v-for="resource in resourceBreakdown.slice(0, 10)"
-              :key="`${resource.resource_type}-${resource.change_action}`"
+              v-for="resource in paginatedResources"
+              :key="`${resource.resource_type}-${resource.change_action}-${resource.resource_address}`"
               class="flex items-center justify-between py-2 border-b border-gray-700 last:border-0"
             >
               <div class="flex items-center gap-2">
@@ -212,12 +223,42 @@
               </div>
               <span class="text-sm font-semibold text-gray-400">{{ formatNumber(resource.count) }}</span>
             </div>
+            <div v-if="showAllResources && resourceBreakdown.length > resourcePageSize" class="flex justify-end pt-2">
+              <UPagination
+                v-model="resourcePage"
+                :page-count="resourcePageSize"
+                :total="resourceBreakdown.length"
+              />
+            </div>
           </div>
           <div v-else class="text-center py-8 text-gray-400">
             No resource changes in this period
           </div>
         </UCard>
       </div>
+
+      <!-- Row 3.5: Resource Search (Full Width, Collapsible) -->
+      <UCard>
+        <template #header>
+          <UButton
+            color="gray"
+            variant="ghost"
+            class="w-full flex justify-between items-center"
+            @click="showResourceSearch = !showResourceSearch"
+          >
+            <div class="flex items-center gap-2">
+              <UIcon name="i-heroicons-magnifying-glass" class="w-4 h-4" />
+              <span class="font-semibold">Resource Search</span>
+            </div>
+            <UIcon
+              name="i-heroicons-chevron-right"
+              class="w-4 h-4 transition-transform"
+              :class="showResourceSearch && 'rotate-90'"
+            />
+          </UButton>
+        </template>
+        <PipelinesResourceSearchPanel v-if="showResourceSearch" />
+      </UCard>
 
       <!-- Row 4: Repository Breakdown Table (Full Width) -->
       <PipelinesRepositoryBreakdownTable
@@ -232,6 +273,7 @@
 import { parseGitLabUrl } from '~/utils/gitlab-url-parser'
 
 // Direct imports of components (Nuxt auto-import not working for subdirectories)
+import PipelinesResourceSearchPanel from '~/components/pipelines/ResourceSearchPanel.vue'
 import PipelinesOrganizationTrendChart from '~/components/pipelines/OrganizationTrendChart.vue'
 import PipelinesActivityHeatMap from '~/components/pipelines/ActivityHeatMap.vue'
 import PipelinesAccountPerformanceChart from '~/components/pipelines/AccountPerformanceChart.vue'
@@ -260,6 +302,21 @@ const selectedDaysLabel = computed(() => {
 
 // Author filter
 const selectedAuthor = ref<string | null>(null)
+
+// Resource changes pagination (org view)
+const showAllResources = ref(false)
+const resourcePage = ref(1)
+const resourcePageSize = 15
+const showResourceSearch = ref(false)
+
+const paginatedResources = computed(() => {
+  if (!resourceBreakdown.value?.length) return []
+  if (!showAllResources.value) {
+    return resourceBreakdown.value.slice(0, 10)
+  }
+  const start = (resourcePage.value - 1) * resourcePageSize
+  return resourceBreakdown.value.slice(start, start + resourcePageSize)
+})
 
 // Data state
 const loading = ref(true)

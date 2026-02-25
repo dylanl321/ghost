@@ -210,8 +210,10 @@ async function seedTemplates() {
   }
 }
 
-// Run if called directly
-if (require.main === module || import.meta.url === `file://${process.argv[1]}`) {
+// Run if called directly (ESM-compatible check for both Windows and Linux)
+import { fileURLToPath } from 'node:url'
+const isMainModule = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]
+if (isMainModule) {
   seedTemplates().catch((error) => {
     console.error('Fatal error:', error)
     process.exit(1)

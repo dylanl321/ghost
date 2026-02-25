@@ -45,20 +45,20 @@
               <div class="flex items-center gap-4 flex-shrink-0 ml-auto">
                 <div class="text-right">
                   <div class="text-sm font-semibold">
-                    <span class="text-green-400">{{ item.successfulAccounts }}</span> /
-                    <span class="text-red-400">{{ item.failedAccounts }}</span>
+                    <span class="text-green-400">{{ item.successfulRuns }}</span> /
+                    <span class="text-red-400">{{ item.failedRuns }}</span>
                   </div>
-                  <div class="text-xs text-gray-400">{{ item.accountSuccessRate }}% success</div>
+                  <div class="text-xs text-gray-400">{{ item.pipelineSuccessRate }}% pipeline success</div>
                 </div>
                 <div class="w-24">
                   <div class="h-2 bg-gray-700 rounded-full overflow-hidden flex">
                     <div
                       class="h-full bg-green-500"
-                      :style="{ width: `${item.accountSuccessRate}%` }"
+                      :style="{ width: `${item.pipelineSuccessRate}%` }"
                     ></div>
                     <div
                       class="h-full bg-red-500"
-                      :style="{ width: `${(item.failedAccounts / item.totalAccounts) * 100}%` }"
+                      :style="{ width: `${item.totalRuns > 0 ? (item.failedRuns / item.totalRuns) * 100 : 0}%` }"
                     ></div>
                   </div>
                 </div>
@@ -72,20 +72,20 @@
             <!-- Quick Stats -->
             <div class="grid grid-cols-4 gap-4 pb-3 border-b border-gray-700">
               <div>
-                <div class="text-xs text-gray-400">Successful Accounts</div>
-                <div class="text-lg font-semibold text-green-400">{{ item.successfulAccounts }}</div>
+                <div class="text-xs text-gray-400">Successful Runs</div>
+                <div class="text-lg font-semibold text-green-400">{{ item.successfulRuns }}</div>
               </div>
               <div>
-                <div class="text-xs text-gray-400">Failed Accounts</div>
-                <div class="text-lg font-semibold text-red-400">{{ item.failedAccounts }}</div>
+                <div class="text-xs text-gray-400">Failed Runs</div>
+                <div class="text-lg font-semibold text-red-400">{{ item.failedRuns }}</div>
               </div>
               <div>
-                <div class="text-xs text-gray-400">Total Accounts</div>
+                <div class="text-xs text-gray-400">Unique Accounts</div>
                 <div class="text-lg font-semibold text-white">{{ item.totalAccounts }}</div>
               </div>
               <div>
-                <div class="text-xs text-gray-400">Success Rate</div>
-                <div class="text-lg font-semibold text-gray-300">{{ item.accountSuccessRate }}%</div>
+                <div class="text-xs text-gray-400">Pipeline Success Rate</div>
+                <div class="text-lg font-semibold text-gray-300">{{ item.pipelineSuccessRate }}%</div>
               </div>
             </div>
 
@@ -114,9 +114,16 @@
         </template>
       </UAccordion>
 
-      <!-- Pagination (if needed) -->
-      <div v-if="filteredRepositories.length > 20" class="mt-4 flex justify-center">
-        <p class="text-sm text-gray-400">Showing top 20 repositories</p>
+      <!-- Pagination -->
+      <div v-if="filteredRepositories.length > repoPageSize" class="mt-4 flex justify-between items-center">
+        <div class="text-sm text-gray-400">
+          Showing {{ (repoPage - 1) * repoPageSize + 1 }}-{{ Math.min(repoPage * repoPageSize, filteredRepositories.length) }} of {{ filteredRepositories.length }} repositories
+        </div>
+        <UPagination
+          v-model="repoPage"
+          :page-count="repoPageSize"
+          :total="filteredRepositories.length"
+        />
       </div>
     </div>
   </UCard>
@@ -151,13 +158,8 @@ const repositories = computed(() => {
     fullPath: string // Full repository path for display
     projectUrl: string | null
     totalRuns: number
-    totalAccounts: number
-    successfulAccounts: number
-    failedAccounts: number
-    pendingAccounts: number
     lastRun: string
     accounts: Set<string>
-    accountStatuses: Map<string, string> // Track account_id -> plan_status
   }>()
 
   props.timelineData.forEach(run => {
@@ -171,13 +173,8 @@ const repositories = computed(() => {
         fullPath: repoFullPath, // Keep full path for display
         projectUrl,
         totalRuns: 0,
-        totalAccounts: 0,
-        successfulAccounts: 0,
-        failedAccounts: 0,
-        pendingAccounts: 0,
         lastRun: run.timestamp_start,
-        accounts: new Set(),
-        accountStatuses: new Map()
+        accounts: new Set()
       })
     }
 
@@ -197,58 +194,70 @@ const repositories = computed(() => {
 
       accountIds.forEach(accountId => {
         repo.accounts.add(accountId)
-        // Note: We can't get individual account status from timeline data
-        // This would need to be enriched from account_plans table
       })
     }
   })
 
-  // Convert to array and calculate account-level metrics
-  // Since we don't have account-level status in timeline data, we estimate based on pipeline status
+  // Compute pipeline-level success rates from actual timeline data per repository
   return Array.from(repoMap.values()).map(repo => {
     const totalAccounts = repo.accounts.size
-    // For now, use pipeline-level status as a proxy
-    // In a real implementation, we'd need to join with account_plans data
-    const successfulAccounts = totalAccounts > 0 ? Math.round(totalAccounts * 0.8) : 0 // Placeholder
-    const failedAccounts = totalAccounts > 0 ? totalAccounts - successfulAccounts : 0
+
+    // Count pipeline runs by status for this repo
+    const repoRuns = props.timelineData.filter(run =>
+      (run.repository?.project || 'unknown') === repo.repository
+    )
+    const successfulRuns = repoRuns.filter(r => r.status === 'success').length
+    const failedRuns = repoRuns.filter(r => r.status === 'failure' || r.status === 'partial_failure').length
+    const pipelineSuccessRate = repo.totalRuns > 0
+      ? Math.round((successfulRuns / repo.totalRuns) * 100)
+      : 0
 
     return {
       ...repo,
       totalAccounts,
-      successfulAccounts,
-      failedAccounts,
-      pendingAccounts: 0,
-      accountSuccessRate: totalAccounts > 0
-        ? Math.round((successfulAccounts / totalAccounts) * 100)
-        : 0
+      successfulRuns,
+      failedRuns,
+      pipelineSuccessRate
     }
   }).sort((a, b) => b.totalRuns - a.totalRuns) // Sort by total runs descending
 })
 
-// Filter repositories based on search query
+// Filter repositories based on search query (no longer hard-limited to 20)
 const filteredRepositories = computed(() => {
   if (!searchQuery.value) {
-    return repositories.value.slice(0, 20) // Limit to top 20
+    return repositories.value
   }
 
   const query = searchQuery.value.toLowerCase()
   return repositories.value
     .filter(repo => repo.repository.toLowerCase().includes(query))
-    .slice(0, 20)
 })
 
-// Create accordion items from repositories
+// Pagination
+const repoPage = ref(1)
+const repoPageSize = 20
+
+const paginatedRepositories = computed(() => {
+  const start = (repoPage.value - 1) * repoPageSize
+  return filteredRepositories.value.slice(start, start + repoPageSize)
+})
+
+// Reset page when search changes
+watch(searchQuery, () => {
+  repoPage.value = 1
+})
+
+// Create accordion items from paginated repositories
 const accordionItems = computed(() => {
-  return filteredRepositories.value.map(repo => ({
+  return paginatedRepositories.value.map(repo => ({
     label: repo.repository,
     repository: repo.repository, // Project name for URLs
     fullPath: repo.fullPath, // Full path for display
     totalRuns: repo.totalRuns,
     totalAccounts: repo.totalAccounts,
-    successfulAccounts: repo.successfulAccounts,
-    failedAccounts: repo.failedAccounts,
-    pendingAccounts: repo.pendingAccounts,
-    accountSuccessRate: repo.accountSuccessRate,
+    successfulRuns: repo.successfulRuns,
+    failedRuns: repo.failedRuns,
+    pipelineSuccessRate: repo.pipelineSuccessRate,
     lastRun: repo.lastRun,
     projectUrl: repo.projectUrl,
     slot: 'item',

@@ -177,7 +177,9 @@ export default defineNuxtConfig({
         exposeAccessToken: true,
       },
     },
-    middleware: {},
+    middleware: {
+      globalMiddlewareEnabled: false,
+    },
     session: {
       // Disable expiration check when using devMode (dev tokens don't expire)
       expirationCheck: process.env.DEV_AUTH_ENABLED !== 'true',

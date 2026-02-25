@@ -3,9 +3,20 @@
     <template #header>
       <div class="flex justify-between items-center">
         <div class="text-lg font-semibold">Resource Changes</div>
-        <UBadge color="blue" variant="soft" size="sm">
-          Top 10
-        </UBadge>
+        <div class="flex items-center gap-2">
+          <UBadge color="blue" variant="soft" size="sm">
+            Top 10
+          </UBadge>
+          <UButton
+            v-if="resourceBreakdown.length > 10"
+            size="xs"
+            :color="showAllTable ? 'primary' : 'gray'"
+            variant="ghost"
+            @click="showAllTable = !showAllTable"
+          >
+            {{ showAllTable ? 'Hide Table' : 'View All' }}
+          </UButton>
+        </div>
       </div>
     </template>
 
@@ -33,6 +44,34 @@
         <div>
           <div class="text-gray-400 text-sm">Destroyed</div>
           <div class="text-red-400 text-lg font-semibold">{{ destroyCount }}</div>
+        </div>
+      </div>
+
+      <!-- Expandable full table -->
+      <div v-if="showAllTable" class="border-t border-gray-700 mt-4 pt-4">
+        <UTable
+          :rows="paginatedTableRows"
+          :columns="tableColumns"
+        >
+          <template #action-data="{ row }">
+            <UBadge
+              :color="getActionColor(row.action)"
+              variant="soft"
+              size="xs"
+            >
+              {{ row.action }}
+            </UBadge>
+          </template>
+        </UTable>
+        <div v-if="allTableRows.length > tablePageSize" class="flex justify-between items-center mt-3">
+          <div class="text-sm text-gray-400">
+            Showing {{ tableStart }}-{{ tableEnd }} of {{ allTableRows.length }} resources
+          </div>
+          <UPagination
+            v-model="tablePage"
+            :page-count="tablePageSize"
+            :total="allTableRows.length"
+          />
         </div>
       </div>
     </div>
@@ -69,6 +108,49 @@ const props = defineProps<{
   resourceBreakdown: ResourceChange[]
   loading: boolean
 }>()
+
+// Expandable table state
+const showAllTable = ref(false)
+const tablePage = ref(1)
+const tablePageSize = 20
+
+const tableColumns = [
+  { key: 'resourceAddress', label: 'Resource Address' },
+  { key: 'resourceType', label: 'Type' },
+  { key: 'action', label: 'Action' },
+  { key: 'count', label: 'Count', sortable: true }
+]
+
+const allTableRows = computed(() => {
+  // Group by resource address (same logic as chart but no slice)
+  const resourceMap = new Map<string, { resourceAddress: string, resourceType: string, action: string, count: number }>()
+  props.resourceBreakdown.forEach(r => {
+    const key = `${r.resourceAddress}:${r.action}`
+    const existing = resourceMap.get(key)
+    if (existing) {
+      existing.count += r.count
+    } else {
+      resourceMap.set(key, { resourceAddress: r.resourceAddress, resourceType: r.resourceType, action: r.action, count: r.count })
+    }
+  })
+  return Array.from(resourceMap.values()).sort((a, b) => b.count - a.count)
+})
+
+const paginatedTableRows = computed(() => {
+  const start = (tablePage.value - 1) * tablePageSize
+  return allTableRows.value.slice(start, start + tablePageSize)
+})
+
+const tableStart = computed(() => allTableRows.value.length === 0 ? 0 : (tablePage.value - 1) * tablePageSize + 1)
+const tableEnd = computed(() => Math.min(tablePage.value * tablePageSize, allTableRows.value.length))
+
+function getActionColor(action: string): string {
+  if (action === 'create') return 'green'
+  if (action === 'update') return 'blue'
+  if (action === 'destroy') return 'red'
+  if (action === 'replace') return 'yellow'
+  return 'gray'
+}
 
 // Group by action
 const createCount = computed(() =>
