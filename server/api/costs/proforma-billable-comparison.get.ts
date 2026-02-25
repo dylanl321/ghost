@@ -8,8 +8,8 @@
  * - lob: string (optional) - Filter by Line of Business
  * - department: string (optional) - Filter by Department
  * - includeDecommissioned: boolean (default: false)
- * - historicalYear: number (default: 2025)
- * - forecastYear: number (default: 2026)
+ * - historicalYear: number (default: current year - 1)
+ * - forecastYear: number (default: current year)
  * - environment: 'commercial' | 'govcloud' (default: 'commercial')
  */
 
@@ -70,8 +70,9 @@ export default defineEventHandler(handleAsync(async (event) => {
   const lob = query.lob as string
   const department = query.department as string
   const includeDecommissioned = query.includeDecommissioned === 'true'
-  const historicalYear = parseInt(query.historicalYear as string) || 2025
-  const forecastYear = parseInt(query.forecastYear as string) || 2026
+  const currentYear = new Date().getFullYear()
+  const historicalYear = parseInt(query.historicalYear as string) || currentYear - 1
+  const forecastYear = parseInt(query.forecastYear as string) || currentYear
   const environment = (query.environment as 'commercial' | 'govcloud') || 'commercial'
 
   logger.info('[ProformaComparison] Starting comparison fetch', {
@@ -150,7 +151,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       granularity: 'MONTHLY',
       metrics: ['UnblendedCost'],
       groupBy: [{ type: 'DIMENSION', key: 'LINKED_ACCOUNT' }]
-    }, environment)
+    })
 
     billableHistoricalData = historicalCosts.billable.costs
     proformaHistoricalData = historicalCosts.proforma.costs
@@ -360,12 +361,12 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   // Calculate organization totals
   const totals = {
-    billable2025: accountComparisons.reduce((sum, acc) => sum + acc.historical.billable.yearTotal, 0),
-    proforma2025: accountComparisons.reduce((sum, acc) => sum + acc.historical.proforma.yearTotal, 0),
-    savings2025: accountComparisons.reduce((sum, acc) => sum + acc.historical.savings.yearTotal, 0),
-    billable2026: accountComparisons.reduce((sum, acc) => sum + acc.forecast.billable.yearTotal, 0),
-    proforma2026: accountComparisons.reduce((sum, acc) => sum + acc.forecast.proforma.yearTotal, 0),
-    savings2026: accountComparisons.reduce((sum, acc) => sum + acc.forecast.savings.yearTotal, 0)
+    [`billable${historicalYear}`]: accountComparisons.reduce((sum, acc) => sum + acc.historical.billable.yearTotal, 0),
+    [`proforma${historicalYear}`]: accountComparisons.reduce((sum, acc) => sum + acc.historical.proforma.yearTotal, 0),
+    [`savings${historicalYear}`]: accountComparisons.reduce((sum, acc) => sum + acc.historical.savings.yearTotal, 0),
+    [`billable${forecastYear}`]: accountComparisons.reduce((sum, acc) => sum + acc.forecast.billable.yearTotal, 0),
+    [`proforma${forecastYear}`]: accountComparisons.reduce((sum, acc) => sum + acc.forecast.proforma.yearTotal, 0),
+    [`savings${forecastYear}`]: accountComparisons.reduce((sum, acc) => sum + acc.forecast.savings.yearTotal, 0)
   }
 
   const duration = Date.now() - startTime

@@ -187,7 +187,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     return sendSuccess(event, mockData)
   } catch (error: any) {
     logger.error('[Combined Forecasts API] Error fetching combined data:', error)
-    return errors.internalServerError(event, 'Failed to fetch combined forecast data')
+    return errors.serverError(event, 'Failed to fetch combined forecast data')
   }
 }))
 

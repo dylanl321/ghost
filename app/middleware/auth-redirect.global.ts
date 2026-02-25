@@ -57,7 +57,7 @@ if (import.meta.client) {
   }
 }
 
-export default defineNuxtRouteMiddleware((to, from) => {
+export default defineNuxtRouteMiddleware(async (to, from) => {
   // Skip on server-side rendering
   if (import.meta.server) return
 
@@ -68,7 +68,7 @@ export default defineNuxtRouteMiddleware((to, from) => {
   if (to.path.startsWith('/chat/shared/')) return
   if (to.path.startsWith('/s/')) return
 
-  const { user, loggedIn } = useOidcAuth()
+  const { user, loggedIn, login } = useOidcAuth()
 
   // Check if authentication is required (devMode handled by nuxt-oidc-auth)
   const needsAuth = !loggedIn.value
@@ -81,10 +81,10 @@ export default defineNuxtRouteMiddleware((to, from) => {
     const { saveReturnUrl } = useAuthRedirect()
     saveReturnUrl(to.fullPath)
 
-    // Let OIDC's middleware handle the actual redirect to Entra (or dev login)
-    // It will redirect to the configured callbackRedirectUrl after auth
-    console.log('[GHOST-AUTH] Middleware: Aborting navigation, letting OIDC handle redirect')
-    return abortNavigation()
+    // Trigger OIDC login directly (global OIDC middleware is disabled so we control ordering)
+    console.log('[GHOST-AUTH] Middleware: Triggering login redirect')
+    await login()
+    return
   }
 
   // Skip JWT expiration check for dev provider (dev tokens don't have real exp)
@@ -109,7 +109,8 @@ export default defineNuxtRouteMiddleware((to, from) => {
           console.log('[GHOST-AUTH] Middleware: Token expired, redirecting to auth')
           const { saveReturnUrl } = useAuthRedirect()
           saveReturnUrl(to.fullPath)
-          return abortNavigation()
+          await login()
+          return
         }
       } catch (error) {
         console.warn('Could not parse token for expiration check:', error)

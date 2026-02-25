@@ -115,13 +115,7 @@ const hasSummary = computed(() => {
 onMounted(async () => {
   loading.value = true
   try {
-    // TODO: Replace with actual API call
-    // const { data } = await $fetch('/api/security-hub/summary', {
-    //   query: { accountId: props.accountId }
-    // })
-    // summary.value = data
-
-    // Placeholder data for demonstration
+    // TODO: Replace with actual API call to /api/security-hub/summary
     await new Promise(resolve => setTimeout(resolve, 500))
     summary.value = {
       critical: 5,

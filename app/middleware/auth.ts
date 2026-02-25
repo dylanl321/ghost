@@ -3,11 +3,11 @@
  * Use this middleware on pages that require authentication
  */
 
-export default defineNuxtRouteMiddleware((to, from) => {
+export default defineNuxtRouteMiddleware(async (to, from) => {
   // Skip on server-side rendering
   if (process.server) return
 
-  const { user, loggedIn } = useOidcAuth()
+  const { user, loggedIn, login } = useOidcAuth()
   const { isBypassEnabled } = useDevAuth()
 
   // Allow bypass in development
@@ -22,7 +22,8 @@ export default defineNuxtRouteMiddleware((to, from) => {
     const { saveReturnUrl } = useAuthRedirect()
     saveReturnUrl(to.fullPath)
 
-    return abortNavigation()
+    await login()
+    return
   }
 
   // Additional validation for token freshness
@@ -33,7 +34,8 @@ export default defineNuxtRouteMiddleware((to, from) => {
     const { saveReturnUrl } = useAuthRedirect()
     saveReturnUrl(to.fullPath)
 
-    return abortNavigation()
+    await login()
+    return
   }
 
   // Validate essential user claims
@@ -44,6 +46,7 @@ export default defineNuxtRouteMiddleware((to, from) => {
     const { saveReturnUrl } = useAuthRedirect()
     saveReturnUrl(to.fullPath)
 
-    return abortNavigation()
+    await login()
+    return
   }
 })

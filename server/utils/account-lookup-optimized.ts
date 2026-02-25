@@ -41,11 +41,12 @@ export interface AccountLookupOptions {
   includeDecommissioned?: boolean
   requireActive?: boolean
   requireSpecificEnvironment?: 'commercial' | 'govcloud'
+  explicitType?: string  // 'pep' to force PEP External Enclave ID lookup
 }
 
 export interface OptimizedLookupResult {
   account: any // Use the existing account type structure
-  identifierType: 'accountId' | 'govId' | 'requestId' | 'email'
+  identifierType: 'accountId' | 'govId' | 'requestId' | 'email' | 'pepId'
   matchedValue: string
   source: 'dynamodb' | 'organizations' | 'both'
 }
@@ -343,6 +344,100 @@ async function getAccountByRequestId(
 }
 
 /**
+ * Get account by PEP External Enclave ID (requires scan)
+ */
+async function getAccountByPepId(
+  pepId: string
+): Promise<any | null> {
+  try {
+    const tableName = await getAccountsTableName()
+    const pepIdNumber = parseInt(pepId)
+
+    const { scanItems } = await import('./dynamodb')
+    const scanResult = await scanItems(
+      tableName,
+      undefined,
+      undefined,
+      undefined,
+      'govcloud'
+    )
+
+    // Find account by pepExternalEnclaveID (compare as both number and string)
+    const account = scanResult.items.find(item =>
+      item.pepExternalEnclaveID === pepIdNumber ||
+      item.pepExternalEnclaveID === pepId
+    )
+
+    if (account) {
+      const normalizedAccount = {
+        ...account,
+        requestId: account.requestID,
+        accountId: account.awsStandardAccountID,
+        govCloudAccountId: account.awsGovCloudAccountID,
+        email: account.awsAccountEmail,
+        name: account.projectName,
+        source: 'dynamodb'
+      }
+
+      normalizedAccount.accountId = account.awsStandardAccountID
+      normalizedAccount.govCloudAccountId = account.awsGovCloudAccountID
+      normalizedAccount.email = account.awsAccountEmail
+      normalizedAccount.name = account.projectName
+
+      const commercialAccountId = account.awsStandardAccountID
+      const govCloudAccountId = account.awsGovCloudAccountID
+
+      if (govCloudAccountId) {
+        try {
+          const orgAccount = await getAccountFromOrganizations(govCloudAccountId, 'govcloud')
+          if (orgAccount) {
+            const enrichedAccount = {
+              ...normalizedAccount,
+              ...orgAccount,
+              source: 'both'
+            }
+            enrichedAccount.accountId = account.awsStandardAccountID
+            enrichedAccount.govCloudAccountId = account.awsGovCloudAccountID
+            enrichedAccount.email = account.awsAccountEmail
+            enrichedAccount.name = account.projectName
+            return enrichedAccount
+          }
+        } catch (error) {
+          logger.warn(`Failed to get Organizations data for govcloud ${govCloudAccountId}:`, error)
+        }
+      }
+
+      if (commercialAccountId) {
+        try {
+          const orgAccount = await getAccountFromOrganizations(commercialAccountId, 'commercial')
+          if (orgAccount) {
+            const enrichedAccount = {
+              ...normalizedAccount,
+              ...orgAccount,
+              source: 'both'
+            }
+            enrichedAccount.accountId = account.awsStandardAccountID
+            enrichedAccount.govCloudAccountId = account.awsGovCloudAccountID
+            enrichedAccount.email = account.awsAccountEmail
+            enrichedAccount.name = account.projectName
+            return enrichedAccount
+          }
+        } catch (error) {
+          logger.warn(`Failed to get Organizations data for commercial ${commercialAccountId}:`, error)
+        }
+      }
+
+      return normalizedAccount
+    }
+
+    return null
+  } catch (error) {
+    logger.error(`Error looking up account by pepId ${pepId}:`, error)
+    return null
+  }
+}
+
+/**
  * Determine identifier type and format
  */
 function determineIdentifierType(identifier: string): 'accountId' | 'requestId' | 'email' | 'unknown' {
@@ -373,22 +468,44 @@ export async function findAccountByIdentifierOptimized(
   if (!identifier || identifier.trim() === '') {
     return null
   }
-  
+
   const cleanIdentifier = identifier.trim()
+
+  const {
+    includeDecommissioned = false,
+    requireActive = false,
+    explicitType
+  } = options
+
+  // If explicitType is set, use that directly instead of auto-detecting
+  if (explicitType === 'pep') {
+    try {
+      const account = await getAccountByPepId(cleanIdentifier)
+      if (account) {
+        if (requireActive && account.status !== 'ACTIVE') return null
+        if (!includeDecommissioned && account.enclaveStatus === 'Decommissioned') return null
+        return {
+          account,
+          identifierType: 'pepId' as const,
+          matchedValue: cleanIdentifier,
+          source: account.source || 'dynamodb'
+        }
+      }
+    } catch (error) {
+      logger.warn(`Error searching for PEP ID ${cleanIdentifier}:`, error)
+    }
+    return null
+  }
+
   const identifierType = determineIdentifierType(cleanIdentifier)
-  
+
   if (identifierType === 'unknown') {
     return null
   }
-  
-  const {
-    includeDecommissioned = false,
-    requireActive = false
-  } = options
-  
+
   // Try to find account using the most efficient method
   let account: any = null
-  
+
   // Always use govcloud environment
   try {
     switch (identifierType) {
@@ -402,17 +519,17 @@ export async function findAccountByIdentifierOptimized(
         account = await getAccountByRequestId(cleanIdentifier)
         break
     }
-      
+
     if (account) {
       // Apply filters
       if (requireActive && account.status !== 'ACTIVE') {
         return null
       }
-      
+
       if (!includeDecommissioned && account.enclaveStatus === 'Decommissioned') {
         return null
       }
-      
+
       // Found valid account
       return {
         account,
@@ -424,7 +541,7 @@ export async function findAccountByIdentifierOptimized(
   } catch (error) {
     logger.warn(`Error searching govcloud for ${identifierType} ${cleanIdentifier}:`, error)
   }
-  
+
   return null
 }
 
@@ -444,18 +561,22 @@ export async function lookupAccountOptimized(
   }
   
   const cleanIdentifier = identifier.trim()
-  const identifierType = determineIdentifierType(cleanIdentifier)
-  
-  if (identifierType === 'unknown') {
-    throw errors.badRequest(event, 
-      'Invalid identifier format. Must be: 12-digit account ID, numeric request ID, or email address'
-    )
+
+  // When explicitType is set (e.g. 'pep'), skip auto-detection validation
+  if (!options.explicitType) {
+    const identifierType = determineIdentifierType(cleanIdentifier)
+
+    if (identifierType === 'unknown') {
+      throw errors.badRequest(event,
+        'Invalid identifier format. Must be: 12-digit account ID, numeric request ID, PEP External Enclave ID (with type=pep), or email address'
+      )
+    }
+
+    if (identifierType === 'accountId' && !/^\d{12}$/.test(cleanIdentifier)) {
+      throw errors.badRequest(event, 'Account ID must be exactly 12 digits')
+    }
   }
-  
-  if (identifierType === 'accountId' && !/^\d{12}$/.test(cleanIdentifier)) {
-    throw errors.badRequest(event, 'Account ID must be exactly 12 digits')
-  }
-  
+
   // Find the account using optimized lookup
   const result = await findAccountByIdentifierOptimized(cleanIdentifier, options)
   

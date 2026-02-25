@@ -592,7 +592,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, onActivated, onDeactivated, watch, nextTick } from 'vue'
 import { useAccountCosts } from '~/composables/useAccountCosts'
 import { useD3TreeChart } from '~/composables/useD3TreeChart'
 import type { TreeNode } from '~/composables/useD3TreeChart'
@@ -1425,17 +1425,25 @@ onMounted(() => {
   loadData()
 })
 
-// Cleanup
-onUnmounted(() => {
-  // Remove escape key listener if still attached
+// Cleanup shared between deactivation (KeepAlive) and unmount (LRU eviction)
+const performCleanup = () => {
   document.removeEventListener('keydown', handleEscapeKey)
-  
-  // Cleanup D3 chart resources
   cleanup()
-  
-  // Reset fullscreen if still active
   if (isChartFullscreen.value) {
     isChartFullscreen.value = false
+  }
+}
+
+onDeactivated(performCleanup)
+onUnmounted(performCleanup)
+
+// Re-render chart when returning via KeepAlive
+onActivated(() => {
+  if (treeData.value) {
+    nextTick(() => {
+      drawChart(treeData.value!)
+      applyFiltersAndRedraw()
+    })
   }
 })
 </script>

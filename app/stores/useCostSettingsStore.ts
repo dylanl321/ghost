@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import type { CostFilterSettings } from '~/composables/useCostFilters'
+import type { CostFilterSettings } from '~/utils/cost-filters'
 
 export const useCostSettingsStore = defineStore('costSettings', {
   state: (): CostFilterSettings => ({

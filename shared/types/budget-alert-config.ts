@@ -3,7 +3,7 @@
  *
  * Types for the budget-alert-config DynamoDB table that stores
  * alert system configuration. Models the configuration schema
- * documented in alert_guide.md.
+ * documented in docs/alert_guide.md.
  *
  * Table Structure:
  * - Partition Key: config_scope (GLOBAL or AWS account ID)

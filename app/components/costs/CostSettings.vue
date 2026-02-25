@@ -199,7 +199,6 @@
 import ForecastUpload from './ForecastUpload.vue'
 
 const costSettingsStore = useCostSettingsStore()
-const { formatCurrency } = useCostFilters()
 const { can } = useUserRoles()
 
 // State

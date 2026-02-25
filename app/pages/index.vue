@@ -1,107 +1,72 @@
 <template>
   <div class="space-y-6 p-6">
-    <!-- Enhanced Welcome Card -->
-    <UCard class="overflow-hidden relative border-gray-200 dark:border-gray-800">
-      <!-- Gradient Background -->
-      <div class="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-purple-500/5 to-transparent pointer-events-none" />
-
-      <template #header>
-        <div class="relative z-10">
-          <div class="flex items-start justify-between">
-            <div class="flex-1">
-              <ClientOnly>
-                <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">{{ currentGreeting }}</p>
-                <template #fallback>
-                  <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">Hello</p>
-                </template>
-              </ClientOnly>
-              <h1 class="text-3xl font-bold mb-2 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                {{ user?.claims?.given_name || 'User' }}
-              </h1>
-              <ClientOnly>
-                <p class="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                  <UIcon name="i-heroicons-calendar" class="w-4 h-4" />
-                  {{ currentDate }}
-                </p>
-                <template #fallback>
-                  <p class="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                    <UIcon name="i-heroicons-calendar" class="w-4 h-4" />
-                    Loading...
-                  </p>
-                </template>
-              </ClientOnly>
-            </div>
-
-            <!-- Quick Stats Summary - User's Personal Stats -->
-            <ClientOnly>
-              <div v-if="userAccountCount > 0" class="flex items-center gap-3">
-                <div class="text-right">
-                  <p class="text-xs text-gray-500 uppercase tracking-wide">My Accounts</p>
-                    <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ userAccountCount }}</p>
-                </div>
-                  <div class="w-px h-12 bg-gray-200 dark:bg-gray-700"></div>
-                <div class="text-right">
-                  <p class="text-xs text-gray-500 uppercase tracking-wide">My MTD Cost</p>
-                    <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ formatCurrency(userTotalCost, 0) }}</p>
-                </div>
-              </div>
-              <!-- Fallback to org stats if user has no accounts -->
-              <div v-else class="flex items-center gap-3">
-                <div class="text-right">
-                  <p class="text-xs text-gray-500 uppercase tracking-wide">Org Accounts</p>
-                    <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ activeAccounts }}</p>
-                </div>
-                  <div class="w-px h-12 bg-gray-200 dark:bg-gray-700"></div>
-                <div class="text-right">
-                  <p class="text-xs text-gray-500 uppercase tracking-wide">Org MTD</p>
-                    <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ formatCurrency(mtdTotal, 0) }}</p>
-                </div>
-              </div>
-              <template #fallback>
-                <div class="flex items-center gap-3">
-                  <div class="text-right">
-                    <p class="text-xs text-gray-500 uppercase tracking-wide">Loading...</p>
-                    <p class="text-2xl font-bold text-gray-900 dark:text-white">--</p>
-                  </div>
-                </div>
-              </template>
-            </ClientOnly>
-          </div>
-
-          <!-- Quick Actions -->
-          <div class="flex items-center gap-2 mt-4 pt-4 border-t border-gray-200 dark:border-gray-800">
-            <NuxtLink to="/account/explorer">
-              <UButton icon="i-heroicons-magnifying-glass" size="sm" variant="soft" color="blue">
-                Search Accounts
-              </UButton>
-            </NuxtLink>
-            <NuxtLink to="/account/costs">
-              <UButton icon="i-heroicons-chart-bar" size="sm" variant="soft" color="purple">
-                Cost Reports
-              </UButton>
-            </NuxtLink>
-            <NuxtLink to="/account/user">
-              <UButton icon="i-heroicons-users" size="sm" variant="soft" color="emerald">
-                User Access
-              </UButton>
-            </NuxtLink>
-            <NuxtLink to="/support/docs">
-              <UButton icon="i-heroicons-book-open" size="sm" variant="ghost">
-                Support
-              </UButton>
-            </NuxtLink>
-
-            <!-- FUTURE: Notifications Bell (when notification system is implemented)
-            <div class="ml-auto">
-              <UButton icon="i-heroicons-bell" size="sm" variant="ghost">
-                <UBadge color="red" size="xs" class="absolute -top-1 -right-1">3</UBadge>
-              </UButton>
-            </div>
-            -->
-          </div>
+    <!-- Welcome Header Card -->
+    <div class="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <ClientOnly>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-0.5">{{ currentGreeting }}</p>
+            <template #fallback>
+              <p class="text-sm text-gray-500 dark:text-gray-400 mb-0.5">Hello</p>
+            </template>
+          </ClientOnly>
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+            {{ user?.claims?.given_name || 'User' }}
+          </h1>
         </div>
-      </template>
-    </UCard>
+
+        <!-- Personal summary stats -->
+        <ClientOnly>
+          <div class="flex items-center gap-5">
+            <div v-if="userAccountCount > 0" class="text-right">
+              <p class="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider">My Accounts</p>
+              <p class="text-xl font-bold text-gray-900 dark:text-white">{{ userAccountCount }}</p>
+            </div>
+            <div v-if="userAccountCount > 0" class="w-px h-10 bg-gray-200 dark:bg-gray-700" />
+            <div class="text-right">
+              <p class="text-[11px] text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                {{ userAccountCount > 0 ? 'My MTD Cost' : 'Org MTD Cost' }}
+              </p>
+              <p class="text-xl font-bold text-gray-900 dark:text-white">
+                {{ formatCurrency(userAccountCount > 0 ? userTotalCost : mtdTotal, 0) }}
+              </p>
+            </div>
+          </div>
+          <template #fallback>
+            <div class="flex items-center gap-5">
+              <div class="text-right animate-pulse">
+                <div class="h-3 w-16 bg-gray-200 dark:bg-gray-700 rounded mb-1.5 ml-auto" />
+                <div class="h-6 w-24 bg-gray-200 dark:bg-gray-700 rounded ml-auto" />
+              </div>
+            </div>
+          </template>
+        </ClientOnly>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="flex items-center gap-2 pt-3 border-t border-gray-100 dark:border-gray-800">
+        <NuxtLink to="/account/explorer">
+          <UButton icon="i-heroicons-magnifying-glass" size="sm" variant="soft" color="blue">
+            Search Accounts
+          </UButton>
+        </NuxtLink>
+        <NuxtLink to="/account/costs">
+          <UButton icon="i-heroicons-chart-bar" size="sm" variant="soft" color="purple">
+            Cost Reports
+          </UButton>
+        </NuxtLink>
+        <NuxtLink to="/account/user">
+          <UButton icon="i-heroicons-users" size="sm" variant="soft" color="emerald">
+            User Access
+          </UButton>
+        </NuxtLink>
+        <NuxtLink to="/support/docs">
+          <UButton icon="i-heroicons-book-open" size="sm" variant="ghost">
+            Support
+          </UButton>
+        </NuxtLink>
+      </div>
+    </div>
 
     <!-- Error Alert -->
     <UAlert v-if="fetchError" color="red" icon="i-heroicons-exclamation-triangle" variant="soft">
@@ -117,251 +82,260 @@
     <!-- Quick Start Card for New Users -->
     <QuickStartCard />
 
-    <!-- FUTURE: Recent Activity Feed
-         When implementing notifications/activity tracking:
-         1. Create a new component: ActivityFeed.vue
-         2. Display recent events like:
-            - New accounts created
-            - Budget threshold alerts
-            - Cost anomaly detections
-            - Account status changes
-         3. Store events in DynamoDB with timestamp, type, severity
-         4. Add API endpoint: /api/activity/recent.get.ts
-         5. Show max 5 items with "View All" link to dedicated activity page
-         6. Color code by severity (info=blue, warning=yellow, critical=red)
-    -->
-
-
-    <!-- Metric Displays -->
+    <!-- Metric Cards -->
     <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-
       <!-- Month to Date -->
-      <UCard class="relative overflow-hidden p-2 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 border-l-4 border-blue-500">
-        <div class="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent pointer-events-none" />
-        <div class="relative z-10">
-          <div class="flex justify-between">
-            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Month to Date Cost</p>
-            <UTooltip v-if="monthToDateTrend !== null" text="Comparison to same days last month">
-              <div :class="`flex gap-1 items-center ${monthToDateTrend > 0 ? 'text-red-500' : 'text-green-500'}`">
-                <UIcon
-                  :name="`${monthToDateTrend > 0 ? 'i-heroicons-arrow-trending-up' : 'i-heroicons-arrow-trending-down'}`"
-                  class="w-5 h-5" />
-                <p>{{ formatNumber(monthToDateTrend, 1) }}%</p>
-              </div>
+      <div class="relative rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 overflow-hidden">
+        <div class="absolute top-0 left-0 w-1 h-full bg-blue-500" />
+        <template v-if="loading">
+          <div class="animate-pulse space-y-2">
+            <div class="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
+            <div class="h-6 w-20 bg-gray-200 dark:bg-gray-700 rounded" />
+            <div class="h-1.5 w-full bg-gray-200 dark:bg-gray-700 rounded-full" />
+          </div>
+        </template>
+        <template v-else>
+          <div class="flex justify-between items-start mb-1">
+            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Month to Date</p>
+            <UTooltip v-if="monthToDateTrend !== null" text="vs same period last month">
+              <span class="text-xs font-semibold" :class="monthToDateTrend > 0 ? 'text-red-500' : 'text-green-500'">
+                {{ monthToDateTrend > 0 ? '+' : '' }}{{ formatNumber(monthToDateTrend, 1) }}%
+              </span>
             </UTooltip>
           </div>
-
-          <p class="text-lg font-semibold mb-2 text-gray-900 dark:text-white">
-            {{ formatCurrency(mtdTotal, 0) }}
-          </p>
-
-          <!-- Progress bar for month elapsed -->
+          <p class="text-xl font-bold text-gray-900 dark:text-white mb-2">{{ formatCurrency(mtdTotal, 0) }}</p>
           <ClientOnly>
             <div class="space-y-1">
-              <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
-                <div
-                  class="bg-blue-500 h-1.5 rounded-full transition-all"
-                  :style="{ width: `${monthProgressPercent}%` }"
-                />
+              <div class="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-1.5">
+                <div class="bg-blue-500 h-1.5 rounded-full transition-all duration-500" :style="{ width: `${monthProgressPercent}%` }" />
               </div>
-              <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+              <div class="flex justify-between text-[10px] text-gray-400 dark:text-gray-500">
                 <span>Day {{ currentDayOfMonth }}</span>
                 <span>{{ monthProgressPercent }}% of month</span>
               </div>
             </div>
           </ClientOnly>
-        </div>
-      </UCard>
+        </template>
+      </div>
 
-      <!-- Projected Spend -->
-      <UCard :class="`relative overflow-hidden p-2 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 border-l-4 ${
-        projectedSpend > budgetHealth.totalBudget && budgetHealth.totalBudget > 0 ? 'border-red-500' :
-        projectedSpend > budgetHealth.totalBudget * 0.9 && budgetHealth.totalBudget > 0 ? 'border-yellow-500' :
-        'border-purple-500'
-      }`">
-        <div class="absolute inset-0 bg-gradient-to-br from-purple-500/10 via-purple-500/5 to-transparent pointer-events-none" />
-        <div class="relative z-10">
-          <div class="flex justify-between">
+      <!-- Forecasted Cost -->
+      <div class="relative rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 overflow-hidden">
+        <div class="absolute top-0 left-0 w-1 h-full" :class="
+          projectedSpend > budgetHealth.totalBudget && budgetHealth.totalBudget > 0 ? 'bg-red-500' :
+          projectedSpend > budgetHealth.totalBudget * 0.9 && budgetHealth.totalBudget > 0 ? 'bg-yellow-500' :
+          'bg-purple-500'" />
+        <template v-if="loading">
+          <div class="animate-pulse space-y-2">
+            <div class="h-3 w-28 bg-gray-200 dark:bg-gray-700 rounded" />
+            <div class="h-6 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
+            <div class="h-3 w-32 bg-gray-200 dark:bg-gray-700 rounded" />
+          </div>
+        </template>
+        <template v-else>
+          <div class="flex justify-between items-start mb-1">
             <UTooltip text="AWS Cost Explorer ML forecast">
-              <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Forecasted Cost</p>
+              <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Forecast</p>
             </UTooltip>
-            <UTooltip v-if="projectedSpend !== 0 && projectedSpendTrend !== null" text="Comparison to previous month spend">
-              <div
-                :class="`flex gap-1 items-center ${projectedSpendTrend > 0 ? 'text-red-500' : 'text-green-500'}`">
-                <UIcon
-                  :name="`${projectedSpendTrend > 0 ? 'i-heroicons-arrow-trending-up' : 'i-heroicons-arrow-trending-down'}`"
-                  class="w-5 h-5" />
-                <p>{{ formatNumber(projectedSpendTrend, 1) }}%</p>
-              </div>
+            <UTooltip v-if="projectedSpend !== 0 && projectedSpendTrend !== null" text="vs last month total">
+              <span class="text-xs font-semibold" :class="projectedSpendTrend > 0 ? 'text-red-500' : 'text-green-500'">
+                {{ projectedSpendTrend > 0 ? '+' : '' }}{{ formatNumber(projectedSpendTrend, 1) }}%
+              </span>
             </UTooltip>
           </div>
-
-          <p v-if="projectedSpend !== 0" class="text-lg font-semibold mb-2 text-gray-900 dark:text-white">
+          <p v-if="projectedSpend !== 0" class="text-xl font-bold text-gray-900 dark:text-white mb-2">
             {{ formatCurrency(projectedSpend, 0) }}
           </p>
-          <p v-else class="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Not enough data</p>
-
-          <!-- Budget comparison if available -->
-          <div v-if="budgetHealth.totalBudget > 0 && projectedSpend > 0" class="text-xs space-y-0.5">
-            <div class="flex justify-between">
-              <span class="text-gray-600 dark:text-gray-400">vs Budget:</span>
-              <span :class="`font-medium ${projectedSpend > budgetHealth.totalBudget ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`">
+          <p v-else class="text-sm text-gray-400 dark:text-gray-500 mb-2">Not enough data</p>
+          <div v-if="budgetHealth.totalBudget > 0 && projectedSpend > 0" class="space-y-0.5">
+            <div class="flex justify-between text-[10px]">
+              <span class="text-gray-400 dark:text-gray-500">vs Budget</span>
+              <span class="font-medium" :class="projectedSpend > budgetHealth.totalBudget ? 'text-red-500' : 'text-green-500'">
                 {{ projectedSpend > budgetHealth.totalBudget ? '+' : '' }}{{ formatCurrency(projectedSpend - budgetHealth.totalBudget, 0) }}
               </span>
             </div>
-            <div class="flex justify-between">
-              <span class="text-gray-600 dark:text-gray-400">Remaining days:</span>
-              <span class="font-medium text-gray-900 dark:text-white">{{ daysRemainingInMonth }}</span>
+            <div class="flex justify-between text-[10px]">
+              <span class="text-gray-400 dark:text-gray-500">Days left</span>
+              <span class="font-medium text-gray-600 dark:text-gray-300">{{ daysRemainingInMonth }}</span>
             </div>
           </div>
-        </div>
-      </UCard>
+        </template>
+      </div>
 
       <!-- Previous Month -->
-      <UCard class="relative overflow-hidden p-2 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 border-l-4 border-gray-500">
-        <div class="absolute inset-0 bg-gradient-to-br from-slate-500/10 via-slate-500/5 to-transparent pointer-events-none" />
-        <div class="relative z-10">
-          <div class="flex justify-between items-start">
-            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Previous Month</p>
-            <UTooltip text="Full month actual cost">
-              <UIcon name="i-heroicons-calendar-days" class="w-4 h-4 text-gray-500" />
-            </UTooltip>
+      <div class="relative rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 overflow-hidden">
+        <div class="absolute top-0 left-0 w-1 h-full bg-gray-400" />
+        <template v-if="loading">
+          <div class="animate-pulse space-y-2">
+            <div class="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
+            <div class="h-6 w-20 bg-gray-200 dark:bg-gray-700 rounded" />
+            <div class="h-3 w-28 bg-gray-200 dark:bg-gray-700 rounded" />
           </div>
-
-          <p class="text-lg font-semibold mb-2 text-gray-900 dark:text-white">
-            {{ formatCurrency(previousMonthSpend, 0) }}
-          </p>
-
-          <!-- Show difference vs 2 months ago if we're tracking positive -->
-          <div v-if="mtdTotal > 0" class="text-xs space-y-0.5">
-            <div class="flex justify-between text-gray-600 dark:text-gray-400">
-              <span>Avg/day:</span>
-              <span class="font-medium text-gray-900 dark:text-white">{{ formatCurrency(previousMonthSpend / previousMonthDays, 0) }}</span>
+        </template>
+        <template v-else>
+          <div class="flex justify-between items-start mb-1">
+            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Previous Month</p>
+          </div>
+          <p class="text-xl font-bold text-gray-900 dark:text-white mb-2">{{ formatCurrency(previousMonthSpend, 0) }}</p>
+          <div v-if="mtdTotal > 0" class="space-y-0.5">
+            <div class="flex justify-between text-[10px]">
+              <span class="text-gray-400 dark:text-gray-500">Avg/day</span>
+              <span class="font-medium text-gray-600 dark:text-gray-300">{{ formatCurrency(previousMonthSpend / previousMonthDays, 0) }}</span>
             </div>
-            <div v-if="currentPaceVsPrevious !== null" class="flex justify-between text-gray-600 dark:text-gray-400">
-              <span>Current pace:</span>
-              <span :class="`font-medium ${currentPaceVsPrevious > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`">
+            <div v-if="currentPaceVsPrevious !== null" class="flex justify-between text-[10px]">
+              <span class="text-gray-400 dark:text-gray-500">Current pace</span>
+              <span class="font-medium" :class="currentPaceVsPrevious > 0 ? 'text-red-500' : 'text-green-500'">
                 {{ currentPaceVsPrevious > 0 ? '+' : '' }}{{ formatNumber(currentPaceVsPrevious, 1) }}%
               </span>
             </div>
           </div>
-        </div>
-      </UCard>
+        </template>
+      </div>
 
       <!-- Active Accounts -->
-      <UCard class="relative overflow-hidden p-2 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 border-l-4 border-emerald-500">
-        <div class="absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent pointer-events-none" />
-        <div class="relative z-10">
-          <div class="flex justify-between items-start">
-            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Active Accounts</p>
+      <div class="relative rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 overflow-hidden">
+        <div class="absolute top-0 left-0 w-1 h-full bg-emerald-500" />
+        <template v-if="loading">
+          <div class="animate-pulse space-y-2">
+            <div class="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
+            <div class="h-6 w-12 bg-gray-200 dark:bg-gray-700 rounded" />
+            <div class="h-3 w-28 bg-gray-200 dark:bg-gray-700 rounded" />
+          </div>
+        </template>
+        <template v-else>
+          <div class="flex justify-between items-start mb-1">
+            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Active Accounts</p>
             <UTooltip :text="`${budgetHealth.accountsWithBudget} with budgets`">
-              <UBadge color="blue" variant="soft" size="xs">
-                {{ budgetHealth.accountsWithBudget }}
-              </UBadge>
+              <UBadge color="blue" variant="soft" size="xs">{{ budgetHealth.accountsWithBudget }}</UBadge>
             </UTooltip>
           </div>
-
-          <div class="flex items-baseline gap-2 mb-2">
-            <p class="text-lg font-semibold text-gray-900 dark:text-white">
-              {{ activeAccounts }}
-            </p>
-            <UIcon name="i-heroicons-building-office-2" class="w-5 h-5 text-blue-500 dark:text-blue-400" />
+          <p class="text-xl font-bold text-gray-900 dark:text-white mb-2">{{ activeAccounts }}</p>
+          <div v-if="mtdTotal > 0 && activeAccounts > 0" class="flex justify-between text-[10px]">
+            <span class="text-gray-400 dark:text-gray-500">Avg cost/acct</span>
+            <span class="font-medium text-gray-600 dark:text-gray-300">{{ formatCurrency(mtdTotal / activeAccounts, 0) }}</span>
           </div>
-
-          <!-- Cost per account metric -->
-          <div v-if="mtdTotal > 0 && activeAccounts > 0" class="text-xs">
-            <div class="flex justify-between text-gray-600 dark:text-gray-400">
-              <span>Avg cost/account:</span>
-              <span class="font-medium text-gray-900 dark:text-white">{{ formatCurrency(mtdTotal / activeAccounts, 0) }}</span>
-            </div>
-          </div>
-        </div>
-      </UCard>
+        </template>
+      </div>
 
       <!-- Budget Health -->
-      <UCard :class="`relative overflow-hidden p-2 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 border-l-4 ${
-        !hasBudgetData ? 'border-gray-500' :
-        budgetHealth.burnRateVsBudget > 10 ? 'border-red-500' :
-        budgetHealth.burnRateVsBudget > 0 ? 'border-yellow-500' :
-        'border-green-500'
-      }`">
-        <div class="absolute inset-0 bg-gradient-to-br from-emerald-500/8 via-amber-500/5 to-transparent pointer-events-none" />
-        <div class="relative z-10">
-          <div class="flex justify-between items-start mb-2">
-            <UTooltip text="Daily burn rate vs budget (excludes day 1 savings plan charges)">
-              <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Budget Health</p>
+      <div class="relative rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 overflow-hidden">
+        <div class="absolute top-0 left-0 w-1 h-full" :class="
+          !hasBudgetData ? 'bg-gray-400' :
+          budgetHealth.burnRateVsBudget > 10 ? 'bg-red-500' :
+          budgetHealth.burnRateVsBudget > 0 ? 'bg-yellow-500' :
+          'bg-green-500'" />
+        <template v-if="loading">
+          <div class="animate-pulse space-y-2">
+            <div class="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
+            <div class="h-6 w-16 bg-gray-200 dark:bg-gray-700 rounded" />
+            <div class="h-3 w-28 bg-gray-200 dark:bg-gray-700 rounded" />
+          </div>
+        </template>
+        <template v-else>
+          <div class="flex justify-between items-start mb-1">
+            <UTooltip text="Burn rate vs budget (excl. day 1 savings plan)">
+              <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Budget Health</p>
             </UTooltip>
             <UTooltip
               v-if="hasBudgetData && budgetHealth.accountsOverBudget > 0"
-              :text="`${budgetHealth.accountsOverBudget} of ${budgetHealth.accountsWithBudget} accounts over budget`">
-              <UBadge color="red" variant="soft" size="xs">
-                <UIcon name="i-heroicons-exclamation-triangle" class="w-3 h-3 mr-1" />
-                {{ budgetHealth.accountsOverBudget }}
-              </UBadge>
+              :text="`${budgetHealth.accountsOverBudget} of ${budgetHealth.accountsWithBudget} over budget`">
+              <UBadge color="red" variant="soft" size="xs">{{ budgetHealth.accountsOverBudget }} over</UBadge>
             </UTooltip>
           </div>
 
           <template v-if="hasBudgetData">
-            <!-- Burn Rate Comparison -->
-            <div class="flex items-baseline gap-2 mb-1">
-              <p :class="`text-2xl font-bold ${
-                budgetHealth.burnRateVsBudget > 10 ? 'text-red-600 dark:text-red-400' :
-                budgetHealth.burnRateVsBudget > 0 ? 'text-yellow-600 dark:text-yellow-400' :
-                'text-green-600 dark:text-green-400'
-              }`">
-                {{ budgetHealth.burnRateVsBudget > 0 ? '+' : '' }}{{ formatNumber(budgetHealth.burnRateVsBudget, 1) }}%
-              </p>
-              <UIcon
-                :name="`${budgetHealth.burnRateVsBudget > 0 ? 'i-heroicons-arrow-trending-up' : 'i-heroicons-arrow-trending-down'}`"
-                :class="`w-5 h-5 ${budgetHealth.burnRateVsBudget > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`" />
-            </div>
-
-            <!-- Daily Rates -->
-            <div class="text-xs space-y-0.5 mb-2">
-              <div class="flex justify-between text-gray-600 dark:text-gray-400">
-                <span>Actual:</span>
-                <span class="font-medium text-gray-900 dark:text-white">{{ formatCurrency(budgetHealth.actualDailyBurnRate, 0) }}/day</span>
+            <p class="text-xl font-bold mb-2" :class="
+              budgetHealth.burnRateVsBudget > 10 ? 'text-red-500' :
+              budgetHealth.burnRateVsBudget > 0 ? 'text-yellow-500' :
+              'text-green-500'">
+              {{ budgetHealth.burnRateVsBudget > 0 ? '+' : '' }}{{ formatNumber(budgetHealth.burnRateVsBudget, 1) }}%
+            </p>
+            <div class="space-y-0.5">
+              <div class="flex justify-between text-[10px]">
+                <span class="text-gray-400 dark:text-gray-500">Actual</span>
+                <span class="font-medium text-gray-600 dark:text-gray-300">{{ formatCurrency(budgetHealth.actualDailyBurnRate, 0) }}/day</span>
               </div>
-              <div class="flex justify-between text-gray-600 dark:text-gray-400">
-                <span>Budget:</span>
-                <span class="font-medium text-gray-900 dark:text-white">{{ formatCurrency(budgetHealth.expectedDailyBudgetRate, 0) }}/day</span>
+              <div class="flex justify-between text-[10px]">
+                <span class="text-gray-400 dark:text-gray-500">Budget</span>
+                <span class="font-medium text-gray-600 dark:text-gray-300">{{ formatCurrency(budgetHealth.expectedDailyBudgetRate, 0) }}/day</span>
               </div>
             </div>
           </template>
           <template v-else>
-            <p class="text-gray-600 dark:text-gray-400 text-sm mb-2">No budget data available</p>
-            <p class="text-xs text-gray-500">Configure account budgets in the Account Details page</p>
+            <p class="text-sm text-gray-400 dark:text-gray-500 mb-1">No budget data</p>
+            <p class="text-[10px] text-gray-400 dark:text-gray-500">Set budgets in Account Details</p>
           </template>
 
-          <!-- View Details Link -->
           <NuxtLink
+            v-if="hasBudgetData"
             to="/account/costs?chartTab=budget-health"
-            class="block text-center text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium mt-2 pt-2 border-t border-gray-200 dark:border-gray-700"
+            class="block text-[10px] text-blue-500 hover:text-blue-400 font-medium mt-2 pt-2 border-t border-gray-100 dark:border-gray-800 transition-colors"
           >
-            View Budget Health Details →
+            View Details →
           </NuxtLink>
+        </template>
+      </div>
+    </div>
+
+    <!-- My Accounts - Full Width (store state only available client-side) -->
+    <ClientOnly>
+      <UserEnclaves v-if="userAccountCount > 0" :loading="loading" />
+    </ClientOnly>
+
+    <!-- Admin Section - placed prominently (store state only available client-side) -->
+    <ClientOnly>
+      <template v-if="isAdminUser">
+        <div class="flex items-center gap-2">
+          <UIcon name="i-heroicons-shield-check" class="w-4 h-4 text-amber-500" />
+          <h2 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Admin Overview</h2>
         </div>
-      </UCard>
-    </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <DashboardAlertsCard />
+          <DashboardPipelineCard />
+          <DashboardFeedbackCard />
+        </div>
+      </template>
+    </ClientOnly>
 
-    <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
-      <UserEnclaves v-if="userAccountCount > 0" :loading="loading" class="xl:col-span-2" />
+    <!-- Cost Trends + Top Accounts -->
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <CostTrendChart
+        title="Cost Trends"
+        :time-series-billable="activeCostTrend"
+        :loading="loading || scopeCostLoading"
+        :scope="costScope"
+        :scope-options="costScopeOptions"
+        class="xl:col-span-2"
+        @update:scope="handleCostScopeChange"
+      />
 
-      <!-- Account insights (tall) -->
-      <AccountInsights :top-accounts="topAccounts" :loading="loading || accountsLoading"
+      <AccountInsights
+        :top-accounts="topAccounts"
+        :loading="loading || accountsLoading"
         @toggle-proforma="handleProformaToggle"
-        class="xl:row-span-2" />
-      
-      <!-- Organization cost trends -->
-      <CostTrendChart title="Organization Cost Trends"
-        :time-series-billable="last14DaysSpend" :loading="loading" class="xl:col-span-2" />
-
-      <!-- Resource usage under cost trends -->
-      <!-- <ResourceUsage class="col-span-2" /> -->
+      />
     </div>
 
-    <!-- <UButton class="mr-2" @click="() => logout()">Logout</UButton> -->
-    <!-- <UButton @click="clear">Clear Stores</UButton> -->
+    <!-- Non-admin personalized section (when user has no accounts) -->
+    <div v-if="!isAdminUser && userAccountCount === 0 && !loading" class="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 text-center">
+      <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
+        <UIcon name="i-heroicons-user-plus" class="w-6 h-6 text-blue-500" />
+      </div>
+      <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-1">Get Started with GHOST</h3>
+      <p class="text-xs text-gray-500 dark:text-gray-400 max-w-md mx-auto mb-4">
+        You don't have any AWS accounts assigned yet. Browse the organization's accounts or contact your administrator for access.
+      </p>
+      <div class="flex items-center justify-center gap-2">
+        <NuxtLink to="/account/explorer">
+          <UButton icon="i-heroicons-magnifying-glass" size="sm" variant="soft" color="blue">Browse Accounts</UButton>
+        </NuxtLink>
+        <NuxtLink to="/account/org-chart">
+          <UButton icon="i-heroicons-building-office" size="sm" variant="soft" color="purple">Org Chart</UButton>
+        </NuxtLink>
+        <NuxtLink to="/support/docs">
+          <UButton icon="i-heroicons-book-open" size="sm" variant="ghost">Documentation</UButton>
+        </NuxtLink>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -371,6 +345,11 @@ const { user } = useOidcAuth()
 const userGroupStore = useUserGroupStore()
 const enclaveStore = useEnclaveStore()
 const { getPreference, setPreference, initialized: prefsInitialized, load: loadPrefs } = useUserPreferences()
+const { isAdmin } = useUserRoles()
+const { favoriteIds } = useFavoriteAccounts()
+
+// Fallback admin check in case useUserRoles hasn't evaluated yet
+const isAdminUser = computed(() => isAdmin.value || userGroupStore.allEntraGroups.includes('AWS-Product-Team'))
 
 interface OverviewResponse {
   success: boolean;
@@ -402,14 +381,14 @@ interface TopAccount {
   cost: number;
 }
 interface DailyCost {
-  date: string; // e.g. "2025-09-26"
+  date: string;
   cost: number;
 }
 
 const orgOverview = ref<OverviewResponse | null>(null)
 const loading = ref(true)
 const accountsLoading = ref(false)
-const useProforma = ref(true) // Default to proforma
+const useProforma = ref(true)
 const fetchError = ref<string | null>(null)
 
 const mtdTotal = computed(() => orgOverview.value?.data?.monthToDateTotal || 0)
@@ -458,14 +437,12 @@ const monthProgressPercent = computed(() =>
   Math.round((currentDayOfMonth.value / daysInMonth.value) * 100)
 )
 
-// Previous month days
 const previousMonthDays = computed(() => {
   const now = new Date()
   const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
   return new Date(prevMonth.getFullYear(), prevMonth.getMonth() + 1, 0).getDate()
 })
 
-// Current pace vs previous month
 const currentPaceVsPrevious = computed(() => {
   if (!previousMonthSpend.value || !mtdTotal.value || currentDayOfMonth.value === 0) return null
   const currentDailyRate = mtdTotal.value / currentDayOfMonth.value
@@ -478,7 +455,6 @@ const currentPaceVsPrevious = computed(() => {
 
 const topAccounts = computed(() => {
   if (!orgOverview.value?.data?.topAccounts) return []
-  // Guard against uninitialized enclave store - show account ID as fallback
   const hasEnclaves = enclaveStore.enclaves && Object.keys(enclaveStore.enclaves).length > 0
   return orgOverview.value.data.topAccounts.map((acct) => ({
     accountId: acct.accountId,
@@ -490,7 +466,6 @@ const topAccounts = computed(() => {
   }))
 })
 
-// Dynamic greeting based on time of day
 const currentGreeting = computed(() => {
   const hour = new Date().getHours()
   if (hour < 12) return 'Good morning'
@@ -498,18 +473,6 @@ const currentGreeting = computed(() => {
   return 'Good evening'
 })
 
-// Formatted current date
-const currentDate = computed(() => {
-  const now = new Date()
-  return now.toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
-})
-
-// User's personal account stats
 const userAccountCount = computed(() => {
   return Object.keys(userGroupStore.myEnclaves).length
 })
@@ -520,6 +483,77 @@ const userTotalCost = computed(() => {
   const userAccountIds = Object.keys(userGroupStore.myEnclaves)
   return userAccountIds.reduce((sum, id) => sum + (costs[id] || 0), 0)
 })
+
+// Cost scope selector
+const costScope = ref('org')
+const scopedCostData = ref<{ date: string; cost: number }[] | null>(null)
+const scopeCostLoading = ref(false)
+
+const costScopeOptions = computed(() => {
+  const options = [{ label: 'Organization', value: 'org' }]
+  if (userAccountCount.value > 0) {
+    options.push({ label: 'My Accounts', value: 'mine' })
+  }
+  if (favoriteIds.value.length > 0) {
+    options.push({ label: 'Favorites', value: 'favorites' })
+  }
+  return options
+})
+
+const activeCostTrend = computed(() => {
+  if (costScope.value === 'org' || !scopedCostData.value) {
+    return last14DaysSpend.value
+  }
+  return scopedCostData.value
+})
+
+async function handleCostScopeChange(scope: string) {
+  costScope.value = scope
+
+  if (scope === 'org') {
+    scopedCostData.value = null
+    return
+  }
+
+  // Determine which account IDs to filter by
+  const accountIds = scope === 'favorites'
+    ? favoriteIds.value
+    : Object.keys(userGroupStore.myEnclaves)
+
+  if (accountIds.length === 0) {
+    scopedCostData.value = []
+    return
+  }
+
+  scopeCostLoading.value = true
+  try {
+    const now = new Date()
+    const end = now.toISOString().split('T')[0]
+    const start = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+
+    const params = new URLSearchParams({
+      startDate: start,
+      endDate: end,
+      granularity: 'DAILY',
+      groupBy: 'NONE',
+      proforma: String(useProforma.value),
+      accountIds: accountIds.join(',')
+    })
+
+    const result = await $fetch<{ success: boolean; data: any }>(`/api/costs/summary?${params}`)
+    if (result.success && result.data?.resultsByTime) {
+      scopedCostData.value = result.data.resultsByTime.map((item: any) => ({
+        date: item.timePeriod?.start || item.date || '',
+        cost: parseFloat(item.total?.amount || item.total || '0')
+      })).filter((d: any) => d.date)
+    }
+  } catch (err) {
+    console.error('Failed to fetch scoped costs:', err)
+    scopedCostData.value = null
+  } finally {
+    scopeCostLoading.value = false
+  }
+}
 
 async function fetchOverview(onlyAccounts = false) {
   if (onlyAccounts) {
@@ -560,11 +594,10 @@ async function fetchOverview(onlyAccounts = false) {
 function handleProformaToggle(value: boolean) {
   useProforma.value = value
   setPreference('dashboardProforma', value)
-  fetchOverview(true) // Only show loading on accounts card
+  fetchOverview(true)
 }
 
 onMounted(async () => {
-  // Load user preference for proforma toggle
   if (!prefsInitialized.value) await loadPrefs()
   useProforma.value = getPreference('dashboardProforma', true)
   await fetchOverview()

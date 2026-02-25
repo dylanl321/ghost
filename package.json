@@ -3,9 +3,12 @@
   "version": "1.10.0",
   "type": "module",
   "private": true,
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "build": "npm run bundle:support && nuxt build",
-    "dev": "NODE_OPTIONS='--max-old-space-size=12288' nuxt dev",
+    "dev": "cross-env NODE_OPTIONS='--max-old-space-size=12288' nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
@@ -67,6 +70,7 @@
     "@types/uuid": "^10.0.0",
     "consola": "^3.4.2",
     "croner": "^9.1.0",
+    "cross-env": "^10.1.0",
     "d3": "^7.9.0",
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.2",

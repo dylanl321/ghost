@@ -366,7 +366,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, onActivated, onDeactivated, watch, nextTick } from 'vue'
 import { useOrganization, type OrgNode } from '~/composables/useOrganization'
 import * as d3 from 'd3'
 
@@ -816,9 +816,19 @@ onMounted(() => {
   loadData()
 })
 
-onUnmounted(() => {
+const cleanupD3 = () => {
   if (svg) {
     svg.selectAll("*").remove()
+  }
+}
+
+onDeactivated(cleanupD3)
+onUnmounted(cleanupD3)
+
+// Re-render chart when returning via KeepAlive
+onActivated(() => {
+  if (treeData.value) {
+    nextTick(() => drawChart(treeData.value!))
   }
 })
 </script>

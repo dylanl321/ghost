@@ -69,20 +69,101 @@
           {{ row.alert_type }}
         </UBadge>
       </template>
+
+      <!-- Spend/Budget Column -->
+      <template #overspend-data="{ row }">
+        <span v-if="row.overspend_amount" class="text-red-400 font-medium text-sm">
+          +{{ formatCurrency(row.overspend_amount, 0) }} over
+        </span>
+        <span v-else class="text-gray-400 text-sm">
+          {{ formatCurrency(row.actual_spend, 0) }} / {{ formatCurrency(row.budget, 0) }}
+        </span>
+      </template>
+
+      <!-- Status Column -->
+      <template #delivery_status-data="{ row }">
+        <UBadge :color="getStatusColor(row.delivery_status)" variant="subtle" size="xs">
+          {{ row.delivery_status }}
+        </UBadge>
+      </template>
+
+      <!-- Actions Column -->
+      <template #actions-data="{ row }">
+        <UButton
+          v-if="row.email_body_s3_uri"
+          color="gray"
+          variant="ghost"
+          size="xs"
+          icon="i-heroicons-envelope"
+          :loading="loadingEmailId === row.alert_id"
+          @click="viewEmail(row)"
+        >
+          View
+        </UButton>
+      </template>
     </UTable>
+
+    <!-- Email Preview Slideover -->
+    <USlideover v-model="showEmailModal" :ui="{ width: 'max-w-3xl' }">
+      <div class="flex flex-col h-full">
+        <!-- Header -->
+        <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+          <div>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Email Preview</h3>
+            <p v-if="emailSubject" class="text-sm text-gray-600 dark:text-gray-400 mt-1">{{ emailSubject }}</p>
+          </div>
+          <UButton
+            color="gray"
+            variant="ghost"
+            icon="i-heroicons-x-mark"
+            @click="showEmailModal = false"
+          />
+        </div>
+
+        <!-- Loading -->
+        <div v-if="loadingEmail" class="flex-1 flex items-center justify-center">
+          <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 text-gray-400 animate-spin" />
+        </div>
+
+        <!-- Email Content -->
+        <div v-else-if="emailHtml" class="flex-1 overflow-hidden p-4">
+          <div class="bg-white rounded-lg h-full">
+            <iframe
+              :srcdoc="emailHtml"
+              class="w-full h-full rounded-lg"
+              sandbox="allow-same-origin"
+            />
+          </div>
+        </div>
+
+        <!-- Error State -->
+        <div v-else class="flex-1 flex items-center justify-center">
+          <p class="text-gray-600 dark:text-gray-400">Failed to load email content</p>
+        </div>
+      </div>
+    </USlideover>
   </UCard>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
+import { useToast } from '#imports'
 import type { BudgetAlert } from '@/shared/types/budget-alerts'
 
 const props = defineProps<{
   accountIds: string[]
 }>()
 
+const toast = useToast()
 const loading = ref(false)
 const alerts = ref<BudgetAlert[]>([])
+
+// Email preview state
+const showEmailModal = ref(false)
+const loadingEmail = ref(false)
+const loadingEmailId = ref<string | null>(null)
+const emailHtml = ref<string | null>(null)
+const emailSubject = ref<string | null>(null)
 
 // Debounce timer for account selection changes
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -97,7 +178,10 @@ const columns = [
   { key: 'created_at', label: 'Date', sortable: true },
   { key: 'account_name', label: 'Account' },
   { key: 'alert_level', label: 'Level', sortable: true },
-  { key: 'alert_type', label: 'Type', sortable: true }
+  { key: 'alert_type', label: 'Type', sortable: true },
+  { key: 'overspend', label: 'Spend / Budget' },
+  { key: 'delivery_status', label: 'Status', sortable: true },
+  { key: 'actions', label: '' }
 ]
 
 // Format date as "Jan 15, 2:30 PM"
@@ -145,44 +229,79 @@ function getTypeColor(type: string): string {
   }
 }
 
+// Get color for delivery status badge
+function getStatusColor(status: string): string {
+  switch (status) {
+    case 'SUCCESS':
+    case 'SENT':
+      return 'green'
+    case 'FAILED':
+      return 'red'
+    case 'PENDING':
+      return 'gray'
+    default:
+      return 'gray'
+  }
+}
+
+// View email content for an alert
+async function viewEmail(alert: BudgetAlert) {
+  if (!alert.email_body_s3_uri) return
+
+  try {
+    loadingEmailId.value = alert.alert_id
+    loadingEmail.value = true
+    emailHtml.value = null
+    emailSubject.value = alert.email_subject || null
+    showEmailModal.value = true
+
+    const res = await $fetch<{ success: boolean; data?: { html: string; subject?: string }; error?: string }>(`/api/alerts/${alert.alert_id}/email`, {
+      query: { accountId: alert.account_id }
+    })
+
+    if (res.success && res.data?.html) {
+      emailHtml.value = res.data.html
+      emailSubject.value = res.data.subject || alert.email_subject || 'Budget Alert'
+    } else {
+      throw new Error(res.error || 'Failed to load email content')
+    }
+  } catch (err: any) {
+    console.error('Failed to fetch email content:', err)
+    toast.add({
+      title: 'Error',
+      description: err.message || 'Failed to load email content.',
+      color: 'red'
+    })
+    showEmailModal.value = false
+  } finally {
+    loadingEmail.value = false
+    loadingEmailId.value = null
+  }
+}
+
 // Fetch alerts from API - filtered to current month only
 async function fetchAlerts() {
   try {
     loading.value = true
     const currentMonth = getCurrentMonth()
 
-    if (props.accountIds.length === 0) {
-      // No accounts selected: fetch current month alerts across all accounts
-      const res = await $fetch<{ success: boolean; data: BudgetAlert[] }>('/api/alerts/list', {
-        query: { month: currentMonth, limit: 10 }
-      })
+    // Always query by month (uses efficient GSI), then filter client-side by accounts
+    const res = await $fetch<{ success: boolean; data: BudgetAlert[] }>('/api/alerts/list', {
+      query: { month: currentMonth, limit: 50 }
+    })
 
-      if (res.success && res.data) {
-        alerts.value = res.data
-      } else {
-        alerts.value = []
+    if (res.success && res.data) {
+      let filtered = res.data
+      // Filter to selected accounts client-side if any are selected
+      if (props.accountIds.length > 0) {
+        const selectedSet = new Set(props.accountIds)
+        filtered = filtered.filter(alert => selectedSet.has(alert.account_id))
       }
+      // Sort by date descending
+      filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      alerts.value = filtered
     } else {
-      // Accounts selected: fetch current month alerts for each account and merge
-      const fetchPromises = props.accountIds.map(accountId =>
-        $fetch<{ success: boolean; data: BudgetAlert[] }>('/api/alerts/list', {
-          query: { accountId, month: currentMonth, limit: 5 }
-        }).catch(() => ({ success: false, data: [] as BudgetAlert[] }))
-      )
-
-      const results = await Promise.all(fetchPromises)
-
-      // Merge all alerts and sort by date descending
-      const allAlerts: BudgetAlert[] = []
-      for (const res of results) {
-        if (res.success && res.data) {
-          allAlerts.push(...res.data)
-        }
-      }
-
-      // Sort by created_at descending and take top 10
-      allAlerts.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      alerts.value = allAlerts.slice(0, 10)
+      alerts.value = []
     }
   } catch (err: any) {
     console.error('Failed to fetch budget alerts:', err)

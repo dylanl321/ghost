@@ -2,6 +2,30 @@ import { ref, computed, watch, onUnmounted } from 'vue'
 import type { Ref } from 'vue'
 import type { DataMode, NormalizedDataset, CostsQuery } from '~/types/costs'
 
+/**
+ * CLIENT-SIDE CACHING GAP
+ *
+ * This composable re-fetches all cost data from scratch on every navigation
+ * to the costs page and on every filter change. There is no client-side
+ * memoization layer — the NormalizedDataset lives in a component-scoped ref
+ * and is lost when the user navigates away.
+ *
+ * Server-side caching (15-30 minute TTL via costCache) already reduces the
+ * load on AWS Cost Explorer, so this is not an urgent performance issue.
+ * However, adding a client-side cache would improve UX by:
+ *   - Avoiding full re-fetches when toggling between tabs
+ *   - Enabling instant back-navigation to a previously viewed timeframe
+ *
+ * Recommended approaches if this becomes a priority:
+ *   A. Use Nuxt's useAsyncData with a key based on {timeframe, mode, accounts}
+ *      to get built-in deduplication and caching.
+ *   B. Add a simple LRU cache (e.g. Map with 5-minute TTL) keyed by
+ *      JSON.stringify({ timeframe, mode, accounts }) that stores the
+ *      NormalizedDataset and serves it on cache hit.
+ *   C. Lift the dataset into a Pinia store with persistence so it survives
+ *      navigation (but adds complexity around staleness).
+ */
+
 interface UseCostDataArgs {
   selectedAccounts: Ref<string[]>
   selectedTimeframe: Ref<string>
@@ -13,10 +37,14 @@ interface UseCostDataArgs {
 export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode = 'proforma', accountsList, debounceMs = 800 }: UseCostDataArgs) => {
   const mode = ref<DataMode>(initialMode)
   const isFetching = ref(false)
+  const isDeferredLoading = ref(false) // True while forecast/supplementary data loads in background
   const isPending = ref(false) // True when debounce timer is active
   const fetchError = ref<string | null>(null)
   const dataset = ref<NormalizedDataset | null>(null)
+  const initialized = ref(false) // Gate watchers until after initial mount fetch
   let debounceTimer: NodeJS.Timeout | null = null
+  let abortController: AbortController | null = null
+  let fetchGeneration = 0 // Counter to discard stale responses
 
   const query = computed<CostsQuery>(() => ({
     accounts: selectedAccounts.value,
@@ -115,16 +143,10 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     params.set('proforma', String(query.value.mode === 'proforma'))
     // Add account filtering
     const accounts = query.value.accounts
-    console.log('buildForecastUrl called with accounts:', accounts, 'length:', accounts.length)
     if (accounts.length > 0) {
       params.set('accountIds', accounts.join(','))
-      console.log('Forecast: Adding accountIds to URL:', accounts)
-    } else {
-      console.log('Forecast: No account filtering - org-wide forecast')
     }
-    const url = `/api/costs/forecast?${params.toString()}`
-    console.log('Final forecast URL:', url)
-    return url
+    return `/api/costs/forecast?${params.toString()}`
   }
 
   const buildExtendedForecastUrl = () => {
@@ -136,7 +158,6 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     // Add account filtering - MUST match regular forecast
     if (query.value.accounts.length > 0) {
       params.set('accountIds', query.value.accounts.join(','))
-      console.log('ExtendedForecast: Adding accountIds to URL:', query.value.accounts)
     }
     return `/api/costs/forecast?${params.toString()}`
   }
@@ -150,7 +171,6 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     // Add account filtering
     if (query.value.accounts.length > 0) {
       params.set('accountIds', query.value.accounts.join(','))
-      console.log('YearEndForecast: Adding accountIds to URL:', query.value.accounts)
     }
     return `/api/costs/forecast?${params.toString()}`
   }
@@ -185,92 +205,135 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
   }
 
   const fetchCosts = async () => {
+    // Clear any pending debounce since we're fetching now
+    isPending.value = false
+    if (debounceTimer) {
+      clearTimeout(debounceTimer)
+      debounceTimer = null
+    }
+
+    // Cancel any in-flight request
+    if (abortController) {
+      abortController.abort()
+    }
+    abortController = new AbortController()
+    const signal = abortController.signal
+    const thisGeneration = ++fetchGeneration
+
     isFetching.value = true
     fetchError.value = null
 
-    // Log the URLs being called
-    const urls = {
-      summary: buildSummaryUrl(),
-      historical: buildHistoricalUrl(),
-      orgWideHistorical: buildOrgWideHistoricalUrl(),
-      ytdSummary: buildYtdSummaryUrl(),
-      lastMonthSummary: buildLastMonthSummaryUrl(),
-      currentMonthOrgWide: buildCurrentMonthOrgWideSummaryUrl(),
-      forecast: buildForecastUrl(),
-      extendedForecast: buildExtendedForecastUrl(),
-      yearEndForecast: buildYearEndForecastUrl(),
-      analysis: buildAnalysisUrl(),
-      services: buildServicesSummaryUrl()
-    }
-    console.log('Fetching cost data with URLs:', urls)
-    console.log('Current selected accounts:', query.value.accounts)
-    console.log('Forecast URL specifically:', urls.forecast)
+    const currentTimeframe = query.value.timeframe
+    const currentMode = query.value.mode
+    const currentAccounts = [...query.value.accounts]
+    const isHistorical = ['last7days', 'last30days', 'last90days', 'lastMonth', 'lastQuarter', 'lastYear', 'last12months'].includes(currentTimeframe)
 
     try {
-      const [summaryRes, historicalRes, orgWideHistoricalRes, ytdSummaryRes, lastMonthSummaryRes, currentMonthOrgWideRes, forecastRes, extendedForecastRes, yearEndForecastRes, analysisRes, servicesRes] = await Promise.all([
-        $fetch(urls.summary),
-        $fetch(urls.historical),
-        $fetch(urls.orgWideHistorical),
-        $fetch(urls.ytdSummary),
-        $fetch(urls.lastMonthSummary),
-        $fetch(urls.currentMonthOrgWide),
-        $fetch(urls.forecast),
-        $fetch(urls.extendedForecast),
-        $fetch(urls.yearEndForecast),
-        $fetch(urls.analysis),
-        $fetch(urls.services)
+      // ── Fire ALL requests at t=0 ──
+      // Browser handles connection pooling (6 conn limit for HTTP/1.1,
+      // multiplexed for HTTP/2). Core requests are queued first so they
+      // get priority. Deferred requests start filling connections as
+      // core requests complete, eliminating the idle gap between phases.
+
+      // Core batch (awaited first for immediate UI)
+      const summaryP = $fetch(buildSummaryUrl(), { signal })
+      const historicalP = $fetch(buildHistoricalUrl(), { signal })
+      const analysisP = $fetch(buildAnalysisUrl(), { signal })
+      const servicesP = $fetch(buildServicesSummaryUrl(), { signal })
+
+      // Deferred wave 1: chart-critical (forecast + org-wide historical)
+      // Fired now, awaited after core renders
+      const wave1: Record<string, Promise<any>> = {}
+      if (!isHistorical) {
+        wave1.forecast = $fetch(buildForecastUrl(), { signal }).catch(() => null)
+        wave1.extendedForecast = $fetch(buildExtendedForecastUrl(), { signal }).catch(() => null)
+        wave1.yearEndForecast = $fetch(buildYearEndForecastUrl(), { signal }).catch(() => null)
+      }
+      wave1.orgWideHistorical = $fetch(buildOrgWideHistoricalUrl(), { signal }).catch(() => null)
+
+      // Deferred wave 2: data-table supplements
+      // Fired now, awaited after wave 1 patches the dataset
+      const wave2: Record<string, Promise<any>> = {}
+      wave2.ytdSummary = $fetch(buildYtdSummaryUrl(), { signal }).catch(() => null)
+      // Skip duplicate requests — reuse core summaryRes when URLs would match
+      if (currentTimeframe !== 'lastMonth') {
+        wave2.lastMonthSummary = $fetch(buildLastMonthSummaryUrl(), { signal }).catch(() => null)
+      }
+      if (!isHistorical && !(currentTimeframe === 'thisMonth' && currentAccounts.length === 0)) {
+        wave2.currentMonthOrgWide = $fetch(buildCurrentMonthOrgWideSummaryUrl(), { signal }).catch(() => null)
+      }
+
+      // ── Phase 1: Await core batch for immediate UI rendering ──
+      const [summaryRes, historicalRes, analysisRes, servicesRes] = await Promise.all([
+        summaryP, historicalP, analysisP, servicesP
       ])
 
+      if (thisGeneration !== fetchGeneration) return
+
       dataset.value = {
-        accounts: query.value.accounts, // Selected account IDs
-        accountsList: accountsList?.value, // Full accounts list for LOB/Department mapping
-        mode: query.value.mode, // Add mode so charts know if we're in proforma
-        timeframe: query.value.timeframe, // Selected timeframe for context
+        accounts: currentAccounts,
+        accountsList: accountsList?.value,
+        mode: currentMode,
+        timeframe: currentTimeframe,
         summary: summaryRes as any,
         historical: historicalRes as any,
-        orgWideHistorical: orgWideHistoricalRes as any, // Unfiltered org-wide data for contextual charts
-        ytdSummary: ytdSummaryRes as any, // YTD per-account data for data table
-        lastMonthSummary: lastMonthSummaryRes as any, // Last month per-account data for data table
-        currentMonthOrgWide: currentMonthOrgWideRes as any, // Current month org-wide for Year-End chart
-        forecast: forecastRes as any,
-        extendedForecast: extendedForecastRes as any, // 3-month forecast for trend analysis
-        yearEndForecast: yearEndForecastRes as any, // Rest-of-year forecast for year-end projection
+        orgWideHistorical: null,
+        ytdSummary: null,
+        lastMonthSummary: null,
+        currentMonthOrgWide: null,
+        forecast: null,
+        extendedForecast: null,
+        yearEndForecast: null,
         analysis: analysisRes as any,
         services: servicesRes as any
       }
-      
-      // Log the forecast response to debug
-      console.log('Forecast API Response:', {
-        note: (forecastRes as any)?.data?.note || 'No note',
-        total: (forecastRes as any)?.data?.forecast?.total?.Amount || 'No total',
-        periodsCount: (forecastRes as any)?.data?.forecast?.forecastResultsByTime?.length || 0,
-        selectedAccounts: query.value.accounts
-      })
-      
-      // Debug logging
-      console.log('Cost data fetched:', {
-        selectedAccounts: query.value.accounts,
-        summaryHasData: !!(summaryRes as any)?.data,
-        summaryAccounts: (summaryRes as any)?.data?.accounts?.length || 0,
-        analysisHasData: !!(analysisRes as any)?.data,
-        analysisByAccount: (analysisRes as any)?.data?.budgetAnalysis?.byAccount?.length || 0,
-        forecastHasData: !!(forecastRes as any)?.data,
-        forecastTotal: (forecastRes as any)?.data?.forecast?.total?.Amount || 'N/A',
-        forecastNote: (forecastRes as any)?.data?.note || 'No note',
-        forecastPeriod: (forecastRes as any)?.data?.period || 'No period',
-        extendedForecastHasData: !!(extendedForecastRes as any)?.data,
-        extendedForecastPeriods: (extendedForecastRes as any)?.data?.forecast?.forecastResultsByTime?.length || 0,
-        extendedForecastTotal: (extendedForecastRes as any)?.data?.forecast?.total?.Amount || 'N/A',
-        yearEndForecastHasData: !!(yearEndForecastRes as any)?.data,
-        yearEndForecastPeriods: (yearEndForecastRes as any)?.data?.forecast?.forecastResultsByTime?.length || 0,
-        yearEndForecastTotal: (yearEndForecastRes as any)?.data?.forecast?.total?.Amount || 'N/A'
-      })
-      
-      // URLs are already logged above
-    } catch (e: any) {
-      fetchError.value = e?.message || 'Failed to fetch cost data'
-    } finally {
+
       isFetching.value = false
+      isDeferredLoading.value = true
+
+      // ── Phase 2: Await wave 1 (already in-flight since t=0) ──
+      const wave1Keys = Object.keys(wave1)
+      const wave1Results = await Promise.all(Object.values(wave1))
+
+      if (thisGeneration === fetchGeneration && dataset.value && dataset.value.timeframe === currentTimeframe && dataset.value.mode === currentMode) {
+        const patch: Record<string, any> = {}
+        wave1Keys.forEach((key, i) => { patch[key] = wave1Results[i] })
+        dataset.value = { ...dataset.value, ...patch }
+      }
+
+      if (thisGeneration !== fetchGeneration) {
+        isDeferredLoading.value = false
+        return
+      }
+
+      // ── Phase 3: Await wave 2 (already in-flight since t=0) ──
+      const wave2Keys = Object.keys(wave2)
+      const wave2Results = await Promise.all(Object.values(wave2))
+
+      if (thisGeneration === fetchGeneration && dataset.value && dataset.value.timeframe === currentTimeframe && dataset.value.mode === currentMode) {
+        const patch: Record<string, any> = {}
+        wave2Keys.forEach((key, i) => { patch[key] = wave2Results[i] })
+        // Apply duplicate reuse from core summaryRes
+        if (currentTimeframe === 'lastMonth') {
+          patch.lastMonthSummary = summaryRes
+        }
+        if (!isHistorical && currentTimeframe === 'thisMonth' && currentAccounts.length === 0) {
+          patch.currentMonthOrgWide = summaryRes
+        }
+        dataset.value = { ...dataset.value, ...patch }
+      }
+
+      isDeferredLoading.value = false
+
+    } catch (e: any) {
+      // Ignore abort errors - these are expected when a newer fetch supersedes
+      if (e?.name === 'AbortError' || thisGeneration !== fetchGeneration) {
+        isDeferredLoading.value = false
+        return
+      }
+      fetchError.value = e?.message || 'Failed to fetch cost data'
+      isFetching.value = false
+      isDeferredLoading.value = false
     }
   }
 
@@ -293,7 +356,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
 
   // Watch for changes to selectedAccounts with debouncing
   watch(selectedAccounts, () => {
-    console.log('Accounts selection changed, debouncing fetch...', selectedAccounts.value)
+    if (!initialized.value) return
     debouncedFetch()
   }, { deep: true })
 
@@ -302,7 +365,6 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
   if (accountsList) {
     watch(accountsList, (newList) => {
       if (dataset.value && newList && newList.length > 0) {
-        console.log('AccountsList updated, patching dataset with', newList.length, 'accounts')
         dataset.value = {
           ...dataset.value,
           accountsList: newList
@@ -311,36 +373,47 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     }, { deep: true })
   }
 
-  // Watch for mode changes separately to clear cache
+  // Watch for mode changes separately to clear cache BEFORE the fetch triggers
+  let modeCacheClearing = false
   watch(mode, async (newMode, oldMode) => {
+    if (!initialized.value) return
     // Only clear cache if mode actually changed (not on initial mount)
     if (oldMode !== undefined && newMode !== oldMode) {
-      console.log(`Mode changed from ${oldMode} to ${newMode}, clearing cache...`)
+      modeCacheClearing = true
       try {
         await $fetch('/api/costs/cache-clear', {
           method: 'POST',
           body: { tags: ['costs'] }
         })
-        console.log('Cache cleared successfully')
       } catch (error) {
         console.error('Failed to clear cache:', error)
-        // Continue anyway - worst case we get cached data
+      } finally {
+        modeCacheClearing = false
       }
+      // Fetch after cache is cleared (the [selectedTimeframe, mode] watcher
+      // may have already fired, but with stale cache -- re-fetch now)
+      void fetchCosts()
     }
   })
 
-  // Watch for changes to timeframe and mode without debouncing (immediate)
+  // Watch for changes to timeframe and mode without debouncing
+  // NOT immediate -- initial fetch is triggered explicitly by the page's onMounted
   watch([selectedTimeframe, mode], () => {
-    console.log('Timeframe or mode changed, fetching immediately...')
+    if (!initialized.value) return
+    // Skip if mode cache is being cleared -- the mode watcher above handles the fetch
+    if (modeCacheClearing) return
     void fetchCosts()
-  }, { immediate: true })
+  })
 
   // Cleanup on unmount
   onUnmounted(() => {
     if (debounceTimer) {
       clearTimeout(debounceTimer)
     }
+    if (abortController) {
+      abortController.abort()
+    }
   })
 
-  return { mode, isFetching, isPending, fetchError, dataset, fetchCosts }
+  return { mode, isFetching, isDeferredLoading, isPending, fetchError, dataset, fetchCosts, initialized }
 }

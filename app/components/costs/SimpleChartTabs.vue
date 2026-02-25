@@ -75,7 +75,10 @@
       <!-- Organizational Overview Tab -->
       <div v-else-if="activeTab === 'organizational'" class="animate-fadeIn">
         <div class="text-gray-600 dark:text-gray-400 text-center py-8">
-          <OrganizationalCharts />
+          <OrganizationalCharts
+            :dataset="dataset"
+            :data-mode="dataMode"
+          />
         </div>
       </div>
 
@@ -207,6 +210,7 @@ const props = defineProps<{
   selectedTimeframe?: string
   accountsList?: any[]
   showAdvancedCharts?: boolean
+  sidebarTab?: string
 }>()
 
 // Emits
@@ -225,10 +229,10 @@ const toggleAdvancedCharts = () => {
   emit('toggle-advanced-charts')
 }
 
-// Get scenario for table selection
+// Get scenario for table selection -- use actual sidebar tab from parent
 const selectedAccountsRef = computed(() => props.selectedAccounts)
-const activeTabRef = ref('all') // This would come from parent if needed
-const { scenario } = useCostScenario({ selectedAccounts: selectedAccountsRef, activeTab: activeTabRef })
+const sidebarTabRef = computed(() => props.sidebarTab || 'all')
+const { scenario } = useCostScenario({ selectedAccounts: selectedAccountsRef, activeTab: sidebarTabRef })
 
 // Get tables from registry
 const selectedTimeframeRef = computed(() => props.selectedTimeframe || 'thisMonth')
@@ -279,7 +283,6 @@ const tabs = computed(() => [
 
 // Watch for tab changes
 watch(activeTab, (newTab) => {
-  console.log('Tab changed to:', newTab)
   emit('tab-changed', newTab)
 })
 </script>

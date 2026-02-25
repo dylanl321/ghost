@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
 import AccountUsers from '~/components/accounts/AccountUsers.vue'
 import type { GraphUser } from '~/composables/useGroupMembers'
 
@@ -7,17 +6,14 @@ import type { GraphUser } from '~/composables/useGroupMembers'
 const route = useRoute()
 const accountId = computed(() => route.params.id as string)
 
-// Composables
-const awsAccountsStore = useAwsAccountsStore()
+// Shared composable for account info
+const { enhancedAccountInfo, loading, error, fetchAccountInfo, initialize } = useAccountInfo(accountId)
+
+// Additional composables
 const groupMembers = useGroupMembers()
 const { user } = useOidcAuth()
 const enclaveStore = useEnclaveStore()
 const idcSessions = useIDCSessions()
-
-// Account info state
-const accountInfo = ref<any>(null)
-const loading = ref(false)
-const error = ref<string | null>(null)
 
 // Users state
 const users = ref<GraphUser[]>([])
@@ -26,82 +22,12 @@ const usersLoading = ref(true)
 // IDC session state
 const idcSessionsData = ref<any[]>([])
 const idcSessionsLoading = ref(false)
-const showSessionStatus = ref(true) // Toggle to show/hide session status
-const idcConfigured = ref(true) // Track if IDC is properly configured
-
-// Get account info from store or fetch from API
-const fetchAccountInfo = async () => {
-  if (!accountId.value) return
-
-  loading.value = true
-  error.value = null
-
-  try {
-    // First try to get from store
-    const storeAccount = awsAccountsStore.accounts[accountId.value]
-    
-    if (storeAccount) {
-      accountInfo.value = {
-        id: accountId.value,
-        name: storeAccount.accountName || `Account ${accountId.value}`,
-        isGovCloud: storeAccount.isGovCloud || false,
-        standardAccountId: storeAccount.standardAccountId || accountId.value,
-        govCloudAccountId: storeAccount.govCloudAccountId,
-        status: storeAccount.accountStatus || 'Unknown'
-      }
-    } else {
-      // Fallback to API
-      const response = await fetch(`/api/get-account-info-complete?accountId=${accountId.value}`)
-      if (!response.ok) {
-        throw new Error(`Failed to fetch account info: ${response.statusText}`)
-      }
-      
-      const data = await response.json()
-      accountInfo.value = {
-        id: accountId.value,
-        name: data.dynamo_accountName || data.org_Name || `Account ${accountId.value}`,
-        isGovCloud: data.dynamo_awsGovCloudAccountID === accountId.value,
-        standardAccountId: data.dynamo_awsStandardAccountID || accountId.value,
-        govCloudAccountId: data.dynamo_awsGovCloudAccountID,
-        status: data.org_Status || 'Unknown'
-      }
-    }
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Failed to fetch account information'
-    console.error('Error fetching account info:', err)
-    
-    // Fallback account info
-    accountInfo.value = {
-      id: accountId.value,
-      name: `Account ${accountId.value}`,
-      isGovCloud: false,
-      standardAccountId: accountId.value,
-      govCloudAccountId: undefined,
-      status: 'Unknown'
-    }
-  } finally {
-    loading.value = false
-  }
-}
-
-// Enhanced account info computed
-const enhancedAccountInfo = computed(() => {
-  if (!accountInfo.value) return null
-  
-  return {
-    ...accountInfo.value,
-    // Provide display names for both account types
-    displayName: accountInfo.value.name,
-    accountTypeLabel: accountInfo.value.isGovCloud ? 'GovCloud' : 'Commercial',
-    // Show which account IDs are available
-    hasMultipleAccountIds: accountInfo.value.standardAccountId && 
-                           accountInfo.value.govCloudAccountId && 
-                           accountInfo.value.standardAccountId !== accountInfo.value.govCloudAccountId
-  }
-})
+const showSessionStatus = ref(true)
+const idcConfigured = ref(true)
 
 // Page metadata
 definePageMeta({
+  keepalive: false,
   title: 'Account Users',
   description: 'View all users with access to this AWS account'
 })
@@ -143,14 +69,7 @@ const fetchIDCSessions = async () => {
   idcSessionsLoading.value = true
   try {
     const environment = 'govcloud'
-
-    console.log('[IDC Sessions] Fetching sessions for account:', accountId.value)
     const sessions = await idcSessions.fetchAccountSessions(accountId.value, environment)
-
-    console.log('[IDC Sessions] Received', sessions.length, 'sessions')
-    console.log('[IDC Sessions] Sessions data:', sessions)
-    console.log('[IDC Sessions] Entra users:', users.value.map(u => u.userPrincipalName))
-
     idcSessionsData.value = sessions
   } catch (err: any) {
     console.error('[IDC Sessions] Error:', err)
@@ -164,9 +83,8 @@ const fetchIDCSessions = async () => {
 
 // Initialize data
 onMounted(async () => {
-  await awsAccountsStore.initialize()
   await enclaveStore.initialize()
-  await fetchAccountInfo()
+  await initialize()
   await fetchUsers()
   // Fetch IDC sessions in parallel (don't block on this)
   fetchIDCSessions()
@@ -180,7 +98,7 @@ onMounted(async () => {
       <Breadcrumb :items="breadcrumbItems" />
       
       <!-- Compact Account Header Card -->
-      <UCard v-if="enhancedAccountInfo" class="bg-gray-900 border border-gray-800">
+      <UCard v-if="enhancedAccountInfo">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
           <!-- Left Column: Account Info -->
           <div class="flex items-center gap-4">
@@ -188,9 +106,9 @@ onMounted(async () => {
               <UIcon name="i-heroicons-building-office" class="w-6 h-6 text-primary-400" />
             </div>
             <div class="flex-1 min-w-0">
-              <h2 class="text-xl font-semibold text-white truncate">{{ enhancedAccountInfo.displayName }}</h2>
+              <h2 class="text-xl font-semibold text-gray-900 dark:text-white truncate">{{ enhancedAccountInfo.displayName }}</h2>
               <div class="flex items-center gap-3 mt-1 flex-wrap">
-                <p class="text-sm text-gray-400">
+                <p class="text-sm text-gray-600 dark:text-gray-400">
                   <span class="font-medium">Type:</span> {{ enhancedAccountInfo.accountTypeLabel }}
                 </p>
                 <UBadge 
@@ -211,7 +129,7 @@ onMounted(async () => {
                 </UBadge>
               </div>
               <!-- Compact Account ID Details -->
-              <div class="mt-2 text-xs text-gray-500">
+              <div class="mt-2 text-xs text-gray-500 dark:text-gray-400">
                 <span v-if="enhancedAccountInfo.standardAccountId" class="font-mono mr-4">
                   Com: {{ enhancedAccountInfo.standardAccountId }}
                 </span>
@@ -254,12 +172,12 @@ onMounted(async () => {
       </UCard>
       
       <!-- Loading State -->
-      <UCard v-else-if="loading" class="bg-gray-900 border border-gray-800">
+      <UCard v-else-if="loading">
         <div class="flex items-center gap-3 p-6 animate-pulse">
-          <div class="w-12 h-12 bg-gray-700 rounded-lg flex-shrink-0"></div>
+          <div class="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded-lg flex-shrink-0"></div>
           <div class="flex-1">
-            <div class="h-5 w-48 bg-gray-700 rounded mb-2"></div>
-            <div class="h-3 w-32 bg-gray-700 rounded"></div>
+            <div class="h-5 w-48 bg-gray-200 dark:bg-gray-700 rounded mb-2"></div>
+            <div class="h-3 w-32 bg-gray-200 dark:bg-gray-700 rounded"></div>
           </div>
         </div>
       </UCard>
@@ -279,15 +197,6 @@ onMounted(async () => {
       </UAlert>
     </div>
 
-    <!-- IDC Configuration Notice (only show in development) -->
-    <UAlert
-      v-if="!idcConfigured && false"
-      color="blue"
-      icon="i-heroicons-information-circle"
-      title="AWS Identity Center Not Available"
-      description="IAM Identity Center is not set up in the GovCloud account. Session tracking is disabled."
-    />
-
     <!-- Users Component with enhanced account info and IDC sessions -->
     <AccountUsers
       v-if="enhancedAccountInfo"
@@ -299,4 +208,4 @@ onMounted(async () => {
       show-all
     />
   </div>
-</template> 
+</template>

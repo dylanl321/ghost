@@ -94,7 +94,7 @@ interface InvalidateResponse {
 export default defineEventHandler(async (event): Promise<EntraAPIResponse<InvalidateResponse>> => {
   try {
     // Require admin scope to invalidate cache
-    requireScope(event, 'admin')
+    await requireScope(event, 'admin')
     
     // Validate Entra configuration
     const configValidation = validateEntraConfig()

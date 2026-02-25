@@ -147,7 +147,7 @@ export async function getEC2Recommendations(
           const accountId = parts[4]
           const instanceId = rec.instanceArn!.split('/').pop()!
           const cacheKey = CACHE_KEYS.INSTANCE_REC(accountId, instanceId)
-          await cache.set(cacheKey, recommendation, CACHE_TTL.RECOMMENDATIONS)
+          await cache.set(cacheKey, recommendation, { ttl: CACHE_TTL.RECOMMENDATIONS })
         }
       }
     } catch (error) {
@@ -213,7 +213,7 @@ export async function getEBSRecommendations(
           const accountId = parts[4]
           const volumeId = rec.volumeArn!.split('/').pop()!
           const cacheKey = CACHE_KEYS.VOLUME_REC(accountId, volumeId)
-          await cache.set(cacheKey, recommendation, CACHE_TTL.RECOMMENDATIONS)
+          await cache.set(cacheKey, recommendation, { ttl: CACHE_TTL.RECOMMENDATIONS })
         }
       }
     } catch (error) {
@@ -277,7 +277,7 @@ export async function getLambdaRecommendations(
           const parts = rec.functionArn!.split(':')
           const accountId = parts[4]
           const cacheKey = CACHE_KEYS.LAMBDA_REC(accountId, rec.functionArn!)
-          await cache.set(cacheKey, recommendation, CACHE_TTL.RECOMMENDATIONS)
+          await cache.set(cacheKey, recommendation, { ttl: CACHE_TTL.RECOMMENDATIONS })
         }
       }
     } catch (error) {

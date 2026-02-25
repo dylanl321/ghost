@@ -76,6 +76,10 @@ export interface PipelineSummary {
   failedRuns: number
   avgDurationSeconds: number
   totalChanges: number
+  // Account-level metrics derived from account_plans
+  successfulAccounts: number
+  failedAccounts: number
+  accountSuccessRate: number
   resourceBreakdown: Array<{
     resourceAddress: string
     resourceType: string
@@ -87,6 +91,10 @@ export interface PipelineSummary {
     count: number
   }>
   recentRuns: PipelineRun[]
+  // Total counts so UI knows full data extent
+  totalRecentRuns: number
+  totalResourceTypes: number
+  totalErrors: number
 }
 
 // Organization-wide pipeline summary (all accounts)
@@ -226,4 +234,117 @@ export interface AuthorSummary {
   total_accounts: number
   unique_accounts: number
   repositories: string[]
+}
+
+// --- Pipeline Analytics Enhancement Types ---
+
+// Resource search result row
+export interface ResourceSearchResult {
+  account_id: string
+  resource_address: string
+  resource_type: string
+  module_name: string
+  change_action: string
+  applied: boolean
+  apply_success: boolean
+  timestamp: string
+  plan_pipeline_id: string
+}
+
+// Cross-account resource deployment status
+export interface ResourceDeploymentStatus {
+  account_id: string
+  account_name?: string
+  latest_action: string
+  latest_applied: boolean
+  latest_apply_success: boolean
+  total_attempts: number
+  last_seen: string
+}
+
+// Planned vs Applied drift summary
+export interface PlannedVsAppliedSummary {
+  totalPlanned: number
+  totalApplied: number
+  totalFailed: number
+  totalPending: number
+  byResourceType: Array<{
+    resource_type: string
+    planned: number
+    applied: number
+    failed: number
+    pending: number
+  }>
+}
+
+// Unapplied resource detail
+export interface UnappliedResource {
+  resource_address: string
+  resource_type: string
+  module_name: string
+  change_action: string
+  plan_pipeline_id: string
+  latest_timestamp: string
+  occurrence_count: number
+}
+
+// Recurring error pattern (grouped errors)
+export interface RecurringErrorPattern {
+  error_category: string
+  error_message: string
+  error_severity: string
+  occurrence_count: number
+  first_seen: string
+  last_seen: string
+  affected_pipelines: number
+}
+
+// Cross-account error comparison result
+export interface CrossAccountError {
+  account_id: string
+  account_name?: string
+  occurrence_count: number
+  last_seen: string
+}
+
+// Account deployment health score and factors
+export interface AccountDeploymentHealth {
+  healthScore: number // 0-100
+  healthRating: 'healthy' | 'warning' | 'critical' | 'unknown'
+  factors: {
+    latestPipelineStatus: string
+    planSuccessRate: number
+    recurringErrorCount: number
+    unappliedResourceCount: number
+  }
+  recurringErrors: RecurringErrorPattern[]
+}
+
+// Parsed resource from Terraform state file
+export interface TerraformStateResource {
+  type: string
+  name: string
+  module: string
+  address: string
+  provider: string
+  instances_count: number
+}
+
+// Result of state-vs-planned comparison
+export interface StateComparison {
+  inStateOnly: TerraformStateResource[]
+  inPlanOnly: Array<{
+    resource_address: string
+    resource_type: string
+    change_action: string
+    timestamp: string
+  }>
+  matched: Array<{
+    address: string
+    type: string
+    inState: boolean
+    inPlan: boolean
+  }>
+  stateResourceCount: number
+  planResourceCount: number
 }

@@ -592,6 +592,7 @@ import { parseGitLabUrl } from '~/utils/gitlab-url-parser'
 
 // Admin-only access control
 definePageMeta({
+  keepalive: false,
   layout: 'admin',
   middleware: 'auth-permission',
   permission: 'admin.logs'

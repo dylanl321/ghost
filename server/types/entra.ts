@@ -3,10 +3,7 @@
  * Types for Microsoft Graph API and Entra ID integration
  */
 
-/**
- * AWS Environment Types
- */
-export type AWSEnvironmentType = 'commercial' | 'govcloud'
+import type { AWSEnvironmentType } from './aws'
 
 /**
  * Raw Entra ID Group from Graph API
@@ -137,22 +134,6 @@ export interface EntraConfig {
 }
 
 /**
- * Graph API Error Response
- */
-export interface GraphAPIError {
-  error: {
-    code: string
-    message: string
-    innerError?: {
-      code?: string
-      message?: string
-      requestId?: string
-      date?: string
-    }
-  }
-}
-
-/**
  * Entra API Response wrapper
  */
 export interface EntraAPIResponse<T> {
@@ -164,34 +145,15 @@ export interface EntraAPIResponse<T> {
 }
 
 /**
- * Search filters for groups
- */
-export interface GroupSearchFilters {
-  accountId?: string
-  environment?: AWSEnvironmentType
-  role?: string
-  includeDistribution?: boolean
-  searchTerm?: string
-}
-
-/**
  * Cache tags specific to Entra
  */
 export enum EntraCacheTags {
   ENTRA = 'ENTRA',
   ENTRA_GROUPS = 'ENTRA_GROUPS',
   ENTRA_USERS = 'ENTRA_USERS',
-  ENTRA_OWNERS = 'ENTRA_OWNERS'
-}
-
-/**
- * Token information from OIDC session
- */
-export interface EntraTokenInfo {
-  accessToken: string
-  refreshToken?: string
-  expiresAt: number
-  scopes: string[]
+  ENTRA_OWNERS = 'ENTRA_OWNERS',
+  ENTRA_MEMBERS = 'ENTRA_MEMBERS',
+  ENTRA_SEARCH = 'ENTRA_SEARCH'
 }
 
 /**

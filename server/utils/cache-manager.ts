@@ -40,6 +40,7 @@ interface CacheConfig {
 
 class CacheManager {
   private cache = new Map<string, CacheEntry>()
+  private inflight = new Map<string, Promise<any>>()
   private stats: CacheStats = {
     hits: 0,
     misses: 0,
@@ -83,6 +84,7 @@ class CacheManager {
       this.cleanupInterval = null
     }
     this.cache.clear()
+    this.inflight.clear()
     this.resetStats()
   }
   
@@ -149,6 +151,10 @@ class CacheManager {
     }
     
     this.cache.set(key, entry)
+    // Track newestEntry incrementally — the entry just written is always a candidate
+    if (entry.timestamp > this.stats.newestEntry) {
+      this.stats.newestEntry = entry.timestamp
+    }
     this.updateStats()
   }
   
@@ -214,7 +220,8 @@ class CacheManager {
   }
   
   /**
-   * Get or set data with automatic caching
+   * Get or set data with automatic caching and stampede protection
+   * If multiple concurrent requests hit the same key, only one fetcher runs
    */
   async getOrSet<T = any>(
     key: string,
@@ -233,15 +240,49 @@ class CacheManager {
       }
     }
     
-    const data = await fetcher()
-    await this.set(key, data, options)
-    return data
+    // Stampede protection: if an in-flight request exists for this key, wait for it
+    const existing = this.inflight.get(key)
+    if (existing) {
+      return existing
+    }
+    
+    // Execute the fetcher and track the in-flight promise
+    const promise = fetcher()
+      .then(async (data) => {
+        await this.set(key, data, options)
+        this.inflight.delete(key)
+        return data
+      })
+      .catch((err) => {
+        this.inflight.delete(key)
+        throw err
+      })
+    
+    this.inflight.set(key, promise)
+    return promise
   }
   
   /**
    * Get cache statistics
+   * Computes expensive stats (oldestEntry, memoryUsage) lazily on demand
    */
   getStats(): CacheStats {
+    // Compute oldestEntry and memoryUsage lazily (only when stats are requested)
+    if (this.cache.size > 0) {
+      let oldest = Infinity
+      let memUsage = 0
+      for (const entry of this.cache.values()) {
+        if (entry.timestamp < oldest) {
+          oldest = entry.timestamp
+        }
+        memUsage += this.estimateSize(entry.data)
+      }
+      this.stats.oldestEntry = oldest
+      this.stats.memoryUsage = memUsage
+    } else {
+      this.stats.oldestEntry = 0
+      this.stats.memoryUsage = 0
+    }
     return { ...this.stats }
   }
   
@@ -334,13 +375,6 @@ class CacheManager {
   
   private updateStats(): void {
     this.stats.entries = this.cache.size
-    
-    if (this.cache.size > 0) {
-      const timestamps = Array.from(this.cache.values()).map(entry => entry.timestamp)
-      this.stats.oldestEntry = Math.min(...timestamps)
-      this.stats.newestEntry = Math.max(...timestamps)
-    }
-    
     this.updateHitRate()
   }
   

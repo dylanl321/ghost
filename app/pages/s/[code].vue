@@ -170,6 +170,7 @@ onMounted(async () => {
 
 // Set page metadata - use minimal public layout for redirect page
 definePageMeta({
+  keepalive: false,
   layout: 'public'
 })
 

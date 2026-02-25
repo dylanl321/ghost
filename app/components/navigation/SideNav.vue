@@ -518,10 +518,4 @@ const navigationItems = computed(() => {
     }
   ];
 });
-
-// const handleNavigation = (to) => {
-//   if (to) {
-//     router.push(to)
-//   }
-// }
 </script>

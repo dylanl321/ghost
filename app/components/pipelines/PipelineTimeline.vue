@@ -15,7 +15,7 @@
     </div>
     <div v-else>
       <UTable
-        :rows="pipelineRuns"
+        :rows="paginatedRuns"
         :columns="columns"
         :loading="loading"
       >
@@ -126,6 +126,19 @@
           </span>
         </template>
       </UTable>
+
+      <!-- Pagination -->
+      <div class="flex justify-between items-center mt-4">
+        <div class="text-sm text-gray-400">
+          Showing {{ paginationStart }}-{{ paginationEnd }} of {{ pipelineRuns.length }} runs
+        </div>
+        <UPagination
+          v-if="pipelineRuns.length > pageSize"
+          v-model="page"
+          :page-count="pageSize"
+          :total="pipelineRuns.length"
+        />
+      </div>
     </div>
   </UCard>
 </template>
@@ -154,6 +167,29 @@ const props = defineProps<{
 }>()
 
 const { isAdmin } = useUserRoles()
+
+// Pagination
+const page = ref(1)
+const pageSize = 25
+
+const paginatedRuns = computed(() => {
+  const start = (page.value - 1) * pageSize
+  return props.pipelineRuns.slice(start, start + pageSize)
+})
+
+const paginationStart = computed(() => {
+  if (props.pipelineRuns.length === 0) return 0
+  return (page.value - 1) * pageSize + 1
+})
+
+const paginationEnd = computed(() => {
+  return Math.min(page.value * pageSize, props.pipelineRuns.length)
+})
+
+// Reset page when data changes
+watch(() => props.pipelineRuns, () => {
+  page.value = 1
+})
 
 const columns = [
   {

@@ -32,7 +32,6 @@
 
         <!-- Right side -->
         <div class="flex items-center gap-4">
-          <!-- <FeedbackModal /> -->
 
           <!-- Universal Search - Compact on the right -->
           <div class="w-80">

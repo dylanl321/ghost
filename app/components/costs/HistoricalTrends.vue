@@ -73,8 +73,8 @@ const fetchHistoricalData = async () => {
   }
 }
 
-// Helper to format currency
-const formatCurrency = (value: number) => {
+// Helper to format currency compactly without prefix (for chart axis labels where $ is prepended separately)
+const formatCurrencyCompact = (value: number) => {
   if (value >= 1000000) return `${(value / 1000000).toFixed(2)}M`
   if (value >= 1000) return `${(value / 1000).toFixed(2)}K`
   return value.toFixed(2)
@@ -111,7 +111,7 @@ const orgTrendChart = computed(() => {
     tooltip: {
       trigger: 'axis',
       formatter: (params: any) => {
-        return `${params[0].axisValue}<br/>Total Spend: $${formatCurrency(params[0].value)}`
+        return `${params[0].axisValue}<br/>Total Spend: $${formatCurrencyCompact(params[0].value)}`
       }
     },
     grid: {
@@ -140,7 +140,7 @@ const orgTrendChart = computed(() => {
       type: 'value',
       axisLabel: {
         color: '#9ca3af',
-        formatter: (value: number) => `$${formatCurrency(value)}`
+        formatter: (value: number) => `$${formatCurrencyCompact(value)}`
       },
       axisLine: {
         lineStyle: { color: 'rgba(156, 163, 175, 0.2)' }
@@ -189,7 +189,7 @@ const yoyComparisonChart = computed(() => {
       formatter: (params: any) => {
         let result = params[0].axisValue + '<br/>'
         params.forEach((item: any) => {
-          result += `${item.marker} ${item.seriesName}: $${formatCurrency(item.value)}<br/>`
+          result += `${item.marker} ${item.seriesName}: $${formatCurrencyCompact(item.value)}<br/>`
         })
         return result
       }
@@ -217,7 +217,7 @@ const yoyComparisonChart = computed(() => {
       type: 'value',
       axisLabel: {
         color: '#9ca3af',
-        formatter: (value: number) => `$${formatCurrency(value)}`
+        formatter: (value: number) => `$${formatCurrencyCompact(value)}`
       },
       axisLine: {
         lineStyle: { color: 'rgba(156, 163, 175, 0.2)' }
@@ -332,7 +332,7 @@ const quarterlyChart = computed(() => {
     tooltip: {
       trigger: 'axis',
       formatter: (params: any) => {
-        return `${params[0].name}<br/>Total: $${formatCurrency(params[0].value)}`
+        return `${params[0].name}<br/>Total: $${formatCurrencyCompact(params[0].value)}`
       }
     },
     grid: {
@@ -356,7 +356,7 @@ const quarterlyChart = computed(() => {
       type: 'value',
       axisLabel: {
         color: '#9ca3af',
-        formatter: (value: number) => `$${formatCurrency(value)}`
+        formatter: (value: number) => `$${formatCurrencyCompact(value)}`
       },
       axisLine: {
         lineStyle: { color: 'rgba(156, 163, 175, 0.2)' }
@@ -376,7 +376,7 @@ const quarterlyChart = computed(() => {
       label: {
         show: true,
         position: 'top',
-        formatter: (params: any) => `$${formatCurrency(params.value)}`,
+        formatter: (params: any) => `$${formatCurrencyCompact(params.value)}`,
         color: '#9ca3af',
         fontSize: 10
       }

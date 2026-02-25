@@ -430,7 +430,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     proforma,
     proformaAccountId,
     masterAccountId,
-    filteredAccountIds: filteredAccountIds?.slice(0, 5) // Sample for key uniqueness
+    filteredAccountIds: filteredAccountIds ? `${filteredAccountIds.length}:${filteredAccountIds.sort().join(',').substring(0, 100)}` : null // Hash for key uniqueness
   })}`
 
   const accountDataCacheKey = `accounts:unified:${includeDecommissioned}`

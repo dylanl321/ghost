@@ -281,7 +281,7 @@ import * as XLSX from 'xlsx'
 import { useForecastData } from '~/composables/useForecastData'
 
 // Composables
-const { uploadForecastData, formatCurrency } = useForecastData()
+const { uploadForecastData } = useForecastData()
 
 // State
 const selectedFile = ref<File | null>(null)
@@ -301,13 +301,11 @@ const previewData = computed(() => uploadedData.value.slice(0, 10))
 // Methods
 const handleFileSelect = (event: Event) => {
   const target = event.target as HTMLInputElement
-  console.log('File selected:', target.files)
   
   if (target.files && target.files[0]) {
     selectedFile.value = target.files[0]
     error.value = null
     successMessage.value = null
-    console.log('File set:', selectedFile.value.name)
   }
 }
 
@@ -380,11 +378,6 @@ const extractForecastData = (workbook: XLSX.WorkBook): any[] => {
     throw new Error('Excel file must contain at least 2 rows (headers and data)')
   }
 
-  console.log('Excel structure - first 5 rows:')
-  for (let i = 0; i < Math.min(5, jsonData.length); i++) {
-    console.log(`Row ${i + 1}:`, jsonData[i])
-  }
-
   // Detect file format by looking for header row
   // Format 1: Row 1 has formulas/aggregates, Row 2 has headers (BOM format)
   // Format 2: Row 1-2 are metadata, Row 3 has headers (old format)
@@ -398,7 +391,6 @@ const extractForecastData = (workbook: XLSX.WorkBook): any[] => {
     if (row2[0] === 'Enclave ID' || String(row2[0]).trim() === 'Enclave ID') {
       headerRowIndex = 1  // Row 2 (0-indexed)
       dataStartIndex = 2  // Row 3 (0-indexed)
-      console.log('Detected BOM format: header at row 2, data starts at row 3')
     }
   }
 
@@ -408,7 +400,6 @@ const extractForecastData = (workbook: XLSX.WorkBook): any[] => {
     if (row3[0] === 'Enclave ID' || String(row3[0]).trim() === 'Enclave ID') {
       headerRowIndex = 2  // Row 3 (0-indexed)
       dataStartIndex = 3  // Row 4 (0-indexed)
-      console.log('Detected old format: header at row 3, data starts at row 4')
     }
   }
 
@@ -418,9 +409,6 @@ const extractForecastData = (workbook: XLSX.WorkBook): any[] => {
 
   const headerRow = jsonData[headerRowIndex] as any[]
   const dataRows = jsonData.slice(dataStartIndex) as any[][]
-
-  console.log('Header row:', headerRow)
-  console.log(`Processing ${dataRows.length} data rows`)
 
   // Find where the monthly data starts (after the last metadata column)
   // Look for the first date column or numeric column index 9
@@ -433,12 +421,9 @@ const extractForecastData = (workbook: XLSX.WorkBook): any[] => {
 
   // Extract metadata columns (A-I typically)
   const metadataColumns = headerRow.slice(0, monthlyDataStartIndex)
-  console.log('Metadata columns:', metadataColumns)
 
   // Extract monthly columns (J onwards)
   const monthlyColumns = headerRow.slice(monthlyDataStartIndex)
-  console.log(`Found ${monthlyColumns.length} monthly columns`)
-  console.log('First 5 monthly columns:', monthlyColumns.slice(0, 5))
   
   // Create column mapping for metadata
   const metadataMapping: Record<string, number> = {}
@@ -476,10 +461,6 @@ const extractForecastData = (workbook: XLSX.WorkBook): any[] => {
       }
     }
   })
-
-  console.log('Metadata mapping:', metadataMapping)
-  console.log('Monthly mapping:', monthlyMapping)
-  console.log('Monthly columns found:', Object.keys(monthlyMapping))
 
   // Process data rows - handle complex forecast structure
   dataRows.forEach((row, index) => {
@@ -550,19 +531,21 @@ const extractForecastData = (workbook: XLSX.WorkBook): any[] => {
 const saveToDatabase = async () => {
   if (uploadedData.value.length === 0) return
 
+  // Confirm before replacing all existing forecast data
+  const confirmed = window.confirm('This will replace all existing forecast data with the uploaded data. Do you want to continue?')
+  if (!confirmed) return
+
   isSaving.value = true
   error.value = null
 
   try {
     // Clear existing data first
-    console.log('🗑️  Clearing existing forecast data...')
     await $fetch('/api/forecast/clear', {
       method: 'POST',
       body: { confirm: true }
     })
     
     // Upload new data
-    console.log('📤 Uploading new forecast data...')
     
     // Transform data to match Excel structure - one record per account
     const transformedData: any[] = []
@@ -613,17 +596,6 @@ const saveToDatabase = async () => {
     if (transformedData.length === 0) {
       throw new Error('No valid forecast data to upload')
     }
-    
-    console.log(`📊 Uploading ${transformedData.length} forecast records...`)
-    
-    // Log the months being uploaded
-    const allMonths = new Set<string>()
-    transformedData.forEach(record => {
-      if (record.forecasts) {
-        Object.keys(record.forecasts).forEach(month => allMonths.add(month))
-      }
-    })
-    console.log('Months being uploaded:', Array.from(allMonths).sort())
     
     const uploadResult = await uploadForecastData(transformedData)
     successMessage.value = `Successfully uploaded ${transformedData.length} forecast records to database`

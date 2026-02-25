@@ -48,28 +48,28 @@
         <div class="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
           <div class="text-xs text-gray-600 dark:text-gray-400 mb-1">Monthly GDMS Forecast</div>
           <div class="text-lg font-semibold text-gray-900 dark:text-white">
-            {{ formatCurrency(budget) }}
+            {{ formatCurrency(budget, 0) }}
           </div>
         </div>
 
         <div class="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
           <div class="text-xs text-gray-600 dark:text-gray-400 mb-1">Current Spend</div>
           <div class="text-lg font-semibold text-blue-600 dark:text-blue-400">
-            {{ formatCurrency(currentSpend) }}
+            {{ formatCurrency(currentSpend, 0) }}
           </div>
         </div>
 
         <div class="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
           <div class="text-xs text-gray-600 dark:text-gray-400 mb-1">Daily Burn Rate</div>
           <div class="text-lg font-semibold text-purple-600 dark:text-purple-400">
-            {{ formatCurrency(burnRate) }}/day
+            {{ formatCurrency(burnRate, 0) }}/day
           </div>
         </div>
 
         <div class="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
           <div class="text-xs text-gray-600 dark:text-gray-400 mb-1">AWS Projected MTD</div>
           <div :class="projectedColorClass" class="text-lg font-semibold">
-            {{ formatCurrency(projectedSpend) }}
+            {{ formatCurrency(projectedSpend, 0) }}
           </div>
         </div>
       </div>
@@ -82,7 +82,7 @@
         <div class="flex items-center justify-between mb-4">
           <div class="text-xs font-medium text-gray-700 dark:text-gray-300">AWS Spend Projection</div>
           <div class="text-xs text-gray-600 dark:text-gray-400">
-            GDMS Forecast: {{ formatCurrency(budget) }}
+            GDMS Forecast: {{ formatCurrency(budget, 0) }}
           </div>
         </div>
 
@@ -118,7 +118,7 @@
                 class="text-[10px] font-medium mt-0.5 whitespace-nowrap"
                 :class="point.isToday ? 'text-blue-600 dark:text-blue-300' : point.exceeds ? 'text-red-500 dark:text-red-400' : 'text-gray-700 dark:text-gray-300'"
               >
-                {{ formatCurrency(point.cumulative) }}
+                {{ formatCurrency(point.cumulative, 0) }}
               </div>
             </div>
           </div>
@@ -533,11 +533,11 @@ const statusMessage = computed(() => {
 
   if (projected > budget * 1.2) {
     return `AWS projection shows exceeding GDMS forecast by ${formatCurrency(
-      projected - budget
+      projected - budget, 0
     )} (${Math.round(((projected - budget) / budget) * 100)}%)`;
   }
   if (projected > budget) {
-    return `AWS projection shows exceeding GDMS forecast by ${formatCurrency(projected - budget)}`;
+    return `AWS projection shows exceeding GDMS forecast by ${formatCurrency(projected - budget, 0)}`;
   }
   if (utilizationPercent.value >= 90) {
     return `${100 - utilizationPercent.value}% of GDMS forecast remaining with ${
@@ -571,13 +571,4 @@ const statusIcon = computed(() => {
   if (utilizationPercent.value >= 90) return "i-heroicons-exclamation-circle";
   return "i-heroicons-information-circle";
 });
-
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value);
-};
 </script>

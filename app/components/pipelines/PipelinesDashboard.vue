@@ -56,7 +56,13 @@
       <template #description>{{ error }}</template>
     </UAlert>
 
-    <!-- Row 1: Success Chart (2 col) + Summary Stats (1 col) -->
+    <!-- Row 1: Deployment Health (full width) -->
+    <PipelinesAccountDeploymentHealth
+      :account-id="accountId"
+      :days="selectedDays"
+    />
+
+    <!-- Row 2: Success Chart (2 col) + Summary Stats (1 col) -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <div class="lg:col-span-2">
         <PipelineSuccessChart
@@ -124,7 +130,14 @@
       </UCard>
     </div>
 
-    <!-- Row 2: Resource Changes (1.5 col) + Error Distribution (1.5 col) -->
+    <!-- Row 3: Planned vs Applied (full width) -->
+    <PipelinesPlannedVsAppliedPanel
+      :account-id="accountId"
+      :days="selectedDays"
+      :repo-names="repoNames"
+    />
+
+    <!-- Row 4: Resource Changes (1.5 col) + Error Distribution (1.5 col) -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <ResourceChangeChart
         :resource-breakdown="summaryData?.summary.resourceBreakdown || []"
@@ -137,7 +150,12 @@
       />
     </div>
 
-    <!-- Row 3: Pipeline Timeline Table (full width) -->
+    <!-- Row 5: Resource Search (full width) -->
+    <PipelinesResourceSearchPanel
+      :account-id="accountId"
+    />
+
+    <!-- Row 6: Pipeline Timeline Table with pagination (full width) -->
     <PipelineTimeline
       :pipeline-runs="summaryData?.summary.recentRuns || []"
       :loading="loading"
@@ -146,6 +164,11 @@
 </template>
 
 <script setup lang="ts">
+import PipelinesAccountDeploymentHealth from '~/components/pipelines/AccountDeploymentHealth.vue'
+import PipelinesPlannedVsAppliedPanel from '~/components/pipelines/PlannedVsAppliedPanel.vue'
+import PipelinesResourceSearchPanel from '~/components/pipelines/ResourceSearchPanel.vue'
+import { parseGitLabUrl } from '~/utils/gitlab-url-parser'
+
 const props = defineProps<{
   accountId: string
 }>()
@@ -155,6 +178,18 @@ const selectedDays = ref(7)
 const loading = ref(true)
 const error = ref<string | null>(null)
 const summaryData = ref<any>(null)
+
+// Extract unique repo names from recent pipeline runs for the state comparison dropdown
+const repoNames = computed<string[]>(() => {
+  const runs = summaryData.value?.summary?.recentRuns
+  if (!runs?.length) return []
+  const names = new Set<string>()
+  for (const run of runs) {
+    const parsed = parseGitLabUrl(run.job_url)
+    if (parsed?.project) names.add(parsed.project)
+  }
+  return Array.from(names).sort()
+})
 
 // Fetch pipeline summary data
 async function fetchPipelineData() {

@@ -5,7 +5,7 @@
     </template>
 
     <CenteredLoadingSpinner v-if="props.loading" />
-    <div v-else :class="props.columns === 1 ? 'grid grid-cols-2 gap-3' : `grid gap-4 grid-cols-${props.columns}`">
+    <div v-else :class="gridClass">
       <!-- EC2 Instances -->
       <div v-if="props.data.ec2" class="bg-gray-100 dark:bg-gray-800/50 rounded-xl p-3 space-y-2">
         <div class="flex gap-1 items-center">
@@ -85,5 +85,15 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   columns: 4
 });
+
+// Static class map to avoid Tailwind purge issues with dynamic class names
+const gridColsMap: Record<number, string> = {
+  1: 'grid grid-cols-2 gap-3',
+  2: 'grid grid-cols-2 gap-4',
+  3: 'grid grid-cols-3 gap-4',
+  4: 'grid grid-cols-4 gap-4',
+}
+
+const gridClass = computed(() => gridColsMap[props.columns] || 'grid grid-cols-4 gap-4')
 
 </script>

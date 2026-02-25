@@ -13,6 +13,7 @@ import { getCostAndUsage, getProformaCosts } from '../../utils/cost-explorer'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { logger } from '../../utils/logger'
+import { requireScope } from '../../middleware/entra-auth'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/costs/validate', 'GET', {
@@ -86,6 +87,9 @@ function valuesMatch(val1: number, val2: number, tolerance: number = 0.01): bool
 }
 
 export default defineEventHandler(handleAsync(async (event) => {
+  // Require admin scope as stated in the docs
+  await requireScope(event, 'admin')
+
   logger.info('Running cost data validation checks...')
 
   const checks: any[] = []

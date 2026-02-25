@@ -2,6 +2,9 @@
  * Server-side type definitions
  */
 
+// Re-export types from specific modules for backwards compatibility
+export type { AWSEnvironmentType, AWSServiceType, AWSClientOptions, AccountInfo, AccountLookupCriteria, AWSCredentials } from './aws'
+
 export interface AWSEnvironment {
   type: 'commercial' | 'govcloud'
   region: string

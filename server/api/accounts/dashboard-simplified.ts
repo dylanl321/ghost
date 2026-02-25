@@ -1,12 +1,9 @@
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { organizationCache, CacheTags } from '../../utils/cache-manager'
-import { CostExplorerClient, GetCostAndUsageCommand } from "@aws-sdk/client-cost-explorer";
-import type { GetCostAndUsageCommandInput, GetCostAndUsageCommandOutput } from "@aws-sdk/client-cost-explorer";
-import getMasterAccountCredentials from '~~/server/utils/credentials/awsAccountCredentials';
+import { getCostAndUsage } from '../../utils/cost-explorer'
 import { logger } from '../../utils/logger'
 
-const region = 'us-east-1'
 const monitoringAccountId = '253821132832'
 
 // Register OpenAPI documentation
@@ -69,24 +66,17 @@ registerEndpoint('/api/accounts/dashboard-simplified', 'GET', {
   }
 })
 
-async function fetchCostData(client: CostExplorerClient, params: GetCostAndUsageCommandInput) {
-  const command = new GetCostAndUsageCommand(params);
-  return client.send(command);
-}
-
-function sumResults(response: GetCostAndUsageCommandOutput) {
-  if (!response.ResultsByTime) return 0;
-  return response.ResultsByTime.reduce((sum, r) => {
-    const cost = parseFloat(r.Total?.BlendedCost.Amount || "0");
+function sumResults(resultsByTime: any[]) {
+  return resultsByTime.reduce((sum, r) => {
+    const cost = parseFloat(r.Total?.BlendedCost?.Amount || "0");
     return sum + cost;
   }, 0);
 }
 
-function mapDaily(response: GetCostAndUsageCommandOutput) {
-  if (!response.ResultsByTime) return [];
-  return response.ResultsByTime.map((r) => ({
+function mapDaily(resultsByTime: any[]) {
+  return resultsByTime.map((r) => ({
     date: r.TimePeriod?.Start,
-    cost: parseFloat(r.Total?.BlendedCost.Amount || "0"),
+    cost: parseFloat(r.Total?.BlendedCost?.Amount || "0"),
   }));
 }
 
@@ -106,7 +96,7 @@ async function getOverview(accountId: string) {
   const now = new Date();
   const today = now.getDate(); // 1-index
   const year = now.getFullYear();
-  const month = now.getMonth(); // 1–12
+  const month = now.getMonth(); // 0–11
   const startOfMonth = buildPaddedDate(year, month, 1);
   const tomorrow = buildPaddedDate(year, month, today + 1); // exclusive end
 
@@ -117,66 +107,51 @@ async function getOverview(accountId: string) {
   tempStart.setDate(tempStart.getDate() - 14); // Go back 14 days to get the start date
   const dailyStart = buildPaddedDate(tempStart.getFullYear(), tempStart.getMonth(), tempStart.getDate());
 
-  // ---- BILLABLE (master account) ----
-  const masterCreds = getMasterAccountCredentials('commercial')
-  const billableClient = new CostExplorerClient({ credentials: masterCreds, region });
+  const linkedAccountFilter = {
+    Dimensions: {
+      Key: "LINKED_ACCOUNT",
+      Values: [accountId],
+    },
+  }
 
-  // ---- PROFORMA (monitoring account) ----
-  const monitoringCreds = await assumeChildAccountRole('commercial', monitoringAccountId);
-  const proformaClient = new CostExplorerClient({ credentials: monitoringCreds, region });
-
+  // Fetch all four cost queries in parallel:
+  // Billable = master account (no targetAccountId), Proforma = monitoring account
   const [billableMtd, billableLast14Days, proformaMtd, proformaLast14Days] = await Promise.all([
-    fetchCostData(billableClient, {
-      TimePeriod: { Start: startOfMonth, End: tomorrow },
-      Granularity: "MONTHLY",
-      Metrics: ["BlendedCost"],
-      Filter: {
-        Dimensions: {
-          Key: "LINKED_ACCOUNT",
-          Values: [accountId],
-        },
-      },
-    }),
-    fetchCostData(billableClient, {
-      TimePeriod: { Start: dailyStart, End: dailyEnd },
-      Granularity: "DAILY",
-      Metrics: ["BlendedCost"],
-      Filter: {
-        Dimensions: {
-          Key: "LINKED_ACCOUNT",
-          Values: [accountId],
-        },
-      },
-    }),
-    fetchCostData(proformaClient, {
-      TimePeriod: { Start: startOfMonth, End: tomorrow },
-      Granularity: "MONTHLY",
-      Metrics: ["BlendedCost"],
-      Filter: {
-        Dimensions: {
-          Key: "LINKED_ACCOUNT",
-          Values: [accountId],
-        },
-      },
-    }),
-    fetchCostData(proformaClient, {
-      TimePeriod: { Start: dailyStart, End: dailyEnd },
-      Granularity: "DAILY",
-      Metrics: ["BlendedCost"],
-      Filter: {
-        Dimensions: {
-          Key: "LINKED_ACCOUNT",
-          Values: [accountId],
-        },
-      },
-    }),
+    getCostAndUsage({
+      startDate: startOfMonth,
+      endDate: tomorrow,
+      granularity: "MONTHLY",
+      metrics: ["BlendedCost"],
+      filter: linkedAccountFilter,
+    }, 'commercial'),
+    getCostAndUsage({
+      startDate: dailyStart,
+      endDate: dailyEnd,
+      granularity: "DAILY",
+      metrics: ["BlendedCost"],
+      filter: linkedAccountFilter,
+    }, 'commercial'),
+    getCostAndUsage({
+      startDate: startOfMonth,
+      endDate: tomorrow,
+      granularity: "MONTHLY",
+      metrics: ["BlendedCost"],
+      filter: linkedAccountFilter,
+    }, 'commercial', monitoringAccountId),
+    getCostAndUsage({
+      startDate: dailyStart,
+      endDate: dailyEnd,
+      granularity: "DAILY",
+      metrics: ["BlendedCost"],
+      filter: linkedAccountFilter,
+    }, 'commercial', monitoringAccountId),
   ]);
 
   return {
-    billableMonthToDateTotal: sumResults(billableMtd),
-    proformaMonthToDateTotal: sumResults(proformaMtd),
-    billableLast14Days: mapDaily(billableLast14Days),
-    proformaLast14Days: mapDaily(proformaLast14Days),
+    billableMonthToDateTotal: sumResults(billableMtd.resultsByTime),
+    proformaMonthToDateTotal: sumResults(proformaMtd.resultsByTime),
+    billableLast14Days: mapDaily(billableLast14Days.resultsByTime),
+    proformaLast14Days: mapDaily(proformaLast14Days.resultsByTime),
   };
 }
 
@@ -194,7 +169,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
 
   // Generate cache key
-  const cacheKey = `accounts:simplified-overview${accountId}`
+  const cacheKey = `accounts:simplified-overview:${accountId}`
 
   const info = await organizationCache.getOrSet(
     cacheKey,

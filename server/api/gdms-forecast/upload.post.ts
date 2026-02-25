@@ -141,7 +141,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     return sendSuccess(event, result)
   } catch (error: any) {
     logger.error('[GDMS Forecast Upload] Error processing forecast data:', error)
-    return errors.internalServerError(event, 'Failed to process GDMS forecast data')
+    return errors.serverError(event, 'Failed to process GDMS forecast data')
   }
 }))
 

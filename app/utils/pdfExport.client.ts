@@ -1,6 +1,9 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import html2canvas from 'html2canvas'
+import { marked } from 'marked'
+import type { Token, Tokens } from 'marked'
+import type { ChatMessage } from '#shared/types/chat-threads'
 
 export interface PDFExportOptions {
   filename?: string
@@ -55,10 +58,10 @@ export class PDFExporter {
         left: options.margins?.left ?? 20,
       },
       fontSize: {
-        title: options.fontSize?.title ?? 20,
-        subtitle: options.fontSize?.subtitle ?? 14,
-        body: options.fontSize?.body ?? 11,
-        footer: options.fontSize?.footer ?? 9,
+        title: options.fontSize?.title ?? 16,
+        subtitle: options.fontSize?.subtitle ?? 11,
+        body: options.fontSize?.body ?? 10,
+        footer: options.fontSize?.footer ?? 8,
       },
       colors: {
         primary: options.colors?.primary ?? '#1e40af',
@@ -377,12 +380,21 @@ export class PDFExporter {
     this.currentY = this.options.margins.top
   }
 
-  public addText(text: string, options?: { fontSize?: number; color?: string; bold?: boolean }): void {
-    if (options?.fontSize) {
-      this.pdf.setFontSize(options.fontSize)
-    } else {
-      this.pdf.setFontSize(this.options.fontSize.body)
-    }
+  public addText(text: string, options?: {
+    fontSize?: number
+    color?: string
+    bold?: boolean
+    spacingBefore?: number
+    spacingAfter?: number
+    lineHeight?: number
+  }): void {
+    const fontSize = options?.fontSize ?? this.options.fontSize.body
+    // Calculate line height based on font size (default 1.4x font size in mm)
+    const lineHeight = options?.lineHeight ?? (fontSize * 0.4)
+    const spacingBefore = options?.spacingBefore ?? 0
+    const spacingAfter = options?.spacingAfter ?? 2
+
+    this.pdf.setFontSize(fontSize)
 
     if (options?.color) {
       this.pdf.setTextColor(options.color)
@@ -396,21 +408,25 @@ export class PDFExporter {
       this.pdf.setFont(undefined, 'normal')
     }
 
+    // Add spacing before
+    this.currentY += spacingBefore
+
     const lines = this.pdf.splitTextToSize(
       text,
       this.pdf.internal.pageSize.width - this.options.margins.left - this.options.margins.right
     )
-    
+
     lines.forEach((line: string) => {
-      if (this.currentY > this.pdf.internal.pageSize.height - this.options.margins.bottom - 20) {
+      if (this.currentY > this.pdf.internal.pageSize.height - this.options.margins.bottom - 15) {
         this.pdf.addPage()
         this.currentY = this.options.margins.top
       }
       this.pdf.text(line, this.options.margins.left, this.currentY)
-      this.currentY += 6
+      this.currentY += lineHeight
     })
 
-    this.currentY += 4
+    // Add spacing after
+    this.currentY += spacingAfter
   }
 
   public async addHTML(element: HTMLElement | string): Promise<void> {
@@ -657,4 +673,431 @@ export function createPDFFromTable(
   const exporter = new PDFExporter(defaultOptions)
   exporter.addData({ headers, rows })
   return exporter.save()
+}
+
+// =============================================================================
+// Chat PDF Export
+// =============================================================================
+
+export interface ChatPDFExportOptions extends PDFExportOptions {
+  includeMetadata?: boolean
+  includeTimestamps?: boolean
+  isSummary?: boolean
+  /** Format as a clean deliverable document without conversation markers */
+  isDeliverable?: boolean
+}
+
+/**
+ * Sanitize text for PDF output
+ * - Removes emojis (jsPDF doesn't support them)
+ * - Strips markdown formatting
+ * - Cleans up HTML tags
+ */
+function sanitizeTextForPDF(text: string): string {
+  return text
+    // Remove emojis and other Unicode symbols that jsPDF can't render
+    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '') // Emojis
+    .replace(/[\u{2600}-\u{26FF}]/gu, '')   // Misc symbols
+    .replace(/[\u{2700}-\u{27BF}]/gu, '')   // Dingbats
+    .replace(/[\u{FE00}-\u{FE0F}]/gu, '')   // Variation selectors
+    .replace(/[\u{1F000}-\u{1F02F}]/gu, '') // Mahjong/domino tiles
+    .replace(/[\u{1F0A0}-\u{1F0FF}]/gu, '') // Playing cards
+    // Remove bold/italic markdown
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/_([^_]+)_/g, '$1')
+    // Remove links but keep text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    // Remove inline code backticks
+    .replace(/`([^`]+)`/g, '$1')
+    // Remove HTML tags
+    .replace(/<details[^>]*>/gi, '')
+    .replace(/<\/details>/gi, '')
+    .replace(/<summary[^>]*>/gi, '')
+    .replace(/<\/summary>/gi, '')
+    .replace(/<[^>]+>/g, '')
+    // Clean up multiple spaces/newlines
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/**
+ * Clean message content for export
+ * - Removes GHOST-specific footer content
+ * - Strips suggested links references
+ * - Removes tool/account metadata mentions
+ */
+function cleanMessageContentForExport(content: string): string {
+  return content
+    // Remove "View detailed ... in GHOST" footer lines
+    .replace(/View detailed[^\n]*in GHOST[^\n]*/gi, '')
+    .replace(/View[^\n]*in GHOST[^\n]*/gi, '')
+    // Remove link icons and GHOST references
+    .replace(/🔗[^\n]*/g, '')
+    .replace(/👉[^\n]*/g, '')
+    // Remove "Related Pages" sections at the end
+    .replace(/Related Pages:[\s\S]*$/i, '')
+    // Remove standalone GHOST mentions at end
+    .replace(/\n*GHOST\s*[!']*\s*$/gi, '')
+    // Clean up trailing whitespace and newlines
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/**
+ * Check if a code block is a diagram (mermaid, plantuml, etc.)
+ */
+function isDiagramCodeBlock(lang: string | undefined): boolean {
+  const diagramLanguages = ['mermaid', 'plantuml', 'dot', 'graphviz', 'flowchart', 'sequence', 'gantt']
+  return lang ? diagramLanguages.includes(lang.toLowerCase()) : false
+}
+
+/**
+ * Render markdown tokens to PDF using the exporter
+ */
+function renderMarkdownTokens(exporter: PDFExporter, tokens: Token[], options: ChatPDFExportOptions): void {
+  const isDeliverable = options.isDeliverable ?? false
+
+  // Color scheme - professional blue for deliverable, purple for conversation
+  const colors = {
+    h1: isDeliverable ? '#1e3a5f' : '#7c3aed',      // Deep blue / Purple
+    h2: isDeliverable ? '#2563eb' : '#7c3aed',      // Bright blue / Purple
+    h3: isDeliverable ? '#3b82f6' : '#6d28d9',      // Medium blue / Dark purple
+    h4: isDeliverable ? '#64748b' : '#8b5cf6',      // Slate / Light purple
+    text: '#374151',                                 // Gray-700
+    muted: '#6b7280',                                // Gray-500
+    accent: isDeliverable ? '#059669' : '#7c3aed',  // Emerald / Purple
+  }
+
+  for (const token of tokens) {
+    switch (token.type) {
+      case 'heading': {
+        const headingToken = token as Tokens.Heading
+        // Compact font sizes for headers
+        const fontSizes: Record<number, number> = { 1: 14, 2: 12, 3: 11, 4: 10, 5: 10, 6: 9 }
+        const spacingBefore: Record<number, number> = { 1: 6, 2: 5, 3: 4, 4: 3, 5: 2, 6: 2 }
+        const headerColors: Record<number, string> = {
+          1: colors.h1,
+          2: colors.h2,
+          3: colors.h3,
+          4: colors.h4,
+          5: colors.h4,
+          6: colors.h4
+        }
+
+        exporter.addText(sanitizeTextForPDF(headingToken.text), {
+          fontSize: fontSizes[headingToken.depth] || 10,
+          bold: true,
+          color: headerColors[headingToken.depth] || colors.h3,
+          spacingBefore: spacingBefore[headingToken.depth] || 3,
+          spacingAfter: 2
+        })
+        break
+      }
+
+      case 'paragraph': {
+        const paraToken = token as Tokens.Paragraph
+        const cleanText = sanitizeTextForPDF(paraToken.text)
+        if (cleanText) {
+          exporter.addText(cleanText, {
+            fontSize: 9,
+            color: colors.text,
+            spacingAfter: 2
+          })
+        }
+        break
+      }
+
+      case 'list': {
+        const listToken = token as Tokens.List
+        for (let i = 0; i < listToken.items.length; i++) {
+          const item = listToken.items[i]
+          const prefix = listToken.ordered ? `${i + 1}. ` : '• '
+          const itemText = sanitizeTextForPDF(item.text)
+          if (itemText) {
+            exporter.addText(`${prefix}${itemText}`, {
+              fontSize: 9,
+              color: colors.text,
+              spacingAfter: 1
+            })
+          }
+        }
+        break
+      }
+
+      case 'table': {
+        const tableToken = token as Tokens.Table
+        const headers = tableToken.header.map(h => sanitizeTextForPDF(h.text))
+        const rows = tableToken.rows.map(row => row.map(cell => sanitizeTextForPDF(cell.text)))
+        exporter.addData({ headers, rows })
+        break
+      }
+
+      case 'code': {
+        const codeToken = token as Tokens.Code
+
+        // Skip diagram code blocks (mermaid, plantuml, etc.) - they can't be rendered as text
+        if (isDiagramCodeBlock(codeToken.lang)) {
+          // Don't show placeholder in deliverable mode
+          if (!isDeliverable) {
+            exporter.addText('[Diagram - see interactive version]', {
+              fontSize: 8,
+              color: '#9ca3af',
+              spacingAfter: 2
+            })
+          }
+          break
+        }
+
+        // Regular code blocks - more compact
+        if (codeToken.lang) {
+          exporter.addText(`Code (${codeToken.lang}):`, {
+            fontSize: 8,
+            bold: true,
+            color: '#64748b',
+            spacingBefore: 2,
+            spacingAfter: 1
+          })
+        }
+        exporter.addText(codeToken.text, {
+          fontSize: 8,
+          color: '#374151',
+          spacingAfter: 2
+        })
+        break
+      }
+
+      case 'blockquote': {
+        const quoteToken = token as Tokens.Blockquote
+        const quoteText = sanitizeTextForPDF(quoteToken.text)
+        if (quoteText) {
+          exporter.addText(`"${quoteText}"`, {
+            fontSize: 9,
+            color: '#64748b',
+            spacingBefore: 2,
+            spacingAfter: 2
+          })
+        }
+        break
+      }
+
+      case 'html': {
+        // Handle HTML blocks - extract text content or skip
+        const htmlToken = token as Tokens.HTML
+        // Skip common HTML tags that don't have meaningful text
+        if (htmlToken.raw.match(/^<(details|summary|\/details|\/summary|br|hr)/i)) {
+          break
+        }
+        // Try to extract text from other HTML
+        const textContent = htmlToken.raw.replace(/<[^>]+>/g, '').trim()
+        if (textContent) {
+          exporter.addText(sanitizeTextForPDF(textContent), { fontSize: 9 })
+        }
+        break
+      }
+
+      case 'hr':
+        // Add a subtle visual separator
+        exporter.addText('', { spacingBefore: 2, spacingAfter: 2 })
+        break
+
+      case 'space':
+        // Skip empty space tokens
+        break
+
+      default:
+        // For any unhandled token types, try to render raw text
+        if ('text' in token && typeof (token as any).text === 'string') {
+          const text = sanitizeTextForPDF((token as any).text)
+          if (text) {
+            exporter.addText(text, { fontSize: 9 })
+          }
+        }
+        break
+    }
+  }
+}
+
+/**
+ * Format a timestamp for display in PDF
+ */
+function formatTimestamp(timestamp: string): string {
+  const date = new Date(timestamp)
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+/**
+ * Export chat messages to PDF format
+ * Handles markdown parsing and renders messages with proper styling
+ */
+export function exportChatToPDF(
+  messages: ChatMessage[],
+  options: ChatPDFExportOptions = {}
+): Blob | void {
+  const {
+    title = 'GHOST Chat Export',
+    subtitle,
+    includeMetadata = true,
+    includeTimestamps = true,
+    isSummary = false,
+    isDeliverable = false,
+    ...pdfOptions
+  } = options
+
+  // Build subtitle with message count and date
+  const messageCount = messages.length
+  const exportDate = new Date().toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  })
+
+  // Deliverable mode: clean professional subtitle
+  let defaultSubtitle: string
+  if (isDeliverable) {
+    defaultSubtitle = subtitle || exportDate
+  } else if (isSummary) {
+    defaultSubtitle = `Summary generated on ${exportDate}`
+  } else {
+    defaultSubtitle = subtitle || `${messageCount} message${messageCount !== 1 ? 's' : ''} | Exported ${exportDate}`
+  }
+
+  const exporter = new PDFExporter({
+    title,
+    subtitle: defaultSubtitle,
+    footer: isDeliverable ? `Page {page}` : 'GHOST Chat | Page {page}',
+    colors: {
+      primary: isDeliverable ? '#1e3a5f' : '#7c3aed', // Deep blue for deliverable, purple for conversation
+      secondary: isDeliverable ? '#2563eb' : '#64748b', // Bright blue for deliverable
+      text: '#374151'
+    },
+    ...pdfOptions
+  })
+
+  // Deliverable mode: format as a clean document
+  if (isDeliverable) {
+    renderDeliverableFormat(exporter, messages, options)
+  } else {
+    // Conversation mode: show Q&A format
+    renderConversationFormat(exporter, messages, { ...options, includeMetadata, includeTimestamps })
+  }
+
+  return exporter.save()
+}
+
+/**
+ * Render messages in deliverable format (clean document without conversation markers)
+ */
+function renderDeliverableFormat(
+  exporter: PDFExporter,
+  messages: ChatMessage[],
+  options: ChatPDFExportOptions
+): void {
+  // Group user questions with their responses for better context
+  let sectionNumber = 0
+
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i]
+    const isUser = message.role === 'user'
+
+    if (isUser) {
+      // Check if there's a following assistant response
+      const hasResponse = i + 1 < messages.length && messages[i + 1].role === 'assistant'
+
+      if (hasResponse) {
+        // Use user message as a section context/header if it's a question
+        sectionNumber++
+        if (sectionNumber > 1) {
+          // Add visual separator between sections
+          exporter.addText('', { fontSize: 6 })
+          exporter.addText('─'.repeat(50), { fontSize: 8, color: '#e5e7eb' })
+          exporter.addText('', { fontSize: 6 })
+        }
+      }
+      // Skip user messages in output (they're just context)
+      continue
+    }
+
+    // Assistant message - render as document content
+    const cleanedContent = cleanMessageContentForExport(message.content)
+    try {
+      const tokens = marked.lexer(cleanedContent)
+      renderMarkdownTokens(exporter, tokens, options)
+    } catch {
+      exporter.addText(cleanedContent)
+    }
+
+    // Add spacing after each response section
+    exporter.addText('', { fontSize: 4 })
+  }
+}
+
+/**
+ * Render messages in conversation format (Q&A with role labels)
+ */
+function renderConversationFormat(
+  exporter: PDFExporter,
+  messages: ChatMessage[],
+  options: ChatPDFExportOptions & { includeMetadata: boolean; includeTimestamps: boolean }
+): void {
+  const { includeMetadata, includeTimestamps } = options
+
+  // User message styling colors
+  const userColor = '#1e40af' // Blue for user
+  const assistantColor = '#7c3aed' // Purple for assistant
+
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i]
+    const isUser = message.role === 'user'
+
+    // Add separator between messages (except first)
+    if (i > 0) {
+      exporter.addText('', { fontSize: 4 }) // Small spacer
+    }
+
+    // Message header: Role and timestamp
+    const roleLabel = isUser ? 'YOU' : 'GHOST ASSISTANT'
+    const headerColor = isUser ? userColor : assistantColor
+
+    if (includeTimestamps && message.timestamp) {
+      exporter.addText(`${roleLabel}  •  ${formatTimestamp(message.timestamp)}`, {
+        fontSize: 10,
+        bold: true,
+        color: headerColor
+      })
+    } else {
+      exporter.addText(roleLabel, {
+        fontSize: 10,
+        bold: true,
+        color: headerColor
+      })
+    }
+
+    // Message content - clean GHOST-specific footer content
+    const cleanedContent = cleanMessageContentForExport(message.content)
+
+    if (isUser) {
+      // User messages are typically plain text
+      exporter.addText(cleanedContent, { color: '#374151' })
+    } else {
+      // Assistant messages may contain markdown - parse and render
+      try {
+        const tokens = marked.lexer(cleanedContent)
+        renderMarkdownTokens(exporter, tokens, options)
+      } catch {
+        // Fallback to plain text if markdown parsing fails
+        exporter.addText(cleanedContent)
+      }
+    }
+
+    // Note: Metadata and suggested links are intentionally excluded from exports
+    // to keep the document clean and focused on content
+  }
 }

@@ -107,22 +107,11 @@ const props = defineProps<{
 // Helper to check if a user has an active IDC session
 const hasActiveSession = (userPrincipalName: string): boolean => {
   if (!props.idcSessions || props.idcSessions.length === 0) {
-    console.log('[AccountUsers] No IDC sessions available')
     return false
   }
 
-  console.log('[AccountUsers] Checking session for:', userPrincipalName)
-  console.log('[AccountUsers] Available sessions:', props.idcSessions.map(s => s.userPrincipalName))
-
   const session = props.idcSessions.find(s => s.userPrincipalName === userPrincipalName)
-  console.log('[AccountUsers] Found session:', session)
   return session?.isActive || false
-}
-
-// Get session details for a user
-const getUserSessionInfo = (userPrincipalName: string): IDCUserSession | undefined => {
-  if (!props.idcSessions) return undefined
-  return props.idcSessions.find(s => s.userPrincipalName === userPrincipalName)
 }
 
 const maxVisible = 6

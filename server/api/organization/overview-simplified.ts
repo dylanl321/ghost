@@ -448,7 +448,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     },
     {
       ttl: 1200, // 20 minutes
-      tags: [CacheTags.ORGANIZATION]
+      tags: [CacheTags.ORGANIZATION, CacheTags.COSTS]
     }
   )
   

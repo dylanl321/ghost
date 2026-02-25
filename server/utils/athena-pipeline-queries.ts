@@ -17,7 +17,14 @@ import type {
   AccountPlan,
   ResourceChange,
   ErrorDetail,
-  PipelineSummary
+  PipelineSummary,
+  ResourceSearchResult,
+  ResourceDeploymentStatus,
+  UnappliedResource,
+  PlannedVsAppliedSummary,
+  RecurringErrorPattern,
+  CrossAccountError,
+  AccountDeploymentHealth
 } from '../../shared/types/pipelines'
 
 // Configuration
@@ -38,6 +45,21 @@ const CACHE_TTL_SECONDS = 300 // 5 minutes cache for pipeline data
 const DEFAULT_TIMEOUT_SECONDS = 60
 const POLL_INTERVAL_MS = 2000
 const ATHENA_RESULT_REUSE_MAX_AGE_MINUTES = 60 // Reuse Athena query results up to 60 minutes old
+
+/**
+ * Paginate an array of results (Athena has no OFFSET support)
+ */
+export function paginateResults<T>(data: T[], page: number, limit: number): { items: T[], total: number, page: number, limit: number } {
+  const start = (page - 1) * limit
+  return { items: data.slice(start, start + limit), total: data.length, page, limit }
+}
+
+/**
+ * Sanitize a string for use in SQL LIKE clauses (escape single quotes)
+ */
+function sanitizeSqlString(input: string): string {
+  return input.replace(/'/g, "''")
+}
 
 /**
  * Execute an Athena SQL query and return results
@@ -189,9 +211,10 @@ async function executeAthenaQuery(
 export async function getPipelineRunsForAccount(
   accountId: string,
   days: number = 7,
-  environment: 'commercial' | 'govcloud' = 'commercial'
+  environment: 'commercial' | 'govcloud' = 'commercial',
+  maxRows: number = 1000
 ): Promise<PipelineRun[]> {
-  const cacheKey = `pipelines:runs:${accountId}:${days}`
+  const cacheKey = `pipelines:runs:${accountId}:${days}:${maxRows}`
 
   const config = getPipelineEnvironmentConfig(environment)
 
@@ -214,7 +237,7 @@ export async function getPipelineRunsForAccount(
     WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
       AND contains(accounts_processed, '${accountId}')
     ORDER BY timestamp_start DESC
-    LIMIT 100
+    LIMIT ${maxRows}
   `
 
   return executeAthenaQuery(sql, `pipeline-runs-${accountId}`, environment, cacheKey) as Promise<PipelineRun[]>
@@ -226,9 +249,10 @@ export async function getPipelineRunsForAccount(
 export async function getAccountPlansForAccount(
   accountId: string,
   days: number = 7,
-  environment: 'commercial' | 'govcloud' = 'commercial'
+  environment: 'commercial' | 'govcloud' = 'commercial',
+  maxRows: number = 500
 ): Promise<AccountPlan[]> {
-  const cacheKey = `pipelines:plans:${accountId}:${days}`
+  const cacheKey = `pipelines:plans:${accountId}:${days}:${maxRows}`
   const config = getPipelineEnvironmentConfig(environment)
 
   const sql = `
@@ -247,7 +271,7 @@ export async function getAccountPlansForAccount(
     WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
       AND account_id = '${accountId}'
     ORDER BY plan_created_at DESC
-    LIMIT 100
+    LIMIT ${maxRows}
   `
 
   return executeAthenaQuery(sql, `account-plans-${accountId}`, environment, cacheKey) as Promise<AccountPlan[]>
@@ -259,9 +283,10 @@ export async function getAccountPlansForAccount(
 export async function getResourceChangesForAccount(
   accountId: string,
   days: number = 7,
-  environment: 'commercial' | 'govcloud' = 'commercial'
+  environment: 'commercial' | 'govcloud' = 'commercial',
+  maxRows: number = 2000
 ): Promise<ResourceChange[]> {
-  const cacheKey = `pipelines:resources:${accountId}:${days}`
+  const cacheKey = `pipelines:resources:${accountId}:${days}:${maxRows}`
   const config = getPipelineEnvironmentConfig(environment)
 
   const sql = `
@@ -278,7 +303,7 @@ export async function getResourceChangesForAccount(
     WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
       AND account_id = '${accountId}'
     ORDER BY timestamp DESC
-    LIMIT 500
+    LIMIT ${maxRows}
   `
 
   return executeAthenaQuery(sql, `resource-changes-${accountId}`, environment, cacheKey) as Promise<ResourceChange[]>
@@ -290,9 +315,10 @@ export async function getResourceChangesForAccount(
 export async function getErrorDetailsForAccount(
   accountId: string,
   days: number = 7,
-  environment: 'commercial' | 'govcloud' = 'commercial'
+  environment: 'commercial' | 'govcloud' = 'commercial',
+  maxRows: number = 500
 ): Promise<ErrorDetail[]> {
-  const cacheKey = `pipelines:errors:${accountId}:${days}`
+  const cacheKey = `pipelines:errors:${accountId}:${days}:${maxRows}`
   const config = getPipelineEnvironmentConfig(environment)
 
   const sql = `
@@ -309,7 +335,7 @@ export async function getErrorDetailsForAccount(
     WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
       AND account_id = '${accountId}'
     ORDER BY timestamp DESC
-    LIMIT 100
+    LIMIT ${maxRows}
   `
 
   return executeAthenaQuery(sql, `error-details-${accountId}`, environment, cacheKey) as Promise<ErrorDetail[]>
@@ -361,7 +387,6 @@ export async function getPipelineSummary(
 
   const resourceBreakdown = Array.from(resourceMap.values())
     .sort((a, b) => b.count - a.count)
-    .slice(0, 10) // Top 10
 
   // Group errors by category
   const errorMap = new Map<string, number>()
@@ -373,15 +398,35 @@ export async function getPipelineSummary(
     .map(([category, count]) => ({ category, count }))
     .sort((a, b) => b.count - a.count)
 
+  // Count unique resource types for totals
+  const uniqueResourceTypes = new Set(resources.map(r => r.resource_type))
+
+  // Account-level metrics from plans: a plan with applied_at set counts as successful
+  const successfulAccounts = plans.filter(p => p.applied_at).length
+  const failedAccounts = plans.filter(p =>
+    p.plan_status === 'failed' || p.plan_status === 'error'
+  ).length
+  const totalAccountPlans = plans.length
+  const accountSuccessRate = totalAccountPlans > 0
+    ? Math.round((successfulAccounts / totalAccountPlans) * 1000) / 10
+    : 0
+
   return {
     totalRuns,
     successfulRuns,
     failedRuns,
     avgDurationSeconds,
     totalChanges,
+    successfulAccounts,
+    failedAccounts,
+    accountSuccessRate,
     resourceBreakdown,
     errorBreakdown,
-    recentRuns: runs.slice(0, 10) // Most recent 10
+    recentRuns: runs,
+    // Total counts so UI knows if there's more data
+    totalRecentRuns: runs.length,
+    totalResourceTypes: uniqueResourceTypes.size,
+    totalErrors: errors.length
   }
 }
 
@@ -659,7 +704,6 @@ export async function getPipelineByIdWithDetails(
       byType: Array.from(resourceTypeMap.entries())
         .map(([type, count]) => ({ type, count }))
         .sort((a, b) => b.count - a.count)
-        .slice(0, 10) // Top 10 resource types
     }
 
     // Aggregate account statistics by plan_status
@@ -871,7 +915,7 @@ export async function getModuleBreakdownForPipeline(
         AND plan_pipeline_id = ${pipelineId}
       GROUP BY module_name
       ORDER BY total_changes DESC
-      LIMIT 50
+      LIMIT 500
     `
 
     return executeAthenaQuery(sql, `module-breakdown-pipeline-${pipelineId}`, environment, cacheKey) as Promise<Array<{
@@ -892,9 +936,10 @@ export async function getModuleBreakdownForPipeline(
  */
 export async function getAccountBreakdown(
   days: number = 30,
-  environment: 'commercial' | 'govcloud' = 'govcloud'
+  environment: 'commercial' | 'govcloud' = 'govcloud',
+  maxRows: number = 500
 ): Promise<any[]> {
-  const cacheKey = `pipelines:account-breakdown:${days}`
+  const cacheKey = `pipelines:account-breakdown:${days}:${maxRows}`
   const config = getPipelineEnvironmentConfig(environment)
 
   const sql = `
@@ -911,7 +956,7 @@ export async function getAccountBreakdown(
     WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
     GROUP BY account_id, account_name
     ORDER BY total_runs DESC
-    LIMIT 50
+    LIMIT ${maxRows}
   `
 
   return executeAthenaQuery(sql, 'account-breakdown', environment, cacheKey)
@@ -923,9 +968,10 @@ export async function getAccountBreakdown(
  */
 export async function getOrganizationResourceBreakdown(
   days: number = 30,
-  environment: 'commercial' | 'govcloud' = 'govcloud'
+  environment: 'commercial' | 'govcloud' = 'govcloud',
+  maxRows: number = 500
 ): Promise<any[]> {
-  const cacheKey = `pipelines:org-resources:${days}`
+  const cacheKey = `pipelines:org-resources:${days}:${maxRows}`
   const config = getPipelineEnvironmentConfig(environment)
 
   const sql = `
@@ -938,7 +984,7 @@ export async function getOrganizationResourceBreakdown(
     WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
     GROUP BY resource_address, resource_type, change_action
     ORDER BY count DESC
-    LIMIT 20
+    LIMIT ${maxRows}
   `
 
   return executeAthenaQuery(sql, 'org-resources', environment, cacheKey)
@@ -1169,4 +1215,313 @@ export async function getAuthorSummary(
 
   const results = await executeAthenaQuery(sql, `author-summary-${authorEmail}`, environment, cacheKey)
   return results.length > 0 ? results[0] : null
+}
+
+// --- New query functions for pipeline analytics enhancements ---
+
+/**
+ * Search for a resource by address or type across all accounts (or scoped to one)
+ */
+export async function searchResourceAcrossAccounts(
+  search: string,
+  days: number = 30,
+  accountId?: string,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
+): Promise<ResourceSearchResult[]> {
+  const sanitized = sanitizeSqlString(search)
+  const accountFilter = accountId ? `AND account_id = '${sanitizeSqlString(accountId)}'` : ''
+  const cacheKey = `pipelines:resource-search:${search}:${accountId || 'all'}:${days}`
+  const config = getPipelineEnvironmentConfig(environment)
+
+  const sql = `
+    SELECT
+      account_id,
+      resource_address,
+      resource_type,
+      module_name,
+      change_action,
+      applied,
+      apply_success,
+      timestamp,
+      plan_pipeline_id
+    FROM ${config.database}.resource_changes
+    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
+      AND (LOWER(resource_address) LIKE LOWER('%${sanitized}%') OR LOWER(resource_type) LIKE LOWER('%${sanitized}%'))
+      ${accountFilter}
+    ORDER BY timestamp DESC
+    LIMIT 2000
+  `
+
+  return executeAthenaQuery(sql, `resource-search-${search}`, environment, cacheKey) as Promise<ResourceSearchResult[]>
+}
+
+/**
+ * Get deployment status for a resource type across accounts
+ */
+export async function getResourceDeploymentStatus(
+  resourceType: string,
+  days: number = 30,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
+): Promise<ResourceDeploymentStatus[]> {
+  const sanitized = sanitizeSqlString(resourceType)
+  const cacheKey = `pipelines:resource-deploy-status:${resourceType}:${days}`
+  const config = getPipelineEnvironmentConfig(environment)
+
+  // Use window function to get the chronologically latest record per account
+  // MAX(change_action) returns alphabetical max, not the most recent action
+  // MAX(applied) masks recent failures if any older row was applied
+  const sql = `
+    SELECT account_id, latest_action, latest_applied, latest_apply_success, total_attempts, last_seen
+    FROM (
+      SELECT
+        account_id,
+        change_action as latest_action,
+        applied as latest_applied,
+        apply_success as latest_apply_success,
+        timestamp as last_seen,
+        COUNT(*) OVER (PARTITION BY account_id) as total_attempts,
+        ROW_NUMBER() OVER (PARTITION BY account_id ORDER BY timestamp DESC) as rn
+      FROM ${config.database}.resource_changes
+      WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
+        AND LOWER(resource_type) LIKE LOWER('%${sanitized}%')
+    )
+    WHERE rn = 1
+    ORDER BY total_attempts DESC
+    LIMIT 500
+  `
+
+  return executeAthenaQuery(sql, `resource-deploy-status-${resourceType}`, environment, cacheKey) as Promise<ResourceDeploymentStatus[]>
+}
+
+/**
+ * Get resources where applied=false for an account (unapplied/drift)
+ */
+export async function getUnappliedResources(
+  accountId: string,
+  days: number = 30,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
+): Promise<UnappliedResource[]> {
+  const cacheKey = `pipelines:unapplied:${accountId}:${days}`
+  const config = getPipelineEnvironmentConfig(environment)
+
+  const sql = `
+    SELECT
+      resource_address,
+      resource_type,
+      module_name,
+      change_action,
+      MAX(plan_pipeline_id) as plan_pipeline_id,
+      MAX(timestamp) as latest_timestamp,
+      COUNT(*) as occurrence_count
+    FROM ${config.database}.resource_changes
+    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
+      AND account_id = '${sanitizeSqlString(accountId)}'
+      AND (applied = false OR applied IS NULL)
+    GROUP BY resource_address, resource_type, module_name, change_action
+    ORDER BY occurrence_count DESC
+    LIMIT 1000
+  `
+
+  return executeAthenaQuery(sql, `unapplied-${accountId}`, environment, cacheKey) as Promise<UnappliedResource[]>
+}
+
+/**
+ * Get planned vs applied summary counts by resource_type for an account
+ */
+export async function getPlannedVsAppliedSummary(
+  accountId: string,
+  days: number = 30,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
+): Promise<PlannedVsAppliedSummary> {
+  const cacheKey = `pipelines:drift-summary:${accountId}:${days}`
+  const config = getPipelineEnvironmentConfig(environment)
+
+  const sql = `
+    SELECT
+      resource_type,
+      COUNT(*) as total_planned,
+      SUM(CASE WHEN applied = true AND apply_success = true THEN 1 ELSE 0 END) as total_applied,
+      SUM(CASE WHEN applied = true AND (apply_success = false OR apply_success IS NULL) THEN 1 ELSE 0 END) as total_failed,
+      SUM(CASE WHEN applied = false OR applied IS NULL THEN 1 ELSE 0 END) as total_pending
+    FROM ${config.database}.resource_changes
+    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
+      AND account_id = '${sanitizeSqlString(accountId)}'
+    GROUP BY resource_type
+    ORDER BY total_planned DESC
+  `
+
+  const results = await executeAthenaQuery(sql, `drift-summary-${accountId}`, environment, cacheKey) as Array<{
+    resource_type: string
+    total_planned: number
+    total_applied: number
+    total_failed: number
+    total_pending: number
+  }>
+
+  // Aggregate totals
+  const totalPlanned = results.reduce((sum, r) => sum + (r.total_planned || 0), 0)
+  const totalApplied = results.reduce((sum, r) => sum + (r.total_applied || 0), 0)
+  const totalFailed = results.reduce((sum, r) => sum + (r.total_failed || 0), 0)
+  const totalPending = results.reduce((sum, r) => sum + (r.total_pending || 0), 0)
+
+  return {
+    totalPlanned,
+    totalApplied,
+    totalFailed,
+    totalPending,
+    byResourceType: results.map(r => ({
+      resource_type: r.resource_type,
+      planned: r.total_planned || 0,
+      applied: r.total_applied || 0,
+      failed: r.total_failed || 0,
+      pending: r.total_pending || 0
+    }))
+  }
+}
+
+/**
+ * Get recurring error patterns for an account (same error appearing multiple times)
+ */
+export async function getRecurringErrors(
+  accountId: string,
+  days: number = 30,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
+): Promise<RecurringErrorPattern[]> {
+  const cacheKey = `pipelines:recurring-errors:${accountId}:${days}`
+  const config = getPipelineEnvironmentConfig(environment)
+
+  const sql = `
+    SELECT
+      error_category,
+      error_message,
+      error_severity,
+      COUNT(*) as occurrence_count,
+      MIN(timestamp) as first_seen,
+      MAX(timestamp) as last_seen,
+      COUNT(DISTINCT pipeline_id) as affected_pipelines
+    FROM ${config.database}.error_details
+    WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
+      AND account_id = '${sanitizeSqlString(accountId)}'
+    GROUP BY error_category, error_message, error_severity
+    HAVING COUNT(*) > 1
+    ORDER BY occurrence_count DESC
+    LIMIT 100
+  `
+
+  return executeAthenaQuery(sql, `recurring-errors-${accountId}`, environment, cacheKey) as Promise<RecurringErrorPattern[]>
+}
+
+/**
+ * Cross-account error check: does this error pattern appear in other accounts?
+ */
+export async function getCrossAccountErrorComparison(
+  errorCategory: string,
+  errorMessagePattern: string,
+  days: number = 30,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
+): Promise<CrossAccountError[]> {
+  const sanitizedCategory = sanitizeSqlString(errorCategory)
+  const sanitizedMessage = sanitizeSqlString(errorMessagePattern)
+  const cacheKey = `pipelines:cross-account-error:${errorCategory}:${errorMessagePattern.substring(0, 50)}:${days}`
+  const config = getPipelineEnvironmentConfig(environment)
+
+  const sql = `
+    SELECT
+      e.account_id,
+      ap.account_name,
+      COUNT(*) as occurrence_count,
+      MAX(e.timestamp) as last_seen
+    FROM ${config.database}.error_details e
+    LEFT JOIN (
+      SELECT DISTINCT account_id, account_name
+      FROM ${config.database}.account_plans
+      WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
+    ) ap ON e.account_id = ap.account_id
+    WHERE CONCAT(e.year, LPAD(e.month, 2, '0')) >= date_format(date_add('day', -${days}, current_date), '%Y%m')
+      AND e.error_category = '${sanitizedCategory}'
+      AND LOWER(e.error_message) LIKE LOWER('%${sanitizedMessage}%')
+    GROUP BY e.account_id, ap.account_name
+    ORDER BY occurrence_count DESC
+    LIMIT 200
+  `
+
+  return executeAthenaQuery(sql, `cross-account-error`, environment, cacheKey) as Promise<CrossAccountError[]>
+}
+
+/**
+ * Compute a composite health score for an account's deployment state
+ */
+export async function getAccountDeploymentHealthData(
+  accountId: string,
+  days: number = 30,
+  environment: 'commercial' | 'govcloud' = 'govcloud'
+): Promise<AccountDeploymentHealth> {
+  // Fetch all health-related data in parallel
+  const [runs, plans, recurringErrors, driftSummary] = await Promise.all([
+    getPipelineRunsForAccount(accountId, days, environment, 100),
+    getAccountPlansForAccount(accountId, days, environment, 500),
+    getRecurringErrors(accountId, days, environment),
+    getPlannedVsAppliedSummary(accountId, days, environment)
+  ])
+
+  // Latest pipeline status
+  const latestRun = runs.length > 0 ? runs[0] : null
+  const latestPipelineStatus = latestRun?.status || 'unknown'
+
+  // Plan success rate
+  const totalPlans = plans.length
+  const appliedPlans = plans.filter(p => p.plan_status === 'applied').length
+  const planSuccessRate = totalPlans > 0 ? (appliedPlans / totalPlans) * 100 : 0
+
+  // Recurring error count
+  const recurringErrorCount = recurringErrors.length
+
+  // Unapplied resource count
+  const unappliedResourceCount = driftSummary.totalPending
+
+  // Compute health score (0-100)
+  let healthScore = 100
+
+  // Deduct for failed latest pipeline (-20)
+  if (latestPipelineStatus === 'failure' || latestPipelineStatus === 'partial_failure') {
+    healthScore -= 20
+  }
+
+  // Deduct for low plan success rate (up to -30)
+  if (planSuccessRate < 100) {
+    healthScore -= Math.round((100 - planSuccessRate) * 0.3)
+  }
+
+  // Deduct for recurring errors (up to -25, -5 per recurring error pattern)
+  healthScore -= Math.min(recurringErrorCount * 5, 25)
+
+  // Deduct for unapplied resources (up to -25, -1 per unapplied resource)
+  healthScore -= Math.min(unappliedResourceCount, 25)
+
+  // Clamp to 0-100
+  healthScore = Math.max(0, Math.min(100, healthScore))
+
+  // Determine rating
+  let healthRating: 'healthy' | 'warning' | 'critical' | 'unknown' = 'unknown'
+  if (runs.length === 0 && plans.length === 0) {
+    healthRating = 'unknown'
+  } else if (healthScore >= 80) {
+    healthRating = 'healthy'
+  } else if (healthScore >= 50) {
+    healthRating = 'warning'
+  } else {
+    healthRating = 'critical'
+  }
+
+  return {
+    healthScore,
+    healthRating,
+    factors: {
+      latestPipelineStatus,
+      planSuccessRate: Math.round(planSuccessRate * 10) / 10,
+      recurringErrorCount,
+      unappliedResourceCount
+    },
+    recurringErrors
+  }
 }

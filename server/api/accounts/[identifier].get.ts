@@ -34,11 +34,21 @@ registerEndpoint('/api/accounts/[identifier]', 'GET', {
       name: 'includeDecommissioned',
       in: 'query',
       required: false,
-      schema: { 
+      schema: {
         type: 'boolean',
         default: false
       },
       description: 'Include decommissioned accounts in search (default: false)'
+    },
+    {
+      name: 'type',
+      in: 'query',
+      required: false,
+      schema: {
+        type: 'string',
+        enum: ['pep']
+      },
+      description: 'Force identifier type. Use "pep" to look up by PEP External Enclave ID'
     }
   ],
   responses: {
@@ -61,9 +71,9 @@ registerEndpoint('/api/accounts/[identifier]', 'GET', {
                     type: 'object',
                     properties: {
                       identifier: { type: 'string' },
-                      identifierType: { 
+                      identifierType: {
                         type: 'string',
-                        enum: ['accountId', 'govId', 'requestID', 'email']
+                        enum: ['accountId', 'govId', 'requestId', 'email', 'pepId']
                       },
                       matchedValue: { type: 'string' },
                       note: { type: 'string' }
@@ -91,11 +101,13 @@ export default defineEventHandler(handleAsync(async (event) => {
   // ================================
   
   const includeDecommissioned = query.includeDecommissioned === 'true' || query.includeDecommissioned === true
-  
+  const explicitType = query.type as string | undefined
+
   // Use optimized account lookup - no more full table scans!
   // This is the standard pattern that all APIs should follow
   const lookupResult = await lookupAccountOptimized(event, identifier, {
-    includeDecommissioned
+    includeDecommissioned,
+    explicitType
   })
   
   if (!lookupResult) {
