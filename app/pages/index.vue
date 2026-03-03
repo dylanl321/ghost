@@ -541,10 +541,24 @@ async function handleCostScopeChange(scope: string) {
     })
 
     const result = await $fetch<{ success: boolean; data: any }>(`/api/costs/summary?${params}`)
-    if (result.success && result.data?.resultsByTime) {
-      scopedCostData.value = result.data.resultsByTime.map((item: any) => ({
-        date: item.timePeriod?.start || item.date || '',
-        cost: parseFloat(item.total?.amount || item.total || '0')
+    if (result.success && result.data) {
+      // Extract resultsByTime from the correct location
+      // Proforma responses nest under .billable/.proforma; non-proforma at top level
+      const rawResults = result.data.billable?.resultsByTime
+        || result.data.proforma?.resultsByTime
+        || result.data.resultsByTime
+        || []
+
+      scopedCostData.value = rawResults.map((item: any) => ({
+        // Handle both AWS uppercase (TimePeriod.Start) and normalized lowercase
+        date: item.TimePeriod?.Start || item.timePeriod?.start || item.date || '',
+        cost: parseFloat(
+          item.Total?.UnblendedCost?.Amount
+          || item.total?.UnblendedCost?.Amount
+          || item.total?.amount
+          || item.total
+          || '0'
+        )
       })).filter((d: any) => d.date)
     }
   } catch (err) {
