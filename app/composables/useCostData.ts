@@ -1,6 +1,9 @@
 import { ref, computed, watch, onUnmounted } from 'vue'
 import type { Ref } from 'vue'
 import type { DataMode, NormalizedDataset, CostsQuery } from '~/types/costs'
+import type { AWSEnclaveData } from '~~/shared/types/accounts'
+import { getCachedDataset, setCachedDataset, invalidateByMode } from '~/composables/useCostDataCache'
+import { getUserFriendlyMessage, retryWithBackoff } from '~/utils/error-helpers'
 
 /**
  * CLIENT-SIDE CACHING GAP
@@ -30,7 +33,7 @@ interface UseCostDataArgs {
   selectedAccounts: Ref<string[]>
   selectedTimeframe: Ref<string>
   initialMode?: DataMode
-  accountsList?: Ref<any[]> // Full accounts data with metadata
+  accountsList?: Ref<AWSEnclaveData[]> // Full accounts data with metadata
   debounceMs?: number // Debounce delay in milliseconds
 }
 
@@ -40,6 +43,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
   const isDeferredLoading = ref(false) // True while forecast/supplementary data loads in background
   const isPending = ref(false) // True when debounce timer is active
   const fetchError = ref<string | null>(null)
+  const fetchWarnings = ref<string[]>([]) // Non-fatal warnings (e.g. deferred fetch failed but core succeeded)
   const dataset = ref<NormalizedDataset | null>(null)
   const initialized = ref(false) // Gate watchers until after initial mount fetch
   let debounceTimer: NodeJS.Timeout | null = null
@@ -96,7 +100,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
   // Build org-wide historical URL (no account filtering) for contextual charts
   const buildOrgWideHistoricalUrl = () => {
     const params = new URLSearchParams()
-    params.set('period', 'last12months') // Always get full year for year-end projection
+    params.set('period', 'last24months') // Get 2 years for LOB trend and year-over-year charts
     params.set('proforma', String(query.value.mode === 'proforma'))
     return `/api/costs/historical?${params.toString()}`
   }
@@ -204,6 +208,16 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     return `/api/costs/summary?${params.toString()}`
   }
 
+  const buildLastMonthServicesSummaryUrl = () => {
+    const params = new URLSearchParams()
+    params.set('period', 'lastMonth')
+    params.set('proforma', String(query.value.mode === 'proforma'))
+    params.set('groupBy', 'SERVICE')
+    params.set('enhanced', 'false')
+    if (query.value.accounts.length > 0) params.set('accountIds', query.value.accounts.join(','))
+    return `/api/costs/summary?${params.toString()}`
+  }
+
   const fetchCosts = async () => {
     // Clear any pending debounce since we're fetching now
     isPending.value = false
@@ -222,11 +236,22 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
 
     isFetching.value = true
     fetchError.value = null
+    fetchWarnings.value = []
 
     const currentTimeframe = query.value.timeframe
     const currentMode = query.value.mode
     const currentAccounts = [...query.value.accounts]
     const isHistorical = ['last7days', 'last30days', 'last90days', 'lastMonth', 'lastQuarter', 'lastYear', 'last12months'].includes(currentTimeframe)
+
+    // Check client-side cache before making network requests
+    const cached = getCachedDataset(currentAccounts, currentTimeframe, currentMode)
+    if (cached) {
+      dataset.value = accountsList?.value
+        ? { ...cached, accountsList: accountsList.value }
+        : cached
+      isFetching.value = false
+      return
+    }
 
     try {
       // ── Fire ALL requests at t=0 ──
@@ -235,33 +260,40 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
       // get priority. Deferred requests start filling connections as
       // core requests complete, eliminating the idle gap between phases.
 
-      // Core batch (awaited first for immediate UI)
-      const summaryP = $fetch(buildSummaryUrl(), { signal })
-      const historicalP = $fetch(buildHistoricalUrl(), { signal })
-      const analysisP = $fetch(buildAnalysisUrl(), { signal })
-      const servicesP = $fetch(buildServicesSummaryUrl(), { signal })
+      // Core batch (awaited first for immediate UI) — retried on transient errors
+      const summaryP = retryWithBackoff(() => $fetch(buildSummaryUrl(), { signal }))
+      const historicalP = retryWithBackoff(() => $fetch(buildHistoricalUrl(), { signal }))
+      const analysisP = retryWithBackoff(() => $fetch(buildAnalysisUrl(), { signal }))
+      const servicesP = retryWithBackoff(() => $fetch(buildServicesSummaryUrl(), { signal }))
 
       // Deferred wave 1: chart-critical (forecast + org-wide historical)
       // Fired now, awaited after core renders
+      const warnOnFail = (label: string) => (err: any) => {
+        if (err?.name !== 'AbortError') {
+          fetchWarnings.value.push(`${label} data unavailable`)
+        }
+        return null
+      }
       const wave1: Record<string, Promise<any>> = {}
       if (!isHistorical) {
-        wave1.forecast = $fetch(buildForecastUrl(), { signal }).catch(() => null)
-        wave1.extendedForecast = $fetch(buildExtendedForecastUrl(), { signal }).catch(() => null)
-        wave1.yearEndForecast = $fetch(buildYearEndForecastUrl(), { signal }).catch(() => null)
+        wave1.forecast = $fetch(buildForecastUrl(), { signal }).catch(warnOnFail('Forecast'))
+        wave1.extendedForecast = $fetch(buildExtendedForecastUrl(), { signal }).catch(warnOnFail('Extended forecast'))
+        wave1.yearEndForecast = $fetch(buildYearEndForecastUrl(), { signal }).catch(warnOnFail('Year-end forecast'))
       }
-      wave1.orgWideHistorical = $fetch(buildOrgWideHistoricalUrl(), { signal }).catch(() => null)
+      wave1.orgWideHistorical = $fetch(buildOrgWideHistoricalUrl(), { signal }).catch(warnOnFail('Org-wide historical'))
 
       // Deferred wave 2: data-table supplements
       // Fired now, awaited after wave 1 patches the dataset
       const wave2: Record<string, Promise<any>> = {}
-      wave2.ytdSummary = $fetch(buildYtdSummaryUrl(), { signal }).catch(() => null)
+      wave2.ytdSummary = $fetch(buildYtdSummaryUrl(), { signal }).catch(warnOnFail('YTD summary'))
       // Skip duplicate requests — reuse core summaryRes when URLs would match
       if (currentTimeframe !== 'lastMonth') {
-        wave2.lastMonthSummary = $fetch(buildLastMonthSummaryUrl(), { signal }).catch(() => null)
+        wave2.lastMonthSummary = $fetch(buildLastMonthSummaryUrl(), { signal }).catch(warnOnFail('Last month summary'))
       }
       if (!isHistorical && !(currentTimeframe === 'thisMonth' && currentAccounts.length === 0)) {
-        wave2.currentMonthOrgWide = $fetch(buildCurrentMonthOrgWideSummaryUrl(), { signal }).catch(() => null)
+        wave2.currentMonthOrgWide = $fetch(buildCurrentMonthOrgWideSummaryUrl(), { signal }).catch(warnOnFail('Current month org-wide'))
       }
+      wave2.lastMonthServices = $fetch(buildLastMonthServicesSummaryUrl(), { signal }).catch(warnOnFail('Last month services'))
 
       // ── Phase 1: Await core batch for immediate UI rendering ──
       const [summaryRes, historicalRes, analysisRes, servicesRes] = await Promise.all([
@@ -285,7 +317,8 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
         extendedForecast: null,
         yearEndForecast: null,
         analysis: analysisRes as any,
-        services: servicesRes as any
+        services: servicesRes as any,
+        lastMonthServices: null
       }
 
       isFetching.value = false
@@ -325,13 +358,18 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
 
       isDeferredLoading.value = false
 
+      // Store completed dataset in client-side cache
+      if (thisGeneration === fetchGeneration && dataset.value) {
+        setCachedDataset(currentAccounts, currentTimeframe, currentMode, dataset.value)
+      }
+
     } catch (e: any) {
       // Ignore abort errors - these are expected when a newer fetch supersedes
       if (e?.name === 'AbortError' || thisGeneration !== fetchGeneration) {
         isDeferredLoading.value = false
         return
       }
-      fetchError.value = e?.message || 'Failed to fetch cost data'
+      fetchError.value = getUserFriendlyMessage(e)
       isFetching.value = false
       isDeferredLoading.value = false
     }
@@ -379,6 +417,9 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     if (!initialized.value) return
     // Only clear cache if mode actually changed (not on initial mount)
     if (oldMode !== undefined && newMode !== oldMode) {
+      // Invalidate client-side cache for both old and new modes
+      invalidateByMode(oldMode)
+      invalidateByMode(newMode)
       modeCacheClearing = true
       try {
         await $fetch('/api/costs/cache-clear', {
@@ -415,5 +456,5 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     }
   })
 
-  return { mode, isFetching, isDeferredLoading, isPending, fetchError, dataset, fetchCosts, initialized }
+  return { mode, isFetching, isDeferredLoading, isPending, fetchError, fetchWarnings, dataset, fetchCosts, initialized }
 }

@@ -25,7 +25,7 @@ import type { NormalizedDataset, AwsResultsByTime } from '~/types/costs'
  */
 export function unwrapCostData(
   dataset: NormalizedDataset,
-  field: 'summary' | 'analysis' | 'services' | 'forecast' | 'historical' | 'extendedForecast' | 'ytdSummary' | 'lastMonthSummary' | 'orgWideHistorical' | 'currentMonthOrgWide' | 'yearEndForecast',
+  field: 'summary' | 'analysis' | 'services' | 'forecast' | 'historical' | 'extendedForecast' | 'ytdSummary' | 'lastMonthSummary' | 'orgWideHistorical' | 'currentMonthOrgWide' | 'yearEndForecast' | 'lastMonthServices',
 ): any {
   const raw = (dataset as any)[field]
   if (!raw) return null
@@ -49,7 +49,7 @@ export function unwrapCostData(
  */
 export function getResultsByTime(
   dataset: NormalizedDataset,
-  field: 'summary' | 'services' | 'historical' | 'forecast' | 'extendedForecast' | 'orgWideHistorical' | 'yearEndForecast',
+  field: 'summary' | 'services' | 'historical' | 'forecast' | 'extendedForecast' | 'orgWideHistorical' | 'yearEndForecast' | 'lastMonthServices',
 ): AwsResultsByTime[] {
   const actualData = unwrapCostData(dataset, field)
   if (!actualData) return []
@@ -57,13 +57,13 @@ export function getResultsByTime(
   const isProforma = dataset.mode === 'proforma'
 
   if (isProforma) {
-    // Proforma data can live at two different nesting depths depending on the
-    // endpoint (summary uses rawData, services does not).
-    if (actualData?.proforma?.rawData?.resultsByTime) {
-      return actualData.proforma.rawData.resultsByTime
-    }
+    // Canonical path — server endpoints now normalize proforma.resultsByTime directly
     if (actualData?.proforma?.resultsByTime) {
       return actualData.proforma.resultsByTime
+    }
+    // Legacy: remove once all endpoints normalize proforma nesting
+    if (actualData?.proforma?.rawData?.resultsByTime) {
+      return actualData.proforma.rawData.resultsByTime
     }
   }
 

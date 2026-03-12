@@ -185,9 +185,31 @@ export function buildLineTrendOptions(data: any, _context: ChartBuilderContext):
           data: weekendMarkAreas,
           z: -1
         } : undefined,
-        markLine: masterAccountAnnotations.length > 0 ? {
+        markLine: (masterAccountAnnotations.length > 0 || data.dailyBudgetPace) ? {
           silent: false,
-          data: masterAccountAnnotations
+          data: [
+            ...masterAccountAnnotations,
+            ...(data.dailyBudgetPace ? [{
+              yAxis: data.dailyBudgetPace,
+              label: {
+                show: true,
+                formatter: `Budget Pace: ${formatCurrency(data.dailyBudgetPace)}/day`,
+                position: 'insideEndTop',
+                color: '#10b981',
+                fontSize: 10,
+                backgroundColor: 'rgba(0,0,0,0.7)',
+                borderColor: '#10b981',
+                borderWidth: 1,
+                borderRadius: 4,
+                padding: [3, 6]
+              },
+              lineStyle: {
+                color: '#10b981',
+                type: 'dashed',
+                width: 2
+              }
+            }] : [])
+          ]
         } : undefined
       }
     ]

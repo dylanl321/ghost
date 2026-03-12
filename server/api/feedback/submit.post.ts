@@ -25,7 +25,7 @@ registerEndpoint('/api/feedback/submit', 'POST', {
           properties: {
             type: {
               type: 'string',
-              enum: ['Issue', 'Feature Request'],
+              enum: ['Issue', 'Feature Request', 'General Feedback'],
               description: 'Type of feedback being reported.'
             },
             description: {
@@ -72,7 +72,7 @@ export default defineEventHandler(async (event) => {
   const startTime = Date.now()
 
   const body = await readBody<{
-    type: 'Issue' | 'Feature Request'
+    type: 'Issue' | 'Feature Request' | 'General Feedback'
     description: string
     reporter_email: string
   }>(event)

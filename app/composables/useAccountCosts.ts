@@ -3,13 +3,15 @@
  */
 
 import { ref, computed } from 'vue'
+import type { AWSEnclaveData } from '~~/shared/types/accounts'
+import type { CostsSummaryResponse } from '~/types/costs'
 
 export const useAccountCosts = () => {
-  
+
   // State
-  const accounts = ref<any>(null)
-  const costs = ref<any>(null)
-  const accountDetails = ref<Map<string, any>>(new Map())
+  const accounts = ref<AWSEnclaveData[] | null>(null)
+  const costs = ref<CostsSummaryResponse | null>(null)
+  const accountDetails = ref<Map<string, AWSEnclaveData>>(new Map())
   const linesOfBusiness = ref<any[]>([])
   const departments = ref<any[]>([])
   const isLoadingAccounts = ref(false)
@@ -17,6 +19,7 @@ export const useAccountCosts = () => {
   const isLoadingDetails = ref(false)
   const accountsError = ref<string | null>(null)
   const costsError = ref<string | null>(null)
+  const warnings = ref<string[]>([])
 
   // Computed
   const isLoading = computed(() => isLoadingAccounts.value || isLoadingCosts.value)
@@ -97,9 +100,6 @@ export const useAccountCosts = () => {
         params.period = 'thisMonth'
       }
 
-      console.log('FETCH COST DEBUG: API params:', params)
-      console.log('FETCH COST DEBUG: URL will be:', '/api/costs/summary?' + new URLSearchParams(params).toString())
-      
       let data
       try {
         data = await $fetch('/api/costs/summary', {
@@ -113,13 +113,10 @@ export const useAccountCosts = () => {
           data = await $fetch('/api/costs/summary', {
             query: fallbackParams
           })
-          console.log('Successfully fetched basic cost data as fallback')
         } else {
           throw enhancedError
         }
       }
-      
-      console.log('FETCH COST DEBUG: Response data keys:', Object.keys(data || {}))
       
       costs.value = data
       return data
@@ -213,6 +210,7 @@ export const useAccountCosts = () => {
       return data?.data || data || []
     } catch (err: any) {
       console.error('Error fetching lines of business:', err)
+      warnings.value.push('Lines of business data unavailable')
       return []
     }
   }
@@ -231,6 +229,7 @@ export const useAccountCosts = () => {
       return data?.data || data || []
     } catch (err: any) {
       console.error('Error fetching departments:', err)
+      warnings.value.push('Department data unavailable')
       return []
     }
   }
@@ -401,6 +400,7 @@ export const useAccountCosts = () => {
     error,
     accountsError,
     costsError,
+    warnings,
     
     // Methods
     fetchAccounts,

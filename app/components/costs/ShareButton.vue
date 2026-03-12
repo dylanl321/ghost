@@ -44,7 +44,7 @@
           <!-- Loading State -->
           <div v-if="isLoading" class="flex items-center justify-center py-8">
             <div class="text-center">
-              <Icon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-blue-500 mx-auto mb-2" />
+              <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-blue-500 mx-auto mb-2" />
               <p class="text-sm text-gray-400">Creating share link...</p>
             </div>
           </div>
@@ -52,7 +52,7 @@
           <!-- Success State -->
           <div v-else-if="shareUrl && !error" class="space-y-4">
             <div class="flex items-center gap-2 text-green-400">
-              <Icon name="i-heroicons-check-circle" class="w-5 h-5" />
+              <UIcon name="i-heroicons-check-circle" class="w-5 h-5" />
               <span class="text-sm font-medium">Share link created successfully!</span>
             </div>
 
@@ -80,7 +80,7 @@
 
             <div class="bg-blue-900/20 border border-blue-700 rounded-lg p-3">
               <div class="flex items-start gap-2">
-                <Icon name="i-heroicons-information-circle" class="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
+                <UIcon name="i-heroicons-information-circle" class="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
                 <div class="text-xs text-blue-200">
                   <div class="font-medium mb-1">What's included in this share:</div>
                   <ul class="space-y-1 text-blue-300">
@@ -101,7 +101,7 @@
           <!-- Error State -->
           <div v-else-if="error" class="space-y-4">
             <div class="flex items-center gap-2 text-red-400">
-              <Icon name="i-heroicons-exclamation-triangle" class="w-5 h-5" />
+              <UIcon name="i-heroicons-exclamation-triangle" class="w-5 h-5" />
               <span class="text-sm font-medium">Failed to create share link</span>
             </div>
 
@@ -193,7 +193,7 @@
           <!-- Loading State -->
           <div v-if="isLoading" class="flex items-center justify-center py-8">
             <div class="text-center">
-              <Icon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-blue-500 mx-auto mb-2" />
+              <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-blue-500 mx-auto mb-2" />
               <p class="text-sm text-gray-400">Creating share link...</p>
             </div>
           </div>
@@ -201,7 +201,7 @@
           <!-- Success State -->
           <div v-else-if="shareUrl && !error" class="space-y-4">
             <div class="flex items-center gap-2 text-green-400">
-              <Icon name="i-heroicons-check-circle" class="w-5 h-5" />
+              <UIcon name="i-heroicons-check-circle" class="w-5 h-5" />
               <span class="text-sm font-medium">Share link created successfully!</span>
             </div>
             
@@ -229,7 +229,7 @@
 
             <div class="bg-blue-900/20 border border-blue-700 rounded-lg p-3">
               <div class="flex items-start gap-2">
-                <Icon name="i-heroicons-information-circle" class="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
+                <UIcon name="i-heroicons-information-circle" class="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
                 <div class="text-xs text-blue-200">
                   <div class="font-medium mb-1">What's included in this share:</div>
                   <ul class="space-y-1 text-blue-300">
@@ -250,7 +250,7 @@
           <!-- Error State -->
           <div v-else-if="error" class="space-y-4">
             <div class="flex items-center gap-2 text-red-400">
-              <Icon name="i-heroicons-exclamation-triangle" class="w-5 h-5" />
+              <UIcon name="i-heroicons-exclamation-triangle" class="w-5 h-5" />
               <span class="text-sm font-medium">Failed to create share link</span>
             </div>
             

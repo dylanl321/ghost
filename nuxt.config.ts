@@ -100,7 +100,7 @@ export default defineNuxtConfig({
 
   nitro: {
     externals: {
-      inline: ['gray-matter']
+      inline: ['gray-matter', 'xlsx']
     }
   },
 

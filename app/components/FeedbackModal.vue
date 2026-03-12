@@ -115,11 +115,14 @@ async function submit() {
       reporter_email: reporter_email.value,
     }
 
-    await fetch('/api/feedback/submit', {
+    const result = await $fetch<{ success: boolean }>('/api/feedback/submit', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: data,
     })
+
+    if (!result.success) {
+      throw new Error('Server returned unsuccessful response')
+    }
 
     toast.add({
       title: 'Feedback Submitted',

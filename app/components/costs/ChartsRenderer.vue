@@ -1,5 +1,15 @@
 <template>
     <div class="space-y-6">
+        <!-- Warnings banner for non-fatal fetch failures -->
+        <div v-if="warnings && warnings.length > 0"
+            class="px-4 py-2.5 bg-yellow-900/20 border border-yellow-700/40 rounded-lg flex items-start gap-2">
+            <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-yellow-500 mt-0.5 flex-shrink-0" />
+            <div class="text-xs text-yellow-400">
+                <span class="font-medium">Some data may be incomplete:</span>
+                {{ warnings.join(', ') }}
+            </div>
+        </div>
+
         <!-- Grid layout for smaller charts -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <template v-for="chart in optimizedCharts" :key="chart.id">
@@ -50,27 +60,34 @@
                         </div>
                     </div>
                     <div class="p-6">
-                        <div class="h-96">
+                        <div class="h-64 md:h-80 lg:h-96">
                             <VChart v-if="getChartOptions(chart)" :option="getChartOptions(chart)" autoresize
                                 class="h-full w-full" />
                             <div v-else-if="isLoading()" class="h-full flex items-center justify-center">
                                 <div class="text-center">
-                                    <Icon name="i-heroicons-arrow-path"
+                                    <UIcon name="i-heroicons-arrow-path"
                                         class="w-8 h-8 animate-spin text-blue-500 mx-auto mb-2" />
                                     <p class="text-gray-400">Loading chart data...</p>
                                 </div>
                             </div>
-                            <div v-else-if="hasError(chart)" class="h-full flex items-center justify-center">
+                            <div v-else-if="hasExtractorError(chart)" class="h-full flex items-center justify-center">
                                 <div class="text-center">
-                                    <Icon name="i-heroicons-exclamation-triangle"
-                                        class="w-8 h-8 text-yellow-500 mx-auto mb-2" />
-                                    <p class="text-gray-400">No data available</p>
+                                    <UIcon name="i-heroicons-exclamation-triangle"
+                                        class="w-8 h-8 text-red-400 mx-auto mb-2" />
+                                    <p class="text-gray-300">Chart failed to render</p>
                                     <details class="mt-2">
                                         <summary class="text-xs text-gray-500 cursor-pointer hover:text-gray-400">Debug
                                         </summary>
                                         <pre
                                             class="text-xs text-left mt-2 p-2 bg-gray-800 rounded overflow-auto max-h-32">{{ preview(chart) }}</pre>
                                     </details>
+                                </div>
+                            </div>
+                            <div v-else-if="hasNoData(chart)" class="h-full flex items-center justify-center">
+                                <div class="text-center">
+                                    <UIcon name="i-heroicons-inbox"
+                                        class="w-8 h-8 text-gray-500 mx-auto mb-2" />
+                                    <p class="text-gray-400">No data available for this view</p>
                                 </div>
                             </div>
                         </div>
@@ -85,11 +102,11 @@
                         <p v-if="chart.description" class="text-sm text-gray-400 mt-1">{{ chart.description }}</p>
                     </div>
                     <div class="p-6">
-                        <div class="h-80">
+                        <div class="h-64 md:h-80">
                             <VChart v-if="getChartOptions(chart)" :option="getChartOptions(chart)" autoresize
                                 class="h-full w-full" />
                             <div v-else-if="isLoading()" class="h-full flex items-center justify-center">
-                                <Icon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-blue-500" />
+                                <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-blue-500" />
                             </div>
                             <div v-else class="h-full flex items-center justify-center text-gray-500 text-sm">
                                 No data
@@ -105,11 +122,11 @@
                         <p v-if="chart.description" class="text-xs text-gray-400 mt-1">{{ chart.description }}</p>
                     </div>
                     <div class="p-4">
-                        <div class="h-64">
+                        <div class="h-48 md:h-64">
                             <VChart v-if="getChartOptions(chart)" :option="getChartOptions(chart)" autoresize
                                 class="h-full w-full" />
                             <div v-else-if="isLoading()" class="h-full flex items-center justify-center">
-                                <Icon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-blue-500" />
+                                <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-blue-500" />
                             </div>
                             <div v-else class="h-full flex items-center justify-center text-gray-500 text-sm">
                                 No data
@@ -123,7 +140,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { NormalizedDataset } from '~/types/costs'
 import type { ChartDefinition } from '~/composables/useChartRegistry'
 import VChart from 'vue-echarts'
@@ -168,6 +185,7 @@ const props = defineProps<{
     dataset: NormalizedDataset | null
     showRegressionLine?: boolean
     selectedAccounts?: string[]
+    warnings?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -200,29 +218,42 @@ const isMediumWidth = (chart: ChartDefinition) => {
     // Medium width for comparison charts and detailed visualizations
     return [
         'departmentComparison',
-        'topSpenders',
-        'budgetUtilization',
         'lobComparison',
         'departmentBudgetPerformance',
-        'costOptimizationOpportunities',
-        'monthOverMonthComparison',
         'billableVsProforma',
-        'scenarioOverlay'
+        'scenarioOverlay',
+        'serviceCostVariance'
     ].includes(chart.id)
 }
 
 const isLoading = () => !props.dataset
-const hasError = (chart: ChartDefinition) => {
+
+// Distinguish between "no data available" and "extractor threw an error"
+const hasNoData = (chart: ChartDefinition) => {
     if (!props.dataset) return false
-    if (!chart.extractor) return false // No extractor means chart will use default data
+    if (!chart.extractor) return false
     try {
         const data = chart.extractor(props.dataset)
         return !data || (Array.isArray(data) && data.length === 0)
+    } catch {
+        return false // error case handled by hasExtractorError
+    }
+}
+
+const hasExtractorError = (chart: ChartDefinition) => {
+    if (!props.dataset) return false
+    if (!chart.extractor) return false
+    try {
+        chart.extractor(props.dataset)
+        return false
     } catch (error) {
         console.warn(`Error in chart extractor for ${chart.id}:`, error)
         return true
     }
 }
+
+// Combined check used by template for the "no chart options" state
+const hasError = (chart: ChartDefinition) => hasNoData(chart) || hasExtractorError(chart)
 
 // Consistent currency and percentage formatting uses auto-imported formatCurrency / formatPercent from utils/formatters
 
@@ -309,6 +340,23 @@ const optimizedCharts = computed(() => {
 // Chart builder registry – delegates to individual builder files in ~/utils/chart-options/
 import { chartBuilderById, chartBuilderByType, type ChartBuilderContext } from '~/utils/chart-options'
 
+// Per-chart memoization cache to avoid rebuilding all 25 charts every render cycle
+const chartCache = new Map<string, {
+    dataHash: string
+    contextHash: string
+    options: Record<string, unknown>
+}>()
+
+function stableHash(obj: unknown): string {
+    try { return JSON.stringify(obj) }
+    catch { return String(Date.now()) }
+}
+
+// Clear cache when dataset identity changes
+watch(() => props.dataset, () => {
+    chartCache.clear()
+}, { flush: 'sync' })
+
 // Cached chart options map – computed once per render cycle instead of twice per chart
 // (template was calling getChartOptions once for v-if and once for :option)
 const chartOptionsMap = computed(() => {
@@ -320,21 +368,41 @@ const chartOptionsMap = computed(() => {
         selectedYearView: selectedYearView.value,
     }
 
+    const contextHash = stableHash(context)
+    const activeIds = new Set<string>()
+
     for (const chart of props.charts) {
+        activeIds.add(chart.id)
         try {
             if (!chart.extractor) continue
 
-            const data = chart.extractor(props.dataset)
-            if (data?.contextualChart || !data) continue
+            const data = chart.extractor(props.dataset) as Record<string, unknown> | null
+            if ((data as any)?.contextualChart || !data) continue
 
-            const builder = chartBuilderById[chart.id] || chartBuilderByType[chart.type]
+            // Check cache before calling builder
+            const dataHash = stableHash(data)
+            const cached = chartCache.get(chart.id)
+            if (cached && cached.dataHash === dataHash && cached.contextHash === contextHash) {
+                map.set(chart.id, cached.options)
+                continue
+            }
+
+            const builder = chartBuilderById[chart.id] || (chart.type ? chartBuilderByType[chart.type] : undefined)
             if (builder) {
                 const options = builder(data, context)
-                if (options) map.set(chart.id, options)
+                if (options) {
+                    map.set(chart.id, options)
+                    chartCache.set(chart.id, { dataHash, contextHash, options })
+                }
             }
         } catch (error) {
             console.error('Error generating chart options for', chart.id, error)
         }
+    }
+
+    // Prune cache entries for charts no longer active
+    for (const key of chartCache.keys()) {
+        if (!activeIds.has(key)) chartCache.delete(key)
     }
 
     return map

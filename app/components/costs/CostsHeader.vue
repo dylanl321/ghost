@@ -23,7 +23,7 @@
           </UButton>
         </UTooltip>
       </div>
-      <div class="flex gap-2 items-center">
+      <div class="flex flex-wrap gap-2 items-center">
         <!-- Data Mode Selector -->
         <div class="w-32" data-tour="costs-mode">
           <USelectMenu
@@ -36,7 +36,7 @@
         </div>
 
         <!-- Reports Menu -->
-        <UDropdown :items="reportsMenuItems" :popper="{ placement: 'bottom-end' }">
+        <UDropdown :items="reportsMenuItems" :popper="{ placement: 'bottom-end' }" data-tour="export-button">
           <UButton
             color="gray"
             variant="ghost"
@@ -51,7 +51,7 @@
         <!-- Help Menu -->
         <span data-tour="costs-help">
           <UDropdown :items="helpMenuItems" :popper="{ placement: 'bottom-end' }">
-            <UButton color="gray" variant="ghost" icon="i-heroicons-question-mark-circle" />
+            <UButton color="gray" variant="ghost" icon="i-heroicons-question-mark-circle" aria-label="Help" />
           </UDropdown>
         </span>
 
@@ -60,7 +60,7 @@
 
         <!-- Refresh -->
         <UTooltip text="Refresh data">
-          <UButton color="gray" variant="ghost" icon="i-heroicons-arrow-path" @click="$emit('refresh')" />
+          <UButton color="gray" variant="ghost" icon="i-heroicons-arrow-path" aria-label="Refresh data" @click="$emit('refresh')" />
         </UTooltip>
       </div>
     </div>

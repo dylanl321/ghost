@@ -340,22 +340,9 @@ export default defineEventHandler(handleAsync(async (event) => {
             : await enhanceCostData(proformaData.billable.costs, includeDecommissioned, groupByDimension)
 
           // Get enhanced proforma data
-          logger.info('[summary] IMMEDIATELY Before enhanceCostData for proforma:', {
-            rootTotal: proformaData.proforma.total,
-            costsTotal: proformaData.proforma.costs.total?.UnblendedCost?.Amount,
-            resultsByTimeLength: proformaData.proforma.costs.resultsByTime?.length,
-            firstPeriodHasTotal: !!proformaData.proforma.costs.resultsByTime?.[0]?.Total,
-            firstPeriodTotalAmount: proformaData.proforma.costs.resultsByTime?.[0]?.Total?.UnblendedCost?.Amount,
-            firstPeriodGroupsCount: proformaData.proforma.costs.resultsByTime?.[0]?.Groups?.length
-          })
-
           const proformaEnhanced = groupByDimension === 'NONE' || groupByDimension === 'MONTHLY_ONLY'
             ? proformaData.proforma.costs // Return raw data for NONE grouping
             : await enhanceCostData(proformaData.proforma.costs, includeDecommissioned, groupByDimension)
-
-          logger.info('[summary] After enhanceCostData for proforma:', {
-            enhancedTotalCost: proformaEnhanced?.summary?.totalCost
-          })
 
           // Note: Master account unallocated costs are NOT added to proforma accounts list
           // Proforma view shows only Billing Conductor allocated costs
@@ -511,6 +498,11 @@ export default defineEventHandler(handleAsync(async (event) => {
     dataSource: proforma 
       ? { type: 'proforma', accounts: [proformaAccountId, masterAccountId] }
       : { type: 'standard', environment }
+  }
+
+  // Normalize proforma nesting: ensure resultsByTime is directly on the proforma object
+  if (finalResult?.proforma?.rawData?.resultsByTime && !finalResult?.proforma?.resultsByTime) {
+    finalResult.proforma.resultsByTime = finalResult.proforma.rawData.resultsByTime
   }
 
   return sendSuccess(event, finalResult, metadata)

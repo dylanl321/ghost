@@ -1,9 +1,10 @@
 <template>
   <UPopover mode="hover" :popper="{ placement: 'bottom-start' }">
     <UTooltip text="Cost Settings" :popper="{ placement: 'top' }">
-      <UButton 
-        size="sm" 
-        variant="ghost" 
+      <UButton
+        data-tour="costs-settings"
+        size="sm"
+        variant="ghost"
         color="gray"
         icon="i-heroicons-cog-6-tooth"
         :class="{ 'text-blue-400': hasActiveFilters }"
@@ -11,7 +12,7 @@
     </UTooltip>
     
     <template #panel="{ close }">
-      <div class="p-4 w-80">
+      <div class="p-4 w-72 sm:w-80 max-w-[calc(100vw-2rem)]">
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-sm font-semibold text-gray-200">Cost Settings</h3>
           <UButton

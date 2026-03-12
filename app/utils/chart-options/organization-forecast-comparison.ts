@@ -68,6 +68,7 @@ export function buildOrganizationForecastComparisonOptions(data: any, _context: 
     yAxis: [
       {
         type: 'value',
+        name: 'Daily Spend',
         position: 'left',
         axisLine: { lineStyle: { color: CHART_THEME.axisLine } },
         axisLabel: {
@@ -75,12 +76,24 @@ export function buildOrganizationForecastComparisonOptions(data: any, _context: 
           formatter: (value: number) => formatCurrency(value)
         },
         splitLine: { lineStyle: { color: CHART_THEME.splitLine } }
+      },
+      {
+        type: 'value',
+        name: 'Cumulative',
+        position: 'right',
+        axisLine: { lineStyle: { color: CHART_THEME.axisLine } },
+        axisLabel: {
+          color: CHART_THEME.axisLabel,
+          formatter: (value: number) => formatCurrency(value)
+        },
+        splitLine: { show: false }
       }
     ],
     series: [
       {
         name: 'Actual Daily Spend',
         type: 'bar',
+        yAxisIndex: 0,
         data: data.series[0].data,
         itemStyle: { color: SEMANTIC_COLORS.primary },
         barWidth: '40%'
@@ -88,6 +101,7 @@ export function buildOrganizationForecastComparisonOptions(data: any, _context: 
       {
         name: 'AWS Projection',
         type: 'bar',
+        yAxisIndex: 0,
         data: data.series[1].data,
         itemStyle: {
           color: SEMANTIC_COLORS.forecast,
@@ -98,6 +112,7 @@ export function buildOrganizationForecastComparisonOptions(data: any, _context: 
       {
         name: 'Cumulative Actual',
         type: 'line',
+        yAxisIndex: 1,
         data: data.series[2].data,
         smooth: true,
         lineStyle: {
@@ -110,6 +125,7 @@ export function buildOrganizationForecastComparisonOptions(data: any, _context: 
       {
         name: 'Cumulative AWS Projection',
         type: 'line',
+        yAxisIndex: 1,
         data: data.series[3].data,
         smooth: true,
         lineStyle: {
@@ -122,6 +138,7 @@ export function buildOrganizationForecastComparisonOptions(data: any, _context: 
       {
         name: 'GDMS Forecasted Costs',
         type: 'line',
+        yAxisIndex: 1,
         data: data.series[4].data,
         lineStyle: {
           color: SEMANTIC_COLORS.warning,

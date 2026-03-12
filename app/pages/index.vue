@@ -82,6 +82,33 @@
     <!-- Quick Start Card for New Users -->
     <QuickStartCard />
 
+    <!-- Budget Alerts Strip -->
+    <div v-if="!dashboardAlertsLoading && !loading && dashboardAlertsTotal > 0" class="flex items-center gap-2.5 px-1 -mb-3">
+      <Icon name="i-heroicons-bell-alert" class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" />
+      <span class="text-[11px] text-gray-500 dark:text-gray-400">
+        {{ dashboardAlertsTotal }} budget alert{{ dashboardAlertsTotal !== 1 ? 's' : '' }} this month
+      </span>
+      <span class="text-[11px] text-gray-400 dark:text-gray-500">&middot;</span>
+      <span v-if="dashboardAlertsBySeverity.critical > 0" class="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400">
+        <span class="w-1.5 h-1.5 rounded-full bg-red-500" />{{ dashboardAlertsBySeverity.critical }} critical
+      </span>
+      <span v-if="dashboardAlertsBySeverity.escalation > 0" class="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400">
+        <span class="w-1.5 h-1.5 rounded-full bg-red-400" />{{ dashboardAlertsBySeverity.escalation }} escalation
+      </span>
+      <span v-if="dashboardAlertsBySeverity.warning > 0" class="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400">
+        <span class="w-1.5 h-1.5 rounded-full bg-yellow-500" />{{ dashboardAlertsBySeverity.warning }} warning{{ dashboardAlertsBySeverity.warning !== 1 ? 's' : '' }}
+      </span>
+      <span v-if="dashboardAlertsBySeverity.info > 0" class="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400">
+        <span class="w-1.5 h-1.5 rounded-full bg-blue-400" />{{ dashboardAlertsBySeverity.info }} info
+      </span>
+      <NuxtLink
+        to="/account/costs?chartTab=budget-health"
+        class="text-[11px] text-blue-500 hover:text-blue-400 transition-colors"
+      >
+        View &rarr;
+      </NuxtLink>
+    </div>
+
     <!-- Metric Cards -->
     <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
       <!-- Month to Date -->
@@ -484,6 +511,46 @@ const userTotalCost = computed(() => {
   return userAccountIds.reduce((sum, id) => sum + (costs[id] || 0), 0)
 })
 
+// Budget alerts for the Budget Health card
+import type { BudgetAlert } from '@/shared/types/budget-alerts'
+const dashboardAlerts = ref<BudgetAlert[]>([])
+const dashboardAlertsLoading = ref(true)
+
+const dashboardAlertsTotal = computed(() => dashboardAlerts.value.length)
+const dashboardAlertsBySeverity = computed(() => {
+  const counts = { critical: 0, warning: 0, info: 0, escalation: 0 }
+  for (const alert of dashboardAlerts.value) {
+    const level = alert.alert_level?.toUpperCase()
+    if (level === 'CRITICAL') counts.critical++
+    else if (level === 'WARNING') counts.warning++
+    else if (level === 'INFO') counts.info++
+    else if (level === 'ESCALATION') counts.escalation++
+  }
+  return counts
+})
+const dashboardAlertsSeverityColor = computed(() => {
+  const sev = dashboardAlertsBySeverity.value
+  if (sev.critical > 0 || sev.escalation > 0) return 'text-red-500'
+  if (sev.warning > 0) return 'text-yellow-500'
+  return 'text-blue-400'
+})
+
+async function fetchDashboardAlerts() {
+  try {
+    dashboardAlertsLoading.value = true
+    const now = new Date()
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    const res = await $fetch<{ success: boolean; data: BudgetAlert[] }>('/api/alerts/list', {
+      query: { month, limit: 100 }
+    })
+    dashboardAlerts.value = res.success && res.data ? res.data : []
+  } catch {
+    dashboardAlerts.value = []
+  } finally {
+    dashboardAlertsLoading.value = false
+  }
+}
+
 // Cost scope selector
 const costScope = ref('org')
 const scopedCostData = ref<{ date: string; cost: number }[] | null>(null)
@@ -541,10 +608,24 @@ async function handleCostScopeChange(scope: string) {
     })
 
     const result = await $fetch<{ success: boolean; data: any }>(`/api/costs/summary?${params}`)
-    if (result.success && result.data?.resultsByTime) {
-      scopedCostData.value = result.data.resultsByTime.map((item: any) => ({
-        date: item.timePeriod?.start || item.date || '',
-        cost: parseFloat(item.total?.amount || item.total || '0')
+    if (result.success && result.data) {
+      // Extract resultsByTime from the correct location
+      // Proforma responses nest under .billable/.proforma; non-proforma at top level
+      const rawResults = result.data.billable?.resultsByTime
+        || result.data.proforma?.resultsByTime
+        || result.data.resultsByTime
+        || []
+
+      scopedCostData.value = rawResults.map((item: any) => ({
+        // Handle both AWS uppercase (TimePeriod.Start) and normalized lowercase
+        date: item.TimePeriod?.Start || item.timePeriod?.start || item.date || '',
+        cost: parseFloat(
+          item.Total?.UnblendedCost?.Amount
+          || item.total?.UnblendedCost?.Amount
+          || item.total?.amount
+          || item.total
+          || '0'
+        )
       })).filter((d: any) => d.date)
     }
   } catch (err) {
@@ -600,7 +681,7 @@ function handleProformaToggle(value: boolean) {
 onMounted(async () => {
   if (!prefsInitialized.value) await loadPrefs()
   useProforma.value = getPreference('dashboardProforma', true)
-  await fetchOverview()
+  await Promise.all([fetchOverview(), fetchDashboardAlerts()])
 })
 
 </script>
