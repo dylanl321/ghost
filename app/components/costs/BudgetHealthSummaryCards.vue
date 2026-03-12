@@ -4,7 +4,7 @@
     <div class="bg-red-900/20 border border-red-800 rounded-lg p-4">
       <div class="flex items-center gap-2 mb-2">
         <div class="p-2 bg-red-900/40 rounded-lg">
-          <Icon name="i-heroicons-exclamation-triangle" class="w-5 h-5 text-red-400" />
+          <UIcon name="i-heroicons-exclamation-triangle" class="w-5 h-5 text-red-400" />
         </div>
         <span class="text-sm font-medium text-red-300">Over Budget</span>
       </div>
@@ -18,7 +18,7 @@
     <div class="bg-green-900/20 border border-green-800 rounded-lg p-4">
       <div class="flex items-center gap-2 mb-2">
         <div class="p-2 bg-green-900/40 rounded-lg">
-          <Icon name="i-heroicons-check-circle" class="w-5 h-5 text-green-400" />
+          <UIcon name="i-heroicons-check-circle" class="w-5 h-5 text-green-400" />
         </div>
         <span class="text-sm font-medium text-green-300">Healthy</span>
       </div>
@@ -32,7 +32,7 @@
     <div class="bg-blue-900/20 border border-blue-800 rounded-lg p-4">
       <div class="flex items-center gap-2 mb-2">
         <div class="p-2 bg-blue-900/40 rounded-lg">
-          <Icon name="i-heroicons-arrow-trending-down" class="w-5 h-5 text-blue-400" />
+          <UIcon name="i-heroicons-arrow-trending-down" class="w-5 h-5 text-blue-400" />
         </div>
         <span class="text-sm font-medium text-blue-300">Underutilized</span>
       </div>
@@ -46,7 +46,7 @@
     <div class="bg-purple-900/20 border border-purple-800 rounded-lg p-4">
       <div class="flex items-center gap-2 mb-2">
         <div class="p-2 bg-purple-900/40 rounded-lg">
-          <Icon name="i-heroicons-chart-bar" class="w-5 h-5 text-purple-400" />
+          <UIcon name="i-heroicons-chart-bar" class="w-5 h-5 text-purple-400" />
         </div>
         <span class="text-sm font-medium text-purple-300">Avg Utilization</span>
       </div>

@@ -53,6 +53,38 @@ export function getCostTourSteps() {
         description: 'Access documentation, restart this tour, or export reports anytime. Click here for guides on features like Billable vs Proforma comparisons.',
         side: 'left' as const
       }
+    },
+    {
+      element: '[data-tour="costs-settings"]',
+      popover: {
+        title: 'Cost Settings',
+        description: 'Configure filters, thresholds, and display options to customize your cost view.',
+        side: 'left' as const
+      }
+    },
+    {
+      element: '[data-tour="data-table"]',
+      popover: {
+        title: 'Data Table',
+        description: 'View detailed per-account data with sorting, column selection, and export capabilities.',
+        side: 'top' as const
+      }
+    },
+    {
+      element: '[data-tour="export-button"]',
+      popover: {
+        title: 'Reports & Exports',
+        description: 'Export data as PDF, CSV, or Excel. Schedule recurring reports or generate shareable links.',
+        side: 'bottom' as const
+      }
+    },
+    {
+      element: '[data-tour="budget-alerts"]',
+      popover: {
+        title: 'Budget Alerts',
+        description: 'Monitor accounts approaching or exceeding their budgets with severity-based alerting.',
+        side: 'top' as const
+      }
     }
   ]
 }

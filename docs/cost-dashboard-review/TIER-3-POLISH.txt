@@ -1,0 +1,516 @@
+================================================================================
+TIER 3 - POLISH (UX, Accessibility & Consistency)
+================================================================================
+Cost Dashboard Review - User Experience Improvements
+Date: 2026-03-12
+Status: Pending
+================================================================================
+
+These issues improve the user experience, accessibility compliance, and visual
+consistency. They are lower urgency but contribute to a professional, polished
+product.
+
+================================================================================
+9. RESPONSIVE DESIGN - Fix Mobile & Tablet Breakpoints
+================================================================================
+
+PROBLEM:
+  Several components have fixed widths or missing intermediate breakpoints that
+  cause layout issues on mobile and tablet devices.
+
+AFFECTED FILES & SPECIFIC LOCATIONS:
+
+  app/components/costs/CostsSummaryCards.vue
+    - Line 2: Grid uses `grid-cols-1 md:grid-cols-4` but no `sm:grid-cols-2`
+    - On tablets (640-768px), cards stack vertically instead of showing 2 per row
+    - Fix: Change to `grid-cols-1 sm:grid-cols-2 lg:grid-cols-4`
+
+  app/components/costs/CostDataTable.vue
+    - Line 10: UInput with `class="w-64"` doesn't shrink on mobile
+    - Search input overflows the container on small screens
+    - Fix: Change to `class="w-full sm:w-64"`
+
+  app/components/costs/CostsHeader.vue
+    - Lines 26-66: Multiple buttons in header row wrap awkwardly on small screens
+    - No responsive stacking or overflow handling
+    - Fix: Add `class="flex flex-wrap gap-2"` and consider collapsing into
+      dropdown menu on mobile:
+      ```vue
+      <!-- Mobile: Show overflow menu -->
+      <UDropdown :items="headerActions" class="sm:hidden">
+        <UButton icon="i-heroicons-ellipsis-vertical" variant="ghost" />
+      </UDropdown>
+
+      <!-- Desktop: Show all buttons -->
+      <div class="hidden sm:flex items-center gap-2">
+        <!-- existing buttons -->
+      </div>
+      ```
+
+  app/components/costs/ChartsRenderer.vue
+    - Chart grid layout: full-width charts work well, but medium (2-col) charts
+      should stack on mobile
+    - Verify: `grid-cols-1 md:grid-cols-2` pattern is used for medium charts
+    - Chart height classes (h-96, h-80, h-64) are fixed - consider making
+      chart heights responsive:
+      ```
+      h-64 sm:h-72 md:h-80 lg:h-96
+      ```
+
+  app/components/costs/CostSettings.vue
+    - Line 14: Popover width is `w-80` (320px) - fine on desktop but may be
+      too wide on very small mobile screens
+    - Fix: `w-72 sm:w-80` or use `max-w-[calc(100vw-2rem)]`
+
+ADDITIONAL RESPONSIVE CONSIDERATIONS:
+  - Summary card values with long currency strings may overflow on small screens
+  - Data table column count may need horizontal scrolling on mobile
+  - Chart tooltips may be clipped on small viewports (ECharts confine option)
+    ```typescript
+    tooltip: { confine: true }  // Keeps tooltip within chart bounds
+    ```
+
+ESTIMATED EFFORT: 0.5-1 day
+RISK: Very low (CSS-only changes)
+TESTING: Use browser DevTools responsive mode at: 320px, 640px, 768px, 1024px, 1280px
+
+
+================================================================================
+10. ARIA LABELS & ACCESSIBILITY - Screen Reader & Keyboard Support
+================================================================================
+
+PROBLEM:
+  Multiple components lack ARIA attributes, making the dashboard inaccessible
+  to users relying on screen readers or keyboard navigation.
+
+AFFECTED FILES & SPECIFIC LOCATIONS:
+
+  app/components/costs/ChartsRenderer.vue
+    - Lines 58-60: Loading spinner has no aria-label or role
+    - Charts render via ECharts without ARIA labels or alt text
+    - Fix for spinner:
+      ```vue
+      <div role="status" aria-live="polite" aria-label="Loading chart data">
+        <UIcon name="i-heroicons-arrow-path" class="animate-spin" />
+        <span class="sr-only">Loading chart data...</span>
+      </div>
+      ```
+    - Fix for charts: ECharts supports built-in ARIA
+      ```typescript
+      // In chart builders or createBaseChartOptions()
+      aria: {
+        enabled: true,
+        description: 'Cost breakdown chart showing spending by service'
+      }
+      ```
+
+  app/components/costs/CostDataTable.vue
+    - Lines 74-75: Sort indicators on column headers lack aria-sort attribute
+    - Fix: Add `aria-sort="none|ascending|descending"` to sortable column headers
+      ```vue
+      <th :aria-sort="getSortState(column)">{{ column.label }}</th>
+      ```
+    - Lines 143-146: Empty state doesn't announce to screen readers
+    - Fix: Add `aria-live="polite"` to empty state container
+
+  app/components/costs/CostsHeader.vue
+    - Line 63: Refresh button has UTooltip but no aria-label
+    - Fix: Add `aria-label="Refresh cost data"` to button
+    - Consider: All icon-only buttons need aria-label attributes
+
+  app/utils/chart-options/line-trend.ts
+    - Lines 116-131: Rich text formatting with `{weekend|...}` syntax is visual-only
+    - Line 52: Emoji in axis labels ("Master Account") not accessible
+    - Fix: Add plain-text aria descriptions alongside visual formatting
+
+  app/utils/chart-options/service-cost-distribution.ts
+    - Treemap has no keyboard navigation support
+    - ECharts treemap is not keyboard-accessible by default
+    - Fix: Add data table alternative for screen reader users (toggle between
+      chart and accessible table view)
+      ```vue
+      <div role="tabpanel">
+        <button @click="showAccessibleTable = !showAccessibleTable">
+          {{ showAccessibleTable ? 'Show Chart' : 'Show Data Table' }}
+        </button>
+        <VChart v-if="!showAccessibleTable" ... />
+        <table v-else role="table" aria-label="Service cost distribution">
+          <!-- Accessible table version of treemap data -->
+        </table>
+      </div>
+      ```
+
+  General chart accessibility improvements:
+    ```typescript
+    // In createBaseChartOptions() - apply to ALL charts
+    export function createBaseChartOptions(): EChartsOption {
+      return {
+        // ... existing options
+        aria: {
+          enabled: true,
+          decal: {
+            show: true  // Color-blind friendly patterns on bars/pie
+          }
+        }
+      }
+    }
+    ```
+
+  app/components/costs/CostDashboardAlerts.vue
+    - Verify alert badges have screen reader text
+    - Status badges (SENT, FAILED, PENDING) should have aria-label with context
+
+WCAG 2.1 AA CHECKLIST FOR THIS DASHBOARD:
+  [ ] All interactive elements keyboard-accessible
+  [ ] All images/charts have text alternatives
+  [ ] Color is not the sole means of conveying information
+  [ ] Loading states announced to assistive technology
+  [ ] Focus management on modal open/close
+  [ ] Sufficient color contrast (4.5:1 for text)
+  [ ] Form inputs have associated labels
+
+ESTIMATED EFFORT: 1-2 days
+RISK: Very low (additive attributes, no behavior changes)
+TESTING: Use browser accessibility audit (Lighthouse, axe); test with
+  screen reader (NVDA on Windows); verify keyboard tab order through
+  entire dashboard flow
+
+
+================================================================================
+11. STANDARDIZE ICON COMPONENT USAGE
+================================================================================
+
+PROBLEM:
+  The codebase mixes `Icon` component and `UIcon` (NuxtUI) component
+  inconsistently. Both render icons but have different APIs and styling defaults.
+
+AFFECTED FILES & SPECIFIC LOCATIONS:
+
+  app/components/costs/CostsHeader.vue
+    - Line 11: Uses `UIcon`
+    - Line 25: Uses `Icon` (different component)
+    - Should pick one and use it consistently
+
+  app/components/costs/CostSettings.vue
+    - Mixed usage throughout
+
+  Other cost components may also mix the two
+
+WHAT TO DO:
+
+  Step 1: Decide on standard (recommendation: UIcon since it's the NuxtUI standard)
+
+  Step 2: Search for all `<Icon ` and `<Icon\n` usages in cost components
+    ```bash
+    grep -rn "<Icon " app/components/costs/
+    grep -rn "UIcon" app/components/costs/
+    ```
+
+  Step 3: Replace all `<Icon>` with `<UIcon>` in cost components
+    - `<Icon name="...">` becomes `<UIcon name="..." />`
+    - Verify icon names are compatible (both use Iconify format)
+
+  Step 4: Check if `Icon` is used elsewhere in the app (may be a global pattern)
+    - If the whole app uses `Icon`, this may be an app-wide decision, not just costs
+
+ESTIMATED EFFORT: 1-2 hours
+RISK: Very low
+TESTING: Visual verification that all icons render correctly after swap
+
+
+================================================================================
+12. EXPAND GUIDED TOUR - Cover More Features
+================================================================================
+
+PROBLEM:
+  The guided tour (CostTour.ts) only covers 6 core elements. Users may not
+  discover settings, export, alerts, data table interactions, or time period
+  selection without guidance.
+
+AFFECTED FILES & SPECIFIC LOCATIONS:
+
+  app/components/tutorial/CostTour.ts
+    - Lines 8-58: Current 6 tour steps
+    - Current coverage:
+      1. Welcome to Cost Analytics
+      2. Account Selection
+      3. Summary Cards
+      4. Interactive Charts
+      5. Chart Categories (tabs)
+      6. Help & Resources
+
+  app/composables/useCostTour.ts
+    - Tour driver configuration and lifecycle
+
+WHAT TO DO:
+
+  Step 1: Add 4-5 new tour steps (insert after existing steps where logical)
+
+    New steps to add:
+    ```typescript
+    // After step 2 (Account Selection):
+    {
+      element: '[data-tour="time-period"]',  // Add this data attr to timeframe selector
+      popover: {
+        title: 'Time Period Selection',
+        description: 'Choose your analysis timeframe: current month, last 30 days, quarter, or custom date range. Charts and data update automatically.',
+        side: 'bottom'
+      }
+    },
+
+    // After step 3 (Summary Cards):
+    {
+      element: '[data-tour="cost-settings"]',  // Add to settings button
+      popover: {
+        title: 'Cost Settings & Filters',
+        description: 'Customize your view: hide savings plans, filter by minimum cost threshold, toggle currency format, and manage decommissioned accounts.',
+        side: 'bottom'
+      }
+    },
+
+    // After step 5 (Chart Categories):
+    {
+      element: '[data-tour="data-table"]',  // Add to data table tab or container
+      popover: {
+        title: 'Data Table View',
+        description: 'Switch to the Data tab for detailed account-level data. Sort columns, search accounts, select visible columns, and export to CSV or PDF.',
+        side: 'top'
+      }
+    },
+    {
+      element: '[data-tour="export-button"]',  // Add to export dropdown
+      popover: {
+        title: 'Export & Reports',
+        description: 'Export your cost data in multiple formats: PDF summary, CSV breakdown, or detailed Excel workbook with multiple sheets.',
+        side: 'bottom'
+      }
+    },
+    {
+      element: '[data-tour="budget-alerts"]',  // Add to alerts section
+      popover: {
+        title: 'Budget Alerts',
+        description: 'Monitor budget thresholds with automated alerts. View alert history, delivery status, and email previews for your accounts.',
+        side: 'top'
+      }
+    }
+    ```
+
+  Step 2: Add `data-tour` attributes to relevant DOM elements
+    - CostsHeader.vue: Add data-tour to settings button, export dropdown, time selector
+    - CostDataTable.vue: Add data-tour to table container
+    - CostDashboardAlerts.vue: Add data-tour to alerts section
+    - SimpleChartTabs.vue: Verify data-tour on tab container
+
+  Step 3: Update useCostTour.ts DOM readiness checks
+    - Add the new element selectors to the readiness check list
+    - Ensure tour doesn't break if some elements aren't rendered yet
+      (e.g., alerts tab not visible)
+
+  Step 4: Consider a "quick tour" vs "full tour" option
+    - Quick: Original 6 steps for returning users
+    - Full: All 10-11 steps for first-time users
+    - Store preference in localStorage
+
+ESTIMATED EFFORT: 2-4 hours
+RISK: Low (additive feature)
+TESTING: Run full tour on fresh user (clear localStorage); verify each step
+  highlights correct element; test tour with different tabs active
+
+
+================================================================================
+13. PERSIST TABLE COLUMN SELECTION
+================================================================================
+
+PROBLEM:
+  CostDataTable.vue allows users to select which columns are visible, but
+  the selection resets on component remount (page navigation, refresh).
+
+AFFECTED FILES & SPECIFIC LOCATIONS:
+
+  app/components/costs/CostDataTable.vue
+    - Line 272: Column selection state (local ref, not persisted)
+
+WHAT TO DO:
+
+  Option A: Add to existing useCostSettingsStore
+    ```typescript
+    // In app/stores/useCostSettingsStore.ts
+    interface CostFilterSettings {
+      // ... existing fields
+      visibleTableColumns?: string[]  // Column IDs to show
+    }
+    ```
+    - Automatically persisted via pinia-plugin-persistedstate
+    - Centralized with other cost preferences
+
+  Option B: Use localStorage directly in component
+    ```typescript
+    const COLUMN_STORAGE_KEY = 'ghost-cost-table-columns'
+    const savedColumns = localStorage.getItem(COLUMN_STORAGE_KEY)
+    const selectedColumns = ref<string[]>(
+      savedColumns ? JSON.parse(savedColumns) : defaultColumns
+    )
+
+    watch(selectedColumns, (cols) => {
+      localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(cols))
+    }, { deep: true })
+    ```
+
+  Recommendation: Option A (store) for consistency with other settings
+
+ESTIMATED EFFORT: 30 minutes
+RISK: Very low
+TESTING: Select columns, navigate away and back, verify selection persists
+
+
+================================================================================
+14. IMPROVE DECOMMISSIONED ACCOUNT VISIBILITY
+================================================================================
+
+PROBLEM:
+  Decommissioned accounts in the data table use `opacity-60` which is too subtle.
+  Users may not notice which accounts are decommissioned at a glance.
+
+AFFECTED FILES & SPECIFIC LOCATIONS:
+
+  app/components/costs/CostDataTable.vue
+    - Line 105: Uses `opacity-60` class for decommissioned rows
+
+WHAT TO DO:
+
+  Option A: Add strikethrough + muted color
+    ```vue
+    <template #cell-accountName="{ row }">
+      <span :class="{
+        'line-through text-gray-400 dark:text-gray-600': row.isDecommissioned,
+      }">
+        {{ row.accountName }}
+      </span>
+      <UBadge v-if="row.isDecommissioned" color="gray" variant="subtle" size="xs" class="ml-2">
+        Decommissioned
+      </UBadge>
+    </template>
+    ```
+
+  Option B: Add icon indicator
+    ```vue
+    <UIcon
+      v-if="row.isDecommissioned"
+      name="i-heroicons-archive-box"
+      class="text-gray-400 mr-1"
+    />
+    ```
+
+  Recommendation: Combine subtle background tint + badge for maximum clarity
+    ```vue
+    <tr :class="{ 'bg-gray-50 dark:bg-gray-800/50': row.isDecommissioned }">
+    ```
+
+ESTIMATED EFFORT: 30 minutes
+RISK: Very low (visual change only)
+TESTING: Verify with mix of active and decommissioned accounts in table
+
+
+================================================================================
+15. REMOVE DEBUG CODE & COMMENTED CONSOLE.LOG STATEMENTS
+================================================================================
+
+PROBLEM:
+  Multiple files contain commented-out console.log statements, debug logging
+  left in production code, and large commented warning blocks.
+
+AFFECTED FILES & SPECIFIC LOCATIONS:
+
+  app/composables/useChartRegistry.ts
+    - Lines 7, 58, 100, 110: Commented console.log statements
+    - Lines 142-145: Multi-line commented debug block
+    - Lines 258-275: Large commented warning block
+
+  app/composables/useCostData.ts
+    - Lines 100-102: Debug logging left in code
+
+  app/composables/useAccountCosts.ts
+    - Line 100-101: Debug console.log left in production code
+
+  Server-side:
+    - server/api/costs/summary.get.ts line 343: Excessive logging for temp debugging
+
+WHAT TO DO:
+
+  Step 1: Search for all debug artifacts
+    ```bash
+    grep -rn "console.log" app/composables/useCost*.ts app/composables/useChart*.ts
+    grep -rn "console.log" app/utils/cost-*.ts
+    grep -rn "// console" app/composables/
+    grep -rn "TODO\|FIXME\|HACK\|XXX" app/composables/useCost*.ts
+    ```
+
+  Step 2: Remove all commented console.log/warn/error statements
+  Step 3: Remove multi-line commented debug blocks
+  Step 4: Replace remaining necessary debug logging with conditional:
+    ```typescript
+    const DEBUG_COSTS = import.meta.dev  // Only true in development
+    if (DEBUG_COSTS) console.log('Cost data loaded:', data)
+    ```
+  Step 5: Remove server-side temp debug logging
+
+ESTIMATED EFFORT: 30 minutes
+RISK: Very low (removing dead code)
+TESTING: Run dev server, verify no missing logs that were actually needed
+
+
+================================================================================
+16. STANDARDIZE BUTTON STYLING PATTERNS
+================================================================================
+
+PROBLEM:
+  Buttons across cost components use inconsistent color/variant combinations.
+  No clear pattern for which actions get which style.
+
+OBSERVED PATTERNS:
+  - CostsHeader.vue: Reports uses `color="gray" variant="ghost"`
+  - CostsHeader.vue: Help uses `color="gray" variant="ghost"`
+  - CostDataTable.vue: Export uses `color="purple" variant="outline"`
+  - Various: Primary actions use different colors
+
+WHAT TO DO:
+
+  Define a consistent button style guide for the cost dashboard:
+    ```
+    Primary actions (Export, Generate): color="primary" variant="solid"
+    Secondary actions (Share, Reports): color="gray" variant="outline"
+    Tertiary actions (Help, Settings):  color="gray" variant="ghost"
+    Danger actions (Clear, Remove):     color="red" variant="outline"
+    Icon-only actions (Refresh, Close): color="gray" variant="ghost" + aria-label
+    ```
+
+  Apply consistently across:
+    - CostsHeader.vue (all header buttons)
+    - CostDataTable.vue (table action buttons)
+    - CostSettings.vue (settings actions)
+    - CostDashboardAlerts.vue (alert actions)
+
+ESTIMATED EFFORT: 1-2 hours
+RISK: Very low (visual consistency)
+TESTING: Visual review of all button states (default, hover, active, disabled)
+
+
+================================================================================
+TOTAL TIER 3 ESTIMATED EFFORT: 3-5 days
+================================================================================
+
+RECOMMENDED ORDER (quick wins first):
+  1. Remove debug code (#15) - 30 minutes, instant cleanup
+  2. Persist column selection (#13) - 30 minutes, nice UX win
+  3. Decommissioned account visibility (#14) - 30 minutes
+  4. Standardize icons (#11) - 1-2 hours
+  5. Standardize buttons (#16) - 1-2 hours
+  6. Responsive design (#9) - 0.5-1 day
+  7. Expand guided tour (#12) - 2-4 hours
+  8. ARIA labels & accessibility (#10) - 1-2 days (most thorough)
+
+DEPENDENCIES:
+  - #10 (accessibility) benefits from Tier 2 #8 (error handling) for proper
+    loading/error state announcements
+  - All items in this tier are independent of each other
+  - All items can be done in parallel by different developers

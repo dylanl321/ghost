@@ -465,6 +465,11 @@
               :total-spend="totalSpend"
               :utilization="isHistoricalTimeframe ? 0 : utilization"
               :format-currency="formatCurrency"
+              :scenario="scenario"
+              :alerts-count="alertsCount"
+              :alerts-by-severity="alertsBySeverity"
+              :is-historical="isHistoricalTimeframe"
+              @view-alerts="navigateToBudgetAlerts"
             />
           </div>
 
@@ -504,6 +509,7 @@
               :active-tab-prop="activeChartTab"
               :show-advanced-charts="showAdvancedCharts"
               :sidebar-tab="activeTab"
+              :warnings="fetchWarnings"
               @toggle-regression-line="showRegressionLine = !showRegressionLine"
               @toggle-advanced-charts="showAdvancedCharts = !showAdvancedCharts; localStorage.setItem('showAdvancedCharts', String(showAdvancedCharts))"
               @tab-changed="activeChartTab = $event"
@@ -538,6 +544,7 @@ import { useCostData } from '~/composables/useCostData'
 import { useCostScenario } from '~/composables/useCostScenario'
 import { useChartRegistry } from '~/composables/useChartRegistry'
 import type { DataMode } from '~/types/costs'
+import type { BudgetAlert } from '@/shared/types/budget-alerts'
 
 const { accounts, isLoading, error, fetchAccounts } = useAccountCosts()
 const { favoriteIds } = useFavoriteAccounts()
@@ -696,6 +703,54 @@ const showRegressionLine = ref(false) // Toggle for budget variance regression l
 const isHistoricalTimeframe = computed(() => {
   return ['last7days', 'last30days', 'last90days', 'lastMonth', 'lastQuarter', 'lastYear', 'last12months'].includes(selectedTimeframe.value)
 })
+
+// Budget alerts summary for the top-level card
+const budgetAlerts = ref<BudgetAlert[]>([])
+let alertDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+const alertsCount = computed(() => budgetAlerts.value.length)
+const alertsBySeverity = computed(() => {
+  const counts = { critical: 0, warning: 0, info: 0, escalation: 0 }
+  for (const alert of budgetAlerts.value) {
+    const level = alert.alert_level?.toUpperCase()
+    if (level === 'CRITICAL') counts.critical++
+    else if (level === 'WARNING') counts.warning++
+    else if (level === 'INFO') counts.info++
+    else if (level === 'ESCALATION') counts.escalation++
+  }
+  return counts
+})
+
+async function fetchAlertsSummary() {
+  try {
+    const now = new Date()
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    const res = await $fetch<{ success: boolean; data: BudgetAlert[] }>('/api/alerts/list', {
+      query: { month, limit: 100 }
+    })
+    if (res.success && res.data) {
+      let filtered = res.data
+      if (selectedAccounts.value.length > 0) {
+        const selectedSet = new Set(selectedAccounts.value)
+        filtered = filtered.filter(a => selectedSet.has(a.account_id))
+      }
+      budgetAlerts.value = filtered
+    } else {
+      budgetAlerts.value = []
+    }
+  } catch {
+    budgetAlerts.value = []
+  }
+}
+
+// Refetch alerts when account selection changes (debounced)
+watch(selectedAccounts, () => {
+  if (alertDebounceTimer) clearTimeout(alertDebounceTimer)
+  alertDebounceTimer = setTimeout(() => fetchAlertsSummary(), 300)
+}, { deep: true })
+
+// Initial fetch
+onMounted(() => fetchAlertsSummary())
 
 // Detect if we're in the early days of a new month
 const isEarlyInMonth = computed(() => {
@@ -979,6 +1034,18 @@ const handleSelectGroup = (accountIds: string[]) => {
   selectedAccounts.value = accountIds
 }
 
+// Navigate to the Budget Health tab and scroll to the alerts table
+const navigateToBudgetAlerts = () => {
+  activeChartTab.value = 'budget-health'
+  // Wait for tab content to render before scrolling
+  nextTick(() => {
+    setTimeout(() => {
+      const el = document.getElementById('budget-alerts-section')
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 150)
+  })
+}
+
 // Handle shared state from URL parameters
 const applySharedStateFromUrl = () => {
   const route = useRoute()
@@ -1064,7 +1131,7 @@ onMounted(async () => {
 //    - Watches selectedAccounts and selectedTimeframe
 //    - Debounces requests to avoid excessive API calls
 //    - Returns dataset containing summary, analysis, historical, services, and forecast data
-const { mode: dataMode, isFetching: isCostFetching, isDeferredLoading, isPending: isCostPending, fetchError: costError, dataset, fetchCosts, initialized } = useCostData({
+const { mode: dataMode, isFetching: isCostFetching, isDeferredLoading, isPending: isCostPending, fetchError: costError, fetchWarnings, dataset, fetchCosts, initialized } = useCostData({
   selectedAccounts,
   selectedTimeframe,
   initialMode: 'proforma',

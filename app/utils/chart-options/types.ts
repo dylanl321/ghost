@@ -3,7 +3,7 @@ export interface ChartBuilderContext {
   selectedYearView?: 'current' | 'next'
 }
 
-export type ChartBuilderFn = (data: any, context: ChartBuilderContext) => Record<string, any> | null
+export type ChartBuilderFn = (data: Record<string, unknown>, context: ChartBuilderContext) => Record<string, unknown> | null
 
 /**
  * Simple linear regression calculation used by budget variance analysis.

@@ -37,6 +37,7 @@ import { buildYearOverYearComparisonOptions } from './year-over-year-comparison'
 import { buildMonthOverMonthComparisonOptions } from './month-over-month-comparison'
 import { buildLast24MonthsTrendOptions } from './last-24-months-trend'
 import { buildYearEndForecastOptions } from './year-end-forecast'
+import { buildServiceCostVarianceOptions } from './service-cost-variance'
 
 // ---- type-fallback builders -----------------------------------------------
 import { buildLineTrendOptions } from './line-trend'
@@ -81,6 +82,7 @@ export const chartBuilderById: Record<string, ChartBuilderFn> = {
   monthOverMonthComparison: buildMonthOverMonthComparisonOptions,
   last24MonthsTrend: buildLast24MonthsTrendOptions,
   yearEndForecast: buildYearEndForecastOptions,
+  serviceCostVariance: buildServiceCostVarianceOptions,
 }
 
 /** Builders keyed by `chart.type` – used as a fallback when no id match is found. */

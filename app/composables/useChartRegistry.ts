@@ -4,6 +4,7 @@ import type { NormalizedDataset } from '~/types/costs'
 import type { Scenario } from '~/composables/useCostScenario'
 import { getAnnualBudgetArray, hasPerMonthBudget } from '#shared/utils/budget-utils'
 import { unwrapCostData, getResultsByTime, getAccountsFromAnalysis, unwrapByMode, buildAccountToGroupMap, extractForecastTotal } from '~/utils/cost-data-unwrap'
+import { buildGroupTrendData } from '~/utils/group-trend-extractor'
 // import { calculateComprehensiveVariance, generateVarianceInsights } from '~/shared/utils/variance-calculator'
 
 // ── Named constants for thresholds and limits ──
@@ -28,7 +29,7 @@ export interface ChartDefinition {
   description?: string
   type?: 'line' | 'bar' | 'pie' | 'donut' | 'gauge' | 'heatmap' | 'treemap' | 'scatter'
   // extractor transforms dataset to the chart data shape
-  extractor: (dataset: NormalizedDataset) => any
+  extractor: (dataset: NormalizedDataset) => unknown
 }
 
 export const useChartRegistry = (args: {
@@ -55,7 +56,7 @@ export const useChartRegistry = (args: {
         const actualData = unwrapCostData(dataset, 'summary')
         const resultsByTime = getResultsByTime(dataset, 'summary')
 
-        // console.log('TotalSpendTrend: found', resultsByTime.length, 'time periods')
+
 
         const selectedAccounts = dataset.accounts || []
         const filterBySelection = selectedAccounts.length > 0
@@ -107,7 +108,7 @@ export const useChartRegistry = (args: {
               // Detect master accounts: unusually high cost on 1st of month
               if (isFirstOfMonth && amount > MASTER_ACCOUNT_CHARGE_THRESHOLD) { // >$100k on 1st suggests master account
                 masterAccountIds.add(accountId)
-                // console.log(`Detected master account: ${accountId} with $${amount.toFixed(0)} on ${dateStr}`)
+
               }
 
               // Track master account costs
@@ -139,10 +140,27 @@ export const useChartRegistry = (args: {
           .sort((a, b) => b.sum - a.sum)
           .slice(0, TOP_ACCOUNTS_LIMIT)
 
-        // console.log('TotalSpendTrend: processed data with', dates.length, 'dates,',
+
         //  weekendData.filter(Boolean).length, 'weekends,',
         //  firstOfMonthData.filter(Boolean).length, 'first-of-month entries,',
         //  masterAccountIds.size, 'master accounts detected')
+
+        // Calculate daily budget pace from analysis data
+        let dailyBudgetPace: number | null = null
+        const byAccount = getAccountsFromAnalysis(dataset)
+        if (byAccount.length > 0) {
+          const selectedAccts = dataset.accounts || []
+          const relevantAccounts = selectedAccts.length > 0
+            ? byAccount.filter((a: any) => selectedAccts.includes(a.accountId))
+            : byAccount
+          const totalMonthlyBudget = relevantAccounts.reduce((sum: number, a: any) => sum + (a.budgetedCost || 0), 0)
+          if (totalMonthlyBudget > 0) {
+            // Use number of days in the current month for pace calculation
+            const now = new Date()
+            const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+            dailyBudgetPace = totalMonthlyBudget / daysInMonth
+          }
+        }
 
         return {
           dates,
@@ -150,7 +168,8 @@ export const useChartRegistry = (args: {
           perAccount,
           weekendData,
           firstOfMonthData,
-          masterAccountData
+          masterAccountData,
+          dailyBudgetPace
         }
       }
     },
@@ -174,7 +193,7 @@ export const useChartRegistry = (args: {
           filteredAccounts = filteredAccounts.filter((a: any) =>
             selectedAccounts.includes(a.accountId)
           )
-          // console.log('BudgetUtilization: after filtering by selection:', filteredAccounts.length, 'accounts')
+
         }
 
         // Get accounts and calculate utilization percentage
@@ -201,15 +220,14 @@ export const useChartRegistry = (args: {
       extractor: (dataset) => {
         const services = dataset.services as any
         if (!services) {
-          // console.log('ServiceBreakdown: no services data in dataset')
+
           return []
         }
 
         const actualData = unwrapCostData(dataset, 'services')
         const selectedAccounts = dataset.accounts || []
 
-        // console.log('ServiceBreakdown: analyzing services, selected accounts:', selectedAccounts, 'mode:', dataset.mode)
-        // console.log('ServiceBreakdown: services data structure:', actualData ? Object.keys(actualData) : 'no data')
+
 
         // Extract service costs from the dedicated services API call
         const serviceMap = new Map<string, number>()
@@ -217,14 +235,14 @@ export const useChartRegistry = (args: {
         // Get resultsByTime handling proforma/billable paths
         const resultsByTime = getResultsByTime(dataset, 'services')
         
-        // console.log('ServiceBreakdown: found', resultsByTime.length, 'time periods')
+
 
         // Parse service data from resultsByTime (grouped by SERVICE)
         if (resultsByTime.length > 0) {
-          // console.log('ServiceBreakdown: Processing', resultsByTime.length, 'time periods')
+
           resultsByTime.forEach((bucket: any) => {
             if (bucket.Groups) {
-              // console.log('ServiceBreakdown: Processing bucket with', bucket.Groups.length, 'service groups')
+
               bucket.Groups.forEach((g: any) => {
                 const serviceName = g.Keys?.[0] || 'Unknown Service'
                 const amount = parseFloat(g.Metrics?.UnblendedCost?.Amount || '0')
@@ -237,25 +255,6 @@ export const useChartRegistry = (args: {
           })
         }
 
-/*         // console.log('ServiceBreakdown: found', serviceMap.size, 'services')
-        if (serviceMap.size > 0) {
-          // console.log('ServiceBreakdown: Top services by cost:', 
-            Array.from(serviceMap.entries())
-              .sort(([,a], [,b]) => b - a)
-              .slice(0, TOP_ACCOUNTS_LIMIT)
-              .map(([name, cost]) => `${name}: $${cost.toFixed(0)}`)
-          )
-        } else {
-          console.warn('ServiceBreakdown: No services found, checking data structure:', {
-            hasServices: !!services,
-            hasData: !!actualData,
-            hasResultsByTime: resultsByTime.length > 0,
-            resultsLength: resultsByTime.length,
-            firstBucket: resultsByTime[0] || null,
-            sampleGroups: resultsByTime[0]?.Groups?.length || 0
-          })
-        } */
-
         // Convert to array and sort by value
         const result = Array.from(serviceMap.entries())
           .map(([name, value]) => ({
@@ -266,9 +265,152 @@ export const useChartRegistry = (args: {
           .sort((a, b) => b.value - a.value)
           .slice(0, TOP_SERVICES_LIMIT) // Top 8 services for better pie chart readability
 
-        // console.log('ServiceBreakdown: returning', result.length, 'services')
-
         return result
+      }
+    },
+
+    // Service Cost Variance (Diverging Horizontal Bar)
+    // Compares projected end-of-month (actual MTD + forecast remainder) vs last month
+    serviceCostVariance: {
+      id: 'serviceCostVariance',
+      title: 'Service Cost Changes',
+      description: 'Projected end-of-month vs last month by service',
+      type: 'bar',
+      extractor: (dataset) => {
+        const services = dataset.services as any
+        if (!services) return null
+
+        // Current month service costs (MTD actuals)
+        const currentServiceMap = new Map<string, number>()
+        const resultsByTime = getResultsByTime(dataset, 'services')
+        resultsByTime.forEach((bucket: any) => {
+          if (bucket.Groups) {
+            bucket.Groups.forEach((g: any) => {
+              const serviceName = (g.Keys?.[0] || 'Unknown').replace(/^AWS\s+/, '')
+              const amount = parseFloat(g.Metrics?.UnblendedCost?.Amount || '0')
+              if (amount > 0) {
+                currentServiceMap.set(serviceName, (currentServiceMap.get(serviceName) || 0) + amount)
+              }
+            })
+          }
+        })
+
+        // Previous month service costs
+        const previousServiceMap = new Map<string, number>()
+        const lastMonthByTime = getResultsByTime(dataset, 'lastMonthServices')
+        lastMonthByTime.forEach((bucket: any) => {
+          if (bucket.Groups) {
+            bucket.Groups.forEach((g: any) => {
+              const serviceName = (g.Keys?.[0] || 'Unknown').replace(/^AWS\s+/, '')
+              const amount = parseFloat(g.Metrics?.UnblendedCost?.Amount || '0')
+              if (amount > 0) {
+                previousServiceMap.set(serviceName, (previousServiceMap.get(serviceName) || 0) + amount)
+              }
+            })
+          }
+        })
+
+        if (currentServiceMap.size === 0 && previousServiceMap.size === 0) return null
+
+        // Build projected end-of-month per service: actual MTD + proportional forecast remainder
+        const forecastTotal = extractForecastTotal(unwrapCostData(dataset, 'forecast'))
+        const totalCurrentSpend = Array.from(currentServiceMap.values()).reduce((a, b) => a + b, 0)
+
+        const projectedServiceMap = new Map<string, number>()
+        for (const [service, cost] of currentServiceMap) {
+          if (forecastTotal > 0 && totalCurrentSpend > 0) {
+            const proportion = cost / totalCurrentSpend
+            projectedServiceMap.set(service, cost + forecastTotal * proportion)
+          } else {
+            projectedServiceMap.set(service, cost)
+          }
+        }
+
+        // Merge all service names
+        const allServices = new Set([...projectedServiceMap.keys(), ...previousServiceMap.keys()])
+
+        const result = Array.from(allServices).map(service => {
+          const projected = projectedServiceMap.get(service) || 0
+          const previous = previousServiceMap.get(service) || 0
+          const change = projected - previous
+          return {
+            service,
+            projected,
+            previous,
+            change,
+            percentChange: previous > 0 ? ((projected - previous) / previous) * 100 : null
+          }
+        })
+          .filter(item => Math.abs(item.change) > SMALL_AMOUNT_THRESHOLD)
+          .sort((a, b) => Math.abs(b.change) - Math.abs(a.change))
+          .slice(0, 10)
+
+        return result.length > 0 ? result : null
+      }
+    },
+
+    // Cost Growth Rate (Bar Chart showing per-account growth)
+    costGrowthRate: {
+      id: 'costGrowthRate',
+      title: 'Cost Growth Rate',
+      description: 'Month-over-month cost growth by account',
+      type: 'bar',
+      extractor: (dataset) => {
+        const summary = dataset.summary as any
+        const historical = dataset.historical as any
+        if (!summary) return null
+
+        const mode = dataset.mode || 'billable'
+        const summaryData = unwrapByMode(summary, mode)
+        const historicalData = unwrapByMode(historical, mode)
+
+        const selectedAccounts = dataset.accounts || []
+        const filterBySelection = selectedAccounts.length > 0
+
+        // Build current month cost map
+        const currentMap = new Map<string, { name: string, cost: number }>()
+        const currentAccounts = summaryData?.accounts || []
+        currentAccounts.forEach((account: any) => {
+          if (filterBySelection && !selectedAccounts.includes(account.accountId)) return
+          if (account.accountId && account.totalCost > SIGNIFICANT_ACCOUNT_COST) {
+            currentMap.set(account.accountId, {
+              name: account.accountName || account.accountId,
+              cost: account.totalCost
+            })
+          }
+        })
+
+        // Build last month cost map from historical
+        const previousMap = new Map<string, number>()
+        if (historicalData?.monthlyBreakdown && historicalData.monthlyBreakdown.length >= 2) {
+          const lastMonthData = historicalData.monthlyBreakdown[historicalData.monthlyBreakdown.length - 2]
+          if (lastMonthData?.accountBreakdown) {
+            lastMonthData.accountBreakdown.forEach((account: any) => {
+              if (filterBySelection && !selectedAccounts.includes(account.accountId)) return
+              previousMap.set(account.accountId, account.cost || 0)
+            })
+          }
+        }
+
+        if (currentMap.size === 0) return null
+
+        return Array.from(currentMap.entries())
+          .map(([accountId, data]) => {
+            const previousCost = previousMap.get(accountId) || 0
+            const growthAmount = data.cost - previousCost
+            const growthRate = previousCost > 0 ? (growthAmount / previousCost) * 100 : 0
+            return {
+              accountId,
+              accountName: data.name,
+              currentCost: data.cost,
+              previousCost,
+              growthAmount,
+              growthRate
+            }
+          })
+          .filter(item => item.previousCost > 0) // Only show accounts with prior month data
+          .sort((a, b) => Math.abs(b.growthRate) - Math.abs(a.growthRate))
+          .slice(0, 10)
       }
     },
 
@@ -313,7 +455,7 @@ export const useChartRegistry = (args: {
 
         const selectedAccounts = dataset.accounts || []
 
-        // console.log('TopSpenders: filtering', byAccount.length, 'accounts, selected:', selectedAccounts)
+
 
         // Filter by selected accounts if any are selected
         let filteredAccounts = byAccount
@@ -322,7 +464,7 @@ export const useChartRegistry = (args: {
           filteredAccounts = filteredAccounts.filter((a: any) =>
             selectedAccounts.includes(a.accountId)
           )
-          // console.log('TopSpenders: after filtering by selection:', filteredAccounts.length, 'accounts')
+
         }
 
         return filteredAccounts
@@ -331,7 +473,9 @@ export const useChartRegistry = (args: {
           .map((a: any) => ({
             accountId: a.accountId,
             accountName: a.accountName || a.accountId,
-            cost: a.actualCost
+            cost: a.actualCost,
+            budget: a.budgetedCost || 0,
+            utilization: a.budgetedCost > 0 ? (a.actualCost / a.budgetedCost) * 100 : 0
           }))
       }
     },
@@ -405,7 +549,7 @@ export const useChartRegistry = (args: {
           lobData.budget += budget
         })
 
-        // console.log('LOB Comparison: found', lobMap.size, 'LOBs')
+
 
         return Array.from(lobMap.entries())
           .map(([name, data]) => ({
@@ -426,143 +570,13 @@ export const useChartRegistry = (args: {
       title: 'LOB Spending Trends Over Time',
       description: 'Compare spending trends across different Lines of Business',
       type: 'line',
-      extractor: (dataset) => {
-        const summary = dataset.summary as any
-        const historical = dataset.historical as any
-        
-        // Prefer historical data for better trend analysis
-        const dataSource = historical?.data || summary?.data || historical || summary
-        if (!dataSource) return null
-
-        // Use historical monthly breakdown if available
-        if (dataSource.monthlyBreakdown && Array.isArray(dataSource.monthlyBreakdown)) {
-          
-          // For historical data, we need to map accounts to LOBs
-          // This requires the accounts list to be available
-          const accounts = (dataset as any).accountsList || []
-          if (!accounts || !Array.isArray(accounts) || accounts.length === 0) {
-            console.warn('LOBTrendComparison: no accounts data available for LOB mapping')
-            return null
-          }
-
-          // Create account-to-LOB mapping with all possible ID formats
-          const accountLOBMap = buildAccountToGroupMap(accounts, 'linesOfBusiness', 'lineOfBusiness')
-
-          // For monthly breakdown, we need to get per-account data from resultsByTime
-          const resultsByTime = dataSource?.resultsByTime || []
-          const lobSeriesMap = new Map<string, number[]>()
-          const dates: string[] = []
-
-          resultsByTime.forEach((bucket: any) => {
-            const dateStr = bucket?.TimePeriod?.Start || ''
-            dates.push(dateStr)
-
-            const lobTotals = new Map<string, number>()
-
-            if (bucket.Groups) {
-              bucket.Groups.forEach((g: any, idx: number) => {
-                const accountId = g.Keys?.[0] || 'unknown'
-                const amount = parseFloat(g.Metrics?.UnblendedCost?.Amount || '0')
-                
-                // Log first account ID format for debugging
-                if (idx === 0 && dates.length === 1) {
-                }
-                
-                // Map account to LOB
-                const lob = accountLOBMap.get(accountId) || 'Unknown LOB'
-                lobTotals.set(lob, (lobTotals.get(lob) || 0) + amount)
-              })
-            }
-
-            // Update series for each LOB
-            lobTotals.forEach((amount, lob) => {
-              if (!lobSeriesMap.has(lob)) {
-                lobSeriesMap.set(lob, new Array(dates.length - 1).fill(0))
-              }
-              lobSeriesMap.get(lob)!.push(amount)
-            })
-
-            // Fill zeros for LOBs that didn't have activity this period
-            lobSeriesMap.forEach((series) => {
-              if (series.length < dates.length) {
-                series.push(0)
-              }
-            })
-          })
-
-          const lobSeries = Array.from(lobSeriesMap.entries())
-            .map(([name, values]) => ({
-              name,
-              dates,
-              values,
-              total: values.reduce((sum, val) => sum + val, 0)
-            }))
-            .filter(series => series.total > LOB_MIN_TOTAL_THRESHOLD) // Filter out very small LOBs
-            .sort((a, b) => b.total - a.total)
-            .slice(0, TOP_LOBS_LIMIT) // Top 6 LOBs for better visibility
-
-          return { dates, series: lobSeries }
-        }
-
-        // Fallback to original implementation for non-historical data
-        const resultsByTime = dataSource?.resultsByTime || []
-        const lobSeriesMap = new Map<string, { dates: string[], values: number[] }>()
-        const dates: string[] = []
-
-        // Build account-to-LOB map once, outside the loop
-        const fallbackAccountsList = (dataset as any).accountsList || []
-        const fallbackLOBMap = fallbackAccountsList.length > 0
-          ? buildAccountToGroupMap(fallbackAccountsList, 'linesOfBusiness', 'lineOfBusiness')
-          : new Map<string, string>()
-
-        resultsByTime.forEach((bucket: any) => {
-          const dateStr = bucket?.TimePeriod?.Start || ''
-          dates.push(dateStr)
-
-          const lobTotals = new Map<string, number>()
-
-          if (bucket.Groups) {
-            bucket.Groups.forEach((g: any) => {
-              const accountId = g.Keys?.[0] || 'unknown'
-              const amount = parseFloat(g.Metrics?.UnblendedCost?.Amount || '0')
-
-              // Look up LOB from pre-built map
-              const lob = fallbackLOBMap.get(accountId)
-                || (fallbackLOBMap.size === 0 ? 'Account-' + (accountId.substring(0, 4) || 'Unknown') : 'Unknown LOB')
-              
-              lobTotals.set(lob, (lobTotals.get(lob) || 0) + amount)
-            })
-          }
-
-          // Update series for each LOB
-          lobTotals.forEach((amount, lob) => {
-            if (!lobSeriesMap.has(lob)) {
-              lobSeriesMap.set(lob, { dates: [...dates], values: new Array(dates.length - 1).fill(0) })
-            }
-            lobSeriesMap.get(lob)!.values.push(amount)
-          })
-
-          // Fill zeros for LOBs that didn't have activity this period
-          lobSeriesMap.forEach((series) => {
-            if (series.values.length < dates.length) {
-              series.values.push(0)
-            }
-          })
-        })
-
-        const lobSeries = Array.from(lobSeriesMap.entries())
-          .map(([name, series]) => ({
-            name,
-            dates: series.dates,
-            values: series.values,
-            total: series.values.reduce((sum, val) => sum + val, 0)
-          }))
-          .filter(series => series.total > LOB_MIN_TOTAL_THRESHOLD) // Filter out very small LOBs
-          .sort((a, b) => b.total - a.total)
-          .slice(0, TOP_LOBS_LIMIT) // Top 6 LOBs for better visibility
-
-        return { dates, series: lobSeries }
-      }
+      extractor: (dataset) => buildGroupTrendData(dataset, {
+        groupField: 'linesOfBusiness',
+        fallbackField: 'lineOfBusiness',
+        minThreshold: LOB_MIN_TOTAL_THRESHOLD,
+        limit: TOP_LOBS_LIMIT,
+        unknownLabel: 'Unknown LOB',
+      })
     },
 
     // Department Trend Comparison (Multi-line chart) - New organizational view
@@ -571,142 +585,13 @@ export const useChartRegistry = (args: {
       title: 'Department Spending Trends Over Time',
       description: 'Compare spending trends across different Departments',
       type: 'line',
-      extractor: (dataset) => {
-        const summary = dataset.summary as any
-        const historical = dataset.historical as any
-        
-        // Prefer historical data for better trend analysis
-        const dataSource = historical?.data || summary?.data || historical || summary
-        if (!dataSource) return null
-
-        // Use historical monthly breakdown if available
-        if (dataSource.monthlyBreakdown && Array.isArray(dataSource.monthlyBreakdown)) {
-          
-          // For historical data, we need to map accounts to departments
-          const accounts = (dataset as any).accountsList || []
-          if (!accounts || accounts.length === 0) {
-            console.warn('DepartmentTrendComparison: no accounts data available for department mapping')
-            return null
-          }
-
-          // Create account-to-department mapping with all possible ID formats
-          const accountDeptMap = buildAccountToGroupMap(accounts, 'departmentNumber', 'department')
-
-          // Get per-account data from resultsByTime
-          const resultsByTime = dataSource?.resultsByTime || []
-          const deptSeriesMap = new Map<string, number[]>()
-          const dates: string[] = []
-
-          resultsByTime.forEach((bucket: any) => {
-            const dateStr = bucket?.TimePeriod?.Start || ''
-            dates.push(dateStr)
-
-            const deptTotals = new Map<string, number>()
-
-            if (bucket.Groups) {
-              bucket.Groups.forEach((g: any, idx: number) => {
-                const accountId = g.Keys?.[0] || 'unknown'
-                const amount = parseFloat(g.Metrics?.UnblendedCost?.Amount || '0')
-                
-                // Log first account ID format for debugging
-                if (idx === 0 && dates.length === 1) {
-                }
-                
-                // Map account to department
-                const dept = accountDeptMap.get(accountId) || 'Unknown Department'
-                deptTotals.set(dept, (deptTotals.get(dept) || 0) + amount)
-              })
-            }
-
-            // Update series for each department
-            deptTotals.forEach((amount, dept) => {
-              if (!deptSeriesMap.has(dept)) {
-                deptSeriesMap.set(dept, new Array(dates.length - 1).fill(0))
-              }
-              deptSeriesMap.get(dept)!.push(amount)
-            })
-
-            // Fill zeros for departments that didn't have activity this period
-            deptSeriesMap.forEach((series) => {
-              if (series.length < dates.length) {
-                series.push(0)
-              }
-            })
-          })
-
-          const deptSeries = Array.from(deptSeriesMap.entries())
-            .map(([name, values]) => ({
-              name,
-              dates,
-              values,
-              total: values.reduce((sum, val) => sum + val, 0)
-            }))
-            .filter(series => series.total > 500) // Filter out very small departments
-            .sort((a, b) => b.total - a.total)
-            .slice(0, 8) // Top 8 departments for better visibility
-
-          return { dates, series: deptSeries }
-        }
-
-        // Fallback to original implementation for non-historical data
-        const resultsByTime = dataSource?.resultsByTime || []
-        const deptSeriesMap = new Map<string, { dates: string[], values: number[] }>()
-        const dates: string[] = []
-
-        // Build account-to-department map once, outside the loop
-        const fallbackDeptAccountsList = (dataset as any).accountsList || []
-        const fallbackDeptMap = fallbackDeptAccountsList.length > 0
-          ? buildAccountToGroupMap(fallbackDeptAccountsList, 'departmentNumber', 'department')
-          : new Map<string, string>()
-
-        resultsByTime.forEach((bucket: any) => {
-          const dateStr = bucket?.TimePeriod?.Start || ''
-          dates.push(dateStr)
-
-          const deptTotals = new Map<string, number>()
-
-          if (bucket.Groups) {
-            bucket.Groups.forEach((g: any) => {
-              const accountId = g.Keys?.[0] || 'unknown'
-              const amount = parseFloat(g.Metrics?.UnblendedCost?.Amount || '0')
-
-              // Look up department from pre-built map
-              const dept = fallbackDeptMap.get(accountId)
-                || (fallbackDeptMap.size === 0 ? 'Account-' + (accountId.substring(0, 4) || 'Unknown') : 'Unknown Department')
-              
-              deptTotals.set(dept, (deptTotals.get(dept) || 0) + amount)
-            })
-          }
-
-          // Update series for each department
-          deptTotals.forEach((amount, dept) => {
-            if (!deptSeriesMap.has(dept)) {
-              deptSeriesMap.set(dept, { dates: [...dates], values: new Array(dates.length - 1).fill(0) })
-            }
-            deptSeriesMap.get(dept)!.values.push(amount)
-          })
-
-          // Fill zeros for departments that didn't have activity this period
-          deptSeriesMap.forEach((series) => {
-            if (series.values.length < dates.length) {
-              series.values.push(0)
-            }
-          })
-        })
-
-        const deptSeries = Array.from(deptSeriesMap.entries())
-          .map(([name, series]) => ({
-            name,
-            dates: series.dates,
-            values: series.values,
-            total: series.values.reduce((sum, val) => sum + val, 0)
-          }))
-          .filter(series => series.total > DEPT_MIN_TOTAL_THRESHOLD) // Filter out very small departments
-          .sort((a, b) => b.total - a.total)
-          .slice(0, TOP_SERVICES_LIMIT) // Top 8 departments for better visibility
-
-        return { dates, series: deptSeries }
-      }
+      extractor: (dataset) => buildGroupTrendData(dataset, {
+        groupField: 'departmentNumber',
+        fallbackField: 'department',
+        minThreshold: DEPT_MIN_TOTAL_THRESHOLD,
+        limit: TOP_DEPTS_LIMIT,
+        unknownLabel: 'Unknown Department',
+      })
     },
 
     // Department Budget Performance (Gauge Chart Collection)
@@ -1075,9 +960,59 @@ export const useChartRegistry = (args: {
       }
     },
 
-    // REMOVED: forecastAccuracyAnalysis - Was using fake/mock data
-    // This chart requires historical forecast tracking data that we don't have
-    // DO NOT USE FAKE DATA
+    // Month-over-Month Comparison (Bar Chart)
+    monthOverMonthComparison: {
+      id: 'monthOverMonthComparison',
+      title: 'Month-over-Month Comparison',
+      description: 'Total spend comparison between last month and this month',
+      type: 'bar',
+      extractor: (dataset) => {
+        const summary = dataset.summary as any
+        const historical = dataset.historical as any
+        if (!summary) return null
+
+        const mode = dataset.mode || 'billable'
+        const summaryData = unwrapByMode(summary, mode)
+        const historicalData = unwrapByMode(historical, mode)
+
+        const selectedAccounts = dataset.accounts || []
+        const filterBySelection = selectedAccounts.length > 0
+
+        // Current month total from summary
+        let currentTotal = 0
+        const currentAccounts = summaryData?.accounts || []
+        currentAccounts.forEach((account: any) => {
+          if (filterBySelection && !selectedAccounts.includes(account.accountId)) return
+          currentTotal += account.totalCost || 0
+        })
+
+        // Last month total from historical
+        let lastMonthTotal = 0
+        if (historicalData?.monthlyBreakdown && historicalData.monthlyBreakdown.length >= 2) {
+          const lastMonthData = historicalData.monthlyBreakdown[historicalData.monthlyBreakdown.length - 2]
+          if (lastMonthData?.accountBreakdown) {
+            lastMonthData.accountBreakdown.forEach((account: any) => {
+              if (filterBySelection && !selectedAccounts.includes(account.accountId)) return
+              lastMonthTotal += account.cost || 0
+            })
+          } else if (lastMonthData?.total) {
+            lastMonthTotal = lastMonthData.total
+          }
+        }
+
+        if (currentTotal === 0 && lastMonthTotal === 0) return null
+
+        const now = new Date()
+        const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+        const lastMonthName = lastMonthDate.toLocaleString('default', { month: 'short', year: 'numeric' })
+        const currentMonthName = now.toLocaleString('default', { month: 'short', year: 'numeric' })
+
+        return [
+          { name: lastMonthName, value: lastMonthTotal, formattedValue: `$${lastMonthTotal.toLocaleString('en-US', { maximumFractionDigits: 0 })}` },
+          { name: currentMonthName, value: currentTotal, formattedValue: `$${currentTotal.toLocaleString('en-US', { maximumFractionDigits: 0 })}` }
+        ]
+      }
+    },
 
     // Account Forecast Comparison (Horizontal Bar Chart)
     accountForecastComparison: {
@@ -1150,211 +1085,119 @@ export const useChartRegistry = (args: {
     // Cumulative Burn-up Chart (Budget Progress Tracking)
     cumulativeBurnUp: {
       id: 'cumulativeBurnUp',
-      title: 'Cumulative Cost Burn-up',
-      description: 'Shows if accounts are on track to meet budget over time',
+      title: 'Monthly Burn-up: Are We On Track?',
+      description: 'Cumulative spend vs budget pace with month-end projection',
       type: 'line',
       extractor: (dataset) => {
-        const historical = dataset.historical as any
         const summary = dataset.summary as any
-        const analysis = dataset.analysis as any
-        
-        
-        if (!summary) {
-          return []
-        }
+        if (!summary) return null
 
-        const summaryData = unwrapCostData(dataset, 'summary')
         const analysisData = unwrapCostData(dataset, 'analysis')
-
-        // Get current accounts and budget data
-        const currentAccounts = summaryData?.accounts || []
         const budgetData = analysisData?.budgetAnalysis?.byAccount || []
-        
-        // console.log('CumulativeBurnUp: Found', currentAccounts.length, 'accounts,', budgetData.length, 'budget entries')
 
         const selectedAccounts = dataset.accounts || []
         const filterBySelection = selectedAccounts.length > 0
 
-        // For cumulative burn-up, we need time-series data
-        // Use resultsByTime from summary for the current period
         const resultsByTime = getResultsByTime(dataset, 'summary')
-        
-        // console.log('CumulativeBurnUp: Found', resultsByTime.length, 'time periods')
-        
-        if (resultsByTime.length === 0) {
-          return []
-        }
+        if (resultsByTime.length === 0) return null
 
-        // Build cumulative data for each account
-        const accountMap = new Map<string, {
-          name: string,
-          monthlyBudget: number,
-          annualBudget: number,
-          cumulative: number[],
-          dates: string[]
-        }>()
+        // Sum total monthly budget for selected (or all) accounts
+        const relevantBudgets = filterBySelection
+          ? budgetData.filter((b: any) => selectedAccounts.includes(b.accountId))
+          : budgetData
+        const totalMonthlyBudget = relevantBudgets.reduce((sum: number, b: any) => sum + (b.budgetedCost || 0), 0)
 
-        // Initialize accounts with budget info
-        currentAccounts
-          .filter((account: any) => !filterBySelection || selectedAccounts.includes(account.accountId))
-          .filter((account: any) => account.totalCost > SIGNIFICANT_ACCOUNT_COST) // Focus on significant accounts
-          .forEach((account: any) => {
-            const budgetInfo = budgetData.find((b: any) => b.accountId === account.accountId)
-            const monthlyBudget = budgetInfo?.budgetedCost || 0
-            
-            accountMap.set(account.accountId, {
-              name: account.accountName || account.accountId,
-              monthlyBudget: monthlyBudget,
-              annualBudget: monthlyBudget * 12, // Annualize for proper comparison
-              cumulative: [],
-              dates: []
-            })
-          })
-        
-        // console.log('CumulativeBurnUp: Tracking', accountMap.size, 'accounts')
-
-        // Process time periods to build cumulative data
+        // Build aggregated daily cumulative spend
         const dates: string[] = []
-        const cumulativeByAccount = new Map<string, number>()
-        
-        
-        resultsByTime.forEach((bucket: any, timeIndex: number) => {
+        const dailyTotals: number[] = []
+
+        resultsByTime.forEach((bucket: any) => {
           const dateStr = bucket?.TimePeriod?.Start || ''
           dates.push(dateStr)
-          
+
+          let dayTotal = 0
           if (bucket.Groups) {
             bucket.Groups.forEach((g: any) => {
               const accountId = g.Keys?.[0] || 'unknown'
-              const amount = parseFloat(g.Metrics?.UnblendedCost?.Amount || '0')
-              
-              if (accountMap.has(accountId)) {
-                const currentCumulative = cumulativeByAccount.get(accountId) || 0
-                const newCumulative = currentCumulative + amount
-                cumulativeByAccount.set(accountId, newCumulative)
-                
-                const accountData = accountMap.get(accountId)!
-                accountData.cumulative.push(newCumulative)
-                accountData.dates.push(dateStr)
-                
-                // Debug first few and last period
-                if (timeIndex <= 2 || timeIndex === resultsByTime.length - 1) {
-                }
-              }
+              if (filterBySelection && !selectedAccounts.includes(accountId)) return
+              dayTotal += parseFloat(g.Metrics?.UnblendedCost?.Amount || '0')
             })
+          } else if (bucket.Total?.UnblendedCost?.Amount) {
+            dayTotal = parseFloat(bucket.Total.UnblendedCost.Amount)
           }
-          
-          // Fill in zeros for accounts with no activity this period
-          accountMap.forEach((data, accountId) => {
-            if (data.cumulative.length <= timeIndex) {
-              const currentCumulative = cumulativeByAccount.get(accountId) || 0
-              data.cumulative.push(currentCumulative)
-              data.dates.push(dateStr)
-            }
-          })
+          dailyTotals.push(dayTotal)
         })
 
-        // Convert to array format for chart
-        const result = Array.from(accountMap.entries())
-          .map(([accountId, data]) => {
-            const periods = data.dates.length
-            const budgetLine = []
-            
-            // Determine the time span of the data
-            let periodsInYear = 12 // Default to 12 months
-            
-            if (periods > 0 && data.dates.length > 1) {
-              // Calculate actual time span from first to last date
-              const firstDateStr = data.dates[0]
-              const lastDateStr = data.dates[data.dates.length - 1]
-              if (firstDateStr && lastDateStr) {
-                const firstDate = new Date(firstDateStr)
-                const lastDate = new Date(lastDateStr)
-                const daysDiff = Math.ceil((lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24)) + 1
-                
-                
-                // Determine if this is daily or monthly data
-                // If we have roughly one period per day (within tolerance), it's daily data
-                const periodsPerDay = periods / daysDiff
-                
-                if (periodsPerDay > 0.8 && periodsPerDay <= 1.2 && daysDiff < 40) {
-                  // Daily data - approximately one period per day
-                  periodsInYear = 365
-                } else if (periods <= 12 && daysDiff > 20) {
-                  // Monthly data - few periods over many days
-                  periodsInYear = 12
-                } else {
-                  // Default to daily for short time spans with multiple periods
-                  if (daysDiff <= 31 && periods >= daysDiff * 0.8) {
-                    periodsInYear = 365
-                  } else {
-                    periodsInYear = 12
-                  }
-                }
-              }
-            }
-            
-            // Create budget progression line
-            if (data.monthlyBudget > 0) {
-              // For daily data: use monthly budget spread across the days
-              // For monthly data: use annual budget spread across months
-              
-              
-              for (let i = 1; i <= periods; i++) {
-                if (periodsInYear === 365) {
-                  // Daily data - show monthly budget prorated for days in current month
-                  const daysInMonth = 30 // Approximate days in a month
-                  const dayOfMonth = Math.min(i, daysInMonth) // Cap at days in month
-                  const budgetProgress = dayOfMonth / daysInMonth
-                  const budgetValue = data.monthlyBudget * budgetProgress
-                  // Show linear progression up to the monthly budget
-                  budgetLine.push(budgetValue)
-                  
-                  if (i <= 3 || i === periods) {
-                  }
-                } else {
-                  // Monthly data - use annual budget
-                  const progress = i / 12
-                  const budgetValue = data.annualBudget * Math.min(progress, 1)
-                  budgetLine.push(budgetValue)
-                  
-                  if (i <= 3 || i === periods) {
-                  }
-                }
-              }
-              
-            }
-            
-            const lastCumulative = data.cumulative[data.cumulative.length - 1] || 0
-            const lastBudgetValue = budgetLine[budgetLine.length - 1] || data.monthlyBudget
-            
-            
-            return {
-              accountId,
-              accountName: data.name,
-              months: data.dates.map(d => {
-                // Format date for display
-                const date = new Date(d)
-                return `${date.getMonth() + 1}/${date.getDate()}`
-              }),
-              actualSpend: data.cumulative,
-              budgetTrack: budgetLine,
-              totalBudget: data.annualBudget,
-              monthlyBudget: data.monthlyBudget,
-              isOverBudget: lastCumulative > lastBudgetValue,
-              burnRate: periods > 0 ? lastCumulative / periods : 0,
-              utilizationPercent: lastBudgetValue > 0 ? (lastCumulative / lastBudgetValue) * 100 : 0
-            }
-          })
-          .filter(item => item.actualSpend.length > 0)
-          .sort((a, b) => {
-            // Sort by last cumulative value
-            const aLast = a.actualSpend[a.actualSpend.length - 1] || 0
-            const bLast = b.actualSpend[b.actualSpend.length - 1] || 0
-            return bLast - aLast
-          })
-          .slice(0, 8) // Limit for readability
-        
-        return result
+        // Build cumulative actual
+        const cumulativeActual: number[] = []
+        let runningTotal = 0
+        for (const daily of dailyTotals) {
+          runningTotal += daily
+          cumulativeActual.push(runningTotal)
+        }
+
+        const totalActual = runningTotal
+        const daysElapsed = dates.length
+
+        // Determine days in month from the first date
+        let daysInMonth = 30
+        if (dates[0]) {
+          const d = new Date(dates[0])
+          daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
+        }
+
+        // Budget pace line — linear from 0 to totalMonthlyBudget across the month
+        const budgetPace: number[] = []
+        for (let i = 1; i <= daysInMonth; i++) {
+          budgetPace.push(totalMonthlyBudget * (i / daysInMonth))
+        }
+
+        // Forecast projection — extend from last actual to month end using avg daily rate
+        const avgDailyRate = daysElapsed > 0 ? totalActual / daysElapsed : 0
+        const forecastProjection: (number | null)[] = new Array(daysElapsed - 1).fill(null)
+        let projected = totalActual
+        forecastProjection.push(totalActual) // Connect to last actual point
+        for (let i = daysElapsed + 1; i <= daysInMonth; i++) {
+          projected += avgDailyRate
+          forecastProjection.push(projected)
+        }
+
+        const projectedEndOfMonth = avgDailyRate * daysInMonth
+
+        // Also use forecast API total if available for a better EOM estimate
+        const forecastTotal = extractForecastTotal(unwrapCostData(dataset, 'forecast'))
+        const eomEstimate = forecastTotal > 0 ? totalActual + forecastTotal : projectedEndOfMonth
+
+        // Date labels for full month
+        const fullMonthLabels: string[] = []
+        if (dates[0]) {
+          const d = new Date(dates[0])
+          for (let i = 1; i <= daysInMonth; i++) {
+            fullMonthLabels.push(`${d.getMonth() + 1}/${i}`)
+          }
+        }
+
+        // Status determination
+        const budgetAtThisPoint = totalMonthlyBudget * (daysElapsed / daysInMonth)
+        const variance = totalActual - budgetAtThisPoint
+        const variancePercent = budgetAtThisPoint > 0 ? (variance / budgetAtThisPoint) * 100 : 0
+        let status: 'under' | 'warning' | 'over' = 'under'
+        if (variancePercent > 10) status = 'over'
+        else if (variancePercent > -5) status = 'warning'
+
+        return {
+          dates: fullMonthLabels,
+          cumulativeActual,
+          budgetPace,
+          forecastProjection,
+          totalMonthlyBudget,
+          totalActual,
+          eomEstimate,
+          daysElapsed,
+          daysInMonth,
+          status,
+          variancePercent
+        }
       }
     },
 
@@ -2062,41 +1905,46 @@ export const useChartRegistry = (args: {
   // Dynamic chart selection based on scenario
   // Default charts shown by scenario (Tier 1 + Tier 2: Essential + Context-specific)
   const chartIdsByScenario: Record<Scenario, string[]> = {
-    // No accounts selected - strategic organizational overview (5 default charts)
+    // No accounts selected - strategic organizational overview (6 default charts)
     'all-accounts': [
       'yearEndForecast',                  // Year-end projection (org-wide)
       'totalSpendTrend',                  // Overall spending trends
+      'monthOverMonthComparison',         // Month-over-month spend comparison
       'serviceBreakdown',                 // Service distribution
       'budgetUtilization',                // Budget status (current periods)
       'topSpenders',                      // Top cost accounts
       'historicalMonthlyTrend'            // Monthly history (historical periods)
     ],
 
-    // Single account selected - focused account deep dive (4 default charts)
+    // Single account selected - focused account deep dive (6 default charts)
     'single-account': [
       'yearEndForecast',                  // Year-end projection for selected account
       'totalSpendTrend',                  // Account spending trend
       'serviceBreakdown',                 // Account service usage
+      'serviceCostVariance',              // Per-service cost changes vs prior month
       'budgetUtilization',                // Account budget status (current periods)
-      'organizationForecastComparison',   // Daily actual + forecast (current month)
+      'cumulativeBurnUp',                 // Cumulative burn-up tracking (answers "am I on track?")
       'historicalMonthlyTrend'            // Monthly history (historical periods)
     ],
 
-    // Few accounts selected (2-10) - comparative analysis (5 default charts)
+    // Few accounts selected (2-10) - comparative analysis (7 default charts)
     'few-accounts': [
       'yearEndForecast',                  // Year-end projection for selected accounts
       'accountForecastComparison',        // Compare forecasts across accounts
+      'monthOverMonthComparison',         // Month-over-month spend comparison
       'topSpenders',                      // Rank selected accounts
       'serviceBreakdown',                 // Combined service usage
+      'serviceCostVariance',              // Per-service cost changes vs prior month
       'budgetUtilization',                // Budget comparison
       'totalSpendTrend',                  // Combined spending trend
       'historicalMonthlyTrend'            // Monthly history (historical periods)
     ],
 
-    // LOB tab active - line of business analysis (4 default charts)
+    // LOB tab active - line of business analysis (5 default charts)
     'lob-group': [
       'yearEndForecast',                  // Year-end projection for selected LOB
       'lobTrendComparison',               // Multi-line LOB trends
+      'monthOverMonthComparison',         // Month-over-month spend comparison
       'lobComparison',                    // LOB comparison bars
       'budgetUtilization',                // LOB budget status
       'topSpenders',                      // Top accounts in LOB
@@ -2118,28 +1966,31 @@ export const useChartRegistry = (args: {
   const advancedChartIds: Record<Scenario, string[]> = {
     'all-accounts': [
       'costOptimizationOpportunities',    // Optimization recommendations
-      'accountRiskAssessment',            // Risk assessment
       'billableVsProforma'                // Cost mode comparison (proforma mode)
     ],
 
     'single-account': [
-      'cumulativeBurnUp',                 // Cumulative burn-up tracking
-      'monthlyTrendWithForecast'          // Monthly trend with forecast
+      'organizationForecastComparison',   // Daily actual + forecast (current month)
+      'monthlyTrendWithForecast',         // Monthly trend with forecast
+      'billableVsProforma'                // Cost mode comparison (proforma mode)
     ],
 
     'few-accounts': [
       'historicalVsForecastComparison',   // Historical patterns vs forecasts
-      'monthlyTrendWithForecast'          // Monthly comparison with forecast
+      'monthlyTrendWithForecast',         // Monthly comparison with forecast
+      'billableVsProforma'                // Cost mode comparison (proforma mode)
     ],
 
     'lob-group': [
       'departmentComparison',             // Departments within LOB
-      'efficiencyScore'                   // LOB budget efficiency
+      'costGrowthRate',                   // Cost growth rate by account
+      'billableVsProforma'                // Cost mode comparison (proforma mode)
     ],
 
     'department-group': [
       'totalSpendTrend',                  // Department overall trend
-      'topSpenders'                       // Top accounts in department
+      'topSpenders',                      // Top accounts in department
+      'billableVsProforma'                // Cost mode comparison (proforma mode)
     ]
   }
 
@@ -2210,16 +2061,8 @@ export const useChartRegistry = (args: {
       ids = ids.filter(id => id !== 'historicalMonthlyTrend' && id !== 'historicalComparison')
     }
     
-    // Add billable vs proforma comparison when in proforma mode
-    if (currentMode === 'proforma' && !ids.includes('billableVsProforma')) {
-      // Insert after totalSpendTrend if present, otherwise at beginning
-      const trendIndex = ids.indexOf('totalSpendTrend')
-      if (trendIndex >= 0) {
-        ids.splice(trendIndex + 1, 0, 'billableVsProforma')
-      } else {
-        ids.unshift('billableVsProforma')
-      }
-    }
+    // billableVsProforma is available via "Show More" in advancedChartIds
+    // No auto-insertion — users opt in via the toggle
     
     const selectedCharts = ids.map(id => baseCharts[id]).filter(Boolean) as ChartDefinition[]
 
@@ -2238,6 +2081,9 @@ export const useChartRegistry = (args: {
         } else if (chart.id === 'serviceBreakdown') {
           contextualTitle = 'Account Services'
           contextualDescription = 'Service costs for selected account'
+        } else if (chart.id === 'organizationForecastComparison') {
+          contextualTitle = 'Daily Spend + Month-End Forecast'
+          contextualDescription = 'Daily spending with actual data and month-end projection'
         }
       } else if (currentScenario === 'few-accounts') {
         if (chart.id === 'yearEndForecast') {

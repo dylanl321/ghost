@@ -1,0 +1,643 @@
+================================================================================
+TIER 2 - FIX SOON (Code Quality & DRY Improvements)
+================================================================================
+Cost Dashboard Review - Quality & Maintainability Issues
+Date: 2026-03-12
+Status: Pending
+================================================================================
+
+These issues affect code maintainability, developer experience, and long-term
+velocity. They should be addressed after Tier 1 critical fixes.
+
+================================================================================
+5. EXTRACT SHARED TOOLTIP FACTORY - Eliminate 30x Duplication
+================================================================================
+
+PROBLEM:
+  Every chart builder (30+ files) reimplements tooltip formatting logic. Each
+  builder manually handles: array parameter checking, data index lookup, currency
+  formatting, percentage formatting, conditional styling, and HTML template
+  generation. Changing tooltip background color or format requires editing 30 files.
+  Tooltips are not unit-testable because they're locked inside builder functions.
+
+AFFECTED FILES & SPECIFIC LOCATIONS:
+
+  app/utils/chart-options/bar.ts
+    - Lines 61-71: Manual array check, custom formatter, currency formatting
+
+  app/utils/chart-options/line-trend.ts
+    - Lines 74-98: Complex multi-series formatter with emoji and conditional logic
+    - Weekend date handling, master account annotations
+
+  app/utils/chart-options/service-cost-variance.ts
+    - Lines 24-30: Direction calculation, percentage formatting, current vs previous
+
+  app/utils/chart-options/cost-growth-rate.ts
+    - Lines 16-26: Three-line custom HTML template
+
+  app/utils/chart-options/cost-optimization-opportunities.ts
+    - Similar pattern to bar.ts with additional savings calculation
+
+  app/utils/chart-options/service-cost-distribution.ts
+    - Treemap-specific tooltip with nested value display
+
+  (Plus ~24 more builders in useChartRegistry.ts inline definitions)
+
+WHAT TO DO:
+
+  Step 1: Create tooltip factory file
+    ```typescript
+    // app/utils/chart-options/tooltip-factory.ts
+
+    import { formatCurrency } from '~/utils/formatters'
+
+    export interface TooltipField {
+      label: string
+      value: number | string
+      format?: 'currency' | 'percent' | 'number' | 'text'
+      color?: string
+      bold?: boolean
+    }
+
+    export interface TooltipConfig {
+      title?: string | ((params: any) => string)
+      fields: TooltipField[] | ((params: any, data: any) => TooltipField[])
+      showDot?: boolean         // Show series color dot
+      showDelta?: boolean       // Show change between values
+      deltaFields?: [string, string]  // Field names to calculate delta
+      currencyAbbreviated?: boolean
+      footer?: string | ((params: any) => string)
+    }
+
+    export function createTooltipFormatter(config: TooltipConfig) {
+      return function(params: any) {
+        const p = Array.isArray(params) ? params[0] : params
+        const dataIndex = p.dataIndex ?? 0
+
+        let html = '<div class="chart-tooltip">'
+
+        // Title
+        const title = typeof config.title === 'function'
+          ? config.title(p) : (config.title || p.name || '')
+        if (title) {
+          html += `<div class="font-semibold mb-1">${title}</div>`
+        }
+
+        // Fields
+        const fields = typeof config.fields === 'function'
+          ? config.fields(p, p.data) : config.fields
+
+        for (const field of fields) {
+          const formatted = formatFieldValue(field)
+          const colorDot = config.showDot && field.color
+            ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${field.color};margin-right:4px"></span>`
+            : ''
+          const weight = field.bold ? 'font-semibold' : ''
+          html += `<div class="${weight}">${colorDot}${field.label}: ${formatted}</div>`
+        }
+
+        // Delta
+        if (config.showDelta && config.deltaFields) {
+          const [fieldA, fieldB] = config.deltaFields
+          const valA = fields.find(f => f.label === fieldA)?.value as number
+          const valB = fields.find(f => f.label === fieldB)?.value as number
+          if (valA != null && valB != null) {
+            const delta = valA - valB
+            const color = delta >= 0 ? '#ef4444' : '#22c55e'
+            html += `<div style="color:${color}">Delta: ${formatCurrency(Math.abs(delta))}</div>`
+          }
+        }
+
+        // Footer
+        if (config.footer) {
+          const footerText = typeof config.footer === 'function'
+            ? config.footer(p) : config.footer
+          html += `<div class="text-xs text-gray-400 mt-1">${footerText}</div>`
+        }
+
+        html += '</div>'
+        return html
+      }
+    }
+
+    function formatFieldValue(field: TooltipField): string {
+      const val = field.value
+      switch (field.format) {
+        case 'currency': return formatCurrency(val as number, 2)
+        case 'percent': return `${(val as number).toFixed(1)}%`
+        case 'number': return (val as number).toLocaleString()
+        default: return String(val)
+      }
+    }
+    ```
+
+  Step 2: Create preset tooltips for common patterns
+    ```typescript
+    // Presets for common chart types
+    export const COST_TOOLTIP = (params: any) => createTooltipFormatter({
+      fields: [
+        { label: 'Cost', value: params.data?.cost || params.value, format: 'currency' }
+      ]
+    })
+
+    export const BUDGET_VS_ACTUAL_TOOLTIP = createTooltipFormatter({
+      fields: (p) => [
+        { label: 'Actual', value: p.data.actual, format: 'currency', color: '#3b82f6' },
+        { label: 'Budget', value: p.data.budget, format: 'currency', color: '#22c55e' },
+      ],
+      showDelta: true,
+      deltaFields: ['Actual', 'Budget']
+    })
+
+    export const VARIANCE_TOOLTIP = createTooltipFormatter({
+      fields: (p, d) => [
+        { label: 'Current', value: d.current, format: 'currency' },
+        { label: 'Previous', value: d.previous, format: 'currency' },
+        { label: 'Change', value: d.change, format: 'currency', bold: true },
+        { label: 'Change %', value: d.percentChange, format: 'percent' },
+      ]
+    })
+    ```
+
+  Step 3: Migrate builders one at a time to use factory
+    - Start with simpler builders (bar.ts, cost-growth-rate.ts)
+    - Then tackle complex ones (line-trend.ts with weekend/annotation logic)
+    - Each migration is safe and independently testable
+
+  Step 4: Add unit tests for tooltip factory
+    ```typescript
+    // tests/tooltip-factory.test.ts
+    describe('createTooltipFormatter', () => {
+      it('formats currency fields correctly', () => { ... })
+      it('calculates delta between fields', () => { ... })
+      it('handles missing data gracefully', () => { ... })
+    })
+    ```
+
+ESTIMATED EFFORT: 0.5-1 day
+RISK: Low (each builder can be migrated independently)
+TESTING: Visual comparison of tooltips before/after migration
+
+
+================================================================================
+6. DRY REFACTOR CHART REGISTRY - Extract Shared Trend Logic
+================================================================================
+
+PROBLEM:
+  useChartRegistry.ts contains lobTrendComparison (lines 575-717) and
+  departmentTrendComparison (lines 720-861) which are 145+ lines of nearly
+  identical code. The only differences are: field names (linesOfBusiness vs
+  departmentNumber), threshold values, and label names. The same pattern
+  of resultsByTime parsing, date tracking, and grouping logic is duplicated.
+
+AFFECTED FILES & SPECIFIC LOCATIONS:
+
+  app/composables/useChartRegistry.ts
+    - Lines 575-717: lobTrendComparison extractor
+    - Lines 720-861: departmentTrendComparison extractor
+    - Both follow identical structure:
+      1. Build account-to-group map using buildAccountToGroupMap()
+      2. Parse resultsByTime from dataset
+      3. Track dates and group series
+      4. Filter by selection, apply thresholds
+      5. Sort and limit to top N
+      6. Return formatted chart data
+
+  Additional duplication patterns in the same file:
+    - Multiple extractors repeat the selected-accounts filtering logic inline
+      instead of using a shared helper (lines 89-97 and elsewhere)
+    - Date parsing and formatting repeated across trend extractors
+    - Account name lookup pattern repeated (check details, then accounts, then ID)
+
+WHAT TO DO:
+
+  Step 1: Extract shared trend comparison builder
+    ```typescript
+    // In useChartRegistry.ts or new file app/utils/chart-extractors/trend-comparison.ts
+
+    interface TrendComparisonConfig {
+      groupField: 'linesOfBusiness' | 'departmentNumber'
+      groupSubField: 'lineOfBusiness' | 'departmentId'  // field within group
+      labelField: string          // display name field
+      defaultLabel: string        // e.g., 'Unknown LOB' or 'Unknown Dept'
+      minTotalThreshold: number   // minimum total to include group
+      topLimit: number            // max groups to show
+      chartTitle: string
+    }
+
+    function buildTrendComparison(
+      dataset: NormalizedDataset,
+      config: TrendComparisonConfig
+    ): ChartData | null {
+      const accounts = dataset.accountsList || []
+      const accountGroupMap = buildAccountToGroupMap(
+        accounts, config.groupField, config.groupSubField
+      )
+
+      const dataSource = dataset.mode === 'proforma'
+        ? dataset.historicalOrgWide?.proforma
+        : dataset.historicalOrgWide
+      const resultsByTime = dataSource?.resultsByTime || []
+      if (!resultsByTime.length) return null
+
+      const seriesMap = new Map<string, number[]>()
+      const dates: string[] = []
+
+      resultsByTime.forEach((bucket: any) => {
+        const dateStr = bucket.TimePeriod?.Start
+        if (!dateStr) return
+        dates.push(dateStr)
+
+        const groups = bucket.Groups || []
+        const dateTotals = new Map<string, number>()
+
+        groups.forEach((group: any) => {
+          const accountId = group.Keys?.[0]
+          const amount = parseFloat(group.Metrics?.UnblendedCost?.Amount || '0')
+          const groupName = accountGroupMap.get(accountId) || config.defaultLabel
+
+          dateTotals.set(groupName, (dateTotals.get(groupName) || 0) + amount)
+        })
+
+        for (const [name, total] of dateTotals) {
+          if (!seriesMap.has(name)) {
+            seriesMap.set(name, new Array(dates.length - 1).fill(0))
+          }
+          seriesMap.get(name)!.push(total)
+        }
+
+        // Pad series that didn't appear in this bucket
+        for (const [name, values] of seriesMap) {
+          if (values.length < dates.length) {
+            values.push(0)
+          }
+        }
+      })
+
+      // Filter by threshold, sort by total, limit to top N
+      const ranked = [...seriesMap.entries()]
+        .map(([name, values]) => ({
+          name,
+          values,
+          total: values.reduce((s, v) => s + v, 0)
+        }))
+        .filter(s => s.total >= config.minTotalThreshold)
+        .sort((a, b) => b.total - a.total)
+        .slice(0, config.topLimit)
+
+      return {
+        dates: dates.map(d => formatDate(d)),
+        series: ranked.map(s => ({ name: s.name, data: s.values })),
+        title: config.chartTitle
+      }
+    }
+    ```
+
+  Step 2: Replace both extractors with config-driven calls
+    ```typescript
+    const lobTrendComparison: ChartDefinition = {
+      id: 'lobTrendComparison',
+      type: 'line',
+      extractor: (dataset) => buildTrendComparison(dataset, {
+        groupField: 'linesOfBusiness',
+        groupSubField: 'lineOfBusiness',
+        labelField: 'name',
+        defaultLabel: 'Unknown LOB',
+        minTotalThreshold: 1000,
+        topLimit: 8,
+        chartTitle: 'Cost Trend by Line of Business'
+      })
+    }
+
+    const departmentTrendComparison: ChartDefinition = {
+      id: 'departmentTrendComparison',
+      type: 'line',
+      extractor: (dataset) => buildTrendComparison(dataset, {
+        groupField: 'departmentNumber',
+        groupSubField: 'departmentId',
+        labelField: 'name',
+        defaultLabel: 'Unknown Department',
+        minTotalThreshold: 500,
+        topLimit: 10,
+        chartTitle: 'Cost Trend by Department'
+      })
+    }
+    ```
+
+  Step 3: Extract additional shared helpers
+    ```typescript
+    // Filter accounts by current selection
+    function filterBySelectedAccounts(
+      data: any[],
+      selectedIds: Set<string>
+    ): any[] { ... }
+
+    // Resolve account display name with fallback chain
+    function resolveAccountName(
+      accountId: string,
+      details: Map<string, Account>,
+      accounts: Account[]
+    ): string { ... }
+
+    // Parse and format date from AWS TimePeriod
+    function parseBucketDate(bucket: any): string | null { ... }
+    ```
+
+  Step 4: Also look at extractors that duplicate selected-account filtering
+    - Multiple extractors repeat inline filtering logic
+    - Extract to shared helper and call consistently
+
+ESTIMATED EFFORT: 2-3 hours for the main refactor, plus testing
+RISK: Medium (logic must be verified identical after extraction)
+TESTING: Compare chart output before/after for both LOB and Department views
+  with same dataset. Verify edge cases: empty data, single group, all groups
+  below threshold.
+
+
+================================================================================
+7. NORMALIZE API RESPONSE SHAPES - Consistent Server Responses
+================================================================================
+
+PROBLEM:
+  Cost API endpoints return different nesting levels and structures, requiring
+  complex unwrapping logic on the client. The inconsistency makes the code
+  brittle and hard to maintain.
+
+  Current response shape variations:
+    - Summary enhanced: { accounts[], summary{} }
+    - Summary raw: { resultsByTime[] } or { proforma.rawData.resultsByTime }
+    - Services: { proforma.resultsByTime } (no rawData wrapper!)
+    - Analysis: { budgetAnalysis.byAccount[] }
+    - Historical: { resultsByTime[] } or { proforma.rawData.resultsByTime }
+
+  This forces cost-data-unwrap.ts to have multiple code paths:
+    - unwrapCostData() handles top-level wrapper
+    - getResultsByTime() handles proforma nesting variations (lines 50-79)
+    - Multiple fallback chains: proforma.rawData.resultsByTime || proforma.resultsByTime
+
+AFFECTED FILES & SPECIFIC LOCATIONS:
+
+  Server endpoints:
+    - server/api/costs/summary.get.ts: Returns different shape in enhanced vs basic mode
+    - server/api/costs/historical.get.ts: Returns resultsByTime or proforma-wrapped
+    - server/api/costs/forecast.get.ts: Own response structure
+    - server/api/costs/analysis.get.ts: budgetAnalysis wrapper
+
+  Client unwrapping:
+    - app/utils/cost-data-unwrap.ts: All unwrap functions
+      - Lines 50-79: getResultsByTime() with dual proforma path handling
+      - Tries proforma.rawData.resultsByTime, then proforma.resultsByTime
+    - app/composables/useCostData.ts: Calls unwrap utilities throughout
+
+WHAT TO DO:
+
+  Step 1: Define a canonical response envelope
+    ```typescript
+    // shared/types/cost-responses.ts
+    interface CostApiResponse<T = any> {
+      meta: {
+        timeframe: string
+        mode: 'billable' | 'proforma'
+        cached: boolean
+        cacheAge?: number
+        responseTimeMs: number
+      }
+      data: T
+    }
+
+    interface CostResultsByTime {
+      resultsByTime: AwsResultsByTime[]
+      summary?: Record<string, any>
+    }
+
+    interface CostSummaryData extends CostResultsByTime {
+      accounts?: AccountCostSummary[]  // Only in enhanced mode
+    }
+
+    interface CostAnalysisData {
+      budgetAnalysis: BudgetAnalysisResult
+      anomalies?: AnomalyResult[]
+      monthOverMonth?: MonthOverMonthResult
+    }
+    ```
+
+  Step 2: Update server endpoints to always wrap in canonical envelope
+    - Summary: Always return { meta, data: { resultsByTime, accounts? } }
+    - Historical: Always return { meta, data: { resultsByTime } }
+    - For proforma: Flatten to same structure (server does unwrapping, not client)
+      ```typescript
+      // Server-side: normalize before returning
+      const resultsByTime = mode === 'proforma'
+        ? rawResponse.proforma?.rawData?.resultsByTime || rawResponse.proforma?.resultsByTime || []
+        : rawResponse.resultsByTime || []
+
+      return { meta: { ... }, data: { resultsByTime } }
+      ```
+
+  Step 3: Simplify client unwrapping
+    - After server normalization, client unwrap becomes trivial:
+    ```typescript
+    function unwrapCostData(response: CostApiResponse): CostResultsByTime {
+      return response.data  // Already normalized!
+    }
+    ```
+
+  Step 4: Migrate endpoints one at a time
+    - Start with summary (most used)
+    - Then historical, forecast, analysis
+    - Update client code to handle new shape alongside old (temporary compatibility)
+    - Remove old unwrap paths once all endpoints migrated
+
+CONSIDERATIONS:
+  - This is a breaking change for any external consumers of the API
+  - Migrate gradually with feature flag or version header if needed
+  - Server-side normalization is more efficient than client-side
+
+ESTIMATED EFFORT: 1-2 days
+RISK: Medium-High (API contract change; test thoroughly)
+TESTING: Verify all chart types render correctly with normalized data;
+  test both billable and proforma modes; test enhanced vs basic summary
+
+
+================================================================================
+8. IMPROVE ERROR HANDLING - Categorize, Retry, Distinguish States
+================================================================================
+
+PROBLEM:
+  Multiple issues across the error handling pipeline:
+
+  A) useCostData.ts catch block (lines 328-337) treats all errors identically.
+     Network errors, timeouts, and cancellations all become the same generic
+     error message. No retry logic for transient failures.
+
+  B) useAccountCosts.ts has silent catch blocks that return empty arrays without
+     user feedback (e.g., fetchLinesOfBusiness lines 213-217).
+
+  C) ChartsRenderer.vue doesn't distinguish loading vs no-data vs error states.
+     All three show the same "No data" message to users.
+
+  D) API error messages are not user-friendly. Validation errors return technical
+     strings that users can't act on.
+
+AFFECTED FILES & SPECIFIC LOCATIONS:
+
+  app/composables/useCostData.ts
+    - Lines 328-337: Generic catch block
+    ```typescript
+    catch (e: any) {
+      if (e?.name === 'AbortError' || thisGeneration !== fetchGeneration) {
+        isDeferredLoading.value = false
+        return  // Swallows legitimate errors if generation changed
+      }
+      fetchError.value = e?.message || 'Failed to fetch cost data'
+    }
+    ```
+
+  app/composables/useAccountCosts.ts
+    - Lines 213-217: Silent catch in fetchLinesOfBusiness
+    - Line 104-119: Enhanced mode fallback (good pattern, but logs only to console)
+
+  app/components/costs/ChartsRenderer.vue
+    - Lines 216-225: hasError() function checks data but can't distinguish states
+    - Line 218: if (!chart.extractor) return false - silently skips charts
+
+  Server endpoints:
+    - server/api/costs/summary.get.ts line 249: Technical error messages
+
+WHAT TO DO:
+
+  Step 1: Categorize errors in useCostData.ts
+    ```typescript
+    catch (e: any) {
+      // Expected: User changed filters, previous request cancelled
+      if (e?.name === 'AbortError') {
+        isDeferredLoading.value = false
+        return
+      }
+
+      // Expected: Stale response from previous generation
+      if (thisGeneration !== fetchGeneration) {
+        isDeferredLoading.value = false
+        return
+      }
+
+      // Transient: Network or timeout errors - retry
+      if (isTransientError(e)) {
+        if (retryCount < MAX_RETRIES) {
+          retryCount++
+          console.warn(`Cost fetch retry ${retryCount}/${MAX_RETRIES}:`, e.message)
+          setTimeout(() => fetchCosts(), RETRY_DELAY * retryCount)
+          return
+        }
+      }
+
+      // Actual error: Surface to user
+      console.error('Cost fetch failed:', { error: e, query: query.value })
+      fetchError.value = getUserFriendlyError(e)
+      isFetching.value = false
+      isDeferredLoading.value = false
+    }
+
+    function isTransientError(e: any): boolean {
+      return e?.status === 429          // Rate limited
+        || e?.status === 503            // Service unavailable
+        || e?.code === 'ECONNRESET'     // Connection reset
+        || e?.message?.includes('timeout')
+    }
+
+    function getUserFriendlyError(e: any): string {
+      if (e?.status === 403) return 'You do not have permission to view cost data for this account.'
+      if (e?.status === 429) return 'Too many requests. Please wait a moment and try again.'
+      if (e?.status >= 500) return 'The cost service is temporarily unavailable. Please try again.'
+      return e?.message || 'Failed to load cost data. Please try refreshing.'
+    }
+    ```
+
+  Step 2: Add retry constants
+    ```typescript
+    const MAX_RETRIES = 2
+    const RETRY_DELAY = 1500  // 1.5s base, multiplied by attempt number
+    ```
+
+  Step 3: Surface errors from silent catch blocks in useAccountCosts.ts
+    ```typescript
+    // Instead of silently returning empty array:
+    catch (err) {
+      console.warn('Failed to fetch lines of business:', err)
+      // Add to a warnings array that UI can optionally display
+      warnings.value.push({
+        type: 'lob-fetch',
+        message: 'Could not load line of business data. Some grouping features may be unavailable.'
+      })
+      return []
+    }
+    ```
+
+  Step 4: Distinguish chart states in ChartsRenderer.vue
+    ```typescript
+    interface ChartState {
+      status: 'loading' | 'success' | 'noData' | 'error'
+      error?: string
+    }
+
+    function getChartState(chart: ChartDefinition, dataset: NormalizedDataset | null): ChartState {
+      if (!dataset) return { status: 'loading' }
+      try {
+        const data = chart.extractor(dataset)
+        if (!data || (Array.isArray(data) && data.length === 0)) {
+          return { status: 'noData' }
+        }
+        return { status: 'success' }
+      } catch (e: any) {
+        return { status: 'error', error: e.message }
+      }
+    }
+    ```
+
+    ```vue
+    <!-- In template -->
+    <div v-if="state.status === 'loading'" class="flex items-center justify-center h-64">
+      <UIcon name="i-heroicons-arrow-path" class="animate-spin" />
+      <span class="ml-2 text-gray-500">Loading chart data...</span>
+    </div>
+    <div v-else-if="state.status === 'noData'" class="flex items-center justify-center h-64">
+      <UIcon name="i-heroicons-chart-bar" class="text-gray-300" />
+      <span class="ml-2 text-gray-400">No data available for this view</span>
+    </div>
+    <div v-else-if="state.status === 'error'" class="flex items-center justify-center h-64">
+      <UIcon name="i-heroicons-exclamation-triangle" class="text-red-400" />
+      <span class="ml-2 text-red-500">Chart failed to load</span>
+    </div>
+    <VChart v-else :option="options" autoresize />
+    ```
+
+  Step 5: Remove or gate debug logging
+    - Remove all console.log debug statements from production code
+    - Replace with conditional logging:
+    ```typescript
+    const DEBUG = process.env.NODE_ENV === 'development'
+    if (DEBUG) console.log('Cost data:', data)
+    ```
+
+ESTIMATED EFFORT: 1-1.5 days
+RISK: Low (additive changes; existing error paths still work)
+TESTING: Simulate network errors (browser DevTools throttling), API 429/500
+  responses, slow connections. Verify retry behavior and user-facing messages.
+
+
+================================================================================
+TOTAL TIER 2 ESTIMATED EFFORT: 4-6 days
+================================================================================
+
+RECOMMENDED ORDER:
+  1. Tooltip factory (#5) - Quick DRY win, independent of other changes
+  2. DRY chart registry (#6) - Reduces code volume, makes other changes easier
+  3. Error handling (#8) - Improves debugging and user experience
+  4. API normalization (#7) - Most complex, benefits from other fixes being done first
+
+DEPENDENCIES:
+  - #7 (API normalization) benefits from Tier 1 #1 (type safety) being done first
+  - #6 (DRY refactor) benefits from Tier 1 #2 (memoization) being done first
+    so you can verify chart output hasn't changed via cache comparison
+  - #5 (tooltip factory) is fully independent, can start immediately
+  - #8 (error handling) is fully independent, can start immediately

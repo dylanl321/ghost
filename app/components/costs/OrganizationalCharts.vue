@@ -263,8 +263,13 @@ const processDatasetData = (dataset: any): boolean => {
 
     // Extract historical monthly breakdown from the dataset
     // Prefer orgWideHistorical (unfiltered) over historical (which may be account-filtered)
-    const historicalData = dataset.orgWideHistorical?.data || dataset.orgWideHistorical
+    const historicalRaw = dataset.orgWideHistorical?.data || dataset.orgWideHistorical
       || dataset.historical?.data || dataset.historical || {}
+    // Unwrap proforma/billable structure if present
+    const mode = dataset.mode || 'billable'
+    const historicalData = (historicalRaw.billable || historicalRaw.proforma)
+      ? (historicalRaw[mode] || historicalRaw.billable || historicalRaw)
+      : historicalRaw
     const monthlyBreakdown = historicalData.monthlyBreakdown || []
 
     lobGroups.value = buildLobGroups(accountsWithCosts, monthlyBreakdown)
@@ -331,8 +336,11 @@ const fetchOrganizationalData = async () => {
       return
     }
     
-    // Process the data
-    const historicalData = (historicalResponse as any).data || historicalResponse || {}
+    // Process the data — unwrap proforma/billable structure if present
+    const historicalRaw = (historicalResponse as any).data || historicalResponse || {}
+    const historicalData = (historicalRaw.billable || historicalRaw.proforma)
+      ? (historicalRaw.proforma || historicalRaw.billable || historicalRaw)
+      : historicalRaw
     const summaryData = (summaryResponse as any).data || summaryResponse || {}
     const accountsWithCosts = summaryData.accounts || []
     const monthlyBreakdown = historicalData.monthlyBreakdown || []
@@ -584,7 +592,7 @@ const lobYearOverYearChart = computed(() => {
     series.push({
       name: `${lobName} (${currentYear})`,
       type: 'line',
-      data: currentYearData.map((val, i) => i <= currentMonth ? val : null),
+      data: currentYearData.map((val, i) => i < currentMonth ? val : null),
       lineStyle: { 
         width: 3,
         color: colors[currentYear][lobIndex]
@@ -679,10 +687,10 @@ const lobYearOverYearChart = computed(() => {
 })
 
 const lobTrendsChart = computed(() => {
-  // Generate month labels for past 24 months (2 years)
+  // Generate month labels for past 23 complete months (excludes current partial month)
   const months: string[] = []
   const now = new Date()
-  for (let i = 23; i >= 0; i--) {
+  for (let i = 23; i >= 1; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
     months.push(d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }))
   }
@@ -754,7 +762,8 @@ const lobTrendsChart = computed(() => {
       monthlyData.forEach((monthEntry: any) => {
         const monthStr = monthEntry.month
         if (!monthStr) return
-        const d = new Date(monthStr + '-01')
+        const [yr, mo] = monthStr.split('-').map(Number)
+        const d = new Date(yr, mo - 1, 1)
         const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
         const breakdown = monthEntry.accountBreakdown || []
         let lobCost = 0
@@ -788,11 +797,11 @@ const lobTrendsChart = computed(() => {
 
 const selectedLobTrendChart = computed(() => {
   if (!selectedLobData.value) return {}
-  
-  // Generate month labels for past 24 months (2 years)
+
+  // Generate month labels for past 23 complete months (excludes current partial month)
   const months: string[] = []
   const now = new Date()
-  for (let i = 23; i >= 0; i--) {
+  for (let i = 23; i >= 1; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
     months.push(d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }))
   }
@@ -851,7 +860,8 @@ const selectedLobTrendChart = computed(() => {
         monthlyData.forEach((monthEntry: any) => {
           const monthStr = monthEntry.month
           if (!monthStr) return
-          const d = new Date(monthStr + '-01')
+          const [yr, mo] = monthStr.split('-').map(Number)
+          const d = new Date(yr, mo - 1, 1)
           const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
           const breakdown = monthEntry.accountBreakdown || []
           let lobCost = 0
@@ -988,7 +998,7 @@ const selectedLobYoYChart = computed(() => {
       {
         name: String(currentYear),
         type: 'bar',
-        data: currentYearData.map((val, i) => i <= currentMonth ? val : null),
+        data: currentYearData.map((val, i) => i < currentMonth ? val : null),
         itemStyle: { 
           color: CHART_COLORS[0]
         },

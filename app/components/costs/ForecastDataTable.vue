@@ -190,7 +190,7 @@
     <div ref="tableContainer" class="bg-white dark:bg-gray-900 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
       <!-- Drag Instruction -->
       <div v-if="filteredData.length > 0" class="bg-gray-50 dark:bg-gray-800/50 px-3 py-1 text-xs text-gray-600 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-        <Icon name="i-heroicons-cursor-arrow-rays" class="w-3 h-3 inline mr-1" />
+        <UIcon name="i-heroicons-cursor-arrow-rays" class="w-3 h-3 inline mr-1" />
         Hold <kbd class="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-gray-700 dark:text-gray-300">Shift</kbd> or <kbd class="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-gray-700 dark:text-gray-300">Alt</kbd> and drag to scroll • Middle-click and drag also works
       </div>
       <div class="overflow-x-auto overflow-y-auto max-h-[calc(100vh-300px)]">
@@ -205,7 +205,7 @@
               >
                 <div class="flex items-center gap-1">
                   Enclave
-                  <Icon v-if="sortColumn === 'enclaveId'" :name="sortDirection === 'asc' ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="w-3 h-3" />
+                  <UIcon v-if="sortColumn === 'enclaveId'" :name="sortDirection === 'asc' ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="w-3 h-3" />
                 </div>
               </th>
               <th 
@@ -214,7 +214,7 @@
               >
                 <div class="flex items-center gap-1">
                   Account Name
-                  <Icon v-if="sortColumn === 'accountName'" :name="sortDirection === 'asc' ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="w-3 h-3" />
+                  <UIcon v-if="sortColumn === 'accountName'" :name="sortDirection === 'asc' ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="w-3 h-3" />
                 </div>
               </th>
               <th 
@@ -223,7 +223,7 @@
               >
                 <div class="flex items-center gap-1">
                   Project Type
-                  <Icon v-if="sortColumn === 'projectType'" :name="sortDirection === 'asc' ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="w-3 h-3" />
+                  <UIcon v-if="sortColumn === 'projectType'" :name="sortDirection === 'asc' ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="w-3 h-3" />
                 </div>
               </th>
               <th 
@@ -232,7 +232,7 @@
               >
                 <div class="flex items-center gap-1">
                   LOB
-                  <Icon v-if="sortColumn === 'lob'" :name="sortDirection === 'asc' ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="w-3 h-3" />
+                  <UIcon v-if="sortColumn === 'lob'" :name="sortDirection === 'asc' ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="w-3 h-3" />
                 </div>
               </th>
               <th class="px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider">
@@ -261,7 +261,7 @@
               >
                 <div class="flex items-center justify-end gap-1">
                   Total
-                  <Icon v-if="sortColumn === 'totalAmount'" :name="sortDirection === 'asc' ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="w-3 h-3" />
+                  <UIcon v-if="sortColumn === 'totalAmount'" :name="sortDirection === 'asc' ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="w-3 h-3" />
                 </div>
               </th>
             </tr>
@@ -302,7 +302,7 @@
                     </NuxtLink>
                     <div class="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
                       <UTooltip :text="getAccountStatusTooltip(item.enclaveStatus)">
-                        <Icon 
+                        <UIcon
                           :name="getAccountStatusIcon(item.enclaveStatus)" 
                           :class="getAccountStatusClass(item.enclaveStatus)"
                           class="w-3 h-3"
@@ -429,7 +429,7 @@
                     @click="toggleGroup(group.groupName)"
                     class="flex items-center gap-2 w-full text-left"
                   >
-                    <Icon 
+                    <UIcon
                       :name="group.expanded ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'" 
                       class="w-4 h-4"
                     />
@@ -469,7 +469,7 @@
                     <div>{{ item.accountName || 'Unknown' }}</div>
                     <div class="flex items-center gap-1.5 text-gray-500">
                       <UTooltip :text="getAccountStatusTooltip(item.enclaveStatus)">
-                        <Icon 
+                        <UIcon
                           :name="getAccountStatusIcon(item.enclaveStatus)" 
                           :class="getAccountStatusClass(item.enclaveStatus)"
                           class="w-3 h-3"
@@ -516,7 +516,7 @@
 
       <!-- Empty State -->
       <div v-if="filteredData.length === 0" class="p-8 text-center">
-        <Icon name="i-heroicons-document-text" class="w-12 h-12 text-gray-500 mx-auto mb-4" />
+        <UIcon name="i-heroicons-document-text" class="w-12 h-12 text-gray-500 mx-auto mb-4" />
         <h3 class="text-lg font-medium text-gray-900 dark:text-gray-300 mb-2">No forecast data found</h3>
         <p class="text-gray-600 dark:text-gray-400">Upload an Excel file to get started</p>
       </div>

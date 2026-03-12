@@ -6,6 +6,7 @@ export interface CostFilterSettings {
   minCostThreshold: number
   currencyFormat: 'full' | 'abbreviated'
   showDecommissioned: boolean
+  selectedTableColumns: string[] | null
 }
 
 export interface FilteredCostData {

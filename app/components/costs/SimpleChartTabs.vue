@@ -12,7 +12,7 @@
           size="xs"
           @click="toggleAdvancedCharts"
         >
-          <Icon name="i-heroicons-adjustments-horizontal" class="w-3 h-3 mr-1" />
+          <UIcon name="i-heroicons-adjustments-horizontal" class="w-3 h-3 mr-1" />
           {{ props.showAdvancedCharts ? 'Show Less' : 'Show More Charts' }}
         </UButton>
       </div>
@@ -28,7 +28,7 @@
             'whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-150'
           ]"
         >
-          <Icon v-if="tab.icon" :name="tab.icon" class="w-4 h-4 inline-block mr-1" />
+          <UIcon v-if="tab.icon" :name="tab.icon" class="w-4 h-4 inline-block mr-1" />
           {{ tab.label }}
           <UTooltip v-if="tab.badge && tab.badgeTooltip" :text="tab.badgeTooltip">
             <NuxtLink
@@ -54,11 +54,18 @@
     <div class="tab-content">
       <!-- Smart Charts Tab -->
       <div v-if="activeTab === 'smart'" class="animate-fadeIn space-y-6">
+        <!-- Budget Health Summary Cards - surfaced on Smart Analysis for quick KPIs -->
+        <BudgetHealthSummaryCards
+          :dataset="dataset"
+          :data-mode="dataMode"
+        />
+
         <ChartsRenderer
           :charts="smartCharts"
           :dataset="dataset"
           :show-regression-line="showRegressionLine"
           :selected-accounts="selectedAccounts"
+          :warnings="warnings"
           @toggle-regression-line="$emit('toggle-regression-line')"
         />
 
@@ -98,7 +105,7 @@
         <!-- Section: Critical Issues -->
         <div class="space-y-4">
           <div class="flex items-center gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
-            <Icon name="i-heroicons-exclamation-triangle" class="w-5 h-5 text-red-400" />
+            <UIcon name="i-heroicons-exclamation-triangle" class="w-5 h-5 text-red-400" />
             <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-200">Critical Issues</h3>
           </div>
           <TablesRenderer
@@ -113,7 +120,7 @@
         <!-- Section: Budget by Project -->
         <div class="space-y-4">
           <div class="flex items-center gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
-            <Icon name="i-heroicons-folder" class="w-5 h-5 text-purple-400" />
+            <UIcon name="i-heroicons-folder" class="w-5 h-5 text-purple-400" />
             <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-200">Budget by Project</h3>
           </div>
           <TablesRenderer
@@ -128,7 +135,7 @@
         <!-- Section: Organizational View -->
         <div class="space-y-4">
           <div class="flex items-center gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
-            <Icon name="i-heroicons-building-office-2" class="w-5 h-5 text-blue-400" />
+            <UIcon name="i-heroicons-building-office-2" class="w-5 h-5 text-blue-400" />
             <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-200">Organizational View</h3>
           </div>
           <TablesRenderer
@@ -143,7 +150,7 @@
         <!-- Section: Underutilized & Summary -->
         <div class="space-y-4">
           <div class="flex items-center gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
-            <Icon name="i-heroicons-chart-pie" class="w-5 h-5 text-green-400" />
+            <UIcon name="i-heroicons-chart-pie" class="w-5 h-5 text-green-400" />
             <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-200">Budget Optimization</h3>
           </div>
           <TablesRenderer
@@ -156,9 +163,9 @@
         </div>
 
         <!-- Section: Budget Alerts -->
-        <div class="space-y-4">
+        <div id="budget-alerts-section" class="space-y-4" data-tour="budget-alerts">
           <div class="flex items-center gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
-            <Icon name="i-heroicons-bell-alert" class="w-5 h-5 text-amber-400" />
+            <UIcon name="i-heroicons-bell-alert" class="w-5 h-5 text-amber-400" />
             <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-200">Budget Alerts</h3>
           </div>
           <CostDashboardAlerts :account-ids="selectedAccounts" />
@@ -166,7 +173,7 @@
       </div>
 
       <!-- Data Table Tab -->
-      <div v-else-if="activeTab === 'data'" class="animate-fadeIn">
+      <div v-else-if="activeTab === 'data'" class="animate-fadeIn" data-tour="data-table">
         <CostDataTable
           :dataset="dataset"
           :selected-accounts="selectedAccounts"
@@ -211,6 +218,7 @@ const props = defineProps<{
   accountsList?: any[]
   showAdvancedCharts?: boolean
   sidebarTab?: string
+  warnings?: string[]
 }>()
 
 // Emits
@@ -280,6 +288,13 @@ const tabs = computed(() => [
   }
 ])
 
+
+// Sync local tab with parent prop changes
+watch(() => props.activeTabProp, (newVal) => {
+  if (newVal && newVal !== activeTab.value) {
+    activeTab.value = newVal
+  }
+})
 
 // Watch for tab changes
 watch(activeTab, (newTab) => {

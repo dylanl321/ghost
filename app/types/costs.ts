@@ -1,3 +1,5 @@
+import type { AWSEnclaveData } from '~~/shared/types/accounts'
+
 export type DataMode = 'billable' | 'proforma'
 
 /** AWS Cost Explorer time period */
@@ -15,6 +17,19 @@ export interface AwsResultsByTime {
     Metrics?: Record<string, { Amount: string; Unit?: string }>
   }>
   Estimated?: boolean
+}
+
+/** Per-account summary returned by the enhanced-mode summary API */
+export interface CostAccountSummary {
+  accountId: string
+  accountName?: string
+  totalCost: number
+  budget?: number
+  departmentNumber?: string
+  linesOfBusiness?: string
+  projectName?: string
+  environment?: string
+  services?: Record<string, number>
 }
 
 // API request params
@@ -52,12 +67,17 @@ export interface CostsSummaryResponse {
     forecast?: number
   }
   // The actual API response often has these additional fields
-  data?: any // Wrapped data from sendSuccess
-  accounts?: any[] // Enhanced mode returns accounts array
-  summary?: any // Summary totals
-  rawData?: { resultsByTime?: any[] } // Raw AWS response data
-  proforma?: any // Proforma nested data when mode=proforma
-  billable?: any // Billable nested data when mode=proforma
+  data?: Record<string, unknown> // Wrapped data from sendSuccess
+  accounts?: CostAccountSummary[] // Enhanced mode returns accounts array
+  summary?: Record<string, unknown> // Summary totals
+  rawData?: { resultsByTime?: AwsResultsByTime[] } // Raw AWS response data
+  /**
+   * Proforma nested data when mode=proforma.
+   * Canonical shape: `proforma.resultsByTime` (server-normalized).
+   * @deprecated `proforma.rawData.resultsByTime` nesting — kept for backward compat.
+   */
+  proforma?: CostsSummaryResponse
+  billable?: CostsSummaryResponse // Billable nested data when mode=proforma
 }
 
 // Historical API response (server/api/costs/historical.get.ts)
@@ -68,11 +88,16 @@ export interface CostsHistoricalSeries {
 
 export interface CostsHistoricalResponse {
   series: CostsHistoricalSeries[]
-  data?: any // Wrapped data from sendSuccess
-  monthlyBreakdown?: any[] // Monthly breakdown with account details
-  rawData?: { resultsByTime?: any[] }
-  proforma?: any
-  billable?: any
+  data?: Record<string, unknown> // Wrapped data from sendSuccess
+  monthlyBreakdown?: Record<string, unknown>[] // Monthly breakdown with account details
+  rawData?: { resultsByTime?: AwsResultsByTime[] }
+  /**
+   * Proforma nested data when mode=proforma.
+   * Canonical shape: `proforma.resultsByTime` (server-normalized).
+   * @deprecated `proforma.rawData.resultsByTime` nesting — kept for backward compat.
+   */
+  proforma?: CostsHistoricalResponse
+  billable?: CostsHistoricalResponse
 }
 
 // Forecast API response (server/api/costs/forecast.get.ts)
@@ -83,10 +108,10 @@ export interface CostsForecastSeries {
 
 export interface CostsForecastResponse {
   series: CostsForecastSeries[]
-  data?: any // Wrapped data from sendSuccess
-  forecast?: any // Nested forecast object
-  total?: any // Total amount object
-  forecastResultsByTime?: any[] // AWS forecast periods
+  data?: Record<string, unknown> // Wrapped data from sendSuccess
+  forecast?: Record<string, unknown> // Nested forecast object
+  total?: Record<string, unknown> // Total amount object
+  forecastResultsByTime?: AwsResultsByTime[] // AWS forecast periods
 }
 
 // Analysis API response (server/api/costs/analysis.get.ts)
@@ -107,21 +132,21 @@ export interface CostsAnalysisResponse {
   anomalies: AnomalyItem[]
   optimizations: OptimizationItem[]
   // The actual API response has these additional fields
-  data?: any // Wrapped data from sendSuccess
+  data?: Record<string, unknown> // Wrapped data from sendSuccess
   budgetAnalysis?: {
-    byAccount?: any[]
+    byAccount?: Record<string, unknown>[]
     totalBudget?: number
     totalActual?: number
     totalVariance?: number
   }
-  monthOverMonth?: any
-  costTrends?: any
+  monthOverMonth?: Record<string, unknown>
+  costTrends?: Record<string, unknown>
 }
 
 // Normalized dataset for charts
 export interface NormalizedDataset {
   accounts: string[] // Selected account IDs
-  accountsList?: any[] // Full account objects with metadata for LOB/Department mapping
+  accountsList?: AWSEnclaveData[] // Full account objects with metadata for LOB/Department mapping
   mode: DataMode // Current mode (billable or proforma)
   timeframe: string // Selected timeframe (thisMonth, lastMonth, etc.)
   summary: CostsSummaryResponse | null
@@ -133,8 +158,9 @@ export interface NormalizedDataset {
   forecast: CostsForecastResponse | null
   extendedForecast: CostsForecastResponse | null // 3-month forecast for trend analysis
   analysis: CostsAnalysisResponse | null
-  services: any | null // Service breakdown data from separate API call
-  yearEndForecast?: any // Rest-of-year forecast
+  services: { resultsByTime?: AwsResultsByTime[] } | null // Service breakdown data from separate API call
+  lastMonthServices?: { resultsByTime?: AwsResultsByTime[] } | null // Last month service breakdown for variance chart
+  yearEndForecast?: CostsForecastResponse | null // Rest-of-year forecast
 }
 
 

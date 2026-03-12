@@ -37,14 +37,14 @@
 
         <!-- Processing Status -->
         <div v-if="isProcessing" class="flex items-center gap-2 text-blue-400">
-          <Icon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin" />
+          <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin" />
           <span class="text-sm">Processing file...</span>
         </div>
 
         <!-- Error Display -->
         <div v-if="error" class="bg-red-900/20 border border-red-700 rounded-lg p-3">
           <div class="flex items-start gap-2">
-            <Icon name="i-heroicons-exclamation-triangle" class="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
+            <UIcon name="i-heroicons-exclamation-triangle" class="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
             <div>
               <h4 class="text-sm font-medium text-red-300">Upload Error</h4>
               <p class="text-xs text-red-400 mt-1">{{ error }}</p>
@@ -55,7 +55,7 @@
         <!-- Success Display -->
         <div v-if="successMessage" class="bg-green-900/20 border border-green-700 rounded-lg p-3">
           <div class="flex items-start gap-2">
-            <Icon name="i-heroicons-check-circle" class="w-5 h-5 text-green-400 mt-0.5 flex-shrink-0" />
+            <UIcon name="i-heroicons-check-circle" class="w-5 h-5 text-green-400 mt-0.5 flex-shrink-0" />
             <div>
               <h4 class="text-sm font-medium text-green-300">Upload Successful</h4>
               <p class="text-xs text-green-400 mt-1">{{ successMessage }}</p>
@@ -72,7 +72,7 @@
           :loading="isProcessing"
           class="w-full"
         >
-          <Icon name="i-heroicons-cloud-arrow-up" class="w-4 h-4 mr-2" />
+          <UIcon name="i-heroicons-cloud-arrow-up" class="w-4 h-4 mr-2" />
           {{ isProcessing ? 'Processing...' : 'Process File' }}
         </UButton>
         
@@ -176,7 +176,7 @@
                     color="blue"
                     @click="showMonthlyDetails(item)"
                   >
-                    <Icon name="i-heroicons-eye" class="w-3 h-3" />
+                    <UIcon name="i-heroicons-eye" class="w-3 h-3" />
                   </UButton>
                 </td>
               </tr>
@@ -259,7 +259,7 @@
           :loading="isSaving"
           :disabled="isSaving"
         >
-          <Icon name="i-heroicons-database" class="w-4 h-4 mr-2" />
+          <UIcon name="i-heroicons-database" class="w-4 h-4 mr-2" />
           Save to Database
         </UButton>
         <UButton
@@ -267,7 +267,7 @@
           color="gray"
           @click="downloadSample"
         >
-          <Icon name="i-heroicons-document-arrow-down" class="w-4 h-4 mr-2" />
+          <UIcon name="i-heroicons-document-arrow-down" class="w-4 h-4 mr-2" />
           Download Sample
         </UButton>
       </div>

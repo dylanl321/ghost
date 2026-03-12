@@ -9,7 +9,8 @@ export const useCostSettingsStore = defineStore('costSettings', {
     hideDevAccounts: true,
     minCostThreshold: 0,
     currencyFormat: 'abbreviated',
-    showDecommissioned: true
+    showDecommissioned: true,
+    selectedTableColumns: null
   }),
 
   actions: {
@@ -25,6 +26,7 @@ export const useCostSettingsStore = defineStore('costSettings', {
       this.minCostThreshold = 0
       this.currencyFormat = 'abbreviated'
       this.showDecommissioned = true
+      this.selectedTableColumns = null
     },
 
     toggleFilter(filterKey: keyof Pick<CostFilterSettings, 'hideSavingsPlans' | 'hideEnterpriseSupport' | 'hideReservedInstances' | 'hideDevAccounts' | 'showDecommissioned'>) {

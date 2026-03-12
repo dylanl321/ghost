@@ -1,13 +1,13 @@
 <template>
   <div class="space-y-4">
     <!-- Table Controls -->
-    <div class="flex justify-between items-center">
-      <div class="flex items-center gap-4">
+    <div class="flex flex-wrap justify-between items-center gap-2">
+      <div class="flex flex-wrap items-center gap-4">
         <UInput
           v-model="searchQuery"
           placeholder="Search accounts..."
           icon="i-heroicons-magnifying-glass"
-          class="w-64"
+          class="w-full sm:w-48 md:w-64"
         />
         <USelectMenu
           v-model="selectedColumns"
@@ -22,11 +22,11 @@
         </USelectMenu>
       </div>
       
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <UTooltip v-if="canGenerateDetailedReport" text="Generate detailed analytics report with service usage and recommendations">
           <UButton
             icon="i-heroicons-document-chart-bar"
-            color="green"
+            color="primary"
             variant="solid"
             @click="generateDetailedReport"
           >
@@ -35,7 +35,7 @@
         </UTooltip>
         <UButton
           icon="i-heroicons-document-arrow-down"
-          color="purple"
+          color="gray"
           variant="outline"
           @click="exportToPDFHandler"
         >
@@ -43,7 +43,7 @@
         </UButton>
         <UButton
           icon="i-heroicons-arrow-down-tray"
-          color="blue"
+          color="gray"
           variant="outline"
           @click="exportToCSV"
         >
@@ -53,6 +53,7 @@
           icon="i-heroicons-arrow-path"
           color="gray"
           variant="ghost"
+          aria-label="Refresh data"
           @click="refreshData"
           :loading="isLoading"
         >
@@ -64,7 +65,7 @@
     <!-- Data Table -->
     <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
       <div class="overflow-x-auto">
-        <table class="w-full">
+        <table class="w-full" :aria-busy="isLoading">
           <thead class="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
             <tr>
               <th
@@ -75,34 +76,35 @@
               >
                 <div class="flex items-center gap-1">
                   {{ col.label }}
-                  <Icon
+                  <UIcon
                     v-if="sortColumn === col.key"
                     :name="sortDirection === 'asc' ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'"
                     class="w-4 h-4"
                   />
                   <UTooltip v-if="col.helpLink" :text="col.helpTooltip || 'Learn more'">
                     <NuxtLink :to="col.helpLink" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300" @click.stop>
-                      <Icon name="i-heroicons-question-mark-circle" class="w-3.5 h-3.5" />
+                      <UIcon name="i-heroicons-question-mark-circle" class="w-3.5 h-3.5" />
                     </NuxtLink>
                   </UTooltip>
                   <UTooltip v-else-if="col.helpTooltip" :text="col.helpTooltip">
-                    <Icon name="i-heroicons-information-circle" class="w-3.5 h-3.5 text-gray-500" />
+                    <UIcon name="i-heroicons-information-circle" class="w-3.5 h-3.5 text-gray-500" />
                   </UTooltip>
                 </div>
               </th>
             </tr>
           </thead>
-          <tbody class="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
+          <tbody class="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800" :class="{ 'opacity-50 pointer-events-none': isLoading && paginatedData.length > 0 }">
             <tr
               v-for="(row, idx) in paginatedData"
               :key="row.accountId || idx"
               class="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              :class="{ 'bg-gray-50/50 dark:bg-gray-800/30 border-l-2 border-l-gray-400': row.accountStatus === 'Decommissioned' }"
             >
               <td
                 v-for="col in visibleColumns"
                 :key="col.key"
                 class="px-4 py-3 text-sm"
-                :class="[col.class, { 'opacity-60': row.accountStatus === 'Decommissioned' }]"
+                :class="[col.class]"
               >
                 <!-- Special handling for account status column -->
                 <span v-if="col.key === 'accountStatus'">
@@ -126,10 +128,12 @@
                 </span>
                 <!-- Special handling for account name to show if decommissioned -->
                 <span v-else-if="col.key === 'accountName'" class="flex items-center gap-2">
-                  {{ getNestedValue(row, col.key) || '-' }}
-                  <UTooltip v-if="row.accountStatus === 'Decommissioned'" text="This account has been decommissioned">
-                    <Icon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-red-500" />
-                  </UTooltip>
+                  <span :class="{ 'line-through text-gray-400 dark:text-gray-500': row.accountStatus === 'Decommissioned' }">
+                    {{ getNestedValue(row, col.key) || '-' }}
+                  </span>
+                  <UBadge v-if="row.accountStatus === 'Decommissioned'" color="gray" variant="subtle" size="xs">
+                    Decommissioned
+                  </UBadge>
                 </span>
                 <!-- Standard column handling -->
                 <span v-else-if="col.format">
@@ -142,7 +146,12 @@
             </tr>
             <tr v-if="paginatedData.length === 0">
               <td :colspan="visibleColumns.length" class="px-4 py-8 text-center text-gray-500">
-                No data available
+                <template v-if="isLoading">
+                  <CenteredLoadingSpinner />
+                </template>
+                <template v-else>
+                  No data available
+                </template>
               </td>
             </tr>
           </tbody>
@@ -269,7 +278,11 @@ const availableColumns = computed(() => [
 
 // State
 const searchQuery = ref('')
-const selectedColumns = ref(availableColumns.value.filter(c => c.default).map(c => c.key))
+const costSettings = useCostSettingsStore()
+const selectedColumns = ref(
+  costSettings.selectedTableColumns ?? availableColumns.value.filter(c => c.default).map(c => c.key)
+)
+watch(selectedColumns, (cols) => { costSettings.selectedTableColumns = [...cols] }, { deep: true })
 const sortColumn = ref('riskScore')
 const sortDirection = ref<'asc' | 'desc'>('desc')
 const currentPage = ref(1)

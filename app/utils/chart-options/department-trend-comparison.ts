@@ -1,5 +1,6 @@
 import { createBaseChartOptions, DEPT_CHART_COLORS, CHART_THEME, getSeriesColor } from '~/utils/chart-theme'
 import { formatCurrency } from '~/utils/formatters'
+import { multiSeriesTooltip } from '~/utils/tooltip-helpers'
 import type { ChartBuilderContext } from './types'
 
 /**
@@ -30,13 +31,7 @@ export function buildDepartmentTrendComparisonOptions(data: any, _context: Chart
     tooltip: {
       ...baseOptions.tooltip,
       trigger: 'axis',
-      formatter: (params: any) => {
-        let tooltip = `${params[0].name}<br/>`
-        params.forEach((param: any) => {
-          tooltip += `${param.seriesName}: ${formatCurrency(param.value)}<br/>`
-        })
-        return tooltip
-      }
+      formatter: multiSeriesTooltip
     },
     legend: {
       orient: 'horizontal',

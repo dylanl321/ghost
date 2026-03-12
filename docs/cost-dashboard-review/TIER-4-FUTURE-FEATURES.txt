@@ -1,0 +1,667 @@
+================================================================================
+TIER 4 - FUTURE FEATURES (New Capabilities & Enhancements)
+================================================================================
+Cost Dashboard Review - Feature Roadmap Ideas
+Date: 2026-03-12
+Status: Backlog
+================================================================================
+
+These are new features and capabilities identified during the review that would
+enhance the cost dashboard's value proposition. They require design discussion
+and product prioritization before implementation.
+
+================================================================================
+17. APPLY COST THRESHOLD FILTER TO CHARTS (Not Just Sidebar)
+================================================================================
+
+PROBLEM:
+  When users set a minimum cost threshold in settings (e.g., $1,000), the sidebar
+  account list correctly hides low-cost accounts. However, chart data still
+  includes ALL accounts regardless of the threshold setting. This creates an
+  inconsistency where the sidebar shows 10 accounts but charts aggregate 50.
+
+AFFECTED FILES:
+  - app/components/costs/CostSettings.vue lines 82-96 (sets threshold)
+  - app/composables/useChartRegistry.ts (extractors don't read threshold)
+  - app/components/costs/ChartsRenderer.vue (renders whatever extractors return)
+
+IMPLEMENTATION APPROACH:
+
+  Step 1: Pass filter settings through to chart context
+    ```typescript
+    // In ChartsRenderer.vue or parent
+    const context = computed<ChartBuilderContext>(() => ({
+      // ... existing context
+      filters: {
+        minCostThreshold: costSettings.minCostThreshold,
+        hideDecommissioned: costSettings.hideDecommissioned,
+        hideSavingsPlans: costSettings.hideSavingsPlans,
+      }
+    }))
+    ```
+
+  Step 2: Update extractors to respect filters
+    ```typescript
+    // In each extractor that aggregates account data
+    function extractAccountData(dataset: NormalizedDataset, context: ChartBuilderContext) {
+      let accounts = dataset.accountsList || []
+
+      // Apply threshold filter
+      if (context.filters?.minCostThreshold > 0) {
+        accounts = accounts.filter(a =>
+          (a.totalCost || 0) >= context.filters.minCostThreshold
+        )
+      }
+
+      // Apply decommissioned filter
+      if (context.filters?.hideDecommissioned) {
+        accounts = accounts.filter(a => !a.isDecommissioned)
+      }
+
+      // ... rest of extraction
+    }
+    ```
+
+  Step 3: Add "Filtered" indicator on charts when filters are active
+    ```vue
+    <div v-if="activeFilterCount > 0" class="text-xs text-gray-400 mb-1">
+      Showing filtered data ({{ activeFilterCount }} filter(s) active)
+    </div>
+    ```
+
+CONSIDERATIONS:
+  - Some charts (like total spend trend) should probably NOT filter (show full picture)
+  - Add per-chart flag: `respectsThresholdFilter: boolean`
+  - Service-level charts may need different filtering than account-level
+
+ESTIMATED EFFORT: 1-2 days
+COMPLEXITY: Medium
+
+
+================================================================================
+18. WHAT-IF SCENARIO MODELING
+================================================================================
+
+PROBLEM:
+  The current useCostScenario.ts (39 lines) only detects whether the user is
+  viewing single vs multiple accounts. There's no ability to simulate spending
+  changes like "What if we reduce EC2 spending by 20%?" or "What if we remove
+  this account?"
+
+PROPOSED FEATURE:
+
+  A scenario modeling panel that lets users:
+  1. Adjust spending by percentage for specific services
+  2. Remove/add accounts from projection
+  3. Apply growth rate assumptions
+  4. Compare "as-is" vs "to-be" projections side by side
+
+IMPLEMENTATION APPROACH:
+
+  Step 1: Define scenario model
+    ```typescript
+    // app/types/cost-scenario.ts
+    interface CostScenario {
+      id: string
+      name: string
+      baselineTimeframe: string  // 'thisMonth' | 'last30days' | etc
+      adjustments: ScenarioAdjustment[]
+      createdAt: Date
+    }
+
+    interface ScenarioAdjustment {
+      type: 'service-percent' | 'account-remove' | 'account-add' | 'growth-rate'
+      target: string              // Service name or account ID
+      value: number               // Percentage change or growth rate
+      description?: string
+    }
+    ```
+
+  Step 2: Create scenario composable
+    ```typescript
+    // app/composables/useCostScenarioModeling.ts
+    export function useCostScenarioModeling(dataset: Ref<NormalizedDataset>) {
+      const scenarios = ref<CostScenario[]>([])
+      const activeScenario = ref<CostScenario | null>(null)
+
+      function applyScenario(scenario: CostScenario): NormalizedDataset {
+        const modified = deepClone(dataset.value)
+        for (const adj of scenario.adjustments) {
+          switch (adj.type) {
+            case 'service-percent':
+              applyServiceAdjustment(modified, adj.target, adj.value)
+              break
+            case 'account-remove':
+              removeAccountFromDataset(modified, adj.target)
+              break
+            case 'growth-rate':
+              applyGrowthRate(modified, adj.value)
+              break
+          }
+        }
+        return modified
+      }
+
+      function compareScenarios(baseline: NormalizedDataset, modified: NormalizedDataset) {
+        return {
+          totalSavings: baseline.totalSpend - modified.totalSpend,
+          percentChange: ((modified.totalSpend - baseline.totalSpend) / baseline.totalSpend) * 100,
+          affectedAccounts: getAffectedAccounts(baseline, modified),
+          affectedServices: getAffectedServices(baseline, modified),
+        }
+      }
+
+      return { scenarios, activeScenario, applyScenario, compareScenarios }
+    }
+    ```
+
+  Step 3: Create UI component
+    ```vue
+    <!-- app/components/costs/CostScenarioPanel.vue -->
+    <UCard>
+      <template #header>
+        <div class="flex justify-between items-center">
+          <h3>What-If Analysis</h3>
+          <UButton @click="addScenario">New Scenario</UButton>
+        </div>
+      </template>
+
+      <!-- Adjustment builder -->
+      <div v-for="adj in activeScenario.adjustments" :key="adj.id">
+        <USelectMenu v-model="adj.type" :options="adjustmentTypes" />
+        <USelectMenu v-model="adj.target" :options="availableTargets" />
+        <UInput v-model="adj.value" type="number" suffix="%" />
+      </div>
+
+      <!-- Comparison summary -->
+      <div v-if="comparison" class="mt-4">
+        <div class="text-lg font-semibold">
+          Projected Savings: {{ formatCurrency(comparison.totalSavings) }}
+          ({{ comparison.percentChange.toFixed(1) }}%)
+        </div>
+      </div>
+    </UCard>
+    ```
+
+  Step 4: Add comparison chart that overlays baseline vs scenario
+    ```typescript
+    // New chart builder: scenario-comparison
+    // Shows two overlapping area charts: baseline (blue) and scenario (green)
+    ```
+
+CONSIDERATIONS:
+  - Scenarios should be saveable (localStorage or API)
+  - Share scenarios via URL parameters
+  - Export scenario comparison as PDF
+  - Consider "templates" for common scenarios (e.g., "Optimize Reserved Instances")
+
+ESTIMATED EFFORT: 3-5 days
+COMPLEXITY: High
+PREREQUISITE: Tier 1 type safety, Tier 2 API normalization
+
+
+================================================================================
+19. COST ANOMALY DETECTION & PROACTIVE ALERTS
+================================================================================
+
+PROBLEM:
+  The current alerts system (CostDashboardAlerts.vue) only shows budget threshold
+  alerts. There's no automated detection of unusual spending patterns, unexpected
+  spikes, or cost anomalies. Users must manually check the dashboard.
+
+PROPOSED FEATURE:
+
+  Automatic detection and notification of:
+  1. Daily spend spikes (>X% above rolling average)
+  2. New service costs (service not seen before)
+  3. Account cost trajectory changes (trend reversal)
+  4. Forecast accuracy drift (actual vs predicted divergence)
+
+IMPLEMENTATION APPROACH:
+
+  Step 1: Server-side anomaly detection
+    ```typescript
+    // server/utils/cost-anomaly-detection.ts
+    interface AnomalyResult {
+      type: 'spike' | 'new-service' | 'trend-change' | 'forecast-drift'
+      severity: 'info' | 'warning' | 'critical'
+      accountId: string
+      accountName: string
+      description: string
+      currentValue: number
+      expectedValue: number
+      deviation: number      // Standard deviations or percentage
+      detectedAt: Date
+      timeframe: string
+    }
+
+    function detectSpendSpikes(
+      historicalData: AwsResultsByTime[],
+      lookbackDays: number = 30,
+      threshold: number = 2.0  // Standard deviations
+    ): AnomalyResult[] {
+      // Calculate rolling average and standard deviation
+      // Flag any day where spend > avg + (threshold * stddev)
+    }
+
+    function detectNewServices(
+      currentServices: string[],
+      historicalServices: string[],
+      minCost: number = 10  // Ignore tiny new charges
+    ): AnomalyResult[] {
+      // Compare current month services against previous months
+      // Flag new services above minimum cost
+    }
+
+    function detectTrendChanges(
+      monthlyData: { month: string, cost: number }[],
+      sensitivity: number = 0.15  // 15% trend reversal
+    ): AnomalyResult[] {
+      // Calculate month-over-month trend direction
+      // Flag when trend reverses by more than sensitivity
+    }
+    ```
+
+  Step 2: API endpoint for anomaly data
+    ```typescript
+    // server/api/costs/anomalies.get.ts
+    export default defineEventHandler(async (event) => {
+      const { accountIds, timeframe, sensitivity } = getQuery(event)
+      // Run detection algorithms
+      // Return anomaly results
+    })
+    ```
+
+  Step 3: Client integration
+    ```typescript
+    // In useCostData.ts - add to deferred loading wave
+    const anomalies = await $fetch('/api/costs/anomalies', {
+      query: { accountIds: selectedAccountIds.value.join(',') }
+    })
+    dataset.value.anomalies = anomalies
+    ```
+
+  Step 4: UI component for anomaly display
+    ```vue
+    <!-- In CostDashboardAlerts.vue or new CostAnomalies.vue -->
+    <UAlert
+      v-for="anomaly in anomalies"
+      :key="anomaly.id"
+      :color="anomaly.severity === 'critical' ? 'red' : anomaly.severity === 'warning' ? 'orange' : 'blue'"
+      :title="anomaly.description"
+    >
+      <template #description>
+        Expected: {{ formatCurrency(anomaly.expectedValue) }}
+        Actual: {{ formatCurrency(anomaly.currentValue) }}
+        ({{ anomaly.deviation > 0 ? '+' : '' }}{{ anomaly.deviation.toFixed(1) }}%)
+      </template>
+    </UAlert>
+    ```
+
+  Step 5: Optional: Email/Slack notifications for critical anomalies
+    - Scheduled Lambda function runs daily
+    - Sends digest of critical anomalies to account owners
+    - Configurable notification preferences per user
+
+CONSIDERATIONS:
+  - AWS Cost Anomaly Detection service could be leveraged instead of custom
+  - Need to tune thresholds to avoid alert fatigue
+  - Historical baseline needs sufficient data (min 30 days)
+  - Consider allowing users to dismiss/acknowledge anomalies
+
+ESTIMATED EFFORT: 5-8 days (server + client + testing)
+COMPLEXITY: High
+PREREQUISITE: Tier 2 error handling, API normalization
+
+
+================================================================================
+20. MULTI-ACCOUNT SIDE-BY-SIDE COMPARISON
+================================================================================
+
+PROBLEM:
+  Users selecting multiple accounts see aggregated data. There's no way to
+  compare Account A vs Account B side by side to understand relative spending,
+  growth rates, or service breakdowns.
+
+PROPOSED FEATURE:
+
+  A comparison view that:
+  1. Allows selecting 2-4 accounts for comparison
+  2. Shows side-by-side metrics (spend, budget, growth, top services)
+  3. Overlays trend lines on the same chart
+  4. Highlights differences and similarities
+
+IMPLEMENTATION APPROACH:
+
+  Step 1: Comparison mode toggle in header
+    ```vue
+    <UButton
+      @click="comparisonMode = !comparisonMode"
+      :color="comparisonMode ? 'primary' : 'gray'"
+      variant="outline"
+    >
+      <UIcon name="i-heroicons-arrows-right-left" />
+      Compare Accounts
+    </UButton>
+    ```
+
+  Step 2: Account selection for comparison (max 4)
+    ```vue
+    <!-- When comparison mode active, show multi-select -->
+    <USelectMenu
+      v-model="comparisonAccounts"
+      :options="availableAccounts"
+      multiple
+      :max="4"
+      placeholder="Select up to 4 accounts"
+    />
+    ```
+
+  Step 3: Comparison layout component
+    ```vue
+    <!-- app/components/costs/CostComparison.vue -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <UCard v-for="account in comparisonAccounts" :key="account.id">
+        <template #header>{{ account.name }}</template>
+        <div class="space-y-2">
+          <div>Total Spend: {{ formatCurrency(account.totalSpend) }}</div>
+          <div>Budget: {{ formatCurrency(account.budget) }}</div>
+          <div>Growth: {{ account.growthRate }}%</div>
+          <div>Top Service: {{ account.topService }}</div>
+        </div>
+      </UCard>
+    </div>
+
+    <!-- Overlay trend chart -->
+    <CostComparisonChart :accounts="comparisonAccounts" />
+    ```
+
+  Step 4: Comparison chart builder
+    ```typescript
+    // Overlay line chart with one series per account
+    // Different colors per account
+    // Shared x-axis (dates)
+    // Normalized option (% of budget) for fair comparison
+    ```
+
+CONSIDERATIONS:
+  - API may need per-account historical data (currently aggregates)
+  - Consider "normalize by budget" toggle for fair comparison of different-sized accounts
+  - Export comparison as PDF/CSV
+  - Deep link to comparison view via URL params
+
+ESTIMATED EFFORT: 3-5 days
+COMPLEXITY: Medium-High
+
+
+================================================================================
+21. COST OPTIMIZATION RECOMMENDATIONS
+================================================================================
+
+PROBLEM:
+  The dashboard is observational, not prescriptive. It shows what is being
+  spent but doesn't suggest how to reduce costs.
+
+PROPOSED FEATURE:
+
+  An "Optimization Insights" section that analyzes spending patterns and
+  suggests actionable cost reduction strategies.
+
+POSSIBLE INSIGHTS:
+
+  1. Reserved Instance Coverage
+     - "Account X has 0% RI coverage on EC2. Estimated savings with 1-year RI: $X,XXX/month"
+     - Requires: EC2 usage data, RI pricing
+
+  2. Savings Plan Utilization
+     - "Your Compute Savings Plan is only 60% utilized. Consider downsizing commitment."
+     - Requires: Savings Plan usage data
+
+  3. Idle Resource Detection
+     - "3 EC2 instances in Account Y have <5% CPU utilization over 30 days"
+     - Requires: CloudWatch metrics integration
+
+  4. Service Consolidation
+     - "Account X and Account Y both run similar workloads. Consider consolidation."
+     - Requires: Resource inventory comparison
+
+  5. Spend Velocity Warnings
+     - "Account Z's daily spend has increased 40% this week. Investigate possible cause."
+     - Requires: Anomaly detection (Feature #19)
+
+IMPLEMENTATION APPROACH:
+
+  Step 1: Start simple - server-side analysis of existing cost data
+    ```typescript
+    // server/utils/cost-optimization.ts
+    interface OptimizationInsight {
+      id: string
+      category: 'ri-coverage' | 'savings-plan' | 'idle-resources' | 'spend-velocity'
+      title: string
+      description: string
+      estimatedSavings: number      // Monthly estimate
+      confidence: 'low' | 'medium' | 'high'
+      affectedAccounts: string[]
+      actionItems: string[]
+    }
+
+    function analyzeRICoverage(costData: CostResultsByTime[]): OptimizationInsight[] {
+      // Look for EC2 spend without corresponding RI charges
+      // Calculate potential savings based on RI pricing tiers
+    }
+
+    function analyzeSavingsPlanUtilization(costData: CostResultsByTime[]): OptimizationInsight[] {
+      // Compare SP commitment vs actual compute usage
+      // Flag under-utilized plans
+    }
+    ```
+
+  Step 2: API endpoint
+    ```typescript
+    // server/api/costs/optimization.get.ts
+    // Returns optimization insights for selected accounts
+    ```
+
+  Step 3: UI component
+    ```vue
+    <!-- app/components/costs/CostOptimizationInsights.vue -->
+    <UCard v-for="insight in insights" :key="insight.id">
+      <template #header>
+        <div class="flex justify-between">
+          <span>{{ insight.title }}</span>
+          <UBadge :color="confidenceColor(insight.confidence)">
+            {{ insight.confidence }} confidence
+          </UBadge>
+        </div>
+      </template>
+      <p>{{ insight.description }}</p>
+      <div class="mt-2 text-green-600 font-semibold">
+        Estimated savings: {{ formatCurrency(insight.estimatedSavings) }}/month
+      </div>
+      <ul class="mt-2 list-disc list-inside text-sm">
+        <li v-for="action in insight.actionItems">{{ action }}</li>
+      </ul>
+    </UCard>
+    ```
+
+CONSIDERATIONS:
+  - Start with low-hanging fruit (spend velocity, basic RI analysis)
+  - AWS Trusted Advisor and Cost Explorer Recommendations APIs may provide
+    some of this data natively
+  - Accuracy disclaimer needed ("estimates based on historical data")
+  - User feedback mechanism ("Was this helpful? Yes/No")
+
+ESTIMATED EFFORT: 5-10 days (phased)
+COMPLEXITY: High
+
+
+================================================================================
+22. REQUEST PROGRESS TRACKING
+================================================================================
+
+PROBLEM:
+  During the multi-phase data loading, users see a generic loading spinner but
+  don't know how many requests are in flight or how far along the load is.
+
+PROPOSED FEATURE:
+  Show "Loading 3 of 5 data sources..." or a progress bar during initial fetch.
+
+IMPLEMENTATION APPROACH:
+
+  Step 1: Add progress tracking to useCostData.ts
+    ```typescript
+    const fetchProgress = reactive({
+      total: 0,
+      completed: 0,
+      currentPhase: '' as 'core' | 'deferred-1' | 'deferred-2' | ''
+    })
+
+    // In fetchCosts():
+    fetchProgress.total = 11  // Total API calls
+    fetchProgress.completed = 0
+    fetchProgress.currentPhase = 'core'
+
+    // After each successful fetch:
+    fetchProgress.completed++
+    ```
+
+  Step 2: Expose progress in composable return
+    ```typescript
+    return {
+      // ... existing
+      fetchProgress: readonly(fetchProgress)
+    }
+    ```
+
+  Step 3: UI progress indicator
+    ```vue
+    <div v-if="isFetching" class="flex items-center gap-2">
+      <UProgress :value="progressPercent" size="sm" class="w-32" />
+      <span class="text-xs text-gray-500">
+        Loading {{ fetchProgress.completed }}/{{ fetchProgress.total }}...
+      </span>
+    </div>
+    ```
+
+ESTIMATED EFFORT: 2-4 hours
+COMPLEXITY: Low
+
+
+================================================================================
+23. CHART INTERACTION HINTS
+================================================================================
+
+PROBLEM:
+  Charts render but users don't know they can interact with them (zoom, pan,
+  click data points, use legend toggles). No onboarding or hint system exists
+  for chart interactions.
+
+PROPOSED FEATURE:
+  Subtle interaction hints that appear on first use.
+
+IMPLEMENTATION:
+  ```vue
+  <!-- First time seeing a chart -->
+  <div v-if="!hasInteracted" class="absolute bottom-2 right-2 text-xs text-gray-400
+    bg-white/80 dark:bg-gray-800/80 px-2 py-1 rounded">
+    Click legend items to toggle series. Scroll to zoom.
+  </div>
+  ```
+  - Track `hasInteracted` in localStorage
+  - Dismiss after first chart interaction event
+
+ESTIMATED EFFORT: 2-4 hours
+COMPLEXITY: Low
+
+
+================================================================================
+24. RECURRING COST REVIEW REMINDERS / DIGESTS
+================================================================================
+
+PROBLEM:
+  Users must manually visit the dashboard to check costs. No proactive
+  notification system exists to remind users of periodic cost reviews.
+
+PROPOSED FEATURE:
+
+  1. Weekly email digest with cost summary
+  2. Configurable alert thresholds per account
+  3. Slack/Teams integration for cost notifications
+  4. Scheduled report generation and delivery
+
+  This would likely require:
+  - Server-side scheduled jobs (Lambda + EventBridge)
+  - Email template system (SES)
+  - User notification preferences (DynamoDB)
+  - Integration with existing alert system in CostDashboardAlerts
+
+ESTIMATED EFFORT: 5-10 days
+COMPLEXITY: High (requires infrastructure changes)
+
+
+================================================================================
+25. CUSTOM DATE RANGE PICKER
+================================================================================
+
+PROBLEM:
+  The timeframe selector offers preset options (thisMonth, last30days, etc.)
+  but no custom date range picker for specific analysis periods.
+
+PROPOSED FEATURE:
+  Add "Custom Range" option to timeframe selector that opens a date picker
+  allowing start and end date selection.
+
+  ```vue
+  <UPopover v-if="selectedTimeframe === 'custom'">
+    <div class="p-4 space-y-4">
+      <div>
+        <label>Start Date</label>
+        <UInput type="date" v-model="customStart" :max="customEnd || today" />
+      </div>
+      <div>
+        <label>End Date</label>
+        <UInput type="date" v-model="customEnd" :min="customStart" :max="today" />
+      </div>
+      <UButton @click="applyCustomRange">Apply</UButton>
+    </div>
+  </UPopover>
+  ```
+
+CONSIDERATIONS:
+  - AWS Cost Explorer has a 12-month lookback limit
+  - Custom ranges affect cache key generation
+  - May need server-side validation of date range limits
+
+ESTIMATED EFFORT: 1-2 days
+COMPLEXITY: Medium
+
+
+================================================================================
+TIER 4 SUMMARY
+================================================================================
+
+PRIORITY RANKING (based on user value and implementation feasibility):
+
+  HIGH VALUE, LOWER EFFORT:
+    #17 - Apply threshold filter to charts (1-2 days)
+    #22 - Request progress tracking (2-4 hours)
+    #23 - Chart interaction hints (2-4 hours)
+    #25 - Custom date range picker (1-2 days)
+
+  HIGH VALUE, HIGHER EFFORT:
+    #19 - Anomaly detection (5-8 days)
+    #18 - What-if scenario modeling (3-5 days)
+    #20 - Multi-account comparison (3-5 days)
+
+  STRATEGIC VALUE:
+    #21 - Cost optimization recommendations (5-10 days)
+    #24 - Recurring review reminders (5-10 days)
+
+PREREQUISITES:
+  - All Tier 4 features benefit from Tier 1 type safety being completed
+  - #19 (Anomaly detection) requires Tier 2 error handling
+  - #18 (Scenarios) requires Tier 2 API normalization
+  - #17 (Threshold on charts) requires understanding of Tier 2 chart refactors
+
+TOTAL ESTIMATED EFFORT FOR ALL TIER 4: 25-45 days
+  (Recommend implementing incrementally based on user feedback)

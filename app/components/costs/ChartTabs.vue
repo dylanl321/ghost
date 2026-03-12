@@ -38,6 +38,7 @@
           :dataset="dataset"
           :show-regression-line="showRegressionLine"
           :selected-accounts="selectedAccounts"
+          :warnings="warnings"
           @toggle-regression-line="$emit('toggle-regression-line')"
         />
       </template>
@@ -54,6 +55,7 @@
           :dataset="dataset"
           :show-regression-line="showRegressionLine"
           :selected-accounts="selectedAccounts"
+          :warnings="warnings"
           @toggle-regression-line="$emit('toggle-regression-line')"
         />
       </template>
@@ -82,6 +84,7 @@ const props = defineProps<{
   showRegressionLine: boolean
   smartChartsLoading: boolean
   allChartDefinitions?: Record<string, ChartDefinition>
+  warnings?: string[]
 }>()
 
 // Emits

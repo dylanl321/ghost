@@ -464,5 +464,10 @@ export default defineEventHandler(handleAsync(async (event) => {
     mode: proforma ? 'proforma' : 'billable'
   }
 
+  // Normalize proforma nesting: ensure resultsByTime is directly on the proforma object
+  if (historicalData?.proforma?.rawData?.resultsByTime && !historicalData?.proforma?.resultsByTime) {
+    historicalData.proforma.resultsByTime = historicalData.proforma.rawData.resultsByTime
+  }
+
   return sendSuccess(event, historicalData, metadata)
 }))

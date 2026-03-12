@@ -5,6 +5,32 @@ All notable changes to GHOST are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] - 2026-03-12
+<!-- highlights: Cost Dashboard Overhaul, Pipeline Health Monitoring, Chart Bug Fixes -->
+
+### New Features
+- Pipeline dashboard now includes account deployment health monitoring with success/failure tracking
+- New resource search lets you find and filter resources across pipeline deployments
+- Planned vs Applied comparison panel shows infrastructure state differences at a glance
+- Added service cost variance chart to identify unexpected spending changes by service
+
+### Improvements
+- Cost dashboard charts have been rebuilt for faster loading and easier long-term maintenance
+- LOB spending trends and year-over-year charts now display a full 2 years of historical data
+- Cost summary cards show richer detail with improved formatting
+- Cumulative burn-up chart provides clearer progress tracking against budgets
+- Cost data is now cached to reduce redundant API calls when navigating between tabs
+- Smoother authentication redirects when sessions expire
+
+### Bug Fixes
+- Fixed LOB charts showing $0 for recent months due to a timezone mismatch in date handling
+- Fixed chart labels incorrectly including the current incomplete month
+- Fixed cost charts displaying blank data when viewing pro forma costs
+- Fixed cost trend scope buttons not switching date ranges correctly
+- Fixed feedback submission failing silently on certain error conditions
+
+---
+
 ## [1.10.0] - 2026-02-02
 <!-- highlights: IT PEP Data, Budget Alert History, Chart Improvements -->
 

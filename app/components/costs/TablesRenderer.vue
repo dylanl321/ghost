@@ -24,7 +24,7 @@
           <!-- Loading State -->
           <div v-if="isLoading" class="flex items-center justify-center py-12">
             <div class="text-center">
-              <Icon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-blue-500 mx-auto mb-2" />
+              <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-blue-500 mx-auto mb-2" />
               <p class="text-gray-400">Loading table data...</p>
             </div>
           </div>
@@ -32,7 +32,7 @@
           <!-- Error State -->
           <div v-else-if="hasError(table)" class="flex items-center justify-center py-12">
             <div class="text-center">
-              <Icon name="i-heroicons-exclamation-triangle" class="w-8 h-8 text-yellow-500 mx-auto mb-2" />
+              <UIcon name="i-heroicons-exclamation-triangle" class="w-8 h-8 text-yellow-500 mx-auto mb-2" />
               <p class="text-gray-400">{{ table.config?.emptyMessage || 'No data available' }}</p>
             </div>
           </div>
@@ -62,7 +62,7 @@
 
     <!-- No Tables Available -->
     <div v-else-if="!isLoading" class="bg-gray-900 border border-gray-700 rounded-lg p-12 text-center">
-      <Icon name="i-heroicons-table-cells" class="w-12 h-12 text-gray-600 mx-auto mb-4" />
+      <UIcon name="i-heroicons-table-cells" class="w-12 h-12 text-gray-600 mx-auto mb-4" />
       <p class="text-gray-400">No tables available for this selection</p>
       <p class="text-sm text-gray-500 mt-2">
         Budget health data is only available for current period selections

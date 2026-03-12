@@ -1,0 +1,402 @@
+================================================================================
+TIER 1 - FIX NOW (High Impact, Moderate Effort)
+================================================================================
+Cost Dashboard Review - Critical Issues
+Date: 2026-03-12
+Status: Pending
+================================================================================
+
+These issues have the highest impact on code reliability, performance, and user
+experience. They should be addressed before adding new features.
+
+================================================================================
+1. TYPE SAFETY - Replace `any` Types Across the Codebase
+================================================================================
+
+PROBLEM:
+  The cost dashboard uses `any` extensively across composables, chart extractors,
+  chart builders, and dataset types. This undermines TypeScript's value, disables
+  IDE autocomplete, prevents compile-time error detection, and makes refactoring
+  dangerous.
+
+AFFECTED FILES & SPECIFIC LOCATIONS:
+
+  app/composables/useAccountCosts.ts
+    - Lines 10-12: accounts, costs, accountDetails all typed as `any`
+    - Line 190: accountId fallback chain (account.accountId || account.awsStandardAccountID || account.id)
+      has no type guarantee any of these exist
+    - Lines 288-289: Account name fallback chain is 4 levels deep with no type safety
+
+  app/composables/useChartRegistry.ts
+    - Line 51: Dataset parameter for unwrapped data not typed
+    - Lines 89-91, 144-147, 379-380: Accessing bucket.Groups, bucket.Metrics without type validation
+    - Extractor functions return untyped data; builders receive `any`
+
+  app/types/costs.ts (NormalizedDataset interface)
+    - accountsList?: any[]  -- should be Account[]
+    - services: any | null  -- should be ServicesBreakdown or similar
+    - proforma fields under-typed throughout
+
+  app/utils/chart-options/index.ts
+    - Line 57-86: ChartBuilderFn signature is (data: any, context: ChartBuilderContext) => Record<string, any> | null
+    - No typed contract between what extractors output and what builders expect
+
+  app/composables/useCostExport.ts
+    - Line 87: dataset parameter typed as interface but implementations use bare `any`
+    - Sheet builder return values not validated
+
+  Server-side API responses:
+    - CostsSummaryResponse defines items: CostsSummaryItem[] but enhanced mode returns accounts: [] instead
+    - Proforma structure has `proforma?: any` in multiple places
+
+WHAT TO DO:
+
+  Step 1: Define proper interfaces for account data structures
+    ```typescript
+    // In app/types/costs.ts or new file app/types/account-data.ts
+    interface AccountData {
+      accounts: Account[] | null
+      costs: CostData | null
+      accountDetails: Map<string, Account>
+    }
+    ```
+
+  Step 2: Define chart data contracts (typed extractor outputs)
+    ```typescript
+    // In app/utils/chart-options/schema.ts (new file)
+    export interface BarChartData {
+      data: Array<{
+        name: string
+        cost: number
+        budget?: number
+        utilization?: number
+      }>
+    }
+
+    export interface LineChartData {
+      dates: string[]
+      totals: number[]
+      weekendData?: boolean[]
+      firstOfMonthData?: boolean[]
+      masterAccountData?: number[]
+    }
+
+    export interface ServiceVarianceData extends Array<{
+      service: string
+      change: number
+      percentChange: number | null
+      current: number
+      previous: number
+    }> {}
+
+    export interface AccountCostSummary {
+      accountId: string
+      accountName: string
+      totalCost: number
+      previousCost?: number
+      growthRate?: number
+      budgetedCost?: number
+    }
+
+    export interface ServiceCostDetail {
+      serviceName: string
+      cost: number
+      previousCost?: number
+      change?: number
+      percentChange?: number
+    }
+    ```
+
+  Step 3: Update ChartBuilderFn signature to use generics
+    ```typescript
+    type ChartBuilderFn<T = unknown> = (
+      data: T,
+      context: ChartBuilderContext
+    ) => EChartsOption | null
+    ```
+
+  Step 4: Replace `any` in NormalizedDataset with concrete types
+    - accountsList: Account[]
+    - services: ServicesBreakdown | null (define ServicesBreakdown)
+    - Define ProformaDataStructure interface with all nesting levels
+
+  Step 5: Create SummaryResponseEnhanced that extends base CostsSummaryResponse
+    for the enhanced mode endpoint variation
+
+  Step 6: Update useAccountCosts.ts to use typed state
+    ```typescript
+    const state = reactive<AccountData>({
+      accounts: null,
+      costs: null,
+      accountDetails: new Map()
+    })
+    ```
+
+ESTIMATED EFFORT: 1-2 days
+RISK: Low (additive change, no behavior modification)
+TESTING: TypeScript compiler will catch any mismatches; run full dev build after
+
+
+================================================================================
+2. PER-CHART MEMOIZATION - Stop Rebuilding All Charts Every Render
+================================================================================
+
+PROBLEM:
+  ChartsRenderer.vue has a computed property `chartOptionsMap` that rebuilds ALL
+  25+ charts on every single render cycle. Each rebuild invokes every chart's
+  extractor function (some doing 1000+ lines of calculation in useChartRegistry)
+  and then calls the builder. This causes unnecessary CPU work, potential frame
+  drops on slower devices, and no selective cache invalidation.
+
+AFFECTED FILES & SPECIFIC LOCATIONS:
+
+  app/components/costs/ChartsRenderer.vue
+    - Lines 315-342: chartOptionsMap computed property
+    - Line 324: loops through ALL props.charts even if only one data point changed
+    - Line 328: calls chart.extractor() for every chart every render
+    - Lines 331-334: calls both chartBuilderById and chartBuilderByType lookup + builder invocation
+
+  app/composables/useChartRegistry.ts
+    - All extractor functions (35+ of them) are called on every render
+    - totalSpendTrend extractor alone is 100+ lines of nested loops
+    - lobTrendComparison and departmentTrendComparison are each 145+ lines
+
+WHAT TO DO:
+
+  Step 1: Add a per-chart cache Map outside the computed property
+    ```typescript
+    const chartCacheMap = new Map<string, {
+      options: EChartsOption | null
+      dataHash: string
+      contextHash: string
+    }>()
+    ```
+
+  Step 2: Inside the computed, hash the extractor output and context per chart
+    ```typescript
+    const chartOptionsMap = computed(() => {
+      const map = new Map<string, EChartsOption>()
+      if (!props.dataset) {
+        chartCacheMap.clear()
+        return map
+      }
+
+      for (const chart of props.charts) {
+        const data = chart.extractor(props.dataset)
+        const dataHash = JSON.stringify(data)  // or use a fast hash
+        const contextHash = JSON.stringify(context.value)
+        const cacheKey = chart.id
+        const cached = chartCacheMap.get(cacheKey)
+
+        if (cached?.dataHash === dataHash && cached?.contextHash === contextHash) {
+          if (cached.options) map.set(chart.id, cached.options)
+        } else {
+          const builder = chartBuilderById[chart.id] || chartBuilderByType[chart.type]
+          const options = builder ? builder(data, context.value) : null
+          if (options) map.set(chart.id, options)
+          chartCacheMap.set(cacheKey, { options, dataHash, contextHash })
+        }
+      }
+      return map
+    })
+    ```
+
+  Step 3: Clear cache when dataset reference changes (not just content)
+    - Watch for dataset identity changes and clear the cache map
+
+  Step 4: Consider using shallowRef for chart options to prevent deep reactivity
+
+PERFORMANCE IMPACT:
+  - Before: 25+ extractors + 25+ builders run every render = potentially 50+ function calls
+  - After: Only charts whose data actually changed get rebuilt
+  - Expected improvement: 80-95% reduction in chart computation per render cycle
+
+ESTIMATED EFFORT: 0.5-1 day
+RISK: Low (rendering behavior unchanged, just cached)
+TESTING: Verify all charts still render correctly after data changes; test with
+  rapid filter toggling to confirm cache invalidation works
+
+
+================================================================================
+3. CLIENT-SIDE CACHING - Prevent Full Re-Fetch on Tab Navigation
+================================================================================
+
+PROBLEM:
+  useCostData.ts re-fetches ALL cost data when users navigate away and back, or
+  when filters change. The NormalizedDataset lives in a component-scoped ref and
+  is lost on navigation. The code itself documents this gap in lines 6-27 with
+  a detailed comment about the "CLIENT-SIDE CACHING GAP."
+
+  This means toggling between dashboard tabs = full re-fetch of 11 API calls
+  even if data hasn't changed.
+
+AFFECTED FILES & SPECIFIC LOCATIONS:
+
+  app/composables/useCostData.ts
+    - Lines 6-27: Detailed comment documenting the caching gap
+    - Lines 14-26: Three proposed approaches (A: Nuxt useAsyncData, B: Pinia store, C: composable singleton)
+    - Line 317-322: Smart deduplication already exists for some requests (reuses summaryRes)
+    - Lines 376-397: Cache invalidation on mode switch clears server cache but no client cache exists
+
+  Server-side caching (working well):
+    - 15min TTL for cost data, 30min for historical
+    - Tag-based selective invalidation
+    - Cache metadata returned to client (hit rate, age, TTL)
+
+WHAT TO DO:
+
+  Approach A (Recommended): Nuxt useAsyncData with key-based deduplication
+    ```typescript
+    // Generate cache key from current query parameters
+    const cacheKey = computed(() =>
+      `costs-${mode.value}-${timeframe.value}-${selectedAccountIds.value.join(',')}`
+    )
+
+    // Use Nuxt's built-in deduplication
+    const { data: summaryData } = useAsyncData(
+      `summary-${cacheKey.value}`,
+      () => $fetch('/api/costs/summary', { query: summaryParams.value }),
+      { watch: [cacheKey] }
+    )
+    ```
+
+  Approach B (Alternative): Pinia store with TTL
+    ```typescript
+    // In a new store: app/stores/useCostCacheStore.ts
+    export const useCostCacheStore = defineStore('costCache', {
+      state: () => ({
+        cache: new Map<string, { data: NormalizedDataset, timestamp: number }>(),
+        ttl: 5 * 60 * 1000 // 5 minutes client-side
+      }),
+      actions: {
+        get(key: string): NormalizedDataset | null {
+          const entry = this.cache.get(key)
+          if (!entry) return null
+          if (Date.now() - entry.timestamp > this.ttl) {
+            this.cache.delete(key)
+            return null
+          }
+          return entry.data
+        },
+        set(key: string, data: NormalizedDataset) {
+          this.cache.set(key, { data, timestamp: Date.now() })
+        },
+        invalidate(pattern?: string) {
+          if (!pattern) { this.cache.clear(); return }
+          for (const key of this.cache.keys()) {
+            if (key.includes(pattern)) this.cache.delete(key)
+          }
+        }
+      }
+    })
+    ```
+
+  Approach C (Simplest): Composable singleton pattern
+    ```typescript
+    // Module-level cache (survives component unmount)
+    const datasetCache = new Map<string, NormalizedDataset>()
+
+    export function useCostData() {
+      // Check cache before fetching
+      const cached = datasetCache.get(cacheKey.value)
+      if (cached) {
+        dataset.value = cached
+        return
+      }
+      // ... fetch and store in cache
+    }
+    ```
+
+  ALSO: Wire up cache invalidation on mode switch (line 376-397)
+    - When mode changes, invalidate client cache for old mode
+    - Server cache clear already happens; client cache should follow
+
+CONSIDERATIONS:
+  - Client TTL should be shorter than server TTL (e.g., 5min client vs 15min server)
+  - Cache key must include: mode, timeframe, selected accounts, filter settings
+  - Manual refresh button should bypass client cache
+  - Mode switch should clear client cache (already clears server cache)
+
+ESTIMATED EFFORT: 1-1.5 days
+RISK: Medium (must ensure stale data is never shown; test cache invalidation thoroughly)
+TESTING: Navigate away and back, verify no re-fetch. Change filters, verify re-fetch.
+  Switch modes, verify cache cleared. Hit refresh button, verify bypass.
+
+
+================================================================================
+4. WIRE UP isLoading ON CostDataTable
+================================================================================
+
+PROBLEM:
+  CostDataTable.vue accepts an `isLoading?: boolean` prop (line 214) but never
+  uses it anywhere in the template. When data is loading, users see either stale
+  data or an empty table with no indication that new data is incoming.
+
+AFFECTED FILES & SPECIFIC LOCATIONS:
+
+  app/components/costs/CostDataTable.vue
+    - Line 214: Props interface defines `isLoading?: boolean`
+    - Lines 65-151: Template area where loading state should be shown
+    - Lines 143-146: Empty state exists but doesn't distinguish loading from no-data
+
+  app/pages/account/costs.vue
+    - Where CostDataTable is rendered; verify isLoading prop is being passed
+
+WHAT TO DO:
+
+  Step 1: Add loading overlay to the table template
+    ```vue
+    <div class="relative">
+      <!-- Loading overlay -->
+      <div
+        v-if="isLoading"
+        class="absolute inset-0 bg-white/60 dark:bg-gray-900/60 z-10 flex items-center justify-center"
+      >
+        <div class="flex items-center gap-2 text-gray-500">
+          <UIcon name="i-heroicons-arrow-path-20-solid" class="animate-spin w-5 h-5" />
+          <span>Loading cost data...</span>
+        </div>
+      </div>
+
+      <!-- Existing table -->
+      <UTable ... />
+    </div>
+    ```
+
+  Step 2: Update empty state to distinguish loading from no-data
+    ```vue
+    <template #empty>
+      <div v-if="isLoading" class="text-center py-8 text-gray-400">
+        Loading account data...
+      </div>
+      <div v-else class="text-center py-8 text-gray-400">
+        No accounts match the current filters.
+      </div>
+    </template>
+    ```
+
+  Step 3: Add aria attributes for accessibility
+    ```vue
+    <div role="status" aria-live="polite" v-if="isLoading">
+      <span class="sr-only">Loading cost data</span>
+    </div>
+    ```
+
+  Step 4: Verify the parent component (costs.vue) passes the prop correctly
+    - Check that isFetching or equivalent reactive value flows to isLoading
+
+ESTIMATED EFFORT: 1-2 hours
+RISK: Very low (additive UI change)
+TESTING: Toggle loading state manually; verify overlay appears and disappears;
+  verify screen reader announces loading state
+
+
+================================================================================
+TOTAL TIER 1 ESTIMATED EFFORT: 3-5 days
+================================================================================
+
+RECOMMENDED ORDER:
+  1. isLoading on CostDataTable (quick win, 1-2 hours)
+  2. Type safety (foundational, enables safer work on everything else)
+  3. Per-chart memoization (performance improvement users will feel)
+  4. Client-side caching (biggest UX improvement, needs most testing)
