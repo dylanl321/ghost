@@ -18,6 +18,20 @@
               {{ option.label }}
             </button>
           </div>
+          <!-- Date range selector -->
+          <div v-if="dateRangeOptions && dateRangeOptions.length > 1" class="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+            <button
+              v-for="option in dateRangeOptions"
+              :key="option.value"
+              @click="$emit('update:dateRange', option.value)"
+              class="px-2.5 py-1 text-[11px] font-medium rounded-md transition-all duration-150"
+              :class="dateRange === option.value
+                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'"
+            >
+              {{ option.label }}
+            </button>
+          </div>
           <UBadge color="gray" variant="soft" size="sm">
             {{ dateRangeLabel }}
           </UBadge>
@@ -32,7 +46,7 @@
       <!-- Summary metrics -->
       <div class="border-t border-gray-200 dark:border-gray-700 mt-4 pt-4 flex">
         <div class="w-1/3 text-left">
-          <div class="text-gray-600 dark:text-gray-400 text-sm">Total Cost (Last 14 Days)</div>
+          <div class="text-gray-600 dark:text-gray-400 text-sm">Total Cost (Last {{ props.dateRange }} Days)</div>
           <div :class="`${totalCostProforma ? 'text-blue-600/80 dark:text-blue-400/80' : 'text-gray-900 dark:text-white'} text-lg font-semibold`">
             {{ formatCurrency(totalCostBillable, 0) }}
           </div>
@@ -94,6 +108,11 @@ interface ScopeOption {
   value: string
 }
 
+interface DateRangeOption {
+  label: string
+  value: number
+}
+
 const props = withDefaults(defineProps<{
   title: string
   loading: boolean
@@ -101,13 +120,18 @@ const props = withDefaults(defineProps<{
   timeSeriesProforma?: TimePoint[] // Pro Forma
   scope?: string
   scopeOptions?: ScopeOption[]
+  dateRange?: number
+  dateRangeOptions?: DateRangeOption[]
 }>(), {
   scope: 'org',
-  scopeOptions: () => []
+  scopeOptions: () => [],
+  dateRange: 14,
+  dateRangeOptions: () => []
 })
 
 defineEmits<{
   'update:scope': [value: string]
+  'update:dateRange': [value: number]
 }>()
 
 // Theme-aware chart colors
@@ -200,7 +224,11 @@ const chartOptions = computed(() => {
           const d = new Date(value)
           const month = d.getUTCMonth() + 1
           const day = d.getUTCDate()
-          const weekday = weekdays[d.getUTCDay()] // Mon, Tue, ...
+          // For ranges > 30 days, skip weekday to reduce clutter
+          if (props.dateRange > 30) {
+            return `${month}/${day}`
+          }
+          const weekday = weekdays[d.getUTCDay()]
           return `${month}-${day}\n${weekday}`
         }
       }

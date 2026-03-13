@@ -96,6 +96,16 @@ registerEndpoint('/api/costs/historical', 'GET', {
         type: 'string'
       },
       description: 'Comma-separated list of department numbers to filter accounts'
+    },
+    {
+      name: 'groupBy',
+      in: 'query',
+      required: false,
+      schema: {
+        type: 'string',
+        default: 'LINKED_ACCOUNT'
+      },
+      description: 'Group costs by dimension or tag. Defaults to LINKED_ACCOUNT. Prefix with "TAG:" to group by a cost allocation tag, e.g. "TAG:Environment"'
     }
   ],
   responses: {
@@ -218,6 +228,11 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.notFound(event, 'No accounts found matching the specified filters')
   }
   
+  // Parse groupBy param — supports TAG: prefix for tag-based grouping
+  const groupByParam = (query.groupBy as string) || 'LINKED_ACCOUNT'
+  const isTagGroupBy = groupByParam.startsWith('TAG:')
+  const groupByKey = isTagGroupBy ? groupByParam.slice(4) : groupByParam
+
   // Build cost parameters for historical data
   const costParams = {
     startDate,
@@ -225,8 +240,8 @@ export default defineEventHandler(handleAsync(async (event) => {
     granularity: 'MONTHLY' as const,
     metrics: ['UnblendedCost'],
     groupBy: [{
-      type: 'DIMENSION' as const,
-      key: 'LINKED_ACCOUNT'
+      type: isTagGroupBy ? 'TAG' as const : 'DIMENSION' as const,
+      key: groupByKey
     }],
     // Add account filter for Cost Explorer only if we have specific accounts
     filter: filteredAccountIds && filteredAccountIds.length > 0 ? {
@@ -242,6 +257,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   const cacheKey = `costs:historical:${JSON.stringify({
     period,
     environment,
+    groupByParam,
     proforma,
     proformaAccountId: proforma ? proformaAccountId : null,
     masterAccountId: proforma ? masterAccountId : null,

@@ -284,7 +284,9 @@ function buildPaddedDate(year: number, month: number, day: number) {
   return `${y}-${m}-${d}`;
 }
 
-async function getOverview(useProforma: boolean = false) {
+const ALLOWED_DAYS = [7, 14, 30, 90] as const
+
+async function getOverview(useProforma: boolean = false, days: number = 14) {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth(); // 0-index
@@ -313,7 +315,7 @@ async function getOverview(useProforma: boolean = false) {
   const dailyEnd = buildPaddedDate(year, month, today) // exclusive
 
   const tempStart = new Date(now);
-  tempStart.setDate(tempStart.getDate() - 14); // Go back 14 days to get the start date
+  tempStart.setDate(tempStart.getDate() - days); // Go back N days to get the start date
   const dailyStart = buildPaddedDate(tempStart.getFullYear(), tempStart.getMonth(), tempStart.getDate());
 
   logger.info(`Running queries with values: startOfMonth=${startOfMonth},
@@ -436,15 +438,17 @@ export default defineEventHandler(handleAsync(async (event) => {
   // Get query parameters
   const query = getQuery(event)
   const useProforma = query.proforma === 'true' || query.proforma === true
+  const rawDays = parseInt(query.days as string) || 14
+  const days = ALLOWED_DAYS.includes(rawDays as any) ? rawDays : 14
 
-  // Generate cache key including proforma flag
-  const cacheKey = `organization:simplified-overview:${useProforma ? 'proforma' : 'billable'}`
+  // Generate cache key including proforma flag and days
+  const cacheKey = `organization:simplified-overview:${useProforma ? 'proforma' : 'billable'}:${days}d`
 
   const info = await organizationCache.getOrSet(
     cacheKey,
     async () => {
-      logger.info(`Cache miss: Fetching organization overview (${useProforma ? 'proforma' : 'billable'})...`)
-      return await getOverview(useProforma)
+      logger.info(`Cache miss: Fetching organization overview (${useProforma ? 'proforma' : 'billable'}, ${days}d)...`)
+      return await getOverview(useProforma, days)
     },
     {
       ttl: 1200, // 20 minutes

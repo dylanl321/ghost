@@ -313,6 +313,7 @@
       <CostsHeader
         v-model:mode="dataMode"
         v-model:selected-timeframe="selectedTimeframe"
+        v-model:view-by="viewBy"
         :timeframe-options="timeframeOptions"
         :selected-accounts="selectedAccounts"
         :active-tab="activeTab"
@@ -355,10 +356,12 @@
               </template>
             </div>
           </div>
-          <UButton size="xs" color="blue" variant="soft" @click="clearSelection">
-            <Icon name="i-heroicons-x-mark" class="w-3.5 h-3.5 mr-1" />
-            Clear
-          </UButton>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <UButton size="xs" color="blue" variant="soft" @click="clearSelection">
+              <Icon name="i-heroicons-x-mark" class="w-3.5 h-3.5 mr-1" />
+              Clear
+            </UButton>
+          </div>
         </div>
       </div>
 
@@ -473,11 +476,49 @@
             />
           </div>
 
+          <!-- Tag Cost Breakdown: shown when a tag key is selected via View By -->
+          <div v-if="groupByTag" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-3">
+            <div class="flex items-center justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <UIcon name="i-heroicons-tag" class="w-4 h-4 text-blue-400 flex-shrink-0" />
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Cost by Tag: {{ groupByTag }}</h3>
+              </div>
+              <div class="flex items-center gap-2">
+                <UTooltip text="View tag coverage details">
+                  <UButton
+                    size="xs"
+                    color="blue"
+                    variant="ghost"
+                    icon="i-heroicons-chart-bar"
+                    :to="`/account/cost-tags?tag=${encodeURIComponent(groupByTag)}`"
+                  >
+                    Coverage
+                  </UButton>
+                </UTooltip>
+                <UButton
+                  size="xs"
+                  color="gray"
+                  variant="ghost"
+                  icon="i-heroicons-x-mark"
+                  @click="viewBy = 'LINKED_ACCOUNT'"
+                >
+                  Clear
+                </UButton>
+              </div>
+            </div>
+
+            <TagCostBreakdown
+              :cost-data="dataset?.summary ?? null"
+              :tag-key="groupByTag"
+              :loading="isCostFetching"
+            />
+          </div>
+
           <div v-if="isCostPending" class="bg-white dark:bg-gray-900 border border-amber-300 dark:border-amber-600 rounded-lg p-4 text-amber-700 dark:text-amber-400 flex items-center gap-2">
             <Icon name="i-heroicons-clock" class="w-5 h-5 animate-pulse" />
             <span>Waiting for account selection to complete...</span>
           </div>
-          <div v-else-if="isCostFetching" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-gray-700 dark:text-gray-300">
+          <div v-else-if="isCostFetching && !groupByTag" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-gray-700 dark:text-gray-300">
             Loading charts...
           </div>
           <div v-else-if="costError" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-red-600 dark:text-red-400">
@@ -490,8 +531,9 @@
                - dataset: Raw cost data from APIs via useCostData
                - Each chart's extractor function transforms dataset to chart format
                Charts are dynamically selected based on scenario and timeframe
+               Hidden when tag groupBy is active since data shape is different
                ============================================================= -->
-          <div v-else data-tour="costs-chart">
+          <div v-else-if="!groupByTag" data-tour="costs-chart">
             <!-- Subtle indicator while forecast/supplementary data loads in background -->
             <div v-if="isDeferredLoading" class="mb-3 flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg text-xs text-blue-600 dark:text-blue-400">
               <Icon name="i-heroicons-arrow-path" class="w-3.5 h-3.5 animate-spin flex-shrink-0" />
@@ -548,6 +590,7 @@ import type { BudgetAlert } from '@/shared/types/budget-alerts'
 
 const { accounts, isLoading, error, fetchAccounts } = useAccountCosts()
 const { favoriteIds } = useFavoriteAccounts()
+const { isAdmin } = useUserRoles()
 
 // Types
 interface Account {
@@ -698,6 +741,10 @@ const activeChartTab = ref('smart') // Chart tab selection (smart, organizationa
 const expandedGroups = ref(new Set<string>())
 const accountSortBy = ref<'cost' | 'name' | 'budget' | 'utilization'>('cost') // Default sort by cost
 const showRegressionLine = ref(false) // Toggle for budget variance regression line
+
+// View By state: controls how cost data is grouped (account, service, region, or tag)
+const viewBy = ref('LINKED_ACCOUNT')
+const groupByTag = computed(() => viewBy.value.startsWith('TAG:') ? viewBy.value.slice(4) : null)
 
 // Computed property to detect if we're viewing historical data
 const isHistoricalTimeframe = computed(() => {
@@ -1136,7 +1183,8 @@ const { mode: dataMode, isFetching: isCostFetching, isDeferredLoading, isPending
   selectedTimeframe,
   initialMode: 'proforma',
   accountsList, // Pass full accounts data for LOB/Department mapping
-  debounceMs: 800 // Wait 800ms after user stops selecting accounts
+  debounceMs: 800, // Wait 800ms after user stops selecting accounts
+  groupByTag // Tag key for grouping summary data by tag value
 })
 
 // 2. useCostScenario: Determines the viewing context based on user selections

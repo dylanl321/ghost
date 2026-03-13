@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, onBeforeUnmount } from 'vue'
 import * as d3 from 'd3'
 
 export interface TreeNode {
@@ -982,15 +982,24 @@ export function useD3TreeChart() {
 
   const cleanup = () => {
     const container = document.querySelector('.visualization-container')
-    if (container && (container as any)._resizeObserver) {
-      ;(container as any)._resizeObserver.disconnect()
-      delete (container as any)._resizeObserver
+    if (container) {
+      // Interrupt active D3 transitions to prevent callbacks on unmounted DOM
+      d3.select(container).selectAll('*').interrupt()
+
+      if ((container as any)._resizeObserver) {
+        (container as any)._resizeObserver.disconnect()
+        delete (container as any)._resizeObserver
+      }
     }
   }
 
   const setOnNodeToggleCallback = (callback: () => void) => {
     onNodeToggleCallback = callback
   }
+
+  onBeforeUnmount(() => {
+    cleanup()
+  })
 
   return {
     drawChart,

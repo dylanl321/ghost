@@ -161,38 +161,18 @@ const budgetOverageAccounts: TableDefinition = {
       }))
 
     // Calculate risk scores across all accounts
+    assignRiskScores(
+      accounts,
+      (a: any) => a.percentOver,
+      (a: any) => a.dollarOver,
+      (a: any, result) => {
+        a.riskScore = result.riskScore
+        a.riskLevel = result.riskLevel
+        a.riskColor = result.riskColor
+      }
+    )
+
     if (accounts.length > 0) {
-      const maxPercentOver = Math.max(...accounts.map((a: any) => a.percentOver), 1)
-      const maxDollarOver = Math.max(...accounts.map((a: any) => a.dollarOver), 1)
-
-      accounts.forEach((account: any) => {
-        // Normalize overage percentage (0-100 scale)
-        const normalizedPercent = (account.percentOver / maxPercentOver) * 100
-
-        // Normalize overage amount (0-100 scale)
-        const normalizedAmount = (account.dollarOver / maxDollarOver) * 100
-
-        // Combined risk score (70% weight on percentage, 30% weight on absolute impact)
-        const riskScore = (normalizedPercent * 0.7) + (normalizedAmount * 0.3)
-
-        // Determine risk level
-        if (riskScore >= 80) {
-          account.riskLevel = 'Critical'
-          account.riskColor = 'red'
-        } else if (riskScore >= 60) {
-          account.riskLevel = 'High'
-          account.riskColor = 'orange'
-        } else if (riskScore >= 40) {
-          account.riskLevel = 'Medium'
-          account.riskColor = 'yellow'
-        } else {
-          account.riskLevel = 'Low'
-          account.riskColor = 'blue'
-        }
-
-        account.riskScore = riskScore
-      })
-
       // Sort by risk score descending
       accounts.sort((a: any, b: any) => b.riskScore - a.riskScore)
     }
@@ -293,38 +273,18 @@ const severeOverageAccounts: TableDefinition = {
       }))
 
     // Calculate risk scores across all accounts
+    assignRiskScores(
+      accounts,
+      (a: any) => a.percentOver,
+      (a: any) => a.dollarOver,
+      (a: any, result) => {
+        a.riskScore = result.riskScore
+        a.riskLevel = result.riskLevel
+        a.riskColor = result.riskColor
+      }
+    )
+
     if (accounts.length > 0) {
-      const maxPercentOver = Math.max(...accounts.map((a: any) => a.percentOver), 1)
-      const maxDollarOver = Math.max(...accounts.map((a: any) => a.dollarOver), 1)
-
-      accounts.forEach((account: any) => {
-        // Normalize overage percentage (0-100 scale)
-        const normalizedPercent = (account.percentOver / maxPercentOver) * 100
-
-        // Normalize overage amount (0-100 scale)
-        const normalizedAmount = (account.dollarOver / maxDollarOver) * 100
-
-        // Combined risk score (70% weight on percentage, 30% weight on absolute impact)
-        const riskScore = (normalizedPercent * 0.7) + (normalizedAmount * 0.3)
-
-        // Determine risk level
-        if (riskScore >= 80) {
-          account.riskLevel = 'Critical'
-          account.riskColor = 'red'
-        } else if (riskScore >= 60) {
-          account.riskLevel = 'High'
-          account.riskColor = 'orange'
-        } else if (riskScore >= 40) {
-          account.riskLevel = 'Medium'
-          account.riskColor = 'yellow'
-        } else {
-          account.riskLevel = 'Low'
-          account.riskColor = 'blue'
-        }
-
-        account.riskScore = riskScore
-      })
-
       // Sort by risk score descending
       accounts.sort((a: any, b: any) => b.riskScore - a.riskScore)
     }

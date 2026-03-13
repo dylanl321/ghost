@@ -5,6 +5,27 @@ All notable changes to GHOST are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.0] - 2026-03-13
+<!-- highlights: Cost Tag Management, Account Risk Scoring, Cost Data Reliability -->
+
+### New Features
+- New Cost Tags page lets you browse and break down spending by AWS resource tags across accounts
+- Tag configuration manager allows you to select which tags to track and view tag coverage
+- Account settings panel provides quick access to tag and cost configuration per account
+- Accounts now show a risk score based on budget overage to help prioritize attention
+
+### Improvements
+- Cost totals are now matched by date rather than position, preventing mismatches when data spans multiple pages
+- Percentage change calculations handle edge cases more gracefully (e.g., new costs with no prior baseline)
+- Updated application icon
+- Side navigation now includes a link to the Cost Tags page
+
+### Bug Fixes
+- Fixed cost totals occasionally showing incorrect values when paginated API responses had misaligned periods
+- Fixed pro forma cost injection failing silently when period counts differed between grouped and total queries
+
+---
+
 ## [1.11.0] - 2026-03-12
 <!-- highlights: Cost Dashboard Overhaul, Pipeline Health Monitoring, Chart Bug Fixes -->
 

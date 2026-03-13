@@ -3,8 +3,10 @@ import type { NormalizedDataset, DataMode } from '~/types/costs'
 interface CacheEntry {
   dataset: NormalizedDataset
   timestamp: number
+  version: number
 }
 
+const CACHE_VERSION = 1
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 const MAX_ENTRIES = 10
 
@@ -42,12 +44,16 @@ export function getCachedDataset(accounts: string[], timeframe: string, mode: Da
     cache.delete(key)
     return null
   }
+  if (entry.version !== CACHE_VERSION) {
+    cache.delete(key)
+    return null
+  }
   return entry.dataset
 }
 
 export function setCachedDataset(accounts: string[], timeframe: string, mode: DataMode, dataset: NormalizedDataset): void {
   const key = buildKey(accounts, timeframe, mode)
-  cache.set(key, { dataset, timestamp: Date.now() })
+  cache.set(key, { dataset, timestamp: Date.now(), version: CACHE_VERSION })
   evictOldest()
 }
 

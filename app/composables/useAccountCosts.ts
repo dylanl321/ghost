@@ -107,7 +107,7 @@ export const useAccountCosts = () => {
         })
       } catch (enhancedError: any) {
         // If enhanced=true fails (likely due to AWS auth issues), try with enhanced=false
-        if (params.enhanced === true && (enhancedError.message?.includes('expired') || enhancedError.message?.includes('500'))) {
+        if (params.enhanced === true && (enhancedError.statusCode >= 400 || enhancedError.status >= 400 || enhancedError.message?.includes('expired') || enhancedError.message?.includes('500'))) {
           console.warn('Enhanced cost data failed, falling back to basic cost data:', enhancedError.message)
           const fallbackParams = { ...params, enhanced: false }
           data = await $fetch('/api/costs/summary', {

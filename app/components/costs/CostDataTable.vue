@@ -493,47 +493,17 @@ const tableData = computed(() => {
   }
 
   // Calculate normalized risk scores across all accounts
-  if (rawData.length > 0) {
-    const maxOveragePercent = Math.max(...rawData.map(a => a.overagePercent), 1)
-    const maxOverageAmount = Math.max(...rawData.map(a => a.overageAmount), 1)
-
-    rawData.forEach(account => {
-      // Normalize overage percentage (0-100 scale)
-      const normalizedPercent = (account.overagePercent / maxOveragePercent) * 100
-
-      // Normalize overage amount (0-100 scale)
-      const normalizedAmount = (account.overageAmount / maxOverageAmount) * 100
-
-      // Combined risk score (70% weight on percentage, 30% weight on absolute impact)
-      // This balances severity of overage vs financial impact
-      const riskScore = (normalizedPercent * 0.7) + (normalizedAmount * 0.3)
-
-      // Determine risk level
-      let riskLevel = 'Good'
-      let riskColor = 'green'
-
-      if (account.overageAmount === 0 && account.variance <= 0) {
-        riskLevel = 'Good'
-        riskColor = 'green'
-      } else if (riskScore >= 80) {
-        riskLevel = 'Critical'
-        riskColor = 'red'
-      } else if (riskScore >= 60) {
-        riskLevel = 'High'
-        riskColor = 'orange'
-      } else if (riskScore >= 40) {
-        riskLevel = 'Medium'
-        riskColor = 'yellow'
-      } else if (riskScore >= 20) {
-        riskLevel = 'Low'
-        riskColor = 'blue'
-      }
-
-      account.riskScore = riskScore
-      account.riskLevel = riskLevel
-      account.riskColor = riskColor
-    })
-  }
+  assignRiskScores(
+    rawData,
+    a => a.overagePercent,
+    a => a.overageAmount,
+    (a, result) => {
+      a.riskScore = result.riskScore
+      a.riskLevel = result.riskLevel
+      a.riskColor = result.riskColor
+    },
+    a => a.overageAmount === 0 && a.variance <= 0
+  )
 
   return rawData
 })

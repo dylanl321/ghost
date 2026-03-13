@@ -331,8 +331,11 @@
         :loading="loading || scopeCostLoading"
         :scope="costScope"
         :scope-options="costScopeOptions"
+        :date-range="costDays"
+        :date-range-options="dateRangeOptions"
         class="xl:col-span-2"
         @update:scope="handleCostScopeChange"
+        @update:date-range="handleDateRangeChange"
       />
 
       <AccountInsights
@@ -551,6 +554,25 @@ async function fetchDashboardAlerts() {
   }
 }
 
+// Cost trend date range
+const costDays = ref(14)
+const dateRangeOptions = [
+  { label: '7D', value: 7 },
+  { label: '14D', value: 14 },
+  { label: '30D', value: 30 },
+  { label: '90D', value: 90 },
+]
+
+function handleDateRangeChange(days: number) {
+  costDays.value = days
+  setPreference('costTrendDays', days)
+  if (costScope.value === 'org') {
+    fetchOverview(false, true)
+  } else {
+    handleCostScopeChange(costScope.value)
+  }
+}
+
 // Cost scope selector
 const costScope = ref('org')
 const scopedCostData = ref<{ date: string; cost: number }[] | null>(null)
@@ -596,7 +618,7 @@ async function handleCostScopeChange(scope: string) {
   try {
     const now = new Date()
     const end = now.toISOString().split('T')[0]
-    const start = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    const start = new Date(now.getTime() - costDays.value * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
     const params = new URLSearchParams({
       startDate: start,
@@ -636,15 +658,17 @@ async function handleCostScopeChange(scope: string) {
   }
 }
 
-async function fetchOverview(onlyAccounts = false) {
-  if (onlyAccounts) {
+async function fetchOverview(onlyAccounts = false, onlyCostTrend = false) {
+  if (onlyCostTrend) {
+    scopeCostLoading.value = true
+  } else if (onlyAccounts) {
     accountsLoading.value = true
   } else {
     loading.value = true
   }
 
   try {
-    const url = `/api/organization/overview-simplified?proforma=${useProforma.value}`
+    const url = `/api/organization/overview-simplified?proforma=${useProforma.value}&days=${costDays.value}`
     const response = await fetch(url)
 
     if (!response.ok) {
@@ -664,7 +688,9 @@ async function fetchOverview(onlyAccounts = false) {
     fetchError.value = 'Unable to load dashboard data. Please try again.'
     orgOverview.value = null
   } finally {
-    if (onlyAccounts) {
+    if (onlyCostTrend) {
+      scopeCostLoading.value = false
+    } else if (onlyAccounts) {
       accountsLoading.value = false
     } else {
       loading.value = false
@@ -681,6 +707,7 @@ function handleProformaToggle(value: boolean) {
 onMounted(async () => {
   if (!prefsInitialized.value) await loadPrefs()
   useProforma.value = getPreference('dashboardProforma', true)
+  costDays.value = getPreference('costTrendDays', 14)
   await Promise.all([fetchOverview(), fetchDashboardAlerts()])
 })
 

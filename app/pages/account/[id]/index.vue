@@ -129,7 +129,10 @@
                 :time-series-billable="billableTimeSeries"
                 :time-series-proforma="proformaTimeSeries"
                 :loading="loading"
+                :date-range="costDays"
+                :date-range-options="dateRangeOptions"
                 :class="{ 'opacity-50 pointer-events-none': isAccountInactive }"
+                @update:date-range="handleDateRangeChange"
               />
             </InactiveAccountOverlay>
           </div>
@@ -217,6 +220,13 @@
           <AccountNotesPanel v-if="accountId && isAdmin" :account-id="accountId" />
         </div>
       </template>
+
+      <!-- Settings Tab (Account Admin) -->
+      <template #settings>
+        <div class="mt-4">
+          <AccountSettingsPanel v-if="accountId" :account-id="accountId" />
+        </div>
+      </template>
     </UTabs>
   </div>
 </template>
@@ -242,6 +252,25 @@ const accountStatus = computed(() => enclaveStore.enclaves[accountId.value]?.enc
 const isAccountInactive = computed(() => accountStatus.value === 'Decommissioned' || accountStatus.value === 'Inactive')
 
 const { isAdmin } = useUserRoles()
+const isAccountAdmin = computed(() =>
+  isAdmin.value || userGroupStore.myAdminAccountIds.includes(accountId.value)
+)
+const { getPreference, setPreference, initialized: prefsInitialized, load: loadPrefs } = useUserPreferences()
+
+// Cost trend date range
+const costDays = ref(14)
+const dateRangeOptions = [
+  { label: '7D', value: 7 },
+  { label: '14D', value: 14 },
+  { label: '30D', value: 30 },
+  { label: '90D', value: 90 },
+]
+
+function handleDateRangeChange(days: number) {
+  costDays.value = days
+  setPreference('costTrendDays', days)
+  fetchAccountData()
+}
 
 // Tour composable
 const { startTour: handleStartAccountTour, maybeAutoStart: maybeAutoStartTour } = useAccountTour()
@@ -257,7 +286,7 @@ const {
   billableTimeSeries,
   proformaTimeSeries,
   fetchAll: fetchAccountData,
-} = useAccountData(accountId, govCloudId, isAccountInactive)
+} = useAccountData(accountId, govCloudId, isAccountInactive, costDays)
 
 // Get user's roles for this account
 const userAccountRoles = computed<RoleLink[]>(() => {
@@ -333,6 +362,10 @@ const tabs = computed(() => {
     baseTabs.push({ label: 'Notes', slot: 'notes', icon: 'i-heroicons-document-text', disabled: false })
   }
 
+  if (isAccountAdmin.value) {
+    baseTabs.push({ label: 'Settings', slot: 'settings', icon: 'i-heroicons-cog-6-tooth', disabled: false })
+  }
+
   return baseTabs
 })
 
@@ -372,6 +405,10 @@ function checkAndRedirectIfGovCloudId() {
 
 onMounted(async () => {
   checkAndRedirectIfGovCloudId()
+
+  // Load saved date range preference
+  if (!prefsInitialized.value) await loadPrefs()
+  costDays.value = getPreference('costTrendDays', 14)
 
   // Track recent account visit (fire-and-forget)
   if (accountId.value) {

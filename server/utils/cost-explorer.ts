@@ -17,6 +17,13 @@ import { getCostExplorerClient } from '../lib/aws-client-factory'
 import type { CostExplorerParams } from '../types'
 import { logger } from './logger'
 
+/** Safe percentage change: returns null when base is 0 and target > 0 (indicates "new" cost) */
+function safePercentChange(from: number, to: number): number | null {
+  if (from === 0 && to === 0) return 0
+  if (from === 0) return null
+  return ((to - from) / from) * 100
+}
+
 /**
  * Get cost and usage data
  */
@@ -101,34 +108,38 @@ export async function getCostAndUsage(
         // Initialize accumulator for each metric
         const accumulatedTotal: any = {}
 
-        // Sum up totals from all time periods AND inject per-period Totals back into allResultsByTime
-        totalResponse.ResultsByTime.forEach((result: any, index: number) => {
-          if (result.Total) {
-            // Inject the per-period Total into the original allResultsByTime structure
-            // This fixes the issue where enhanceCostData sums Groups instead of using Totals
-            if (allResultsByTime[index]) {
-              allResultsByTime[index].Total = result.Total
-              logger.debug(`✓ Billable: Injected period ${index} Total: ${result.Total?.UnblendedCost?.Amount}`)
-            } else {
-              logger.warn(`✗ Billable: Cannot inject period ${index} Total - allResultsByTime[${index}] is undefined`)
-            }
-
-            params.metrics.forEach((metric: string) => {
-              if (result.Total[metric]?.Amount) {
-                if (!accumulatedTotal[metric]) {
-                  accumulatedTotal[metric] = {
-                    Amount: '0',
-                    Unit: result.Total[metric].Unit || 'USD'
-                  }
-                }
-                const currentAmount = parseFloat(accumulatedTotal[metric].Amount)
-                const addAmount = parseFloat(result.Total[metric].Amount)
-                accumulatedTotal[metric].Amount = (currentAmount + addAmount).toString()
-              }
-            })
-          } else {
-            logger.debug(`Billable: Period ${index} has no Total in separate call`)
+        // Build date-keyed map from total response to avoid index mismatch on pagination
+        const totalsByDate = new Map<string, any>()
+        totalResponse.ResultsByTime.forEach((result: any) => {
+          if (result.Total && result.TimePeriod?.Start) {
+            totalsByDate.set(result.TimePeriod.Start, result.Total)
           }
+        })
+
+        // Inject totals by matching date keys
+        allResultsByTime.forEach((period: any) => {
+          const dateKey = period.TimePeriod?.Start
+          if (dateKey && totalsByDate.has(dateKey)) {
+            period.Total = totalsByDate.get(dateKey)
+            logger.debug(`✓ Billable: Injected Total for ${dateKey}: ${period.Total?.UnblendedCost?.Amount}`)
+          }
+        })
+
+        // Accumulate totals from the date-keyed map
+        totalsByDate.forEach((periodTotal: any) => {
+          params.metrics.forEach((metric: string) => {
+            if (periodTotal[metric]?.Amount) {
+              if (!accumulatedTotal[metric]) {
+                accumulatedTotal[metric] = {
+                  Amount: '0',
+                  Unit: periodTotal[metric].Unit || 'USD'
+                }
+              }
+              const currentAmount = parseFloat(accumulatedTotal[metric].Amount)
+              const addAmount = parseFloat(periodTotal[metric].Amount)
+              accumulatedTotal[metric].Amount = (currentAmount + addAmount).toString()
+            }
+          })
         })
 
         if (Object.keys(accumulatedTotal).length > 0) {
@@ -591,37 +602,41 @@ export async function getProformaCosts(
       if (proformaTotalResponse.ResultsByTime && proformaTotalResponse.ResultsByTime.length > 0) {
         const accumulatedTotal: any = {}
 
-        // Sum up totals from all time periods AND inject per-period Totals back into proformaCosts
-        logger.info(`Proforma: About to inject Totals. proformaTotalResponse has ${proformaTotalResponse.ResultsByTime.length} periods, proformaCosts has ${proformaCosts.resultsByTime.length} periods`)
-
-        proformaTotalResponse.ResultsByTime.forEach((result: any, index: number) => {
-          if (result.Total) {
-            // Inject the per-period Total into the original proformaCosts structure
-            // This fixes the issue where enhanceCostData sums Groups instead of using Totals
-            if (proformaCosts.resultsByTime[index]) {
-              const before = proformaCosts.resultsByTime[index].Total?.UnblendedCost?.Amount
-              proformaCosts.resultsByTime[index].Total = result.Total
-              logger.info(`✓ Proforma period ${index}: Injected Total ${result.Total?.UnblendedCost?.Amount} (was: ${before || 'NONE'})`)
-            } else {
-              logger.warn(`✗ Proforma: Cannot inject period ${index} Total - resultsByTime[${index}] is undefined (array length: ${proformaCosts.resultsByTime.length})`)
-            }
-
-            params.metrics.forEach((metric: string) => {
-              if (result.Total[metric]?.Amount) {
-                if (!accumulatedTotal[metric]) {
-                  accumulatedTotal[metric] = {
-                    Amount: '0',
-                    Unit: result.Total[metric].Unit || 'USD'
-                  }
-                }
-                const currentAmount = parseFloat(accumulatedTotal[metric].Amount)
-                const addAmount = parseFloat(result.Total[metric].Amount)
-                accumulatedTotal[metric].Amount = (currentAmount + addAmount).toString()
-              }
-            })
-          } else {
-            logger.debug(`Proforma: Period ${index} has no Total in separate call`)
+        // Build date-keyed map from total response to avoid index mismatch on pagination
+        const proformaTotalsByDate = new Map<string, any>()
+        proformaTotalResponse.ResultsByTime.forEach((result: any) => {
+          if (result.Total && result.TimePeriod?.Start) {
+            proformaTotalsByDate.set(result.TimePeriod.Start, result.Total)
           }
+        })
+
+        logger.info(`Proforma: About to inject Totals. proformaTotalResponse has ${proformaTotalsByDate.size} date-keyed periods, proformaCosts has ${proformaCosts.resultsByTime.length} periods`)
+
+        // Inject totals by matching date keys
+        proformaCosts.resultsByTime.forEach((period: any) => {
+          const dateKey = period.TimePeriod?.Start
+          if (dateKey && proformaTotalsByDate.has(dateKey)) {
+            const before = period.Total?.UnblendedCost?.Amount
+            period.Total = proformaTotalsByDate.get(dateKey)
+            logger.info(`✓ Proforma ${dateKey}: Injected Total ${period.Total?.UnblendedCost?.Amount} (was: ${before || 'NONE'})`)
+          }
+        })
+
+        // Accumulate totals from the date-keyed map
+        proformaTotalsByDate.forEach((periodTotal: any) => {
+          params.metrics.forEach((metric: string) => {
+            if (periodTotal[metric]?.Amount) {
+              if (!accumulatedTotal[metric]) {
+                accumulatedTotal[metric] = {
+                  Amount: '0',
+                  Unit: periodTotal[metric].Unit || 'USD'
+                }
+              }
+              const currentAmount = parseFloat(accumulatedTotal[metric].Amount)
+              const addAmount = parseFloat(periodTotal[metric].Amount)
+              accumulatedTotal[metric].Amount = (currentAmount + addAmount).toString()
+            }
+          })
         })
 
         if (Object.keys(accumulatedTotal).length > 0) {
@@ -761,7 +776,7 @@ export async function getProformaCosts(
           const billableCost = parseFloat(billableGroup.Metrics?.['UnblendedCost']?.Amount || '0')
           const proformaCost = proformaAccountMap.get(accountId) || 0
           const difference = proformaCost - billableCost
-          const percentChange = billableCost > 0 ? (difference / billableCost) * 100 : 0
+          const percentChange = safePercentChange(billableCost, proformaCost)
           
           // Validation: For individual linked accounts, proforma should be >= billable
           // (Billing Conductor allocates savings plan costs to accounts that benefit from them)
@@ -792,7 +807,7 @@ export async function getProformaCosts(
         groups: proformaResult?.Groups || []
       },
       difference: periodDifference,
-      percentChange: billablePeriodTotal > 0 ? (periodDifference / billablePeriodTotal) * 100 : 0,
+      percentChange: safePercentChange(billablePeriodTotal, proformaPeriodTotal),
       accountComparisons
     }
   })
@@ -850,7 +865,7 @@ export async function getProformaCosts(
     proformaTotal,
     masterUnallocated,
     savingsAllocated: proformaTotal - billableTotal, // Positive = savings allocated to accounts
-    allocationPercent: billableTotal > 0 ? ((proformaTotal - billableTotal) / billableTotal) * 100 : 0
+    allocationPercent: safePercentChange(billableTotal, proformaTotal)
   }
   
   return {

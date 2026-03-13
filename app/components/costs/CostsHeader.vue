@@ -65,7 +65,7 @@
       </div>
     </div>
 
-    <div class="flex flex-wrap gap-3 mt-3">
+    <div class="flex flex-wrap gap-3 mt-3 items-center">
       <div class="w-full sm:w-64 md:w-72" data-tour="costs-timeframe">
         <USelectMenu
           v-model="modelSelectedTimeframe"
@@ -73,6 +73,81 @@
           placeholder="Time Period"
           value-attribute="value"
           option-attribute="label"
+        />
+      </div>
+
+      <!-- View By Selector -->
+      <div class="flex items-center gap-1" data-tour="costs-view-by">
+        <span class="text-xs text-gray-500 dark:text-gray-400 mr-1">View:</span>
+        <div class="inline-flex rounded-md shadow-sm">
+          <UButton
+            size="xs"
+            :color="modelViewBy === 'LINKED_ACCOUNT' ? 'blue' : 'gray'"
+            :variant="modelViewBy === 'LINKED_ACCOUNT' ? 'solid' : 'ghost'"
+            @click="setViewBy('LINKED_ACCOUNT')"
+          >
+            Account
+          </UButton>
+          <UButton
+            size="xs"
+            :color="modelViewBy === 'SERVICE' ? 'blue' : 'gray'"
+            :variant="modelViewBy === 'SERVICE' ? 'solid' : 'ghost'"
+            @click="setViewBy('SERVICE')"
+          >
+            Service
+          </UButton>
+          <UButton
+            size="xs"
+            :color="modelViewBy === 'REGION' ? 'blue' : 'gray'"
+            :variant="modelViewBy === 'REGION' ? 'solid' : 'ghost'"
+            @click="setViewBy('REGION')"
+          >
+            Region
+          </UButton>
+          <UPopover v-model:open="showTagPopover" :popper="{ placement: 'bottom-end' }" @open="loadTagOptions">
+            <UButton
+              size="xs"
+              :color="activeTagKey ? 'blue' : 'gray'"
+              :variant="activeTagKey ? 'solid' : 'ghost'"
+              trailing-icon="i-heroicons-chevron-down"
+              :loading="isLoadingTags"
+            >
+              {{ activeTagKey ? `Tag: ${activeTagKey}` : 'Tag' }}
+            </UButton>
+            <template #panel>
+              <div class="p-2 w-56 max-h-64 overflow-y-auto">
+                <div v-if="isLoadingTags" class="flex items-center gap-2 text-sm text-gray-500 py-2 px-1">
+                  <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin" />
+                  Loading tags...
+                </div>
+                <div v-else-if="sortedTagKeys.length === 0" class="text-sm text-gray-500 py-2 px-1">
+                  No cost allocation tags found
+                </div>
+                <template v-else>
+                  <button
+                    v-for="tag in sortedTagKeys"
+                    :key="tag"
+                    class="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2 transition-colors"
+                    :class="activeTagKey === tag ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300'"
+                    @click="selectTag(tag)"
+                  >
+                    <UIcon name="i-heroicons-tag" class="w-3.5 h-3.5 flex-shrink-0" />
+                    <span class="truncate">{{ tag }}</span>
+                    <UBadge v-if="importantTags.includes(tag)" size="xs" variant="soft" color="blue" label="pinned" class="ml-auto" />
+                  </button>
+                </template>
+              </div>
+            </template>
+          </UPopover>
+        </div>
+        <!-- Clear tag selection -->
+        <UButton
+          v-if="activeTagKey"
+          size="xs"
+          color="gray"
+          variant="ghost"
+          icon="i-heroicons-x-mark"
+          @click="setViewBy('LINKED_ACCOUNT')"
         />
       </div>
     </div>
@@ -228,11 +303,53 @@ const props = defineProps<{
 
 const modelMode = defineModel<DataMode>('mode', { default: 'proforma' })
 const modelSelectedTimeframe = defineModel<string>('selectedTimeframe')
+const modelViewBy = defineModel<string>('viewBy', { default: 'LINKED_ACCOUNT' })
 
 const modeOptions = [
   { label: 'Billable', value: 'billable' },
   { label: 'Proforma', value: 'proforma' }
 ]
+
+// View By options
+const { availableTags, tagConfig, isLoadingTags, fetchAvailableTags, fetchAccountTagConfig } = useCostTags()
+let tagsLoaded = false
+const showTagPopover = ref(false)
+
+async function loadTagOptions() {
+  if (tagsLoaded) return
+  tagsLoaded = true
+  await fetchAvailableTags(props.selectedAccounts)
+  if (props.selectedAccounts.length === 1 && props.selectedAccounts[0]) {
+    await fetchAccountTagConfig(props.selectedAccounts[0])
+  }
+}
+
+const importantTags = computed(() => tagConfig.value?.importantTags ?? [])
+
+const sortedTagKeys = computed(() => {
+  const important = importantTags.value.filter(t => availableTags.value.includes(t))
+  const rest = availableTags.value.filter(t => !importantTags.value.includes(t))
+  return [...important, ...rest]
+})
+
+const activeTagKey = computed(() => {
+  const v = modelViewBy.value
+  return v.startsWith('TAG:') ? v.slice(4) : null
+})
+
+function setViewBy(value: string) {
+  modelViewBy.value = value
+}
+
+function selectTag(tagKey: string) {
+  modelViewBy.value = `TAG:${tagKey}`
+  showTagPopover.value = false
+}
+
+// Reload tags when selected accounts change
+watch(() => props.selectedAccounts, () => {
+  tagsLoaded = false
+}, { deep: true })
 
 const isExporting = ref(false)
 const showShareReportModal = ref(false)
