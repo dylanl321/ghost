@@ -5,6 +5,31 @@ All notable changes to GHOST are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.0] - 2026-03-16
+<!-- highlights: Security Health Dashboard, Athena Security Hub Integration, Dashboard Enhancements -->
+
+### New Features
+- Security Health Dashboard with four tabs: Overview, Analysis, Accounts, and Findings for organization-wide security visibility
+- Findings Trend chart shows weekly severity breakdown over 90 days with stacked, line, and total view modes
+- Findings by Region chart highlights which AWS regions have the most active security findings
+- Finding Age Distribution shows how long findings have been open with automated insight callouts
+- Severity by Product stacked bar chart reveals which security products generate which severity levels
+- Compliance Overview gauge with pass/fail counts for quick compliance posture assessment
+- Account risk distribution cards show at-a-glance counts by risk level (Critical through Minimal)
+- Security data now queries the pre-processed `security_hub` Athena database for faster, more accurate results
+
+### Improvements
+- Security Athena queries migrated from Security Lake OCSF tables to flat `security_hub` tables with correct status values and faster performance
+- Security dashboard metric cards remain pinned above all tabs for persistent context
+- Eight Athena queries now run in parallel (up from four) for richer analysis data without added latency
+- Dashboard page restructured with customizable widget sections and admin controls
+
+### Bug Fixes
+- Fixed Athena timestamp parsing errors by using `from_iso8601_timestamp()` instead of `CAST()` for ISO 8601 strings with timezone suffixes
+- Fixed Security Lake queries filtering on non-existent `NOTIFIED` status value — now correctly uses `workflow_status` column
+
+---
+
 ## [1.12.0] - 2026-03-13
 <!-- highlights: Cost Tag Management, Account Risk Scoring, Cost Data Reliability -->
 

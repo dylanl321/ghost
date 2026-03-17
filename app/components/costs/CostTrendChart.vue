@@ -1,79 +1,79 @@
 <template>
-  <UCard>
-    <template #header>
-      <div class="flex justify-between items-center">
-        <div class="text-lg font-semibold text-gray-900 dark:text-white">{{ title }}</div>
-        <div class="flex items-center gap-2">
-          <!-- Scope selector -->
-          <div v-if="scopeOptions.length > 1" class="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
-            <button
-              v-for="option in scopeOptions"
-              :key="option.value"
-              @click="$emit('update:scope', option.value)"
-              class="px-2.5 py-1 text-[11px] font-medium rounded-md transition-all duration-150"
-              :class="scope === option.value
-                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'"
-            >
-              {{ option.label }}
-            </button>
-          </div>
-          <!-- Date range selector -->
-          <div v-if="dateRangeOptions && dateRangeOptions.length > 1" class="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
-            <button
-              v-for="option in dateRangeOptions"
-              :key="option.value"
-              @click="$emit('update:dateRange', option.value)"
-              class="px-2.5 py-1 text-[11px] font-medium rounded-md transition-all duration-150"
-              :class="dateRange === option.value
-                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'"
-            >
-              {{ option.label }}
-            </button>
-          </div>
-          <UBadge color="gray" variant="soft" size="sm">
-            {{ dateRangeLabel }}
-          </UBadge>
+  <div class="h-full flex flex-col rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+    <div class="flex justify-between items-center p-5">
+      <div class="text-sm font-semibold text-gray-900 dark:text-white">{{ title }}</div>
+      <div class="flex items-center gap-2">
+        <!-- Scope selector -->
+        <div v-if="scopeOptions.length > 1" class="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+          <button
+            v-for="option in scopeOptions"
+            :key="option.value"
+            @click="$emit('update:scope', option.value)"
+            class="px-2.5 py-1 text-[11px] font-medium rounded-md transition-all duration-150"
+            :class="scope === option.value
+              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'"
+          >
+            {{ option.label }}
+          </button>
         </div>
+        <!-- Date range selector -->
+        <div v-if="dateRangeOptions && dateRangeOptions.length > 1" class="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+          <button
+            v-for="option in dateRangeOptions"
+            :key="option.value"
+            @click="$emit('update:dateRange', option.value)"
+            class="px-2.5 py-1 text-[11px] font-medium rounded-md transition-all duration-150"
+            :class="dateRange === option.value
+              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'"
+          >
+            {{ option.label }}
+          </button>
+        </div>
+        <UBadge color="gray" variant="soft" size="sm">
+          {{ dateRangeLabel }}
+        </UBadge>
       </div>
-    </template>
+    </div>
 
-    <CenteredLoadingSpinner v-if="props.loading" />
-    <div v-else>
-      <VChart :option="chartOptions" class="h-80" autoresize />
+    <div class="flex-1 min-h-0 px-5 pb-5">
+      <CenteredLoadingSpinner v-if="props.loading" />
+      <div v-else>
+        <VChart :option="chartOptions" class="h-80" autoresize />
 
-      <!-- Summary metrics -->
-      <div class="border-t border-gray-200 dark:border-gray-700 mt-4 pt-4 flex">
-        <div class="w-1/3 text-left">
-          <div class="text-gray-600 dark:text-gray-400 text-sm">Total Cost (Last {{ props.dateRange }} Days)</div>
-          <div :class="`${totalCostProforma ? 'text-blue-600/80 dark:text-blue-400/80' : 'text-gray-900 dark:text-white'} text-lg font-semibold`">
-            {{ formatCurrency(totalCostBillable, 0) }}
+        <!-- Summary metrics -->
+        <div class="border-t border-gray-200 dark:border-gray-700 mt-4 pt-4 flex">
+          <div class="w-1/3 text-left">
+            <div class="text-gray-600 dark:text-gray-400 text-sm">Total Cost (Last {{ props.dateRange }} Days)</div>
+            <div :class="`${totalCostProforma ? 'text-blue-600/80 dark:text-blue-400/80' : 'text-gray-900 dark:text-white'} text-lg font-semibold`">
+              {{ formatCurrency(totalCostBillable, 0) }}
+            </div>
+            <div v-if="totalCostProforma" class="text-green-400/80 text-lg font-semibold">
+              {{ formatCurrency(totalCostProforma, 0) }}
+            </div>
           </div>
-          <div v-if="totalCostProforma" class="text-green-400/80 text-lg font-semibold">
-            {{ formatCurrency(totalCostProforma, 0) }}
+          <div class="w-1/3 text-left">
+            <div class="text-gray-600 dark:text-gray-400 text-sm">Average Daily</div>
+            <div :class="`${totalCostProforma ? 'text-blue-600/80 dark:text-blue-400/80' : 'text-gray-900 dark:text-white'} text-lg font-semibold`">
+              {{ formatCurrency(avgCostBillable, 0) }}
+            </div>
+            <div v-if="avgCostProforma" class="text-green-400/80 text-lg font-semibold">
+              {{ formatCurrency(avgCostProforma, 0) }}
+            </div>
           </div>
-        </div>
-        <div class="w-1/3 text-left">
-          <div class="text-gray-600 dark:text-gray-400 text-sm">Average Daily</div>
-          <div :class="`${totalCostProforma ? 'text-blue-600/80 dark:text-blue-400/80' : 'text-gray-900 dark:text-white'} text-lg font-semibold`">
-            {{ formatCurrency(avgCostBillable, 0) }}
+          <div class="w-1/3 text-left">
+            <div class="text-gray-600 dark:text-gray-400 text-sm">Peak Cost</div>
+            <div :class="`${totalCostProforma ? 'text-blue-600/80 dark:text-blue-400/80' : 'text-gray-900 dark:text-white'} text-lg font-semibold`">
+              {{ formatCurrency(peakCostBillable, 0) }}
+            </div>
+            <div v-if="peakCostProforma" class="text-green-400/80 text-lg font-semibold">
+              {{ formatCurrency(peakCostProforma, 0) }}</div>
           </div>
-          <div v-if="avgCostProforma" class="text-green-400/80 text-lg font-semibold">
-            {{ formatCurrency(avgCostProforma, 0) }}
-          </div>
-        </div>
-        <div class="w-1/3 text-left">
-          <div class="text-gray-600 dark:text-gray-400 text-sm">Peak Cost</div>
-          <div :class="`${totalCostProforma ? 'text-blue-600/80 dark:text-blue-400/80' : 'text-gray-900 dark:text-white'} text-lg font-semibold`">
-            {{ formatCurrency(peakCostBillable, 0) }}
-          </div>
-          <div v-if="peakCostProforma" class="text-green-400/80 text-lg font-semibold">
-            {{ formatCurrency(peakCostProforma, 0) }}</div>
         </div>
       </div>
     </div>
-  </UCard>
+  </div>
 </template>
 
 <script setup lang="ts">

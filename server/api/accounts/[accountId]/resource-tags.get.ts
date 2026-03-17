@@ -1,11 +1,15 @@
 /**
  * GET /api/accounts/:accountId/resource-tags
  * Discover tag keys (with example values) in use on resources in a specific AWS account.
- * Uses GetResources across all regions to match what the AWS Console Tag Editor shows.
+ * Combines GetTagKeys, GetTagValues, and GetResources across US regions for full coverage.
  */
 
 import { defineEventHandler } from 'h3'
-import { GetResourcesCommand } from '@aws-sdk/client-resource-groups-tagging-api'
+import {
+  GetTagKeysCommand,
+  GetTagValuesCommand,
+  GetResourcesCommand
+} from '@aws-sdk/client-resource-groups-tagging-api'
 import { getResourceGroupsTaggingClient } from '../../../lib/aws-client-factory'
 import { sendSuccess, parseQueryParams, handleAsync } from '../../../utils/api-response'
 import { costCache, CacheTags } from '../../../utils/cache-manager'
@@ -14,19 +18,73 @@ import type { AWSEnvironmentType } from '../../../types/aws'
 
 const MAX_EXAMPLE_VALUES = 5
 
-const COMMERCIAL_REGIONS = [
-  'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2',
-  'eu-west-1', 'eu-west-2', 'eu-west-3', 'eu-central-1',
-  'ap-southeast-1', 'ap-southeast-2', 'ap-northeast-1', 'ap-northeast-2',
-  'ap-south-1', 'sa-east-1', 'ca-central-1'
-]
-
+const COMMERCIAL_REGIONS = ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2']
 const GOVCLOUD_REGIONS = ['us-gov-west-1', 'us-gov-east-1']
 
 /**
- * Scan a single region for all tagged resources and collect tag key-value pairs
+ * Fetch all tag keys from GetTagKeys in a single region (this API returns account-wide keys)
  */
-async function scanRegion(
+async function fetchAllTagKeys(
+  environment: AWSEnvironmentType,
+  region: string,
+  accountId: string
+): Promise<string[]> {
+  const client = await getResourceGroupsTaggingClient(environment, region, accountId)
+  const allKeys: string[] = []
+  let paginationToken: string | undefined
+
+  do {
+    const command = new GetTagKeysCommand({
+      PaginationToken: paginationToken
+    })
+    const response = await client.send(command)
+    if (response.TagKeys) {
+      allKeys.push(...response.TagKeys)
+    }
+    paginationToken = response.PaginationToken
+  } while (paginationToken)
+
+  return allKeys
+}
+
+/**
+ * Fetch example values for a specific tag key using GetTagValues
+ */
+async function fetchTagValues(
+  environment: AWSEnvironmentType,
+  region: string,
+  accountId: string,
+  tagKey: string
+): Promise<string[]> {
+  try {
+    const client = await getResourceGroupsTaggingClient(environment, region, accountId)
+    const values: string[] = []
+    let paginationToken: string | undefined
+
+    do {
+      const command = new GetTagValuesCommand({
+        Key: tagKey,
+        PaginationToken: paginationToken
+      })
+      const response = await client.send(command)
+      if (response.TagValues) {
+        values.push(...response.TagValues)
+      }
+      paginationToken = response.PaginationToken
+      // Only need a few example values, stop early
+      if (values.length >= MAX_EXAMPLE_VALUES) break
+    } while (paginationToken)
+
+    return values.slice(0, MAX_EXAMPLE_VALUES)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Scan a single region with GetResources and collect tag key-value pairs
+ */
+async function scanRegionResources(
   environment: AWSEnvironmentType,
   region: string,
   accountId: string
@@ -61,8 +119,7 @@ async function scanRegion(
       paginationToken = response.PaginationToken
     } while (paginationToken)
   } catch (err: any) {
-    // Region may not be enabled for this account — skip silently
-    logger.debug(`Skipping region ${region} for account ${accountId}: ${err.message}`)
+    logger.debug(`Skipping region ${region} for GetResources: ${err.message}`)
   }
 
   return tagMap
@@ -82,22 +139,24 @@ export default defineEventHandler(handleAsync(async (event) => {
     cacheKey,
     async () => {
       const regions = environment === 'govcloud' ? GOVCLOUD_REGIONS : COMMERCIAL_REGIONS
-      logger.info(`Fetching resource tags for account ${accountId} across ${regions.length} ${environment} regions...`)
+      const primaryRegion = regions[0]
+      logger.info(`Fetching resource tags for account ${accountId} across ${regions.length} ${environment} US regions...`)
 
-      // Query all regions in parallel
-      const regionResults = await Promise.allSettled(
-        regions.map(region => scanRegion(environment, region, accountId))
-      )
+      // Run GetTagKeys (account-wide index) and GetResources (per-region) in parallel
+      const [tagKeysResult, ...regionResults] = await Promise.allSettled([
+        fetchAllTagKeys(environment, primaryRegion, accountId),
+        ...regions.map(region => scanRegionResources(environment, region, accountId))
+      ])
 
-      // Merge results from all regions
-      const mergedMap = new Map<string, Set<string>>()
+      // Merge GetResources results from all regions
+      const resourceTagMap = new Map<string, Set<string>>()
       for (const result of regionResults) {
         if (result.status !== 'fulfilled') continue
         for (const [key, values] of result.value) {
-          let merged = mergedMap.get(key)
+          let merged = resourceTagMap.get(key)
           if (!merged) {
             merged = new Set<string>()
-            mergedMap.set(key, merged)
+            resourceTagMap.set(key, merged)
           }
           for (const v of values) {
             if (merged.size < MAX_EXAMPLE_VALUES) {
@@ -107,11 +166,35 @@ export default defineEventHandler(handleAsync(async (event) => {
         }
       }
 
-      return Array.from(mergedMap.entries())
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([key, values]) => ({
+      // Combine: start with all keys from GetTagKeys, overlay with GetResources values
+      const allKeys = new Set<string>(resourceTagMap.keys())
+      if (tagKeysResult.status === 'fulfilled') {
+        for (const key of tagKeysResult.value) {
+          allKeys.add(key)
+        }
+      }
+
+      // For any keys found by GetTagKeys but missing from GetResources, fetch example values
+      const keysNeedingValues = Array.from(allKeys).filter(k => !resourceTagMap.has(k))
+      if (keysNeedingValues.length > 0) {
+        const valueResults = await Promise.allSettled(
+          keysNeedingValues.map(key => fetchTagValues(environment, primaryRegion, accountId, key))
+        )
+        keysNeedingValues.forEach((key, i) => {
+          const result = valueResults[i]
+          if (result.status === 'fulfilled' && result.value.length > 0) {
+            resourceTagMap.set(key, new Set(result.value))
+          } else {
+            resourceTagMap.set(key, new Set())
+          }
+        })
+      }
+
+      return Array.from(allKeys)
+        .sort((a, b) => a.localeCompare(b))
+        .map(key => ({
           key,
-          exampleValues: Array.from(values).sort().slice(0, MAX_EXAMPLE_VALUES)
+          exampleValues: Array.from(resourceTagMap.get(key) ?? []).sort().slice(0, MAX_EXAMPLE_VALUES)
         }))
     },
     {

@@ -1,7 +1,17 @@
 <template>
-  <UCard
-    v-if="shouldShow"
-    class="mb-6 border border-emerald-500/20 bg-gradient-to-r from-emerald-50 to-blue-50 dark:from-emerald-950/30 dark:to-blue-950/30"
+  <!-- Compact mode -->
+  <div v-if="shouldShow && displayStyle === 'compact'" class="rounded-xl border border-gray-200 dark:border-gray-700 bg-gradient-to-r from-emerald-50 to-blue-50 dark:from-emerald-950/30 dark:to-blue-950/30 px-4 py-2.5 flex items-center gap-3">
+    <UIcon name="i-fa6-solid-ghost" class="h-5 w-5 text-emerald-400 flex-shrink-0" />
+    <span class="text-sm text-gray-700 dark:text-gray-300 flex-1">Welcome to GHOST — your centralized AWS Dashboard Hub.</span>
+    <NuxtLink to="/account/explorer">
+      <UButton icon="i-heroicons-magnifying-glass" size="xs" color="emerald" variant="soft">Search Accounts</UButton>
+    </NuxtLink>
+    <UButton icon="i-heroicons-x-mark" color="gray" variant="ghost" size="xs" @click="handleDismiss" class="flex-shrink-0" />
+  </div>
+
+  <div
+    v-if="shouldShow && displayStyle !== 'compact'"
+    class="rounded-xl border border-gray-200 dark:border-gray-700 bg-gradient-to-r from-emerald-50 to-blue-50 dark:from-emerald-950/30 dark:to-blue-950/30 p-5"
   >
     <div class="flex items-start justify-between gap-4">
       <div class="flex-1">
@@ -89,11 +99,16 @@
         class="flex-shrink-0"
       />
     </div>
-  </UCard>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import type { DisplayStyle } from '#shared/types/dashboard-layout'
+
+const props = withDefaults(defineProps<{
+  displayStyle?: DisplayStyle
+}>(), { displayStyle: 'full' })
 
 const { getPreference, setPreference, initialized, load } = useUserPreferences()
 

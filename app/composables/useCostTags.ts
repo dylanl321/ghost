@@ -20,16 +20,18 @@ export const useCostTags = () => {
   const coverageError = ref<string | null>(null)
   const configError = ref<string | null>(null)
 
-  // Cache tag keys since they rarely change
-  const tagKeyCache = ref<{ tags: string[]; fetchedAt: number } | null>(null)
+  // Cache tag keys since they rarely change — keyed by account selection
+  const tagKeyCache = ref<{ tags: string[]; fetchedAt: number; accountKey?: string } | null>(null)
   const TAG_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 
   /**
    * Fetch available cost allocation tag keys
    */
   const fetchAvailableTags = async (accountIds?: string[]) => {
-    // Return cached value if still fresh
-    if (tagKeyCache.value && Date.now() - tagKeyCache.value.fetchedAt < TAG_CACHE_TTL_MS) {
+    const accountKey = accountIds?.sort().join(',') || ''
+
+    // Return cached value if still fresh and for the same accounts
+    if (tagKeyCache.value && Date.now() - tagKeyCache.value.fetchedAt < TAG_CACHE_TTL_MS && tagKeyCache.value.accountKey === accountKey) {
       availableTags.value = tagKeyCache.value.tags
       return tagKeyCache.value.tags
     }
@@ -45,7 +47,7 @@ export const useCostTags = () => {
       const tags: string[] = data?.data?.tags ?? data?.tags ?? []
 
       availableTags.value = tags
-      tagKeyCache.value = { tags, fetchedAt: Date.now() }
+      tagKeyCache.value = { tags, fetchedAt: Date.now(), accountKey }
       return tags
     } catch (err: any) {
       tagsError.value = err.message || 'Failed to fetch tags'
@@ -134,12 +136,14 @@ export const useCostTags = () => {
   const isLoadingResourceTags = ref(false)
   const resourceTagsError = ref<string | null>(null)
 
-  const fetchResourceTags = async (accountId: string) => {
+  const fetchResourceTags = async (accountId: string, environment?: string) => {
     isLoadingResourceTags.value = true
     resourceTagsError.value = null
 
     try {
-      const response = await $fetch(`/api/accounts/${accountId}/resource-tags`) as any
+      const query: Record<string, any> = {}
+      if (environment) query.environment = environment
+      const response = await $fetch(`/api/accounts/${accountId}/resource-tags`, { query }) as any
       const tags: Array<{ key: string; exampleValues: string[] }> = response?.data?.tags ?? []
       resourceTags.value = tags
       return tags

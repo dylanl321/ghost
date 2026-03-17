@@ -253,6 +253,18 @@ export function useAdminSearch() {
       keywords: ['issues', 'tickets', 'bugs', 'problems', 'errors']
     },
 
+    // Security Data
+    {
+      id: 'security-data',
+      label: 'Security Data Management',
+      description: 'Manage security dashboard data and Athena recomputation',
+      icon: 'i-heroicons-shield-check',
+      category: 'security',
+      categoryLabel: 'Security Data',
+      to: '/admin/security',
+      keywords: ['security', 'athena', 'findings', 'cache', 'recompute', 'scheduler']
+    },
+
     // Pipeline Analytics (separate pages, no tabs)
     {
       id: 'pipelines-dashboard',

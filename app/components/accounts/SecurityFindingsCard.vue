@@ -37,6 +37,17 @@
     <!-- Quick Action Links -->
     <div class="space-y-2">
       <UButton
+        @click="$emit('view-security-tab')"
+        icon="i-heroicons-shield-exclamation"
+        variant="soft"
+        color="primary"
+        block
+        size="sm"
+      >
+        View Security Tab
+      </UButton>
+
+      <UButton
         @click="viewSecurityHubReport"
         icon="i-heroicons-shield-exclamation"
         variant="soft"
@@ -88,6 +99,10 @@ const props = defineProps<{
   accountId: string
 }>()
 
+defineEmits<{
+  'view-security-tab': []
+}>()
+
 const {
   buildSecurityHubLink,
   buildConfigLink,
@@ -110,19 +125,17 @@ const hasSummary = computed(() => {
     (summary.value.critical > 0 || summary.value.high > 0 || summary.value.medium > 0)
 })
 
-// Note: This would normally fetch real data from an API
-// For now, we'll use placeholder data to demonstrate the UI
 onMounted(async () => {
   loading.value = true
   try {
-    // TODO: Replace with actual API call to /api/security-hub/summary
-    await new Promise(resolve => setTimeout(resolve, 500))
+    const res = await $fetch<{ data: any }>(`/api/accounts/${props.accountId}/security-summary`)
+    const breakdown = res.data?.severityBreakdown || {}
     summary.value = {
-      critical: 5,
-      high: 12,
-      medium: 23,
-      low: 45,
-      informational: 8
+      critical: breakdown.CRITICAL ?? 0,
+      high: breakdown.HIGH ?? 0,
+      medium: breakdown.MEDIUM ?? 0,
+      low: breakdown.LOW ?? 0,
+      informational: breakdown.INFORMATIONAL ?? 0
     }
   } catch (error) {
     console.error('Failed to load security summary:', error)

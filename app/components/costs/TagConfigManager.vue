@@ -34,7 +34,7 @@
         @toggle-important-tag="toggleImportantTag"
         @set-description="setDescription"
         @update-default-group="draft.defaultGroupByTag = $event ?? undefined"
-        @fetch-resource-tags="fetchResourceTags(accountId)"
+        @fetch-resource-tags="fetchResourceTags(accountId, props.environment)"
       />
 
       <template #footer>
@@ -83,7 +83,7 @@
       @toggle-important-tag="toggleImportantTag"
       @set-description="setDescription"
       @update-default-group="draft.defaultGroupByTag = $event ?? undefined"
-      @fetch-resource-tags="fetchResourceTags(accountId)"
+      @fetch-resource-tags="fetchResourceTags(accountId, props.environment)"
     />
 
     <template #footer>
@@ -109,6 +109,7 @@ const props = defineProps<{
   accountId: string
   show?: boolean
   mode?: 'modal' | 'inline'
+  environment?: string
 }>()
 
 defineEmits<{

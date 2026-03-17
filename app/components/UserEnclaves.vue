@@ -1,9 +1,10 @@
 <template>
-  <div>
+  <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
     <!-- Section Header -->
-    <div class="flex items-center justify-between mb-3">
+    <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-2">
-        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">My Accounts</h2>
+        <UIcon name="i-heroicons-building-office-2" class="w-5 h-5 text-blue-500" />
+        <h2 class="text-sm font-semibold text-gray-900 dark:text-white">My Accounts</h2>
         <UBadge v-if="tableData.length > 0" color="blue" variant="soft" size="xs">{{ tableData.length }}</UBadge>
       </div>
       <NuxtLink v-if="tableData.length > 0" to="/account/explorer" class="text-xs text-blue-500 hover:text-blue-400 transition-colors">
@@ -12,8 +13,13 @@
     </div>
 
     <!-- Loading skeleton -->
-    <div v-if="props.loading" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-      <div v-for="i in 4" :key="i" class="rounded-xl border border-gray-200 dark:border-gray-800 p-4 animate-pulse">
+    <div v-if="props.loading" :class="[
+      'grid gap-3',
+      props.displayStyle === 'compact' ? 'grid-cols-1' :
+      props.displayStyle === 'half' ? 'grid-cols-1 sm:grid-cols-2' :
+      'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3'
+    ]">
+      <div v-for="i in (props.displayStyle === 'compact' ? 2 : 4)" :key="i" class="rounded-xl border border-gray-200 dark:border-gray-800 p-4 animate-pulse">
         <div class="flex items-center justify-between mb-3">
           <div class="h-4 w-32 bg-gray-200 dark:bg-gray-700 rounded" />
           <div class="h-5 w-16 bg-gray-200 dark:bg-gray-700 rounded-full" />
@@ -27,30 +33,60 @@
     </div>
 
     <!-- Empty state -->
-    <UCard v-else-if="tableData.length === 0">
-      <div class="py-8 text-center">
-        <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-          <UIcon name="i-heroicons-folder-open" class="w-6 h-6 text-gray-400" />
-        </div>
-        <h3 class="text-sm font-medium text-gray-900 dark:text-gray-300 mb-1">No Account Access</h3>
-        <p class="text-gray-500 dark:text-gray-400 text-xs max-w-xs mx-auto">
-          You don't have access to any AWS accounts yet. Contact your administrator to request access.
-        </p>
+    <div v-else-if="tableData.length === 0" class="py-8 text-center">
+      <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+        <UIcon name="i-heroicons-folder-open" class="w-6 h-6 text-gray-400" />
       </div>
-    </UCard>
+      <h3 class="text-sm font-medium text-gray-900 dark:text-gray-300 mb-1">No Account Access</h3>
+      <p class="text-gray-500 dark:text-gray-400 text-xs max-w-xs mx-auto">
+        You don't have access to any AWS accounts yet. Contact your administrator to request access.
+      </p>
+    </div>
 
-    <!-- Account cards grid - adaptive columns based on count -->
+    <!-- Compact mini-tiles: 2-col grid of small squares when >2 accounts -->
+    <div v-else-if="props.displayStyle === 'compact' && displayedAccounts.length > 2" class="grid grid-cols-2 gap-2">
+      <NuxtLink
+        v-for="enclave in displayedAccounts"
+        :key="enclave.standardId"
+        :to="`/account/${enclave.standardId}`"
+        class="group rounded-lg border border-gray-200 dark:border-gray-700 p-2.5 transition-all duration-150 hover:border-blue-500/50 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+      >
+        <div class="flex items-center gap-1.5 mb-1">
+          <span
+            class="w-1.5 h-1.5 rounded-full shrink-0"
+            :class="enclave.environment === 'GovCloud' ? 'bg-orange-400' : 'bg-blue-400'"
+          />
+          <span class="text-xs font-semibold text-gray-900 dark:text-white truncate group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors">
+            {{ enclave.projectName }}
+          </span>
+        </div>
+        <span class="text-[10px] font-mono text-gray-400 dark:text-gray-500">{{ enclave.standardId }}</span>
+      </NuxtLink>
+      <NuxtLink
+        v-if="hiddenCount > 0"
+        to="/account/explorer"
+        class="rounded-lg border border-dashed border-gray-200 dark:border-gray-700 p-2.5 flex items-center justify-center text-xs text-gray-400 hover:text-blue-500 hover:border-blue-500/50 transition-colors"
+      >
+        +{{ hiddenCount }} more
+      </NuxtLink>
+    </div>
+
+    <!-- Full account cards for non-compact or compact with ≤2 accounts -->
     <div v-else :class="[
-      'grid gap-3',
-      tableData.length === 1 ? 'grid-cols-1 max-w-lg' :
-      tableData.length === 2 ? 'grid-cols-1 sm:grid-cols-2' :
+      'grid gap-3 overflow-y-auto',
+      props.displayStyle === 'compact' ? 'grid-cols-1 max-h-[280px]' :
+      props.displayStyle === 'half' ? 'max-h-[400px]' :
+      'max-h-[500px]',
+      props.displayStyle === 'half' ? (displayedAccounts.length === 1 ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2') :
+      displayedAccounts.length === 1 ? 'grid-cols-1 max-w-lg' :
+      displayedAccounts.length === 2 ? 'grid-cols-1 sm:grid-cols-2' :
       'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3'
     ]">
       <NuxtLink
-        v-for="enclave in tableData"
+        v-for="enclave in displayedAccounts"
         :key="enclave.standardId"
         :to="`/account/${enclave.standardId}`"
-        class="group relative rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 transition-all duration-200 hover:border-blue-500/50 hover:shadow-md hover:shadow-blue-500/5 hover:-translate-y-0.5"
+        class="group relative rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 transition-all duration-200 hover:border-blue-500/50 hover:shadow-md hover:shadow-blue-500/5 hover:-translate-y-0.5"
       >
         <!-- Top row: name + environment badge -->
         <div class="flex items-start justify-between gap-2 mb-2">
@@ -102,6 +138,13 @@
         />
       </NuxtLink>
     </div>
+
+    <!-- Show count of hidden accounts when truncated (non-compact only, compact has inline "+X more" tile) -->
+    <div v-if="!props.loading && hiddenCount > 0 && !(props.displayStyle === 'compact' && displayedAccounts.length > 2)" class="mt-3 text-center">
+      <NuxtLink to="/account/explorer" class="text-xs text-gray-400 hover:text-blue-500 transition-colors">
+        +{{ hiddenCount }} more account{{ hiddenCount !== 1 ? 's' : '' }}
+      </NuxtLink>
+    </div>
   </div>
 </template>
 
@@ -110,6 +153,7 @@ const userGroupStore = useUserGroupStore()
 
 const props = defineProps<{
   loading: boolean
+  displayStyle?: 'full' | 'half' | 'compact'
 }>()
 
 const GOV_IDENTIFIER = ' | gov'
@@ -134,4 +178,14 @@ const tableData = computed(() => {
   if (!userGroupStore.myEnclaves) return []
   return Object.values(userGroupStore.myEnclaves)
 })
+
+// Cap visible accounts per display style to prevent unbounded growth
+const displayedAccounts = computed(() => {
+  const all = tableData.value
+  if (props.displayStyle === 'compact') return all.slice(0, 6)
+  if (props.displayStyle === 'half') return all.slice(0, 6)
+  return all.slice(0, 9)
+})
+
+const hiddenCount = computed(() => tableData.value.length - displayedAccounts.value.length)
 </script>

@@ -1,16 +1,14 @@
 <template>
-  <UCard>
-    <template #header>
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <UIcon name="i-heroicons-bell-alert" class="w-4 h-4 text-amber-500" />
-          <span class="text-sm font-semibold text-gray-900 dark:text-white">Budget Alerts</span>
-        </div>
-        <NuxtLink to="/admin/budget-alerts" class="text-xs text-blue-500 hover:text-blue-400 transition-colors">
-          View All →
-        </NuxtLink>
+  <div class="h-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-2">
+        <UIcon name="i-heroicons-bell-alert" class="w-5 h-5 text-amber-500" />
+        <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Budget Alerts</h2>
       </div>
-    </template>
+      <NuxtLink to="/admin/budget-alerts" class="text-xs text-blue-500 hover:text-blue-400 transition-colors">
+        View All →
+      </NuxtLink>
+    </div>
 
     <!-- Loading -->
     <div v-if="loading" class="animate-pulse space-y-3">
@@ -68,7 +66,7 @@
         </span>
       </div>
     </div>
-  </UCard>
+  </div>
 </template>
 
 <script setup lang="ts">

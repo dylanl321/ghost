@@ -499,6 +499,11 @@ const navigationItems = computed(() => {
       icon: "i-heroicons-server-stack",
     },
     {
+      label: "Security Health",
+      to: "/security",
+      icon: "i-heroicons-shield-exclamation",
+    },
+    {
       label: "AI Assistant",
       to: "/chat",
       icon: "i-heroicons-sparkles",

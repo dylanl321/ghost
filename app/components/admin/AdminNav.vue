@@ -214,6 +214,7 @@ const categoryExpanded = ref<Record<string, boolean>>({
   content: false,
   ai: false,
   monitoring: false,
+  security: false,
   pipelines: false
 })
 
@@ -350,6 +351,13 @@ const categories = [
       { label: 'Health Checks', icon: 'i-heroicons-heart', to: '/admin/monitoring?tab=health' },
       { label: 'Issues', icon: 'i-heroicons-exclamation-triangle', to: '/admin/monitoring?tab=issues' }
     ]
+  },
+  {
+    id: 'security',
+    label: 'Security Data',
+    icon: 'i-heroicons-shield-check',
+    to: '/admin/security',
+    children: []
   },
   {
     id: 'pipelines',

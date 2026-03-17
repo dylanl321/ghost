@@ -200,55 +200,70 @@ async function fetchFindingsForRegion(
   try {
     // Get client for Security Lake aggregation account
     const client = await getSecurityHubClient(region, environment)
-    const secHubFilters = buildSecurityHubFilters(filters)
 
-    // Add account filter to only get findings for our target accounts
+    // Security Hub AwsAccountId filter is limited to 20 items per request.
+    // Batch account IDs into groups of 20; empty array means no account filter (all accounts).
+    const MAX_ACCOUNT_FILTER = 20
+    const accountBatches: string[][] = []
     if (targetAccountIds.length > 0) {
-      secHubFilters.AwsAccountId = targetAccountIds.map(id => ({
-        Value: id,
-        Comparison: 'EQUALS'
-      }))
+      for (let i = 0; i < targetAccountIds.length; i += MAX_ACCOUNT_FILTER) {
+        accountBatches.push(targetAccountIds.slice(i, i + MAX_ACCOUNT_FILTER))
+      }
+    } else {
+      accountBatches.push([]) // Single batch with no account filter
     }
 
-    let nextToken: string | undefined
-    let pageCount = 0
-    const maxPages = 20  // Limit to prevent excessive API calls
+    for (const batch of accountBatches) {
+      const secHubFilters = buildSecurityHubFilters(filters)
 
-    do {
-      const command = new GetFindingsCommand({
-        Filters: secHubFilters,
-        MaxResults: 100,
-        NextToken: nextToken,
-      })
-
-      const response = await client.send(command)
-      pageCount++
-
-      if (response.Findings) {
-        for (const finding of response.Findings) {
-          // Get account name from map (finding has the actual account ID)
-          const accountName = accountNameMap.get(finding.AwsAccountId || '') || finding.AwsAccountId || 'Unknown'
-          findings.push(normalizeFinding(finding, accountName))
-        }
+      if (batch.length > 0) {
+        secHubFilters.AwsAccountId = batch.map(id => ({
+          Value: id,
+          Comparison: 'EQUALS'
+        }))
       }
 
-      nextToken = response.NextToken
+      let nextToken: string | undefined
+      let pageCount = 0
+      const maxPages = 20  // Limit to prevent excessive API calls
 
-      logger.debug('[SecurityHub] Fetched findings page', {
-        region,
-        page: pageCount,
-        findingsInPage: response.Findings?.length || 0,
-        totalFindings: findings.length,
-      })
+      do {
+        const command = new GetFindingsCommand({
+          Filters: secHubFilters,
+          MaxResults: 100,
+          NextToken: nextToken,
+        })
 
-    } while (nextToken && pageCount < maxPages)
+        const response = await client.send(command)
+        pageCount++
 
-    if (nextToken) {
-      logger.warn('[SecurityHub] Exceeded max pages for region', {
-        region,
-        maxPages,
-        totalFindings: findings.length,
-      })
+        if (response.Findings) {
+          for (const finding of response.Findings) {
+            const accountName = accountNameMap.get(finding.AwsAccountId || '') || finding.AwsAccountId || 'Unknown'
+            findings.push(normalizeFinding(finding, accountName))
+          }
+        }
+
+        nextToken = response.NextToken
+
+        logger.debug('[SecurityHub] Fetched findings page', {
+          region,
+          page: pageCount,
+          batchSize: batch.length || 'all',
+          findingsInPage: response.Findings?.length || 0,
+          totalFindings: findings.length,
+        })
+
+      } while (nextToken && pageCount < maxPages)
+
+      if (nextToken) {
+        logger.warn('[SecurityHub] Exceeded max pages for region batch', {
+          region,
+          maxPages,
+          batchSize: batch.length,
+          totalFindings: findings.length,
+        })
+      }
     }
 
   } catch (error: any) {
@@ -432,8 +447,7 @@ export async function getSecurityHubFindings(
  */
 export async function getSecurityHubFindingsSummary(
   accountIds: string[],
-  filters: SecurityHubDatasetFilters = {},
-  regions: string[] = DEFAULT_REGIONS
+  filters: SecurityHubDatasetFilters = {}
 ): Promise<{
   totalFindings: number
   findingsBySeverity: Record<FindingSeverity, number>
@@ -441,7 +455,7 @@ export async function getSecurityHubFindingsSummary(
   findingsByProduct: Record<string, number>
   findingsByResourceType: Record<string, number>
 }> {
-  const findings = await getSecurityHubFindings(accountIds, filters, regions)
+  const findings = await getSecurityHubFindings(accountIds, filters)
 
   const summary = {
     totalFindings: findings.length,
@@ -489,7 +503,6 @@ export async function getSecurityHubFindingsSummary(
 export async function getTopCriticalFindings(
   accountIds: string[],
   filters: SecurityHubDatasetFilters = {},
-  regions: string[] = DEFAULT_REGIONS,
   limit: number = 10
 ): Promise<SecurityHubFindingRecord[]> {
   // Modify filters to only include CRITICAL and HIGH
@@ -499,7 +512,7 @@ export async function getTopCriticalFindings(
     statuses: filters.statuses || ['NEW', 'NOTIFIED'],  // Exclude resolved/suppressed
   }
 
-  const findings = await getSecurityHubFindings(accountIds, criticalFilters, regions)
+  const findings = await getSecurityHubFindings(accountIds, criticalFilters)
 
   // Return top N findings (already sorted by severity)
   return findings.slice(0, limit)

@@ -476,49 +476,11 @@
             />
           </div>
 
-          <!-- Tag Cost Breakdown: shown when a tag key is selected via View By -->
-          <div v-if="groupByTag" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-3">
-            <div class="flex items-center justify-between gap-3">
-              <div class="flex items-center gap-2">
-                <UIcon name="i-heroicons-tag" class="w-4 h-4 text-blue-400 flex-shrink-0" />
-                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Cost by Tag: {{ groupByTag }}</h3>
-              </div>
-              <div class="flex items-center gap-2">
-                <UTooltip text="View tag coverage details">
-                  <UButton
-                    size="xs"
-                    color="blue"
-                    variant="ghost"
-                    icon="i-heroicons-chart-bar"
-                    :to="`/account/cost-tags?tag=${encodeURIComponent(groupByTag)}`"
-                  >
-                    Coverage
-                  </UButton>
-                </UTooltip>
-                <UButton
-                  size="xs"
-                  color="gray"
-                  variant="ghost"
-                  icon="i-heroicons-x-mark"
-                  @click="viewBy = 'LINKED_ACCOUNT'"
-                >
-                  Clear
-                </UButton>
-              </div>
-            </div>
-
-            <TagCostBreakdown
-              :cost-data="dataset?.summary ?? null"
-              :tag-key="groupByTag"
-              :loading="isCostFetching"
-            />
-          </div>
-
           <div v-if="isCostPending" class="bg-white dark:bg-gray-900 border border-amber-300 dark:border-amber-600 rounded-lg p-4 text-amber-700 dark:text-amber-400 flex items-center gap-2">
             <Icon name="i-heroicons-clock" class="w-5 h-5 animate-pulse" />
             <span>Waiting for account selection to complete...</span>
           </div>
-          <div v-else-if="isCostFetching && !groupByTag" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-gray-700 dark:text-gray-300">
+          <div v-else-if="isCostFetching" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-gray-700 dark:text-gray-300">
             Loading charts...
           </div>
           <div v-else-if="costError" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-red-600 dark:text-red-400">
@@ -742,9 +704,8 @@ const expandedGroups = ref(new Set<string>())
 const accountSortBy = ref<'cost' | 'name' | 'budget' | 'utilization'>('cost') // Default sort by cost
 const showRegressionLine = ref(false) // Toggle for budget variance regression line
 
-// View By state: controls how cost data is grouped (account, service, region, or tag)
+// View By state: controls how cost data is grouped (account, service, or region)
 const viewBy = ref('LINKED_ACCOUNT')
-const groupByTag = computed(() => viewBy.value.startsWith('TAG:') ? viewBy.value.slice(4) : null)
 
 // Computed property to detect if we're viewing historical data
 const isHistoricalTimeframe = computed(() => {
@@ -1183,8 +1144,7 @@ const { mode: dataMode, isFetching: isCostFetching, isDeferredLoading, isPending
   selectedTimeframe,
   initialMode: 'proforma',
   accountsList, // Pass full accounts data for LOB/Department mapping
-  debounceMs: 800, // Wait 800ms after user stops selecting accounts
-  groupByTag // Tag key for grouping summary data by tag value
+  debounceMs: 800 // Wait 800ms after user stops selecting accounts
 })
 
 // 2. useCostScenario: Determines the viewing context based on user selections

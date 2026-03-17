@@ -6,7 +6,7 @@
 import { defineEventHandler, getRouterParam } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../../utils/api-response'
 import { registerEndpoint } from '../../../plugins/swagger'
-import { getItem } from '../../../utils/dynamodb'
+import { scanItems } from '../../../utils/dynamodb'
 import { logger } from '../../../utils/logger'
 import type { AccountCostTagConfig } from '../../../../shared/types/cost-tags'
 
@@ -64,10 +64,26 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   logger.info(`[TagConfig] Fetching tag config for account ${accountId}`)
 
-  const record = await getItem(TABLE_NAME, { accountId })
+  // accountId is not the primary key — scan and match against both commercial and govcloud IDs
+  const scanResult = await scanItems(
+    TABLE_NAME,
+    'awsStandardAccountID = :aid OR awsGovCloudAccountID = :aid',
+    undefined,
+    undefined,
+    'govcloud',
+    undefined,
+    { ':aid': accountId }
+  )
 
+  const record = scanResult.items[0]
   if (!record) {
-    return errors.notFound(event, `Account ${accountId} not found`)
+    // No account record yet — return empty defaults instead of 404
+    const defaults: AccountCostTagConfig = {
+      importantTags: [],
+      defaultGroupByTag: undefined,
+      tagDescriptions: {}
+    }
+    return sendSuccess(event, defaults)
   }
 
   // Return existing tag config or empty defaults

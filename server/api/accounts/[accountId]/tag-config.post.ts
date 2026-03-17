@@ -6,7 +6,7 @@
 import { defineEventHandler, readBody, getRouterParam } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../../utils/api-response'
 import { registerEndpoint } from '../../../plugins/swagger'
-import { getItem, updateItem } from '../../../utils/dynamodb'
+import { scanItems, updateItem } from '../../../utils/dynamodb'
 import { logger } from '../../../utils/logger'
 import type { AccountCostTagConfig } from '../../../../shared/types/cost-tags'
 
@@ -101,8 +101,18 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.badRequest(event, 'importantTags must contain only strings')
   }
 
-  // Verify account exists before updating
-  const record = await getItem(TABLE_NAME, { accountId })
+  // accountId is not the primary key — scan and match against both commercial and govcloud IDs
+  const scanResult = await scanItems(
+    TABLE_NAME,
+    'awsStandardAccountID = :aid OR awsGovCloudAccountID = :aid',
+    undefined,
+    undefined,
+    'govcloud',
+    undefined,
+    { ':aid': accountId }
+  )
+
+  const record = scanResult.items[0]
   if (!record) {
     return errors.notFound(event, `Account ${accountId} not found`)
   }
@@ -113,7 +123,6 @@ export default defineEventHandler(handleAsync(async (event) => {
     defaultGroupByTag: body.defaultGroupByTag || undefined,
     tagDescriptions: body.tagDescriptions || {},
     updatedAt: new Date().toISOString(),
-    // Capture the user identity from the session if available
     updatedBy: (event.context.user?.email as string) || (event.context.user?.name as string) || 'unknown'
   }
 
@@ -122,7 +131,8 @@ export default defineEventHandler(handleAsync(async (event) => {
     defaultGroupByTag: tagConfig.defaultGroupByTag
   })
 
-  await updateItem(TABLE_NAME, { accountId }, { costTagConfig: tagConfig })
+  // Use the actual primary key (requestID) for the update
+  await updateItem(TABLE_NAME, { requestID: record.requestID }, { costTagConfig: tagConfig })
 
   return sendSuccess(event, tagConfig, {
     message: `Tag configuration updated for account ${accountId}`

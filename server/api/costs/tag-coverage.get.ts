@@ -193,9 +193,12 @@ export default defineEventHandler(handleAsync(async (event) => {
           const keys = group.Keys || []
           const cost = parseFloat(group.Metrics?.UnblendedCost?.Amount || '0')
 
-          // With 2 GroupBy dimensions, Keys = [accountId, tagValue]
+          // With 2 GroupBy dimensions, Keys = [accountId, "tagKey$tagValue"]
+          // AWS Cost Explorer TAG GroupBy returns keys formatted as "tagKey$tagValue"
+          // Untagged resources have an empty value after the $, e.g. "Name$"
           const accountId = keys[0]
-          const tagValue = keys.length > 1 ? keys[1] : ''
+          const rawTagValue = keys.length > 1 ? keys[1] : ''
+          const tagValue = rawTagValue.includes('$') ? rawTagValue.split('$').slice(1).join('$') : rawTagValue
 
           if (!accountId) continue
 
@@ -203,7 +206,7 @@ export default defineEventHandler(handleAsync(async (event) => {
           accountTotals.set(accountId, (accountTotals.get(accountId) || 0) + cost)
 
           // Determine if this group represents tagged resources
-          // Untagged resources have empty-string tag value
+          // Untagged resources have empty-string tag value after the $ separator
           const isUntagged = !tagValue || tagValue.trim() === ''
           if (!isUntagged) {
             accountTaggedCosts.set(accountId, (accountTaggedCosts.get(accountId) || 0) + cost)

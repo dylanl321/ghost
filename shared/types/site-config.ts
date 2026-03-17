@@ -370,6 +370,17 @@ export const DEFAULT_SITE_CONFIG: SiteConfigItem[] = [
     isPublic: true,
     isEditable: true,
   },
+  {
+    key: 'ui.dashboardLayout.default',
+    value: null,
+    type: 'object',
+    category: 'ui',
+    label: 'Default Dashboard Layout',
+    description: 'Organization-wide default dashboard layout for new users. Admin-configured.',
+    defaultValue: null,
+    isPublic: true,
+    isEditable: true,
+  },
 ];
 
 /**

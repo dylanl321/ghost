@@ -1,5 +1,5 @@
 // Auto-generated file - DO NOT EDIT
-// Generated at: 2026-03-13T15:04:17.198Z
+// Generated at: 2026-03-16T15:10:47.157Z
 // Run 'npm run bundle:support' to regenerate
 
 export interface SupportArticle {

@@ -200,6 +200,20 @@
         </div>
       </template>
 
+      <!-- Security Tab -->
+      <template #security>
+        <div v-if="!isAccountInactive">
+          <AccountSecurityDashboard v-if="accountId" :account-id="accountId" />
+        </div>
+        <div v-else class="flex items-center justify-center py-16 mt-4">
+          <div class="text-center">
+            <UIcon name="i-heroicons-shield-exclamation" class="w-16 h-16 text-gray-500 mx-auto mb-4 opacity-50" />
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Security Unavailable</h3>
+            <p class="text-gray-600 dark:text-gray-400">This tab is disabled because the account is {{ accountStatus?.toLowerCase() }}.</p>
+          </div>
+        </div>
+      </template>
+
       <!-- Pipelines Tab -->
       <template #pipelines>
         <div class="mt-4">
@@ -224,7 +238,7 @@
       <!-- Settings Tab (Account Admin) -->
       <template #settings>
         <div class="mt-4">
-          <AccountSettingsPanel v-if="accountId" :account-id="accountId" />
+          <AccountSettingsPanel v-if="accountId" :account-id="accountId" :environment="govCloudId ? 'govcloud' : 'commercial'" />
         </div>
       </template>
     </UTabs>
@@ -355,6 +369,7 @@ const tabs = computed(() => {
     { label: 'Overview', slot: 'overview', icon: 'i-heroicons-home', disabled: false },
     { label: 'Resources', slot: 'resources', icon: 'i-heroicons-server-stack', disabled: isAccountInactive.value },
     { label: 'Policies', slot: 'policies', icon: 'i-heroicons-shield-check', disabled: isAccountInactive.value },
+    { label: 'Security', slot: 'security', icon: 'i-heroicons-shield-exclamation', disabled: isAccountInactive.value },
   ]
 
   if (isAdmin.value) {

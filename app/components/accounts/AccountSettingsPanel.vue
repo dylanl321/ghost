@@ -3,6 +3,7 @@
     <!-- Cost Tag Configuration -->
     <TagConfigManager
       :account-id="accountId"
+      :environment="environment"
       mode="inline"
     />
 
@@ -11,7 +12,10 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{
+const props = defineProps<{
   accountId: string
+  environment?: string
 }>()
+
+const environment = computed(() => props.environment)
 </script>
