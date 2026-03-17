@@ -493,9 +493,8 @@
                - dataset: Raw cost data from APIs via useCostData
                - Each chart's extractor function transforms dataset to chart format
                Charts are dynamically selected based on scenario and timeframe
-               Hidden when tag groupBy is active since data shape is different
                ============================================================= -->
-          <div v-else-if="!groupByTag" data-tour="costs-chart">
+          <div v-else data-tour="costs-chart">
             <!-- Subtle indicator while forecast/supplementary data loads in background -->
             <div v-if="isDeferredLoading" class="mb-3 flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg text-xs text-blue-600 dark:text-blue-400">
               <Icon name="i-heroicons-arrow-path" class="w-3.5 h-3.5 animate-spin flex-shrink-0" />

@@ -235,12 +235,6 @@
         </div>
       </template>
 
-      <!-- Settings Tab (Account Admin) -->
-      <template #settings>
-        <div class="mt-4">
-          <AccountSettingsPanel v-if="accountId" :account-id="accountId" :environment="govCloudId ? 'govcloud' : 'commercial'" />
-        </div>
-      </template>
     </UTabs>
   </div>
 </template>
@@ -266,9 +260,6 @@ const accountStatus = computed(() => enclaveStore.enclaves[accountId.value]?.enc
 const isAccountInactive = computed(() => accountStatus.value === 'Decommissioned' || accountStatus.value === 'Inactive')
 
 const { isAdmin } = useUserRoles()
-const isAccountAdmin = computed(() =>
-  isAdmin.value || userGroupStore.myAdminAccountIds.includes(accountId.value)
-)
 const { getPreference, setPreference, initialized: prefsInitialized, load: loadPrefs } = useUserPreferences()
 
 // Cost trend date range
@@ -375,10 +366,6 @@ const tabs = computed(() => {
   if (isAdmin.value) {
     baseTabs.push({ label: 'Pipelines', slot: 'pipelines', icon: 'i-heroicons-arrow-path', disabled: false })
     baseTabs.push({ label: 'Notes', slot: 'notes', icon: 'i-heroicons-document-text', disabled: false })
-  }
-
-  if (isAccountAdmin.value) {
-    baseTabs.push({ label: 'Settings', slot: 'settings', icon: 'i-heroicons-cog-6-tooth', disabled: false })
   }
 
   return baseTabs

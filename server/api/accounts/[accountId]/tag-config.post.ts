@@ -46,6 +46,10 @@ registerEndpoint('/api/accounts/{accountId}/tag-config', 'POST', {
             tagDescriptions: {
               type: 'object',
               description: 'Human-readable descriptions for tag keys'
+            },
+            tagValueAliases: {
+              type: 'object',
+              description: 'Friendly names for tag values. Key format: "TagKey::tagValue"'
             }
           }
         }
@@ -122,6 +126,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     importantTags: body.importantTags,
     defaultGroupByTag: body.defaultGroupByTag || undefined,
     tagDescriptions: body.tagDescriptions || {},
+    tagValueAliases: body.tagValueAliases || {},
     updatedAt: new Date().toISOString(),
     updatedBy: (event.context.user?.email as string) || (event.context.user?.name as string) || 'unknown'
   }

@@ -2,6 +2,7 @@ export interface AccountCostTagConfig {
   importantTags: string[]
   defaultGroupByTag?: string
   tagDescriptions?: Record<string, string>
+  tagValueAliases?: Record<string, string>  // key format: "TagKey::tagValue" → "Friendly Name"
   updatedBy?: string
   updatedAt?: string
 }

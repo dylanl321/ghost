@@ -187,6 +187,11 @@
       <div v-else-if="activeTab === 'forecast'" class="animate-fadeIn">
         <ForecastDataTable />
       </div>
+
+      <!-- Tag Analysis Tab -->
+      <div v-else-if="activeTab === 'tags'" class="animate-fadeIn">
+        <TagAnalysisTab :selected-accounts="selectedAccounts" />
+      </div>
     </div>
   </div>
 </template>
@@ -199,6 +204,7 @@ import OrganizationalCharts from './OrganizationalCharts.vue'
 import HistoricalTrends from './HistoricalTrends.vue'
 import CostDataTable from './CostDataTable.vue'
 import ForecastDataTable from './ForecastDataTable.vue'
+import TagAnalysisTab from './TagAnalysisTab.vue'
 import BudgetHealthSummaryCards from './BudgetHealthSummaryCards.vue'
 import CostDashboardAlerts from './CostDashboardAlerts.vue'
 import type { ChartDefinition } from '~/composables/useChartRegistry'
@@ -285,6 +291,11 @@ const tabs = computed(() => [
     id: 'forecast',
     label: 'Forecast Data',
     icon: 'i-heroicons-chart-bar-square'
+  },
+  {
+    id: 'tags',
+    label: 'Tag Analysis',
+    icon: 'i-heroicons-tag'
   }
 ])
 

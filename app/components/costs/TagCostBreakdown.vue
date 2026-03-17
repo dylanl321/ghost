@@ -27,6 +27,9 @@
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-400 tracking-wider w-40">
                 {{ tagKey || 'Tag Value' }}
               </th>
+              <th v-if="editable || hasAliases" class="px-4 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-400 tracking-wider w-36">
+                Alias
+              </th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-400 tracking-wider">
                 Cost Distribution
               </th>
@@ -42,7 +45,11 @@
             <tr
               v-for="row in rows"
               :key="row.value"
-              class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+              class="transition-colors cursor-pointer"
+              :class="selectedValue === row.value
+                ? 'bg-blue-50 dark:bg-blue-900/30 ring-1 ring-inset ring-blue-300 dark:ring-blue-700'
+                : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'"
+              @click="!row.isUntagged && handleRowClick(row)"
             >
               <td class="px-4 py-3">
                 <div class="flex items-center gap-1.5">
@@ -50,21 +57,38 @@
                     v-if="row.isUntagged"
                     text="Resources without this tag or with a blank value"
                   >
-                    <span
-                      class="text-xs font-medium text-amber-400 cursor-help"
-                    >
+                    <span class="text-xs font-medium text-amber-400 cursor-help">
                       Untagged
                     </span>
                   </UTooltip>
-                  <button
-                    v-else
-                    class="text-xs font-medium text-blue-400 hover:text-blue-300 hover:underline text-left truncate max-w-[140px]"
-                    :title="row.label"
-                    @click="$emit('filter', row.value)"
-                  >
-                    {{ row.label }}
-                  </button>
+                  <template v-else>
+                    <span
+                      class="text-xs font-medium text-blue-400 text-left truncate max-w-[140px]"
+                      :title="row.rawValue"
+                    >
+                      {{ row.label }}
+                    </span>
+                    <UIcon
+                      v-if="selectedValue === row.value"
+                      name="i-heroicons-check-circle-solid"
+                      class="w-3.5 h-3.5 text-blue-500 flex-shrink-0"
+                    />
+                  </template>
                 </div>
+              </td>
+              <td v-if="editable || hasAliases" class="px-4 py-3" @click.stop>
+                <template v-if="editable && !row.isUntagged">
+                  <UInput
+                    :model-value="getAlias(row.value)"
+                    size="xs"
+                    :placeholder="row.parsedValue !== row.value ? row.parsedValue : 'Set alias...'"
+                    class="max-w-[130px]"
+                    @update:model-value="handleAliasChange(row.value, $event as string)"
+                  />
+                </template>
+                <span v-else-if="getAlias(row.value)" class="text-xs text-gray-500 dark:text-gray-400">
+                  {{ getAlias(row.value) }}
+                </span>
               </td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-2">
@@ -87,7 +111,7 @@
           </tbody>
           <tfoot class="bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
             <tr>
-              <td colspan="2" class="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">
+              <td :colspan="(editable || hasAliases) ? 3 : 2" class="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">
                 {{ rows.length }} tag values
               </td>
               <td class="px-4 py-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100 font-mono">
@@ -100,6 +124,67 @@
           </tfoot>
         </table>
       </div>
+
+      <!-- Selected tag value detail panel -->
+      <div
+        v-if="selectedRow"
+        class="mt-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 animate-fadeIn"
+      >
+        <div class="flex items-start justify-between gap-4">
+          <div class="min-w-0 flex-1 space-y-2">
+            <div class="flex items-center gap-2">
+              <UIcon name="i-heroicons-tag" class="w-4 h-4 text-blue-500 flex-shrink-0" />
+              <span class="text-sm font-semibold text-blue-900 dark:text-blue-100 truncate">
+                {{ selectedRow.label }}
+              </span>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div>
+                <div class="text-gray-500 dark:text-gray-400">Cost</div>
+                <div class="font-semibold text-gray-900 dark:text-gray-100 font-mono">{{ formatCostValue(selectedRow.cost) }}</div>
+              </div>
+              <div>
+                <div class="text-gray-500 dark:text-gray-400">Share</div>
+                <div class="font-semibold text-gray-900 dark:text-gray-100">{{ selectedRow.percentage.toFixed(1) }}%</div>
+              </div>
+              <div v-if="selectedRow.parsedValue !== selectedRow.label" class="col-span-2">
+                <div class="text-gray-500 dark:text-gray-400">Parsed Value</div>
+                <div class="font-medium text-gray-700 dark:text-gray-300 truncate" :title="selectedRow.parsedValue">{{ selectedRow.parsedValue }}</div>
+              </div>
+            </div>
+            <div v-if="selectedRow.rawValue !== selectedRow.parsedValue">
+              <div class="text-[10px] text-gray-400 dark:text-gray-500">Raw: <span class="font-mono select-all">{{ selectedRow.rawValue }}</span></div>
+            </div>
+          </div>
+          <div class="flex items-center gap-1 flex-shrink-0">
+            <UTooltip text="Copy raw value">
+              <UButton
+                icon="i-heroicons-clipboard-document"
+                color="blue"
+                variant="ghost"
+                size="xs"
+                @click="copyValue(selectedRow.rawValue)"
+              />
+            </UTooltip>
+            <UTooltip text="Copy parsed value">
+              <UButton
+                icon="i-heroicons-clipboard"
+                color="blue"
+                variant="ghost"
+                size="xs"
+                @click="copyValue(selectedRow.parsedValue)"
+              />
+            </UTooltip>
+            <UButton
+              icon="i-heroicons-x-mark"
+              color="gray"
+              variant="ghost"
+              size="xs"
+              @click="selectedValue = null"
+            />
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -107,23 +192,131 @@
 <script setup lang="ts">
 import { formatCostValue } from '~/utils/cost-filters'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   /** Summary API response — expects .groups array with { groupKey, totalCost } */
   costData: any | null
   tagKey: string
   loading: boolean
+  tagValueAliases?: Record<string, string>
+  editable?: boolean
+}>(), {
+  tagValueAliases: () => ({}),
+  editable: false
+})
+
+const emit = defineEmits<{
+  (e: 'select', row: TagRow): void
+  (e: 'update:alias', payload: { tagKey: string; tagValue: string; alias: string }): void
 }>()
 
-defineEmits<{
-  (e: 'filter', tagValue: string): void
-}>()
-
-interface TagRow {
-  value: string
-  label: string
+export interface TagRow {
+  value: string       // raw groupKey from API (may include tagKey$ prefix)
+  rawValue: string    // original raw value for tooltip
+  parsedValue: string // cleaned tag value after stripping prefix
+  label: string       // display label (alias > parsed > raw)
   cost: number
   percentage: number
   isUntagged: boolean
+}
+
+const toast = useToast()
+const selectedValue = ref<string | null>(null)
+
+const selectedRow = computed(() => {
+  if (!selectedValue.value) return null
+  return rows.value.find(r => r.value === selectedValue.value) || null
+})
+
+const hasAliases = computed(() =>
+  Object.keys(props.tagValueAliases).length > 0
+)
+
+function getAlias(tagValue: string): string {
+  const key = `${props.tagKey}::${tagValue}`
+  return props.tagValueAliases[key] || ''
+}
+
+function handleAliasChange(tagValue: string, alias: string) {
+  emit('update:alias', { tagKey: props.tagKey, tagValue, alias })
+}
+
+function handleRowClick(row: TagRow) {
+  if (selectedValue.value === row.value) {
+    selectedValue.value = null
+  } else {
+    selectedValue.value = row.value
+    emit('select', row)
+  }
+}
+
+async function copyValue(value: string) {
+  try {
+    await navigator.clipboard.writeText(value)
+    toast.add({
+      title: 'Copied',
+      description: value.length > 60 ? `${value.substring(0, 60)}...` : value,
+      icon: 'i-heroicons-clipboard-document-check',
+      color: 'green',
+      timeout: 2000
+    })
+  } catch {
+    // Fallback for older browsers
+    const el = document.createElement('textarea')
+    el.value = value
+    document.body.appendChild(el)
+    el.select()
+    document.execCommand('copy')
+    document.body.removeChild(el)
+    toast.add({ title: 'Copied', icon: 'i-heroicons-clipboard-document-check', color: 'green', timeout: 2000 })
+  }
+}
+
+/**
+ * Parse an AWS Cost Explorer tag group key.
+ * AWS returns keys in "tagKey$tagValue" format when grouping by TAG.
+ * Also extracts human-readable parts from special AWS tag values.
+ */
+function parseTagValue(rawKey: string, tagKey: string): string {
+  if (!rawKey) return rawKey
+
+  // Strip "tagKey$" prefix if present (AWS Cost Explorer format)
+  let value = rawKey
+  const dollarIdx = rawKey.indexOf('$')
+  if (dollarIdx !== -1) {
+    const prefix = rawKey.substring(0, dollarIdx)
+    // Only strip if the prefix matches the tag key we're grouping by
+    if (prefix === tagKey || prefix === '') {
+      value = rawKey.substring(dollarIdx + 1)
+    }
+  }
+
+  if (!value) return rawKey
+
+  // Parse aws:createdBy values — extract email or role name
+  // e.g. "AssumedRole:AROAXNNO7DI3QZTU5I44R:Michael.Neiderhauser@gd-ms.com" → "Michael.Neiderhauser@gd-ms.com"
+  if (value.startsWith('AssumedRole:')) {
+    const parts = value.split(':')
+    if (parts.length >= 3) return parts[parts.length - 1]
+  }
+
+  // Parse "AWSService:serviceName" → "serviceName"
+  if (value.startsWith('AWSService:')) {
+    return value.substring('AWSService:'.length)
+  }
+
+  // Parse IAM user ARN-style: "arn:aws:iam::123456:user/username" → "username"
+  if (value.includes(':user/')) {
+    const userPart = value.split(':user/').pop()
+    if (userPart) return userPart
+  }
+
+  // Parse IAM role ARN-style: "arn:aws:iam::123456:role/rolename" → "rolename"
+  if (value.includes(':role/')) {
+    const rolePart = value.split(':role/').pop()
+    if (rolePart) return rolePart
+  }
+
+  return value
 }
 
 const rows = computed<TagRow[]>(() => {
@@ -142,10 +335,15 @@ const rows = computed<TagRow[]>(() => {
     .map((g: any): TagRow => {
       const rawValue: string = g.groupKey ?? g.tagValue ?? ''
       const isUntagged = rawValue === '$not_tagged' || rawValue === '' || rawValue === '__untagged__'
+        || rawValue === `${props.tagKey}$` // AWS returns "tagKey$" for untagged
       const cost = g.totalCost ?? g.cost ?? 0
+      const parsedValue = isUntagged ? 'Untagged' : parseTagValue(rawValue, props.tagKey)
+      const alias = getAlias(rawValue)
       return {
         value: rawValue,
-        label: isUntagged ? 'Untagged' : rawValue,
+        rawValue,
+        parsedValue,
+        label: isUntagged ? 'Untagged' : (alias || parsedValue),
         cost,
         percentage: totalRaw > 0 ? (cost / totalRaw) * 100 : 0,
         isUntagged
@@ -157,4 +355,21 @@ const rows = computed<TagRow[]>(() => {
 const totalCost = computed(() =>
   rows.value.reduce((sum, r) => sum + r.cost, 0)
 )
+
+// Clear selection when data changes
+watch(() => props.costData, () => {
+  selectedValue.value = null
+})
+
+defineExpose({ rows, totalCost })
 </script>
+
+<style scoped>
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-in;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+</style>
