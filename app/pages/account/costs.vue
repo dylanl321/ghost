@@ -469,10 +469,31 @@
               :utilization="isHistoricalTimeframe ? 0 : utilization"
               :format-currency="formatCurrency"
               :scenario="scenario"
-              :alerts-count="alertsCount"
-              :alerts-by-severity="alertsBySeverity"
               :is-historical="isHistoricalTimeframe"
-              @view-alerts="navigateToBudgetAlerts"
+            />
+          </div>
+
+          <!-- Budget Alerts Banner -->
+          <div
+            v-if="!isHistoricalTimeframe && alertsCount > 0 && !alertsBannerDismissed"
+            class="flex items-center justify-between rounded-lg border px-4 py-3"
+            :class="alertsBannerClasses"
+          >
+            <div class="flex items-center gap-2">
+              <UIcon name="i-heroicons-bell-alert" class="w-5 h-5" />
+              <span class="text-sm font-medium">
+                {{ alertsCount }} budget alert{{ alertsCount !== 1 ? 's' : '' }}: {{ alertsSummaryText }}
+              </span>
+              <UButton variant="link" size="xs" @click="navigateToBudgetAlerts">
+                View details &rarr;
+              </UButton>
+            </div>
+            <UButton
+              variant="ghost"
+              size="xs"
+              color="gray"
+              icon="i-heroicons-x-mark"
+              @click="alertsBannerDismissed = true"
             />
           </div>
 
@@ -711,8 +732,9 @@ const isHistoricalTimeframe = computed(() => {
   return ['last7days', 'last30days', 'last90days', 'lastMonth', 'lastQuarter', 'lastYear', 'last12months'].includes(selectedTimeframe.value)
 })
 
-// Budget alerts summary for the top-level card
+// Budget alerts
 const budgetAlerts = ref<BudgetAlert[]>([])
+const alertsBannerDismissed = ref(false)
 let alertDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
 const alertsCount = computed(() => budgetAlerts.value.length)
@@ -726,6 +748,27 @@ const alertsBySeverity = computed(() => {
     else if (level === 'ESCALATION') counts.escalation++
   }
   return counts
+})
+
+const alertsSummaryText = computed(() => {
+  const sev = alertsBySeverity.value
+  const parts: string[] = []
+  if (sev.critical > 0) parts.push(`${sev.critical} critical`)
+  if (sev.escalation > 0) parts.push(`${sev.escalation} escalation`)
+  if (sev.warning > 0) parts.push(`${sev.warning} warning${sev.warning !== 1 ? 's' : ''}`)
+  if (sev.info > 0) parts.push(`${sev.info} info`)
+  return parts.join(', ')
+})
+
+const alertsBannerClasses = computed(() => {
+  const sev = alertsBySeverity.value
+  if (sev.critical > 0 || sev.escalation > 0) {
+    return 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400'
+  }
+  if (sev.warning > 0) {
+    return 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400'
+  }
+  return 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400'
 })
 
 async function fetchAlertsSummary() {
@@ -750,8 +793,9 @@ async function fetchAlertsSummary() {
   }
 }
 
-// Refetch alerts when account selection changes (debounced)
+// Refetch alerts when account selection changes (debounced), reset dismissed state
 watch(selectedAccounts, () => {
+  alertsBannerDismissed.value = false
   if (alertDebounceTimer) clearTimeout(alertDebounceTimer)
   alertDebounceTimer = setTimeout(() => fetchAlertsSummary(), 300)
 }, { deep: true })

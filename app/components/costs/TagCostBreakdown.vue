@@ -43,7 +43,7 @@
           </thead>
           <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
             <tr
-              v-for="row in rows"
+              v-for="row in displayRows"
               :key="row.value"
               class="transition-colors cursor-pointer"
               :class="selectedValue === row.value
@@ -112,7 +112,14 @@
           <tfoot class="bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
             <tr>
               <td :colspan="(editable || hasAliases) ? 3 : 2" class="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">
-                {{ rows.length }} tag values
+                <span>{{ displayRows.length }} tag values</span>
+                <button
+                  v-if="zeroCostRows.length > 0"
+                  class="ml-2 text-blue-500 hover:text-blue-400 underline underline-offset-2"
+                  @click.stop="showZeroCost = !showZeroCost"
+                >
+                  {{ showZeroCost ? 'Hide' : 'Show' }} {{ zeroCostRows.length }} $0-cost values
+                </button>
               </td>
               <td class="px-4 py-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100 font-mono">
                 {{ formatCostValue(totalCost) }}
@@ -128,6 +135,7 @@
       <!-- Selected tag value detail panel -->
       <div
         v-if="selectedRow"
+        ref="detailPanelRef"
         class="mt-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 animate-fadeIn"
       >
         <div class="flex items-start justify-between gap-4">
@@ -155,6 +163,27 @@
             <div v-if="selectedRow.rawValue !== selectedRow.parsedValue">
               <div class="text-[10px] text-gray-400 dark:text-gray-500">Raw: <span class="font-mono select-all">{{ selectedRow.rawValue }}</span></div>
             </div>
+
+            <!-- Service breakdown drill-down (only for tagged values) -->
+            <template v-if="!selectedRow.isUntagged && accountId">
+              <div class="mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
+                <TagValueServiceBreakdown
+                  :account-id="accountId"
+                  :tag-key="tagKey"
+                  :tag-value="selectedRow.value"
+                  :period="period"
+                />
+              </div>
+              <div class="mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
+                <TagValueTrend
+                  :account-id="accountId"
+                  :tag-key="tagKey"
+                  :tag-value="selectedRow.value"
+                  :tag-value-label="selectedRow.label"
+                  :period="period"
+                />
+              </div>
+            </template>
           </div>
           <div class="flex items-center gap-1 flex-shrink-0">
             <UTooltip text="Copy raw value">
@@ -199,9 +228,13 @@ const props = withDefaults(defineProps<{
   loading: boolean
   tagValueAliases?: Record<string, string>
   editable?: boolean
+  accountId?: string
+  period?: string
 }>(), {
   tagValueAliases: () => ({}),
-  editable: false
+  editable: false,
+  accountId: '',
+  period: ''
 })
 
 const emit = defineEmits<{
@@ -221,6 +254,8 @@ export interface TagRow {
 
 const toast = useToast()
 const selectedValue = ref<string | null>(null)
+const showZeroCost = ref(false)
+const detailPanelRef = ref<HTMLElement | null>(null)
 
 const selectedRow = computed(() => {
   if (!selectedValue.value) return null
@@ -246,6 +281,9 @@ function handleRowClick(row: TagRow) {
   } else {
     selectedValue.value = row.value
     emit('select', row)
+    nextTick(() => {
+      detailPanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    })
   }
 }
 
@@ -351,6 +389,10 @@ const rows = computed<TagRow[]>(() => {
     })
     .sort((a, b) => b.cost - a.cost)
 })
+
+const visibleRows = computed(() => rows.value.filter(r => r.cost > 0 || r.isUntagged))
+const zeroCostRows = computed(() => rows.value.filter(r => r.cost <= 0 && !r.isUntagged))
+const displayRows = computed(() => showZeroCost.value ? rows.value : visibleRows.value)
 
 const totalCost = computed(() =>
   rows.value.reduce((sum, r) => sum + r.cost, 0)

@@ -5,6 +5,7 @@
 
 import {
   GetCostAndUsageCommand,
+  GetCostAndUsageWithResourcesCommand,
   GetCostForecastCommand,
   GetDimensionValuesCommand,
   GetTagsCommand,
@@ -165,6 +166,49 @@ export async function getCostAndUsage(
     dimensionValueAttributes: dimensionValueAttributes,
     total: total
   }
+}
+
+/**
+ * Get cost and usage data with resource-level granularity.
+ * Uses the separate GetCostAndUsageWithResources API which supports RESOURCE_ID grouping.
+ * A Filter is required by this API.
+ */
+export async function getCostAndUsageWithResources(
+  params: {
+    startDate: string
+    endDate: string
+    granularity: 'DAILY' | 'MONTHLY'
+    metrics: string[]
+    filter: Expression
+  },
+  environment: 'commercial' | 'govcloud' = 'commercial',
+  targetAccountId?: string
+) {
+  const client = await getCostExplorerClient(environment, undefined, targetAccountId)
+
+  let allResultsByTime: any[] = []
+  let nextPageToken: string | undefined = undefined
+
+  do {
+    const command = new GetCostAndUsageWithResourcesCommand({
+      TimePeriod: { Start: params.startDate, End: params.endDate },
+      Granularity: params.granularity as Granularity,
+      Metrics: params.metrics,
+      Filter: params.filter,
+      GroupBy: [{ Type: 'DIMENSION', Key: 'RESOURCE_ID' }],
+      NextPageToken: nextPageToken
+    })
+
+    const response = await client.send(command)
+    allResultsByTime = allResultsByTime.concat(response.ResultsByTime || [])
+    nextPageToken = response.NextPageToken
+
+    logger.debug(`CostWithResources pagination: fetched ${response.ResultsByTime?.length || 0} results, nextToken: ${!!nextPageToken}`)
+  } while (nextPageToken)
+
+  logger.info(`CostWithResources total results: ${allResultsByTime.length} time periods`)
+
+  return { resultsByTime: allResultsByTime }
 }
 
 /**

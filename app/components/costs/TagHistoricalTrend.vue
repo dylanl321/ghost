@@ -54,12 +54,11 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const chartData = ref<any>(null)
 
-const periodToApiPeriod: Record<string, string> = {
-  thisMonth: 'last30days',
-  lastMonth: 'lastMonth',
-  last90Days: 'last90days',
-  ytd: 'ytd',
-  last12Months: 'last12months'
+// Periods that benefit from daily granularity
+const dailyPeriods = new Set(['last7days', 'last30days', 'thisMonth', 'lastMonth'])
+
+function getGranularity(period: string): 'DAILY' | 'MONTHLY' {
+  return dailyPeriods.has(period) ? 'DAILY' : 'MONTHLY'
 }
 
 async function fetchData() {
@@ -69,12 +68,13 @@ async function fetchData() {
   error.value = null
 
   try {
-    const apiPeriod = periodToApiPeriod[props.period || 'last90Days'] || 'last90days'
+    const apiPeriod = props.period || 'last90days'
     const response = await $fetch('/api/costs/historical', {
       params: {
         groupBy: `TAG:${props.tagKey}`,
         accountIds: props.accountId,
-        period: apiPeriod
+        period: apiPeriod,
+        granularity: getGranularity(apiPeriod)
       }
     }) as any
 
@@ -134,54 +134,59 @@ const processedData = computed(() => {
   if (!resultsByTime.length) return null
 
   const tagValueMap: Record<string, Record<string, number>> = {}
-  const months: string[] = []
+  const timeKeys: string[] = []
+  // Detect granularity from data: if start dates differ by ~1 day, it's DAILY
+  const isDaily = resultsByTime.length >= 2 &&
+    (new Date(resultsByTime[1].TimePeriod?.Start).getTime() - new Date(resultsByTime[0].TimePeriod?.Start).getTime()) < 8 * 86400000
 
   resultsByTime.forEach((period: any) => {
-    const month = period.TimePeriod?.Start?.substring(0, 7) || ''
-    if (month && !months.includes(month)) months.push(month)
+    const timeKey = isDaily
+      ? period.TimePeriod?.Start?.substring(0, 10) || ''
+      : period.TimePeriod?.Start?.substring(0, 7) || ''
+    if (timeKey && !timeKeys.includes(timeKey)) timeKeys.push(timeKey)
 
     ;(period.Groups || []).forEach((group: any) => {
       const key = group.Keys?.[0] || 'Unknown'
       const cost = parseFloat(group.Metrics?.UnblendedCost?.Amount || '0')
       if (!tagValueMap[key]) tagValueMap[key] = {}
-      tagValueMap[key][month] = (tagValueMap[key][month] || 0) + cost
+      tagValueMap[key][timeKey] = (tagValueMap[key][timeKey] || 0) + cost
     })
   })
 
   const sorted = Object.entries(tagValueMap)
-    .map(([key, monthlyCosts]) => ({
+    .map(([key, periodCosts]) => ({
       key,
       displayName: getDisplayName(key),
-      total: Object.values(monthlyCosts).reduce((s, c) => s + c, 0),
-      monthlyCosts
+      total: Object.values(periodCosts).reduce((s, c) => s + c, 0),
+      periodCosts
     }))
     .sort((a, b) => b.total - a.total)
 
-  return { months, sorted, top: sorted.slice(0, 10), rest: sorted.slice(10) }
+  return { timeKeys, isDaily, sorted, top: sorted.slice(0, 10), rest: sorted.slice(10) }
 })
 
 const chartOption = computed(() => {
   if (!processedData.value) return {}
 
-  const { months, top, rest } = processedData.value
+  const { timeKeys, isDaily, top, rest } = processedData.value
 
   const series: any[] = top.map((item, i) => ({
     name: item.displayName,
     type: 'line',
-    smooth: true,
-    data: months.map(m => item.monthlyCosts[m] || 0),
+    smooth: !isDaily,
+    data: timeKeys.map(k => item.periodCosts[k] || 0),
     lineStyle: { width: 2 },
     itemStyle: { color: COLORS[i % COLORS.length] }
   }))
 
   if (rest.length > 0) {
-    const otherData = months.map(m =>
-      rest.reduce((sum, item) => sum + (item.monthlyCosts[m] || 0), 0)
+    const otherData = timeKeys.map(k =>
+      rest.reduce((sum, item) => sum + (item.periodCosts[k] || 0), 0)
     )
     series.push({
       name: `Other (${rest.length})`,
       type: 'line',
-      smooth: true,
+      smooth: !isDaily,
       data: otherData,
       lineStyle: { width: 1, type: 'dashed' },
       itemStyle: { color: '#6b7280' }
@@ -220,8 +225,12 @@ const chartOption = computed(() => {
     },
     xAxis: {
       type: 'category',
-      data: months.map(m => {
-        const [y, mo] = m.split('-')
+      data: timeKeys.map(k => {
+        if (isDaily) {
+          const [y, mo, d] = k.split('-')
+          return new Date(+y, +mo - 1, +d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        }
+        const [y, mo] = k.split('-')
         return new Date(+y, +mo - 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
       }),
       axisLabel: { color: '#9ca3af' },
@@ -243,20 +252,20 @@ const chartOption = computed(() => {
 function exportTrendCSV() {
   if (!processedData.value) return
 
-  const { months, sorted } = processedData.value
+  const { timeKeys, sorted } = processedData.value
   const escCSV = (v: any) => {
     const s = String(v ?? '')
     return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
   }
 
-  const headers = ['Tag Value', 'Display Name', ...months, 'Total']
+  const headers = ['Tag Value', 'Display Name', ...timeKeys, 'Total']
   const lines = [headers.map(escCSV).join(',')]
 
   sorted.forEach(item => {
     const row = [
       escCSV(item.key),
       escCSV(item.displayName),
-      ...months.map(m => (item.monthlyCosts[m] || 0).toFixed(2)),
+      ...timeKeys.map(k => (item.periodCosts[k] || 0).toFixed(2)),
       item.total.toFixed(2)
     ]
     lines.push(row.join(','))

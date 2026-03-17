@@ -190,7 +190,7 @@
 
       <!-- Tag Analysis Tab -->
       <div v-else-if="activeTab === 'tags'" class="animate-fadeIn">
-        <TagAnalysisTab :selected-accounts="selectedAccounts" />
+        <TagAnalysisTab :selected-accounts="selectedAccounts" :selected-timeframe="selectedTimeframe" />
       </div>
     </div>
   </div>

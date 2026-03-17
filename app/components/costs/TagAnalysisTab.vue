@@ -27,14 +27,9 @@
             class="w-56"
             :loading="isLoadingTags"
           />
-          <USelectMenu
-            v-model="selectedPeriod"
-            :options="periodOptions"
-            value-attribute="value"
-            option-attribute="label"
-            size="sm"
-            class="w-44"
-          />
+          <span v-if="hiddenTagCount > 0" class="text-xs text-gray-400 dark:text-gray-500">
+            ({{ hiddenTagCount }} tag{{ hiddenTagCount === 1 ? '' : 's' }} with $0 cost hidden)
+          </span>
           <UTooltip text="Refresh data">
             <UButton
               color="gray"
@@ -125,6 +120,8 @@
           :loading="isLoadingBreakdown"
           :tag-value-aliases="currentAliases"
           :editable="true"
+          :account-id="accountId"
+          :period="activePeriod"
           @update:alias="handleAliasUpdate"
         />
       </div>
@@ -136,7 +133,7 @@
           :account-id="accountId"
           :tag-key="selectedTag"
           :tag-value-aliases="currentAliases"
-          :period="selectedPeriod"
+          :period="activePeriod"
         />
       </div>
 
@@ -177,6 +174,7 @@ import type { AccountCostTagConfig } from '~~/shared/types/cost-tags'
 
 const props = defineProps<{
   selectedAccounts: string[]
+  selectedTimeframe?: string
 }>()
 
 const enclaveStore = useEnclaveStore()
@@ -209,31 +207,30 @@ const {
 
 // Local state
 const selectedTag = ref<string | null>(null)
-const selectedPeriod = ref('last90Days')
 const configExpanded = ref(false)
 const breakdownData = ref<any>(null)
 const isLoadingBreakdown = ref(false)
 const draftAliases = ref<Record<string, string>>({})
 const aliasesDirty = ref(false)
+const tagsWithCost = ref<string[]>([])
+const hiddenTagCount = ref(0)
 
-const periodOptions = [
-  { label: 'This Month', value: 'thisMonth' },
-  { label: 'Last Month', value: 'lastMonth' },
-  { label: 'Last 90 Days', value: 'last90Days' },
-  { label: 'Year to Date', value: 'ytd' },
-  { label: 'Last 12 Months', value: 'last12Months' }
-]
+// Use global timeframe from parent (values already match API period params)
+const activePeriod = computed(() => props.selectedTimeframe || 'last90days')
 
-// Build tag select options: important tags first, then rest
+// Build tag select options: use filtered tags (with cost), important tags first
 const tagSelectOptions = computed(() => {
   const important = tagConfig.value?.importantTags || []
-  const all = availableTags.value || []
+  const all = tagsWithCost.value.length > 0 ? tagsWithCost.value : (availableTags.value || [])
   const options: { label: string; value: string; disabled?: boolean }[] = []
 
   if (important.length > 0) {
-    options.push({ label: '--- Important Tags ---', value: '__divider_imp__', disabled: true })
-    important.forEach(t => options.push({ label: t, value: t }))
-    options.push({ label: '--- All Tags ---', value: '__divider_all__', disabled: true })
+    const importantWithCost = important.filter(t => all.includes(t))
+    if (importantWithCost.length > 0) {
+      options.push({ label: '--- Important Tags ---', value: '__divider_imp__', disabled: true })
+      importantWithCost.forEach(t => options.push({ label: t, value: t }))
+      options.push({ label: '--- All Tags ---', value: '__divider_all__', disabled: true })
+    }
   }
 
   all.filter(t => !important.includes(t)).forEach(t => options.push({ label: t, value: t }))
@@ -266,14 +263,6 @@ const currentAliases = computed(() => ({
   ...draftAliases.value
 }))
 
-// Period-to-API mapping for summary endpoint
-const periodToSummaryPeriod: Record<string, string> = {
-  thisMonth: 'thisMonth',
-  lastMonth: 'lastMonth',
-  last90Days: 'last90days',
-  ytd: 'ytd',
-  last12Months: 'last12months'
-}
 
 // Fetch cost breakdown for selected tag
 async function fetchBreakdown() {
@@ -285,7 +274,7 @@ async function fetchBreakdown() {
       params: {
         groupBy: `TAG:${selectedTag.value}`,
         accountIds: accountId.value,
-        period: periodToSummaryPeriod[selectedPeriod.value] || 'last90days'
+        period: activePeriod.value
       }
     }) as any
     breakdownData.value = response?.data || response || null
@@ -376,7 +365,7 @@ function exportBreakdownCSV() {
   lines.push('')
   lines.push(`# Account: ${accountId.value}`)
   lines.push(`# Tag Key: ${selectedTag.value}`)
-  lines.push(`# Period: ${periodOptions.find(p => p.value === selectedPeriod.value)?.label || selectedPeriod.value}`)
+  lines.push(`# Period: ${activePeriod.value}`)
   lines.push(`# Exported: ${new Date().toISOString()}`)
 
   const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
@@ -397,22 +386,61 @@ async function loadInitialData() {
 
   draftAliases.value = {}
   aliasesDirty.value = false
+  tagsWithCost.value = []
+  hiddenTagCount.value = 0
 
   const [tags] = await Promise.all([
     fetchAvailableTags([accountId.value]),
     fetchAccountTagConfig(accountId.value)
   ])
 
-  // Set default selected tag
+  // Filter tags to only those with actual charges
+  if (tags.length > 0) {
+    const costChecks = await Promise.allSettled(
+      tags.map(tag =>
+        $fetch('/api/costs/summary', {
+          params: {
+            groupBy: `TAG:${tag}`,
+            accountIds: accountId.value,
+            period: 'last90days'
+          }
+        })
+      )
+    )
+
+    const filtered: string[] = []
+    costChecks.forEach((result, i) => {
+      if (result.status === 'fulfilled') {
+        const data = (result.value as any)?.data || result.value
+        const groups: any[] = data?.groups || []
+        // Keep if any non-untagged group has cost > 0
+        const hasCharges = groups.some((g: any) => {
+          const key: string = g.groupKey ?? ''
+          const isUntagged = key === '$not_tagged' || key === '' || key === '__untagged__' || key === `${tags[i]}$`
+          return !isUntagged && (g.totalCost ?? 0) > 0
+        })
+        if (hasCharges) filtered.push(tags[i])
+      } else {
+        // On failure, keep the tag (don't hide it)
+        filtered.push(tags[i])
+      }
+    })
+
+    tagsWithCost.value = filtered
+    hiddenTagCount.value = tags.length - filtered.length
+  }
+
+  // Set default selected tag (using filtered list)
+  const effectiveTags = tagsWithCost.value.length > 0 ? tagsWithCost.value : tags
   const defaultTag = tagConfig.value?.defaultGroupByTag
   const importantTags = tagConfig.value?.importantTags || []
 
-  if (defaultTag && tags.includes(defaultTag)) {
+  if (defaultTag && effectiveTags.includes(defaultTag)) {
     selectedTag.value = defaultTag
-  } else if (importantTags.length > 0 && tags.includes(importantTags[0])) {
+  } else if (importantTags.length > 0 && effectiveTags.includes(importantTags[0])) {
     selectedTag.value = importantTags[0]
-  } else if (tags.length > 0) {
-    selectedTag.value = tags[0]
+  } else if (effectiveTags.length > 0) {
+    selectedTag.value = effectiveTags[0]
   } else {
     selectedTag.value = null
   }
@@ -420,15 +448,15 @@ async function loadInitialData() {
 
 function refreshAll() {
   if (selectedTag.value) {
-    fetchTagCoverage(selectedTag.value, [accountId.value], periodToSummaryPeriod[selectedPeriod.value])
+    fetchTagCoverage(selectedTag.value, [accountId.value], activePeriod.value)
     fetchBreakdown()
   }
 }
 
 // Watch for tag/period changes to fetch data
-watch([selectedTag, selectedPeriod], ([tag, period]) => {
+watch([selectedTag, activePeriod], ([tag, period]) => {
   if (!tag || !accountId.value) return
-  fetchTagCoverage(tag, [accountId.value], periodToSummaryPeriod[period] || 'last90days')
+  fetchTagCoverage(tag, [accountId.value], period)
   fetchBreakdown()
 })
 

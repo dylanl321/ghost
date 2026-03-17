@@ -135,11 +135,18 @@ registerEndpoint('/api/costs/summary', 'GET', {
       name: 'enhanced',
       in: 'query',
       required: false,
-      schema: { 
+      schema: {
         type: 'boolean',
         default: true
       },
       description: 'Return enhanced format with account names and summaries (default: true)'
+    },
+    {
+      name: 'tagFilter',
+      in: 'query',
+      required: false,
+      schema: { type: 'string' },
+      description: 'Filter by a specific tag value before grouping. Format: "tagKey||tagValue" (split on "||" delimiter to support colons in tag keys)'
     }
   ],
   responses: {
@@ -296,15 +303,40 @@ export default defineEventHandler(handleAsync(async (event) => {
       type: isTagGroupBy ? 'TAG' as const : 'DIMENSION' as const,
       key: isTagGroupBy ? tagGroupKey! : groupByDimension
     }],
-    // Add account filter for Cost Explorer only if we have specific accounts
-    // Never pass an empty array to AWS Cost Explorer
-    filter: filteredAccountIds && filteredAccountIds.length > 0 ? {
-      Dimensions: {
-        Key: 'LINKED_ACCOUNT',
-        Values: filteredAccountIds,
-        MatchOptions: ['EQUALS']
+    // Build filter: combine account filter and tag filter if both present
+    filter: (() => {
+      const tagFilterParam = query.tagFilter as string | undefined
+      let accountFilter: any = undefined
+      let tagFilter: any = undefined
+
+      if (filteredAccountIds && filteredAccountIds.length > 0) {
+        accountFilter = {
+          Dimensions: {
+            Key: 'LINKED_ACCOUNT',
+            Values: filteredAccountIds,
+            MatchOptions: ['EQUALS']
+          }
+        }
       }
-    } : undefined
+
+      if (tagFilterParam) {
+        const idx = tagFilterParam.indexOf('||')
+        if (idx > 0) {
+          tagFilter = {
+            Tags: {
+              Key: tagFilterParam.substring(0, idx),
+              Values: [tagFilterParam.substring(idx + 2)],
+              MatchOptions: ['EQUALS']
+            }
+          }
+        }
+      }
+
+      if (accountFilter && tagFilter) {
+        return { And: [accountFilter, tagFilter] }
+      }
+      return accountFilter || tagFilter || undefined
+    })()
   }
   
   // Generate cache key based on request parameters
@@ -314,6 +346,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     granularity,
     groupByDimension: groupByDimension === 'MONTHLY_ONLY' ? 'NONE_MONTHLY' : groupByDimension,
     tagGroupKey,
+    tagFilter: query.tagFilter || null,
     environment,
     proforma,
     proformaAccountId: proforma ? proformaAccountId : null,
