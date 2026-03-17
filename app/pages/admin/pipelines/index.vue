@@ -271,6 +271,7 @@
 
 <script setup lang="ts">
 import { parseGitLabUrl } from '~/utils/gitlab-url-parser'
+const { fetchPipelineSummary, fetchPipelineTimeline } = usePipelineData()
 
 // Direct imports of components (Nuxt auto-import not working for subdirectories)
 import PipelinesResourceSearchPanel from '~/components/pipelines/ResourceSearchPanel.vue'
@@ -335,40 +336,26 @@ async function fetchPipelineData() {
   error.value = null
 
   try {
-    // Fetch summary and timeline in parallel
-    const [summaryResponse, timelineResponse] = await Promise.all([
-      fetch(`/api/pipelines/global-summary?days=${selectedDays.value}`),
-      fetch(`/api/pipelines/global-timeline?days=${selectedDays.value}&limit=200`)
+    const [summaryData, timelineRaw] = await Promise.all([
+      fetchPipelineSummary(selectedDays.value),
+      fetchPipelineTimeline(selectedDays.value, 200)
     ])
 
-    if (!summaryResponse.ok) {
-      throw new Error('Failed to fetch pipeline summary')
-    }
-    if (!timelineResponse.ok) {
-      throw new Error('Failed to fetch pipeline timeline')
-    }
-
-    const summaryJson = await summaryResponse.json()
-    const timelineJson = await timelineResponse.json()
-
-    // Extract data from responses
-    if (summaryJson.success && summaryJson.data) {
-      summary.value = summaryJson.data.summary
-      dailyMetrics.value = summaryJson.data.dailyMetrics || []
-      accountBreakdown.value = summaryJson.data.accountBreakdown || []
-      resourceBreakdown.value = summaryJson.data.resourceBreakdown || []
-      errorBreakdown.value = summaryJson.data.errorBreakdown || []
+    if (summaryData) {
+      summary.value = summaryData.summary
+      dailyMetrics.value = summaryData.dailyMetrics || []
+      accountBreakdown.value = summaryData.accountBreakdown || []
+      resourceBreakdown.value = summaryData.resourceBreakdown || []
+      errorBreakdown.value = summaryData.errorBreakdown || []
     }
 
-    if (timelineJson.success && timelineJson.data) {
-      // Parse repository info from job URLs
-      timelineData.value = timelineJson.data.map((run: any) => ({
+    if (timelineRaw) {
+      timelineData.value = (Array.isArray(timelineRaw) ? timelineRaw : []).map((run: any) => ({
         ...run,
         repository: parseGitLabUrl(run.job_url)
       }))
     }
 
-    // Generate heat map data from daily metrics (simplified)
     heatMapData.value = dailyMetrics.value.slice(0, 30)
 
   } catch (err: any) {
@@ -392,8 +379,8 @@ const filteredTimelineData = computed(() => {
   })
 })
 
-// Watch for time range changes and author changes
-watch([selectedDays, selectedAuthor], () => {
+// Only re-fetch when time range changes; author filtering is handled client-side by filteredTimelineData
+watch(selectedDays, () => {
   fetchPipelineData()
 })
 

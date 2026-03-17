@@ -5,6 +5,21 @@ All notable changes to GHOST are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0] - 2026-03-17
+<!-- highlights: Pipeline Caching, Resource Display Fix -->
+
+### Improvements
+- Pipeline pages now load instantly when navigating back — data is cached for 5 minutes instead of re-fetched every time
+- Dashboard pipeline card and admin pipeline page share cached data, eliminating duplicate requests
+- Resource change charts and tables now group by resource type instead of showing raw Terraform addresses with unreadable SHA digests
+- Resource addresses with long hashes are now shortened for readability, with full details available on hover
+- All pipeline data fetching uses improved error handling for more consistent behavior
+
+### Bug Fixes
+- Fixed author filter on the admin pipeline page triggering unnecessary data re-fetches — filtering is now handled instantly on the client side
+
+---
+
 ## [1.13.0] - 2026-03-16
 <!-- highlights: Security Health Dashboard, Athena Security Hub Integration, Dashboard Enhancements -->
 

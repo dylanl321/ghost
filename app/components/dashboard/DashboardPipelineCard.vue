@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
+  <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-2">
         <UIcon name="i-heroicons-arrow-path" class="w-5 h-5 text-blue-500" />
@@ -73,7 +73,7 @@
 </template>
 
 <script setup lang="ts">
-interface PipelineSummary {
+interface DashboardPipelineSummary {
   totalRuns: number
   successfulRuns: number
   failedRuns: number
@@ -83,7 +83,9 @@ interface PipelineSummary {
   totalChanges: number
 }
 
-const summary = ref<PipelineSummary | null>(null)
+const { fetchPipelineSummary } = usePipelineData()
+
+const summary = ref<DashboardPipelineSummary | null>(null)
 const loading = ref(true)
 const error = ref(false)
 
@@ -95,10 +97,9 @@ function formatDuration(seconds: number): string {
 
 onMounted(async () => {
   try {
-    const result = await $fetch<{ success: boolean; data: { summary: PipelineSummary } }>('/api/pipelines/global-summary?days=30')
-    if (result.success && result.data?.summary) {
-      // Ensure numeric fields have defaults in case Athena returns nulls
-      const s = result.data.summary
+    const data = await fetchPipelineSummary(30)
+    if (data?.summary) {
+      const s = data.summary
       summary.value = {
         totalRuns: s.totalRuns || 0,
         successfulRuns: s.successfulRuns || 0,

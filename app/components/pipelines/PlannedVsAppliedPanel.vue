@@ -91,8 +91,8 @@
           </template>
 
           <template #resource_address-data="{ row }">
-            <code class="text-xs text-gray-300 bg-gray-800 px-2 py-1 rounded break-all">
-              {{ row.resource_address }}
+            <code class="text-xs text-gray-300 bg-gray-800 px-2 py-1 rounded break-all" :title="row.resource_address">
+              {{ formatResourceAddress(row.resource_address) }}
             </code>
           </template>
 
@@ -235,6 +235,7 @@ const props = defineProps<{
   repoNames?: string[]
 }>()
 
+const { fetchAccountDrift } = usePipelineData()
 const loading = ref(true)
 const error = ref<string | null>(null)
 const driftData = ref<DriftData | null>(null)
@@ -349,17 +350,7 @@ async function fetchDriftData() {
   error.value = null
 
   try {
-    const response = await fetch(
-      `/api/pipelines/account-drift?account_id=${props.accountId}&days=${props.days}`
-    )
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.message || 'Failed to fetch drift data')
-    }
-
-    const result = await response.json()
-    driftData.value = result.data
+    driftData.value = await fetchAccountDrift(props.accountId, props.days)
   } catch (err: any) {
     console.error('Error fetching drift data:', err)
     error.value = err.message || 'An unexpected error occurred'
@@ -383,14 +374,7 @@ async function fetchStateComparison() {
       days: String(props.days)
     })
 
-    const response = await fetch(`/api/pipelines/account-state-comparison?${params}`)
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.message || 'Failed to fetch state comparison')
-    }
-
-    const result = await response.json()
+    const result = await $fetch<any>(`/api/pipelines/account-state-comparison?${params}`)
 
     if (!result.data) {
       stateError.value = 'No state comparison data returned for this repository'
@@ -439,6 +423,14 @@ function formatTimestamp(timestamp: string): string {
   } catch {
     return 'Invalid date'
   }
+}
+
+// Strip SHA digests and long hashes from Terraform resource addresses for readability
+function formatResourceAddress(address: string): string {
+  if (!address) return '-'
+  // Replace SHA256 digests (64 hex chars) with a short label
+  return address.replace(/sha256:[a-f0-9]{64}/gi, 'sha256:...')
+    .replace(/[a-f0-9]{64}/gi, (match) => match.substring(0, 8) + '...')
 }
 
 // Fetch data on mount

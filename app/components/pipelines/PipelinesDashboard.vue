@@ -174,6 +174,7 @@ const props = defineProps<{
 }>()
 
 const { isAdmin } = useUserRoles()
+const { fetchAccountSummary } = usePipelineData()
 const selectedDays = ref(7)
 const loading = ref(true)
 const error = ref<string | null>(null)
@@ -197,22 +198,7 @@ async function fetchPipelineData() {
   error.value = null
 
   try {
-    const response = await fetch(
-      `/api/pipelines/account-summary?account_id=${props.accountId}&days=${selectedDays.value}&environment=commercial`
-    )
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.message || 'Failed to fetch pipeline data')
-    }
-
-    const result = await response.json()
-
-    if (!result.success) {
-      throw new Error(result.message || 'Failed to fetch pipeline data')
-    }
-
-    summaryData.value = result.data
+    summaryData.value = await fetchAccountSummary(props.accountId, selectedDays.value, 'commercial')
   } catch (err: any) {
     console.error('Error fetching pipeline data:', err)
     error.value = err.message || 'An unexpected error occurred'

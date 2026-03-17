@@ -55,6 +55,12 @@
           </code>
         </template>
 
+        <template #resource_address-data="{ row }">
+          <code class="text-xs text-gray-300 bg-gray-800 px-2 py-1 rounded break-all" :title="row.resource_address">
+            {{ formatResourceAddress(row.resource_address) }}
+          </code>
+        </template>
+
         <template #action-data="{ row }">
           <UBadge
             :color="getActionColor(row.action)"
@@ -241,14 +247,7 @@ async function fetchResults() {
       params.set('applied', appliedFilter.value)
     }
 
-    const response = await fetch(`/api/pipelines/resource-search?${params.toString()}`)
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.message || 'Failed to search resources')
-    }
-
-    const data = await response.json()
+    const data = await $fetch<any>(`/api/pipelines/resource-search?${params.toString()}`)
     results.value = data.data || []
     totalResults.value = data.pagination?.total || 0
   } catch (err: any) {
@@ -274,14 +273,7 @@ async function checkOtherAccounts() {
       limit: '2000'
     })
 
-    const response = await fetch(`/api/pipelines/resource-search?${params.toString()}`)
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.message || 'Failed to fetch deployment status')
-    }
-
-    const data = await response.json()
+    const data = await $fetch<any>(`/api/pipelines/resource-search?${params.toString()}`)
     const allResults = data.data || []
 
     // Group by account_id to compute cross-account summary
@@ -307,6 +299,13 @@ async function checkOtherAccounts() {
   } finally {
     deploymentLoading.value = false
   }
+}
+
+// Strip SHA digests and long hashes from Terraform resource addresses for readability
+function formatResourceAddress(address: string): string {
+  if (!address) return '-'
+  return address.replace(/sha256:[a-f0-9]{64}/gi, 'sha256:...')
+    .replace(/[a-f0-9]{64}/gi, (match) => match.substring(0, 8) + '...')
 }
 
 // Helpers
