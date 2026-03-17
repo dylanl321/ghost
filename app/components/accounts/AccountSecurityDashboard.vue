@@ -30,6 +30,14 @@
 
     <!-- Data loaded -->
     <template v-else-if="data">
+      <!-- Source filter + last updated -->
+      <div class="flex items-center justify-between">
+        <SecuritySourceFilter v-model="sourceFilter" />
+        <span class="text-xs text-gray-500 dark:text-gray-400">
+          Last updated {{ formatLastUpdated(data.lastUpdated) }}
+        </span>
+      </div>
+
       <!-- Row 1: Risk gauge + severity donut + compliance gauge -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <UCard>
@@ -106,37 +114,46 @@
         </UCard>
       </div>
 
-      <!-- Row 3: Findings table -->
+      <!-- Row 3: Analysis tabs -->
       <UCard>
-        <template #header>
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <UIcon name="i-heroicons-table-cells" class="w-4 h-4 text-gray-400" />
-              <span class="text-sm font-semibold text-gray-900 dark:text-white">
-                Top Findings
-              </span>
-              <UBadge color="gray" variant="soft" size="xs">{{ data.topFindings.length }}</UBadge>
+        <UTabs v-model="activeAnalysisTab" :items="analysisTabs">
+          <template #top-findings>
+            <div class="pt-4">
+              <div v-if="data.topFindings.length > 0">
+                <SecurityFindingsTable :findings="data.topFindings" />
+              </div>
+              <div v-else class="flex flex-col items-center justify-center py-10 gap-2">
+                <UIcon name="i-heroicons-shield-check" class="w-12 h-12 text-green-400 opacity-70" />
+                <p class="text-sm text-gray-500 dark:text-gray-400">No active findings - great security posture!</p>
+              </div>
             </div>
-            <span class="text-xs text-gray-500 dark:text-gray-400">
-              Last updated {{ formatLastUpdated(data.lastUpdated) }}
-            </span>
-          </div>
-        </template>
+          </template>
 
-        <div v-if="data.topFindings.length > 0">
-          <SecurityFindingsTable :findings="data.topFindings" />
-        </div>
-        <div v-else class="flex flex-col items-center justify-center py-10 gap-2">
-          <UIcon name="i-heroicons-shield-check" class="w-12 h-12 text-green-400 opacity-70" />
-          <p class="text-sm text-gray-500 dark:text-gray-400">No active findings - great security posture!</p>
-        </div>
+          <template #by-resource>
+            <div class="pt-4">
+              <SecurityFindingsByResource :groups="data.findingsByResource || []" />
+            </div>
+          </template>
+
+          <template #by-title>
+            <div class="pt-4">
+              <SecurityFindingsByTitle :groups="data.findingsByTitle || []" />
+            </div>
+          </template>
+
+          <template v-if="hasCveData" #by-cve>
+            <div class="pt-4">
+              <SecurityFindingsByCve :groups="data.findingsByCve || []" />
+            </div>
+          </template>
+        </UTabs>
       </UCard>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import type { AccountSecuritySummary } from '../../../shared/types/security-dashboard'
+import type { AccountSecuritySummary, SecuritySourceFilter as SourceFilterType } from '../../../shared/types/security-dashboard'
 
 const props = defineProps<{
   accountId: string
@@ -145,16 +162,42 @@ const props = defineProps<{
 const loading = ref(true)
 const error = ref<string | null>(null)
 const data = ref<AccountSecuritySummary | null>(null)
+const sourceFilter = ref<SourceFilterType>('all')
+const activeAnalysisTab = ref(0)
 
 const hasProductData = computed(() =>
   data.value ? Object.keys(data.value.findingsByProduct).length > 0 : false
 )
 
+const hasCveData = computed(() =>
+  (data.value?.findingsByCve?.length ?? 0) > 0
+)
+
+const analysisTabs = computed(() => {
+  const tabs = [
+    { label: 'Top Findings', slot: 'top-findings', icon: 'i-heroicons-table-cells' },
+    { label: 'By Resource', slot: 'by-resource', icon: 'i-heroicons-server-stack' },
+    { label: 'By Title', slot: 'by-title', icon: 'i-heroicons-document-text' },
+  ]
+  if (hasCveData.value) {
+    tabs.push({ label: 'By CVE', slot: 'by-cve', icon: 'i-heroicons-bug-ant' })
+  }
+  return tabs
+})
+
+// Re-fetch when source filter changes
+watch(sourceFilter, () => {
+  loadData()
+})
+
 async function loadData() {
   loading.value = true
   error.value = null
   try {
-    const res = await $fetch<{ data: AccountSecuritySummary }>(`/api/accounts/${props.accountId}/security-summary`)
+    const res = await $fetch<{ data: AccountSecuritySummary }>(
+      `/api/accounts/${props.accountId}/security-summary`,
+      { params: { source: sourceFilter.value } }
+    )
     data.value = res.data
   } catch (err: any) {
     error.value = err?.data?.message || err?.message || 'Failed to load security data'

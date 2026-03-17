@@ -1,7 +1,10 @@
 <template>
-  <div class="h-full flex flex-col rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+  <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 h-full overflow-hidden">
     <div class="flex justify-between items-center p-5">
-      <div class="text-sm font-semibold text-gray-900 dark:text-white">Top Accounts</div>
+      <div class="flex items-center gap-2">
+        <div class="text-sm font-semibold text-gray-900 dark:text-white">Top Accounts</div>
+        <UBadge v-if="isScoped" color="primary" variant="subtle" size="xs">{{ scopeLabel }}</UBadge>
+      </div>
       <div class="flex items-center gap-2">
         <span class="text-xs text-gray-600 dark:text-gray-400">{{ showProforma ? 'Proforma' : 'Billable' }}</span>
         <UToggle
@@ -17,8 +20,8 @@
     </div>
 
     <CenteredLoadingSpinner v-if="props.loading" />
-    <div v-else class="flex-1 overflow-hidden flex flex-col">
-      <div class="flex-1 overflow-y-auto max-h-[400px]">
+    <div v-else>
+      <div class="max-h-[400px] overflow-y-auto">
         <NuxtLink v-for="(acct, idx) in displayedAccounts" :key="acct.accountId" :to="`/account/${acct.accountId}`"
           class="block p-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200">
           <div class="flex items-center justify-between flex-wrap lg:flex-nowrap gap-y-2">
@@ -64,6 +67,8 @@ const props = defineProps<{
     percentOfTotal: number
   }[]
 }>()
+
+const { isScoped, scopeLabel } = useDashboardScope()
 
 const emit = defineEmits<{
   toggleProforma: [value: boolean]

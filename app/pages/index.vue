@@ -43,29 +43,69 @@
         </ClientOnly>
       </div>
 
-      <!-- Quick Actions -->
+      <!-- Quick Actions + Scope/Timeframe Controls -->
       <div class="flex items-center gap-2 pt-3 border-t border-gray-100 dark:border-gray-800">
         <NuxtLink to="/account/explorer">
-          <UButton icon="i-heroicons-magnifying-glass" size="sm" variant="soft" color="blue">
+          <UButton icon="i-heroicons-magnifying-glass" size="xs" variant="soft" color="blue">
             Search Accounts
           </UButton>
         </NuxtLink>
         <NuxtLink to="/account/costs">
-          <UButton icon="i-heroicons-chart-bar" size="sm" variant="soft" color="purple">
+          <UButton icon="i-heroicons-chart-bar" size="xs" variant="soft" color="purple">
             Cost Reports
           </UButton>
         </NuxtLink>
         <NuxtLink to="/account/user">
-          <UButton icon="i-heroicons-users" size="sm" variant="soft" color="emerald">
+          <UButton icon="i-heroicons-users" size="xs" variant="soft" color="emerald">
             User Access
           </UButton>
         </NuxtLink>
         <NuxtLink to="/support/docs">
-          <UButton icon="i-heroicons-book-open" size="sm" variant="ghost">
+          <UButton icon="i-heroicons-book-open" size="xs" variant="ghost">
             Support
           </UButton>
         </NuxtLink>
         <div class="flex-1" />
+
+        <!-- Scope & Timeframe selectors -->
+        <ClientOnly>
+          <div class="flex items-center gap-2">
+            <div class="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+              <button
+                v-for="option in dashboardScopeOptions"
+                :key="option.value"
+                @click="handleScopeChange(option.value)"
+                class="px-2 py-1 text-[11px] font-medium rounded-md transition-all duration-150"
+                :class="dashboardScope === option.value
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+            <div class="w-px h-5 bg-gray-200 dark:bg-gray-700" />
+            <div class="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+              <button
+                v-for="option in dashboardDateRangeOptions"
+                :key="option.value"
+                @click="handleDateRangeChange(option.value)"
+                class="px-2 py-1 text-[11px] font-medium rounded-md transition-all duration-150"
+                :class="dashboardDateRange === option.value
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+          </div>
+          <template #fallback>
+            <div class="flex items-center gap-2">
+              <div class="h-7 w-36 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
+              <div class="h-7 w-28 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
+            </div>
+          </template>
+        </ClientOnly>
+
         <UPopover v-model:open="showSpotlight" :popper="{ placement: 'bottom-end' }">
           <UTooltip text="Customize dashboard">
             <div class="relative">
@@ -114,7 +154,7 @@
     <ClientOnly>
       <div class="grid grid-cols-12 gap-6 lg:gap-8">
         <template v-for="section in visibleSections" :key="section.id">
-          <div class="grid min-w-0" :class="sectionColSpan(section.displayStyle)">
+          <div class="grid min-w-0 overflow-hidden" :class="sectionColSpan(section.displayStyle)">
             <QuickStartCard v-if="section.id === 'quickStart'" :display-style="section.displayStyle || 'full'" />
 
             <DashboardBudgetAlerts
@@ -142,11 +182,8 @@
               :has-budget-data="hasBudgetData"
               :visible-cards="layoutConfig.metricCards"
               :visible-count="visibleMetricCardCount"
-              :scope="metricScope"
-              :scope-options="metricScopeOptions"
               :user-mtd-total="userTotalCost"
               :user-active-accounts="userActiveAccountCount"
-              @update:scope="handleMetricScopeChange"
             />
 
             <DashboardMyAccounts
@@ -166,13 +203,7 @@
               :active-cost-trend="activeCostTrend"
               :loading="loading || scopeCostLoading"
               :accounts-loading="loading || accountsLoading"
-              :scope="costScope"
-              :scope-options="costScopeOptions"
-              :date-range="costDays"
-              :date-range-options="dateRangeOptions"
               :top-accounts="topAccounts"
-              @update:scope="handleCostScopeChange"
-              @update:date-range="handleDateRangeChange"
               @toggle-proforma="handleProformaToggle"
             />
 
@@ -273,10 +304,18 @@ const { getPreference, setPreference, initialized: prefsInitialized, load: loadP
 const { isAdmin } = useUserRoles()
 const { favoriteIds } = useFavoriteAccounts()
 const { visibleSections, visibleMetricCardCount, sectionColSpan, setSectionStyle, layout: layoutConfig } = useDashboardLayout()
+const {
+  scope: dashboardScope,
+  dateRange: dashboardDateRange,
+  scopeOptions: dashboardScopeOptions,
+  dateRangeOptions: dashboardDateRangeOptions,
+  setScope,
+  setDateRange,
+  init: initDashboardScope,
+} = useDashboardScope()
 
 const showCustomizePanel = ref(false)
 const showSpotlight = ref(false)
-const metricScope = ref('org')
 
 const customizeDashboardSeen = computed(() => getPreference<boolean>('customizeDashboardSeen', false))
 
@@ -422,18 +461,6 @@ const userActiveAccountCount = computed(() =>
   ).length
 )
 
-const metricScopeOptions = computed(() => {
-  const options = [{ label: 'Organization', value: 'org' }]
-  if (userAccountCount.value > 0) {
-    options.push({ label: 'My Accounts', value: 'mine' })
-  }
-  return options
-})
-
-function handleMetricScopeChange(scope: string) {
-  metricScope.value = scope
-  setPreference('metricScope', scope)
-}
 
 // Spotlight handlers
 async function handleCustomizeClick() {
@@ -487,57 +514,23 @@ async function fetchDashboardAlerts() {
   }
 }
 
-// Cost trend date range
-const costDays = ref(14)
-const dateRangeOptions = [
-  { label: '7D', value: 7 },
-  { label: '14D', value: 14 },
-  { label: '30D', value: 30 },
-  { label: '90D', value: 90 },
-]
-
-function handleDateRangeChange(days: number) {
-  costDays.value = days
-  setPreference('costTrendDays', days)
-  if (costScope.value === 'org') {
-    fetchOverview(false, true)
-  } else {
-    handleCostScopeChange(costScope.value)
-  }
-}
-
-// Cost scope selector
-const costScope = ref('org')
+// Scoped cost data (for non-org scope)
 const scopedCostData = ref<{ date: string; cost: number }[] | null>(null)
 const scopeCostLoading = ref(false)
 
-const costScopeOptions = computed(() => {
-  const options = [{ label: 'Organization', value: 'org' }]
-  if (userAccountCount.value > 0) {
-    options.push({ label: 'My Accounts', value: 'mine' })
-  }
-  if (favoriteIds.value.length > 0) {
-    options.push({ label: 'Favorites', value: 'favorites' })
-  }
-  return options
-})
-
 const activeCostTrend = computed(() => {
-  if (costScope.value === 'org' || !scopedCostData.value) {
+  if (dashboardScope.value === 'org' || !scopedCostData.value) {
     return last14DaysSpend.value
   }
   return scopedCostData.value
 })
 
-async function handleCostScopeChange(scope: string) {
-  costScope.value = scope
-
+async function fetchScopedCosts(scope: string) {
   if (scope === 'org') {
     scopedCostData.value = null
     return
   }
 
-  // Determine which account IDs to filter by
   const accountIds = scope === 'favorites'
     ? favoriteIds.value
     : Object.keys(userGroupStore.myEnclaves)
@@ -551,7 +544,7 @@ async function handleCostScopeChange(scope: string) {
   try {
     const now = new Date()
     const end = now.toISOString().split('T')[0]
-    const start = new Date(now.getTime() - costDays.value * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    const start = new Date(now.getTime() - dashboardDateRange.value * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
     const params = new URLSearchParams({
       startDate: start,
@@ -564,15 +557,12 @@ async function handleCostScopeChange(scope: string) {
 
     const result = await $fetch<{ success: boolean; data: any }>(`/api/costs/summary?${params}`)
     if (result.success && result.data) {
-      // Extract resultsByTime from the correct location
-      // Proforma responses nest under .billable/.proforma; non-proforma at top level
       const rawResults = result.data.billable?.resultsByTime
         || result.data.proforma?.resultsByTime
         || result.data.resultsByTime
         || []
 
       scopedCostData.value = rawResults.map((item: any) => ({
-        // Handle both AWS uppercase (TimePeriod.Start) and normalized lowercase
         date: item.TimePeriod?.Start || item.timePeriod?.start || item.date || '',
         cost: parseFloat(
           item.Total?.UnblendedCost?.Amount
@@ -591,6 +581,24 @@ async function handleCostScopeChange(scope: string) {
   }
 }
 
+function handleScopeChange(value: string) {
+  setScope(value as 'org' | 'mine' | 'favorites')
+  if (value === 'org') {
+    scopedCostData.value = null
+  } else {
+    fetchScopedCosts(value)
+  }
+}
+
+function handleDateRangeChange(days: number) {
+  setDateRange(days as 7 | 14 | 30 | 90)
+  if (dashboardScope.value === 'org') {
+    fetchOverview(false, true)
+  } else {
+    fetchScopedCosts(dashboardScope.value)
+  }
+}
+
 async function fetchOverview(onlyAccounts = false, onlyCostTrend = false) {
   if (onlyCostTrend) {
     scopeCostLoading.value = true
@@ -601,7 +609,7 @@ async function fetchOverview(onlyAccounts = false, onlyCostTrend = false) {
   }
 
   try {
-    const url = `/api/organization/overview-simplified?proforma=${useProforma.value}&days=${costDays.value}`
+    const url = `/api/organization/overview-simplified?proforma=${useProforma.value}&days=${dashboardDateRange.value}`
     const response = await fetch(url)
 
     if (!response.ok) {
@@ -640,13 +648,16 @@ function handleProformaToggle(value: boolean) {
 onMounted(async () => {
   if (!prefsInitialized.value) await loadPrefs()
   useProforma.value = getPreference('dashboardProforma', true)
-  costDays.value = getPreference('costTrendDays', 14)
-  metricScope.value = getPreference('metricScope', 'org')
+  initDashboardScope()
   // Show spotlight if user hasn't seen it yet
   if (!getPreference<boolean>('customizeDashboardSeen', false)) {
     showSpotlight.value = true
   }
   await Promise.all([fetchOverview(), fetchDashboardAlerts()])
+  // If scope was restored to non-org, fetch scoped costs after overview loads
+  if (dashboardScope.value !== 'org') {
+    fetchScopedCosts(dashboardScope.value)
+  }
 })
 
 </script>

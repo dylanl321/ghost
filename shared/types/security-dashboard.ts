@@ -8,6 +8,35 @@
 import type { FindingSeverity, WorkflowStatus, ComplianceStatus } from './security-hub'
 
 // ============================================================================
+// Source Filter & Analysis Groupings
+// ============================================================================
+
+export type SecuritySourceFilter = 'all' | 'platform' | 'os'
+
+export interface ResourceFindingGroup {
+  resourceId: string
+  totalFindings: number
+  critical: number
+  high: number
+  medium: number
+  low: number
+}
+
+export interface TitleFindingGroup {
+  title: string
+  count: number
+  severity: FindingSeverity
+  productName: string
+}
+
+export interface CveFindingGroup {
+  cveId: string
+  title: string
+  count: number
+  severity: FindingSeverity
+}
+
+// ============================================================================
 // Account-Level Security Summary
 // ============================================================================
 
@@ -30,6 +59,9 @@ export interface AccountSecuritySummary {
   topFindings: SecurityFindingSummary[]
   recommendations: string[]
   lastUpdated: string
+  findingsByResource?: ResourceFindingGroup[]
+  findingsByTitle?: TitleFindingGroup[]
+  findingsByCve?: CveFindingGroup[]
 }
 
 // ============================================================================

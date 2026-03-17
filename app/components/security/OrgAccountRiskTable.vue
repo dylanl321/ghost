@@ -56,8 +56,10 @@ const columns = [
   { key: 'highCount', label: 'High', sortable: true },
 ]
 
-// Already sorted descending by risk score from the API, but keep client-side reactivity
-const sortedAccounts = computed(() => [...(props.accounts || [])].sort((a, b) => b.riskScore - a.riskScore))
+// Sort by critical count descending, then high count, then risk score as tiebreaker
+const sortedAccounts = computed(() => [...(props.accounts || [])].sort((a, b) =>
+  b.criticalCount - a.criticalCount || b.highCount - a.highCount || b.riskScore - a.riskScore
+))
 
 function riskColor(level: AccountRiskEntry['riskLevel']): 'red' | 'orange' | 'yellow' | 'green' | 'gray' {
   switch (level) {

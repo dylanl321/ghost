@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
+  <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 h-full overflow-hidden">
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-2">
         <UIcon name="i-heroicons-shield-check" class="w-5 h-5 text-cyan-500" />

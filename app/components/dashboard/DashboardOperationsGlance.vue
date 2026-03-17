@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
+  <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 h-full overflow-hidden">
     <div class="flex items-center gap-2 mb-4">
       <UIcon name="i-heroicons-signal" class="w-5 h-5 text-indigo-500" />
       <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Operations Glance</h2>

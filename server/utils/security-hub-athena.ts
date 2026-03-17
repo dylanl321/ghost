@@ -18,19 +18,25 @@ import {
   getEnvironmentConfig,
   type EnvironmentConfig,
 } from './security-lake-consolidated'
-import { getAllAccountsUnified } from './accounts-consolidated'
+import { getAllAccountsUnified, lookupAccountUnified } from './accounts-consolidated'
 import { logger } from './logger'
 import type {
   OrgSecuritySummary,
+  AccountSecuritySummary,
   AccountRiskEntry,
   SecurityFindingSummary,
   FindingsTrendPoint,
   SeverityByProductEntry,
   FindingAgeBuckets,
+  SecuritySourceFilter,
+  ResourceFindingGroup,
+  TitleFindingGroup,
+  CveFindingGroup,
 } from '../../shared/types/security-dashboard'
 import type { FindingSeverity } from '../../shared/types/security-hub'
 
-export interface ProgressEvent {
+// ProgressEvent is already exported from security-hub-statistics.ts (auto-imported by Nitro)
+interface AthenaProgressEvent {
   stage: string
   message: string
   percent: number
@@ -39,7 +45,7 @@ export interface ProgressEvent {
   findingsSoFar?: number
 }
 
-type ProgressCallback = (event: ProgressEvent) => void
+type ProgressCallback = (event: AthenaProgressEvent) => void
 
 // ---------------------------------------------------------------------------
 // security_hub UNION subquery helper
@@ -51,6 +57,20 @@ const SECURITY_HUB_TABLES = [
   'shub-inspector-vuln-findings',
   'shub-os-inspec-findings',
 ]
+
+/** Builds a UNION ALL subquery filtered by source type */
+function buildFindingsUnionFiltered(source: SecuritySourceFilter): string {
+  const tablesBySource: Record<SecuritySourceFilter, string[]> = {
+    all: SECURITY_HUB_TABLES,
+    platform: SECURITY_HUB_TABLES.slice(0, 2), // compliance + inspector
+    os: [SECURITY_HUB_TABLES[2]],              // os-inspec only
+  }
+  const tables = tablesBySource[source]
+  const selects = tables
+    .map(t => `SELECT * FROM ${SECURITY_HUB_DATABASE}."${t}"`)
+    .join('\n  UNION ALL\n  ')
+  return `(\n  ${selects}\n) AS findings`
+}
 
 /** Builds a UNION ALL subquery across all 3 security_hub tables */
 function buildFindingsUnion(): string {
@@ -137,16 +157,278 @@ async function executeAthenaSQL(
 // Risk scoring helpers
 // ---------------------------------------------------------------------------
 
-function computeRiskScore(critical: number, high: number, medium: number, low: number): number {
+export function computeRiskScore(critical: number, high: number, medium: number, low: number): number {
   return Math.min(100, critical * 20 + high * 10 + medium * 3 + low * 1)
 }
 
-function getRiskLevel(score: number): AccountRiskEntry['riskLevel'] {
+export function getRiskLevel(score: number): AccountRiskEntry['riskLevel'] {
   if (score >= 80) return 'CRITICAL'
   if (score >= 50) return 'HIGH'
   if (score >= 20) return 'MEDIUM'
   if (score > 0) return 'LOW'
   return 'MINIMAL'
+}
+
+// ---------------------------------------------------------------------------
+// Account-level Athena query
+// ---------------------------------------------------------------------------
+
+/**
+ * Build an AccountSecuritySummary using Athena queries against the
+ * security_hub database for a single account. Runs 6 queries in parallel:
+ * severity breakdown, product breakdown, compliance status, top findings,
+ * findings by resource, and findings by title.
+ */
+export async function buildAccountSecurityViaAthena(
+  accountId: string,
+  accountName: string,
+  sourceFilter: SecuritySourceFilter = 'all'
+): Promise<AccountSecuritySummary> {
+  const environment = (process.env.AWS_SECURITYHUB_ENVIRONMENT as 'commercial' | 'govcloud') || 'govcloud'
+  const findingsUnion = buildFindingsUnionFiltered(sourceFilter)
+
+  // Resolve the correct account ID for the Athena tables (GovCloud stores GovCloud IDs)
+  let resolvedAccountId = accountId
+  if (environment === 'govcloud') {
+    const account = await lookupAccountUnified({ accountId })
+    if (account?.awsGovCloudAccountID) {
+      resolvedAccountId = account.awsGovCloudAccountID
+    }
+  }
+
+  logger.info(`[SecurityAthena] Account query for ${accountId} (resolved: ${resolvedAccountId}), source: ${sourceFilter}`)
+
+  const accountFilter = `awsaccountid = '${resolvedAccountId}'`
+  const baseWhere = `${accountFilter} AND workflow_status IN ('NEW', 'NOTIFIED') AND from_iso8601_timestamp(lastobservedat) >= date_add('day', -90, current_timestamp)`
+
+  const queries = {
+    severity: `
+      SELECT severity_label AS severity, COUNT(*) AS cnt
+      FROM ${findingsUnion}
+      WHERE ${baseWhere}
+      GROUP BY severity_label
+    `,
+    product: `
+      SELECT productname AS product_name, COUNT(*) AS cnt
+      FROM ${findingsUnion}
+      WHERE ${baseWhere}
+      GROUP BY productname
+    `,
+    compliance: `
+      SELECT compliance_status, COUNT(*) AS cnt
+      FROM ${findingsUnion}
+      WHERE ${baseWhere}
+        AND compliance_status IS NOT NULL AND compliance_status != ''
+      GROUP BY compliance_status
+    `,
+    topFindings: `
+      SELECT
+        generatorid AS id,
+        title,
+        severity_label AS severity,
+        productname AS product_name,
+        productname AS resource_type,
+        resourceids AS resource_id,
+        awsaccountid AS accountid,
+        region,
+        compliance_status,
+        description AS recommendation,
+        createdat AS created_at,
+        updatedat AS updated_at
+      FROM ${findingsUnion}
+      WHERE ${baseWhere}
+        AND severity_label IN ('CRITICAL', 'HIGH')
+      ORDER BY CASE severity_label WHEN 'CRITICAL' THEN 5 ELSE 4 END DESC,
+               from_iso8601_timestamp(updatedat) DESC
+      LIMIT 25
+    `,
+    byResource: `
+      SELECT resourceids AS resource_id, severity_label AS severity, COUNT(*) AS cnt
+      FROM ${findingsUnion}
+      WHERE ${baseWhere}
+        AND resourceids IS NOT NULL AND resourceids != ''
+      GROUP BY resourceids, severity_label
+    `,
+    byTitle: `
+      SELECT title, severity_label AS severity, productname AS product_name, COUNT(*) AS cnt
+      FROM ${findingsUnion}
+      WHERE ${baseWhere}
+      GROUP BY title, severity_label, productname
+      ORDER BY cnt DESC
+      LIMIT 100
+    `,
+  }
+
+  const [sevResult, prodResult, compResult, topResult, resResult, titleResult] = await Promise.allSettled([
+    executeAthenaSQL(queries.severity, environment),
+    executeAthenaSQL(queries.product, environment),
+    executeAthenaSQL(queries.compliance, environment),
+    executeAthenaSQL(queries.topFindings, environment),
+    executeAthenaSQL(queries.byResource, environment),
+    executeAthenaSQL(queries.byTitle, environment),
+  ])
+
+  // Parse severity breakdown
+  const severityBreakdown: Record<FindingSeverity, number> = {
+    CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, INFORMATIONAL: 0,
+  }
+  if (sevResult.status === 'fulfilled') {
+    for (const row of sevResult.value) {
+      const sev = (row.severity || '').toUpperCase() as FindingSeverity
+      if (sev in severityBreakdown) {
+        severityBreakdown[sev] += parseInt(row.cnt, 10) || 0
+      }
+    }
+  } else {
+    logger.error('[SecurityAthena] Account severity query failed:', sevResult.reason)
+  }
+
+  // Parse product breakdown
+  const findingsByProduct: Record<string, number> = {}
+  if (prodResult.status === 'fulfilled') {
+    for (const row of prodResult.value) {
+      findingsByProduct[row.product_name || 'Unknown'] = parseInt(row.cnt, 10) || 0
+    }
+  } else {
+    logger.error('[SecurityAthena] Account product query failed:', prodResult.reason)
+  }
+
+  // Parse compliance
+  const complianceCounts = { passed: 0, failed: 0, warning: 0, notAvailable: 0, total: 0 }
+  if (compResult.status === 'fulfilled') {
+    for (const row of compResult.value) {
+      const status = (row.compliance_status || '').toUpperCase()
+      const count = parseInt(row.cnt, 10) || 0
+      complianceCounts.total += count
+      if (status === 'PASSED' || status === 'PASS') complianceCounts.passed += count
+      else if (status === 'FAILED' || status === 'FAIL') complianceCounts.failed += count
+      else if (status === 'WARNING') complianceCounts.warning += count
+      else complianceCounts.notAvailable += count
+    }
+  } else {
+    logger.error('[SecurityAthena] Account compliance query failed:', compResult.reason)
+  }
+
+  // Parse top findings
+  const topFindings: SecurityFindingSummary[] = []
+  if (topResult.status === 'fulfilled') {
+    for (const row of topResult.value) {
+      const sev = (row.severity || '').toUpperCase() as FindingSeverity
+      topFindings.push({
+        id: row.id || '',
+        title: row.title || 'Untitled Finding',
+        severity: sev in severityBreakdown ? sev : 'INFORMATIONAL',
+        workflowStatus: 'NEW',
+        productName: row.product_name || 'Unknown',
+        resourceType: row.resource_type || 'Unknown',
+        resourceId: row.resource_id || 'Unknown',
+        accountId,
+        accountName,
+        region: row.region || '',
+        complianceStatus: row.compliance_status as any,
+        recommendation: row.recommendation || undefined,
+        createdAt: row.created_at || '',
+        updatedAt: row.updated_at || '',
+      })
+    }
+  } else {
+    logger.error('[SecurityAthena] Account top findings query failed:', topResult.reason)
+  }
+
+  // Parse findings by resource — pivot severity counts per resource
+  const findingsByResource: ResourceFindingGroup[] = []
+  if (resResult.status === 'fulfilled') {
+    const resourceMap = new Map<string, ResourceFindingGroup>()
+    for (const row of resResult.value) {
+      const resId = row.resource_id || ''
+      const sev = (row.severity || '').toUpperCase()
+      const count = parseInt(row.cnt, 10) || 0
+      const group = resourceMap.get(resId) || { resourceId: resId, totalFindings: 0, critical: 0, high: 0, medium: 0, low: 0 }
+      group.totalFindings += count
+      if (sev === 'CRITICAL') group.critical += count
+      else if (sev === 'HIGH') group.high += count
+      else if (sev === 'MEDIUM') group.medium += count
+      else if (sev === 'LOW') group.low += count
+      resourceMap.set(resId, group)
+    }
+    findingsByResource.push(...[...resourceMap.values()].sort((a, b) => b.totalFindings - a.totalFindings))
+  } else {
+    logger.error('[SecurityAthena] Account by-resource query failed:', resResult.reason)
+  }
+
+  // Parse findings by title + extract CVEs from Inspector rows
+  const findingsByTitle: TitleFindingGroup[] = []
+  const findingsByCve: CveFindingGroup[] = []
+  if (titleResult.status === 'fulfilled') {
+    const cvePattern = /^(CVE-\d{4}-\d+)/
+    for (const row of titleResult.value) {
+      const title = row.title || ''
+      const count = parseInt(row.cnt, 10) || 0
+      const sev = (row.severity || '').toUpperCase() as FindingSeverity
+      const productName = row.product_name || ''
+
+      findingsByTitle.push({ title, count, severity: sev, productName })
+
+      // Extract CVE entries from Inspector findings
+      const cveMatch = title.match(cvePattern)
+      if (cveMatch && productName.toLowerCase().includes('inspector')) {
+        findingsByCve.push({ cveId: cveMatch[1], title, count, severity: sev })
+      }
+    }
+  } else {
+    logger.error('[SecurityAthena] Account by-title query failed:', titleResult.reason)
+  }
+
+  // Compute risk score and level
+  const totalFindings = Object.values(severityBreakdown).reduce((sum, v) => sum + v, 0)
+  const riskScore = computeRiskScore(severityBreakdown.CRITICAL, severityBreakdown.HIGH, severityBreakdown.MEDIUM, severityBreakdown.LOW)
+  const riskLevel = getRiskLevel(riskScore)
+
+  // Compliance pass rate
+  const passRate = complianceCounts.total > 0
+    ? Math.round((complianceCounts.passed / complianceCounts.total) * 100)
+    : 100
+
+  // Recommendations
+  const recommendations: string[] = []
+  if (severityBreakdown.CRITICAL > 0) {
+    recommendations.push(`Address ${severityBreakdown.CRITICAL} critical finding(s) immediately - these represent severe security risks`)
+  }
+  if (severityBreakdown.HIGH > 0) {
+    recommendations.push(`Review and remediate ${severityBreakdown.HIGH} high severity finding(s) as soon as possible`)
+  }
+  if (findingsByProduct['Inspector']) {
+    recommendations.push('Review Inspector vulnerability findings for outdated packages or known CVEs')
+  }
+  if (findingsByProduct['Security Hub']) {
+    recommendations.push('Check Security Hub for compliance standard violations and misconfigurations')
+  }
+  if (passRate < 70 && complianceCounts.total > 0) {
+    recommendations.push(`Compliance pass rate is ${passRate}% - review failed controls to improve posture`)
+  }
+  if (recommendations.length === 0) {
+    recommendations.push('Security posture is healthy - continue monitoring for new findings')
+  }
+
+  logger.info(`[SecurityAthena] Account ${accountId}: ${totalFindings} findings, risk ${riskLevel} (${riskScore})`)
+
+  return {
+    accountId,
+    accountName,
+    environment,
+    riskScore,
+    riskLevel,
+    totalFindings,
+    severityBreakdown,
+    findingsByProduct,
+    compliance: { ...complianceCounts, passRate },
+    topFindings,
+    recommendations,
+    lastUpdated: new Date().toISOString(),
+    findingsByResource,
+    findingsByTitle,
+    findingsByCve,
+  }
 }
 
 // ---------------------------------------------------------------------------

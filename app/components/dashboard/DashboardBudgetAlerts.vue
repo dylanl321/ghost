@@ -1,5 +1,5 @@
 <template>
-  <div v-if="!loading && total > 0" class="flex items-center gap-2.5 px-1 -mb-3">
+  <div v-if="!loading && total > 0" class="flex items-center gap-2.5 px-1">
     <Icon name="i-heroicons-bell-alert" class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" />
     <span class="text-[11px] text-gray-500 dark:text-gray-400">
       {{ total }} budget alert{{ total !== 1 ? 's' : '' }} this month

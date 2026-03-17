@@ -433,12 +433,17 @@ onMounted(async () => {
   // Tour auto-start (handles preference loading internally)
   maybeAutoStartTour()
 
-  // Deep-link to tab from shared link query param
-  const tabParam = route.query.tab
-  if (tabParam !== undefined && tabParam !== null) {
-    const tabIndex = parseInt(tabParam as string)
+  // Deep-link to tab from shared link query param (supports both numeric index and slot name)
+  const tabParam = route.query.tab as string | undefined
+  if (tabParam) {
+    const tabIndex = parseInt(tabParam)
     if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex < tabs.value.length) {
       selectedTab.value = tabIndex
+    } else {
+      const matchIndex = tabs.value.findIndex(t => t.slot === tabParam)
+      if (matchIndex !== -1) {
+        selectedTab.value = matchIndex
+      }
     }
   }
 

@@ -1,20 +1,5 @@
 <template>
   <div>
-    <!-- Scope Toggle -->
-    <div v-if="scopeOptions && scopeOptions.length > 1" class="flex items-center gap-1 mb-3">
-      <button
-        v-for="option in scopeOptions"
-        :key="option.value"
-        class="px-2.5 py-1 text-xs font-medium rounded-full transition-colors"
-        :class="scope === option.value
-          ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
-          : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'"
-        @click="$emit('update:scope', option.value)"
-      >
-        {{ option.label }}
-      </button>
-    </div>
-
     <div :class="['grid gap-4', gridClass]">
     <!-- Month to Date -->
     <div v-if="isCardVisible('mtdSpend')" class="relative rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 overflow-hidden">
@@ -28,7 +13,10 @@
       </template>
       <template v-else>
         <div class="flex justify-between items-start mb-1">
-          <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Month to Date</p>
+          <div class="flex items-center gap-1.5">
+            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Month to Date</p>
+            <UBadge v-if="isScoped" color="primary" variant="subtle" size="xs">{{ scopeLabel }}</UBadge>
+          </div>
           <UTooltip v-if="monthToDateTrend !== null" text="vs same period last month">
             <span class="text-xs font-semibold" :class="monthToDateTrend > 0 ? 'text-red-500' : 'text-green-500'">
               {{ monthToDateTrend > 0 ? '+' : '' }}{{ formatNumber(monthToDateTrend, 1) }}%
@@ -68,7 +56,7 @@
           <UTooltip text="AWS Cost Explorer ML forecast">
             <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
               Forecast
-              <span v-if="scope === 'mine'" class="text-[9px] font-normal normal-case">(Org)</span>
+              <span v-if="isScoped" class="text-[9px] font-normal normal-case">(Org)</span>
             </p>
           </UTooltip>
           <UTooltip v-if="projectedSpend !== 0 && projectedSpendTrend !== null" text="vs last month total">
@@ -244,22 +232,18 @@ const props = defineProps<{
   hasBudgetData: boolean
   visibleCards: Record<MetricCardId, boolean>
   visibleCount: number
-  scope?: string
-  scopeOptions?: { label: string; value: string }[]
   userMtdTotal?: number
   userActiveAccounts?: number
 }>()
 
-defineEmits<{
-  'update:scope': [value: string]
-}>()
+const { scope, isScoped, scopeLabel } = useDashboardScope()
 
 // Scoped values: switch between org and user data for MTD and Active Accounts
 const effectiveMtdTotal = computed(() =>
-  props.scope === 'mine' && props.userMtdTotal != null ? props.userMtdTotal : props.mtdTotal
+  scope.value === 'mine' && props.userMtdTotal != null ? props.userMtdTotal : props.mtdTotal
 )
 const effectiveActiveAccounts = computed(() =>
-  props.scope === 'mine' && props.userActiveAccounts != null ? props.userActiveAccounts : props.activeAccounts
+  scope.value === 'mine' && props.userActiveAccounts != null ? props.userActiveAccounts : props.activeAccounts
 )
 
 function isCardVisible(id: MetricCardId): boolean {

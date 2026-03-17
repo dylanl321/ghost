@@ -1,6 +1,6 @@
 <template>
   <ClientOnly>
-    <UserEnclaves v-if="userAccountCount > 0" :loading="loading" :display-style="displayStyle" />
+    <UserEnclaves :loading="loading" :display-style="displayStyle" />
   </ClientOnly>
 </template>
 

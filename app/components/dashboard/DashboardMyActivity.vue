@@ -1,5 +1,5 @@
 <template>
-  <div v-if="activityItems.length > 0" class="h-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
+  <div v-if="activityItems.length > 0" class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 h-full overflow-hidden">
     <div class="flex items-center gap-2 mb-4">
       <UIcon name="i-heroicons-clock" class="w-5 h-5 text-purple-500" />
       <h2 class="text-sm font-semibold text-gray-900 dark:text-white">My Activity</h2>
