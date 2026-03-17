@@ -1,6 +1,6 @@
 <template>
   <!-- Compact mode -->
-  <div v-if="shouldShow && displayStyle === 'compact'" class="rounded-xl border border-gray-200 dark:border-gray-700 bg-gradient-to-r from-emerald-50 to-blue-50 dark:from-emerald-950/30 dark:to-blue-950/30 px-4 py-2.5 flex items-center gap-3">
+  <div v-if="shouldShow && displayStyle === 'third'" class="rounded-xl border border-gray-200 dark:border-gray-700 bg-gradient-to-r from-emerald-50 to-blue-50 dark:from-emerald-950/30 dark:to-blue-950/30 px-4 py-2.5 flex items-center gap-3">
     <UIcon name="i-fa6-solid-ghost" class="h-5 w-5 text-emerald-400 flex-shrink-0" />
     <span class="text-sm text-gray-700 dark:text-gray-300 flex-1">Welcome to GHOST — your centralized AWS Dashboard Hub.</span>
     <NuxtLink to="/account/explorer">
@@ -10,7 +10,7 @@
   </div>
 
   <div
-    v-if="shouldShow && displayStyle !== 'compact'"
+    v-if="shouldShow && displayStyle !== 'third'"
     class="rounded-xl border border-gray-200 dark:border-gray-700 bg-gradient-to-r from-emerald-50 to-blue-50 dark:from-emerald-950/30 dark:to-blue-950/30 p-5"
   >
     <div class="flex items-start justify-between gap-4">

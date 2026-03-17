@@ -28,7 +28,7 @@
     </div>
 
     <!-- Compact: horizontal chips -->
-    <div v-else-if="displayStyle === 'compact'" class="flex gap-2 overflow-x-auto pb-1">
+    <div v-else-if="displayStyle === 'third'" class="flex gap-2 overflow-x-auto pb-1">
       <NuxtLink
         v-for="account in displayedFavorites"
         :key="account.accountId"
@@ -73,7 +73,7 @@ const props = defineProps<{
 const { favorites } = useFavoriteAccounts()
 
 const displayedFavorites = computed(() => {
-  if (props.displayStyle === 'compact') return favorites.value.slice(0, 6)
+  if (props.displayStyle === 'third') return favorites.value.slice(0, 6)
   if (props.displayStyle === 'half') return favorites.value.slice(0, 4)
   return favorites.value.slice(0, 9)
 })

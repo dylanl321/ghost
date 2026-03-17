@@ -17,7 +17,7 @@
           <h3 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Sections</h3>
           <div ref="sortableEl" class="space-y-1 select-none">
             <div
-              v-for="section in localSections"
+              v-for="section in visibleLocalSections"
               :key="section.id"
               class="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors select-none"
             >
@@ -30,7 +30,7 @@
               <!-- Section label -->
               <span class="flex-1 text-sm text-gray-700 dark:text-gray-300">
                 {{ SECTION_LABELS[section.id] }}
-                <UBadge v-if="section.id === 'adminOverview'" color="amber" variant="soft" size="xs" class="ml-1">Admin</UBadge>
+                <UBadge v-if="section.id === 'adminOverview' || section.id === 'adminAlerts' || section.id === 'adminPipeline' || section.id === 'adminFeedback'" color="amber" variant="soft" size="xs" class="ml-1">Admin</UBadge>
               </span>
 
               <!-- Style picker: shown only when the section supports more than one style -->
@@ -136,9 +136,16 @@ const {
   exportAsDefault,
 } = useDashboardLayout()
 
+const ADMIN_SECTION_IDS = new Set(['adminOverview', 'adminAlerts', 'adminPipeline', 'adminFeedback'])
+
 // Local copy of sections kept in sync with layout so sortable can mutate it
 // without waiting for the async persist round-trip
 const localSections = ref<DashboardSectionConfig[]>([])
+
+// Hide admin sections from non-admin users
+const visibleLocalSections = computed(() =>
+  isAdmin.value ? localSections.value : localSections.value.filter(s => !ADMIN_SECTION_IDS.has(s.id))
+)
 
 watch(
   () => layout.value.sections,
@@ -193,13 +200,15 @@ async function handleExportDefault() {
 // Returns the heroicon name for each display style
 function styleIcon(style: DisplayStyle): string {
   if (style === 'full') return 'i-heroicons-rectangle-group'
+  if (style === 'two-thirds') return 'i-heroicons-rectangle-stack'
   if (style === 'half') return 'i-heroicons-squares-2x2'
   return 'i-heroicons-minus'
 }
 
 function styleLabel(style: DisplayStyle): string {
   if (style === 'full') return 'Full'
-  if (style === 'half') return 'Half'
-  return 'Compact'
+  if (style === 'two-thirds') return '2/3'
+  if (style === 'half') return '1/2'
+  return '1/3'
 }
 </script>

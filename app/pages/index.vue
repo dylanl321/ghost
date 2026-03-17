@@ -198,12 +198,28 @@
               :is-admin="isAdminUser"
             />
 
+            <DashboardAlertsCard
+              v-else-if="section.id === 'adminAlerts' && isAdminUser"
+            />
+
+            <DashboardPipelineCard
+              v-else-if="section.id === 'adminPipeline' && isAdminUser"
+            />
+
+            <DashboardFeedbackCard
+              v-else-if="section.id === 'adminFeedback' && isAdminUser"
+            />
+
             <DashboardCostTrend
               v-else-if="section.id === 'costTrend'"
               :active-cost-trend="activeCostTrend"
               :loading="loading || scopeCostLoading"
-              :accounts-loading="loading || accountsLoading"
+            />
+
+            <DashboardTopAccounts
+              v-else-if="section.id === 'topAccounts'"
               :top-accounts="topAccounts"
+              :loading="loading || accountsLoading"
               @toggle-proforma="handleProformaToggle"
             />
 

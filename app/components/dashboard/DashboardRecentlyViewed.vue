@@ -22,7 +22,7 @@
     </div>
 
     <!-- Compact mode: horizontal badges -->
-    <div v-if="displayStyle === 'compact'" class="flex gap-2 overflow-x-auto pb-1">
+    <div v-if="displayStyle === 'third'" class="flex gap-2 overflow-x-auto pb-1">
       <NuxtLink
         v-for="account in displayedAccounts"
         :key="account.accountId"
@@ -70,7 +70,7 @@ const { recentAccounts } = useRecentAccounts()
 const showAll = ref(false)
 
 const displayedAccounts = computed(() => {
-  if (props.displayStyle === 'compact') return recentAccounts.value.slice(0, 6)
+  if (props.displayStyle === 'third') return recentAccounts.value.slice(0, 6)
   if (props.displayStyle === 'half') {
     return showAll.value ? recentAccounts.value : recentAccounts.value.slice(0, 3)
   }

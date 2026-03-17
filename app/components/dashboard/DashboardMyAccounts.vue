@@ -8,6 +8,6 @@
 defineProps<{
   loading: boolean
   userAccountCount: number
-  displayStyle?: 'full' | 'half' | 'compact'
+  displayStyle?: 'full' | 'two-thirds' | 'half' | 'third'
 }>()
 </script>

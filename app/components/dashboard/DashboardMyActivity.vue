@@ -1,42 +1,82 @@
 <template>
   <div v-if="activityItems.length > 0" class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 h-full overflow-hidden">
-    <div class="flex items-center gap-2 mb-4">
-      <UIcon name="i-heroicons-clock" class="w-5 h-5 text-purple-500" />
-      <h2 class="text-sm font-semibold text-gray-900 dark:text-white">My Activity</h2>
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-2">
+        <div class="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+          <UIcon name="i-heroicons-clock" class="w-4.5 h-4.5 text-purple-500" />
+        </div>
+        <div>
+          <h2 class="text-sm font-semibold text-gray-900 dark:text-white">My Activity</h2>
+          <p class="text-[11px] text-gray-400 dark:text-gray-500">Recent views & chats</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <div v-if="viewCount > 0" class="flex items-center gap-1.5 px-2 py-1 rounded-full bg-blue-50 dark:bg-blue-900/20">
+          <UIcon name="i-heroicons-eye" class="w-3.5 h-3.5 text-blue-500" />
+          <span class="text-[11px] font-medium text-blue-600 dark:text-blue-400">{{ viewCount }}</span>
+        </div>
+        <div v-if="chatCount > 0" class="flex items-center gap-1.5 px-2 py-1 rounded-full bg-purple-50 dark:bg-purple-900/20">
+          <UIcon name="i-heroicons-chat-bubble-left-right" class="w-3.5 h-3.5 text-purple-500" />
+          <span class="text-[11px] font-medium text-purple-600 dark:text-purple-400">{{ chatCount }}</span>
+        </div>
+      </div>
     </div>
 
-    <!-- Compact: icon row with counts -->
-    <div v-if="displayStyle === 'compact'" class="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-      <span v-if="viewCount > 0" class="flex items-center gap-1">
-        <UIcon name="i-heroicons-eye" class="w-3.5 h-3.5" />
-        {{ viewCount }} view{{ viewCount !== 1 ? 's' : '' }}
-      </span>
-      <span v-if="chatCount > 0" class="flex items-center gap-1">
-        <UIcon name="i-heroicons-chat-bubble-left-right" class="w-3.5 h-3.5" />
-        {{ chatCount }} chat{{ chatCount !== 1 ? 's' : '' }}
-      </span>
-    </div>
-
-    <!-- Full / Half: timeline list -->
-    <div v-else class="space-y-1">
+    <!-- Third: summary counts only -->
+    <div v-if="displayStyle === 'third'" class="space-y-2.5">
       <component
         :is="item.link ? NuxtLink : 'div'"
         v-for="item in displayedItems"
         :key="item.id"
         :to="item.link"
-        class="group flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+        class="group flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
       >
-        <UIcon
-          :name="item.type === 'view' ? 'i-heroicons-eye' : 'i-heroicons-chat-bubble-left-right'"
-          class="w-4 h-4 flex-shrink-0"
-          :class="item.type === 'view' ? 'text-blue-400' : 'text-purple-400'"
+        <span
+          class="w-1.5 h-1.5 rounded-full flex-shrink-0"
+          :class="item.type === 'view' ? 'bg-blue-400' : 'bg-purple-400'"
         />
+        <span class="text-xs text-gray-700 dark:text-gray-300 truncate flex-1 group-hover:text-blue-600 dark:group-hover:text-blue-400">{{ item.label }}</span>
+        <span class="text-[10px] text-gray-400 dark:text-gray-500 flex-shrink-0">{{ item.timeAgo }}</span>
+      </component>
+    </div>
+
+    <!-- Full / Half / Two-thirds: timeline list -->
+    <div v-else class="space-y-0.5">
+      <component
+        :is="item.link ? NuxtLink : 'div'"
+        v-for="(item, idx) in displayedItems"
+        :key="item.id"
+        :to="item.link"
+        class="group flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all duration-150"
+      >
+        <!-- Timeline connector -->
+        <div class="relative flex flex-col items-center">
+          <div
+            class="w-8 h-8 rounded-lg flex items-center justify-center transition-colors duration-150"
+            :class="item.type === 'view'
+              ? 'bg-blue-50 dark:bg-blue-900/20 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30'
+              : 'bg-purple-50 dark:bg-purple-900/20 group-hover:bg-purple-100 dark:group-hover:bg-purple-900/30'"
+          >
+            <UIcon
+              :name="item.type === 'view' ? 'i-heroicons-eye' : 'i-heroicons-chat-bubble-left-right'"
+              class="w-4 h-4"
+              :class="item.type === 'view' ? 'text-blue-500' : 'text-purple-500'"
+            />
+          </div>
+          <div
+            v-if="idx < displayedItems.length - 1"
+            class="absolute top-8 w-px h-3 bg-gray-200 dark:bg-gray-700"
+          />
+        </div>
+
         <div class="min-w-0 flex-1">
-          <p class="text-sm text-gray-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400">
+          <p class="text-sm font-medium text-gray-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
             {{ item.label }}
           </p>
+          <p class="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{{ item.timeAgo }}</p>
         </div>
-        <span class="text-[11px] text-gray-400 dark:text-gray-500 flex-shrink-0">{{ item.timeAgo }}</span>
+
+        <UIcon name="i-heroicons-chevron-right" class="w-4 h-4 text-gray-300 dark:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
       </component>
     </div>
   </div>
@@ -109,7 +149,8 @@ const viewCount = computed(() => activityItems.value.filter(i => i.type === 'vie
 const chatCount = computed(() => activityItems.value.filter(i => i.type === 'chat').length)
 
 const displayedItems = computed(() => {
-  const max = props.displayStyle === 'half' ? 5 : 8
-  return activityItems.value.slice(0, max)
+  if (props.displayStyle === 'third') return activityItems.value.slice(0, 4)
+  if (props.displayStyle === 'half') return activityItems.value.slice(0, 5)
+  return activityItems.value.slice(0, 8)
 })
 </script>

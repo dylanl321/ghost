@@ -1,4 +1,4 @@
-export type DisplayStyle = 'full' | 'half' | 'compact'
+export type DisplayStyle = 'full' | 'two-thirds' | 'half' | 'third'
 
 export type DashboardSectionId =
   | 'budgetAlerts'
@@ -6,6 +6,7 @@ export type DashboardSectionId =
   | 'myAccounts'
   | 'adminOverview'
   | 'costTrend'
+  | 'topAccounts'
   | 'quickStart'
   | 'favoriteAccounts'
   | 'recentlyViewed'
@@ -14,6 +15,9 @@ export type DashboardSectionId =
   | 'operationsGlance'
   | 'myActivity'
   | 'securitySnapshot'
+  | 'adminAlerts'
+  | 'adminPipeline'
+  | 'adminFeedback'
 
 export type MetricCardId =
   | 'mtdSpend'
@@ -39,6 +43,7 @@ export const SECTION_LABELS: Record<DashboardSectionId, string> = {
   myAccounts: 'My Accounts',
   adminOverview: 'Admin Overview',
   costTrend: 'Cost Trends',
+  topAccounts: 'Top Accounts',
   quickStart: 'Quick Start',
   favoriteAccounts: 'Favorite Accounts',
   recentlyViewed: 'Recently Viewed',
@@ -47,22 +52,29 @@ export const SECTION_LABELS: Record<DashboardSectionId, string> = {
   operationsGlance: 'Operations Glance',
   myActivity: 'My Activity',
   securitySnapshot: 'Security Snapshot',
+  adminAlerts: 'Admin: Budget Alerts',
+  adminPipeline: 'Admin: Pipeline Activity',
+  adminFeedback: 'Admin: Feature Requests',
 }
 
 export const SECTION_STYLE_SUPPORT: Record<DashboardSectionId, DisplayStyle[]> = {
-  budgetAlerts: ['full'],
+  budgetAlerts: ['full', 'two-thirds', 'half', 'third'],
   metricCards: ['full'],
-  myAccounts: ['full', 'half', 'compact'],
+  myAccounts: ['full', 'two-thirds', 'half', 'third'],
   adminOverview: ['full'],
-  costTrend: ['full'],
-  quickStart: ['full', 'compact'],
-  favoriteAccounts: ['full', 'half', 'compact'],
-  recentlyViewed: ['full', 'half', 'compact'],
-  myAccountCosts: ['full', 'half'],
-  newAccounts: ['full', 'half', 'compact'],
-  operationsGlance: ['full', 'half'],
-  myActivity: ['full', 'half', 'compact'],
-  securitySnapshot: ['full', 'half'],
+  costTrend: ['full', 'two-thirds', 'half', 'third'],
+  topAccounts: ['full', 'two-thirds', 'half', 'third'],
+  quickStart: ['full', 'third'],
+  favoriteAccounts: ['full', 'two-thirds', 'half', 'third'],
+  recentlyViewed: ['full', 'two-thirds', 'half', 'third'],
+  myAccountCosts: ['full', 'two-thirds', 'half'],
+  newAccounts: ['full', 'two-thirds', 'half', 'third'],
+  operationsGlance: ['full', 'two-thirds', 'half'],
+  myActivity: ['full', 'two-thirds', 'half', 'third'],
+  securitySnapshot: ['full', 'two-thirds', 'half'],
+  adminAlerts: ['full', 'two-thirds', 'half', 'third'],
+  adminPipeline: ['full', 'two-thirds', 'half', 'third'],
+  adminFeedback: ['full', 'two-thirds', 'half', 'third'],
 }
 
 export const METRIC_CARD_LABELS: Record<MetricCardId, string> = {
@@ -79,6 +91,7 @@ export const ALL_SECTION_IDS: DashboardSectionId[] = [
   'myAccounts',
   'adminOverview',
   'costTrend',
+  'topAccounts',
   'quickStart',
   'favoriteAccounts',
   'recentlyViewed',
@@ -87,6 +100,9 @@ export const ALL_SECTION_IDS: DashboardSectionId[] = [
   'operationsGlance',
   'myActivity',
   'securitySnapshot',
+  'adminAlerts',
+  'adminPipeline',
+  'adminFeedback',
 ]
 
 export const ALL_METRIC_CARD_IDS: MetricCardId[] = [
@@ -102,8 +118,11 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayoutConfig = {
     { id: 'budgetAlerts', visible: true },
     { id: 'metricCards', visible: true },
     { id: 'myAccounts', visible: true },
-    { id: 'adminOverview', visible: true },
-    { id: 'costTrend', visible: true },
+    { id: 'adminAlerts', visible: true, displayStyle: 'third' },
+    { id: 'adminPipeline', visible: true, displayStyle: 'third' },
+    { id: 'adminFeedback', visible: true, displayStyle: 'third' },
+    { id: 'costTrend', visible: true, displayStyle: 'half' },
+    { id: 'topAccounts', visible: true, displayStyle: 'half' },
     { id: 'quickStart', visible: true },
     { id: 'favoriteAccounts', visible: true, displayStyle: 'half' },
     { id: 'operationsGlance', visible: true, displayStyle: 'half' },
@@ -112,6 +131,7 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayoutConfig = {
     { id: 'myAccountCosts', visible: false },
     { id: 'newAccounts', visible: false },
     { id: 'securitySnapshot', visible: false },
+    { id: 'adminOverview', visible: false },
   ],
   metricCards: Object.fromEntries(ALL_METRIC_CARD_IDS.map(id => [id, true])) as Record<MetricCardId, boolean>,
 }

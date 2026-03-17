@@ -2,7 +2,7 @@
   <div
     ref="cardRef"
     class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 h-full overflow-hidden"
-    :style="lockedHeight ? { height: lockedHeight + 'px' } : undefined"
+    :style="{ minHeight: '420px', height: lockedHeight ? lockedHeight + 'px' : undefined }"
   >
     <Transition
       enter-active-class="transition-all duration-300 ease-out"
@@ -105,11 +105,11 @@
         <!-- Loading skeleton -->
         <div v-if="props.loading" :class="[
           'grid gap-3',
-          props.displayStyle === 'compact' ? 'grid-cols-1' :
+          props.displayStyle === 'third' ? 'grid-cols-1' :
           props.displayStyle === 'half' ? 'grid-cols-1 sm:grid-cols-2' :
           'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3'
         ]">
-          <div v-for="i in (props.displayStyle === 'compact' ? 2 : 4)" :key="i" class="rounded-xl border border-gray-200 dark:border-gray-800 p-4 animate-pulse">
+          <div v-for="i in (props.displayStyle === 'third' ? 2 : 4)" :key="i" class="rounded-xl border border-gray-200 dark:border-gray-800 p-4 animate-pulse">
             <div class="flex items-center justify-between mb-3">
               <div class="h-4 w-32 bg-gray-200 dark:bg-gray-700 rounded" />
               <div class="h-5 w-16 bg-gray-200 dark:bg-gray-700 rounded-full" />
@@ -139,7 +139,7 @@
         </div>
 
         <!-- Compact mini-tiles: 2-col grid of small squares when >2 accounts -->
-        <div v-else-if="props.displayStyle === 'compact' && displayedAccounts.length > 2" class="grid grid-cols-2 gap-2">
+        <div v-else-if="props.displayStyle === 'third' && displayedAccounts.length > 2" class="grid grid-cols-2 gap-2">
           <button
             v-for="enclave in displayedAccounts"
             :key="enclave.standardId"
@@ -169,7 +169,7 @@
         <!-- Full account cards for non-compact or compact with ≤2 accounts -->
         <div v-else :class="[
           'grid gap-3 overflow-y-auto',
-          props.displayStyle === 'compact' ? 'grid-cols-1 max-h-[280px]' :
+          props.displayStyle === 'third' ? 'grid-cols-1 max-h-[280px]' :
           props.displayStyle === 'half' ? 'max-h-[400px]' :
           'max-h-[500px]',
           props.displayStyle === 'half' ? (displayedAccounts.length === 1 ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2') :
@@ -235,7 +235,7 @@
         </div>
 
         <!-- Show count of hidden accounts when truncated -->
-        <div v-if="!props.loading && hiddenCount > 0 && !(props.displayStyle === 'compact' && displayedAccounts.length > 2)" class="mt-3 text-center">
+        <div v-if="!props.loading && hiddenCount > 0 && !(props.displayStyle === 'third' && displayedAccounts.length > 2)" class="mt-3 text-center">
           <NuxtLink to="/account/explorer" class="text-xs text-gray-400 hover:text-blue-500 transition-colors">
             +{{ hiddenCount }} more account{{ hiddenCount !== 1 ? 's' : '' }}
           </NuxtLink>
@@ -250,7 +250,7 @@ const userGroupStore = useUserGroupStore()
 
 const props = defineProps<{
   loading: boolean
-  displayStyle?: 'full' | 'half' | 'compact'
+  displayStyle?: 'full' | 'two-thirds' | 'half' | 'third'
 }>()
 
 const GOV_IDENTIFIER = ' | gov'
@@ -259,13 +259,10 @@ const cardRef = ref<HTMLElement | null>(null)
 const lockedHeight = ref<number | null>(null)
 const selectedAccount = ref<any>(null)
 
-// Minimum height to comfortably fit the detail view (back button + 3 rows of 2 link cards + roles)
-const DETAIL_MIN_HEIGHT = 420
-
 function selectAccount(enclave: any) {
-  // Lock the card to at least the minimum detail height so links aren't cramped
+  // Lock the card to its current rendered height so the grid row doesn't shift
   if (cardRef.value) {
-    lockedHeight.value = Math.max(cardRef.value.offsetHeight, DETAIL_MIN_HEIGHT)
+    lockedHeight.value = cardRef.value.offsetHeight
   }
   selectedAccount.value = enclave
 }
@@ -301,7 +298,7 @@ const tableData = computed(() => {
 // Cap visible accounts per display style to prevent unbounded growth
 const displayedAccounts = computed(() => {
   const all = tableData.value
-  if (props.displayStyle === 'compact') return all.slice(0, 6)
+  if (props.displayStyle === 'third') return all.slice(0, 6)
   if (props.displayStyle === 'half') return all.slice(0, 6)
   return all.slice(0, 9)
 })

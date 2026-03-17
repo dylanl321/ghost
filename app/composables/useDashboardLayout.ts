@@ -66,9 +66,11 @@ export function useDashboardLayout() {
       ...saved.sections
         .filter(s => ALL_SECTION_IDS.includes(s.id))
         .map(s => {
+          // Migrate legacy 'compact' → 'third'
+          const rawStyle = s.displayStyle === 'compact' as any ? 'third' : s.displayStyle
           // Validate displayStyle against supported styles for this section
           const supported = SECTION_STYLE_SUPPORT[s.id] || ['full']
-          const style = s.displayStyle && supported.includes(s.displayStyle) ? s.displayStyle : undefined
+          const style = rawStyle && supported.includes(rawStyle) ? rawStyle : undefined
           return { id: s.id, visible: s.visible, displayStyle: style }
         }),
       ...ALL_SECTION_IDS.filter(id => !savedIds.has(id)).map(id => ({ id, visible: true })),
@@ -98,9 +100,10 @@ export function useDashboardLayout() {
   // Returns Tailwind col-span classes for a section based on its display style
   function sectionColSpan(style?: DisplayStyle): string {
     switch (style) {
-      case 'half':    return 'col-span-12 lg:col-span-6'
-      case 'compact': return 'col-span-12 md:col-span-6 lg:col-span-4'
-      default:        return 'col-span-12'
+      case 'two-thirds': return 'col-span-12 lg:col-span-8'
+      case 'half':       return 'col-span-12 lg:col-span-6'
+      case 'third':      return 'col-span-12 md:col-span-6 lg:col-span-4'
+      default:           return 'col-span-12'
     }
   }
 
