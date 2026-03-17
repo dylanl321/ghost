@@ -3,7 +3,7 @@
     <template #header>
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <div class="text-lg font-semibold text-gray-900 dark:text-white">Budget Alert History</div>
+          <div class="text-sm font-semibold text-gray-900 dark:text-white">Budget Alert History</div>
           <UBadge v-if="filteredAlerts.length > 0" color="emerald" variant="subtle">
             {{ filteredAlerts.length }} alert{{ filteredAlerts.length !== 1 ? 's' : '' }}
           </UBadge>

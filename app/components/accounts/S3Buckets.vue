@@ -2,7 +2,7 @@
   <UCard v-bind="$attrs" class="h-full flex flex-col">
     <template #header>
       <div class="flex justify-between items-center">
-        <div class="text-lg font-semibold text-gray-900 dark:text-white">S3 Buckets</div>
+        <div class="text-sm font-semibold text-gray-900 dark:text-white">S3 Buckets</div>
         <div class="flex items-center gap-3">
           <div class="flex items-center gap-2">
             <UToggle v-model="showLandingZoneBuckets" />

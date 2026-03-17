@@ -2,7 +2,7 @@
   <UCard>
     <template #header>
       <div class="flex items-center justify-between">
-        <div class="text-lg font-semibold text-gray-900 dark:text-white">Account Details</div>
+        <div class="text-sm font-semibold text-gray-900 dark:text-white">Account Details</div>
 
         <div class="flex items-center gap-2">
           <!-- Email Account Button -->
@@ -37,13 +37,13 @@
     <UTabs v-model="selectedTab" :items="tabs">
       <!-- General Tab -->
       <template #general>
-        <div class="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4 pt-4">
+        <div class="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6 pt-4">
           <!-- Project Details -->
-          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 md:row-span-2">
+          <UCard class="bg-gray-50 dark:bg-gray-800/50 md:row-span-2">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-briefcase" class="text-blue-500 w-5 h-5" />
-                <h4 class="font-semibold text-gray-900 dark:text-white">Project Details</h4>
+                <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Project Details</h4>
               </div>
             </template>
 
@@ -60,11 +60,11 @@
           </UCard>
 
           <!-- Platform Info -->
-          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+          <UCard class="bg-gray-50 dark:bg-gray-800/50">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-shield-check" class="text-blue-500 w-5 h-5" />
-                <h4 class="font-semibold text-gray-900 dark:text-white">Platform Info</h4>
+                <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Platform Info</h4>
               </div>
             </template>
 
@@ -76,11 +76,11 @@
           </UCard>
 
           <!-- Cost Details -->
-          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+          <UCard class="bg-gray-50 dark:bg-gray-800/50">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-currency-dollar" class="text-green-500 w-5 h-5" />
-                <h4 class="font-semibold text-gray-900 dark:text-white">Cost Details</h4>
+                <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Cost Details</h4>
               </div>
             </template>
 
@@ -92,11 +92,11 @@
           </UCard>
 
           <!-- Network Config -->
-          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+          <UCard class="bg-gray-50 dark:bg-gray-800/50">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-server" class="text-purple-500 w-5 h-5" />
-                <h4 class="font-semibold text-gray-900 dark:text-white">Network Configuration</h4>
+                <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Network Configuration</h4>
               </div>
             </template>
 
@@ -108,11 +108,11 @@
           </UCard>
 
           <!-- Account Admins -->
-          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+          <UCard class="bg-gray-50 dark:bg-gray-800/50">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-user-group" class="text-orange-500 w-5 h-5" />
-                <h4 class="font-semibold text-gray-900 dark:text-white">Account Admins</h4>
+                <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Account Admins</h4>
               </div>
             </template>
 
@@ -174,13 +174,13 @@
 
       <!-- IT PEP Data Tab -->
       <template #it-pep-data>
-        <div class="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4 pt-4">
+        <div class="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6 pt-4">
           <!-- Environment Info -->
-          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+          <UCard class="bg-gray-50 dark:bg-gray-800/50">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-server-stack" class="text-blue-500 w-5 h-5" />
-                <h4 class="font-semibold text-gray-900 dark:text-white">Environment Info</h4>
+                <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Environment Info</h4>
               </div>
             </template>
 
@@ -195,11 +195,11 @@
           </UCard>
 
           <!-- Location -->
-          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+          <UCard class="bg-gray-50 dark:bg-gray-800/50">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-map-pin" class="text-red-500 w-5 h-5" />
-                <h4 class="font-semibold text-gray-900 dark:text-white">Location</h4>
+                <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Location</h4>
               </div>
             </template>
 
@@ -211,11 +211,11 @@
           </UCard>
 
           <!-- Contract Details -->
-          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+          <UCard class="bg-gray-50 dark:bg-gray-800/50">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-document-text" class="text-yellow-500 w-5 h-5" />
-                <h4 class="font-semibold text-gray-900 dark:text-white">Contract Details</h4>
+                <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Contract Details</h4>
               </div>
             </template>
 
@@ -229,11 +229,11 @@
           </UCard>
 
           <!-- Business Info -->
-          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+          <UCard class="bg-gray-50 dark:bg-gray-800/50">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-building-office-2" class="text-indigo-500 w-5 h-5" />
-                <h4 class="font-semibold text-gray-900 dark:text-white">Business Info</h4>
+                <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Business Info</h4>
               </div>
             </template>
 
@@ -248,11 +248,11 @@
           </UCard>
 
           <!-- Budget -->
-          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 md:row-span-2">
+          <UCard class="bg-gray-50 dark:bg-gray-800/50 md:row-span-2">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-banknotes" class="text-green-500 w-5 h-5" />
-                <h4 class="font-semibold text-gray-900 dark:text-white">Budget</h4>
+                <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Budget</h4>
               </div>
             </template>
 
@@ -277,11 +277,11 @@
           </UCard>
 
           <!-- Personnel -->
-          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 md:row-span-2">
+          <UCard class="bg-gray-50 dark:bg-gray-800/50 md:row-span-2">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-users" class="text-orange-500 w-5 h-5" />
-                <h4 class="font-semibold text-gray-900 dark:text-white">Personnel</h4>
+                <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Personnel</h4>
               </div>
             </template>
 
@@ -350,11 +350,11 @@
           </UCard>
 
           <!-- Project -->
-          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+          <UCard class="bg-gray-50 dark:bg-gray-800/50">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-folder" class="text-cyan-500 w-5 h-5" />
-                <h4 class="font-semibold text-gray-900 dark:text-white">Project</h4>
+                <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Project</h4>
               </div>
             </template>
 
@@ -367,11 +367,11 @@
           </UCard>
 
           <!-- Cloud Record -->
-          <UCard class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+          <UCard class="bg-gray-50 dark:bg-gray-800/50">
             <template #header>
               <div class="flex items-center gap-2">
                 <UIcon name="i-heroicons-cloud" class="text-sky-500 w-5 h-5" />
-                <h4 class="font-semibold text-gray-900 dark:text-white">Cloud Record</h4>
+                <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Cloud Record</h4>
               </div>
             </template>
 

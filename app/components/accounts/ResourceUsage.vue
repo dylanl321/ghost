@@ -1,13 +1,13 @@
 <template>
   <UCard class="h-full flex flex-col">
     <template #header>
-      <div class="text-lg font-semibold text-gray-900 dark:text-white">Resource Usage</div>
+      <div class="text-sm font-semibold text-gray-900 dark:text-white">Resource Usage</div>
     </template>
 
     <CenteredLoadingSpinner v-if="props.loading" />
     <div v-else :class="gridClass">
       <!-- EC2 Instances -->
-      <div v-if="props.data.ec2" class="bg-gray-100 dark:bg-gray-800/50 rounded-xl p-3 space-y-2">
+      <div v-if="props.data.ec2" class="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-3 space-y-2">
         <div class="flex gap-1 items-center">
           <UIcon name="i-heroicons-server" class="text-purple-600 dark:text-purple-400 w-4 h-4" />
           <div class="text-xs text-gray-600 dark:text-gray-400">EC2 Instances</div>
@@ -23,7 +23,7 @@
       </div>
 
       <!-- EBS Volumes -->
-      <div v-if="props.data.volumes" class="bg-gray-100 dark:bg-gray-800/50 rounded-xl p-3 space-y-2">
+      <div v-if="props.data.volumes" class="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-3 space-y-2">
         <div class="flex gap-1 items-center">
           <UIcon name="i-heroicons-circle-stack" class="text-blue-600 dark:text-blue-400 w-4 h-4" />
           <div class="text-xs text-gray-600 dark:text-gray-400">EBS Volumes</div>
@@ -37,7 +37,7 @@
       </div>
 
       <!-- Container Clusters -->
-      <div v-if="props.data.ecsContainers || props.data.eksClusters" class="bg-gray-100 dark:bg-gray-800/50 rounded-xl p-3 space-y-2">
+      <div v-if="props.data.ecsContainers || props.data.eksClusters" class="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-3 space-y-2">
         <div class="flex gap-1 items-center">
           <UIcon name="i-heroicons-cube" class="text-green-600 dark:text-green-400 w-4 h-4" />
           <div class="text-xs text-gray-600 dark:text-gray-400">Containers</div>
@@ -52,7 +52,7 @@
       </div>
 
       <!-- S3 Buckets -->
-      <div v-if="props.data.buckets" class="bg-gray-100 dark:bg-gray-800/50 rounded-xl p-3 space-y-2">
+      <div v-if="props.data.buckets" class="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-3 space-y-2">
         <div class="flex gap-1 items-center">
           <UIcon name="i-heroicons-archive-box" class="text-yellow-600 dark:text-yellow-400 w-4 h-4" />
           <div class="text-xs text-gray-600 dark:text-gray-400">S3 Buckets</div>

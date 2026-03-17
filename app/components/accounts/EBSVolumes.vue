@@ -2,7 +2,7 @@
   <UCard class="h-full flex flex-col">
     <template #header>
       <div class="flex justify-between items-center">
-        <div class="text-lg font-semibold text-gray-900 dark:text-white">EBS Volumes</div>
+        <div class="text-sm font-semibold text-gray-900 dark:text-white">EBS Volumes</div>
         <UBadge v-if="!loading" color="gray" variant="soft">
           {{ volumes.length }} volumes
         </UBadge>

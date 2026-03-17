@@ -2,7 +2,7 @@
   <UCard class="h-full flex flex-col">
     <template #header>
       <div class="flex justify-between items-center">
-        <div class="text-lg font-semibold text-gray-900 dark:text-white">Instance Scheduling</div>
+        <div class="text-sm font-semibold text-gray-900 dark:text-white">Instance Scheduling</div>
         <UBadge v-if="!loading" color="gray" variant="soft">
           {{ instances.length }} instances
         </UBadge>
@@ -16,14 +16,14 @@
     <div v-else class="space-y-4">
       <!-- Summary Cards -->
       <div class="grid grid-cols-2 gap-4">
-        <div class="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-4">
-          <div class="text-sm text-gray-600 dark:text-gray-400">Scheduled</div>
-          <div class="text-2xl font-bold text-green-600 dark:text-green-400">{{ scheduledCount }}</div>
+        <div class="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-3">
+          <div class="text-xs text-gray-600 dark:text-gray-400">Scheduled</div>
+          <div class="text-xl font-bold text-green-600 dark:text-green-400">{{ scheduledCount }}</div>
           <div class="text-xs text-gray-500">{{ scheduledPercentage }}%</div>
         </div>
-        <div class="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-4">
-          <div class="text-sm text-gray-600 dark:text-gray-400">Unscheduled</div>
-          <div class="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{{ unscheduledCount }}</div>
+        <div class="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-3">
+          <div class="text-xs text-gray-600 dark:text-gray-400">Unscheduled</div>
+          <div class="text-xl font-bold text-yellow-600 dark:text-yellow-400">{{ unscheduledCount }}</div>
           <div class="text-xs text-gray-500">{{ unscheduledPercentage }}%</div>
         </div>
       </div>
@@ -31,7 +31,7 @@
       <!-- Schedule Breakdown -->
       <div class="space-y-2">
         <div class="text-sm font-semibold text-gray-700 dark:text-gray-300">Schedule Types</div>
-        <div v-for="(count, schedule) in scheduleBreakdown" :key="schedule" class="flex justify-between items-center p-2 bg-gray-100 dark:bg-gray-800/30 rounded">
+        <div v-for="(count, schedule) in scheduleBreakdown" :key="schedule" class="flex justify-between items-center p-2 bg-gray-100 dark:bg-gray-800/50 rounded">
           <div class="text-sm text-gray-700 dark:text-gray-300">{{ schedule }}</div>
           <UBadge color="blue" variant="soft">{{ count }}</UBadge>
         </div>
@@ -41,14 +41,14 @@
       <div class="space-y-2">
         <div class="text-sm font-semibold text-gray-700 dark:text-gray-300">Special Purpose Tags</div>
         <div class="space-y-2">
-          <div class="flex justify-between items-center p-2 bg-gray-100 dark:bg-gray-800/30 rounded">
+          <div class="flex justify-between items-center p-2 bg-gray-100 dark:bg-gray-800/50 rounded">
             <div class="flex items-center gap-2">
               <UIcon name="i-heroicons-wrench-screwdriver" class="text-purple-500 dark:text-purple-400" />
               <div class="text-sm text-gray-700 dark:text-gray-300">SWFactory</div>
             </div>
             <UBadge color="purple" variant="soft">{{ swFactoryCount }}</UBadge>
           </div>
-          <div class="flex justify-between items-center p-2 bg-gray-100 dark:bg-gray-800/30 rounded">
+          <div class="flex justify-between items-center p-2 bg-gray-100 dark:bg-gray-800/50 rounded">
             <div class="flex items-center gap-2">
               <UIcon name="i-heroicons-shield-check" class="text-blue-500 dark:text-blue-400" />
               <div class="text-sm text-gray-700 dark:text-gray-300">GDMS Managed</div>
@@ -59,7 +59,7 @@
       </div>
 
       <!-- Schedule Legend -->
-      <UCard class="bg-gray-100 dark:bg-gray-800/30">
+      <div class="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-3">
         <div class="text-xs space-y-2">
           <div class="font-semibold text-gray-700 dark:text-gray-300">Schedule Tag Values:</div>
           <ul class="space-y-1 text-gray-600 dark:text-gray-400 list-disc list-inside">
@@ -70,7 +70,7 @@
             <li><span class="font-mono text-xs">9am-east-startup-8pm-east-shutdown</span> - 9am-8pm ET, Mon-Fri</li>
           </ul>
         </div>
-      </UCard>
+      </div>
     </div>
   </UCard>
 </template>

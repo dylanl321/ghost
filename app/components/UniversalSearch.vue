@@ -21,7 +21,7 @@
     <div
       v-if="(results.length || loading) && showResults"
       ref="dropdown"
-      class="absolute z-10 mt-1 w-full rounded-lg shadow-lg p-2 max-h-[25rem] overflow-y-auto border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0e1625]"
+      class="absolute z-10 mt-1 w-full rounded-lg shadow-lg p-2 max-h-[25rem] overflow-y-auto border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
     >
       <!-- Loading indicator -->
       <div v-if="loading" class="px-2 py-2 text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">

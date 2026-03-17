@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6 p-6">
+  <div class="space-y-6 lg:space-y-8 p-6 max-w-[1600px] mx-auto">
     <!-- Decommissioned Account Warning Banner -->
     <UAlert
       v-if="isAccountInactive"
@@ -14,7 +14,7 @@
     </UAlert>
 
     <!-- Account Header -->
-    <UCard data-tour="account-header">
+    <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5" data-tour="account-header">
       <div class="flex gap-2 items-center justify-between">
         <div class="flex gap-2 items-center">
           <div :class="`w-3 h-3 rounded-full ${accountStatus !== 'Decommissioned' ? 'bg-green-500' : 'bg-red-500'}`" />
@@ -90,13 +90,13 @@
           </UButton>
         </div>
       </div>
-    </UCard>
+    </div>
 
     <!-- Tabs -->
     <UTabs v-model="selectedTab" :items="tabs" data-tour="account-tabs">
       <!-- Overview Tab -->
       <template #overview>
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 row-auto">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 row-auto">
           <!-- Account Details -->
           <div data-tour="account-details" class="col-span-1 lg:col-span-2">
             <AccountDetails v-if="accountId" :account-id="accountId" :current-spend="currentSpend" :users="users" />
@@ -146,9 +146,9 @@
 
       <!-- Resources Tab -->
       <template #resources>
-        <div v-if="!isAccountInactive" class="space-y-4 mt-4">
+        <div v-if="!isAccountInactive" class="space-y-6 mt-4">
           <!-- Row 1: Resource Usage (1 col) + S3 Buckets (2 col) -->
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div class="col-span-1 h-full">
               <ResourceUsage :data="resourceCounts || {}" :columns="1" :loading="loading" class="h-full" />
             </div>
@@ -158,7 +158,7 @@
           </div>
 
           <!-- Row 2: EBS Volumes (2 col) + Instance Scheduling (1 col) -->
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div class="col-span-1 md:col-span-2 h-full">
               <EBSVolumes v-if="govCloudId || accountId" :account-id="govCloudId || accountId" class="h-full" />
             </div>
@@ -181,7 +181,7 @@
 
       <!-- Policies Tab -->
       <template #policies>
-        <div v-if="!isAccountInactive" class="grid grid-cols-1 md:grid-cols-3 gap-4 row-auto mt-4">
+        <div v-if="!isAccountInactive" class="grid grid-cols-1 md:grid-cols-3 gap-6 row-auto mt-4">
           <!-- Service Control Policies -->
           <ServiceControlPolicies v-if="accountId" :account-id="accountId" class="col-span-2" />
 
