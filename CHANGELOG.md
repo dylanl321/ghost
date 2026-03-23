@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.15.0] - 2026-03-23
-<!-- highlights: Tag Analysis, Estimated Proforma Costs, Admin Redesign -->
+<!-- highlights: Tag Analysis, Estimated Proforma Costs -->
 
 ### New Features
 - Tag Analysis tab on the Cost Dashboard lets you break down an account's spend by any tag key, with coverage stats, cost distribution bars, and CSV export
@@ -17,7 +17,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Security findings analysis added to the dashboard for at-a-glance security posture
 
 ### Improvements
-- Admin section reorganized into 7 domain-based categories for easier navigation
 - Tag settings moved from an inline card to a slideover panel for a cleaner layout
 - Account detail pages now share a consistent visual style with the main dashboard
 - Tag Analysis documentation updated with a new section explaining how proforma cost estimation works and a FAQ entry
