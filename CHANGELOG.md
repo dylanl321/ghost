@@ -5,6 +5,28 @@ All notable changes to GHOST are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.0] - 2026-03-23
+<!-- highlights: Tag Analysis, Estimated Proforma Costs, Admin Redesign -->
+
+### New Features
+- Tag Analysis tab on the Cost Dashboard lets you break down an account's spend by any tag key, with coverage stats, cost distribution bars, and CSV export
+- Drill into any tag value to see a service-level and resource-level cost breakdown plus a per-value trend chart
+- Tag costs now show estimated proforma amounts by default, with clear labeling and links to documentation explaining the extrapolation
+- Dashboard scope controls let you switch between "My Accounts" and "All Accounts" views with persistent preferences
+- My Accounts section on the home page highlights your accounts with recent activity and cost summaries
+- Security findings analysis added to the dashboard for at-a-glance security posture
+
+### Improvements
+- Admin section reorganized into 7 domain-based categories for easier navigation
+- Tag settings moved from an inline card to a slideover panel for a cleaner layout
+- Account detail pages now share a consistent visual style with the main dashboard
+- Tag Analysis documentation updated with a new section explaining how proforma cost estimation works and a FAQ entry
+
+### Bug Fixes
+- Fixed miscellaneous UI issues across the dashboard
+
+---
+
 ## [1.14.0] - 2026-03-17
 <!-- highlights: Pipeline Caching, Resource Display Fix -->
 
