@@ -20,21 +20,37 @@
 
     <!-- Table + bars -->
     <div v-else>
+      <!-- Proforma estimation note -->
+      <div v-if="showProforma" class="flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2 mb-3">
+        <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+        <p class="text-xs text-amber-700 dark:text-amber-300">
+          Costs shown are <strong>estimates</strong> &mdash; billable tag distribution applied to your proforma total of <strong>{{ formatCostValue(totalCost * proformaRatio!) }}</strong>. Percentages are exact.
+          <NuxtLink to="/support/docs?topic=cost-tags-guide" class="underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-100">Why estimated?</NuxtLink>
+        </p>
+      </div>
       <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
         <table class="w-full text-sm">
           <thead class="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
             <tr>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-400 tracking-wider w-40">
-                {{ tagKey || 'Tag Value' }}
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-400 tracking-wider w-48">
+                Display Name
               </th>
-              <th v-if="editable || hasAliases" class="px-4 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-400 tracking-wider w-36">
-                Alias
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-400 tracking-wider w-40">
+                Raw Value
               </th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-400 tracking-wider">
                 Cost Distribution
               </th>
               <th class="px-4 py-3 text-right text-xs font-medium text-gray-700 dark:text-gray-400 tracking-wider w-28">
-                Total Cost
+                <template v-if="showProforma">
+                  <UTooltip text="Estimated proforma cost — extrapolated from billable tag distribution">
+                    <span class="inline-flex items-center gap-1 cursor-help">
+                      Est. Cost
+                      <UIcon name="i-heroicons-information-circle" class="w-3 h-3" />
+                    </span>
+                  </UTooltip>
+                </template>
+                <template v-else>Total Cost</template>
               </th>
               <th class="px-4 py-3 text-right text-xs font-medium text-gray-700 dark:text-gray-400 tracking-wider w-16">
                 %
@@ -45,14 +61,27 @@
             <tr
               v-for="row in displayRows"
               :key="row.value"
-              class="transition-colors cursor-pointer"
+              class="group transition-colors cursor-pointer"
               :class="selectedValue === row.value
                 ? 'bg-blue-50 dark:bg-blue-900/30 ring-1 ring-inset ring-blue-300 dark:ring-blue-700'
                 : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'"
               @click="!row.isUntagged && handleRowClick(row)"
             >
-              <td class="px-4 py-3">
-                <div class="flex items-center gap-1.5">
+              <!-- Display Name: click-to-edit alias -->
+              <td class="px-4 py-3" @click.stop>
+                <div v-if="editingAlias === row.value && !row.isUntagged" class="flex items-center gap-1">
+                  <UInput
+                    v-model="editingAliasText"
+                    size="xs"
+                    autofocus
+                    :placeholder="row.parsedValue"
+                    class="max-w-[160px]"
+                    @keydown.enter="confirmAliasEdit(row)"
+                    @keydown.escape="cancelAliasEdit()"
+                    @blur="confirmAliasEdit(row)"
+                  />
+                </div>
+                <div v-else class="flex items-center gap-1.5">
                   <UTooltip
                     v-if="row.isUntagged"
                     text="Resources without this tag or with a blank value"
@@ -63,11 +92,18 @@
                   </UTooltip>
                   <template v-else>
                     <span
-                      class="text-xs font-medium text-blue-400 text-left truncate max-w-[140px]"
-                      :title="row.rawValue"
+                      class="text-xs font-medium text-blue-400 text-left truncate max-w-[160px] cursor-text"
+                      :title="row.label"
+                      @click.stop="startAliasEdit(row)"
                     >
                       {{ row.label }}
                     </span>
+                    <UIcon
+                      v-if="editable"
+                      name="i-heroicons-pencil-square"
+                      class="w-3 h-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 cursor-pointer"
+                      @click.stop="startAliasEdit(row)"
+                    />
                     <UIcon
                       v-if="selectedValue === row.value"
                       name="i-heroicons-check-circle-solid"
@@ -76,19 +112,18 @@
                   </template>
                 </div>
               </td>
-              <td v-if="editable || hasAliases" class="px-4 py-3" @click.stop>
-                <template v-if="editable && !row.isUntagged">
-                  <UInput
-                    :model-value="getAlias(row.value)"
-                    size="xs"
-                    :placeholder="row.parsedValue !== row.value ? row.parsedValue : 'Set alias...'"
-                    class="max-w-[130px]"
-                    @update:model-value="handleAliasChange(row.value, $event as string)"
-                  />
+              <!-- Raw Value -->
+              <td class="px-4 py-3">
+                <template v-if="row.isUntagged">
+                  <span class="text-xs text-gray-400">&mdash;</span>
                 </template>
-                <span v-else-if="getAlias(row.value)" class="text-xs text-gray-500 dark:text-gray-400">
-                  {{ getAlias(row.value) }}
-                </span>
+                <template v-else>
+                  <UTooltip :text="row.rawValue">
+                    <span class="text-xs font-mono text-gray-500 dark:text-gray-400 truncate max-w-[150px] block">
+                      {{ row.rawValue }}
+                    </span>
+                  </UTooltip>
+                </template>
               </td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-2">
@@ -102,7 +137,7 @@
                 </div>
               </td>
               <td class="px-4 py-3 text-right text-xs text-gray-900 dark:text-gray-100 font-mono">
-                {{ formatCostValue(row.cost) }}
+                {{ showProforma ? formatCostValue(row.cost * proformaRatio!) : formatCostValue(row.cost) }}
               </td>
               <td class="px-4 py-3 text-right text-xs text-gray-500 dark:text-gray-400">
                 {{ row.percentage.toFixed(1) }}%
@@ -111,7 +146,7 @@
           </tbody>
           <tfoot class="bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
             <tr>
-              <td :colspan="(editable || hasAliases) ? 3 : 2" class="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">
+              <td colspan="3" class="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">
                 <span>{{ displayRows.length }} tag values</span>
                 <button
                   v-if="zeroCostRows.length > 0"
@@ -122,7 +157,7 @@
                 </button>
               </td>
               <td class="px-4 py-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100 font-mono">
-                {{ formatCostValue(totalCost) }}
+                {{ showProforma ? formatCostValue(totalCost * proformaRatio!) : formatCostValue(totalCost) }}
               </td>
               <td class="px-4 py-2 text-right text-xs text-gray-500 dark:text-gray-400">
                 100%
@@ -148,8 +183,15 @@
             </div>
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
               <div>
-                <div class="text-gray-500 dark:text-gray-400">Cost</div>
-                <div class="font-semibold text-gray-900 dark:text-gray-100 font-mono">{{ formatCostValue(selectedRow.cost) }}</div>
+                <div class="text-gray-500 dark:text-gray-400">
+                  <template v-if="showProforma">
+                    <UTooltip text="Estimated proforma cost — extrapolated from billable distribution">
+                      <span class="inline-flex items-center gap-0.5 cursor-help">Est. Cost <UIcon name="i-heroicons-information-circle" class="w-2.5 h-2.5" /></span>
+                    </UTooltip>
+                  </template>
+                  <template v-else>Cost</template>
+                </div>
+                <div class="font-semibold text-gray-900 dark:text-gray-100 font-mono">{{ showProforma ? formatCostValue(selectedRow.cost * proformaRatio!) : formatCostValue(selectedRow.cost) }}</div>
               </div>
               <div>
                 <div class="text-gray-500 dark:text-gray-400">Share</div>
@@ -230,11 +272,15 @@ const props = withDefaults(defineProps<{
   editable?: boolean
   accountId?: string
   period?: string
+  proformaRatio?: number | null
+  dataMode?: 'billable' | 'proforma'
 }>(), {
   tagValueAliases: () => ({}),
   editable: false,
   accountId: '',
-  period: ''
+  period: '',
+  proformaRatio: null,
+  dataMode: 'proforma'
 })
 
 const emit = defineEmits<{
@@ -253,26 +299,46 @@ export interface TagRow {
 }
 
 const toast = useToast()
+
+const showProforma = computed(() => props.dataMode === 'proforma' && props.proformaRatio != null)
+
 const selectedValue = ref<string | null>(null)
 const showZeroCost = ref(false)
 const detailPanelRef = ref<HTMLElement | null>(null)
+
+const editingAlias = ref<string | null>(null)
+const editingAliasText = ref('')
 
 const selectedRow = computed(() => {
   if (!selectedValue.value) return null
   return rows.value.find(r => r.value === selectedValue.value) || null
 })
 
-const hasAliases = computed(() =>
-  Object.keys(props.tagValueAliases).length > 0
-)
-
 function getAlias(tagValue: string): string {
   const key = `${props.tagKey}::${tagValue}`
   return props.tagValueAliases[key] || ''
 }
 
-function handleAliasChange(tagValue: string, alias: string) {
-  emit('update:alias', { tagKey: props.tagKey, tagValue, alias })
+function startAliasEdit(row: TagRow) {
+  if (!props.editable) return
+  editingAlias.value = row.value
+  editingAliasText.value = getAlias(row.value) || ''
+}
+
+function confirmAliasEdit(row: TagRow) {
+  if (editingAlias.value !== row.value) return
+  const newAlias = editingAliasText.value.trim()
+  const currentAlias = getAlias(row.value)
+  if (newAlias !== currentAlias) {
+    emit('update:alias', { tagKey: props.tagKey, tagValue: row.value, alias: newAlias })
+  }
+  editingAlias.value = null
+  editingAliasText.value = ''
+}
+
+function cancelAliasEdit() {
+  editingAlias.value = null
+  editingAliasText.value = ''
 }
 
 function handleRowClick(row: TagRow) {

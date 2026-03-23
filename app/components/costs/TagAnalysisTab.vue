@@ -61,6 +61,15 @@
           </UTooltip>
         </div>
 
+        <!-- Proforma estimation banner -->
+        <div v-if="selectedTag && showProforma && tagCoverage && !isLoadingCoverage" class="flex items-start gap-2 rounded-md bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 px-3 py-2">
+          <UIcon name="i-heroicons-information-circle" class="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
+          <p class="text-xs text-blue-700 dark:text-blue-300">
+            Dollar amounts below are <strong>estimated proforma costs</strong> extrapolated from billable tag distribution. Percentages are exact.
+            <NuxtLink to="/support/docs?topic=cost-tags-guide" class="underline underline-offset-2 hover:text-blue-900 dark:hover:text-blue-100">Learn why</NuxtLink>
+          </p>
+        </div>
+
         <!-- Coverage stat cards -->
         <div v-if="selectedTag && tagCoverage && !isLoadingCoverage" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
@@ -78,24 +87,28 @@
           </div>
 
           <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-            <div class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Tagged Cost</div>
+            <div class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+              {{ showProforma ? 'Tagged Cost (est.)' : 'Tagged Cost' }}
+            </div>
             <div class="text-3xl font-bold text-green-600 dark:text-green-400">
-              {{ formatCostValue(tagCoverage.totalTaggedCost) }}
+              {{ showProforma ? formatCostValue(tagCoverage.totalTaggedCost * proformaRatio!) : formatCostValue(tagCoverage.totalTaggedCost) }}
             </div>
             <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Resources with "{{ selectedTag }}"
+              {{ showProforma ? 'Estimated proforma' : `Resources with "${selectedTag}"` }}
             </div>
           </div>
 
           <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4"
             :class="untaggedIsHigh ? 'border-amber-300 dark:border-amber-600' : ''"
           >
-            <div class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Untagged Cost</div>
+            <div class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+              {{ showProforma ? 'Untagged Cost (est.)' : 'Untagged Cost' }}
+            </div>
             <div class="text-3xl font-bold" :class="untaggedIsHigh ? 'text-amber-600 dark:text-amber-400' : 'text-gray-700 dark:text-gray-300'">
-              {{ formatCostValue(tagCoverage.totalUntaggedCost) }}
+              {{ showProforma ? formatCostValue(tagCoverage.totalUntaggedCost * proformaRatio!) : formatCostValue(tagCoverage.totalUntaggedCost) }}
             </div>
             <div class="text-xs mt-1" :class="untaggedIsHigh ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'">
-              {{ untaggedIsHigh ? 'High untagged spend detected' : 'Resources without this tag' }}
+              {{ untaggedIsHigh ? 'High untagged spend detected' : (showProforma ? 'Estimated proforma' : 'Resources without this tag') }}
             </div>
           </div>
         </div>
@@ -131,6 +144,8 @@
           :editable="true"
           :account-id="accountId"
           :period="activePeriod"
+          :proforma-ratio="showProforma ? proformaRatio : null"
+          :data-mode="dataMode"
           @update:alias="handleAliasUpdate"
         />
       </div>
@@ -162,10 +177,13 @@ import { formatCostValue } from '~/utils/cost-filters'
 import { downloadBlob } from '~/utils/export/export-utils'
 import type { AccountCostTagConfig } from '~~/shared/types/cost-tags'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   selectedAccounts: string[]
   selectedTimeframe?: string
-}>()
+  dataMode?: 'billable' | 'proforma'
+}>(), {
+  dataMode: 'proforma'
+})
 
 const enclaveStore = useEnclaveStore()
 const toast = useToast()
@@ -204,6 +222,18 @@ const draftAliases = ref<Record<string, string>>({})
 const aliasesDirty = ref(false)
 const tagsWithCost = ref<string[]>([])
 const hiddenTagCount = ref(0)
+
+// Proforma ratio state
+const proformaTotals = ref<{ billableTotal: number; proformaTotal: number } | null>(null)
+
+const proformaRatio = computed(() => {
+  if (!proformaTotals.value) return null
+  const { billableTotal, proformaTotal } = proformaTotals.value
+  if (billableTotal <= 0) return null
+  return proformaTotal / billableTotal
+})
+
+const showProforma = computed(() => props.dataMode === 'proforma' && proformaRatio.value !== null)
 
 // Use global timeframe from parent (values already match API period params)
 const activePeriod = computed(() => props.selectedTimeframe || 'last90days')
@@ -276,6 +306,30 @@ async function fetchBreakdown() {
   }
 }
 
+// Fetch proforma/billable totals for ratio computation
+async function fetchProformaRatio() {
+  if (!accountId.value || props.dataMode !== 'proforma') {
+    proformaTotals.value = null
+    return
+  }
+  try {
+    const response = await $fetch('/api/costs/summary', {
+      params: {
+        proforma: 'true',
+        groupBy: 'NONE',
+        accountIds: accountId.value,
+        period: activePeriod.value
+      }
+    }) as any
+    const billableTotal = parseFloat(response?.billable?.total?.UnblendedCost?.Amount || '0')
+    const proformaTotal = parseFloat(response?.proforma?.total?.UnblendedCost?.Amount || '0')
+    proformaTotals.value = { billableTotal, proformaTotal }
+  } catch (err) {
+    console.error('Error fetching proforma ratio:', err)
+    proformaTotals.value = null
+  }
+}
+
 // Handle alias updates
 function handleAliasUpdate(payload: { tagKey: string; tagValue: string; alias: string }) {
   const key = `${payload.tagKey}::${payload.tagValue}`
@@ -333,23 +387,33 @@ function exportBreakdownCSV() {
     return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
   }
 
-  const headers = ['Display Name', 'Raw Value', 'Tag Value (Parsed)', 'Cost ($)', 'Percentage (%)']
+  const hasProforma = showProforma.value && proformaRatio.value !== null
+  const headers = hasProforma
+    ? ['Display Name', 'Raw Value', 'Tag Value (Parsed)', 'Billable Cost ($)', 'Est. Proforma Cost ($)', 'Percentage (%)']
+    : ['Display Name', 'Raw Value', 'Tag Value (Parsed)', 'Cost ($)', 'Percentage (%)']
   const lines = [headers.join(',')]
 
   rows.forEach((row: any) => {
-    lines.push([
+    const cols = [
       escCSV(row.label),
       escCSV(row.rawValue || row.value),
       escCSV(row.parsedValue || row.label),
-      (row.cost || 0).toFixed(2),
-      (row.percentage || 0).toFixed(2)
-    ].join(','))
+      (row.cost || 0).toFixed(2)
+    ]
+    if (hasProforma) cols.push(((row.cost || 0) * proformaRatio.value!).toFixed(2))
+    cols.push((row.percentage || 0).toFixed(2))
+    lines.push(cols.join(','))
   })
 
   // Append summary
   const total = breakdownRef.value?.totalCost || 0
   lines.push('')
-  lines.push(`Total,,,"${total.toFixed(2)}",100.00`)
+  if (hasProforma) {
+    const proformaTotal = proformaTotals.value?.proformaTotal || 0
+    lines.push(`Total,,,${total.toFixed(2)},${proformaTotal.toFixed(2)},100.00`)
+  } else {
+    lines.push(`Total,,,"${total.toFixed(2)}",100.00`)
+  }
 
   // Append metadata
   lines.push('')
@@ -379,10 +443,12 @@ async function loadInitialData() {
   aliasesDirty.value = false
   tagsWithCost.value = []
   hiddenTagCount.value = 0
+  proformaTotals.value = null
 
   const [tags] = await Promise.all([
     fetchAvailableTags([accountId.value]),
-    fetchAccountTagConfig(accountId.value)
+    fetchAccountTagConfig(accountId.value),
+    fetchProformaRatio()
   ])
 
   // Filter tags to only those with actual charges
@@ -441,6 +507,7 @@ function refreshAll() {
   if (selectedTag.value) {
     fetchTagCoverage(selectedTag.value, [accountId.value], activePeriod.value)
     fetchBreakdown()
+    fetchProformaRatio()
   }
 }
 
@@ -449,6 +516,7 @@ watch([selectedTag, activePeriod], ([tag, period]) => {
   if (!tag || !accountId.value) return
   fetchTagCoverage(tag, [accountId.value], period)
   fetchBreakdown()
+  fetchProformaRatio()
   logUserAction('cost.tag_drilldown', `tag:${tag}`)
 })
 

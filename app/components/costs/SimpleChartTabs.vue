@@ -190,7 +190,7 @@
 
       <!-- Tag Analysis Tab -->
       <div v-else-if="activeTab === 'tags'" class="animate-fadeIn">
-        <TagAnalysisTab :selected-accounts="selectedAccounts" :selected-timeframe="selectedTimeframe" />
+        <TagAnalysisTab :selected-accounts="selectedAccounts" :selected-timeframe="selectedTimeframe" :data-mode="dataMode || 'proforma'" />
       </div>
     </div>
   </div>
@@ -295,7 +295,10 @@ const tabs = computed(() => [
   {
     id: 'tags',
     label: 'Tag Analysis',
-    icon: 'i-heroicons-tag'
+    icon: 'i-heroicons-tag',
+    badge: props.dataMode === 'proforma' ? 'Estimated' : undefined,
+    badgeTooltip: props.dataMode === 'proforma' ? 'Tag costs are estimated from billable distribution' : undefined,
+    badgeLink: '/support/docs?topic=cost-tags-guide'
   }
 ])
 

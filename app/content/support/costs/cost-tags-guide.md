@@ -1,123 +1,146 @@
 ---
-title: Tag Analysis & Tag-Based Cost Grouping
-lastUpdated: 2026-03-13
+title: Tag Analysis & Cost Breakdown by Tag
+lastUpdated: 2026-03-23
 icon: i-heroicons-tag
 ---
 
-> **Prerequisite:** Cost Allocation Tags must be **activated** in the AWS Billing Console before they appear in GHOST. If you don't see any tags, ask your AWS administrator to enable them. It can take up to 24 hours after activation for tags to show up.
-
-# Tag Analysis & Tag-Based Cost Grouping
+# Tag Analysis & Cost Breakdown by Tag
 
 ## Overview
 
-Tags let you label AWS resources (e.g., `Project: Phoenix`, `Team: Platform`, `Environment: Production`). The Tag Analysis feature lets you see how your AWS costs break down by these labels, so you can answer questions like:
+Tag Analysis lets you break down an account's AWS costs by tag key. For any given tag, you can see what percentage of spend is covered, identify untagged costs, and drill into service-level and resource-level detail for each tag value. Use it to answer questions like:
 
 - "How much is the Phoenix project costing us?"
 - "What percentage of our spend is properly tagged?"
-- "Which accounts have untagged resources?"
+- "Who created the most expensive resources?"
 
-## Viewing Costs by Tag
+## Understanding AWS Tags
 
-### From the Cost Dashboard
+### What Are Tags?
 
-1. Navigate to **Cost Dashboard** (`/account/costs`)
-2. In the header bar, look for the **Tags** dropdown
-3. Select a tag key (e.g., "Environment", "Project", or "Team")
-4. The dashboard switches to show costs grouped by that tag's values
+Tags are key-value labels attached to AWS resources. For example, a tag with key `Project` and value `Phoenix` would be written as `Project: Phoenix`. Tags are used for:
 
-When tag grouping is active:
-- A **Tag Cost Breakdown** panel appears showing cost per tag value
-- A bar chart visualizes the distribution
-- An **"Untagged"** row shows costs from resources without that tag
-- Click any tag value to filter to just those costs
+- **Cost allocation** — breaking down your AWS bill by project, team, or environment
+- **Ownership tracking** — identifying who created or manages a resource
+- **Compliance** — ensuring resources meet organizational tagging requirements
 
-### Clearing Tag Grouping
+### AWS-Generated vs. User-Defined Tags
 
-To go back to the normal view, click the **X** on the tag badge in the header, or select a different grouping option.
+**AWS-generated tags** are prefixed with `aws:` and created automatically by AWS services:
 
-## Tag Analysis Page
+- `aws:createdBy` — records who or what created the resource (IAM user, assumed role, or AWS service)
+- `aws:cloudformation:stack-name` — set by CloudFormation on resources it creates
+- These appear automatically but must still be **activated** in the Billing Console before they show up in cost analysis
 
-For a deeper look across all your accounts, use the dedicated Tag Analysis page.
+**User-defined tags** are created by your team when provisioning resources:
 
-### Accessing the Page
+- Examples: `Project`, `Team`, `Environment`, `CostCenter`
+- **Not automatic** — your project team must implement a tagging strategy and apply tags at resource creation time
+- Tags applied after resource creation only affect costs going forward (they are not retroactive)
 
-1. Click **Tag Compliance** in the sidebar (under Cost Management)
-2. Or navigate directly to `/admin/costs/tag-compliance`
+### Why Some Resources Are Untagged
 
-### Tag Discovery
+The "Untagged" row in the cost breakdown captures several scenarios:
 
-The top section shows all cost allocation tags found across your accounts. Click any tag badge to select it for analysis.
+- **Not all resource types support tags** — some charges like data transfer fees and certain shared services cannot be tagged
+- **Tags were never applied** — the resource was created without the tag you're analyzing
+- **The tag was added later** — costs incurred before tagging won't be retroactively tagged
+- **Blank tag values** — the tag key exists on the resource but has no value
 
-### Tag Coverage
+### Understanding `aws:createdBy` Values
 
-Once you select a tag, the **Tag Coverage** section shows:
-- **Overall Coverage** - What percentage of total costs have this tag applied
-- **Per-Account Breakdown** - Each account's tagged vs. untagged costs with a progress bar
-  - **Green** (75%+): Good coverage
-  - **Yellow** (50-75%): Needs improvement
-  - **Red** (below 50%): Many resources are missing this tag
+The `aws:createdBy` tag produces several value formats depending on how the resource was created. GHOST parses these automatically into readable display names:
 
-### Cost by Tag
+| Raw Value Format | What It Means | Display Name |
+|---|---|---|
+| `AssumedRole:AROAXXXX:user@example.com` | A user assumed an IAM role (most common in SSO environments) | `user@example.com` |
+| `AWSService:serviceName` | An AWS service created the resource (e.g., Auto Scaling, CloudFormation) | `serviceName` |
+| `arn:aws:iam::123456:user/username` | An IAM user directly created the resource | `username` |
+| `arn:aws:iam::123456:role/rolename` | An IAM role created the resource | `rolename` |
 
-Below coverage, you'll see a table and chart showing how costs distribute across the tag's values. For example, if you select the "Environment" tag, you might see:
-- Production: $45,000
-- Development: $12,000
-- Staging: $3,000
-- Untagged: $8,000
+## Using the Tag Analysis Tab
 
-### Untagged Cost Alerts
+1. Navigate to the **Cost Dashboard** and select a **single account** from the sidebar (tag analysis requires exactly one account)
+2. Switch to the **Tag Analysis** tab
+3. Use the **tag dropdown** to select a tag key — favorite/important tags appear at the top with a separator for easy access
+4. Three **coverage stat cards** appear showing:
+   - **Coverage %** — percentage of total cost that has this tag applied (color-coded: green 80%+, amber 50-79%, red below 50%)
+   - **Tagged Cost** — total dollar amount from resources with this tag
+   - **Untagged Cost** — total dollar amount from resources without this tag (highlighted with amber border when coverage is low)
+5. Tags with $0 cost are automatically hidden from the dropdown — a count is shown next to the selector (e.g., "3 tags with $0 cost hidden")
 
-Accounts where more than 50% of costs are untagged are highlighted as alerts. This helps you prioritize which accounts need better tagging.
+## Cost Breakdown Table
 
-## Configuring Important Tags
+Below the coverage cards, a table shows every value for the selected tag, sorted by cost:
 
-As an account admin, you can mark which tags matter most for your account. This makes them easier to find in dropdowns and highlights them for your team.
+| Column | Description |
+|---|---|
+| **Display Name** | Friendly name for the tag value. Click to edit (set an alias). A pencil icon appears on hover. |
+| **Raw Value** | The original value from AWS Cost Explorer. Hover to see the full value in a tooltip. |
+| **Cost Distribution** | Visual bar showing relative cost (blue for tagged values, amber for untagged). |
+| **Total Cost** | Dollar amount for this tag value. |
+| **%** | Percentage of total cost. |
 
-### Setting Up Important Tags
+### Interacting with the Table
 
-1. Go to the **Cost Dashboard** (`/account/costs`)
-2. Select a single account in the sidebar
-3. Click the **Tag Configuration** button (visible to account admins only)
-4. In the configuration panel:
-   - **Check the box** next to tags you want to mark as important
-   - **Set a default tag** to automatically group costs by when viewing this account
-   - **Add descriptions** to explain what each tag means for your team
-5. Click **Save**
+- **Click a row** to expand a detail panel below the table showing:
+  - Service-level cost breakdown for that tag value
+  - A trend chart showing cost over time for that value
+  - Copy buttons for the raw and parsed values
+- **Edit display names** — click any display name or the pencil icon to set a custom alias. When you've made changes, a **Save Aliases** button appears above the table. Click it to persist all pending alias changes at once.
+- **$0-cost values** — a toggle at the bottom of the table lets you show or hide tag values with zero cost
+- **Export** — use the download button in the toolbar to export the breakdown as CSV
 
-Important tags appear at the top of all tag dropdowns with a visual separator, making them quick to find.
+## Historical Trend
 
-## Filtering by Tag Values
+Below the breakdown table, a line chart shows cost over time for the top tag values. Less common values are grouped into an "Other" category to keep the chart readable.
 
-You can narrow your cost view to specific tag values:
+## Tag Settings
 
-1. When tag grouping is active on the Cost Dashboard, the **Tag Filter** panel appears
-2. Select a tag key, then pick one or more values
-3. Filter badges appear showing your active filters
-4. Click the **X** on any badge to remove that filter
-5. Click **Clear All** to remove all tag filters
+Click the **settings icon** (adjustments/gear) in the toolbar to open the Tag Settings slideover panel. It contains three sections:
+
+1. **Favorite Tags** — toggle which tags appear at the top of the tag dropdown for quick access. You can also add custom tag names manually, or click **Discover** to scan your AWS account for tags that are actually in use on your resources.
+2. **Default Tag** — choose a tag to auto-select when you open the Tag Analysis tab, so you don't have to pick one each time.
+3. **Tag Notes** — add descriptions explaining what each favorite tag means for your team. These appear as tooltips throughout the interface.
+
+Click **Save Settings** at the bottom to persist your changes.
+
+## Proforma Cost Estimates
+
+By default, the Cost Dashboard shows **proforma costs** (what your account is actually charged via AWS Billing Conductor). However, AWS Billing Conductor **does not support cost allocation tags** — tag-level cost breakdowns are only available from billable (master account) data via Cost Explorer.
+
+To bridge this gap, GHOST **extrapolates proforma costs** by applying the percentage distribution from your billable tag data to your account's proforma total. For example, if tag value "Phoenix" accounts for 40% of your billable costs and your proforma total is $10,000, GHOST estimates the proforma cost for "Phoenix" at $4,000.
+
+**What this means for you:**
+
+- **Percentages are accurate** — the relative distribution between tag values is exact (it comes directly from billable data)
+- **Dollar amounts are estimates** — indicated by "(est.)" labels throughout the interface
+- **Coverage % is unaffected** — the tagged vs. untagged ratio is the same regardless of proforma vs. billable
+- **Switch to billable mode** on the Cost Dashboard toggle to see exact billable costs per tag (without estimation)
+
+When estimated proforma costs are shown, a note appears above the breakdown table explaining the extrapolation.
 
 ## Common Questions
 
-### Why don't I see any tags?
-
-Cost Allocation Tags must be activated in the AWS Billing Console. Contact your AWS administrator and ask them to:
-1. Go to **AWS Billing Console** > **Cost Allocation Tags**
-2. Select the tags to activate
-3. Click **Activate**
-
-Tags take up to 24 hours to appear after activation. Only costs incurred **after** activation will be tagged.
-
 ### What does "Untagged" mean?
 
-Resources without a value for the selected tag are grouped as **Untagged**. This is normal for shared services (like data transfer), but a high untagged percentage may mean resources need tagging.
+Resources without a value for the selected tag are grouped as **Untagged**. This includes resources that don't support tags (like some data transfer charges), resources where the tag was never applied, and resources with a blank tag value. A high untagged percentage may indicate your team needs to improve its tagging strategy.
 
-### Can I see tags from multiple accounts at once?
+### Why do some `aws:createdBy` values show emails and others show role names?
 
-Yes. The Tag Analysis page (`/admin/costs/tag-compliance`) shows tags across all your accounts. The coverage section breaks down tagging quality per account.
+The format depends on how the resource was created. Users signing in through SSO typically show up as `AssumedRole:...:email@example.com`, which GHOST parses to show the email. Resources created by AWS services or IAM roles without an email session will show the service or role name instead. See the parsing table above for all formats.
 
-### Who can configure important tags?
+### Can I rename tag values?
 
-Only **account administrators** can set up important tags and default grouping. All users can view and use tags for grouping and filtering.
+Yes. Click any display name in the breakdown table to set a custom alias. This doesn't change anything in AWS — it only changes how the value appears in GHOST. Use this to turn cryptic values like `AssumedRole:AROAXXXX:j.smith@company.com` into friendly names like "Jane Smith". Click **Save Aliases** to persist your changes.
+
+### Who can configure tag settings?
+
+Any user with access to the account can open the Tag Settings panel and configure favorite tags, default tag, and tag notes. Alias edits in the breakdown table are also saved per-account and visible to all users.
+
+### Why do tag costs show as estimated?
+
+AWS Billing Conductor (which calculates proforma costs) does not support cost allocation tags. GHOST works around this by taking the tag percentage breakdown from billable costs and applying it to your proforma total. The resulting dollar amounts are estimates — marked with "(est.)" — while the percentages remain exact. To see exact costs per tag, switch the Cost Dashboard to billable mode.
 
 ### Do tags affect my actual AWS bill?
 
@@ -125,8 +148,10 @@ No. Tags are labels for organizing and analyzing costs. They don't change what y
 
 ## Tips
 
-- **Start with one tag** - Pick your most important tag (like "Project" or "Team") and get comfortable before adding more
-- **Check coverage regularly** - Use the Tag Analysis page to monitor tagging compliance
-- **Tag early** - Apply tags when creating resources, not after. Costs before tagging won't be retroactively tagged
-- **Standardize names** - Agree on tag keys and values across teams (e.g., always "Environment", not "Env" or "env")
-- **Use the untagged alerts** - Focus cleanup efforts on accounts with the highest untagged costs
+- **Start with one tag** — pick your most important tag (like "Project" or "Team") and get comfortable before adding more
+- **Tag early** — apply tags when creating resources, not after. Costs before tagging won't be retroactively tagged
+- **Use `aws:createdBy`** to identify who is driving costs even before implementing a full tagging strategy
+- **Use aliases** to clean up cryptic tag values into team-friendly names
+- **Standardize names** — agree on tag keys and values across teams (e.g., always "Environment", not "Env" or "env")
+- **Set a default tag** in Tag Settings so the analysis loads automatically when you open the tab
+- **Export to CSV** for offline analysis or sharing with stakeholders who don't have GHOST access
