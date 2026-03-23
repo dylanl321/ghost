@@ -41,8 +41,8 @@ For a deeper look across all your accounts, use the dedicated Tag Analysis page.
 
 ### Accessing the Page
 
-1. Click **Tag Analysis** in the sidebar (under Accounts)
-2. Or navigate directly to `/account/cost-tags`
+1. Click **Tag Compliance** in the sidebar (under Cost Management)
+2. Or navigate directly to `/admin/costs/tag-compliance`
 
 ### Tag Discovery
 
@@ -113,7 +113,7 @@ Resources without a value for the selected tag are grouped as **Untagged**. This
 
 ### Can I see tags from multiple accounts at once?
 
-Yes. The Tag Analysis page (`/account/cost-tags`) shows tags across all your accounts. The coverage section breaks down tagging quality per account.
+Yes. The Tag Analysis page (`/admin/costs/tag-compliance`) shows tags across all your accounts. The coverage section breaks down tagging quality per account.
 
 ### Who can configure important tags?
 

@@ -16,7 +16,7 @@
         <span class="text-sm font-medium">Pipeline: {{ pipelineHealthPercent }}%</span>
       </NuxtLink>
 
-      <NuxtLink to="/admin/budget-alerts" class="group flex items-center gap-2 px-3 py-2 rounded-lg transition-colors"
+      <NuxtLink to="/admin/costs/budget-alerts" class="group flex items-center gap-2 px-3 py-2 rounded-lg transition-colors"
         :class="alertColor">
         <UIcon name="i-heroicons-bell-alert" class="w-4 h-4" />
         <span class="text-sm font-medium">{{ budgetAlertCount }} Alert{{ budgetAlertCount !== 1 ? 's' : '' }}</span>

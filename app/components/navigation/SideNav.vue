@@ -484,11 +484,6 @@ const navigationItems = computed(() => {
       collapseRule: "default-collapsed",
     },
     {
-      label: "Tag Analysis",
-      to: "/account/cost-tags",
-      icon: "i-heroicons-tag",
-    },
-    {
       label: "Users & Access",
       to: "/account/user",
       icon: "i-heroicons-users",

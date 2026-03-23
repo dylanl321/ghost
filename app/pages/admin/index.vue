@@ -5,37 +5,24 @@
       <UCard class="max-w-2xl">
         <div class="p-8 text-center">
           <Icon name="i-heroicons-shield-exclamation" class="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-            Access Denied
-          </h1>
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">Access Denied</h1>
           <p class="text-gray-600 dark:text-gray-400 mb-6">
             You don't have permission to access the admin panel. This area is restricted to administrators only.
           </p>
-
           <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 mb-6 text-left">
-            <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-2">
-              To get admin access:
-            </h3>
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-2">To get admin access:</h3>
             <ul class="text-sm text-gray-600 dark:text-gray-400 space-y-1 list-disc list-inside">
               <li>You must be a member of the <code class="text-blue-600 dark:text-blue-400">AWS-Product-Team</code> group</li>
               <li>Contact your manager to request access</li>
               <li>Submit a SailPoint request for the AWS-Product-Team group</li>
             </ul>
           </div>
-
           <div class="flex flex-col sm:flex-row gap-3 justify-center">
-            <UButton
-              color="emerald"
-              @click="navigateTo('/')"
-            >
+            <UButton color="emerald" @click="navigateTo('/')">
               <Icon name="i-heroicons-home" class="w-4 h-4 mr-2" />
               Go to Dashboard
             </UButton>
-            <UButton
-              color="gray"
-              variant="soft"
-              @click="navigateTo('/profile')"
-            >
+            <UButton color="gray" variant="soft" @click="navigateTo('/profile')">
               <Icon name="i-heroicons-user-circle" class="w-4 h-4 mr-2" />
               View My Profile
             </UButton>
@@ -46,568 +33,122 @@
 
     <!-- Admin Dashboard Content -->
     <div v-else class="container mx-auto px-6 py-8 max-w-7xl">
-          <!-- Header with Search -->
-          <div class="mb-6">
-            <div class="flex items-center justify-between mb-4">
-              <div>
-                <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-                  Admin Dashboard
-                </h1>
-                <p class="text-gray-600 dark:text-gray-400">
-                  Manage system settings, users, content, and monitor application health
-                </p>
-              </div>
-            </div>
+      <!-- Header -->
+      <div class="mb-6">
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">Admin Dashboard</h1>
+        <p class="text-gray-600 dark:text-gray-400">System overview and quick actions</p>
+      </div>
 
-            <!-- Search and Quick Actions Bar -->
-            <div class="flex gap-3">
-              <UInput
-                v-model="searchQuery"
-                placeholder="Search admin sections..."
-                icon="i-heroicons-magnifying-glass"
-                class="flex-1"
-                size="lg"
-              />
-              <UButton
-                v-if="isSearching"
-                color="gray"
-                variant="soft"
-                icon="i-heroicons-x-mark"
-                size="lg"
-                @click="clearSearch"
-              >
-                Clear
-              </UButton>
-              <UButton
-                v-else
-                color="gray"
-                variant="soft"
-                icon="i-heroicons-star"
-                size="lg"
-                @click="showFavorites = !showFavorites"
-              >
-                Favorites
-              </UButton>
-            </div>
-
-            <!-- Favorites Quick Access (if enabled) -->
-            <div v-if="showFavorites && favoriteActions.length > 0 && !isSearching" class="mt-4">
-              <UCard>
-                <div class="flex flex-wrap gap-2">
-                  <UButton
-                    v-for="fav in favoriteActions"
-                    :key="fav.id"
-                    color="primary"
-                    variant="soft"
-                    size="sm"
-                    :icon="fav.icon"
-                    @click="navigateTo(fav.to)"
-                  >
-                    {{ fav.label }}
-                  </UButton>
-                </div>
-              </UCard>
-            </div>
-
-            <!-- Search Results -->
-            <div v-if="isSearching" class="mt-4">
-              <div v-if="filteredPanels.length > 0">
-                <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">
-                  {{ filteredPanels.length }} result{{ filteredPanels.length !== 1 ? 's' : '' }} for "{{ searchQuery }}"
-                </h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  <UCard
-                    v-for="panel in filteredPanels"
-                    :key="panel.id"
-                    class="cursor-pointer hover:shadow-lg transition-shadow"
-                    @click="navigateToPanel(panel)"
-                  >
-                    <div class="flex items-center gap-3">
-                      <div class="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                        <Icon :name="panel.icon" class="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                      </div>
-                      <div class="flex-1 min-w-0">
-                        <h4 class="font-medium text-gray-900 dark:text-white truncate">
-                          {{ panel.label }}
-                        </h4>
-                        <p class="text-xs text-gray-500 dark:text-gray-400 truncate">
-                          {{ panel.categoryLabel }}
-                        </p>
-                      </div>
-                      <Icon name="i-heroicons-arrow-right" class="w-4 h-4 text-gray-400 flex-shrink-0" />
-                    </div>
-                  </UCard>
-                </div>
-              </div>
-              <div v-else class="text-center py-8">
-                <Icon name="i-heroicons-magnifying-glass" class="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                <p class="text-gray-500 dark:text-gray-400">
-                  No results for "{{ searchQuery }}"
-                </p>
-                <p class="text-sm text-gray-400 dark:text-gray-500 mt-1">
-                  Try searching for "api", "users", "logs", or "budget"
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Main Dashboard Content (hidden when searching) -->
-          <template v-if="!isSearching">
-          <!-- Error Alert -->
-          <div v-if="metricsError" class="mb-6">
-            <UAlert
-              color="red"
-              icon="i-heroicons-exclamation-triangle"
-              :title="metricsError"
-            >
-              <template #actions>
-                <UButton
-                  color="red"
-                  variant="soft"
-                  size="xs"
-                  @click="fetchMetrics"
-                  :loading="loading"
-                >
-                  Retry
-                </UButton>
-              </template>
-            </UAlert>
-          </div>
-
-          <!-- Quick Settings Section -->
-          <div class="mb-8">
-            <div class="flex items-center justify-between mb-4">
-              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
-                Quick Settings
-              </h2>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <UCard class="cursor-pointer hover:shadow-lg transition-shadow" @click="navigateTo('/admin/settings')">
-                <div class="flex items-center gap-4">
-                  <div class="p-3 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
-                    <Icon name="i-heroicons-cog-6-tooth" class="w-6 h-6 text-orange-600 dark:text-orange-400" />
-                  </div>
-                  <div class="flex-1">
-                    <h3 class="font-semibold text-gray-900 dark:text-white">System Settings</h3>
-                    <p class="text-sm text-gray-600 dark:text-gray-400">Configure site-wide settings</p>
-                  </div>
-                  <Icon name="i-heroicons-arrow-right" class="w-5 h-5 text-gray-400" />
-                </div>
-              </UCard>
-
-              <UCard class="cursor-pointer hover:shadow-lg transition-shadow" @click="navigateTo('/admin/settings')">
-                <div class="flex items-center gap-4">
-                  <div class="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                    <Icon name="i-heroicons-key" class="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div class="flex-1">
-                    <h3 class="font-semibold text-gray-900 dark:text-white">API Keys</h3>
-                    <p class="text-sm text-gray-600 dark:text-gray-400">Manage API access</p>
-                  </div>
-                  <Icon name="i-heroicons-arrow-right" class="w-5 h-5 text-gray-400" />
-                </div>
-              </UCard>
-
-              <UCard class="cursor-pointer hover:shadow-lg transition-shadow" @click="navigateTo('/admin/settings')">
-                <div class="flex items-center gap-4">
-                  <div class="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                    <Icon name="i-heroicons-bell" class="w-6 h-6 text-purple-600 dark:text-purple-400" />
-                  </div>
-                  <div class="flex-1">
-                    <h3 class="font-semibold text-gray-900 dark:text-white">Notifications</h3>
-                    <p class="text-sm text-gray-600 dark:text-gray-400">Configure alerts</p>
-                  </div>
-                  <Icon name="i-heroicons-arrow-right" class="w-5 h-5 text-gray-400" />
-                </div>
-              </UCard>
-            </div>
-          </div>
-
-          <!-- System Health and Metrics Row -->
-          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-            <!-- System Health Status -->
-            <UCard>
-              <template #header>
-                <div class="flex items-center justify-between">
-                  <h3 class="font-semibold text-gray-900 dark:text-white">System Health</h3>
-                  <Icon name="i-heroicons-heart" class="w-5 h-5 text-red-500" />
-                </div>
-              </template>
-              <div class="space-y-3">
-                <div v-for="service in systemHealth" :key="service.name" class="flex items-center justify-between">
-                  <div class="flex items-center gap-2">
-                    <div
-                      class="w-2 h-2 rounded-full"
-                      :class="service.status === 'healthy' ? 'bg-green-500' : service.status === 'degraded' ? 'bg-yellow-500' : 'bg-red-500'"
-                    ></div>
-                    <span class="text-sm text-gray-700 dark:text-gray-300">{{ service.name }}</span>
-                  </div>
-                  <span class="text-xs text-gray-500">{{ service.responseTime }}</span>
-                </div>
-              </div>
-            </UCard>
-
-            <!-- Activity Chart -->
-            <UCard>
-              <template #header>
-                <div class="flex items-center justify-between">
-                  <h3 class="font-semibold text-gray-900 dark:text-white">User Activity (7d)</h3>
-                  <Icon name="i-heroicons-chart-bar" class="w-5 h-5 text-blue-500" />
-                </div>
-              </template>
-              <div class="space-y-2">
-                <div v-for="day in activityData" :key="day.day" class="flex items-center gap-2">
-                  <span class="text-xs text-gray-600 dark:text-gray-400 w-8">{{ day.day }}</span>
-                  <div class="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                    <div
-                      class="bg-blue-500 h-2 rounded-full transition-all"
-                      :style="{ width: `${Math.min(100, (day.users / maxActivityUsers) * 100)}%` }"
-                    ></div>
-                  </div>
-                  <span class="text-xs font-medium text-gray-700 dark:text-gray-300 w-8">{{ day.users }}</span>
-                </div>
-              </div>
-            </UCard>
-
-            <!-- Quick Stats Summary -->
-            <UCard>
-              <template #header>
-                <div class="flex items-center justify-between">
-                  <h3 class="font-semibold text-gray-900 dark:text-white">Quick Stats</h3>
-                  <Icon name="i-heroicons-chart-pie" class="w-5 h-5 text-gray-500" />
-                </div>
-              </template>
-              <div class="space-y-3">
-                <div class="flex items-center justify-between">
-                  <span class="text-sm text-gray-600 dark:text-gray-400">Total Users</span>
-                  <span class="text-sm font-semibold text-gray-900 dark:text-white">{{ totalUsers }}</span>
-                </div>
-                <div class="flex items-center justify-between">
-                  <span class="text-sm text-gray-600 dark:text-gray-400">Chat Threads</span>
-                  <span class="text-sm font-semibold text-gray-900 dark:text-white">{{ aiChatSessions }}</span>
-                </div>
-                <div class="flex items-center justify-between">
-                  <span class="text-sm text-gray-600 dark:text-gray-400">Share Links</span>
-                  <span class="text-sm font-semibold text-gray-900 dark:text-white">{{ shortlinksTotal }}</span>
-                </div>
-                <div class="flex items-center justify-between">
-                  <span class="text-sm text-gray-600 dark:text-gray-400">Scheduled Reports</span>
-                  <span class="text-sm font-semibold text-gray-900 dark:text-white">{{ scheduledReportsCount }}</span>
-                </div>
-              </div>
-            </UCard>
-          </div>
-
-          <!-- Stats Grid -->
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-            <UCard>
-              <div class="flex items-center justify-between">
-                <div>
-                  <p class="text-sm text-gray-600 dark:text-gray-400">Active Users</p>
-                  <p class="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                    <span v-if="loading">...</span>
-                    <span v-else>{{ totalUsers }}</span>
-                  </p>
-                  <p class="text-xs text-gray-500 mt-1">Total registered users</p>
-                </div>
-                <Icon name="i-heroicons-users" class="w-8 h-8 text-blue-500" />
-              </div>
-            </UCard>
-
-            <UCard>
-              <div class="flex items-center justify-between">
-                <div>
-                  <p class="text-sm text-gray-600 dark:text-gray-400">Share Links</p>
-                  <p class="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                    <span v-if="loading">...</span>
-                    <span v-else>{{ shortlinksTotal }}</span>
-                  </p>
-                  <p class="text-xs text-gray-500 mt-1">Total created</p>
-                </div>
-                <Icon name="i-heroicons-link" class="w-8 h-8 text-purple-500" />
-              </div>
-            </UCard>
-
-            <UCard>
-              <div class="flex items-center justify-between">
-                <div>
-                  <p class="text-sm text-gray-600 dark:text-gray-400">AI Chat Threads</p>
-                  <p class="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                    <span v-if="loading">...</span>
-                    <span v-else>{{ aiChatSessions }}</span>
-                  </p>
-                  <p class="text-xs text-blue-600 dark:text-blue-400 mt-1">{{ aiChatsToday }} queries today</p>
-                </div>
-                <Icon name="i-heroicons-chat-bubble-left-right" class="w-8 h-8 text-emerald-500" />
-              </div>
-            </UCard>
-
-            <UCard>
-              <div class="flex items-center justify-between">
-                <div>
-                  <p class="text-sm text-gray-600 dark:text-gray-400">Scheduled Reports</p>
-                  <p class="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                    <span v-if="loading">...</span>
-                    <span v-else>{{ scheduledReportsCount }}</span>
-                  </p>
-                  <p class="text-xs text-gray-500 mt-1">Active schedules</p>
-                </div>
-                <Icon name="i-heroicons-calendar-days" class="w-8 h-8 text-orange-500" />
-              </div>
-            </UCard>
-          </div>
-
-          <!-- All Categories Section -->
-          <div class="mb-6">
-            <h2 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-              All Categories
-            </h2>
-          </div>
-
-          <!-- Category Cards Grid -->
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <!-- System Settings - First Position -->
-            <UCard
-              class="hover:shadow-lg transition-shadow cursor-pointer border-2 border-orange-200 dark:border-orange-800"
-              @click="navigateTo('/admin/settings')"
-            >
-              <div class="space-y-4">
-                <div class="flex items-start justify-between">
-                  <div class="p-3 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
-                    <Icon name="i-heroicons-cog-6-tooth" class="w-8 h-8 text-orange-600 dark:text-orange-400" />
-                  </div>
-                  <div class="flex items-center gap-1">
-                    <Icon name="i-heroicons-star" class="w-4 h-4 text-orange-500" />
-                    <Icon name="i-heroicons-arrow-right" class="w-5 h-5 text-gray-400" />
-                  </div>
-                </div>
-                <div>
-                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    System Settings
-                  </h3>
-                  <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                    Configure API keys, site settings, and notifications
-                  </p>
-                  <div class="flex flex-wrap gap-2">
-                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      API Keys
-                    </span>
-                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      Site Config
-                    </span>
-                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      Notifications
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </UCard>
-
-            <!-- User Management Category -->
-            <UCard
-              class="hover:shadow-lg transition-shadow cursor-pointer"
-              @click="navigateTo('/admin/users')"
-            >
-              <div class="space-y-4">
-                <div class="flex items-start justify-between">
-                  <div class="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                    <Icon name="i-heroicons-user-group" class="w-8 h-8 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <Icon name="i-heroicons-arrow-right" class="w-5 h-5 text-gray-400" />
-                </div>
-                <div>
-                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    User Management
-                  </h3>
-                  <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                    Manage user preferences, roles, and permissions
-                  </p>
-                  <div class="flex flex-wrap gap-2">
-                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      User Preferences
-                    </span>
-                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      Roles & Permissions
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </UCard>
-
-            <!-- Content & Reports Category -->
-            <UCard
-              class="hover:shadow-lg transition-shadow cursor-pointer"
-              @click="navigateTo('/admin/content')"
-            >
-              <div class="space-y-4">
-                <div class="flex items-start justify-between">
-                  <div class="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                    <Icon name="i-heroicons-document-duplicate" class="w-8 h-8 text-purple-600 dark:text-purple-400" />
-                  </div>
-                  <Icon name="i-heroicons-arrow-right" class="w-5 h-5 text-gray-400" />
-                </div>
-                <div>
-                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    Content & Reports
-                  </h3>
-                  <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                    Manage share links, scheduled reports, and stored reports
-                  </p>
-                  <div class="flex flex-wrap gap-2">
-                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      Share Links
-                    </span>
-                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      Reports
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </UCard>
-
-            <!-- AI Operations Category (Consolidated) -->
-            <UCard
-              class="hover:shadow-lg transition-shadow cursor-pointer"
-              @click="navigateTo('/admin/ai')"
-            >
-              <div class="space-y-4">
-                <div class="flex items-start justify-between">
-                  <div class="p-3 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
-                    <Icon name="i-heroicons-sparkles" class="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
-                  </div>
-                  <Icon name="i-heroicons-arrow-right" class="w-5 h-5 text-gray-400" />
-                </div>
-                <div>
-                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    AI Operations
-                  </h3>
-                  <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                    Monitor AI chat, test agents, and view performance metrics
-                  </p>
-                  <div class="flex flex-wrap gap-2">
-                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      Chat Monitor
-                    </span>
-                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      Agent Testing
-                    </span>
-                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      Metrics
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </UCard>
-
-            <!-- System Monitoring Category (Consolidated) -->
-            <UCard
-              class="hover:shadow-lg transition-shadow cursor-pointer"
-              @click="navigateTo('/admin/monitoring')"
-            >
-              <div class="space-y-4">
-                <div class="flex items-start justify-between">
-                  <div class="p-3 bg-red-100 dark:bg-red-900/30 rounded-lg">
-                    <Icon name="i-heroicons-chart-bar" class="w-8 h-8 text-red-600 dark:text-red-400" />
-                  </div>
-                  <Icon name="i-heroicons-arrow-right" class="w-5 h-5 text-gray-400" />
-                </div>
-                <div>
-                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    System Monitoring
-                  </h3>
-                  <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                    View logs, health checks, and manage issues
-                  </p>
-                  <div class="flex flex-wrap gap-2">
-                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      System Logs
-                    </span>
-                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      Health Checks
-                    </span>
-                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      Issues
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </UCard>
-
-            <!-- Budget Alerts Category -->
-            <UCard
-              class="hover:shadow-lg transition-shadow cursor-pointer"
-              @click="navigateTo('/admin/budget-alerts')"
-            >
-              <div class="space-y-4">
-                <div class="flex items-start justify-between">
-                  <div class="p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
-                    <Icon name="i-heroicons-currency-dollar" class="w-8 h-8 text-yellow-600 dark:text-yellow-400" />
-                  </div>
-                  <Icon name="i-heroicons-arrow-right" class="w-5 h-5 text-gray-400" />
-                </div>
-                <div>
-                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    Budget Alerts
-                  </h3>
-                  <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                    Monitor budget alerts, view Lambda logs, and configure alert settings
-                  </p>
-                  <div class="flex flex-wrap gap-2">
-                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      Org Overview
-                    </span>
-                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      Alert History
-                    </span>
-                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      Lambda Logs
-                    </span>
-                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      Settings
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </UCard>
-
-            <!-- Pipeline Analytics Category -->
-            <UCard
-              class="hover:shadow-lg transition-shadow cursor-pointer"
-              @click="navigateTo('/admin/pipelines')"
-            >
-              <div class="space-y-4">
-                <div class="flex items-start justify-between">
-                  <div class="p-3 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
-                    <Icon name="i-heroicons-arrow-path" class="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
-                  </div>
-                  <Icon name="i-heroicons-arrow-right" class="w-5 h-5 text-gray-400" />
-                </div>
-                <div>
-                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    Pipeline Analytics
-                  </h3>
-                  <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                    View and analyze CI/CD pipeline metrics and performance
-                  </p>
-                  <div class="flex flex-wrap gap-2">
-                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      Repositories
-                    </span>
-                    <span class="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-700 dark:text-gray-300">
-                      Authors
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </UCard>
-          </div>
+      <!-- Error Alert -->
+      <div v-if="metricsError" class="mb-6">
+        <UAlert color="red" icon="i-heroicons-exclamation-triangle" :title="metricsError">
+          <template #actions>
+            <UButton color="red" variant="soft" size="xs" @click="fetchMetrics" :loading="loading">Retry</UButton>
           </template>
+        </UAlert>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="mb-6">
+        <h2 class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Quick Actions</h2>
+        <div class="flex flex-wrap gap-3">
+          <UButton color="gray" variant="soft" icon="i-heroicons-clipboard-document-check" @click="navigateTo('/admin/costs/data-validation')">
+            Run Validation
+          </UButton>
+          <UButton color="gray" variant="soft" icon="i-heroicons-heart" @click="navigateTo('/admin/ai?tab=agent-health')">
+            Check Agent Health
+          </UButton>
+          <UButton color="gray" variant="soft" icon="i-heroicons-exclamation-triangle" @click="navigateTo('/admin/users?tab=feedback')">
+            View Feedback
+          </UButton>
+          <UButton color="gray" variant="soft" icon="i-heroicons-bell-alert" @click="navigateTo('/admin/costs/budget-alerts')">
+            Budget Alerts
+          </UButton>
+          <UButton color="gray" variant="soft" icon="i-heroicons-tag" @click="navigateTo('/admin/costs/tag-compliance')">
+            Tag Compliance
+          </UButton>
+        </div>
+      </div>
+
+      <!-- System Health, Activity Chart, Quick Stats -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <!-- System Health Status -->
+        <UCard>
+          <template #header>
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-gray-900 dark:text-white">System Health</h3>
+              <Icon name="i-heroicons-heart" class="w-5 h-5 text-red-500" />
+            </div>
+          </template>
+          <div class="space-y-3">
+            <div v-for="service in systemHealth" :key="service.name" class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <div
+                  class="w-2 h-2 rounded-full"
+                  :class="service.status === 'healthy' ? 'bg-green-500' : service.status === 'degraded' ? 'bg-yellow-500' : 'bg-red-500'"
+                ></div>
+                <span class="text-sm text-gray-700 dark:text-gray-300">{{ service.name }}</span>
+              </div>
+              <span class="text-xs text-gray-500">{{ service.responseTime }}</span>
+            </div>
+          </div>
+        </UCard>
+
+        <!-- Activity Chart -->
+        <UCard>
+          <template #header>
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-gray-900 dark:text-white">User Activity (7d)</h3>
+              <Icon name="i-heroicons-chart-bar" class="w-5 h-5 text-blue-500" />
+            </div>
+          </template>
+          <div class="space-y-2">
+            <div v-for="day in activityData" :key="day.day" class="flex items-center gap-2">
+              <span class="text-xs text-gray-600 dark:text-gray-400 w-8">{{ day.day }}</span>
+              <div class="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                <div
+                  class="bg-blue-500 h-2 rounded-full transition-all"
+                  :style="{ width: `${Math.min(100, (day.users / maxActivityUsers) * 100)}%` }"
+                ></div>
+              </div>
+              <span class="text-xs font-medium text-gray-700 dark:text-gray-300 w-8">{{ day.users }}</span>
+            </div>
+          </div>
+        </UCard>
+
+        <!-- Quick Stats -->
+        <UCard>
+          <template #header>
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-gray-900 dark:text-white">Quick Stats</h3>
+              <Icon name="i-heroicons-chart-pie" class="w-5 h-5 text-gray-500" />
+            </div>
+          </template>
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-gray-600 dark:text-gray-400">Total Users</span>
+              <span class="text-sm font-semibold text-gray-900 dark:text-white">{{ loading ? '...' : totalUsers }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-gray-600 dark:text-gray-400">Chat Threads</span>
+              <span class="text-sm font-semibold text-gray-900 dark:text-white">{{ loading ? '...' : aiChatSessions }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-gray-600 dark:text-gray-400">Share Links</span>
+              <span class="text-sm font-semibold text-gray-900 dark:text-white">{{ loading ? '...' : shortlinksTotal }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-gray-600 dark:text-gray-400">Scheduled Reports</span>
+              <span class="text-sm font-semibold text-gray-900 dark:text-white">{{ loading ? '...' : scheduledReportsCount }}</span>
+            </div>
+          </div>
+        </UCard>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-// Page meta - using admin layout
 definePageMeta({
   layout: 'admin',
   middleware: 'auth-permission',
@@ -617,23 +158,9 @@ definePageMeta({
 })
 
 const { isAdmin } = useUserRoles()
-
-// Check if user has admin access
 const hasAdminAccess = computed(() => isAdmin.value)
 
-// Use existing admin search composable
-const { searchQuery, filteredPanels, isSearching, navigateToPanel, clearSearch } = useAdminSearch()
-
-// Favorites state
-const showFavorites = ref(false)
-
-// Favorite actions (could be loaded from user preferences)
-const favoriteActions = ref([
-  { id: 'settings', label: 'System Settings', icon: 'i-heroicons-cog-6-tooth', to: '/admin/settings' },
-  { id: 'api-keys', label: 'API Keys', icon: 'i-heroicons-key', to: '/admin/settings' },
-])
-
-// Real system health status
+// System health status
 const systemHealth = ref([
   { name: 'API Gateway', status: 'healthy', responseTime: '<100ms' },
   { name: 'Database', status: 'healthy', responseTime: '50ms' },
@@ -641,7 +168,7 @@ const systemHealth = ref([
   { name: 'Strands AI', status: 'healthy', responseTime: '1.2s' },
 ])
 
-// User activity data (last 7 days) - will be populated with real data
+// User activity data (last 7 days)
 const activityData = ref([
   { day: 'Mon', users: 0 },
   { day: 'Tue', users: 0 },
@@ -652,30 +179,24 @@ const activityData = ref([
   { day: 'Sun', users: 0 },
 ])
 
-// Stats - Real data
+// Stats
 const totalUsers = ref(0)
 const shortlinksTotal = ref(0)
-const shortlinksToday = ref(0)
 const aiChatSessions = ref(0)
 const aiChatsToday = ref(0)
 const scheduledReportsCount = ref(0)
 const loading = ref(true)
 const metricsError = ref<string | null>(null)
 
-// Computed max for activity bar scaling
 const maxActivityUsers = computed(() => Math.max(1, ...activityData.value.map(d => d.users)))
 
-// Shortlinks data
 const { total, fetchShortlinks } = useShortlinks()
 
-
-// Fetch real metrics with parallel requests
 const fetchMetrics = async () => {
   try {
     loading.value = true
     metricsError.value = null
 
-    // Fetch all metrics in parallel for faster loading
     const [
       userPrefsResult,
       chatMetrics24hResult,
@@ -692,11 +213,9 @@ const fetchMetrics = async () => {
       $fetch('/api/admin/strands-health')
     ])
 
-    // Fetch shortlinks separately (uses composable)
     await fetchShortlinks({ limit: 1 })
     shortlinksTotal.value = total.value
 
-    // Extract values from fulfilled promises
     if (userPrefsResult.status === 'fulfilled') {
       totalUsers.value = userPrefsResult.value.data.total || 0
     }
@@ -714,7 +233,6 @@ const fetchMetrics = async () => {
     }
 
     if (chatMetrics7dResult.status === 'fulfilled') {
-      // Use uniqueUsers as a measure of activity - show daily average evenly
       const dailyAvg = Math.floor((chatMetrics7dResult.value.metrics.uniqueUsers || 0) / 7)
       activityData.value = activityData.value.map((day) => ({
         ...day,
@@ -722,32 +240,20 @@ const fetchMetrics = async () => {
       }))
     }
 
-    // Update Strands AI health status with real data
     if (strandsHealthResult.status === 'fulfilled') {
       const healthData = strandsHealthResult.value as any
       const strandsStatus = healthData?.healthy ? 'healthy' : 'degraded'
       const strandsLatency = healthData?.results?.health?.service?.latency
         ? `${healthData.results.health.service.latency}ms`
         : 'N/A'
-
-      // Update Strands AI entry in systemHealth
       const strandsIndex = systemHealth.value.findIndex(s => s.name === 'Strands AI')
       if (strandsIndex !== -1) {
-        systemHealth.value[strandsIndex] = {
-          name: 'Strands AI',
-          status: strandsStatus,
-          responseTime: strandsLatency
-        }
+        systemHealth.value[strandsIndex] = { name: 'Strands AI', status: strandsStatus, responseTime: strandsLatency }
       }
     } else {
-      // Mark as degraded if health check failed
       const strandsIndex = systemHealth.value.findIndex(s => s.name === 'Strands AI')
       if (strandsIndex !== -1) {
-        systemHealth.value[strandsIndex] = {
-          name: 'Strands AI',
-          status: 'degraded',
-          responseTime: 'Error'
-        }
+        systemHealth.value[strandsIndex] = { name: 'Strands AI', status: 'degraded', responseTime: 'Error' }
       }
     }
 
@@ -759,7 +265,6 @@ const fetchMetrics = async () => {
   }
 }
 
-// Load initial data
 onMounted(async () => {
   if (hasAdminAccess.value) {
     await fetchMetrics()

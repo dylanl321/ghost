@@ -5,7 +5,7 @@
         <UIcon name="i-heroicons-bell-alert" class="w-5 h-5 text-amber-500" />
         <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Budget Alerts</h2>
       </div>
-      <NuxtLink to="/admin/budget-alerts" class="text-xs text-blue-500 hover:text-blue-400 transition-colors">
+      <NuxtLink to="/admin/costs/budget-alerts" class="text-xs text-blue-500 hover:text-blue-400 transition-colors">
         View All →
       </NuxtLink>
     </div>

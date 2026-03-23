@@ -78,11 +78,12 @@ export function useCommandPalette() {
     if (isAdmin.value) {
       commands.push(
         { id: 'admin-dashboard', label: 'Admin Dashboard', description: 'Admin control panel', icon: 'i-heroicons-shield-check', to: '/admin', category: 'admin', keywords: ['admin', 'dashboard'] },
-        { id: 'admin-settings', label: 'System Settings', description: 'API keys, site config', icon: 'i-heroicons-cog-6-tooth', to: '/admin/settings', category: 'admin', keywords: ['system', 'api', 'config', 'admin'] },
-        { id: 'admin-users', label: 'User Management', description: 'Manage users and roles', icon: 'i-heroicons-user-group', to: '/admin/users', category: 'admin', keywords: ['users', 'roles', 'admin'] },
+        { id: 'admin-configuration', label: 'Configuration', description: 'API keys, site config', icon: 'i-heroicons-cog-6-tooth', to: '/admin/configuration', category: 'admin', keywords: ['system', 'api', 'config', 'admin'] },
+        { id: 'admin-users', label: 'Users & Access', description: 'Users, roles, journeys, feedback', icon: 'i-heroicons-user-group', to: '/admin/users', category: 'admin', keywords: ['users', 'roles', 'admin'] },
         { id: 'admin-content', label: 'Content & Reports', description: 'Share links, reports', icon: 'i-heroicons-document-duplicate', to: '/admin/content', category: 'admin', keywords: ['content', 'reports', 'admin'] },
-        { id: 'admin-ai', label: 'AI Operations', description: 'AI monitoring and testing', icon: 'i-heroicons-sparkles', to: '/admin/ai', category: 'admin', keywords: ['ai', 'agents', 'metrics', 'admin'] },
-        { id: 'admin-monitoring', label: 'System Monitoring', description: 'Logs, health, issues', icon: 'i-heroicons-chart-bar', to: '/admin/monitoring', category: 'admin', keywords: ['logs', 'monitoring', 'health', 'admin'] },
+        { id: 'admin-costs', label: 'Cost Management', description: 'Budget alerts, tag compliance', icon: 'i-heroicons-currency-dollar', to: '/admin/costs', category: 'admin', keywords: ['costs', 'budget', 'tags', 'admin'] },
+        { id: 'admin-ai', label: 'AI & Agents', description: 'AI monitoring and testing', icon: 'i-heroicons-sparkles', to: '/admin/ai', category: 'admin', keywords: ['ai', 'agents', 'metrics', 'admin'] },
+        { id: 'admin-system', label: 'System Health', description: 'Logs, health, notifications', icon: 'i-heroicons-server-stack', to: '/admin/system', category: 'admin', keywords: ['logs', 'monitoring', 'health', 'admin'] },
         { id: 'admin-pipelines', label: 'Pipeline Analytics', description: 'CI/CD analytics', icon: 'i-heroicons-arrow-path', to: '/admin/pipelines', category: 'admin', keywords: ['pipelines', 'cicd', 'admin'] },
       )
     }

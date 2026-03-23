@@ -59,6 +59,7 @@ const route = useRoute()
 
 // Active tab state
 const activeTab = ref(0)
+const tabNames = ['share-links', 'reports', 'stored-reports']
 
 // Tab configuration
 const tabs = [
@@ -76,29 +77,22 @@ const tabs = [
   }
 ]
 
-// Read tab from query param on mount
 onMounted(() => {
-  const tabParam = route.query.tab
-  if (tabParam !== undefined) {
-    const tabIndex = parseInt(tabParam as string, 10)
-    if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex < tabs.length) {
-      activeTab.value = tabIndex
-    }
+  const tabParam = route.query.tab as string | undefined
+  if (tabParam) {
+    const idx = tabNames.indexOf(tabParam)
+    if (idx !== -1) activeTab.value = idx
   }
 })
 
-// Watch for query changes (e.g., back/forward navigation)
 watch(() => route.query.tab, (newTab) => {
-  if (newTab !== undefined) {
-    const tabIndex = parseInt(newTab as string, 10)
-    if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex < tabs.length) {
-      activeTab.value = tabIndex
-    }
+  if (newTab) {
+    const idx = tabNames.indexOf(newTab as string)
+    if (idx !== -1) activeTab.value = idx
   }
 })
 
-// Update URL when tab changes
 watch(activeTab, (newTab) => {
-  navigateTo({ query: { ...route.query, tab: newTab.toString() } }, { replace: true })
+  navigateTo({ query: { ...route.query, tab: tabNames[newTab] } }, { replace: true })
 })
 </script>
