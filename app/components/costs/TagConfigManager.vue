@@ -1,105 +1,46 @@
 <template>
-  <!-- Modal mode: wrapped in UModal -->
-  <UModal v-if="mode === 'modal'" :model-value="show" @update:model-value="$emit('update:show', $event)">
-    <UCard
-      :ui="{
-        ring: '',
-        divide: 'divide-y divide-gray-200 dark:divide-gray-700',
-        header: { base: 'py-4 px-6', background: 'bg-white dark:bg-gray-900' },
-        footer: { base: 'py-4 px-6', background: 'bg-white dark:bg-gray-900' }
-      }"
-    >
-      <template #header>
-        <div class="flex items-center justify-between">
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Tag Configuration</h3>
-          <UButton
-            color="gray"
-            variant="ghost"
-            icon="i-heroicons-x-mark-20-solid"
-            size="sm"
-            @click="$emit('update:show', false)"
-          />
+  <USlideover v-model="isOpen" side="right" :ui="{ width: 'max-w-sm' }">
+    <div class="flex flex-col h-full">
+      <!-- Header -->
+      <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+        <div class="flex items-center gap-2">
+          <UIcon name="i-heroicons-adjustments-horizontal" class="w-5 h-5 text-gray-500" />
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Tag Settings</h2>
         </div>
-      </template>
-
-      <TagConfigForm
-        :available-tags="availableTags"
-        :resource-tags="resourceTags"
-        :is-loading-resource-tags="isLoadingResourceTags"
-        :account-id="accountId"
-        :draft="draft"
-        :is-loading="isLoadingConfig || isLoadingTags"
-        :is-saving="isSavingConfig"
-        :default-group-options="defaultGroupOptions"
-        @toggle-important-tag="toggleImportantTag"
-        @set-description="setDescription"
-        @update-default-group="draft.defaultGroupByTag = $event ?? undefined"
-        @fetch-resource-tags="fetchResourceTags(accountId, props.environment)"
-      />
-
-      <template #footer>
-        <div class="flex justify-end gap-2">
-          <UButton
-            color="gray"
-            variant="ghost"
-            @click="$emit('update:show', false)"
-          >
-            Cancel
-          </UButton>
-          <UButton
-            color="blue"
-            variant="solid"
-            :loading="isSavingConfig"
-            :disabled="isLoadingConfig || isLoadingTags"
-            @click="save"
-          >
-            Save Configuration
-          </UButton>
-        </div>
-      </template>
-    </UCard>
-  </UModal>
-
-  <!-- Inline mode: rendered as a card -->
-  <UCard v-else>
-    <template #header>
-      <div>
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Cost Allocation Tags</h3>
-        <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-          Configure which tags are important for cost analysis on this account.
-        </p>
+        <UButton icon="i-heroicons-x-mark" size="xs" variant="ghost" color="gray" @click="isOpen = false" />
       </div>
-    </template>
 
-    <TagConfigForm
-      :available-tags="availableTags"
-      :resource-tags="resourceTags"
-      :is-loading-resource-tags="isLoadingResourceTags"
-      :account-id="accountId"
-      :draft="draft"
-      :is-loading="isLoadingConfig || isLoadingTags"
-      :is-saving="isSavingConfig"
-      :default-group-options="defaultGroupOptions"
-      @toggle-important-tag="toggleImportantTag"
-      @set-description="setDescription"
-      @update-default-group="draft.defaultGroupByTag = $event ?? undefined"
-      @fetch-resource-tags="fetchResourceTags(accountId, props.environment)"
-    />
+      <!-- Scrollable content -->
+      <div class="flex-1 overflow-y-auto p-4">
+        <TagConfigForm
+          :available-tags="availableTags"
+          :resource-tags="resourceTags"
+          :is-loading-resource-tags="isLoadingResourceTags"
+          :account-id="accountId"
+          :draft="draft"
+          :is-loading="isLoadingConfig || isLoadingTags"
+          :is-saving="isSavingConfig"
+          :default-group-options="defaultGroupOptions"
+          @toggle-important-tag="toggleImportantTag"
+          @set-description="setDescription"
+          @update-default-group="draft.defaultGroupByTag = $event ?? undefined"
+          @fetch-resource-tags="fetchResourceTags(accountId, props.environment)"
+        />
+      </div>
 
-    <template #footer>
-      <div class="flex justify-end">
+      <!-- Footer -->
+      <div class="p-4 border-t border-gray-200 dark:border-gray-700">
         <UButton
+          label="Save Settings"
           color="blue"
-          variant="solid"
+          block
           :loading="isSavingConfig"
           :disabled="isLoadingConfig || isLoadingTags"
           @click="save"
-        >
-          Save Configuration
-        </UButton>
+        />
       </div>
-    </template>
-  </UCard>
+    </div>
+  </USlideover>
 </template>
 
 <script setup lang="ts">
@@ -107,14 +48,10 @@ import type { AccountCostTagConfig } from '~~/shared/types/cost-tags'
 
 const props = defineProps<{
   accountId: string
-  show?: boolean
-  mode?: 'modal' | 'inline'
   environment?: string
 }>()
 
-defineEmits<{
-  (e: 'update:show', value: boolean): void
-}>()
+const isOpen = defineModel<boolean>({ required: true })
 
 const toast = useToast()
 const {
@@ -204,16 +141,9 @@ async function loadData() {
   populateDraft()
 }
 
-// Modal mode: load data when modal opens
-if (props.mode === 'modal' || !props.mode) {
-  watch(() => props.show, async (open) => {
-    if (!open) return
-    await loadData()
-  }, { immediate: true })
-}
-
-// Inline mode: load data on mount
-if (props.mode === 'inline') {
-  onMounted(() => loadData())
-}
+// Load data when slideover opens
+watch(isOpen, async (open) => {
+  if (!open) return
+  await loadData()
+}, { immediate: true })
 </script>

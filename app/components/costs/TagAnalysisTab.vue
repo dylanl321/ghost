@@ -50,6 +50,15 @@
               @click="exportBreakdownCSV"
             />
           </UTooltip>
+          <UTooltip text="Tag Settings">
+            <UButton
+              icon="i-heroicons-adjustments-horizontal"
+              color="gray"
+              variant="ghost"
+              size="sm"
+              @click="showSettings = true"
+            />
+          </UTooltip>
         </div>
 
         <!-- Coverage stat cards -->
@@ -137,31 +146,12 @@
         />
       </div>
 
-      <!-- Section D: Tag Configuration (Collapsible) -->
-      <UCard>
-        <template #header>
-          <button
-            class="flex items-center justify-between w-full text-left"
-            @click="configExpanded = !configExpanded"
-          >
-            <div class="flex items-center gap-2">
-              <UIcon name="i-heroicons-cog-6-tooth" class="w-4 h-4 text-gray-500" />
-              <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">Tag Configuration</span>
-            </div>
-            <UIcon
-              :name="configExpanded ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'"
-              class="w-4 h-4 text-gray-400"
-            />
-          </button>
-        </template>
-        <div v-if="configExpanded">
-          <TagConfigManager
-            :account-id="accountId"
-            :environment="environment"
-            mode="inline"
-          />
-        </div>
-      </UCard>
+      <!-- Tag Settings Slideover -->
+      <TagConfigManager
+        v-model="showSettings"
+        :account-id="accountId"
+        :environment="environment"
+      />
     </div>
   </div>
 </template>
@@ -207,7 +197,7 @@ const {
 
 // Local state
 const selectedTag = ref<string | null>(null)
-const configExpanded = ref(false)
+const showSettings = ref(false)
 const breakdownData = ref<any>(null)
 const isLoadingBreakdown = ref(false)
 const draftAliases = ref<Record<string, string>>({})
@@ -343,14 +333,14 @@ function exportBreakdownCSV() {
     return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
   }
 
-  const headers = ['Tag Value (Raw)', 'Tag Value (Parsed)', 'Alias', 'Cost ($)', 'Percentage (%)']
+  const headers = ['Display Name', 'Raw Value', 'Tag Value (Parsed)', 'Cost ($)', 'Percentage (%)']
   const lines = [headers.join(',')]
 
   rows.forEach((row: any) => {
     lines.push([
+      escCSV(row.label),
       escCSV(row.rawValue || row.value),
       escCSV(row.parsedValue || row.label),
-      escCSV(currentAliases.value[`${selectedTag.value}::${row.value}`] || ''),
       (row.cost || 0).toFixed(2),
       (row.percentage || 0).toFixed(2)
     ].join(','))
@@ -378,6 +368,7 @@ function exportBreakdownCSV() {
     icon: 'i-heroicons-arrow-down-tray',
     color: 'green'
   })
+  logUserAction('export.csv', 'source:tag-analysis')
 }
 
 // Initial data load when single account is selected
@@ -458,6 +449,7 @@ watch([selectedTag, activePeriod], ([tag, period]) => {
   if (!tag || !accountId.value) return
   fetchTagCoverage(tag, [accountId.value], period)
   fetchBreakdown()
+  logUserAction('cost.tag_drilldown', `tag:${tag}`)
 })
 
 // Watch for account changes
