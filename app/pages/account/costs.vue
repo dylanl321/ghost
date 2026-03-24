@@ -318,8 +318,11 @@
         :selected-accounts="selectedAccounts"
         :active-tab="activeTab"
         :dataset="dataset"
+        :alerts-count="!isHistoricalTimeframe ? alertsCount : 0"
+        :alerts-by-severity="!isHistoricalTimeframe ? alertsBySeverity : { critical: 0, escalation: 0, warning: 0, info: 0 }"
         @refresh="refreshData"
         @start-tour="() => handleStartTour(true)"
+        @view-alerts="navigateToBudgetAlerts"
       />
 
       <!-- Selected Account Context Banner -->
@@ -473,30 +476,6 @@
             />
           </div>
 
-          <!-- Budget Alerts Banner -->
-          <div
-            v-if="!isHistoricalTimeframe && alertsCount > 0 && !alertsBannerDismissed"
-            class="flex items-center justify-between rounded-lg border px-4 py-3"
-            :class="alertsBannerClasses"
-          >
-            <div class="flex items-center gap-2">
-              <UIcon name="i-heroicons-bell-alert" class="w-5 h-5" />
-              <span class="text-sm font-medium">
-                {{ alertsCount }} budget alert{{ alertsCount !== 1 ? 's' : '' }}: {{ alertsSummaryText }}
-              </span>
-              <UButton variant="link" size="xs" @click="navigateToBudgetAlerts">
-                View details &rarr;
-              </UButton>
-            </div>
-            <UButton
-              variant="ghost"
-              size="xs"
-              color="gray"
-              icon="i-heroicons-x-mark"
-              @click="alertsBannerDismissed = true"
-            />
-          </div>
-
           <div v-if="isCostPending" class="bg-white dark:bg-gray-900 border border-amber-300 dark:border-amber-600 rounded-lg p-4 text-amber-700 dark:text-amber-400 flex items-center gap-2">
             <Icon name="i-heroicons-clock" class="w-5 h-5 animate-pulse" />
             <span>Waiting for account selection to complete...</span>
@@ -534,11 +513,13 @@
               :show-advanced-charts="showAdvancedCharts"
               :sidebar-tab="activeTab"
               :warnings="fetchWarnings"
+              :cost-summary-context="costSummaryContext"
               @toggle-regression-line="showRegressionLine = !showRegressionLine"
               @toggle-advanced-charts="showAdvancedCharts = !showAdvancedCharts; localStorage.setItem('showAdvancedCharts', String(showAdvancedCharts))"
               @tab-changed="activeChartTab = $event"
               @refresh-data="fetchCosts"
             />
+
           </div>
         </div>
       </div>
@@ -734,7 +715,6 @@ const isHistoricalTimeframe = computed(() => {
 
 // Budget alerts
 const budgetAlerts = ref<BudgetAlert[]>([])
-const alertsBannerDismissed = ref(false)
 let alertDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
 const alertsCount = computed(() => budgetAlerts.value.length)
@@ -750,26 +730,6 @@ const alertsBySeverity = computed(() => {
   return counts
 })
 
-const alertsSummaryText = computed(() => {
-  const sev = alertsBySeverity.value
-  const parts: string[] = []
-  if (sev.critical > 0) parts.push(`${sev.critical} critical`)
-  if (sev.escalation > 0) parts.push(`${sev.escalation} escalation`)
-  if (sev.warning > 0) parts.push(`${sev.warning} warning${sev.warning !== 1 ? 's' : ''}`)
-  if (sev.info > 0) parts.push(`${sev.info} info`)
-  return parts.join(', ')
-})
-
-const alertsBannerClasses = computed(() => {
-  const sev = alertsBySeverity.value
-  if (sev.critical > 0 || sev.escalation > 0) {
-    return 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400'
-  }
-  if (sev.warning > 0) {
-    return 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400'
-  }
-  return 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400'
-})
 
 async function fetchAlertsSummary() {
   try {
@@ -793,9 +753,8 @@ async function fetchAlertsSummary() {
   }
 }
 
-// Refetch alerts when account selection changes (debounced), reset dismissed state
+// Refetch alerts when account selection changes (debounced)
 watch(selectedAccounts, () => {
-  alertsBannerDismissed.value = false
   if (alertDebounceTimer) clearTimeout(alertDebounceTimer)
   alertDebounceTimer = setTimeout(() => fetchAlertsSummary(), 300)
 }, { deep: true })
@@ -988,6 +947,46 @@ const totalSpend = computed<number>(() => {
 const utilization = computed(() => {
   if (totalBudget.value === 0) return 0
   return Math.round((totalSpend.value / totalBudget.value) * 100)
+})
+
+// AI Cost Summary context (combined cost + budget analysis)
+const costSummaryContext = computed(() => {
+  if (totalSpend.value === 0) return {}
+  const accts = selectedAccounts.value.length > 0
+    ? accountsWithCosts.value.filter((a: Account) => selectedAccounts.value.includes(getAccountKey(a)))
+    : accountsWithCosts.value.slice(0, 10)
+
+  const ctx: Record<string, any> = {
+    timeframe: selectedTimeframe.value,
+    dataMode: dataMode.value,
+    totalCost: totalSpend.value,
+    accountCount: selectedAccounts.value.length || accountsWithCosts.value.length,
+    accountNames: accts.map((a: Account) => formatAccountDisplayName(a)).slice(0, 5),
+    topServices: (dataset.value?.summary as any)?.topServices?.slice(0, 5) || [],
+  }
+
+  // Include budget data if available
+  if (totalBudget.value > 0) {
+    ctx.budgetUtilization = utilization.value
+    ctx.totalBudget = totalBudget.value
+    const overBudget = accountsWithCosts.value
+      .filter((a: Account) => {
+        const b = getBudget(a)
+        return b > 0 && getSpend(a) > b
+      })
+      .slice(0, 3)
+      .map((a: Account) => ({
+        name: formatAccountDisplayName(a),
+        actual: getSpend(a),
+        budget: getBudget(a),
+        variancePercent: getBudget(a) > 0 ? ((getSpend(a) - getBudget(a)) / getBudget(a)) * 100 : 0,
+      }))
+    if (overBudget.length > 0) {
+      ctx.overBudgetAccounts = overBudget
+    }
+  }
+
+  return ctx
 })
 
 // Selected accounts display logic
@@ -1204,6 +1203,12 @@ const showAdvancedCharts = ref(false)
 //    - Historical timeframes exclude budget-dependent charts
 //    - showAdvanced toggle includes power-user charts when enabled
 const { charts } = useChartRegistry({ scenario, timeframe: selectedTimeframe, mode: dataMode, showAdvanced: showAdvancedCharts })
+
+// Activity tracking for cost dashboard interactions
+watch(selectedTimeframe, (val) => { if (initialized.value) logUserAction('cost.timeframe_change', `timeframe:${val}`) })
+watch(activeTab, (val) => { if (initialized.value) logUserAction('cost.tab_switch', `tab:${val}`) })
+watch(activeChartTab, (val) => { if (initialized.value) logUserAction('cost.tab_switch', `chartTab:${val}`) })
+watch(dataMode, (val) => { if (initialized.value) logUserAction('cost.mode_toggle', `mode:${val}`) })
 
 // Set page title
 useHead({

@@ -18,7 +18,7 @@
         <!-- Summary metrics -->
         <div class="border-t border-gray-200 dark:border-gray-700 mt-4 pt-4 flex">
           <div class="w-1/3 text-left">
-            <div class="text-gray-600 dark:text-gray-400 text-sm">Total Cost (Last {{ dateRange }} Days)</div>
+            <div class="text-gray-600 dark:text-gray-400 text-sm">Total Cost ({{ dateRange === 'ytd' ? 'Year to Date' : `Last ${dateRange} Days` }})</div>
             <div :class="`${totalCostProforma ? 'text-blue-600/80 dark:text-blue-400/80' : 'text-gray-900 dark:text-white'} text-lg font-semibold`">
               {{ formatCurrency(totalCostBillable, 0) }}
             </div>
@@ -83,7 +83,7 @@ const props = defineProps<{
   timeSeriesProforma?: TimePoint[] // Pro Forma
 }>()
 
-const { dateRange, isScoped, scopeLabel } = useDashboardScope()
+const { dateRange, dateRangeDays, isScoped, scopeLabel } = useDashboardScope()
 
 // Theme-aware chart colors
 const colorMode = useColorMode()
@@ -176,7 +176,7 @@ const chartOptions = computed(() => {
           const month = d.getUTCMonth() + 1
           const day = d.getUTCDate()
           // For ranges > 30 days, skip weekday to reduce clutter
-          if (dateRange.value > 30) {
+          if (dateRangeDays.value > 30) {
             return `${month}/${day}`
           }
           const weekday = weekdays[d.getUTCDay()]

@@ -76,6 +76,22 @@
         </UBadge>
       </template>
 
+      <!-- Utilization -->
+      <template #utilization-data="{ row }">
+        <template v-if="getUtilizationEntry(row.resourceId)">
+          <UTooltip :text="getUtilizationTooltip(row.resourceId)">
+            <UBadge
+              :color="getUtilizationColor(getUtilizationEntry(row.resourceId)!.classification)"
+              variant="soft"
+              size="xs"
+            >
+              {{ getUtilizationLabel(getUtilizationEntry(row.resourceId)!.classification) }}
+            </UBadge>
+          </UTooltip>
+        </template>
+        <span v-else class="text-gray-400 text-xs">—</span>
+      </template>
+
       <!-- IP Addresses -->
       <template #ipAddresses-data="{ row }">
         <div class="text-sm space-y-1">
@@ -205,6 +221,7 @@
 <script setup lang="ts">
 interface Props {
   accountId: string
+  utilizationMap?: Record<string, { classification: string; reasons: string[] }>
 }
 
 const props = defineProps<Props>()
@@ -258,6 +275,7 @@ const columns = [
   { key: 'instanceName', label: 'Name' },
   { key: 'instanceType', label: 'Type' },
   { key: 'instanceState', label: 'State' },
+  { key: 'utilization', label: 'Utilization' },
   { key: 'ipAddresses', label: 'IP Addresses' },
   { key: 'configurationItemCaptureTime', label: 'Last State Change' },
   { key: 'pricing', label: 'Monthly Cost' },
@@ -327,6 +345,39 @@ const getStateColor = (state: string) => {
     case 'pending': return 'blue'
     default: return 'gray'
   }
+}
+
+const getUtilizationEntry = (resourceId: string) => {
+  return props.utilizationMap?.[resourceId] || null
+}
+
+const getUtilizationTooltip = (resourceId: string): string => {
+  const entry = props.utilizationMap?.[resourceId]
+  if (!entry) return 'No data'
+  const reasons = Array.isArray(entry.reasons) ? entry.reasons : []
+  return reasons.length > 0 ? reasons.join('; ') : 'No details'
+}
+
+const getUtilizationColor = (classification: string) => {
+  const colors: Record<string, string> = {
+    'unused': 'red',
+    'patching-only': 'orange',
+    'underutilized': 'yellow',
+    'right-sized': 'green',
+    'insufficient-data': 'gray'
+  }
+  return colors[classification] || 'gray'
+}
+
+const getUtilizationLabel = (classification: string) => {
+  const labels: Record<string, string> = {
+    'unused': 'Unused',
+    'patching-only': 'Patch Only',
+    'underutilized': 'Underutil.',
+    'right-sized': 'Right-sized',
+    'insufficient-data': 'No Data'
+  }
+  return labels[classification] || classification
 }
 
 const otherTagsCount = (row: any) => {

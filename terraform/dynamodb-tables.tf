@@ -587,6 +587,41 @@ resource "aws_dynamodb_table" "async_metrics" {
 # Terraform state. GHOST only needs read-only IAM permissions to query the table.
 
 # ============================================================================
+# Cost Tag Configuration Table (GovCloud Environment)
+# ============================================================================
+# Stores per-account cost tag configuration (important tags, descriptions, aliases)
+# Migrated from costTagConfig attribute on gdms_aws_accounts-master table
+resource "aws_dynamodb_table" "cost_tag_config" {
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-cost-tag-config-prod" : "ghost-cost-tag-config"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "accountId"
+
+  attribute {
+    name = "accountId"
+    type = "S"
+  }
+
+  # Enable encryption at rest
+  server_side_encryption {
+    enabled = true
+  }
+
+  # Enable point-in-time recovery
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Name        = "GHOST Cost Tag Configuration"
+    Environment = local.environment
+    ManagedBy   = "Terraform"
+    Service     = "GHOST"
+    Component   = "CostTagConfig"
+  }
+}
+
+# ============================================================================
 # Outputs
 # ============================================================================
 
@@ -688,6 +723,16 @@ output "async_metrics_table_name" {
 output "async_metrics_table_arn" {
   description = "ARN of the DynamoDB table for async metrics"
   value       = aws_dynamodb_table.async_metrics.arn
+}
+
+output "cost_tag_config_table_name" {
+  description = "Name of the DynamoDB table for cost tag configuration"
+  value       = aws_dynamodb_table.cost_tag_config.name
+}
+
+output "cost_tag_config_table_arn" {
+  description = "ARN of the DynamoDB table for cost tag configuration"
+  value       = aws_dynamodb_table.cost_tag_config.arn
 }
 
 # NOTE: strands_agent_metrics table outputs removed

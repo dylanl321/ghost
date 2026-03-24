@@ -37,8 +37,11 @@ async function fetchOrgDefault() {
   }
 }
 
+const ADMIN_SECTION_IDS = new Set<DashboardSectionId>(['adminOverview', 'adminAlerts', 'adminPipeline', 'adminFeedback'])
+
 export function useDashboardLayout() {
   const { setPreference, getPreference } = useUserPreferences()
+  const { isAdmin } = useUserRoles()
 
   // Fetch org default on first use (non-blocking)
   if (import.meta.client && !orgDefaultFetched.value) {
@@ -89,8 +92,10 @@ export function useDashboardLayout() {
     return { sections: mergedSections, metricCards: mergedMetricCards }
   })
 
+  // Filter out admin-only sections for non-admin users so their wrapper divs
+  // don't render as empty grid items and break the column layout
   const visibleSections = computed(() =>
-    layout.value.sections.filter(s => s.visible)
+    layout.value.sections.filter(s => s.visible && (isAdmin.value || !ADMIN_SECTION_IDS.has(s.id)))
   )
 
   const visibleMetricCardCount = computed(() =>

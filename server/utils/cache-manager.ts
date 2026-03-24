@@ -463,6 +463,12 @@ export const costCache = createTrackedCache({
   enableAnalytics: true
 })
 
+export const insightCache = createTrackedCache({
+  defaultTTL: 1800, // 30 minutes for AI-generated insights
+  maxEntries: 100,
+  enableAnalytics: true
+})
+
 // Cache key generators for common patterns
 export const CacheKeys = {
   organizationOverview: (params: { 

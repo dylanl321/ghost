@@ -55,6 +55,7 @@ export function useFavoriteAccounts() {
           color: 'yellow',
           timeout: 3000
         })
+        logUserAction('account.favorite', accountId)
       }
 
       return success
@@ -90,6 +91,7 @@ export function useFavoriteAccounts() {
           color: 'gray',
           timeout: 3000
         })
+        logUserAction('account.unfavorite', accountId)
       }
 
       return success

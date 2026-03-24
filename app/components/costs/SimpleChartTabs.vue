@@ -77,6 +77,15 @@
           :accounts-list="accountsList"
           :selected-accounts="selectedAccounts"
         />
+
+        <!-- AI Cost Analysis -->
+        <AiInsightCard
+          v-if="costSummaryContext && Object.keys(costSummaryContext).length > 0"
+          type="cost-summary"
+          title="AI Cost Analysis"
+          icon="i-heroicons-sparkles"
+          :context="costSummaryContext"
+        />
       </div>
 
       <!-- Organizational Overview Tab -->
@@ -225,6 +234,7 @@ const props = defineProps<{
   showAdvancedCharts?: boolean
   sidebarTab?: string
   warnings?: string[]
+  costSummaryContext?: Record<string, any>
 }>()
 
 // Emits

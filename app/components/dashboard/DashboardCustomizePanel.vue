@@ -1,6 +1,18 @@
 <template>
-  <USlideover v-model="isOpen" side="right" :ui="{ width: 'max-w-sm' }">
-    <div class="flex flex-col h-full">
+  <Teleport to="body">
+    <Transition
+      enter-active-class="transition-transform duration-300 ease-out"
+      enter-from-class="translate-x-full"
+      enter-to-class="translate-x-0"
+      leave-active-class="transition-transform duration-200 ease-in"
+      leave-from-class="translate-x-0"
+      leave-to-class="translate-x-full"
+    >
+      <div
+        v-if="isOpen"
+        ref="panelEl"
+        class="fixed inset-y-0 right-0 z-40 w-screen max-w-sm bg-white dark:bg-gray-900 shadow-xl border-l border-gray-200 dark:border-gray-700 flex flex-col"
+      >
       <!-- Header -->
       <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
         <div class="flex items-center gap-2">
@@ -105,12 +117,14 @@
           @click="resetLayout"
         />
       </div>
-    </div>
-  </USlideover>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
 import { useSortable } from '@vueuse/integrations/useSortable'
+import { onClickOutside } from '@vueuse/core'
 import {
   SECTION_LABELS,
   METRIC_CARD_LABELS,
@@ -121,6 +135,9 @@ import {
 } from '#shared/types/dashboard-layout'
 
 const isOpen = defineModel<boolean>({ required: true })
+
+const panelEl = ref<HTMLElement | null>(null)
+onClickOutside(panelEl, () => { isOpen.value = false })
 
 const { isAdmin } = useUserRoles()
 
@@ -141,6 +158,7 @@ const ADMIN_SECTION_IDS = new Set(['adminOverview', 'adminAlerts', 'adminPipelin
 // Local copy of sections kept in sync with layout so sortable can mutate it
 // without waiting for the async persist round-trip
 const localSections = ref<DashboardSectionConfig[]>([])
+const skipSync = ref(false)
 
 // Hide admin sections from non-admin users
 const visibleLocalSections = computed(() =>
@@ -149,7 +167,11 @@ const visibleLocalSections = computed(() =>
 
 watch(
   () => layout.value.sections,
-  (sections) => { localSections.value = [...sections] },
+  (sections) => {
+    if (!skipSync.value) {
+      localSections.value = [...sections]
+    }
+  },
   { immediate: true, deep: true },
 )
 
@@ -164,15 +186,34 @@ const { start, stop } = useSortable(sortableEl, localSections, {
   ghostClass: 'opacity-30',
   onUpdate(evt) {
     if (evt.oldIndex == null || evt.newIndex == null) return
-    const item = localSections.value.splice(evt.oldIndex, 1)[0]
-    localSections.value.splice(evt.newIndex, 0, item)
+
+    // DOM indices correspond to visibleLocalSections, not the full localSections array
+    const visible = [...visibleLocalSections.value]
+    const [moved] = visible.splice(evt.oldIndex, 1)
+    visible.splice(evt.newIndex, 0, moved)
+
+    if (isAdmin.value) {
+      localSections.value = visible
+    } else {
+      // Merge reordered visible sections with hidden admin sections
+      const adminSections = localSections.value.filter(s => ADMIN_SECTION_IDS.has(s.id))
+      const result: DashboardSectionConfig[] = [...visible]
+      for (const admin of adminSections) {
+        const origIdx = localSections.value.indexOf(admin)
+        result.splice(Math.min(origIdx, result.length), 0, admin)
+      }
+      localSections.value = result
+    }
+
+    // Prevent the layout watcher from resetting localSections during persist
+    skipSync.value = true
     reorderSections(localSections.value)
+    nextTick(() => { skipSync.value = false })
   },
 })
 
-// The slideover conditionally renders its content, so the DOM element doesn't exist
-// at mount time and is destroyed on close. Tear down the old instance and re-init
-// on each open so sortable always binds to the fresh DOM element.
+// The panel conditionally renders via v-if, so the DOM element doesn't exist
+// until opened. Re-init sortable on each open so it binds to the fresh DOM element.
 watch(isOpen, (open) => {
   if (open) {
     nextTick(() => {

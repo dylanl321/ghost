@@ -301,7 +301,8 @@ function buildPaddedDate(year: number, month: number, day: number) {
   return `${y}-${m}-${d}`;
 }
 
-const ALLOWED_DAYS = [7, 14, 30, 90] as const
+const MIN_DAYS = 1
+const MAX_DAYS = 366
 
 async function getOverview(useProforma: boolean = false, days: number = 14) {
   const now = new Date();
@@ -457,7 +458,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   const query = getQuery(event)
   const useProforma = query.proforma === 'true' || query.proforma === true
   const rawDays = parseInt(query.days as string) || 14
-  const days = ALLOWED_DAYS.includes(rawDays as any) ? rawDays : 14
+  const days = (rawDays >= MIN_DAYS && rawDays <= MAX_DAYS) ? rawDays : 14
 
   // Generate cache key including proforma flag and days
   const cacheKey = `organization:simplified-overview:${useProforma ? 'proforma' : 'billable'}:${days}d`

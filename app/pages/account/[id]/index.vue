@@ -137,8 +137,19 @@
             </InactiveAccountOverlay>
           </div>
 
-          <!-- Budget Alert History - full width -->
-          <div v-if="accountId" class="col-span-1 lg:col-span-3" data-tour="account-alerts">
+          <!-- AI Account Health -->
+          <div v-if="!isAccountInactive" class="col-span-1">
+            <AiInsightCard
+              type="account-health"
+              title="Account Health"
+              icon="i-heroicons-heart"
+              :context="accountHealthContext"
+              class="h-full"
+            />
+          </div>
+
+          <!-- Budget Alert History -->
+          <div v-if="accountId" class="col-span-1 lg:col-span-2" data-tour="account-alerts">
             <AccountAlertHistory :account-id="accountId" />
           </div>
         </div>
@@ -167,8 +178,15 @@
             </div>
           </div>
 
-          <!-- Row 3: Instances Table - Full Width (GovCloud) -->
-          <InstancesTable v-if="govCloudId || accountId" :account-id="govCloudId || accountId" />
+          <!-- Row 3: Instance Utilization Analysis - Full Width -->
+          <InstanceUtilization
+            v-if="govCloudId || accountId"
+            :account-id="govCloudId || accountId"
+            @loaded="(data) => utilizationMap = data"
+          />
+
+          <!-- Row 4: Instances Table - Full Width (GovCloud) -->
+          <InstancesTable v-if="govCloudId || accountId" :account-id="govCloudId || accountId" :utilization-map="utilizationMap" />
         </div>
         <div v-else class="flex items-center justify-center py-16">
           <div class="text-center">
@@ -259,8 +277,27 @@ const accountName = computed(() => enclaveStore.enclaves[accountId.value]?.proje
 const accountStatus = computed(() => enclaveStore.enclaves[accountId.value]?.enclaveStatus)
 const isAccountInactive = computed(() => accountStatus.value === 'Decommissioned' || accountStatus.value === 'Inactive')
 
+// AI Account Health context
+const accountHealthContext = computed(() => {
+  if (!accountId.value || loading.value) return {}
+  const enclave = enclaveStore.enclaves[accountId.value]
+  return {
+    accountId: accountId.value,
+    accountName: accountName.value,
+    lob: enclave?.lineOfBusiness,
+    status: accountStatus.value,
+    mtdCost: currentSpend.value,
+    budget: budget.value,
+    budgetUtilization: budget.value > 0 ? (currentSpend.value / budget.value) * 100 : undefined,
+    instanceCount: resourceCounts.value?.ec2Instances,
+  }
+})
+
 const { isAdmin } = useUserRoles()
 const { getPreference, setPreference, initialized: prefsInitialized, load: loadPrefs } = useUserPreferences()
+
+// Instance utilization data (passed from InstanceUtilization to InstancesTable)
+const utilizationMap = ref<Record<string, any>>({})
 
 // Cost trend date range
 const costDays = ref(14)

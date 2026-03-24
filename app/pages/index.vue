@@ -199,15 +199,15 @@
             />
 
             <DashboardAlertsCard
-              v-else-if="section.id === 'adminAlerts' && isAdminUser"
+              v-else-if="section.id === 'adminAlerts'"
             />
 
             <DashboardPipelineCard
-              v-else-if="section.id === 'adminPipeline' && isAdminUser"
+              v-else-if="section.id === 'adminPipeline'"
             />
 
             <DashboardFeedbackCard
-              v-else-if="section.id === 'adminFeedback' && isAdminUser"
+              v-else-if="section.id === 'adminFeedback'"
             />
 
             <DashboardCostTrend
@@ -263,6 +263,19 @@
             <DashboardSecuritySnapshot
               v-else-if="section.id === 'securitySnapshot'"
               :display-style="section.displayStyle || 'full'"
+            />
+
+            <AiInsightCard
+              v-else-if="section.id === 'aiBriefing'"
+              type="dashboard-briefing"
+              title="AI Briefing"
+              icon="i-heroicons-sparkles"
+              :context="aiBriefingContext"
+            />
+
+            <DashboardQuickChat
+              v-else-if="section.id === 'quickChat'"
+              :display-style="section.displayStyle || 'half'"
             />
           </div>
         </template>
@@ -325,6 +338,7 @@ const {
   dateRange: dashboardDateRange,
   scopeOptions: dashboardScopeOptions,
   dateRangeOptions: dashboardDateRangeOptions,
+  dateRangeDays,
   setScope,
   setDateRange,
   init: initDashboardScope,
@@ -471,6 +485,22 @@ const userTotalCost = computed(() => {
   return userAccountIds.reduce((sum, id) => sum + (costs[id] || 0), 0)
 })
 
+// AI Briefing context — only populated once overview data loads
+const aiBriefingContext = computed(() => {
+  if (!orgOverview.value?.data) return {}
+  return {
+    mtdTotal: mtdTotal.value,
+    projectedSpend: projectedSpend.value,
+    previousMonthSpend: previousMonthSpend.value,
+    activeAccounts: activeAccounts.value,
+    budgetHealth: budgetHealth.value,
+    alertsBySeverity: dashboardAlertsBySeverity.value,
+    topAccounts: topAccounts.value.slice(0, 5),
+    userAccountCount: userAccountCount.value,
+    userMtdCost: userTotalCost.value,
+  }
+})
+
 const userActiveAccountCount = computed(() =>
   Object.keys(userGroupStore.myEnclaves).filter(id =>
     enclaveStore.enclaves[id]?.accountStatus === 'ACTIVE'
@@ -560,7 +590,7 @@ async function fetchScopedCosts(scope: string) {
   try {
     const now = new Date()
     const end = now.toISOString().split('T')[0]
-    const start = new Date(now.getTime() - dashboardDateRange.value * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    const start = new Date(now.getTime() - dateRangeDays.value * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
     const params = new URLSearchParams({
       startDate: start,
@@ -606,8 +636,8 @@ function handleScopeChange(value: string) {
   }
 }
 
-function handleDateRangeChange(days: number) {
-  setDateRange(days as 7 | 14 | 30 | 90)
+function handleDateRangeChange(days: typeof dashboardDateRange.value) {
+  setDateRange(days)
   if (dashboardScope.value === 'org') {
     fetchOverview(false, true)
   } else {
@@ -625,7 +655,7 @@ async function fetchOverview(onlyAccounts = false, onlyCostTrend = false) {
   }
 
   try {
-    const url = `/api/organization/overview-simplified?proforma=${useProforma.value}&days=${dashboardDateRange.value}`
+    const url = `/api/organization/overview-simplified?proforma=${useProforma.value}&days=${dateRangeDays.value}`
     const response = await fetch(url)
 
     if (!response.ok) {

@@ -6,11 +6,10 @@
 import { defineEventHandler, getRouterParam } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../../utils/api-response'
 import { registerEndpoint } from '../../../plugins/swagger'
-import { scanItems } from '../../../utils/dynamodb'
+import { getItem } from '../../../utils/dynamodb'
+import { getTableConfig } from '../../../lib/dynamodb-config'
 import { logger } from '../../../utils/logger'
 import type { AccountCostTagConfig } from '../../../../shared/types/cost-tags'
-
-const TABLE_NAME = process.env.AWS_ACCOUNTS_TABLE_NAME || 'gdms_aws_accounts-master'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/accounts/{accountId}/tag-config', 'GET', {
@@ -51,7 +50,6 @@ registerEndpoint('/api/accounts/{accountId}/tag-config', 'GET', {
       }
     },
     400: { $ref: '#/components/schemas/Error' },
-    404: { $ref: '#/components/schemas/Error' },
     500: { $ref: '#/components/schemas/Error' }
   }
 })
@@ -64,20 +62,15 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   logger.info(`[TagConfig] Fetching tag config for account ${accountId}`)
 
-  // accountId is not the primary key — scan and match against both commercial and govcloud IDs
-  const scanResult = await scanItems(
-    TABLE_NAME,
-    'awsStandardAccountID = :aid OR awsGovCloudAccountID = :aid',
-    undefined,
-    undefined,
-    'govcloud',
-    undefined,
-    { ':aid': accountId }
+  const tableConfig = await getTableConfig('costTagConfig')
+  const record = await getItem(
+    tableConfig.tableName,
+    { accountId },
+    tableConfig.environment,
+    tableConfig.accountId
   )
 
-  const record = scanResult.items[0]
   if (!record) {
-    // No account record yet — return empty defaults instead of 404
     const defaults: AccountCostTagConfig = {
       importantTags: [],
       defaultGroupByTag: undefined,
@@ -86,12 +79,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     return sendSuccess(event, defaults)
   }
 
-  // Return existing tag config or empty defaults
-  const tagConfig: AccountCostTagConfig = record.costTagConfig || {
-    importantTags: [],
-    defaultGroupByTag: undefined,
-    tagDescriptions: {}
-  }
-
-  return sendSuccess(event, tagConfig)
+  // Strip the partition key before returning
+  const { accountId: _id, ...tagConfig } = record
+  return sendSuccess(event, tagConfig as AccountCostTagConfig)
 }))

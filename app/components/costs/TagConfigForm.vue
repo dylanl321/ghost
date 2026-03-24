@@ -4,53 +4,43 @@
     <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-blue-500 mx-auto" />
   </div>
 
-  <div v-else class="space-y-6">
-    <!-- Important tags -->
+  <div v-else class="space-y-8">
+    <!-- Section 1: Favorite Tags -->
     <div>
-      <h4 class="text-sm font-semibold text-gray-900 dark:text-white mb-1">Important Tags</h4>
+      <div class="flex items-center gap-2 mb-1">
+        <UIcon name="i-heroicons-star" class="w-4 h-4 text-amber-500" />
+        <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Favorite Tags</h4>
+      </div>
       <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
-        Pinned at the top of the tag selector. Check tags from AWS or add your own below.
+        Choose tags you use most often. These will appear at the top of the tag dropdown for quick access.
       </p>
 
-      <!-- Checkboxes for AWS-discovered cost allocation tags -->
-      <div v-if="availableTags.length > 0" class="space-y-2 max-h-48 overflow-y-auto pr-1 mb-3">
-        <label
-          v-for="tag in availableTags"
-          :key="tag"
-          class="flex items-center gap-2 cursor-pointer"
+      <!-- Toggle switches for all tags (AWS-discovered + custom) -->
+      <div v-if="allTagsList.length > 0" class="border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-200 dark:divide-gray-700 max-h-56 overflow-y-auto mb-3">
+        <div
+          v-for="tag in allTagsList"
+          :key="tag.key"
+          class="flex items-center justify-between px-3 py-2"
         >
-          <UCheckbox
-            :model-value="draft.importantTags.includes(tag)"
-            @update:model-value="$emit('toggleImportantTag', tag, $event)"
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-sm text-gray-900 dark:text-gray-200 truncate">{{ tag.key }}</span>
+            <UBadge v-if="tag.isCustom" size="xs" variant="soft" color="gray" label="custom" />
+          </div>
+          <UToggle
+            :model-value="draft.importantTags.includes(tag.key)"
+            @update:model-value="$emit('toggleImportantTag', tag.key, $event)"
           />
-          <span class="text-sm text-gray-900 dark:text-gray-200">{{ tag }}</span>
-        </label>
+        </div>
       </div>
       <div v-else class="text-sm text-gray-400 italic mb-3">
-        No cost allocation tags discovered from AWS.
-      </div>
-
-      <!-- Custom tags already added (that aren't in availableTags) -->
-      <div v-if="customImportantTags.length > 0" class="space-y-2 mb-3">
-        <div
-          v-for="tag in customImportantTags"
-          :key="tag"
-          class="flex items-center gap-2"
-        >
-          <UCheckbox
-            :model-value="true"
-            @update:model-value="$emit('toggleImportantTag', tag, false)"
-          />
-          <span class="text-sm text-gray-900 dark:text-gray-200">{{ tag }}</span>
-          <UBadge size="xs" variant="soft" color="gray" label="custom" />
-        </div>
+        No tags discovered yet. Add one below or scan your resources.
       </div>
 
       <!-- Add custom tag input -->
       <div class="flex items-center gap-2 mb-3">
         <UInput
           v-model="customTagInput"
-          placeholder="Add a custom tag key..."
+          placeholder="Add a tag not listed above..."
           size="sm"
           class="flex-1 sm:max-w-xs"
           @keydown.enter.prevent="addCustomTag"
@@ -66,20 +56,20 @@
         </UButton>
       </div>
 
-      <!-- Smart suggest from resources -->
+      <!-- Find More Tags from resources -->
       <div v-if="accountId" class="border-t border-gray-200 dark:border-gray-700 pt-3">
         <div class="flex items-center justify-between mb-2">
           <div>
-            <h5 class="text-xs font-semibold text-gray-700 dark:text-gray-300">Suggest from Resources</h5>
+            <h5 class="text-xs font-semibold text-gray-700 dark:text-gray-300">Find More Tags</h5>
             <p class="text-xs text-gray-500 dark:text-gray-400">
-              Discover tags in use on actual AWS resources in this account.
+              Scan your AWS account to find tags that are actually in use on your resources.
             </p>
           </div>
           <UButton
             size="xs"
             color="blue"
             variant="soft"
-            icon="i-heroicons-sparkles"
+            icon="i-heroicons-magnifying-glass"
             :loading="isLoadingResourceTags"
             @click="$emit('fetchResourceTags')"
           >
@@ -111,34 +101,40 @@
           </UTooltip>
         </div>
         <div v-else-if="resourceTags.length > 0" class="text-xs text-gray-500 italic py-1">
-          All discovered tags are already in your important list.
+          All discovered tags are already in your favorites.
         </div>
       </div>
     </div>
 
-    <!-- Default group-by tag -->
+    <!-- Section 2: Default Tag -->
     <div>
-      <h4 class="text-sm font-semibold text-gray-900 dark:text-white mb-1">Default Group By</h4>
+      <div class="flex items-center gap-2 mb-1">
+        <UIcon name="i-heroicons-bookmark" class="w-4 h-4 text-blue-500" />
+        <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Default Tag</h4>
+      </div>
       <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">
-        Pre-selected tag when opening the cost breakdown view.
+        Automatically select this tag when you open the cost breakdown.
       </p>
       <USelectMenu
         :model-value="draft.defaultGroupByTag"
         :options="defaultGroupOptions"
         value-attribute="value"
         option-attribute="label"
-        placeholder="None (manual selection)"
+        placeholder="None — I'll pick each time"
         size="sm"
         class="w-full sm:w-64"
         @update:model-value="$emit('updateDefaultGroup', $event)"
       />
     </div>
 
-    <!-- Tag descriptions -->
+    <!-- Section 3: Tag Notes -->
     <div v-if="draft.importantTags.length > 0">
-      <h4 class="text-sm font-semibold text-gray-900 dark:text-white mb-1">Tag Descriptions</h4>
+      <div class="flex items-center gap-2 mb-1">
+        <UIcon name="i-heroicons-chat-bubble-bottom-center-text" class="w-4 h-4 text-green-500" />
+        <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Tag Notes</h4>
+      </div>
       <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
-        Optional descriptions shown as tooltips in the tag selector.
+        Add notes to help your team understand what each tag means. These appear as tooltips.
       </p>
       <div class="space-y-2">
         <div
@@ -149,7 +145,7 @@
           <span class="text-xs text-gray-500 dark:text-gray-400 w-32 shrink-0 truncate" :title="tag">{{ tag }}</span>
           <UInput
             :model-value="draft.tagDescriptions?.[tag] ?? ''"
-            placeholder="Optional description..."
+            placeholder="What does this tag mean?"
             size="sm"
             class="flex-1"
             @update:model-value="$emit('setDescription', tag, $event)"
@@ -183,10 +179,21 @@ const emit = defineEmits<{
 
 const customTagInput = ref('')
 
-// Important tags that were added manually (not from the AWS-discovered cost allocation list)
-const customImportantTags = computed(() =>
-  props.draft.importantTags.filter(t => !props.availableTags.includes(t))
-)
+// Merge AWS-discovered tags + custom important tags into a single list
+const allTagsList = computed(() => {
+  const awsSet = new Set(props.availableTags)
+  const entries: Array<{ key: string; isCustom: boolean }> = []
+
+  // AWS-discovered tags first
+  props.availableTags.forEach(t => entries.push({ key: t, isCustom: false }))
+
+  // Custom tags that aren't in the AWS list
+  props.draft.importantTags
+    .filter(t => !awsSet.has(t))
+    .forEach(t => entries.push({ key: t, isCustom: true }))
+
+  return entries
+})
 
 // Resource tags not already in availableTags or importantTags — these are the suggestions
 const suggestedTags = computed(() =>

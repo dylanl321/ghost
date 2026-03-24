@@ -7,7 +7,7 @@
         </div>
         <div>
           <h2 class="text-sm font-semibold text-gray-900 dark:text-white">My Activity</h2>
-          <p class="text-[11px] text-gray-400 dark:text-gray-500">Recent views & chats</p>
+          <p class="text-[11px] text-gray-400 dark:text-gray-500">Recent activity</p>
         </div>
       </div>
       <div class="flex items-center gap-3">
@@ -18,6 +18,10 @@
         <div v-if="chatCount > 0" class="flex items-center gap-1.5 px-2 py-1 rounded-full bg-purple-50 dark:bg-purple-900/20">
           <UIcon name="i-heroicons-chat-bubble-left-right" class="w-3.5 h-3.5 text-purple-500" />
           <span class="text-[11px] font-medium text-purple-600 dark:text-purple-400">{{ chatCount }}</span>
+        </div>
+        <div v-if="actionCount > 0" class="flex items-center gap-1.5 px-2 py-1 rounded-full bg-cyan-50 dark:bg-cyan-900/20">
+          <UIcon name="i-heroicons-bolt" class="w-3.5 h-3.5 text-cyan-500" />
+          <span class="text-[11px] font-medium text-cyan-600 dark:text-cyan-400">{{ actionCount }}</span>
         </div>
       </div>
     </div>
@@ -33,7 +37,7 @@
       >
         <span
           class="w-1.5 h-1.5 rounded-full flex-shrink-0"
-          :class="item.type === 'view' ? 'bg-blue-400' : 'bg-purple-400'"
+          :class="getMeta(item.type).dot"
         />
         <span class="text-xs text-gray-700 dark:text-gray-300 truncate flex-1 group-hover:text-blue-600 dark:group-hover:text-blue-400">{{ item.label }}</span>
         <span class="text-[10px] text-gray-400 dark:text-gray-500 flex-shrink-0">{{ item.timeAgo }}</span>
@@ -53,14 +57,12 @@
         <div class="relative flex flex-col items-center">
           <div
             class="w-8 h-8 rounded-lg flex items-center justify-center transition-colors duration-150"
-            :class="item.type === 'view'
-              ? 'bg-blue-50 dark:bg-blue-900/20 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30'
-              : 'bg-purple-50 dark:bg-purple-900/20 group-hover:bg-purple-100 dark:group-hover:bg-purple-900/30'"
+            :class="getMeta(item.type).bg"
           >
             <UIcon
-              :name="item.type === 'view' ? 'i-heroicons-eye' : 'i-heroicons-chat-bubble-left-right'"
+              :name="getMeta(item.type).icon"
               class="w-4 h-4"
-              :class="item.type === 'view' ? 'text-blue-500' : 'text-purple-500'"
+              :class="getMeta(item.type).text"
             />
           </div>
           <div
@@ -92,14 +94,31 @@ const props = withDefaults(defineProps<{
 const NuxtLink = resolveComponent('NuxtLink')
 const { recentAccounts } = useRecentAccounts()
 const chatStore = useChatThreadsStore()
+const { actionItems: cloudActions, fetchServerActions } = useMyActivity()
+
+// Fetch server-side actions on mount for cross-device persistence
+onMounted(() => fetchServerActions())
+
+type ActivityCategory = 'view' | 'chat' | 'cost' | 'export' | 'favorite' | 'search' | 'dashboard' | 'action'
 
 interface ActivityItem {
   id: string
-  type: 'view' | 'chat'
+  type: ActivityCategory
   label: string
   timestamp: number
   timeAgo: string
   link?: string
+}
+
+const activityMeta: Record<ActivityCategory, { icon: string; bg: string; text: string; dot: string }> = {
+  view: { icon: 'i-heroicons-eye', bg: 'bg-blue-50 dark:bg-blue-900/20 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30', text: 'text-blue-500', dot: 'bg-blue-400' },
+  chat: { icon: 'i-heroicons-chat-bubble-left-right', bg: 'bg-purple-50 dark:bg-purple-900/20 group-hover:bg-purple-100 dark:group-hover:bg-purple-900/30', text: 'text-purple-500', dot: 'bg-purple-400' },
+  cost: { icon: 'i-heroicons-currency-dollar', bg: 'bg-cyan-50 dark:bg-cyan-900/20 group-hover:bg-cyan-100 dark:group-hover:bg-cyan-900/30', text: 'text-cyan-500', dot: 'bg-cyan-400' },
+  export: { icon: 'i-heroicons-arrow-down-tray', bg: 'bg-emerald-50 dark:bg-emerald-900/20 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900/30', text: 'text-emerald-500', dot: 'bg-emerald-400' },
+  favorite: { icon: 'i-heroicons-star', bg: 'bg-yellow-50 dark:bg-yellow-900/20 group-hover:bg-yellow-100 dark:group-hover:bg-yellow-900/30', text: 'text-yellow-500', dot: 'bg-yellow-400' },
+  search: { icon: 'i-heroicons-magnifying-glass', bg: 'bg-gray-50 dark:bg-gray-800/50 group-hover:bg-gray-100 dark:group-hover:bg-gray-700/50', text: 'text-gray-500', dot: 'bg-gray-400' },
+  dashboard: { icon: 'i-heroicons-squares-2x2', bg: 'bg-indigo-50 dark:bg-indigo-900/20 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900/30', text: 'text-indigo-500', dot: 'bg-indigo-400' },
+  action: { icon: 'i-heroicons-bolt', bg: 'bg-amber-50 dark:bg-amber-900/20 group-hover:bg-amber-100 dark:group-hover:bg-amber-900/30', text: 'text-amber-500', dot: 'bg-amber-400' },
 }
 
 function formatTimeAgo(ms: number): string {
@@ -113,10 +132,36 @@ function formatTimeAgo(ms: number): string {
   return `${diffDays}d ago`
 }
 
+function actionTypeToCategory(type: string): ActivityCategory {
+  const prefix = type.split('.')[0] || ''
+  if (prefix === 'account') return 'favorite'
+  if (['cost', 'export', 'search', 'dashboard', 'chat'].includes(prefix)) return prefix as ActivityCategory
+  return 'action'
+}
+
+const actionLabels: Record<string, string> = {
+  'cost.timeframe_change': 'Changed cost timeframe',
+  'cost.tab_switch': 'Switched cost view',
+  'cost.mode_toggle': 'Toggled cost mode',
+  'cost.tag_drilldown': 'Tag analysis drilldown',
+  'cost.account_select': 'Selected cost accounts',
+  'account.favorite': 'Favorited an account',
+  'account.unfavorite': 'Unfavorited an account',
+  'export.csv': 'Exported CSV',
+  'export.json': 'Exported JSON',
+  'dashboard.scope_change': 'Changed dashboard scope',
+  'dashboard.daterange_change': 'Changed date range',
+  'search.explorer': 'Searched accounts',
+  'search.cost': 'Searched costs',
+  'chat.thread_create': 'Created chat thread',
+  'chat.thread_share': 'Shared chat thread',
+}
+
 const activityItems = computed<ActivityItem[]>(() => {
   const now = Date.now()
   const items: ActivityItem[] = []
 
+  // Recent account views
   for (const acct of recentAccounts.value) {
     const ts = new Date(acct.viewedAt).getTime()
     items.push({
@@ -129,6 +174,7 @@ const activityItems = computed<ActivityItem[]>(() => {
     })
   }
 
+  // Chat threads
   for (const thread of chatStore.threads) {
     if (thread.isArchived) continue
     const ts = new Date(thread.lastMessageAt).getTime()
@@ -142,15 +188,32 @@ const activityItems = computed<ActivityItem[]>(() => {
     })
   }
 
+  // Action items from hybrid composable (local + server)
+  for (const action of cloudActions.value) {
+    const category = actionTypeToCategory(action.type)
+    items.push({
+      id: `action-${action.type}-${action.timestamp}`,
+      type: category,
+      label: actionLabels[action.type] || action.type,
+      timestamp: action.timestamp,
+      timeAgo: formatTimeAgo(now - action.timestamp),
+    })
+  }
+
   return items.sort((a, b) => b.timestamp - a.timestamp)
 })
 
 const viewCount = computed(() => activityItems.value.filter(i => i.type === 'view').length)
 const chatCount = computed(() => activityItems.value.filter(i => i.type === 'chat').length)
+const actionCount = computed(() => activityItems.value.filter(i => !['view', 'chat'].includes(i.type)).length)
 
 const displayedItems = computed(() => {
   if (props.displayStyle === 'third') return activityItems.value.slice(0, 4)
   if (props.displayStyle === 'half') return activityItems.value.slice(0, 5)
   return activityItems.value.slice(0, 8)
 })
+
+function getMeta(type: ActivityCategory) {
+  return activityMeta[type] || activityMeta.action
+}
 </script>

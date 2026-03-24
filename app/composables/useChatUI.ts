@@ -234,7 +234,7 @@ function removePlaceholder(threadId: string, jobId: string) {
 
 // Options for the composable
 export interface UseChatUIOptions {
-  viewMode?: 'fullpage' | 'popup' | 'sidebar'
+  viewMode?: 'fullpage' | 'popup' | 'sidebar' | 'dashboard'
   initialGreeting?: string
 }
 

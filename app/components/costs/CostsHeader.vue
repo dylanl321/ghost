@@ -22,6 +22,26 @@
             Tour
           </UButton>
         </UTooltip>
+        <!-- Alert severity badges -->
+        <button
+          v-if="alertsCount && alertsCount > 0"
+          class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium transition-colors bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700"
+          @click="emit('view-alerts')"
+        >
+          <UIcon name="i-heroicons-bell-alert" class="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
+          <span v-if="alertsBySeverity?.critical" class="inline-flex items-center gap-1 text-red-600 dark:text-red-400">
+            {{ alertsBySeverity.critical }} critical
+          </span>
+          <span v-if="alertsBySeverity?.escalation" class="inline-flex items-center gap-1 text-orange-600 dark:text-orange-400">
+            {{ alertsBySeverity.escalation }} escalation
+          </span>
+          <span v-if="alertsBySeverity?.warning" class="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
+            {{ alertsBySeverity.warning }} warning
+          </span>
+          <span v-if="alertsBySeverity?.info" class="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400">
+            {{ alertsBySeverity.info }} info
+          </span>
+        </button>
       </div>
       <div class="flex flex-wrap gap-2 items-center">
         <!-- Data Mode Selector -->
@@ -248,13 +268,15 @@ import type { NormalizedDataset } from '~/types/costs'
 import type { ExportFormat } from '#shared/types/export'
 import ExportButton from '~/components/shared/ExportButton.vue'
 
-const emit = defineEmits<{ (e: 'refresh'): void; (e: 'start-tour'): void }>()
+const emit = defineEmits<{ (e: 'refresh'): void; (e: 'start-tour'): void; (e: 'view-alerts'): void }>()
 
 const props = defineProps<{
   timeframeOptions: Array<{ label: string, value: string }>,
   selectedAccounts: string[],
   activeTab: string,
-  dataset?: NormalizedDataset | null
+  dataset?: NormalizedDataset | null,
+  alertsCount?: number,
+  alertsBySeverity?: { critical: number, escalation: number, warning: number, info: number }
 }>()
 
 const modelMode = defineModel<DataMode>('mode', { default: 'proforma' })

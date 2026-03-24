@@ -18,6 +18,8 @@ export type DashboardSectionId =
   | 'adminAlerts'
   | 'adminPipeline'
   | 'adminFeedback'
+  | 'aiBriefing'
+  | 'quickChat'
 
 export type MetricCardId =
   | 'mtdSpend'
@@ -55,6 +57,8 @@ export const SECTION_LABELS: Record<DashboardSectionId, string> = {
   adminAlerts: 'Admin: Budget Alerts',
   adminPipeline: 'Admin: Pipeline Activity',
   adminFeedback: 'Admin: Feature Requests',
+  aiBriefing: 'AI Briefing',
+  quickChat: 'Quick Chat',
 }
 
 export const SECTION_STYLE_SUPPORT: Record<DashboardSectionId, DisplayStyle[]> = {
@@ -75,6 +79,8 @@ export const SECTION_STYLE_SUPPORT: Record<DashboardSectionId, DisplayStyle[]> =
   adminAlerts: ['full', 'two-thirds', 'half', 'third'],
   adminPipeline: ['full', 'two-thirds', 'half', 'third'],
   adminFeedback: ['full', 'two-thirds', 'half', 'third'],
+  aiBriefing: ['full', 'two-thirds', 'half'],
+  quickChat: ['full', 'two-thirds', 'half', 'third'],
 }
 
 export const METRIC_CARD_LABELS: Record<MetricCardId, string> = {
@@ -103,6 +109,8 @@ export const ALL_SECTION_IDS: DashboardSectionId[] = [
   'adminAlerts',
   'adminPipeline',
   'adminFeedback',
+  'aiBriefing',
+  'quickChat',
 ]
 
 export const ALL_METRIC_CARD_IDS: MetricCardId[] = [
@@ -117,6 +125,7 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayoutConfig = {
   sections: [
     { id: 'budgetAlerts', visible: true },
     { id: 'metricCards', visible: true },
+    { id: 'aiBriefing', visible: true },
     { id: 'myAccounts', visible: true },
     { id: 'adminAlerts', visible: true, displayStyle: 'third' },
     { id: 'adminPipeline', visible: true, displayStyle: 'third' },
@@ -132,6 +141,7 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayoutConfig = {
     { id: 'newAccounts', visible: false },
     { id: 'securitySnapshot', visible: false },
     { id: 'adminOverview', visible: false },
+    { id: 'quickChat', visible: false, displayStyle: 'half' },
   ],
   metricCards: Object.fromEntries(ALL_METRIC_CARD_IDS.map(id => [id, true])) as Record<MetricCardId, boolean>,
 }

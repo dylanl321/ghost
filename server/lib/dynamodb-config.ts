@@ -39,6 +39,7 @@ export interface DynamoDBConfig {
   asyncMetrics: DynamoDBTableConfig
   budgetAlerts: DynamoDBTableConfig
   budgetAlertConfig: DynamoDBTableConfig
+  costTagConfig: DynamoDBTableConfig
 }
 
 // -----------------------------------------------------------------------------
@@ -241,6 +242,12 @@ function loadFromEnvironment(): DynamoDBConfig {
       region: commercialRegion,
       accountId: PROFORMA_ACCOUNT_ID || commercialAccountId,
       readOnly: false  // Admin can modify alert configuration
+    },
+    costTagConfig: {
+      tableName: process.env.COST_TAG_CONFIG_TABLE || 'ghost-cost-tag-config',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
     }
   }
 }

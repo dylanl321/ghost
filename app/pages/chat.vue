@@ -256,12 +256,14 @@ async function handleNewThread() {
     title: 'New conversation started',
     color: 'green'
   })
+  logUserAction('chat.thread_create')
 }
 
 // Handle share thread (from sidebar)
 function handleShareThread(threadId: string) {
   shareThreadId.value = threadId
   showShareModal.value = true
+  logUserAction('chat.thread_share')
 }
 
 // Handle share current thread (from header)
