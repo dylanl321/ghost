@@ -171,54 +171,21 @@
         </div>
       </UCard>
 
-      <!-- Notifications Section (Placeholder) -->
-      <UCard>
-        <template #header>
-          <div class="flex items-center gap-3">
-            <div class="p-2 rounded-lg bg-pink-50 dark:bg-pink-900/20">
-              <UIcon name="i-heroicons-bell" class="w-5 h-5 text-pink-600 dark:text-pink-400" />
-            </div>
-            <div>
-              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Notifications</h2>
-              <p class="text-sm text-gray-500 dark:text-gray-400">
-                Manage your notification preferences
-              </p>
-            </div>
+      <!-- Notifications Section -->
+      <div>
+        <div class="flex items-center gap-3 mb-4">
+          <div class="p-2 rounded-lg bg-pink-50 dark:bg-pink-900/20">
+            <UIcon name="i-heroicons-bell" class="w-5 h-5 text-pink-600 dark:text-pink-400" />
           </div>
-        </template>
-
-        <div class="space-y-4">
-          <div class="flex items-center justify-between">
-            <div>
-              <div class="font-medium text-gray-900 dark:text-white">Email Notifications</div>
-              <p class="text-sm text-gray-500 dark:text-gray-400">
-                Receive email notifications for important updates
-              </p>
-            </div>
-            <UToggle v-model="emailNotifications" />
-          </div>
-
-          <div class="flex items-center justify-between">
-            <div>
-              <div class="font-medium text-gray-900 dark:text-white">Report Delivery</div>
-              <p class="text-sm text-gray-500 dark:text-gray-400">
-                Receive scheduled report emails
-              </p>
-            </div>
-            <UToggle v-model="reportNotifications" />
-          </div>
-
-          <div class="pt-4 border-t border-gray-200 dark:border-slate-700">
-            <UButton
-              color="emerald"
-              :loading="savingNotifications"
-              @click="saveNotifications"
-            >
-              Save Notification Settings
-            </UButton>
+          <div>
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Notifications</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+              Manage your notification preferences
+            </p>
           </div>
         </div>
-      </UCard>
+        <NotificationPreferences />
+      </div>
     </div>
   </div>
 </template>
@@ -316,8 +283,6 @@ const dateFormatPreview = computed(() => {
 onMounted(() => {
   dateFormat.value = getPreference('dateFormat', 'MM/DD/YYYY')
   timeFormat.value = getPreference('timeFormat', '12h')
-  emailNotifications.value = getPreference('emailNotifications', true)
-  reportNotifications.value = getPreference('reportNotifications', true)
 })
 
 async function saveFormats() {
@@ -336,24 +301,4 @@ async function saveFormats() {
   }
 }
 
-// Notifications
-const emailNotifications = ref(true)
-const reportNotifications = ref(true)
-const savingNotifications = ref(false)
-
-async function saveNotifications() {
-  savingNotifications.value = true
-  try {
-    await setPreference('emailNotifications', emailNotifications.value)
-    await setPreference('reportNotifications', reportNotifications.value)
-    toast.add({
-      title: 'Settings Saved',
-      description: 'Your notification preferences have been updated.',
-      color: 'green',
-      icon: 'i-heroicons-check-circle'
-    })
-  } finally {
-    savingNotifications.value = false
-  }
-}
 </script>

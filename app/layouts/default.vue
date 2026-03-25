@@ -16,6 +16,11 @@
       <!-- Welcome Banner -->
       <WelcomeBanner v-if="!route.path.startsWith('/support')" />
 
+      <!-- Announcements -->
+      <ClientOnly>
+        <AnnouncementBanner />
+      </ClientOnly>
+
       <!-- Main Content Area -->
       <main 
         class="flex-1 min-h-0 flex flex-col bg-[var(--ghost-bg)] dark:bg-slate-900"

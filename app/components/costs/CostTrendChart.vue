@@ -13,7 +13,7 @@
     <div class="px-5 pb-5">
       <CenteredLoadingSpinner v-if="props.loading" />
       <div v-else>
-        <VChart :option="chartOptions" class="h-80" autoresize />
+        <VChart ref="vchartRef" :option="chartOptions" class="h-80" autoresize />
 
         <!-- Summary metrics -->
         <div class="border-t border-gray-200 dark:border-gray-700 mt-4 pt-4 flex">
@@ -50,6 +50,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import * as echarts from 'echarts/core'
 import { LineChart } from 'echarts/charts'
 import {
@@ -84,6 +85,18 @@ const props = defineProps<{
 }>()
 
 const { dateRange, dateRangeDays, isScoped, scopeLabel } = useDashboardScope()
+
+// Chart group for crosshair linking across cost page charts
+const { registerChart, unregisterAll } = useChartGroup('costCharts')
+const vchartRef = ref<any>(null)
+
+onMounted(() => {
+  registerChart(vchartRef.value)
+})
+
+onUnmounted(() => {
+  unregisterAll()
+})
 
 // Theme-aware chart colors
 const colorMode = useColorMode()

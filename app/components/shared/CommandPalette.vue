@@ -108,6 +108,20 @@
                       @select="executeCommand(cmd)"
                     />
                   </div>
+
+                  <!-- Accounts -->
+                  <div v-if="groupedCommands.accounts && groupedCommands.accounts.length > 0" class="px-2 py-2">
+                    <div class="px-2 py-1 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Accounts
+                    </div>
+                    <CommandItem
+                      v-for="(cmd, idx) in groupedCommands.accounts"
+                      :key="cmd.id"
+                      :command="cmd"
+                      :selected="selectedIndex === getGlobalIndex('accounts', idx)"
+                      @select="executeCommand(cmd)"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -124,9 +138,15 @@
                     to select
                   </span>
                 </div>
-                <div class="flex items-center gap-1">
-                  <span class="text-emerald-500">⌘K</span>
-                  <span>to open</span>
+                <div class="flex items-center gap-3">
+                  <span class="flex items-center gap-1">
+                    <kbd class="px-1.5 py-0.5 bg-gray-100 dark:bg-slate-700 rounded">?</kbd>
+                    for shortcuts
+                  </span>
+                  <div class="flex items-center gap-1">
+                    <span class="text-emerald-500">⌘K</span>
+                    <span>to open</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -134,6 +154,8 @@
         </div>
       </div>
     </Transition>
+
+    <KeyboardShortcutsModal v-model="showShortcutsModal" />
   </Teleport>
 </template>
 
@@ -145,6 +167,7 @@ const {
   searchQuery,
   filteredCommands,
   groupedCommands,
+  showShortcutsModal,
   close,
   executeCommand
 } = useCommandPalette()
@@ -170,7 +193,7 @@ watch(searchQuery, () => {
 // Calculate global index for a command in a category
 function getGlobalIndex(category: string, localIndex: number): number {
   let offset = 0
-  const categories = ['recent', 'navigation', 'settings', 'admin']
+  const categories = ['recent', 'navigation', 'settings', 'admin', 'accounts']
 
   for (const cat of categories) {
     if (cat === category) {
@@ -196,6 +219,9 @@ const allCommandsFlat = computed(() => {
   }
   if (groupedCommands.value.admin) {
     result.push(...groupedCommands.value.admin)
+  }
+  if (groupedCommands.value.accounts) {
+    result.push(...groupedCommands.value.accounts)
   }
   return result
 })
@@ -236,6 +262,8 @@ const CommandItem = defineComponent({
   },
   emits: ['select'],
   setup(props, { emit }) {
+    const isAccount = props.command.category === 'accounts'
+
     return () => h('button', {
       class: [
         'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors',
@@ -251,16 +279,33 @@ const CommandItem = defineComponent({
             class: 'w-5 h-5 flex-shrink-0'
           })
         : null,
-      h('div', { class: 'flex-1 min-w-0' }, [
+      h('div', { class: 'flex-1 min-w-0 flex items-center gap-2' }, [
         h('div', { class: 'font-medium truncate' }, props.command.label),
-        props.command.description
-          ? h('div', { class: 'text-xs text-gray-500 dark:text-gray-400 truncate' }, props.command.description)
+        // Account ID badge
+        isAccount && props.command.accountId
+          ? h('span', {
+              class: 'flex-shrink-0 text-xs font-mono px-1.5 py-0.5 rounded bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-gray-400'
+            }, props.command.accountId)
+          : null,
+        // Environment dot
+        isAccount
+          ? h('span', {
+              class: [
+                'flex-shrink-0 w-2 h-2 rounded-full',
+                props.command.isGovCloud ? 'bg-blue-400' : 'bg-green-400'
+              ],
+              title: props.command.isGovCloud ? 'GovCloud' : 'Commercial'
+            })
           : null
       ]),
+      // Description for non-account items
+      !isAccount && props.command.description
+        ? h('div', { class: 'text-xs text-gray-500 dark:text-gray-400 truncate' }, props.command.description)
+        : null,
       props.selected
         ? h(resolveComponent('UIcon'), {
             name: 'i-heroicons-arrow-return-left',
-            class: 'w-4 h-4 text-gray-400'
+            class: 'w-4 h-4 text-gray-400 flex-shrink-0'
           })
         : null
     ])

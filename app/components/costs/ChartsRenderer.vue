@@ -61,7 +61,7 @@
                     </div>
                     <div class="p-6">
                         <div class="h-64 md:h-80 lg:h-96">
-                            <VChart v-if="getChartOptions(chart)" :option="getChartOptions(chart)" autoresize
+                            <VChart v-if="getChartOptions(chart)" :ref="registerChartRef" :option="getChartOptions(chart)" autoresize
                                 class="h-full w-full" />
                             <div v-else-if="isLoading()" class="h-full flex items-center justify-center">
                                 <div class="text-center">
@@ -103,7 +103,7 @@
                     </div>
                     <div class="p-6">
                         <div class="h-64 md:h-80">
-                            <VChart v-if="getChartOptions(chart)" :option="getChartOptions(chart)" autoresize
+                            <VChart v-if="getChartOptions(chart)" :ref="registerChartRef" :option="getChartOptions(chart)" autoresize
                                 class="h-full w-full" />
                             <div v-else-if="isLoading()" class="h-full flex items-center justify-center">
                                 <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-blue-500" />
@@ -123,7 +123,7 @@
                     </div>
                     <div class="p-4">
                         <div class="h-48 md:h-64">
-                            <VChart v-if="getChartOptions(chart)" :option="getChartOptions(chart)" autoresize
+                            <VChart v-if="getChartOptions(chart)" :ref="registerChartRef" :option="getChartOptions(chart)" autoresize
                                 class="h-full w-full" />
                             <div v-else-if="isLoading()" class="h-full flex items-center justify-center">
                                 <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-blue-500" />
@@ -140,7 +140,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import type { NormalizedDataset } from '~/types/costs'
 import type { ChartDefinition } from '~/composables/useChartRegistry'
 import VChart from 'vue-echarts'
@@ -179,6 +179,17 @@ echartsUse([
     TitleComponent,
     VisualMapComponent
 ])
+
+// Chart group for crosshair linking across cost page charts
+const { registerChart, unregisterAll } = useChartGroup('costCharts')
+// Ref callback used by all VChart instances in the v-for loops
+function registerChartRef(el: any) {
+  if (el) registerChart(el)
+}
+
+onUnmounted(() => {
+  unregisterAll()
+})
 
 const props = defineProps<{
     charts: ChartDefinition[]

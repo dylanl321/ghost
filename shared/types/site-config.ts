@@ -69,6 +69,18 @@ export interface SiteConfigItem {
 }
 
 /**
+ * Announcement displayed as a dismissible banner to all users
+ */
+export interface Announcement {
+  id: string;
+  message: string;
+  severity: 'info' | 'warning' | 'critical';
+  active: boolean;
+  createdAt: string;
+  expiresAt?: string;
+}
+
+/**
  * Type-safe configuration structure
  */
 export interface SiteConfig {
@@ -111,6 +123,7 @@ export interface SiteConfig {
     welcomeMessage?: string;
     showWelcomeCard?: boolean;
   };
+  announcements?: Announcement[];
 }
 
 /**

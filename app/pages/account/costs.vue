@@ -326,6 +326,21 @@
         @load-preset="applyPreset"
       />
 
+      <!-- Compare Toggle -->
+      <div class="px-4 md:px-5 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center gap-2">
+        <UTooltip text="Compare two time periods side by side">
+          <UButton
+            size="xs"
+            :color="compareMode ? 'blue' : 'gray'"
+            :variant="compareMode ? 'soft' : 'ghost'"
+            icon="i-heroicons-arrows-right-left"
+            @click="compareMode = !compareMode"
+          >
+            Compare
+          </UButton>
+        </UTooltip>
+      </div>
+
       <!-- Selected Account Context Banner -->
       <div v-if="selectedAccounts.length > 0" class="px-4 md:px-6 pt-4">
         <div class="bg-blue-900/30 border border-blue-700 rounded-lg px-4 py-3 flex items-center justify-between gap-4">
@@ -371,8 +386,19 @@
 
       <!-- Content Area -->
       <div class="flex-1 overflow-auto min-h-0 p-4 md:p-6">
+        <!-- Comparison Mode -->
+        <div v-if="compareMode">
+          <div class="mb-4 flex items-center gap-3">
+            <h2 class="text-base font-semibold text-white">Period Comparison</h2>
+            <UButton size="xs" color="gray" variant="soft" icon="i-heroicons-x-mark" @click="compareMode = false">
+              Exit Compare
+            </UButton>
+          </div>
+          <CostComparisonView />
+        </div>
+
         <!-- Loading State -->
-        <div v-if="isLoading" class="flex items-center justify-center h-full">
+        <div v-else-if="isLoading" class="flex items-center justify-center h-full">
           <div class="text-center">
             <Icon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-blue-500 mx-auto mb-2" />
             <p class="text-gray-600 dark:text-gray-400">Loading cost data...</p>
@@ -694,6 +720,9 @@ const accountsWithCosts = computed<Account[]>(() => {
   // Apply cost filtering based on user settings
   return applyAccountFilters(enrichedAccounts, costSettingsStore.$state)
 })
+
+// Compare mode toggle
+const compareMode = ref(false)
 
 // State
 const searchTerm = ref('')

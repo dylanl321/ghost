@@ -15,36 +15,49 @@
       <!-- Organization-wide 2-Year Trend -->
       <div class="bg-gray-900 border border-gray-700 rounded-lg p-4">
         <h3 class="text-lg font-semibold text-gray-200 mb-4">Organization-Wide 2-Year Cost Trend</h3>
-        <v-chart :option="orgTrendChart" :autoresize="true" style="height: 400px" />
+        <v-chart ref="orgTrendChartRef" :option="orgTrendChart" :autoresize="true" style="height: 400px" />
       </div>
 
       <!-- Year-over-Year Comparison -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div class="bg-gray-900 border border-gray-700 rounded-lg p-4">
           <h3 class="text-lg font-semibold text-gray-200 mb-4">Year-over-Year Comparison</h3>
-          <v-chart :option="yoyComparisonChart" :autoresize="true" style="height: 350px" />
+          <v-chart ref="yoyComparisonChartRef" :option="yoyComparisonChart" :autoresize="true" style="height: 350px" />
         </div>
         
         <div class="bg-gray-900 border border-gray-700 rounded-lg p-4">
           <h3 class="text-lg font-semibold text-gray-200 mb-4">Monthly Growth Rate</h3>
-          <v-chart :option="growthRateChart" :autoresize="true" style="height: 350px" />
+          <v-chart ref="growthRateChartRef" :option="growthRateChart" :autoresize="true" style="height: 350px" />
         </div>
       </div>
 
       <!-- Quarterly Breakdown -->
       <div class="bg-gray-900 border border-gray-700 rounded-lg p-4">
         <h3 class="text-lg font-semibold text-gray-200 mb-4">Quarterly Spending Analysis</h3>
-        <v-chart :option="quarterlyChart" :autoresize="true" style="height: 350px" />
+        <v-chart ref="quarterlyChartRef" :option="quarterlyChart" :autoresize="true" style="height: 350px" />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import VChart from 'vue-echarts'
 
 const logger = createLogger('HistoricalTrends')
+
+// Chart group for crosshair linking across cost page charts
+const { registerChart, unregisterAll } = useChartGroup('costCharts')
+
+// Template refs for v-chart instances
+const orgTrendChartRef = ref<InstanceType<typeof VChart> | null>(null)
+const yoyComparisonChartRef = ref<InstanceType<typeof VChart> | null>(null)
+const growthRateChartRef = ref<InstanceType<typeof VChart> | null>(null)
+const quarterlyChartRef = ref<InstanceType<typeof VChart> | null>(null)
+
+onUnmounted(() => {
+  unregisterAll()
+})
 
 // State
 const loading = ref(true)
@@ -386,8 +399,13 @@ const quarterlyChart = computed(() => {
   }
 })
 
-// Load data on mount
-onMounted(() => {
-  fetchHistoricalData()
+// Load data on mount, then register charts for crosshair linking
+onMounted(async () => {
+  await fetchHistoricalData()
+  await nextTick()
+  registerChart(orgTrendChartRef.value)
+  registerChart(yoyComparisonChartRef.value)
+  registerChart(growthRateChartRef.value)
+  registerChart(quarterlyChartRef.value)
 })
 </script>

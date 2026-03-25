@@ -1,3 +1,5 @@
+import Fuse from 'fuse.js'
+
 const logger = createLogger('CommandPalette')
 
 /**
@@ -12,14 +14,22 @@ export interface CommandItem {
   icon?: string
   to?: string
   action?: () => void
-  category: 'navigation' | 'settings' | 'admin' | 'recent'
+  category: 'navigation' | 'settings' | 'admin' | 'recent' | 'accounts'
   keywords?: string[]
+  // Extra metadata for account items
+  accountId?: string
+  isGovCloud?: boolean
 }
 
 // Shared state (singleton pattern)
 const isOpen = ref(false)
 const searchQuery = ref('')
 const recentCommands = ref<string[]>([])
+const showShortcutsModal = ref(false)
+
+// g-prefix shortcut state
+const pendingPrefix = ref<'g' | null>(null)
+let prefixTimeout: ReturnType<typeof setTimeout> | null = null
 
 // Maximum recent commands to track
 const MAX_RECENT = 5
@@ -28,6 +38,7 @@ const RECENT_STORAGE_KEY = 'ghost-command-palette-recent'
 export function useCommandPalette() {
   const router = useRouter()
   const { isAdmin } = useUserRoles()
+  const accountsStore = useAwsAccountsStore()
 
   // Load recent commands from localStorage
   onMounted(() => {
@@ -55,6 +66,15 @@ export function useCommandPalette() {
       }
     }
   }
+
+  // Fuse.js instance for fuzzy account search
+  const accountFuse = computed(() => {
+    return new Fuse(accountsStore.accountsList, {
+      keys: ['accountName', 'accountId', 'awsStandardAccountID', 'linesOfBusiness'],
+      threshold: 0.4,
+      includeScore: true
+    })
+  })
 
   // All available commands
   const allCommands = computed<CommandItem[]>(() => {
@@ -97,11 +117,10 @@ export function useCommandPalette() {
   const filteredCommands = computed(() => {
     const query = searchQuery.value.toLowerCase().trim()
     if (!query) {
-      // Show recent + all commands grouped by category
       return allCommands.value
     }
 
-    return allCommands.value.filter(cmd => {
+    const staticMatches = allCommands.value.filter(cmd => {
       const searchText = [
         cmd.label,
         cmd.description,
@@ -109,6 +128,20 @@ export function useCommandPalette() {
       ].join(' ').toLowerCase()
       return searchText.includes(query)
     })
+
+    // Fuzzy search accounts and append top 5 matches
+    const accountMatches = accountFuse.value.search(query).slice(0, 5).map(({ item }) => ({
+      id: `account-${item.accountId}`,
+      label: item.accountName,
+      description: item.accountId,
+      icon: 'i-heroicons-building-office-2',
+      to: `/account/explorer?search=${item.accountId}`,
+      category: 'accounts' as const,
+      accountId: item.accountId,
+      isGovCloud: item.isGovCloud
+    }))
+
+    return [...staticMatches, ...accountMatches]
   })
 
   // Grouped commands for display
@@ -117,7 +150,8 @@ export function useCommandPalette() {
       recent: [],
       navigation: [],
       settings: [],
-      admin: []
+      admin: [],
+      accounts: []
     }
 
     // Add recent commands first
@@ -139,6 +173,11 @@ export function useCommandPalette() {
       if (!groups.recent.some(r => r.id === cmd.id)) {
         groups[cmd.category].push(cmd)
       }
+    }
+
+    // Limit account results to 8
+    if (groups.accounts.length > 8) {
+      groups.accounts = groups.accounts.slice(0, 8)
     }
 
     return groups
@@ -175,14 +214,71 @@ export function useCommandPalette() {
     }
   }
 
-  // Keyboard shortcut handler (Cmd+K / Ctrl+K)
+  // Check if focus is in an input/textarea (skip shortcuts in that case)
+  function isInInput(): boolean {
+    const tag = (document.activeElement as HTMLElement)?.tagName?.toLowerCase()
+    return tag === 'input' || tag === 'textarea' || (document.activeElement as HTMLElement)?.isContentEditable
+  }
+
+  // Keyboard shortcut handler (Cmd+K / Ctrl+K + g-prefix nav + ? for help)
   function handleKeydown(event: KeyboardEvent) {
     if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
       event.preventDefault()
       toggle()
+      return
     }
+
     if (event.key === 'Escape' && isOpen.value) {
       close()
+      return
+    }
+
+    // Skip g-prefix and ? shortcuts when typing in an input or when modifier keys are held
+    if (isInInput() || event.metaKey || event.ctrlKey || event.altKey) {
+      return
+    }
+
+    // ? opens shortcuts modal
+    if (event.key === '?' && !isOpen.value) {
+      event.preventDefault()
+      showShortcutsModal.value = true
+      return
+    }
+
+    // g-prefix navigation shortcuts
+    if (pendingPrefix.value === 'g') {
+      // Clear the pending prefix regardless of which key arrives
+      pendingPrefix.value = null
+      if (prefixTimeout) {
+        clearTimeout(prefixTimeout)
+        prefixTimeout = null
+      }
+
+      const destinations: Record<string, string> = {
+        d: '/',
+        c: '/account/costs',
+        e: '/account/explorer',
+        s: '/security',
+        a: '/admin'
+      }
+
+      if (destinations[event.key]) {
+        event.preventDefault()
+        router.push(destinations[event.key])
+      }
+      return
+    }
+
+    // Press g to start prefix sequence (only when palette is closed)
+    if (event.key === 'g' && !isOpen.value) {
+      event.preventDefault()
+      pendingPrefix.value = 'g'
+      // Clear prefix after 500ms if no second key arrives
+      if (prefixTimeout) clearTimeout(prefixTimeout)
+      prefixTimeout = setTimeout(() => {
+        pendingPrefix.value = null
+        prefixTimeout = null
+      }, 500)
     }
   }
 
@@ -204,6 +300,8 @@ export function useCommandPalette() {
     isOpen: readonly(isOpen),
     searchQuery,
     recentCommands: readonly(recentCommands),
+    showShortcutsModal,
+    pendingPrefix: readonly(pendingPrefix),
 
     // Computed
     allCommands,
