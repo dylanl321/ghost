@@ -1,15 +1,15 @@
-import * as echarts from 'echarts/core'
-
 export function useChartGroup(groupId: string) {
-  const chartRefs: echarts.ECharts[] = []
+  const chartRefs: any[] = []
 
   function registerChart(chartComponent: any) {
-    if (!chartComponent) return
-    // vue-echarts exposes the ECharts instance via the .chart property
+    if (!chartComponent || !import.meta.client) return
     const instance = chartComponent?.chart
     if (instance) {
       instance.group = groupId
-      echarts.connect(groupId)
+      // Dynamically import echarts to avoid SSR issues
+      import('echarts/core').then((echarts) => {
+        echarts.connect(groupId)
+      })
       chartRefs.push(instance)
     }
   }
