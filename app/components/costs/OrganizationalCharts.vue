@@ -174,6 +174,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import VChart from 'vue-echarts'
 import { CHART_COLORS, CHART_THEME, getSeriesColor, getUtilizationColor } from '~/utils/chart-theme'
 import { chartAnimationDefaults } from '~/utils/chartAnimationDefaults'
+import { useChartGroup } from '~/composables/useChartGroup'
 
 const logger = createLogger('OrganizationalCharts')
 

@@ -145,6 +145,7 @@ import type { NormalizedDataset } from '~/types/costs'
 import type { ChartDefinition } from '~/composables/useChartRegistry'
 import VChart from 'vue-echarts'
 import { chartAnimationDefaults } from '~/utils/chartAnimationDefaults'
+import { useChartGroup } from '~/composables/useChartGroup'
 import { use as echartsUse } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import {

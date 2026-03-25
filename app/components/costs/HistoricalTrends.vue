@@ -44,6 +44,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import VChart from 'vue-echarts'
 import { chartAnimationDefaults } from '~/utils/chartAnimationDefaults'
+import { useChartGroup } from '~/composables/useChartGroup'
 
 const logger = createLogger('HistoricalTrends')
 

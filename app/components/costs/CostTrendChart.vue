@@ -53,6 +53,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import * as echarts from 'echarts/core'
 import { chartAnimationDefaults } from '~/utils/chartAnimationDefaults'
+import { useChartGroup } from '~/composables/useChartGroup'
 import { LineChart } from 'echarts/charts'
 import {
   TitleComponent,
