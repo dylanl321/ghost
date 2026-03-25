@@ -256,6 +256,8 @@ import { parseGitLabUrl } from '~/utils/gitlab-url-parser'
 import PipelinesAuthorSelector from '~/components/pipelines/AuthorSelector.vue'
 import PipelinesAuthorBadge from '~/components/pipelines/AuthorBadge.vue'
 
+const logger = createLogger('Index')
+
 // Admin-only access control
 definePageMeta({
   keepalive: false,
@@ -339,7 +341,7 @@ async function fetchRepositoryData() {
       return repoInfo?.project === projectName
     })
 
-    console.log('Repository runs found:', filteredRuns.length, 'for project:', projectName)
+    logger.info('Repository runs found:', filteredRuns.length, 'for project:', projectName)
 
     // Extract group name and full path from first matching run
     if (filteredRuns.length > 0) {
@@ -433,7 +435,7 @@ async function fetchRepositoryData() {
     }
 
   } catch (err: any) {
-    console.error('Error fetching repository data:', err)
+    logger.error('Error fetching repository data:', err)
     error.value = err.message || 'An unexpected error occurred'
   } finally {
     loading.value = false

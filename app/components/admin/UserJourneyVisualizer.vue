@@ -292,6 +292,8 @@
 <script setup lang="ts">
 import * as echarts from 'echarts'
 
+const logger = createLogger('UserJourneyVisualizer')
+
 interface NavigationLog {
   timestamp: number
   user: string
@@ -373,7 +375,7 @@ async function fetchData() {
       if (activeTab.value === 2) renderHeatmapChart()
     }
   } catch (err) {
-    console.error('Error fetching navigation data:', err)
+    logger.error('Error fetching navigation data:', err)
   } finally {
     loading.value = false
   }

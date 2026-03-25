@@ -1,3 +1,5 @@
+const logger = createLogger('UserShareLink')
+
 interface UserShareLinkState {
   username: string
 }
@@ -64,7 +66,7 @@ export const useUserShareLink = (options: UserShareLinkOptions) => {
         throw new Error('Failed to create share link')
       }
     } catch (err: any) {
-      console.error('Error creating share link:', err)
+      logger.error('Error creating share link:', err)
       error.value = err?.data?.statusMessage || err?.message || 'Failed to create share link'
       return null
     } finally {

@@ -124,6 +124,8 @@
 </template>
 
 <script setup lang="ts">
+const logger = createLogger('ResourceSearchPanel')
+
 interface SearchResult {
   account_id: string
   resource_address: string
@@ -251,7 +253,7 @@ async function fetchResults() {
     results.value = data.data || []
     totalResults.value = data.pagination?.total || 0
   } catch (err: any) {
-    console.error('Error searching resources:', err)
+    logger.error('Error searching resources:', err)
     results.value = []
     totalResults.value = 0
   } finally {
@@ -294,7 +296,7 @@ async function checkOtherAccounts() {
       failedAccounts: Array.from(accountMap.values()).filter(a => a.failed && !a.applied).length
     }
   } catch (err: any) {
-    console.error('Error fetching deployment status:', err)
+    logger.error('Error fetching deployment status:', err)
     deploymentSummary.value = null
   } finally {
     deploymentLoading.value = false

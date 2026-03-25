@@ -4,6 +4,8 @@ import type { TableColumn } from '~/components/shared/DataTable.vue'
 import type { DataMode } from '~/shared/types/scheduled-reports'
 import { getAccountsFromAnalysis, unwrapCostData } from '~/utils/cost-data-unwrap'
 
+const logger = createLogger('TableRegistry')
+
 // Account metadata type (simplified for LOB/Department lookup)
 export interface AccountMetadata {
   accountId?: string
@@ -1020,7 +1022,7 @@ const serviceBreakdownTable: TableDefinition = {
     const servicesResponse = dataset.services as any
 
     if (!servicesResponse) {
-      console.warn('No services data in dataset')
+      logger.warn('No services data in dataset')
       return []
     }
 
@@ -1038,7 +1040,7 @@ const serviceBreakdownTable: TableDefinition = {
     }
 
     if (!servicesData.resultsByTime || !Array.isArray(servicesData.resultsByTime)) {
-      console.warn('No resultsByTime in services data:', servicesData)
+      logger.warn('No resultsByTime in services data:', servicesData)
       return []
     }
 
@@ -1077,7 +1079,7 @@ const serviceBreakdownTable: TableDefinition = {
         percentOfTotal: totalCost > 0 ? (svc.cost / totalCost) * 100 : 0
       }))
 
-    console.log('Service breakdown extracted:', {
+    logger.info('Service breakdown extracted:', {
       totalServices: serviceCostMap.size,
       topServices: topServices.length,
       totalCost,

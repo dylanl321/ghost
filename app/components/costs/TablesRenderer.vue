@@ -76,6 +76,8 @@ import type { NormalizedDataset } from '~/types/costs'
 import type { TableDefinition, AccountMetadata } from '~/composables/useTableRegistry'
 import DataTable from '~/components/shared/DataTable.vue'
 
+const logger = createLogger('TablesRenderer')
+
 const props = defineProps<{
   tables: TableDefinition[]
   dataset: NormalizedDataset | null
@@ -96,7 +98,7 @@ const hasError = (table: TableDefinition) => {
     const data = table.extractor(props.dataset, props.dataMode || 'billable', props.accountsList, props.selectedAccounts)
     return !data || (Array.isArray(data) && data.length === 0)
   } catch (error) {
-    console.warn(`Error extracting data for table ${table.id}:`, error)
+    logger.warn(`Error extracting data for table ${table.id}:`, error)
     return true
   }
 }
@@ -108,7 +110,7 @@ const getTableData = (table: TableDefinition) => {
   try {
     return table.extractor(props.dataset, props.dataMode || 'billable', props.accountsList, props.selectedAccounts)
   } catch (error) {
-    console.error(`Error extracting data for table ${table.id}:`, error)
+    logger.error(`Error extracting data for table ${table.id}:`, error)
     return []
   }
 }

@@ -224,6 +224,8 @@
 <script setup lang="ts">
 import type { PlannedVsAppliedSummary, UnappliedResource, StateComparison } from '~/shared/types/pipelines'
 
+const logger = createLogger('PlannedVsAppliedPanel')
+
 interface DriftData {
   summary: PlannedVsAppliedSummary
   unappliedResources: UnappliedResource[]
@@ -352,7 +354,7 @@ async function fetchDriftData() {
   try {
     driftData.value = await fetchAccountDrift(props.accountId, props.days)
   } catch (err: any) {
-    console.error('Error fetching drift data:', err)
+    logger.error('Error fetching drift data:', err)
     error.value = err.message || 'An unexpected error occurred'
   } finally {
     loading.value = false
@@ -383,7 +385,7 @@ async function fetchStateComparison() {
 
     stateComparison.value = result.data
   } catch (err: any) {
-    console.error('Error fetching state comparison:', err)
+    logger.error('Error fetching state comparison:', err)
     stateError.value = err.message || 'An unexpected error occurred while comparing state'
   } finally {
     stateLoading.value = false

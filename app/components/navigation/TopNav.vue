@@ -116,6 +116,8 @@ import { useNavigationStore } from '~/stores/useNavigationStore'
 import { useSiteConfigStore } from '~/stores/useSiteConfigStore'
 import UserAvatar from '~/components/ui/UserAvatar.vue'
 
+const logger = createLogger('TopNav')
+
 type BreadcrumbItem = {
   label: string
   to?: string
@@ -199,7 +201,7 @@ const toggleSidebar = () => {
   
   const success = navigationStore.toggle(route.path)
   if (!success) {
-    console.log('Cannot collapse sidebar on this page - it is protected')
+    logger.info('Cannot collapse sidebar on this page - it is protected')
   }
 }
 

@@ -53,6 +53,8 @@
 import { ref, watch } from 'vue'
 import { formatCostValue } from '~/utils/cost-filters'
 
+const logger = createLogger('TagValueResourceBreakdown')
+
 const props = defineProps<{
   accountId: string
   serviceName: string
@@ -110,7 +112,7 @@ async function fetchData() {
     resources.value = data.resources || []
     notice.value = data.notice || null
   } catch (err: any) {
-    console.error('Error fetching resource breakdown:', err)
+    logger.error('Error fetching resource breakdown:', err)
     const msg = err?.data?.error?.message || err.message || ''
     // Distinguish "data not available" from real errors
     if (msg.includes('not available') || msg.includes('not enabled') || msg.includes('Resource-level')) {

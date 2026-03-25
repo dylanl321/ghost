@@ -528,6 +528,8 @@ async function handleSpotlightDismiss() {
 
 // Budget alerts for the Budget Health card
 import type { BudgetAlert } from '@/shared/types/budget-alerts'
+
+const logger = createLogger('Index')
 const dashboardAlerts = ref<BudgetAlert[]>([])
 const dashboardAlertsLoading = ref(true)
 
@@ -620,7 +622,7 @@ async function fetchScopedCosts(scope: string) {
       })).filter((d: any) => d.date)
     }
   } catch (err) {
-    console.error('Failed to fetch scoped costs:', err)
+    logger.error('Failed to fetch scoped costs:', err)
     scopedCostData.value = null
   } finally {
     scopeCostLoading.value = false
@@ -671,7 +673,7 @@ async function fetchOverview(onlyAccounts = false, onlyCostTrend = false) {
     orgOverview.value = result
     fetchError.value = null
   } catch (err) {
-    console.error('Failed to fetch overview:', err)
+    logger.error('Failed to fetch overview:', err)
     fetchError.value = 'Unable to load dashboard data. Please try again.'
     orgOverview.value = null
   } finally {

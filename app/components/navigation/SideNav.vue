@@ -291,6 +291,8 @@ import { useRoute } from "vue-router";
 import { useNavigationStore } from "~/stores/useNavigationStore";
 import { useUserRoles } from "~/composables/useUserRoles";
 
+const logger = createLogger('SideNav')
+
 const route = useRoute();
 const navigationStore = useNavigationStore();
 const { isAdmin } = useUserRoles();
@@ -344,7 +346,7 @@ const toggleSidebar = () => {
   if (!canCollapse.value) {
     // Provide visual feedback for protected pages
     const rule = navigationStore.getPageRule(route.path);
-    console.log(
+    logger.info(
       `Cannot collapse sidebar: ${
         rule?.reason || "This page requires full navigation"
       }`
@@ -363,7 +365,7 @@ const toggleSidebar = () => {
 
   const success = navigationStore.toggle(route.path);
   if (!success) {
-    console.log("Failed to toggle sidebar state");
+    logger.info("Failed to toggle sidebar state");
   }
 };
 
@@ -396,7 +398,7 @@ watch(
       navigationStore.isPageProtected(currentPath) &&
       collapsed
     ) {
-      console.log(
+      logger.info(
         `State inconsistency detected: Protected page ${currentPath} is collapsed - forcing expand`
       );
       navigationStore.expand();

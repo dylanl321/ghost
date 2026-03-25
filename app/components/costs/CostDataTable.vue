@@ -216,6 +216,8 @@ import type { NormalizedDataset } from '~/types/costs'
 import { usePDFExport } from '~/composables/usePDFExport'
 import { useAccountCosts } from '~/composables/useAccountCosts'
 
+const logger = createLogger('CostDataTable')
+
 const props = defineProps<{
   dataset: NormalizedDataset | null
   selectedAccounts: string[]
@@ -632,7 +634,7 @@ const generateDetailedReport = () => {
   )
   
   if (selectedAccountsData.length === 0) {
-    console.warn('No accounts selected for report')
+    logger.warn('No accounts selected for report')
     return
   }
   
@@ -1029,7 +1031,7 @@ const fetchUnknownAccounts = async () => {
           accountLookupCache.value.set(account.accountId, details)
         }
       } catch (error) {
-        console.error(`Failed to fetch details for account ${account.accountId}:`, error)
+        logger.error(`Failed to fetch details for account ${account.accountId}:`, error)
       }
     }
   }

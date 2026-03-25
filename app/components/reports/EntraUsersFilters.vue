@@ -117,6 +117,8 @@
 <script setup lang="ts">
 import type { EntraUsersDatasetFilters } from '~/shared/types/dataset-reports'
 
+const logger = createLogger('EntraUsersFilters')
+
 const filters = defineModel<EntraUsersDatasetFilters>({
   default: () => ({
     roles: [],
@@ -174,7 +176,7 @@ onMounted(async () => {
       departmentOptions.value = response.data.departments
     }
   } catch (error) {
-    console.error('Failed to load Entra filter options:', error)
+    logger.error('Failed to load Entra filter options:', error)
     // Fall back to empty arrays - user can still use search and other filters
     roleOptions.value = []
     departmentOptions.value = []

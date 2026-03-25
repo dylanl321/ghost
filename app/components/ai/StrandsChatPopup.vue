@@ -279,6 +279,8 @@
 
 import mermaid from 'mermaid'
 
+const logger = createLogger('StrandsChatPopup')
+
 // Get unified chat logic
 const {
   // Core state
@@ -376,7 +378,7 @@ function handleDisambiguate() {
   if (disambiguationData.value) {
     openDisambiguationModal()
   } else {
-    console.warn('[StrandsChatPopup] No disambiguation data available')
+    logger.warn('No disambiguation data available')
   }
 }
 
@@ -456,7 +458,7 @@ watch(messages, async () => {
         })
       }
     } catch (error) {
-      console.error('Error rendering mermaid chart:', error)
+      logger.error('Error rendering mermaid chart:', error)
       element.innerHTML = `
         <div class="p-2 bg-red-50 dark:bg-red-900/20 rounded border border-red-200 dark:border-red-800 text-xs">
           <span class="text-red-700 dark:text-red-300">Unable to render chart</span>
@@ -558,7 +560,7 @@ async function handleFirstTimePopupBehavior() {
           await userPreferences.setPreference('chatPopupSeen', true)
           showHint.value = false
         } catch (error) {
-          console.warn('Failed to save chatPopupSeen preference:', error)
+          logger.warn('Failed to save chatPopupSeen preference:', error)
           // Fallback to localStorage
           localStorage.setItem('strands-popup-visited', 'true')
           showHint.value = false
@@ -569,7 +571,7 @@ async function handleFirstTimePopupBehavior() {
       isOpen.value = false
     }
   } catch (error) {
-    console.warn('Failed to load user preferences, falling back to localStorage:', error)
+    logger.warn('Failed to load user preferences, falling back to localStorage:', error)
     
     // Fallback to localStorage if user preferences fail
     const hasVisited = localStorage.getItem('strands-popup-visited')

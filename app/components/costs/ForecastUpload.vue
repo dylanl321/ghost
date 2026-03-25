@@ -280,6 +280,8 @@ import { ref, computed } from 'vue'
 import * as XLSX from 'xlsx'
 import { useForecastData } from '~/composables/useForecastData'
 
+const logger = createLogger('ForecastUpload')
+
 // Composables
 const { uploadForecastData } = useForecastData()
 
@@ -329,7 +331,7 @@ const processFile = async () => {
     successMessage.value = `Successfully processed ${processedData.length} forecast records`
   } catch (err: any) {
     error.value = err.message || 'Failed to process file'
-    console.error('File processing error:', err)
+    logger.error('File processing error:', err)
   } finally {
     isProcessing.value = false
   }
@@ -457,7 +459,7 @@ const extractForecastData = (workbook: XLSX.WorkBook): any[] => {
           monthlyMapping[monthKey] = index + monthlyDataStartIndex
         }
       } catch (err) {
-        console.warn(`Failed to parse column header at index ${index}:`, header, err)
+        logger.warn(`Failed to parse column header at index ${index}:`, header, err)
       }
     }
   })
@@ -601,7 +603,7 @@ const saveToDatabase = async () => {
     successMessage.value = `Successfully uploaded ${transformedData.length} forecast records to database`
   } catch (err: any) {
     error.value = err.message || 'Failed to save data to database'
-    console.error('Database save error:', err)
+    logger.error('Database save error:', err)
   } finally {
     isSaving.value = false
   }

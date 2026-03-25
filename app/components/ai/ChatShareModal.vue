@@ -130,6 +130,8 @@
 <script setup lang="ts">
 import type { ShareThreadResponse } from '#shared/types/chat-threads'
 
+const logger = createLogger('ChatShareModal')
+
 interface Props {
   threadId: string | null
   expiresInDays?: number
@@ -208,7 +210,7 @@ async function generateShareLink() {
     shareData.value = response.data
     currentShareThreadId.value = props.threadId
   } catch (err: any) {
-    console.error('Error generating share link:', err)
+    logger.error('Error generating share link:', err)
     error.value = err.data?.error?.message || 'Failed to generate share link'
   } finally {
     loading.value = false
@@ -227,7 +229,7 @@ async function copyToClipboard() {
       color: 'green'
     })
   } catch (err) {
-    console.error('Failed to copy:', err)
+    logger.error('Failed to copy:', err)
     toast.add({
       title: 'Failed to copy',
       description: 'Please copy the link manually',
@@ -248,7 +250,7 @@ async function copyShortUrl() {
       color: 'green'
     })
   } catch (err) {
-    console.error('Failed to copy:', err)
+    logger.error('Failed to copy:', err)
     toast.add({
       title: 'Failed to copy',
       description: 'Please copy the link manually',
@@ -275,7 +277,7 @@ async function handleUnshare() {
     emit('unshared')
     close()
   } catch (err: any) {
-    console.error('Error removing share:', err)
+    logger.error('Error removing share:', err)
     toast.add({
       title: 'Failed to remove sharing',
       description: err.data?.error?.message || 'Please try again',

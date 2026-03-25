@@ -8,6 +8,8 @@
 import { defineStore } from 'pinia';
 import type { SiteConfig } from '~/shared/types/site-config';
 
+const logger = createLogger('SiteConfigStore')
+
 interface SiteConfigState {
   config: Partial<SiteConfig>;
   loaded: boolean;
@@ -151,7 +153,7 @@ export const useSiteConfigStore = defineStore('siteConfig', {
           throw new Error('Failed to fetch site configuration');
         }
       } catch (error: any) {
-        console.error('Error fetching site config:', error);
+        logger.error('Error fetching site config:', error);
         this.error = error.message || 'Failed to load configuration';
 
         // Set sensible defaults on error

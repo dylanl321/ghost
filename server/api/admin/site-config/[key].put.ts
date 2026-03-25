@@ -58,7 +58,7 @@ export default defineEventHandler(async (event) => {
         oldValue,
         body.value,
         username
-      ).catch(err => console.error('Failed to save config history:', err));
+      ).catch(err => logger.error('Failed to save config history:', err));
     }
 
     return {
@@ -67,7 +67,7 @@ export default defineEventHandler(async (event) => {
       message: `Configuration ${decodedKey} updated successfully`,
     } as SiteConfigUpdateResponse & { message: string };
   } catch (error: any) {
-    console.error('Error updating site config:', error);
+    logger.error('Error updating site config:', error);
 
     throw createError({
       statusCode: error.statusCode || 500,

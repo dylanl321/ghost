@@ -5,6 +5,8 @@ import type { AWSEnclaveData } from '~~/shared/types/accounts'
 import { getCachedDataset, setCachedDataset, invalidateByMode } from '~/composables/useCostDataCache'
 import { getUserFriendlyMessage, retryWithBackoff } from '~/utils/error-helpers'
 
+const logger = createLogger('CostData')
+
 /**
  * CLIENT-SIDE CACHING GAP
  *
@@ -444,7 +446,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
           body: { tags: ['costs'] }
         })
       } catch (error) {
-        console.error('Failed to clear cache:', error)
+        logger.error('Failed to clear cache:', error)
       } finally {
         modeCacheClearing = false
       }

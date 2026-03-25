@@ -302,6 +302,8 @@
 import type { ScheduledReport } from '~/shared/types/scheduled-reports'
 import type { DatasetReportConfig } from '~/shared/types/dataset-reports'
 
+const logger = createLogger('DatasetReportFormModal')
+
 const props = defineProps<{
   report?: ScheduledReport | null
 }>()
@@ -473,7 +475,7 @@ async function handleExecute() {
     emit('saved')
     close()
   } catch (error: any) {
-    console.error('Failed to save report:', error)
+    logger.error('Failed to save report:', error)
   } finally {
     saving.value = false
   }

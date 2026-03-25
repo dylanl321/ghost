@@ -359,6 +359,8 @@
 </template>
 
 <script setup lang="ts">
+const logger = createLogger('SystemLogsPanel')
+
 interface CloudWatchLog {
   eventId: string
   ingestionTime: number
@@ -486,7 +488,7 @@ async function fetchLogs() {
       parsed: parseLogMessage(log.message)
     }))
   } catch (err) {
-    console.error('Error fetching logs:', err)
+    logger.error('Error fetching logs:', err)
   } finally {
     loading.value = false
   }

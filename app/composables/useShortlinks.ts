@@ -1,3 +1,5 @@
+const logger = createLogger('Shortlinks')
+
 export interface ShortLink {
   shortCode: string
   shortUrl?: string
@@ -48,7 +50,7 @@ export const useShortlinks = () => {
         total.value = response.data.total
       }
     } catch (err: any) {
-      console.error('Error fetching shortlinks:', err)
+      logger.error('Error fetching shortlinks:', err)
       error.value = err?.message || 'Failed to fetch shortlinks'
       links.value = []
       total.value = 0

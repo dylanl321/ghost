@@ -95,6 +95,8 @@
 </template>
 
 <script setup lang="ts">
+const logger = createLogger('SecurityFindingsCard')
+
 const props = defineProps<{
   accountId: string
 }>()
@@ -138,7 +140,7 @@ onMounted(async () => {
       informational: breakdown.INFORMATIONAL ?? 0
     }
   } catch (error) {
-    console.error('Failed to load security summary:', error)
+    logger.error('Failed to load security summary:', error)
   } finally {
     loading.value = false
   }

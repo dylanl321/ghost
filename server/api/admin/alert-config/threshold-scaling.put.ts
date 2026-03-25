@@ -74,7 +74,7 @@ export default defineEventHandler(async (event) => {
       message: 'Threshold scaling configuration updated successfully'
     }
   } catch (error: any) {
-    console.error('Error updating threshold scaling config:', error)
+    logger.error('Error updating threshold scaling config:', error)
 
     throw createError({
       statusCode: error.statusCode || 500,

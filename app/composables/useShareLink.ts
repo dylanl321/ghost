@@ -1,5 +1,7 @@
 import type { DataMode } from '~/types/costs'
 
+const logger = createLogger('ShareLink')
+
 interface ShareLinkState {
   selectedAccounts: string[]
   timeframe: string
@@ -42,16 +44,16 @@ export const useShareLink = (options: ShareLinkOptions) => {
    * Generates a shareable link by calling the shortlinks API
    */
   const generateShareLink = async (): Promise<string | null> => {
-    console.log('generateShareLink: Starting...')
+    logger.info('generateShareLink: Starting...')
     isLoading.value = true
     error.value = null
     shortUrl.value = null
-    console.log('generateShareLink: Reset state - shortUrl:', shortUrl.value, 'error:', error.value)
+    logger.info('generateShareLink: Reset state - shortUrl:', shortUrl.value, 'error:', error.value)
 
     try {
       // Capture current state
       const state = captureState()
-      console.log('Generating share link with state:', state)
+      logger.info('Generating share link with state:', state)
       
       // Build the original URL path
       const route = useRoute()
@@ -75,19 +77,19 @@ export const useShareLink = (options: ShareLinkOptions) => {
         }
       })
 
-      console.log('Share link API response:', response)
+      logger.info('Share link API response:', response)
 
       if (response.success && response.data) {
         shortUrl.value = response.data.shortUrl
-        console.log('Share URL set to:', shortUrl.value)
-        console.log('shortUrl.value after assignment:', shortUrl.value)
+        logger.info('Share URL set to:', shortUrl.value)
+        logger.info('shortUrl.value after assignment:', shortUrl.value)
         return response.data.shortUrl
       } else {
-        console.error('API response missing success or data:', response)
+        logger.error('API response missing success or data:', response)
         throw new Error('Failed to create share link')
       }
     } catch (err: any) {
-      console.error('Error creating share link:', err)
+      logger.error('Error creating share link:', err)
       error.value = err?.data?.statusMessage || err?.message || 'Failed to create share link'
       return null
     } finally {

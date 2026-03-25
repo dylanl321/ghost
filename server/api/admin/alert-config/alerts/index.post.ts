@@ -162,7 +162,7 @@ export default defineEventHandler(async (event) => {
       message: `Alert level ${levelUpper} created successfully`
     }
   } catch (error: any) {
-    console.error('Error creating alert level:', error)
+    logger.error('Error creating alert level:', error)
 
     throw createError({
       statusCode: error.statusCode || 500,

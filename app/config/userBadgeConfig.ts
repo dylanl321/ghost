@@ -1,3 +1,5 @@
+const logger = createLogger('RBadgeConfig')
+
 export interface UserBadge {
   id: string
   title: string
@@ -323,7 +325,7 @@ export async function evaluateUserBadges(context: BadgeContext): Promise<UserBad
         addedBadgeIds.add(rule.badge.id)
       }
     } catch (error) {
-      console.warn(`Error evaluating badge rule ${rule.id}:`, error)
+      logger.warn(`Error evaluating badge rule ${rule.id}:`, error)
     }
   }
   

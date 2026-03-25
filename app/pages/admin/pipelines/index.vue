@@ -281,6 +281,8 @@ import PipelinesAccountPerformanceChart from '~/components/pipelines/AccountPerf
 import PipelinesRepositoryBreakdownTable from '~/components/pipelines/RepositoryBreakdownTable.vue'
 import PipelinesAuthorSelector from '~/components/pipelines/AuthorSelector.vue'
 
+const logger = createLogger('Index')
+
 // Admin-only access control
 definePageMeta({
   layout: 'admin',
@@ -359,7 +361,7 @@ async function fetchPipelineData() {
     heatMapData.value = dailyMetrics.value.slice(0, 30)
 
   } catch (err: any) {
-    console.error('Error fetching pipeline data:', err)
+    logger.error('Error fetching pipeline data:', err)
     error.value = err.message || 'An unknown error occurred'
   } finally {
     loading.value = false

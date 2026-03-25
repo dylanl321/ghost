@@ -58,7 +58,7 @@ export default defineEventHandler(async (event) => {
       message: 'ML configuration updated successfully'
     }
   } catch (error: any) {
-    console.error('Error updating ML config:', error)
+    logger.error('Error updating ML config:', error)
 
     throw createError({
       statusCode: error.statusCode || 500,

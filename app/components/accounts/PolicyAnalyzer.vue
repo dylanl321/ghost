@@ -756,6 +756,8 @@
 </template>
 
 <script setup lang="ts">
+const logger = createLogger('PolicyAnalyzer')
+
 const props = defineProps<{
   accountId: string
   environment?: 'commercial' | 'govcloud'
@@ -991,7 +993,7 @@ const loadAnalysis = async () => {
     fullAnalysisData.value = data.data
   } catch (err: any) {
     error.value = err.message || 'Failed to load policy analysis'
-    console.error('Error loading policy analysis:', err)
+    logger.error('Error loading policy analysis:', err)
   } finally {
     loading.value = false
   }

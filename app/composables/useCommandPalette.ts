@@ -1,3 +1,5 @@
+const logger = createLogger('CommandPalette')
+
 /**
  * Command Palette Composable
  * Global state and logic for the Cmd+K command palette
@@ -36,7 +38,7 @@ export function useCommandPalette() {
           recentCommands.value = JSON.parse(stored)
         }
       } catch (e) {
-        console.warn('Failed to load recent commands:', e)
+        logger.warn('Failed to load recent commands:', e)
       }
     }
   })
@@ -49,7 +51,7 @@ export function useCommandPalette() {
       try {
         localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(updated))
       } catch (e) {
-        console.warn('Failed to save recent commands:', e)
+        logger.warn('Failed to save recent commands:', e)
       }
     }
   }

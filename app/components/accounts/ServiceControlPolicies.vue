@@ -105,6 +105,8 @@
 </template>
 
 <script setup lang="ts">
+const logger = createLogger('ServiceControlPolicies')
+
 const props = defineProps<{
   accountId: string
 }>()
@@ -190,7 +192,7 @@ onMounted(async () => {
     }
   } catch (err: any) {
     error.value = err.message || 'Failed to load service control policies'
-    console.error('Error fetching policy data:', err)
+    logger.error('Error fetching policy data:', err)
   } finally {
     loading.value = false
   }

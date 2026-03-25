@@ -68,7 +68,7 @@ export default defineEventHandler(async (event) => {
       message: 'Anomaly detection configuration updated successfully'
     }
   } catch (error: any) {
-    console.error('Error updating anomaly detection config:', error)
+    logger.error('Error updating anomaly detection config:', error)
 
     throw createError({
       statusCode: error.statusCode || 500,

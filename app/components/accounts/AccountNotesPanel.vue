@@ -234,6 +234,8 @@ import { NOTE_TAG_OPTIONS } from '#shared/types/account-notes'
 import { formatUsername } from '~/utils/userUtils'
 import { onClickOutside } from '@vueuse/core'
 
+const logger = createLogger('AccountNotesPanel')
+
 interface Props {
   accountId: string
 }
@@ -365,10 +367,10 @@ function handleUserSearchAsync(query: string) {
     try {
       const accessToken = user.value?.accessToken || ''
       const results = await searchUsers(accessToken, query, 10)
-      console.log('User search results:', results) // Debug log
+      logger.info('User search results:', results) // Debug log
       userSearchResults.value = results as UserSearchResult[]
     } catch (error) {
-      console.error('Failed to search users:', error)
+      logger.error('Failed to search users:', error)
       userSearchResults.value = []
     } finally {
       searchingUsers.value = false

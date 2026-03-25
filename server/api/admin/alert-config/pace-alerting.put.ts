@@ -118,7 +118,7 @@ export default defineEventHandler(async (event) => {
       message: 'Pace alerting configuration updated successfully'
     }
   } catch (error: any) {
-    console.error('Error updating pace alerting config:', error)
+    logger.error('Error updating pace alerting config:', error)
 
     throw createError({
       statusCode: error.statusCode || 500,

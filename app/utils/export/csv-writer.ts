@@ -13,6 +13,8 @@ import {
 } from './export-utils'
 import JSZip from 'jszip'
 
+const logger = createLogger('CsvWriter')
+
 /**
  * Generate CSV content from a single sheet
  */
@@ -196,7 +198,7 @@ export async function exportToCSV(
     }
 
   } catch (error) {
-    console.error('CSV export failed:', error)
+    logger.error('CSV export failed:', error)
     return {
       success: false,
       format: 'csv',
@@ -211,7 +213,7 @@ export async function exportToCSV(
  */
 export function downloadCSV(result: ExportResult): void {
   if (!result.success || !result.blob) {
-    console.error('Cannot download CSV:', result.error)
+    logger.error('Cannot download CSV:', result.error)
     return
   }
 

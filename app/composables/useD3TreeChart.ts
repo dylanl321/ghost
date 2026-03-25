@@ -1,6 +1,8 @@
 import { ref, onBeforeUnmount } from 'vue'
 import * as d3 from 'd3'
 
+const logger = createLogger('D3TreeChart')
+
 export interface TreeNode {
   name: string
   id: string
@@ -34,7 +36,7 @@ export function useD3TreeChart() {
       const width = Math.max(containerRect.width || 900, 800)
       const height = Math.max(containerRect.height || 600, 600)
       
-      console.log('Canvas dimensions:', { width, height, containerRect })
+      logger.info('Canvas dimensions:', { width, height, containerRect })
       
       // Set up responsive resize observer
       if (window.ResizeObserver) {
@@ -128,7 +130,7 @@ export function useD3TreeChart() {
         root.children = null
       }
       
-      console.log('Initial state: only master visible, all LOBs collapsed')
+      logger.info('Initial state: only master visible, all LOBs collapsed')
 
       const diagonal = (d: any) => {
         const source = d.source
@@ -169,7 +171,7 @@ export function useD3TreeChart() {
       function arrangeAccountNodes(nodes: d3.HierarchyNode<any>[]) {
         nodes.forEach(d => {
           if (d.data.type === 'department' && d.children) {
-            console.log("arranging nodes...")
+            logger.info("arranging nodes...")
             const COLUMNS = Math.ceil(Math.sqrt(d.children.length))
             const SPACING_X = nodeWidth * 1.1
             const SPACING_Y = nodeHeight * 1.2
@@ -230,7 +232,7 @@ export function useD3TreeChart() {
           .style("transition", "all 0.2s ease")
           .on("click", function(event, d) {
             event.stopPropagation()
-            console.log('Node clicked immediately:', d.data.name)
+            logger.info('Node clicked immediately:', d.data.name)
             
             // Immediate visual feedback
             d3.selectAll(".node-box")
@@ -424,7 +426,7 @@ export function useD3TreeChart() {
   }
 
   function toggleNodeWithNeighborCollapse(d: any) {
-    console.log('Toggling node:', d.data.name, 'type:', d.data.type, 'has children:', !!d.children, 'has _children:', !!d._children)
+    logger.info('Toggling node:', d.data.name, 'type:', d.data.type, 'has children:', !!d.children, 'has _children:', !!d._children)
     
     if (d.children) {
       // Collapsing - just collapse this node
@@ -465,7 +467,7 @@ export function useD3TreeChart() {
       if (d.children) {
         d.children.forEach(child => {
           if (child.children) {
-            console.log('Keeping grandchild collapsed:', child.data.name)
+            logger.info('Keeping grandchild collapsed:', child.data.name)
             child._children = child.children
             child.children = null
           }
@@ -514,7 +516,7 @@ export function useD3TreeChart() {
     // Find the master node and arrange its LOBs in a grid
     const masterNode = nodes.find(d => d.data.type === 'master')
     if (masterNode && masterNode.children && masterNode.children.length > 0) {
-      console.log(`arranging ${masterNode.children.length} LOBs in grid layout`)
+      logger.info(`arranging ${masterNode.children.length} LOBs in grid layout`)
       const totalChildren = masterNode.children.length
       const MAX_COLUMNS = 4
       const COLUMNS = Math.min(MAX_COLUMNS, totalChildren)
@@ -547,7 +549,7 @@ export function useD3TreeChart() {
     // Handle expanded LOB and department nodes with collision avoidance
     nodes.forEach(d => {
       if ((d.data.type === 'lob' || d.data.type === 'department') && d.children && d.children.length > 0) {
-        console.log(`arranging ${d.children.length} ${d.data.type} children in grid`)
+        logger.info(`arranging ${d.children.length} ${d.data.type} children in grid`)
         const totalChildren = d.children.length
         const MAX_COLUMNS = 4
         const COLUMNS = Math.min(MAX_COLUMNS, totalChildren)
@@ -659,7 +661,7 @@ export function useD3TreeChart() {
       .style("transition", "all 0.2s ease")
       .on("click", function(event, d) {
         event.stopPropagation()
-        console.log('Node clicked immediately:', d.data.name)
+        logger.info('Node clicked immediately:', d.data.name)
         
         // Immediate visual feedback
         d3.selectAll(".node-box")
@@ -897,7 +899,7 @@ export function useD3TreeChart() {
         .call(zoom.transform, transform)
         
     } catch (error) {
-      console.warn('Failed to fit chart to container:', error)
+      logger.warn('Failed to fit chart to container:', error)
       // Fallback to simple center
       const container = document.querySelector('.visualization-container')
       if (container) {

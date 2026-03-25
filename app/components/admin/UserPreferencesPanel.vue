@@ -652,6 +652,8 @@ import { COMMON_TIMEZONES } from '#shared/types/user-preferences'
 import type { DashboardLayoutConfig } from '#shared/types/dashboard-layout'
 import { DEFAULT_DASHBOARD_LAYOUT, ALL_METRIC_CARD_IDS } from '#shared/types/dashboard-layout'
 
+const logger = createLogger('UserPreferencesPanel')
+
 // State
 const allPreferences = ref<UserPreferences[]>([])
 const loading = ref(false)
@@ -811,7 +813,7 @@ async function loadPreferences() {
     const response = await $fetch<{ data: { preferences: UserPreferences[]; total: number } }>('/api/admin/user-preferences')
     allPreferences.value = response.data.preferences
   } catch (err: any) {
-    console.error('Failed to load user preferences:', err)
+    logger.error('Failed to load user preferences:', err)
     error.value = err.message || 'Failed to load user preferences'
   } finally {
     loading.value = false

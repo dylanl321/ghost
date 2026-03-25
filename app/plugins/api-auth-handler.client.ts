@@ -1,3 +1,5 @@
+const logger = createLogger('GHOST-AUTH')
+
 /**
  * Global API auth error handler plugin
  *
@@ -56,7 +58,7 @@ async function tryRefreshSession(): Promise<boolean> {
   isRefreshing = true
   refreshPromise = (async () => {
     try {
-      console.log('[GHOST-AUTH] Attempting to refresh session...')
+      logger.info('Attempting to refresh session...')
 
       // Call the nuxt-oidc-auth refresh endpoint directly
       // This is more reliable than using the composable in plugin context
@@ -66,14 +68,14 @@ async function tryRefreshSession(): Promise<boolean> {
       })
 
       if (response.ok) {
-        console.log('[GHOST-AUTH] Session refresh successful')
+        logger.info('Session refresh successful')
         return true
       } else {
-        console.log('[GHOST-AUTH] Session refresh failed with status:', response.status)
+        logger.info('Session refresh failed with status:', response.status)
         return false
       }
     } catch (err) {
-      console.error('[GHOST-AUTH] Session refresh error:', err)
+      logger.error('Session refresh error:', err)
       return false
     } finally {
       isRefreshing = false
@@ -92,11 +94,11 @@ function redirectToSessionExpired(): void {
 
   // Skip if already on auth pages to avoid loops
   if (currentPath.startsWith('/auth/')) {
-    console.log('[GHOST-AUTH] Already on auth page, not redirecting')
+    logger.info('Already on auth page, not redirecting')
     return
   }
 
-  console.log('[GHOST-AUTH] Redirecting to session-expired page')
+  logger.info('Redirecting to session-expired page')
 
   try {
     const { saveReturnUrl } = useAuthRedirect()
@@ -127,14 +129,14 @@ export default defineNuxtPlugin(() => {
         throw error
       }
 
-      console.log('[GHOST-AUTH] Auth error detected:', error?.statusCode || error?.status)
+      logger.info('Auth error detected:', error?.statusCode || error?.status)
 
       // Get the request options to check if we've already retried
       const requestOptions = args[1] || {}
 
       // Check if we've already retried this request
       if (retriedRequests.has(requestOptions)) {
-        console.log('[GHOST-AUTH] Already retried this request, redirecting')
+        logger.info('Already retried this request, redirecting')
         redirectToSessionExpired()
         throw error
       }
@@ -146,21 +148,21 @@ export default defineNuxtPlugin(() => {
         // Mark this request as retried
         retriedRequests.add(requestOptions)
 
-        console.log('[GHOST-AUTH] Retrying original request after refresh')
+        logger.info('Retrying original request after refresh')
         try {
           // Retry the original request
           return await originalFetch(...args)
         } catch (retryError: any) {
           // If retry also fails with auth error, redirect
           if (isAuthError(retryError)) {
-            console.log('[GHOST-AUTH] Retry also failed with auth error, redirecting')
+            logger.info('Retry also failed with auth error, redirecting')
             redirectToSessionExpired()
           }
           throw retryError
         }
       } else {
         // Refresh failed, redirect to session expired
-        console.log('[GHOST-AUTH] Session refresh failed, redirecting')
+        logger.info('Session refresh failed, redirecting')
         redirectToSessionExpired()
         throw error
       }

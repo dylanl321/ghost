@@ -40,7 +40,7 @@ export default defineEventHandler(async (event) => {
   // Save change history (non-blocking)
   if (oldValue !== undefined) {
     saveConfigHistory(configKey, oldValue, body.layout, username, 'Admin set org default dashboard layout')
-      .catch(err => console.error('Failed to save config history:', err))
+      .catch(err => logger.error('Failed to save config history:', err))
   }
 
   return { success: true, message: 'Default dashboard layout saved' }

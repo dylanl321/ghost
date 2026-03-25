@@ -267,6 +267,8 @@
 </template>
 
 <script setup lang="ts">
+const logger = createLogger('DevOptionsPanel')
+
 const { user } = useOidcAuth()
 const userGroupStore = useUserGroupStore()
 const enclaveStore = useEnclaveStore()
@@ -448,7 +450,7 @@ async function applyDevSettings() {
       timeout: 3000
     })
   } catch (error) {
-    console.error('Failed to apply dev settings:', error)
+    logger.error('Failed to apply dev settings:', error)
     toast.add({
       title: 'Apply Failed',
       description: 'Could not apply dev account settings',
@@ -525,7 +527,7 @@ async function resetAll() {
       timeout: 3000
     })
   } catch (error) {
-    console.error('Failed to reset preferences:', error)
+    logger.error('Failed to reset preferences:', error)
     toast.add({
       title: 'Reset Failed',
       description: 'An error occurred while resetting preferences',
@@ -569,7 +571,7 @@ async function clearCachedData() {
       timeout: 3000
     })
   } catch (error) {
-    console.error('Failed to clear cache:', error)
+    logger.error('Failed to clear cache:', error)
     toast.add({
       title: 'Clear Failed',
       description: 'An error occurred while clearing cache',

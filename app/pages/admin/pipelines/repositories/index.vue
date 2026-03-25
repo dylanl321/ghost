@@ -185,6 +185,8 @@ import { formatDistanceToNow } from 'date-fns'
 import type { GitLabRepoInfo } from '~/shared/types/pipelines'
 import { parseGitLabUrl } from '~/utils/gitlab-url-parser'
 
+const logger = createLogger('Index')
+
 // Admin-only access control
 definePageMeta({
   layout: 'admin',
@@ -228,7 +230,7 @@ async function fetchRepositories() {
       throw new Error(result.message || 'Failed to fetch repository data')
     }
 
-    console.log('Total pipeline runs fetched:', result.data.length)
+    logger.info('Total pipeline runs fetched:', result.data.length)
 
     // Group by repository
     const repoMap = new Map<string, any>()
@@ -289,7 +291,7 @@ async function fetchRepositories() {
     })).sort((a, b) => b.totalRuns - a.totalRuns)
 
   } catch (err: any) {
-    console.error('Error fetching repository data:', err)
+    logger.error('Error fetching repository data:', err)
     error.value = err.message || 'An unexpected error occurred'
   } finally {
     loading.value = false

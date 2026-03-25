@@ -1,7 +1,9 @@
+const logger = createLogger('LogActivity')
+
 export const logActivity = async (message: string) => {
   // Only run on client-side to avoid SSR issues
   if (typeof window === 'undefined') {
-    console.warn('logToBackend: Skipping server-side logging to avoid URL parsing errors')
+    logger.warn('logToBackend: Skipping server-side logging to avoid URL parsing errors')
     return
   }
 
@@ -15,10 +17,10 @@ export const logActivity = async (message: string) => {
     });
 
     if (!response.ok) {
-      console.warn('Failed to log to backend:', response.status, response.statusText)
+      logger.warn('Failed to log to backend:', response.status, response.statusText)
     }
   } catch (error) {
-    console.error('Error logging message:', error);
+    logger.error('Error logging message:', error);
   }
 };
 

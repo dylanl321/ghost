@@ -1037,6 +1037,8 @@
 import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
 import { getEmailPatternsFromSlug, getSearchTermsFromSlug, isValidUsername, convertToUsernameSlug } from '~/utils/userUtils'
 
+const logger = createLogger('AccessHistory')
+
 // Types
 interface AccessEvent {
   eventId: string
@@ -1258,7 +1260,7 @@ const findUserByUsername = async (usernameSlug: string) => {
 
   // Validate the username slug format
   if (!isValidUsername(usernameSlug)) {
-    console.error('Invalid username slug format:', usernameSlug)
+    logger.error('Invalid username slug format:', usernameSlug)
     return null
   }
 
@@ -1266,7 +1268,7 @@ const findUserByUsername = async (usernameSlug: string) => {
     // Get possible email patterns from the slug
     const emailPatterns = getEmailPatternsFromSlug(usernameSlug)
     
-    console.log(`Trying email patterns for slug "${usernameSlug}":`, emailPatterns)
+    logger.info(`Trying email patterns for slug "${usernameSlug}":`, emailPatterns)
 
     // Try each email pattern
     for (const email of emailPatterns) {
@@ -1278,7 +1280,7 @@ const findUserByUsername = async (usernameSlug: string) => {
             u.userPrincipalName.toLowerCase() === email.toLowerCase()
           )
           if (exactMatch) {
-            console.log(`Found exact email match: ${email}`)
+            logger.info(`Found exact email match: ${email}`)
             return exactMatch
           }
           
@@ -1288,18 +1290,18 @@ const findUserByUsername = async (usernameSlug: string) => {
             u.userPrincipalName.toLowerCase().includes(usernameSlug.replace(/-/g, '').toLowerCase())
           )
           if (partialMatch) {
-            console.log(`Found partial email match: ${email} -> ${partialMatch.userPrincipalName}`)
+            logger.info(`Found partial email match: ${email} -> ${partialMatch.userPrincipalName}`)
             return partialMatch
           }
         }
       } catch (err) {
-        console.debug(`No results for email pattern: ${email}`)
+        logger.debug(`No results for email pattern: ${email}`)
       }
     }
 
     // If email search fails, try searching by display name parts
     const searchTerms = getSearchTermsFromSlug(usernameSlug)
-    console.log(`Trying name search terms:`, searchTerms)
+    logger.info(`Trying name search terms:`, searchTerms)
     
     for (const searchTerm of searchTerms) {
       try {
@@ -1312,19 +1314,19 @@ const findUserByUsername = async (usernameSlug: string) => {
           })
           
           if (bestMatch) {
-            console.log(`Found name match: ${searchTerm} -> ${bestMatch.userPrincipalName}`)
+            logger.info(`Found name match: ${searchTerm} -> ${bestMatch.userPrincipalName}`)
             return bestMatch
           }
         }
       } catch (err) {
-        console.debug(`No results for search term: ${searchTerm}`)
+        logger.debug(`No results for search term: ${searchTerm}`)
       }
     }
 
-    console.log(`No user found for username slug: ${usernameSlug}`)
+    logger.info(`No user found for username slug: ${usernameSlug}`)
     return null
   } catch (err) {
-    console.error('Error finding user:', err)
+    logger.error('Error finding user:', err)
     return null
   }
 }
@@ -1365,13 +1367,13 @@ const resolveUserProfile = async () => {
     // Set the resolved email for CloudWatch queries
     resolvedEmail.value = profile.userPrincipalName || foundUser.userPrincipalName
     
-    console.log(`Resolved username slug "${username.value}" to email: ${resolvedEmail.value}`)
+    logger.info(`Resolved username slug "${username.value}" to email: ${resolvedEmail.value}`)
 
     // Update breadcrumbs with user's display name
     updateBreadcrumbs()
 
   } catch (err) {
-    console.error('Error resolving user profile:', err)
+    logger.error('Error resolving user profile:', err)
     if (mounted.value) {
       error.value = 'Failed to resolve user'
       errorDetails.value = err instanceof Error ? err.message : 'Could not resolve the user profile'
@@ -1412,7 +1414,7 @@ const loadAccessHistory = async () => {
     
     loadingMessage.value = rangeMessages[selectedDateRange.value] || 'Searching CloudTrail logs...'
 
-    console.log(`Searching CloudWatch for resolved email: ${resolvedEmail.value}`)
+    logger.info(`Searching CloudWatch for resolved email: ${resolvedEmail.value}`)
 
     // Use comprehensive query to get all data once
     const response: any = await $fetch('/api/aws/cloudtrail/user-access-history', {
@@ -1436,10 +1438,10 @@ const loadAccessHistory = async () => {
     // Update filter options based on results
     updateFilterOptions(accessEvents.value)
     
-    console.log(`Loaded ${accessEvents.value.length} events`)
+    logger.info(`Loaded ${accessEvents.value.length} events`)
     
   } catch (err: any) {
-    console.error('Error loading access history:', err)
+    logger.error('Error loading access history:', err)
     
     // Only update state if component is still mounted
     if (!mounted.value) return
@@ -1522,7 +1524,7 @@ const viewEventDetails = (event: AccessEvent) => {
 
 const exportAccessHistory = () => {
   if (!mounted.value || !accessEvents.value || accessEvents.value.length === 0) {
-    console.warn('No access history data to export')
+    logger.warn('No access history data to export')
     return
   }
 
@@ -1602,7 +1604,7 @@ const exportAccessHistory = () => {
       URL.revokeObjectURL(url)
     }
   } catch (error) {
-    console.error('Failed to download access history CSV:', error)
+    logger.error('Failed to download access history CSV:', error)
     alert('Failed to export access history. Please try again.')
   }
 }

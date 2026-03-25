@@ -15,6 +15,8 @@
 import { marked } from 'marked'
 import { convertToUsernameSlug } from '~/utils/userUtils'
 
+const logger = createLogger('Response Enricher')
+
 /**
  * Entity types that can be detected and enriched
  */
@@ -562,7 +564,7 @@ export function useStrandsResponseEnricher() {
 
       return result
     } catch (error) {
-      console.error('[Response Enricher] Error parsing content:', error)
+      logger.error('Error parsing content:', error)
       return content.replace(/\n/g, '<br>')
     }
   }
@@ -613,7 +615,7 @@ export function useStrandsResponseEnricher() {
    */
   function showEntityPopover(entityType: EntityType, entityValue: string, triggerElement: HTMLElement) {
     // This is a placeholder - you'll implement with your popover component
-    console.log('Show popover:', { entityType, entityValue, triggerElement })
+    logger.info('Show popover:', { entityType, entityValue, triggerElement })
 
     // Example: Emit event that Vue component can listen to
     window.dispatchEvent(new CustomEvent('show-entity-popover', {
@@ -631,7 +633,7 @@ export function useStrandsResponseEnricher() {
       try {
         return await pattern.popoverDataFetcher(entityValue)
       } catch (error) {
-        console.error(`Error fetching ${entityType} data:`, error)
+        logger.error(`Error fetching ${entityType} data:`, error)
         return null
       }
     }

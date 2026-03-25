@@ -79,7 +79,7 @@ export default defineEventHandler(async (event) => {
       message: 'Dry run configuration updated successfully'
     }
   } catch (error: any) {
-    console.error('Error updating dry run config:', error)
+    logger.error('Error updating dry run config:', error)
 
     throw createError({
       statusCode: error.statusCode || 500,

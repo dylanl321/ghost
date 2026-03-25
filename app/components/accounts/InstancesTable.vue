@@ -219,6 +219,8 @@
 </template>
 
 <script setup lang="ts">
+const logger = createLogger('InstancesTable')
+
 interface Props {
   accountId: string
   utilizationMap?: Record<string, { classification: string; reasons: string[] }>
@@ -306,7 +308,7 @@ const fetchInstances = async () => {
     const data = await response.json()
     instances.value = data.data?.instances || []
   } catch (error) {
-    console.error('Error fetching instances:', error)
+    logger.error('Error fetching instances:', error)
     instances.value = []
   } finally {
     loading.value = false

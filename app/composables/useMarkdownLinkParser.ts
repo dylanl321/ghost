@@ -6,6 +6,8 @@
 
 import { marked } from 'marked'
 
+const logger = createLogger('Markdown Parser')
+
 export function useMarkdownLinkParser() {
   /**
    * Patterns to identify GHOST internal URLs across different environments
@@ -85,7 +87,7 @@ export function useMarkdownLinkParser() {
     try {
       return marked.parse(content) as string
     } catch (error) {
-      console.error('[Markdown Parser] Error parsing markdown:', error)
+      logger.error('Error parsing markdown:', error)
       return content.replace(/\n/g, '<br>')
     }
   }

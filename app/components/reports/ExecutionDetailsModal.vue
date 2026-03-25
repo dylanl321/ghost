@@ -187,6 +187,8 @@
 <script setup lang="ts">
 import type { ScheduledReport, ReportExecution } from '~/shared/types/scheduled-reports'
 
+const logger = createLogger('ExecutionDetailsModal')
+
 interface Props {
   modelValue: boolean
   report: ScheduledReport | null
@@ -234,7 +236,7 @@ async function loadExecutionDetails() {
 
     execution.value = response
   } catch (error: any) {
-    console.error('Failed to load execution details:', error)
+    logger.error('Failed to load execution details:', error)
 
     toast.add({
       title: 'Failed to load details',

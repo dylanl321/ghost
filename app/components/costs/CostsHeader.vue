@@ -268,6 +268,8 @@ import type { NormalizedDataset } from '~/types/costs'
 import type { ExportFormat } from '#shared/types/export'
 import ExportButton from '~/components/shared/ExportButton.vue'
 
+const logger = createLogger('CostsHeader')
+
 const emit = defineEmits<{ (e: 'refresh'): void; (e: 'start-tour'): void; (e: 'view-alerts'): void }>()
 
 const props = defineProps<{
@@ -452,7 +454,7 @@ async function generateShareUrl() {
       throw new Error('Invalid response from server')
     }
   } catch (error: any) {
-    console.error('Failed to generate share link:', error)
+    logger.error('Failed to generate share link:', error)
     shareError.value = error.message || 'Failed to create share link'
     toast.add({
       title: 'Share Link Failed',
@@ -486,7 +488,7 @@ async function copyShareUrl() {
       shareCopied.value = false
     }, 2000)
   } catch (error) {
-    console.error('Failed to copy to clipboard:', error)
+    logger.error('Failed to copy to clipboard:', error)
     toast.add({
       title: 'Copy Failed',
       description: 'Could not copy link to clipboard',
@@ -526,7 +528,7 @@ async function handleExport(format: ExportFormat) {
   }
 
   if (!props.dataset) {
-    console.warn('No dataset available for export')
+    logger.warn('No dataset available for export')
     toast.add({
       title: 'Export Error',
       description: 'No data available for export',
@@ -573,7 +575,7 @@ async function handleExport(format: ExportFormat) {
       color: 'green'
     })
   } catch (error) {
-    console.error('Export failed:', error)
+    logger.error('Export failed:', error)
     toast.remove('export-progress')
     toast.add({
       title: 'Export Failed',
@@ -662,7 +664,7 @@ async function handleProformaBillableExport() {
       color: 'green'
     })
   } catch (error) {
-    console.error('Proforma vs Billable export failed:', error)
+    logger.error('Proforma vs Billable export failed:', error)
     toast.remove('proforma-billable-export-progress')
     toast.add({
       title: 'Export Failed',
@@ -685,7 +687,7 @@ async function handleBomExport() {
   }
 
   if (!props.dataset) {
-    console.warn('No dataset available for BOM export')
+    logger.warn('No dataset available for BOM export')
     toast.add({
       title: 'Export Error',
       description: 'No data available for export',
@@ -733,7 +735,7 @@ async function handleBomExport() {
       color: 'green'
     })
   } catch (error) {
-    console.error('BOM export failed:', error)
+    logger.error('BOM export failed:', error)
     toast.remove('bom-export-progress')
     toast.add({
       title: 'BOM Export Failed',

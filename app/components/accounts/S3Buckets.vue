@@ -299,6 +299,8 @@
 </template>
 
 <script setup lang="ts">
+const logger = createLogger('S3Buckets')
+
 defineOptions({
   inheritAttrs: false
 })
@@ -335,7 +337,7 @@ const {
     }
   },
   onError: (err) => {
-    console.error('Error fetching buckets:', err)
+    logger.error('Error fetching buckets:', err)
   }
 })
 
@@ -541,9 +543,9 @@ const analyzePolicies = async () => {
 
     policyAnalysis.value = { analyses: allAnalyses, summary }
 
-    console.log(`Policy analysis: ${summary.publicBuckets} public, ${summary.crossAccountBuckets} cross-account, ${summary.criticalRisks + summary.highRisks} high-severity risks`)
+    logger.info(`Policy analysis: ${summary.publicBuckets} public, ${summary.crossAccountBuckets} cross-account, ${summary.criticalRisks + summary.highRisks} high-severity risks`)
   } catch (error) {
-    console.error('Error analyzing policies:', error)
+    logger.error('Error analyzing policies:', error)
   } finally {
     analyzingPolicies.value = false
   }
@@ -647,7 +649,7 @@ const showPolicyModal = (bucketName: string) => {
         policy = JSON.parse(bucketPolicyObj.policyText)
       }
     } catch (e) {
-      console.error('Failed to parse policy:', e)
+      logger.error('Failed to parse policy:', e)
     }
   }
 
@@ -668,7 +670,7 @@ const copyPolicy = async () => {
   try {
     await navigator.clipboard.writeText(formatPolicyJson(selectedBucketPolicy.value))
   } catch (error) {
-    console.error('Failed to copy:', error)
+    logger.error('Failed to copy:', error)
   }
 }
 

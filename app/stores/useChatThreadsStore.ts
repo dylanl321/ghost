@@ -13,6 +13,8 @@ import type {
   ShareThreadResponse
 } from '#shared/types/chat-threads'
 
+const logger = createLogger('Chat Threads Store')
+
 interface ChatThreadsState {
   threads: ChatThread[]
   activeThreadId: string | null
@@ -129,7 +131,7 @@ export const useChatThreadsStore = defineStore('chatThreads', {
         this.filters = appliedFilters
       } catch (err: any) {
         this.error = err.data?.error?.message || 'Failed to fetch threads'
-        console.error('[Chat Threads Store] Error fetching threads:', err)
+        logger.error('Error fetching threads:', err)
       } finally {
         this.loading = false
       }
@@ -162,7 +164,7 @@ export const useChatThreadsStore = defineStore('chatThreads', {
         return data
       } catch (err: any) {
         this.error = err.data?.error?.message || 'Failed to create thread'
-        console.error('[Chat Threads Store] Error creating thread:', err)
+        logger.error('Error creating thread:', err)
         return null
       }
     },
@@ -192,7 +194,7 @@ export const useChatThreadsStore = defineStore('chatThreads', {
         return true
       } catch (err: any) {
         this.error = err.data?.error?.message || 'Failed to load thread'
-        console.error('[Chat Threads Store] Error loading thread:', err)
+        logger.error('Error loading thread:', err)
         return false
       }
     },
@@ -224,7 +226,7 @@ export const useChatThreadsStore = defineStore('chatThreads', {
         return true
       } catch (err: any) {
         this.error = err.data?.error?.message || 'Failed to update thread'
-        console.error('[Chat Threads Store] Error updating thread:', err)
+        logger.error('Error updating thread:', err)
         return false
       }
     },
@@ -294,7 +296,7 @@ export const useChatThreadsStore = defineStore('chatThreads', {
         return true
       } catch (err: any) {
         this.error = err.data?.error?.message || 'Failed to add message'
-        console.error('[Chat Threads Store] Error adding message:', err)
+        logger.error('Error adding message:', err)
         return false
       }
     },
@@ -322,7 +324,7 @@ export const useChatThreadsStore = defineStore('chatThreads', {
         return true
       } catch (err: any) {
         this.error = err.data?.error?.message || 'Failed to clear thread'
-        console.error('[Chat Threads Store] Error clearing thread:', err)
+        logger.error('Error clearing thread:', err)
         return false
       }
     },
@@ -348,7 +350,7 @@ export const useChatThreadsStore = defineStore('chatThreads', {
         return true
       } catch (err: any) {
         this.error = err.data?.error?.message || 'Failed to delete thread'
-        console.error('[Chat Threads Store] Error deleting thread:', err)
+        logger.error('Error deleting thread:', err)
         return false
       }
     },
@@ -365,14 +367,14 @@ export const useChatThreadsStore = defineStore('chatThreads', {
 
         const newThread = await this.createThread('New Conversation')
         if (!newThread) {
-          console.error('[Chat Threads Store] Failed to create new thread after deletion')
+          logger.error('Failed to create new thread after deletion')
           return null
         }
 
         return newThread
       } catch (err: any) {
         this.error = err.data?.error?.message || 'Failed to delete thread and create new'
-        console.error('[Chat Threads Store] Error in deleteThreadAndCreateNew:', err)
+        logger.error('Error in deleteThreadAndCreateNew:', err)
         return null
       }
     },
@@ -407,7 +409,7 @@ export const useChatThreadsStore = defineStore('chatThreads', {
         return data
       } catch (err: any) {
         this.error = err.data?.error?.message || 'Failed to share thread'
-        console.error('[Chat Threads Store] Error sharing thread:', err)
+        logger.error('Error sharing thread:', err)
         return null
       }
     },
@@ -438,7 +440,7 @@ export const useChatThreadsStore = defineStore('chatThreads', {
         return true
       } catch (err: any) {
         this.error = err.data?.error?.message || 'Failed to unshare thread'
-        console.error('[Chat Threads Store] Error unsharing thread:', err)
+        logger.error('Error unsharing thread:', err)
         return false
       }
     },
@@ -467,7 +469,7 @@ export const useChatThreadsStore = defineStore('chatThreads', {
         return true
       } catch (err: any) {
         this.error = 'Failed to export thread'
-        console.error('[Chat Threads Store] Error exporting thread:', err)
+        logger.error('Error exporting thread:', err)
         return false
       }
     },

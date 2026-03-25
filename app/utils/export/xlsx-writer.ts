@@ -13,6 +13,8 @@ import {
   calculateColumnWidths
 } from './export-utils'
 
+const logger = createLogger('XlsxWriter')
+
 /**
  * Create an Excel workbook from DataExportConfig
  */
@@ -264,7 +266,7 @@ export async function exportToXLSX(
     }
 
   } catch (error) {
-    console.error('XLSX export failed:', error)
+    logger.error('XLSX export failed:', error)
     return {
       success: false,
       format: 'xlsx',
@@ -279,7 +281,7 @@ export async function exportToXLSX(
  */
 export function downloadXLSX(result: ExportResult): void {
   if (!result.success || !result.blob) {
-    console.error('Cannot download XLSX:', result.error)
+    logger.error('Cannot download XLSX:', result.error)
     return
   }
 

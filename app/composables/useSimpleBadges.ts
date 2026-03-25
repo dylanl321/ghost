@@ -1,5 +1,7 @@
 import { evaluateUserBadges, type BadgeContext, type BadgeDefinition } from '~/config/simpleBadgeConfig'
 
+const logger = createLogger('SimpleBadges')
+
 export interface UserBadge {
   title: string
   color: string
@@ -51,7 +53,7 @@ export function useSimpleBadges() {
         description: badge.description
       }))
     } catch (error) {
-      console.warn(`Failed to get badges for user ${userPrincipalName}:`, error)
+      logger.warn(`Failed to get badges for user ${userPrincipalName}:`, error)
       return []
     }
   }
@@ -94,7 +96,7 @@ export function useSimpleBadges() {
           )
           result[user.userPrincipalName] = badges
         } catch (error) {
-          console.warn(`Failed to get badges for ${user.userPrincipalName}:`, error)
+          logger.warn(`Failed to get badges for ${user.userPrincipalName}:`, error)
           result[user.userPrincipalName] = []
         }
       }))

@@ -595,6 +595,8 @@ import { ref, computed, onMounted, watch, nextTick, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useForecastData } from '~/composables/useForecastData'
 
+const logger = createLogger('ForecastDataTable')
+
 // Get forecast data composable
 const { 
   forecastData, 
@@ -1123,7 +1125,7 @@ const clearAllData = async () => {
     await fetchForecastData() // Refresh the data
     showClearDialog.value = false
   } catch (err) {
-    console.error('Failed to clear all data:', err)
+    logger.error('Failed to clear all data:', err)
   }
 }
 

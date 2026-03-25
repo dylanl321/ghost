@@ -4,6 +4,8 @@
 
 import { ref, computed } from 'vue'
 
+const logger = createLogger('ForecastData')
+
 export const useForecastData = () => {
   // State
   const forecastData = ref<any[]>([])
@@ -42,7 +44,7 @@ export const useForecastData = () => {
       }
     } catch (err: any) {
       error.value = err.message || 'Failed to upload forecast data'
-      console.error('Forecast upload error:', err)
+      logger.error('Forecast upload error:', err)
       throw err
     } finally {
       isLoading.value = false
@@ -81,7 +83,7 @@ export const useForecastData = () => {
       }
     } catch (err: any) {
       error.value = err.message || 'Failed to fetch forecast data'
-      console.error('Forecast fetch error:', err)
+      logger.error('Forecast fetch error:', err)
       throw err
     } finally {
       isLoading.value = false
@@ -110,7 +112,7 @@ export const useForecastData = () => {
       }
     } catch (err: any) {
       error.value = err.message || 'Failed to delete forecast data'
-      console.error('Forecast delete error:', err)
+      logger.error('Forecast delete error:', err)
       throw err
     } finally {
       isLoading.value = false
@@ -146,7 +148,7 @@ export const useForecastData = () => {
       }
     } catch (err: any) {
       error.value = err.message || 'Failed to update forecast data'
-      console.error('Forecast update error:', err)
+      logger.error('Forecast update error:', err)
       throw err
     } finally {
       isLoading.value = false

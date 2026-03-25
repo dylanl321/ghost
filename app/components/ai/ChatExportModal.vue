@@ -385,6 +385,8 @@
 import type { ChatThread, ChatMessage } from '#shared/types/chat-threads'
 import { exportChatToPDF } from '~/utils/pdfExport.client'
 
+const logger = createLogger('ChatExportModal')
+
 interface Props {
   threadId: string | null
 }
@@ -502,7 +504,7 @@ async function loadThreadData() {
       selectedMessageIds.value = new Set(threadData.value.messages.map(m => m.messageId))
     }
   } catch (err: any) {
-    console.error('Error loading thread:', err)
+    logger.error('Error loading thread:', err)
     toast.add({
       title: 'Failed to load thread',
       description: err.data?.error?.message || 'Please try again',
@@ -537,7 +539,7 @@ async function generateTitle() {
       }
     }
   } catch (err) {
-    console.error('Error generating title:', err)
+    logger.error('Error generating title:', err)
     // Use fallback title
     generatedTitle.value = {
       title: threadData.value.title || 'Analysis Report',
@@ -779,7 +781,7 @@ async function handleDownload() {
 
     close()
   } catch (err: any) {
-    console.error('Error exporting thread:', err)
+    logger.error('Error exporting thread:', err)
     toast.add({
       title: 'Export failed',
       description: err.message || 'Failed to download conversation',

@@ -136,6 +136,8 @@
 </template>
 
 <script setup lang="ts">
+const logger = createLogger('QueryResultsViewer')
+
 interface AttributeSchema {
   name: string
   type: 'string' | 'number' | 'boolean' | 'object' | 'array' | 'date'
@@ -318,7 +320,7 @@ async function copyToClipboard(format: 'json' | 'csv') {
 
     await navigator.clipboard.writeText(text)
   } catch (err) {
-    console.error('Failed to copy to clipboard:', err)
+    logger.error('Failed to copy to clipboard:', err)
   }
 }
 

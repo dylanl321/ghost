@@ -76,6 +76,8 @@ import ForecastDataTable from './ForecastDataTable.vue'
 import { useChartRegistry } from '~/composables/useChartRegistry'
 import type { ChartDefinition } from '~/composables/useChartRegistry'
 
+const logger = createLogger('ChartTabs')
+
 // Props
 const props = defineProps<{
   dataset: any
@@ -147,7 +149,7 @@ const trendCharts = computed((): ChartDefinition[] => {
 
 // Handle tab changes
 const handleTabChange = (tabId: string) => {
-  console.log('Changing tab to:', tabId)
+  logger.info('Changing tab to:', tabId)
   activeTab.value = tabId
   emit('tab-changed', tabId)
 }

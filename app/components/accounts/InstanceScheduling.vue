@@ -76,6 +76,8 @@
 </template>
 
 <script setup lang="ts">
+const logger = createLogger('InstanceScheduling')
+
 interface Props {
   accountId: string
 }
@@ -93,7 +95,7 @@ const fetchInstances = async () => {
     const data = await response.json()
     instances.value = data.data?.instances || []
   } catch (error) {
-    console.error('Error fetching instances:', error)
+    logger.error('Error fetching instances:', error)
     instances.value = []
   } finally {
     loading.value = false

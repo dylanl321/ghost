@@ -1,3 +1,5 @@
+const logger = createLogger('PolicyExport')
+
 /**
  * Policy Export Composable
  * Handles exporting policy analysis data to various formats
@@ -272,7 +274,7 @@ export function usePolicyExport() {
     try {
       await navigator.clipboard.writeText(text)
     } catch (error) {
-      console.error('Failed to copy to clipboard:', error)
+      logger.error('Failed to copy to clipboard:', error)
       throw new Error('Failed to copy to clipboard')
     }
   }

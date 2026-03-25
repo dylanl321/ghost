@@ -247,7 +247,7 @@ const hasExtractorError = (chart: ChartDefinition) => {
         chart.extractor(props.dataset)
         return false
     } catch (error) {
-        console.warn(`Error in chart extractor for ${chart.id}:`, error)
+        logger.warn(`Error in chart extractor for ${chart.id}:`, error)
         return true
     }
 }
@@ -340,6 +340,8 @@ const optimizedCharts = computed(() => {
 // Chart builder registry – delegates to individual builder files in ~/utils/chart-options/
 import { chartBuilderById, chartBuilderByType, type ChartBuilderContext } from '~/utils/chart-options'
 
+const logger = createLogger('ChartsRenderer')
+
 // Per-chart memoization cache to avoid rebuilding all 25 charts every render cycle
 const chartCache = new Map<string, {
     dataHash: string
@@ -396,7 +398,7 @@ const chartOptionsMap = computed(() => {
                 }
             }
         } catch (error) {
-            console.error('Error generating chart options for', chart.id, error)
+            logger.error('Error generating chart options for', chart.id, error)
         }
     }
 

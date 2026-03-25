@@ -93,7 +93,7 @@ export default defineEventHandler(async (event) => {
       message: 'Standalone anomaly alerts configuration updated successfully'
     }
   } catch (error: any) {
-    console.error('Error updating standalone anomaly alerts config:', error)
+    logger.error('Error updating standalone anomaly alerts config:', error)
 
     throw createError({
       statusCode: error.statusCode || 500,

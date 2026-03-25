@@ -172,6 +172,8 @@ import { ref, computed, onMounted, watch } from 'vue'
 import VChart from 'vue-echarts'
 import { CHART_COLORS, CHART_THEME, getSeriesColor, getUtilizationColor } from '~/utils/chart-theme'
 
+const logger = createLogger('OrganizationalCharts')
+
 // Props — when provided, data comes from the parent's shared pipeline
 const props = defineProps<{
   dataset?: any | null
@@ -203,7 +205,7 @@ const fetchLobFullNames = async () => {
     })
     lobFullNames.value = mapping
   } catch (err) {
-    console.error('Failed to fetch LOB full names:', err)
+    logger.error('Failed to fetch LOB full names:', err)
   }
 }
 
@@ -284,7 +286,7 @@ const processDatasetData = (dataset: any): boolean => {
     loading.value = false
     return false
   } catch (err: any) {
-    console.error('Error processing dataset for organizational charts:', err)
+    logger.error('Error processing dataset for organizational charts:', err)
     error.value = err.message || 'Failed to process organizational data'
     loading.value = false
     return false
@@ -351,7 +353,7 @@ const fetchOrganizationalData = async () => {
     dataFetched.value = true
     
   } catch (err: any) {
-    console.error('Error fetching organizational data:', err)
+    logger.error('Error fetching organizational data:', err)
     error.value = err.message || 'Failed to load organizational data'
   } finally {
     loading.value = false
@@ -404,7 +406,7 @@ const fetchLobBudgetData = async (lobName: string) => {
     }
     
   } catch (err) {
-    console.error('Error fetching LOB budget data:', err)
+    logger.error('Error fetching LOB budget data:', err)
   }
 }
 

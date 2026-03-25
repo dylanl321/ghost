@@ -122,6 +122,8 @@
 import type { ChatThread } from '#shared/types/chat-threads'
 import mermaid from 'mermaid'
 
+const logger = createLogger('[shareId]')
+
 const route = useRoute()
 const shareId = route.params.shareId as string
 
@@ -154,7 +156,7 @@ async function copyMessageMarkdown(message: any) {
       timeout: 3000
     })
   } catch (err) {
-    console.error('Failed to copy:', err)
+    logger.error('Failed to copy:', err)
     toast.add({
       title: 'Copy failed',
       description: 'Please try selecting and copying manually',
@@ -242,7 +244,7 @@ onMounted(async () => {
     await nextTick()
     await renderMermaidCharts()
   } catch (err: any) {
-    console.error('Error loading shared thread:', err)
+    logger.error('Error loading shared thread:', err)
     error.value = err?.data?.message || err?.message || 'This shared link is no longer available or has expired.'
   } finally {
     isLoading.value = false
@@ -266,7 +268,7 @@ async function renderMermaidCharts() {
       element.innerHTML = `<div class="mermaid-svg-container">${svg}</div>`
       element.setAttribute('data-rendered', 'true')
     } catch (error) {
-      console.error('Error rendering mermaid chart:', error)
+      logger.error('Error rendering mermaid chart:', error)
       const code = element.textContent || ''
       element.innerHTML = `
         <div class="p-3 bg-red-50 dark:bg-red-900/20 rounded border border-red-200 dark:border-red-800">

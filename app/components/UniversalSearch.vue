@@ -55,6 +55,8 @@
 <script setup lang="ts">
 import { onClickOutside } from '@vueuse/core'
 
+const logger = createLogger('UniversalSearch')
+
 const { user } = useOidcAuth()
 const { searchUsers } = useGraphApi()
 const enclaveStore = useEnclaveStore()
@@ -130,7 +132,7 @@ const onSearch = () => {
         }))
       )
     } catch (e) {
-      console.warn('User search failed', e)
+      logger.warn('User search failed', e)
     }
 
     results.value = merged_results
@@ -140,7 +142,7 @@ const onSearch = () => {
 }
 
 const selectResult = (result: any) => {
-  console.log('Selected:', result)
+  logger.info('Selected:', result)
   showResults.value = false
   query.value = ""
 

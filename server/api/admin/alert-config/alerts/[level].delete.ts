@@ -52,7 +52,7 @@ export default defineEventHandler(async (event) => {
       message: `Alert level ${levelUpper} deleted successfully`
     }
   } catch (error: any) {
-    console.error('Error deleting alert level:', error)
+    logger.error('Error deleting alert level:', error)
 
     throw createError({
       statusCode: error.statusCode || 500,

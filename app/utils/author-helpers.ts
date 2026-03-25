@@ -5,6 +5,8 @@
 
 import type { AuthorInfo } from '~/shared/types/pipelines'
 
+const logger = createLogger('AuthorHelpers')
+
 /**
  * Parse author field from GitLab format: "Name <email@domain.com>"
  * Client-side equivalent of server-side parseAuthorField
@@ -115,7 +117,7 @@ export async function copyToClipboard(text: string, successMessage?: string): Pr
 
     return true
   } catch (error) {
-    console.error('Failed to copy to clipboard:', error)
+    logger.error('Failed to copy to clipboard:', error)
 
     // Show error toast
     const toast = useToast()

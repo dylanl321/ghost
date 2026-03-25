@@ -169,6 +169,8 @@ import PipelinesPlannedVsAppliedPanel from '~/components/pipelines/PlannedVsAppl
 import PipelinesResourceSearchPanel from '~/components/pipelines/ResourceSearchPanel.vue'
 import { parseGitLabUrl } from '~/utils/gitlab-url-parser'
 
+const logger = createLogger('PipelinesDashboard')
+
 const props = defineProps<{
   accountId: string
 }>()
@@ -200,7 +202,7 @@ async function fetchPipelineData() {
   try {
     summaryData.value = await fetchAccountSummary(props.accountId, selectedDays.value, 'commercial')
   } catch (err: any) {
-    console.error('Error fetching pipeline data:', err)
+    logger.error('Error fetching pipeline data:', err)
     error.value = err.message || 'An unexpected error occurred'
   } finally {
     loading.value = false

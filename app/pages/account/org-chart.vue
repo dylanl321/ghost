@@ -599,6 +599,8 @@ import type { TreeNode } from '~/composables/useD3TreeChart'
 import { getMonthlyBudget } from '#shared/utils/budget-utils'
 import * as d3 from 'd3'
 
+const logger = createLogger('OrgChart')
+
 // Composables
 const {
   accounts,
@@ -762,9 +764,9 @@ const loadData = async () => {
     // Transform data
     const transformedData = transformToD3Tree(accounts.value?.data || accounts.value, costs.value?.data || costs.value, useProforma.value)
     
-    console.log('Transformed data:', transformedData)
-    console.log('Accounts data:', accounts.value)
-    console.log('Costs data:', costs.value)
+    logger.info('Transformed data:', transformedData)
+    logger.info('Accounts data:', accounts.value)
+    logger.info('Costs data:', costs.value)
     
     if (transformedData) {
       treeData.value = transformedData
@@ -783,17 +785,17 @@ const loadData = async () => {
       
       // Render chart using original D3 composable
       await nextTick()
-      console.log('About to draw chart with data:', transformedData)
+      logger.info('About to draw chart with data:', transformedData)
       drawChart(transformedData)
     } else {
-      console.error('No transformed data available')
+      logger.error('No transformed data available')
     }
     
     loadingProgress.value = 100
     loadingMessage.value = 'Complete!'
     
   } catch (err) {
-    console.error('Failed to load data:', err)
+    logger.error('Failed to load data:', err)
   }
 }
 
@@ -1058,20 +1060,20 @@ const clearAllFilters = () => {
 
 const focusOnParent = () => {
   if (!selectedNode.value) {
-    console.log('No node selected')
+    logger.info('No node selected')
     return
   }
   
   // Find the current selected node in the D3 tree structure via allNodes
   const currentNode = allNodes.value.find(n => n.id === selectedNode.value.id)
   if (!currentNode) {
-    console.log('Selected node not found in tree structure')
+    logger.info('Selected node not found in tree structure')
     return
   }
   
   // Check if current node has a parent
   if (!currentNode.parent) {
-    console.log('No parent node found - already at root')
+    logger.info('No parent node found - already at root')
     return
   }
   
@@ -1334,7 +1336,7 @@ const updateFilteredCounts = () => {
 // Watch for tree data changes to redraw chart
 watch(treeData, async (newData) => {
   if (newData) {
-    console.log('Tree data updated, drawing chart:', newData)
+    logger.info('Tree data updated, drawing chart:', newData)
     await nextTick()
     // Don't auto-redraw here - let the initial load handle it
   }

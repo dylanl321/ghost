@@ -42,7 +42,7 @@ export default defineEventHandler(async (event) => {
       };
     }
   } catch (error: any) {
-    console.error('Error resetting site config:', error);
+    logger.error('Error resetting site config:', error);
 
     throw createError({
       statusCode: error.statusCode || 500,

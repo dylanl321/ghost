@@ -314,6 +314,8 @@
 <script setup lang="ts">
 import type { DataMode } from '~/types/costs'
 
+const logger = createLogger('ShareButton')
+
 interface Props {
   selectedAccounts: string[]
   selectedTimeframe: string
@@ -368,9 +370,9 @@ const handleShare = async () => {
   isModalOpen.value = true
   // Always generate a fresh link when opening the share modal
   const url = await generateShareLink()
-  console.log('ShareButton - Generated URL:', url)
-  console.log('ShareButton - shortUrl ref value:', shortUrl.value)
-  console.log('ShareButton - shareUrl computed value:', shareUrl.value)
+  logger.info('ShareButton - Generated URL:', url)
+  logger.info('ShareButton - shortUrl ref value:', shortUrl.value)
+  logger.info('ShareButton - shareUrl computed value:', shareUrl.value)
 }
 
 // Copy to clipboard functionality
@@ -388,7 +390,7 @@ const copyToClipboard = async () => {
       copySuccess.value = false
     }, 2000)
   } catch (err) {
-    console.error('Failed to copy to clipboard:', err)
+    logger.error('Failed to copy to clipboard:', err)
   } finally {
     isCopying.value = false
   }

@@ -154,7 +154,7 @@ export default defineEventHandler(async (event) => {
       message: `Alert level ${levelUpper} updated successfully`
     }
   } catch (error: any) {
-    console.error('Error updating alert level:', error)
+    logger.error('Error updating alert level:', error)
 
     throw createError({
       statusCode: error.statusCode || 500,

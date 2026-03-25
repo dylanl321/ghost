@@ -5,6 +5,8 @@
 import type { GraphUser } from '~/composables/useGroupMembers'
 import { getMonthlyBudget } from '#shared/utils/budget-utils'
 
+const logger = createLogger('AccountData')
+
 interface CostResponse {
   success: boolean
   data: CostData
@@ -85,7 +87,7 @@ export function useAccountData(
       resourceCounts.value = resourcesJson.data
       forecastData.value = forecastJson.data
     } catch (err) {
-      console.error('Error fetching account data:', err)
+      logger.error('Error fetching account data:', err)
     } finally {
       loading.value = false
     }

@@ -177,6 +177,8 @@ import { formatCostValue } from '~/utils/cost-filters'
 import { downloadBlob } from '~/utils/export/export-utils'
 import type { AccountCostTagConfig } from '~~/shared/types/cost-tags'
 
+const logger = createLogger('TagAnalysisTab')
+
 const props = withDefaults(defineProps<{
   selectedAccounts: string[]
   selectedTimeframe?: string
@@ -299,7 +301,7 @@ async function fetchBreakdown() {
     }) as any
     breakdownData.value = response?.data || response || null
   } catch (err: any) {
-    console.error('Error fetching tag breakdown:', err)
+    logger.error('Error fetching tag breakdown:', err)
     breakdownData.value = null
   } finally {
     isLoadingBreakdown.value = false
@@ -325,7 +327,7 @@ async function fetchProformaRatio() {
     const proformaTotal = parseFloat(response?.proforma?.total?.UnblendedCost?.Amount || '0')
     proformaTotals.value = { billableTotal, proformaTotal }
   } catch (err) {
-    console.error('Error fetching proforma ratio:', err)
+    logger.error('Error fetching proforma ratio:', err)
     proformaTotals.value = null
   }
 }

@@ -2,6 +2,8 @@
 import AccountUsers from '~/components/accounts/AccountUsers.vue'
 import type { GraphUser } from '~/composables/useGroupMembers'
 
+const logger = createLogger('IDC Sessions')
+
 // Page setup
 const route = useRoute()
 const accountId = computed(() => route.params.id as string)
@@ -55,7 +57,7 @@ const fetchUsers = async () => {
       user.value?.accessToken || ''
     )
   } catch (err) {
-    console.error('Error fetching users:', err)
+    logger.error('Error fetching users:', err)
     users.value = []
   } finally {
     usersLoading.value = false
@@ -72,7 +74,7 @@ const fetchIDCSessions = async () => {
     const sessions = await idcSessions.fetchAccountSessions(accountId.value, environment)
     idcSessionsData.value = sessions
   } catch (err: any) {
-    console.error('[IDC Sessions] Error:', err)
+    logger.error('Error:', err)
     showSessionStatus.value = false
     idcConfigured.value = false
     idcSessionsData.value = []

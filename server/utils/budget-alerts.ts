@@ -15,7 +15,7 @@ import {
 } from '../lib/dynamodb-config'
 
 // Debug: Log the values at module load time
-console.log('[Budget Alerts] Module loaded with config:', {
+logger.info('[Budget Alerts] Module loaded with config:', {
   tableName: BUDGET_ALERTS_TABLE,
   proformaAccountId: PROFORMA_ACCOUNT_ID,
   indexes: BUDGET_ALERTS_INDEXES

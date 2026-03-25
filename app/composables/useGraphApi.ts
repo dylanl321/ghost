@@ -1,3 +1,5 @@
+const logger = createLogger('Graph API')
+
 // Microsoft Graph is the official REST API for Entra ID
 // Use this to get information on groups, roles, users, etc.
 
@@ -36,7 +38,7 @@ function createDevModeError(operation: string): Error {
 const fetchAllGroupsRaw = async (accessToken: string) => {
   // Check for dev mode - return empty array instead of failing
   if (isDevAuthMode()) {
-    console.log('[Graph API] Dev mode detected - returning empty groups')
+    logger.info('Dev mode detected - returning empty groups')
     return []
   }
 
@@ -61,10 +63,10 @@ const fetchAllGroupsRaw = async (accessToken: string) => {
       nextUrl = data['@odata.nextLink'] || ''
     }
 
-    console.log(`Fetched ${allGroups.length} total groups with pagination`)
+    logger.info(`Fetched ${allGroups.length} total groups with pagination`)
     return allGroups
   } catch (error) {
-    console.error('Error fetching raw groups:', error)
+    logger.error('Error fetching raw groups:', error)
     throw error
   }
 }
@@ -110,14 +112,14 @@ const parseAwsGroups = (groups: GraphGroup[]) => {
       }
     } catch {
       // Silently ignore groups that don't match our patterns
-      console.debug(`Skipped group that couldn't be parsed: ${groupName}`)
+      logger.debug(`Skipped group that couldn't be parsed: ${groupName}`)
     }
   })
 
   const awsCount = Object.keys(parsedGroups.awsRoleGroups).length
   const distroCount = Object.keys(parsedGroups.distributionGroups).length
 
-  console.log(`Parsed ${awsCount} AWS role groups and ${distroCount} distribution groups`)
+  logger.info(`Parsed ${awsCount} AWS role groups and ${distroCount} distribution groups`)
   return parsedGroups
 }
 
@@ -125,14 +127,14 @@ export const useGraphApi = () => {
   const fetchAllGroupsWithPagination = async (accessToken: string): Promise<GraphGroup[]> => {
     // Check for dev mode - return empty array instead of failing
     if (isDevAuthMode()) {
-      console.log('[Graph API] Dev mode detected - returning empty groups for pagination')
+      logger.info('Dev mode detected - returning empty groups for pagination')
       return []
     }
 
     const allGroups: GraphGroup[] = []
     let nextUrl = 'https://graph.microsoft.us/v1.0/me/memberOf?$top=999'
 
-    console.log("in fetchAllGroupsWithPagination with access token (first 20 characters): ", accessToken.slice(0, 20))
+    logger.info("in fetchAllGroupsWithPagination with access token (first 20 characters): ", accessToken.slice(0, 20))
 
     try {
       while (nextUrl) {
@@ -152,13 +154,13 @@ export const useGraphApi = () => {
 
         nextUrl = data['@odata.nextLink'] || ''
 
-        console.log("here is the response from the /me/memberOf endpoint: ", data)
+        logger.info("here is the response from the /me/memberOf endpoint: ", data)
       }
 
-      console.log(`Fetched ${allGroups.length} total groups with pagination`)
+      logger.info(`Fetched ${allGroups.length} total groups with pagination`)
       return allGroups
     } catch (error) {
-      console.error('Error fetching groups with pagination:', error)
+      logger.error('Error fetching groups with pagination:', error)
       throw error
     }
   }
@@ -175,7 +177,7 @@ export const useGraphApi = () => {
   const searchUsers = async (accessToken: string, searchQuery: string, top: number = 25) => {
     // Check for dev mode - return empty array instead of failing
     if (isDevAuthMode()) {
-      console.log('[Graph API] Dev mode detected - returning empty user search results')
+      logger.info('Dev mode detected - returning empty user search results')
       return []
     }
 
@@ -210,7 +212,7 @@ export const useGraphApi = () => {
             return data.value || []
           }
         } catch (err) {
-          console.warn('Search call failed:', err)
+          logger.warn('Search call failed:', err)
         }
         return []
       }
@@ -295,11 +297,11 @@ export const useGraphApi = () => {
       // Convert Map back to array and limit results
       const finalResults = Array.from(results.values()).slice(0, top)
       
-      console.log(`Search for "${searchQuery}" returned ${finalResults.length} users`)
+      logger.info(`Search for "${searchQuery}" returned ${finalResults.length} users`)
       return finalResults
 
     } catch (error) {
-      console.error('Error searching users:', error)
+      logger.error('Error searching users:', error)
       throw error
     }
   }
@@ -307,7 +309,7 @@ export const useGraphApi = () => {
   const fetchUserProfile = async (userPrincipalName: string, accessToken: string) => {
     // Check for dev mode - return mock profile instead of failing
     if (isDevAuthMode()) {
-      console.log('[Graph API] Dev mode detected - returning mock user profile')
+      logger.info('Dev mode detected - returning mock user profile')
       return {
         id: 'dev-user-id',
         displayName: 'Dev User',
@@ -334,7 +336,7 @@ export const useGraphApi = () => {
   const fetchUserMemberOf = async (accessToken: string, userPrincipalName: string) => {
     // Check for dev mode - return empty array instead of failing
     if (isDevAuthMode()) {
-      console.log('[Graph API] Dev mode detected - returning empty memberOf')
+      logger.info('Dev mode detected - returning empty memberOf')
       return []
     }
 
@@ -361,7 +363,7 @@ export const useGraphApi = () => {
 
       return allGroups
     } catch (error) {
-      console.error('Error fetching user memberOf:', error)
+      logger.error('Error fetching user memberOf:', error)
       throw error
     }
   }
@@ -369,7 +371,7 @@ export const useGraphApi = () => {
   const fetchGroupDetails = async (accessToken: string, groupId: string) => {
     // Check for dev mode - return mock group instead of failing
     if (isDevAuthMode()) {
-      console.log('[Graph API] Dev mode detected - returning mock group details')
+      logger.info('Dev mode detected - returning mock group details')
       return {
         id: groupId,
         displayName: 'Mock Group',
@@ -396,7 +398,7 @@ export const useGraphApi = () => {
   const fetchAllGroups = async (accessToken: string, searchQuery?: string, top: number = 100) => {
     // Check for dev mode - return empty array instead of failing
     if (isDevAuthMode()) {
-      console.log('[Graph API] Dev mode detected - returning empty groups list')
+      logger.info('Dev mode detected - returning empty groups list')
       return []
     }
 
@@ -422,7 +424,7 @@ export const useGraphApi = () => {
       const data = await response.json()
       return data.value || []
     } catch (error) {
-      console.error('Error fetching all groups:', error)
+      logger.error('Error fetching all groups:', error)
       throw error
     }
   }

@@ -12,6 +12,8 @@ import type {
   AdminAsyncJobSummary,
 } from "#shared/types/chat-threads";
 
+const logger = createLogger('AIChatMonitoring')
+
 export interface MonitoringFilters {
   userId?: string;
   accountId?: string;
@@ -62,7 +64,7 @@ export function useAIChatMonitoring() {
       metrics.value = response.metrics;
     } catch (err: any) {
       error.value = err.message || "Failed to fetch metrics";
-      console.error("Error fetching metrics:", err);
+      logger.error("Error fetching metrics:", err);
     } finally {
       loading.value = false;
     }
@@ -93,7 +95,7 @@ export function useAIChatMonitoring() {
       threads.value = response.threads;
     } catch (err: any) {
       error.value = err.message || "Failed to fetch threads";
-      console.error("Error fetching threads:", err);
+      logger.error("Error fetching threads:", err);
     } finally {
       loading.value = false;
     }
@@ -114,7 +116,7 @@ export function useAIChatMonitoring() {
       selectedThread.value = response.thread;
     } catch (err: any) {
       error.value = err.message || "Failed to fetch thread details";
-      console.error("Error fetching thread details:", err);
+      logger.error("Error fetching thread details:", err);
     } finally {
       loading.value = false;
     }
@@ -145,7 +147,7 @@ export function useAIChatMonitoring() {
       requestLogs.value = response.logs;
     } catch (err: any) {
       error.value = err.message || "Failed to fetch request logs";
-      console.error("Error fetching request logs:", err);
+      logger.error("Error fetching request logs:", err);
     } finally {
       loading.value = false;
     }
@@ -182,7 +184,7 @@ export function useAIChatMonitoring() {
       cloudWatchLogs.value = response.logs;
     } catch (err: any) {
       error.value = err.message || "Failed to fetch CloudWatch logs";
-      console.error("Error fetching CloudWatch logs:", err);
+      logger.error("Error fetching CloudWatch logs:", err);
     } finally {
       loading.value = false;
     }
@@ -212,7 +214,7 @@ export function useAIChatMonitoring() {
       asyncJobs.value = response.jobs;
     } catch (err: any) {
       error.value = err.message || "Failed to fetch async jobs";
-      console.error("Error fetching async jobs:", err);
+      logger.error("Error fetching async jobs:", err);
     } finally {
       loading.value = false;
     }
@@ -239,7 +241,7 @@ export function useAIChatMonitoring() {
       logStreams.value = response.streams;
     } catch (err: any) {
       error.value = err.message || "Failed to fetch log streams";
-      console.error("Error fetching log streams:", err);
+      logger.error("Error fetching log streams:", err);
     } finally {
       loading.value = false;
     }

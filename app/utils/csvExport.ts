@@ -1,3 +1,5 @@
+const logger = createLogger('CsvExport')
+
 /**
  * CSV Export utilities for user and access data
  */
@@ -35,7 +37,7 @@ const escapeCSV = (value: any): string => {
  */
 export const exportUsersToCSV = (users: any[], filename = 'users-export.csv') => {
   if (!users || users.length === 0) {
-    console.warn('No users to export')
+    logger.warn('No users to export')
     return
   }
 

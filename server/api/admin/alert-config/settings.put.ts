@@ -92,7 +92,7 @@ export default defineEventHandler(async (event) => {
       message: 'Settings updated successfully'
     }
   } catch (error: any) {
-    console.error('Error updating alert settings:', error)
+    logger.error('Error updating alert settings:', error)
 
     throw createError({
       statusCode: error.statusCode || 500,

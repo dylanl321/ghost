@@ -1,3 +1,5 @@
+const logger = createLogger('IDCSessions')
+
 /**
  * IDC Sessions composable
  */
@@ -10,7 +12,7 @@ export const useIDCSessions = () => {
       })
       return response.data || []
     } catch (error) {
-      console.error('Failed to fetch IDC sessions:', error)
+      logger.error('Failed to fetch IDC sessions:', error)
       throw error
     }
   }

@@ -4,6 +4,8 @@ import { exportUsersToCSV, exportFilteredUsersToCSV, exportEnhancedUserAccessToC
 import { convertToUsernameSlug } from '~/utils/userUtils'
 import UserAvatar from '~/components/ui/UserAvatar.vue'
 
+const logger = createLogger('Index')
+
 interface User {
   userPrincipalName: string
   displayName: string
@@ -163,7 +165,7 @@ const searchForUsers = async (query?: string) => {
           tags: [] // Will be filled by batch operation
         }
       } catch (err) {
-        console.warn(`Failed to get groups for user ${searchUser.userPrincipalName}:`, err)
+        logger.warn(`Failed to get groups for user ${searchUser.userPrincipalName}:`, err)
         return {
           userPrincipalName: searchUser.userPrincipalName,
           displayName: searchUser.displayName,
@@ -194,10 +196,10 @@ const searchForUsers = async (query?: string) => {
         tags: userTagsMap[user.userPrincipalName] || []
       }))
       
-      console.log(`Successfully processed ${users.value.length} users with batch tagging`)
+      logger.info(`Successfully processed ${users.value.length} users with batch tagging`)
       
     } catch (tagError) {
-      console.warn('Batch tagging failed, falling back to individual calls:', tagError)
+      logger.warn('Batch tagging failed, falling back to individual calls:', tagError)
       
       // Fallback to individual tag calls if batch fails
       const tagPromises = usersWithGroups.map(async (userResult) => {
@@ -211,7 +213,7 @@ const searchForUsers = async (query?: string) => {
           )
           return { ...userResult, tags }
         } catch (err) {
-          console.warn(`Failed to get tags for user ${userResult.userPrincipalName}:`, err)
+          logger.warn(`Failed to get tags for user ${userResult.userPrincipalName}:`, err)
           return { ...userResult, tags: [] }
         }
       })
@@ -221,7 +223,7 @@ const searchForUsers = async (query?: string) => {
     
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to search users'
-    console.error('Error searching users:', err)
+    logger.error('Error searching users:', err)
   } finally {
     loading.value = false
   }
@@ -377,7 +379,7 @@ onMounted(async () => {
   try {
     await awsAccountsStore.initialize()
   } catch (error) {
-    console.warn('Failed to initialize AWS accounts store:', error)
+    logger.warn('Failed to initialize AWS accounts store:', error)
   }
 })
 </script>

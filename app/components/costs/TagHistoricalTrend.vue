@@ -43,6 +43,8 @@ import { ref, computed, watch } from 'vue'
 import VChart from 'vue-echarts'
 import { downloadBlob } from '~/utils/export/export-utils'
 
+const logger = createLogger('TagHistoricalTrend')
+
 const props = defineProps<{
   accountId: string
   tagKey: string
@@ -80,7 +82,7 @@ async function fetchData() {
 
     chartData.value = response?.data || response || null
   } catch (err: any) {
-    console.error('Error fetching tag historical data:', err)
+    logger.error('Error fetching tag historical data:', err)
     error.value = err.message || 'Failed to load historical tag data'
   } finally {
     loading.value = false

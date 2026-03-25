@@ -263,6 +263,8 @@
 <script setup lang="ts">
 import { formatCostValue } from '~/utils/cost-filters'
 
+const logger = createLogger('TagCostBreakdown')
+
 const props = withDefaults(defineProps<{
   /** Summary API response — expects .groups array with { groupKey, totalCost } */
   costData: any | null
@@ -427,7 +429,7 @@ const rows = computed<TagRow[]>(() => {
   const groups: any[] = props.costData?.groups ?? props.costData?.data?.groups ?? []
   if (!groups.length) {
     if (props.costData) {
-      console.debug('[TagCostBreakdown] Data received but no groups found. Keys:', Object.keys(props.costData))
+      logger.debug('Data received but no groups found. Keys:', Object.keys(props.costData))
     }
     return []
   }

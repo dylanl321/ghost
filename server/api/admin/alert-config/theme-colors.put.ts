@@ -66,7 +66,7 @@ export default defineEventHandler(async (event) => {
       message: 'Theme colors configuration updated successfully'
     }
   } catch (error: any) {
-    console.error('Error updating theme colors config:', error)
+    logger.error('Error updating theme colors config:', error)
 
     throw createError({
       statusCode: error.statusCode || 500,

@@ -115,6 +115,8 @@
 <script setup lang="ts">
 import type { SiteConfigHistoryEntry } from '#shared/types/site-config';
 
+const logger = createLogger('ChangeHistoryModal')
+
 const isOpen = defineModel<boolean>();
 
 const history = ref<SiteConfigHistoryEntry[]>([]);
@@ -156,7 +158,7 @@ async function loadHistory() {
     }
   } catch (e: any) {
     error.value = e.message || 'Failed to load change history';
-    console.error('Error loading history:', e);
+    logger.error('Error loading history:', e);
   } finally {
     loading.value = false;
   }

@@ -1,6 +1,8 @@
 import { ref, computed } from 'vue'
 import type { Ref } from 'vue'
 
+const logger = createLogger('ContextualCharts')
+
 interface ContextualChartData {
   [chartId: string]: any
 }
@@ -75,7 +77,7 @@ export const useContextualCharts = (selectedAccounts: Ref<string[]>) => {
         ]
       }
     } catch (e: any) {
-      console.error('Error fetching year-over-year data:', e)
+      logger.error('Error fetching year-over-year data:', e)
       throw e
     }
   }
@@ -116,7 +118,7 @@ export const useContextualCharts = (selectedAccounts: Ref<string[]>) => {
         }
       ]
     } catch (e: any) {
-      console.error('Error fetching month-over-month data:', e)
+      logger.error('Error fetching month-over-month data:', e)
       throw e
     }
   }
@@ -157,7 +159,7 @@ export const useContextualCharts = (selectedAccounts: Ref<string[]>) => {
         }]
       }
     } catch (e: any) {
-      console.error('Error fetching 24-month trend:', e)
+      logger.error('Error fetching 24-month trend:', e)
       throw e
     }
   }

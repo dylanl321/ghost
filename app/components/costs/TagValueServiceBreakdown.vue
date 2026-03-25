@@ -61,6 +61,8 @@
 import { ref, computed, watch } from 'vue'
 import { formatCostValue } from '~/utils/cost-filters'
 
+const logger = createLogger('TagValueServiceBreakdown')
+
 const props = defineProps<{
   accountId: string
   tagKey: string
@@ -113,7 +115,7 @@ async function fetchData() {
 
     rawData.value = response?.data || response || null
   } catch (err: any) {
-    console.error('Error fetching tag value service breakdown:', err)
+    logger.error('Error fetching tag value service breakdown:', err)
     error.value = err.message || 'Failed to load service breakdown'
   } finally {
     loading.value = false

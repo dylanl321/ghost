@@ -219,6 +219,8 @@
 <script setup lang="ts">
 import type { ScheduledReport } from '~/shared/types/scheduled-reports'
 
+const logger = createLogger('ReportHistory')
+
 const emit = defineEmits<{
   'view-details': [report: ScheduledReport]
 }>()
@@ -412,7 +414,7 @@ async function handleDownload(report: ScheduledReport) {
       color: 'green'
     })
   } catch (error: any) {
-    console.error('Failed to download report:', error)
+    logger.error('Failed to download report:', error)
 
     toast.add({
       title: 'Download failed',
@@ -461,7 +463,7 @@ async function handleRerun(report: ScheduledReport) {
       await fetchReports()
     }
   } catch (error: any) {
-    console.error('Failed to re-run report:', error)
+    logger.error('Failed to re-run report:', error)
 
     toast.add({
       title: 'Report failed',
@@ -477,12 +479,12 @@ function getDropdownItems(report: ScheduledReport) {
     [{
       label: 'Clone Configuration',
       icon: 'i-heroicons-document-duplicate',
-      click: () => console.log('Clone:', report.reportId)
+      click: () => logger.info('Clone:', report.reportId)
     }],
     [{
       label: 'View Logs',
       icon: 'i-heroicons-document-text',
-      click: () => console.log('View logs:', report.reportId)
+      click: () => logger.info('View logs:', report.reportId)
     }]
   ]
 }

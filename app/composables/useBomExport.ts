@@ -7,6 +7,8 @@ import type { NormalizedDataset } from '~/types/costs'
 import type { AccountBomData } from '#shared/utils/bom-sheet-builder'
 import { exportSingleBom, exportMultipleBoms } from '~/utils/export/bom-xlsx-writer'
 
+const logger = createLogger('BomExport')
+
 export const useBomExport = (dataset: NormalizedDataset) => {
   const route = useRoute()
 
@@ -88,7 +90,7 @@ export const useBomExport = (dataset: NormalizedDataset) => {
         }
       }
     } catch (error) {
-      console.error('BOM Export: Failed to fetch forecast data:', error)
+      logger.error('BOM Export: Failed to fetch forecast data:', error)
     }
 
     return { costs, monthLabels }
@@ -143,7 +145,7 @@ export const useBomExport = (dataset: NormalizedDataset) => {
     const selectedAccounts = dataset.accounts
 
     if (!selectedAccounts || selectedAccounts.length === 0) {
-      console.error('No accounts selected for export')
+      logger.error('No accounts selected for export')
       throw new Error('Please select at least one account to export')
     }
 
@@ -160,7 +162,7 @@ export const useBomExport = (dataset: NormalizedDataset) => {
         await exportMultipleBoms(bomDataArray)
       }
     } catch (error) {
-      console.error('BOM export failed:', error)
+      logger.error('BOM export failed:', error)
       throw error
     }
   }

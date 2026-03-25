@@ -106,6 +106,8 @@
 import { ref, computed, onMounted } from 'vue'
 import type { DisplayStyle } from '#shared/types/dashboard-layout'
 
+const logger = createLogger('QuickStartCard')
+
 const props = withDefaults(defineProps<{
   displayStyle?: DisplayStyle
 }>(), { displayStyle: 'full' })
@@ -139,7 +141,7 @@ function cacheToLocalStorage(pref: QuickStartCardPreference): void {
   try {
     localStorage.setItem(QUICK_START_CACHE_KEY, JSON.stringify(pref))
   } catch (e) {
-    console.warn('Failed to cache quickstart preference:', e)
+    logger.warn('Failed to cache quickstart preference:', e)
   }
 }
 
@@ -152,7 +154,7 @@ function getCachedPreference(): QuickStartCardPreference | null {
     if (!cached) return null
     return JSON.parse(cached)
   } catch (e) {
-    console.warn('Failed to read cached quickstart preference:', e)
+    logger.warn('Failed to read cached quickstart preference:', e)
     return null
   }
 }
@@ -175,7 +177,7 @@ onMounted(async () => {
       // Check localStorage fallback if no server preference
       const cached = getCachedPreference()
       if (cached) {
-        console.log('QuickStartCard: Using cached preference from localStorage')
+        logger.info('QuickStartCard: Using cached preference from localStorage')
         preference.value = cached
       }
     }
@@ -202,7 +204,7 @@ onMounted(async () => {
       })
     }
   } catch (error) {
-    console.warn('QuickStartCard: Failed to load preferences, using localStorage fallback:', error)
+    logger.warn('QuickStartCard: Failed to load preferences, using localStorage fallback:', error)
     // Fallback to localStorage
     const cached = getCachedPreference()
     if (cached) {

@@ -1,3 +1,5 @@
+const logger = createLogger('EnclaveStore')
+
 export interface EnclaveState {
   lastFetch: number | null
   enclaves: Record<string, AWSEnclaveData>
@@ -24,11 +26,11 @@ export const useEnclaveStore = defineStore('enclaveStore', {
     async initialize(force: boolean = false) {
       if (!import.meta.client) return // only run on client-side
       if (!this.needsRefresh && !force) {
-        console.log('Using cached enclave data.')
+        logger.info('Using cached enclave data.')
         return
       }
 
-      console.log('Initializing enclaves')
+      logger.info('Initializing enclaves')
 
       const json = await $fetch('/api/accounts/list?includeDecommissioned=true')
 
@@ -51,19 +53,19 @@ export const useEnclaveStore = defineStore('enclaveStore', {
       }
 
       this.enclaves = dict
-      console.log(`Collected information for ${Object.keys(dict).length} enclaves.`)
+      logger.info(`Collected information for ${Object.keys(dict).length} enclaves.`)
 
       if (this.enclaves) {
         this.lastFetch = Date.now()
       } else {
-        console.error('Unable to fetch enclaves.')
+        logger.error('Unable to fetch enclaves.')
       }
     },
 
     clear() {
       this.enclaves = {}
       this.lastFetch = null
-      console.log('Enclave store cleared')
+      logger.info('Enclave store cleared')
     }
   },
 

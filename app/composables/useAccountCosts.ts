@@ -6,6 +6,8 @@ import { ref, computed } from 'vue'
 import type { AWSEnclaveData } from '~~/shared/types/accounts'
 import type { CostsSummaryResponse } from '~/types/costs'
 
+const logger = createLogger('AccountCosts')
+
 export const useAccountCosts = () => {
 
   // State
@@ -49,7 +51,7 @@ export const useAccountCosts = () => {
       return data
     } catch (err: any) {
       accountsError.value = err.message || 'Failed to fetch accounts'
-      console.error('Error fetching accounts:', err)
+      logger.error('Error fetching accounts:', err)
       throw err
     } finally {
       isLoadingAccounts.value = false
@@ -108,7 +110,7 @@ export const useAccountCosts = () => {
       } catch (enhancedError: any) {
         // If enhanced=true fails (likely due to AWS auth issues), try with enhanced=false
         if (params.enhanced === true && (enhancedError.statusCode >= 400 || enhancedError.status >= 400 || enhancedError.message?.includes('expired') || enhancedError.message?.includes('500'))) {
-          console.warn('Enhanced cost data failed, falling back to basic cost data:', enhancedError.message)
+          logger.warn('Enhanced cost data failed, falling back to basic cost data:', enhancedError.message)
           const fallbackParams = { ...params, enhanced: false }
           data = await $fetch('/api/costs/summary', {
             query: fallbackParams
@@ -122,7 +124,7 @@ export const useAccountCosts = () => {
       return data
     } catch (err: any) {
       costsError.value = err.message || 'Failed to fetch costs'
-      console.error('Error fetching costs:', err)
+      logger.error('Error fetching costs:', err)
       throw err
     } finally {
       isLoadingCosts.value = false
@@ -209,7 +211,7 @@ export const useAccountCosts = () => {
       linesOfBusiness.value = data?.data || data || []
       return data?.data || data || []
     } catch (err: any) {
-      console.error('Error fetching lines of business:', err)
+      logger.error('Error fetching lines of business:', err)
       warnings.value.push('Lines of business data unavailable')
       return []
     }
@@ -228,7 +230,7 @@ export const useAccountCosts = () => {
       departments.value = data?.data || data || []
       return data?.data || data || []
     } catch (err: any) {
-      console.error('Error fetching departments:', err)
+      logger.error('Error fetching departments:', err)
       warnings.value.push('Department data unavailable')
       return []
     }
@@ -257,7 +259,7 @@ export const useAccountCosts = () => {
     )
     
     if (!masterAccount) {
-      console.warn('No master account found')
+      logger.warn('No master account found')
       return null
     }
     
@@ -352,7 +354,7 @@ export const useAccountCosts = () => {
       
       return accountData
     } catch (err: any) {
-      console.error(`Error fetching account details for ${accountId}:`, err)
+      logger.error(`Error fetching account details for ${accountId}:`, err)
       return null
     } finally {
       isLoadingDetails.value = false
@@ -381,7 +383,7 @@ export const useAccountCosts = () => {
       })
       return data
     } catch (err: any) {
-      console.error(`Error fetching cost analysis for ${accountId}:`, err)
+      logger.error(`Error fetching cost analysis for ${accountId}:`, err)
       return null
     }
   }

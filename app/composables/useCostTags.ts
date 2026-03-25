@@ -5,6 +5,8 @@
 import { ref } from 'vue'
 import type { AccountCostTagConfig, TagCoverageData } from '~~/shared/types/cost-tags'
 
+const logger = createLogger('CostTags')
+
 export const useCostTags = () => {
   // State
   const availableTags = ref<string[]>([])
@@ -51,7 +53,7 @@ export const useCostTags = () => {
       return tags
     } catch (err: any) {
       tagsError.value = err.message || 'Failed to fetch tags'
-      console.error('Error fetching available tags:', err)
+      logger.error('Error fetching available tags:', err)
       return []
     } finally {
       isLoadingTags.value = false
@@ -76,7 +78,7 @@ export const useCostTags = () => {
       return coverage
     } catch (err: any) {
       coverageError.value = err.message || 'Failed to fetch tag coverage'
-      console.error(`Error fetching coverage for tag "${tagKey}":`, err)
+      logger.error(`Error fetching coverage for tag "${tagKey}":`, err)
       return null
     } finally {
       isLoadingCoverage.value = false
@@ -97,7 +99,7 @@ export const useCostTags = () => {
       return config
     } catch (err: any) {
       configError.value = err.message || 'Failed to fetch tag config'
-      console.error(`Error fetching tag config for account "${accountId}":`, err)
+      logger.error(`Error fetching tag config for account "${accountId}":`, err)
       return null
     } finally {
       isLoadingConfig.value = false
@@ -121,7 +123,7 @@ export const useCostTags = () => {
       return saved
     } catch (err: any) {
       configError.value = err.message || 'Failed to save tag config'
-      console.error(`Error saving tag config for account "${accountId}":`, err)
+      logger.error(`Error saving tag config for account "${accountId}":`, err)
       throw err
     } finally {
       isSavingConfig.value = false
@@ -149,7 +151,7 @@ export const useCostTags = () => {
       return tags
     } catch (err: any) {
       resourceTagsError.value = err.message || 'Failed to fetch resource tags'
-      console.error(`Error fetching resource tags for account "${accountId}":`, err)
+      logger.error(`Error fetching resource tags for account "${accountId}":`, err)
       return []
     } finally {
       isLoadingResourceTags.value = false

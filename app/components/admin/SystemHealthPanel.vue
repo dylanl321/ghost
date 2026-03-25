@@ -321,6 +321,8 @@
 </template>
 
 <script setup lang="ts">
+const logger = createLogger('SystemHealthPanel')
+
 interface HealthResponse {
   success: boolean
   data: {
@@ -435,7 +437,7 @@ async function checkHealth() {
     health.value = response as HealthResponse
   } catch (e: any) {
     error.value = e.data?.message || e.message || 'Failed to check system health'
-    console.error('Error checking system health:', e)
+    logger.error('Error checking system health:', e)
   } finally {
     loading.value = false
   }

@@ -1,3 +1,5 @@
+const logger = createLogger('GHOST-AUTH')
+
 /**
  * Composable for handling authentication redirects with return URL preservation
  *
@@ -23,7 +25,7 @@ export const useAuthRedirect = () => {
   const saveReturnUrl = (url?: string) => {
     const returnUrl = url || window.location.pathname + window.location.search
     sessionStorage.setItem('auth_return_url', returnUrl)
-    console.log('[GHOST-AUTH] Saved return URL:', returnUrl)
+    logger.info('Saved return URL:', returnUrl)
   }
 
   /**
@@ -32,7 +34,7 @@ export const useAuthRedirect = () => {
    */
   const getReturnUrl = (): string => {
     const savedUrl = sessionStorage.getItem('auth_return_url')
-    console.log('[GHOST-AUTH] Getting return URL:', savedUrl)
+    logger.info('Getting return URL:', savedUrl)
     if (savedUrl) {
       // Don't remove here - clearReturnUrl() should be called after successful redirect
       // This prevents issues with re-renders or multiple calls returning '/'
@@ -54,7 +56,7 @@ export const useAuthRedirect = () => {
       ? `/auth/loading?returnTo=${encodeURIComponent(returnUrl)}`
       : '/auth/loading'
     
-    console.log('Redirecting to auth:', authUrl)
+    logger.info('Redirecting to auth:', authUrl)
     window.location.href = authUrl
   }
 
@@ -64,7 +66,7 @@ export const useAuthRedirect = () => {
    */
   const requireAuth = () => {
     const currentUrl = window.location.pathname + window.location.search
-    console.log('Authentication required, current URL:', currentUrl)
+    logger.info('Authentication required, current URL:', currentUrl)
     redirectToAuth(currentUrl)
   }
 
@@ -73,7 +75,7 @@ export const useAuthRedirect = () => {
    * Call this after successful navigation to the return URL
    */
   const clearReturnUrl = () => {
-    console.log('[GHOST-AUTH] Clearing return URL from sessionStorage')
+    logger.info('Clearing return URL from sessionStorage')
     sessionStorage.removeItem('auth_return_url')
   }
 

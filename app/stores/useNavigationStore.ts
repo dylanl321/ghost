@@ -16,6 +16,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
+const logger = createLogger('NavigationStore')
+
 interface PageCollapseRule {
   path: string
   /**
@@ -93,7 +95,7 @@ export const useNavigationStore = defineStore('navigation', () => {
   const toggle = (currentPath?: string) => {
     // Check if current page is protected
     if (currentPath && isPageProtected(currentPath) && !isCollapsed.value) {
-      console.log(`Cannot collapse sidebar on protected page: ${currentPath}`)
+      logger.info(`Cannot collapse sidebar on protected page: ${currentPath}`)
       return false
     }
     
@@ -104,7 +106,7 @@ export const useNavigationStore = defineStore('navigation', () => {
 
   const collapse = (currentPath?: string) => {
     if (currentPath && isPageProtected(currentPath)) {
-      console.log(`Cannot collapse sidebar on protected page: ${currentPath}`)
+      logger.info(`Cannot collapse sidebar on protected page: ${currentPath}`)
       return false
     }
     

@@ -149,6 +149,8 @@
 </template>
 
 <script setup lang="ts">
+const logger = createLogger('Index')
+
 definePageMeta({
   layout: 'admin',
   middleware: 'auth-permission',
@@ -258,7 +260,7 @@ const fetchMetrics = async () => {
     }
 
   } catch (error) {
-    console.error('Failed to fetch admin metrics:', error)
+    logger.error('Failed to fetch admin metrics:', error)
     metricsError.value = 'Failed to load dashboard metrics. Please try again.'
   } finally {
     loading.value = false

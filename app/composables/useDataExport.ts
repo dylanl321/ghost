@@ -10,6 +10,8 @@ import type {
   ExportResult
 } from '~/shared/types/export'
 
+const logger = createLogger('DataExport')
+
 export function useDataExport() {
   const isExporting = ref(false)
   const exportProgress = ref<string>('')
@@ -89,7 +91,7 @@ export function useDataExport() {
       return result
 
     } catch (error) {
-      console.error('Export failed:', error)
+      logger.error('Export failed:', error)
 
       const errorResult: ExportResult = {
         success: false,
@@ -152,7 +154,7 @@ export function useDataExport() {
       }
 
     } catch (error) {
-      console.error('JSON export failed:', error)
+      logger.error('JSON export failed:', error)
       return {
         success: false,
         format: 'json',

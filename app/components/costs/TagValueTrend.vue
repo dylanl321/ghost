@@ -24,6 +24,8 @@
 import { ref, computed, watch } from 'vue'
 import VChart from 'vue-echarts'
 
+const logger = createLogger('TagValueTrend')
+
 const props = defineProps<{
   accountId: string
   tagKey: string
@@ -75,7 +77,7 @@ async function fetchData() {
 
     rawData.value = response?.data || response || null
   } catch (err: any) {
-    console.error('Error fetching tag value trend:', err)
+    logger.error('Error fetching tag value trend:', err)
     error.value = err.message || 'Failed to load trend data'
   } finally {
     loading.value = false

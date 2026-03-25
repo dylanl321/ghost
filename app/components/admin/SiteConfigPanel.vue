@@ -112,6 +112,8 @@
 <script setup lang="ts">
 import type { SiteConfigItem } from '~/shared/types/site-config';
 
+const logger = createLogger('SiteConfigPanel')
+
 const configs = ref<SiteConfigItem[]>([]);
 const loading = ref(false);
 const resetting = ref(false);
@@ -181,15 +183,15 @@ async function loadConfig() {
 
       // Debug: Log the first config to check structure
       if (configs.value.length > 0) {
-        console.log('[SiteConfigPanel] Sample config:', configs.value[0]);
-        console.log('[SiteConfigPanel] Total configs loaded:', configs.value.length);
+        logger.info('Sample config:', configs.value[0]);
+        logger.info('Total configs loaded:', configs.value.length);
       }
     } else {
       throw new Error('Failed to load configuration');
     }
   } catch (e: any) {
     error.value = e.message || 'Failed to load configuration';
-    console.error('Error loading config:', e);
+    logger.error('Error loading config:', e);
   } finally {
     loading.value = false;
   }
@@ -220,7 +222,7 @@ async function handleUpdate(key: string, value: any) {
     }
   } catch (e: any) {
     error.value = e.data?.message || e.message || 'Failed to update configuration';
-    console.error('Error updating config:', e);
+    logger.error('Error updating config:', e);
   }
 }
 
@@ -249,7 +251,7 @@ async function handleReset(key: string) {
     }
   } catch (e: any) {
     error.value = e.data?.message || e.message || 'Failed to reset configuration';
-    console.error('Error resetting config:', e);
+    logger.error('Error resetting config:', e);
   }
 }
 
@@ -278,7 +280,7 @@ async function confirmResetAll() {
     }
   } catch (e: any) {
     error.value = e.data?.message || e.message || 'Failed to reset all configuration';
-    console.error('Error resetting all config:', e);
+    logger.error('Error resetting all config:', e);
   } finally {
     resetting.value = false;
   }

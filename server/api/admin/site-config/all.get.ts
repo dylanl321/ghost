@@ -38,7 +38,7 @@ export default defineEventHandler(async (event) => {
       byCategory,
     } as SiteConfigListResponse & { nestedConfig: any; byCategory: any };
   } catch (error) {
-    console.error('Error fetching admin site config:', error);
+    logger.error('Error fetching admin site config:', error);
 
     throw createError({
       statusCode: 500,

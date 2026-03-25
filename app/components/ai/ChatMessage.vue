@@ -227,6 +227,8 @@
 
 import type { StreamingChatMessage as ChatMessageType, ErrorType } from '#shared/types/chat-threads'
 
+const logger = createLogger('ChatMessage')
+
 const props = defineProps<{
   message: ChatMessageType & {
     reasoning?: string | null  // New API field for AI thinking
@@ -266,7 +268,7 @@ const formattedContent = computed(() => {
     // The reasoning is in the separate reasoning field
     return enrichStrandsResponse(props.message.content)
   } catch (error) {
-    console.error('[ChatMessage] Error enriching message content:', error)
+    logger.error('Error enriching message content:', error)
     return props.message.content.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')
   }
 })
@@ -299,7 +301,7 @@ async function handleCopy() {
       copied.value = false
     }, 2000)
   } catch (err) {
-    console.error('Failed to copy:', err)
+    logger.error('Failed to copy:', err)
     toast.add({
       title: 'Copy failed',
       description: 'Please try selecting and copying manually',

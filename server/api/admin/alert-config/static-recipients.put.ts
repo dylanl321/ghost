@@ -67,7 +67,7 @@ export default defineEventHandler(async (event) => {
       message: 'Static recipients configuration updated successfully'
     }
   } catch (error: any) {
-    console.error('Error updating static recipients config:', error)
+    logger.error('Error updating static recipients config:', error)
 
     throw createError({
       statusCode: error.statusCode || 500,

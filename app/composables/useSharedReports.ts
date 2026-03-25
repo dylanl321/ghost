@@ -5,6 +5,8 @@
 
 import type { SharedReport, CreateShareReportRequest, CreateShareReportResponse } from '~/shared/types/shared-reports'
 
+const logger = createLogger('SharedReports')
+
 export function useSharedReports() {
   const toast = useToast()
   const sharedReports = ref<SharedReport[]>([])
@@ -37,7 +39,7 @@ export function useSharedReports() {
       }
     } catch (err: any) {
       error.value = err.message || 'Unknown error fetching shared reports'
-      console.error('Error fetching shared reports:', err)
+      logger.error('Error fetching shared reports:', err)
       toast.add({
         title: 'Error',
         description: 'Failed to load shared reports',
@@ -85,7 +87,7 @@ export function useSharedReports() {
       return response
     } catch (err: any) {
       error.value = err.message || 'Unknown error creating shareable report'
-      console.error('Error creating shareable report:', err)
+      logger.error('Error creating shareable report:', err)
       toast.add({
         title: 'Error',
         description: 'Failed to create shareable report',
@@ -130,7 +132,7 @@ export function useSharedReports() {
 
       return response
     } catch (err: any) {
-      console.error('Error deleting shared report:', err)
+      logger.error('Error deleting shared report:', err)
       toast.add({
         title: 'Error',
         description: 'Failed to delete shared report',
@@ -156,7 +158,7 @@ export function useSharedReports() {
         color: 'green'
       })
     } catch (err) {
-      console.error('Failed to copy link:', err)
+      logger.error('Failed to copy link:', err)
       toast.add({
         title: 'Error',
         description: 'Failed to copy link to clipboard',

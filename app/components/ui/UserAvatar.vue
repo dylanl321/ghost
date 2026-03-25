@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, watch } from 'vue'
 
+const logger = createLogger('UserAvatar')
+
 interface Props {
   userPrincipalName?: string
   displayName?: string
@@ -132,7 +134,7 @@ const checkForRedirectFromImage = (img: HTMLImageElement, originalUrl: string): 
     return isLikelyPlaceholder || urlChanged || hasDefaultPattern
     
   } catch (error) {
-    console.warn('Failed to check image for redirect indicators:', error)
+    logger.warn('Failed to check image for redirect indicators:', error)
     return false
   }
 }

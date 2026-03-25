@@ -25,6 +25,8 @@
 </template>
 
 <script setup lang="ts">
+const logger = createLogger('[code]')
+
 // Support multiple page types
 interface CostShareLinkState {
   selectedAccounts: string[]
@@ -161,7 +163,7 @@ onMounted(async () => {
     await navigateTo(targetUrl, { replace: true })
 
   } catch (err: any) {
-    console.error('Error loading shared link:', err)
+    logger.error('Error loading shared link:', err)
     error.value = err?.message || 'Failed to load shared link'
   } finally {
     isLoading.value = false

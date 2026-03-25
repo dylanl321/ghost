@@ -44,6 +44,8 @@
 import { ref, computed, onMounted } from 'vue'
 import VChart from 'vue-echarts'
 
+const logger = createLogger('HistoricalTrends')
+
 // State
 const loading = ref(true)
 const error = ref<string | null>(null)
@@ -64,9 +66,9 @@ const fetchHistoricalData = async () => {
     })
     
     historicalData.value = (response as any).data || response || {}
-    console.log('Historical data loaded:', historicalData.value)
+    logger.info('Historical data loaded:', historicalData.value)
   } catch (err: any) {
-    console.error('Error fetching historical data:', err)
+    logger.error('Error fetching historical data:', err)
     error.value = err.message || 'Failed to load historical data'
   } finally {
     loading.value = false

@@ -3,6 +3,8 @@ import { parseGroupDescription, convertToUsernameSlug } from '~/utils/userUtils'
 import { useGroupMembers } from '~/composables/useGroupMembers'
 import UserAvatar from '~/components/ui/UserAvatar.vue'
 
+const logger = createLogger('AccountGroups')
+
 interface Props {
   accountId: string
   accountName?: string
@@ -159,7 +161,7 @@ const loadGroupMembers = async (group: AccountGroup) => {
     }))
     
   } catch (err) {
-    console.warn(`Failed to load members for group ${group.displayName}:`, err)
+    logger.warn(`Failed to load members for group ${group.displayName}:`, err)
   } finally {
     group.loadingMembers = false
   }
@@ -272,7 +274,7 @@ const loadAccountGroups = async () => {
               sourceAccountId: accountId
             })
           } catch (memberError) {
-            console.warn(`Failed to fetch members for group ${group.displayName}:`, memberError)
+            logger.warn(`Failed to fetch members for group ${group.displayName}:`, memberError)
             
             // Still add the group with default values
             const role = parseAwsGroupRole(group.displayName, accountId) || 'other'
@@ -298,7 +300,7 @@ const loadAccountGroups = async () => {
         }
         
       } catch (groupError) {
-        console.error(`Failed to fetch groups for account ${accountId}:`, groupError)
+        logger.error(`Failed to fetch groups for account ${accountId}:`, groupError)
       }
     }
     
@@ -317,7 +319,7 @@ const loadAccountGroups = async () => {
     
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to load groups'
-    console.error('Error loading account groups:', err)
+    logger.error('Error loading account groups:', err)
   } finally {
     loading.value = false
   }

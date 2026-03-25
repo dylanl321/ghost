@@ -810,6 +810,8 @@ import { PERMISSION_CATEGORIES } from '~/config/roles'
 import type { ScheduledReport, CreateReportRequest } from '~/shared/types/scheduled-reports'
 import { COMMON_TIMEZONES } from '#shared/types/user-preferences'
 
+const logger = createLogger('Profile')
+
 const { user } = useOidcAuth()
 const userGroupStore = useUserGroupStore()
 const { userRoles, userPermissions, isAdmin } = useUserRoles()
@@ -1248,7 +1250,7 @@ async function handleSubmit(data: CreateReportRequest) {
       })
     }
   } catch (err) {
-    console.error('Error submitting report:', err)
+    logger.error('Error submitting report:', err)
   }
 }
 

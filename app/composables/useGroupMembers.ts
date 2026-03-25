@@ -1,3 +1,5 @@
+const logger = createLogger('GroupMembers')
+
 /**
  * Composable for managing user group memberships and tags
  */
@@ -66,7 +68,7 @@ const fetchGroupsWithPagination = async (accountId: string, accessToken: string)
 
     return allGroups
   } catch (error) {
-    console.error('Error fetching groups with pagination:', error)
+    logger.error('Error fetching groups with pagination:', error)
     throw error
   }
 }
@@ -87,7 +89,7 @@ const fetchGroupMembersWithPagination = async (groupId: string, accessToken: str
       if (!response.ok) {
         // Enhanced error logging for debugging 401 issues
         const errorText = await response.text()
-        console.error('Graph API Error Details:', {
+        logger.error('Graph API Error Details:', {
           status: response.status,
           statusText: response.statusText,
           url: nextUrl,
@@ -105,7 +107,7 @@ const fetchGroupMembersWithPagination = async (groupId: string, accessToken: str
 
     return allMembers
   } catch (error) {
-    console.error(`Error fetching members for group ${groupId}:`, error)
+    logger.error(`Error fetching members for group ${groupId}:`, error)
     throw error
   }
 }
@@ -129,7 +131,7 @@ export const useGroupMembers = () => {
             const role = parseAwsGroupRole(group.displayName, accountId)
 
             if (!role) {
-              console.debug(`Skipping group with invalid format: ${group.displayName}`)
+              logger.debug(`Skipping group with invalid format: ${group.displayName}`)
               return []
             }
 
@@ -157,7 +159,7 @@ export const useGroupMembers = () => {
 
       combined.forEach((member: any) => {
         if (!member.userPrincipalName || !member.displayName) {
-          console.debug('Skipping member with missing data:', member)
+          logger.debug('Skipping member with missing data:', member)
           return
         }
 
@@ -178,7 +180,7 @@ export const useGroupMembers = () => {
       })
 
       const finalMembers = Array.from(memberMap.values())
-      console.log(`Found ${finalMembers.length} unique members across all groups`)
+      logger.info(`Found ${finalMembers.length} unique members across all groups`)
 
       return finalMembers
 
@@ -192,7 +194,7 @@ export const useGroupMembers = () => {
 
       // return Array.from(uniqueUsers.values())
     } catch (error) {
-      console.error(
+      logger.error(
         `Error fetching users for commercial ${commercialId} and govcloud ${govcloudId}:`,
         error
       )
@@ -232,7 +234,7 @@ export const useGroupMembers = () => {
       // Already in UserTag format
       return badges
     } catch (error) {
-      console.warn(`Failed to get tags for user ${userPrincipalName}:`, error)
+      logger.warn(`Failed to get tags for user ${userPrincipalName}:`, error)
       return []
     }
   }
@@ -263,7 +265,7 @@ export const useGroupMembers = () => {
       // Already in correct format
       return badgeResults
     } catch (error) {
-      console.warn('Failed to batch get user tags:', error)
+      logger.warn('Failed to batch get user tags:', error)
       return {}
     }
   }
@@ -311,7 +313,7 @@ export const useGroupMembers = () => {
         distributionLists
       }
     } catch (error) {
-      console.error('Failed to get group stats:', error)
+      logger.error('Failed to get group stats:', error)
       return {
         totalGroups: 0,
         awsGroups: 0,
@@ -371,7 +373,7 @@ export const useGroupMembers = () => {
         memberCount: users.length
       }
     } catch (error) {
-      console.error(`Failed to fetch members for group ${groupId}:`, error)
+      logger.error(`Failed to fetch members for group ${groupId}:`, error)
       return {
         members: [],
         memberCount: 0

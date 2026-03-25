@@ -5,6 +5,8 @@
 
 import type { AWSEnclaveData } from '#shared/types/accounts'
 
+const logger = createLogger('FavoriteAccounts')
+
 const FAVORITES_KEY = 'favoriteAccounts'
 
 export function useFavoriteAccounts() {
@@ -60,7 +62,7 @@ export function useFavoriteAccounts() {
 
       return success
     } catch (error) {
-      console.error('Failed to add favorite:', error)
+      logger.error('Failed to add favorite:', error)
       toast.add({
         title: 'Failed to add favorite',
         description: 'Please try again',
@@ -96,7 +98,7 @@ export function useFavoriteAccounts() {
 
       return success
     } catch (error) {
-      console.error('Failed to remove favorite:', error)
+      logger.error('Failed to remove favorite:', error)
       toast.add({
         title: 'Failed to remove favorite',
         description: 'Please try again',

@@ -105,6 +105,8 @@
 </template>
 
 <script setup lang="ts">
+const logger = createLogger('EBSVolumes')
+
 interface Props {
   accountId: string
   environment?: 'commercial' | 'govcloud'
@@ -133,7 +135,7 @@ const {
     calculateUnusedVolumeCost()
   },
   onError: (error) => {
-    console.error('Error fetching volumes:', error)
+    logger.error('Error fetching volumes:', error)
   }
 })
 
@@ -182,7 +184,7 @@ const calculateUnusedVolumeCost = async () => {
       unusedVolumeCost.value = data.data.summary.totalMonthlyCost
     }
   } catch (error) {
-    console.error('Error calculating unused volume cost:', error)
+    logger.error('Error calculating unused volume cost:', error)
     unusedVolumeCost.value = null
   } finally {
     loadingPricing.value = false

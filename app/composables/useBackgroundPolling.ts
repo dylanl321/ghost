@@ -14,6 +14,8 @@
 
 import type { ChatMessage } from '#shared/types/chat-threads'
 
+const logger = createLogger('BackgroundPolling')
+
 // Storage key for pending jobs
 const PENDING_JOBS_KEY = 'ghost-chat-pending-jobs'
 
@@ -61,7 +63,7 @@ export function useBackgroundPolling() {
    */
   function registerJobCallbacks(jobId: string, callbacks: PollingCallbacks) {
     jobCallbacks.value.set(jobId, callbacks)
-    console.log('[BackgroundPolling] Registered callbacks for job:', jobId)
+    logger.info('Registered callbacks for job:', jobId)
   }
 
   /**
@@ -69,7 +71,7 @@ export function useBackgroundPolling() {
    */
   function unregisterJobCallbacks(jobId: string) {
     jobCallbacks.value.delete(jobId)
-    console.log('[BackgroundPolling] Unregistered callbacks for job:', jobId)
+    logger.info('Unregistered callbacks for job:', jobId)
   }
 
   /**
@@ -91,7 +93,7 @@ export function useBackgroundPolling() {
       }))
       localStorage.setItem(PENDING_JOBS_KEY, JSON.stringify(jobs))
     } catch (e) {
-      console.warn('[BackgroundPolling] Failed to save jobs:', e)
+      logger.warn('Failed to save jobs:', e)
     }
   }
 
@@ -116,9 +118,9 @@ export function useBackgroundPolling() {
       // Clean up expired jobs from storage
       savePendingJobs()
 
-      console.log('[BackgroundPolling] Loaded', activeJobs.value.size, 'pending jobs')
+      logger.info('Loaded', activeJobs.value.size, 'pending jobs')
     } catch (e) {
-      console.warn('[BackgroundPolling] Failed to load jobs:', e)
+      logger.warn('Failed to load jobs:', e)
     }
   }
 
@@ -141,7 +143,7 @@ export function useBackgroundPolling() {
     activeJobs.value.set(jobId, job)
     savePendingJobs()
     
-    console.log('[BackgroundPolling] Registered job:', jobId)
+    logger.info('Registered job:', jobId)
 
     // Show "query started" notification (only if not on chat page to avoid duplication)
     const currentPath = router.currentRoute.value.path
@@ -192,7 +194,7 @@ export function useBackgroundPolling() {
     if (isPollingActive.value) return
 
     isPollingActive.value = true
-    console.log('[BackgroundPolling] Starting background polling service')
+    logger.info('Starting background polling service')
 
     // Poll every 2 seconds
     pollIntervalId.value = setInterval(() => {
@@ -209,7 +211,7 @@ export function useBackgroundPolling() {
       pollIntervalId.value = null
     }
     isPollingActive.value = false
-    console.log('[BackgroundPolling] Stopped background polling service')
+    logger.info('Stopped background polling service')
   }
 
   async function pollAllJobs() {
@@ -221,7 +223,7 @@ export function useBackgroundPolling() {
       try {
         await pollJob(job)
       } catch (error) {
-        console.error('[BackgroundPolling] Error polling job:', jobId, error)
+        logger.error('Error polling job:', jobId, error)
         // Mark for removal after too many failures
         job.status = 'error'
         jobsToRemove.push(jobId)
@@ -242,7 +244,7 @@ export function useBackgroundPolling() {
   async function pollJob(job: PendingJob) {
     // Skip if already completed or being processed
     if (job.status !== 'polling') {
-      console.log('[BackgroundPolling] Skipping job', job.jobId, '- status is', job.status)
+      logger.info('Skipping job', job.jobId, '- status is', job.status)
       return
     }
     
@@ -257,7 +259,7 @@ export function useBackgroundPolling() {
 
       // Double-check job wasn't completed while we were fetching
       if (job.status !== 'polling') {
-        console.log('[BackgroundPolling] Job', job.jobId, 'status changed while polling, skipping')
+        logger.info('Job', job.jobId, 'status changed while polling, skipping')
         return
       }
 
@@ -291,11 +293,11 @@ export function useBackgroundPolling() {
             status.toolsCalled || []
           )
         } catch (err) {
-          console.error('[BackgroundPolling] Error in onProgress callback:', err)
+          logger.error('Error in onProgress callback:', err)
         }
       }
 
-      console.log('[BackgroundPolling] Job', job.jobId, 'status:', status.status, 'progress:', job.progress)
+      logger.info('Job', job.jobId, 'status:', status.status, 'progress:', job.progress)
 
       // Check if complete
       if (status.status === 'complete') {
@@ -313,7 +315,7 @@ export function useBackgroundPolling() {
       }
 
     } catch (error: any) {
-      console.error('[BackgroundPolling] Fetch error for job:', job.jobId, error)
+      logger.error('Fetch error for job:', job.jobId, error)
       // Don't fail immediately - will retry on next poll cycle
     }
   }
@@ -328,7 +330,7 @@ export function useBackgroundPolling() {
     const duration = Math.round((Date.now() - job.timestamp) / 1000)
     const callbacks = jobCallbacks.value.get(job.jobId)
 
-    console.log('[BackgroundPolling] Job complete:', job.jobId, 'hasCallbacks:', !!callbacks)
+    logger.info('Job complete:', job.jobId, 'hasCallbacks:', !!callbacks)
 
     // Call UI callbacks first (if registered)
     if (callbacks?.onComplete) {
@@ -340,9 +342,9 @@ export function useBackgroundPolling() {
           status.suggestedLinks || [],
           status.suggestedPrompts || []
         )
-        console.log('[BackgroundPolling] Called onComplete callback for job:', job.jobId)
+        logger.info('Called onComplete callback for job:', job.jobId)
       } catch (err) {
-        console.error('[BackgroundPolling] Error in onComplete callback:', err)
+        logger.error('Error in onComplete callback:', err)
       }
     }
 
@@ -360,9 +362,9 @@ export function useBackgroundPolling() {
           }
         }
       })
-      console.log('[BackgroundPolling] Saved response to thread via API:', job.threadId)
+      logger.info('Saved response to thread via API:', job.threadId)
     } catch (err) {
-      console.error('[BackgroundPolling] Failed to save message via API:', err)
+      logger.error('Failed to save message via API:', err)
     }
 
     // Show toast only if no UI callbacks (user navigated away)
@@ -419,15 +421,15 @@ export function useBackgroundPolling() {
     const callbacks = jobCallbacks.value.get(job.jobId)
     job.status = 'error'
 
-    console.error('[BackgroundPolling] Job error:', job.jobId, 'hasCallbacks:', !!callbacks, errorMsg)
+    logger.error('Job error:', job.jobId, 'hasCallbacks:', !!callbacks, errorMsg)
 
     // Call UI callbacks first (if registered)
     if (callbacks?.onError) {
       try {
         callbacks.onError(job.jobId, errorMsg)
-        console.log('[BackgroundPolling] Called onError callback for job:', job.jobId)
+        logger.info('Called onError callback for job:', job.jobId)
       } catch (err) {
-        console.error('[BackgroundPolling] Error in onError callback:', err)
+        logger.error('Error in onError callback:', err)
       }
     }
 
@@ -453,9 +455,9 @@ export function useBackgroundPolling() {
           }
         }
       })
-      console.log('[BackgroundPolling] Saved error to thread via API:', job.threadId)
+      logger.info('Saved error to thread via API:', job.threadId)
     } catch (err) {
-      console.error('[BackgroundPolling] Failed to save error message via API:', err)
+      logger.error('Failed to save error message via API:', err)
     }
 
     // Show toast only if no UI callbacks (user navigated away)
