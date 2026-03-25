@@ -594,6 +594,7 @@
 import { ref, computed, onMounted, watch, nextTick, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useForecastData } from '~/composables/useForecastData'
+import { chartAnimationDefaults } from '~/utils/chartAnimationDefaults'
 
 const logger = createLogger('ForecastDataTable')
 
@@ -907,6 +908,7 @@ const getChartOption = (item: any) => {
   const seriesData = monthColumns.value.map(m => item.forecasts[m] || 0)
   
   return {
+    ...chartAnimationDefaults,
     tooltip: {
       trigger: 'axis',
       formatter: (params: any) => {

@@ -48,18 +48,45 @@ export function useCostComparison() {
 
   const fetchPeriod = async (period: ComparisonPeriod): Promise<PeriodData | null> => {
     const historicalPeriod = toHistoricalPeriod(period)
-    const res = await $fetch<{ success: boolean; data: any }>('/api/costs/historical', {
-      query: { period: historicalPeriod }
-    })
-    if (!res.success || !res.data) return null
-    const raw = res.data
+
+    // Fetch account totals and service breakdown concurrently
+    const [accountRes, serviceRes] = await Promise.allSettled([
+      $fetch<{ success: boolean; data: any }>('/api/costs/historical', {
+        query: { period: historicalPeriod }
+      }),
+      $fetch<{ success: boolean; data: any }>('/api/costs/historical', {
+        query: { period: historicalPeriod, groupBy: 'SERVICE' }
+      })
+    ])
+
+    if (accountRes.status === 'rejected' || !accountRes.value.success || !accountRes.value.data) return null
+    const raw = accountRes.value.data
+
+    // Build top 5 services from the service-grouped response
+    let topServices: { service: string; cost: number }[] = []
+    if (serviceRes.status === 'fulfilled' && serviceRes.value.success && serviceRes.value.data) {
+      const serviceRaw = serviceRes.value.data
+      // monthlyBreakdown accountBreakdown contains per-group costs; sum across all months
+      const serviceTotals = new Map<string, number>()
+      for (const month of (serviceRaw.monthlyBreakdown ?? [])) {
+        for (const entry of (month.accountBreakdown ?? [])) {
+          const key = entry.accountId ?? 'Unknown'
+          serviceTotals.set(key, (serviceTotals.get(key) ?? 0) + (entry.cost ?? 0))
+        }
+      }
+      topServices = [...serviceTotals.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([service, cost]) => ({ service, cost }))
+    }
+
     return {
       period,
       totalCost: raw.totalCost ?? 0,
       totalCostFormatted: raw.totalCostFormatted ?? '$0.00',
       accountCount: raw.accountCount ?? 0,
       monthlyBreakdown: raw.monthlyBreakdown ?? [],
-      topServices: raw.topServices ?? []
+      topServices
     }
   }
 

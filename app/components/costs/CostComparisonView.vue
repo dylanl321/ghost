@@ -73,6 +73,21 @@
             <p class="text-xs text-gray-500 mt-1">{{ periodA.accountCount }} account{{ periodA.accountCount !== 1 ? 's' : '' }}</p>
           </div>
 
+          <!-- Top 5 services -->
+          <div v-if="periodA.topServices && periodA.topServices.length > 0" class="mt-5">
+            <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Top Services</p>
+            <div class="space-y-1.5">
+              <div
+                v-for="svc in periodA.topServices"
+                :key="svc.service"
+                class="flex items-center justify-between gap-2"
+              >
+                <span class="text-xs text-gray-400 truncate">{{ svc.service }}</span>
+                <span class="text-xs font-medium text-gray-200 flex-shrink-0">{{ formatCurrency(svc.cost) }}</span>
+              </div>
+            </div>
+          </div>
+
           <!-- Monthly breakdown -->
           <div v-if="periodA.monthlyBreakdown.length > 0" class="mt-5">
             <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Monthly Breakdown</p>
@@ -163,6 +178,21 @@
             <p class="text-xs text-gray-400 mb-1">Total Cost</p>
             <p class="text-3xl font-bold text-white">{{ formatCurrency(periodB.totalCost) }}</p>
             <p class="text-xs text-gray-500 mt-1">{{ periodB.accountCount }} account{{ periodB.accountCount !== 1 ? 's' : '' }}</p>
+          </div>
+
+          <!-- Top 5 services -->
+          <div v-if="periodB.topServices && periodB.topServices.length > 0" class="mt-5">
+            <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Top Services</p>
+            <div class="space-y-1.5">
+              <div
+                v-for="svc in periodB.topServices"
+                :key="svc.service"
+                class="flex items-center justify-between gap-2"
+              >
+                <span class="text-xs text-gray-400 truncate">{{ svc.service }}</span>
+                <span class="text-xs font-medium text-gray-200 flex-shrink-0">{{ formatCurrency(svc.cost) }}</span>
+              </div>
+            </div>
           </div>
 
           <!-- Monthly breakdown -->

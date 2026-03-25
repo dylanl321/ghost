@@ -52,6 +52,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import * as echarts from 'echarts/core'
+import { chartAnimationDefaults } from '~/utils/chartAnimationDefaults'
 import { LineChart } from 'echarts/charts'
 import {
   TitleComponent,
@@ -153,6 +154,7 @@ const chartOptions = computed(() => {
   const dates = props.timeSeriesBillable.map(d => d.date)
 
   return {
+    ...chartAnimationDefaults,
     tooltip: {
       trigger: 'axis',
       formatter: (params: any) => {

@@ -43,6 +43,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import VChart from 'vue-echarts'
+import { chartAnimationDefaults } from '~/utils/chartAnimationDefaults'
 
 const logger = createLogger('HistoricalTrends')
 
@@ -122,6 +123,7 @@ const orgTrendChart = computed(() => {
   }
   
   return {
+    ...chartAnimationDefaults,
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis',
@@ -198,6 +200,7 @@ const yoyComparisonChart = computed(() => {
   const thisYearData = months.map((_, i) => 500000 + Math.random() * 150000)
   
   return {
+    ...chartAnimationDefaults,
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis',
@@ -270,6 +273,7 @@ const growthRateChart = computed(() => {
   })
   
   return {
+    ...chartAnimationDefaults,
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis',
@@ -343,6 +347,7 @@ const quarterlyChart = computed(() => {
   const quarterlyData = quarters.map((_, i) => 1500000 + i * 100000 + Math.random() * 200000)
   
   return {
+    ...chartAnimationDefaults,
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis',

@@ -173,6 +173,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import VChart from 'vue-echarts'
 import { CHART_COLORS, CHART_THEME, getSeriesColor, getUtilizationColor } from '~/utils/chart-theme'
+import { chartAnimationDefaults } from '~/utils/chartAnimationDefaults'
 
 const logger = createLogger('OrganizationalCharts')
 
@@ -452,6 +453,7 @@ watch(
 // Chart configurations - Overview charts (no budget logic, focus on spending patterns)
 const lobComparisonChart = computed(() => {
   const chart: any = {
+    ...chartAnimationDefaults,
     backgroundColor: 'transparent',
     tooltip: { 
       trigger: 'axis',
@@ -505,6 +507,7 @@ const lobComparisonChart = computed(() => {
 })
 
 const lobDistributionChart = computed(() => ({
+  ...chartAnimationDefaults,
   backgroundColor: 'transparent',
   tooltip: { trigger: 'item' },
   series: [{
@@ -621,12 +624,13 @@ const lobYearOverYearChart = computed(() => {
   })
   
   return {
+    ...chartAnimationDefaults,
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis',
       formatter: (params: any) => {
         let result = `<strong>${params[0].axisValue}</strong><br/>`
-        
+
         // Group by LOB for better organization
         const lobData: Record<string, any[]> = {}
         params.forEach((item: any) => {
@@ -714,8 +718,9 @@ const lobTrendsChart = computed(() => {
   const colors = CHART_COLORS.slice(0, 5)
   
   return {
+    ...chartAnimationDefaults,
     backgroundColor: 'transparent',
-    tooltip: { 
+    tooltip: {
       trigger: 'axis',
       formatter: (params: any) => {
         let result = params[0].axisValue + '<br/>'
@@ -822,8 +827,9 @@ const selectedLobTrendChart = computed(() => {
   }
   
   return {
+    ...chartAnimationDefaults,
     backgroundColor: 'transparent',
-    tooltip: { 
+    tooltip: {
       trigger: 'axis',
       formatter: (params: any) => {
         return `${params[0].axisValue}<br/>Spend: ${formatCurrency(params[0].value)}`
@@ -926,6 +932,7 @@ const selectedLobYoYChart = computed(() => {
   const currentYearData = getLobMonthlyByYear(selectedLobData.value, currentYear)
   
   return {
+    ...chartAnimationDefaults,
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis',
@@ -1051,8 +1058,9 @@ const selectedLobAccountsChart = computed(() => {
     }))
   
   return {
+    ...chartAnimationDefaults,
     backgroundColor: 'transparent',
-    tooltip: { 
+    tooltip: {
       trigger: 'axis',
       formatter: (params: any) => {
         return `${params[0].name}: ${formatCurrency(params[0].value)}`
@@ -1112,6 +1120,7 @@ const lastMonthBudgetChart = computed(() => {
   const utilization = data.budget > 0 ? (data.spend / data.budget) * 100 : 0
   
   return {
+    ...chartAnimationDefaults,
     backgroundColor: 'transparent',
     tooltip: { trigger: 'axis' },
     xAxis: {
@@ -1160,6 +1169,7 @@ const currentMtdBudgetChart = computed(() => {
   const expectedSpend = (data.budget * daysPassed) / daysInMonth
   
   return {
+    ...chartAnimationDefaults,
     backgroundColor: 'transparent',
     tooltip: { trigger: 'axis' },
     xAxis: {

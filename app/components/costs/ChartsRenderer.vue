@@ -144,6 +144,7 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import type { NormalizedDataset } from '~/types/costs'
 import type { ChartDefinition } from '~/composables/useChartRegistry'
 import VChart from 'vue-echarts'
+import { chartAnimationDefaults } from '~/utils/chartAnimationDefaults'
 import { use as echartsUse } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import {
@@ -404,8 +405,9 @@ const chartOptionsMap = computed(() => {
             if (builder) {
                 const options = builder(data, context)
                 if (options) {
-                    map.set(chart.id, options)
-                    chartCache.set(chart.id, { dataHash, contextHash, options })
+                    const optionsWithDefaults = { ...chartAnimationDefaults, ...options }
+                    map.set(chart.id, optionsWithDefaults)
+                    chartCache.set(chart.id, { dataHash, contextHash, options: optionsWithDefaults })
                 }
             }
         } catch (error) {
