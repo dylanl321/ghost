@@ -301,6 +301,52 @@ resource "aws_ecs_task_definition" "main" {
           name  = "S3_PRESIGNED_URL_EXPIRES_DAYS"
           value = "30"
         },
+        # AWS Bedrock Configuration (GovCloud with Claude Sonnet 4.5)
+        {
+          name  = "BEDROCK_ENVIRONMENT"
+          value = "govcloud"
+        },
+        {
+          name  = "BEDROCK_REGION"
+          value = "us-gov-west-1"
+        },
+        {
+          name  = "BEDROCK_CLAUDE_MODEL_ID"
+          value = "us-gov.anthropic.claude-sonnet-4-5-20250929-v1:0"
+        },
+        {
+          name  = "BEDROCK_CLAUDE_MAX_TOKENS"
+          value = "4096"
+        },
+        {
+          name  = "BEDROCK_CLAUDE_TEMPERATURE"
+          value = "0.3"
+        },
+        {
+          name  = "BEDROCK_CLAUDE_TOP_P"
+          value = "0.95"
+        },
+        {
+          name  = "BEDROCK_CLAUDE_FALLBACK_MODELS"
+          value = "anthropic.claude-3-5-sonnet-20240620-v1:0,anthropic.claude-3-sonnet-20240229-v1:0"
+        },
+        # Strands Agent Configuration
+        {
+          name  = "STRANDS_SERVER_URL"
+          value = "http://internal-lz-mcp-servers-dev-alb-1428009891.us-gov-west-1.elb.amazonaws.com:80"
+        },
+        {
+          name  = "STRANDS_TIMEOUT"
+          value = "600000"
+        },
+        {
+          name  = "STRANDS_RETRIES"
+          value = "2"
+        },
+        {
+          name  = "STRANDS_RETRY_DELAY"
+          value = "2000"
+        },
         # Public URLs (environment-specific)
         {
           name  = "NUXT_PUBLIC_SITE_URL"
