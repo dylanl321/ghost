@@ -3,7 +3,7 @@
     <template #header>
       <div class="text-base font-semibold text-gray-900 dark:text-white">Compliance Overview</div>
     </template>
-    <div class="flex flex-col items-center gap-4">
+    <div class="flex flex-col items-center gap-4 cursor-pointer transition-transform hover:scale-105" @click="emit('drill-down')">
       <!-- Ring gauge -->
       <div class="relative w-36 h-36">
         <svg viewBox="0 0 120 120" class="w-full h-full">
@@ -54,6 +54,8 @@ const props = defineProps<{
   passed: number
   failed: number
 }>()
+
+const emit = defineEmits<{ 'drill-down': [] }>()
 
 const colorMode = useColorMode()
 const isDark = computed(() => colorMode.value === 'dark')

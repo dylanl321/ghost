@@ -76,6 +76,11 @@
     <ClientOnly>
       <CommandPalette />
     </ClientOnly>
+
+    <!-- What's New Modal -->
+    <ClientOnly>
+      <WhatsNewModal v-model="showWhatsNew" @dismiss="onWhatsNewDismiss" />
+    </ClientOnly>
   </div>
 </template>
 
@@ -89,13 +94,28 @@ const navigationStore = useNavigationStore()
 const siteConfigStore = useSiteConfigStore()
 const sideNavRef = ref()
 
+// What's New modal
+const showWhatsNew = ref(false)
+const preferences = useUserPreferences()
+const currentVersion = useRuntimeConfig().public.appVersion
+
 // Initialize streaming notifications monitoring (background polling for chat queries)
 const { startMonitoring } = useStreamingNotifications()
 
 // Start monitoring on mount
 onMounted(() => {
   startMonitoring()
+
+  // Show What's New modal if version changed
+  const lastSeen = preferences.getPreference('lastSeenVersion', '0.0.0')
+  if (lastSeen !== currentVersion) {
+    showWhatsNew.value = true
+  }
 })
+
+function onWhatsNewDismiss() {
+  preferences.setPreference('lastSeenVersion', currentVersion as string)
+}
 
 // Detect full-height pages that need special layout (no padding, overflow handled by page)
 const isExplorerPage = computed(() =>

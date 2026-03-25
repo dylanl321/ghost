@@ -14,8 +14,12 @@ export function useFavoriteAccounts() {
   const enclaveStore = useEnclaveStore()
   const toast = useToast()
 
+  // Optimistic state: when non-null, takes priority over server state
+  const optimisticIds = ref<string[] | null>(null)
+
   // Get array of favorite account IDs
   const favoriteIds = computed<string[]>(() => {
+    if (optimisticIds.value !== null) return optimisticIds.value
     return getPreference<string[]>(FAVORITES_KEY, [])
   })
 
@@ -44,9 +48,13 @@ export function useFavoriteAccounts() {
       return true
     }
 
+    // Optimistic update: show change immediately
+    const previousIds = favoriteIds.value
+    optimisticIds.value = [...previousIds, accountId]
+
     try {
-      const updated = [...favoriteIds.value, accountId]
-      const success = await setPreference(FAVORITES_KEY, updated)
+      const success = await setPreference(FAVORITES_KEY, optimisticIds.value)
+      optimisticIds.value = null // Fall through to server state
 
       if (success) {
         const accountName = enclaveStore.enclaves[accountId]?.projectName || accountId
@@ -62,6 +70,7 @@ export function useFavoriteAccounts() {
 
       return success
     } catch (error) {
+      optimisticIds.value = null // Rollback
       logger.error('Failed to add favorite:', error)
       toast.add({
         title: 'Failed to add favorite',
@@ -80,9 +89,13 @@ export function useFavoriteAccounts() {
   async function removeFavorite(accountId: string): Promise<boolean> {
     if (!accountId) return false
 
+    // Optimistic update: remove immediately
+    const previousIds = favoriteIds.value
+    optimisticIds.value = previousIds.filter(id => id !== accountId)
+
     try {
-      const updated = favoriteIds.value.filter(id => id !== accountId)
-      const success = await setPreference(FAVORITES_KEY, updated)
+      const success = await setPreference(FAVORITES_KEY, optimisticIds.value)
+      optimisticIds.value = null // Fall through to server state
 
       if (success) {
         const accountName = enclaveStore.enclaves[accountId]?.projectName || accountId
@@ -98,6 +111,7 @@ export function useFavoriteAccounts() {
 
       return success
     } catch (error) {
+      optimisticIds.value = null // Rollback
       logger.error('Failed to remove favorite:', error)
       toast.add({
         title: 'Failed to remove favorite',

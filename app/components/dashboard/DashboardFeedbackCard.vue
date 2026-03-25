@@ -11,11 +11,7 @@
     </div>
 
     <!-- Loading -->
-    <div v-if="loading" class="animate-pulse space-y-3">
-      <div class="h-3 w-full bg-gray-200 dark:bg-gray-700 rounded" />
-      <div class="h-3 w-3/4 bg-gray-200 dark:bg-gray-700 rounded" />
-      <div class="h-3 w-1/2 bg-gray-200 dark:bg-gray-700 rounded" />
-    </div>
+    <LoadingSkeleton v-if="loading" type="card" />
 
     <!-- Error -->
     <div v-else-if="error" class="text-center py-4">

@@ -109,16 +109,8 @@
           props.displayStyle === 'half' ? 'grid-cols-1 sm:grid-cols-2' :
           'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3'
         ]">
-          <div v-for="i in (props.displayStyle === 'third' ? 2 : 4)" :key="i" class="rounded-xl border border-gray-200 dark:border-gray-800 p-4 animate-pulse">
-            <div class="flex items-center justify-between mb-3">
-              <div class="h-4 w-32 bg-gray-200 dark:bg-gray-700 rounded" />
-              <div class="h-5 w-16 bg-gray-200 dark:bg-gray-700 rounded-full" />
-            </div>
-            <div class="h-3 w-48 bg-gray-200 dark:bg-gray-700 rounded mb-3" />
-            <div class="flex gap-1.5">
-              <div class="h-5 w-16 bg-gray-200 dark:bg-gray-700 rounded-full" />
-              <div class="h-5 w-20 bg-gray-200 dark:bg-gray-700 rounded-full" />
-            </div>
+          <div v-for="i in (props.displayStyle === 'third' ? 2 : 4)" :key="i" class="rounded-xl border border-gray-200 dark:border-gray-800 p-4">
+            <LoadingSkeleton type="card" />
           </div>
         </div>
 

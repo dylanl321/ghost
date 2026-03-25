@@ -135,6 +135,14 @@
                     Decommissioned
                   </UBadge>
                 </span>
+                <!-- Sparkline trend column -->
+                <span v-else-if="col.key === 'trend'">
+                  <SparklineCell
+                    :data="accountTrendMap.get(row.accountId) || []"
+                    :width="60"
+                    :height="20"
+                  />
+                </span>
                 <!-- Standard column handling -->
                 <span v-else-if="col.format">
                   {{ col.format(getNestedValue(row, col.key)) }}
@@ -275,8 +283,31 @@ const availableColumns = computed(() => [
   { key: 'linesOfBusiness', label: 'Line of Business', default: false },
   { key: 'projectName', label: 'Project', default: false },
   { key: 'environment', label: 'Environment', default: false },
-  { key: 'forecastedCost', label: 'Forecast', default: false, format: (v: number) => formatCurrency(v, 2), class: 'text-right' }
+  { key: 'forecastedCost', label: 'Forecast', default: false, format: (v: number) => formatCurrency(v, 2), class: 'text-right' },
+  { key: 'trend', label: 'Trend', default: true, class: 'text-center' }
 ])
+
+// Per-account daily cost series for sparkline trend
+const accountTrendMap = computed(() => {
+  const map = new Map<string, number[]>()
+  if (!props.dataset) return map
+
+  const raw = props.dataset as any
+  const resultsByTime = raw?.resultsByTime || raw?.summary?.data?.resultsByTime || raw?.summary?.resultsByTime || []
+
+  for (const bucket of resultsByTime) {
+    if (!bucket.Groups) continue
+    for (const group of bucket.Groups) {
+      const accountId = group.Keys?.[0]
+      const amount = parseFloat(group.Metrics?.UnblendedCost?.Amount || group.Metrics?.BlendedCost?.Amount || '0')
+      if (!accountId) continue
+      if (!map.has(accountId)) map.set(accountId, [])
+      map.get(accountId)!.push(amount)
+    }
+  }
+
+  return map
+})
 
 // State
 const searchQuery = ref('')

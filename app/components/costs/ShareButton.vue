@@ -185,11 +185,6 @@
         </template>
 
         <div class="p-6 space-y-4">
-          <!-- Debug Info -->
-          <div class="text-xs text-gray-500 font-mono">
-            Debug: isLoading={{ isLoading }}, shareUrl={{ shareUrl }}, error={{ error }}
-          </div>
-
           <!-- Loading State -->
           <div v-if="isLoading" class="flex items-center justify-center py-8">
             <div class="text-center">

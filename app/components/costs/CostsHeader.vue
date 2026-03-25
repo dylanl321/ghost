@@ -75,6 +75,16 @@
           </UDropdown>
         </span>
 
+        <!-- Filter Presets -->
+        <FilterPresets
+          :selected-accounts="selectedAccounts"
+          :timeframe="modelSelectedTimeframe || ''"
+          :data-mode="modelMode"
+          view-by=""
+          :active-tab="activeTab"
+          @load="(preset: any) => emit('load-preset', preset)"
+        />
+
         <!-- Settings -->
         <CostSettings />
 
@@ -270,7 +280,7 @@ import ExportButton from '~/components/shared/ExportButton.vue'
 
 const logger = createLogger('CostsHeader')
 
-const emit = defineEmits<{ (e: 'refresh'): void; (e: 'start-tour'): void; (e: 'view-alerts'): void }>()
+const emit = defineEmits<{ (e: 'refresh'): void; (e: 'start-tour'): void; (e: 'view-alerts'): void; (e: 'load-preset', preset: { selectedAccounts: string[]; timeframe: string; dataMode: string; viewBy: string; activeTab: string }): void }>()
 
 const props = defineProps<{
   timeframeOptions: Array<{ label: string, value: string }>,

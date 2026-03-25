@@ -51,6 +51,7 @@
             :risk-score="data.riskScore"
             :risk-level="data.riskLevel"
             :total-findings="data.totalFindings"
+            @drill-down="openDrilldown('risk')"
           />
         </UCard>
 
@@ -149,6 +150,17 @@
         </UTabs>
       </UCard>
     </template>
+
+    <!-- Drill-down slideover -->
+    <GaugeDrilldownSlideover
+      v-if="data"
+      :open="drilldownOpen"
+      :title="drilldownTitle"
+      :subtitle="drilldownSubtitle"
+      :findings="data.topFindings"
+      :filter-criteria="drilldownFilter"
+      @update:open="drilldownOpen = $event"
+    />
   </div>
 </template>
 
@@ -164,6 +176,24 @@ const error = ref<string | null>(null)
 const data = ref<AccountSecuritySummary | null>(null)
 const sourceFilter = ref<SourceFilterType>('all')
 const activeAnalysisTab = ref(0)
+
+const drilldownOpen = ref(false)
+const drilldownTitle = ref('')
+const drilldownSubtitle = ref('')
+const drilldownFilter = ref<{ type: 'risk' | 'compliance'; severity?: string; complianceStatus?: 'PASSED' | 'FAILED' }>()
+
+function openDrilldown(type: 'risk' | 'compliance') {
+  if (type === 'risk') {
+    drilldownTitle.value = 'Risk Score Details'
+    drilldownSubtitle.value = `${data.value?.totalFindings ?? 0} total findings`
+    drilldownFilter.value = { type: 'risk' }
+  } else {
+    drilldownTitle.value = 'Compliance Details'
+    drilldownSubtitle.value = 'Failed compliance checks'
+    drilldownFilter.value = { type: 'compliance', complianceStatus: 'FAILED' }
+  }
+  drilldownOpen.value = true
+}
 
 const hasProductData = computed(() =>
   data.value ? Object.keys(data.value.findingsByProduct).length > 0 : false

@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col items-center gap-3">
+  <div class="flex flex-col items-center gap-3 cursor-pointer transition-transform hover:scale-105" @click="emit('drill-down')">
     <!-- SVG ring gauge -->
     <div class="relative">
       <svg width="140" height="140" viewBox="0 0 140 140">
@@ -54,6 +54,8 @@ const props = defineProps<{
   riskLevel: string
   totalFindings: number
 }>()
+
+const emit = defineEmits<{ 'drill-down': [] }>()
 
 const circumference = 2 * Math.PI * 56 // ~351.86
 

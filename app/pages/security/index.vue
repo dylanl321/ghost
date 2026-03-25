@@ -143,6 +143,7 @@
                 :compliance-rate="summary.complianceRate"
                 :passed="compliancePassed"
                 :failed="complianceFailed"
+                @drill-down="openComplianceDrilldown"
               />
               <div class="lg:col-span-2">
                 <ClientOnly>
@@ -189,6 +190,16 @@
           </div>
         </template>
       </UTabs>
+
+      <!-- Compliance drill-down slideover -->
+      <GaugeDrilldownSlideover
+        :open="complianceDrilldownOpen"
+        :title="'Compliance Details'"
+        :subtitle="`${complianceFailed} failed checks`"
+        :findings="summary.topFindings"
+        :filter-criteria="{ type: 'compliance', complianceStatus: 'FAILED' }"
+        @update:open="complianceDrilldownOpen = $event"
+      />
     </template>
   </div>
 </template>
@@ -202,6 +213,11 @@ const loading = ref(true)
 const errorMsg = ref<string | null>(null)
 const summary = ref<OrgSecuritySummary | null>(null)
 const activeTab = ref(0)
+const complianceDrilldownOpen = ref(false)
+
+function openComplianceDrilldown() {
+  complianceDrilldownOpen.value = true
+}
 
 const progress = reactive({
   stage: '',

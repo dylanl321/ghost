@@ -323,6 +323,7 @@
         @refresh="refreshData"
         @start-tour="() => handleStartTour(true)"
         @view-alerts="navigateToBudgetAlerts"
+        @load-preset="applyPreset"
       />
 
       <!-- Selected Account Context Banner -->
@@ -1094,6 +1095,16 @@ const navigateToBudgetAlerts = () => {
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }, 150)
   })
+}
+
+// Apply a filter preset from CostsHeader
+const applyPreset = (preset: { selectedAccounts: string[]; timeframe: string; dataMode: string; viewBy: string; activeTab: string }) => {
+  selectedAccounts.value = preset.selectedAccounts || []
+  if (preset.timeframe) selectedTimeframe.value = preset.timeframe
+  if (preset.dataMode === 'billable' || preset.dataMode === 'proforma') {
+    dataMode.value = preset.dataMode as DataMode
+  }
+  if (preset.activeTab) activeTab.value = preset.activeTab
 }
 
 // Handle shared state from URL parameters

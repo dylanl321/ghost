@@ -23,7 +23,7 @@
             </span>
           </UTooltip>
         </div>
-        <p class="text-xl font-bold text-gray-900 dark:text-white mb-2">{{ formatCurrency(effectiveMtdTotal, 0) }}</p>
+        <p class="text-xl font-bold text-gray-900 dark:text-white mb-2">{{ animatedMtd }}</p>
         <ClientOnly>
           <div class="space-y-1">
             <div class="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-1.5">
@@ -66,7 +66,7 @@
           </UTooltip>
         </div>
         <p v-if="projectedSpend !== 0" class="text-xl font-bold text-gray-900 dark:text-white mb-2">
-          {{ formatCurrency(projectedSpend, 0) }}
+          {{ animatedForecast }}
         </p>
         <p v-else class="text-sm text-gray-400 dark:text-gray-500 mb-2">Not enough data</p>
         <div v-if="budgetHealth.totalBudget > 0 && projectedSpend > 0" class="space-y-0.5">
@@ -101,7 +101,7 @@
             <span v-if="scope === 'mine'" class="text-[9px] font-normal normal-case">(Org)</span>
           </p>
         </div>
-        <p class="text-xl font-bold text-gray-900 dark:text-white mb-2">{{ formatCurrency(previousMonthSpend, 0) }}</p>
+        <p class="text-xl font-bold text-gray-900 dark:text-white mb-2">{{ animatedPrevMonth }}</p>
         <div v-if="mtdTotal > 0" class="space-y-0.5">
           <div class="flex justify-between text-[10px]">
             <span class="text-gray-400 dark:text-gray-500">Avg/day</span>
@@ -134,7 +134,7 @@
             <UBadge color="blue" variant="soft" size="xs">{{ budgetHealth.accountsWithBudget }}</UBadge>
           </UTooltip>
         </div>
-        <p class="text-xl font-bold text-gray-900 dark:text-white mb-2">{{ effectiveActiveAccounts }}</p>
+        <p class="text-xl font-bold text-gray-900 dark:text-white mb-2">{{ animatedActiveAccounts }}</p>
         <div v-if="effectiveMtdTotal > 0 && effectiveActiveAccounts > 0" class="flex justify-between text-[10px]">
           <span class="text-gray-400 dark:text-gray-500">Avg cost/acct</span>
           <span class="font-medium text-gray-600 dark:text-gray-300">{{ formatCurrency(effectiveMtdTotal / effectiveActiveAccounts, 0) }}</span>
@@ -173,7 +173,7 @@
             budgetHealth.burnRateVsBudget > 10 ? 'text-red-500' :
             budgetHealth.burnRateVsBudget > 0 ? 'text-yellow-500' :
             'text-green-500'">
-            {{ budgetHealth.burnRateVsBudget > 0 ? '+' : '' }}{{ formatNumber(budgetHealth.burnRateVsBudget, 1) }}%
+            {{ animatedBurnRate }}
           </p>
           <div class="space-y-0.5">
             <div class="flex justify-between text-[10px]">
@@ -206,6 +206,7 @@
 
 <script setup lang="ts">
 import type { MetricCardId } from '#shared/types/dashboard-layout'
+import { useCountUp } from '~/composables/useCountUp'
 
 const props = defineProps<{
   loading: boolean
@@ -249,6 +250,22 @@ const effectiveActiveAccounts = computed(() =>
 function isCardVisible(id: MetricCardId): boolean {
   return props.visibleCards[id] ?? true
 }
+
+// Animated counters
+const mtdTarget = computed(() => effectiveMtdTotal.value)
+const { formattedValue: animatedMtd } = useCountUp(mtdTarget, { formatter: (n) => formatCurrency(n, 0) })
+
+const forecastTarget = computed(() => props.projectedSpend)
+const { formattedValue: animatedForecast } = useCountUp(forecastTarget, { formatter: (n) => formatCurrency(n, 0) })
+
+const prevMonthTarget = computed(() => props.previousMonthSpend)
+const { formattedValue: animatedPrevMonth } = useCountUp(prevMonthTarget, { formatter: (n) => formatCurrency(n, 0) })
+
+const activeTarget = computed(() => effectiveActiveAccounts.value)
+const { formattedValue: animatedActiveAccounts } = useCountUp(activeTarget, { formatter: (n) => String(Math.round(n)) })
+
+const burnRateTarget = computed(() => props.budgetHealth.burnRateVsBudget)
+const { formattedValue: animatedBurnRate } = useCountUp(burnRateTarget, { formatter: (n) => `${n > 0 ? '+' : ''}${formatNumber(n, 1)}%` })
 
 const gridClass = computed(() => {
   const count = props.visibleCount
