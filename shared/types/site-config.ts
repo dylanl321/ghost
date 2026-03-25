@@ -122,6 +122,15 @@ export interface SiteConfig {
     siteName?: string;
     welcomeMessage?: string;
     showWelcomeCard?: boolean;
+    popupMessage?: {
+      enabled?: boolean;
+      id?: string;
+      title?: string;
+      body?: string;
+      severity?: 'info' | 'success' | 'warning';
+      ctaLabel?: string;
+      ctaLink?: string;
+    };
   };
   announcements?: Announcement[];
 }
@@ -380,6 +389,86 @@ export const DEFAULT_SITE_CONFIG: SiteConfigItem[] = [
     label: 'Show Welcome Card',
     description: 'Display the welcome card on the homepage for new users',
     defaultValue: true,
+    isPublic: true,
+    isEditable: true,
+  },
+  {
+    key: 'ui.popupMessage.enabled',
+    value: false,
+    type: 'boolean',
+    category: 'ui',
+    label: 'Popup Message Enabled',
+    description: 'Show a popup message to users on login. When disabled, falls back to version changelog.',
+    defaultValue: false,
+    isPublic: true,
+    isEditable: true,
+  },
+  {
+    key: 'ui.popupMessage.id',
+    value: '',
+    type: 'string',
+    category: 'ui',
+    label: 'Popup Message ID',
+    description: 'Unique ID for the current popup. Change this to re-show to users who dismissed the previous one.',
+    defaultValue: '',
+    isPublic: true,
+    isEditable: true,
+  },
+  {
+    key: 'ui.popupMessage.title',
+    value: '',
+    type: 'string',
+    category: 'ui',
+    label: 'Popup Title',
+    description: 'Title displayed at the top of the popup modal.',
+    defaultValue: '',
+    isPublic: true,
+    isEditable: true,
+  },
+  {
+    key: 'ui.popupMessage.body',
+    value: '',
+    type: 'string',
+    category: 'ui',
+    label: 'Popup Body',
+    description: 'Main content of the popup. Supports basic markdown (bold, links, lists).',
+    defaultValue: '',
+    isPublic: true,
+    isEditable: true,
+  },
+  {
+    key: 'ui.popupMessage.severity',
+    value: 'info',
+    type: 'string',
+    category: 'ui',
+    label: 'Popup Severity',
+    description: 'Visual style of the popup: info (blue), success (green), warning (yellow).',
+    defaultValue: 'info',
+    isPublic: true,
+    isEditable: true,
+    validation: {
+      allowedValues: ['info', 'success', 'warning'],
+    },
+  },
+  {
+    key: 'ui.popupMessage.ctaLabel',
+    value: '',
+    type: 'string',
+    category: 'ui',
+    label: 'Popup CTA Button Label',
+    description: 'Optional call-to-action button text. Leave empty for no CTA.',
+    defaultValue: '',
+    isPublic: true,
+    isEditable: true,
+  },
+  {
+    key: 'ui.popupMessage.ctaLink',
+    value: '',
+    type: 'string',
+    category: 'ui',
+    label: 'Popup CTA Button Link',
+    description: 'URL the CTA button navigates to (internal path or external URL).',
+    defaultValue: '',
     isPublic: true,
     isEditable: true,
   },

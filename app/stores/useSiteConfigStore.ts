@@ -114,6 +114,10 @@ export const useSiteConfigStore = defineStore('siteConfig', {
       return state.config.ui?.showWelcomeCard ?? true;
     },
 
+    popupMessage: (state) => {
+      return state.config.ui?.popupMessage ?? null;
+    },
+
     /**
      * Check if config is stale and needs refresh
      */

@@ -99,7 +99,7 @@ const navigationStore = useNavigationStore()
 const siteConfigStore = useSiteConfigStore()
 const sideNavRef = ref()
 
-// What's New modal
+// Popup / What's New modal
 const showWhatsNew = ref(false)
 const preferences = useUserPreferences()
 const currentVersion = useRuntimeConfig().public.appVersion
@@ -111,15 +111,32 @@ const { startMonitoring } = useStreamingNotifications()
 onMounted(() => {
   startMonitoring()
 
-  // Show What's New modal if version changed
-  const lastSeen = preferences.getPreference('lastSeenVersion', '0.0.0')
-  if (lastSeen !== currentVersion) {
-    showWhatsNew.value = true
+  // Determine which popup to show: admin-configured or version changelog
+  const popup = siteConfigStore.popupMessage
+  if (popup?.enabled && popup?.id && popup?.body) {
+    // Admin popup: show if user hasn't dismissed this specific popup ID
+    const dismissedId = preferences.getPreference('dismissedPopupId', '')
+    if (dismissedId !== popup.id) {
+      showWhatsNew.value = true
+    }
+  } else {
+    // Fallback: version changelog popup
+    const lastSeen = preferences.getPreference('lastSeenVersion', '0.0.0')
+    if (lastSeen !== currentVersion) {
+      showWhatsNew.value = true
+    }
   }
 })
 
 function onWhatsNewDismiss() {
-  preferences.setPreference('lastSeenVersion', currentVersion as string)
+  const popup = siteConfigStore.popupMessage
+  if (popup?.enabled && popup?.id && popup?.body) {
+    // Record dismissal of admin popup by its ID
+    preferences.setPreference('dismissedPopupId', popup.id)
+  } else {
+    // Record version seen for changelog popup
+    preferences.setPreference('lastSeenVersion', currentVersion as string)
+  }
 }
 
 // Detect full-height pages that need special layout (no padding, overflow handled by page)
