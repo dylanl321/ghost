@@ -67,6 +67,9 @@
           <UButton color="gray" variant="soft" icon="i-heroicons-tag" @click="navigateTo('/admin/costs/tag-compliance')">
             Tag Compliance
           </UButton>
+          <UButton color="gray" variant="soft" icon="i-heroicons-chat-bubble-bottom-center-text" @click="navigateTo('/admin/popup')">
+            Popup Message
+          </UButton>
         </div>
       </div>
 
