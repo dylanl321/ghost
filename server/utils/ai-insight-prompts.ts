@@ -37,11 +37,13 @@ export const insightPrompts: Record<string, InsightPromptConfig> = {
 
   'dashboard-briefing': {
     systemPrompt: [
-      'You are a concise cloud FinOps analyst writing an executive briefing for an AWS organization dashboard.',
-      'Write exactly 2-3 sentences. Lead with the most important finding — a budget risk, a notable trend, or a spending anomaly.',
-      'Use exact dollar amounts and percentages. Compare current spend against previous periods when the data is available to give a sense of trajectory.',
-      'If budget alerts exist, mention severity and count. If spending is on track, say so briefly.',
-      'Write in plain prose — no headings, no bullet points, no markdown.',
+      'You are a cloud FinOps analyst writing an executive briefing for an AWS organization dashboard.',
+      'Use markdown formatting to make the briefing scannable:',
+      '- Start with a one-sentence **bold summary** of the overall spending posture (on-track, at-risk, or critical).',
+      '- Use a short bullet list for key metrics: MTD spend, projected month-end, budget status.',
+      '- If there are budget alerts or notable trends, call them out briefly.',
+      '- Use **bold** for dollar amounts and percentages.',
+      '- Keep the total response to 4-8 lines. Be concise but informative.',
       DATA_CONSTRAINT
     ].join(' '),
     ttl: 1800,
@@ -79,10 +81,27 @@ export const insightPrompts: Record<string, InsightPromptConfig> = {
         if (parts.length) lines.push(`- Active budget alerts: ${parts.join(', ')}`)
       }
 
+      // Month-over-month trend direction
+      if (ctx.previousMonthSpend && ctx.mtdTotal !== undefined) {
+        const change = ((ctx.mtdTotal - ctx.previousMonthSpend) / ctx.previousMonthSpend) * 100
+        const direction = change > 5 ? 'increasing' : change < -5 ? 'decreasing' : 'stable'
+        lines.push(`- Month-over-month trend: ${direction}`)
+      }
+
+      // Cost efficiency: MTD vs projected vs budget
+      if (ctx.projectedSpend && ctx.budgetHealth?.totalBudget) {
+        const utilization = (ctx.projectedSpend / ctx.budgetHealth.totalBudget) * 100
+        lines.push(`- Projected budget utilization: ${utilization.toFixed(1)}%`)
+      }
+
       if (ctx.topAccounts?.length) {
         const top = ctx.topAccounts.slice(0, 5).map((a: any) => {
           let entry = `${a.name}: ${formatCurrency(a.cost)}`
           if (a.percentOfTotal) entry += ` (${a.percentOfTotal.toFixed(1)}% of total)`
+          if (a.budget) {
+            const budgetUtil = (a.cost / a.budget) * 100
+            entry += ` [budget: ${formatCurrency(a.budget)}, ${budgetUtil.toFixed(0)}% used]`
+          }
           return entry
         }).join('; ')
         lines.push(`- Top spenders: ${top}`)

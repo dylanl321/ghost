@@ -108,10 +108,12 @@ const currentVersion = useRuntimeConfig().public.appVersion
 const { startMonitoring } = useStreamingNotifications()
 
 // Start monitoring on mount
-onMounted(() => {
+onMounted(async () => {
   startMonitoring()
 
-  // Determine which popup to show: admin-configured or version changelog
+  // Ensure site config is loaded before deciding which popup to show
+  await siteConfigStore.fetchConfig()
+
   const popup = siteConfigStore.popupMessage
   if (popup?.enabled && popup?.id && popup?.body) {
     // Admin popup: show if user hasn't dismissed this specific popup ID

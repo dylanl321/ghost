@@ -54,7 +54,7 @@ export default handleAsync(defineEventHandler(async (event) => {
     systemPrompt: promptConfig.systemPrompt,
     model: 'claude-sonnet',
     temperature: 0.3,
-    maxTokens: 250
+    maxTokens: 500
   })
 
   if (!result.success || !result.content) {

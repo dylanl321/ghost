@@ -51,10 +51,8 @@
         <div class="animate-pulse h-3 bg-gray-200 dark:bg-gray-700 rounded w-4/6" />
       </div>
 
-      <!-- Insight text -->
-      <p v-else-if="insight" class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-        {{ insight }}
-      </p>
+      <!-- Insight text (rendered as markdown) -->
+      <div v-else-if="insight" class="ai-insight-content text-sm text-gray-700 dark:text-gray-300 leading-relaxed" v-html="renderedInsight" />
 
       <!-- Error (soft) -->
       <p v-else-if="error" class="text-xs text-gray-400 dark:text-gray-500 italic">
@@ -70,6 +68,7 @@
 </template>
 
 <script setup lang="ts">
+import { marked } from 'marked'
 import { useSiteConfigStore } from '~/stores/useSiteConfigStore'
 
 const props = withDefaults(defineProps<{
@@ -108,6 +107,15 @@ const timeAgo = computed(() => {
   if (mins < 1) return 'just now'
   if (mins < 60) return `${mins}m ago`
   return `${Math.floor(mins / 60)}h ago`
+})
+
+const renderedInsight = computed(() => {
+  if (!insight.value) return ''
+  try {
+    return marked.parse(insight.value, { gfm: true, breaks: true }) as string
+  } catch {
+    return insight.value
+  }
 })
 
 function toggleCollapsed() {
@@ -170,3 +178,35 @@ watch(disabled, (val) => {
   if (!val && props.context && Object.keys(props.context).length > 0) fetchInsight()
 }, { immediate: true })
 </script>
+
+<style scoped>
+.ai-insight-content :deep(p) {
+  @apply text-sm leading-relaxed mb-1.5 last:mb-0;
+}
+.ai-insight-content :deep(strong) {
+  @apply font-semibold text-gray-900 dark:text-white;
+}
+.ai-insight-content :deep(ul) {
+  @apply space-y-1 mb-2 pl-4 list-disc;
+}
+.ai-insight-content :deep(ol) {
+  @apply space-y-1 mb-2 pl-4 list-decimal;
+}
+.ai-insight-content :deep(li) {
+  @apply text-sm text-gray-700 dark:text-gray-300;
+}
+.ai-insight-content :deep(li::marker) {
+  @apply text-indigo-400;
+}
+.ai-insight-content :deep(h2),
+.ai-insight-content :deep(h3),
+.ai-insight-content :deep(h4) {
+  @apply text-sm font-semibold text-gray-900 dark:text-white mt-2 mb-1;
+}
+.ai-insight-content :deep(a) {
+  @apply text-indigo-500 dark:text-indigo-400 hover:underline;
+}
+.ai-insight-content :deep(code) {
+  @apply bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded text-xs;
+}
+</style>
