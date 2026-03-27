@@ -220,6 +220,14 @@ resource "aws_ecs_task_definition" "main" {
           name  = "ACCOUNT_NOTES_TABLE"
           value = aws_dynamodb_table.account_notes.name
         },
+        {
+          name  = "USER_NOTIFICATIONS_TABLE"
+          value = aws_dynamodb_table.user_notifications.name
+        },
+        {
+          name  = "NOTIFICATION_BROADCASTS_TABLE"
+          value = aws_dynamodb_table.notification_broadcasts.name
+        },
         # SES Configuration (now managed via Site Config DynamoDB table)
         # These env vars serve as fallbacks only - primary config is in ghost-site-config table
         # To update: Use Admin Panel > System > Site Configuration > Email & Notifications
