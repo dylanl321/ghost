@@ -23,9 +23,11 @@
 
     <div class="mt-6">
       <NotificationDashboardPanel v-if="activeTab === 0" />
-      <UserNotificationsPanel v-else-if="activeTab === 1" />
-      <NotificationBroadcastPanel v-else-if="activeTab === 2" />
-      <NotificationConfigPanel v-else-if="activeTab === 3" @dry-run-changed="checkDryRun" />
+      <NotificationSourcesPanel v-else-if="activeTab === 1" />
+      <NotificationActivityFeedPanel v-else-if="activeTab === 2" />
+      <UserNotificationsPanel v-else-if="activeTab === 3" />
+      <NotificationBroadcastPanel v-else-if="activeTab === 4" />
+      <NotificationConfigPanel v-else-if="activeTab === 5" @dry-run-changed="checkDryRun" />
     </div>
   </div>
 </template>
@@ -41,11 +43,13 @@ definePageMeta({
 
 const route = useRoute()
 const activeTab = ref(0)
-const tabNames = ['dashboard', 'all', 'broadcasts', 'configuration']
+const tabNames = ['dashboard', 'sources', 'activity', 'all', 'broadcasts', 'configuration']
 const dryRunActive = ref(false)
 
 const tabs = [
   { label: 'Dashboard', icon: 'i-heroicons-squares-2x2' },
+  { label: 'Sources', icon: 'i-heroicons-queue-list' },
+  { label: 'Activity Feed', icon: 'i-heroicons-clock' },
   { label: 'All Notifications', icon: 'i-heroicons-inbox-stack' },
   { label: 'Broadcasts', icon: 'i-heroicons-megaphone' },
   { label: 'Configuration', icon: 'i-heroicons-cog-6-tooth' }

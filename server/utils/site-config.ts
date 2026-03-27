@@ -556,6 +556,39 @@ export function clearSiteConfigCache(): void {
 }
 
 /**
+ * Write a raw key-value to the site-config table without requiring
+ * the key to exist in DEFAULT_SITE_CONFIG. Used for dynamic runtime data
+ * like source heartbeats that don't belong in the static defaults.
+ */
+export async function putSiteConfigRaw(key: string, value: any): Promise<void> {
+  const client = await getDynamoDBClientDirect();
+  if (!client) return;
+
+  const item: Record<string, any> = {
+    key,
+    value,
+    type: 'object',
+    category: 'system',
+    label: key,
+    description: `Auto-generated runtime value for ${key}`,
+    isPublic: false,
+    isEditable: false,
+    updatedAt: new Date().toISOString()
+  };
+
+  await client.send(new PutItemCommand({
+    TableName: TABLE_NAME,
+    Item: marshall(item, { removeUndefinedValues: true })
+  }));
+
+  // Update in-memory cache
+  configCache.set(key, {
+    value: item as SiteConfigItem,
+    expiresAt: Date.now() + CACHE_TTL
+  });
+}
+
+/**
  * Save a change history entry to DynamoDB
  * History entries use a composite key: PK=CONFIG#key, SK=HISTORY#timestamp
  */

@@ -111,8 +111,9 @@ const { startMonitoring } = useStreamingNotifications()
 onMounted(async () => {
   startMonitoring()
 
-  // Ensure site config is loaded before deciding which popup to show
-  await siteConfigStore.fetchConfig()
+  // Force-fetch site config so the popup decision uses fresh data,
+  // not stale sessionStorage cache
+  await siteConfigStore.fetchConfig(true)
 
   const popup = siteConfigStore.popupMessage
   if (popup?.enabled && popup?.id && popup?.body) {

@@ -8,6 +8,7 @@ import { processScheduledReports } from '../utils/report-scheduler'
 import { cleanupStaleLocks, claimExecutionLock, releaseExecutionLock } from '../utils/execution-locks'
 import { logger } from '../utils/logger'
 import { markJobRunning, markJobComplete, logJobCompletion } from '../utils/job-tracker'
+import { writeSourceHeartbeat } from '../utils/source-heartbeat'
 
 const SCHEDULER_ENABLED = process.env.REPORT_SCHEDULER_ENABLED !== 'false'
 
@@ -67,9 +68,11 @@ export default defineNitroPlugin(async () => {
       logJobCompletion('report-scheduler', 'success', performance.now() - start, {
         processed: result.processed, successful: result.successful, failed: result.failed,
       })
+      writeSourceHeartbeat('report-scheduler', { lastRun: new Date().toISOString(), status: 'success', durationMs: Math.round(performance.now() - start), count: result.processed })
     } catch (error) {
       logger.error('Error in scheduler cron job:', error)
       logJobCompletion('report-scheduler', 'error', performance.now() - start)
+      writeSourceHeartbeat('report-scheduler', { lastRun: new Date().toISOString(), status: 'error', durationMs: Math.round(performance.now() - start), error: String(error) })
     } finally {
       markJobComplete('report-scheduler')
     }
@@ -181,10 +184,12 @@ export default defineNitroPlugin(async () => {
       logJobCompletion('email-digest', 'success', performance.now() - start, {
         processed: result.processed, successful: result.successful, failed: result.failed, skipped: result.skipped,
       })
+      writeSourceHeartbeat('email-digest', { lastRun: new Date().toISOString(), status: 'success', durationMs: Math.round(performance.now() - start), count: result.processed })
     } catch (error) {
       logger.error('[Digest] Hourly digest processing failed:', error)
       await releaseExecutionLock('email-digest', hourKey).catch(() => {})
       logJobCompletion('email-digest', 'error', performance.now() - start)
+      writeSourceHeartbeat('email-digest', { lastRun: new Date().toISOString(), status: 'error', durationMs: Math.round(performance.now() - start), error: String(error) })
     } finally {
       markJobComplete('email-digest')
     }
@@ -216,10 +221,12 @@ export default defineNitroPlugin(async () => {
       logJobCompletion('budget-alert-notifier', 'success', performance.now() - start, {
         processed: result.processed, notified: result.notified, skipped: result.skipped,
       })
+      writeSourceHeartbeat('budget-alert-notifier', { lastRun: new Date().toISOString(), status: 'success', durationMs: Math.round(performance.now() - start), count: result.processed })
     } catch (error) {
       logger.error('[BudgetAlertNotifier] Budget alert processing failed:', error)
       await releaseExecutionLock('budget-alert-notifier', windowKey).catch(() => {})
       logJobCompletion('budget-alert-notifier', 'error', performance.now() - start)
+      writeSourceHeartbeat('budget-alert-notifier', { lastRun: new Date().toISOString(), status: 'error', durationMs: Math.round(performance.now() - start), error: String(error) })
     } finally {
       markJobComplete('budget-alert-notifier')
     }

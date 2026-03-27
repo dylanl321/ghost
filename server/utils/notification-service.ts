@@ -417,7 +417,15 @@ export async function markNotificationsAsEmailed(
 export async function getAllNotificationsAdmin(
   params: AdminNotificationListParams = {}
 ): Promise<NotificationListResponse & { total?: number }> {
-  const { tableName, environment, accountId } = await getTableInfo()
+  let tableInfo: { tableName: string; environment: string; accountId?: string }
+  try {
+    tableInfo = await getTableInfo()
+  } catch (err: any) {
+    // Table may not exist in dev — return empty result gracefully
+    logger.warn('getAllNotificationsAdmin: table not available:', err.message)
+    return { notifications: [], nextKey: null, hasMore: false }
+  }
+  const { tableName, environment, accountId } = tableInfo
 
   const limit = Math.min(params.limit || 20, 100)
 
@@ -522,24 +530,31 @@ export async function getAllNotificationsAdmin(
 // ---------------------------------------------------------------------------
 
 export async function getNotificationStats(days: number = 7): Promise<NotificationStats> {
-  const { tableName, environment, accountId } = await getTableInfo()
+  let items: UserNotification[] = []
 
-  const since = new Date()
-  since.setDate(since.getDate() - days)
-  const sinceISO = since.toISOString()
+  try {
+    const { tableName, environment, accountId } = await getTableInfo()
 
-  // Scan recent notifications (limited for performance)
-  const result = await scanItems(
-    tableName,
-    'createdAt >= :since',
-    1000,
-    undefined,
-    environment,
-    undefined,
-    { ':since': sinceISO }
-  )
+    const since = new Date()
+    since.setDate(since.getDate() - days)
+    const sinceISO = since.toISOString()
 
-  const items = (result.items || []) as UserNotification[]
+    // Scan recent notifications (limited for performance)
+    const result = await scanItems(
+      tableName,
+      'createdAt >= :since',
+      1000,
+      undefined,
+      environment,
+      undefined,
+      { ':since': sinceISO }
+    )
+
+    items = (result.items || []) as UserNotification[]
+  } catch (err: any) {
+    // Table may not exist in dev — return empty stats gracefully
+    logger.warn('getNotificationStats: table not available, returning empty stats:', err.message)
+  }
 
   // Aggregate stats
   const byCategory: Partial<Record<NotificationCategory, number>> = {}
