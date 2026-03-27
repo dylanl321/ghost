@@ -91,9 +91,9 @@ export interface SendUserNotificationOptions {
 // ---------------------------------------------------------------------------
 
 export const CATEGORY_PREFERENCE_MAP: Record<NotificationCategory, string | null> = {
-  BUDGET_THRESHOLD: 'budgetThresholdWarnings',
-  COST_ANOMALY: 'dailyCostAnomalyAlerts',
-  COST_SUMMARY: 'monthlyCostSummary',
+  BUDGET_THRESHOLD: null, // Always delivered — email handled by external budget alert Lambda
+  COST_ANOMALY: null,     // Always delivered — email handled by external budget alert Lambda
+  COST_SUMMARY: null,     // Always delivered — email handled by external budget alert Lambda
   SECURITY_CRITICAL: 'criticalSecurityFindings',
   COMPLIANCE: 'complianceViolations',
   SECURITY_SCORE: 'securityScoreChanges',

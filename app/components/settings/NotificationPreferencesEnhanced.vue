@@ -9,34 +9,21 @@
           </div>
           <div>
             <h3 class="text-base font-semibold text-gray-900 dark:text-white">Budget Alerts</h3>
-            <p class="text-sm text-gray-500 dark:text-gray-400">In-browser and email notifications for cost thresholds and anomalies</p>
+            <p class="text-sm text-gray-500 dark:text-gray-400">In-app notifications for cost thresholds and anomalies</p>
           </div>
         </div>
       </template>
 
-      <div class="space-y-4">
-        <div class="flex items-center justify-between">
-          <div>
-            <div class="font-medium text-gray-900 dark:text-white">Budget Threshold Warnings</div>
-            <p class="text-sm text-gray-500 dark:text-gray-400">Alert when account exceeds 80%, 90%, or 100% of budget</p>
-          </div>
-          <UToggle v-model="prefs.budgetThresholdWarnings" />
-        </div>
-
-        <div class="flex items-center justify-between">
-          <div>
-            <div class="font-medium text-gray-900 dark:text-white">Daily Cost Anomaly Alerts</div>
-            <p class="text-sm text-gray-500 dark:text-gray-400">Detect and alert on unusual daily spending patterns</p>
-          </div>
-          <UToggle v-model="prefs.dailyCostAnomalyAlerts" />
-        </div>
-
-        <div class="flex items-center justify-between">
-          <div>
-            <div class="font-medium text-gray-900 dark:text-white">Monthly Cost Summary</div>
-            <p class="text-sm text-gray-500 dark:text-gray-400">Receive a monthly summary of your cloud spend</p>
-          </div>
-          <UToggle v-model="prefs.monthlyCostSummary" />
+      <div class="space-y-2">
+        <p class="text-sm text-gray-600 dark:text-gray-400">
+          Budget alert notifications appear automatically in your notification inbox when cost thresholds are triggered.
+        </p>
+        <div class="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+          <UIcon name="i-heroicons-envelope" class="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+          <p class="text-sm text-blue-700 dark:text-blue-300">
+            Budget alert emails are managed by the external alert system. Email recipients and thresholds are configured in
+            <NuxtLink to="/admin/costs/budget-alerts" class="underline font-medium">Admin &gt; Budget Alerts</NuxtLink>.
+          </p>
         </div>
       </div>
     </UCard>
@@ -269,9 +256,6 @@ const clearing = ref(false)
 const mutedUntil = ref<string | null>(null)
 
 const defaultPrefs = {
-  budgetThresholdWarnings: true,
-  dailyCostAnomalyAlerts: true,
-  monthlyCostSummary: true,
   criticalSecurityFindings: true,
   complianceViolations: true,
   securityScoreChanges: false,

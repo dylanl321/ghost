@@ -39,9 +39,9 @@ Categories classify notifications and control user preference routing, UI groupi
 
 | Category | Description | User Can Disable? | UI Group |
 |----------|-------------|-------------------|----------|
-| `BUDGET_THRESHOLD` | AWS budget overage/approaching alerts | Yes | Budget |
-| `COST_ANOMALY` | Unusual spending pattern detected | Yes | Budget |
-| `COST_SUMMARY` | Periodic cost summary | Yes | Budget |
+| `BUDGET_THRESHOLD` | AWS budget overage/approaching alerts | No (email via external Lambda) | Budget |
+| `COST_ANOMALY` | Unusual spending pattern detected | No (email via external Lambda) | Budget |
+| `COST_SUMMARY` | Periodic cost summary | No (email via external Lambda) | Budget |
 | `SECURITY_CRITICAL` | Critical security findings | Yes | Security |
 | `COMPLIANCE` | Compliance status changes | Yes | Security |
 | `SECURITY_SCORE` | Security score changes | Yes | Security |
