@@ -177,7 +177,7 @@
         </h2>
         <p class="text-sm text-amber-700 dark:text-amber-400 mb-3">
           {{ untaggedAccounts.length }} account{{ untaggedAccounts.length !== 1 ? 's have' : ' has' }} significant untagged costs for "{{ selectedTag }}".
-          Adding this tag to resources improves cost tracking and allocation.
+          Adding this tag to resources improves cost tracking and visibility.
         </p>
         <div class="space-y-2">
           <div
@@ -265,6 +265,9 @@
             <strong>Cost Allocation Tags</strong> are labels attached to AWS resources (like Project, Owner, or Environment).
             They must be activated in the AWS Billing Console before they appear in cost data.
             Higher tag coverage means better cost tracking and accountability.
+          </p>
+          <p class="mt-1">
+            Tag analysis uses <strong>billable</strong> cost data from AWS Cost Explorer. AWS Billing Conductor (proforma) does not support cost allocation tags.
           </p>
           <NuxtLink to="/support/docs?topic=cost-tags-guide" class="inline-flex items-center gap-1 mt-1 text-blue-600 dark:text-blue-300 hover:underline font-medium">
             Learn more about tag analysis

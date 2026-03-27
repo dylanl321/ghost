@@ -7,6 +7,7 @@ import { Cron } from 'croner'
 import { processScheduledReports } from '../utils/report-scheduler'
 import { cleanupStaleLocks, claimExecutionLock, releaseExecutionLock } from '../utils/execution-locks'
 import { logger } from '../utils/logger'
+import { markJobRunning, markJobComplete, logJobCompletion } from '../utils/job-tracker'
 
 const SCHEDULER_ENABLED = process.env.REPORT_SCHEDULER_ENABLED !== 'false'
 
@@ -52,6 +53,8 @@ export default defineNitroPlugin(async () => {
 
   // Run every minute to check for due reports
   schedulerJob = new Cron('* * * * *', async () => {
+    const start = performance.now()
+    markJobRunning('report-scheduler')
     try {
       const result = await processScheduledReports()
 
@@ -61,8 +64,14 @@ export default defineNitroPlugin(async () => {
           `${result.successful} successful, ${result.failed} failed`
         )
       }
+      logJobCompletion('report-scheduler', 'success', performance.now() - start, {
+        processed: result.processed, successful: result.successful, failed: result.failed,
+      })
     } catch (error) {
       logger.error('Error in scheduler cron job:', error)
+      logJobCompletion('report-scheduler', 'error', performance.now() - start)
+    } finally {
+      markJobComplete('report-scheduler')
     }
   })
 
@@ -99,9 +108,14 @@ export default defineNitroPlugin(async () => {
   // Nightly security summary pre-computation via Athena (3 AM UTC)
   securitySummaryJob = new Cron('0 3 * * *', async () => {
     const today = new Date().toISOString().split('T')[0]
+    const start = performance.now()
+    markJobRunning('security-summary-nightly')
     try {
       const locked = await claimExecutionLock('security-summary-nightly', today)
-      if (!locked) return // Another container is handling it
+      if (!locked) {
+        markJobComplete('security-summary-nightly')
+        return // Another container is handling it
+      }
 
       // Check if already computed recently (< 20 hours)
       const { getSecuritySummaryMetadata } = await import('../utils/security-summary-store')
@@ -109,20 +123,26 @@ export default defineNitroPlugin(async () => {
       if (meta && meta.ageMinutes < 20 * 60) {
         logger.info('[SecurityScheduler] Summary already fresh, skipping')
         await releaseExecutionLock('security-summary-nightly', today)
+        logJobCompletion('security-summary-nightly', 'success', performance.now() - start, { skipped: true })
+        markJobComplete('security-summary-nightly')
         return
       }
 
       logger.info('[SecurityScheduler] Starting nightly security summary computation...')
-      const start = Date.now()
+      const jobStart = Date.now()
       const { buildSecuritySummaryViaAthena } = await import('../utils/security-hub-athena')
       const { saveSecuritySummary } = await import('../utils/security-summary-store')
       const result = await buildSecuritySummaryViaAthena()
-      await saveSecuritySummary(result, { durationMs: Date.now() - start })
-      logger.info(`[SecurityScheduler] Nightly summary complete in ${Date.now() - start}ms`)
+      await saveSecuritySummary(result, { durationMs: Date.now() - jobStart })
+      logger.info(`[SecurityScheduler] Nightly summary complete in ${Date.now() - jobStart}ms`)
       await releaseExecutionLock('security-summary-nightly', today)
+      logJobCompletion('security-summary-nightly', 'success', performance.now() - start)
     } catch (error) {
       logger.error('[SecurityScheduler] Nightly security summary failed:', error)
       await releaseExecutionLock('security-summary-nightly', today).catch(() => {})
+      logJobCompletion('security-summary-nightly', 'error', performance.now() - start)
+    } finally {
+      markJobComplete('security-summary-nightly')
     }
   })
 
@@ -131,14 +151,21 @@ export default defineNitroPlugin(async () => {
   // Email digest delivery — every hour at :15
   digestJob = new Cron('15 * * * *', async () => {
     const hourKey = new Date().toISOString().substring(0, 13) // YYYY-MM-DDTHH
+    const start = performance.now()
+    markJobRunning('email-digest')
     try {
       const locked = await claimExecutionLock('email-digest', hourKey)
-      if (!locked) return // Another container is handling it
+      if (!locked) {
+        markJobComplete('email-digest')
+        return // Another container is handling it
+      }
 
       const { getConfigValue } = await import('../utils/site-config')
       const digestEnabled = await getConfigValue<boolean>('notifications.digestEnabled')
       if (digestEnabled === false) {
         await releaseExecutionLock('email-digest', hourKey)
+        logJobCompletion('email-digest', 'success', performance.now() - start, { skipped: true })
+        markJobComplete('email-digest')
         return
       }
 
@@ -151,9 +178,15 @@ export default defineNitroPlugin(async () => {
       }
 
       await releaseExecutionLock('email-digest', hourKey)
+      logJobCompletion('email-digest', 'success', performance.now() - start, {
+        processed: result.processed, successful: result.successful, failed: result.failed, skipped: result.skipped,
+      })
     } catch (error) {
       logger.error('[Digest] Hourly digest processing failed:', error)
       await releaseExecutionLock('email-digest', hourKey).catch(() => {})
+      logJobCompletion('email-digest', 'error', performance.now() - start)
+    } finally {
+      markJobComplete('email-digest')
     }
   })
 
@@ -162,9 +195,14 @@ export default defineNitroPlugin(async () => {
   // Budget alert notifier — every 15 minutes at :05, :20, :35, :50
   budgetAlertJob = new Cron('5,20,35,50 * * * *', async () => {
     const windowKey = new Date().toISOString().substring(0, 16) // YYYY-MM-DDTHH:MM
+    const start = performance.now()
+    markJobRunning('budget-alert-notifier')
     try {
       const locked = await claimExecutionLock('budget-alert-notifier', windowKey)
-      if (!locked) return // Another container is handling it
+      if (!locked) {
+        markJobComplete('budget-alert-notifier')
+        return // Another container is handling it
+      }
 
       logger.info('[BudgetAlertNotifier] Starting budget alert processing...')
       const { processRecentBudgetAlerts } = await import('../utils/budget-alert-notifier')
@@ -175,9 +213,15 @@ export default defineNitroPlugin(async () => {
       }
 
       await releaseExecutionLock('budget-alert-notifier', windowKey)
+      logJobCompletion('budget-alert-notifier', 'success', performance.now() - start, {
+        processed: result.processed, notified: result.notified, skipped: result.skipped,
+      })
     } catch (error) {
       logger.error('[BudgetAlertNotifier] Budget alert processing failed:', error)
       await releaseExecutionLock('budget-alert-notifier', windowKey).catch(() => {})
+      logJobCompletion('budget-alert-notifier', 'error', performance.now() - start)
+    } finally {
+      markJobComplete('budget-alert-notifier')
     }
   })
 

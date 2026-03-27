@@ -14,6 +14,16 @@
 
     <!-- Single account selected -->
     <div v-else class="space-y-6">
+      <!-- Billable data / chargeback disclaimer (always visible on tag tab) -->
+      <div class="flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2">
+        <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+        <p class="text-xs text-amber-700 dark:text-amber-300">
+          Tag analysis uses <strong>billable</strong> cost data. AWS Billing Conductor (proforma) does not support cost allocation tags.
+          This data is for directional insight only and <strong>should not be used for chargeback</strong>.
+          <NuxtLink to="/support/docs?topic=cost-tags-guide" class="underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-100">Learn more</NuxtLink>
+        </p>
+      </div>
+
       <!-- Section A: Tag Selector + Coverage Stats -->
       <div class="space-y-4">
         <div class="flex items-center gap-3 flex-wrap">
@@ -423,6 +433,9 @@ function exportBreakdownCSV() {
   lines.push(`# Tag Key: ${selectedTag.value}`)
   lines.push(`# Period: ${activePeriod.value}`)
   lines.push(`# Exported: ${new Date().toISOString()}`)
+  if (hasProforma) {
+    lines.push(`# Note: Proforma dollar amounts are estimates extrapolated from billable tag distribution. Not suitable for chargeback.`)
+  }
 
   const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
   const timestamp = new Date().toISOString().slice(0, 10)

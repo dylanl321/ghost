@@ -24,7 +24,7 @@
       <div v-if="showProforma" class="flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2 mb-3">
         <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
         <p class="text-xs text-amber-700 dark:text-amber-300">
-          Costs shown are <strong>estimates</strong> &mdash; billable tag distribution applied to your proforma total of <strong>{{ formatCostValue(totalCost * proformaRatio!) }}</strong>. Percentages are exact.
+          Costs shown are <strong>estimates</strong> &mdash; billable tag distribution applied to your proforma total of <strong>{{ formatCostValue(totalCost * proformaRatio!) }}</strong>. Percentages are exact. Not suitable for chargeback.
           <NuxtLink to="/support/docs?topic=cost-tags-guide" class="underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-100">Why estimated?</NuxtLink>
         </p>
       </div>

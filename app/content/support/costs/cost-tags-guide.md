@@ -118,6 +118,8 @@ To bridge this gap, GHOST **extrapolates proforma costs** by applying the percen
 - **Coverage % is unaffected** — the tagged vs. untagged ratio is the same regardless of proforma vs. billable
 - **Switch to billable mode** on the Cost Dashboard toggle to see exact billable costs per tag (without estimation)
 
+> **Important:** Tag-level proforma cost estimates are for directional insight only. They are extrapolated from billable percentages, not calculated by AWS Billing Conductor, and should **not** be used for chargeback or financial reconciliation. For chargeback, use proforma account-level totals, which are calculated directly by AWS Billing Conductor.
+
 When estimated proforma costs are shown, a note appears above the breakdown table explaining the extrapolation.
 
 ## Common Questions
@@ -140,7 +142,7 @@ Any user with access to the account can open the Tag Settings panel and configur
 
 ### Why do tag costs show as estimated?
 
-AWS Billing Conductor (which calculates proforma costs) does not support cost allocation tags. GHOST works around this by taking the tag percentage breakdown from billable costs and applying it to your proforma total. The resulting dollar amounts are estimates — marked with "(est.)" — while the percentages remain exact. To see exact costs per tag, switch the Cost Dashboard to billable mode.
+AWS Billing Conductor (which calculates proforma costs) does not support cost allocation tags. GHOST works around this by taking the tag percentage breakdown from billable costs and applying it to your proforma total. The resulting dollar amounts are estimates — marked with "(est.)" — while the percentages remain exact. To see exact costs per tag, switch the Cost Dashboard to billable mode. These tag-level estimates should not be used for chargeback; use proforma account-level totals for that purpose.
 
 ### Do tags affect my actual AWS bill?
 

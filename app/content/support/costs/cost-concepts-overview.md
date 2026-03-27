@@ -51,8 +51,10 @@ AWS Billing Conductor adjusts costs to distribute savings plan discounts back to
 |--------|----------|----------|
 | **Matches AWS invoice** | ✅ Yes | ❌ No |
 | **Shows savings discounts** | ❌ Only in master | ✅ Distributed |
-| **Used for chargeback** | ❌ No | ✅ Yes |
+| **Used for chargeback** | ❌ No | ✅ Yes (account-level totals)* |
 | **Best for** | Org-wide totals | Account-level tracking |
+
+*Proforma is used for chargeback at the **account level**. However, AWS Billing Conductor does not support cost allocation tags, so tag-level proforma breakdowns shown in Tag Analysis are estimates and should not be used for chargeback.
 
 **Example:** Account uses $1000 of resources. Billable shows $1000. Proforma shows $800 after savings plan discount allocation.
 
