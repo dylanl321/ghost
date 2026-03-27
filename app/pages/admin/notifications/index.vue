@@ -8,18 +8,24 @@
         <div class="p-2 bg-pink-100 dark:bg-pink-900/30 rounded-lg">
           <Icon name="i-heroicons-bell-alert" class="w-6 h-6 text-pink-600 dark:text-pink-400" />
         </div>
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">User Notifications</h1>
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Notification Center</h1>
+        <UBadge v-if="dryRunActive" color="yellow" variant="solid" size="sm">
+          <span class="flex items-center gap-1">
+            <UIcon name="i-heroicons-beaker" class="w-3 h-3" />
+            Dry-Run Active
+          </span>
+        </UBadge>
       </div>
-      <p class="text-gray-600 dark:text-gray-400">Manage user notification delivery, broadcasts, and system configuration</p>
+      <p class="text-gray-600 dark:text-gray-400">Monitor notification delivery, manage broadcasts, and configure the system</p>
     </div>
 
     <UTabs v-model="activeTab" :items="tabs" class="mb-6" />
 
     <div class="mt-6">
-      <UserNotificationsPanel v-if="activeTab === 0" />
-      <NotificationBroadcastPanel v-else-if="activeTab === 1" />
-      <NotificationConfigPanel v-else-if="activeTab === 2" />
-      <NotificationAnalyticsPanel v-else-if="activeTab === 3" />
+      <NotificationDashboardPanel v-if="activeTab === 0" />
+      <UserNotificationsPanel v-else-if="activeTab === 1" />
+      <NotificationBroadcastPanel v-else-if="activeTab === 2" />
+      <NotificationConfigPanel v-else-if="activeTab === 3" @dry-run-changed="checkDryRun" />
     </div>
   </div>
 </template>
@@ -29,20 +35,32 @@ definePageMeta({
   layout: 'admin',
   middleware: 'auth-permission',
   permission: 'admin',
-  title: 'User Notifications',
-  description: 'Manage user notification delivery, broadcasts, and system configuration'
+  title: 'Notification Center',
+  description: 'Monitor notification delivery, manage broadcasts, and configure the system'
 })
 
 const route = useRoute()
 const activeTab = ref(0)
-const tabNames = ['all', 'broadcasts', 'configuration', 'analytics']
+const tabNames = ['dashboard', 'all', 'broadcasts', 'configuration']
+const dryRunActive = ref(false)
 
 const tabs = [
+  { label: 'Dashboard', icon: 'i-heroicons-squares-2x2' },
   { label: 'All Notifications', icon: 'i-heroicons-inbox-stack' },
   { label: 'Broadcasts', icon: 'i-heroicons-megaphone' },
-  { label: 'Configuration', icon: 'i-heroicons-cog-6-tooth' },
-  { label: 'Analytics', icon: 'i-heroicons-chart-bar' }
+  { label: 'Configuration', icon: 'i-heroicons-cog-6-tooth' }
 ]
+
+async function checkDryRun() {
+  try {
+    const res = await $fetch<any>('/api/admin/user-notifications/config')
+    if (res?.success) {
+      dryRunActive.value = res.data.dryRunEnabled === true
+    }
+  } catch {
+    // ignore
+  }
+}
 
 onMounted(() => {
   const tabParam = route.query.tab as string | undefined
@@ -50,6 +68,7 @@ onMounted(() => {
     const idx = tabNames.indexOf(tabParam)
     if (idx !== -1) activeTab.value = idx
   }
+  checkDryRun()
 })
 
 watch(() => route.query.tab, (newTab) => {

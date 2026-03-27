@@ -20,6 +20,8 @@ export default defineEventHandler(async (event) => {
       digestEnabled?: boolean
       defaultDigestFrequency?: string
       defaultDigestHour?: number
+      dryRunEnabled?: boolean
+      dryRunRedirectTo?: string
     }>(event)
 
     const updates: string[] = []
@@ -42,6 +44,16 @@ export default defineEventHandler(async (event) => {
     if (body.defaultDigestHour !== undefined) {
       await updateSiteConfig('notifications.defaultDigestHour', body.defaultDigestHour, adminId)
       updates.push('notifications.defaultDigestHour')
+    }
+
+    if (body.dryRunEnabled !== undefined) {
+      await updateSiteConfig('notifications.dryRun.enabled', body.dryRunEnabled, adminId)
+      updates.push('notifications.dryRun.enabled')
+    }
+
+    if (body.dryRunRedirectTo !== undefined) {
+      await updateSiteConfig('notifications.dryRun.redirectTo', body.dryRunRedirectTo, adminId)
+      updates.push('notifications.dryRun.redirectTo')
     }
 
     return {

@@ -66,6 +66,27 @@ export async function sendUserNotification(
     return { success: true }
   }
 
+  // Dry-run mode: redirect all notifications to a single admin email
+  const dryRunEnabled = await getConfigValue<boolean>('notifications.dryRun.enabled')
+  if (dryRunEnabled) {
+    const redirectTo = await getConfigValue<string>('notifications.dryRun.redirectTo')
+    if (redirectTo && options.userId !== redirectTo) {
+      logger.info('Dry-run mode: redirecting notification', {
+        originalUserId: options.userId,
+        redirectTo,
+        category: options.category
+      })
+      options = {
+        ...options,
+        metadata: {
+          ...options.metadata,
+          dryRunOriginalUserId: options.userId
+        },
+        userId: redirectTo
+      }
+    }
+  }
+
   const notificationId = generateSortableId()
   const now = new Date().toISOString()
   const ttl = Math.floor(Date.now() / 1000) + (90 * 24 * 60 * 60) // 90 days

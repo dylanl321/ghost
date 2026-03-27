@@ -15,6 +15,8 @@ export default defineEventHandler(async (event) => {
     const digestEnabled = await getConfigValue<boolean>('notifications.digestEnabled')
     const defaultFrequency = await getConfigValue<string>('notifications.defaultDigestFrequency')
     const defaultHour = await getConfigValue<number>('notifications.defaultDigestHour')
+    const dryRunEnabled = await getConfigValue<boolean>('notifications.dryRun.enabled')
+    const dryRunRedirectTo = await getConfigValue<string>('notifications.dryRun.redirectTo')
 
     return {
       success: true,
@@ -22,7 +24,9 @@ export default defineEventHandler(async (event) => {
         notificationsEnabled: notificationsEnabled !== false, // Default to true
         digestEnabled: digestEnabled !== false, // Default to true
         defaultDigestFrequency: defaultFrequency || 'daily',
-        defaultDigestHour: defaultHour ?? 8
+        defaultDigestHour: defaultHour ?? 8,
+        dryRunEnabled: dryRunEnabled === true,
+        dryRunRedirectTo: dryRunRedirectTo || ''
       }
     }
   } catch (error: any) {
