@@ -671,11 +671,11 @@ resource "aws_dynamodb_table" "user_notifications" {
     projection_type = "ALL"
   }
 
-  # GSI for filtering by category sorted by time
+  # GSI for filtering by category per user
   global_secondary_index {
     name            = "CategoryIndex"
     hash_key        = "userId"
-    range_key       = "createdAt"
+    range_key       = "category"
     projection_type = "ALL"
   }
 
