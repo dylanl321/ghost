@@ -82,6 +82,8 @@ export interface SendUserNotificationOptions {
   actionLabel?: string
   metadata?: Record<string, any>
   dedupeKey?: string
+  /** Skip all GHOST email routing (immediate + digest). Use when an external system handles emails. */
+  skipEmail?: boolean
 }
 
 // ---------------------------------------------------------------------------

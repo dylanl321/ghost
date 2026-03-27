@@ -77,10 +77,13 @@ export async function sendUserNotification(
     let emailSent = true // Default: skip email (will be set to false if digest needed)
     let shouldSendImmediateEmail = false
 
-    const prefKey = CATEGORY_PREFERENCE_MAP[options.category]
-
-    if (prefKey !== null) {
+    if (options.skipEmail) {
+      // External system handles email — inbox + SSE only
+      emailSent = true
+      shouldSendImmediateEmail = false
+    } else if (CATEGORY_PREFERENCE_MAP[options.category] !== null) {
       // Category has a preference toggle — check if user has it enabled
+      const prefKey = CATEGORY_PREFERENCE_MAP[options.category]!
       try {
         const userPrefs = await getUserPreferences(options.userId)
         const notifPrefs = userPrefs.preferences?.notificationPreferences || {}

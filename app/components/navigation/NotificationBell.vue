@@ -155,14 +155,36 @@
                   Warning
                 </span>
               </div>
-              <UButton
-                v-if="notif.actionUrl"
-                variant="link"
-                size="xs"
-                :label="notif.actionLabel || 'View details'"
-                class="mt-1 -ml-2"
-                @click.stop="navigateToAction(notif)"
-              />
+              <div class="flex items-center gap-2 mt-1">
+                <UButton
+                  v-if="notif.actionUrl"
+                  variant="link"
+                  size="xs"
+                  :label="notif.actionLabel || 'View details'"
+                  class="-ml-2"
+                  @click.stop="navigateToAction(notif)"
+                />
+                <UButton
+                  v-if="notif.metadata?.emailBodyS3Uri"
+                  variant="link"
+                  size="xs"
+                  color="gray"
+                  icon="i-heroicons-envelope"
+                  label="View Email"
+                  @click.stop="viewAlertEmail(notif)"
+                />
+              </div>
+              <span
+                v-if="notif.metadata?.lambdaDeliveryStatus"
+                class="text-xs mt-0.5 inline-block"
+                :class="{
+                  'text-green-600 dark:text-green-400': ['SUCCESS', 'SENT'].includes(notif.metadata.lambdaDeliveryStatus),
+                  'text-red-600 dark:text-red-400': notif.metadata.lambdaDeliveryStatus === 'FAILED',
+                  'text-yellow-600 dark:text-yellow-400': notif.metadata.lambdaDeliveryStatus === 'PENDING'
+                }"
+              >
+                Email {{ ['SUCCESS', 'SENT'].includes(notif.metadata.lambdaDeliveryStatus) ? 'delivered' : notif.metadata.lambdaDeliveryStatus.toLowerCase() }}
+              </span>
             </div>
           </div>
 
@@ -181,6 +203,34 @@
         </div>
       </div>
     </USlideover>
+
+    <!-- Email Preview Modal -->
+    <UModal v-model="showEmailModal" :ui="{ width: 'max-w-3xl' }">
+      <UCard>
+        <template #header>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <UIcon name="i-heroicons-envelope" class="w-5 h-5 text-gray-500" />
+              <h3 class="font-semibold text-gray-900 dark:text-white">{{ emailPreviewSubject || 'Budget Alert Email' }}</h3>
+            </div>
+            <UButton variant="ghost" color="gray" icon="i-heroicons-x-mark" @click="showEmailModal = false" />
+          </div>
+        </template>
+        <div v-if="loadingEmailPreview" class="flex justify-center py-12">
+          <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-gray-400" />
+        </div>
+        <iframe
+          v-else-if="emailPreviewHtml"
+          :srcdoc="emailPreviewHtml"
+          class="w-full border-0 rounded"
+          style="min-height: 500px;"
+          sandbox="allow-same-origin"
+        />
+        <p v-else class="text-sm text-gray-500 py-8 text-center">
+          Email content is no longer available.
+        </p>
+      </UCard>
+    </UModal>
   </div>
 </template>
 
@@ -272,6 +322,39 @@ function navigateToAction(notif: UserNotification) {
   closePanel()
   if (notif.actionUrl) {
     router.push(notif.actionUrl)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Email preview (for budget alerts sent by external Lambda)
+// ---------------------------------------------------------------------------
+
+const showEmailModal = ref(false)
+const emailPreviewHtml = ref<string | null>(null)
+const emailPreviewSubject = ref<string | null>(null)
+const loadingEmailPreview = ref(false)
+
+async function viewAlertEmail(notif: UserNotification) {
+  if (!notif.metadata?.alertId || !notif.metadata?.accountId) return
+
+  loadingEmailPreview.value = true
+  emailPreviewHtml.value = null
+  emailPreviewSubject.value = null
+  showEmailModal.value = true
+
+  try {
+    const res = await $fetch<{ success: boolean; data: { html: string; subject: string } }>(
+      `/api/alerts/${notif.metadata.alertId}/email`,
+      { params: { accountId: notif.metadata.accountId } }
+    )
+    if (res.success && res.data?.html) {
+      emailPreviewHtml.value = res.data.html
+      emailPreviewSubject.value = res.data.subject
+    }
+  } catch {
+    emailPreviewHtml.value = null
+  } finally {
+    loadingEmailPreview.value = false
   }
 }
 </script>

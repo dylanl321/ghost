@@ -130,7 +130,8 @@ await sendUserNotification({
   actionUrl: '/settings/reports',    // Optional: link to relevant page
   actionLabel: 'View Reports',       // Optional: button text
   metadata: { reportId: '123' },     // Optional: arbitrary context
-  dedupeKey: 'report-123'            // Optional: prevents duplicates
+  dedupeKey: 'report-123',           // Optional: prevents duplicates
+  skipEmail: false                   // Optional: skip all GHOST email routing
 })
 ```
 
@@ -140,8 +141,8 @@ await sendUserNotification({
 1. Checks `notifications.enabled` site config kill switch
 2. If `dedupeKey` provided, queries for existing notification with same key — returns early if found
 3. Generates ULID-based `notificationId` and sets 90-day TTL
-4. Checks user preferences for this category
-5. Routes email: immediate if critical + pref enabled, digest queue if pref enabled, skip otherwise
+4. If `skipEmail` is true, skips all email routing (inbox + SSE only)
+5. Otherwise, checks user preferences and routes email: immediate if critical + pref enabled, digest queue if pref enabled, skip otherwise
 6. Writes to DynamoDB
 7. Pushes to SSE via `notificationEmitter.emitNotification()`
 8. Sends immediate email if applicable
@@ -240,16 +241,18 @@ Guard:       Transition check (job.status was non-terminal, now terminal)
 
 **Location:** `server/utils/budget-alert-notifier.ts`
 
-Cron job (every 15 minutes) polls the budget alert DynamoDB table with a 30-minute lookback window.
+Cron job (every 15 minutes) polls the budget alert DynamoDB table with a 30-minute lookback window. Uses `skipEmail: true` because an external Lambda (`budget-alert-system-prod`) is the sole owner of budget email delivery — GHOST never sends emails about costs or budgets.
 
 ```
 Category:    BUDGET_THRESHOLD
 Severity:    Mapped from alert_level (CRITICAL/ESCALATION→critical, WARNING→warning, INFO→info)
 Action:      /costs?account={account_id} → "View Cost Details"
-Metadata:    { alertId, accountId, accountName, alertLevel, alertType, actualSpend, budget, projectedSpend }
+skipEmail:   true (external Lambda handles all email delivery)
+Metadata:    { alertId, accountId, accountName, alertLevel, alertType, actualSpend, budget, projectedSpend, emailBodyS3Uri, lambdaDeliveryStatus, lambdaSesMessageId }
 DedupeKey:   budget-alert-{alert_id}
 Guard:       dedupeKey (overlapping lookback windows)
 Recipients:  Each email in alert.recipients_to or alert.recipients
+UI:          "View Email" button fetches Lambda's HTML from S3 via /api/alerts/[alertId]/email
 ```
 
 ### 4. Feedback Confirmation

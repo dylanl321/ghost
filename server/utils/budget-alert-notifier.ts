@@ -116,6 +116,7 @@ export async function processRecentBudgetAlerts(): Promise<{ processed: number; 
             severity,
             actionUrl: `/costs?account=${alert.account_id}`,
             actionLabel: 'View Cost Details',
+            skipEmail: true, // External Lambda handles all budget email delivery
             metadata: {
               alertId: alert.alert_id,
               accountId: alert.account_id,
@@ -124,7 +125,10 @@ export async function processRecentBudgetAlerts(): Promise<{ processed: number; 
               alertType: alert.alert_type,
               actualSpend: alert.actual_spend,
               budget: alert.budget,
-              projectedSpend: alert.projected_spend
+              projectedSpend: alert.projected_spend,
+              emailBodyS3Uri: alert.email_body_s3_uri || null,
+              lambdaDeliveryStatus: alert.delivery_status,
+              lambdaSesMessageId: alert.ses_message_id || null,
             },
             dedupeKey: `budget-alert-${alert.alert_id}`
           })
