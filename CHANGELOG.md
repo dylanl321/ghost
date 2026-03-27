@@ -5,6 +5,23 @@ All notable changes to GHOST are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.0] - 2026-03-27
+<!-- highlights: Real-Time Notifications, SSE Push, Budget Alerts -->
+
+### New Features
+- Real-time notification delivery via Server-Sent Events — notifications now appear instantly without waiting for the 30-second poll cycle
+- Budget alert notifications automatically surface AWS budget threshold breaches to affected recipients every 15 minutes
+- Report completion notifications alert you when scheduled reports finish generating or fail
+- AI chat completion notifications let you know when long-running async analyses are ready
+- Feedback submission now sends an in-app confirmation so you know your report was received
+
+### Improvements
+- Notification deduplication now correctly prevents duplicate alerts when the same event is processed multiple times
+- SSE connections gracefully fall back to polling with exponential backoff reconnect when the real-time stream is interrupted
+- Polling interval automatically slows from 30s to 60s while the SSE connection is active, reducing unnecessary server load
+
+---
+
 ## [1.15.0] - 2026-03-23
 <!-- highlights: Tag Analysis, Estimated Proforma Costs -->
 

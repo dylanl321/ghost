@@ -82,6 +82,9 @@
             class="transition-all duration-200 opacity-70 hover:opacity-100"
           />
 
+          <!-- Notification Bell -->
+          <NotificationBell />
+
           <div class="relative">
             <UDropdown
               :items="userMenuItems"

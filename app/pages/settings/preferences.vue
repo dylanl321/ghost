@@ -172,20 +172,24 @@
       </UCard>
 
       <!-- Notifications Section -->
-      <div>
-        <div class="flex items-center gap-3 mb-4">
-          <div class="p-2 rounded-lg bg-pink-50 dark:bg-pink-900/20">
-            <UIcon name="i-heroicons-bell" class="w-5 h-5 text-pink-600 dark:text-pink-400" />
+      <NuxtLink to="/settings/notifications">
+        <UCard class="hover:shadow-lg transition-shadow cursor-pointer group">
+          <div class="flex items-center gap-4">
+            <div class="p-3 rounded-lg bg-pink-50 dark:bg-pink-900/20 text-pink-600 dark:text-pink-400 group-hover:scale-110 transition-transform">
+              <UIcon name="i-heroicons-bell" class="w-6 h-6" />
+            </div>
+            <div class="flex-1">
+              <h3 class="font-semibold text-gray-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                Notification Settings
+              </h3>
+              <p class="text-sm text-gray-500 dark:text-gray-400">
+                Manage notification delivery, email digest, mute, and category preferences.
+              </p>
+            </div>
+            <UIcon name="i-heroicons-chevron-right" class="w-5 h-5 text-gray-400" />
           </div>
-          <div>
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Notifications</h2>
-            <p class="text-sm text-gray-500 dark:text-gray-400">
-              Manage your notification preferences
-            </p>
-          </div>
-        </div>
-        <NotificationPreferences />
-      </div>
+        </UCard>
+      </NuxtLink>
     </div>
   </div>
 </template>

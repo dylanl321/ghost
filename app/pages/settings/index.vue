@@ -79,6 +79,29 @@
         </UCard>
       </NuxtLink>
 
+      <!-- Notifications Card -->
+      <NuxtLink to="/settings/notifications">
+        <UCard class="h-full hover:shadow-lg transition-shadow cursor-pointer group">
+          <div class="flex items-start gap-4">
+            <div class="p-3 rounded-lg bg-pink-50 dark:bg-pink-900/20 text-pink-600 dark:text-pink-400 group-hover:scale-110 transition-transform">
+              <UIcon name="i-heroicons-bell" class="w-6 h-6" />
+            </div>
+            <div class="flex-1">
+              <h3 class="font-semibold text-gray-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                Notifications
+              </h3>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Manage notification delivery, email digest settings, and view history.
+              </p>
+              <div class="mt-3 flex items-center gap-2 text-sm text-gray-400 dark:text-gray-500">
+                <UIcon name="i-heroicons-bell-alert" class="w-4 h-4" />
+                <span>Digest, mute, and category preferences</span>
+              </div>
+            </div>
+          </div>
+        </UCard>
+      </NuxtLink>
+
       <!-- Profile Link Card -->
       <NuxtLink to="/profile">
         <UCard class="h-full hover:shadow-lg transition-shadow cursor-pointer group">

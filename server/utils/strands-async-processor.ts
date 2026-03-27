@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { logger } from './logger'
 import { getStrandsConfig, StrandsClientError } from './strands-client'
 import { putItem, getItem, updateItem } from './dynamodb'
+import { sendUserNotification } from './notification-service'
 import { getTableName, getTableEnvironment, getTableAccountId } from '../lib/dynamodb-config'
 import type {
   AsyncChatJob,
@@ -365,6 +366,25 @@ export async function pollJobStatus(jobId: string, userId: string): Promise<Asyn
       progress: updatedJob.progress,
       progressPercent: updatedJob.progressPercent
     })
+
+    // Send notification on terminal status transition (not on cached result returns)
+    if ((newStatus === 'complete' || newStatus === 'error')
+        && job.status !== 'complete' && job.status !== 'error') {
+      const isComplete = newStatus === 'complete'
+      sendUserNotification({
+        userId: job.userId,
+        category: 'CHAT_COMPLETE',
+        title: isComplete ? 'Your AI analysis is ready' : 'AI analysis failed',
+        body: isComplete
+          ? `Analysis completed with ${updatedJob.toolsCalled?.length || 0} tool(s) called`
+          : `Error: ${updatedJob.errorMessage || 'Unknown error'}`,
+        severity: isComplete ? 'info' : 'warning',
+        actionUrl: '/chat',
+        actionLabel: 'View Result',
+        metadata: { jobId: job.jobId, toolsCalled: updatedJob.toolsCalled },
+        dedupeKey: `chat-job-${job.jobId}`
+      }).catch(err => logger.warn('[Async Processor] Failed to send completion notification:', err))
+    }
 
     return updatedJob
 

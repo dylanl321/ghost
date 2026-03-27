@@ -349,6 +349,18 @@ const categories = [
     ]
   },
   {
+    id: 'notifications',
+    label: 'Notifications',
+    icon: 'i-heroicons-bell-alert',
+    to: '/admin/notifications',
+    children: [
+      { label: 'All Notifications', icon: 'i-heroicons-inbox-stack', to: '/admin/notifications?tab=all' },
+      { label: 'Broadcasts', icon: 'i-heroicons-megaphone', to: '/admin/notifications?tab=broadcasts' },
+      { label: 'Configuration', icon: 'i-heroicons-cog-6-tooth', to: '/admin/notifications?tab=configuration' },
+      { label: 'Analytics', icon: 'i-heroicons-chart-bar', to: '/admin/notifications?tab=analytics' }
+    ]
+  },
+  {
     id: 'costs',
     label: 'Cost Management',
     icon: 'i-heroicons-currency-dollar',

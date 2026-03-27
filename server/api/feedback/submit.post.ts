@@ -4,6 +4,7 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { logger } from '../../utils/logger'
 import { sendAdminNotification, NotificationType } from '../../utils/admin-notifications'
+import { sendUserNotification } from '../../utils/notification-service'
 
 const region = 'us-gov-west-1'
 const deploymentAccountId = '461760157232'
@@ -143,6 +144,15 @@ export default defineEventHandler(async (event) => {
       // Log error but don't fail the feedback submission
       logger.error('Failed to send admin notification for feedback:', notificationError)
     }
+
+    // Send confirmation notification to the user
+    sendUserNotification({
+      userId: reporter_email,
+      category: 'SYSTEM',
+      title: 'Feedback received',
+      body: `Your ${type.toLowerCase()} has been submitted. Thank you!`,
+      severity: 'info'
+    }).catch(() => {})
 
     const metadata = { responseTimeMs: Date.now() - startTime }
 

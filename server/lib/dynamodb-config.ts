@@ -40,6 +40,8 @@ export interface DynamoDBConfig {
   budgetAlerts: DynamoDBTableConfig
   budgetAlertConfig: DynamoDBTableConfig
   costTagConfig: DynamoDBTableConfig
+  userNotifications: DynamoDBTableConfig
+  notificationBroadcasts: DynamoDBTableConfig
 }
 
 // -----------------------------------------------------------------------------
@@ -245,6 +247,18 @@ function loadFromEnvironment(): DynamoDBConfig {
     },
     costTagConfig: {
       tableName: process.env.COST_TAG_CONFIG_TABLE || 'ghost-cost-tag-config',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
+    },
+    userNotifications: {
+      tableName: process.env.USER_NOTIFICATIONS_TABLE || 'ghost-user-notifications',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
+    },
+    notificationBroadcasts: {
+      tableName: process.env.NOTIFICATION_BROADCASTS_TABLE || 'ghost-notification-broadcasts',
       environment: 'govcloud',
       region: govCloudRegion,
       accountId: deploymentAccountId
