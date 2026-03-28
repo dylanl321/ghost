@@ -33,6 +33,11 @@
           <ShortcutRow :keys="['g', 'e']" label="Explorer" />
           <ShortcutRow :keys="['g', 's']" label="Security" />
           <ShortcutRow :keys="['g', 'a']" label="Admin" />
+          <ShortcutRow :keys="['g', 'o']" label="Org Chart" />
+          <ShortcutRow :keys="['g', 'r']" label="Reports" />
+          <ShortcutRow :keys="['g', 'h']" label="AI Chat" />
+          <ShortcutRow :keys="['g', 'p']" label="Profile" />
+          <ShortcutRow :keys="['g', 'l']" label="Changelog" />
         </div>
       </div>
     </div>

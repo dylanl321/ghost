@@ -42,7 +42,7 @@
           <!-- Left: GHOST Branding -->
           <div class="flex items-center gap-3">
             <div class="flex items-center gap-2">
-              <UIcon name="i-fa6-solid-ghost" class="h-4 w-4 text-emerald-400" />
+              <UIcon name="i-fa6-solid-ghost" class="h-4 w-4 text-emerald-400" data-ghost-footer />
               <span class="font-medium text-gray-900 dark:text-gray-300">GHOST</span>
             </div>
             <span class="text-gray-600 dark:text-gray-500">|</span>

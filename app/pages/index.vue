@@ -277,6 +277,11 @@
               v-else-if="section.id === 'quickChat'"
               :display-style="section.displayStyle || 'half'"
             />
+
+            <DashboardCommandPalette
+              v-else-if="section.id === 'commandPalette'"
+              :display-style="section.displayStyle || 'third'"
+            />
           </div>
         </template>
       </div>

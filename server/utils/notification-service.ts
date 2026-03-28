@@ -163,7 +163,7 @@ export async function sendUserNotification(
         accountId
       )
       if (existing.count > 0) {
-        return { success: true, notificationId: existing.items[0].notificationId }
+        return { success: true, notificationId: existing.items[0].notificationId, deduplicated: true }
       }
     }
 

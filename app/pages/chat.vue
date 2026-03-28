@@ -242,6 +242,13 @@ onMounted(async () => {
     await threadsStore.loadThread(threadsStore.activeThreadId)
   }
   // Note: If no active thread, one will be auto-created when the user sends their first message
+
+  // Pre-fill input from command palette "Ask AI" routing (?q= query param)
+  const route = useRoute()
+  const prefillQuery = route.query.q as string | undefined
+  if (prefillQuery?.trim()) {
+    chatUI.inputValue.value = prefillQuery.trim()
+  }
 })
 
 // Handle thread selection - use chatUI to properly handle callback registration for active jobs

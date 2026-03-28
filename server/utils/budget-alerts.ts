@@ -245,20 +245,39 @@ export async function getAlertsByMonth(
     throw new Error('Invalid month format. Use YYYY-MM format.')
   }
 
-  // Build filter expression from options
+  // Build filter expression from options — but exclude dateFrom/dateTo since
+  // created_at is the sort key of the month-index GSI and must be in KeyConditionExpression
+  const optionsWithoutDates = { ...options, dateFrom: undefined, dateTo: undefined }
   const { filterExpression, expressionAttributeNames = {}, expressionAttributeValues = {} } =
-    buildFilterExpression(options)
+    buildFilterExpression(optionsWithoutDates)
 
   // Add month to expression values
   expressionAttributeValues[':month'] = month
+
+  // Build key condition — created_at is the sort key of month-index GSI
+  let keyCondition = '#month = :month'
+  if (options.dateFrom && options.dateTo) {
+    keyCondition += ' AND #created_at BETWEEN :date_from AND :date_to'
+    expressionAttributeNames['#created_at'] = 'created_at'
+    expressionAttributeValues[':date_from'] = options.dateFrom
+    expressionAttributeValues[':date_to'] = options.dateTo
+  } else if (options.dateFrom) {
+    keyCondition += ' AND #created_at >= :date_from'
+    expressionAttributeNames['#created_at'] = 'created_at'
+    expressionAttributeValues[':date_from'] = options.dateFrom
+  } else if (options.dateTo) {
+    keyCondition += ' AND #created_at <= :date_to'
+    expressionAttributeNames['#created_at'] = 'created_at'
+    expressionAttributeValues[':date_to'] = options.dateTo
+  }
 
   try {
     const result = await queryItems(
       {
         tableName: BUDGET_ALERTS_TABLE,
         indexName: BUDGET_ALERTS_INDEXES.MONTH_INDEX,
-        queryExpression: '#month = :month',
-        filterExpression,
+        queryExpression: keyCondition,
+        filterExpression: filterExpression || undefined,
         expressionAttributeNames: {
           '#month': 'month',
           ...expressionAttributeNames

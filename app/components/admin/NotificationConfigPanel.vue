@@ -119,6 +119,121 @@
         </UButton>
       </div>
     </UCard>
+    <!-- Backfill Budget Notifications -->
+    <UCard>
+      <template #header>
+        <div class="flex items-center gap-2">
+          <Icon name="i-heroicons-arrow-path" class="w-5 h-5 text-gray-500" />
+          <h3 class="text-lg font-semibold">Backfill Budget Notifications</h3>
+        </div>
+      </template>
+
+      <div class="space-y-4">
+        <p class="text-sm text-gray-500">
+          Import historical budget alerts from the external alert system into the in-app notification inbox.
+          Uses deduplication — safe to run multiple times.
+        </p>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Months Back</label>
+            <USelectMenu v-model="backfillForm.months" :options="backfillMonthOptions" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Limit Per Month</label>
+            <USelectMenu v-model="backfillForm.limitPerMonth" :options="backfillLimitOptions" />
+          </div>
+        </div>
+
+        <div class="flex gap-3">
+          <UButton
+            color="gray"
+            variant="solid"
+            icon="i-heroicons-eye"
+            @click="runBackfill(true)"
+            :loading="backfilling"
+          >
+            Preview
+          </UButton>
+          <UButton
+            color="primary"
+            icon="i-heroicons-arrow-path"
+            @click="runBackfill(false)"
+            :loading="backfilling"
+          >
+            Run Backfill
+          </UButton>
+        </div>
+
+        <!-- Results -->
+        <div v-if="backfillResult" class="space-y-3">
+          <div
+            class="p-3 rounded-lg text-sm"
+            :class="backfillResult.dryRun ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800' : 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'"
+          >
+            <p class="font-medium" :class="backfillResult.dryRun ? 'text-blue-800 dark:text-blue-300' : 'text-green-800 dark:text-green-300'">
+              {{ backfillResult.dryRun ? 'Preview Results' : 'Backfill Complete' }}
+            </p>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2 text-xs">
+              <div>
+                <span class="text-gray-500">Alerts Found</span>
+                <p class="font-bold text-gray-900 dark:text-white">{{ backfillResult.totalAlerts }}</p>
+              </div>
+              <div>
+                <span class="text-gray-500">{{ backfillResult.dryRun ? 'Would Create' : 'Created' }}</span>
+                <p class="font-bold text-green-600">{{ backfillResult.notificationsCreated }}</p>
+              </div>
+              <div>
+                <span class="text-gray-500">Duplicates</span>
+                <p class="font-bold text-yellow-600">{{ backfillResult.duplicatesSkipped }}</p>
+              </div>
+              <div>
+                <span class="text-gray-500">Skipped</span>
+                <p class="font-bold text-gray-500">{{ backfillResult.alertsSkipped }}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Preview table -->
+          <div v-if="backfillResult.dryRun && backfillResult.preview?.length" class="max-h-64 overflow-y-auto">
+            <table class="w-full text-xs">
+              <thead class="sticky top-0 bg-gray-50 dark:bg-gray-800">
+                <tr>
+                  <th class="text-left p-1.5">Account</th>
+                  <th class="text-left p-1.5">Level</th>
+                  <th class="text-left p-1.5">Recipients</th>
+                  <th class="text-left p-1.5">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in backfillResult.preview" :key="item.alertId" class="border-t border-gray-100 dark:border-gray-800">
+                  <td class="p-1.5 font-medium">{{ item.account }}</td>
+                  <td class="p-1.5">
+                    <UBadge
+                      :color="item.level === 'CRITICAL' || item.level === 'ESCALATION' ? 'red' : item.level === 'WARNING' ? 'yellow' : 'gray'"
+                      size="xs"
+                    >
+                      {{ item.level }}
+                    </UBadge>
+                  </td>
+                  <td class="p-1.5 text-gray-500">{{ item.recipients.join(', ') }}</td>
+                  <td class="p-1.5 text-gray-400">{{ new Date(item.date).toLocaleDateString() }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Per-month breakdown -->
+          <div v-if="!backfillResult.dryRun && backfillResult.perMonth?.length" class="text-xs">
+            <p class="font-medium text-gray-700 dark:text-gray-300 mb-1">Per Month:</p>
+            <div v-for="m in backfillResult.perMonth" :key="m.month" class="flex items-center gap-2 text-gray-500">
+              <span class="w-16 font-medium">{{ m.month }}</span>
+              <span>{{ m.alerts }} alerts → {{ m.created }} created, {{ m.dupes }} dupes, {{ m.skipped }} skipped</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </UCard>
   </div>
 </template>
 
@@ -127,6 +242,8 @@ const emit = defineEmits(['dry-run-changed'])
 const toast = useToast()
 const loading = ref(false)
 const sendingTest = ref(false)
+const backfilling = ref(false)
+const backfillResult = ref<any>(null)
 
 const config = reactive({
   notificationsEnabled: true,
@@ -142,6 +259,54 @@ const testForm = reactive({
   body: 'This is a test notification sent from the admin panel.',
   severity: 'info'
 })
+
+const backfillForm = reactive({
+  months: 3,
+  limitPerMonth: 200
+})
+
+const backfillMonthOptions = [
+  { label: '1 month', value: 1 },
+  { label: '2 months', value: 2 },
+  { label: '3 months', value: 3 },
+  { label: '6 months', value: 6 },
+  { label: '12 months', value: 12 }
+]
+
+const backfillLimitOptions = [
+  { label: '50', value: 50 },
+  { label: '100', value: 100 },
+  { label: '200', value: 200 },
+  { label: '500', value: 500 }
+]
+
+async function runBackfill(dryRun: boolean) {
+  backfilling.value = true
+  backfillResult.value = null
+  try {
+    const result = await $fetch('/api/admin/user-notifications/backfill-budget', {
+      method: 'POST',
+      body: {
+        months: backfillForm.months,
+        limitPerMonth: backfillForm.limitPerMonth,
+        dryRun
+      }
+    }) as any
+
+    if (result?.success) {
+      backfillResult.value = result.data
+      toast.add({
+        title: dryRun ? 'Preview complete' : 'Backfill complete',
+        description: `${result.data.notificationsCreated} notifications ${dryRun ? 'would be' : ''} created`,
+        color: 'green'
+      })
+    }
+  } catch (err: any) {
+    toast.add({ title: 'Backfill failed', description: err.message, color: 'red' })
+  } finally {
+    backfilling.value = false
+  }
+}
 
 const frequencyOptions = [
   { label: 'Daily', value: 'daily' },

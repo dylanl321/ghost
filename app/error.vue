@@ -37,6 +37,116 @@ const errorConfig = computed(() => {
 const handleGoHome = () => {
   clearError({ redirect: "/" });
 };
+
+// Ghost Catcher Easter Egg
+const ghostClickCount = ref(0);
+const gameActive = ref(false);
+const gameScore = ref(0);
+const gameMessage = ref("");
+const ghostPosition = ref({ x: 50, y: 50 });
+const showResult = ref(false);
+const timerStarted = ref(false);
+let gameTimer: ReturnType<typeof setTimeout> | null = null;
+let moveTimer: ReturnType<typeof setInterval> | null = null;
+
+function onGhostIconClick() {
+  if (gameActive.value) return;
+  ghostClickCount.value++;
+  if (ghostClickCount.value >= 5) {
+    startGame();
+  }
+}
+
+function startGame() {
+  gameActive.value = true;
+  gameScore.value = 0;
+  showResult.value = false;
+  gameMessage.value = "";
+  timerStarted.value = false;
+  console.log(
+    "%c🎮 Ghost Catcher activated!",
+    "color: #f59e0b; font-size: 14px;"
+  );
+  moveGhost();
+  startMoveTimer();
+  gameTimer = setTimeout(endGame, 15000);
+  nextTick(() => {
+    timerStarted.value = true;
+  });
+}
+
+function moveGhost() {
+  ghostPosition.value = {
+    x: Math.random() * 70 + 10,
+    y: Math.random() * 60 + 15,
+  };
+}
+
+function startMoveTimer() {
+  if (moveTimer) clearInterval(moveTimer);
+  const interval = Math.max(500, 1200 - gameScore.value * 50);
+  moveTimer = setInterval(moveGhost, interval);
+}
+
+function catchGhost() {
+  if (!gameActive.value) return;
+  gameScore.value++;
+  moveGhost();
+  startMoveTimer();
+}
+
+function endGame() {
+  gameActive.value = false;
+  timerStarted.value = false;
+  if (moveTimer) {
+    clearInterval(moveTimer);
+    moveTimer = null;
+  }
+  if (gameTimer) {
+    clearTimeout(gameTimer);
+    gameTimer = null;
+  }
+
+  const score = gameScore.value;
+  let highScore = 0;
+  try {
+    highScore = parseInt(
+      localStorage.getItem("ghost-catcher-high-score") || "0",
+      10
+    );
+  } catch {}
+
+  if (score > highScore) {
+    highScore = score;
+    try {
+      localStorage.setItem("ghost-catcher-high-score", String(score));
+    } catch {}
+  }
+
+  if (score <= 3)
+    gameMessage.value = "The ghost escaped! Better luck next time. 👻";
+  else if (score <= 7) gameMessage.value = "Not bad, ghost hunter! 🎯";
+  else
+    gameMessage.value =
+      "Master Ghost Catcher! You should work in incident response. 🏆";
+
+  showResult.value = true;
+  console.log(
+    `%c🏆 Score: ${score} (High score: ${highScore})`,
+    "color: #f59e0b; font-size: 14px;"
+  );
+
+  setTimeout(() => {
+    showResult.value = false;
+    gameMessage.value = "";
+    ghostClickCount.value = 0;
+  }, 3000);
+}
+
+onUnmounted(() => {
+  if (moveTimer) clearInterval(moveTimer);
+  if (gameTimer) clearTimeout(gameTimer);
+});
 </script>
 
 <style scoped>
@@ -72,6 +182,15 @@ const handleGoHome = () => {
 .animate-pulse-slow {
   animation: pulse-slow 3s ease-in-out infinite;
 }
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
 </style>
 
 <template>
@@ -105,7 +224,10 @@ const handleGoHome = () => {
           ></div>
         </div>
 
-        <div class="mb-6 relative">
+        <div
+          class="mb-6 relative cursor-pointer select-none"
+          @click="onGhostIconClick"
+        >
           <UIcon
             name="i-fa6-solid-ghost"
             class="w-12 h-12 mx-auto mb-4 drop-shadow-2xl"
@@ -144,6 +266,45 @@ const handleGoHome = () => {
           >
           to search
         </p>
+
+        <!-- Ghost Catcher Game Overlay -->
+        <div v-if="gameActive" class="absolute inset-0 rounded-xl overflow-hidden">
+          <!-- Score -->
+          <div class="absolute top-3 right-3 text-sm font-mono text-emerald-400 z-10">
+            Score: {{ gameScore }}
+          </div>
+          <!-- Timer bar -->
+          <div class="absolute top-0 left-0 right-0 h-1 bg-slate-700">
+            <div
+              class="h-full bg-emerald-400 transition-all duration-[15000ms] ease-linear"
+              :style="{ width: timerStarted ? '0%' : '100%' }"
+            />
+          </div>
+          <!-- Catchable ghost -->
+          <button
+            class="absolute text-3xl cursor-pointer transition-all duration-150 hover:scale-125 z-10 select-none"
+            :style="{
+              left: ghostPosition.x + '%',
+              top: ghostPosition.y + '%',
+              transform: 'translate(-50%, -50%)',
+            }"
+            @click.stop="catchGhost"
+          >
+            👻
+          </button>
+        </div>
+
+        <!-- Result Message -->
+        <Transition name="fade">
+          <div
+            v-if="showResult"
+            class="absolute inset-0 rounded-xl flex items-center justify-center bg-slate-900/80 backdrop-blur-sm z-20"
+          >
+            <p class="text-lg font-semibold text-white text-center px-6">
+              {{ gameMessage }}
+            </p>
+          </div>
+        </Transition>
       </div>
     </div>
   </div>
