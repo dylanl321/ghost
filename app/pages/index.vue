@@ -106,15 +106,14 @@
           </template>
         </ClientOnly>
 
-        <UPopover v-model:open="showSpotlight" :popper="{ placement: 'bottom-end' }">
+        <UPopover v-model:open="showSpotlight" :popper="{ placement: 'bottom-end' }" :disabled="customizeDashboardSeen">
           <UTooltip text="Customize dashboard">
-            <div class="relative">
+            <div class="relative" @click.capture="handleCustomizeClick">
               <UButton
                 icon="i-heroicons-cog-6-tooth"
                 size="xs"
                 variant="ghost"
                 color="gray"
-                @click="handleCustomizeClick"
               />
               <span v-if="!customizeDashboardSeen"
                 class="absolute -top-1 -right-1 flex h-2.5 w-2.5">
@@ -519,9 +518,10 @@ const userActiveAccountCount = computed(() =>
 
 
 // Spotlight handlers
-async function handleCustomizeClick() {
-  showCustomizePanel.value = true
+async function handleCustomizeClick(e: Event) {
+  e.stopPropagation()
   showSpotlight.value = false
+  showCustomizePanel.value = true
   if (!customizeDashboardSeen.value) {
     await setPreference('customizeDashboardSeen', true)
   }
