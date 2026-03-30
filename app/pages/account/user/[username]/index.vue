@@ -695,7 +695,7 @@ const updateBreadcrumbs = () => {
     <!-- No User State -->
     <UCard v-else class="bg-gray-900 border border-gray-800">
       <div class="text-center py-16">
-        <UIcon name="i-heroicons-user-x-mark" class="w-20 h-20 text-gray-500 mx-auto mb-6" />
+        <UIcon name="i-heroicons-user-minus" class="w-20 h-20 text-gray-500 mx-auto mb-6" />
         <h3 class="text-2xl font-semibold text-white mb-3">User Not Found</h3>
         <p class="text-gray-400 mb-8 max-w-md mx-auto">
           The user "{{ username }}" could not be found. They may not exist or you may not have permission to view their profile.
