@@ -566,6 +566,35 @@ resource "aws_iam_role_policy" "ecs_notification_broadcasts_dynamodb" {
   })
 }
 
+# DynamoDB permissions for achievement progress (read/write)
+resource "aws_iam_role_policy" "ecs_achievement_progress_dynamodb" {
+  provider = aws.target_deployment_account
+  name     = "${var.app_name}_achievement_progress_dynamodb"
+  role     = aws_iam_role.ecs_task_execution_role.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AchievementProgressDynamoDB"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Resource = [
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-achievement-progress",
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-achievement-progress/index/*"
+        ]
+      }
+    ]
+  })
+}
+
 # DynamoDB permissions for external accounts table (read-only access to gdms_aws_accounts-master)
 # Note: This table is managed externally and located in the same GovCloud account
 resource "aws_iam_role_policy" "ecs_external_accounts_table" {

@@ -228,6 +228,10 @@ resource "aws_ecs_task_definition" "main" {
           name  = "NOTIFICATION_BROADCASTS_TABLE"
           value = aws_dynamodb_table.notification_broadcasts.name
         },
+        {
+          name  = "ACHIEVEMENT_PROGRESS_TABLE"
+          value = aws_dynamodb_table.achievement_progress.name
+        },
         # SES Configuration (now managed via Site Config DynamoDB table)
         # These env vars serve as fallbacks only - primary config is in ghost-site-config table
         # To update: Use Admin Panel > System > Site Configuration > Email & Notifications

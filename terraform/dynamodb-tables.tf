@@ -771,6 +771,41 @@ resource "aws_dynamodb_table" "notification_broadcasts" {
 }
 
 # ============================================================================
+# Achievement Progress Table (GovCloud Environment)
+# ============================================================================
+# Stores per-user achievement/badge progress for the gamification system
+# Single-item-per-user pattern: userId → all badge progress data
+resource "aws_dynamodb_table" "achievement_progress" {
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-achievement-progress-prod" : "ghost-achievement-progress"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "userId"
+
+  attribute {
+    name = "userId"
+    type = "S"
+  }
+
+  # Enable encryption at rest
+  server_side_encryption {
+    enabled = true
+  }
+
+  # Enable point-in-time recovery
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Name        = "GHOST Achievement Progress"
+    Environment = local.environment
+    ManagedBy   = "Terraform"
+    Service     = "GHOST"
+    Component   = "AchievementProgress"
+  }
+}
+
+# ============================================================================
 # Outputs
 # ============================================================================
 
@@ -902,6 +937,16 @@ output "cost_tag_config_table_name" {
 output "cost_tag_config_table_arn" {
   description = "ARN of the DynamoDB table for cost tag configuration"
   value       = aws_dynamodb_table.cost_tag_config.arn
+}
+
+output "achievement_progress_table_name" {
+  description = "Name of the DynamoDB table for achievement progress"
+  value       = aws_dynamodb_table.achievement_progress.name
+}
+
+output "achievement_progress_table_arn" {
+  description = "ARN of the DynamoDB table for achievement progress"
+  value       = aws_dynamodb_table.achievement_progress.arn
 }
 
 # NOTE: strands_agent_metrics table outputs removed
