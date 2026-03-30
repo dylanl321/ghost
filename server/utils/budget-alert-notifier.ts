@@ -114,7 +114,7 @@ export async function processRecentBudgetAlerts(): Promise<{ processed: number; 
             title,
             body,
             severity,
-            actionUrl: `/costs?account=${alert.account_id}`,
+            actionUrl: `/account/costs?account=${alert.account_id}`,
             actionLabel: 'View Cost Details',
             skipEmail: true, // External Lambda handles all budget email delivery
             metadata: {

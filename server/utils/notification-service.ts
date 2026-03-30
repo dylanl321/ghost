@@ -516,7 +516,8 @@ export async function getAllNotificationsAdmin(
     params.lastKey,
     environment,
     Object.keys(exprNames).length > 0 ? exprNames : undefined,
-    Object.keys(exprValues).length > 0 ? exprValues : undefined
+    Object.keys(exprValues).length > 0 ? exprValues : undefined,
+    accountId
   )
 
   let notifications = (result.items || []) as UserNotification[]
@@ -563,7 +564,8 @@ export async function getNotificationStats(days: number = 7): Promise<Notificati
       undefined,
       environment,
       undefined,
-      { ':since': sinceISO }
+      { ':since': sinceISO },
+      accountId
     )
 
     items = (result.items || []) as UserNotification[]

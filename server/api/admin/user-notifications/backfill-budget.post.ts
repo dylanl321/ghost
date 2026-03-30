@@ -133,7 +133,7 @@ export default defineEventHandler(async (event) => {
                 title,
                 body: alertBody,
                 severity: mapSeverity(alert.alert_level),
-                actionUrl: `/costs?account=${alert.account_id}`,
+                actionUrl: `/account/costs?account=${alert.account_id}`,
                 actionLabel: 'View Cost Details',
                 skipEmail: true,
                 metadata: {

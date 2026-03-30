@@ -354,10 +354,12 @@ const categories = [
     icon: 'i-heroicons-bell-alert',
     to: '/admin/notifications',
     children: [
+      { label: 'Dashboard', icon: 'i-heroicons-squares-2x2', to: '/admin/notifications?tab=dashboard' },
+      { label: 'Sources', icon: 'i-heroicons-queue-list', to: '/admin/notifications?tab=sources' },
+      { label: 'Activity Feed', icon: 'i-heroicons-clock', to: '/admin/notifications?tab=activity' },
       { label: 'All Notifications', icon: 'i-heroicons-inbox-stack', to: '/admin/notifications?tab=all' },
       { label: 'Broadcasts', icon: 'i-heroicons-megaphone', to: '/admin/notifications?tab=broadcasts' },
-      { label: 'Configuration', icon: 'i-heroicons-cog-6-tooth', to: '/admin/notifications?tab=configuration' },
-      { label: 'Analytics', icon: 'i-heroicons-chart-bar', to: '/admin/notifications?tab=analytics' }
+      { label: 'Configuration', icon: 'i-heroicons-cog-6-tooth', to: '/admin/notifications?tab=configuration' }
     ]
   },
   {
