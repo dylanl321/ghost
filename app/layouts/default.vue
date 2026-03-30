@@ -111,6 +111,11 @@ const { startMonitoring } = useStreamingNotifications()
 onMounted(async () => {
   startMonitoring()
 
+  // Ensure user preferences are loaded before checking dismissed state
+  if (!preferences.initialized.value) {
+    await preferences.load()
+  }
+
   // Force-fetch site config so the popup decision uses fresh data,
   // not stale sessionStorage cache
   await siteConfigStore.fetchConfig(true)

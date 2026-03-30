@@ -521,8 +521,8 @@ const userActiveAccountCount = computed(() =>
 // Spotlight handlers
 async function handleCustomizeClick() {
   showCustomizePanel.value = true
+  showSpotlight.value = false
   if (!customizeDashboardSeen.value) {
-    showSpotlight.value = false
     await setPreference('customizeDashboardSeen', true)
   }
 }

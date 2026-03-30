@@ -123,6 +123,7 @@ export function useDashboardLayout() {
 
   async function persist(updated: DashboardLayoutConfig) {
     await setPreference(LAYOUT_KEY, updated)
+    useEventBus().emit('dashboard.customized', { action: 'layout_changed' })
   }
 
   async function toggleSection(id: DashboardSectionId) {
