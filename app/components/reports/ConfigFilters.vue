@@ -114,7 +114,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ConfigDatasetFilters } from '~/shared/types/dataset-reports'
+import type { ConfigDatasetFilters } from '#shared/types/dataset-reports'
 
 const filters = defineModel<ConfigDatasetFilters>({
   default: () => ({

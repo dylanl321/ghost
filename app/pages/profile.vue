@@ -726,6 +726,12 @@
           </div>
         </UCard>
       </template>
+
+      <template #achievements>
+        <div class="mt-4">
+          <BadgeGrid v-if="selectedTab === 6" />
+        </div>
+      </template>
     </UTabs>
 
     <!-- Create/Edit Modal -->
@@ -807,8 +813,10 @@
 
 <script setup lang="ts">
 import { PERMISSION_CATEGORIES } from '~/config/roles'
-import type { ScheduledReport, CreateReportRequest } from '~/shared/types/scheduled-reports'
+import type { ScheduledReport, CreateReportRequest } from '#shared/types/scheduled-reports'
 import { COMMON_TIMEZONES } from '#shared/types/user-preferences'
+
+const logger = createLogger('Profile')
 
 const { user } = useOidcAuth()
 const userGroupStore = useUserGroupStore()
@@ -1070,6 +1078,11 @@ const profileTabs = [
     label: 'Settings',
     slot: 'settings',
     icon: 'i-heroicons-cog-6-tooth'
+  },
+  {
+    label: 'Achievements',
+    slot: 'achievements',
+    icon: 'i-heroicons-trophy'
   }
 ]
 
@@ -1248,7 +1261,7 @@ async function handleSubmit(data: CreateReportRequest) {
       })
     }
   } catch (err) {
-    console.error('Error submitting report:', err)
+    logger.error('Error submitting report:', err)
   }
 }
 
@@ -1369,9 +1382,23 @@ onMounted(async () => {
   await fetchReports()
   await fetchSharedReports()
 
-  // Switch to scheduled reports tab if coming from query param
+  // Handle tab query parameter for deep-linking
+  const tabParam = route.query.tab as string | undefined
+  if (tabParam) {
+    const tabIndex = parseInt(tabParam)
+    if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex < profileTabs.length) {
+      selectedTab.value = tabIndex
+    } else {
+      const matchIndex = profileTabs.findIndex(t => t.slot === tabParam)
+      if (matchIndex !== -1) {
+        selectedTab.value = matchIndex
+      }
+    }
+  }
+
+  // Switch to scheduled reports tab if coming from section query param
   if (route.query.section === 'scheduled-reports') {
-    selectedTab.value = 3 // Index of the Scheduled Reports tab
+    selectedTab.value = 3
     nextTick(() => {
       const element = document.getElementById('scheduled-reports')
       if (element) {

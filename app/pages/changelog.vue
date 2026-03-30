@@ -58,7 +58,7 @@
         <article
           v-for="(entry, index) in entries"
           :key="entry.version"
-          class="relative lg:min-h-[180px]"
+          class="relative"
         >
           <!-- Mobile Layout -->
           <div class="lg:hidden mb-6">
@@ -70,62 +70,45 @@
           </div>
 
           <!-- Desktop: Two-sided Layout -->
-          <div class="hidden lg:grid lg:grid-cols-2 lg:gap-16 items-start">
-            <!-- LEFT COLUMN: Features (even) or Details (odd) -->
-            <div class="flex justify-end">
-              <!-- Version & Features Card (even indices = left side) -->
+          <div class="hidden lg:grid lg:grid-cols-[1fr_auto_1fr] items-start">
+            <!-- LEFT COLUMN -->
+            <div class="flex justify-end py-4">
+              <!-- Version card on left (even) -->
               <div
                 v-if="index % 2 === 0"
-                class="w-full max-w-md text-right"
+                class="w-full max-w-lg"
               >
                 <div
-                  class="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5 transition-all hover:shadow-lg"
-                  :class="entry.version === currentVersion ? 'ring-2 ring-emerald-500/50' : ''"
+                  class="bg-white dark:bg-slate-800 rounded-xl rounded-r-none border border-gray-200 dark:border-slate-700 border-r-0 p-5 transition-all hover:shadow-lg"
+                  :class="entry.version === currentVersion ? 'ring-2 ring-emerald-500/50 ring-r-0' : ''"
                 >
-                  <!-- Version & Date -->
                   <div class="flex items-center justify-end gap-3 mb-3">
-                    <time
-                      v-if="entry.date"
-                      class="text-sm text-gray-500 dark:text-gray-400"
-                    >
+                    <time v-if="entry.date" class="text-sm text-gray-500 dark:text-gray-400">
                       {{ formatDate(entry.date) }}
                     </time>
-                    <UBadge
-                      v-if="entry.version === currentVersion"
-                      color="emerald"
-                      variant="solid"
-                      size="xs"
-                    >
+                    <UBadge v-if="entry.version === currentVersion" color="emerald" variant="solid" size="xs">
                       Latest
                     </UBadge>
                     <span class="text-2xl font-bold text-gray-900 dark:text-white">
                       v{{ entry.version }}
                     </span>
                   </div>
-
-                  <!-- Highlights -->
                   <div v-if="entry.highlights?.length" class="flex flex-wrap justify-end gap-2">
                     <span
                       v-for="highlight in entry.highlights"
                       :key="highlight"
                       class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-slate-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300"
                     >
-                      <span
-                        class="w-2 h-2 rounded-full"
-                        :class="getHighlightColor(highlight)"
-                      />
+                      <span class="w-2 h-2 rounded-full" :class="getHighlightColor(highlight)" />
                       {{ highlight }}
                     </span>
                   </div>
                 </div>
               </div>
 
-              <!-- Details Card (odd indices = left side) -->
-              <div
-                v-else
-                class="w-full max-w-md"
-              >
-                <div class="bg-slate-50 dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-5">
+              <!-- Details card on left (odd) -->
+              <div v-else class="w-full max-w-lg">
+                <div class="bg-slate-50 dark:bg-slate-900 rounded-xl rounded-r-none border border-gray-200 dark:border-slate-700 border-r-0 p-5">
                   <p class="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">
                     All Changes
                   </p>
@@ -137,21 +120,26 @@
             </div>
 
             <!-- CENTER: Timeline Node -->
-            <div class="absolute left-1/2 top-5 transform -translate-x-1/2 z-10">
-              <div
-                class="w-5 h-5 rounded-full border-4 border-white dark:border-slate-900 shadow-lg"
-                :class="index === 0 ? 'bg-emerald-500 ring-4 ring-emerald-500/30' : 'bg-slate-400 dark:bg-slate-500'"
-              />
+            <div class="flex items-start justify-center py-4">
+              <div class="relative w-10 flex justify-center">
+                <!-- Horizontal connector lines -->
+                <div class="absolute top-[10px] left-0 right-1/2 h-0.5 bg-gray-300 dark:bg-slate-600" />
+                <div class="absolute top-[10px] left-1/2 right-0 h-0.5 bg-gray-300 dark:bg-slate-600" />
+                <div
+                  class="relative z-10 w-5 h-5 rounded-full border-4 border-white dark:border-slate-900 shadow-lg"
+                  :class="index === 0 ? 'bg-emerald-500 ring-4 ring-emerald-500/30' : 'bg-slate-400 dark:bg-slate-500'"
+                />
+              </div>
             </div>
 
-            <!-- RIGHT COLUMN: Details (even) or Features (odd) -->
-            <div class="flex justify-start">
-              <!-- Details Card (even indices = right side) -->
+            <!-- RIGHT COLUMN -->
+            <div class="flex justify-start py-4">
+              <!-- Details card on right (even) -->
               <div
                 v-if="index % 2 === 0"
-                class="w-full max-w-md"
+                class="w-full max-w-lg"
               >
-                <div class="bg-slate-50 dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-5">
+                <div class="bg-slate-50 dark:bg-slate-900 rounded-xl rounded-l-none border border-gray-200 dark:border-slate-700 border-l-0 p-5">
                   <p class="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">
                     All Changes
                   </p>
@@ -161,47 +149,30 @@
                 </div>
               </div>
 
-              <!-- Version & Features Card (odd indices = right side) -->
-              <div
-                v-else
-                class="w-full max-w-md"
-              >
+              <!-- Version card on right (odd) -->
+              <div v-else class="w-full max-w-lg">
                 <div
-                  class="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-5 transition-all hover:shadow-lg"
+                  class="bg-white dark:bg-slate-800 rounded-xl rounded-l-none border border-gray-200 dark:border-slate-700 border-l-0 p-5 transition-all hover:shadow-lg"
                   :class="entry.version === currentVersion ? 'ring-2 ring-emerald-500/50' : ''"
                 >
-                  <!-- Version & Date -->
                   <div class="flex items-center gap-3 mb-3">
                     <span class="text-2xl font-bold text-gray-900 dark:text-white">
                       v{{ entry.version }}
                     </span>
-                    <UBadge
-                      v-if="entry.version === currentVersion"
-                      color="emerald"
-                      variant="solid"
-                      size="xs"
-                    >
+                    <UBadge v-if="entry.version === currentVersion" color="emerald" variant="solid" size="xs">
                       Latest
                     </UBadge>
-                    <time
-                      v-if="entry.date"
-                      class="text-sm text-gray-500 dark:text-gray-400"
-                    >
+                    <time v-if="entry.date" class="text-sm text-gray-500 dark:text-gray-400">
                       {{ formatDate(entry.date) }}
                     </time>
                   </div>
-
-                  <!-- Highlights -->
                   <div v-if="entry.highlights?.length" class="flex flex-wrap gap-2">
                     <span
                       v-for="highlight in entry.highlights"
                       :key="highlight"
                       class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-slate-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300"
                     >
-                      <span
-                        class="w-2 h-2 rounded-full"
-                        :class="getHighlightColor(highlight)"
-                      />
+                      <span class="w-2 h-2 rounded-full" :class="getHighlightColor(highlight)" />
                       {{ highlight }}
                     </span>
                   </div>

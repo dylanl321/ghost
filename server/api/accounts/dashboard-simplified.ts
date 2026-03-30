@@ -92,7 +92,9 @@ function buildPaddedDate(year: number, month: number, day: number) {
   return `${y}-${m}-${d}`;
 }
 
-async function getOverview(accountId: string) {
+const ALLOWED_DAYS = [7, 14, 30, 90] as const
+
+async function getOverview(accountId: string, days: number = 14) {
   const now = new Date();
   const today = now.getDate(); // 1-index
   const year = now.getFullYear();
@@ -100,11 +102,11 @@ async function getOverview(accountId: string) {
   const startOfMonth = buildPaddedDate(year, month, 1);
   const tomorrow = buildPaddedDate(year, month, today + 1); // exclusive end
 
-  // Past 14 days (not including today)
+  // Past N days (not including today)
   const dailyEnd = buildPaddedDate(year, month, today) // exclusive
 
   const tempStart = new Date(now);
-  tempStart.setDate(tempStart.getDate() - 14); // Go back 14 days to get the start date
+  tempStart.setDate(tempStart.getDate() - days); // Go back N days to get the start date
   const dailyStart = buildPaddedDate(tempStart.getFullYear(), tempStart.getMonth(), tempStart.getDate());
 
   const linkedAccountFilter = {
@@ -168,14 +170,17 @@ export default defineEventHandler(handleAsync(async (event) => {
     })
   }
 
+  const rawDays = parseInt(query.days as string) || 14
+  const days = ALLOWED_DAYS.includes(rawDays as any) ? rawDays : 14
+
   // Generate cache key
-  const cacheKey = `accounts:simplified-overview:${accountId}`
+  const cacheKey = `accounts:simplified-overview:${accountId}:${days}d`
 
   const info = await organizationCache.getOrSet(
     cacheKey,
     async () => {
       logger.info(`Cache miss: Fetching organization overview...`)
-      return await getOverview(accountId)
+      return await getOverview(accountId, days)
     },
     {
       ttl: 1200, // 20 minutes

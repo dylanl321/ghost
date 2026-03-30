@@ -1,3 +1,5 @@
+const logger = createLogger('AccountInfo')
+
 /**
  * Shared composable for fetching and enriching account info.
  * Used by the groups and users sub-pages to avoid duplicated logic.
@@ -90,7 +92,7 @@ export function useAccountInfo(accountId: Ref<string> | ComputedRef<string>) {
       }
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to fetch account information'
-      console.error('Error fetching account info:', err)
+      logger.error('Error fetching account info:', err)
 
       // Fallback account info so the page still renders
       accountInfo.value = {

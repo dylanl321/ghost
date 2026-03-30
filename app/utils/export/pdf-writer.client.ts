@@ -3,8 +3,10 @@
  * Uses the shared PDF generator with client-specific features
  */
 
-import type { DataExportConfig, ExportResult } from '~/shared/types/export'
+import type { DataExportConfig, ExportResult } from '#shared/types/export'
 import { createPDF, type PDFGeneratorHooks } from '#shared/utils/pdf-generator'
+
+const logger = createLogger('PdfWriter')
 
 /**
  * Generate AI-powered cost analysis (client-side)
@@ -95,7 +97,7 @@ IMPORTANT: Focus on analysis and observations, not recommendations. Write direct
 
     return null
   } catch (error) {
-    console.error('AI cost analysis error:', error)
+    logger.error('AI cost analysis error:', error)
     return null
   }
 }
@@ -122,7 +124,7 @@ export async function exportToPDF(
  */
 export function downloadPDF(result: ExportResult): void {
   if (!result.success || !result.blob) {
-    console.error('Cannot download PDF:', result.error)
+    logger.error('Cannot download PDF:', result.error)
     return
   }
 

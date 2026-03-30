@@ -315,6 +315,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 
+const logger = createLogger('ValidationPanel')
+
 // State
 const validationResult = ref<any>(null)
 const loading = ref(false)
@@ -437,7 +439,7 @@ async function runValidation() {
     currentPage.value = 1
   } catch (err: any) {
     error.value = err.message || 'Failed to run validation'
-    console.error('Validation error:', err)
+    logger.error('Validation error:', err)
   } finally {
     loading.value = false
   }
@@ -468,7 +470,7 @@ async function downloadCsv() {
     document.body.removeChild(a)
   } catch (err: any) {
     error.value = err.message || 'Failed to download CSV'
-    console.error('Download error:', err)
+    logger.error('Download error:', err)
   } finally {
     downloadingCsv.value = false
   }

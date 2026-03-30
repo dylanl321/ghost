@@ -13,6 +13,7 @@ import { getLogs } from '../../utils/log-manager'
 import { logger } from '../../utils/logger'
 
 const NAV_REGEX = /Navigation - USER:([\w.@-]+),?\s*PATH:(.+)/
+const ACTION_REGEX = /Action - USER:([\w.@-]+),?\s*TYPE:([\w.]+)(?:,?\s*DETAIL:(.+))?/
 const SESSION_GAP_MS = 30 * 60 * 1000 // 30 minutes
 
 interface NavEntry {
@@ -21,17 +22,28 @@ interface NavEntry {
   path: string
 }
 
+interface ActionEntry {
+  timestamp: number
+  user: string
+  type: string
+  detail?: string
+}
+
 interface UserMetrics {
   userId: string
   avgSessionLengthMs: number
   sessionCount: number
   topPages: Array<{ path: string; count: number }>
+  actionCount: number
+  topActions: Array<{ type: string; count: number }>
 }
 
 interface GlobalMetrics {
   avgSessionLengthMs: number
   totalSessions: number
   topPages: Array<{ path: string; count: number }>
+  totalActions: number
+  actionsByType: Array<{ type: string; count: number }>
 }
 
 export default defineEventHandler(async (event) => {
@@ -45,21 +57,39 @@ export default defineEventHandler(async (event) => {
     const durationSeconds = period === '30d' ? 30 * 86400 : 7 * 86400
     const logs = await getLogs(durationSeconds)
 
-    const navEntries: NavEntry[] = logs
-      .filter((e: { message?: string }) => (e.message || '').startsWith('Navigation - USER:'))
-      .map((e: { message?: string; timestamp?: number }) => {
-        const match = (e.message || '').match(NAV_REGEX)
-        if (!match) return null
-        return {
-          timestamp: e.timestamp ?? 0,
-          user: match[1],
-          path: match[2].trim()
+    const navEntries: NavEntry[] = []
+    const actionEntries: ActionEntry[] = []
+
+    for (const e of logs) {
+      const msg = e.message || ''
+      if (msg.startsWith('Navigation - USER:')) {
+        const match = msg.match(NAV_REGEX)
+        if (match) {
+          navEntries.push({ timestamp: e.timestamp ?? 0, user: match[1]!, path: match[2]!.trim() })
         }
-      })
-      .filter(Boolean) as NavEntry[]
+      } else if (msg.startsWith('Action - USER:')) {
+        const match = msg.match(ACTION_REGEX)
+        if (match) {
+          actionEntries.push({ timestamp: e.timestamp ?? 0, user: match[1]!, type: match[2]!, detail: match[3]?.trim() })
+        }
+      }
+    }
 
     const byUser = aggregateByUser(navEntries)
+    const actionsByUser = aggregateActionsByUser(actionEntries)
+
+    // Merge action metrics into user metrics
+    for (const [user, actions] of Object.entries(actionsByUser)) {
+      if (byUser[user]) {
+        byUser[user].actionCount = actions.actionCount
+        byUser[user].topActions = actions.topActions
+      } else {
+        byUser[user] = { avgSessionLengthMs: 0, sessionCount: 0, topPages: [], ...actions }
+      }
+    }
+
     const global = aggregateGlobal(byUser)
+    const globalActions = aggregateGlobalActions(actionEntries)
 
     const byUserList = Object.entries(byUser)
       .map(([userId, m]) => ({ userId, ...m }))
@@ -73,7 +103,7 @@ export default defineEventHandler(async (event) => {
         startDate: new Date(Date.now() - durationSeconds * 1000).toISOString(),
         endDate: new Date().toISOString(),
         byUser: byUserList,
-        global
+        global: { ...global, ...globalActions }
       }
     }
   } catch (error: any) {
@@ -123,9 +153,45 @@ function aggregateByUser(entries: NavEntry[]): Record<string, Omit<UserMetrics, 
       .slice(0, 10)
       .map(([path, count]) => ({ path, count }))
 
-    result[user] = { avgSessionLengthMs, sessionCount, topPages }
+    result[user] = { avgSessionLengthMs, sessionCount, topPages, actionCount: 0, topActions: [] }
   }
   return result
+}
+
+function aggregateActionsByUser(entries: ActionEntry[]): Record<string, { actionCount: number; topActions: Array<{ type: string; count: number }> }> {
+  const byUser: Record<string, ActionEntry[]> = {}
+  for (const e of entries) {
+    if (!byUser[e.user]) byUser[e.user] = []
+    byUser[e.user].push(e)
+  }
+
+  const result: Record<string, { actionCount: number; topActions: Array<{ type: string; count: number }> }> = {}
+  for (const [user, list] of Object.entries(byUser)) {
+    const typeCounts: Record<string, number> = {}
+    for (const e of list) {
+      typeCounts[e.type] = (typeCounts[e.type] || 0) + 1
+    }
+    const topActions = Object.entries(typeCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([type, count]) => ({ type, count }))
+
+    result[user] = { actionCount: list.length, topActions }
+  }
+  return result
+}
+
+function aggregateGlobalActions(entries: ActionEntry[]): { totalActions: number; actionsByType: Array<{ type: string; count: number }> } {
+  const typeCounts: Record<string, number> = {}
+  for (const e of entries) {
+    typeCounts[e.type] = (typeCounts[e.type] || 0) + 1
+  }
+  const actionsByType = Object.entries(typeCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([type, count]) => ({ type, count }))
+
+  return { totalActions: entries.length, actionsByType }
 }
 
 function aggregateGlobal(byUser: Record<string, Omit<UserMetrics, 'userId'>>): GlobalMetrics {
@@ -147,7 +213,7 @@ function aggregateGlobal(byUser: Record<string, Omit<UserMetrics, 'userId'>>): G
     .slice(0, 10)
     .map(([path, count]) => ({ path, count }))
 
-  return { avgSessionLengthMs, totalSessions, topPages }
+  return { avgSessionLengthMs, totalSessions, topPages, totalActions: 0, actionsByType: [] }
 }
 
 function simplifyPath(path: string): string {

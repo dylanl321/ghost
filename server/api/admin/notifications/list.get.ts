@@ -89,7 +89,7 @@ export default defineEventHandler(async (event) => {
       }
     }
   } catch (error: any) {
-    console.error('Error listing notifications:', error)
+    logger.error('Error listing notifications:', error)
     return {
       success: false,
       error: error.message

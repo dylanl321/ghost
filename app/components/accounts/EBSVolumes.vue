@@ -2,7 +2,7 @@
   <UCard class="h-full flex flex-col">
     <template #header>
       <div class="flex justify-between items-center">
-        <div class="text-lg font-semibold text-gray-900 dark:text-white">EBS Volumes</div>
+        <div class="text-sm font-semibold text-gray-900 dark:text-white">EBS Volumes</div>
         <UBadge v-if="!loading" color="gray" variant="soft">
           {{ volumes.length }} volumes
         </UBadge>
@@ -105,6 +105,8 @@
 </template>
 
 <script setup lang="ts">
+const logger = createLogger('EBSVolumes')
+
 interface Props {
   accountId: string
   environment?: 'commercial' | 'govcloud'
@@ -133,7 +135,7 @@ const {
     calculateUnusedVolumeCost()
   },
   onError: (error) => {
-    console.error('Error fetching volumes:', error)
+    logger.error('Error fetching volumes:', error)
   }
 })
 
@@ -182,7 +184,7 @@ const calculateUnusedVolumeCost = async () => {
       unusedVolumeCost.value = data.data.summary.totalMonthlyCost
     }
   } catch (error) {
-    console.error('Error calculating unused volume cost:', error)
+    logger.error('Error calculating unused volume cost:', error)
     unusedVolumeCost.value = null
   } finally {
     loadingPricing.value = false

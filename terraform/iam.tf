@@ -359,6 +359,242 @@ resource "aws_iam_role_policy" "ecs_s3_app_storage" {
   })
 }
 
+# DynamoDB permissions for user preferences (read/write)
+resource "aws_iam_role_policy" "ecs_user_preferences_dynamodb" {
+  provider = aws.target_deployment_account
+  name     = "${var.app_name}_user_preferences_dynamodb"
+  role     = aws_iam_role.ecs_task_execution_role.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "UserPreferencesDynamoDB"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Resource = [
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-user-preferences",
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-user-preferences/index/*"
+        ]
+      }
+    ]
+  })
+}
+
+# DynamoDB permissions for account notes (read/write)
+resource "aws_iam_role_policy" "ecs_account_notes_dynamodb" {
+  provider = aws.target_deployment_account
+  name     = "${var.app_name}_account_notes_dynamodb"
+  role     = aws_iam_role.ecs_task_execution_role.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AccountNotesDynamoDB"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Resource = [
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-account-notes",
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-account-notes/index/*"
+        ]
+      }
+    ]
+  })
+}
+
+# DynamoDB permissions for async chat jobs (read/write)
+resource "aws_iam_role_policy" "ecs_async_chat_jobs_dynamodb" {
+  provider = aws.target_deployment_account
+  name     = "${var.app_name}_async_chat_jobs_dynamodb"
+  role     = aws_iam_role.ecs_task_execution_role.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AsyncChatJobsDynamoDB"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Resource = [
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-async-chat-jobs",
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-async-chat-jobs/index/*"
+        ]
+      }
+    ]
+  })
+}
+
+# DynamoDB permissions for async metrics (read/write)
+resource "aws_iam_role_policy" "ecs_async_metrics_dynamodb" {
+  provider = aws.target_deployment_account
+  name     = "${var.app_name}_async_metrics_dynamodb"
+  role     = aws_iam_role.ecs_task_execution_role.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AsyncMetricsDynamoDB"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Resource = [
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-async-metrics",
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-async-metrics/index/*"
+        ]
+      }
+    ]
+  })
+}
+
+# DynamoDB permissions for cost tag config (read/write)
+resource "aws_iam_role_policy" "ecs_cost_tag_config_dynamodb" {
+  provider = aws.target_deployment_account
+  name     = "${var.app_name}_cost_tag_config_dynamodb"
+  role     = aws_iam_role.ecs_task_execution_role.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "CostTagConfigDynamoDB"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Resource = [
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-cost-tag-config",
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-cost-tag-config/index/*"
+        ]
+      }
+    ]
+  })
+}
+
+# DynamoDB permissions for user notifications (read/write)
+resource "aws_iam_role_policy" "ecs_user_notifications_dynamodb" {
+  provider = aws.target_deployment_account
+  name     = "${var.app_name}_user_notifications_dynamodb"
+  role     = aws_iam_role.ecs_task_execution_role.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "UserNotificationsDynamoDB"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan",
+          "dynamodb:BatchGetItem",
+          "dynamodb:BatchWriteItem"
+        ]
+        Resource = [
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-user-notifications",
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-user-notifications/index/*"
+        ]
+      }
+    ]
+  })
+}
+
+# DynamoDB permissions for notification broadcasts (read/write)
+resource "aws_iam_role_policy" "ecs_notification_broadcasts_dynamodb" {
+  provider = aws.target_deployment_account
+  name     = "${var.app_name}_notification_broadcasts_dynamodb"
+  role     = aws_iam_role.ecs_task_execution_role.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "NotificationBroadcastsDynamoDB"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan",
+          "dynamodb:BatchGetItem",
+          "dynamodb:BatchWriteItem"
+        ]
+        Resource = [
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-notification-broadcasts",
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-notification-broadcasts/index/*"
+        ]
+      }
+    ]
+  })
+}
+
+# DynamoDB permissions for achievement progress (read/write)
+resource "aws_iam_role_policy" "ecs_achievement_progress_dynamodb" {
+  provider = aws.target_deployment_account
+  name     = "${var.app_name}_achievement_progress_dynamodb"
+  role     = aws_iam_role.ecs_task_execution_role.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AchievementProgressDynamoDB"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Resource = [
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-achievement-progress",
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-achievement-progress/index/*"
+        ]
+      }
+    ]
+  })
+}
+
 # DynamoDB permissions for external accounts table (read-only access to gdms_aws_accounts-master)
 # Note: This table is managed externally and located in the same GovCloud account
 resource "aws_iam_role_policy" "ecs_external_accounts_table" {

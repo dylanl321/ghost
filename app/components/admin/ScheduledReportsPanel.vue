@@ -532,7 +532,9 @@
 </template>
 
 <script setup lang="ts">
-import type { ScheduledReport, ReportExecution } from '~/shared/types/scheduled-reports'
+import type { ScheduledReport, ReportExecution } from '#shared/types/scheduled-reports'
+
+const logger = createLogger('ScheduledReportsPanel')
 
 const toast = useToast()
 
@@ -787,7 +789,7 @@ async function fixStuckReports() {
           description: `${errors.length} error(s) - check console`,
           color: 'orange'
         })
-        console.error('Fix stuck reports errors:', errors)
+        logger.error('Fix stuck reports errors:', errors)
       }
 
       // Refresh data to show updated reports
@@ -838,7 +840,7 @@ async function handleTogglePause(report: ScheduledReport) {
       })
     }
   } catch (err: any) {
-    console.error(`Error ${action} report:`, err)
+    logger.error(`Error ${action} report:`, err)
     toast.add({
       title: 'Error',
       description: err.message || `Failed to ${action} report`,
@@ -888,7 +890,7 @@ async function resumeAllPaused() {
   }
 
   if (results.errors.length > 0) {
-    console.error('Resume errors:', results.errors)
+    logger.error('Resume errors:', results.errors)
   }
 
   // Refresh data

@@ -148,7 +148,7 @@
 </template>
 
 <script setup lang="ts">
-import type { CloudTrailDatasetFilters } from '~/shared/types/dataset-reports'
+import type { CloudTrailDatasetFilters } from '#shared/types/dataset-reports'
 
 const filters = defineModel<CloudTrailDatasetFilters>({
   default: () => ({

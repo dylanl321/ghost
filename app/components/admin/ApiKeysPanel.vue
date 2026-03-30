@@ -465,6 +465,8 @@
 </template>
 
 <script setup lang="ts">
+const logger = createLogger('ApiKeysPanel')
+
 const toast = useToast()
 
 // State
@@ -515,7 +517,7 @@ const loadKeys = async () => {
       apiKeys.value = response.data.keys
     }
   } catch (error: any) {
-    console.error('Failed to load API keys:', error)
+    logger.error('Failed to load API keys:', error)
     toast.add({
       title: 'Error',
       description: 'Failed to load API keys',
@@ -574,7 +576,7 @@ const createKey = async () => {
       })
     }
   } catch (error: any) {
-    console.error('Failed to create API key:', error)
+    logger.error('Failed to create API key:', error)
     toast.add({
       title: 'Error',
       description: error.data?.statusMessage || 'Failed to create API key',
@@ -609,7 +611,7 @@ const viewUsage = async (key: any) => {
       usageHistory.value = response.data.history
     }
   } catch (error: any) {
-    console.error('Failed to load usage:', error)
+    logger.error('Failed to load usage:', error)
     toast.add({
       title: 'Error',
       description: 'Failed to load usage history',
@@ -654,7 +656,7 @@ const saveDescription = async () => {
     showEditModal.value = false
     loadKeys()
   } catch (error: any) {
-    console.error('Failed to update description:', error)
+    logger.error('Failed to update description:', error)
     toast.add({
       title: 'Error',
       description: 'Failed to update description',
@@ -701,7 +703,7 @@ const deleteKey = async () => {
     showDeleteModal.value = false
     loadKeys()
   } catch (error: any) {
-    console.error('Failed to delete API key:', error)
+    logger.error('Failed to delete API key:', error)
     toast.add({
       title: 'Error',
       description: error.data?.statusMessage || 'Failed to revoke API key',

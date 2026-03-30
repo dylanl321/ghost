@@ -5,6 +5,8 @@
 
 import type { AccountNote, CreateNoteRequest } from '#shared/types/account-notes'
 
+const logger = createLogger('AccountNotes')
+
 export function useAccountNotes(accountId: string) {
   const notes = ref<AccountNote[]>([])
   const loading = ref(false)
@@ -28,7 +30,7 @@ export function useAccountNotes(accountId: string) {
 
       notes.value = response.data || []
     } catch (err: any) {
-      console.error('Failed to fetch account notes:', err)
+      logger.error('Failed to fetch account notes:', err)
       error.value = err.message || 'Failed to fetch notes'
       toast.add({
         title: 'Failed to load notes',
@@ -78,7 +80,7 @@ export function useAccountNotes(accountId: string) {
       
       return false
     } catch (err: any) {
-      console.error('Failed to create note:', err)
+      logger.error('Failed to create note:', err)
       error.value = err.message || 'Failed to create note'
       toast.add({
         title: 'Failed to create note',
@@ -119,7 +121,7 @@ export function useAccountNotes(accountId: string) {
       
       return true
     } catch (err: any) {
-      console.error('Failed to delete note:', err)
+      logger.error('Failed to delete note:', err)
       error.value = err.message || 'Failed to delete note'
       toast.add({
         title: 'Failed to delete note',

@@ -8,7 +8,7 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { requireAdmin } from '../../../utils/user-roles'
 import { getConfigItem, updateConfigItem } from '../../../utils/budget-alert-config'
-import type { StaticRecipientsConfig } from '@/shared/types/budget-alert-config'
+import type { StaticRecipientsConfig } from '#shared/types/budget-alert-config'
 
 interface StaticRecipientsUpdateRequest {
   mappings?: Record<string, string>
@@ -67,7 +67,7 @@ export default defineEventHandler(async (event) => {
       message: 'Static recipients configuration updated successfully'
     }
   } catch (error: any) {
-    console.error('Error updating static recipients config:', error)
+    logger.error('Error updating static recipients config:', error)
 
     throw createError({
       statusCode: error.statusCode || 500,

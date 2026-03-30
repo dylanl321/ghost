@@ -145,7 +145,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ReportExecution } from '~/shared/types/scheduled-reports'
+import type { ReportExecution } from '#shared/types/scheduled-reports'
 
 defineProps<{
   executions: ReportExecution[]

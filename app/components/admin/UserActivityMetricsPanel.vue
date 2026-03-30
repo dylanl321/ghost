@@ -30,7 +30,7 @@
     </div>
 
     <!-- Global summary -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
       <UCard>
         <div class="flex items-center gap-3">
           <div class="p-2 bg-cyan-500/10 rounded-lg">
@@ -66,6 +66,36 @@
           </div>
         </div>
       </UCard>
+      <UCard>
+        <div class="flex items-center gap-3">
+          <div class="p-2 bg-purple-500/10 rounded-lg">
+            <Icon name="i-heroicons-bolt" class="w-5 h-5 text-purple-500" />
+          </div>
+          <div>
+            <p class="text-xs text-gray-600 dark:text-gray-400">Total actions</p>
+            <p class="text-xl font-bold text-gray-900 dark:text-white">{{ global?.totalActions ?? 0 }}</p>
+          </div>
+        </div>
+      </UCard>
+    </div>
+
+    <!-- Action type distribution -->
+    <div v-if="global?.actionsByType?.length" class="mb-6">
+      <UCard>
+        <template #header>
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Action Type Distribution</h3>
+        </template>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div
+            v-for="action in global.actionsByType"
+            :key="action.type"
+            class="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50"
+          >
+            <span class="text-sm text-gray-700 dark:text-gray-300 truncate">{{ formatActionType(action.type) }}</span>
+            <UBadge color="purple" variant="soft" size="xs">{{ action.count }}</UBadge>
+          </div>
+        </div>
+      </UCard>
     </div>
 
     <UCard>
@@ -97,6 +127,7 @@
               <th class="pb-3 pr-4 font-medium text-gray-700 dark:text-gray-300">User</th>
               <th class="pb-3 pr-4 font-medium text-gray-700 dark:text-gray-300">Sessions</th>
               <th class="pb-3 pr-4 font-medium text-gray-700 dark:text-gray-300">Avg. session</th>
+              <th class="pb-3 pr-4 font-medium text-gray-700 dark:text-gray-300">Actions</th>
               <th class="pb-3 font-medium text-gray-700 dark:text-gray-300">Most active pages</th>
             </tr>
           </thead>
@@ -110,6 +141,23 @@
               </td>
               <td class="py-3 pr-4 text-gray-600 dark:text-gray-400">{{ u.sessionCount }}</td>
               <td class="py-3 pr-4 text-gray-600 dark:text-gray-400">{{ formatDuration(u.avgSessionLengthMs) }}</td>
+              <td class="py-3 pr-4">
+                <div class="flex flex-wrap gap-1">
+                  <UBadge v-if="u.actionCount" color="purple" variant="soft" size="xs">
+                    {{ u.actionCount }} total
+                  </UBadge>
+                  <UBadge
+                    v-for="a in (u.topActions || []).slice(0, 2)"
+                    :key="a.type"
+                    color="gray"
+                    variant="soft"
+                    size="xs"
+                  >
+                    {{ formatActionType(a.type) }} ({{ a.count }})
+                  </UBadge>
+                  <span v-if="!u.actionCount" class="text-xs text-gray-400">—</span>
+                </div>
+              </td>
               <td class="py-3">
                 <div class="flex flex-wrap gap-1">
                   <UBadge
@@ -136,8 +184,21 @@
 const activityPeriod = ref<'7d' | '30d'>('7d')
 const loading = ref(false)
 const loadError = ref<string | null>(null)
-const byUser = ref<Array<{ userId: string; avgSessionLengthMs: number; sessionCount: number; topPages: Array<{ path: string; count: number }> }>>([])
-const global = ref<{ avgSessionLengthMs: number; totalSessions: number; topPages: Array<{ path: string; count: number }> } | null>(null)
+const byUser = ref<Array<{
+  userId: string
+  avgSessionLengthMs: number
+  sessionCount: number
+  topPages: Array<{ path: string; count: number }>
+  actionCount?: number
+  topActions?: Array<{ type: string; count: number }>
+}>>([])
+const global = ref<{
+  avgSessionLengthMs: number
+  totalSessions: number
+  topPages: Array<{ path: string; count: number }>
+  totalActions?: number
+  actionsByType?: Array<{ type: string; count: number }>
+} | null>(null)
 
 const globalTopPagesStr = computed(() => {
   const top = global.value?.topPages?.slice(0, 5)
@@ -155,6 +216,28 @@ function formatDuration(ms: number): string {
   const h = Math.floor(min / 60)
   const m = min % 60
   return m ? `${h}h ${m}m` : `${h}h`
+}
+
+const actionTypeLabels: Record<string, string> = {
+  'cost.timeframe_change': 'Cost Timeframe',
+  'cost.tab_switch': 'Cost Tab',
+  'cost.mode_toggle': 'Cost Mode',
+  'cost.tag_drilldown': 'Tag Drilldown',
+  'cost.account_select': 'Cost Accounts',
+  'account.favorite': 'Favorite',
+  'account.unfavorite': 'Unfavorite',
+  'export.csv': 'CSV Export',
+  'export.json': 'JSON Export',
+  'dashboard.scope_change': 'Scope Change',
+  'dashboard.daterange_change': 'Date Range',
+  'search.explorer': 'Search',
+  'search.cost': 'Cost Search',
+  'chat.thread_create': 'New Chat',
+  'chat.thread_share': 'Share Chat',
+}
+
+function formatActionType(type: string): string {
+  return actionTypeLabels[type] || type.replace('.', ': ')
 }
 
 async function load() {

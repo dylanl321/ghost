@@ -16,6 +16,11 @@
       <!-- Welcome Banner -->
       <WelcomeBanner v-if="!route.path.startsWith('/support')" />
 
+      <!-- Announcements -->
+      <ClientOnly>
+        <AnnouncementBanner />
+      </ClientOnly>
+
       <!-- Main Content Area -->
       <main 
         class="flex-1 min-h-0 flex flex-col bg-[var(--ghost-bg)] dark:bg-slate-900"
@@ -37,7 +42,7 @@
           <!-- Left: GHOST Branding -->
           <div class="flex items-center gap-3">
             <div class="flex items-center gap-2">
-              <UIcon name="i-fa6-solid-ghost" class="h-4 w-4 text-emerald-400" />
+              <UIcon name="i-fa6-solid-ghost" class="h-4 w-4 text-emerald-400" data-ghost-footer />
               <span class="font-medium text-gray-900 dark:text-gray-300">GHOST</span>
             </div>
             <span class="text-gray-600 dark:text-gray-500">|</span>
@@ -76,6 +81,11 @@
     <ClientOnly>
       <CommandPalette />
     </ClientOnly>
+
+    <!-- What's New Modal -->
+    <ClientOnly>
+      <WhatsNewModal v-model="showWhatsNew" @dismiss="onWhatsNewDismiss" />
+    </ClientOnly>
   </div>
 </template>
 
@@ -89,13 +99,53 @@ const navigationStore = useNavigationStore()
 const siteConfigStore = useSiteConfigStore()
 const sideNavRef = ref()
 
+// Popup / What's New modal
+const showWhatsNew = ref(false)
+const preferences = useUserPreferences()
+const currentVersion = useRuntimeConfig().public.appVersion
+
 // Initialize streaming notifications monitoring (background polling for chat queries)
 const { startMonitoring } = useStreamingNotifications()
 
 // Start monitoring on mount
-onMounted(() => {
+onMounted(async () => {
   startMonitoring()
+
+  // Ensure user preferences are loaded before checking dismissed state
+  if (!preferences.initialized.value) {
+    await preferences.load()
+  }
+
+  // Force-fetch site config so the popup decision uses fresh data,
+  // not stale sessionStorage cache
+  await siteConfigStore.fetchConfig(true)
+
+  const popup = siteConfigStore.popupMessage
+  if (popup?.enabled && popup?.id && popup?.body) {
+    // Admin popup: show if user hasn't dismissed this specific popup ID
+    const dismissedId = preferences.getPreference('dismissedPopupId', '')
+    if (dismissedId !== popup.id) {
+      showWhatsNew.value = true
+    }
+  } else {
+    // Fallback: version changelog popup
+    const lastSeen = preferences.getPreference('lastSeenVersion', '0.0.0')
+    if (lastSeen !== currentVersion) {
+      showWhatsNew.value = true
+    }
+  }
 })
+
+function onWhatsNewDismiss() {
+  const popup = siteConfigStore.popupMessage
+  if (popup?.enabled && popup?.id && popup?.body) {
+    // Record dismissal of admin popup by its ID
+    preferences.setPreference('dismissedPopupId', popup.id)
+  } else {
+    // Record version seen for changelog popup
+    preferences.setPreference('lastSeenVersion', currentVersion as string)
+  }
+}
 
 // Detect full-height pages that need special layout (no padding, overflow handled by page)
 const isExplorerPage = computed(() =>

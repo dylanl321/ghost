@@ -15,6 +15,7 @@ import { generateDatasetReport } from './dataset-report-generator'
 import { sendReportEmail, renderTemplate, getDefaultTemplate } from './email-service'
 import { claimExecutionLock, createLockId } from './execution-locks'
 import { uploadReportToS3 } from './s3-reports-storage'
+import { sendUserNotification } from './notification-service'
 import { logger } from './logger'
 
 /**
@@ -155,6 +156,18 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
       downloadCount: 0                              // Initialize download counter
     })
 
+    // Notify report creator that their report is ready
+    sendUserNotification({
+      userId: report.createdBy,
+      category: 'REPORT_READY',
+      title: `Report '${report.reportName}' is ready`,
+      body: `Sent to ${report.recipients.length} recipient(s)`,
+      severity: 'info',
+      actionUrl: '/settings/reports',
+      actionLabel: 'View Reports',
+      metadata: { reportId: report.reportId, executionId, s3Url: s3UploadResult.s3Url }
+    }).catch(err => logger.warn('Failed to send report-ready notification:', err))
+
     return {
       success: true,
       duration
@@ -179,6 +192,18 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
       emailsSent: 0,
       emailsFailed: report.recipients.length
     })
+
+    // Notify report creator of the failure
+    sendUserNotification({
+      userId: report.createdBy,
+      category: 'REPORT_READY',
+      title: `Report '${report.reportName}' failed`,
+      body: `Failed to generate: ${errorMessage}`,
+      severity: 'warning',
+      actionUrl: '/settings/reports',
+      actionLabel: 'View Reports',
+      metadata: { reportId: report.reportId, error: errorMessage }
+    }).catch(err => logger.warn('Failed to send report-failure notification:', err))
 
     return {
       success: false,

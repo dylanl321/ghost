@@ -16,7 +16,8 @@ export default defineAppConfig({
     //   shadow: 'shadow-sm hover:shadow-md transition-shadow duration-200',
     // },
     card: {
-      background: 'bg-white dark:bg-[#0e1625] border border-gray-200 dark:border-gray-800',
+      background: 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700',
+      rounded: 'rounded-xl',
       body: {
         base: 'text-gray-900 dark:text-white',
       },

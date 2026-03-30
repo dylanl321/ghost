@@ -148,7 +148,9 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import { useToast } from '#imports'
-import type { BudgetAlert } from '@/shared/types/budget-alerts'
+import type { BudgetAlert } from '#shared/types/budget-alerts'
+
+const logger = createLogger('CostDashboardAlerts')
 
 const props = defineProps<{
   accountIds: string[]
@@ -266,7 +268,7 @@ async function viewEmail(alert: BudgetAlert) {
       throw new Error(res.error || 'Failed to load email content')
     }
   } catch (err: any) {
-    console.error('Failed to fetch email content:', err)
+    logger.error('Failed to fetch email content:', err)
     toast.add({
       title: 'Error',
       description: err.message || 'Failed to load email content.',
@@ -304,7 +306,7 @@ async function fetchAlerts() {
       alerts.value = []
     }
   } catch (err: any) {
-    console.error('Failed to fetch budget alerts:', err)
+    logger.error('Failed to fetch budget alerts:', err)
     alerts.value = []
   } finally {
     loading.value = false

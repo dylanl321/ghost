@@ -2,8 +2,10 @@
  * Composable for Dataset Reports API
  */
 
-import type { ScheduledReport } from '~/shared/types/scheduled-reports'
-import type { DatasetReportConfig } from '~/shared/types/dataset-reports'
+import type { ScheduledReport } from '#shared/types/scheduled-reports'
+import type { DatasetReportConfig } from '#shared/types/dataset-reports'
+
+const logger = createLogger('useDatasetReports')
 
 interface CreateDatasetReportRequest {
   reportName: string
@@ -50,7 +52,7 @@ export function useDatasetReports() {
       }
     } catch (err: any) {
       error.value = err.message || 'Failed to fetch dataset reports'
-      console.error('[useDatasetReports] Fetch error:', err)
+      logger.error('Fetch error:', err)
       throw err
     } finally {
       loading.value = false
@@ -72,7 +74,7 @@ export function useDatasetReports() {
         throw new Error('Failed to fetch report')
       }
     } catch (err: any) {
-      console.error('[useDatasetReports] Fetch report error:', err)
+      logger.error('Fetch report error:', err)
       throw err
     }
   }
@@ -96,7 +98,7 @@ export function useDatasetReports() {
         throw new Error('Failed to create report')
       }
     } catch (err: any) {
-      console.error('[useDatasetReports] Create error:', err)
+      logger.error('Create error:', err)
       throw err
     }
   }
@@ -120,7 +122,7 @@ export function useDatasetReports() {
         throw new Error('Failed to update report')
       }
     } catch (err: any) {
-      console.error('[useDatasetReports] Update error:', err)
+      logger.error('Update error:', err)
       throw err
     }
   }
@@ -141,7 +143,7 @@ export function useDatasetReports() {
         throw new Error('Failed to delete report')
       }
     } catch (err: any) {
-      console.error('[useDatasetReports] Delete error:', err)
+      logger.error('Delete error:', err)
       throw err
     }
   }
@@ -163,7 +165,7 @@ export function useDatasetReports() {
         throw new Error('Failed to send test report')
       }
     } catch (err: any) {
-      console.error('[useDatasetReports] Send test error:', err)
+      logger.error('Send test error:', err)
       throw err
     }
   }
@@ -186,7 +188,7 @@ export function useDatasetReports() {
         throw new Error('Failed to toggle pause')
       }
     } catch (err: any) {
-      console.error('[useDatasetReports] Toggle pause error:', err)
+      logger.error('Toggle pause error:', err)
       throw err
     }
   }
@@ -207,7 +209,7 @@ export function useDatasetReports() {
         throw new Error('Failed to fetch history')
       }
     } catch (err: any) {
-      console.error('[useDatasetReports] Fetch history error:', err)
+      logger.error('Fetch history error:', err)
       throw err
     }
   }

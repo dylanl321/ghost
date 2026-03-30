@@ -1489,6 +1489,8 @@
 <script setup lang="ts">
 import { useUserRoles } from '~/composables/useUserRoles'
 
+const logger = createLogger('SupportTools')
+
 definePageMeta({
   layout: 'default'
 })
@@ -1973,7 +1975,7 @@ async function copyToClipboard(text: string) {
   try {
     await navigator.clipboard.writeText(text)
   } catch (err) {
-    console.error('Failed to copy:', err)
+    logger.error('Failed to copy:', err)
   }
 }
 
@@ -2165,7 +2167,7 @@ async function fetchQueryTemplates() {
     queryTemplates.templates = data.templates || []
     queryTemplates.categories = data.categories || []
   } catch (err: any) {
-    console.error('Failed to fetch query templates:', err)
+    logger.error('Failed to fetch query templates:', err)
   } finally {
     queryTemplates.loading = false
   }

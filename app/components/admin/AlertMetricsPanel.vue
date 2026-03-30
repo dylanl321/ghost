@@ -193,6 +193,8 @@ import {
 import { CanvasRenderer } from 'echarts/renderers'
 import type { BudgetAlert, BudgetAlertLevel } from '#shared/types/budget-alerts'
 
+const logger = createLogger('AlertMetricsPanel')
+
 // Register required ECharts modules
 echarts.use([
   LineChart,
@@ -630,7 +632,7 @@ const loadData = async () => {
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
 
   } catch (err: any) {
-    console.error('Error loading alert metrics:', err)
+    logger.error('Error loading alert metrics:', err)
     error.value = err.message || 'Failed to load alert metrics'
   } finally {
     loading.value = false

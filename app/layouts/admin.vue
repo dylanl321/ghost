@@ -69,13 +69,28 @@ const breadcrumbs = computed(() => {
     { label: 'Admin', to: '/admin' }
   ]
 
+  // Category name mappings for cleaner display
+  const labelMap: Record<string, string> = {
+    'configuration': 'Configuration',
+    'users': 'Users & Access',
+    'content': 'Content & Reports',
+    'costs': 'Cost Management',
+    'ai': 'AI & Agents',
+    'system': 'System Health',
+    'pipelines': 'Pipeline Analytics',
+    'budget-alerts': 'Budget Alerts',
+    'tag-compliance': 'Tag Compliance',
+    'data-validation': 'Data Validation',
+    'repositories': 'Repositories',
+    'authors': 'Authors'
+  }
+
   // Skip 'admin' segment as it's already in breadcrumbs
   for (let i = 1; i < segments.length; i++) {
     const seg = segments[i]
     if (!seg) continue
 
-    // Format category names
-    const label = seg
+    const label = labelMap[seg] || seg
       .split('-')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ')
@@ -83,6 +98,20 @@ const breadcrumbs = computed(() => {
     crumbs.push({
       label,
       to: '/' + segments.slice(0, i + 1).join('/'),
+    })
+  }
+
+  // Add tab context as final breadcrumb if present
+  const tabParam = route.query.tab as string | undefined
+  if (tabParam) {
+    const tabLabel = tabParam
+      .split('-')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+
+    crumbs.push({
+      label: tabLabel,
+      to: route.fullPath,
     })
   }
 

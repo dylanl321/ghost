@@ -17,7 +17,9 @@
  *   → fullPath: "GDMSCloud/aws/terraform/modules/security-baseline"
  */
 
-import type { GitLabRepoInfo } from '~/shared/types/pipelines'
+import type { GitLabRepoInfo } from '#shared/types/pipelines'
+
+const logger = createLogger('GitLab Parser')
 
 /**
  * Parse a GitLab job URL to extract repository information
@@ -41,7 +43,7 @@ export function parseGitLabUrl(jobUrl: string): GitLabRepoInfo | null {
 
     if (dashIndex === -1 || dashIndex < 2) {
       // Invalid format - need at least group/project before '/-/'
-      console.warn(`[GitLab Parser] Invalid URL format: ${jobUrl}`)
+      logger.warn(`Invalid URL format: ${jobUrl}`)
       return null
     }
 
@@ -76,7 +78,7 @@ export function parseGitLabUrl(jobUrl: string): GitLabRepoInfo | null {
     }
 
   } catch (error) {
-    console.warn(`[GitLab Parser] Failed to parse URL: ${jobUrl}`, error)
+    logger.warn(`Failed to parse URL: ${jobUrl}`, error)
     return null
   }
 }

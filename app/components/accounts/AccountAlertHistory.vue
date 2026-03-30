@@ -3,7 +3,7 @@
     <template #header>
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <div class="text-lg font-semibold text-gray-900 dark:text-white">Budget Alert History</div>
+          <div class="text-sm font-semibold text-gray-900 dark:text-white">Budget Alert History</div>
           <UBadge v-if="filteredAlerts.length > 0" color="emerald" variant="subtle">
             {{ filteredAlerts.length }} alert{{ filteredAlerts.length !== 1 ? 's' : '' }}
           </UBadge>
@@ -147,7 +147,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useToast } from '#imports'
-import type { BudgetAlert } from '@/shared/types/budget-alerts'
+import type { BudgetAlert } from '#shared/types/budget-alerts'
+
+const logger = createLogger('AccountAlertHistory')
 
 const props = defineProps<{
   accountId: string
@@ -299,7 +301,7 @@ async function fetchAlerts() {
       throw new Error(data.error || 'Failed to fetch alerts')
     }
   } catch (err: any) {
-    console.error('Failed to fetch budget alerts:', err)
+    logger.error('Failed to fetch budget alerts:', err)
     toast.add({
       title: 'Error',
       description: err.message || 'Failed to load budget alert history.',
@@ -331,7 +333,7 @@ async function viewEmail(alert: BudgetAlert) {
       throw new Error(data.error || 'Failed to load email content')
     }
   } catch (err: any) {
-    console.error('Failed to fetch email content:', err)
+    logger.error('Failed to fetch email content:', err)
     toast.add({
       title: 'Error',
       description: err.message || 'Failed to load email content.',

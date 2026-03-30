@@ -313,13 +313,33 @@
       <CostsHeader
         v-model:mode="dataMode"
         v-model:selected-timeframe="selectedTimeframe"
+        v-model:view-by="viewBy"
         :timeframe-options="timeframeOptions"
         :selected-accounts="selectedAccounts"
         :active-tab="activeTab"
         :dataset="dataset"
+        :alerts-count="!isHistoricalTimeframe ? alertsCount : 0"
+        :alerts-by-severity="!isHistoricalTimeframe ? alertsBySeverity : { critical: 0, escalation: 0, warning: 0, info: 0 }"
         @refresh="refreshData"
         @start-tour="() => handleStartTour(true)"
+        @view-alerts="navigateToBudgetAlerts"
+        @load-preset="applyPreset"
       />
+
+      <!-- Compare Toggle -->
+      <div class="px-4 md:px-5 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center gap-2">
+        <UTooltip text="Compare two time periods side by side">
+          <UButton
+            size="xs"
+            :color="compareMode ? 'blue' : 'gray'"
+            :variant="compareMode ? 'soft' : 'ghost'"
+            icon="i-heroicons-arrows-right-left"
+            @click="compareMode = !compareMode"
+          >
+            Compare
+          </UButton>
+        </UTooltip>
+      </div>
 
       <!-- Selected Account Context Banner -->
       <div v-if="selectedAccounts.length > 0" class="px-4 md:px-6 pt-4">
@@ -355,17 +375,30 @@
               </template>
             </div>
           </div>
-          <UButton size="xs" color="blue" variant="soft" @click="clearSelection">
-            <Icon name="i-heroicons-x-mark" class="w-3.5 h-3.5 mr-1" />
-            Clear
-          </UButton>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <UButton size="xs" color="blue" variant="soft" @click="clearSelection">
+              <Icon name="i-heroicons-x-mark" class="w-3.5 h-3.5 mr-1" />
+              Clear
+            </UButton>
+          </div>
         </div>
       </div>
 
       <!-- Content Area -->
       <div class="flex-1 overflow-auto min-h-0 p-4 md:p-6">
+        <!-- Comparison Mode -->
+        <div v-if="compareMode">
+          <div class="mb-4 flex items-center gap-3">
+            <h2 class="text-base font-semibold text-white">Period Comparison</h2>
+            <UButton size="xs" color="gray" variant="soft" icon="i-heroicons-x-mark" @click="compareMode = false">
+              Exit Compare
+            </UButton>
+          </div>
+          <CostComparisonView />
+        </div>
+
         <!-- Loading State -->
-        <div v-if="isLoading" class="flex items-center justify-center h-full">
+        <div v-else-if="isLoading" class="flex items-center justify-center h-full">
           <div class="text-center">
             <Icon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-blue-500 mx-auto mb-2" />
             <p class="text-gray-600 dark:text-gray-400">Loading cost data...</p>
@@ -466,10 +499,7 @@
               :utilization="isHistoricalTimeframe ? 0 : utilization"
               :format-currency="formatCurrency"
               :scenario="scenario"
-              :alerts-count="alertsCount"
-              :alerts-by-severity="alertsBySeverity"
               :is-historical="isHistoricalTimeframe"
-              @view-alerts="navigateToBudgetAlerts"
             />
           </div>
 
@@ -510,11 +540,13 @@
               :show-advanced-charts="showAdvancedCharts"
               :sidebar-tab="activeTab"
               :warnings="fetchWarnings"
+              :cost-summary-context="costSummaryContext"
               @toggle-regression-line="showRegressionLine = !showRegressionLine"
               @toggle-advanced-charts="showAdvancedCharts = !showAdvancedCharts; localStorage.setItem('showAdvancedCharts', String(showAdvancedCharts))"
               @tab-changed="activeChartTab = $event"
               @refresh-data="fetchCosts"
             />
+
           </div>
         </div>
       </div>
@@ -544,10 +576,11 @@ import { useCostData } from '~/composables/useCostData'
 import { useCostScenario } from '~/composables/useCostScenario'
 import { useChartRegistry } from '~/composables/useChartRegistry'
 import type { DataMode } from '~/types/costs'
-import type { BudgetAlert } from '@/shared/types/budget-alerts'
+import type { BudgetAlert } from '#shared/types/budget-alerts'
 
 const { accounts, isLoading, error, fetchAccounts } = useAccountCosts()
 const { favoriteIds } = useFavoriteAccounts()
+const { isAdmin } = useUserRoles()
 
 // Types
 interface Account {
@@ -688,6 +721,9 @@ const accountsWithCosts = computed<Account[]>(() => {
   return applyAccountFilters(enrichedAccounts, costSettingsStore.$state)
 })
 
+// Compare mode toggle
+const compareMode = ref(false)
+
 // State
 const searchTerm = ref('')
 const searchScope = ref<'tab' | 'global'>('tab') // Default to searching within current tab
@@ -699,12 +735,15 @@ const expandedGroups = ref(new Set<string>())
 const accountSortBy = ref<'cost' | 'name' | 'budget' | 'utilization'>('cost') // Default sort by cost
 const showRegressionLine = ref(false) // Toggle for budget variance regression line
 
+// View By state: controls how cost data is grouped (account, service, or region)
+const viewBy = ref('LINKED_ACCOUNT')
+
 // Computed property to detect if we're viewing historical data
 const isHistoricalTimeframe = computed(() => {
   return ['last7days', 'last30days', 'last90days', 'lastMonth', 'lastQuarter', 'lastYear', 'last12months'].includes(selectedTimeframe.value)
 })
 
-// Budget alerts summary for the top-level card
+// Budget alerts
 const budgetAlerts = ref<BudgetAlert[]>([])
 let alertDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -720,6 +759,7 @@ const alertsBySeverity = computed(() => {
   }
   return counts
 })
+
 
 async function fetchAlertsSummary() {
   try {
@@ -939,6 +979,46 @@ const utilization = computed(() => {
   return Math.round((totalSpend.value / totalBudget.value) * 100)
 })
 
+// AI Cost Summary context (combined cost + budget analysis)
+const costSummaryContext = computed(() => {
+  if (totalSpend.value === 0) return {}
+  const accts = selectedAccounts.value.length > 0
+    ? accountsWithCosts.value.filter((a: Account) => selectedAccounts.value.includes(getAccountKey(a)))
+    : accountsWithCosts.value.slice(0, 10)
+
+  const ctx: Record<string, any> = {
+    timeframe: selectedTimeframe.value,
+    dataMode: dataMode.value,
+    totalCost: totalSpend.value,
+    accountCount: selectedAccounts.value.length || accountsWithCosts.value.length,
+    accountNames: accts.map((a: Account) => formatAccountDisplayName(a)).slice(0, 5),
+    topServices: (dataset.value?.summary as any)?.topServices?.slice(0, 5) || [],
+  }
+
+  // Include budget data if available
+  if (totalBudget.value > 0) {
+    ctx.budgetUtilization = utilization.value
+    ctx.totalBudget = totalBudget.value
+    const overBudget = accountsWithCosts.value
+      .filter((a: Account) => {
+        const b = getBudget(a)
+        return b > 0 && getSpend(a) > b
+      })
+      .slice(0, 3)
+      .map((a: Account) => ({
+        name: formatAccountDisplayName(a),
+        actual: getSpend(a),
+        budget: getBudget(a),
+        variancePercent: getBudget(a) > 0 ? ((getSpend(a) - getBudget(a)) / getBudget(a)) * 100 : 0,
+      }))
+    if (overBudget.length > 0) {
+      ctx.overBudgetAccounts = overBudget
+    }
+  }
+
+  return ctx
+})
+
 // Selected accounts display logic
 const selectedAccountObjects = computed(() => {
   if (selectedAccounts.value.length === 0) return []
@@ -1046,6 +1126,16 @@ const navigateToBudgetAlerts = () => {
   })
 }
 
+// Apply a filter preset from CostsHeader
+const applyPreset = (preset: { selectedAccounts: string[]; timeframe: string; dataMode: string; viewBy: string; activeTab: string }) => {
+  selectedAccounts.value = preset.selectedAccounts || []
+  if (preset.timeframe) selectedTimeframe.value = preset.timeframe
+  if (preset.dataMode === 'billable' || preset.dataMode === 'proforma') {
+    dataMode.value = preset.dataMode as DataMode
+  }
+  if (preset.activeTab) activeTab.value = preset.activeTab
+}
+
 // Handle shared state from URL parameters
 const applySharedStateFromUrl = () => {
   const route = useRoute()
@@ -1111,6 +1201,22 @@ onMounted(async () => {
     // Enable watchers now that URL state is applied and initial fetch is done
     initialized.value = true
 
+    // Emit cost-specific events for achievement badges (fire-and-forget)
+    nextTick(() => {
+      for (const acc of accountsWithCosts.value) {
+        const spend = getSpend(acc)
+        const budget = getBudget(acc)
+        if (budget > 0 && spend > budget) {
+          useEventBus().emit('cost.over_budget_viewed', { accountId: getAccountKey(acc), spend, budget })
+          break
+        }
+        if (spend === 0) {
+          useEventBus().emit('cost.zero_spend_viewed', { accountId: getAccountKey(acc) })
+          break
+        }
+      }
+    })
+
     // Auto-start tour for first-time users or admin resets
     await initTourOnMount()
 
@@ -1153,6 +1259,12 @@ const showAdvancedCharts = ref(false)
 //    - Historical timeframes exclude budget-dependent charts
 //    - showAdvanced toggle includes power-user charts when enabled
 const { charts } = useChartRegistry({ scenario, timeframe: selectedTimeframe, mode: dataMode, showAdvanced: showAdvancedCharts })
+
+// Activity tracking for cost dashboard interactions
+watch(selectedTimeframe, (val) => { if (initialized.value) logUserAction('cost.timeframe_change', `timeframe:${val}`) })
+watch(activeTab, (val) => { if (initialized.value) logUserAction('cost.tab_switch', `tab:${val}`) })
+watch(activeChartTab, (val) => { if (initialized.value) logUserAction('cost.tab_switch', `chartTab:${val}`) })
+watch(dataMode, (val) => { if (initialized.value) { logUserAction('cost.mode_toggle', `mode:${val}`); useEventBus().emit('cost.data_mode_toggled', { mode: val }) } })
 
 // Set page title
 useHead({

@@ -265,6 +265,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 
+const logger = createLogger('BudgetAlertsOverviewPanel')
+
 const emit = defineEmits<{
   (e: 'view-account', accountId: string): void
 }>()
@@ -475,7 +477,7 @@ async function fetchOverview() {
       throw new Error('Failed to fetch overview')
     }
   } catch (err: any) {
-    console.error('Failed to fetch budget alerts overview:', err)
+    logger.error('Failed to fetch budget alerts overview:', err)
     error.value = err.message || 'Failed to load budget alerts overview'
   } finally {
     loading.value = false

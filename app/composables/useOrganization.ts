@@ -1,5 +1,7 @@
 import { ref } from 'vue'
 
+const logger = createLogger('Organization')
+
 export interface OrgNode {
   id: string
   arn: string
@@ -39,7 +41,7 @@ export function useOrganization() {
         throw new Error('Failed to fetch organization data')
       }
     } catch (err: any) {
-      console.error('Error fetching organization:', err)
+      logger.error('Error fetching organization:', err)
       error.value = err.message || 'Failed to fetch organization structure'
       return null
     } finally {
@@ -124,7 +126,7 @@ export function useOrganization() {
         summary: { totalPolicies: 0, directCount: 0, inheritedCount: 0, hierarchyDepth: 0 }
       }
     } catch (err) {
-      console.error('Error fetching policies:', err)
+      logger.error('Error fetching policies:', err)
       return {
         directPolicies: [],
         inheritedPolicies: [],

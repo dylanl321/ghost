@@ -24,6 +24,7 @@ export default defineNuxtConfig({
   },
 
   app: {
+    pageTransition: { name: 'page', mode: 'out-in' },
     keepalive: {
       max: 10
     },

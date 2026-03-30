@@ -7,7 +7,7 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { requireAdmin } from '../../../utils/user-roles'
 import { getConfigItem, updateConfigItem } from '../../../utils/budget-alert-config'
-import type { DryRunConfig } from '@/shared/types/budget-alert-config'
+import type { DryRunConfig } from '#shared/types/budget-alert-config'
 
 interface DryRunUpdateRequest {
   enabled?: boolean
@@ -79,7 +79,7 @@ export default defineEventHandler(async (event) => {
       message: 'Dry run configuration updated successfully'
     }
   } catch (error: any) {
-    console.error('Error updating dry run config:', error)
+    logger.error('Error updating dry run config:', error)
 
     throw createError({
       statusCode: error.statusCode || 500,

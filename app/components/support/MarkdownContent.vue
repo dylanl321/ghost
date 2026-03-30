@@ -8,6 +8,8 @@
 import { marked } from 'marked'
 import mermaid from 'mermaid'
 
+const logger = createLogger('MarkdownContent')
+
 // Props
 const props = defineProps<{
   content: string
@@ -61,7 +63,7 @@ const renderedContent = computed(() => {
     const html = marked.parse(props.content, { renderer }) as string
     return html
   } catch (error) {
-    console.error('Error parsing markdown:', error)
+    logger.error('Error parsing markdown:', error)
     return '<p class="text-red-500">Error rendering markdown content</p>'
   }
 })
@@ -77,7 +79,7 @@ async function renderMermaidCharts() {
       const { svg } = await mermaid.render(id + '-svg', code)
       element.innerHTML = svg
     } catch (error) {
-      console.error('Error rendering mermaid chart:', error)
+      logger.error('Error rendering mermaid chart:', error)
       element.innerHTML = '<p class="text-red-500">Error rendering chart</p>'
     }
   }

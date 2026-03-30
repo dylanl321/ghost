@@ -3,6 +3,8 @@ import UserAccess from '~/components/accounts/UserAccess.vue'
 import { getEmailPatternsFromSlug, getSearchTermsFromSlug, isValidUsername, convertToUsernameSlug } from '~/utils/userUtils'
 import UserAvatar from '~/components/ui/UserAvatar.vue'
 
+const logger = createLogger('Index')
+
 interface UserProfile {
   userPrincipalName: string
   displayName: string
@@ -81,7 +83,7 @@ const findUserByUsername = async (usernameSlug: string) => {
 
   // Validate the username slug format
   if (!isValidUsername(usernameSlug)) {
-    console.error('Invalid username slug format:', usernameSlug)
+    logger.error('Invalid username slug format:', usernameSlug)
     return null
   }
 
@@ -89,7 +91,7 @@ const findUserByUsername = async (usernameSlug: string) => {
     // Get possible email patterns from the slug
     const emailPatterns = getEmailPatternsFromSlug(usernameSlug)
     
-    console.log(`Trying email patterns for slug "${usernameSlug}":`, emailPatterns)
+    logger.info(`Trying email patterns for slug "${usernameSlug}":`, emailPatterns)
 
     // Try each email pattern
     for (const email of emailPatterns) {
@@ -101,7 +103,7 @@ const findUserByUsername = async (usernameSlug: string) => {
             u.userPrincipalName.toLowerCase() === email.toLowerCase()
           )
           if (exactMatch) {
-            console.log(`Found exact email match: ${email}`)
+            logger.info(`Found exact email match: ${email}`)
             return exactMatch
           }
           
@@ -112,18 +114,18 @@ const findUserByUsername = async (usernameSlug: string) => {
             return userSlug === usernameSlug.toLowerCase()
           })
           if (partialMatch) {
-            console.log(`Found partial email match with exact slug: ${email} -> ${partialMatch.userPrincipalName}`)
+            logger.info(`Found partial email match with exact slug: ${email} -> ${partialMatch.userPrincipalName}`)
             return partialMatch
           }
         }
       } catch {
-        console.debug(`No results for email pattern: ${email}`)
+        logger.debug(`No results for email pattern: ${email}`)
       }
     }
 
     // If email search fails, try searching by display name parts
     const searchTerms = getSearchTermsFromSlug(usernameSlug)
-    console.log(`Trying name search terms:`, searchTerms)
+    logger.info(`Trying name search terms:`, searchTerms)
     
     for (const searchTerm of searchTerms) {
       try {
@@ -136,19 +138,19 @@ const findUserByUsername = async (usernameSlug: string) => {
           })
           
           if (bestMatch) {
-            console.log(`Found name match: ${searchTerm} -> ${bestMatch.userPrincipalName}`)
+            logger.info(`Found name match: ${searchTerm} -> ${bestMatch.userPrincipalName}`)
             return bestMatch
           }
         }
       } catch {
-        console.debug(`No results for search term: ${searchTerm}`)
+        logger.debug(`No results for search term: ${searchTerm}`)
       }
     }
 
-    console.log(`No user found for username slug: ${usernameSlug}`)
+    logger.info(`No user found for username slug: ${usernameSlug}`)
     return null
   } catch (err) {
-    console.error('Error finding user:', err)
+    logger.error('Error finding user:', err)
     return null
   }
 }
@@ -163,7 +165,7 @@ const loadUserTags = async () => {
     const tags = await getUserTags(userProfile.value.userPrincipalName, user.value.accessToken)
     userTags.value = tags
   } catch (error) {
-    console.error('Failed to load user tags:', error)
+    logger.error('Failed to load user tags:', error)
     userTags.value = []
   }
 }
@@ -206,7 +208,7 @@ const loadUserProfile = async () => {
 
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to load user profile'
-    console.error('Error loading user profile:', err)
+    logger.error('Error loading user profile:', err)
   } finally {
     loading.value = false
   }
@@ -693,7 +695,7 @@ const updateBreadcrumbs = () => {
     <!-- No User State -->
     <UCard v-else class="bg-gray-900 border border-gray-800">
       <div class="text-center py-16">
-        <UIcon name="i-heroicons-user-x-mark" class="w-20 h-20 text-gray-500 mx-auto mb-6" />
+        <UIcon name="i-heroicons-user-minus" class="w-20 h-20 text-gray-500 mx-auto mb-6" />
         <h3 class="text-2xl font-semibold text-white mb-3">User Not Found</h3>
         <p class="text-gray-400 mb-8 max-w-md mx-auto">
           The user "{{ username }}" could not be found. They may not exist or you may not have permission to view their profile.

@@ -461,7 +461,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ScheduledReport, CreateReportRequest, UpdateReportRequest } from '~/shared/types/scheduled-reports'
+import type { ScheduledReport, CreateReportRequest, UpdateReportRequest } from '#shared/types/scheduled-reports'
 
 const props = defineProps<{
   modelValue: boolean

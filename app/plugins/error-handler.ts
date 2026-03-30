@@ -1,6 +1,8 @@
+const logger = createLogger('ErrorHandler')
+
 export default defineNuxtPlugin((nuxtApp) => {
   nuxtApp.hook('vue:error', (error: unknown, instance: ComponentPublicInstance | null, info: string) => {
-    console.log("Error handler has caught an error!")
+    logger.info("Error handler has caught an error!")
 
     // Access route safely - it's available at error time, not plugin setup time
     try {

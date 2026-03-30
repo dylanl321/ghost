@@ -95,6 +95,8 @@
 </template>
 
 <script setup lang="ts">
+const logger = createLogger('OrganizationalStructure')
+
 const props = defineProps<{
   accountId: string
 }>()
@@ -153,7 +155,7 @@ onMounted(async () => {
     }
   } catch (err: any) {
     error.value = err.message || 'Failed to load organizational structure'
-    console.error('Error fetching organizational data:', err)
+    logger.error('Error fetching organizational data:', err)
   } finally {
     loading.value = false
   }

@@ -96,6 +96,34 @@ registerEndpoint('/api/costs/historical', 'GET', {
         type: 'string'
       },
       description: 'Comma-separated list of department numbers to filter accounts'
+    },
+    {
+      name: 'groupBy',
+      in: 'query',
+      required: false,
+      schema: {
+        type: 'string',
+        default: 'LINKED_ACCOUNT'
+      },
+      description: 'Group costs by dimension or tag. Defaults to LINKED_ACCOUNT. Prefix with "TAG:" to group by a cost allocation tag, e.g. "TAG:Environment"'
+    },
+    {
+      name: 'granularity',
+      in: 'query',
+      required: false,
+      schema: {
+        type: 'string',
+        enum: ['DAILY', 'MONTHLY'],
+        default: 'MONTHLY'
+      },
+      description: 'Time granularity for results. DAILY gives day-level data points, MONTHLY gives month-level. Defaults to MONTHLY.'
+    },
+    {
+      name: 'tagFilter',
+      in: 'query',
+      required: false,
+      schema: { type: 'string' },
+      description: 'Filter by a specific tag value before grouping. Format: "tagKey||tagValue" (split on "||" delimiter to support colons in tag keys)'
     }
   ],
   responses: {
@@ -218,30 +246,70 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.notFound(event, 'No accounts found matching the specified filters')
   }
   
+  // Parse granularity param — defaults to MONTHLY
+  const granularity = ((query.granularity as string) || 'MONTHLY').toUpperCase() as 'DAILY' | 'MONTHLY'
+  if (granularity !== 'DAILY' && granularity !== 'MONTHLY') {
+    return errors.badRequest(event, 'Granularity must be DAILY or MONTHLY')
+  }
+
+  // Parse groupBy param — supports TAG: prefix for tag-based grouping
+  const groupByParam = (query.groupBy as string) || 'LINKED_ACCOUNT'
+  const isTagGroupBy = groupByParam.startsWith('TAG:')
+  const groupByKey = isTagGroupBy ? groupByParam.slice(4) : groupByParam
+
   // Build cost parameters for historical data
   const costParams = {
     startDate,
     endDate,
-    granularity: 'MONTHLY' as const,
+    granularity,
     metrics: ['UnblendedCost'],
     groupBy: [{
-      type: 'DIMENSION' as const,
-      key: 'LINKED_ACCOUNT'
+      type: isTagGroupBy ? 'TAG' as const : 'DIMENSION' as const,
+      key: groupByKey
     }],
-    // Add account filter for Cost Explorer only if we have specific accounts
-    filter: filteredAccountIds && filteredAccountIds.length > 0 ? {
-      Dimensions: {
-        Key: 'LINKED_ACCOUNT',
-        Values: filteredAccountIds,
-        MatchOptions: ['EQUALS']
+    // Build filter: combine account filter and tag filter if both present
+    filter: (() => {
+      const tagFilterParam = query.tagFilter as string | undefined
+      let accountFilter: any = undefined
+      let tagFilter: any = undefined
+
+      if (filteredAccountIds && filteredAccountIds.length > 0) {
+        accountFilter = {
+          Dimensions: {
+            Key: 'LINKED_ACCOUNT',
+            Values: filteredAccountIds,
+            MatchOptions: ['EQUALS']
+          }
+        }
       }
-    } : undefined
+
+      if (tagFilterParam) {
+        const idx = tagFilterParam.indexOf('||')
+        if (idx > 0) {
+          tagFilter = {
+            Tags: {
+              Key: tagFilterParam.substring(0, idx),
+              Values: [tagFilterParam.substring(idx + 2)],
+              MatchOptions: ['EQUALS']
+            }
+          }
+        }
+      }
+
+      if (accountFilter && tagFilter) {
+        return { And: [accountFilter, tagFilter] }
+      }
+      return accountFilter || tagFilter || undefined
+    })()
   }
   
   // Generate cache key for historical data
   const cacheKey = `costs:historical:${JSON.stringify({
     period,
+    granularity,
     environment,
+    groupByParam,
+    tagFilter: query.tagFilter || null,
     proforma,
     proformaAccountId: proforma ? proformaAccountId : null,
     masterAccountId: proforma ? masterAccountId : null,

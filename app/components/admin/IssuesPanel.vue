@@ -83,6 +83,8 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useToast } from '#imports'
 
+const logger = createLogger('IssuesPanel')
+
 type FeedbackType = 'All' | 'Issue' | 'Feature Request' | 'General Feedback'
 
 const toast = useToast()
@@ -137,7 +139,7 @@ async function toggleResolved(row: any, resolved: boolean) {
       color: resolved ? 'green' : 'blue'
     })
   } catch (err) {
-    console.error('Failed to update issue:', err)
+    logger.error('Failed to update issue:', err)
     toast.add({ title: 'Error', description: 'Failed to update issue.', color: 'red' })
   }
 }
@@ -176,7 +178,7 @@ async function loadFeedback() {
       resolved: item.resolved ?? false
     }))
   } catch (err) {
-    console.error('Failed to load feedback:', err)
+    logger.error('Failed to load feedback:', err)
     toast.add({ title: 'Error', description: 'Failed to load feedback.', color: 'red' })
   } finally {
     loading.value = false

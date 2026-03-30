@@ -9,6 +9,8 @@ import {
   type UserContext 
 } from '~/config/roles'
 
+const logger = createLogger('UserRoles')
+
 export const useUserRoles = () => {
   const { user } = useOidcAuth()
   const userGroupStore = useUserGroupStore()
@@ -78,11 +80,11 @@ export const useUserRoles = () => {
   // Debug helper to log current user roles and permissions
   const debug = () => {
     console.group('User Roles & Permissions')
-    console.log('User:', user.value?.claims?.email || 'Unknown')
-    console.log('Roles:', userRoles.value.map(r => r.name).join(', '))
-    console.log('Permissions:', Array.from(userPermissions.value).sort())
-    console.log('All Entra Groups:', userGroupStore.allEntraGroups)
-    console.log('AWS Role Groups:', userGroupStore.roleGroups)
+    logger.info('User:', user.value?.claims?.email || 'Unknown')
+    logger.info('Roles:', userRoles.value.map(r => r.name).join(', '))
+    logger.info('Permissions:', Array.from(userPermissions.value).sort())
+    logger.info('All Entra Groups:', userGroupStore.allEntraGroups)
+    logger.info('AWS Role Groups:', userGroupStore.roleGroups)
     console.groupEnd()
   }
   

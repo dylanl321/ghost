@@ -142,6 +142,8 @@
 import { loadSupportCategories, getArticleById, getCategoryByArticleId } from '~/utils/supportArticles'
 import type { SupportArticle, SupportCategory } from '~/utils/supportArticles'
 
+const logger = createLogger('Docs')
+
 // Page meta
 definePageMeta({
   title: 'Documentation',
@@ -224,6 +226,7 @@ const relatedArticles = computed(() => {
 // Methods
 const selectArticle = (articleId: string) => {
   selectedArticleId.value = articleId
+  useEventBus().emit('support.doc_viewed', { articleId })
   // URL update and scroll handled by selectedArticleId watcher
 }
 
@@ -235,7 +238,7 @@ const getArticlePreview = (article: SupportArticle): string => {
 
 const handleFeedback = (type: 'helpful' | 'not-helpful') => {
   // In a real app, this would send feedback to an analytics service
-  console.log(`Article feedback: ${type} for article ${currentArticle.value?.id}`)
+  logger.info(`Article feedback: ${type} for article ${currentArticle.value?.id}`)
   
   // Show toast notification
   const toast = useToast()

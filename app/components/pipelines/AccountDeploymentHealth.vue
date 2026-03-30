@@ -148,13 +148,14 @@
 </template>
 
 <script setup lang="ts">
-import type { AccountDeploymentHealth, CrossAccountError, RecurringErrorPattern } from '~/shared/types/pipelines'
+import type { AccountDeploymentHealth, CrossAccountError, RecurringErrorPattern } from '#shared/types/pipelines'
 
 const props = defineProps<{
   accountId: string
   days: number
 }>()
 
+const { fetchAccountHealth } = usePipelineData()
 const loading = ref(true)
 const error = ref<string | null>(null)
 const healthData = ref<AccountDeploymentHealth | null>(null)
@@ -210,16 +211,7 @@ async function fetchHealthData() {
   crossAccountResults.value = {}
 
   try {
-    const response = await fetch(
-      `/api/pipelines/account-health?account_id=${props.accountId}&days=${props.days}`
-    )
-    const result = await response.json()
-
-    if (!result.success) {
-      throw new Error(result.error?.message || 'Failed to fetch health data')
-    }
-
-    healthData.value = result.data
+    healthData.value = await fetchAccountHealth(props.accountId, props.days)
   } catch (err: any) {
     error.value = err.message || 'Failed to load deployment health'
   } finally {
@@ -236,8 +228,7 @@ async function checkCrossAccount(err: RecurringErrorPattern, idx: number) {
       error_message: err.error_message.substring(0, 100),
       days: String(props.days)
     })
-    const response = await fetch(`/api/pipelines/error-cross-account?${params}`)
-    const result = await response.json()
+    const result = await $fetch<any>(`/api/pipelines/error-cross-account?${params}`)
 
     if (result.success) {
       crossAccountResults.value[idx] = result.data || []

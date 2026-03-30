@@ -24,6 +24,8 @@ import {
   transformUserAccessDataForExport 
 } from '~/utils/csvExport'
 
+const logger = createLogger('UserAccess')
+
 interface Props {
   userPrincipalName: string
   displayName?: string
@@ -135,30 +137,30 @@ onMounted(async () => {
 
 // Enhanced account name resolution with multiple fallbacks
 const resolveAccountName = async (accountId: string): Promise<string> => {
-  console.log(`🔍 Resolving account name for: ${accountId}`)
+  logger.info(`🔍 Resolving account name for: ${accountId}`)
   
   try {
     // Method 1: Check user's personal accounts store
     const userAccount = awsAccountsStore.accounts[accountId]
     if (userAccount?.accountName) {
-      console.log(`✅ Found account ${accountId} in user store:`, userAccount.accountName)
+      logger.info(`✅ Found account ${accountId} in user store:`, userAccount.accountName)
       return userAccount.accountName
     } else {
-      console.log(`❌ Account ${accountId} not found in user store`)
+      logger.info(`❌ Account ${accountId} not found in user store`)
     }
 
     // Method 2: Check all system accounts store
     const systemAccount = awsAccountsStore.findAccountById(accountId)
     if (systemAccount?.accountName) {
-      console.log(`✅ Found account ${accountId} in system store:`, systemAccount.accountName)
+      logger.info(`✅ Found account ${accountId} in system store:`, systemAccount.accountName)
       return systemAccount.accountName
     } else {
-      console.log(`❌ Account ${accountId} not found in system store`)
+      logger.info(`❌ Account ${accountId} not found in system store`)
     }
 
     // Debug: Check what's actually in the stores
-    console.log(`📊 User store has ${Object.keys(awsAccountsStore.accounts).length} accounts`)
-    console.log(`📊 System store initialized: ${awsAccountsStore.allAccountsInitialized}`)
+    logger.info(`📊 User store has ${Object.keys(awsAccountsStore.accounts).length} accounts`)
+    logger.info(`📊 System store initialized: ${awsAccountsStore.allAccountsInitialized}`)
 
     // Method 3: Format the account ID nicely as fallback (skip API for now)
     let fallbackName: string
@@ -168,11 +170,11 @@ const resolveAccountName = async (accountId: string): Promise<string> => {
       fallbackName = `Account ${accountId}`
     }
     
-    console.log(`📝 Using fallback name for ${accountId}: ${fallbackName}`)
+    logger.info(`📝 Using fallback name for ${accountId}: ${fallbackName}`)
     return fallbackName
     
   } catch (error) {
-    console.warn(`❌ Account resolution failed for ${accountId}:`, error)
+    logger.warn(`❌ Account resolution failed for ${accountId}:`, error)
     return `Account ${accountId}`
   }
 }
@@ -203,11 +205,11 @@ const parseAwsGroups = (groups: any[]) => {
       }
     } catch {
       // Silently ignore groups that don't match our patterns
-      console.debug(`Skipped group that couldn't be parsed: ${groupName}`)
+      logger.debug(`Skipped group that couldn't be parsed: ${groupName}`)
     }
   })
   
-  console.log(`Parsed ${awsGroups.length} AWS groups from ${groups.length} total groups`)
+  logger.info(`Parsed ${awsGroups.length} AWS groups from ${groups.length} total groups`)
   return awsGroups
 }
 
@@ -227,7 +229,7 @@ const loadUserAccess = async () => {
       try {
         userProfile.value = await fetchUserProfile(props.userPrincipalName, user.value.accessToken)
       } catch (err) {
-        console.warn('Failed to fetch user profile:', err)
+        logger.warn('Failed to fetch user profile:', err)
       }
     }
 
@@ -354,7 +356,7 @@ const loadUserAccess = async () => {
 
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to load user access'
-    console.error('Error loading user access:', err)
+    logger.error('Error loading user access:', err)
   } finally {
     loading.value = false
   }
@@ -372,7 +374,7 @@ const loadUserTags = async () => {
     const tags = await getUserTags(props.userPrincipalName, user.value.accessToken, displayName)
     userTags.value = tags
   } catch (error) {
-    console.error('Failed to load user tags:', error)
+    logger.error('Failed to load user tags:', error)
     userTags.value = []
   }
 }
@@ -492,7 +494,7 @@ const showGroupDetails = async (account: AccountAccess, role?: string) => {
           loadingMembers: false
         })
       } catch (err) {
-        console.warn(`Failed to load details for group ${detail.groupName}:`, err)
+        logger.warn(`Failed to load details for group ${detail.groupName}:`, err)
         enhancedDetails.push({
           ...detail,
           loadingMembers: false
@@ -503,7 +505,7 @@ const showGroupDetails = async (account: AccountAccess, role?: string) => {
     selectedGroupDetails.value = enhancedDetails
     
   } catch (err) {
-    console.error('Failed to load group details:', err)
+    logger.error('Failed to load group details:', err)
     selectedGroupDetails.value = []
   } finally {
     loadingGroupDetails.value = false

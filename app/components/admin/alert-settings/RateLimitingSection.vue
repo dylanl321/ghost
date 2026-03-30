@@ -172,7 +172,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ThresholdScalingConfig, PaceAlertingConfig, MlConfig } from '@/shared/types/budget-alert-config'
+import type { ThresholdScalingConfig, PaceAlertingConfig, MlConfig } from '#shared/types/budget-alert-config'
 
 const props = defineProps<{
   thresholdScaling: ThresholdScalingConfig | null

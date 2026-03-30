@@ -551,7 +551,23 @@
             <div class="space-y-6 max-w-[1800px] mx-auto">
             <!-- Quick Action Tester -->
             <div v-if="fullAnalysisData?.commonActionTests">
-              <QuickActionTester :common-action-tests="fullAnalysisData.commonActionTests" />
+              <div class="text-sm font-semibold text-gray-300 mb-3">Quick Action Tests</div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div
+                  v-for="test in fullAnalysisData.commonActionTests"
+                  :key="test.action"
+                  class="flex items-center justify-between bg-gray-800/50 border border-gray-700 rounded-lg px-3 py-2"
+                >
+                  <span class="text-sm font-mono text-gray-300">{{ test.action }}</span>
+                  <UBadge
+                    :color="test.result === 'allowed' ? 'green' : test.result === 'denied' ? 'red' : 'yellow'"
+                    variant="soft"
+                    size="xs"
+                  >
+                    {{ test.result === 'allowed' ? 'Allowed' : test.result === 'denied' ? 'Denied' : 'Conditional' }}
+                  </UBadge>
+                </div>
+              </div>
             </div>
 
             <div class="border-t border-gray-700 pt-6"></div>
@@ -740,6 +756,8 @@
 </template>
 
 <script setup lang="ts">
+const logger = createLogger('PolicyAnalyzer')
+
 const props = defineProps<{
   accountId: string
   environment?: 'commercial' | 'govcloud'
@@ -975,7 +993,7 @@ const loadAnalysis = async () => {
     fullAnalysisData.value = data.data
   } catch (err: any) {
     error.value = err.message || 'Failed to load policy analysis'
-    console.error('Error loading policy analysis:', err)
+    logger.error('Error loading policy analysis:', err)
   } finally {
     loading.value = false
   }

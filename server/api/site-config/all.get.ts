@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
       count: configs.length,
     };
   } catch (error) {
-    console.error('Error fetching public site config:', error);
+    logger.error('Error fetching public site config:', error);
 
     return {
       success: false,

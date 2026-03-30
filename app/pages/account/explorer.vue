@@ -120,7 +120,7 @@
             icon="i-heroicons-arrow-down-tray"
             size="xs"
             variant="outline"
-            @click="() => exportToCSV(filteredRows)"
+            @click="() => { exportToCSV(filteredRows); logUserAction('export.csv', 'source:account-explorer') }"
           >
             Export
           </UButton>
@@ -685,8 +685,7 @@ const itemsPerPageOptions = [
   { value: 10, label: '10 / page' },
   { value: 25, label: '25 / page' },
   { value: 50, label: '50 / page' },
-  { value: 100, label: '100 / page' },
-  { value: 999999, label: 'All' }
+  { value: 100, label: '100 / page' }
 ]
 const itemsPerPage = ref(25)
 
@@ -844,7 +843,6 @@ const filteredRows = computed(() => {
 
 const paginatedRows = computed(() => {
   const perPage = itemsPerPage.value
-  if (perPage >= 999999) return filteredRows.value // Show all
   const start = (page.value - 1) * perPage
   return filteredRows.value.slice(start, start + perPage)
 })
@@ -852,6 +850,15 @@ const paginatedRows = computed(() => {
 // Reset to page 1 when filters change the result set
 watch(filteredRows, () => {
   page.value = 1
+})
+
+// Track when user performs a search (debounced to avoid logging every keystroke)
+let searchLogTimer: ReturnType<typeof setTimeout> | null = null
+watch(search, (val) => {
+  if (searchLogTimer) clearTimeout(searchLogTimer)
+  if (val) {
+    searchLogTimer = setTimeout(() => logUserAction('search.explorer'), 1000)
+  }
 })
 
 function resetFilters() {

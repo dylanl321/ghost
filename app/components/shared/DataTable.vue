@@ -195,6 +195,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 
+const logger = createLogger('DataTable')
+
 // Column definition type
 export interface TableColumn {
   key: string
@@ -407,7 +409,7 @@ const exportToCSV = () => {
 
 const exportToPDF = () => {
   // TODO: Implement PDF export using existing usePDFExport composable
-  console.log('PDF export not yet implemented')
+  logger.info('PDF export not yet implemented')
 }
 
 // Watch: Reset page when search changes

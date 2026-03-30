@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
+const logger = createLogger('AwsAccountsStore')
+
 export interface AwsAccount {
   accountId: string
   accountName: string
@@ -111,7 +113,7 @@ export const useAwsAccountsStore = defineStore('awsAccounts', () => {
       lastFetched.value = new Date()
     } catch (error: any) {
       error.value = error.message || 'Failed to fetch AWS accounts'
-      console.error('Error fetching AWS accounts:', error)
+      logger.error('Error fetching AWS accounts:', error)
     } finally {
       loading.value = false
     }

@@ -1,5 +1,7 @@
 import type { PDFExportOptions } from '~/utils/pdfExport.client'
 
+const logger = createLogger('PDFExport')
+
 export interface UsePDFExportReturn {
   exportData: (data: any, options?: PDFExportOptions) => Promise<Blob | void>
   exportJSON: (jsonData: any, options?: PDFExportOptions) => Promise<Blob | void>
@@ -18,7 +20,7 @@ export interface UsePDFExportReturn {
 export function usePDFExport(): UsePDFExportReturn {
   const exportData = async (data: any, options?: PDFExportOptions): Promise<Blob | void> => {
     if (!process.client) {
-      console.warn('PDF export is only available on client side')
+      logger.warn('PDF export is only available on client side')
       return
     }
     
@@ -28,7 +30,7 @@ export function usePDFExport(): UsePDFExportReturn {
 
   const exportJSON = async (jsonData: any, options?: PDFExportOptions): Promise<Blob | void> => {
     if (!process.client) {
-      console.warn('PDF export is only available on client side')
+      logger.warn('PDF export is only available on client side')
       return
     }
     
@@ -41,7 +43,7 @@ export function usePDFExport(): UsePDFExportReturn {
     options?: PDFExportOptions
   ): Promise<Blob | void> => {
     if (!process.client) {
-      console.warn('PDF export is only available on client side')
+      logger.warn('PDF export is only available on client side')
       return
     }
     
@@ -55,7 +57,7 @@ export function usePDFExport(): UsePDFExportReturn {
     options?: PDFExportOptions
   ): Promise<Blob | void> => {
     if (!process.client) {
-      console.warn('PDF export is only available on client side')
+      logger.warn('PDF export is only available on client side')
       return
     }
     
@@ -73,7 +75,7 @@ export function usePDFExport(): UsePDFExportReturn {
     options?: PDFExportOptions
   ): Promise<Blob | void> => {
     if (!process.client) {
-      console.warn('PDF export is only available on client side')
+      logger.warn('PDF export is only available on client side')
       return
     }
     
@@ -83,7 +85,7 @@ export function usePDFExport(): UsePDFExportReturn {
 
   const exportChartData = async (chartData: any, options?: PDFExportOptions): Promise<Blob | void> => {
     if (!process.client) {
-      console.warn('PDF export is only available on client side')
+      logger.warn('PDF export is only available on client side')
       return
     }
 
@@ -118,7 +120,7 @@ export function usePDFExport(): UsePDFExportReturn {
 
   const exportCostData = async (costData: any, options?: PDFExportOptions): Promise<Blob | void> => {
     if (!process.client) {
-      console.warn('PDF export is only available on client side')
+      logger.warn('PDF export is only available on client side')
       return
     }
 

@@ -166,6 +166,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useToast } from '#imports'
 
+const logger = createLogger('NotificationsPanel')
+
 type NotificationType = 'All' | 'FEEDBACK' | 'ERROR' | 'SECURITY_ALERT' | 'SYSTEM_ALERT' | 'PERFORMANCE_ALERT' | 'DEPLOYMENT'
 type NotificationStatus = 'All' | 'SENT' | 'FAILED'
 
@@ -276,7 +278,7 @@ async function viewNotification(notification: Notification) {
     selectedNotification.value = notification
     showDetailModal.value = true
   } catch (err) {
-    console.error('Failed to load notification details:', err)
+    logger.error('Failed to load notification details:', err)
     toast.add({
       title: 'Error',
       description: 'Failed to load notification details.',
@@ -320,7 +322,7 @@ async function fetchNotifications() {
       throw new Error(data.error || 'Failed to fetch notifications')
     }
   } catch (err: any) {
-    console.error('Failed to fetch notifications:', err)
+    logger.error('Failed to fetch notifications:', err)
     toast.add({
       title: 'Error',
       description: err.message || 'Failed to load notifications.',

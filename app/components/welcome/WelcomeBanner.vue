@@ -57,6 +57,8 @@
 <script setup lang="ts">
 import { useSiteConfigStore } from '~/stores/useSiteConfigStore'
 
+const logger = createLogger('WelcomeBanner')
+
 const route = useRoute()
 const router = useRouter()
 const { getPreference, setPreference, initialized } = useUserPreferences()
@@ -125,7 +127,7 @@ async function incrementSeenIfNeeded() {
   } catch (error) {
     // Reset flag so it can retry on next page load
     hasIncrementedThisSession.value = false
-    console.error('Failed to increment welcome banner seen count:', error)
+    logger.error('Failed to increment welcome banner seen count:', error)
   }
 }
 

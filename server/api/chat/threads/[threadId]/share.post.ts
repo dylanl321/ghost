@@ -10,7 +10,7 @@ import { shareThread, updateThread, getThreadById } from '../../../../utils/chat
 import { createShortLink } from '../../../../lib/shortlinks'
 import { registerEndpoint } from '../../../../plugins/swagger'
 import { logger } from '../../../../utils/logger'
-import type { ShareThreadRequest, ShareThreadResponse } from '~/shared/types/chat-threads'
+import type { ShareThreadRequest, ShareThreadResponse } from '#shared/types/chat-threads'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/chat/threads/{threadId}/share', 'POST', {

@@ -5,6 +5,8 @@
  */
 import { startAccountTour } from '~/components/tutorial/AccountTour'
 
+const logger = createLogger('AccountTour')
+
 const ACCOUNT_TOUR_SEEN_KEY = 'ghost-account-tour-seen'
 
 function hasSeenAccountTourLocally(): boolean {
@@ -73,7 +75,7 @@ export function useAccountTour() {
         },
       })
     } catch (error: any) {
-      console.error('Failed to start account tour:', error)
+      logger.error('Failed to start account tour:', error)
       const toast = useToast()
       toast.add({
         title: 'Tour Error',

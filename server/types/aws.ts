@@ -34,6 +34,7 @@ export type AWSServiceType =
   | 'ssm'
   | 'inspector2'
   | 'cloudwatch-logs'
+  | 'resource-groups-tagging'
 
 export interface AWSClientOptions {
   environment: AWSEnvironmentType

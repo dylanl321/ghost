@@ -22,6 +22,26 @@
             Tour
           </UButton>
         </UTooltip>
+        <!-- Alert severity badges -->
+        <button
+          v-if="alertsCount && alertsCount > 0"
+          class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium transition-colors bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700"
+          @click="emit('view-alerts')"
+        >
+          <UIcon name="i-heroicons-bell-alert" class="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
+          <span v-if="alertsBySeverity?.critical" class="inline-flex items-center gap-1 text-red-600 dark:text-red-400">
+            {{ alertsBySeverity.critical }} critical
+          </span>
+          <span v-if="alertsBySeverity?.escalation" class="inline-flex items-center gap-1 text-orange-600 dark:text-orange-400">
+            {{ alertsBySeverity.escalation }} escalation
+          </span>
+          <span v-if="alertsBySeverity?.warning" class="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
+            {{ alertsBySeverity.warning }} warning
+          </span>
+          <span v-if="alertsBySeverity?.info" class="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400">
+            {{ alertsBySeverity.info }} info
+          </span>
+        </button>
       </div>
       <div class="flex flex-wrap gap-2 items-center">
         <!-- Data Mode Selector -->
@@ -55,6 +75,16 @@
           </UDropdown>
         </span>
 
+        <!-- Filter Presets -->
+        <FilterPresets
+          :selected-accounts="selectedAccounts"
+          :timeframe="modelSelectedTimeframe || ''"
+          :data-mode="modelMode"
+          view-by=""
+          :active-tab="activeTab"
+          @load="(preset: any) => emit('load-preset', preset)"
+        />
+
         <!-- Settings -->
         <CostSettings />
 
@@ -65,7 +95,7 @@
       </div>
     </div>
 
-    <div class="flex flex-wrap gap-3 mt-3">
+    <div class="flex flex-wrap gap-3 mt-3 items-center">
       <div class="w-full sm:w-64 md:w-72" data-tour="costs-timeframe">
         <USelectMenu
           v-model="modelSelectedTimeframe"
@@ -74,6 +104,37 @@
           value-attribute="value"
           option-attribute="label"
         />
+      </div>
+
+      <!-- View By Selector -->
+      <div class="flex items-center gap-1" data-tour="costs-view-by">
+        <span class="text-xs text-gray-500 dark:text-gray-400 mr-1">View:</span>
+        <div class="inline-flex rounded-md shadow-sm">
+          <UButton
+            size="xs"
+            :color="modelViewBy === 'LINKED_ACCOUNT' ? 'blue' : 'gray'"
+            :variant="modelViewBy === 'LINKED_ACCOUNT' ? 'solid' : 'ghost'"
+            @click="setViewBy('LINKED_ACCOUNT')"
+          >
+            Account
+          </UButton>
+          <UButton
+            size="xs"
+            :color="modelViewBy === 'SERVICE' ? 'blue' : 'gray'"
+            :variant="modelViewBy === 'SERVICE' ? 'solid' : 'ghost'"
+            @click="setViewBy('SERVICE')"
+          >
+            Service
+          </UButton>
+          <UButton
+            size="xs"
+            :color="modelViewBy === 'REGION' ? 'blue' : 'gray'"
+            :variant="modelViewBy === 'REGION' ? 'solid' : 'ghost'"
+            @click="setViewBy('REGION')"
+          >
+            Region
+          </UButton>
+        </div>
       </div>
     </div>
 
@@ -217,22 +278,31 @@ import type { NormalizedDataset } from '~/types/costs'
 import type { ExportFormat } from '#shared/types/export'
 import ExportButton from '~/components/shared/ExportButton.vue'
 
-const emit = defineEmits<{ (e: 'refresh'): void; (e: 'start-tour'): void }>()
+const logger = createLogger('CostsHeader')
+
+const emit = defineEmits<{ (e: 'refresh'): void; (e: 'start-tour'): void; (e: 'view-alerts'): void; (e: 'load-preset', preset: { selectedAccounts: string[]; timeframe: string; dataMode: string; viewBy: string; activeTab: string }): void }>()
 
 const props = defineProps<{
   timeframeOptions: Array<{ label: string, value: string }>,
   selectedAccounts: string[],
   activeTab: string,
-  dataset?: NormalizedDataset | null
+  dataset?: NormalizedDataset | null,
+  alertsCount?: number,
+  alertsBySeverity?: { critical: number, escalation: number, warning: number, info: number }
 }>()
 
 const modelMode = defineModel<DataMode>('mode', { default: 'proforma' })
 const modelSelectedTimeframe = defineModel<string>('selectedTimeframe')
+const modelViewBy = defineModel<string>('viewBy', { default: 'LINKED_ACCOUNT' })
 
 const modeOptions = [
   { label: 'Billable', value: 'billable' },
   { label: 'Proforma', value: 'proforma' }
 ]
+
+function setViewBy(value: string) {
+  modelViewBy.value = value
+}
 
 const isExporting = ref(false)
 const showShareReportModal = ref(false)
@@ -394,7 +464,7 @@ async function generateShareUrl() {
       throw new Error('Invalid response from server')
     }
   } catch (error: any) {
-    console.error('Failed to generate share link:', error)
+    logger.error('Failed to generate share link:', error)
     shareError.value = error.message || 'Failed to create share link'
     toast.add({
       title: 'Share Link Failed',
@@ -428,7 +498,7 @@ async function copyShareUrl() {
       shareCopied.value = false
     }, 2000)
   } catch (error) {
-    console.error('Failed to copy to clipboard:', error)
+    logger.error('Failed to copy to clipboard:', error)
     toast.add({
       title: 'Copy Failed',
       description: 'Could not copy link to clipboard',
@@ -468,7 +538,7 @@ async function handleExport(format: ExportFormat) {
   }
 
   if (!props.dataset) {
-    console.warn('No dataset available for export')
+    logger.warn('No dataset available for export')
     toast.add({
       title: 'Export Error',
       description: 'No data available for export',
@@ -515,7 +585,7 @@ async function handleExport(format: ExportFormat) {
       color: 'green'
     })
   } catch (error) {
-    console.error('Export failed:', error)
+    logger.error('Export failed:', error)
     toast.remove('export-progress')
     toast.add({
       title: 'Export Failed',
@@ -604,7 +674,7 @@ async function handleProformaBillableExport() {
       color: 'green'
     })
   } catch (error) {
-    console.error('Proforma vs Billable export failed:', error)
+    logger.error('Proforma vs Billable export failed:', error)
     toast.remove('proforma-billable-export-progress')
     toast.add({
       title: 'Export Failed',
@@ -627,7 +697,7 @@ async function handleBomExport() {
   }
 
   if (!props.dataset) {
-    console.warn('No dataset available for BOM export')
+    logger.warn('No dataset available for BOM export')
     toast.add({
       title: 'Export Error',
       description: 'No data available for export',
@@ -675,7 +745,7 @@ async function handleBomExport() {
       color: 'green'
     })
   } catch (error) {
-    console.error('BOM export failed:', error)
+    logger.error('BOM export failed:', error)
     toast.remove('bom-export-progress')
     toast.add({
       title: 'BOM Export Failed',

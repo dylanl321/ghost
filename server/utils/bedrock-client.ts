@@ -36,7 +36,7 @@ const MODEL_CONFIGS: Record<BedrockModel, BedrockModelConfig> = {
     requestFormat: 'nova'
   },
   'claude-sonnet': {
-    modelId: process.env.BEDROCK_CLAUDE_MODEL_ID || 'anthropic.claude-3-5-sonnet-20241022-v2:0', // Primary: Claude 3.5 Sonnet
+    modelId: process.env.BEDROCK_CLAUDE_MODEL_ID || 'us.anthropic.claude-3-5-sonnet-20241022-v2:0', // Cross-region inference profile for Claude 3.5 Sonnet
     maxTokens: parseInt(process.env.BEDROCK_CLAUDE_MAX_TOKENS || '4096'),
     temperature: parseFloat(process.env.BEDROCK_CLAUDE_TEMPERATURE || '0.3'), // Lower temperature for more consistent analysis
     topP: parseFloat(process.env.BEDROCK_CLAUDE_TOP_P || '0.95'),
@@ -51,11 +51,11 @@ const FALLBACK_MODEL_IDS: Record<BedrockModel, string[]> = {
     ...(process.env.BEDROCK_NOVA_FALLBACK_MODELS?.split(',') || ['amazon.nova-micro-v1:0']), // Fallback models
   ],
   'claude-sonnet': [
-    process.env.BEDROCK_CLAUDE_MODEL_ID || 'anthropic.claude-3-5-sonnet-20241022-v2:0', // Primary
+    process.env.BEDROCK_CLAUDE_MODEL_ID || 'us.anthropic.claude-3-5-sonnet-20241022-v2:0', // Cross-region inference profile (primary)
     ...(process.env.BEDROCK_CLAUDE_FALLBACK_MODELS?.split(',') || [
-      'anthropic.claude-3-5-sonnet-20240620-v1:0', // Alternative version
-      'anthropic.claude-3-sonnet-20240229-v1:0',   // Older Claude 3 Sonnet
-      'anthropic.claude-v2:1'                       // Claude v2 as last resort
+      'anthropic.claude-3-5-sonnet-20241022-v2:0',  // Direct model ID fallback
+      'us.anthropic.claude-3-5-sonnet-20240620-v1:0', // Older inference profile
+      'anthropic.claude-3-5-sonnet-20240620-v1:0',  // Older direct model ID
     ])
   ]
 }

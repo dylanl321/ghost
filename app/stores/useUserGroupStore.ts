@@ -1,3 +1,5 @@
+const logger = createLogger('GHOST-AUTH')
+
 // ----- Interfaces -----
 
 interface RoleGroupStructure {
@@ -67,7 +69,7 @@ export const useUserGroupStore = defineStore('userGroups', {
 
     myEnclaves: (state) => {
       if (!state.awsRoles) {
-        console.error('Initialize awsRoles before accessing myEnclaves')
+        logger.error('Initialize awsRoles before accessing myEnclaves')
         return {}
       }
 
@@ -122,7 +124,7 @@ export const useUserGroupStore = defineStore('userGroups', {
         this.myAdminAccountIds = []
         this.awsRolesLastFetch = Date.now()
       }
-      console.log('[GHOST-AUTH] Dev mode: Set mock groups:', groups)
+      logger.info('Dev mode: Set mock groups:', groups)
     },
 
     // Set dev accounts with real enclave data - builds awsRoles so the user appears to have access
@@ -200,17 +202,17 @@ export const useUserGroupStore = defineStore('userGroups', {
       this.awsRolesLastFetch = Date.now()
       this.groupsLastFetch = Date.now()
 
-      console.log(`[GHOST-AUTH] Dev mode: Set ${accountIds.length} accounts with roles [${roles.join(', ')}], ${this.myAccountIds.length} total, ${this.myAdminAccountIds.length} admin`)
+      logger.info(`Dev mode: Set ${accountIds.length} accounts with roles [${roles.join(', ')}], ${this.myAccountIds.length} total, ${this.myAdminAccountIds.length} admin`)
     },
 
     async initializeGroups(accessToken: string, force: boolean = false) {
       if (!import.meta.client) return // only run on client-side
       if (!this.groupsNeedRefresh && !force) {
-        console.log('Using cached user group data.')
+        logger.info('Using cached user group data.')
         return
       }
 
-      console.log('Initializing user groups')
+      logger.info('Initializing user groups')
 
       const { fetchGroups, fetchAllGroupsWithPagination } = useGraphApi()
 
@@ -220,7 +222,7 @@ export const useUserGroupStore = defineStore('userGroups', {
         .map((g: any) => g.displayName || '')
         .filter((name: string) => name !== '')
 
-      console.log(`Stored ${this.allEntraGroups.length} total Entra ID groups for role evaluation`)
+      logger.info(`Stored ${this.allEntraGroups.length} total Entra ID groups for role evaluation`)
 
       // Fetch AWS-specific groups (for AWS access)
       const data = await fetchGroups(accessToken)
@@ -230,23 +232,23 @@ export const useUserGroupStore = defineStore('userGroups', {
       if (this.roleGroups && this.distributionGroups) {
         this.groupsLastFetch = Date.now()
       } else {
-        console.error('Missing groups or roles for user.')
+        logger.error('Missing groups or roles for user.')
       }
     },
 
     async initializeAWSRoles(enclaveData: Record<string, AWSEnclaveData>, force: boolean = false) {
       if (!import.meta.client) return // only run on client-side
       if (!this.awsRolesNeedRefresh && !force) {
-        console.log('Using cached user AWS roles data.')
+        logger.info('Using cached user AWS roles data.')
         return
       }
 
       if (!this.roleGroups || !this.distributionGroups) {
-        console.error('Ensure that groups have been initialized before initializing AWS roles.')
+        logger.error('Ensure that groups have been initialized before initializing AWS roles.')
         return
       }
 
-      console.log('Initializing user AWS roles')
+      logger.info('Initializing user AWS roles')
 
       // Clear any existing AWS roles
       this.awsRoles = {}
@@ -319,12 +321,12 @@ export const useUserGroupStore = defineStore('userGroups', {
       this.myAccountIds = Array.from(accountIdsSet)
       this.myAdminAccountIds = Array.from(adminAccountIdsSet)
 
-      console.log(`Cached ${this.myAccountIds.length} total accounts and ${this.myAdminAccountIds.length} admin accounts`)
+      logger.info(`Cached ${this.myAccountIds.length} total accounts and ${this.myAdminAccountIds.length} admin accounts`)
 
       if (this.awsRoles) {
         this.awsRolesLastFetch = Date.now()
       } else {
-        console.warn('Failed to fetch any AWS roles for current user.')
+        logger.warn('Failed to fetch any AWS roles for current user.')
       }
     },
 
@@ -335,7 +337,7 @@ export const useUserGroupStore = defineStore('userGroups', {
       this.allEntraGroups = []
       this.groupsLastFetch = null
       this.awsRolesLastFetch = null
-      console.log('User group stored cleared')
+      logger.info('User group stored cleared')
     }
   },
 

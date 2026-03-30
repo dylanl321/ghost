@@ -930,10 +930,12 @@
 </template>
 
 <script setup lang="ts">
-import type { ScheduledReport } from '~/shared/types/scheduled-reports'
+import type { ScheduledReport } from '#shared/types/scheduled-reports'
 import type { DatasetPreset } from '#shared/types/dataset-presets'
 import ReportSchedules from '../../components/reports/ReportSchedules.vue'
 import ReportHistory from '../../components/reports/ReportHistory.vue'
+
+const logger = createLogger('Datasets')
 
 const { fetchReports, reports, loading } = useDatasetReports()
 const toast = useToast()
@@ -1213,6 +1215,8 @@ function proceedToExport() {
 function handlePreviewQuery() {
   workflowStage.value = 2
   handleRunNow()
+  const enabledDatasets = Object.entries(queryBuilder.value.datasets).filter(([, ds]: [string, any]) => ds.enabled).map(([key]) => key)
+  enabledDatasets.forEach(ds => useEventBus().emit('dataset.query_executed', { datasetType: ds }))
   // Accordion will auto-close after successful preview in handleRunNow
 }
 
@@ -1367,7 +1371,7 @@ async function confirmDelete() {
     showDeleteModal.value = false
     reportToDelete.value = null
   } catch (err: any) {
-    console.error('Failed to delete report:', err)
+    logger.error('Failed to delete report:', err)
   } finally {
     deleting.value = false
   }
@@ -1378,7 +1382,7 @@ async function handleTest(report: ScheduledReport) {
     const { sendTestReport } = useDatasetReports()
     await sendTestReport(report.reportId)
   } catch (err: any) {
-    console.error('Failed to send test report:', err)
+    logger.error('Failed to send test report:', err)
   }
 }
 
@@ -1389,13 +1393,13 @@ async function handleTogglePause(report: ScheduledReport) {
     await togglePause(report.reportId, newStatus === 'paused')
     await fetchReports()
   } catch (err: any) {
-    console.error('Failed to toggle pause:', err)
+    logger.error('Failed to toggle pause:', err)
   }
 }
 
 async function handleViewHistory(report: ScheduledReport) {
   // TODO: Implement view history details
-  console.log('View history for:', report.reportId)
+  logger.info('View history for:', report.reportId)
 }
 
 function handleSaved() {
@@ -1438,7 +1442,7 @@ async function handleRunNow() {
       throw new Error('Failed to fetch preview data')
     }
   } catch (err: any) {
-    console.error('Failed to run query:', err)
+    logger.error('Failed to run query:', err)
     const toast = useToast()
     toast.add({
       title: 'Preview Failed',
@@ -1460,7 +1464,7 @@ function refreshPreview() {
 
 function handleSaveQuery() {
   // TODO: Implement save query functionality
-  console.log('Saving query:', queryBuilder.value)
+  logger.info('Saving query:', queryBuilder.value)
 }
 
 async function handleExport(format: string) {
@@ -1553,7 +1557,7 @@ async function handleExport(format: string) {
     })
 
   } catch (error: any) {
-    console.error('Export failed:', error)
+    logger.error('Export failed:', error)
 
     toast.add({
       title: 'Export Failed',
@@ -1840,7 +1844,7 @@ function parseUrlParameters() {
       })
     }
   } catch (error) {
-    console.error('Error parsing URL parameters:', error)
+    logger.error('Error parsing URL parameters:', error)
   }
 }
 

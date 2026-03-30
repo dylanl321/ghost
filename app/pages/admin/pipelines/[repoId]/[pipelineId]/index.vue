@@ -590,6 +590,8 @@
 <script setup lang="ts">
 import { parseGitLabUrl } from '~/utils/gitlab-url-parser'
 
+const logger = createLogger('Pipeline Details')
+
 // Admin-only access control
 definePageMeta({
   keepalive: false,
@@ -675,7 +677,7 @@ async function fetchPipelineData() {
     // Use the comprehensive details endpoint with GitLab enrichment
     const response = await fetch(`/api/pipelines/${pipelineId}/details?enrich=true`)
 
-    console.log('API response status:', response.status)
+    logger.info('API response status:', response.status)
 
     if (response.status === 404) {
       // Pipeline not found
@@ -686,7 +688,7 @@ async function fetchPipelineData() {
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('API error response:', errorText)
+      logger.error('API error response:', errorText)
       throw new Error('Failed to fetch pipeline data')
     }
 
@@ -696,8 +698,8 @@ async function fetchPipelineData() {
       throw new Error(result.message || 'Failed to fetch pipeline data')
     }
 
-    console.log('Pipeline comprehensive data found:', result.data)
-    console.log('GitLab enrichment data:', result.data.pipeline?.gitlab)
+    logger.info('Pipeline comprehensive data found:', result.data)
+    logger.info('GitLab enrichment data:', result.data.pipeline?.gitlab)
 
     // Destructure the comprehensive response
     pipelineData.value = result.data.pipeline
@@ -707,8 +709,8 @@ async function fetchPipelineData() {
     errorStats.value = result.data.errorStats
 
     // Debug: Log resource stats
-    console.log('[Pipeline Details] Resource Stats:', resourceStats.value)
-    console.log('[Pipeline Details] Total Resources:', resourceStats.value?.totalResources)
+    logger.info('Resource Stats:', resourceStats.value)
+    logger.info('Total Resources:', resourceStats.value?.totalResources)
 
     // Fetch detailed resources and errors in parallel
     const [resourcesResponse, errorsResponse] = await Promise.all([
@@ -731,7 +733,7 @@ async function fetchPipelineData() {
     }
 
   } catch (err: any) {
-    console.error('Error fetching pipeline data:', err)
+    logger.error('Error fetching pipeline data:', err)
     error.value = err.message || 'An unexpected error occurred'
   } finally {
     loading.value = false

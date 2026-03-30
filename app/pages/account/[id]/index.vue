@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6 p-6">
+  <div class="space-y-6 lg:space-y-8 p-6 max-w-[1600px] mx-auto">
     <!-- Decommissioned Account Warning Banner -->
     <UAlert
       v-if="isAccountInactive"
@@ -14,7 +14,7 @@
     </UAlert>
 
     <!-- Account Header -->
-    <UCard data-tour="account-header">
+    <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5" data-tour="account-header">
       <div class="flex gap-2 items-center justify-between">
         <div class="flex gap-2 items-center">
           <div :class="`w-3 h-3 rounded-full ${accountStatus !== 'Decommissioned' ? 'bg-green-500' : 'bg-red-500'}`" />
@@ -90,13 +90,13 @@
           </UButton>
         </div>
       </div>
-    </UCard>
+    </div>
 
     <!-- Tabs -->
     <UTabs v-model="selectedTab" :items="tabs" data-tour="account-tabs">
       <!-- Overview Tab -->
       <template #overview>
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 row-auto">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 row-auto">
           <!-- Account Details -->
           <div data-tour="account-details" class="col-span-1 lg:col-span-2">
             <AccountDetails v-if="accountId" :account-id="accountId" :current-spend="currentSpend" :users="users" />
@@ -129,13 +129,27 @@
                 :time-series-billable="billableTimeSeries"
                 :time-series-proforma="proformaTimeSeries"
                 :loading="loading"
+                :date-range="costDays"
+                :date-range-options="dateRangeOptions"
                 :class="{ 'opacity-50 pointer-events-none': isAccountInactive }"
+                @update:date-range="handleDateRangeChange"
               />
             </InactiveAccountOverlay>
           </div>
 
-          <!-- Budget Alert History - full width -->
-          <div v-if="accountId" class="col-span-1 lg:col-span-3" data-tour="account-alerts">
+          <!-- AI Account Health -->
+          <div v-if="!isAccountInactive" class="col-span-1">
+            <AiInsightCard
+              type="account-health"
+              title="Account Health"
+              icon="i-heroicons-heart"
+              :context="accountHealthContext"
+              class="h-full"
+            />
+          </div>
+
+          <!-- Budget Alert History -->
+          <div v-if="accountId" class="col-span-1 lg:col-span-2" data-tour="account-alerts">
             <AccountAlertHistory :account-id="accountId" />
           </div>
         </div>
@@ -143,9 +157,9 @@
 
       <!-- Resources Tab -->
       <template #resources>
-        <div v-if="!isAccountInactive" class="space-y-4 mt-4">
+        <div v-if="!isAccountInactive" class="space-y-6 mt-4">
           <!-- Row 1: Resource Usage (1 col) + S3 Buckets (2 col) -->
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div class="col-span-1 h-full">
               <ResourceUsage :data="resourceCounts || {}" :columns="1" :loading="loading" class="h-full" />
             </div>
@@ -155,7 +169,7 @@
           </div>
 
           <!-- Row 2: EBS Volumes (2 col) + Instance Scheduling (1 col) -->
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div class="col-span-1 md:col-span-2 h-full">
               <EBSVolumes v-if="govCloudId || accountId" :account-id="govCloudId || accountId" class="h-full" />
             </div>
@@ -164,8 +178,15 @@
             </div>
           </div>
 
-          <!-- Row 3: Instances Table - Full Width (GovCloud) -->
-          <InstancesTable v-if="govCloudId || accountId" :account-id="govCloudId || accountId" />
+          <!-- Row 3: Instance Utilization Analysis - Full Width -->
+          <InstanceUtilization
+            v-if="govCloudId || accountId"
+            :account-id="govCloudId || accountId"
+            @loaded="(data) => utilizationMap = data"
+          />
+
+          <!-- Row 4: Instances Table - Full Width (GovCloud) -->
+          <InstancesTable v-if="govCloudId || accountId" :account-id="govCloudId || accountId" :utilization-map="utilizationMap" />
         </div>
         <div v-else class="flex items-center justify-center py-16">
           <div class="text-center">
@@ -178,7 +199,7 @@
 
       <!-- Policies Tab -->
       <template #policies>
-        <div v-if="!isAccountInactive" class="grid grid-cols-1 md:grid-cols-3 gap-4 row-auto mt-4">
+        <div v-if="!isAccountInactive" class="grid grid-cols-1 md:grid-cols-3 gap-6 row-auto mt-4">
           <!-- Service Control Policies -->
           <ServiceControlPolicies v-if="accountId" :account-id="accountId" class="col-span-2" />
 
@@ -192,6 +213,20 @@
           <div class="text-center">
             <UIcon name="i-heroicons-shield-check" class="w-16 h-16 text-gray-500 mx-auto mb-4 opacity-50" />
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Policies Unavailable</h3>
+            <p class="text-gray-600 dark:text-gray-400">This tab is disabled because the account is {{ accountStatus?.toLowerCase() }}.</p>
+          </div>
+        </div>
+      </template>
+
+      <!-- Security Tab -->
+      <template #security>
+        <div v-if="!isAccountInactive">
+          <AccountSecurityDashboard v-if="accountId" :account-id="accountId" />
+        </div>
+        <div v-else class="flex items-center justify-center py-16 mt-4">
+          <div class="text-center">
+            <UIcon name="i-heroicons-shield-exclamation" class="w-16 h-16 text-gray-500 mx-auto mb-4 opacity-50" />
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Security Unavailable</h3>
             <p class="text-gray-600 dark:text-gray-400">This tab is disabled because the account is {{ accountStatus?.toLowerCase() }}.</p>
           </div>
         </div>
@@ -217,6 +252,7 @@
           <AccountNotesPanel v-if="accountId && isAdmin" :account-id="accountId" />
         </div>
       </template>
+
     </UTabs>
   </div>
 </template>
@@ -241,7 +277,42 @@ const accountName = computed(() => enclaveStore.enclaves[accountId.value]?.proje
 const accountStatus = computed(() => enclaveStore.enclaves[accountId.value]?.enclaveStatus)
 const isAccountInactive = computed(() => accountStatus.value === 'Decommissioned' || accountStatus.value === 'Inactive')
 
+// AI Account Health context
+const accountHealthContext = computed(() => {
+  if (!accountId.value || loading.value) return {}
+  const enclave = enclaveStore.enclaves[accountId.value]
+  return {
+    accountId: accountId.value,
+    accountName: accountName.value,
+    lob: enclave?.lineOfBusiness,
+    status: accountStatus.value,
+    mtdCost: currentSpend.value,
+    budget: budget.value,
+    budgetUtilization: budget.value > 0 ? (currentSpend.value / budget.value) * 100 : undefined,
+    instanceCount: resourceCounts.value?.ec2Instances,
+  }
+})
+
 const { isAdmin } = useUserRoles()
+const { getPreference, setPreference, initialized: prefsInitialized, load: loadPrefs } = useUserPreferences()
+
+// Instance utilization data (passed from InstanceUtilization to InstancesTable)
+const utilizationMap = ref<Record<string, any>>({})
+
+// Cost trend date range
+const costDays = ref(14)
+const dateRangeOptions = [
+  { label: '7D', value: 7 },
+  { label: '14D', value: 14 },
+  { label: '30D', value: 30 },
+  { label: '90D', value: 90 },
+]
+
+function handleDateRangeChange(days: number) {
+  costDays.value = days
+  setPreference('costTrendDays', days)
+  fetchAccountData()
+}
 
 // Tour composable
 const { startTour: handleStartAccountTour, maybeAutoStart: maybeAutoStartTour } = useAccountTour()
@@ -257,7 +328,7 @@ const {
   billableTimeSeries,
   proformaTimeSeries,
   fetchAll: fetchAccountData,
-} = useAccountData(accountId, govCloudId, isAccountInactive)
+} = useAccountData(accountId, govCloudId, isAccountInactive, costDays)
 
 // Get user's roles for this account
 const userAccountRoles = computed<RoleLink[]>(() => {
@@ -326,6 +397,7 @@ const tabs = computed(() => {
     { label: 'Overview', slot: 'overview', icon: 'i-heroicons-home', disabled: false },
     { label: 'Resources', slot: 'resources', icon: 'i-heroicons-server-stack', disabled: isAccountInactive.value },
     { label: 'Policies', slot: 'policies', icon: 'i-heroicons-shield-check', disabled: isAccountInactive.value },
+    { label: 'Security', slot: 'security', icon: 'i-heroicons-shield-exclamation', disabled: isAccountInactive.value },
   ]
 
   if (isAdmin.value) {
@@ -339,6 +411,15 @@ const tabs = computed(() => {
 const currentTabName = computed(() => {
   const tab = tabs.value.find((_, index) => index === selectedTab.value)
   return tab?.label || 'Overview'
+})
+
+// Track tab changes for cross-feature achievement badge
+const TAB_TO_FEATURE: Record<string, string> = { Resources: 'resources', Security: 'security', Overview: 'costs' }
+watch(selectedTab, () => {
+  const feature = TAB_TO_FEATURE[currentTabName.value]
+  if (feature && accountId.value) {
+    useEventBus().emit('account.feature_viewed', { accountId: accountId.value, feature })
+  }
 })
 
 const navigateToCostsPage = () => {
@@ -373,20 +454,31 @@ function checkAndRedirectIfGovCloudId() {
 onMounted(async () => {
   checkAndRedirectIfGovCloudId()
 
+  // Load saved date range preference
+  if (!prefsInitialized.value) await loadPrefs()
+  costDays.value = getPreference('costTrendDays', 14)
+
   // Track recent account visit (fire-and-forget)
   if (accountId.value) {
     addRecentAccount(accountId.value).catch(() => {})
+    useEventBus().emit('account.viewed', { accountId: accountId.value, environment: govCloudId.value ? 'govcloud' : 'commercial' })
+    useEventBus().emit('account.feature_viewed', { accountId: accountId.value, feature: 'costs' })
   }
 
   // Tour auto-start (handles preference loading internally)
   maybeAutoStartTour()
 
-  // Deep-link to tab from shared link query param
-  const tabParam = route.query.tab
-  if (tabParam !== undefined && tabParam !== null) {
-    const tabIndex = parseInt(tabParam as string)
+  // Deep-link to tab from shared link query param (supports both numeric index and slot name)
+  const tabParam = route.query.tab as string | undefined
+  if (tabParam) {
+    const tabIndex = parseInt(tabParam)
     if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex < tabs.value.length) {
       selectedTab.value = tabIndex
+    } else {
+      const matchIndex = tabs.value.findIndex(t => t.slot === tabParam)
+      if (matchIndex !== -1) {
+        selectedTab.value = matchIndex
+      }
     }
   }
 

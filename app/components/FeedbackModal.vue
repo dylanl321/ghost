@@ -51,6 +51,8 @@
 import { ref, watch } from 'vue'
 import { useToast } from '#imports'
 
+const logger = createLogger('FeedbackModal')
+
 const { user } = useOidcAuth()
 
 type FeatureOptions = 'Issue' | 'Feature Request' | 'General Feedback'
@@ -124,6 +126,8 @@ async function submit() {
       throw new Error('Server returned unsuccessful response')
     }
 
+    useEventBus().emit('feedback.submitted', {})
+
     toast.add({
       title: 'Feedback Submitted',
       description: 'Thank you for your feedback!',
@@ -137,7 +141,7 @@ async function submit() {
     reporter_email.value = ''
     isAnonymous.value = false
   } catch (err) {
-    console.error('Failed to submit feedback:', err)
+    logger.error('Failed to submit feedback:', err)
     toast.add({ title: 'Error', description: 'Failed to submit feedback.', color: 'red' })
   } finally {
     isSubmitting.value = false

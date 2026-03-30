@@ -1,3 +1,5 @@
+const logger = createLogger('AccountShareLink')
+
 interface AccountShareLinkState {
   accountId: string
   selectedTab: number
@@ -67,7 +69,7 @@ export const useAccountShareLink = (options: AccountShareLinkOptions) => {
         throw new Error('Failed to create share link')
       }
     } catch (err: any) {
-      console.error('Error creating share link:', err)
+      logger.error('Error creating share link:', err)
       error.value = err?.data?.statusMessage || err?.message || 'Failed to create share link'
       return null
     } finally {

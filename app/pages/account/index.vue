@@ -370,6 +370,8 @@ import { ref, computed, onMounted, onUnmounted, onActivated, onDeactivated, watc
 import { useOrganization, type OrgNode } from '~/composables/useOrganization'
 import * as d3 from 'd3'
 
+const logger = createLogger('Index')
+
 // Composable
 const {
   orgData,
@@ -766,7 +768,7 @@ const fitToScreen = () => {
       .duration(750)
       .call(zoom.transform, transform)
   } catch (error) {
-    console.warn('Failed to fit to screen:', error)
+    logger.warn('Failed to fit to screen:', error)
   }
 }
 

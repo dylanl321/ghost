@@ -209,11 +209,12 @@ const sidebarCollapsed = ref(false)
 
 // Category expanded states
 const categoryExpanded = ref<Record<string, boolean>>({
-  settings: true,
+  configuration: true,
   users: false,
   content: false,
+  costs: false,
   ai: false,
-  monitoring: false,
+  system: false,
   pipelines: false
 })
 
@@ -287,36 +288,53 @@ function handleClickOutside(event: MouseEvent) {
   }
 }
 
-// Setup click outside listener
+// Cmd/Ctrl+K keyboard shortcut to focus search
+function handleGlobalKeydown(event: KeyboardEvent) {
+  if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+    event.preventDefault()
+    if (sidebarCollapsed.value) {
+      expandAndFocusSearch()
+    } else {
+      searchInputRef.value?.input?.focus()
+      showSearchResults.value = true
+    }
+  }
+}
+
+// Setup click outside and keyboard listeners
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
+  document.addEventListener('keydown', handleGlobalKeydown)
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
+  document.removeEventListener('keydown', handleGlobalKeydown)
 })
 
 // Admin navigation categories with nested children
 const categories = [
   {
-    id: 'settings',
-    label: 'System Settings',
+    id: 'configuration',
+    label: 'Configuration',
     icon: 'i-heroicons-cog-6-tooth',
-    to: '/admin/settings',
+    to: '/admin/configuration',
     children: [
-      { label: 'API Keys', icon: 'i-heroicons-key', to: '/admin/settings?tab=api-keys' },
-      { label: 'Site Config', icon: 'i-heroicons-cog', to: '/admin/settings?tab=site-config' },
-      { label: 'Alert Settings', icon: 'i-heroicons-bell-alert', to: '/admin/settings?tab=alert-settings' }
+      { label: 'API Keys', icon: 'i-heroicons-key', to: '/admin/configuration?tab=api-keys' },
+      { label: 'Site Config', icon: 'i-heroicons-cog', to: '/admin/configuration?tab=site-config' }
     ]
   },
   {
     id: 'users',
-    label: 'User Management',
+    label: 'Users & Access',
     icon: 'i-heroicons-user-group',
     to: '/admin/users',
     children: [
       { label: 'User Preferences', icon: 'i-heroicons-user', to: '/admin/users?tab=preferences' },
-      { label: 'Roles & Permissions', icon: 'i-heroicons-shield-check', to: '/admin/users?tab=roles' }
+      { label: 'Roles & Permissions', icon: 'i-heroicons-shield-check', to: '/admin/users?tab=roles' },
+      { label: 'Usage Analytics', icon: 'i-heroicons-chart-bar', to: '/admin/users?tab=usage-analytics' },
+      { label: 'User Journeys', icon: 'i-heroicons-map', to: '/admin/users?tab=user-journeys' },
+      { label: 'Feedback & Requests', icon: 'i-heroicons-exclamation-triangle', to: '/admin/users?tab=feedback' }
     ]
   },
   {
@@ -326,29 +344,58 @@ const categories = [
     to: '/admin/content',
     children: [
       { label: 'Share Links', icon: 'i-heroicons-link', to: '/admin/content?tab=share-links' },
-      { label: 'Scheduled Reports', icon: 'i-heroicons-calendar', to: '/admin/content?tab=reports' }
+      { label: 'Scheduled Reports', icon: 'i-heroicons-calendar', to: '/admin/content?tab=reports' },
+      { label: 'Stored Reports', icon: 'i-heroicons-document-duplicate', to: '/admin/content?tab=stored-reports' }
+    ]
+  },
+  {
+    id: 'notifications',
+    label: 'Notifications',
+    icon: 'i-heroicons-bell-alert',
+    to: '/admin/notifications',
+    children: [
+      { label: 'Dashboard', icon: 'i-heroicons-squares-2x2', to: '/admin/notifications?tab=dashboard' },
+      { label: 'Sources', icon: 'i-heroicons-queue-list', to: '/admin/notifications?tab=sources' },
+      { label: 'Activity Feed', icon: 'i-heroicons-clock', to: '/admin/notifications?tab=activity' },
+      { label: 'All Notifications', icon: 'i-heroicons-inbox-stack', to: '/admin/notifications?tab=all' },
+      { label: 'Broadcasts', icon: 'i-heroicons-megaphone', to: '/admin/notifications?tab=broadcasts' },
+      { label: 'Configuration', icon: 'i-heroicons-cog-6-tooth', to: '/admin/notifications?tab=configuration' }
+    ]
+  },
+  {
+    id: 'costs',
+    label: 'Cost Management',
+    icon: 'i-heroicons-currency-dollar',
+    to: '/admin/costs',
+    children: [
+      { label: 'Budget Alerts', icon: 'i-heroicons-bell-alert', to: '/admin/costs/budget-alerts' },
+      { label: 'Tag Compliance', icon: 'i-heroicons-tag', to: '/admin/costs/tag-compliance' },
+      { label: 'Data Validation', icon: 'i-heroicons-clipboard-document-check', to: '/admin/costs/data-validation' }
     ]
   },
   {
     id: 'ai',
-    label: 'AI Operations',
+    label: 'AI & Agents',
     icon: 'i-heroicons-sparkles',
     to: '/admin/ai',
     children: [
       { label: 'Chat Monitor', icon: 'i-heroicons-chat-bubble-left-right', to: '/admin/ai?tab=chat-monitor' },
+      { label: 'Agent Logs', icon: 'i-heroicons-document-text', to: '/admin/ai?tab=agent-logs' },
       { label: 'Agent Testing', icon: 'i-heroicons-beaker', to: '/admin/ai?tab=agent-testing' },
-      { label: 'AI Metrics', icon: 'i-heroicons-chart-bar', to: '/admin/ai?tab=metrics' }
+      { label: 'Agent Health', icon: 'i-heroicons-heart', to: '/admin/ai?tab=agent-health' },
+      { label: 'AI Metrics', icon: 'i-heroicons-chart-bar', to: '/admin/ai?tab=ai-metrics' }
     ]
   },
   {
-    id: 'monitoring',
-    label: 'System Monitoring',
-    icon: 'i-heroicons-chart-bar',
-    to: '/admin/monitoring',
+    id: 'system',
+    label: 'System Health',
+    icon: 'i-heroicons-server-stack',
+    to: '/admin/system',
     children: [
-      { label: 'System Logs', icon: 'i-heroicons-document-text', to: '/admin/monitoring?tab=logs' },
-      { label: 'Health Checks', icon: 'i-heroicons-heart', to: '/admin/monitoring?tab=health' },
-      { label: 'Issues', icon: 'i-heroicons-exclamation-triangle', to: '/admin/monitoring?tab=issues' }
+      { label: 'Health Dashboard', icon: 'i-heroicons-server-stack', to: '/admin/system?tab=health-dashboard' },
+      { label: 'System Logs', icon: 'i-heroicons-document-text', to: '/admin/system?tab=system-logs' },
+      { label: 'Notification Log', icon: 'i-heroicons-bell', to: '/admin/system?tab=notification-log' },
+      { label: 'Security Cache', icon: 'i-heroicons-shield-check', to: '/admin/system?tab=security-cache' }
     ]
   },
   {
@@ -357,8 +404,8 @@ const categories = [
     icon: 'i-heroicons-arrow-path',
     to: '/admin/pipelines',
     children: [
-      { label: 'Repositories', icon: 'i-heroicons-folder', to: '/admin/pipelines?tab=repositories' },
-      { label: 'Authors', icon: 'i-heroicons-users', to: '/admin/pipelines?tab=authors' }
+      { label: 'Repositories', icon: 'i-heroicons-folder', to: '/admin/pipelines/repositories' },
+      { label: 'Authors', icon: 'i-heroicons-users', to: '/admin/pipelines/authors' }
     ]
   }
 ]

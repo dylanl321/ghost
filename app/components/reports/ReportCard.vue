@@ -86,7 +86,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ScheduledReport } from '~/shared/types/scheduled-reports'
+import type { ScheduledReport } from '#shared/types/scheduled-reports'
 
 const props = defineProps<{
   report: ScheduledReport

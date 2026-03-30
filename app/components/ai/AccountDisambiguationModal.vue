@@ -109,7 +109,7 @@
 </template>
 
 <script setup lang="ts">
-import type { AccountDisambiguation } from '~/server/types/strands'
+import type { AccountDisambiguation } from '~~/server/types/strands'
 
 interface Props {
   disambiguation: AccountDisambiguation

@@ -294,6 +294,8 @@
 </template>
 
 <script setup lang="ts">
+const logger = createLogger('PolicyAnalyzerSimple')
+
 const props = defineProps<{
   accountId: string
   environment?: 'commercial' | 'govcloud'
@@ -345,7 +347,7 @@ const loadAnalysis = async () => {
     analysisData.value = data.data
   } catch (err: any) {
     error.value = err.message || 'Failed to load policy analysis'
-    console.error('Error loading policy analysis:', err)
+    logger.error('Error loading policy analysis:', err)
   } finally {
     loading.value = false
   }
@@ -472,7 +474,7 @@ const copyPolicyJson = async (policy: any) => {
   try {
     await navigator.clipboard.writeText(formatPolicyJson(policy))
   } catch (error) {
-    console.error('Failed to copy:', error)
+    logger.error('Failed to copy:', error)
   }
 }
 

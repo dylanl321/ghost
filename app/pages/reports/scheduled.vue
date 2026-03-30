@@ -187,7 +187,9 @@
 </template>
 
 <script setup lang="ts">
-import type { ScheduledReport, CreateReportRequest } from '~/shared/types/scheduled-reports'
+import type { ScheduledReport, CreateReportRequest } from '#shared/types/scheduled-reports'
+
+const logger = createLogger('Scheduled')
 
 definePageMeta({
   title: 'Scheduled Reports',
@@ -291,7 +293,7 @@ async function handleSubmit(data: CreateReportRequest) {
       })
     }
   } catch (err) {
-    console.error('Error submitting report:', err)
+    logger.error('Error submitting report:', err)
   }
 }
 

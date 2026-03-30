@@ -8,7 +8,9 @@ import type {
   DataExportConfig,
   ExportFormat,
   ExportResult
-} from '~/shared/types/export'
+} from '#shared/types/export'
+
+const logger = createLogger('DataExport')
 
 export function useDataExport() {
   const isExporting = ref(false)
@@ -71,6 +73,8 @@ export function useDataExport() {
           downloadFile(result.blob, result.filename)
         }
 
+        useEventBus().emit('export.completed', { format })
+
         toast.add({
           title: 'Export Successful',
           description: `${format.toUpperCase()} file has been downloaded`,
@@ -89,7 +93,7 @@ export function useDataExport() {
       return result
 
     } catch (error) {
-      console.error('Export failed:', error)
+      logger.error('Export failed:', error)
 
       const errorResult: ExportResult = {
         success: false,
@@ -152,7 +156,7 @@ export function useDataExport() {
       }
 
     } catch (error) {
-      console.error('JSON export failed:', error)
+      logger.error('JSON export failed:', error)
       return {
         success: false,
         format: 'json',

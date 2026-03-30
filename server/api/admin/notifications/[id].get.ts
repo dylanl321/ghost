@@ -27,7 +27,7 @@ export default defineEventHandler(async (event) => {
       data: notification
     }
   } catch (error: any) {
-    console.error('Error getting notification:', error)
+    logger.error('Error getting notification:', error)
     return {
       success: false,
       error: error.message

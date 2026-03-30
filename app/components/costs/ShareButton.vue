@@ -185,11 +185,6 @@
         </template>
 
         <div class="p-6 space-y-4">
-          <!-- Debug Info -->
-          <div class="text-xs text-gray-500 font-mono">
-            Debug: isLoading={{ isLoading }}, shareUrl={{ shareUrl }}, error={{ error }}
-          </div>
-
           <!-- Loading State -->
           <div v-if="isLoading" class="flex items-center justify-center py-8">
             <div class="text-center">
@@ -314,6 +309,8 @@
 <script setup lang="ts">
 import type { DataMode } from '~/types/costs'
 
+const logger = createLogger('ShareButton')
+
 interface Props {
   selectedAccounts: string[]
   selectedTimeframe: string
@@ -368,9 +365,9 @@ const handleShare = async () => {
   isModalOpen.value = true
   // Always generate a fresh link when opening the share modal
   const url = await generateShareLink()
-  console.log('ShareButton - Generated URL:', url)
-  console.log('ShareButton - shortUrl ref value:', shortUrl.value)
-  console.log('ShareButton - shareUrl computed value:', shareUrl.value)
+  logger.info('ShareButton - Generated URL:', url)
+  logger.info('ShareButton - shortUrl ref value:', shortUrl.value)
+  logger.info('ShareButton - shareUrl computed value:', shareUrl.value)
 }
 
 // Copy to clipboard functionality
@@ -388,7 +385,7 @@ const copyToClipboard = async () => {
       copySuccess.value = false
     }, 2000)
   } catch (err) {
-    console.error('Failed to copy to clipboard:', err)
+    logger.error('Failed to copy to clipboard:', err)
   } finally {
     isCopying.value = false
   }

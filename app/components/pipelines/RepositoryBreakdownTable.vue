@@ -131,7 +131,7 @@
 
 <script setup lang="ts">
 import { formatDistanceToNow } from 'date-fns'
-import type { GitLabRepoInfo } from '~/shared/types/pipelines'
+import type { GitLabRepoInfo } from '#shared/types/pipelines'
 import { getProjectUrl } from '~/utils/gitlab-url-parser'
 
 interface TimelineItem {

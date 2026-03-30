@@ -2,6 +2,8 @@
 import { ref, onMounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 
+const logger = createLogger('GHOST-AUTH')
+
 definePageMeta({
   layout: "authentication",
 });
@@ -19,19 +21,19 @@ const progress = ref(0);
 
 // Get the return URL with query parameter fallback support
 const getFinalReturnUrl = (): string => {
-  console.log('[GHOST-AUTH] Loading: Determining return URL...')
-  console.log('[GHOST-AUTH] Loading: Query params:', route.query)
+  logger.info('Loading: Determining return URL...')
+  logger.info('Loading: Query params:', route.query)
 
   // First check query parameters (support both 'returnTo' and 'redirect' for compatibility)
   const queryParam = route.query.returnTo || route.query.redirect
   if (queryParam && typeof queryParam === "string") {
-    console.log('[GHOST-AUTH] Loading: Using query parameter:', queryParam)
+    logger.info('Loading: Using query parameter:', queryParam)
     return decodeURIComponent(queryParam);
   }
 
   // Then use the composable to check sessionStorage
   const savedUrl = getReturnUrl()
-  console.log('[GHOST-AUTH] Loading: Return URL from sessionStorage:', savedUrl)
+  logger.info('Loading: Return URL from sessionStorage:', savedUrl)
 
   return savedUrl
 };
@@ -59,7 +61,7 @@ const validateLoginState = async (accessToken: string) => {
 onMounted(async () => {
   // CAPTURE URL IMMEDIATELY - before any async work that could cause re-render
   const finalReturnUrl = getFinalReturnUrl()
-  console.log('[GHOST-AUTH] Loading: Final return URL captured:', finalReturnUrl)
+  logger.info('Loading: Final return URL captured:', finalReturnUrl)
 
   try {
     // DEV MODE: Skip Graph API but still load enclave data for account selection
@@ -79,7 +81,7 @@ onMounted(async () => {
         .map((g: string) => g.trim())
         .filter((g: string) => g.length > 0)
 
-      console.log('[GHOST-AUTH] Dev mode: Setting groups:', devGroups)
+      logger.info('Dev mode: Setting groups:', devGroups)
       userGroupStore.setDevGroups(devGroups)
 
       // Load enclave data so accounts are available in the dev options panel
@@ -92,7 +94,7 @@ onMounted(async () => {
       await new Promise((resolve) => setTimeout(resolve, 500))
 
       clearReturnUrl()
-      console.log('[GHOST-AUTH] Loading: Dev mode redirecting to:', finalReturnUrl)
+      logger.info('Loading: Dev mode redirecting to:', finalReturnUrl)
       window.location.href = finalReturnUrl
       return
     }
@@ -135,7 +137,7 @@ onMounted(async () => {
 
     // Debug roles in development only (no sensitive data dumps in console)
     if (import.meta.dev) {
-      console.log('[GHOST-AUTH] Session loaded successfully')
+      logger.info('Session loaded successfully')
       debugRoles();
     }
 
@@ -147,7 +149,7 @@ onMounted(async () => {
     clearReturnUrl()
 
     // Redirect to the original URL the user was trying to access
-    console.log('[GHOST-AUTH] Loading: Redirecting to:', finalReturnUrl);
+    logger.info('Loading: Redirecting to:', finalReturnUrl);
 
     // Use window.location.href to ensure full page navigation
     // This prevents the loading page from appearing in content areas

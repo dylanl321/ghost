@@ -129,7 +129,9 @@
 </template>
 
 <script setup lang="ts">
-import type { AWSEnclaveData } from '~/shared/types/accounts'
+import type { AWSEnclaveData } from '#shared/types/accounts'
+
+const logger = createLogger('DatasetAccountSelector')
 
 const selectedAccountIds = defineModel<string[]>({ default: () => [] })
 
@@ -269,17 +271,17 @@ function getStatusColor(status: string): string {
 onMounted(async () => {
   loading.value = true
   try {
-    console.log('[DatasetAccountSelector] Fetching accounts...')
+    logger.info('Fetching accounts...')
     const response = await $fetch<{ success: boolean; data: AWSEnclaveData[] }>('/api/accounts/list')
-    console.log('[DatasetAccountSelector] Response:', response)
-    console.log('[DatasetAccountSelector] Accounts count:', response.data?.length)
+    logger.info('Response:', response)
+    logger.info('Accounts count:', response.data?.length)
     accounts.value = response.data || []
-    console.log('[DatasetAccountSelector] Loaded accounts:', accounts.value.length)
+    logger.info('Loaded accounts:', accounts.value.length)
 
     // Debug: Show sample account statuses
     if (accounts.value.length > 0) {
       const sampleAccounts = accounts.value.slice(0, 5)
-      console.log('[DatasetAccountSelector] Sample accounts:', sampleAccounts.map(a => ({
+      logger.info('Sample accounts:', sampleAccounts.map(a => ({
         id: a.accountId,
         name: a.accountName,
         enclaveStatus: a.enclaveStatus,
@@ -287,7 +289,7 @@ onMounted(async () => {
       })))
     }
   } catch (error) {
-    console.error('[DatasetAccountSelector] Failed to load accounts:', error)
+    logger.error('Failed to load accounts:', error)
     // TODO: Show error toast
   } finally {
     loading.value = false
@@ -296,6 +298,6 @@ onMounted(async () => {
 
 // Debug computed values
 watch(filteredAccounts, (newVal) => {
-  console.log('[DatasetAccountSelector] Filtered accounts:', newVal.length)
+  logger.info('Filtered accounts:', newVal.length)
 }, { immediate: true })
 </script>

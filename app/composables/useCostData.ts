@@ -5,6 +5,8 @@ import type { AWSEnclaveData } from '~~/shared/types/accounts'
 import { getCachedDataset, setCachedDataset, invalidateByMode } from '~/composables/useCostDataCache'
 import { getUserFriendlyMessage, retryWithBackoff } from '~/utils/error-helpers'
 
+const logger = createLogger('CostData')
+
 /**
  * CLIENT-SIDE CACHING GAP
  *
@@ -35,13 +37,15 @@ interface UseCostDataArgs {
   initialMode?: DataMode
   accountsList?: Ref<AWSEnclaveData[]> // Full accounts data with metadata
   debounceMs?: number // Debounce delay in milliseconds
+  groupByTag?: Ref<string | null> // Tag key to group costs by (e.g. "Environment")
 }
 
-export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode = 'proforma', accountsList, debounceMs = 800 }: UseCostDataArgs) => {
+export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode = 'proforma', accountsList, debounceMs = 800, groupByTag }: UseCostDataArgs) => {
   const mode = ref<DataMode>(initialMode)
   const isFetching = ref(false)
   const isDeferredLoading = ref(false) // True while forecast/supplementary data loads in background
   const isPending = ref(false) // True when debounce timer is active
+  const loadingPhase = ref<'idle' | 'core' | 'wave1' | 'wave2' | 'complete'>('idle')
   const fetchError = ref<string | null>(null)
   const fetchWarnings = ref<string[]>([]) // Non-fatal warnings (e.g. deferred fetch failed but core succeeded)
   const dataset = ref<NormalizedDataset | null>(null)
@@ -79,12 +83,20 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     params.set('period', period)
     // Use proforma flag
     params.set('proforma', String(query.value.mode === 'proforma'))
-    // Group by linked account for per-account series; enhanced=true to get account details
-    params.set('groupBy', 'LINKED_ACCOUNT')
-    params.set('enhanced', 'true')
-    // IMPORTANT: Don't filter by accountIds for summary - we need all account costs for the sidebar
-    // The account selection is used for chart filtering, not data fetching
-    // if (query.value.accounts.length > 0) params.set('accountIds', query.value.accounts.join(','))
+
+    // When grouping by tag, use TAG:<key> groupBy and disable enhanced account enrichment
+    if (groupByTag?.value) {
+      params.set('groupBy', `TAG:${groupByTag.value}`)
+      params.set('enhanced', 'false')
+      // Pass selected accounts for tag grouping since we need specific account data
+      if (query.value.accounts.length > 0) params.set('accountIds', query.value.accounts.join(','))
+    } else {
+      // Group by linked account for per-account series; enhanced=true to get account details
+      params.set('groupBy', 'LINKED_ACCOUNT')
+      params.set('enhanced', 'true')
+      // IMPORTANT: Don't filter by accountIds for summary - we need all account costs for the sidebar
+      // The account selection is used for chart filtering, not data fetching
+    }
     return `/api/costs/summary?${params.toString()}`
   }
 
@@ -234,6 +246,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     const signal = abortController.signal
     const thisGeneration = ++fetchGeneration
 
+    loadingPhase.value = 'core'
     isFetching.value = true
     fetchError.value = null
     fetchWarnings.value = []
@@ -250,6 +263,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
         ? { ...cached, accountsList: accountsList.value }
         : cached
       isFetching.value = false
+      loadingPhase.value = 'complete'
       return
     }
 
@@ -322,6 +336,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
       }
 
       isFetching.value = false
+      loadingPhase.value = 'wave1'
       isDeferredLoading.value = true
 
       // ── Phase 2: Await wave 1 (already in-flight since t=0) ──
@@ -333,6 +348,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
         wave1Keys.forEach((key, i) => { patch[key] = wave1Results[i] })
         dataset.value = { ...dataset.value, ...patch }
       }
+      loadingPhase.value = 'wave2'
 
       if (thisGeneration !== fetchGeneration) {
         isDeferredLoading.value = false
@@ -357,6 +373,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
       }
 
       isDeferredLoading.value = false
+      loadingPhase.value = 'complete'
 
       // Store completed dataset in client-side cache
       if (thisGeneration === fetchGeneration && dataset.value) {
@@ -367,11 +384,13 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
       // Ignore abort errors - these are expected when a newer fetch supersedes
       if (e?.name === 'AbortError' || thisGeneration !== fetchGeneration) {
         isDeferredLoading.value = false
+        loadingPhase.value = 'idle'
         return
       }
       fetchError.value = getUserFriendlyMessage(e)
       isFetching.value = false
       isDeferredLoading.value = false
+      loadingPhase.value = 'idle'
     }
   }
 
@@ -427,7 +446,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
           body: { tags: ['costs'] }
         })
       } catch (error) {
-        console.error('Failed to clear cache:', error)
+        logger.error('Failed to clear cache:', error)
       } finally {
         modeCacheClearing = false
       }
@@ -446,6 +465,14 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     void fetchCosts()
   })
 
+  // Watch for tag groupBy changes - re-fetch when the active tag key changes
+  if (groupByTag) {
+    watch(groupByTag, () => {
+      if (!initialized.value) return
+      void fetchCosts()
+    })
+  }
+
   // Cleanup on unmount
   onUnmounted(() => {
     if (debounceTimer) {
@@ -456,5 +483,5 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     }
   })
 
-  return { mode, isFetching, isDeferredLoading, isPending, fetchError, fetchWarnings, dataset, fetchCosts, initialized }
+  return { mode, isFetching, isDeferredLoading, isPending, loadingPhase, fetchError, fetchWarnings, dataset, fetchCosts, initialized }
 }

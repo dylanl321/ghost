@@ -136,7 +136,7 @@
 </template>
 
 <script setup lang="ts">
-import type { DryRunConfig } from '@/shared/types/budget-alert-config'
+import type { DryRunConfig } from '#shared/types/budget-alert-config'
 
 const props = defineProps<{
   dryRun: DryRunConfig | null

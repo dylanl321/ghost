@@ -254,6 +254,8 @@ import type {
   StrandsAgentDashboardMetrics
 } from '#shared/types/strands-agent-metrics'
 
+const logger = createLogger('AIMetricsPanel')
+
 const period = ref<'24h' | '7d' | '30d'>('7d')
 const loading = ref(true)
 const error = ref<string | null>(null)
@@ -304,7 +306,7 @@ const loadData = async () => {
       .slice(0, 10)
 
   } catch (err: any) {
-    console.error('Error loading metrics:', err)
+    logger.error('Error loading metrics:', err)
     error.value = err.message || 'Failed to load metrics'
   } finally {
     loading.value = false

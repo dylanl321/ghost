@@ -189,6 +189,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 
+const logger = createLogger('BudgetAlertLambdaLogsPanel')
+
 interface LogEvent {
   timestamp: number
   timestampFormatted: string
@@ -341,7 +343,7 @@ async function fetchLogs() {
       throw new Error('Failed to fetch logs')
     }
   } catch (err: any) {
-    console.error('Failed to fetch Lambda logs:', err)
+    logger.error('Failed to fetch Lambda logs:', err)
     error.value = err.message || 'Failed to load Lambda logs'
   } finally {
     loading.value = false

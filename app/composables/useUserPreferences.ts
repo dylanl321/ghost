@@ -12,6 +12,8 @@
 import type { UserPreferences, UpdatePreferencesRequest } from '#shared/types/user-preferences'
 import { getBrowserTimezone } from '#shared/types/user-preferences'
 
+const logger = createLogger('UserPreferences')
+
 // localStorage cache key for preferences
 const PREFS_CACHE_KEY = 'ghost-user-preferences-cache'
 const AUTH_ERROR_SESSION_KEY = 'ghost-auth-error-shown'
@@ -34,7 +36,7 @@ function cachePreferences(prefs: UserPreferences): void {
       cachedAt: Date.now()
     }))
   } catch (e) {
-    console.warn('Failed to cache preferences to localStorage:', e)
+    logger.warn('Failed to cache preferences to localStorage:', e)
   }
 }
 
@@ -49,7 +51,7 @@ function getCachedPreferences(): UserPreferences | null {
     const { data } = JSON.parse(cached)
     return data
   } catch (e) {
-    console.warn('Failed to read cached preferences:', e)
+    logger.warn('Failed to read cached preferences:', e)
     return null
   }
 }
@@ -120,7 +122,7 @@ export function useUserPreferences() {
         }]
       })
     } catch (e) {
-      console.warn('Failed to show auth error toast:', e)
+      logger.warn('Failed to show auth error toast:', e)
     }
   }
 
@@ -157,27 +159,27 @@ export function useUserPreferences() {
       // Auto-fix timezone if it's still the server default (EST) and doesn't match browser
       // This handles users who logged in before this fix was deployed
       if (preferences.value.timezone === 'America/New_York' && browserTz !== 'America/New_York') {
-        console.log('Auto-updating timezone from server default (EST) to browser timezone:', browserTz)
+        logger.info('Auto-updating timezone from server default (EST) to browser timezone:', browserTz)
         // Update silently in background, don't wait for it
         updateTimezone(browserTz).catch(err => {
-          console.warn('Failed to auto-update timezone:', err)
+          logger.warn('Failed to auto-update timezone:', err)
         })
       }
     } catch (err: any) {
-      console.error('Failed to load user preferences:', err)
+      logger.error('Failed to load user preferences:', err)
       error.value = err.message || 'Failed to load preferences'
 
       // Check if this is an auth error (401)
       if (isAuthError(err)) {
         authError.value = true
-        console.warn('Auth error detected while loading preferences')
+        logger.warn('Auth error detected while loading preferences')
         emitAuthErrorEvent()
       }
 
       // Try to use cached preferences from localStorage
       const cached = getCachedPreferences()
       if (cached) {
-        console.log('Using cached preferences from localStorage')
+        logger.info('Using cached preferences from localStorage')
         preferences.value = cached
       } else {
         // Only use empty defaults if no cache exists
@@ -216,7 +218,7 @@ export function useUserPreferences() {
 
       return true
     } catch (err: any) {
-      console.error('Failed to update user preferences:', err)
+      logger.error('Failed to update user preferences:', err)
       error.value = err.message || 'Failed to update preferences'
 
       // Check if this is an auth error

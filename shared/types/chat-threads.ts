@@ -33,6 +33,7 @@ export interface ChatMessage {
   timestamp: string // ISO timestamp
   metadata?: {
     accountId?: string
+    accountName?: string
     mcpUsed?: string
     mcpType?: 'permanent' | 'temporary'
     model?: string

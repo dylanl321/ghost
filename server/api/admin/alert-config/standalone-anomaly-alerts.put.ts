@@ -7,7 +7,7 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { requireAdmin } from '../../../utils/user-roles'
 import { getConfigItem, updateConfigItem } from '../../../utils/budget-alert-config'
-import type { StandaloneAnomalyAlertsConfig } from '@/shared/types/budget-alert-config'
+import type { StandaloneAnomalyAlertsConfig } from '#shared/types/budget-alert-config'
 
 interface StandaloneAnomalyAlertsUpdateRequest {
   enabled?: boolean
@@ -93,7 +93,7 @@ export default defineEventHandler(async (event) => {
       message: 'Standalone anomaly alerts configuration updated successfully'
     }
   } catch (error: any) {
-    console.error('Error updating standalone anomaly alerts config:', error)
+    logger.error('Error updating standalone anomaly alerts config:', error)
 
     throw createError({
       statusCode: error.statusCode || 500,

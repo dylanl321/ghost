@@ -7,7 +7,7 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { requireAdmin } from '../../../utils/user-roles'
 import { getConfigItem, updateConfigItem } from '../../../utils/budget-alert-config'
-import type { SettingsConfig } from '@/shared/types/budget-alert-config'
+import type { SettingsConfig } from '#shared/types/budget-alert-config'
 
 interface SettingsUpdateRequest {
   email_domain?: string
@@ -92,7 +92,7 @@ export default defineEventHandler(async (event) => {
       message: 'Settings updated successfully'
     }
   } catch (error: any) {
-    console.error('Error updating alert settings:', error)
+    logger.error('Error updating alert settings:', error)
 
     throw createError({
       statusCode: error.statusCode || 500,

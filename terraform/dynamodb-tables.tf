@@ -587,8 +587,247 @@ resource "aws_dynamodb_table" "async_metrics" {
 # Terraform state. GHOST only needs read-only IAM permissions to query the table.
 
 # ============================================================================
+# Cost Tag Configuration Table (GovCloud Environment)
+# ============================================================================
+# Stores per-account cost tag configuration (important tags, descriptions, aliases)
+# Migrated from costTagConfig attribute on gdms_aws_accounts-master table
+resource "aws_dynamodb_table" "cost_tag_config" {
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-cost-tag-config-prod" : "ghost-cost-tag-config"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "accountId"
+
+  attribute {
+    name = "accountId"
+    type = "S"
+  }
+
+  # Enable encryption at rest
+  server_side_encryption {
+    enabled = true
+  }
+
+  # Enable point-in-time recovery
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Name        = "GHOST Cost Tag Configuration"
+    Environment = local.environment
+    ManagedBy   = "Terraform"
+    Service     = "GHOST"
+    Component   = "CostTagConfig"
+  }
+}
+
+# ============================================================================
+# User Notifications Table (GovCloud Environment)
+# ============================================================================
+# Per-user notification inbox for the unified notification system
+# Supports in-browser notification center, email routing, and digest delivery
+resource "aws_dynamodb_table" "user_notifications" {
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-user-notifications-prod" : "ghost-user-notifications"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "userId"
+  range_key    = "notificationId"
+
+  attribute {
+    name = "userId"
+    type = "S"
+  }
+
+  attribute {
+    name = "notificationId"
+    type = "S"
+  }
+
+  attribute {
+    name = "status"
+    type = "S"
+  }
+
+  attribute {
+    name = "createdAt"
+    type = "S"
+  }
+
+  attribute {
+    name = "category"
+    type = "S"
+  }
+
+  attribute {
+    name = "emailPending"
+    type = "S"
+  }
+
+  # GSI for querying unread notifications per user
+  global_secondary_index {
+    name            = "StatusIndex"
+    hash_key        = "userId"
+    range_key       = "status"
+    projection_type = "ALL"
+  }
+
+  # GSI for filtering by category per user
+  global_secondary_index {
+    name            = "CategoryIndex"
+    hash_key        = "userId"
+    range_key       = "category"
+    projection_type = "ALL"
+  }
+
+  # Sparse GSI for digest email processing — only items with emailPending="PENDING" appear
+  global_secondary_index {
+    name            = "EmailPendingIndex"
+    hash_key        = "emailPending"
+    range_key       = "createdAt"
+    projection_type = "ALL"
+  }
+
+  # Enable TTL to auto-delete old notifications (90 days)
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  # Enable encryption at rest
+  server_side_encryption {
+    enabled = true
+  }
+
+  # Enable point-in-time recovery
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Name        = "GHOST User Notifications"
+    Environment = local.environment
+    ManagedBy   = "Terraform"
+    Service     = "GHOST"
+    Component   = "UserNotifications"
+  }
+}
+
+# ============================================================================
+# Notification Broadcasts Table (GovCloud Environment)
+# ============================================================================
+# Tracks admin broadcast notifications sent to users
+resource "aws_dynamodb_table" "notification_broadcasts" {
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-notification-broadcasts-prod" : "ghost-notification-broadcasts"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "broadcastId"
+
+  attribute {
+    name = "broadcastId"
+    type = "S"
+  }
+
+  attribute {
+    name = "status"
+    type = "S"
+  }
+
+  attribute {
+    name = "createdAt"
+    type = "S"
+  }
+
+  # GSI for finding scheduled/pending broadcasts
+  global_secondary_index {
+    name            = "StatusIndex"
+    hash_key        = "status"
+    range_key       = "createdAt"
+    projection_type = "ALL"
+  }
+
+  # Enable TTL to auto-delete old broadcasts (90 days)
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  # Enable encryption at rest
+  server_side_encryption {
+    enabled = true
+  }
+
+  # Enable point-in-time recovery
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Name        = "GHOST Notification Broadcasts"
+    Environment = local.environment
+    ManagedBy   = "Terraform"
+    Service     = "GHOST"
+    Component   = "NotificationBroadcasts"
+  }
+}
+
+# ============================================================================
+# Achievement Progress Table (GovCloud Environment)
+# ============================================================================
+# Stores per-user achievement/badge progress for the gamification system
+# Single-item-per-user pattern: userId → all badge progress data
+resource "aws_dynamodb_table" "achievement_progress" {
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-achievement-progress-prod" : "ghost-achievement-progress"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "userId"
+
+  attribute {
+    name = "userId"
+    type = "S"
+  }
+
+  # Enable encryption at rest
+  server_side_encryption {
+    enabled = true
+  }
+
+  # Enable point-in-time recovery
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Name        = "GHOST Achievement Progress"
+    Environment = local.environment
+    ManagedBy   = "Terraform"
+    Service     = "GHOST"
+    Component   = "AchievementProgress"
+  }
+}
+
+# ============================================================================
 # Outputs
 # ============================================================================
+
+output "user_notifications_table_name" {
+  description = "Name of the DynamoDB table for user notifications"
+  value       = aws_dynamodb_table.user_notifications.name
+}
+
+output "user_notifications_table_arn" {
+  description = "ARN of the DynamoDB table for user notifications"
+  value       = aws_dynamodb_table.user_notifications.arn
+}
+
+output "notification_broadcasts_table_name" {
+  description = "Name of the DynamoDB table for notification broadcasts"
+  value       = aws_dynamodb_table.notification_broadcasts.name
+}
+
+output "notification_broadcasts_table_arn" {
+  description = "ARN of the DynamoDB table for notification broadcasts"
+  value       = aws_dynamodb_table.notification_broadcasts.arn
+}
 
 output "api_keys_table_name" {
   description = "Name of the DynamoDB table for API keys"
@@ -688,6 +927,26 @@ output "async_metrics_table_name" {
 output "async_metrics_table_arn" {
   description = "ARN of the DynamoDB table for async metrics"
   value       = aws_dynamodb_table.async_metrics.arn
+}
+
+output "cost_tag_config_table_name" {
+  description = "Name of the DynamoDB table for cost tag configuration"
+  value       = aws_dynamodb_table.cost_tag_config.name
+}
+
+output "cost_tag_config_table_arn" {
+  description = "ARN of the DynamoDB table for cost tag configuration"
+  value       = aws_dynamodb_table.cost_tag_config.arn
+}
+
+output "achievement_progress_table_name" {
+  description = "Name of the DynamoDB table for achievement progress"
+  value       = aws_dynamodb_table.achievement_progress.name
+}
+
+output "achievement_progress_table_arn" {
+  description = "ARN of the DynamoDB table for achievement progress"
+  value       = aws_dynamodb_table.achievement_progress.arn
 }
 
 # NOTE: strands_agent_metrics table outputs removed

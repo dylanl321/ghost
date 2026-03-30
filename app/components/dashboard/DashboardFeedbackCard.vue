@@ -1,23 +1,17 @@
 <template>
-  <UCard>
-    <template #header>
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <UIcon name="i-heroicons-light-bulb" class="w-4 h-4 text-purple-500" />
-          <span class="text-sm font-semibold text-gray-900 dark:text-white">Feature Requests</span>
-        </div>
-        <NuxtLink to="/admin" class="text-xs text-blue-500 hover:text-blue-400 transition-colors">
-          View All →
-        </NuxtLink>
+  <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-2">
+        <UIcon name="i-heroicons-light-bulb" class="w-5 h-5 text-purple-500" />
+        <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Feature Requests</h2>
       </div>
-    </template>
+      <NuxtLink to="/admin" class="text-xs text-blue-500 hover:text-blue-400 transition-colors">
+        View All →
+      </NuxtLink>
+    </div>
 
     <!-- Loading -->
-    <div v-if="loading" class="animate-pulse space-y-3">
-      <div class="h-3 w-full bg-gray-200 dark:bg-gray-700 rounded" />
-      <div class="h-3 w-3/4 bg-gray-200 dark:bg-gray-700 rounded" />
-      <div class="h-3 w-1/2 bg-gray-200 dark:bg-gray-700 rounded" />
-    </div>
+    <LoadingSkeleton v-if="loading" type="card" />
 
     <!-- Error -->
     <div v-else-if="error" class="text-center py-4">
@@ -72,7 +66,7 @@
         </UBadge>
       </div>
     </div>
-  </UCard>
+  </div>
 </template>
 
 <script setup lang="ts">

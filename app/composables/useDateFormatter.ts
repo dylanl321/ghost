@@ -5,6 +5,8 @@
 
 import { useUserPreferences } from './useUserPreferences'
 
+const logger = createLogger('DateFormatter')
+
 export function useDateFormatter() {
   const { timezone } = useUserPreferences()
 
@@ -22,7 +24,7 @@ export function useDateFormatter() {
         ...options
       })
     } catch (error) {
-      console.error('Error formatting date:', error)
+      logger.error('Error formatting date:', error)
       return 'Invalid Date'
     }
   }
@@ -84,7 +86,7 @@ export function useDateFormatter() {
 
       return formatDateOnly(date)
     } catch (error) {
-      console.error('Error formatting relative time:', error)
+      logger.error('Error formatting relative time:', error)
       return 'N/A'
     }
   }

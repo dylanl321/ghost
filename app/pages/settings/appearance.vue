@@ -229,6 +229,7 @@ function setTheme(theme: string) {
   currentTheme.value = theme
   colorMode.preference = theme
   setPreference('theme', theme)
+  useEventBus().emit('theme.changed', { theme })
   toast.add({
     title: 'Theme Updated',
     description: `Theme set to ${theme}`,

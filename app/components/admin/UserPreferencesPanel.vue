@@ -35,7 +35,7 @@
     </div>
 
     <!-- Stats Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4 mb-6">
       <UCard>
         <div class="flex items-center gap-3">
           <div class="p-2 bg-blue-500/10 rounded-lg">
@@ -68,6 +68,18 @@
           <div>
             <p class="text-xs text-gray-600 dark:text-gray-400">With Favorites</p>
             <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ usersWithFavorites }}</p>
+          </div>
+        </div>
+      </UCard>
+
+      <UCard>
+        <div class="flex items-center gap-3">
+          <div class="p-2 bg-indigo-500/10 rounded-lg">
+            <Icon name="i-heroicons-squares-2x2" class="w-5 h-5 text-indigo-500" />
+          </div>
+          <div>
+            <p class="text-xs text-gray-600 dark:text-gray-400">Custom Layouts</p>
+            <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ usersWithCustomLayout }}</p>
           </div>
         </div>
       </UCard>
@@ -236,6 +248,7 @@
               <th class="pb-3 pr-4 font-medium text-gray-700 dark:text-gray-300">User</th>
               <th class="pb-3 pr-4 font-medium text-gray-700 dark:text-gray-300">Timezone</th>
               <th class="pb-3 pr-4 font-medium text-gray-700 dark:text-gray-300">Favorites</th>
+              <th class="pb-3 pr-4 font-medium text-gray-700 dark:text-gray-300">Layout</th>
               <th class="pb-3 pr-4 font-medium text-gray-700 dark:text-gray-300">Avg. session</th>
               <th class="pb-3 pr-4 font-medium text-gray-700 dark:text-gray-300">Most active page</th>
               <th class="pb-3 pr-4 font-medium text-gray-700 dark:text-gray-300">Last Login</th>
@@ -265,6 +278,15 @@
                     {{ getFavoriteCount(prefs) }}
                   </span>
                 </div>
+              </td>
+              <td class="py-3 pr-4">
+                <UBadge v-if="hasCustomLayout(prefs)" color="indigo" variant="soft" size="sm">
+                  <Icon name="i-heroicons-squares-2x2" class="w-3 h-3 mr-1" />
+                  Custom
+                </UBadge>
+                <UBadge v-else color="gray" variant="soft" size="sm">
+                  Default
+                </UBadge>
               </td>
               <td class="py-3 pr-4 text-gray-600 dark:text-gray-400 text-xs">
                 {{ activityMetricsLoading ? '…' : formatSessionDuration(getUserAvgSessionMs(prefs.userId)) }}
@@ -460,9 +482,34 @@
                 </div>
               </div>
 
+              <!-- Dashboard Layout -->
+              <div v-if="viewingPrefs.preferences.dashboardLayout">
+                <div class="flex items-center gap-2 mb-2">
+                  <Icon name="i-heroicons-squares-2x2" class="w-4 h-4 text-indigo-500" />
+                  <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Dashboard Layout</span>
+                  <UBadge size="xs" color="indigo" variant="soft">Custom</UBadge>
+                </div>
+                <div class="pl-6 space-y-2">
+                  <div class="flex justify-between items-center">
+                    <span class="text-xs text-gray-600 dark:text-gray-400">Hidden sections</span>
+                    <span class="text-xs font-medium text-gray-900 dark:text-white">{{ getLayoutHiddenSections(viewingPrefs.preferences.dashboardLayout).length }}</span>
+                  </div>
+                  <div class="flex justify-between items-center">
+                    <span class="text-xs text-gray-600 dark:text-gray-400">Disabled metric cards</span>
+                    <span class="text-xs font-medium text-gray-900 dark:text-white">{{ getLayoutDisabledMetrics(viewingPrefs.preferences.dashboardLayout).length }}</span>
+                  </div>
+                  <div class="flex justify-between items-center">
+                    <span class="text-xs text-gray-600 dark:text-gray-400">Custom section order</span>
+                    <UBadge size="xs" :color="hasCustomSectionOrder(viewingPrefs.preferences.dashboardLayout) ? 'indigo' : 'gray'" variant="soft">
+                      {{ hasCustomSectionOrder(viewingPrefs.preferences.dashboardLayout) ? 'Yes' : 'No' }}
+                    </UBadge>
+                  </div>
+                </div>
+              </div>
+
               <!-- Other Custom Preferences -->
               <div v-for="(value, key) in viewingPrefs.preferences" :key="key">
-                <div v-if="key !== 'favoriteAccounts'" class="space-y-2">
+                <div v-if="key !== 'favoriteAccounts' && key !== 'dashboardLayout'" class="space-y-2">
                   <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ key }}</span>
                   <pre class="text-xs bg-white dark:bg-gray-900 p-2 rounded overflow-x-auto">{{ JSON.stringify(value, null, 2) }}</pre>
                 </div>
@@ -602,6 +649,10 @@
 <script setup lang="ts">
 import type { UserPreferences } from '#shared/types/user-preferences'
 import { COMMON_TIMEZONES } from '#shared/types/user-preferences'
+import type { DashboardLayoutConfig } from '#shared/types/dashboard-layout'
+import { DEFAULT_DASHBOARD_LAYOUT, ALL_METRIC_CARD_IDS } from '#shared/types/dashboard-layout'
+
+const logger = createLogger('UserPreferencesPanel')
 
 // State
 const allPreferences = ref<UserPreferences[]>([])
@@ -650,6 +701,10 @@ const usersWithFavorites = computed(() => {
   return allPreferences.value.filter(prefs => {
     return prefs.preferences?.favoriteAccounts && prefs.preferences.favoriteAccounts.length > 0
   }).length
+})
+
+const usersWithCustomLayout = computed(() => {
+  return allPreferences.value.filter(prefs => hasCustomLayout(prefs)).length
 })
 
 const uniqueTimezones = computed(() => {
@@ -724,6 +779,26 @@ function getFavoriteCount(prefs: UserPreferences): number {
   return prefs.preferences?.favoriteAccounts?.length || 0
 }
 
+function hasCustomLayout(prefs: UserPreferences): boolean {
+  return !!prefs.preferences?.dashboardLayout
+}
+
+function getLayoutHiddenSections(layout: DashboardLayoutConfig): string[] {
+  return (layout.sections || []).filter(s => !s.visible).map(s => s.id)
+}
+
+function getLayoutDisabledMetrics(layout: DashboardLayoutConfig): string[] {
+  if (!layout.metricCards) return []
+  return ALL_METRIC_CARD_IDS.filter(id => layout.metricCards[id] === false)
+}
+
+function hasCustomSectionOrder(layout: DashboardLayoutConfig): boolean {
+  if (!layout.sections?.length) return false
+  const userOrder = layout.sections.map(s => s.id)
+  const defaultOrder = DEFAULT_DASHBOARD_LAYOUT.sections.map(s => s.id)
+  return JSON.stringify(userOrder) !== JSON.stringify(defaultOrder)
+}
+
 function clearFilters() {
   searchQuery.value = ''
   timezoneFilter.value = ''
@@ -738,7 +813,7 @@ async function loadPreferences() {
     const response = await $fetch<{ data: { preferences: UserPreferences[]; total: number } }>('/api/admin/user-preferences')
     allPreferences.value = response.data.preferences
   } catch (err: any) {
-    console.error('Failed to load user preferences:', err)
+    logger.error('Failed to load user preferences:', err)
     error.value = err.message || 'Failed to load user preferences'
   } finally {
     loading.value = false
@@ -988,11 +1063,12 @@ function formatDate(dateStr: string): string {
 // Export to CSV
 function exportToCSV() {
   try {
-    const headers = ['User ID', 'Timezone', 'Favorite Count', `Avg. Session (${activityPeriod.value})`, 'Most Active Page', 'Last Login', 'Created At', 'Updated At', 'Custom Preferences']
+    const headers = ['User ID', 'Timezone', 'Favorite Count', 'Custom Layout', `Avg. Session (${activityPeriod.value})`, 'Most Active Page', 'Last Login', 'Created At', 'Updated At', 'Custom Preferences']
     const rows = filteredPreferences.value.map(prefs => [
       prefs.userId,
       prefs.timezone,
       getFavoriteCount(prefs).toString(),
+      hasCustomLayout(prefs) ? 'Yes' : 'No',
       formatSessionDuration(getUserAvgSessionMs(prefs.userId)),
       getUserTopPage(prefs.userId) || '',
       prefs.lastLoginAt || 'Never',

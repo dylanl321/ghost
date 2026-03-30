@@ -153,6 +153,8 @@
 </template>
 
 <script setup lang="ts">
+const logger = createLogger('AccountShareButton')
+
 interface Props {
   accountId: string
   accountName?: string
@@ -202,7 +204,7 @@ const copyToClipboard = async () => {
       copySuccess.value = false
     }, 2000)
   } catch (err) {
-    console.error('Failed to copy to clipboard:', err)
+    logger.error('Failed to copy to clipboard:', err)
   } finally {
     isCopying.value = false
   }

@@ -59,9 +59,10 @@
         <!-- LOB Comparison Bar Chart -->
         <div class="bg-gray-900 border border-gray-700 rounded-lg p-4 lg:col-span-2">
           <h3 class="text-lg font-semibold text-gray-200 mb-4">LOB Spending Comparison</h3>
-          <v-chart 
-            :option="lobComparisonChart" 
-            :autoresize="true" 
+          <v-chart
+            :ref="registerChartRef"
+            :option="lobComparisonChart"
+            :autoresize="true"
             style="height: 400px"
             @click="handleChartClick"
           />
@@ -70,9 +71,10 @@
         <!-- LOB Distribution Pie -->
         <div class="bg-gray-900 border border-gray-700 rounded-lg p-4">
           <h3 class="text-lg font-semibold text-gray-200 mb-4">LOB Distribution</h3>
-          <v-chart 
-            :option="lobDistributionChart" 
-            :autoresize="true" 
+          <v-chart
+            :ref="registerChartRef"
+            :option="lobDistributionChart"
+            :autoresize="true"
             style="height: 400px"
             @click="handleChartClick"
           />
@@ -81,13 +83,13 @@
         <!-- LOB Year-over-Year Comparison -->
         <div class="bg-gray-900 border border-gray-700 rounded-lg p-4 lg:col-span-3">
           <h3 class="text-lg font-semibold text-gray-200 mb-4">Year-over-Year LOB Comparison (2 Years)</h3>
-          <v-chart :option="lobYearOverYearChart" :autoresize="true" style="height: 400px" />
+          <v-chart :ref="registerChartRef" :option="lobYearOverYearChart" :autoresize="true" style="height: 400px" />
         </div>
 
         <!-- LOB Trends -->
         <div class="bg-gray-900 border border-gray-700 rounded-lg p-4 lg:col-span-3">
           <h3 class="text-lg font-semibold text-gray-200 mb-4">2-Year LOB Spending Trends</h3>
-          <v-chart :option="lobTrendsChart" :autoresize="true" style="height: 400px" />
+          <v-chart :ref="registerChartRef" :option="lobTrendsChart" :autoresize="true" style="height: 400px" />
         </div>
       </div>
 
@@ -131,29 +133,29 @@
           <div v-if="selectedLobBudgetData" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div class="bg-gray-800 rounded-lg p-4">
               <h3 class="text-lg font-semibold text-gray-200 mb-4">Last Month Budget vs Spend</h3>
-              <v-chart :option="lastMonthBudgetChart" :autoresize="true" style="height: 300px" />
+              <v-chart :ref="registerChartRef" :option="lastMonthBudgetChart" :autoresize="true" style="height: 300px" />
             </div>
             <div class="bg-gray-800 rounded-lg p-4">
               <h3 class="text-lg font-semibold text-gray-200 mb-4">Current Month-to-Date</h3>
-              <v-chart :option="currentMtdBudgetChart" :autoresize="true" style="height: 300px" />
+              <v-chart :ref="registerChartRef" :option="currentMtdBudgetChart" :autoresize="true" style="height: 300px" />
             </div>
           </div>
 
           <!-- LOB Year-over-Year Comparison -->
           <div class="bg-gray-800 rounded-lg p-4 mb-6">
             <h3 class="text-lg font-semibold text-gray-200 mb-4">Year-over-Year Comparison</h3>
-            <v-chart :option="selectedLobYoYChart" :autoresize="true" style="height: 350px" />
+            <v-chart :ref="registerChartRef" :option="selectedLobYoYChart" :autoresize="true" style="height: 350px" />
           </div>
 
           <!-- LOB Charts -->
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div class="bg-gray-800 rounded-lg p-4">
               <h3 class="text-lg font-semibold text-gray-200 mb-4">2-Year Spending Trend</h3>
-              <v-chart :option="selectedLobTrendChart" :autoresize="true" style="height: 300px" />
+              <v-chart :ref="registerChartRef" :option="selectedLobTrendChart" :autoresize="true" style="height: 300px" />
             </div>
             <div class="bg-gray-800 rounded-lg p-4">
               <h3 class="text-lg font-semibold text-gray-200 mb-4">Top Accounts</h3>
-              <v-chart :option="selectedLobAccountsChart" :autoresize="true" style="height: 300px" />
+              <v-chart :ref="registerChartRef" :option="selectedLobAccountsChart" :autoresize="true" style="height: 300px" />
             </div>
           </div>
         </div>
@@ -168,9 +170,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import VChart from 'vue-echarts'
 import { CHART_COLORS, CHART_THEME, getSeriesColor, getUtilizationColor } from '~/utils/chart-theme'
+import { chartAnimationDefaults } from '~/utils/chartAnimationDefaults'
+import { useChartGroup } from '~/composables/useChartGroup'
+
+const logger = createLogger('OrganizationalCharts')
+
+// Chart group for crosshair linking across cost page charts
+const { registerChart, unregisterAll } = useChartGroup('costCharts')
+// Ref callback used by all v-chart instances
+function registerChartRef(el: any) {
+  if (el) registerChart(el)
+}
+
+onUnmounted(() => {
+  unregisterAll()
+})
 
 // Props — when provided, data comes from the parent's shared pipeline
 const props = defineProps<{
@@ -203,7 +220,7 @@ const fetchLobFullNames = async () => {
     })
     lobFullNames.value = mapping
   } catch (err) {
-    console.error('Failed to fetch LOB full names:', err)
+    logger.error('Failed to fetch LOB full names:', err)
   }
 }
 
@@ -284,7 +301,7 @@ const processDatasetData = (dataset: any): boolean => {
     loading.value = false
     return false
   } catch (err: any) {
-    console.error('Error processing dataset for organizational charts:', err)
+    logger.error('Error processing dataset for organizational charts:', err)
     error.value = err.message || 'Failed to process organizational data'
     loading.value = false
     return false
@@ -351,7 +368,7 @@ const fetchOrganizationalData = async () => {
     dataFetched.value = true
     
   } catch (err: any) {
-    console.error('Error fetching organizational data:', err)
+    logger.error('Error fetching organizational data:', err)
     error.value = err.message || 'Failed to load organizational data'
   } finally {
     loading.value = false
@@ -404,7 +421,7 @@ const fetchLobBudgetData = async (lobName: string) => {
     }
     
   } catch (err) {
-    console.error('Error fetching LOB budget data:', err)
+    logger.error('Error fetching LOB budget data:', err)
   }
 }
 
@@ -437,6 +454,7 @@ watch(
 // Chart configurations - Overview charts (no budget logic, focus on spending patterns)
 const lobComparisonChart = computed(() => {
   const chart: any = {
+    ...chartAnimationDefaults,
     backgroundColor: 'transparent',
     tooltip: { 
       trigger: 'axis',
@@ -490,6 +508,7 @@ const lobComparisonChart = computed(() => {
 })
 
 const lobDistributionChart = computed(() => ({
+  ...chartAnimationDefaults,
   backgroundColor: 'transparent',
   tooltip: { trigger: 'item' },
   series: [{
@@ -606,12 +625,13 @@ const lobYearOverYearChart = computed(() => {
   })
   
   return {
+    ...chartAnimationDefaults,
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis',
       formatter: (params: any) => {
         let result = `<strong>${params[0].axisValue}</strong><br/>`
-        
+
         // Group by LOB for better organization
         const lobData: Record<string, any[]> = {}
         params.forEach((item: any) => {
@@ -699,8 +719,9 @@ const lobTrendsChart = computed(() => {
   const colors = CHART_COLORS.slice(0, 5)
   
   return {
+    ...chartAnimationDefaults,
     backgroundColor: 'transparent',
-    tooltip: { 
+    tooltip: {
       trigger: 'axis',
       formatter: (params: any) => {
         let result = params[0].axisValue + '<br/>'
@@ -807,8 +828,9 @@ const selectedLobTrendChart = computed(() => {
   }
   
   return {
+    ...chartAnimationDefaults,
     backgroundColor: 'transparent',
-    tooltip: { 
+    tooltip: {
       trigger: 'axis',
       formatter: (params: any) => {
         return `${params[0].axisValue}<br/>Spend: ${formatCurrency(params[0].value)}`
@@ -911,6 +933,7 @@ const selectedLobYoYChart = computed(() => {
   const currentYearData = getLobMonthlyByYear(selectedLobData.value, currentYear)
   
   return {
+    ...chartAnimationDefaults,
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis',
@@ -1036,8 +1059,9 @@ const selectedLobAccountsChart = computed(() => {
     }))
   
   return {
+    ...chartAnimationDefaults,
     backgroundColor: 'transparent',
-    tooltip: { 
+    tooltip: {
       trigger: 'axis',
       formatter: (params: any) => {
         return `${params[0].name}: ${formatCurrency(params[0].value)}`
@@ -1097,6 +1121,7 @@ const lastMonthBudgetChart = computed(() => {
   const utilization = data.budget > 0 ? (data.spend / data.budget) * 100 : 0
   
   return {
+    ...chartAnimationDefaults,
     backgroundColor: 'transparent',
     tooltip: { trigger: 'axis' },
     xAxis: {
@@ -1145,6 +1170,7 @@ const currentMtdBudgetChart = computed(() => {
   const expectedSpend = (data.budget * daysPassed) / daysInMonth
   
   return {
+    ...chartAnimationDefaults,
     backgroundColor: 'transparent',
     tooltip: { trigger: 'axis' },
     xAxis: {

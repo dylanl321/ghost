@@ -39,6 +39,10 @@ export interface DynamoDBConfig {
   asyncMetrics: DynamoDBTableConfig
   budgetAlerts: DynamoDBTableConfig
   budgetAlertConfig: DynamoDBTableConfig
+  costTagConfig: DynamoDBTableConfig
+  userNotifications: DynamoDBTableConfig
+  notificationBroadcasts: DynamoDBTableConfig
+  achievementProgress: DynamoDBTableConfig
 }
 
 // -----------------------------------------------------------------------------
@@ -241,6 +245,30 @@ function loadFromEnvironment(): DynamoDBConfig {
       region: commercialRegion,
       accountId: PROFORMA_ACCOUNT_ID || commercialAccountId,
       readOnly: false  // Admin can modify alert configuration
+    },
+    costTagConfig: {
+      tableName: process.env.COST_TAG_CONFIG_TABLE || 'ghost-cost-tag-config',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
+    },
+    userNotifications: {
+      tableName: process.env.USER_NOTIFICATIONS_TABLE || 'ghost-user-notifications',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
+    },
+    notificationBroadcasts: {
+      tableName: process.env.NOTIFICATION_BROADCASTS_TABLE || 'ghost-notification-broadcasts',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
+    },
+    achievementProgress: {
+      tableName: process.env.ACHIEVEMENT_PROGRESS_TABLE || 'ghost-achievement-progress',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
     }
   }
 }

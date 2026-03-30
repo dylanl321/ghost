@@ -463,6 +463,12 @@ export const costCache = createTrackedCache({
   enableAnalytics: true
 })
 
+export const insightCache = createTrackedCache({
+  defaultTTL: 1800, // 30 minutes for AI-generated insights
+  maxEntries: 100,
+  enableAnalytics: true
+})
+
 // Cache key generators for common patterns
 export const CacheKeys = {
   organizationOverview: (params: { 
@@ -501,7 +507,9 @@ export const CacheKeys = {
     dataType?: string,
     accountIds?: string[]
   }) =>
-    CacheManager.generateKey('forecast:analysis', params)
+    CacheManager.generateKey('forecast:analysis', params),
+
+  securityOrgSummary: () => 'security:org-summary'
 }
 
 // Cache tags for invalidation
@@ -510,7 +518,8 @@ export const CacheTags = {
   COSTS: 'costs',
   ORGANIZATION: 'organization',
   SERVICES: 'services',
-  BUDGETS: 'budgets'
+  BUDGETS: 'budgets',
+  SECURITY: 'security'
 }
 
 // Default cache manager instance with cleanup tracking

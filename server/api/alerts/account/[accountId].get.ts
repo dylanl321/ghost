@@ -7,7 +7,7 @@ import { defineEventHandler, getRouterParam, getQuery } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../../utils/api-response'
 import { registerEndpoint } from '../../../plugins/swagger'
 import { getAlertsByAccount, validateDateRange } from '../../../utils/budget-alerts'
-import type { BudgetAlertLevel, BudgetAlertDeliveryStatus } from '@/shared/types/budget-alerts'
+import type { BudgetAlertLevel, BudgetAlertDeliveryStatus } from '#shared/types/budget-alerts'
 import { logger } from '../../../utils/logger'
 
 // Register OpenAPI documentation

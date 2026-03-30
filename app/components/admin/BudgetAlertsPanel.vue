@@ -296,7 +296,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useToast } from '#imports'
-import type { BudgetAlert, BudgetAlertLevel, BudgetAlertType, BudgetAlertDeliveryStatus } from '@/shared/types/budget-alerts'
+import type { BudgetAlert, BudgetAlertLevel, BudgetAlertType, BudgetAlertDeliveryStatus } from '#shared/types/budget-alerts'
+
+const logger = createLogger('BudgetAlertsPanel')
 
 type LevelFilter = 'All' | BudgetAlertLevel
 type TypeFilter = 'All' | BudgetAlertType
@@ -560,7 +562,7 @@ async function fetchAlerts() {
       throw new Error('Failed to fetch alerts')
     }
   } catch (err: any) {
-    console.error('Failed to fetch budget alerts:', err)
+    logger.error('Failed to fetch budget alerts:', err)
     toast.add({
       title: 'Error',
       description: err.message || 'Failed to load budget alerts.',
@@ -594,7 +596,7 @@ async function viewEmail(alert: BudgetAlert) {
       throw new Error('Failed to load email content')
     }
   } catch (err: any) {
-    console.error('Failed to fetch email content:', err)
+    logger.error('Failed to fetch email content:', err)
     toast.add({
       title: 'Error',
       description: err.message || 'Failed to load email content.',

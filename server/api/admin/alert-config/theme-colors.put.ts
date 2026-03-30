@@ -7,7 +7,7 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { requireAdmin } from '../../../utils/user-roles'
 import { getConfigItem, updateConfigItem } from '../../../utils/budget-alert-config'
-import type { ThemeColorsConfig } from '@/shared/types/budget-alert-config'
+import type { ThemeColorsConfig } from '#shared/types/budget-alert-config'
 
 interface ThemeColorsUpdateRequest {
   colors?: Record<string, string>
@@ -66,7 +66,7 @@ export default defineEventHandler(async (event) => {
       message: 'Theme colors configuration updated successfully'
     }
   } catch (error: any) {
-    console.error('Error updating theme colors config:', error)
+    logger.error('Error updating theme colors config:', error)
 
     throw createError({
       statusCode: error.statusCode || 500,

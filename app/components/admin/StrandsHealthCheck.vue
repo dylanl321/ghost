@@ -147,6 +147,8 @@
 </template>
 
 <script setup lang="ts">
+const logger = createLogger('StrandsHealthCheck')
+
 interface HealthCheck {
   success: boolean
   healthy: boolean
@@ -189,7 +191,7 @@ async function checkHealth() {
     health.value = response as HealthCheck
   } catch (e: any) {
     error.value = e.data?.message || e.message || 'Failed to check service health'
-    console.error('Error checking Strands health:', e)
+    logger.error('Error checking Strands health:', e)
   } finally {
     loading.value = false
   }

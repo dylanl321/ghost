@@ -6,6 +6,8 @@
 import { reactive, computed, readonly } from 'vue'
 import { useEnclaveStore } from '~/stores/useEnclaveStore'
 
+const logger = createLogger('SupportContext')
+
 export interface SupportInstance {
   resourceId: string
   instanceName?: string
@@ -129,7 +131,7 @@ export function useSupportContext() {
         region: inst.region
       }))
     } catch (err: any) {
-      console.error('[SupportContext] Failed to load instances:', err)
+      logger.error('Failed to load instances:', err)
       state.instancesError = err.data?.error?.message || err.message || 'Failed to load instances'
       state.instances = []
     } finally {
@@ -158,7 +160,7 @@ export function useSupportContext() {
       const data = (response as any).data
       state.logGroups = data?.logGroups || []
     } catch (err: any) {
-      console.error('[SupportContext] Failed to load log groups:', err)
+      logger.error('Failed to load log groups:', err)
       state.logGroupsError = err.data?.error?.message || err.message || 'Failed to load log groups'
       state.logGroups = []
     } finally {

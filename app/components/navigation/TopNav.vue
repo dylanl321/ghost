@@ -82,6 +82,9 @@
             class="transition-all duration-200 opacity-70 hover:opacity-100"
           />
 
+          <!-- Notification Bell -->
+          <NotificationBell />
+
           <div class="relative">
             <UDropdown
               :items="userMenuItems"
@@ -115,6 +118,8 @@
 import { useNavigationStore } from '~/stores/useNavigationStore'
 import { useSiteConfigStore } from '~/stores/useSiteConfigStore'
 import UserAvatar from '~/components/ui/UserAvatar.vue'
+
+const logger = createLogger('TopNav')
 
 type BreadcrumbItem = {
   label: string
@@ -199,7 +204,7 @@ const toggleSidebar = () => {
   
   const success = navigationStore.toggle(route.path)
   if (!success) {
-    console.log('Cannot collapse sidebar on this page - it is protected')
+    logger.info('Cannot collapse sidebar on this page - it is protected')
   }
 }
 

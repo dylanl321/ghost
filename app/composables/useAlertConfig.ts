@@ -20,7 +20,9 @@ import type {
   ThemeColorsConfig,
   AnomalyDetectionConfig,
   StandaloneAnomalyAlertsConfig
-} from '@/shared/types/budget-alert-config'
+} from '#shared/types/budget-alert-config'
+
+const logger = createLogger('useAlertConfig')
 
 /**
  * Complete alert configuration overview
@@ -88,7 +90,7 @@ export function useAlertConfig() {
       return response
     } catch (e: any) {
       error.value = e
-      console.error('[useAlertConfig] Error fetching config:', e)
+      logger.error('Error fetching config:', e)
       throw e
     } finally {
       loading.value = false
@@ -107,7 +109,7 @@ export function useAlertConfig() {
       return response.data
     } catch (e: any) {
       error.value = e
-      console.error(`[useAlertConfig] Error fetching section ${section}:`, e)
+      logger.error(`Error fetching section ${section}:`, e)
       throw e
     } finally {
       loading.value = false
@@ -135,7 +137,7 @@ export function useAlertConfig() {
       return response.data
     } catch (e: any) {
       saveError.value = e
-      console.error('[useAlertConfig] Error updating section:', e)
+      logger.error('Error updating section:', e)
       throw e
     } finally {
       saving.value = false
@@ -225,7 +227,7 @@ export function useAlertConfig() {
       return response.data
     } catch (e: any) {
       saveError.value = e
-      console.error('[useAlertConfig] Error updating alert level:', e)
+      logger.error('Error updating alert level:', e)
       throw e
     } finally {
       saving.value = false
@@ -255,7 +257,7 @@ export function useAlertConfig() {
       return response.data
     } catch (e: any) {
       saveError.value = e
-      console.error('[useAlertConfig] Error creating alert level:', e)
+      logger.error('Error creating alert level:', e)
       throw e
     } finally {
       saving.value = false
@@ -276,7 +278,7 @@ export function useAlertConfig() {
       await fetchConfig()
     } catch (e: any) {
       saveError.value = e
-      console.error('[useAlertConfig] Error deleting alert level:', e)
+      logger.error('Error deleting alert level:', e)
       throw e
     } finally {
       saving.value = false

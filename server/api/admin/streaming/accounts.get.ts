@@ -8,7 +8,7 @@
 import { defineEventHandler, getQuery } from 'h3'
 import { requireAdmin } from '../../../utils/user-roles'
 import { scanItems } from '../../../utils/dynamodb'
-import type { StreamingMetrics } from '~/shared/types/streaming-metrics'
+import type { StreamingMetrics } from '#shared/types/streaming-metrics'
 import { logger } from '../../../utils/logger'
 
 const TABLE_NAME = process.env.STREAMING_METRICS_TABLE_NAME || 'ghost-streaming-metrics'

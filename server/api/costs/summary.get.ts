@@ -57,12 +57,12 @@ registerEndpoint('/api/costs/summary', 'GET', {
       name: 'groupBy',
       in: 'query',
       required: false,
-      schema: { 
+      schema: {
         type: 'string',
         enum: ['SERVICE', 'LINKED_ACCOUNT', 'REGION', 'NONE'],
         default: 'SERVICE'
       },
-      description: 'Group costs by dimension. Use NONE for totals only (automatically groups by month for multi-month ranges)'
+      description: 'Group costs by dimension or tag. Use NONE for totals only (automatically groups by month for multi-month ranges). Prefix with "TAG:" to group by a cost allocation tag, e.g. "TAG:Environment"'
     },
     {
       name: 'proforma',
@@ -135,11 +135,18 @@ registerEndpoint('/api/costs/summary', 'GET', {
       name: 'enhanced',
       in: 'query',
       required: false,
-      schema: { 
+      schema: {
         type: 'boolean',
         default: true
       },
       description: 'Return enhanced format with account names and summaries (default: true)'
+    },
+    {
+      name: 'tagFilter',
+      in: 'query',
+      required: false,
+      schema: { type: 'string' },
+      description: 'Filter by a specific tag value before grouping. Format: "tagKey||tagValue" (split on "||" delimiter to support colons in tag keys)'
     }
   ],
   responses: {
@@ -282,6 +289,10 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.notFound(event, 'No accounts found matching the specified filters')
   }
   
+  // Detect TAG: prefix — e.g. "TAG:Environment" means group by tag key "Environment"
+  const isTagGroupBy = groupByDimension.startsWith('TAG:')
+  const tagGroupKey = isTagGroupBy ? groupByDimension.slice(4) : null
+
   // Build cost parameters
   const costParams = {
     startDate,
@@ -289,18 +300,43 @@ export default defineEventHandler(handleAsync(async (event) => {
     granularity,
     metrics: ['UnblendedCost', 'UsageQuantity'],
     groupBy: (groupByDimension === 'NONE' || groupByDimension === 'MONTHLY_ONLY') ? undefined : [{
-      type: 'DIMENSION' as const,
-      key: groupByDimension
+      type: isTagGroupBy ? 'TAG' as const : 'DIMENSION' as const,
+      key: isTagGroupBy ? tagGroupKey! : groupByDimension
     }],
-    // Add account filter for Cost Explorer only if we have specific accounts
-    // Never pass an empty array to AWS Cost Explorer
-    filter: filteredAccountIds && filteredAccountIds.length > 0 ? {
-      Dimensions: {
-        Key: 'LINKED_ACCOUNT',
-        Values: filteredAccountIds,
-        MatchOptions: ['EQUALS']
+    // Build filter: combine account filter and tag filter if both present
+    filter: (() => {
+      const tagFilterParam = query.tagFilter as string | undefined
+      let accountFilter: any = undefined
+      let tagFilter: any = undefined
+
+      if (filteredAccountIds && filteredAccountIds.length > 0) {
+        accountFilter = {
+          Dimensions: {
+            Key: 'LINKED_ACCOUNT',
+            Values: filteredAccountIds,
+            MatchOptions: ['EQUALS']
+          }
+        }
       }
-    } : undefined
+
+      if (tagFilterParam) {
+        const idx = tagFilterParam.indexOf('||')
+        if (idx > 0) {
+          tagFilter = {
+            Tags: {
+              Key: tagFilterParam.substring(0, idx),
+              Values: [tagFilterParam.substring(idx + 2)],
+              MatchOptions: ['EQUALS']
+            }
+          }
+        }
+      }
+
+      if (accountFilter && tagFilter) {
+        return { And: [accountFilter, tagFilter] }
+      }
+      return accountFilter || tagFilter || undefined
+    })()
   }
   
   // Generate cache key based on request parameters
@@ -309,6 +345,8 @@ export default defineEventHandler(handleAsync(async (event) => {
     endDate,
     granularity,
     groupByDimension: groupByDimension === 'MONTHLY_ONLY' ? 'NONE_MONTHLY' : groupByDimension,
+    tagGroupKey,
+    tagFilter: query.tagFilter || null,
     environment,
     proforma,
     proformaAccountId: proforma ? proformaAccountId : null,
@@ -424,6 +462,31 @@ export default defineEventHandler(handleAsync(async (event) => {
         // Default: return billable costs only
         const costData = await getCostAndUsage(costParams, environment)
         
+        // For TAG groupBy, aggregate Groups into a flat tag-value breakdown
+        // This runs regardless of enhanced flag since the raw AWS format isn't useful to consumers
+        if (isTagGroupBy) {
+          const tagTotals = new Map<string, number>()
+
+          for (const period of (costData.resultsByTime || [])) {
+            for (const group of (period.Groups || [])) {
+              const rawKey: string = group.Keys?.[0] ?? ''
+              const cost = parseFloat(group.Metrics?.UnblendedCost?.Amount || '0')
+              tagTotals.set(rawKey, (tagTotals.get(rawKey) || 0) + cost)
+            }
+          }
+
+          const groups = Array.from(tagTotals.entries()).map(([tagValue, totalCost]) => ({
+            groupKey: tagValue || '',
+            totalCost
+          }))
+
+          return {
+            groups,
+            resultsByTime: costData.resultsByTime,
+            total: costData.total
+          }
+        }
+
         if (enhanced) {
           // For NONE or MONTHLY_ONLY grouping, we need to handle the data differently
           if (groupByDimension === 'NONE' || groupByDimension === 'MONTHLY_ONLY') {

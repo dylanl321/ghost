@@ -3,7 +3,7 @@
  * Captures current page state and prepares it for scheduling
  */
 
-import type { ReportConfig, CreateReportRequest } from '~/shared/types/scheduled-reports'
+import type { ReportConfig, CreateReportRequest } from '#shared/types/scheduled-reports'
 
 export const useScheduleFromView = () => {
   const showSimpleModal = ref(false)

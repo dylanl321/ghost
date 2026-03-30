@@ -21,7 +21,7 @@
     <div
       v-if="(results.length || loading) && showResults"
       ref="dropdown"
-      class="absolute z-10 mt-1 w-full rounded-lg shadow-lg p-2 max-h-[25rem] overflow-y-auto border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#0e1625]"
+      class="absolute z-10 mt-1 w-full rounded-lg shadow-lg p-2 max-h-[25rem] overflow-y-auto border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
     >
       <!-- Loading indicator -->
       <div v-if="loading" class="px-2 py-2 text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
@@ -54,6 +54,8 @@
 
 <script setup lang="ts">
 import { onClickOutside } from '@vueuse/core'
+
+const logger = createLogger('UniversalSearch')
 
 const { user } = useOidcAuth()
 const { searchUsers } = useGraphApi()
@@ -130,7 +132,7 @@ const onSearch = () => {
         }))
       )
     } catch (e) {
-      console.warn('User search failed', e)
+      logger.warn('User search failed', e)
     }
 
     results.value = merged_results
@@ -140,7 +142,7 @@ const onSearch = () => {
 }
 
 const selectResult = (result: any) => {
-  console.log('Selected:', result)
+  logger.info('Selected:', result)
   showResults.value = false
   query.value = ""
 

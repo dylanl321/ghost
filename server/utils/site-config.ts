@@ -59,7 +59,7 @@ async function getDynamoDBClientDirect(): Promise<DynamoDBClient | null> {
     }
 
     // Credentials expired or about to expire, clear cache
-    console.log('[Site Config] DynamoDB client credentials expired, refreshing...');
+    logger.info('[Site Config] DynamoDB client credentials expired, refreshing...');
     cachedDynamoDBClient = null;
   }
 
@@ -90,7 +90,7 @@ async function getDynamoDBClientDirect(): Promise<DynamoDBClient | null> {
     const assumeRoleResponse = await stsClient.send(assumeRoleCommand);
 
     if (!assumeRoleResponse.Credentials || !assumeRoleResponse.Credentials.Expiration) {
-      console.error('Failed to assume role for site-config access');
+      logger.error('Failed to assume role for site-config access');
       return null;
     }
 
@@ -110,11 +110,11 @@ async function getDynamoDBClientDirect(): Promise<DynamoDBClient | null> {
       expiration: assumeRoleResponse.Credentials.Expiration,
     };
 
-    console.log(`[Site Config] Created DynamoDB client for deployment account ${deploymentAccountId}, expires at ${assumeRoleResponse.Credentials.Expiration.toISOString()}`);
+    logger.info(`[Site Config] Created DynamoDB client for deployment account ${deploymentAccountId}, expires at ${assumeRoleResponse.Credentials.Expiration.toISOString()}`);
 
     return client;
   } catch (error) {
-    console.error('Error assuming role for site-config:', error);
+    logger.error('Error assuming role for site-config:', error);
     return null;
   }
 }
@@ -174,7 +174,7 @@ export async function getSiteConfig(key: string, useCache = true): Promise<SiteC
     // If not found in DB, return default value
     return getDefaultConfig(key);
   } catch (error) {
-    console.error(`Error fetching site config for key ${key}:`, error);
+    logger.error(`Error fetching site config for key ${key}:`, error);
     // Return default on error
     return getDefaultConfig(key);
   }
@@ -189,7 +189,7 @@ export async function getAllSiteConfig(useCache = true): Promise<SiteConfigItem[
 
     // If no client (no credentials), return defaults
     if (!client) {
-      console.warn('AWS credentials not available, using default site config');
+      logger.warn('AWS credentials not available, using default site config');
       return DEFAULT_SITE_CONFIG;
     }
 
@@ -202,7 +202,7 @@ export async function getAllSiteConfig(useCache = true): Promise<SiteConfigItem[
 
     // If DB is empty or has fewer items than defaults, merge with defaults
     if (items.length === 0) {
-      console.warn('Site config table is empty, using defaults');
+      logger.warn('Site config table is empty, using defaults');
       return DEFAULT_SITE_CONFIG;
     }
 
@@ -219,11 +219,11 @@ export async function getAllSiteConfig(useCache = true): Promise<SiteConfigItem[
   } catch (error: any) {
     // If table doesn't exist yet, return defaults
     if (error.name === 'ResourceNotFoundException' || error.message?.includes('not found')) {
-      console.warn(`Site config table '${TABLE_NAME}' not found, using defaults. Run 'npx tsx scripts/init-site-config.ts' to initialize.`);
+      logger.warn(`Site config table '${TABLE_NAME}' not found, using defaults. Run 'npx tsx scripts/init-site-config.ts' to initialize.`);
       return DEFAULT_SITE_CONFIG;
     }
 
-    console.error('Error fetching all site config:', error);
+    logger.error('Error fetching all site config:', error);
     // Return defaults on any error
     return DEFAULT_SITE_CONFIG;
   }
@@ -295,7 +295,7 @@ export async function updateSiteConfig(
       throw new Error(`Site config table '${TABLE_NAME}' not found. Please run 'npx tsx scripts/init-site-config.ts' to initialize the table.`);
     }
 
-    console.error(`Error updating site config for key ${key}:`, error);
+    logger.error(`Error updating site config for key ${key}:`, error);
     throw error;
   }
 }
@@ -385,9 +385,9 @@ export async function initializeSiteConfig(): Promise<void> {
       await client.send(command);
     }
 
-    console.log('Site config initialized successfully');
+    logger.info('Site config initialized successfully');
   } catch (error) {
-    console.error('Error initializing site config:', error);
+    logger.error('Error initializing site config:', error);
     throw error;
   }
 }
@@ -440,7 +440,7 @@ function mergeSingleItemWithDefault(dbItem: SiteConfigItem): SiteConfigItem {
   if (!defaultItem) {
     // DB item not in defaults - validate it has required fields
     if (!dbItem.type) {
-      console.warn(`[Site Config] Orphaned config item "${dbItem.key}" is missing required type field. Skipping...`);
+      logger.warn(`[Site Config] Orphaned config item "${dbItem.key}" is missing required type field. Skipping...`);
       // Return a minimal valid item to prevent crashes
       return {
         ...dbItem,
@@ -556,6 +556,39 @@ export function clearSiteConfigCache(): void {
 }
 
 /**
+ * Write a raw key-value to the site-config table without requiring
+ * the key to exist in DEFAULT_SITE_CONFIG. Used for dynamic runtime data
+ * like source heartbeats that don't belong in the static defaults.
+ */
+export async function putSiteConfigRaw(key: string, value: any): Promise<void> {
+  const client = await getDynamoDBClientDirect();
+  if (!client) return;
+
+  const item: Record<string, any> = {
+    key,
+    value,
+    type: 'object',
+    category: 'system',
+    label: key,
+    description: `Auto-generated runtime value for ${key}`,
+    isPublic: false,
+    isEditable: false,
+    updatedAt: new Date().toISOString()
+  };
+
+  await client.send(new PutItemCommand({
+    TableName: TABLE_NAME,
+    Item: marshall(item, { removeUndefinedValues: true })
+  }));
+
+  // Update in-memory cache
+  configCache.set(key, {
+    value: item as SiteConfigItem,
+    expiresAt: Date.now() + CACHE_TTL
+  });
+}
+
+/**
  * Save a change history entry to DynamoDB
  * History entries use a composite key: PK=CONFIG#key, SK=HISTORY#timestamp
  */
@@ -570,7 +603,7 @@ export async function saveConfigHistory(
     const client = await getDynamoDBClientDirect();
 
     if (!client) {
-      console.warn('Cannot save config history: AWS credentials not available');
+      logger.warn('Cannot save config history: AWS credentials not available');
       return;
     }
 
@@ -598,7 +631,7 @@ export async function saveConfigHistory(
 
     await client.send(command);
   } catch (error) {
-    console.error('Error saving config history:', error);
+    logger.error('Error saving config history:', error);
     // Don't throw - history is nice-to-have, not critical
   }
 }
@@ -611,7 +644,7 @@ export async function getConfigHistory(key: string, limit = 50): Promise<SiteCon
     const client = await getDynamoDBClientDirect();
 
     if (!client) {
-      console.warn('Cannot retrieve config history: AWS credentials not available');
+      logger.warn('Cannot retrieve config history: AWS credentials not available');
       return [];
     }
 
@@ -637,7 +670,7 @@ export async function getConfigHistory(key: string, limit = 50): Promise<SiteCon
 
     return items;
   } catch (error) {
-    console.error(`Error fetching config history for key ${key}:`, error);
+    logger.error(`Error fetching config history for key ${key}:`, error);
     return [];
   }
 }
@@ -650,7 +683,7 @@ export async function getAllConfigHistory(limit = 100): Promise<SiteConfigHistor
     const client = await getDynamoDBClientDirect();
 
     if (!client) {
-      console.warn('Cannot retrieve config history: AWS credentials not available');
+      logger.warn('Cannot retrieve config history: AWS credentials not available');
       return [];
     }
 
@@ -676,7 +709,7 @@ export async function getAllConfigHistory(limit = 100): Promise<SiteConfigHistor
 
     return items;
   } catch (error) {
-    console.error('Error fetching all config history:', error);
+    logger.error('Error fetching all config history:', error);
     return [];
   }
 }

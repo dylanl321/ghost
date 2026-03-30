@@ -250,6 +250,23 @@ async function fetchCostData(client: CostExplorerClient, params: GetCostAndUsage
     const command = new GetCostAndUsageCommand(params);
     return await client.send(command);
   } catch (error: any) {
+    // If Cost Explorer says our start date is too early, retry with the earliest supported date
+    if (error.name === 'ValidationException' && error.message?.includes('Earliest supported Start is')) {
+      const match = error.message.match(/Earliest supported Start is (\d{4}-\d{2}-\d{2})/)
+      if (match && params.TimePeriod?.Start && params.TimePeriod?.End) {
+        const earliestStart = match[1]
+        // Only retry if clamped range is valid (start < end)
+        if (earliestStart < params.TimePeriod.End) {
+          logger.warn(`Cost Explorer start date clamped from ${params.TimePeriod.Start} to ${earliestStart}`)
+          const retryParams = { ...params, TimePeriod: { Start: earliestStart, End: params.TimePeriod.End } }
+          const command = new GetCostAndUsageCommand(retryParams)
+          return await client.send(command)
+        }
+        // Start >= End means no valid range; return empty result
+        logger.warn(`Cost Explorer has no data for range ${params.TimePeriod.Start} - ${params.TimePeriod.End} (earliest: ${earliestStart})`)
+        return { ResultsByTime: [], $metadata: {} } as any
+      }
+    }
     logger.error('Cost Explorer API error:', {
       message: error.message,
       code: error.name,
@@ -265,10 +282,10 @@ async function fetchCostData(client: CostExplorerClient, params: GetCostAndUsage
   }
 }
 
-function dailySeries(results: any) {
-  return results.ResultsByTime.map((r: any) => ({
+function dailySeries(results: any): DailyCost[] {
+  return (results.ResultsByTime || []).map((r: any) => ({
     date: r.TimePeriod.Start,
-    cost: parseFloat(r.Total.UnblendedCost.Amount),
+    cost: parseFloat(r.Total?.UnblendedCost?.Amount || '0'),
   }));
 }
 
@@ -284,7 +301,10 @@ function buildPaddedDate(year: number, month: number, day: number) {
   return `${y}-${m}-${d}`;
 }
 
-async function getOverview(useProforma: boolean = false) {
+const MIN_DAYS = 1
+const MAX_DAYS = 366
+
+async function getOverview(useProforma: boolean = false, days: number = 14) {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth(); // 0-index
@@ -313,7 +333,7 @@ async function getOverview(useProforma: boolean = false) {
   const dailyEnd = buildPaddedDate(year, month, today) // exclusive
 
   const tempStart = new Date(now);
-  tempStart.setDate(tempStart.getDate() - 14); // Go back 14 days to get the start date
+  tempStart.setDate(tempStart.getDate() - days); // Go back N days to get the start date
   const dailyStart = buildPaddedDate(tempStart.getFullYear(), tempStart.getMonth(), tempStart.getDate());
 
   logger.info(`Running queries with values: startOfMonth=${startOfMonth},
@@ -360,7 +380,8 @@ async function getOverview(useProforma: boolean = false) {
       Granularity: "MONTHLY",
       Metrics: ["UnblendedCost"],
     }),
-    getCostForecast(forecastStart, forecastEnd, "UNBLENDED_COST", "MONTHLY", undefined, "commercial"),
+    getCostForecast(forecastStart, forecastEnd, "UNBLENDED_COST", "MONTHLY", undefined, "commercial")
+      .catch(err => { logger.warn(`Cost forecast failed: ${err.message}`); return { total: undefined, forecastResultsByTime: [] } }),
     getAccountCounts(),
     getBudgetHealth(costClient, startOfMonth, endOfMonth, []),
   ]);
@@ -389,7 +410,7 @@ async function getOverview(useProforma: boolean = false) {
 
   // ----- Transformations -----
 
-  const mtdTotal = parseFloat(mtdMonthly.ResultsByTime?.[0].Total?.UnblendedCost.Amount || "0");
+  const mtdTotal = parseFloat(mtdMonthly.ResultsByTime?.[0]?.Total?.UnblendedCost?.Amount || "0");
 
   const rolling14Daily = dailySeries(rolling14DailyResponse)
   const mtdDaily = dailySeries(mtdDailyResponse)
@@ -399,9 +420,9 @@ async function getOverview(useProforma: boolean = false) {
   const forecast = parseFloat(forecastResponse.total?.Amount || "0")
   logger.info(`AWS Forecast API returned: $${forecast.toFixed(2)} for period ${forecastStart} to ${forecastEnd}`)
 
-  const prevTotal = parseFloat(prevMonthly.ResultsByTime?.[0].Total?.UnblendedCost.Amount || "0");
+  const prevTotal = parseFloat(prevMonthly.ResultsByTime?.[0]?.Total?.UnblendedCost?.Amount || "0");
 
-  const prevMtdTotal = parseFloat(prevMtd.ResultsByTime?.[0].Total?.UnblendedCost.Amount || "0");
+  const prevMtdTotal = parseFloat(prevMtd.ResultsByTime?.[0]?.Total?.UnblendedCost?.Amount || "0");
 
   // Build full map of account costs for accurate user cost calculation
   const allAccountCosts: Record<string, number> = {}
@@ -436,15 +457,17 @@ export default defineEventHandler(handleAsync(async (event) => {
   // Get query parameters
   const query = getQuery(event)
   const useProforma = query.proforma === 'true' || query.proforma === true
+  const rawDays = parseInt(query.days as string) || 14
+  const days = (rawDays >= MIN_DAYS && rawDays <= MAX_DAYS) ? rawDays : 14
 
-  // Generate cache key including proforma flag
-  const cacheKey = `organization:simplified-overview:${useProforma ? 'proforma' : 'billable'}`
+  // Generate cache key including proforma flag and days
+  const cacheKey = `organization:simplified-overview:${useProforma ? 'proforma' : 'billable'}:${days}d`
 
   const info = await organizationCache.getOrSet(
     cacheKey,
     async () => {
-      logger.info(`Cache miss: Fetching organization overview (${useProforma ? 'proforma' : 'billable'})...`)
-      return await getOverview(useProforma)
+      logger.info(`Cache miss: Fetching organization overview (${useProforma ? 'proforma' : 'billable'}, ${days}d)...`)
+      return await getOverview(useProforma, days)
     },
     {
       ttl: 1200, // 20 minutes

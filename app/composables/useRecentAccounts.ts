@@ -5,6 +5,8 @@
 
 import type { AWSEnclaveData } from '#shared/types/accounts'
 
+const logger = createLogger('RecentAccounts')
+
 const RECENT_ACCOUNTS_KEY = 'recentlyViewedAccounts'
 const MAX_RECENT_ACCOUNTS = 10
 
@@ -58,7 +60,7 @@ export function useRecentAccounts() {
       const success = await setPreference(RECENT_ACCOUNTS_KEY, updated)
       return success
     } catch (error) {
-      console.error('Failed to add recent account:', error)
+      logger.error('Failed to add recent account:', error)
       return false
     }
   }
@@ -87,7 +89,7 @@ export function useRecentAccounts() {
 
       return success
     } catch (error) {
-      console.error('Failed to remove recent account:', error)
+      logger.error('Failed to remove recent account:', error)
       toast.add({
         title: 'Failed to remove',
         description: 'Please try again',
@@ -115,7 +117,7 @@ export function useRecentAccounts() {
       }
       return success
     } catch (error) {
-      console.error('Failed to clear recent accounts:', error)
+      logger.error('Failed to clear recent accounts:', error)
       return false
     }
   }

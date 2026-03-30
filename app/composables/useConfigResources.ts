@@ -9,7 +9,7 @@ import type {
   ConfigResourcesResponse,
   ConfigResourcesQueryParams,
   ConfigResource
-} from '~/shared/types/resources'
+} from '#shared/types/resources'
 
 export interface UseConfigResourcesOptions extends ConfigResourcesQueryParams {
   immediate?: boolean

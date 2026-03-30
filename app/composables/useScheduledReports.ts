@@ -11,7 +11,9 @@ import type {
   ListReportsResponse,
   ReportResponse,
   ExecutionHistoryResponse
-} from '~/shared/types/scheduled-reports'
+} from '#shared/types/scheduled-reports'
+
+const logger = createLogger('ScheduledReports')
 
 export const useScheduledReports = () => {
   const loading = ref(false)
@@ -39,7 +41,7 @@ export const useScheduledReports = () => {
         error.value = response.error || 'Failed to fetch reports'
       }
     } catch (err: any) {
-      console.error('Error fetching reports:', err)
+      logger.error('Error fetching reports:', err)
       error.value = err?.data?.message || err?.message || 'Failed to fetch reports'
       reports.value = []
     } finally {
@@ -66,7 +68,7 @@ export const useScheduledReports = () => {
         currentReport.value = null
       }
     } catch (err: any) {
-      console.error('Error fetching report:', err)
+      logger.error('Error fetching report:', err)
       error.value = err?.data?.message || err?.message || 'Failed to fetch report'
       currentReport.value = null
     } finally {
@@ -91,6 +93,7 @@ export const useScheduledReports = () => {
       )
 
       if (response.success) {
+        useEventBus().emit('report.scheduled', { reportId: response.data?.reportId })
         // Refresh the reports list in background (don't await)
         fetchReports()
         return true
@@ -99,7 +102,7 @@ export const useScheduledReports = () => {
         return false
       }
     } catch (err: any) {
-      console.error('Error creating report:', err)
+      logger.error('Error creating report:', err)
       error.value = err?.data?.message || err?.message || 'Failed to create report'
       return false
     } finally {
@@ -139,7 +142,7 @@ export const useScheduledReports = () => {
         return false
       }
     } catch (err: any) {
-      console.error('Error updating report:', err)
+      logger.error('Error updating report:', err)
       error.value = err?.data?.message || err?.message || 'Failed to update report'
       return false
     } finally {
@@ -174,7 +177,7 @@ export const useScheduledReports = () => {
         return false
       }
     } catch (err: any) {
-      console.error('Error deleting report:', err)
+      logger.error('Error deleting report:', err)
       error.value = err?.data?.message || err?.message || 'Failed to delete report'
       return false
     } finally {
@@ -213,7 +216,7 @@ export const useScheduledReports = () => {
         return false
       }
     } catch (err: any) {
-      console.error('Error sending test report:', err)
+      logger.error('Error sending test report:', err)
       error.value = err?.data?.message || err?.message || 'Failed to send test report'
       return false
     } finally {
@@ -249,7 +252,7 @@ export const useScheduledReports = () => {
         return false
       }
     } catch (err: any) {
-      console.error('Error toggling pause:', err)
+      logger.error('Error toggling pause:', err)
       error.value = err?.data?.message || err?.message || 'Failed to update report status'
       return false
     } finally {
@@ -276,7 +279,7 @@ export const useScheduledReports = () => {
         executions.value = []
       }
     } catch (err: any) {
-      console.error('Error fetching execution history:', err)
+      logger.error('Error fetching execution history:', err)
       error.value = err?.data?.message || err?.message || 'Failed to fetch execution history'
       executions.value = []
     } finally {
@@ -339,7 +342,7 @@ export const useScheduledReportsAdmin = () => {
         error.value = response.error || 'Failed to fetch reports'
       }
     } catch (err: any) {
-      console.error('Error fetching all reports:', err)
+      logger.error('Error fetching all reports:', err)
       error.value = err?.data?.message || err?.message || 'Failed to fetch reports'
       allReports.value = []
     } finally {
@@ -365,7 +368,7 @@ export const useScheduledReportsAdmin = () => {
         error.value = response.error || 'Failed to fetch statistics'
       }
     } catch (err: any) {
-      console.error('Error fetching statistics:', err)
+      logger.error('Error fetching statistics:', err)
       error.value = err?.data?.message || err?.message || 'Failed to fetch statistics'
       statistics.value = null
     } finally {
@@ -400,7 +403,7 @@ export const useScheduledReportsAdmin = () => {
         return false
       }
     } catch (err: any) {
-      console.error('Error executing report:', err)
+      logger.error('Error executing report:', err)
       error.value = err?.data?.message || err?.message || 'Failed to execute report'
       return false
     } finally {
@@ -487,7 +490,7 @@ export const useStoredReportsAdmin = () => {
         error.value = response.error || 'Failed to fetch stored reports'
       }
     } catch (err: any) {
-      console.error('Error fetching stored reports:', err)
+      logger.error('Error fetching stored reports:', err)
       error.value = err?.data?.message || err?.message || 'Failed to fetch stored reports'
       storedReports.value = []
       stats.value = null
@@ -519,7 +522,7 @@ export const useStoredReportsAdmin = () => {
         return null
       }
     } catch (err: any) {
-      console.error('Error getting download URL:', err)
+      logger.error('Error getting download URL:', err)
       error.value = err?.data?.message || err?.message || 'Failed to get download URL'
       return null
     }
@@ -559,7 +562,7 @@ export const useStoredReportsAdmin = () => {
         return false
       }
     } catch (err: any) {
-      console.error('Error deleting stored report:', err)
+      logger.error('Error deleting stored report:', err)
       error.value = err?.data?.message || err?.message || 'Failed to delete report'
       return false
     } finally {

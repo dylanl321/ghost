@@ -12,13 +12,13 @@ export default defineEventHandler((): ChangelogEntry[] => {
     const content = config.changelogContent
 
     if (!content) {
-      console.warn('Changelog content not found in runtime config')
+      logger.warn('Changelog content not found in runtime config')
       return []
     }
 
     return parseChangelog(content)
   } catch (error) {
-    console.error('Error parsing changelog:', error)
+    logger.error('Error parsing changelog:', error)
     return []
   }
 })

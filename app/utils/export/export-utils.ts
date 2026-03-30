@@ -3,7 +3,7 @@
  * Common helpers for data transformation and formatting
  */
 
-import type { ColumnConfig, FormattingOptions } from '~/shared/types/export'
+import type { ColumnConfig, FormattingOptions } from '#shared/types/export'
 
 /**
  * Format a value based on column configuration

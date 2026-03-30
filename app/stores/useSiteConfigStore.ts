@@ -6,7 +6,9 @@
  */
 
 import { defineStore } from 'pinia';
-import type { SiteConfig } from '~/shared/types/site-config';
+import type { SiteConfig } from '#shared/types/site-config';
+
+const logger = createLogger('SiteConfigStore')
 
 interface SiteConfigState {
   config: Partial<SiteConfig>;
@@ -15,6 +17,10 @@ interface SiteConfigState {
   error: string | null;
   lastFetch: number | null;
 }
+
+// Shared promise for in-flight fetch — prevents race conditions when
+// multiple callers invoke fetchConfig() concurrently.
+let pendingFetch: Promise<void> | null = null;
 
 export const useSiteConfigStore = defineStore('siteConfig', {
   state: (): SiteConfigState => ({
@@ -112,6 +118,10 @@ export const useSiteConfigStore = defineStore('siteConfig', {
       return state.config.ui?.showWelcomeCard ?? true;
     },
 
+    popupMessage: (state) => {
+      return state.config.ui?.popupMessage ?? null;
+    },
+
     /**
      * Check if config is stale and needs refresh
      */
@@ -132,46 +142,51 @@ export const useSiteConfigStore = defineStore('siteConfig', {
         return;
       }
 
-      // Skip if already loading
-      if (this.loading) {
-        return;
+      // If already loading, wait for the in-flight request instead of returning empty
+      if (this.loading && pendingFetch) {
+        return pendingFetch;
       }
 
       this.loading = true;
       this.error = null;
 
-      try {
-        const response = await $fetch('/api/site-config/all');
+      pendingFetch = (async () => {
+        try {
+          const response = await $fetch('/api/site-config/all');
 
-        if (response.success && response.config) {
-          this.config = response.config as Partial<SiteConfig>;
+          if (response.success && response.config) {
+            this.config = response.config as Partial<SiteConfig>;
+            this.loaded = true;
+            this.lastFetch = Date.now();
+          } else {
+            throw new Error('Failed to fetch site configuration');
+          }
+        } catch (error: any) {
+          logger.error('Error fetching site config:', error);
+          this.error = error.message || 'Failed to load configuration';
+
+          // Set sensible defaults on error
+          this.config = {
+            features: {
+              strandsChat: { enabled: true },
+              strandsChatPopup: { enabled: false },
+              reportScheduler: { enabled: true },
+              adminNotifications: { enabled: true },
+            },
+            ui: {
+              siteName: 'GHOST Dashboard',
+              welcomeMessage: 'Welcome to GHOST - Your centralized AWS account management dashboard',
+              showWelcomeCard: true,
+            },
+          };
           this.loaded = true;
-          this.lastFetch = Date.now();
-        } else {
-          throw new Error('Failed to fetch site configuration');
+        } finally {
+          this.loading = false;
+          pendingFetch = null;
         }
-      } catch (error: any) {
-        console.error('Error fetching site config:', error);
-        this.error = error.message || 'Failed to load configuration';
+      })();
 
-        // Set sensible defaults on error
-        this.config = {
-          features: {
-            strandsChat: { enabled: true },
-            strandsChatPopup: { enabled: false },
-            reportScheduler: { enabled: true },
-            adminNotifications: { enabled: true },
-          },
-          ui: {
-            siteName: 'GHOST Dashboard',
-            welcomeMessage: 'Welcome to GHOST - Your centralized AWS account management dashboard',
-            showWelcomeCard: true,
-          },
-        };
-        this.loaded = true;
-      } finally {
-        this.loading = false;
-      }
+      return pendingFetch;
     },
 
     /**

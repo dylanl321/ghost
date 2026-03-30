@@ -1,3 +1,5 @@
+const logger = createLogger('AccountTour')
+
 export type StartAccountTourOptions = {
   startAtStep?: number
   onComplete?: () => void
@@ -58,7 +60,7 @@ export async function startAccountTour(options: StartAccountTourOptions = {}) {
   })
 
   if (validSteps.length === 0) {
-    console.warn('No valid tour steps found - elements may not be in the DOM yet')
+    logger.warn('No valid tour steps found - elements may not be in the DOM yet')
     throw new Error('No valid tour steps found. Please ensure the page has fully loaded.')
   }
 

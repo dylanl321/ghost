@@ -184,8 +184,10 @@
 </template>
 
 <script setup lang="ts">
-import type { EntityType } from '../composables/useStrandsResponseEnricher'
+import type { EntityType } from '~/composables/useStrandsResponseEnricher'
 import { convertToUsernameSlug } from '~/utils/userUtils'
+
+const logger = createLogger('EntityPopover')
 
 const isVisible = ref(false)
 const loading = ref(false)
@@ -291,7 +293,7 @@ const show = async (type: EntityType, value: string, trigger: HTMLElement) => {
     entityData.value = await fetchEntityData(type, value)
     loading.value = false
   } catch (e) {
-    console.error('Error fetching entity data:', e)
+    logger.error('Error fetching entity data:', e)
     error.value = true
     loading.value = false
   }

@@ -7,7 +7,7 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { requireAdmin } from '../../../utils/user-roles'
 import { getConfigItem, updateConfigItem } from '../../../utils/budget-alert-config'
-import type { AnomalyDetectionConfig } from '@/shared/types/budget-alert-config'
+import type { AnomalyDetectionConfig } from '#shared/types/budget-alert-config'
 
 interface AnomalyDetectionUpdateRequest {
   enabled?: boolean
@@ -68,7 +68,7 @@ export default defineEventHandler(async (event) => {
       message: 'Anomaly detection configuration updated successfully'
     }
   } catch (error: any) {
-    console.error('Error updating anomaly detection config:', error)
+    logger.error('Error updating anomaly detection config:', error)
 
     throw createError({
       statusCode: error.statusCode || 500,

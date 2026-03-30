@@ -11,7 +11,7 @@ import type {
   ChatThreadFilters,
   ListThreadsResponse,
   ChatThreadSummary
-} from '~/shared/types/chat-threads'
+} from '#shared/types/chat-threads'
 import { logger } from './logger'
 import { getTableName, getTableEnvironment, getTableAccountId } from '../lib/dynamodb-config'
 

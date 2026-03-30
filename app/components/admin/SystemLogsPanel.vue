@@ -21,7 +21,7 @@
     </div>
 
     <!-- Filters & Stats -->
-    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
       <!-- Stats Cards -->
       <UCard class="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-blue-200 dark:border-blue-800">
         <div class="flex items-center justify-between">
@@ -75,6 +75,18 @@
             <UIcon name="i-heroicons-exclamation-triangle" :class="stats.errors > 0
               ? 'w-5 h-5 text-red-600 dark:text-red-400'
               : 'w-5 h-5 text-gray-600 dark:text-gray-400'" />
+          </div>
+        </div>
+      </UCard>
+
+      <UCard class="bg-gradient-to-br from-cyan-50 to-cyan-100 dark:from-cyan-900/20 dark:to-cyan-800/20 border-cyan-200 dark:border-cyan-800">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-xs font-medium text-cyan-600 dark:text-cyan-400 uppercase tracking-wide">Actions</p>
+            <p class="text-2xl font-bold text-cyan-900 dark:text-cyan-100">{{ stats.actions }}</p>
+          </div>
+          <div class="p-2 bg-cyan-500/20 rounded-lg">
+            <UIcon name="i-heroicons-bolt" class="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
           </div>
         </div>
       </UCard>
@@ -181,8 +193,8 @@
         >
           <div class="flex items-start gap-3">
             <!-- Event Icon -->
-            <div :class="getEventIconClass(log.parsed.type)" class="flex-shrink-0 mt-0.5">
-              <UIcon :name="getEventIcon(log.parsed.type)" class="w-5 h-5" />
+            <div :class="getEventIconClass(log.parsed.type, log.parsed)" class="flex-shrink-0 mt-0.5">
+              <UIcon :name="getEventIcon(log.parsed.type, log.parsed)" class="w-5 h-5" />
             </div>
 
             <!-- Event Content -->
@@ -199,7 +211,7 @@
 
                 <!-- Event Description -->
                 <span class="text-sm text-gray-900 dark:text-white font-medium">
-                  {{ getEventLabel(log.parsed.type) }}
+                  {{ getEventLabel(log.parsed.type, log.parsed) }}
                 </span>
 
                 <!-- Path Badge -->
@@ -211,6 +223,23 @@
                   <UIcon name="i-heroicons-link" class="w-3 h-3" />
                   {{ formatPath(log.parsed.path) }}
                 </NuxtLink>
+
+                <!-- Action Type Badge -->
+                <span
+                  v-if="log.parsed.actionType"
+                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300"
+                >
+                  <UIcon name="i-heroicons-bolt" class="w-3 h-3" />
+                  {{ log.parsed.actionType }}
+                </span>
+
+                <!-- Action Detail Badge -->
+                <span
+                  v-if="log.parsed.actionDetail"
+                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                >
+                  {{ log.parsed.actionDetail }}
+                </span>
 
                 <!-- Account Badge -->
                 <span
@@ -330,6 +359,8 @@
 </template>
 
 <script setup lang="ts">
+const logger = createLogger('SystemLogsPanel')
+
 interface CloudWatchLog {
   eventId: string
   ingestionTime: number
@@ -345,6 +376,8 @@ interface ParsedLog {
   accountId?: string
   details?: string
   error?: string
+  actionType?: string // e.g. 'cost.timeframe_change', 'account.favorite'
+  actionDetail?: string // e.g. 'timeframe:30d', 'scope:favorites'
 }
 
 interface EnrichedLog extends CloudWatchLog {
@@ -369,6 +402,9 @@ const typeOptions = [
   { label: 'Navigation', value: 'navigation' },
   { label: 'Error', value: 'error' },
   { label: 'Action', value: 'action' },
+  { label: 'Cost Interaction', value: 'cost' },
+  { label: 'Export', value: 'export' },
+  { label: 'Favorite', value: 'favorite' },
 ]
 
 const timeRangeMap = {
@@ -408,11 +444,23 @@ function parseLogMessage(message: string): ParsedLog {
     return { type: 'error', user: userMatch?.[1], error: errorText }
   }
 
-  // Action: "Action - USER:Dylan.Lewis, ACTION:..."
+  // Action: structured "Action - USER:..., TYPE:..., DETAIL:..." or legacy "Action - USER:..., ACTION:..."
   if (message.startsWith('Action - USER:')) {
-    const match = message.match(/USER:([\w.@-]+),?\s*ACTION:(.+)/)
-    if (match) {
-      return { type: 'action', user: match[1], details: match[2] }
+    // New structured format
+    const typedMatch = message.match(/USER:([\w.@-]+),?\s*TYPE:([\w.]+)(?:,?\s*DETAIL:(.+))?/)
+    if (typedMatch) {
+      return {
+        type: 'action',
+        user: typedMatch[1],
+        actionType: typedMatch[2]!,
+        actionDetail: typedMatch[3]?.trim(),
+        details: formatActionLabel(typedMatch[2]!, typedMatch[3]?.trim())
+      }
+    }
+    // Legacy format
+    const legacyMatch = message.match(/USER:([\w.@-]+),?\s*ACTION:(.+)/)
+    if (legacyMatch) {
+      return { type: 'action', user: legacyMatch[1], details: legacyMatch[2] }
     }
   }
 
@@ -440,7 +488,7 @@ async function fetchLogs() {
       parsed: parseLogMessage(log.message)
     }))
   } catch (err) {
-    console.error('Error fetching logs:', err)
+    logger.error('Error fetching logs:', err)
   } finally {
     loading.value = false
   }
@@ -474,9 +522,18 @@ const filteredLogs = computed(() => {
     result = result.filter(log => log.parsed.user && selectedUsers.value.includes(log.parsed.user))
   }
 
-  // Filter by selected types
+  // Filter by selected types (including action subtype filters)
   if (selectedTypes.value.length > 0) {
-    result = result.filter(log => selectedTypes.value.includes(log.parsed.type))
+    result = result.filter(log => {
+      if (selectedTypes.value.includes(log.parsed.type)) return true
+      // Check action subtype filters (cost, export, favorite)
+      if (log.parsed.actionType) {
+        const category = log.parsed.actionType.split('.')[0] || ''
+        if (category === 'account' && selectedTypes.value.includes('favorite')) return true
+        if (selectedTypes.value.includes(category)) return true
+      }
+      return false
+    })
   }
 
   return result
@@ -487,7 +544,8 @@ const stats = computed(() => ({
   logins: logs.value.filter(l => l.parsed.type === 'login').length,
   uniqueUsers: new Set(logs.value.filter(l => l.parsed.user).map(l => l.parsed.user)).size,
   pageViews: logs.value.filter(l => l.parsed.type === 'navigation').length,
-  errors: logs.value.filter(l => l.parsed.type === 'error').length
+  errors: logs.value.filter(l => l.parsed.type === 'error').length,
+  actions: logs.value.filter(l => l.parsed.type === 'action').length,
 }))
 
 // Computed: top users
@@ -523,7 +581,37 @@ function clearFilters() {
   selectedTypes.value = []
 }
 
-function getEventIcon(type: string): string {
+function getActionIcon(actionType?: string): string {
+  if (!actionType) return 'i-heroicons-bolt'
+  const category = actionType.split('.')[0]
+  switch (category) {
+    case 'cost': return 'i-heroicons-currency-dollar'
+    case 'export': return 'i-heroicons-arrow-down-tray'
+    case 'account': return 'i-heroicons-star'
+    case 'dashboard': return 'i-heroicons-squares-2x2'
+    case 'search': return 'i-heroicons-magnifying-glass'
+    case 'chat': return 'i-heroicons-chat-bubble-left-right'
+    default: return 'i-heroicons-bolt'
+  }
+}
+
+function getActionIconClass(actionType?: string): string {
+  const base = 'p-1.5 rounded-lg'
+  if (!actionType) return `${base} bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400`
+  const category = actionType.split('.')[0]
+  switch (category) {
+    case 'cost': return `${base} bg-cyan-100 text-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-400`
+    case 'export': return `${base} bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400`
+    case 'account': return `${base} bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400`
+    case 'dashboard': return `${base} bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400`
+    case 'search': return `${base} bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400`
+    case 'chat': return `${base} bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400`
+    default: return `${base} bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400`
+  }
+}
+
+function getEventIcon(type: string, parsed?: ParsedLog): string {
+  if (type === 'action' && parsed?.actionType) return getActionIcon(parsed.actionType)
   switch (type) {
     case 'login': return 'i-heroicons-arrow-right-on-rectangle'
     case 'navigation': return 'i-heroicons-cursor-arrow-rays'
@@ -533,7 +621,8 @@ function getEventIcon(type: string): string {
   }
 }
 
-function getEventIconClass(type: string): string {
+function getEventIconClass(type: string, parsed?: ParsedLog): string {
+  if (type === 'action' && parsed?.actionType) return getActionIconClass(parsed.actionType)
   const base = 'p-1.5 rounded-lg'
   switch (type) {
     case 'login': return `${base} bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400`
@@ -544,7 +633,27 @@ function getEventIconClass(type: string): string {
   }
 }
 
-function getEventLabel(type: string): string {
+function getEventLabel(type: string, parsed?: ParsedLog): string {
+  if (type === 'action' && parsed?.actionType) {
+    const labels: Record<string, string> = {
+      'cost.timeframe_change': 'changed cost timeframe',
+      'cost.tab_switch': 'switched cost tab',
+      'cost.mode_toggle': 'toggled cost mode',
+      'cost.tag_drilldown': 'drilled into tag data',
+      'cost.account_select': 'selected cost accounts',
+      'account.favorite': 'favorited an account',
+      'account.unfavorite': 'unfavorited an account',
+      'export.csv': 'exported CSV',
+      'export.json': 'exported JSON',
+      'dashboard.scope_change': 'changed dashboard scope',
+      'dashboard.daterange_change': 'changed date range',
+      'search.explorer': 'searched accounts',
+      'search.cost': 'searched costs',
+      'chat.thread_create': 'created chat thread',
+      'chat.thread_share': 'shared chat thread',
+    }
+    return labels[parsed.actionType] || 'performed action'
+  }
   switch (type) {
     case 'login': return 'signed in'
     case 'navigation': return 'visited'
@@ -552,6 +661,28 @@ function getEventLabel(type: string): string {
     case 'action': return 'performed action'
     default: return 'activity'
   }
+}
+
+function formatActionLabel(actionType: string, detail?: string): string {
+  const labels: Record<string, string> = {
+    'cost.timeframe_change': 'Changed cost timeframe',
+    'cost.tab_switch': 'Switched cost tab',
+    'cost.mode_toggle': 'Toggled cost mode',
+    'cost.tag_drilldown': 'Tag data drilldown',
+    'cost.account_select': 'Selected cost accounts',
+    'account.favorite': 'Favorited account',
+    'account.unfavorite': 'Unfavorited account',
+    'export.csv': 'CSV export',
+    'export.json': 'JSON export',
+    'dashboard.scope_change': 'Dashboard scope change',
+    'dashboard.daterange_change': 'Date range change',
+    'search.explorer': 'Account search',
+    'search.cost': 'Cost search',
+    'chat.thread_create': 'New chat thread',
+    'chat.thread_share': 'Shared chat thread',
+  }
+  const label = labels[actionType] || actionType
+  return detail ? `${label} (${detail})` : label
 }
 
 function formatPath(path: string): string {

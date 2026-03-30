@@ -69,6 +69,18 @@ export interface SiteConfigItem {
 }
 
 /**
+ * Announcement displayed as a dismissible banner to all users
+ */
+export interface Announcement {
+  id: string;
+  message: string;
+  severity: 'info' | 'warning' | 'critical';
+  active: boolean;
+  createdAt: string;
+  expiresAt?: string;
+}
+
+/**
  * Type-safe configuration structure
  */
 export interface SiteConfig {
@@ -110,7 +122,17 @@ export interface SiteConfig {
     siteName?: string;
     welcomeMessage?: string;
     showWelcomeCard?: boolean;
+    popupMessage?: {
+      enabled?: boolean;
+      id?: string;
+      title?: string;
+      body?: string;
+      severity?: 'info' | 'success' | 'warning';
+      ctaLabel?: string;
+      ctaLink?: string;
+    };
   };
+  announcements?: Announcement[];
 }
 
 /**
@@ -243,6 +265,81 @@ export const DEFAULT_SITE_CONFIG: SiteConfigItem[] = [
     isEditable: true,
   },
 
+  // User Notification System Configuration
+  {
+    key: 'notifications.enabled',
+    value: true,
+    type: 'boolean',
+    category: 'features',
+    label: 'User Notifications Enabled',
+    description: 'Master switch for the in-app user notification system',
+    defaultValue: true,
+    isPublic: false,
+    isEditable: true,
+  },
+  {
+    key: 'notifications.digestEnabled',
+    value: true,
+    type: 'boolean',
+    category: 'features',
+    label: 'Email Digest Enabled',
+    description: 'Send grouped email digests of notifications to users',
+    defaultValue: true,
+    isPublic: false,
+    isEditable: true,
+  },
+  {
+    key: 'notifications.defaultDigestFrequency',
+    value: 'daily',
+    type: 'string',
+    category: 'features',
+    label: 'Default Digest Frequency',
+    description: 'Default email digest frequency for new users',
+    defaultValue: 'daily',
+    isPublic: false,
+    isEditable: true,
+    validation: {
+      allowedValues: ['daily', 'weekly'],
+    },
+  },
+  {
+    key: 'notifications.defaultDigestHour',
+    value: 8,
+    type: 'number',
+    category: 'features',
+    label: 'Default Digest Hour',
+    description: 'Default hour (0-23) for email digest delivery',
+    defaultValue: 8,
+    isPublic: false,
+    isEditable: true,
+    validation: {
+      min: 0,
+      max: 23,
+    },
+  },
+  {
+    key: 'notifications.dryRun.enabled',
+    value: false,
+    type: 'boolean',
+    category: 'features',
+    label: 'Notification Dry-Run Mode',
+    description: 'Redirect all notifications to a single admin email instead of individual users',
+    defaultValue: false,
+    isPublic: false,
+    isEditable: true,
+  },
+  {
+    key: 'notifications.dryRun.redirectTo',
+    value: '',
+    type: 'string',
+    category: 'features',
+    label: 'Dry-Run Redirect Email',
+    description: 'Email address to receive all notifications when dry-run mode is enabled',
+    defaultValue: '',
+    isPublic: false,
+    isEditable: true,
+  },
+
   // Service Configuration
   {
     key: 'services.strands.serverUrl',
@@ -367,6 +464,97 @@ export const DEFAULT_SITE_CONFIG: SiteConfigItem[] = [
     label: 'Show Welcome Card',
     description: 'Display the welcome card on the homepage for new users',
     defaultValue: true,
+    isPublic: true,
+    isEditable: true,
+  },
+  {
+    key: 'ui.popupMessage.enabled',
+    value: false,
+    type: 'boolean',
+    category: 'ui',
+    label: 'Popup Message Enabled',
+    description: 'Show a popup message to users on login. When disabled, falls back to version changelog.',
+    defaultValue: false,
+    isPublic: true,
+    isEditable: true,
+  },
+  {
+    key: 'ui.popupMessage.id',
+    value: '',
+    type: 'string',
+    category: 'ui',
+    label: 'Popup Message ID',
+    description: 'Unique ID for the current popup. Change this to re-show to users who dismissed the previous one.',
+    defaultValue: '',
+    isPublic: true,
+    isEditable: true,
+  },
+  {
+    key: 'ui.popupMessage.title',
+    value: '',
+    type: 'string',
+    category: 'ui',
+    label: 'Popup Title',
+    description: 'Title displayed at the top of the popup modal.',
+    defaultValue: '',
+    isPublic: true,
+    isEditable: true,
+  },
+  {
+    key: 'ui.popupMessage.body',
+    value: '',
+    type: 'string',
+    category: 'ui',
+    label: 'Popup Body',
+    description: 'Main content of the popup. Supports basic markdown (bold, links, lists).',
+    defaultValue: '',
+    isPublic: true,
+    isEditable: true,
+  },
+  {
+    key: 'ui.popupMessage.severity',
+    value: 'info',
+    type: 'string',
+    category: 'ui',
+    label: 'Popup Severity',
+    description: 'Visual style of the popup: info (blue), success (green), warning (yellow).',
+    defaultValue: 'info',
+    isPublic: true,
+    isEditable: true,
+    validation: {
+      allowedValues: ['info', 'success', 'warning'],
+    },
+  },
+  {
+    key: 'ui.popupMessage.ctaLabel',
+    value: '',
+    type: 'string',
+    category: 'ui',
+    label: 'Popup CTA Button Label',
+    description: 'Optional call-to-action button text. Leave empty for no CTA.',
+    defaultValue: '',
+    isPublic: true,
+    isEditable: true,
+  },
+  {
+    key: 'ui.popupMessage.ctaLink',
+    value: '',
+    type: 'string',
+    category: 'ui',
+    label: 'Popup CTA Button Link',
+    description: 'URL the CTA button navigates to (internal path or external URL).',
+    defaultValue: '',
+    isPublic: true,
+    isEditable: true,
+  },
+  {
+    key: 'ui.dashboardLayout.default',
+    value: null,
+    type: 'object',
+    category: 'ui',
+    label: 'Default Dashboard Layout',
+    description: 'Organization-wide default dashboard layout for new users. Admin-configured.',
+    defaultValue: null,
     isPublic: true,
     isEditable: true,
   },

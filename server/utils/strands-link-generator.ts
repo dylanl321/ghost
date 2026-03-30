@@ -51,7 +51,7 @@ async function getAccountDataMap(): Promise<Map<string, any>> {
 
     return accountMap
   } catch (error) {
-    console.error('[Link Generator] Error loading account data:', error)
+    logger.error('[Link Generator] Error loading account data:', error)
     return new Map()
   }
 }

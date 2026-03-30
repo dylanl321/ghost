@@ -1,3 +1,5 @@
+const logger = createLogger('GHOST-AUTH')
+
 /**
  * Global middleware to handle authentication redirects
  * This middleware preserves the current URL when redirecting to auth
@@ -29,7 +31,7 @@ if (import.meta.client) {
         const now = Date.now() / 1000
 
         if (payload.exp && payload.exp < now) {
-          console.log('[GHOST-AUTH] Token expired while tab was hidden, redirecting')
+          logger.info('Token expired while tab was hidden, redirecting')
           const { saveReturnUrl } = useAuthRedirect()
           saveReturnUrl()
           window.location.href = '/auth/session-expired'
@@ -37,7 +39,7 @@ if (import.meta.client) {
         }
       } catch {
         // Token parsing failed - let normal flow handle it
-        console.warn('[GHOST-AUTH] Could not parse token for visibility check')
+        logger.warn('Could not parse token for visibility check')
       }
 
       // Then validate server-side session (catches ECS restart scenario)
@@ -46,7 +48,7 @@ if (import.meta.client) {
         await $fetch('/api/user/session-check', { method: 'HEAD' })
       } catch (error: any) {
         if (error?.statusCode === 401 || error?.status === 401) {
-          console.log('[GHOST-AUTH] Server session invalid after tab resume, redirecting')
+          logger.info('Server session invalid after tab resume, redirecting')
           const { saveReturnUrl } = useAuthRedirect()
           saveReturnUrl()
           window.location.href = '/auth/session-expired'
@@ -75,14 +77,14 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
 
   // If authentication is needed and we're not already going to auth
   if (needsAuth) {
-    console.log('[GHOST-AUTH] Middleware: Auth required for:', to.fullPath)
+    logger.info('Middleware: Auth required for:', to.fullPath)
 
     // Save the return URL to sessionStorage before OIDC takes over
     const { saveReturnUrl } = useAuthRedirect()
     saveReturnUrl(to.fullPath)
 
     // Trigger OIDC login directly (global OIDC middleware is disabled so we control ordering)
-    console.log('[GHOST-AUTH] Middleware: Triggering login redirect')
+    logger.info('Middleware: Triggering login redirect')
     await login()
     return
   }
@@ -106,14 +108,14 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
         const now = Date.now() / 1000
 
         if (payload.exp && payload.exp < now) {
-          console.log('[GHOST-AUTH] Middleware: Token expired, redirecting to auth')
+          logger.info('Middleware: Token expired, redirecting to auth')
           const { saveReturnUrl } = useAuthRedirect()
           saveReturnUrl(to.fullPath)
           await login()
           return
         }
       } catch (error) {
-        console.warn('Could not parse token for expiration check:', error)
+        logger.warn('Could not parse token for expiration check:', error)
         // Continue with navigation - let the auth loading page handle validation
       }
     }
@@ -125,6 +127,7 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     if (email) {
       const username = email.split("@")[0] || "UnknownUser"
       logActivity(`Navigation - USER:${username}, PATH:${to.fullPath}`)
+      useEventBus().emit('page.visited', { page: to.fullPath })
     }
   }
 })

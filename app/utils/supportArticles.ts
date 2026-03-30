@@ -1,3 +1,5 @@
+const logger = createLogger('SupportArticles')
+
 export interface SupportArticle {
   id: string
   title: string
@@ -30,7 +32,7 @@ export async function loadSupportCategories(): Promise<SupportCategory[]> {
       return response.data
     }
   } catch (error) {
-    console.error('Failed to load support articles:', error)
+    logger.error('Failed to load support articles:', error)
   }
 
   return []

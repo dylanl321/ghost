@@ -30,7 +30,7 @@ export default defineEventHandler(async (event): Promise<SiteConfigHistoryRespon
       count: history.length,
     };
   } catch (error: any) {
-    console.error('Error fetching config history:', error);
+    logger.error('Error fetching config history:', error);
     throw createError({
       statusCode: 500,
       message: error.message || 'Failed to fetch configuration history',

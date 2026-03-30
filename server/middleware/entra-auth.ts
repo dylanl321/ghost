@@ -78,22 +78,9 @@ async function validateAPIKeyAuth(event: H3Event): Promise<AuthContext | null> {
  */
 async function validateOIDCAuth(event: H3Event): Promise<AuthContext | null> {
   try {
-    // Get the OIDC session using the project's session utility
-    const session = await getOIDCSession(event)
-
-    if (session && (session.user || session.accessToken)) {
-      // User has valid OIDC session
-      // Authenticated users get full access to all APIs
-      return {
-        isAuthenticated: true,
-        authType: 'oidc',
-        user: session.user || { id: 'oidc-user', email: 'unknown' }, // User object from session
-        scopes: ['*'] // Full access
-      }
-    }
-
-    // Check for nuxt-oidc-auth devMode session
-    // devMode sessions have a different structure - check for provider='dev'
+    // Check for nuxt-oidc-auth devMode session FIRST
+    // Dev mode sessions need special handling to inject mock groups
+    // so that server-side admin checks don't call Graph API
     try {
       const { getUserSession: getOIDCUserSession } = await import('nuxt-oidc-auth/runtime/server/utils/session.js')
       const oidcSession = await getOIDCUserSession(event)
@@ -109,7 +96,7 @@ async function validateOIDCAuth(event: H3Event): Promise<AuthContext | null> {
 
         return {
           isAuthenticated: true,
-          authType: 'oidc', // Treat as OIDC for permission checks
+          authType: 'oidc',
           user: {
             id: oidcSession.userName || 'dev-user',
             displayName: oidcSession.userName || 'Dev User',
@@ -122,6 +109,20 @@ async function validateOIDCAuth(event: H3Event): Promise<AuthContext | null> {
       }
     } catch {
       // Ignore - devMode check is optional
+    }
+
+    // Get the OIDC session using the project's session utility
+    const session = await getOIDCSession(event)
+
+    if (session && (session.user || session.accessToken)) {
+      // User has valid OIDC session
+      // Authenticated users get full access to all APIs
+      return {
+        isAuthenticated: true,
+        authType: 'oidc',
+        user: session.user || { id: 'oidc-user', email: 'unknown' }, // User object from session
+        scopes: ['*'] // Full access
+      }
     }
 
     return null

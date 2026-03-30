@@ -14,7 +14,7 @@
 import { ref, computed, nextTick, readonly, onUnmounted, reactive } from 'vue'
 import { useChatThreadsStore } from '~/stores/useChatThreadsStore'
 import { useBackgroundPolling, type PollingCallbacks } from './useBackgroundPolling'
-import type { ChatMessage, StreamingChatMessage, SuggestedPrompt } from '#shared/types/chat-threads'
+import type { ChatMessage, StreamingChatMessage, SuggestedPrompt, MessageStatus } from '#shared/types/chat-threads'
 import type { AWSEnclaveData } from '#shared/types/accounts'
 
 // Chat state enum
@@ -22,6 +22,8 @@ export type ChatState = 'idle' | 'sending' | 'polling' | 'error' | 'canceled'
 
 // Import error type from shared types
 import type { ErrorType } from '#shared/types/chat-threads'
+
+const logger = createLogger('useChatUI')
 
 /**
  * Enhanced error classification system
@@ -201,7 +203,7 @@ function ensurePlaceholderForJob(threadId: string, jobId: string, initial?: Part
     if (existing.status && initial?.status) {
       existing.status.progress = initial.status.progress ?? existing.status.progress
       existing.status.toolsCalled = initial.status.toolsCalled ?? existing.status.toolsCalled
-        ; (existing.status as any).statusHistory = (initial.status as any)?.statusHistory ?? (existing.status as any).statusHistory
+      existing.status.statusHistory = initial.status.statusHistory ?? existing.status.statusHistory
       existing.status.jobId = jobId
     }
     return existing
@@ -217,7 +219,7 @@ function ensurePlaceholderForJob(threadId: string, jobId: string, initial?: Part
       jobId,
       progress: initial?.status?.progress || 'Starting...',
       toolsCalled: initial?.status?.toolsCalled || [],
-      statusHistory: (initial?.status as any)?.statusHistory || []
+      statusHistory: initial?.status?.statusHistory || []
     },
     streamBuffer: initial?.streamBuffer || ''
   }
@@ -234,7 +236,7 @@ function removePlaceholder(threadId: string, jobId: string) {
 
 // Options for the composable
 export interface UseChatUIOptions {
-  viewMode?: 'fullpage' | 'popup' | 'sidebar'
+  viewMode?: 'fullpage' | 'popup' | 'sidebar' | 'dashboard'
   initialGreeting?: string
 }
 
@@ -439,8 +441,9 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   // ============================================================================
 
   // Messages from store - single source of truth
-  const messages = computed(() => {
-    const threadMessages = threadsStore.currentThread?.messages || []
+  // Cast to StreamingChatMessage[] since pending/streaming messages are injected with status fields
+  const messages = computed<StreamingChatMessage[]>(() => {
+    const threadMessages = (threadsStore.currentThread?.messages || []) as StreamingChatMessage[]
     return threadMessages
   })
 
@@ -629,7 +632,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
           progress: job.progress || 'Processing...',
           toolsCalled: job.toolsCalled || [],
           statusHistory: job.statusHistory || []
-        } as any
+        }
       })
 
       // Inject placeholder into currently viewed thread if not present
@@ -672,7 +675,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
    * Handle progress updates from background polling
    */
   function handlePollingProgress(jobId: string, progress: string, percent: number, tools: string[]) {
-    console.log('[useChatUI] Progress update:', jobId, progress, percent)
+    logger.info('Progress update:', jobId, progress, percent)
     const threadId = threadsStore.activeThreadId
     if (!threadId) return
 
@@ -716,7 +719,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     suggestedLinks?: any[],
     suggestedPrompts?: any[]
   ) {
-    console.log('[useChatUI] Job complete:', jobId)
+    logger.info('Job complete:', jobId)
 
     // Find and update the pending message
     const threadMessages = threadsStore.currentThread?.messages || []
@@ -736,7 +739,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     } else {
       // No pending message found - add the response directly
       // This can happen if the thread was reloaded during polling
-      console.log('[useChatUI] No pending message found, adding response directly')
+      logger.info('No pending message found, adding response directly')
       if (threadsStore.currentThread?.messages) {
         threadsStore.currentThread.messages.push({
           messageId: `response-${Date.now()}`,
@@ -780,7 +783,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
    * Handle job error from background polling
    */
   function handlePollingError(jobId: string, error: string) {
-    console.error('[useChatUI] Job error:', jobId, error)
+    logger.error('Job error:', jobId, error)
 
     // Check for disambiguation
     if (error.includes('Multiple accounts found matching')) {
@@ -916,11 +919,11 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     const userInput = messageText.trim()
     const mentionedAccount = selectedAccountForMessage.value
 
-    console.log('[useChatUI] Sending message:', userInput.substring(0, 50))
+    logger.info('Sending message:', userInput.substring(0, 50))
 
     // Ensure we have a thread BEFORE we set any per-thread UI state
     if (!threadsStore.activeThreadId) {
-      console.log('[useChatUI] Creating new thread')
+      logger.info('Creating new thread')
       await threadsStore.createThread()
     }
 
@@ -959,7 +962,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
           progress: 'Starting...',
           toolsCalled: [],
           statusHistory: []
-        } as any,
+        },
         streamBuffer: ''
       }
 
@@ -969,31 +972,28 @@ export function useChatUI(options: UseChatUIOptions = {}) {
       scrollTrigger.value++
 
       // Get conversation history (exclude pending messages)
-      const conversationHistory = (threadsStore.currentThread?.messages || [])
-        .filter(m => !m.status || m.status.status === 'complete')
+      const conversationHistory = ((threadsStore.currentThread?.messages || []) as StreamingChatMessage[])
+        .filter((m: StreamingChatMessage) => !m.status || m.status.status === 'complete')
         .slice(-10)
-        .map(m => ({
+        .map((m: StreamingChatMessage) => ({
           role: m.role === 'user' ? 'user' as const : 'assistant' as const,
           content: m.content
         }))
 
-      // Get active enclave for context
-      const activeEnclave = enclaveStore.activeEnclave
-
-      console.log('[useChatUI] Submitting async query')
+      logger.info('Submitting async query')
 
       // Submit async query
       const response = await $fetch('/api/strands/chat/async', {
         method: 'POST',
         body: {
           message: userInput,
-          accountIdentifier: mentionedAccount?.accountId || activeEnclave?.id,
+          accountIdentifier: mentionedAccount?.accountId || undefined,
           conversationHistory,
           timezone: userTimezone.value
         }
       }) as any
 
-      console.log('[useChatUI] Async query response:', response)
+      logger.info('Async query response:', response)
 
       if (!response.success || !response.jobId) {
         throw new Error(response.error || 'Failed to submit query')
@@ -1028,6 +1028,8 @@ export function useChatUI(options: UseChatUIOptions = {}) {
       pollingToolsCalled.value = []
       pollingStatusHistory.value = []
 
+      useEventBus().emit('ai.chat.sent', { message: userInput })
+
       // Register with background polling service
       backgroundPolling.registerJob(jobId, currentThreadId, userInput)
 
@@ -1038,10 +1040,10 @@ export function useChatUI(options: UseChatUIOptions = {}) {
         onError: handlePollingError
       })
 
-      console.log('[useChatUI] Registered callbacks for job:', jobId)
+      logger.info('Registered callbacks for job:', jobId)
 
     } catch (error: any) {
-      console.error('[useChatUI] Error sending message:', error)
+      logger.error('Error sending message:', error)
       // Handle local error (not from polling)
       const errorMsg = error.message || 'Failed to send message'
 
@@ -1081,16 +1083,16 @@ export function useChatUI(options: UseChatUIOptions = {}) {
 
   async function retryLastMessage(): Promise<void> {
     // Find the last user message
-    const threadMessages = threadsStore.currentThread?.messages || []
-    const lastUserMsg = [...threadMessages].reverse().find(m => m.role === 'user')
+    const threadMessages = (threadsStore.currentThread?.messages || []) as StreamingChatMessage[]
+    const lastUserMsg = [...threadMessages].reverse().find((m: StreamingChatMessage) => m.role === 'user')
 
     if (!lastUserMsg) {
-      console.warn('[useChatUI] No user message to retry')
+      logger.warn('No user message to retry')
       return
     }
 
     // Remove error message if present
-    const errorIndex = threadMessages.findIndex(m => m.status?.status === 'error')
+    const errorIndex = threadMessages.findIndex((m: StreamingChatMessage) => m.status?.status === 'error')
     if (errorIndex !== -1) {
       threadMessages.splice(errorIndex, 1)
     }
@@ -1104,7 +1106,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   }
 
   async function cancelQuery(): Promise<void> {
-    console.log('[useChatUI] Canceling query')
+    logger.info('Canceling query')
 
     // Unregister callbacks and job from background polling
     if (currentJobId.value) {
@@ -1117,7 +1119,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
           method: 'POST'
         })
       } catch (err) {
-        console.warn('[useChatUI] Failed to cancel on server:', err)
+        logger.warn('Failed to cancel on server:', err)
       }
     }
 
@@ -1182,9 +1184,9 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     chatState.value = 'idle'
 
     // Remove pending message
-    const threadMessages = threadsStore.currentThread?.messages
+    const threadMessages = threadsStore.currentThread?.messages as StreamingChatMessage[] | undefined
     if (threadMessages) {
-      const pendingIndex = threadMessages.findIndex(m =>
+      const pendingIndex = threadMessages.findIndex((m: StreamingChatMessage) =>
         m.status?.status === 'pending' || m.status?.status === 'streaming'
       )
       if (pendingIndex !== -1) {
@@ -1397,7 +1399,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   // ============================================================================
 
   async function initialize(): Promise<void> {
-    console.log('[useChatUI] Initializing...')
+    logger.info('Initializing...')
     await threadsStore.fetchThreads()
 
     if (threadsStore.activeThreadId) {
@@ -1406,20 +1408,20 @@ export function useChatUI(options: UseChatUIOptions = {}) {
       if (!loaded) {
         // Thread no longer exists - clear the stale reference
         // Don't auto-create, let user send first message to create thread
-        console.log('[useChatUI] Persisted thread not found, clearing stale reference')
+        logger.info('Persisted thread not found, clearing stale reference')
         threadsStore.setActiveThread(null)
 
         // Select most recent existing thread if available
         if (threadsStore.threads.length > 0) {
           const mostRecent = threadsStore.threads[0]
-          console.log('[useChatUI] Selecting most recent thread:', mostRecent.threadId)
+          logger.info('Selecting most recent thread:', mostRecent.threadId)
           await threadsStore.loadThread(mostRecent.threadId)
         }
       }
     } else if (threadsStore.threads.length > 0) {
       // No active thread but threads exist - select the most recent one
       const mostRecent = threadsStore.threads[0]
-      console.log('[useChatUI] No active thread, selecting most recent:', mostRecent.threadId)
+      logger.info('No active thread, selecting most recent:', mostRecent.threadId)
       await threadsStore.loadThread(mostRecent.threadId)
     }
     // If no active thread and no existing threads, don't create one
@@ -1438,7 +1440,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
       window.addEventListener('chat-thread-switched', handleThreadSwitch as EventListener)
     }
 
-    console.log('[useChatUI] Initialization complete')
+    logger.info('Initialization complete')
   }
 
   // ============================================================================

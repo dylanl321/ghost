@@ -7,7 +7,7 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { requireAdmin } from '../../../utils/user-roles'
 import { getConfigItem, updateConfigItem } from '../../../utils/budget-alert-config'
-import type { PaceAlertingConfig } from '@/shared/types/budget-alert-config'
+import type { PaceAlertingConfig } from '#shared/types/budget-alert-config'
 
 interface PaceAlertingUpdateRequest {
   severity_thresholds?: {
@@ -118,7 +118,7 @@ export default defineEventHandler(async (event) => {
       message: 'Pace alerting configuration updated successfully'
     }
   } catch (error: any) {
-    console.error('Error updating pace alerting config:', error)
+    logger.error('Error updating pace alerting config:', error)
 
     throw createError({
       statusCode: error.statusCode || 500,

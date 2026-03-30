@@ -163,7 +163,7 @@
 </template>
 
 <script setup lang="ts">
-import type { SettingsConfig } from '@/shared/types/budget-alert-config'
+import type { SettingsConfig } from '#shared/types/budget-alert-config'
 
 const props = defineProps<{
   settings: SettingsConfig | null

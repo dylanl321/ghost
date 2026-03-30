@@ -6,6 +6,8 @@
 import { ref } from 'vue'
 import { startCostTour } from '~/components/tutorial/CostTour'
 
+const logger = createLogger('CostTour')
+
 const COST_TOUR_SEEN_KEY = 'ghost-cost-tour-seen'
 
 export function useCostTour() {
@@ -108,7 +110,7 @@ export function useCostTour() {
         }
       })
     } catch (error: any) {
-      console.error('Failed to start tour:', error)
+      logger.error('Failed to start tour:', error)
       const toast = useToast()
       toast.add({
         title: 'Tour Error',

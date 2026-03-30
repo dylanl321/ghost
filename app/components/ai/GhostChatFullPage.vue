@@ -251,6 +251,8 @@
 
 import mermaid from 'mermaid'
 
+const logger = createLogger('GhostChatFullPage')
+
 // Get unified chat logic
 const {
   // Core state
@@ -424,7 +426,7 @@ async function handleSubmit(e: Event) {
 
 // Handle example question clicks
 async function handleExampleClick(message: string) {
-  console.log('[GhostChatFullPage] Example clicked:', message)
+  logger.info('Example clicked:', message)
   // Set the input value so sendMessage can use it
   inputValue.value = message
   await sendMessage()
@@ -432,7 +434,7 @@ async function handleExampleClick(message: string) {
 
 // Handle suggested prompt clicks
 async function handlePromptClick(promptText: string) {
-  console.log('[GhostChatFullPage] Prompt clicked:', promptText)
+  logger.info('Prompt clicked:', promptText)
   // Set the input value so sendMessage can use it
   inputValue.value = promptText
   await sendMessage()
@@ -444,7 +446,7 @@ function handleDisambiguate() {
   if (disambiguationData.value) {
     openDisambiguationModal()
   } else {
-    console.warn('[GhostChatFullPage] No disambiguation data available')
+    logger.warn('No disambiguation data available')
   }
 }
 
@@ -520,7 +522,7 @@ watch(messages, async () => {
         })
       }
     } catch (error) {
-      console.error('Error rendering mermaid chart:', error)
+      logger.error('Error rendering mermaid chart:', error)
       const code = element.textContent || ''
       element.innerHTML = `
         <div class="p-3 bg-red-50 dark:bg-red-900/20 rounded border border-red-200 dark:border-red-800">
@@ -624,7 +626,7 @@ async function copyToClipboard(text: string) {
       timeout: 2000
     })
   } catch (err) {
-    console.error('Failed to copy:', err)
+    logger.error('Failed to copy:', err)
     toast.add({
       title: 'Copy failed',
       icon: 'i-heroicons-exclamation-triangle',

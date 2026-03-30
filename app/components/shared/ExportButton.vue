@@ -22,7 +22,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ExportFormat } from '~/shared/types/export'
+import type { ExportFormat } from '#shared/types/export'
 
 interface Props {
   // Button appearance

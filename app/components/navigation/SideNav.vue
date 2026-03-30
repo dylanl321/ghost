@@ -94,6 +94,7 @@
             <NuxtLink
               v-if="strandsEnabled"
               :to="item.to"
+              prefetch
               class="flex items-center px-3 py-2 rounded-md text-sm text-slate-700 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors relative group overflow-hidden"
               :class="{ 'text-slate-900 bg-slate-100 dark:text-white dark:bg-slate-800': isActive(item) }"
             >
@@ -128,6 +129,7 @@
             <NuxtLink
               v-if="isAdmin"
               :to="item.to"
+              prefetch
               class="flex items-center px-3 py-2 rounded-md text-sm text-slate-700 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors relative group overflow-hidden"
               :class="{ 'text-slate-900 bg-slate-100 dark:text-white dark:bg-slate-800': isActive(item) }"
             >
@@ -162,6 +164,7 @@
             <NuxtLink
               v-if="isAdmin"
               :to="item.to"
+              prefetch
               class="flex items-center px-3 py-2 rounded-md text-sm text-slate-700 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors relative group overflow-hidden"
               :class="{ 'text-slate-900 bg-slate-100 dark:text-white dark:bg-slate-800': isActive(item) }"
             >
@@ -194,6 +197,7 @@
           <NuxtLink
             v-else
             :to="item.to"
+            prefetch
             class="flex items-center px-3 py-2 rounded-md text-sm text-slate-700 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors relative group overflow-hidden"
             :class="{ 'text-slate-900 bg-slate-100 dark:text-white dark:bg-slate-800': isActive(item) }"
           >
@@ -246,6 +250,7 @@
         <UTooltip text="Documentation" :shortcuts="[]">
           <NuxtLink
             to="/support/docs"
+            prefetch
             class="flex items-center justify-center p-2 rounded-md text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors relative group"
             :class="{
               'text-slate-900 bg-slate-100 dark:text-white dark:bg-slate-800': route.path.startsWith('/support/docs'),
@@ -259,6 +264,7 @@
         <UTooltip text="Support" :shortcuts="[]">
           <NuxtLink
             to="/support"
+            prefetch
             class="flex items-center justify-center p-2 rounded-md text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors relative group"
             :class="{
               'text-slate-900 bg-slate-100 dark:text-white dark:bg-slate-800': route.path === '/support' || route.path.startsWith('/support/'),
@@ -272,6 +278,7 @@
         <UTooltip text="About" :shortcuts="[]">
           <NuxtLink
             to="/about"
+            prefetch
             class="flex items-center justify-center p-2 rounded-md text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors relative group"
             :class="{
               'text-slate-900 bg-slate-100 dark:text-white dark:bg-slate-800': route.path === '/about',
@@ -290,6 +297,8 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue"
 import { useRoute } from "vue-router";
 import { useNavigationStore } from "~/stores/useNavigationStore";
 import { useUserRoles } from "~/composables/useUserRoles";
+
+const logger = createLogger('SideNav')
 
 const route = useRoute();
 const navigationStore = useNavigationStore();
@@ -344,7 +353,7 @@ const toggleSidebar = () => {
   if (!canCollapse.value) {
     // Provide visual feedback for protected pages
     const rule = navigationStore.getPageRule(route.path);
-    console.log(
+    logger.info(
       `Cannot collapse sidebar: ${
         rule?.reason || "This page requires full navigation"
       }`
@@ -363,7 +372,7 @@ const toggleSidebar = () => {
 
   const success = navigationStore.toggle(route.path);
   if (!success) {
-    console.log("Failed to toggle sidebar state");
+    logger.info("Failed to toggle sidebar state");
   }
 };
 
@@ -396,7 +405,7 @@ watch(
       navigationStore.isPageProtected(currentPath) &&
       collapsed
     ) {
-      console.log(
+      logger.info(
         `State inconsistency detected: Protected page ${currentPath} is collapsed - forcing expand`
       );
       navigationStore.expand();
@@ -492,6 +501,11 @@ const navigationItems = computed(() => {
       label: "Dataset Reports",
       to: "/reports/datasets",
       icon: "i-heroicons-server-stack",
+    },
+    {
+      label: "Security Health",
+      to: "/security",
+      icon: "i-heroicons-shield-exclamation",
     },
     {
       label: "AI Assistant",

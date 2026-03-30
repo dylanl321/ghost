@@ -5,6 +5,8 @@ import { marked } from 'marked'
 import type { Token, Tokens } from 'marked'
 import type { ChatMessage } from '#shared/types/chat-threads'
 
+const logger = createLogger('PdfExport')
+
 export interface PDFExportOptions {
   filename?: string
   orientation?: 'portrait' | 'landscape'
@@ -557,7 +559,7 @@ export class PDFExporter {
     // Note: jsPDF doesn't have full bookmark support, but we can track sections
     // This is a placeholder for future enhancement when switching to a library with better support
     const pageNumber = this.pdf.getCurrentPageInfo().pageNumber
-    console.log(`Bookmark: ${title} at page ${pageNumber}, level ${level}`)
+    logger.info(`Bookmark: ${title} at page ${pageNumber}, level ${level}`)
   }
 }
 

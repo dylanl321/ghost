@@ -1,8 +1,10 @@
 import { computed, type ComputedRef } from 'vue'
 import type { NormalizedDataset } from '~/types/costs'
 import type { TableColumn } from '~/components/shared/DataTable.vue'
-import type { DataMode } from '~/shared/types/scheduled-reports'
+import type { DataMode } from '#shared/types/scheduled-reports'
 import { getAccountsFromAnalysis, unwrapCostData } from '~/utils/cost-data-unwrap'
+
+const logger = createLogger('TableRegistry')
 
 // Account metadata type (simplified for LOB/Department lookup)
 export interface AccountMetadata {
@@ -161,38 +163,18 @@ const budgetOverageAccounts: TableDefinition = {
       }))
 
     // Calculate risk scores across all accounts
+    assignRiskScores(
+      accounts,
+      (a: any) => a.percentOver,
+      (a: any) => a.dollarOver,
+      (a: any, result) => {
+        a.riskScore = result.riskScore
+        a.riskLevel = result.riskLevel
+        a.riskColor = result.riskColor
+      }
+    )
+
     if (accounts.length > 0) {
-      const maxPercentOver = Math.max(...accounts.map((a: any) => a.percentOver), 1)
-      const maxDollarOver = Math.max(...accounts.map((a: any) => a.dollarOver), 1)
-
-      accounts.forEach((account: any) => {
-        // Normalize overage percentage (0-100 scale)
-        const normalizedPercent = (account.percentOver / maxPercentOver) * 100
-
-        // Normalize overage amount (0-100 scale)
-        const normalizedAmount = (account.dollarOver / maxDollarOver) * 100
-
-        // Combined risk score (70% weight on percentage, 30% weight on absolute impact)
-        const riskScore = (normalizedPercent * 0.7) + (normalizedAmount * 0.3)
-
-        // Determine risk level
-        if (riskScore >= 80) {
-          account.riskLevel = 'Critical'
-          account.riskColor = 'red'
-        } else if (riskScore >= 60) {
-          account.riskLevel = 'High'
-          account.riskColor = 'orange'
-        } else if (riskScore >= 40) {
-          account.riskLevel = 'Medium'
-          account.riskColor = 'yellow'
-        } else {
-          account.riskLevel = 'Low'
-          account.riskColor = 'blue'
-        }
-
-        account.riskScore = riskScore
-      })
-
       // Sort by risk score descending
       accounts.sort((a: any, b: any) => b.riskScore - a.riskScore)
     }
@@ -293,38 +275,18 @@ const severeOverageAccounts: TableDefinition = {
       }))
 
     // Calculate risk scores across all accounts
+    assignRiskScores(
+      accounts,
+      (a: any) => a.percentOver,
+      (a: any) => a.dollarOver,
+      (a: any, result) => {
+        a.riskScore = result.riskScore
+        a.riskLevel = result.riskLevel
+        a.riskColor = result.riskColor
+      }
+    )
+
     if (accounts.length > 0) {
-      const maxPercentOver = Math.max(...accounts.map((a: any) => a.percentOver), 1)
-      const maxDollarOver = Math.max(...accounts.map((a: any) => a.dollarOver), 1)
-
-      accounts.forEach((account: any) => {
-        // Normalize overage percentage (0-100 scale)
-        const normalizedPercent = (account.percentOver / maxPercentOver) * 100
-
-        // Normalize overage amount (0-100 scale)
-        const normalizedAmount = (account.dollarOver / maxDollarOver) * 100
-
-        // Combined risk score (70% weight on percentage, 30% weight on absolute impact)
-        const riskScore = (normalizedPercent * 0.7) + (normalizedAmount * 0.3)
-
-        // Determine risk level
-        if (riskScore >= 80) {
-          account.riskLevel = 'Critical'
-          account.riskColor = 'red'
-        } else if (riskScore >= 60) {
-          account.riskLevel = 'High'
-          account.riskColor = 'orange'
-        } else if (riskScore >= 40) {
-          account.riskLevel = 'Medium'
-          account.riskColor = 'yellow'
-        } else {
-          account.riskLevel = 'Low'
-          account.riskColor = 'blue'
-        }
-
-        account.riskScore = riskScore
-      })
-
       // Sort by risk score descending
       accounts.sort((a: any, b: any) => b.riskScore - a.riskScore)
     }
@@ -1060,7 +1022,7 @@ const serviceBreakdownTable: TableDefinition = {
     const servicesResponse = dataset.services as any
 
     if (!servicesResponse) {
-      console.warn('No services data in dataset')
+      logger.warn('No services data in dataset')
       return []
     }
 
@@ -1078,7 +1040,7 @@ const serviceBreakdownTable: TableDefinition = {
     }
 
     if (!servicesData.resultsByTime || !Array.isArray(servicesData.resultsByTime)) {
-      console.warn('No resultsByTime in services data:', servicesData)
+      logger.warn('No resultsByTime in services data:', servicesData)
       return []
     }
 
@@ -1117,7 +1079,7 @@ const serviceBreakdownTable: TableDefinition = {
         percentOfTotal: totalCost > 0 ? (svc.cost / totalCost) * 100 : 0
       }))
 
-    console.log('Service breakdown extracted:', {
+    logger.info('Service breakdown extracted:', {
       totalServices: serviceCostMap.size,
       topServices: topServices.length,
       totalCost,

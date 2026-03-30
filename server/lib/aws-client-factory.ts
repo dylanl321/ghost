@@ -32,6 +32,7 @@ import { EventBridgeClient } from '@aws-sdk/client-eventbridge'
 import { SSMClient } from '@aws-sdk/client-ssm'
 import { Inspector2Client } from '@aws-sdk/client-inspector2'
 import { CloudWatchLogsClient } from '@aws-sdk/client-cloudwatch-logs'
+import { ResourceGroupsTaggingAPIClient } from '@aws-sdk/client-resource-groups-tagging-api'
 import { logger } from '../utils/logger'
 
 import type {
@@ -85,7 +86,8 @@ const SERVICE_CLIENT_MAP = {
   'eventbridge': EventBridgeClient,
   'ssm': SSMClient,
   'inspector2': Inspector2Client,
-  'cloudwatch-logs': CloudWatchLogsClient
+  'cloudwatch-logs': CloudWatchLogsClient,
+  'resource-groups-tagging': ResourceGroupsTaggingAPIClient
 } as const
 
 // Cache for AWS clients with expiration tracking
@@ -689,6 +691,14 @@ export async function getCloudWatchLogsClient(
   accountId?: string
 ): Promise<CloudWatchLogsClient> {
   return getClient(environment, 'cloudwatch-logs', region, accountId)
+}
+
+export async function getResourceGroupsTaggingClient(
+  environment: AWSEnvironmentType = 'commercial',
+  region?: string,
+  accountId?: string
+): Promise<ResourceGroupsTaggingAPIClient> {
+  return getClient(environment, 'resource-groups-tagging', region, accountId)
 }
 
 // Export validation functions for testing

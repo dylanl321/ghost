@@ -167,7 +167,7 @@
 </template>
 
 <script setup lang="ts">
-import type { AnomalyDetectionConfig, StandaloneAnomalyAlertsConfig } from '@/shared/types/budget-alert-config'
+import type { AnomalyDetectionConfig, StandaloneAnomalyAlertsConfig } from '#shared/types/budget-alert-config'
 
 defineProps<{
   anomalyDetection: AnomalyDetectionConfig | null

@@ -242,6 +242,13 @@ onMounted(async () => {
     await threadsStore.loadThread(threadsStore.activeThreadId)
   }
   // Note: If no active thread, one will be auto-created when the user sends their first message
+
+  // Pre-fill input from command palette "Ask AI" routing (?q= query param)
+  const route = useRoute()
+  const prefillQuery = route.query.q as string | undefined
+  if (prefillQuery?.trim()) {
+    chatUI.inputValue.value = prefillQuery.trim()
+  }
 })
 
 // Handle thread selection - use chatUI to properly handle callback registration for active jobs
@@ -256,12 +263,14 @@ async function handleNewThread() {
     title: 'New conversation started',
     color: 'green'
   })
+  logUserAction('chat.thread_create')
 }
 
 // Handle share thread (from sidebar)
 function handleShareThread(threadId: string) {
   shareThreadId.value = threadId
   showShareModal.value = true
+  logUserAction('chat.thread_share')
 }
 
 // Handle share current thread (from header)
@@ -361,6 +370,7 @@ async function saveTitle() {
       color: 'green',
       timeout: 2000
     })
+    useEventBus().emit('chat.thread_renamed', { threadId: threadsStore.activeThreadId })
   } else {
     toast.add({
       title: 'Failed to rename thread',

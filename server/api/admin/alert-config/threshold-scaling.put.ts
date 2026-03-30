@@ -7,7 +7,7 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { requireAdmin } from '../../../utils/user-roles'
 import { getConfigItem, updateConfigItem } from '../../../utils/budget-alert-config'
-import type { ThresholdScalingConfig } from '@/shared/types/budget-alert-config'
+import type { ThresholdScalingConfig } from '#shared/types/budget-alert-config'
 
 interface ThresholdScalingUpdateRequest {
   enabled?: boolean
@@ -74,7 +74,7 @@ export default defineEventHandler(async (event) => {
       message: 'Threshold scaling configuration updated successfully'
     }
   } catch (error: any) {
-    console.error('Error updating threshold scaling config:', error)
+    logger.error('Error updating threshold scaling config:', error)
 
     throw createError({
       statusCode: error.statusCode || 500,

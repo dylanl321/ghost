@@ -264,6 +264,8 @@
 </template>
 
 <script setup lang="ts">
+const logger = createLogger('StrandsLogsViewer')
+
 interface LogEvent {
   timestamp: number
   logStreamName: string
@@ -394,7 +396,7 @@ async function loadContainers() {
       }
     }
   } catch (e: any) {
-    console.error('Error loading containers:', e)
+    logger.error('Error loading containers:', e)
     // Use default
     availableContainers.value = ['agent']
   } finally {
@@ -431,7 +433,7 @@ async function fetchLogs() {
     }
   } catch (e: any) {
     error.value = e.data?.message || e.message || 'Failed to fetch logs'
-    console.error('Error fetching logs:', e)
+    logger.error('Error fetching logs:', e)
   } finally {
     loading.value = false
   }

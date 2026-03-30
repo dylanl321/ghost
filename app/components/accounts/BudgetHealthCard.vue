@@ -1,11 +1,10 @@
 <template>
-  <UCard class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
-    <template #header>
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <UIcon name="i-heroicons-chart-pie" class="text-blue-500 w-5 h-5" />
-          <h3 class="font-semibold text-lg text-gray-900 dark:text-white">GDMS Forecast Health</h3>
-        </div>
+  <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-2">
+        <UIcon name="i-heroicons-chart-pie" class="text-blue-500 w-5 h-5" />
+        <h3 class="font-semibold text-sm text-gray-900 dark:text-white">GDMS Forecast Health</h3>
+      </div>
         <UButton
           to="/support/docs?topic=gdms-forecast-health"
           variant="ghost"
@@ -16,7 +15,6 @@
           Help
         </UButton>
       </div>
-    </template>
 
     <div v-if="loading" class="flex items-center justify-center py-8">
       <UIcon
@@ -30,14 +28,14 @@
       <div>
         <div class="flex justify-between items-baseline mb-2">
           <span class="text-sm text-gray-600 dark:text-gray-400">GDMS Forecast Utilization</span>
-          <span :class="utilizationColorClass" class="text-2xl font-bold">
+          <span :class="utilizationColorClass" class="text-xl font-bold">
             {{ utilizationPercent }}%
           </span>
         </div>
-        <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
+        <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 overflow-hidden">
           <div
             :class="utilizationBgClass"
-            class="h-3 rounded-full transition-all duration-500"
+            class="h-1.5 rounded-full transition-all duration-500"
             :style="{ width: Math.min(utilizationPercent, 100) + '%' }"
           />
         </div>
@@ -45,30 +43,30 @@
 
       <!-- Key Metrics Grid -->
       <div class="grid grid-cols-2 gap-4">
-        <div class="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+        <div class="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-3">
           <div class="text-xs text-gray-600 dark:text-gray-400 mb-1">Monthly GDMS Forecast</div>
-          <div class="text-lg font-semibold text-gray-900 dark:text-white">
+          <div class="text-xl font-bold text-gray-900 dark:text-white">
             {{ formatCurrency(budget, 0) }}
           </div>
         </div>
 
-        <div class="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+        <div class="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-3">
           <div class="text-xs text-gray-600 dark:text-gray-400 mb-1">Current Spend</div>
-          <div class="text-lg font-semibold text-blue-600 dark:text-blue-400">
+          <div class="text-xl font-bold text-blue-600 dark:text-blue-400">
             {{ formatCurrency(currentSpend, 0) }}
           </div>
         </div>
 
-        <div class="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+        <div class="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-3">
           <div class="text-xs text-gray-600 dark:text-gray-400 mb-1">Daily Burn Rate</div>
-          <div class="text-lg font-semibold text-purple-600 dark:text-purple-400">
+          <div class="text-xl font-bold text-purple-600 dark:text-purple-400">
             {{ formatCurrency(burnRate, 0) }}/day
           </div>
         </div>
 
-        <div class="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+        <div class="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-3">
           <div class="text-xs text-gray-600 dark:text-gray-400 mb-1">AWS Projected MTD</div>
-          <div :class="projectedColorClass" class="text-lg font-semibold">
+          <div :class="projectedColorClass" class="text-xl font-bold">
             {{ formatCurrency(projectedSpend, 0) }}
           </div>
         </div>
@@ -77,7 +75,7 @@
       <!-- Simple Forecast Timeline -->
       <div
         v-if="forecastTimeline.length > 0 && budget > 0"
-        class="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4"
+        class="bg-gray-100 dark:bg-gray-800/50 rounded-lg p-4"
       >
         <div class="flex items-center justify-between mb-4">
           <div class="text-xs font-medium text-gray-700 dark:text-gray-300">AWS Spend Projection</div>
@@ -161,7 +159,7 @@
         </div>
       </div>
     </div>
-  </UCard>
+  </div>
 </template>
 
 <script setup lang="ts">

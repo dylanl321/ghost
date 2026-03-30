@@ -185,8 +185,8 @@
 </template>
 
 <script setup lang="ts">
-import type { ReportConfig } from '~/shared/types/scheduled-reports'
-import type { CreateShareReportResponse } from '~/shared/types/shared-reports'
+import type { ReportConfig } from '#shared/types/scheduled-reports'
+import type { CreateShareReportResponse } from '#shared/types/shared-reports'
 
 const props = defineProps<{
   modelValue: boolean

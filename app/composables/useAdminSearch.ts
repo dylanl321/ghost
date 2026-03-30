@@ -8,10 +8,10 @@ export interface AdminPanelItem {
   label: string
   description?: string
   icon: string
-  category: string      // Parent category (settings, ai, monitoring, etc.)
+  category: string      // Parent category (configuration, ai, system, etc.)
   categoryLabel: string // Display name for category
   to: string           // Navigation path
-  tab?: number         // Tab index if navigating to specific tab
+  tab?: string         // Tab slug if navigating to specific tab
   keywords?: string[]  // Additional search terms
 }
 
@@ -23,84 +23,40 @@ export function useAdminSearch() {
 
   // Full index of all admin panels organized by category
   const allPanels = computed<AdminPanelItem[]>(() => [
-    // System Settings (6 tabs)
+    // Configuration (2 tabs)
     {
-      id: 'settings-api-keys',
+      id: 'config-api-keys',
       label: 'API Keys',
       description: 'Manage API keys and secrets',
       icon: 'i-heroicons-key',
-      category: 'settings',
-      categoryLabel: 'System Settings',
-      to: '/admin/settings',
-      tab: 0,
+      category: 'configuration',
+      categoryLabel: 'Configuration',
+      to: '/admin/configuration',
+      tab: 'api-keys',
       keywords: ['api', 'keys', 'secrets', 'credentials', 'tokens']
     },
     {
-      id: 'settings-site-config',
+      id: 'config-site-config',
       label: 'Site Configuration',
       description: 'Configure site-wide settings',
       icon: 'i-heroicons-cog-6-tooth',
-      category: 'settings',
-      categoryLabel: 'System Settings',
-      to: '/admin/settings',
-      tab: 1,
+      category: 'configuration',
+      categoryLabel: 'Configuration',
+      to: '/admin/configuration',
+      tab: 'site-config',
       keywords: ['site', 'config', 'configuration', 'general']
     },
-    {
-      id: 'settings-notifications',
-      label: 'Notifications',
-      description: 'Configure notification settings',
-      icon: 'i-heroicons-bell',
-      category: 'settings',
-      categoryLabel: 'System Settings',
-      to: '/admin/settings',
-      tab: 2,
-      keywords: ['notifications', 'alerts', 'email', 'slack']
-    },
-    {
-      id: 'settings-budget-alerts',
-      label: 'Budget Alerts',
-      description: 'Configure budget alert thresholds',
-      icon: 'i-heroicons-bell-alert',
-      category: 'settings',
-      categoryLabel: 'System Settings',
-      to: '/admin/settings',
-      tab: 3,
-      keywords: ['budget', 'alerts', 'thresholds', 'spending', 'costs']
-    },
-    {
-      id: 'settings-alert-metrics',
-      label: 'Alert Metrics',
-      description: 'View alert delivery metrics',
-      icon: 'i-heroicons-chart-bar',
-      category: 'settings',
-      categoryLabel: 'System Settings',
-      to: '/admin/settings',
-      tab: 4,
-      keywords: ['metrics', 'alerts', 'delivery', 'statistics']
-    },
-    {
-      id: 'settings-alert-settings',
-      label: 'Alert Settings',
-      description: 'Configure alert behavior and rules',
-      icon: 'i-heroicons-adjustments-horizontal',
-      category: 'settings',
-      categoryLabel: 'System Settings',
-      to: '/admin/settings',
-      tab: 5,
-      keywords: ['alert', 'settings', 'rules', 'behavior']
-    },
 
-    // User Management (2 tabs)
+    // Users & Access (5 tabs)
     {
       id: 'users-preferences',
       label: 'User Preferences',
-      description: 'Manage user preferences',
+      description: 'Manage user preferences and profiles',
       icon: 'i-heroicons-user-circle',
       category: 'users',
-      categoryLabel: 'User Management',
+      categoryLabel: 'Users & Access',
       to: '/admin/users',
-      tab: 0,
+      tab: 'preferences',
       keywords: ['user', 'preferences', 'settings', 'profile']
     },
     {
@@ -109,10 +65,43 @@ export function useAdminSearch() {
       description: 'Manage roles and access permissions',
       icon: 'i-heroicons-shield-check',
       category: 'users',
-      categoryLabel: 'User Management',
+      categoryLabel: 'Users & Access',
       to: '/admin/users',
-      tab: 1,
+      tab: 'roles',
       keywords: ['roles', 'permissions', 'access', 'rbac', 'groups']
+    },
+    {
+      id: 'users-usage-analytics',
+      label: 'Usage Analytics',
+      description: 'View user activity and usage metrics',
+      icon: 'i-heroicons-chart-bar',
+      category: 'users',
+      categoryLabel: 'Users & Access',
+      to: '/admin/users',
+      tab: 'usage-analytics',
+      keywords: ['usage', 'analytics', 'activity', 'metrics', 'statistics']
+    },
+    {
+      id: 'users-journeys',
+      label: 'User Journeys',
+      description: 'Track user navigation paths and behavior',
+      icon: 'i-heroicons-map',
+      category: 'users',
+      categoryLabel: 'Users & Access',
+      to: '/admin/users',
+      tab: 'user-journeys',
+      keywords: ['user', 'journeys', 'paths', 'navigation', 'tracking']
+    },
+    {
+      id: 'users-feedback',
+      label: 'Feedback & Requests',
+      description: 'View user feedback and feature requests',
+      icon: 'i-heroicons-exclamation-triangle',
+      category: 'users',
+      categoryLabel: 'Users & Access',
+      to: '/admin/users',
+      tab: 'feedback',
+      keywords: ['feedback', 'requests', 'issues', 'tickets', 'bugs']
     },
 
     // Content & Reports (3 tabs)
@@ -124,7 +113,7 @@ export function useAdminSearch() {
       category: 'content',
       categoryLabel: 'Content & Reports',
       to: '/admin/content',
-      tab: 0,
+      tab: 'share-links',
       keywords: ['share', 'links', 'shared', 'public']
     },
     {
@@ -135,7 +124,7 @@ export function useAdminSearch() {
       category: 'content',
       categoryLabel: 'Content & Reports',
       to: '/admin/content',
-      tab: 1,
+      tab: 'reports',
       keywords: ['scheduled', 'reports', 'automation', 'cron']
     },
     {
@@ -146,20 +135,52 @@ export function useAdminSearch() {
       category: 'content',
       categoryLabel: 'Content & Reports',
       to: '/admin/content',
-      tab: 2,
+      tab: 'stored-reports',
       keywords: ['stored', 'reports', 'history', 'archive']
     },
 
-    // AI Operations (5 tabs)
+    // Cost Management (3 sub-pages)
+    {
+      id: 'costs-budget-alerts',
+      label: 'Budget Alerts',
+      description: 'Monitor budget alerts and configure thresholds',
+      icon: 'i-heroicons-bell-alert',
+      category: 'costs',
+      categoryLabel: 'Cost Management',
+      to: '/admin/costs/budget-alerts',
+      keywords: ['budget', 'alerts', 'thresholds', 'spending', 'costs']
+    },
+    {
+      id: 'costs-tag-compliance',
+      label: 'Tag Compliance',
+      description: 'Analyze cost allocation tag coverage',
+      icon: 'i-heroicons-tag',
+      category: 'costs',
+      categoryLabel: 'Cost Management',
+      to: '/admin/costs/tag-compliance',
+      keywords: ['tag', 'compliance', 'coverage', 'cost', 'allocation', 'tagging']
+    },
+    {
+      id: 'costs-data-validation',
+      label: 'Data Validation',
+      description: 'Validate cost data accuracy',
+      icon: 'i-heroicons-clipboard-document-check',
+      category: 'costs',
+      categoryLabel: 'Cost Management',
+      to: '/admin/costs/data-validation',
+      keywords: ['validation', 'data', 'integrity', 'quality', 'accuracy', 'cost']
+    },
+
+    // AI & Agents (5 tabs)
     {
       id: 'ai-chat-monitor',
       label: 'Chat Monitor',
       description: 'Monitor AI chat sessions',
       icon: 'i-heroicons-chat-bubble-left-right',
       category: 'ai',
-      categoryLabel: 'AI Operations',
+      categoryLabel: 'AI & Agents',
       to: '/admin/ai',
-      tab: 0,
+      tab: 'chat-monitor',
       keywords: ['chat', 'monitor', 'conversations', 'sessions', 'ai']
     },
     {
@@ -168,92 +189,92 @@ export function useAdminSearch() {
       description: 'View AI agent execution logs',
       icon: 'i-heroicons-document-text',
       category: 'ai',
-      categoryLabel: 'AI Operations',
+      categoryLabel: 'AI & Agents',
       to: '/admin/ai',
-      tab: 1,
+      tab: 'agent-logs',
       keywords: ['agent', 'logs', 'execution', 'strands', 'ai']
-    },
-    {
-      id: 'ai-data-validation',
-      label: 'Data Validation',
-      description: 'Validate AI data integrity',
-      icon: 'i-heroicons-clipboard-document-check',
-      category: 'ai',
-      categoryLabel: 'AI Operations',
-      to: '/admin/ai',
-      tab: 2,
-      keywords: ['validation', 'data', 'integrity', 'quality', 'ai']
     },
     {
       id: 'ai-agent-testing',
       label: 'Agent Testing',
-      description: 'Test AI agents',
+      description: 'Test AI agents in sandbox',
       icon: 'i-heroicons-beaker',
       category: 'ai',
-      categoryLabel: 'AI Operations',
+      categoryLabel: 'AI & Agents',
       to: '/admin/ai',
-      tab: 3,
+      tab: 'agent-testing',
       keywords: ['testing', 'agent', 'test', 'sandbox', 'ai']
     },
     {
+      id: 'ai-agent-health',
+      label: 'Agent Health',
+      description: 'Monitor Strands AI agent health status',
+      icon: 'i-heroicons-heart',
+      category: 'ai',
+      categoryLabel: 'AI & Agents',
+      to: '/admin/ai',
+      tab: 'agent-health',
+      keywords: ['health', 'agent', 'strands', 'status', 'uptime']
+    },
+    {
       id: 'ai-metrics',
-      label: 'Metrics Dashboard',
-      description: 'View AI performance metrics',
+      label: 'AI Metrics',
+      description: 'View AI performance metrics and analytics',
       icon: 'i-heroicons-chart-bar',
       category: 'ai',
-      categoryLabel: 'AI Operations',
+      categoryLabel: 'AI & Agents',
       to: '/admin/ai',
-      tab: 4,
+      tab: 'ai-metrics',
       keywords: ['metrics', 'dashboard', 'performance', 'analytics', 'ai']
     },
 
-    // System Monitoring (4 tabs - Agent Logs moved to AI Operations)
+    // System Health (4 tabs)
     {
-      id: 'monitoring-activity-logs',
-      label: 'Activity Logs',
+      id: 'system-health-dashboard',
+      label: 'Health Dashboard',
+      description: 'View system health overview',
+      icon: 'i-heroicons-server-stack',
+      category: 'system',
+      categoryLabel: 'System Health',
+      to: '/admin/system',
+      tab: 'health-dashboard',
+      keywords: ['health', 'dashboard', 'status', 'system', 'uptime']
+    },
+    {
+      id: 'system-logs',
+      label: 'System Logs',
       description: 'View system activity logs',
       icon: 'i-heroicons-document-text',
-      category: 'monitoring',
-      categoryLabel: 'System Monitoring',
-      to: '/admin/monitoring',
-      tab: 0,
-      keywords: ['activity', 'logs', 'audit', 'history', 'events']
+      category: 'system',
+      categoryLabel: 'System Health',
+      to: '/admin/system',
+      tab: 'system-logs',
+      keywords: ['system', 'logs', 'audit', 'history', 'events', 'activity']
     },
     {
-      id: 'monitoring-user-journeys',
-      label: 'User Journeys',
-      description: 'Track user navigation paths',
-      icon: 'i-heroicons-map',
-      category: 'monitoring',
-      categoryLabel: 'System Monitoring',
-      to: '/admin/monitoring',
-      tab: 1,
-      keywords: ['user', 'journeys', 'paths', 'navigation', 'tracking']
+      id: 'system-notification-log',
+      label: 'Notification Log',
+      description: 'View sent notification history',
+      icon: 'i-heroicons-bell',
+      category: 'system',
+      categoryLabel: 'System Health',
+      to: '/admin/system',
+      tab: 'notification-log',
+      keywords: ['notifications', 'alerts', 'email', 'slack', 'log', 'sent']
     },
     {
-      id: 'monitoring-service-health',
-      label: 'Service Health',
-      description: 'Monitor service health status',
-      icon: 'i-heroicons-heart',
-      category: 'monitoring',
-      categoryLabel: 'System Monitoring',
-      to: '/admin/monitoring',
-      tab: 2,
-      keywords: ['health', 'service', 'status', 'uptime', 'heartbeat']
-    },
-    {
-      id: 'monitoring-issues',
-      label: 'Issues & Tickets',
-      description: 'Manage system issues and tickets',
-      icon: 'i-heroicons-exclamation-triangle',
-      category: 'monitoring',
-      categoryLabel: 'System Monitoring',
-      to: '/admin/monitoring',
-      tab: 3,
-      keywords: ['issues', 'tickets', 'bugs', 'problems', 'errors']
+      id: 'system-security-cache',
+      label: 'Security Cache',
+      description: 'Manage security data and Athena recomputation',
+      icon: 'i-heroicons-shield-check',
+      category: 'system',
+      categoryLabel: 'System Health',
+      to: '/admin/system',
+      tab: 'security-cache',
+      keywords: ['security', 'athena', 'findings', 'cache', 'recompute']
     },
 
-    // Pipeline Analytics (separate pages, no tabs)
+    // Pipeline Analytics
     {
       id: 'pipelines-dashboard',
       label: 'Pipeline Dashboard',
@@ -323,7 +344,7 @@ export function useAdminSearch() {
 
   // Navigate to a panel (with optional tab parameter)
   function navigateToPanel(panel: AdminPanelItem) {
-    const path = panel.tab !== undefined
+    const path = panel.tab
       ? `${panel.to}?tab=${panel.tab}`
       : panel.to
 

@@ -16,13 +16,17 @@
           <UIcon
             name="i-fa6-solid-ghost"
             class="relative text-primary drop-shadow-lg"
+            :class="{ 'ghost-spin': ghostAwakened }"
           />
         </div>
       </div>
 
       <!-- GHOST Title - Interactive -->
       <div class="relative z-10 mb-4 sm:mb-6">
-        <h1 class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold tracking-wide flex justify-center gap-1 sm:gap-2 md:gap-3 flex-wrap">
+        <h1
+          class="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold tracking-wide flex justify-center gap-1 sm:gap-2 md:gap-3 flex-wrap"
+          :class="{ 'ghost-rainbow': ghostAwakened }"
+        >
           <span
             v-for="(letter, index) in ghostLetters"
             :key="index"
@@ -31,7 +35,7 @@
               'ghost-letter-active': hoveredLetter === index,
               'ghost-letter-muted': hoveredLetter !== null && hoveredLetter !== index
             }"
-            @mouseenter="hoveredLetter = index"
+            @mouseenter="onLetterHover(index)"
             @mouseleave="hoveredLetter = null"
           >
             <span
@@ -219,6 +223,54 @@ definePageMeta({
 })
 
 const hoveredLetter = ref<number | null>(null)
+
+// Easter egg: GHOST Awakening
+const ghostAwakened = ref(false)
+const hoverSequence = ref<number[]>([])
+const sequenceStartTime = ref(0)
+
+function onLetterHover(index: number) {
+  hoveredLetter.value = index
+
+  // Easter egg tracking
+  if (ghostAwakened.value) return
+
+  const now = Date.now()
+  if (hoverSequence.value.length === 0 || now - sequenceStartTime.value > 2000) {
+    // Start fresh sequence
+    hoverSequence.value = [index]
+    sequenceStartTime.value = now
+  } else {
+    // Only add if it's the next letter in sequence (0,1,2,3,4)
+    const expected = hoverSequence.value.length
+    if (index === expected) {
+      hoverSequence.value.push(index)
+    } else if (index !== hoverSequence.value[hoverSequence.value.length - 1]) {
+      // Wrong order, reset
+      hoverSequence.value = [index]
+      sequenceStartTime.value = now
+    }
+  }
+
+  // Check if complete sequence G(0) H(1) O(2) S(3) T(4)
+  if (hoverSequence.value.length === 5) {
+    triggerGhostAwakening()
+  }
+}
+
+const { emit: emitEvent } = useEventBus()
+
+function triggerGhostAwakening() {
+  ghostAwakened.value = true
+  emitEvent('easter_egg.ghost_awakening', {})
+  console.log('%c✨ You\'ve awakened the GHOST! The spirits are pleased.', 'color: #10b981; font-size: 16px; font-weight: bold;')
+
+  // Reset after animation completes (3 seconds)
+  setTimeout(() => {
+    ghostAwakened.value = false
+    hoverSequence.value = []
+  }, 3000)
+}
 
 interface InfoCard {
   title: string
@@ -426,5 +478,38 @@ const scrollToSection = (id: string) => {
 /* Radial gradient utility - static, no animation */
 .bg-gradient-radial {
   background: radial-gradient(circle at center, var(--tw-gradient-stops));
+}
+
+/* Easter egg: Ghost Awakening */
+@keyframes ghost-spin-animation {
+  0% { transform: rotate(0deg) scale(1); }
+  25% { transform: rotate(90deg) scale(1.2); }
+  50% { transform: rotate(180deg) scale(1); }
+  75% { transform: rotate(270deg) scale(1.2); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+.ghost-spin {
+  animation: ghost-spin-animation 1s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+@keyframes rainbow-sweep {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.ghost-rainbow span {
+  background: linear-gradient(90deg, #6ee7b7, #93c5fd, #d8b4fe, #fcd34d, #fda4af, #6ee7b7);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: rainbow-sweep 2s ease-in-out;
+}
+
+.ghost-rainbow span::after {
+  content: '';
+  animation: none;
 }
 </style>

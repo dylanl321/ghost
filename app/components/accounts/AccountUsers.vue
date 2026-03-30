@@ -2,7 +2,7 @@
   <UCard>
     <template #header>
       <div class="flex items-center justify-between">
-        <div class="text-lg font-semibold text-gray-900 dark:text-white">Account Users</div>
+        <div class="text-sm font-semibold text-gray-900 dark:text-white">Account Users</div>
         <UButton icon="i-heroicons-users" size="xs" variant="outline" color="primary" @click="goToAllUsers">
           View All
         </UButton>
@@ -17,7 +17,7 @@
       <div
         v-for="user in visibleUsers"
         :key="user.userPrincipalName"
-        class="flex items-center justify-between px-2 py-3 cursor-pointer border-b gap-y-2 flex-wrap 2xl:flex-nowrap border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+        class="flex items-center justify-between px-2 py-3 cursor-pointer border-b gap-y-2 flex-wrap 2xl:flex-nowrap border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
         @click="goToUser(user.userPrincipalName)"
       >
         <div class="flex items-center gap-3 min-w-0">

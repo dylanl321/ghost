@@ -3,7 +3,7 @@
  * This script creates the infrastructure defined in terraform/scheduled-reports.tf and terraform/ses.tf
  * Uses the AWS client factory for consistent credential management
  *
- * Usage: npx tsx scripts/setup-scheduled-reports-infra.ts [--environment govcloud|commercial] [--domain your-domain.com]
+ * Usage: npx tsx scripts/setup-scheduled-reports-infra.ts [--environment govcloud|commercial] [--domain your-domain.com] [--env dev|prod]
  */
 
 import { CreateTableCommand, DescribeTableCommand } from '@aws-sdk/client-dynamodb'
@@ -22,9 +22,11 @@ import type { AWSEnvironmentType } from '../server/types/aws'
 const args = process.argv.slice(2)
 const environmentArg = args.find(arg => arg.startsWith('--environment='))?.split('=')[1] || 'govcloud'
 const domainArg = args.find(arg => arg.startsWith('--domain='))?.split('=')[1] || 'example.com'
+const envArg = args.find(arg => arg.startsWith('--env='))?.split('=')[1] || 'dev'
 
 const ENVIRONMENT: AWSEnvironmentType = environmentArg === 'commercial' ? 'commercial' : 'govcloud'
 const DOMAIN_NAME = domainArg
+const ENV_SUFFIX = envArg === 'prod' ? '-prod' : ''
 
 // AWS Configuration
 const AWS_REGION = ENVIRONMENT === 'govcloud' ? 'us-gov-west-1' : 'us-east-1'
@@ -322,8 +324,8 @@ async function main() {
     const fromEmail = `noreply@${DOMAIN_NAME}`
     await createSESEmailIdentity(fromEmail)
 
-    // 5. Create SES configuration set
-    await createSESConfigurationSet('ghost-scheduled-reports')
+    // 5. Create SES configuration set (matches terraform/ses.tf naming: ghost-scheduled-reports-${env})
+    await createSESConfigurationSet(`ghost-scheduled-reports${ENV_SUFFIX}`)
 
     console.log('\n📢 Creating SNS Resources...\n')
 
@@ -358,7 +360,7 @@ async function main() {
     console.log('      EMAIL_TEMPLATES_TABLE=ghost-email-templates')
     console.log('      REPORT_EXECUTIONS_TABLE=ghost-report-executions')
     console.log(`      SES_FROM_EMAIL=noreply@${DOMAIN_NAME}`)
-    console.log('      SES_CONFIGURATION_SET=ghost-scheduled-reports')
+    console.log(`      SES_CONFIGURATION_SET=ghost-scheduled-reports${ENV_SUFFIX}`)
     if (topicArn) {
       console.log(`      SES_NOTIFICATIONS_TOPIC_ARN=${topicArn}`)
     }

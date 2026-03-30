@@ -115,22 +115,21 @@ const tablePage = ref(1)
 const tablePageSize = 20
 
 const tableColumns = [
-  { key: 'resourceAddress', label: 'Resource Address' },
-  { key: 'resourceType', label: 'Type' },
+  { key: 'resourceType', label: 'Resource Type' },
   { key: 'action', label: 'Action' },
   { key: 'count', label: 'Count', sortable: true }
 ]
 
 const allTableRows = computed(() => {
-  // Group by resource address (same logic as chart but no slice)
-  const resourceMap = new Map<string, { resourceAddress: string, resourceType: string, action: string, count: number }>()
+  // Group by resource type + action for cleaner display
+  const resourceMap = new Map<string, { resourceType: string, action: string, count: number }>()
   props.resourceBreakdown.forEach(r => {
-    const key = `${r.resourceAddress}:${r.action}`
+    const key = `${r.resourceType}:${r.action}`
     const existing = resourceMap.get(key)
     if (existing) {
       existing.count += r.count
     } else {
-      resourceMap.set(key, { resourceAddress: r.resourceAddress, resourceType: r.resourceType, action: r.action, count: r.count })
+      resourceMap.set(key, { resourceType: r.resourceType, action: r.action, count: r.count })
     }
   })
   return Array.from(resourceMap.values()).sort((a, b) => b.count - a.count)
@@ -176,9 +175,9 @@ const totalChanges = computed(() =>
 )
 
 const chartOptions = computed(() => {
-  // Group by resource address (name)
+  // Group by resource type — resource_address often contains instance-specific
+  // keys (e.g., ECR image SHA digests) that are unreadable as chart labels
   const resourceMap = new Map<string, {
-    address: string
     type: string
     create: number
     update: number
@@ -187,9 +186,8 @@ const chartOptions = computed(() => {
   }>()
 
   props.resourceBreakdown.forEach(r => {
-    if (!resourceMap.has(r.resourceAddress)) {
-      resourceMap.set(r.resourceAddress, {
-        address: r.resourceAddress,
+    if (!resourceMap.has(r.resourceType)) {
+      resourceMap.set(r.resourceType, {
         type: r.resourceType,
         create: 0,
         update: 0,
@@ -197,7 +195,7 @@ const chartOptions = computed(() => {
         replace: 0
       })
     }
-    const entry = resourceMap.get(r.resourceAddress)!
+    const entry = resourceMap.get(r.resourceType)!
     if (r.action === 'create') entry.create += r.count
     else if (r.action === 'update') entry.update += r.count
     else if (r.action === 'destroy') entry.destroy += r.count
@@ -213,12 +211,7 @@ const chartOptions = computed(() => {
     .sort((a, b) => b.total - a.total)
     .slice(0, 10)
 
-  // Format display names - show resource address with type hint
-  const resourceNames = sortedResources.map(r => {
-    // Truncate long resource addresses for display
-    const address = r.address.length > 60 ? r.address.substring(0, 57) + '...' : r.address
-    return address
-  })
+  const resourceNames = sortedResources.map(r => r.type)
 
   const createData = sortedResources.map(r => r.create)
   const updateData = sortedResources.map(r => r.update)
@@ -240,8 +233,7 @@ const chartOptions = computed(() => {
           return `<strong>${params[0].name}</strong><br/>`
         }
 
-        let result = `<strong>${resource.address}</strong><br/>`
-        result += `<span style="color: #9ca3af; font-size: 11px;">${resource.type}</span><br/><br/>`
+        let result = `<strong>${resource.type}</strong><br/><br/>`
 
         params.forEach((p: any) => {
           if (p.data > 0) {

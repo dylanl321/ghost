@@ -5,6 +5,8 @@
 import type { GraphUser } from '~/composables/useGroupMembers'
 import { getMonthlyBudget } from '#shared/utils/budget-utils'
 
+const logger = createLogger('AccountData')
+
 interface CostResponse {
   success: boolean
   data: CostData
@@ -24,6 +26,7 @@ export function useAccountData(
   accountId: ComputedRef<string>,
   govCloudId: ComputedRef<string | undefined>,
   isAccountInactive: ComputedRef<boolean>,
+  days?: Ref<number>,
 ) {
   const enclaveStore = useEnclaveStore()
   const groupMembers = useGroupMembers()
@@ -69,7 +72,7 @@ export function useAccountData(
       }
 
       const [costsRes, resourcesRes, forecastRes] = await Promise.all([
-        fetch(`/api/accounts/dashboard-simplified?standard_account_id=${accountId.value}`),
+        fetch(`/api/accounts/dashboard-simplified?standard_account_id=${accountId.value}${days ? `&days=${days.value}` : ''}`),
         fetch(`/api/config/summary-simplified?govcloud_account_id=${govCloudId.value}`),
         fetch(`/api/costs/projections?period=current-month-remainder&accountIds=${accountId.value}&granularity=DAILY&environment=commercial`),
       ])
@@ -84,7 +87,7 @@ export function useAccountData(
       resourceCounts.value = resourcesJson.data
       forecastData.value = forecastJson.data
     } catch (err) {
-      console.error('Error fetching account data:', err)
+      logger.error('Error fetching account data:', err)
     } finally {
       loading.value = false
     }
