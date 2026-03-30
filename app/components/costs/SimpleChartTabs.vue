@@ -16,7 +16,7 @@
           {{ props.showAdvancedCharts ? 'Show Less' : 'Show More Charts' }}
         </UButton>
       </div>
-      <nav class="-mb-px flex space-x-8" aria-label="Chart Tabs">
+      <nav class="-mb-px flex flex-wrap gap-x-4 lg:gap-x-8 gap-y-1" aria-label="Chart Tabs">
         <button
           v-for="tab in tabs"
           :key="tab.id"
@@ -29,7 +29,8 @@
           ]"
         >
           <UIcon v-if="tab.icon" :name="tab.icon" class="w-4 h-4 inline-block mr-1" />
-          {{ tab.label }}
+          <span class="hidden sm:inline">{{ tab.label }}</span>
+          <span class="sm:hidden">{{ tab.shortLabel || tab.label }}</span>
           <UTooltip v-if="tab.badge && tab.badgeTooltip" :text="tab.badgeTooltip">
             <NuxtLink
               :to="tab.badgeLink || '/support/docs?topic=proforma-vs-billable'"
@@ -268,22 +269,26 @@ const tabs = computed(() => [
   {
     id: 'smart',
     label: 'Smart Analysis',
+    shortLabel: 'Smart',
     icon: 'i-heroicons-chart-bar',
     badge: props.selectedAccounts.length > 0 ? `${props.selectedAccounts.length} selected` : 'All accounts'
   },
   {
     id: 'organizational',
     label: 'Organizational Overview',
+    shortLabel: 'Org',
     icon: 'i-heroicons-building-office'
   },
   {
     id: 'trends',
     label: 'Historical Trends',
+    shortLabel: 'Trends',
     icon: 'i-heroicons-arrow-trending-up'
   },
   {
     id: 'budget-health',
     label: 'Budget Health',
+    shortLabel: 'Budget',
     icon: 'i-heroicons-heart',
     badge: 'Risk Scoring',
     badgeTooltip: 'Learn about Budget Risk Scores',
@@ -292,6 +297,7 @@ const tabs = computed(() => [
   {
     id: 'data',
     label: 'Data Table',
+    shortLabel: 'Data',
     icon: 'i-heroicons-table-cells',
     badge: props.dataMode === 'proforma' ? 'Proforma' : 'Billable',
     badgeTooltip: 'Learn about Billable vs Pro-forma data',
@@ -300,11 +306,13 @@ const tabs = computed(() => [
   {
     id: 'forecast',
     label: 'Forecast Data',
+    shortLabel: 'Forecast',
     icon: 'i-heroicons-chart-bar-square'
   },
   {
     id: 'tags',
     label: 'Tag Analysis',
+    shortLabel: 'Tags',
     icon: 'i-heroicons-tag',
     badge: props.dataMode === 'proforma' ? 'Estimated' : undefined,
     badgeTooltip: props.dataMode === 'proforma' ? 'Tag costs are estimated from billable distribution' : undefined,
