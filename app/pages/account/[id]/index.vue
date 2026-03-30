@@ -413,6 +413,15 @@ const currentTabName = computed(() => {
   return tab?.label || 'Overview'
 })
 
+// Track tab changes for cross-feature achievement badge
+const TAB_TO_FEATURE: Record<string, string> = { Resources: 'resources', Security: 'security', Overview: 'costs' }
+watch(selectedTab, () => {
+  const feature = TAB_TO_FEATURE[currentTabName.value]
+  if (feature && accountId.value) {
+    useEventBus().emit('account.feature_viewed', { accountId: accountId.value, feature })
+  }
+})
+
 const navigateToCostsPage = () => {
   if (!accountId.value) return
   router.push({
@@ -452,6 +461,8 @@ onMounted(async () => {
   // Track recent account visit (fire-and-forget)
   if (accountId.value) {
     addRecentAccount(accountId.value).catch(() => {})
+    useEventBus().emit('account.viewed', { accountId: accountId.value, environment: govCloudId.value ? 'govcloud' : 'commercial' })
+    useEventBus().emit('account.feature_viewed', { accountId: accountId.value, feature: 'costs' })
   }
 
   // Tour auto-start (handles preference loading internally)

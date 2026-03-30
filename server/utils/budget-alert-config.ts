@@ -24,7 +24,7 @@ import type {
   ThemeColorsConfig,
   AnomalyDetectionConfig,
   StandaloneAnomalyAlertsConfig
-} from '@/shared/types/budget-alert-config'
+} from '#shared/types/budget-alert-config'
 import { logger } from './logger'
 
 // -----------------------------------------------------------------------------

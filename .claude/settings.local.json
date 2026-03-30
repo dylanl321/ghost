@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git stash:*)",
+      "Bash(git checkout:*)",
+      "Bash(grep -l \"v-chart\\\\|echarts\\\\|ECharts\" /c/code/aws/source/Ghostv2/app/components/costs/*.vue)"
+    ]
+  }
+}

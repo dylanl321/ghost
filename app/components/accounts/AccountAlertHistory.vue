@@ -147,7 +147,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useToast } from '#imports'
-import type { BudgetAlert } from '@/shared/types/budget-alerts'
+import type { BudgetAlert } from '#shared/types/budget-alerts'
 
 const logger = createLogger('AccountAlertHistory')
 

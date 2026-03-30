@@ -576,7 +576,7 @@ import { useCostData } from '~/composables/useCostData'
 import { useCostScenario } from '~/composables/useCostScenario'
 import { useChartRegistry } from '~/composables/useChartRegistry'
 import type { DataMode } from '~/types/costs'
-import type { BudgetAlert } from '@/shared/types/budget-alerts'
+import type { BudgetAlert } from '#shared/types/budget-alerts'
 
 const { accounts, isLoading, error, fetchAccounts } = useAccountCosts()
 const { favoriteIds } = useFavoriteAccounts()
@@ -1201,6 +1201,22 @@ onMounted(async () => {
     // Enable watchers now that URL state is applied and initial fetch is done
     initialized.value = true
 
+    // Emit cost-specific events for achievement badges (fire-and-forget)
+    nextTick(() => {
+      for (const acc of accountsWithCosts.value) {
+        const spend = getSpend(acc)
+        const budget = getBudget(acc)
+        if (budget > 0 && spend > budget) {
+          useEventBus().emit('cost.over_budget_viewed', { accountId: getAccountKey(acc), spend, budget })
+          break
+        }
+        if (spend === 0) {
+          useEventBus().emit('cost.zero_spend_viewed', { accountId: getAccountKey(acc) })
+          break
+        }
+      }
+    })
+
     // Auto-start tour for first-time users or admin resets
     await initTourOnMount()
 
@@ -1248,7 +1264,7 @@ const { charts } = useChartRegistry({ scenario, timeframe: selectedTimeframe, mo
 watch(selectedTimeframe, (val) => { if (initialized.value) logUserAction('cost.timeframe_change', `timeframe:${val}`) })
 watch(activeTab, (val) => { if (initialized.value) logUserAction('cost.tab_switch', `tab:${val}`) })
 watch(activeChartTab, (val) => { if (initialized.value) logUserAction('cost.tab_switch', `chartTab:${val}`) })
-watch(dataMode, (val) => { if (initialized.value) logUserAction('cost.mode_toggle', `mode:${val}`) })
+watch(dataMode, (val) => { if (initialized.value) { logUserAction('cost.mode_toggle', `mode:${val}`); useEventBus().emit('cost.data_mode_toggled', { mode: val }) } })
 
 // Set page title
 useHead({

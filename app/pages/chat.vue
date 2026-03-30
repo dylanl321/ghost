@@ -370,6 +370,7 @@ async function saveTitle() {
       color: 'green',
       timeout: 2000
     })
+    useEventBus().emit('chat.thread_renamed', { threadId: threadsStore.activeThreadId })
   } else {
     toast.add({
       title: 'Failed to rename thread',

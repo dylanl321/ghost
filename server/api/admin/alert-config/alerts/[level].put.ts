@@ -8,7 +8,7 @@
 import { defineEventHandler, readBody, createError, getRouterParam } from 'h3'
 import { requireAdmin } from '../../../../utils/user-roles'
 import { getConfigItem, updateConfigItem, getAlertLevels } from '../../../../utils/budget-alert-config'
-import type { AlertLevelConfig } from '@/shared/types/budget-alert-config'
+import type { AlertLevelConfig } from '#shared/types/budget-alert-config'
 
 const VALID_LEVELS = ['INFO', 'WARNING', 'CRITICAL', 'ESCALATION']
 

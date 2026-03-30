@@ -42,6 +42,7 @@ export interface DynamoDBConfig {
   costTagConfig: DynamoDBTableConfig
   userNotifications: DynamoDBTableConfig
   notificationBroadcasts: DynamoDBTableConfig
+  achievementProgress: DynamoDBTableConfig
 }
 
 // -----------------------------------------------------------------------------
@@ -259,6 +260,12 @@ function loadFromEnvironment(): DynamoDBConfig {
     },
     notificationBroadcasts: {
       tableName: process.env.NOTIFICATION_BROADCASTS_TABLE || 'ghost-notification-broadcasts',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
+    },
+    achievementProgress: {
+      tableName: process.env.ACHIEVEMENT_PROGRESS_TABLE || 'ghost-achievement-progress',
       environment: 'govcloud',
       region: govCloudRegion,
       accountId: deploymentAccountId

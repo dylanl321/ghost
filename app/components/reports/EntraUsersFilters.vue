@@ -115,7 +115,7 @@
 </template>
 
 <script setup lang="ts">
-import type { EntraUsersDatasetFilters } from '~/shared/types/dataset-reports'
+import type { EntraUsersDatasetFilters } from '#shared/types/dataset-reports'
 
 const logger = createLogger('EntraUsersFilters')
 

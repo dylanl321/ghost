@@ -44,7 +44,7 @@
 </template>
 
 <script setup lang="ts">
-import type { SuggestedLink } from '~/server/utils/strands-link-generator'
+import type { SuggestedLink } from '#shared/types/chat-threads'
 
 interface Props {
   link: SuggestedLink

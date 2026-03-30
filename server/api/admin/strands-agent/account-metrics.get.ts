@@ -11,7 +11,7 @@ import { queryItems } from '../../../utils/dynamodb'
 import type {
   StrandsMetric,
   StrandsMetricsQueryResponse
-} from '~/shared/types/strands-agent-metrics'
+} from '#shared/types/strands-agent-metrics'
 import { logger } from '../../../utils/logger'
 
 const TABLE_NAME = process.env.STRANDS_AGENT_METRICS_TABLE_NAME || 'strands-agent-metrics-prod'

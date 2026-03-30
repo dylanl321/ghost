@@ -266,10 +266,10 @@ const panelOpen = computed({
 const filters = [
   { key: 'all', label: 'All' },
   { key: 'unread', label: 'Unread' },
-  { key: 'BUDGET_THRESHOLD', label: 'Budget' },
-  { key: 'SECURITY_CRITICAL', label: 'Security' },
-  { key: 'PIPELINE_FAILURE', label: 'Pipeline' },
-  { key: 'SYSTEM', label: 'System' }
+  { key: 'budget', label: 'Budget' },
+  { key: 'security', label: 'Security' },
+  { key: 'pipeline', label: 'Pipeline' },
+  { key: 'system', label: 'System' }
 ]
 
 // ---------------------------------------------------------------------------

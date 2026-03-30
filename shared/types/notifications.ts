@@ -21,6 +21,7 @@ export type NotificationCategory =
   | 'REPORT_READY'
   | 'CHAT_COMPLETE'
   | 'SYSTEM'
+  | 'ACHIEVEMENT'
 
 export type NotificationSeverity = 'info' | 'warning' | 'critical'
 export type NotificationStatus = 'unread' | 'read' | 'archived'
@@ -52,7 +53,7 @@ export interface UserNotification {
 // ---------------------------------------------------------------------------
 
 export interface NotificationListParams {
-  category?: NotificationCategory
+  category?: NotificationCategory | NotificationCategory[]
   status?: NotificationStatus
   limit?: number
   lastKey?: string
@@ -101,7 +102,8 @@ export const CATEGORY_PREFERENCE_MAP: Record<NotificationCategory, string | null
   DEPLOYMENT: 'deploymentCompletions',
   REPORT_READY: null,   // Always delivered (user requested the report)
   CHAT_COMPLETE: null,   // Always delivered (user started the query)
-  SYSTEM: null           // Always delivered (admin announcements)
+  SYSTEM: null,          // Always delivered (admin announcements)
+  ACHIEVEMENT: null      // Always delivered (earned by user action, no email)
 }
 
 // ---------------------------------------------------------------------------
@@ -125,7 +127,8 @@ export const CATEGORY_DISPLAY: Record<NotificationCategory, CategoryDisplayInfo>
   DEPLOYMENT: { label: 'Deployment', icon: 'i-heroicons-rocket-launch', color: 'green' },
   REPORT_READY: { label: 'Report', icon: 'i-heroicons-document-chart-bar', color: 'blue' },
   CHAT_COMPLETE: { label: 'AI Chat', icon: 'i-heroicons-chat-bubble-left-right', color: 'violet' },
-  SYSTEM: { label: 'System', icon: 'i-heroicons-megaphone', color: 'gray' }
+  SYSTEM: { label: 'System', icon: 'i-heroicons-megaphone', color: 'gray' },
+  ACHIEVEMENT: { label: 'Achievement', icon: 'i-heroicons-trophy', color: 'yellow' }
 }
 
 // ---------------------------------------------------------------------------
@@ -140,7 +143,7 @@ export const FILTER_GROUP_CATEGORIES: Record<NotificationFilterGroup, Notificati
   budget: ['BUDGET_THRESHOLD', 'COST_ANOMALY', 'COST_SUMMARY'],
   security: ['SECURITY_CRITICAL', 'COMPLIANCE', 'SECURITY_SCORE'],
   pipeline: ['PIPELINE_FAILURE', 'DEPLOYMENT'],
-  system: ['REPORT_READY', 'CHAT_COMPLETE', 'SYSTEM']
+  system: ['REPORT_READY', 'CHAT_COMPLETE', 'SYSTEM', 'ACHIEVEMENT']
 }
 
 // ---------------------------------------------------------------------------

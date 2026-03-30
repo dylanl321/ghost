@@ -12,8 +12,8 @@
 import { getAlertsByMonth } from './budget-alerts'
 import { sendUserNotification } from './notification-service'
 import { logger } from './logger'
-import type { BudgetAlert, BudgetAlertLevel } from '@/shared/types/budget-alerts'
-import type { NotificationSeverity } from '@/shared/types/notifications'
+import type { BudgetAlert, BudgetAlertLevel } from '#shared/types/budget-alerts'
+import type { NotificationSeverity } from '#shared/types/notifications'
 
 const LOOKBACK_MINUTES = 30
 
@@ -108,7 +108,7 @@ export async function processRecentBudgetAlerts(): Promise<{ processed: number; 
       // Send notification to each recipient
       for (const email of recipients) {
         try {
-          await sendUserNotification({
+          const result = await sendUserNotification({
             userId: email,
             category: 'BUDGET_THRESHOLD',
             title,
@@ -132,7 +132,17 @@ export async function processRecentBudgetAlerts(): Promise<{ processed: number; 
             },
             dedupeKey: `budget-alert-${alert.alert_id}`
           })
-          notified++
+          if (result.success && !result.skipped) {
+            notified++
+          } else {
+            logger.warn('[BudgetAlertNotifier] Notification not delivered', {
+              alertId: alert.alert_id,
+              recipient: email,
+              success: result.success,
+              skipped: result.skipped,
+              reason: result.reason || result.error
+            })
+          }
         } catch (err) {
           logger.warn('[BudgetAlertNotifier] Failed to send notification', {
             alertId: alert.alert_id,

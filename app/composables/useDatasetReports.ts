@@ -2,8 +2,8 @@
  * Composable for Dataset Reports API
  */
 
-import type { ScheduledReport } from '~/shared/types/scheduled-reports'
-import type { DatasetReportConfig } from '~/shared/types/dataset-reports'
+import type { ScheduledReport } from '#shared/types/scheduled-reports'
+import type { DatasetReportConfig } from '#shared/types/dataset-reports'
 
 const logger = createLogger('useDatasetReports')
 

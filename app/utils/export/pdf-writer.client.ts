@@ -3,7 +3,7 @@
  * Uses the shared PDF generator with client-specific features
  */
 
-import type { DataExportConfig, ExportResult } from '~/shared/types/export'
+import type { DataExportConfig, ExportResult } from '#shared/types/export'
 import { createPDF, type PDFGeneratorHooks } from '#shared/utils/pdf-generator'
 
 const logger = createLogger('PdfWriter')

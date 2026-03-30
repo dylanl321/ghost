@@ -554,9 +554,14 @@ export default defineEventHandler(handleAsync(async (event) => {
             includeDecommissioned: accountFilters.includeDecommissioned || false
           })
           
+          if (!lookupResult) {
+            resolveErrors.push(`Account '${identifier}' not found`)
+            continue
+          }
+
           // Store the account object for name mapping later
           resolvedAccountObjects.push(lookupResult.account)
-          
+
           // Choose the appropriate account ID based on the environment
           let fullAccountId: string | undefined
           if (environment === 'govcloud') {
@@ -677,8 +682,8 @@ export default defineEventHandler(handleAsync(async (event) => {
     if (responseDetail === 'simple') {
       // Simple: Return identifiers with enriched instance names for EC2 instances
       // For EC2 instances, we need to fetch minimal config to get the Name tag
-      const ec2Instances = resourceIdentifiers.filter(r => r.ResourceType === 'AWS::EC2::Instance')
-      const nonEc2Resources = resourceIdentifiers.filter(r => r.ResourceType !== 'AWS::EC2::Instance')
+      const ec2Instances = resourceIdentifiers.filter(r => r.resourceType === 'AWS::EC2::Instance')
+      const nonEc2Resources = resourceIdentifiers.filter(r => r.resourceType !== 'AWS::EC2::Instance')
       
       // Get basic config for EC2 instances to extract names
       let ec2Details: any[] = []
@@ -687,11 +692,11 @@ export default defineEventHandler(handleAsync(async (event) => {
           const ec2BatchResult = await batchGetResourceConfigs(
             aggregatorName,
             ec2Instances.map(r => ({
-              SourceAccountId: r.SourceAccountId!,
-              SourceRegion: r.SourceRegion!,
-              ResourceId: r.ResourceId!,
-              ResourceType: r.ResourceType!,
-              ResourceName: r.ResourceName
+              SourceAccountId: r.sourceAccountId!,
+              SourceRegion: r.sourceRegion!,
+              ResourceId: r.resourceId!,
+              ResourceType: r.resourceType!,
+              ResourceName: r.resourceName
             })),
             environment,
             targetRegion
@@ -723,20 +728,20 @@ export default defineEventHandler(handleAsync(async (event) => {
           logger.warn('[Config API] Failed to enrich EC2 instances:', error)
           // Fall back to basic data without names
           ec2Details = ec2Instances.map(r => ({
-            resourceId: r.ResourceId,
-            resourceType: r.ResourceType,
-            accountId: r.SourceAccountId,
-            region: r.SourceRegion
+            resourceId: r.resourceId,
+            resourceType: r.resourceType,
+            accountId: r.sourceAccountId,
+            region: r.sourceRegion
           }))
         }
       }
       
       // Non-EC2 resources get basic treatment
       const nonEc2Details = nonEc2Resources.map(r => ({
-        resourceId: r.ResourceId,
-        resourceType: r.ResourceType,
-        accountId: r.SourceAccountId,
-        region: r.SourceRegion
+        resourceId: r.resourceId,
+        resourceType: r.resourceType,
+        accountId: r.sourceAccountId,
+        region: r.sourceRegion
       }))
       
       resourceDetails = [...ec2Details, ...nonEc2Details]
@@ -745,11 +750,11 @@ export default defineEventHandler(handleAsync(async (event) => {
       const batchResult = await batchGetResourceConfigs(
         aggregatorName,
         resourceIdentifiers.map(r => ({
-          SourceAccountId: r.SourceAccountId!,
-          SourceRegion: r.SourceRegion!,
-          ResourceId: r.ResourceId!,
-          ResourceType: r.ResourceType!,
-          ResourceName: r.ResourceName
+          SourceAccountId: r.sourceAccountId!,
+          SourceRegion: r.sourceRegion!,
+          ResourceId: r.resourceId!,
+          ResourceType: r.resourceType!,
+          ResourceName: r.resourceName
         })),
         environment,
         targetRegion
@@ -923,7 +928,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     logger.info(`[Config API] Returning ${filteredResources.length} resources with ${Object.keys(summary.byType).length} types`)
     
     return sendSuccess(event, response, { message: 'Resources fetched successfully' })
-  } catch (error) {
+  } catch (error: any) {
     logger.error('[Config API] Unexpected error:', error)
     return errors.serverError(event, `Configuration service error: ${error.message}`)
   }

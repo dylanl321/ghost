@@ -930,7 +930,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ScheduledReport } from '~/shared/types/scheduled-reports'
+import type { ScheduledReport } from '#shared/types/scheduled-reports'
 import type { DatasetPreset } from '#shared/types/dataset-presets'
 import ReportSchedules from '../../components/reports/ReportSchedules.vue'
 import ReportHistory from '../../components/reports/ReportHistory.vue'
@@ -1215,6 +1215,8 @@ function proceedToExport() {
 function handlePreviewQuery() {
   workflowStage.value = 2
   handleRunNow()
+  const enabledDatasets = Object.entries(queryBuilder.value.datasets).filter(([, ds]: [string, any]) => ds.enabled).map(([key]) => key)
+  enabledDatasets.forEach(ds => useEventBus().emit('dataset.query_executed', { datasetType: ds }))
   // Accordion will auto-close after successful preview in handleRunNow
 }
 

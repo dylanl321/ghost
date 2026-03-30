@@ -148,7 +148,7 @@
 </template>
 
 <script setup lang="ts">
-import type { AccountDeploymentHealth, CrossAccountError, RecurringErrorPattern } from '~/shared/types/pipelines'
+import type { AccountDeploymentHealth, CrossAccountError, RecurringErrorPattern } from '#shared/types/pipelines'
 
 const props = defineProps<{
   accountId: string

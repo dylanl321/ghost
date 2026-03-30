@@ -1377,6 +1377,7 @@ watch(useProforma, async () => {
 })
 
 watch(viewMode, (mode) => {
+  useEventBus().emit('org_chart.view_mode_changed', { mode })
   if (!treeData.value) return
   
   const svg = d3.select('svg')

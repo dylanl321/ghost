@@ -3,7 +3,7 @@
  * Handles creating, listing, and deleting shareable report links
  */
 
-import type { SharedReport, CreateShareReportRequest, CreateShareReportResponse } from '~/shared/types/shared-reports'
+import type { SharedReport, CreateShareReportRequest, CreateShareReportResponse } from '#shared/types/shared-reports'
 
 const logger = createLogger('SharedReports')
 
@@ -67,6 +67,8 @@ export function useSharedReports() {
       )
 
       if (response.success) {
+        useEventBus().emit('report.shared', { reportId: response.data?.shareId })
+
         toast.add({
           title: 'Success',
           description: 'Shareable report link created',

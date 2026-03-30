@@ -357,6 +357,7 @@ export function useCommandPalette() {
               }
               console.log('%c👻 Ghost Parade summoned from the Command Palette!', 'color: #a855f7; font-size: 14px;')
             }
+            useEventBus().emit('easter_egg.triggered', { command: 'ghost_parade' })
           }
         },
         {
@@ -374,6 +375,7 @@ export function useCommandPalette() {
               document.body.style.filter = ''
               console.log('%c🌀 Reality restored.', 'color: #8b5cf6; font-size: 14px;')
             }, 10000)
+            useEventBus().emit('easter_egg.triggered', { command: 'dark_dimension' })
           }
         },
         {
@@ -410,6 +412,7 @@ export function useCommandPalette() {
               toast.style.transform = 'translateY(10px)'
               setTimeout(() => toast.remove(), 300)
             }, 5000)
+            useEventBus().emit('easter_egg.triggered', { command: 'fortune_cookie' })
           }
         },
         {
@@ -423,6 +426,7 @@ export function useCommandPalette() {
             if (typeof window !== 'undefined' && (window as any).ghost?.tarot) {
               (window as any).ghost.tarot()
             }
+            useEventBus().emit('easter_egg.triggered', { command: 'tarot_card' })
           }
         },
       ]

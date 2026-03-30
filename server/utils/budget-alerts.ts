@@ -25,7 +25,7 @@ import type {
   BudgetAlertLevel,
   BudgetAlertType,
   BudgetAlertDeliveryStatus
-} from '@/shared/types/budget-alerts'
+} from '#shared/types/budget-alerts'
 import { logger } from './logger'
 
 // -----------------------------------------------------------------------------

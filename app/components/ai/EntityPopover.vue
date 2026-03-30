@@ -184,7 +184,7 @@
 </template>
 
 <script setup lang="ts">
-import type { EntityType } from '../composables/useStrandsResponseEnricher'
+import type { EntityType } from '~/composables/useStrandsResponseEnricher'
 import { convertToUsernameSlug } from '~/utils/userUtils'
 
 const logger = createLogger('EntityPopover')

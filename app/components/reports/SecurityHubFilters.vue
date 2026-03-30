@@ -141,7 +141,7 @@
 </template>
 
 <script setup lang="ts">
-import type { SecurityHubDatasetFilters } from '~/shared/types/dataset-reports'
+import type { SecurityHubDatasetFilters } from '#shared/types/dataset-reports'
 
 const filters = defineModel<SecurityHubDatasetFilters>({
   default: () => ({

@@ -210,7 +210,7 @@
 </template>
 
 <script setup lang="ts">
-import type { AlertLevelConfig } from '@/shared/types/budget-alert-config'
+import type { AlertLevelConfig } from '#shared/types/budget-alert-config'
 
 const props = defineProps<{
   levels: AlertLevelConfig[] | null

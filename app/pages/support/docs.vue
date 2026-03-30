@@ -226,6 +226,7 @@ const relatedArticles = computed(() => {
 // Methods
 const selectArticle = (articleId: string) => {
   selectedArticleId.value = articleId
+  useEventBus().emit('support.doc_viewed', { articleId })
   // URL update and scroll handled by selectedArticleId watcher
 }
 

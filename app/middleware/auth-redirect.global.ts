@@ -127,6 +127,7 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     if (email) {
       const username = email.split("@")[0] || "UnknownUser"
       logActivity(`Navigation - USER:${username}, PATH:${to.fullPath}`)
+      useEventBus().emit('page.visited', { page: to.fullPath })
     }
   }
 })

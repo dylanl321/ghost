@@ -51,6 +51,7 @@ export function useDashboardScope() {
     scope.value = value
     setPreference('dashboardScope', value)
     logUserAction('dashboard.scope_change', `scope:${value}`)
+    useEventBus().emit('dashboard.scope_changed', { scope: value })
   }
 
   function setDateRange(value: DateRange) {

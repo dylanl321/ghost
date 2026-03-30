@@ -17,7 +17,7 @@
  *   → fullPath: "GDMSCloud/aws/terraform/modules/security-baseline"
  */
 
-import type { GitLabRepoInfo } from '~/shared/types/pipelines'
+import type { GitLabRepoInfo } from '#shared/types/pipelines'
 
 const logger = createLogger('GitLab Parser')
 

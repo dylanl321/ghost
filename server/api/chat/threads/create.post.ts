@@ -9,7 +9,7 @@ import { requireUserSession } from '../../../utils/entra/session'
 import { createThread } from '../../../utils/chat-threads'
 import { registerEndpoint } from '../../../plugins/swagger'
 import { logger } from '../../../utils/logger'
-import type { CreateThreadRequest } from '~/shared/types/chat-threads'
+import type { CreateThreadRequest } from '#shared/types/chat-threads'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/chat/threads/create', 'POST', {

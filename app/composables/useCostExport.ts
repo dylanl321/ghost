@@ -11,7 +11,7 @@ import type {
   ColumnConfig,
   ExportFormat,
   ExportMetadata
-} from '~/shared/types/export'
+} from '#shared/types/export'
 import {
   formatTimeframe,
   formatScope,

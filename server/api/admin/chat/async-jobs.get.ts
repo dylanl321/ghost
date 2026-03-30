@@ -4,7 +4,7 @@
  * Returns async job status across all users (admin only)
  */
 
-import type { AdminAsyncJobSummary } from '~/shared/types/chat-threads'
+import type { AdminAsyncJobSummary } from '#shared/types/chat-threads'
 import { getTableName, getTableEnvironment, getTableAccountId } from '../../../lib/dynamodb-config'
 
 export default defineEventHandler(async (event) => {

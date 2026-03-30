@@ -182,7 +182,7 @@
 
 <script setup lang="ts">
 import { formatDistanceToNow } from 'date-fns'
-import type { GitLabRepoInfo } from '~/shared/types/pipelines'
+import type { GitLabRepoInfo } from '#shared/types/pipelines'
 import { parseGitLabUrl } from '~/utils/gitlab-url-parser'
 
 const logger = createLogger('Index')

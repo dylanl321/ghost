@@ -466,6 +466,7 @@ export const useChatThreadsStore = defineStore('chatThreads', {
         document.body.removeChild(a)
         URL.revokeObjectURL(url)
 
+        useEventBus().emit('chat.thread_exported', { threadId, format })
         return true
       } catch (err: any) {
         this.error = 'Failed to export thread'

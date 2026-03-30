@@ -58,12 +58,15 @@ function generateSortableId(): string {
 
 export async function sendUserNotification(
   options: SendUserNotificationOptions
-): Promise<{ success: boolean; notificationId?: string; error?: string }> {
+): Promise<{ success: boolean; notificationId?: string; error?: string; skipped?: boolean; reason?: string; deduplicated?: boolean }> {
+  // Normalize userId to lowercase for consistent DynamoDB lookups
+  options = { ...options, userId: options.userId.toLowerCase() }
+
   // Check kill switch
   const enabled = await getConfigValue<boolean>('notifications.enabled')
   if (enabled === false) {
-    logger.info('Notification system is disabled, skipping notification')
-    return { success: true }
+    logger.warn('Notification system is disabled, skipping notification', { userId: options.userId, category: options.category })
+    return { success: true, skipped: true, reason: 'notifications_disabled' }
   }
 
   // Dry-run mode: redirect all notifications to a single admin email
@@ -80,7 +83,8 @@ export async function sendUserNotification(
         ...options,
         metadata: {
           ...options.metadata,
-          dryRunOriginalUserId: options.userId
+          dryRunOriginalUserId: options.userId,
+          dryRunRedirected: true
         },
         userId: redirectTo
       }
@@ -163,7 +167,7 @@ export async function sendUserNotification(
         accountId
       )
       if (existing.count > 0) {
-        return { success: true, notificationId: existing.items[0].notificationId, deduplicated: true }
+        return { success: true, notificationId: existing.items[0].notificationId as string, deduplicated: true }
       }
     }
 
@@ -213,6 +217,7 @@ export async function getUserNotifications(
   userId: string,
   params: NotificationListParams = {}
 ): Promise<NotificationListResponse> {
+  userId = userId.toLowerCase()
   const { tableName, environment, accountId } = await getTableInfo()
 
   const limit = Math.min(params.limit || 20, 50)
@@ -223,8 +228,15 @@ export async function getUserNotifications(
   const exprNames: Record<string, string> = {}
 
   if (params.category) {
-    filterParts.push('category = :category')
-    exprValues[':category'] = params.category
+    const categories = Array.isArray(params.category) ? params.category : [params.category]
+    if (categories.length === 1) {
+      filterParts.push('category = :category')
+      exprValues[':category'] = categories[0]
+    } else {
+      const placeholders = categories.map((_, i) => `:cat${i}`)
+      filterParts.push(`category IN (${placeholders.join(', ')})`)
+      categories.forEach((cat, i) => { exprValues[`:cat${i}`] = cat })
+    }
   }
   if (params.status) {
     filterParts.push('#status = :status')
@@ -259,6 +271,7 @@ export async function getUserNotifications(
 // ---------------------------------------------------------------------------
 
 export async function getUnreadCount(userId: string): Promise<UnreadCountResponse> {
+  userId = userId.toLowerCase()
   const { tableName, environment, accountId } = await getTableInfo()
 
   const result = await queryItems(
@@ -291,6 +304,7 @@ export async function markNotificationAsRead(
   userId: string,
   notificationId: string
 ): Promise<void> {
+  userId = userId.toLowerCase()
   const { tableName, environment, accountId } = await getTableInfo()
 
   await updateItem(
@@ -303,6 +317,7 @@ export async function markNotificationAsRead(
 }
 
 export async function markAllNotificationsAsRead(userId: string): Promise<number> {
+  userId = userId.toLowerCase()
   const { tableName, environment, accountId } = await getTableInfo()
 
   // Get all unread notifications for this user
@@ -347,6 +362,7 @@ export async function deleteNotification(
   userId: string,
   notificationId: string
 ): Promise<void> {
+  userId = userId.toLowerCase()
   const { tableName, environment, accountId } = await getTableInfo()
 
   await deleteItem(
@@ -590,6 +606,7 @@ export async function getNotificationStats(days: number = 7): Promise<Notificati
 // ---------------------------------------------------------------------------
 
 export async function clearAllUserNotifications(userId: string): Promise<number> {
+  userId = userId.toLowerCase()
   const { tableName, environment, accountId } = await getTableInfo()
 
   // Get all notifications for this user

@@ -726,6 +726,12 @@
           </div>
         </UCard>
       </template>
+
+      <template #achievements>
+        <div class="mt-4">
+          <BadgeGrid v-if="selectedTab === 6" />
+        </div>
+      </template>
     </UTabs>
 
     <!-- Create/Edit Modal -->
@@ -807,7 +813,7 @@
 
 <script setup lang="ts">
 import { PERMISSION_CATEGORIES } from '~/config/roles'
-import type { ScheduledReport, CreateReportRequest } from '~/shared/types/scheduled-reports'
+import type { ScheduledReport, CreateReportRequest } from '#shared/types/scheduled-reports'
 import { COMMON_TIMEZONES } from '#shared/types/user-preferences'
 
 const logger = createLogger('Profile')
@@ -1072,6 +1078,11 @@ const profileTabs = [
     label: 'Settings',
     slot: 'settings',
     icon: 'i-heroicons-cog-6-tooth'
+  },
+  {
+    label: 'Achievements',
+    slot: 'achievements',
+    icon: 'i-heroicons-trophy'
   }
 ]
 

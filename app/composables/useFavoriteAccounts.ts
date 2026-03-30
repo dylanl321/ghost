@@ -66,6 +66,7 @@ export function useFavoriteAccounts() {
           timeout: 3000
         })
         logUserAction('account.favorite', accountId)
+        useEventBus().emit('account.favorited', { accountId })
       }
 
       return success

@@ -187,7 +187,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ScheduledReport, CreateReportRequest } from '~/shared/types/scheduled-reports'
+import type { ScheduledReport, CreateReportRequest } from '#shared/types/scheduled-reports'
 
 const logger = createLogger('Scheduled')
 

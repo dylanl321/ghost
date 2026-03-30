@@ -141,7 +141,7 @@
 </template>
 
 <script setup lang="ts">
-import type { PipelineAuthorMetrics } from '~/shared/types/pipelines'
+import type { PipelineAuthorMetrics } from '#shared/types/pipelines'
 import { getAuthorInitials } from '~/utils/author-helpers'
 import PipelinesAuthorContactIcons from '~/components/pipelines/AuthorContactIcons.vue'
 

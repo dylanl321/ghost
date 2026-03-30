@@ -129,7 +129,7 @@
 </template>
 
 <script setup lang="ts">
-import type { AWSEnclaveData } from '~/shared/types/accounts'
+import type { AWSEnclaveData } from '#shared/types/accounts'
 
 const logger = createLogger('DatasetAccountSelector')
 

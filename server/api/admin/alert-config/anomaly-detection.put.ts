@@ -7,7 +7,7 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { requireAdmin } from '../../../utils/user-roles'
 import { getConfigItem, updateConfigItem } from '../../../utils/budget-alert-config'
-import type { AnomalyDetectionConfig } from '@/shared/types/budget-alert-config'
+import type { AnomalyDetectionConfig } from '#shared/types/budget-alert-config'
 
 interface AnomalyDetectionUpdateRequest {
   enabled?: boolean

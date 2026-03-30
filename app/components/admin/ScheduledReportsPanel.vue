@@ -532,7 +532,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ScheduledReport, ReportExecution } from '~/shared/types/scheduled-reports'
+import type { ScheduledReport, ReportExecution } from '#shared/types/scheduled-reports'
 
 const logger = createLogger('ScheduledReportsPanel')
 

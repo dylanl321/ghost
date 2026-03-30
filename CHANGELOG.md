@@ -5,6 +5,26 @@ All notable changes to GHOST are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.0] - 2026-03-30
+<!-- highlights: Achievement Badges, Gamification, User Milestones -->
+
+### New Features
+- Achievement badge system with 55+ badges that reward you for exploring the platform — from visiting accounts to using keyboard shortcuts to discovering hidden easter eggs
+- Achievements tab on the Profile page shows all badges organized by category: Discovery, Hidden, and Meta, with a progress bar tracking your overall completion
+- Progress indicators on count-based badges show how close you are to earning them (e.g., "3/10 accounts visited")
+- Achievements card on the home dashboard highlights your recently earned badges and the ones you're closest to completing
+- Hidden badges appear as "???" until you earn them — keep exploring to discover what triggers them
+- Login streak tracking rewards daily usage with "Daily Driver" (5 days) and "Iron Streak" (7 days) badges
+- Visit milestone badges at 50, 100, and 500 platform visits celebrate your loyalty
+- Badge notifications appear instantly via toast and persist in the notification bell for later review
+- Hover over any badge to see exactly what you need to do to earn it
+
+### Improvements
+- Event tracking added across the platform to support badge evaluation — cost page, chat, exports, org chart, datasets, support docs, and more
+- Achievement progress syncs to the server every 30 seconds and survives page refreshes via local caching
+
+---
+
 ## [1.16.0] - 2026-03-27
 <!-- highlights: Real-Time Notifications, SSE Push, Budget Alerts -->
 

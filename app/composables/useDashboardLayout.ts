@@ -127,10 +127,14 @@ export function useDashboardLayout() {
 
   async function toggleSection(id: DashboardSectionId) {
     const current = layout.value
+    const wasVisible = current.sections.find(s => s.id === id)?.visible ?? true
     const sections = current.sections.map(s =>
       s.id === id ? { ...s, visible: !s.visible } : s
     )
     await persist({ ...current, sections })
+    if (wasVisible) {
+      useEventBus().emit('dashboard.widget_removed', { sectionId: id })
+    }
   }
 
   async function toggleMetricCard(id: MetricCardId) {

@@ -8,7 +8,7 @@ import type {
   DataExportConfig,
   ExportFormat,
   ExportResult
-} from '~/shared/types/export'
+} from '#shared/types/export'
 
 const logger = createLogger('DataExport')
 
@@ -72,6 +72,8 @@ export function useDataExport() {
         if (result.blob) {
           downloadFile(result.blob, result.filename)
         }
+
+        useEventBus().emit('export.completed', { format })
 
         toast.add({
           title: 'Export Successful',

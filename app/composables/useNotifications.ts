@@ -12,6 +12,8 @@ import type {
   NotificationStatus,
   NotificationListResponse
 } from '#shared/types/notifications'
+import { FILTER_GROUP_CATEGORIES } from '#shared/types/notifications'
+import type { NotificationFilterGroup } from '#shared/types/notifications'
 
 const logger = createLogger('Notifications')
 
@@ -156,7 +158,12 @@ export function useNotifications() {
       if (activeFilter.value === 'unread') {
         params.status = 'unread'
       } else if (activeFilter.value !== 'all') {
-        params.category = activeFilter.value
+        const groupCategories = FILTER_GROUP_CATEGORIES[activeFilter.value as NotificationFilterGroup]
+        if (groupCategories) {
+          params.category = groupCategories.join(',')
+        } else {
+          params.category = activeFilter.value
+        }
       }
 
       const queryString = new URLSearchParams(params).toString()

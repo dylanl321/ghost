@@ -7,7 +7,7 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { requireAdmin } from '../../../utils/user-roles'
 import { getConfigItem, updateConfigItem } from '../../../utils/budget-alert-config'
-import type { ThresholdScalingConfig } from '@/shared/types/budget-alert-config'
+import type { ThresholdScalingConfig } from '#shared/types/budget-alert-config'
 
 interface ThresholdScalingUpdateRequest {
   enabled?: boolean

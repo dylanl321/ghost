@@ -14,7 +14,7 @@ import { getAlertsByMonth, getAllAlerts, type BudgetAlertQueryOptions } from '..
 import { getAllAccountsUnified, type UnifiedAccount } from '../../../utils/accounts-consolidated'
 import { getCostAndUsage, getCostForecast } from '../../../utils/cost-explorer'
 import { requireAdmin } from '../../../utils/user-roles'
-import type { BudgetAlert, BudgetAlertLevel } from '@/shared/types/budget-alerts'
+import type { BudgetAlert, BudgetAlertLevel } from '#shared/types/budget-alerts'
 import { getMonthlyBudget } from '../../../../shared/utils/budget-utils'
 
 /**

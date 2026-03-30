@@ -21,6 +21,7 @@ export type DashboardSectionId =
   | 'aiBriefing'
   | 'quickChat'
   | 'commandPalette'
+  | 'achievements'
 
 export type MetricCardId =
   | 'mtdSpend'
@@ -61,6 +62,7 @@ export const SECTION_LABELS: Record<DashboardSectionId, string> = {
   aiBriefing: 'AI Briefing',
   quickChat: 'Quick Chat',
   commandPalette: 'Command Palette',
+  achievements: 'Achievements',
 }
 
 export const SECTION_STYLE_SUPPORT: Record<DashboardSectionId, DisplayStyle[]> = {
@@ -84,6 +86,7 @@ export const SECTION_STYLE_SUPPORT: Record<DashboardSectionId, DisplayStyle[]> =
   aiBriefing: ['full', 'two-thirds', 'half'],
   quickChat: ['full', 'two-thirds', 'half', 'third'],
   commandPalette: ['full', 'two-thirds', 'half', 'third'],
+  achievements: ['full', 'two-thirds', 'half', 'third'],
 }
 
 export const METRIC_CARD_LABELS: Record<MetricCardId, string> = {
@@ -115,6 +118,7 @@ export const ALL_SECTION_IDS: DashboardSectionId[] = [
   'aiBriefing',
   'quickChat',
   'commandPalette',
+  'achievements',
 ]
 
 export const ALL_METRIC_CARD_IDS: MetricCardId[] = [
@@ -147,6 +151,7 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayoutConfig = {
     { id: 'adminOverview', visible: false },
     { id: 'quickChat', visible: false, displayStyle: 'half' },
     { id: 'commandPalette', visible: true, displayStyle: 'third' },
+    { id: 'achievements', visible: true, displayStyle: 'third' },
   ],
   metricCards: Object.fromEntries(ALL_METRIC_CARD_IDS.map(id => [id, true])) as Record<MetricCardId, boolean>,
 }

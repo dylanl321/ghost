@@ -282,6 +282,11 @@
               v-else-if="section.id === 'commandPalette'"
               :display-style="section.displayStyle || 'third'"
             />
+
+            <DashboardAchievements
+              v-else-if="section.id === 'achievements'"
+              :display-style="section.displayStyle || 'third'"
+            />
           </div>
         </template>
       </div>
@@ -532,7 +537,7 @@ async function handleSpotlightDismiss() {
 }
 
 // Budget alerts for the Budget Health card
-import type { BudgetAlert } from '@/shared/types/budget-alerts'
+import type { BudgetAlert } from '#shared/types/budget-alerts'
 
 const logger = createLogger('Index')
 const dashboardAlerts = ref<BudgetAlert[]>([])

@@ -10,7 +10,7 @@ import { requireAdmin } from '../../../utils/user-roles'
 import type {
   ActiveStreamInfo,
   ActiveStreamsResponse
-} from '~/shared/types/streaming-metrics'
+} from '#shared/types/streaming-metrics'
 import { logger } from '../../../utils/logger'
 
 export default defineEventHandler(async (event) => {

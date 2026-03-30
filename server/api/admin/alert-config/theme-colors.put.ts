@@ -7,7 +7,7 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { requireAdmin } from '../../../utils/user-roles'
 import { getConfigItem, updateConfigItem } from '../../../utils/budget-alert-config'
-import type { ThemeColorsConfig } from '@/shared/types/budget-alert-config'
+import type { ThemeColorsConfig } from '#shared/types/budget-alert-config'
 
 interface ThemeColorsUpdateRequest {
   colors?: Record<string, string>

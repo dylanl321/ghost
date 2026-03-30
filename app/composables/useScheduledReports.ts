@@ -11,7 +11,7 @@ import type {
   ListReportsResponse,
   ReportResponse,
   ExecutionHistoryResponse
-} from '~/shared/types/scheduled-reports'
+} from '#shared/types/scheduled-reports'
 
 const logger = createLogger('ScheduledReports')
 
@@ -93,6 +93,7 @@ export const useScheduledReports = () => {
       )
 
       if (response.success) {
+        useEventBus().emit('report.scheduled', { reportId: response.data?.reportId })
         // Refresh the reports list in background (don't await)
         fetchReports()
         return true

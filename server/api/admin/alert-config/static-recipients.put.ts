@@ -8,7 +8,7 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { requireAdmin } from '../../../utils/user-roles'
 import { getConfigItem, updateConfigItem } from '../../../utils/budget-alert-config'
-import type { StaticRecipientsConfig } from '@/shared/types/budget-alert-config'
+import type { StaticRecipientsConfig } from '#shared/types/budget-alert-config'
 
 interface StaticRecipientsUpdateRequest {
   mappings?: Record<string, string>

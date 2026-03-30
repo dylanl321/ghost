@@ -4,7 +4,7 @@
  */
 
 import * as XLSX from 'xlsx'
-import type { DataExportConfig, ExportResult, SheetConfig } from '~/shared/types/export'
+import type { DataExportConfig, ExportResult, SheetConfig } from '#shared/types/export'
 import {
   formatCellValue,
   normalizeSheetData,

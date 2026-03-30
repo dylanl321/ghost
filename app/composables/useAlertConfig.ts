@@ -20,7 +20,7 @@ import type {
   ThemeColorsConfig,
   AnomalyDetectionConfig,
   StandaloneAnomalyAlertsConfig
-} from '@/shared/types/budget-alert-config'
+} from '#shared/types/budget-alert-config'
 
 const logger = createLogger('useAlertConfig')
 

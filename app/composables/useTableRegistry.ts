@@ -1,7 +1,7 @@
 import { computed, type ComputedRef } from 'vue'
 import type { NormalizedDataset } from '~/types/costs'
 import type { TableColumn } from '~/components/shared/DataTable.vue'
-import type { DataMode } from '~/shared/types/scheduled-reports'
+import type { DataMode } from '#shared/types/scheduled-reports'
 import { getAccountsFromAnalysis, unwrapCostData } from '~/utils/cost-data-unwrap'
 
 const logger = createLogger('TableRegistry')

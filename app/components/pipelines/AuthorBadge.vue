@@ -21,7 +21,7 @@
 
 <script setup lang="ts">
 import { parseAuthor, formatAuthorName } from '~/utils/author-helpers'
-import type { AuthorInfo } from '~/shared/types/pipelines'
+import type { AuthorInfo } from '#shared/types/pipelines'
 import PipelinesAuthorContactIcons from './AuthorContactIcons.vue'
 
 const props = withDefaults(defineProps<{

@@ -14,7 +14,7 @@
 import { ref, computed, nextTick, readonly, onUnmounted, reactive } from 'vue'
 import { useChatThreadsStore } from '~/stores/useChatThreadsStore'
 import { useBackgroundPolling, type PollingCallbacks } from './useBackgroundPolling'
-import type { ChatMessage, StreamingChatMessage, SuggestedPrompt } from '#shared/types/chat-threads'
+import type { ChatMessage, StreamingChatMessage, SuggestedPrompt, MessageStatus } from '#shared/types/chat-threads'
 import type { AWSEnclaveData } from '#shared/types/accounts'
 
 // Chat state enum
@@ -203,7 +203,7 @@ function ensurePlaceholderForJob(threadId: string, jobId: string, initial?: Part
     if (existing.status && initial?.status) {
       existing.status.progress = initial.status.progress ?? existing.status.progress
       existing.status.toolsCalled = initial.status.toolsCalled ?? existing.status.toolsCalled
-        ; (existing.status as any).statusHistory = (initial.status as any)?.statusHistory ?? (existing.status as any).statusHistory
+      existing.status.statusHistory = initial.status.statusHistory ?? existing.status.statusHistory
       existing.status.jobId = jobId
     }
     return existing
@@ -219,7 +219,7 @@ function ensurePlaceholderForJob(threadId: string, jobId: string, initial?: Part
       jobId,
       progress: initial?.status?.progress || 'Starting...',
       toolsCalled: initial?.status?.toolsCalled || [],
-      statusHistory: (initial?.status as any)?.statusHistory || []
+      statusHistory: initial?.status?.statusHistory || []
     },
     streamBuffer: initial?.streamBuffer || ''
   }
@@ -441,8 +441,9 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   // ============================================================================
 
   // Messages from store - single source of truth
-  const messages = computed(() => {
-    const threadMessages = threadsStore.currentThread?.messages || []
+  // Cast to StreamingChatMessage[] since pending/streaming messages are injected with status fields
+  const messages = computed<StreamingChatMessage[]>(() => {
+    const threadMessages = (threadsStore.currentThread?.messages || []) as StreamingChatMessage[]
     return threadMessages
   })
 
@@ -631,7 +632,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
           progress: job.progress || 'Processing...',
           toolsCalled: job.toolsCalled || [],
           statusHistory: job.statusHistory || []
-        } as any
+        }
       })
 
       // Inject placeholder into currently viewed thread if not present
@@ -961,7 +962,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
           progress: 'Starting...',
           toolsCalled: [],
           statusHistory: []
-        } as any,
+        },
         streamBuffer: ''
       }
 
@@ -971,16 +972,13 @@ export function useChatUI(options: UseChatUIOptions = {}) {
       scrollTrigger.value++
 
       // Get conversation history (exclude pending messages)
-      const conversationHistory = (threadsStore.currentThread?.messages || [])
-        .filter(m => !m.status || m.status.status === 'complete')
+      const conversationHistory = ((threadsStore.currentThread?.messages || []) as StreamingChatMessage[])
+        .filter((m: StreamingChatMessage) => !m.status || m.status.status === 'complete')
         .slice(-10)
-        .map(m => ({
+        .map((m: StreamingChatMessage) => ({
           role: m.role === 'user' ? 'user' as const : 'assistant' as const,
           content: m.content
         }))
-
-      // Get active enclave for context
-      const activeEnclave = enclaveStore.activeEnclave
 
       logger.info('Submitting async query')
 
@@ -989,7 +987,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
         method: 'POST',
         body: {
           message: userInput,
-          accountIdentifier: mentionedAccount?.accountId || activeEnclave?.id,
+          accountIdentifier: mentionedAccount?.accountId || undefined,
           conversationHistory,
           timezone: userTimezone.value
         }
@@ -1029,6 +1027,8 @@ export function useChatUI(options: UseChatUIOptions = {}) {
       pollingPercent.value = 0
       pollingToolsCalled.value = []
       pollingStatusHistory.value = []
+
+      useEventBus().emit('ai.chat.sent', { message: userInput })
 
       // Register with background polling service
       backgroundPolling.registerJob(jobId, currentThreadId, userInput)
@@ -1083,8 +1083,8 @@ export function useChatUI(options: UseChatUIOptions = {}) {
 
   async function retryLastMessage(): Promise<void> {
     // Find the last user message
-    const threadMessages = threadsStore.currentThread?.messages || []
-    const lastUserMsg = [...threadMessages].reverse().find(m => m.role === 'user')
+    const threadMessages = (threadsStore.currentThread?.messages || []) as StreamingChatMessage[]
+    const lastUserMsg = [...threadMessages].reverse().find((m: StreamingChatMessage) => m.role === 'user')
 
     if (!lastUserMsg) {
       logger.warn('No user message to retry')
@@ -1092,7 +1092,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     }
 
     // Remove error message if present
-    const errorIndex = threadMessages.findIndex(m => m.status?.status === 'error')
+    const errorIndex = threadMessages.findIndex((m: StreamingChatMessage) => m.status?.status === 'error')
     if (errorIndex !== -1) {
       threadMessages.splice(errorIndex, 1)
     }
@@ -1184,9 +1184,9 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     chatState.value = 'idle'
 
     // Remove pending message
-    const threadMessages = threadsStore.currentThread?.messages
+    const threadMessages = threadsStore.currentThread?.messages as StreamingChatMessage[] | undefined
     if (threadMessages) {
-      const pendingIndex = threadMessages.findIndex(m =>
+      const pendingIndex = threadMessages.findIndex((m: StreamingChatMessage) =>
         m.status?.status === 'pending' || m.status?.status === 'streaming'
       )
       if (pendingIndex !== -1) {

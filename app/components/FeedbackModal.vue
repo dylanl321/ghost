@@ -126,6 +126,8 @@ async function submit() {
       throw new Error('Server returned unsuccessful response')
     }
 
+    useEventBus().emit('feedback.submitted', {})
+
     toast.add({
       title: 'Feedback Submitted',
       description: 'Thank you for your feedback!',

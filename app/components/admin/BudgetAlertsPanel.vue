@@ -296,7 +296,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useToast } from '#imports'
-import type { BudgetAlert, BudgetAlertLevel, BudgetAlertType, BudgetAlertDeliveryStatus } from '@/shared/types/budget-alerts'
+import type { BudgetAlert, BudgetAlertLevel, BudgetAlertType, BudgetAlertDeliveryStatus } from '#shared/types/budget-alerts'
 
 const logger = createLogger('BudgetAlertsPanel')
 

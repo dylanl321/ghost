@@ -3,7 +3,7 @@
  * Handles author parsing, contact URLs, and clipboard operations
  */
 
-import type { AuthorInfo } from '~/shared/types/pipelines'
+import type { AuthorInfo } from '#shared/types/pipelines'
 
 const logger = createLogger('AuthorHelpers')
 

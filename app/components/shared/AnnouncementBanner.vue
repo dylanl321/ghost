@@ -26,7 +26,7 @@
 </template>
 
 <script setup lang="ts">
-import type { Announcement } from '~/shared/types/site-config';
+import type { Announcement } from '#shared/types/site-config';
 
 const STORAGE_KEY = 'ghost-dismissed-announcements';
 

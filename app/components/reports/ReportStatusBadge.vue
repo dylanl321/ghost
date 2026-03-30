@@ -10,7 +10,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ReportStatus } from '~/shared/types/scheduled-reports'
+import type { ReportStatus } from '#shared/types/scheduled-reports'
 
 const props = defineProps<{
   status: ReportStatus

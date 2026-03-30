@@ -3,7 +3,7 @@
  * Generates CSV files from DataExportConfig
  */
 
-import type { DataExportConfig, ExportResult, SheetConfig } from '~/shared/types/export'
+import type { DataExportConfig, ExportResult, SheetConfig } from '#shared/types/export'
 import {
   formatCellValue,
   escapeCSV,

@@ -6,7 +6,7 @@
  */
 
 import { defineStore } from 'pinia';
-import type { SiteConfig } from '~/shared/types/site-config';
+import type { SiteConfig } from '#shared/types/site-config';
 
 const logger = createLogger('SiteConfigStore')
 

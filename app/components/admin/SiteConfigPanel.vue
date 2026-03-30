@@ -110,7 +110,7 @@
 </template>
 
 <script setup lang="ts">
-import type { SiteConfigItem } from '~/shared/types/site-config';
+import type { SiteConfigItem } from '#shared/types/site-config';
 
 const logger = createLogger('SiteConfigPanel')
 
