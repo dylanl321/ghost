@@ -252,6 +252,27 @@ export const CONDITION_CHECKERS: Record<string, ConditionChecker> = {
     return daysSince >= 30
   },
 
+  /** Arcade Champion: scored 8+ in Ghost Catcher mini-game */
+  ghost_catcher_high_score: (event) => {
+    if (event.type !== 'easter_egg.ghost_catcher') return false
+    return (event.payload.score ?? 0) >= 8
+  },
+
+  /** Paranormal Investigator: found all easter eggs */
+  all_easter_eggs_found: (_event, progress) => {
+    const easterEggBadgeIds = [
+      'ghost-hunter',
+      'konami-master',
+      'summoner',
+      'cloud-surfer',
+      'poltergeist',
+      'console-hacker',
+      'the-awakening',
+      'ghost-catcher',
+    ]
+    return easterEggBadgeIds.every(id => progress.awarded.has(id))
+  },
+
   feature_used_within_24h: (event) => {
     if (event.type !== 'feature.used') return false
     const releasedAt = event.payload.releasedAt

@@ -725,6 +725,107 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     rule: { type: 'condition', key: 'scrolled_table_to_bottom' }
   },
 
+  // ── Hidden: Easter Egg badges ───────────────────────────────────────────
+  {
+    id: 'konami-master',
+    name: 'Konami Master',
+    description: 'Entered the legendary code',
+    hint: 'Up, up, down, down...',
+    category: 'hidden',
+    hidden: true,
+    icon: 'fa-solid fa-gamepad',
+    color: '#F59E0B',
+    rule: { type: 'event_once', event: 'easter_egg.konami' }
+  },
+  {
+    id: 'summoner',
+    name: 'Summoner',
+    description: 'Typed the magic word and summoned a spirit',
+    hint: 'Say the name of this platform.',
+    category: 'hidden',
+    hidden: true,
+    icon: 'fa-solid fa-hat-wizard',
+    color: '#A855F7',
+    rule: { type: 'event_once', event: 'easter_egg.ghost_word' }
+  },
+  {
+    id: 'cloud-surfer',
+    name: 'Cloud Surfer',
+    description: 'Made it rain cloud services',
+    hint: 'Three letters that power everything.',
+    category: 'hidden',
+    hidden: true,
+    icon: 'fa-solid fa-cloud',
+    color: '#34D399',
+    rule: { type: 'event_once', event: 'easter_egg.cloud_matrix' }
+  },
+  {
+    id: 'poltergeist',
+    name: 'Poltergeist',
+    description: 'The spirits followed your every move',
+    hint: 'Some icons respond to persistence.',
+    category: 'hidden',
+    hidden: true,
+    icon: 'fa-solid fa-wand-sparkles',
+    color: '#E879F9',
+    rule: { type: 'event_once', event: 'easter_egg.haunted_cursor' }
+  },
+  {
+    id: 'console-hacker',
+    name: 'Console Hacker',
+    description: 'Discovered the ghost in the machine',
+    hint: 'Open your developer tools and look for clues.',
+    category: 'hidden',
+    hidden: true,
+    icon: 'fa-solid fa-terminal',
+    color: '#22D3EE',
+    rule: { type: 'event_once', event: 'easter_egg.console_function' }
+  },
+  {
+    id: 'the-awakening',
+    name: 'The Awakening',
+    description: 'Awakened the GHOST through an ancient sequence',
+    hint: 'The letters spell something in order.',
+    category: 'hidden',
+    hidden: true,
+    icon: 'fa-solid fa-eye',
+    color: '#10B981',
+    rule: { type: 'event_once', event: 'easter_egg.ghost_awakening' }
+  },
+  {
+    id: 'ghost-catcher',
+    name: 'Ghost Catcher',
+    description: 'Found and played the hidden mini-game',
+    hint: 'Even error pages have secrets.',
+    category: 'hidden',
+    hidden: true,
+    icon: 'fa-solid fa-crosshairs',
+    color: '#FB923C',
+    rule: { type: 'event_once', event: 'easter_egg.ghost_catcher' }
+  },
+  {
+    id: 'arcade-champion',
+    name: 'Arcade Champion',
+    description: 'Achieved a legendary score in Ghost Catcher',
+    hint: 'Master the mini-game. 8 is the magic number.',
+    category: 'hidden',
+    hidden: true,
+    icon: 'fa-solid fa-trophy',
+    color: '#FBBF24',
+    rule: { type: 'condition', key: 'ghost_catcher_high_score' }
+  },
+  {
+    id: 'paranormal-investigator',
+    name: 'Paranormal Investigator',
+    description: 'Found every hidden easter egg in the platform',
+    hint: 'You\'re missing something. Keep looking everywhere.',
+    category: 'hidden',
+    hidden: true,
+    icon: 'fa-solid fa-magnifying-glass-location',
+    color: '#6366F1',
+    rule: { type: 'condition', key: 'all_easter_eggs_found' }
+  },
+
   // ── Meta ───────────────────────────────────────────────────────────────
   {
     id: 'badge-watcher',

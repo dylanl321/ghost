@@ -38,6 +38,8 @@ const handleGoHome = () => {
   clearError({ redirect: "/" });
 };
 
+const { emit } = useEventBus()
+
 // Ghost Catcher Easter Egg
 const ghostClickCount = ref(0);
 const gameActive = ref(false);
@@ -63,6 +65,7 @@ function startGame() {
   showResult.value = false;
   gameMessage.value = "";
   timerStarted.value = false;
+  emit('easter_egg.ghost_catcher', { action: 'started' });
   console.log(
     "%c🎮 Ghost Catcher activated!",
     "color: #f59e0b; font-size: 14px;"
@@ -122,6 +125,8 @@ function endGame() {
       localStorage.setItem("ghost-catcher-high-score", String(score));
     } catch {}
   }
+
+  emit('easter_egg.ghost_catcher', { action: 'ended', score });
 
   if (score <= 3)
     gameMessage.value = "The ghost escaped! Better luck next time. 👻";

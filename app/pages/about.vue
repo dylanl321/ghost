@@ -258,8 +258,11 @@ function onLetterHover(index: number) {
   }
 }
 
+const { emit: emitEvent } = useEventBus()
+
 function triggerGhostAwakening() {
   ghostAwakened.value = true
+  emitEvent('easter_egg.ghost_awakening', {})
   console.log('%c✨ You\'ve awakened the GHOST! The spirits are pleased.', 'color: #10b981; font-size: 16px; font-weight: bold;')
 
   // Reset after animation completes (3 seconds)

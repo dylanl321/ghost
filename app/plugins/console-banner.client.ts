@@ -2,6 +2,8 @@
  * Prints a fun ASCII art banner and registers easter eggs in the browser console.
  */
 export default defineNuxtPlugin(() => {
+  const { emit } = useEventBus()
+  const consoleFunctionsUsed = new Set<string>()
   const banner = `
  ██████╗ ██╗  ██╗ ██████╗ ███████╗████████╗
 ██╔════╝ ██║  ██║██╔═══██╗██╔════╝╚══██╔══╝
@@ -36,6 +38,7 @@ export default defineNuxtPlugin(() => {
       if (konamiIndex === konamiSequence.length) {
         konamiIndex = 0
         launchGhostParade()
+        emit('easter_egg.konami', {})
       }
     }
     else {
@@ -63,18 +66,21 @@ export default defineNuxtPlugin(() => {
       ]
       const msg = spookyMessages[Math.floor(Math.random() * spookyMessages.length)]
       console.log(`%c${msg}`, 'color: #a855f7; font-size: 14px; font-weight: bold;')
+      emit('easter_egg.ghost_word', {})
     }
 
     awsWord.push(key)
     if (awsWord.length > 3) awsWord.shift()
     if (awsWord.join('') === 'aws') {
       launchCloudMatrix()
+      emit('easter_egg.cloud_matrix', {})
     }
   })
 
   // Console helper: window.ghost.haunt() and friends
   ;(window as any).ghost = {
     haunt() {
+      if (!consoleFunctionsUsed.has('haunt')) { consoleFunctionsUsed.add('haunt'); emit('easter_egg.console_function', { function: 'haunt' }) }
       const ghost = document.createElement('div')
       ghost.textContent = '👻'
       ghost.style.cssText = 'position:fixed;font-size:48px;z-index:99999;pointer-events:none;transition:all 2s ease-in;'
@@ -89,6 +95,7 @@ export default defineNuxtPlugin(() => {
       return '👻 A ghost drifts through your dashboard...'
     },
     wisdom() {
+      if (!consoleFunctionsUsed.has('wisdom')) { consoleFunctionsUsed.add('wisdom'); emit('easter_egg.console_function', { function: 'wisdom' }) }
       const tips = [
         '💡 Tip: Tag your resources. Future-you will thank present-you.',
         '💡 Tip: Review your Security Hub findings weekly. Or, you know, monthly. Just review them.',
@@ -103,6 +110,7 @@ export default defineNuxtPlugin(() => {
       return tip
     },
     status() {
+      if (!consoleFunctionsUsed.has('status')) { consoleFunctionsUsed.add('status'); emit('easter_egg.console_function', { function: 'status' }) }
       console.log('%c📊 GHOST System Status', 'color: #6366f1; font-size: 16px; font-weight: bold;')
       console.log(`%c  Environment: ${env}`, 'color: #a5b4fc;')
       console.log(`%c  Version: ${version}`, 'color: #a5b4fc;')
@@ -110,6 +118,7 @@ export default defineNuxtPlugin(() => {
       console.log(`%c  Vibe: immaculate 👻`, 'color: #a5b4fc;')
     },
     credits() {
+      if (!consoleFunctionsUsed.has('credits')) { consoleFunctionsUsed.add('credits'); emit('easter_egg.console_function', { function: 'credits' }) }
       console.log(`%c
   ╔═══════════════════════════════════════════════════╗
   ║          Built with 💜 by the                     ║
@@ -121,6 +130,7 @@ export default defineNuxtPlugin(() => {
       `, 'color: #6366f1; font-family: monospace;')
     },
     tarot() {
+      if (!consoleFunctionsUsed.has('tarot')) { consoleFunctionsUsed.add('tarot'); emit('easter_egg.console_function', { function: 'tarot' }) }
       const deck = [
         { name: 'The EC2 Instance', reading: 'A powerful force awaits deployment. But beware — it may be oversized for your needs.', advice: 'Right-size before you regret-size.' },
         { name: 'The S3 Bucket (Reversed)', reading: 'Your data sprawls unchecked. Lifecycle policies cry out from the void.', advice: 'Enable versioning, or lose everything to a misplaced DeleteObject.' },
@@ -195,6 +205,7 @@ export default defineNuxtPlugin(() => {
         if (clickCount === 3) {
           clickCount = 0
           console.log('%c👻 Haunted cursor activated! The spirits follow you...', 'color: #a855f7; font-size: 14px; font-weight: bold;')
+          emit('easter_egg.haunted_cursor', {})
           let lastTime = 0
           const onMove = (e: MouseEvent) => {
             const now = Date.now()

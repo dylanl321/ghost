@@ -1382,9 +1382,23 @@ onMounted(async () => {
   await fetchReports()
   await fetchSharedReports()
 
-  // Switch to scheduled reports tab if coming from query param
+  // Handle tab query parameter for deep-linking
+  const tabParam = route.query.tab as string | undefined
+  if (tabParam) {
+    const tabIndex = parseInt(tabParam)
+    if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex < profileTabs.length) {
+      selectedTab.value = tabIndex
+    } else {
+      const matchIndex = profileTabs.findIndex(t => t.slot === tabParam)
+      if (matchIndex !== -1) {
+        selectedTab.value = matchIndex
+      }
+    }
+  }
+
+  // Switch to scheduled reports tab if coming from section query param
   if (route.query.section === 'scheduled-reports') {
-    selectedTab.value = 3 // Index of the Scheduled Reports tab
+    selectedTab.value = 3
     nextTick(() => {
       const element = document.getElementById('scheduled-reports')
       if (element) {
