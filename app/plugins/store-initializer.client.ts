@@ -31,6 +31,13 @@ export default defineNuxtPlugin(async (nuxtApp) => {
       return
     }
 
+    // Skip store refresh while impersonating — the store holds the target user's data
+    const { isImpersonating } = useImpersonation()
+    if (isImpersonating.value) {
+      logger.info('Impersonation active, skipping store refresh')
+      return
+    }
+
     // Check if user is logged in
     if (!loggedIn.value || !user.value?.accessToken) {
       logger.info('Store init: User not logged in, skipping store initialization')

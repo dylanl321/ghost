@@ -129,6 +129,28 @@ export const ALL_METRIC_CARD_IDS: MetricCardId[] = [
   'budgetHealth',
 ]
 
+/**
+ * Compare two dashboard layouts for equality.
+ * Normalizes undefined displayStyle to 'full' so layouts that omit the default style still match.
+ */
+export function layoutsAreEqual(a: DashboardLayoutConfig, b: DashboardLayoutConfig): boolean {
+  if (a.sections.length !== b.sections.length) return false
+
+  for (let i = 0; i < a.sections.length; i++) {
+    const sa = a.sections[i]!
+    const sb = b.sections[i]!
+    if (sa.id !== sb.id) return false
+    if (sa.visible !== sb.visible) return false
+    if ((sa.displayStyle || 'full') !== (sb.displayStyle || 'full')) return false
+  }
+
+  for (const id of ALL_METRIC_CARD_IDS) {
+    if ((a.metricCards[id] ?? true) !== (b.metricCards[id] ?? true)) return false
+  }
+
+  return true
+}
+
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayoutConfig = {
   sections: [
     { id: 'budgetAlerts', visible: true },

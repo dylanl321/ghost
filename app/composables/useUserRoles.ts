@@ -14,7 +14,11 @@ const logger = createLogger('UserRoles')
 export const useUserRoles = () => {
   const { user } = useOidcAuth()
   const userGroupStore = useUserGroupStore()
-  
+
+  // Impersonation state — when active, role evaluation uses the target user's identity
+  const impersonating = useState<boolean>('impersonation-active', () => false)
+  const impersonatedUser = useState<{ userPrincipalName: string; displayName: string; jobTitle?: string; department?: string } | null>('impersonation-user', () => null)
+
   // Computed property for user roles
   const userRoles = computed<RoleDefinition[]>(() => {
     if (!user.value) return []
@@ -23,12 +27,19 @@ export const useUserRoles = () => {
     // This ensures we can check membership in groups like "AWS-Product-Team"
     const groups = userGroupStore.allEntraGroups || []
 
+    // When impersonating, evaluate roles using the target user's identity
+    const target = impersonating.value ? impersonatedUser.value : null
+
     // Build user context
     const context: UserContext = {
-      userPrincipalName: user.value.claims?.email || user.value.claims?.preferred_username || '',
-      displayName: user.value.claims?.name || user.value.claims?.given_name || '',
-      jobTitle: user.value.claims?.jobTitle,
-      department: user.value.claims?.department,
+      userPrincipalName: target
+        ? target.userPrincipalName
+        : (user.value.claims?.email || user.value.claims?.preferred_username || '') as string,
+      displayName: target
+        ? target.displayName
+        : (user.value.claims?.name || user.value.claims?.given_name || '') as string,
+      jobTitle: target ? target.jobTitle : user.value.claims?.jobTitle as string | undefined,
+      department: target ? target.department : user.value.claims?.department as string | undefined,
       groups,
       claims: user.value.claims
     }

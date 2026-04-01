@@ -13,6 +13,11 @@
         @toggle-mobile-menu="handleMobileMenuToggle"
       />
 
+      <!-- Impersonation Banner -->
+      <ClientOnly>
+        <ImpersonationBanner />
+      </ClientOnly>
+
       <!-- Main Content Area with Settings Sidebar -->
       <main class="flex-1 min-h-0 flex bg-[var(--ghost-bg)] dark:bg-slate-900 overflow-hidden">
         <!-- Settings Sidebar -->

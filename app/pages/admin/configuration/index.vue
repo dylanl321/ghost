@@ -10,12 +10,13 @@
         </div>
         <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Configuration</h1>
       </div>
-      <p class="text-gray-600 dark:text-gray-400">Manage API keys and site-wide configuration</p>
+      <p class="text-gray-600 dark:text-gray-400">Manage API keys, site-wide configuration, and dashboard defaults</p>
     </div>
     <UTabs v-model="activeTab" :items="tabs" class="mb-6" />
     <div class="mt-6">
       <ApiKeysPanel v-if="activeTab === 0" />
       <SiteConfigPanel v-else-if="activeTab === 1" />
+      <DashboardDefaultPanel v-else-if="activeTab === 2" />
     </div>
   </div>
 </template>
@@ -31,11 +32,12 @@ definePageMeta({
 
 const route = useRoute()
 const activeTab = ref(0)
-const tabNames = ['api-keys', 'site-config']
+const tabNames = ['api-keys', 'site-config', 'dashboard-default']
 
 const tabs = [
   { label: 'API Keys', icon: 'i-heroicons-key' },
-  { label: 'Site Config', icon: 'i-heroicons-cog-6-tooth' }
+  { label: 'Site Config', icon: 'i-heroicons-cog-6-tooth' },
+  { label: 'Dashboard Default', icon: 'i-heroicons-rectangle-group' },
 ]
 
 onMounted(() => {

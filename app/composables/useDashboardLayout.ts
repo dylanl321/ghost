@@ -16,6 +16,7 @@ import {
   ALL_METRIC_CARD_IDS,
   DEFAULT_DASHBOARD_LAYOUT,
   SECTION_STYLE_SUPPORT,
+  layoutsAreEqual,
 } from '#shared/types/dashboard-layout'
 
 const LAYOUT_KEY = 'dashboardLayout'
@@ -102,6 +103,12 @@ export function useDashboardLayout() {
     ALL_METRIC_CARD_IDS.filter(id => layout.value.metricCards[id]).length
   )
 
+  // Whether the current layout matches the org default: true/false/null (no default configured)
+  const matchesOrgDefault = computed<boolean | null>(() => {
+    if (!orgDefault.value) return null
+    return layoutsAreEqual(layout.value, orgDefault.value)
+  })
+
   // Returns Tailwind col-span classes for a section based on its display style
   function sectionColSpan(style?: DisplayStyle): string {
     switch (style) {
@@ -184,7 +191,7 @@ export function useDashboardLayout() {
     })
   }
 
-  async function exportAsDefault() {
+  async function exportAsDefault(): Promise<{ saved: true; verified: boolean }> {
     const current = layout.value
     await $fetch('/api/admin/dashboard-layout/set-default', {
       method: 'POST',
@@ -192,12 +199,26 @@ export function useDashboardLayout() {
     })
     // Update local cache so the org default reflects immediately
     orgDefault.value = current
+
+    // Verify by fetching back from the server (bypass cache)
+    try {
+      const res = await $fetch<{ success: boolean; layout: DashboardLayoutConfig | null }>('/api/admin/dashboard-layout/get-default', {
+        query: { nocache: '1' },
+      })
+      const verified = !!(res.success && res.layout && layoutsAreEqual(current, res.layout))
+      return { saved: true, verified }
+    } catch {
+      // Verification fetch failed but the save itself succeeded
+      return { saved: true, verified: false }
+    }
   }
 
   return {
     layout,
     visibleSections,
     visibleMetricCardCount,
+    matchesOrgDefault,
+    orgDefault: readonly(orgDefault),
     sectionColSpan,
     isSectionVisible,
     isMetricCardVisible,

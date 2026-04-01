@@ -38,7 +38,7 @@
           </div>
           <div>
             <p class="text-xs text-gray-600 dark:text-gray-400">Avg. session length</p>
-            <p class="text-xl font-bold text-gray-900 dark:text-white">{{ formatDuration(global?.avgSessionLengthMs ?? 0) }}</p>
+            <p class="text-xl font-bold text-gray-900 dark:text-white">{{ formatSessionDuration(global?.avgSessionLengthMs ?? 0) }}</p>
           </div>
         </div>
       </UCard>
@@ -132,15 +132,23 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-200 dark:divide-gray-800">
-            <tr v-for="u in byUser" :key="u.userId" class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+            <tr
+              v-for="u in byUser"
+              :key="u.userId"
+              class="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer"
+              @click="navigateTo(`/admin/users/${encodeURIComponent(u.userId)}`)"
+            >
               <td class="py-3 pr-4">
                 <div class="flex items-center gap-2">
                   <UserAvatar :email="u.userId" size="sm" />
-                  <span class="font-medium text-gray-900 dark:text-white">{{ u.userId }}</span>
+                  <div class="min-w-0">
+                    <span class="font-medium text-gray-900 dark:text-white block truncate">{{ truncateEmail(u.userId).name }}</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 block truncate max-w-[200px]">{{ u.userId }}</span>
+                  </div>
                 </div>
               </td>
               <td class="py-3 pr-4 text-gray-600 dark:text-gray-400">{{ u.sessionCount }}</td>
-              <td class="py-3 pr-4 text-gray-600 dark:text-gray-400">{{ formatDuration(u.avgSessionLengthMs) }}</td>
+              <td class="py-3 pr-4 text-gray-600 dark:text-gray-400">{{ formatSessionDuration(u.avgSessionLengthMs) }}</td>
               <td class="py-3 pr-4">
                 <div class="flex flex-wrap gap-1">
                   <UBadge v-if="u.actionCount" color="purple" variant="soft" size="xs">
@@ -181,6 +189,8 @@
 </template>
 
 <script setup lang="ts">
+import { formatSessionDuration, formatActionType, truncateEmail } from '~/composables/useAdminUserDetail'
+
 const activityPeriod = ref<'7d' | '30d'>('7d')
 const loading = ref(false)
 const loadError = ref<string | null>(null)
@@ -205,40 +215,6 @@ const globalTopPagesStr = computed(() => {
   if (!top?.length) return ''
   return top.map(p => p.path).join(', ')
 })
-
-function formatDuration(ms: number): string {
-  if (ms <= 0 || !Number.isFinite(ms)) return '—'
-  const sec = Math.round(ms / 1000)
-  if (sec < 60) return `${sec}s`
-  const min = Math.floor(sec / 60)
-  const s = sec % 60
-  if (min < 60) return s ? `${min}m ${s}s` : `${min}m`
-  const h = Math.floor(min / 60)
-  const m = min % 60
-  return m ? `${h}h ${m}m` : `${h}h`
-}
-
-const actionTypeLabels: Record<string, string> = {
-  'cost.timeframe_change': 'Cost Timeframe',
-  'cost.tab_switch': 'Cost Tab',
-  'cost.mode_toggle': 'Cost Mode',
-  'cost.tag_drilldown': 'Tag Drilldown',
-  'cost.account_select': 'Cost Accounts',
-  'account.favorite': 'Favorite',
-  'account.unfavorite': 'Unfavorite',
-  'export.csv': 'CSV Export',
-  'export.json': 'JSON Export',
-  'dashboard.scope_change': 'Scope Change',
-  'dashboard.daterange_change': 'Date Range',
-  'search.explorer': 'Search',
-  'search.cost': 'Cost Search',
-  'chat.thread_create': 'New Chat',
-  'chat.thread_share': 'Share Chat',
-}
-
-function formatActionType(type: string): string {
-  return actionTypeLabels[type] || type.replace('.', ': ')
-}
 
 async function load() {
   loading.value = true

@@ -43,6 +43,27 @@ const { searchUsers, fetchUserProfile, fetchUserMemberOf } = useGraphApi()
 const { parseAwsGroupName, sortRolesByPriority } = useAwsGroupParser()
 const { getUserTags, batchGetUserTags } = useGroupMembers()
 const awsAccountsStore = useAwsAccountsStore()
+const { isAdmin } = useUserRoles()
+const { startImpersonation, isLoading: impersonationLoading } = useImpersonation()
+
+// Track which user is currently being impersonated (for loading state)
+const impersonatingUpn = ref<string | null>(null)
+
+const handleImpersonate = async (targetUser: User) => {
+  impersonatingUpn.value = targetUser.userPrincipalName
+  try {
+    await startImpersonation({
+      userPrincipalName: targetUser.userPrincipalName,
+      displayName: targetUser.displayName,
+      mail: targetUser.userPrincipalName,
+      jobTitle: targetUser.jobTitle
+    })
+  } catch (err) {
+    logger.error('Failed to impersonate:', err)
+  } finally {
+    impersonatingUpn.value = null
+  }
+}
 
 // Filtered users based on search and filters
 const filteredUsers = computed(() => {
@@ -643,9 +664,22 @@ onMounted(async () => {
               </div>
             </div>
 
-            <!-- View Details Icon (whole row is clickable now) -->
-            <div class="flex-shrink-0 text-gray-500">
-              <UIcon name="i-heroicons-chevron-right" class="w-5 h-5" />
+            <!-- Actions -->
+            <div class="flex items-center gap-2 flex-shrink-0" @click.stop>
+              <!-- Impersonate Button (admin only) -->
+              <UTooltip v-if="isAdmin" text="View GHOST as this user">
+                <UButton
+                  icon="i-heroicons-eye"
+                  variant="ghost"
+                  size="xs"
+                  color="amber"
+                  :loading="impersonatingUpn === user.userPrincipalName"
+                  @click="handleImpersonate(user)"
+                />
+              </UTooltip>
+
+              <!-- View Details -->
+              <UIcon name="i-heroicons-chevron-right" class="w-5 h-5 text-gray-500" />
             </div>
           </div>
         </div>

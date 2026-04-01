@@ -128,13 +128,10 @@ export function useNotifications() {
 
   async function fetchUnreadCount() {
     try {
-      const { data } = await useFetch('/api/notifications/unread-count', {
-        key: `notif-unread-${Date.now()}`,
-        server: false
-      })
+      const result = await $fetch<{ success: boolean; data: { count: number } }>('/api/notifications/unread-count')
 
-      if (data.value?.success) {
-        unreadCount.value = data.value.data.count
+      if (result.success) {
+        unreadCount.value = result.data.count
       }
     } catch (error) {
       logger.warn('Failed to fetch unread count:', error)
