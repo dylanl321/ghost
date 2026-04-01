@@ -99,15 +99,15 @@
                 </div>
               </div>
 
-              <!-- Sparkline (only for instances with CPU data) -->
-              <div v-if="inst.cpuDailyValues && inst.cpuDailyValues.length > 1" class="flex-shrink-0" style="width: 80px; height: 24px;">
+              <!-- Sparkline (only for instances with max CPU data) -->
+              <div v-if="inst.maxCpuDailyValues && inst.maxCpuDailyValues.length > 1" class="flex-shrink-0" style="width: 80px; height: 24px;">
                 <VChart :option="sparklineOptions(inst)" :init-options="{ width: 80, height: 24 }" :autoresize="false" />
               </div>
 
               <!-- Activity Summary -->
               <div class="flex-shrink-0 text-right w-[70px]">
                 <div v-if="inst.totalDaysMonitored > 0" class="text-[10px] leading-tight">
-                  <span class="font-mono" :class="cpuColor(inst.metrics?.avgCpuPercent ?? 0)">
+                  <span class="font-mono" :class="cpuColor(inst.metrics?.maxCpuPercent ?? 0)">
                     {{ inst.activeDaysCount }}/{{ inst.totalDaysMonitored }}d
                   </span>
                   <span class="text-gray-500 block">active</span>
@@ -192,9 +192,9 @@
               </div>
 
               <!-- Larger CPU Chart -->
-              <div v-if="inst.cpuDailyValues && inst.cpuDailyValues.length > 1">
+              <div v-if="inst.maxCpuDailyValues && inst.maxCpuDailyValues.length > 1">
                 <div class="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                  CPU Usage Over {{ inst.metrics?.lookbackDays || 14 }} Days
+                  Peak CPU Over {{ inst.metrics?.lookbackDays || 14 }} Days
                 </div>
                 <div class="h-[80px] bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700 p-1">
                   <VChart :option="detailChartOptions(inst)" :init-options="{ height: 72 }" :autoresize="true" class="w-full h-full" />
@@ -348,8 +348,8 @@ function classificationLabel(classification: Classification): string {
 }
 
 function cpuColor(cpu: number): string {
-  if (cpu < 1) return 'text-red-500'
-  if (cpu < 5) return 'text-yellow-500'
+  if (cpu < 5) return 'text-red-500'
+  if (cpu < 15) return 'text-yellow-500'
   return 'text-green-500'
 }
 
@@ -385,11 +385,12 @@ function instanceAge(launchTime: string): string {
   } catch { return '' }
 }
 
-// Sparkline chart options (compact inline)
+// Sparkline chart options (compact inline — uses daily max CPU)
 function sparklineOptions(inst: any) {
   const isDark = colorMode.value === 'dark'
-  const values = inst.cpuDailyValues || []
-  const lineColor = inst.metrics?.avgCpuPercent < 1 ? '#ef4444' : inst.metrics?.avgCpuPercent < 5 ? '#eab308' : '#22c55e'
+  const values = inst.maxCpuDailyValues || []
+  const peakCpu = inst.metrics?.maxCpuPercent ?? 0
+  const lineColor = peakCpu < 5 ? '#ef4444' : peakCpu < 15 ? '#eab308' : '#22c55e'
 
   return {
     grid: { top: 2, right: 2, bottom: 2, left: 2 },
@@ -413,12 +414,13 @@ function sparklineOptions(inst: any) {
   }
 }
 
-// Detail chart options (expanded view)
+// Detail chart options (expanded view — uses daily max CPU)
 function detailChartOptions(inst: any) {
   const isDark = colorMode.value === 'dark'
-  const values = inst.cpuDailyValues || []
+  const values = inst.maxCpuDailyValues || []
   const timestamps = inst.cpuDailyTimestamps || []
-  const lineColor = inst.metrics?.avgCpuPercent < 1 ? '#ef4444' : inst.metrics?.avgCpuPercent < 5 ? '#eab308' : '#22c55e'
+  const peakCpu = inst.metrics?.maxCpuPercent ?? 0
+  const lineColor = peakCpu < 5 ? '#ef4444' : peakCpu < 15 ? '#eab308' : '#22c55e'
   const textColor = isDark ? '#9ca3af' : '#6b7280'
 
   const labels = timestamps.map((t: string) => {
@@ -462,7 +464,7 @@ function detailChartOptions(inst: any) {
       trigger: 'axis',
       formatter: (params: any) => {
         const p = params[0]
-        return `${p.name}: <b>${p.value?.toFixed(1)}%</b> CPU`
+        return `${p.name}: <b>${p.value?.toFixed(1)}%</b> Peak CPU`
       },
       textStyle: { fontSize: 11 }
     },
