@@ -170,6 +170,7 @@ Click any row to expand it. The detail view includes:
 - **Monthly Cost** — On-demand estimate with annual projection
 - **Tags** — Owner, Project, Schedule, and Patch Group if present
 - **Peak CPU Chart** — A larger chart showing daily peak CPU with labeled axes and tooltips
+- **Network I/O Chart** — A chart showing daily network traffic (in + out) with auto-scaled units (KB or MB). Color reflects traffic level: red (below 5 MB/day idle threshold), blue (moderate), green (high). Only appears when network data is available.
 - **Explanation** — A plain-language summary of why the instance received its classification
 - **Evidence** — A bullet list of the specific data points that support the classification
 

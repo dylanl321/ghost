@@ -201,6 +201,16 @@
                 </div>
               </div>
 
+              <!-- Network I/O Chart -->
+              <div v-if="inst.networkDailyValues && inst.networkDailyValues.length > 1">
+                <div class="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
+                  Network I/O Over {{ inst.metrics?.lookbackDays || 14 }} Days
+                </div>
+                <div class="h-[80px] bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700 p-1">
+                  <VChart :option="networkChartOptions(inst)" :init-options="{ height: 72 }" :autoresize="true" class="w-full h-full" />
+                </div>
+              </div>
+
               <!-- Explanation -->
               <div class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
                 {{ inst.explanation }}
@@ -465,6 +475,72 @@ function detailChartOptions(inst: any) {
       formatter: (params: any) => {
         const p = params[0]
         return `${p.name}: <b>${p.value?.toFixed(1)}%</b> Peak CPU`
+      },
+      textStyle: { fontSize: 11 }
+    },
+    animation: false
+  }
+}
+
+// Network I/O chart options (expanded view — daily total bytes in+out)
+function networkChartOptions(inst: any) {
+  const isDark = colorMode.value === 'dark'
+  const values = (inst.networkDailyValues || []) as number[]
+  const timestamps = (inst.networkDailyTimestamps || []) as string[]
+  const textColor = isDark ? '#9ca3af' : '#6b7280'
+
+  // Determine scale: show in KB or MB
+  const maxVal = values.length > 0 ? Math.max(...values) : 0
+  const useMB = maxVal >= 1_048_576
+  const scaledValues = values.map((v: number) => useMB ? v / 1_048_576 : v / 1024)
+  const unit = useMB ? 'MB' : 'KB'
+
+  // Color based on average daily traffic vs idle threshold (5 MB/day)
+  const avgPerDay = values.length > 0 ? values.reduce((s: number, v: number) => s + v, 0) / values.length : 0
+  const lineColor = avgPerDay < 5_000_000 ? '#ef4444' : avgPerDay < 50_000_000 ? '#3b82f6' : '#22c55e'
+
+  const labels = timestamps.map((t: string) => {
+    try {
+      const d = new Date(t)
+      return `${d.getMonth() + 1}/${d.getDate()}`
+    } catch { return '' }
+  })
+
+  return {
+    grid: { top: 8, right: 8, bottom: 20, left: 40 },
+    xAxis: {
+      type: 'category',
+      data: labels,
+      axisLabel: { fontSize: 9, color: textColor, interval: Math.max(0, Math.floor(labels.length / 5) - 1) },
+      axisLine: { show: false },
+      axisTick: { show: false }
+    },
+    yAxis: {
+      type: 'value',
+      min: 0,
+      axisLabel: { fontSize: 9, color: textColor, formatter: `{value} ${unit}` },
+      splitLine: { lineStyle: { color: isDark ? '#374151' : '#e5e7eb' } }
+    },
+    series: [{
+      type: 'line',
+      data: scaledValues,
+      smooth: true,
+      symbol: 'circle',
+      symbolSize: 3,
+      lineStyle: { width: 2, color: lineColor },
+      itemStyle: { color: lineColor },
+      areaStyle: {
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: lineColor + '30' },
+          { offset: 1, color: lineColor + '05' }
+        ])
+      }
+    }],
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params: any) => {
+        const p = params[0]
+        return `${p.name}: <b>${p.value?.toFixed(1)} ${unit}</b>`
       },
       textStyle: { fontSize: 11 }
     },

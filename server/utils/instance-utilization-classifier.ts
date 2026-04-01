@@ -48,6 +48,8 @@ export interface InstanceClassification {
   cpuDailyValues: number[]
   cpuDailyTimestamps: string[]
   maxCpuDailyValues: number[]
+  networkDailyValues: number[]
+  networkDailyTimestamps: string[]
   lastActiveDate?: string
   activeDaysCount: number
   totalDaysMonitored: number
@@ -126,6 +128,8 @@ export function classifyInstance(
     cpuDailyValues: cpuValues,
     cpuDailyTimestamps: cpuTimestamps,
     maxCpuDailyValues,
+    networkDailyValues: metrics?.networkDailyValues || [],
+    networkDailyTimestamps: metrics?.networkDailyTimestamps || [],
     lastActiveDate,
     activeDaysCount,
     totalDaysMonitored: maxCpuDailyValues.length || cpuValues.length,

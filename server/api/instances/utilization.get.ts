@@ -148,7 +148,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     {
       resourceType: 'AWS::EC2::Instance',
       accountIds: [targetAccountId],
-      limit: 500
+      limit: 5000
     },
     environment,
     configRegion

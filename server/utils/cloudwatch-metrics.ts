@@ -16,7 +16,7 @@ import type { AWSEnvironmentType } from '../types'
 
 const CACHE_TTL = 3600 // 1 hour
 const CACHE_KEY_PREFIX = 'cloudwatch:metrics'
-const MAX_METRIC_QUERIES_PER_REQUEST = 500
+const MAX_METRIC_QUERIES_PER_REQUEST = 400 // Conservative limit (API max is 500) to avoid edge-case throttling
 
 export interface InstanceMetrics {
   instanceId: string
@@ -30,6 +30,8 @@ export interface InstanceMetrics {
   totalNetworkOutBytes: number | null
   totalNetworkBytes: number | null
   networkBytesPerDay: number | null
+  networkDailyValues: number[]
+  networkDailyTimestamps: string[]
   dataPointCount: number
   lookbackDays: number
 }
@@ -134,7 +136,16 @@ async function fetchRegionMetrics(
     const maxInstancesPerBatch = Math.floor(MAX_METRIC_QUERIES_PER_REQUEST / metricsPerInstance)
     const batches = chunkArray(instanceIds, maxInstancesPerBatch)
 
-    for (const batch of batches) {
+    for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+      const batch = batches[batchIdx]
+
+      // Stagger batches to avoid CloudWatch throttling (50ms between batches)
+      if (batchIdx > 0) {
+        await new Promise(resolve => setTimeout(resolve, 50))
+      }
+
+      try {
+
       const queries: MetricDataQuery[] = []
 
       for (const instanceId of batch) {
@@ -203,7 +214,27 @@ async function fetchRegionMetrics(
         EndTime: endTime
       })
 
-      const response = await client.send(command)
+      // Retry with exponential backoff for throttling
+      let response
+      const maxRetries = 3
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          response = await client.send(command)
+          break
+        } catch (err: any) {
+          const isThrottle = err.name === 'Throttling' || err.name === 'ThrottlingException' ||
+            err.name === 'TooManyRequestsException' || err.message?.includes('Rate exceeded')
+          if (isThrottle && attempt < maxRetries) {
+            const delay = Math.pow(2, attempt) * 500 // 500ms, 1s, 2s
+            logger.warn(`[CloudWatch Metrics] Throttled on batch ${batchIdx + 1}/${batches.length}, retry ${attempt + 1} in ${delay}ms`)
+            await new Promise(resolve => setTimeout(resolve, delay))
+          } else {
+            throw err
+          }
+        }
+      }
+
+      if (!response) continue
 
       // Parse results back into per-instance metrics
       for (const instanceId of batch) {
@@ -258,6 +289,22 @@ async function fetchRegionMetrics(
           ? totalNetwork / networkDaysCount
           : null
 
+        // Build daily network totals (in + out per day), sorted by timestamp
+        const netInTimestamps = netInResult?.Timestamps || []
+        const netOutTimestamps = netOutResult?.Timestamps || []
+        const dailyNetMap = new Map<string, number>()
+        for (let i = 0; i < netInValues.length; i++) {
+          const ts = netInTimestamps[i]?.toISOString() || ''
+          dailyNetMap.set(ts, (dailyNetMap.get(ts) || 0) + netInValues[i])
+        }
+        for (let i = 0; i < netOutValues.length; i++) {
+          const ts = netOutTimestamps[i]?.toISOString() || ''
+          dailyNetMap.set(ts, (dailyNetMap.get(ts) || 0) + netOutValues[i])
+        }
+        const networkPairs = Array.from(dailyNetMap.entries())
+          .map(([ts, bytes]) => ({ timestamp: ts, value: Math.round(bytes) }))
+          .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+
         result.metrics.set(instanceId, {
           instanceId,
           region,
@@ -270,13 +317,20 @@ async function fetchRegionMetrics(
           totalNetworkOutBytes: totalNetOut,
           totalNetworkBytes: totalNetwork,
           networkBytesPerDay,
+          networkDailyValues: networkPairs.map(p => p.value),
+          networkDailyTimestamps: networkPairs.map(p => p.timestamp),
           dataPointCount: cpuValues.length,
           lookbackDays
         })
       }
+      } catch (batchError: any) {
+        // Per-batch error handling — log and continue to next batch
+        logger.error(`[CloudWatch Metrics] Batch ${batchIdx + 1}/${batches.length} failed for ${batch.length} instances in ${region}:`, batchError.message)
+        result.errors.push(`Batch ${batchIdx + 1} failed in ${region}: ${batchError.message}`)
+      }
     }
   } catch (error: any) {
-    logger.error(`[CloudWatch Metrics] Region ${region} error:`, error.message)
+    logger.error(`[CloudWatch Metrics] Region ${region} setup error:`, error.message)
 
     if (error.name === 'AccessDeniedException') {
       result.errors.push(`Access denied for CloudWatch in account ${accountId}, region ${region}`)
