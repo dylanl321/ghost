@@ -64,7 +64,7 @@
       </div>
 
       <!-- Stats Grid -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <UCard>
           <div class="text-center">
             <p class="text-sm text-gray-500 dark:text-gray-400">Avg. Session</p>
@@ -78,6 +78,14 @@
             <p class="text-sm text-gray-500 dark:text-gray-400">Total Sessions</p>
             <p class="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
               {{ activityLoading ? '…' : (userActivity?.sessionCount ?? 0) }}
+            </p>
+          </div>
+        </UCard>
+        <UCard>
+          <div class="text-center">
+            <p class="text-sm text-gray-500 dark:text-gray-400">Tracked Actions</p>
+            <p class="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
+              {{ recentActions.length }}
             </p>
           </div>
         </UCard>
@@ -217,6 +225,30 @@
             </div>
           </UCard>
 
+          <!-- UI Settings -->
+          <UCard>
+            <template #header>
+              <div class="flex items-center gap-2">
+                <Icon name="i-heroicons-paint-brush" class="w-5 h-5 text-pink-500" />
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">UI Settings</h3>
+              </div>
+            </template>
+            <div class="space-y-3">
+              <DetailRow label="Theme" :value="p('theme') || 'system'" />
+              <DetailRow label="Density" :value="p('density') || 'default'" />
+              <DetailRow label="Dashboard Scope" :value="p('dashboardScope') || '—'" />
+              <DetailRow label="Metric Scope" :value="p('metricScope') || '—'" />
+              <DetailRow label="Cost Trend Range" :value="p('costTrendDays') || '—'" />
+              <DetailRow label="Last Seen Version" :value="p('lastSeenVersion') || '—'" />
+              <div class="flex justify-between items-center">
+                <span class="text-sm text-gray-600 dark:text-gray-400">Customize Panel Seen</span>
+                <UBadge :color="p('customizeDashboardSeen') ? 'green' : 'gray'" variant="soft" size="xs">
+                  {{ p('customizeDashboardSeen') ? 'Yes' : 'No' }}
+                </UBadge>
+              </div>
+            </div>
+          </UCard>
+
           <!-- Favorite Accounts -->
           <UCard>
             <template #header>
@@ -240,6 +272,28 @@
             <p v-else class="text-sm text-gray-500 dark:text-gray-400 italic">No favorite accounts</p>
           </UCard>
 
+          <!-- Recently Viewed Accounts -->
+          <UCard v-if="recentlyViewed.length">
+            <template #header>
+              <div class="flex items-center gap-2">
+                <Icon name="i-heroicons-clock" class="w-5 h-5 text-cyan-500" />
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Recently Viewed Accounts</h3>
+                <UBadge color="gray" variant="soft" size="xs">{{ recentlyViewed.length }}</UBadge>
+              </div>
+            </template>
+            <div class="space-y-2">
+              <div
+                v-for="(item, idx) in recentlyViewed.slice(0, 8)"
+                :key="idx"
+                class="flex items-center justify-between"
+              >
+                <span class="text-sm font-mono text-gray-700 dark:text-gray-300">{{ item.accountId }}</span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">{{ formatRelativeDate(item.viewedAt) }}</span>
+              </div>
+              <p v-if="recentlyViewed.length > 8" class="text-xs text-gray-400">+{{ recentlyViewed.length - 8 }} more</p>
+            </div>
+          </UCard>
+
           <!-- Dashboard Layout -->
           <UCard>
             <template #header>
@@ -258,28 +312,81 @@
             <div v-if="userPrefs.preferences?.dashboardLayout" class="space-y-3">
               <div class="flex justify-between items-center">
                 <span class="text-sm text-gray-600 dark:text-gray-400">Hidden sections</span>
-                <span class="text-sm font-medium text-gray-900 dark:text-white">
-                  {{ hiddenSections.length }}
-                </span>
+                <span class="text-sm font-medium text-gray-900 dark:text-white">{{ hiddenSections.length }}</span>
               </div>
               <div v-if="hiddenSections.length" class="flex flex-wrap gap-1">
                 <UBadge v-for="s in hiddenSections" :key="s" color="gray" variant="soft" size="xs">{{ s }}</UBadge>
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-sm text-gray-600 dark:text-gray-400">Disabled metric cards</span>
-                <span class="text-sm font-medium text-gray-900 dark:text-white">
-                  {{ disabledMetrics.length }}
-                </span>
+                <span class="text-sm font-medium text-gray-900 dark:text-white">{{ disabledMetrics.length }}</span>
               </div>
               <div v-if="disabledMetrics.length" class="flex flex-wrap gap-1">
                 <UBadge v-for="m in disabledMetrics" :key="m" color="gray" variant="soft" size="xs">{{ m }}</UBadge>
               </div>
             </div>
             <p v-else class="text-sm text-gray-500 dark:text-gray-400 italic">Using default layout</p>
+
+            <!-- V2 widget layout summary -->
+            <div v-if="userPrefs.preferences?.dashboardLayoutV2" class="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700 space-y-2">
+              <div class="flex justify-between items-center">
+                <span class="text-sm text-gray-600 dark:text-gray-400">Widget layout (v2)</span>
+                <UBadge color="indigo" variant="soft" size="xs">
+                  {{ userPrefs.preferences.dashboardLayoutV2.widgets?.length ?? 0 }} widgets
+                </UBadge>
+              </div>
+              <div v-if="userPrefs.preferences.dashboardLayoutV2.widgets?.length" class="flex flex-wrap gap-1">
+                <UBadge
+                  v-for="w in userPrefs.preferences.dashboardLayoutV2.widgets"
+                  :key="w.id"
+                  color="gray"
+                  variant="soft"
+                  size="xs"
+                >
+                  {{ w.type }}
+                </UBadge>
+              </div>
+            </div>
           </UCard>
 
-          <!-- Other Preferences -->
-          <UCard v-if="otherPreferences.length" class="lg:col-span-2">
+          <!-- Dismissible Cards -->
+          <UCard v-if="userPrefs.preferences?.whatsNewCard || userPrefs.preferences?.quickStartCard">
+            <template #header>
+              <div class="flex items-center gap-2">
+                <Icon name="i-heroicons-bell" class="w-5 h-5 text-amber-500" />
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Dismissible Cards</h3>
+              </div>
+            </template>
+            <div class="space-y-4">
+              <div v-if="userPrefs.preferences?.whatsNewCard">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-sm text-gray-700 dark:text-gray-300">What's New Card</span>
+                </div>
+                <div class="pl-4 space-y-1 text-xs text-gray-500 dark:text-gray-400">
+                  <div>Views: {{ userPrefs.preferences.whatsNewCard.viewCount ?? 0 }}</div>
+                  <div>Dismissals: {{ userPrefs.preferences.whatsNewCard.dismissCount ?? 0 }}</div>
+                  <div v-if="userPrefs.preferences.whatsNewCard.firstSeenAt">
+                    First seen: {{ formatRelativeDate(userPrefs.preferences.whatsNewCard.firstSeenAt) }}
+                  </div>
+                </div>
+              </div>
+              <div v-if="userPrefs.preferences?.quickStartCard">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-sm text-gray-700 dark:text-gray-300">Quick Start Card</span>
+                </div>
+                <div class="pl-4 space-y-1 text-xs text-gray-500 dark:text-gray-400">
+                  <div>Views: {{ userPrefs.preferences.quickStartCard.viewCount ?? 0 }}</div>
+                  <div>Dismissals: {{ userPrefs.preferences.quickStartCard.dismissCount ?? 0 }}</div>
+                  <div v-if="userPrefs.preferences.quickStartCard.firstSeenAt">
+                    First seen: {{ formatRelativeDate(userPrefs.preferences.quickStartCard.firstSeenAt) }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </UCard>
+
+          <!-- Truly unknown preferences -->
+          <UCard v-if="unknownPreferences.length" class="lg:col-span-2">
             <template #header>
               <div class="flex items-center gap-2">
                 <Icon name="i-heroicons-adjustments-horizontal" class="w-5 h-5 text-gray-500" />
@@ -287,9 +394,9 @@
               </div>
             </template>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div v-for="[key, value] in otherPreferences" :key="key" class="space-y-1">
+              <div v-for="[key, value] in unknownPreferences" :key="key" class="space-y-1">
                 <label class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ key }}</label>
-                <AdminUsersPreferenceValueDisplay :prop-key="key" :value="value" />
+                <PreferenceValueDisplay :prop-key="key" :value="value" />
               </div>
             </div>
           </UCard>
@@ -302,84 +409,24 @@
             <p class="text-gray-500 dark:text-gray-400">Loading activity data...</p>
           </div>
 
-          <div v-else-if="!userActivity" class="text-center py-12">
-            <Icon name="i-heroicons-chart-bar" class="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-            <p class="text-gray-500 dark:text-gray-400">No activity data available for this period.</p>
-          </div>
-
-          <template v-else>
-            <!-- Activity Period Selector -->
-            <div class="flex justify-end mb-4">
-              <USelect
-                v-model="activityPeriod"
-                :options="[{ label: 'Last 7 days', value: '7d' }, { label: 'Last 30 days', value: '30d' }]"
-                class="w-40"
-                @update:model-value="loadActivity"
-              />
-            </div>
-
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <!-- Session Stats -->
-              <UCard>
-                <template #header>
-                  <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Session Stats</h3>
-                </template>
-                <div class="space-y-3">
-                  <DetailRow label="Sessions" :value="String(userActivity.sessionCount)" />
-                  <DetailRow label="Avg. Duration" :value="formatSessionDuration(userActivity.avgSessionLengthMs)" />
-                  <DetailRow v-if="userActivity.actionCount" label="Total Actions" :value="String(userActivity.actionCount)" />
-                </div>
-              </UCard>
-
-              <!-- Top Pages -->
-              <UCard>
-                <template #header>
-                  <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Most Visited Pages</h3>
-                </template>
-                <div v-if="userActivity.topPages.length" class="space-y-2">
-                  <div
-                    v-for="page in userActivity.topPages.slice(0, 8)"
-                    :key="page.path"
-                    class="flex items-center justify-between"
-                  >
-                    <span class="text-sm text-gray-700 dark:text-gray-300 truncate">{{ page.path }}</span>
-                    <UBadge color="gray" variant="soft" size="xs">{{ page.count }}</UBadge>
-                  </div>
-                </div>
-                <p v-else class="text-sm text-gray-500 italic">No page visits recorded</p>
-              </UCard>
-
-              <!-- Action Breakdown -->
-              <UCard v-if="userActivity.topActions?.length" class="lg:col-span-2">
-                <template #header>
-                  <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Action Breakdown</h3>
-                </template>
-                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                  <div
-                    v-for="action in userActivity.topActions"
-                    :key="action.type"
-                    class="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50"
-                  >
-                    <span class="text-sm text-gray-700 dark:text-gray-300 truncate">{{ formatActionType(action.type) }}</span>
-                    <UBadge color="purple" variant="soft" size="xs">{{ action.count }}</UBadge>
-                  </div>
-                </div>
-              </UCard>
-            </div>
-          </template>
+          <UserActivityBreakdown
+            v-else
+            :actions="recentActions"
+            :cloudwatch-activity="userActivity"
+          />
         </div>
       </div>
     </template>
 
     <!-- Edit Modal -->
-    <AdminUsersUserEditModal
+    <UserEditModal
       v-model="showEditModal"
       :prefs="userPrefs"
       @saved="reloadData"
     />
 
     <!-- Delete Modal -->
-    <AdminUsersUserDeleteModal
+    <UserDeleteModal
       v-model="showDeleteModal"
       :user-id="userPrefs?.userId ?? ''"
       @deleted="navigateTo('/admin/users')"
@@ -395,7 +442,6 @@ import {
   formatRelativeDate,
   formatAbsoluteDate,
   truncateEmail,
-  formatActionType,
   type ActivityMetricsData
 } from '~/composables/useAdminUserDetail'
 
@@ -409,10 +455,12 @@ definePageMeta({
 // Simple detail row component inline
 const DetailRow = defineComponent({
   props: { label: String, value: String },
-  template: `<div class="flex justify-between items-center">
-    <span class="text-sm text-gray-600 dark:text-gray-400">{{ label }}</span>
-    <span class="text-sm font-medium text-gray-900 dark:text-white">{{ value || '—' }}</span>
-  </div>`
+  setup(props) {
+    return () => h('div', { class: 'flex justify-between items-center' }, [
+      h('span', { class: 'text-sm text-gray-600 dark:text-gray-400' }, props.label),
+      h('span', { class: 'text-sm font-medium text-gray-900 dark:text-white' }, props.value || '—')
+    ])
+  }
 })
 
 const route = useRoute()
@@ -423,7 +471,7 @@ const { fetchAllPreferences, fetchActivityMetrics, resetTourForUser } = useAdmin
 const loading = ref(true)
 const error = ref<string | null>(null)
 const userPrefs = ref<UserPreferences | null>(null)
-const activityLoading = ref(false)
+const activityLoading = ref(true)
 const activityPeriod = ref<'7d' | '30d'>('7d')
 const activityData = ref<ActivityMetricsData | null>(null)
 const showEditModal = ref(false)
@@ -436,8 +484,21 @@ const tabs = [
   { label: 'Activity', icon: 'i-heroicons-chart-bar' }
 ]
 
+// Shortcut to access a preference value
+function p(key: string): any {
+  return userPrefs.value?.preferences?.[key]
+}
+
 // Computed
 const favoriteAccounts = computed(() => userPrefs.value?.preferences?.favoriteAccounts ?? [])
+
+const recentlyViewed = computed<Array<{ accountId: string; viewedAt: string }>>(() =>
+  userPrefs.value?.preferences?.recentlyViewedAccounts ?? []
+)
+
+const recentActions = computed<Array<{ type: string; detail?: string; timestamp: number }>>(() =>
+  userPrefs.value?.preferences?.recentActions ?? []
+)
 
 const hiddenSections = computed(() => {
   const layout = userPrefs.value?.preferences?.dashboardLayout
@@ -455,17 +516,28 @@ const disabledMetrics = computed(() => {
     .map(id => METRIC_CARD_LABELS[id] || id)
 })
 
-const otherPreferences = computed(() => {
+// Keys we handle in dedicated cards above
+const KNOWN_PREF_KEYS = [
+  'favoriteAccounts', 'dashboardLayout', 'dashboardLayoutV2',
+  'welcomeBanner', 'costTour', 'accountTour',
+  'recentActions', 'recentlyViewedAccounts',
+  'whatsNewCard', 'quickStartCard',
+  'theme', 'density', 'dashboardScope', 'metricScope',
+  'costTrendDays', 'lastSeenVersion', 'customizeDashboardSeen'
+]
+
+const unknownPreferences = computed(() => {
   const prefs = userPrefs.value?.preferences
   if (!prefs) return []
-  const knownKeys = ['favoriteAccounts', 'dashboardLayout', 'welcomeBanner', 'costTour', 'accountTour']
-  return Object.entries(prefs).filter(([key]) => !knownKeys.includes(key))
+  return Object.entries(prefs).filter(([key]) => !KNOWN_PREF_KEYS.includes(key))
 })
 
 const userActivity = computed(() => {
   if (!activityData.value) return null
-  return activityData.value.byUser.find(u => u.userId === userId.value) ?? null
+  const id = userId.value.toLowerCase()
+  return activityData.value.byUser.find(u => u.userId.toLowerCase() === id) ?? null
 })
+
 
 // Load data
 async function loadPreferences() {

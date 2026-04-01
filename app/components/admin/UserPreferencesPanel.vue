@@ -35,7 +35,7 @@
     </div>
 
     <!-- Stats Cards -->
-    <AdminUsersUserStatsCards
+    <UserStatsCards
       :total-users="allPreferences.length"
       :active-today="activeToday"
       :with-favorites="usersWithFavorites"
@@ -107,7 +107,7 @@
     </UCard>
 
     <!-- User Table -->
-    <AdminUsersUserPreferencesTable
+    <UserPreferencesTable
       :rows="filteredPreferences"
       :total="allPreferences.length"
       :loading="loading"
@@ -123,14 +123,14 @@
     />
 
     <!-- Edit Modal -->
-    <AdminUsersUserEditModal
+    <UserEditModal
       v-model="showEditModal"
       :prefs="editingPrefs"
       @saved="loadAll"
     />
 
     <!-- Delete Modal -->
-    <AdminUsersUserDeleteModal
+    <UserDeleteModal
       v-model="showDeleteModal"
       :user-id="deletingUserId"
       @deleted="loadAll"
