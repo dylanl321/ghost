@@ -22,11 +22,14 @@ export interface InstanceMetrics {
   instanceId: string
   region: string
   avgCpuPercent: number | null
+  maxCpuPercent: number | null
   cpuDailyValues: number[]
   cpuDailyTimestamps: string[]
+  maxCpuDailyValues: number[]
   totalNetworkInBytes: number | null
   totalNetworkOutBytes: number | null
   totalNetworkBytes: number | null
+  networkBytesPerDay: number | null
   dataPointCount: number
   lookbackDays: number
 }
@@ -125,9 +128,9 @@ async function fetchRegionMetrics(
     const startTime = new Date()
     startTime.setDate(startTime.getDate() - lookbackDays)
 
-    // Each instance needs 3 metrics (CPU, NetworkIn, NetworkOut)
+    // Each instance needs 4 metrics (CPU avg, CPU max, NetworkIn, NetworkOut)
     // GetMetricData supports up to 500 queries per request
-    const metricsPerInstance = 3
+    const metricsPerInstance = 4
     const maxInstancesPerBatch = Math.floor(MAX_METRIC_QUERIES_PER_REQUEST / metricsPerInstance)
     const batches = chunkArray(instanceIds, maxInstancesPerBatch)
 
@@ -152,6 +155,20 @@ async function fetchRegionMetrics(
         })
 
         queries.push({
+          Id: `cpumax_${safeId}`,
+          MetricStat: {
+            Metric: {
+              Namespace: 'AWS/EC2',
+              MetricName: 'CPUUtilization',
+              Dimensions: [{ Name: 'InstanceId', Value: instanceId }]
+            },
+            Period: 86400, // 1 day
+            Stat: 'Maximum'
+          },
+          ReturnData: true
+        })
+
+        queries.push({
           Id: `netin_${safeId}`,
           MetricStat: {
             Metric: {
@@ -159,7 +176,7 @@ async function fetchRegionMetrics(
               MetricName: 'NetworkIn',
               Dimensions: [{ Name: 'InstanceId', Value: instanceId }]
             },
-            Period: 86400 * lookbackDays, // entire period as one data point
+            Period: 86400, // 1 day — daily granularity for per-day calculation
             Stat: 'Sum'
           },
           ReturnData: true
@@ -173,7 +190,7 @@ async function fetchRegionMetrics(
               MetricName: 'NetworkOut',
               Dimensions: [{ Name: 'InstanceId', Value: instanceId }]
             },
-            Period: 86400 * lookbackDays,
+            Period: 86400, // 1 day — daily granularity for per-day calculation
             Stat: 'Sum'
           },
           ReturnData: true
@@ -193,6 +210,7 @@ async function fetchRegionMetrics(
         const safeId = instanceId.replace(/-/g, '_')
 
         const cpuResult = response.MetricDataResults?.find(r => r.Id === `cpu_${safeId}`)
+        const cpuMaxResult = response.MetricDataResults?.find(r => r.Id === `cpumax_${safeId}`)
         const netInResult = response.MetricDataResults?.find(r => r.Id === `netin_${safeId}`)
         const netOutResult = response.MetricDataResults?.find(r => r.Id === `netout_${safeId}`)
 
@@ -202,27 +220,56 @@ async function fetchRegionMetrics(
           ? cpuValues.reduce((sum, v) => sum + v, 0) / cpuValues.length
           : null
 
-        // Sort daily values by timestamp (CloudWatch returns in arbitrary order)
+        // Sort daily average values by timestamp (CloudWatch returns in arbitrary order)
         const cpuPairs = cpuValues.map((v, i) => ({
           value: Math.round(v * 100) / 100,
           timestamp: cpuTimestamps[i]?.toISOString() || ''
         })).sort((a, b) => a.timestamp.localeCompare(b.timestamp))
 
-        const totalNetIn = netInResult?.Values?.[0] ?? null
-        const totalNetOut = netOutResult?.Values?.[0] ?? null
+        // Daily max CPU values, sorted by timestamp
+        const cpuMaxValues = cpuMaxResult?.Values || []
+        const cpuMaxTimestamps = cpuMaxResult?.Timestamps || []
+        const cpuMaxPairs = cpuMaxValues.map((v, i) => ({
+          value: Math.round(v * 100) / 100,
+          timestamp: cpuMaxTimestamps[i]?.toISOString() || ''
+        })).sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+
+        // Peak CPU = highest daily max across the lookback period
+        const peakCpu = cpuMaxPairs.length > 0
+          ? Math.max(...cpuMaxPairs.map(p => p.value))
+          : null
+
+        // Network: sum daily values to get totals, compute per-day average
+        const netInValues = netInResult?.Values || []
+        const netOutValues = netOutResult?.Values || []
+        const totalNetIn = netInValues.length > 0
+          ? netInValues.reduce((sum, v) => sum + v, 0)
+          : null
+        const totalNetOut = netOutValues.length > 0
+          ? netOutValues.reduce((sum, v) => sum + v, 0)
+          : null
         const totalNetwork = totalNetIn != null && totalNetOut != null
           ? totalNetIn + totalNetOut
           : totalNetIn ?? totalNetOut
+
+        // Days with network data (use the longer of the two arrays)
+        const networkDaysCount = Math.max(netInValues.length, netOutValues.length)
+        const networkBytesPerDay = totalNetwork != null && networkDaysCount > 0
+          ? totalNetwork / networkDaysCount
+          : null
 
         result.metrics.set(instanceId, {
           instanceId,
           region,
           avgCpuPercent: avgCpu != null ? Math.round(avgCpu * 100) / 100 : null,
+          maxCpuPercent: peakCpu,
           cpuDailyValues: cpuPairs.map(p => p.value),
           cpuDailyTimestamps: cpuPairs.map(p => p.timestamp),
+          maxCpuDailyValues: cpuMaxPairs.map(p => p.value),
           totalNetworkInBytes: totalNetIn,
           totalNetworkOutBytes: totalNetOut,
           totalNetworkBytes: totalNetwork,
+          networkBytesPerDay,
           dataPointCount: cpuValues.length,
           lookbackDays
         })
