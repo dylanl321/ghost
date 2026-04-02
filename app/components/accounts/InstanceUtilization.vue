@@ -88,11 +88,16 @@
                 {{ classificationLabel(inst.classification) }}
               </UBadge>
 
-              <!-- Instance Name + Owner -->
+              <!-- Instance Name + ID + Owner -->
               <div class="min-w-0 flex-1">
-                <span class="text-sm font-medium text-gray-900 dark:text-white truncate block">
-                  {{ inst.instanceName || inst.instanceId }}
-                </span>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-sm font-medium text-gray-900 dark:text-white truncate">
+                    {{ inst.instanceName || inst.instanceId }}
+                  </span>
+                  <span v-if="inst.instanceName" class="text-[10px] text-gray-400 font-mono flex-shrink-0">
+                    {{ inst.instanceId }}
+                  </span>
+                </div>
                 <div class="flex items-center gap-2">
                   <span class="text-[10px] text-gray-500 font-mono">{{ inst.instanceType }}</span>
                   <span v-if="inst.owner" class="text-[10px] text-blue-500 truncate">{{ inst.owner }}</span>
