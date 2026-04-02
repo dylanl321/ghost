@@ -230,13 +230,23 @@ export function classifyInstance(
   }
 
   // --- Running instance classification ---
-  const hasMetrics = metrics && metrics.avgCpuPercent != null
+  const hasCpuMetrics = metrics && metrics.avgCpuPercent != null
+  const hasNetworkMetrics = metrics && metrics.networkBytesPerDay != null
+  const hasMetrics = hasCpuMetrics || hasNetworkMetrics
   const hasOptimizer = optimizerRec != null
 
   if (!hasMetrics && !hasOptimizer) {
     result.classification = 'insufficient-data'
-    result.classificationReasons.push('No CloudWatch metrics or Compute Optimizer data available')
-    result.explanation = 'No monitoring data is available for this instance. CloudWatch metrics may not be enabled, or Compute Optimizer has not yet analyzed it.'
+    // Check if instance is brand new (launched within last 24 hours)
+    const isNewInstance = instance.launchTime &&
+      (Date.now() - new Date(instance.launchTime).getTime()) < 24 * 60 * 60 * 1000
+    if (isNewInstance) {
+      result.classificationReasons.push('Instance launched less than 24 hours ago')
+      result.explanation = 'This instance was launched recently and does not yet have enough CloudWatch data for classification. It typically takes at least 24 hours for daily metrics to become available.'
+    } else {
+      result.classificationReasons.push('No CloudWatch metrics or Compute Optimizer data available')
+      result.explanation = 'No monitoring data is available for this instance. CloudWatch metrics may not be enabled, or Compute Optimizer has not yet analyzed it.'
+    }
     result.evidence = [
       'State: Running',
       'CloudWatch CPU data: Not available',
@@ -286,12 +296,12 @@ export function classifyInstance(
         result.classificationReasons.push(`Potential savings: ${savings.toFixed(2)}/month`)
       }
       const recommended = optimizerRec!.recommendationOptions?.[0]?.configuration?.instanceType
-      const peakStr = hasMetrics ? (metrics!.maxCpuPercent?.toFixed(1) ?? 'N/A') : null
-      const avgStr = hasMetrics ? metrics!.avgCpuPercent!.toFixed(1) : null
+      const peakStr = hasCpuMetrics ? (metrics!.maxCpuPercent?.toFixed(1) ?? 'N/A') : null
+      const avgStr = hasCpuMetrics ? metrics!.avgCpuPercent!.toFixed(1) : null
       result.explanation = 'AWS Compute Optimizer analyzed this instance and determined it is over-provisioned'
         + (recommended ? ` \u2014 a ${recommended} would handle the current workload` : '')
         + '.'
-        + (hasMetrics ? ` Peak CPU over ${metrics!.lookbackDays} days was ${peakStr}% (avg ${avgStr}%).` : '')
+        + (hasCpuMetrics ? ` Peak CPU over ${metrics!.lookbackDays} days was ${peakStr}% (avg ${avgStr}%).` : '')
       result.evidence = [
         'State: Running',
         ...activityEvidence,
@@ -299,7 +309,7 @@ export function classifyInstance(
         'AWS Compute Optimizer finding: Over-provisioned',
         ...(recommended ? [`Recommended type: ${recommended}`] : []),
         ...(savings > 0 ? [`Estimated savings: ${savings.toFixed(0)}/month (${(savings * 12).toLocaleString()}/year)`] : []),
-        ...(hasMetrics ? [
+        ...(hasCpuMetrics ? [
           `Peak CPU: ${peakStr}% over ${metrics!.lookbackDays} days`,
           `Average CPU: ${avgStr}% over ${metrics!.lookbackDays} days`
         ] : []),
@@ -313,11 +323,11 @@ export function classifyInstance(
       result.classification = 'right-sized'
       result.classificationReasons.push('Compute Optimizer: OPTIMIZED')
       result.explanation = 'AWS Compute Optimizer has confirmed this instance is appropriately sized for its workload.'
-      const peakStr = hasMetrics ? (metrics!.maxCpuPercent?.toFixed(1) ?? 'N/A') : null
-      const avgStr = hasMetrics ? metrics!.avgCpuPercent!.toFixed(1) : null
+      const peakStr = hasCpuMetrics ? (metrics!.maxCpuPercent?.toFixed(1) ?? 'N/A') : null
+      const avgStr = hasCpuMetrics ? metrics!.avgCpuPercent!.toFixed(1) : null
       result.evidence = [
         'Compute Optimizer finding: Optimized',
-        ...(hasMetrics ? [
+        ...(hasCpuMetrics ? [
           `Peak CPU: ${peakStr}% over ${metrics!.lookbackDays} days`,
           `Average CPU: ${avgStr}% over ${metrics!.lookbackDays} days`
         ] : []),
@@ -331,14 +341,35 @@ export function classifyInstance(
   if (hasMetrics) {
     const peakStr = metrics!.maxCpuPercent?.toFixed(1) ?? 'N/A'
     const avgStr = metrics!.avgCpuPercent?.toFixed(1) ?? 'N/A'
-    result.classification = 'right-sized'
-    result.classificationReasons.push(`Peak CPU ${peakStr}% \u2014 above idle threshold`)
-    result.explanation = 'This instance shows active usage above the idle threshold.'
-    result.evidence = [
-      `Peak CPU: ${peakStr}% over ${metrics!.lookbackDays} days`,
-      `Average CPU: ${avgStr}% over ${metrics!.lookbackDays} days`,
-      ...tagEvidence
-    ]
+    const netPerDayStr = metrics!.networkBytesPerDay != null ? formatBytes(metrics!.networkBytesPerDay) + '/day' : 'N/A'
+
+    if (hasCpuMetrics) {
+      result.classification = 'right-sized'
+      result.classificationReasons.push(`Peak CPU ${peakStr}% \u2014 above idle threshold`)
+      result.explanation = 'This instance shows active usage above the idle threshold.'
+      result.evidence = [
+        `Peak CPU: ${peakStr}% over ${metrics!.lookbackDays} days`,
+        `Average CPU: ${avgStr}% over ${metrics!.lookbackDays} days`,
+        ...(hasNetworkMetrics ? [`Network traffic: ${netPerDayStr}`] : []),
+        ...tagEvidence
+      ]
+    } else {
+      // Network data only, no CPU — not enough to fully classify
+      result.classification = 'insufficient-data'
+      result.classificationReasons.push('Network data available but no CPU metrics')
+      const isNewInstance = instance.launchTime &&
+        (Date.now() - new Date(instance.launchTime).getTime()) < 24 * 60 * 60 * 1000
+      result.explanation = isNewInstance
+        ? 'This instance was launched recently. Network data is available but CPU metrics have not yet accumulated for a full daily period.'
+        : 'Network data is available but CPU metrics are missing. CloudWatch basic monitoring may not be enabled or the CloudWatch agent may not be installed.'
+      result.evidence = [
+        'State: Running',
+        'CloudWatch CPU data: Not available',
+        `Network traffic: ${netPerDayStr}`,
+        ...tagEvidence,
+        ...(costStr ? [`Estimated cost: ${costStr} (${annualStr})`] : [])
+      ]
+    }
   }
 
   return result
