@@ -597,6 +597,39 @@ resource "aws_iam_role_policy" "ecs_achievement_progress_dynamodb" {
 
 # DynamoDB permissions for external accounts table (read-only access to gdms_aws_accounts-master)
 # Note: This table is managed externally and located in the same GovCloud account
+# DynamoDB permissions for utilization analysis (read/write)
+resource "aws_iam_role_policy" "ecs_utilization_analysis_dynamodb" {
+  provider = aws.target_deployment_account
+  name     = "${var.app_name}_utilization_analysis_dynamodb"
+  role     = aws_iam_role.ecs_task_execution_role.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "UtilizationAnalysisDynamoDB"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan",
+          "dynamodb:BatchGetItem",
+          "dynamodb:BatchWriteItem"
+        ]
+        Resource = [
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-utilization-analysis",
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-utilization-analysis/index/*",
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-utilization-analysis-prod",
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-utilization-analysis-prod/index/*"
+        ]
+      }
+    ]
+  })
+}
+
 resource "aws_iam_role_policy" "ecs_external_accounts_table" {
   provider = aws.target_deployment_account
   name     = "${var.app_name}_external_accounts_table"
