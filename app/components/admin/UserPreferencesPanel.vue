@@ -140,11 +140,22 @@
 
 <script setup lang="ts">
 import type { UserPreferences } from '#shared/types/user-preferences'
+import type { DashboardLayoutConfig } from '#shared/types/dashboard-layout'
+import { layoutsAreEqual, DEFAULT_DASHBOARD_LAYOUT } from '#shared/types/dashboard-layout'
 import { formatSessionDuration } from '~/composables/useAdminUserDetail'
 import type { ActivityMetricsData } from '~/composables/useAdminUserDetail'
 
 const { fetchAllPreferences, fetchActivityMetrics, resetTourForUser } = useAdminUserDetail()
+const { orgDefault, ensureOrgDefault } = useDashboardLayout()
 const toast = useToast()
+
+function isLayoutTrulyCustom(prefs: UserPreferences): boolean {
+  const saved = prefs.preferences?.dashboardLayout as DashboardLayoutConfig | undefined
+  if (!saved?.sections || !Array.isArray(saved.sections)) return false
+  if (orgDefault.value && layoutsAreEqual(saved, orgDefault.value as DashboardLayoutConfig)) return false
+  if (layoutsAreEqual(saved, DEFAULT_DASHBOARD_LAYOUT as DashboardLayoutConfig)) return false
+  return true
+}
 
 // State
 const allPreferences = ref<UserPreferences[]>([])
@@ -178,7 +189,7 @@ const usersWithFavorites = computed(() =>
 )
 
 const usersWithCustomLayout = computed(() =>
-  allPreferences.value.filter(p => !!p.preferences?.dashboardLayout).length
+  allPreferences.value.filter(p => isLayoutTrulyCustom(p)).length
 )
 
 const uniqueTimezones = computed(() =>
@@ -286,7 +297,7 @@ function exportToCSV() {
       p.userId,
       p.timezone,
       String(p.preferences?.favoriteAccounts?.length || 0),
-      p.preferences?.dashboardLayout ? 'Yes' : 'No',
+      isLayoutTrulyCustom(p) ? 'Yes' : 'No',
       formatSessionDuration(getUserAvgSessionMs(p.userId)),
       p.lastLoginAt || 'Never',
       p.createdAt
@@ -312,5 +323,7 @@ function exportToCSV() {
   }
 }
 
-onMounted(() => loadAll())
+onMounted(async () => {
+  await Promise.all([loadAll(), ensureOrgDefault()])
+})
 </script>

@@ -301,15 +301,15 @@
                 <Icon name="i-heroicons-squares-2x2" class="w-5 h-5 text-indigo-500" />
                 <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Dashboard Layout</h3>
                 <UBadge
-                  :color="userPrefs.preferences?.dashboardLayout ? 'indigo' : 'gray'"
+                  :color="dashboardLayoutBadgeColor"
                   variant="soft"
                   size="xs"
                 >
-                  {{ userPrefs.preferences?.dashboardLayout ? 'Custom' : 'Default' }}
+                  {{ dashboardLayoutLabel }}
                 </UBadge>
               </div>
             </template>
-            <div v-if="userPrefs.preferences?.dashboardLayout" class="space-y-3">
+            <div v-if="dashboardLayoutStatus === 'custom'" class="space-y-3">
               <div class="flex justify-between items-center">
                 <span class="text-sm text-gray-600 dark:text-gray-400">Hidden sections</span>
                 <span class="text-sm font-medium text-gray-900 dark:text-white">{{ hiddenSections.length }}</span>
@@ -325,7 +325,9 @@
                 <UBadge v-for="m in disabledMetrics" :key="m" color="gray" variant="soft" size="xs">{{ m }}</UBadge>
               </div>
             </div>
-            <p v-else class="text-sm text-gray-500 dark:text-gray-400 italic">Using default layout</p>
+            <p v-else class="text-sm text-gray-500 dark:text-gray-400 italic">
+              {{ dashboardLayoutStatus === 'matches-org' ? 'Layout matches org default' : 'Using default layout' }}
+            </p>
 
             <!-- V2 widget layout summary -->
             <div v-if="userPrefs.preferences?.dashboardLayoutV2" class="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700 space-y-2">
@@ -436,7 +438,8 @@
 
 <script setup lang="ts">
 import type { UserPreferences } from '#shared/types/user-preferences'
-import { SECTION_LABELS, ALL_METRIC_CARD_IDS, METRIC_CARD_LABELS } from '#shared/types/dashboard-layout'
+import { SECTION_LABELS, ALL_METRIC_CARD_IDS, METRIC_CARD_LABELS, layoutsAreEqual, DEFAULT_DASHBOARD_LAYOUT } from '#shared/types/dashboard-layout'
+import type { DashboardLayoutConfig } from '#shared/types/dashboard-layout'
 import {
   formatSessionDuration,
   formatRelativeDate,
@@ -488,6 +491,36 @@ const tabs = [
 function p(key: string): any {
   return userPrefs.value?.preferences?.[key]
 }
+
+// Org default layout — fetched once for true comparison
+const { orgDefault, ensureOrgDefault } = useDashboardLayout()
+
+// Determine if user's saved layout truly differs from org default (or hardcoded default)
+const dashboardLayoutStatus = computed<'custom' | 'matches-org' | 'matches-default' | 'default'>(() => {
+  const saved = userPrefs.value?.preferences?.dashboardLayout as DashboardLayoutConfig | undefined
+  if (!saved?.sections || !Array.isArray(saved.sections)) return 'default' // no saved layout
+  if (orgDefault.value && layoutsAreEqual(saved, orgDefault.value as DashboardLayoutConfig)) return 'matches-org'
+  if (layoutsAreEqual(saved, DEFAULT_DASHBOARD_LAYOUT as DashboardLayoutConfig)) return 'matches-default'
+  return 'custom'
+})
+
+const dashboardLayoutLabel = computed(() => {
+  switch (dashboardLayoutStatus.value) {
+    case 'matches-org': return 'Matches Org Default'
+    case 'matches-default': return 'Matches Default'
+    case 'custom': return 'Custom'
+    default: return 'Default'
+  }
+})
+
+const dashboardLayoutBadgeColor = computed(() => {
+  switch (dashboardLayoutStatus.value) {
+    case 'matches-org': return 'green'
+    case 'matches-default': return 'gray'
+    case 'custom': return 'indigo'
+    default: return 'gray'
+  }
+})
 
 // Computed
 const favoriteAccounts = computed(() => userPrefs.value?.preferences?.favoriteAccounts ?? [])
@@ -576,7 +609,7 @@ async function handleResetTour(tourKey: string, label: string) {
 }
 
 onMounted(async () => {
-  await Promise.all([loadPreferences(), loadActivity()])
+  await Promise.all([loadPreferences(), loadActivity(), ensureOrgDefault()])
   loading.value = false
 })
 </script>

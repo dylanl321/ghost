@@ -85,19 +85,17 @@ export function useCommandPalette() {
   const accountsStore = useAwsAccountsStore()
   const { allPanels: adminPanels } = useAdminSearch()
 
-  // Load recent commands from localStorage
-  onMounted(() => {
-    if (process.client) {
-      try {
-        const stored = localStorage.getItem(RECENT_STORAGE_KEY)
-        if (stored) {
-          recentCommands.value = JSON.parse(stored)
-        }
-      } catch (e) {
-        logger.warn('Failed to load recent commands:', e)
+  // Load recent commands from localStorage (runs once on first call)
+  if (import.meta.client && recentCommands.value.length === 0) {
+    try {
+      const stored = localStorage.getItem(RECENT_STORAGE_KEY)
+      if (stored) {
+        recentCommands.value = JSON.parse(stored)
       }
+    } catch (e) {
+      logger.warn('Failed to load recent commands:', e)
     }
-  })
+  }
 
   // Save recent command
   function addRecentCommand(commandId: string) {
@@ -668,13 +666,11 @@ export function useCommandPalette() {
   }
 
   // Register keyboard listener (singleton — only once globally)
-  onMounted(() => {
-    if (process.client && !keyboardListenerRegistered) {
-      keyboardHandler = handleKeydown
-      document.addEventListener('keydown', keyboardHandler)
-      keyboardListenerRegistered = true
-    }
-  })
+  if (import.meta.client && !keyboardListenerRegistered) {
+    keyboardHandler = handleKeydown
+    document.addEventListener('keydown', keyboardHandler)
+    keyboardListenerRegistered = true
+  }
 
   return {
     // State

@@ -49,7 +49,7 @@
       <UTable :rows="filteredInstances" :columns="columns" :ui="{ wrapper: 'relative', thead: 'sticky top-0 z-10 bg-gray-100 dark:bg-gray-900 shadow-md' }">
       <!-- Instance Name -->
       <template #instanceName-data="{ row }">
-        <div class="flex items-center gap-2">
+        <NuxtLink v-if="row.resourceId" :to="`/account/${accountId}/instance/${row.resourceId}`" class="flex items-center gap-2 hover:text-primary-500 transition-colors">
           <UIcon
             :name="row.instanceState === 'running' ? 'i-heroicons-play-circle' : 'i-heroicons-stop-circle'"
             :class="row.instanceState === 'running' ? 'text-green-400' : 'text-gray-400'"
@@ -57,6 +57,12 @@
           <div>
             <div class="font-medium">{{ row.instanceName || 'Unnamed' }}</div>
             <div class="text-xs text-gray-500">{{ row.resourceId }}</div>
+          </div>
+        </NuxtLink>
+        <div v-else class="flex items-center gap-2">
+          <UIcon name="i-heroicons-stop-circle" class="text-gray-400" />
+          <div>
+            <div class="font-medium">{{ row.instanceName || 'Unnamed' }}</div>
           </div>
         </div>
       </template>

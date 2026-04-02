@@ -341,7 +341,7 @@ const enclaveStore = useEnclaveStore()
 const { getPreference, setPreference, initialized: prefsInitialized, load: loadPrefs } = useUserPreferences()
 const { isAdmin } = useUserRoles()
 const { favoriteIds } = useFavoriteAccounts()
-const { visibleSections, visibleMetricCardCount, sectionColSpan, setSectionStyle, layout: layoutConfig } = useDashboardLayout()
+const { visibleSections, visibleMetricCardCount, sectionColSpan, setSectionStyle, layout: layoutConfig, ensureOrgDefault } = useDashboardLayout()
 const {
   scope: dashboardScope,
   dateRange: dashboardDateRange,
@@ -704,7 +704,11 @@ function handleProformaToggle(value: boolean) {
 }
 
 onMounted(async () => {
-  if (!prefsInitialized.value) await loadPrefs()
+  // Load user prefs and org default in parallel so layout renders correctly
+  await Promise.all([
+    prefsInitialized.value ? Promise.resolve() : loadPrefs(),
+    ensureOrgDefault(),
+  ])
   useProforma.value = getPreference('dashboardProforma', true)
   initDashboardScope()
   // Show spotlight if user hasn't seen it yet

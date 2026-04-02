@@ -294,6 +294,10 @@ const accountHealthContext = computed(() => {
 })
 
 const { isAdmin } = useUserRoles()
+
+// Defer admin-only tabs until after hydration to avoid HeadlessUI ID mismatch
+// (SSR and client must render the same number of Tab/TabPanel components)
+const isAdminHydrated = ref(false)
 const { getPreference, setPreference, initialized: prefsInitialized, load: loadPrefs } = useUserPreferences()
 
 // Instance utilization data (passed from InstanceUtilization to InstancesTable)
@@ -400,7 +404,7 @@ const tabs = computed(() => {
     { label: 'Security', slot: 'security', icon: 'i-heroicons-shield-exclamation', disabled: isAccountInactive.value },
   ]
 
-  if (isAdmin.value) {
+  if (isAdminHydrated.value) {
     baseTabs.push({ label: 'Pipelines', slot: 'pipelines', icon: 'i-heroicons-arrow-path', disabled: false })
     baseTabs.push({ label: 'Notes', slot: 'notes', icon: 'i-heroicons-document-text', disabled: false })
   }
@@ -451,8 +455,28 @@ function checkAndRedirectIfGovCloudId() {
   }
 }
 
+// Deep-link to tab from shared link query param (supports both numeric index and slot name)
+function applyTabDeepLink() {
+  const tabParam = route.query.tab as string | undefined
+  if (tabParam) {
+    const tabIndex = parseInt(tabParam)
+    if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex < tabs.value.length) {
+      selectedTab.value = tabIndex
+    } else {
+      const matchIndex = tabs.value.findIndex(t => t.slot === tabParam)
+      if (matchIndex !== -1) {
+        selectedTab.value = matchIndex
+      }
+    }
+  }
+}
+
 onMounted(async () => {
   checkAndRedirectIfGovCloudId()
+
+  // Sync admin tabs now that hydration is complete
+  isAdminHydrated.value = isAdmin.value
+  watch(isAdmin, (val) => { isAdminHydrated.value = val })
 
   // Load saved date range preference
   if (!prefsInitialized.value) await loadPrefs()
@@ -468,19 +492,9 @@ onMounted(async () => {
   // Tour auto-start (handles preference loading internally)
   maybeAutoStartTour()
 
-  // Deep-link to tab from shared link query param (supports both numeric index and slot name)
-  const tabParam = route.query.tab as string | undefined
-  if (tabParam) {
-    const tabIndex = parseInt(tabParam)
-    if (!isNaN(tabIndex) && tabIndex >= 0 && tabIndex < tabs.value.length) {
-      selectedTab.value = tabIndex
-    } else {
-      const matchIndex = tabs.value.findIndex(t => t.slot === tabParam)
-      if (matchIndex !== -1) {
-        selectedTab.value = matchIndex
-      }
-    }
-  }
+  // Apply tab deep-link after tabs are finalized (including admin tabs)
+  await nextTick()
+  applyTabDeepLink()
 
   // Fetch page data
   await fetchAccountData()

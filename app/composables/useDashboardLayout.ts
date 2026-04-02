@@ -21,21 +21,35 @@ import {
 
 const LAYOUT_KEY = 'dashboardLayout'
 
-// Cached org default layout (fetched once per session)
+// Cached org default layout with time-based invalidation
 const orgDefault = ref<DashboardLayoutConfig | null>(null)
-const orgDefaultFetched = ref(false)
+const orgDefaultLastFetched = ref(0)
+const ORG_DEFAULT_CACHE_MS = 5 * 60 * 1000 // 5 minutes
+let orgDefaultPromise: Promise<void> | null = null
 
-async function fetchOrgDefault() {
-  if (orgDefaultFetched.value) return
-  orgDefaultFetched.value = true
-  try {
-    const res = await $fetch<{ success: boolean; layout: DashboardLayoutConfig | null }>('/api/admin/dashboard-layout/get-default')
-    if (res.success && res.layout) {
-      orgDefault.value = res.layout
-    }
-  } catch {
-    // Silently fall back to hardcoded default
+async function fetchOrgDefault(force = false) {
+  const now = Date.now()
+  if (!force && orgDefaultLastFetched.value > 0 && now - orgDefaultLastFetched.value < ORG_DEFAULT_CACHE_MS) {
+    return
   }
+  // Deduplicate concurrent calls
+  if (orgDefaultPromise) return orgDefaultPromise
+  orgDefaultPromise = (async () => {
+    try {
+      const res = await $fetch<{ success: boolean; layout: DashboardLayoutConfig | null }>('/api/admin/dashboard-layout/get-default')
+      if (res.success && res.layout) {
+        orgDefault.value = res.layout
+      }
+      orgDefaultLastFetched.value = Date.now()
+    } catch (err) {
+      console.warn('[DashboardLayout] Failed to fetch org default:', err)
+      // Set a short cooldown on failure to avoid hammering the server
+      orgDefaultLastFetched.value = Date.now() - ORG_DEFAULT_CACHE_MS + 30_000 // retry after 30s
+    } finally {
+      orgDefaultPromise = null
+    }
+  })()
+  return orgDefaultPromise
 }
 
 const ADMIN_SECTION_IDS = new Set<DashboardSectionId>(['adminOverview', 'adminAlerts', 'adminPipeline', 'adminFeedback'])
@@ -44,8 +58,8 @@ export function useDashboardLayout() {
   const { setPreference, getPreference } = useUserPreferences()
   const { isAdmin } = useUserRoles()
 
-  // Fetch org default on first use (non-blocking)
-  if (import.meta.client && !orgDefaultFetched.value) {
+  // Fetch org default on first use (non-blocking, deduped)
+  if (import.meta.client) {
     fetchOrgDefault()
   }
 
@@ -80,8 +94,8 @@ export function useDashboardLayout() {
       ...ALL_SECTION_IDS.filter(id => !savedIds.has(id)).map(id => ({ id, visible: true })),
     ]
 
-    // Merge metric cards: keep saved values, default new ones to true
-    const mergedMetricCards = { ...DEFAULT_DASHBOARD_LAYOUT.metricCards }
+    // Merge metric cards: keep saved values, default new ones to org default (or hardcoded)
+    const mergedMetricCards = { ...effectiveDefault.value.metricCards }
     if (saved.metricCards) {
       for (const id of ALL_METRIC_CARD_IDS) {
         if (id in saved.metricCards) {
@@ -199,6 +213,7 @@ export function useDashboardLayout() {
     })
     // Update local cache so the org default reflects immediately
     orgDefault.value = current
+    orgDefaultLastFetched.value = Date.now()
 
     // Verify by fetching back from the server (bypass cache)
     try {
@@ -230,5 +245,6 @@ export function useDashboardLayout() {
     reorderSections,
     resetLayout,
     exportAsDefault,
+    ensureOrgDefault: fetchOrgDefault,
   }
 }

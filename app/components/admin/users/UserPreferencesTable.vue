@@ -79,7 +79,7 @@
                 </div>
               </td>
               <td class="py-3 pr-4">
-                <UBadge v-if="prefs.preferences?.dashboardLayout" color="indigo" variant="soft" size="sm">
+                <UBadge v-if="isLayoutTrulyCustom(prefs)" color="indigo" variant="soft" size="sm">
                   Custom
                 </UBadge>
                 <UBadge v-else color="gray" variant="soft" size="sm">Default</UBadge>
@@ -117,6 +117,8 @@
 
 <script setup lang="ts">
 import type { UserPreferences } from '#shared/types/user-preferences'
+import type { DashboardLayoutConfig } from '#shared/types/dashboard-layout'
+import { layoutsAreEqual, DEFAULT_DASHBOARD_LAYOUT } from '#shared/types/dashboard-layout'
 import { formatSessionDuration, formatRelativeDate, truncateEmail } from '~/composables/useAdminUserDetail'
 
 const props = defineProps<{
@@ -136,6 +138,16 @@ const emit = defineEmits<{
   resetCostTour: [prefs: UserPreferences]
   resetAccountTour: [prefs: UserPreferences]
 }>()
+
+const { orgDefault } = useDashboardLayout()
+
+function isLayoutTrulyCustom(prefs: UserPreferences): boolean {
+  const saved = prefs.preferences?.dashboardLayout as DashboardLayoutConfig | undefined
+  if (!saved?.sections || !Array.isArray(saved.sections)) return false
+  if (orgDefault.value && layoutsAreEqual(saved, orgDefault.value as DashboardLayoutConfig)) return false
+  if (layoutsAreEqual(saved, DEFAULT_DASHBOARD_LAYOUT as DashboardLayoutConfig)) return false
+  return true
+}
 
 const pageSize = 15
 const currentPage = ref(1)
