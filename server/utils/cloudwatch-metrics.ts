@@ -97,14 +97,19 @@ export async function batchGetInstanceMetrics(
 
   await Promise.all(regionPromises)
 
-  // Cache the result (serialize Map for caching)
-  const cacheData = {
-    metrics: Object.fromEntries(result.metrics),
-    errors: result.errors
+  // Cache the result only if we got data — don't cache failures/empty results
+  if (result.metrics.size > 0) {
+    const cacheData = {
+      metrics: Object.fromEntries(result.metrics),
+      errors: result.errors
+    }
+    await cache.set(cacheKey, cacheData, { ttl: CACHE_TTL })
   }
-  await cache.set(cacheKey, cacheData, { ttl: CACHE_TTL })
 
-  logger.info(`[CloudWatch Metrics] Fetched metrics for ${result.metrics.size} instances in account ${accountId}`)
+  if (result.errors.length > 0) {
+    logger.warn(`[CloudWatch Metrics] ${result.errors.length} error(s) for account ${accountId}: ${result.errors.join('; ')}`)
+  }
+  logger.info(`[CloudWatch Metrics] Fetched metrics for ${result.metrics.size} of ${instances.length} instances in account ${accountId}`)
   return result
 }
 
