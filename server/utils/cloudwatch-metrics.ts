@@ -220,35 +220,55 @@ async function fetchRegionMetrics(
       })
 
       // Retry with exponential backoff for throttling
-      let response
+      // Paginate through all results (GetMetricData may return partial results with NextToken)
+      let allMetricResults: any[] = []
+      let nextToken: string | undefined
       const maxRetries = 3
-      for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        try {
-          response = await client.send(command)
-          break
-        } catch (err: any) {
-          const isThrottle = err.name === 'Throttling' || err.name === 'ThrottlingException' ||
-            err.name === 'TooManyRequestsException' || err.message?.includes('Rate exceeded')
-          if (isThrottle && attempt < maxRetries) {
-            const delay = Math.pow(2, attempt) * 500 // 500ms, 1s, 2s
-            logger.warn(`[CloudWatch Metrics] Throttled on batch ${batchIdx + 1}/${batches.length}, retry ${attempt + 1} in ${delay}ms`)
-            await new Promise(resolve => setTimeout(resolve, delay))
-          } else {
-            throw err
+
+      do {
+        const paginatedCommand = new GetMetricDataCommand({
+          MetricDataQueries: nextToken ? undefined : queries,
+          StartTime: startTime,
+          EndTime: endTime,
+          NextToken: nextToken
+        })
+
+        let response
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          try {
+            response = await client.send(paginatedCommand)
+            break
+          } catch (err: any) {
+            const isThrottle = err.name === 'Throttling' || err.name === 'ThrottlingException' ||
+              err.name === 'TooManyRequestsException' || err.message?.includes('Rate exceeded')
+            if (isThrottle && attempt < maxRetries) {
+              const delay = Math.pow(2, attempt) * 500
+              logger.warn(`[CloudWatch Metrics] Throttled on batch ${batchIdx + 1}/${batches.length}, retry ${attempt + 1} in ${delay}ms`)
+              await new Promise(resolve => setTimeout(resolve, delay))
+            } else {
+              throw err
+            }
           }
         }
-      }
 
-      if (!response) continue
+        if (!response) break
+
+        if (response.MetricDataResults) {
+          allMetricResults.push(...response.MetricDataResults)
+        }
+        nextToken = response.NextToken
+      } while (nextToken)
+
+      if (allMetricResults.length === 0) continue
 
       // Parse results back into per-instance metrics
       for (const instanceId of batch) {
         const safeId = instanceId.replace(/-/g, '_')
 
-        const cpuResult = response.MetricDataResults?.find(r => r.Id === `cpu_${safeId}`)
-        const cpuMaxResult = response.MetricDataResults?.find(r => r.Id === `cpumax_${safeId}`)
-        const netInResult = response.MetricDataResults?.find(r => r.Id === `netin_${safeId}`)
-        const netOutResult = response.MetricDataResults?.find(r => r.Id === `netout_${safeId}`)
+        const cpuResult = allMetricResults.find(r => r.Id === `cpu_${safeId}`)
+        const cpuMaxResult = allMetricResults.find(r => r.Id === `cpumax_${safeId}`)
+        const netInResult = allMetricResults.find(r => r.Id === `netin_${safeId}`)
+        const netOutResult = allMetricResults.find(r => r.Id === `netout_${safeId}`)
 
         const cpuValues = cpuResult?.Values || []
         const cpuTimestamps = cpuResult?.Timestamps || []
