@@ -43,6 +43,7 @@ export interface DynamoDBConfig {
   userNotifications: DynamoDBTableConfig
   notificationBroadcasts: DynamoDBTableConfig
   achievementProgress: DynamoDBTableConfig
+  utilizationAnalysis: DynamoDBTableConfig
 }
 
 // -----------------------------------------------------------------------------
@@ -266,6 +267,12 @@ function loadFromEnvironment(): DynamoDBConfig {
     },
     achievementProgress: {
       tableName: process.env.ACHIEVEMENT_PROGRESS_TABLE || 'ghost-achievement-progress',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
+    },
+    utilizationAnalysis: {
+      tableName: process.env.UTILIZATION_ANALYSIS_TABLE || 'ghost-utilization-analysis',
       environment: 'govcloud',
       region: govCloudRegion,
       accountId: deploymentAccountId

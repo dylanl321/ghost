@@ -71,9 +71,12 @@ export function useAccountData(
         )
       }
 
+      const resourceAccountId = govCloudId.value || accountId.value
+      const resourceEnvironment = govCloudId.value ? 'govcloud' : 'commercial'
+
       const [costsRes, resourcesRes, forecastRes] = await Promise.all([
         fetch(`/api/accounts/dashboard-simplified?standard_account_id=${accountId.value}${days ? `&days=${days.value}` : ''}`),
-        fetch(`/api/config/summary-simplified?govcloud_account_id=${govCloudId.value}`),
+        fetch(`/api/config/summary-simplified?account_id=${resourceAccountId}&environment=${resourceEnvironment}`),
         fetch(`/api/costs/projections?period=current-month-remainder&accountIds=${accountId.value}&granularity=DAILY&environment=commercial`),
       ])
 

@@ -29,8 +29,8 @@ const CACHE_TTL = {
 }
 
 const CACHE_KEYS = {
-  RESOURCE_LIST: (aggregator: string, type?: string, accountId?: string) => 
-    `config:resources:${aggregator}:${type || 'all'}:${accountId || 'all'}`,
+  RESOURCE_LIST: (aggregator: string, type?: string, accountId?: string, limit?: number) =>
+    `config:resources:${aggregator}:${type || 'all'}:${accountId || 'all'}:${limit || 100}`,
   RESOURCE_DETAIL: (aggregator: string, resourceId: string) => 
     `config:resource:${aggregator}:${resourceId}`,
   RESOURCE_CONFIG: (aggregator: string, resourceId: string) => 
@@ -122,7 +122,8 @@ export async function listAggregateResources(
   const cacheKey = CACHE_KEYS.RESOURCE_LIST(
     aggregatorName,
     filter?.resourceType,
-    filter?.accountIds?.[0]
+    filter?.accountIds?.[0],
+    filter?.limit
   )
 
   // Check cache for non-paginated requests

@@ -178,20 +178,33 @@
             </div>
           </div>
 
-          <!-- Row 3: Instance Utilization Analysis - Full Width -->
-          <InstanceUtilization
-            v-if="govCloudId || accountId"
-            :account-id="govCloudId || accountId"
-            @loaded="(data) => utilizationMap = data"
-          />
-
-          <!-- Row 4: Instances Table - Full Width (GovCloud) -->
+          <!-- Row 3: Instances Table - Full Width -->
           <InstancesTable v-if="govCloudId || accountId" :account-id="govCloudId || accountId" :utilization-map="utilizationMap" />
         </div>
         <div v-else class="flex items-center justify-center py-16">
           <div class="text-center">
             <UIcon name="i-heroicons-server-stack" class="w-16 h-16 text-gray-500 mx-auto mb-4 opacity-50" />
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Resources Unavailable</h3>
+            <p class="text-gray-600 dark:text-gray-400">This tab is disabled because the account is {{ accountStatus?.toLowerCase() }}.</p>
+          </div>
+        </div>
+      </template>
+
+      <!-- Cost Optimization Tab -->
+      <template #cost-optimization>
+        <div v-if="!isAccountInactive" class="space-y-6 mt-4">
+          <InstanceUtilizationDashboard
+            v-if="govCloudId || accountId"
+            :account-id="govCloudId || accountId"
+            :environment="govCloudId ? 'govcloud' : 'commercial'"
+            :expected-instance-count="resourceCounts?.ec2Instances"
+            @loaded="(data) => utilizationMap = data"
+          />
+        </div>
+        <div v-else class="flex items-center justify-center py-16 mt-4">
+          <div class="text-center">
+            <UIcon name="i-heroicons-currency-dollar" class="w-16 h-16 text-gray-500 mx-auto mb-4 opacity-50" />
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Cost Optimization Unavailable</h3>
             <p class="text-gray-600 dark:text-gray-400">This tab is disabled because the account is {{ accountStatus?.toLowerCase() }}.</p>
           </div>
         </div>
@@ -400,6 +413,7 @@ const tabs = computed(() => {
   const baseTabs = [
     { label: 'Overview', slot: 'overview', icon: 'i-heroicons-home', disabled: false },
     { label: 'Resources', slot: 'resources', icon: 'i-heroicons-server-stack', disabled: isAccountInactive.value },
+    { label: 'Cost Optimization', slot: 'cost-optimization', icon: 'i-heroicons-currency-dollar', disabled: isAccountInactive.value },
     { label: 'Policies', slot: 'policies', icon: 'i-heroicons-shield-check', disabled: isAccountInactive.value },
     { label: 'Security', slot: 'security', icon: 'i-heroicons-shield-exclamation', disabled: isAccountInactive.value },
   ]

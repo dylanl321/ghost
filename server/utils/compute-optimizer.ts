@@ -119,42 +119,63 @@ export async function getEC2Recommendations(
     logger.info(`[Optimizer] All ${instanceArns.length} instances from cache`)
     return recommendations
   }
-  
+
   logger.info(`[Optimizer] Fetching ${uncachedArns.length} instances, ${recommendations.length} from cache`)
-  
-  // Determine region from ARN if not provided
-  const arnRegion = region || uncachedArns[0].split(':')[3]
-  const client = await getComputeOptimizerClient(environment, arnRegion)
-  
-  // Batch fetch recommendations (max 20 per request)
-  const chunks = chunkArray(uncachedArns, 20)
-  
-  for (const chunk of chunks) {
-    try {
-      const command = new GetEC2InstanceRecommendationsCommand({
-        instanceArns: chunk
-      })
-      
-      const response = await client.send(command)
-      
-      if (response.instanceRecommendations) {
-        for (const rec of response.instanceRecommendations) {
-          const recommendation = parseEC2Recommendation(rec)
-          recommendations.push(recommendation)
-          
-          // Cache the recommendation
-          const parts = rec.instanceArn!.split(':')
-          const accountId = parts[4]
-          const instanceId = rec.instanceArn!.split('/').pop()!
-          const cacheKey = CACHE_KEYS.INSTANCE_REC(accountId, instanceId)
-          await cache.set(cacheKey, recommendation, { ttl: CACHE_TTL.RECOMMENDATIONS })
-        }
-      }
-    } catch (error) {
-      logger.error(`Error fetching EC2 recommendations:`, error)
-    }
+
+  // Group uncached ARNs by region for multi-region support
+  const arnsByRegion = new Map<string, string[]>()
+  for (const arn of uncachedArns) {
+    // Use explicit region param if provided (backward compat), otherwise extract from ARN
+    const arnRegion = region || arn.split(':')[3]
+    const existing = arnsByRegion.get(arnRegion) || []
+    existing.push(arn)
+    arnsByRegion.set(arnRegion, existing)
   }
-  
+
+  // Fetch recommendations per region (parallel with concurrency limit)
+  const regionEntries = Array.from(arnsByRegion.entries())
+
+  // Process regions in groups of 3 to avoid overwhelming the API
+  const REGION_CONCURRENCY = 3
+  for (let i = 0; i < regionEntries.length; i += REGION_CONCURRENCY) {
+    const regionBatch = regionEntries.slice(i, i + REGION_CONCURRENCY)
+
+    await Promise.all(regionBatch.map(async ([regionKey, regionArns]) => {
+      try {
+        const client = await getComputeOptimizerClient(environment, regionKey)
+        const chunks = chunkArray(regionArns, 20)
+
+        for (const chunk of chunks) {
+          try {
+            const command = new GetEC2InstanceRecommendationsCommand({
+              instanceArns: chunk
+            })
+
+            const response = await client.send(command)
+
+            if (response.instanceRecommendations) {
+              for (const rec of response.instanceRecommendations) {
+                const recommendation = parseEC2Recommendation(rec)
+                recommendations.push(recommendation)
+
+                // Cache the recommendation
+                const parts = rec.instanceArn!.split(':')
+                const accountId = parts[4]
+                const instanceId = rec.instanceArn!.split('/').pop()!
+                const cacheKey = CACHE_KEYS.INSTANCE_REC(accountId, instanceId)
+                await cache.set(cacheKey, recommendation, { ttl: CACHE_TTL.RECOMMENDATIONS })
+              }
+            }
+          } catch (error) {
+            logger.error(`[Optimizer] Error fetching EC2 recommendations in ${regionKey}:`, error)
+          }
+        }
+      } catch (error) {
+        logger.error(`[Optimizer] Failed to create client for region ${regionKey}:`, error)
+      }
+    }))
+  }
+
   return recommendations
 }
 
