@@ -211,6 +211,15 @@
               <UBadge color="gray" variant="soft" size="sm" class="ml-2">
                 {{ filteredInstances.length }} instance{{ filteredInstances.length !== 1 ? 's' : '' }}
               </UBadge>
+              <NuxtLink to="/support/docs#cost-optimization-guide" class="ml-2">
+                <UButton
+                  icon="i-heroicons-question-mark-circle"
+                  color="gray"
+                  variant="ghost"
+                  size="xs"
+                  title="Learn about classifications"
+                />
+              </NuxtLink>
             </div>
             <div class="flex items-center gap-2">
               <UBadge

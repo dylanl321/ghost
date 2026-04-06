@@ -1,214 +1,307 @@
 # EC2 Instance Utilization Analysis
 
-This guide explains how the Instance Utilization panel on the Account page classifies your EC2 instances and what each classification means.
+This guide documents how the Cost Optimization panel classifies EC2 instances and what each classification means. It is intended for developers maintaining or extending this system.
 
-## Overview
+The panel lives in the **Cost Optimization** tab on the Account page (`app/pages/account/[id]/index.vue`, template `#cost-optimization`). The component is `InstanceUtilizationDashboard.vue`.
 
-The system analyzes every EC2 instance in an account by combining three data sources:
+## Data Sources
 
-- **Instance state and tags** — Is the instance running or stopped? Does it have a schedule, patch group, or owner?
-- **CloudWatch metrics** — Peak (maximum) CPU usage per day and daily network traffic over the last 14 days (running instances only).
-- **AWS Compute Optimizer** — AWS's own right-sizing recommendations based on observed usage patterns.
+The classifier combines six data sources. Each is shown in the "Data Sources Used" checklist when you expand an instance row.
 
-Each instance is assigned one of five classifications. Results are cached for 30 minutes.
+| Source | What it provides | Where it's fetched |
+|--------|------------------|--------------------|
+| CloudWatch CPU | Daily peak (maximum) `CPUUtilization` over 14 days. This is the value used for idle classification and scoring. Daily average is also fetched but only shown in evidence text — no decisions depend on it. | `server/utils/cloudwatch-metrics.ts` → `GetMetricData` with `Period: 86400`, `Stat: Maximum` |
+| CloudWatch Network | Daily `NetworkIn` + `NetworkOut` sums, combined into a per-day total | Same file, same `GetMetricData` call |
+| CloudWatch Disk I/O | Daily `DiskReadOps` + `DiskWriteOps` sums | Same file |
+| Compute Optimizer | `OVER_PROVISIONED`, `UNDER_PROVISIONED`, or `OPTIMIZED` finding with recommended instance type and savings | `server/utils/compute-optimizer.ts` → `GetEC2InstanceRecommendations` |
+| CloudTrail API Activity | Count of meaningful AWS API calls made by the instance's IAM role (excludes SSM agent noise) | Fetched during analysis job |
+| Instance Tags | `Schedule`, `Patch Group`, `Owner`, `Project`, `GDMS_Managed` | AWS Config via `BatchGetAggregateResourceConfig` in `server/api/instances/utilization.get.ts` |
 
-The idle criteria for running instances are aligned with [AWS Compute Optimizer's idle resource recommendations](https://docs.aws.amazon.com/compute-optimizer/latest/ug/view-idle-recommendations.html).
+Results are cached for 30 minutes (`CACHE_TTL = 1800` in the API). CloudWatch metrics are cached for 1 hour (`CACHE_TTL = 3600` in `cloudwatch-metrics.ts`). Empty/failed CloudWatch results are NOT cached so retries happen on the next request.
 
 ---
 
 ## Classifications
 
+There are six possible classifications. The classifier evaluates them in a specific order — the first matching rule wins. This means the `classifyInstance()` function in `server/utils/instance-utilization-classifier.ts` checks conditions sequentially from top to bottom, and as soon as one condition matches, it assigns that classification and `return`s immediately. Later rules are never evaluated. For example, a stopped instance with no Schedule and no Patch Group but with historical CloudWatch activity will match the "Underutilized (stopped with prior usage)" rule and return before ever reaching the plain "Unused" rule below it. The order of the `if` statements in the code IS the priority order.
+
 ### 🔴 Unused
 
-The instance shows no meaningful activity. There are two ways an instance can be classified as unused:
+The instance shows no meaningful activity and is a candidate for termination.
 
-**Stopped instances:**
-A stopped instance is unused if it has **no Schedule tag** and **no Patch Group tag**. The reasoning is simple — nothing exists that would automatically restart it, so it's sitting idle and likely forgotten.
+**Stopped instances (no historical activity):**
+A stopped instance is classified as unused when ALL of the following are true:
+- No `Schedule` tag
+- No `Patch Group` tag
+- No historical evidence of usage (no CloudWatch metrics showing activity, no meaningful CloudTrail API calls, no Compute Optimizer finding)
 
-**Running instances (aligned with AWS Compute Optimizer idle criteria):**
-A running instance is unused if **both** of the following are true over the 14-day lookback period:
-- Peak (maximum) CPU utilization is below **5%** on every day
+This is the strictest "unused" path. If the instance has ANY historical evidence of real usage, it falls to "Underutilized" instead (see below).
+
+Code reference: `classifyInstance()` → stopped branch → `if (!hasSchedule && !hasPatchGroup)` → inner check for `hasHistoricalMetrics || hasHistoricalActivity || hasHistoricalOptimizer`.
+
+**Running instances (idle per AWS Compute Optimizer criteria):**
+A running instance is classified as unused when ALL of the following are true:
+- Peak (maximum) CPU utilization is below **5%** on every day of the 14-day lookback
 - Network traffic (in + out) is below **5 MB per day**
+- No meaningful CloudTrail API calls detected
 
-Both conditions must be met. A running instance with 3% peak CPU but 20 MB/day of network traffic would not be flagged as unused — it's clearly doing *something* on the network. The use of peak (maximum) CPU rather than average means that even brief spikes of activity above 5% will prevent an instance from being classified as idle.
+The CPU and network thresholds are aligned with [AWS Compute Optimizer's idle resource recommendations](https://docs.aws.amazon.com/compute-optimizer/latest/ug/view-idle-recommendations.html).
 
-**Potential savings:** The full monthly on-demand cost of the instance is counted as potential savings.
+The CloudTrail check is a safety net: if an instance has low CPU and low network but IS making AWS API calls (e.g., polling SQS, reading S3, calling DynamoDB), it gets reclassified as "Right-sized" instead. Code reference: the `if (hasApiActivity)` guard inside the idle check block.
+
+**Potential savings:** Full monthly on-demand cost.
 
 ---
 
 ### 🟠 Patching Only
 
-The instance is stopped, has a **Patch Group** tag, but has **no Schedule** tag.
+The instance is stopped, has a `Patch Group` tag, but has NO `Schedule` tag.
 
-This means the instance is only started during patching windows (managed by AWS Systems Manager or similar automation) and has no scheduled workload runtime. It exists solely to receive patches, which raises the question of whether it needs to exist at all.
+This means the instance is only started during patching windows (managed by AWS Systems Manager) and has no scheduled workload runtime. It exists solely to receive patches.
 
-**Potential savings:** The full monthly on-demand cost of the instance is counted as potential savings.
+Code reference: `classifyInstance()` → stopped branch → `if (hasPatchGroup && !hasSchedule)`.
+
+**Potential savings:** Full monthly on-demand cost.
 
 ---
 
-### 🟡 Underutilized
+### 🟡 Underutilized (Over-provisioned)
 
-The instance is running but not using its resources efficiently. An instance is classified as underutilized when:
+The instance is being used but is wastefully sized, or is stopped with evidence of prior usage. There are two paths into this classification:
 
-- AWS Compute Optimizer has flagged it as **OVER_PROVISIONED** — meaning a smaller instance type could handle the workload
+**Path 1 — Compute Optimizer OVER_PROVISIONED (running instances):**
+AWS Compute Optimizer's ML analysis determined a smaller instance type could handle the workload. The panel shows the recommended instance type and estimated savings.
 
-This classification is driven entirely by Compute Optimizer's machine learning analysis, which considers CPU, memory, network, and disk patterns over time. When Compute Optimizer provides a recommendation, the panel will show the suggested instance type (e.g., "a `t3.medium` would handle the current workload") and the estimated monthly savings from downsizing.
+Code reference: `classifyInstance()` → running branch → `if (optimizerRec!.finding === 'OVER_PROVISIONED')`.
 
-**Potential savings:** If Compute Optimizer provides a savings estimate, that value is used. Otherwise, 50% of the instance's monthly on-demand cost is used as a conservative estimate.
+**Path 2 — Stopped with historical activity (no schedule/patch group):**
+The instance is stopped with no Schedule or Patch Group tag, BUT has historical evidence of real usage — CloudWatch metrics showing CPU activity, meaningful CloudTrail API calls, or a Compute Optimizer finding. This catches instances that were actively used before being stopped. The explanation prompts the user to decide whether to terminate or restart.
+
+Code reference: `classifyInstance()` → stopped branch → `if (!hasSchedule && !hasPatchGroup && (hasHistoricalMetrics || hasHistoricalActivity || hasHistoricalOptimizer))`. This check runs BEFORE the plain "unused" check, so historical evidence always takes priority.
+
+**Potential savings:** Compute Optimizer's savings estimate if available, otherwise 50% of monthly on-demand cost.
+
+---
+
+### 🟣 Under-provisioned
+
+The instance needs MORE resources than its current type provides. This is a distinct actionable insight — the instance is actively used but may be experiencing performance issues.
+
+Triggered when Compute Optimizer returns `UNDER_PROVISIONED`. The panel shows the recommended (larger) instance type and the finding reason codes (e.g., CPU over-utilized, memory pressure).
+
+Code reference: `classifyInstance()` → running branch → `if (optimizerRec!.finding === 'UNDER_PROVISIONED')`.
+
+**Potential savings:** None (this is a performance concern, not a cost concern). Counted in the "flagged for review" total.
 
 ---
 
 ### 🟢 Right-Sized
 
-The instance appears to be appropriately sized for its workload. An instance is classified as right-sized if **any** of the following are true:
+The instance appears appropriately sized. There are multiple paths into this classification:
 
-- It is stopped but has a **Schedule** tag (it's intentionally off as part of its normal schedule)
-- AWS Compute Optimizer has flagged it as **OPTIMIZED**
-- Peak CPU utilization is **5% or above** (not idle) and Compute Optimizer has no concerns
+1. **Stopped with Schedule tag** — The instance is intentionally off as part of its normal schedule. Code: stopped branch → `if (hasSchedule)`.
 
-No action is needed for these instances.
+2. **Compute Optimizer OPTIMIZED** — AWS confirmed the instance is well-sized. Code: running branch → `if (optimizerRec!.finding === 'OPTIMIZED')`.
+
+3. **CPU above idle threshold** — Peak CPU ≥ 5% (not idle) and Compute Optimizer has no concerns. Code: running branch → fallback `if (hasCpuMetrics)`.
+
+4. **Idle metrics but active API calls** — Peak CPU < 5% and network < 5 MB/day, but the instance has meaningful CloudTrail API calls. The safety net reclassifies it from "unused" to "right-sized." Code: inside the idle check → `if (hasApiActivity)`.
+
+5. **Network-only with substantial traffic** — No CPU data available, but network traffic exceeds **50 MB/day** (`networkOnlyRightSizedThreshold`). This indicates active usage even without CPU metrics. Code: running branch → fallback `if (hasNetworkMetrics)` → `if (netPerDay > thresholds.networkOnlyRightSizedThreshold)`.
+
+**Potential savings:** None.
 
 ---
 
 ### ⚪ No Data (Insufficient Data)
 
-No monitoring data is available for this instance. This typically means:
+Not enough monitoring data to classify the instance. There are three paths:
 
-- CloudWatch metrics are not enabled or not reporting
-- Compute Optimizer has not yet analyzed the instance (it can take up to 12 hours after an instance starts)
-- The instance was recently launched and doesn't have enough history
+1. **No metrics and no Compute Optimizer** — The instance is running but CloudWatch returned no CPU data, no network data, and Compute Optimizer has no analysis. If the instance was launched within the last 24 hours (`newInstanceGraceHours`), the explanation says it's too new. Otherwise it suggests checking CloudWatch configuration. Code: running branch → `if (!hasMetrics && !hasOptimizer)`.
 
-These instances are not flagged and no savings are estimated, but they may warrant investigation to ensure monitoring is properly configured.
+2. **Network-only with low traffic** — Network data exists but CPU data is missing, and network traffic is below 50 MB/day. Not enough signal to confidently classify. Code: running branch → fallback `if (hasNetworkMetrics)` → else branch (low network).
+
+3. **Fallback** — Any running instance that doesn't match any of the above rules.
+
+**Potential savings:** None estimated.
 
 ---
 
-## How the Decision Tree Works
+## Decision Tree
 
-The classifier evaluates instances in a specific order. The first matching rule wins.
+The classifier evaluates rules in this order. First match wins.
 
 ```
 Instance
 │
-├─ Is it STOPPED?
+├─ STOPPED?
 │  │
-│  ├─ Has a Schedule tag?
-│  │  └─ ✅ Right-Sized (intentionally stopped per schedule)
+│  ├─ Has Schedule tag?
+│  │  └─ ✅ Right-Sized
 │  │
-│  ├─ Has a Patch Group tag but NO Schedule tag?
-│  │  └─ 🟠 Patching Only
+│  ├─ No Schedule AND no Patch Group?
+│  │  │
+│  │  ├─ Has historical evidence (CPU metrics, API calls, or Optimizer finding)?
+│  │  │  └─ 🟡 Underutilized (stopped with prior usage)
+│  │  │
+│  │  └─ No historical evidence?
+│  │     └─ 🔴 Unused
 │  │
-│  └─ No Schedule AND no Patch Group?
-│     └─ 🔴 Unused
+│  └─ Has Patch Group but no Schedule?
+│     └─ 🟠 Patching Only
 │
-└─ Is it RUNNING?
+└─ RUNNING?
    │
-   ├─ No CloudWatch metrics AND no Compute Optimizer data?
+   ├─ No CloudWatch metrics AND no Compute Optimizer?
    │  └─ ⚪ No Data
    │
-   ├─ Has CloudWatch metrics?
+   ├─ Has metrics → Peak CPU < 5% AND network < 5 MB/day?
    │  │
-   │  └─ Peak CPU < 5% AND network < 5 MB/day?
-   │     └─ 🔴 Unused (idle per AWS Compute Optimizer criteria)
+   │  ├─ Has meaningful CloudTrail API calls?
+   │  │  └─ ✅ Right-Sized (API activity safety net)
+   │  │
+   │  └─ No API activity?
+   │     └─ 🔴 Unused (idle)
    │
-   ├─ Compute Optimizer recommendation?
-   │  │
-   │  ├─ OVER_PROVISIONED?
-   │  │  └─ 🟡 Underutilized (with recommended instance type + savings)
-   │  │
-   │  └─ OPTIMIZED?
-   │     └─ ✅ Right-Sized
+   ├─ Compute Optimizer = OVER_PROVISIONED?
+   │  └─ 🟡 Underutilized
    │
-   └─ Has metrics, not idle, no Compute Optimizer concern?
-      └─ ✅ Right-Sized
+   ├─ Compute Optimizer = UNDER_PROVISIONED?
+   │  └─ 🟣 Under-provisioned
+   │
+   ├─ Compute Optimizer = OPTIMIZED?
+   │  └─ ✅ Right-Sized
+   │
+   ├─ Has CPU data, not idle?
+   │  └─ ✅ Right-Sized
+   │
+   ├─ Network only, > 50 MB/day?
+   │  └─ ✅ Right-Sized
+   │
+   └─ Network only, ≤ 50 MB/day?
+      └─ ⚪ No Data
 ```
 
-> When both CloudWatch metrics and Compute Optimizer data are available, both are evaluated. The idle check (peak CPU + network) runs first. If the instance is not idle, Compute Optimizer's finding determines whether it's underutilized (OVER_PROVISIONED) or right-sized (OPTIMIZED or no finding).
+---
+
+## Utilization Score (0–100)
+
+Every instance receives a numeric score combining all available signals. The score is computed by `computeUtilizationScore()` at the bottom of `instance-utilization-classifier.ts`. It is displayed as a progress bar in the expanded detail view.
+
+The score is NOT used for classification — it's a supplementary signal for human review. An instance can be "right-sized" with a score of 30 (limited data) or 95 (strong evidence from all sources).
+
+### Weight breakdown
+
+All weights are configurable via `DEFAULT_CONFIG.score` in the classifier file.
+
+| Signal | Max Points | Tiers |
+|--------|-----------|-------|
+| Compute Optimizer (OPTIMIZED or UNDER_PROVISIONED) | 25 | Binary: 25 if present |
+| Compute Optimizer (OVER_PROVISIONED) | 20 | Binary: 20 if present |
+| CloudTrail API activity | 15 | ≥100 calls → 15, ≥10 → 10, ≥1 → 5 |
+| Network traffic | 20 | ≥5 GB/day → 20, ≥500 MB → 15, ≥50 MB → 10, ≥5 MB → 5 |
+| Peak CPU | 15 | ≥50% → 15, ≥20% → 10, ≥5% → 5 |
+| CPU volatility (coefficient of variation) | 10 | CV ≥1.0 → 10, CV ≥0.5 → 5 |
+| Disk I/O (any ops/day > 0) | 5 | Binary: 5 if active |
+| New instance grace (< 7 days old) | 10 | Binary: 10 if new |
+
+Total possible: 100 (capped). A score of 0 means no data at all. A score above 50 generally indicates strong evidence of active usage.
 
 ---
 
-## Understanding the UI
+## Configuration Reference
 
-### Summary Bar
+All thresholds are defined in `DEFAULT_CONFIG` (`UtilizationConfig` interface) in `server/utils/instance-utilization-classifier.ts`. To change behavior, modify these values.
 
-The colored pills at the top show the count of instances in each classification. Click a pill to filter the list to only that category. Click it again to clear the filter.
-
-| Pill Color | Classification | Flagged? |
-|------------|---------------|----------|
-| Red | Unused | Yes |
-| Orange | Patching Only | Yes |
-| Yellow | Underutilized | Yes |
-| Green | Right-Sized | No |
-| Gray | No Data | No |
-
-By default, only **flagged** instances (unused, patching only, underutilized) are shown. Click "Show all X instances" at the bottom to see right-sized and no-data instances too.
-
-### Potential Savings Banner
-
-If any instances have estimated savings, a green banner shows the total potential monthly and annual savings across all flagged instances.
-
-### Instance Rows
-
-Each row shows:
-
-| Element | Description |
-|---------|-------------|
-| Classification badge | Color-coded label (Unused, Patch Only, Underutilized, Right-sized, No Data) |
-| Instance name | The `Name` tag, or the instance ID if no name is set |
-| Instance type | e.g., `t3.large`, `m5.xlarge` |
-| Owner | From the `Owner` tag, if present |
-| Peak CPU sparkline | A mini chart showing daily peak CPU over the lookback period. Color reflects severity: red (< 5%), yellow (5-15%), green (> 15%) |
-| Active days | How many of the monitored days had peak CPU above 1%, shown as `X/Yd active` |
-| Monthly cost | Estimated on-demand cost based on instance type and region |
-
-### Expanded Detail View
-
-Click any row to expand it. The detail view includes:
-
-- **Last Active** — The most recent day where daily peak CPU exceeded 1%, and how many days ago that was
-- **Active Days** — Count and percentage of monitored days with peak CPU above 1%
-- **Launched** — When the instance was first started, and its age
-- **Monthly Cost** — On-demand estimate with annual projection
-- **Tags** — Owner, Project, Schedule, and Patch Group if present
-- **Peak CPU Chart** — A larger chart showing daily peak CPU with labeled axes and tooltips
-- **Network I/O Chart** — A chart showing daily network traffic (in + out) with auto-scaled units (KB or MB). Color reflects traffic level: red (below 5 MB/day idle threshold), blue (moderate), green (high). Only appears when network data is available.
-- **Explanation** — A plain-language summary of why the instance received its classification
-- **Evidence** — A bullet list of the specific data points that support the classification
+| Parameter | Default | Purpose |
+|-----------|---------|---------|
+| `idlePeakCpuPercent` | 5 | Peak CPU below this = idle (per AWS Compute Optimizer) |
+| `idleNetworkBytesPerDay` | 5,000,000 (5 MB) | Network/day below this = idle (per AWS Compute Optimizer) |
+| `stoppedDaysThreshold` | 14 | Days stopped before flagging in explanation text |
+| `activeDayCpuThreshold` | 1 | Daily max CPU% above this = "active day" |
+| `activeDayNetworkThreshold` | 1,000,000 (1 MB) | Network bytes/day above this = "active day" (fallback when CPU missing) |
+| `networkOnlyRightSizedThreshold` | 50,000,000 (50 MB) | Network/day above this = right-sized even without CPU data |
+| `newInstanceGraceHours` | 24 | Instances younger than this get a softer "too new" explanation |
+| `score.*` | (see table above) | All scoring weights are individually tunable |
 
 ---
 
-## Key Thresholds Reference
+## Active Days Calculation
 
-| Metric | Threshold | Used For |
-|--------|-----------|----------|
-| Peak CPU (daily max) | < 5% | Unused/idle (running instances, per AWS Compute Optimizer) |
-| Network I/O (in + out) | < 5 MB/day | Unused/idle (running instances, combined with peak CPU check) |
-| Daily peak CPU > 1% | — | Counts as an "active day" for the activity summary |
-| Lookback period | 14 days (default) | How far back CloudWatch metrics are analyzed |
+The "Active Days" metric shown in the UI counts how many of the monitored days had meaningful activity. The logic is in `classifyInstance()` near the top.
+
+- **Primary (CPU available):** A day is "active" if the daily max CPU exceeds `activeDayCpuThreshold` (default 1%). Uses `maxCpuDailyValues`.
+- **Fallback (no CPU, network available):** A day is "active" if daily network traffic exceeds `activeDayNetworkThreshold` (default 1 MB). Uses `networkDailyValues`.
+- **Total days monitored** = `Math.max(maxCpuDailyValues.length, cpuValues.length, networkDailyValues.length)` — whichever source has the most data points.
 
 ---
 
-## Frequently Asked Questions
+## CloudWatch Metrics Fetching
 
-**Q: My instance is stopped but shows as "Right-Sized" — why?**
-It has a Schedule tag, which means automation is managing its start/stop cycle. The system treats this as intentional behavior.
+Metrics are fetched in `server/utils/cloudwatch-metrics.ts` via `batchGetInstanceMetrics()`.
 
-**Q: An instance shows "No Data" but it's been running for weeks. What's wrong?**
-CloudWatch basic monitoring may not be enabled, or the instance might not have the CloudWatch agent installed. Check that the instance is publishing `CPUUtilization` metrics to CloudWatch.
+Key implementation details:
+- Uses `GetMetricData` with 4 metric queries per instance: CPU Average, CPU Maximum, NetworkIn Sum, NetworkOut Sum (all at `Period: 86400` / 1 day).
+- Batch size: 100 instances per `GetMetricData` call (400 queries, conservative limit vs API max of 500).
+- **Pagination:** Follows `NextToken` to collect all metric results. `GetMetricData` can paginate responses — without following `NextToken`, some metrics (typically CPU) can be silently dropped while others (network) come through in the first page.
+- **Retry:** Exponential backoff on throttling errors (3 retries at 500ms, 1s, 2s).
+- **Per-batch error handling:** A failed batch logs the error and continues to the next batch. Other instances' metrics are not lost.
+- **Stagger:** 50ms delay between batches to reduce throttling risk.
+- **Cache:** Results cached for 1 hour. Empty/failed results are NOT cached so the next request retries.
 
-**Q: Why is my instance "Unused" even though it runs a nightly batch job?**
-The idle check uses *peak* (maximum) CPU per day, not average. If your batch job pushes CPU above 5% on the days it runs, those days will show peak CPU above the threshold. However, if the job is extremely lightweight (never exceeding 5% CPU even at peak) and generates less than 5 MB/day of network traffic, the instance will still be flagged as idle. Check the peak CPU chart in the expanded view — you should see spikes on the days the job runs.
+Instance limit: The API fetches up to 5,000 instances from AWS Config (`limit: 5000` in `utilization.get.ts`). The Config service paginates internally at 100 items per `ListAggregateDiscoveredResources` call.
 
-**Q: How is "underutilized" different from "unused"?**
-Unused means the instance is idle — peak CPU never exceeded 5% and network traffic was minimal. This aligns with AWS Compute Optimizer's idle criteria. Underutilized means the instance IS being used, but Compute Optimizer's analysis determined a smaller instance type could handle the workload. Unused = "consider deleting." Underutilized = "consider downsizing."
+---
 
-**Q: How are savings calculated for underutilized instances?**
-If AWS Compute Optimizer provides a specific savings estimate (based on recommending a smaller instance type), that number is used. If Compute Optimizer data isn't available, the system estimates savings as 50% of the current monthly on-demand cost — a conservative placeholder.
+## UI Components
 
-**Q: Does this analysis account for Reserved Instances or Savings Plans?**
-No. All cost estimates are based on on-demand pricing. Actual savings will vary depending on your pricing commitments.
+The dashboard is rendered by `app/components/accounts/InstanceUtilizationDashboard.vue`. Key UI elements:
 
-**Q: How often is the data refreshed?**
-Results are cached for 30 minutes. CloudWatch metrics are cached for 1 hour. Compute Optimizer refreshes its recommendations daily on the AWS side.
+- **Summary stat cards** — One per classification, color-coded with left border. Clickable to filter the table.
+- **Donut chart** — Classification breakdown (PieChart via ECharts).
+- **Savings banner** — Green gradient card showing total monthly/annual potential savings.
+- **Sortable data table** — Columns: Classification, Instance Name, Instance ID, Type, Active Days, Peak CPU, Trend (sparkline), Monthly Cost. Sortable by clicking column headers. Paginated at 25 rows.
+- **Expanded detail view** — Click any row to expand. Shows: key activity metrics (Last Active, Active Days, Launched, Monthly Cost), Data Sources Used checklist (6 sources with green/gray check icons), Utilization Score bar, tags, Peak CPU chart, Network I/O chart, explanation text, and evidence bullets.
+- **Run Analysis button** — Triggers an async analysis job with a progress bar.
+- **Stale data warning** — If the stored result has fewer instances than expected (from resource counts), an alert appears and a fresh analysis starts automatically.
 
-**Q: Why did the idle thresholds change from average CPU to peak CPU?**
-The previous version used average CPU < 1% and total network < 1 MB. This was replaced to align with AWS Compute Optimizer's official idle criteria, which uses peak (maximum) CPU < 5% and network < 5 MB/day. Peak CPU is a stronger signal of true idleness — an instance that never spikes above 5% even at its busiest moment is genuinely idle. Average CPU can hide periodic bursts of activity.
+---
+
+## File Map
+
+| File | Purpose |
+|------|---------|
+| `app/pages/account/[id]/index.vue` | Account page — renders `InstanceUtilizationDashboard` in the Cost Optimization tab |
+| `app/components/accounts/InstanceUtilizationDashboard.vue` | Main dashboard UI component |
+| `server/api/instances/utilization.get.ts` | API endpoint — orchestrates Config, CloudWatch, Compute Optimizer, and pricing calls |
+| `server/utils/instance-utilization-classifier.ts` | Classification logic, scoring, thresholds config |
+| `server/utils/cloudwatch-metrics.ts` | CloudWatch `GetMetricData` batching with retry and pagination |
+| `server/utils/compute-optimizer.ts` | Compute Optimizer recommendations fetching |
+| `server/utils/instance-enrichment.ts` | `EnrichedInstanceData` type definition |
+| `server/lib/aws-client-factory.ts` | Cross-account assume-role client creation |
+
+---
+
+## FAQ
+
+**Q: An instance is "No Data" but I can see CPU metrics in the CloudWatch console. Why?**
+Most likely cause: the `GetMetricData` response was paginated and the previous code version didn't follow `NextToken`. This was fixed — the current code paginates all results. If you still see this, check the server logs for CloudWatch errors on that account. Also verify the cache isn't serving stale data (metrics cache TTL is 1 hour).
+
+**Q: An instance has low CPU and low network but is classified "Right-sized" instead of "Unused." Why?**
+The CloudTrail API activity safety net. If the instance is making meaningful AWS API calls (e.g., polling SQS, reading from S3), it's reclassified as right-sized even though CPU/network are below idle thresholds. Check the "CloudTrail" data source in the expanded detail view.
+
+**Q: A stopped instance shows "Underutilized" instead of "Unused." Why?**
+The classifier found historical evidence of real usage — CloudWatch metrics, CloudTrail API calls, or a Compute Optimizer finding from when the instance was running. This prevents prematurely flagging recently-stopped active instances as unused.
+
+**Q: How do I change the idle thresholds?**
+Edit `DEFAULT_CONFIG` in `server/utils/instance-utilization-classifier.ts`. The key fields are `idlePeakCpuPercent` (default 5) and `idleNetworkBytesPerDay` (default 5,000,000). These are aligned with AWS Compute Optimizer — changing them means diverging from AWS's definition.
+
+**Q: How do I add a new data source to the scoring?**
+1. Add the data to `InstanceMetrics` or create a new interface in `cloudwatch-metrics.ts`.
+2. Pass it through `InstanceClassification` in the classifier.
+3. Add scoring logic in `computeUtilizationScore()`.
+4. Add a new tier config in `UtilizationConfig.score`.
+5. Add the data source to the "Data Sources Used" checklist in `InstanceUtilizationDashboard.vue`.
+
+**Q: What is the Utilization Score used for?**
+Display only. It's shown as a 0–100 progress bar in the expanded detail view. It is NOT used for classification decisions — those are rule-based. The score gives humans a quick sense of how much evidence supports the classification.
