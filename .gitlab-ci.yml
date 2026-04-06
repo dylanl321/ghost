@@ -48,7 +48,7 @@ variables:
     - export AWS_SESSION_TOKEN=$(echo $CREDS | jq -r '.Credentials.SessionToken')
 
 # Test jobs for feature branches - these run automatically for any branch except master/dev
-# test_docker_build:
+test_docker_build:
   stage: test
   tags:
     - prod-docker-shared
