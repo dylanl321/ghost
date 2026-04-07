@@ -10,14 +10,17 @@ The Cost Optimization tab on each account page analyzes every EC2 instance and c
 
 ## How It Works
 
-The system looks at six data sources over the last 14 days:
+The system looks at several data sources over the last 14 days to classify each instance:
 
-- **CPU usage** — the highest (peak) CPU each day
-- **Network traffic** — total bytes in and out each day
-- **Disk I/O** — read and write operations per day
-- **AWS Compute Optimizer** — AWS's own analysis of whether the instance is the right size
-- **CloudTrail API activity** — whether the instance is making AWS API calls (like reading from S3 or polling queues)
-- **Tags** — Schedule, Patch Group, and ownership tags on the instance
+**Used for classification decisions:**
+- **CPU usage** — the highest (peak) CPU each day. If peak CPU stays below 5%, the instance may be idle.
+- **Network traffic** — total bytes in and out each day. Combined with CPU to determine idle status, and used on its own when CPU data is missing.
+- **AWS Compute Optimizer** — AWS's own analysis of whether the instance is the right size (over-provisioned, under-provisioned, or optimized).
+- **CloudTrail API activity** — whether the instance is making AWS API calls. Acts as a safety net: an instance with low CPU and network but active API calls won't be flagged as unused.
+- **Tags** — Schedule and Patch Group tags determine how stopped instances are classified.
+
+**Used for evidence and scoring only (does not affect classification):**
+- **Disk I/O** — read and write operations per day. Shown in the detail view and contributes to the utilization score, but does not change which classification an instance receives.
 
 Each instance receives one of six color-coded classifications.
 
