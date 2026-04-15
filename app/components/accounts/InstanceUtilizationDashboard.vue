@@ -108,28 +108,70 @@
 
     <!-- Main Dashboard Content -->
     <template v-else>
-      <!-- Summary Stats Row -->
-      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-        <button
-          v-for="cat in categories"
-          :key="cat.key"
-          class="relative rounded-lg border-l-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-4 text-left transition-all hover:shadow-md"
-          :class="[
-            cat.borderClass,
-            activeFilter === cat.key ? 'ring-2 ring-blue-400 shadow-md' : '',
-            cat.count === 0 ? 'opacity-50 cursor-default' : 'cursor-pointer'
-          ]"
-          :disabled="cat.count === 0"
-          @click="cat.count > 0 && toggleFilter(cat.key)"
-        >
-          <div class="text-3xl font-bold" :class="cat.textClass">{{ cat.count }}</div>
-          <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">{{ cat.label }}</div>
-          <UIcon
-            v-if="activeFilter === cat.key"
-            name="i-heroicons-funnel-solid"
-            class="absolute top-2 right-2 w-4 h-4 text-blue-400"
-          />
-        </button>
+      <!-- Two-Dimension Summary -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        <!-- Dimension 1: Compute Optimizer -->
+        <UCard>
+          <template #header>
+            <div class="flex items-center gap-2">
+              <UIcon name="i-heroicons-cpu-chip" class="text-blue-500 w-5 h-5" />
+              <span class="text-sm font-semibold text-gray-900 dark:text-white">Compute Optimizer</span>
+              <UTooltip text="AWS's analysis of whether each instance is the right size">
+                <UIcon name="i-heroicons-information-circle" class="text-gray-400 w-4 h-4" />
+              </UTooltip>
+            </div>
+          </template>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <button
+              v-for="cat in categories"
+              :key="cat.key"
+              class="relative rounded-lg border-l-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-3 text-left transition-all hover:shadow-md"
+              :class="[
+                cat.borderClass,
+                activeFilter === cat.key ? 'ring-2 ring-blue-400 shadow-md' : '',
+                cat.count === 0 ? 'opacity-50 cursor-default' : 'cursor-pointer'
+              ]"
+              :disabled="cat.count === 0"
+              @click="cat.count > 0 && toggleFilter(cat.key)"
+            >
+              <div class="text-2xl font-bold" :class="cat.textClass">{{ cat.count }}</div>
+              <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">{{ cat.label }}</div>
+              <UIcon v-if="activeFilter === cat.key" name="i-heroicons-funnel-solid" class="absolute top-2 right-2 w-3 h-3 text-blue-400" />
+            </button>
+          </div>
+        </UCard>
+
+        <!-- Dimension 2: Runtime (last 7 days) -->
+        <UCard>
+          <template #header>
+            <div class="flex items-center gap-2">
+              <UIcon name="i-heroicons-clock" class="text-green-500 w-5 h-5" />
+              <span class="text-sm font-semibold text-gray-900 dark:text-white">Runtime — Last 7 Days</span>
+              <UTooltip text="How much time each instance was running over the last 7 days, based on CloudWatch data">
+                <UIcon name="i-heroicons-information-circle" class="text-gray-400 w-4 h-4" />
+              </UTooltip>
+            </div>
+          </template>
+          <div class="grid grid-cols-3 gap-3">
+            <button
+              v-for="rt in runtimeCategories"
+              :key="rt.key"
+              class="relative rounded-lg border-l-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-3 text-left transition-all hover:shadow-md"
+              :class="[
+                rt.borderClass,
+                runtimeFilter === rt.key ? 'ring-2 ring-blue-400 shadow-md' : '',
+                rt.count === 0 ? 'opacity-50 cursor-default' : 'cursor-pointer'
+              ]"
+              :disabled="rt.count === 0"
+              @click="rt.count > 0 && toggleRuntimeFilter(rt.key)"
+            >
+              <div class="text-2xl font-bold" :class="rt.textClass">{{ rt.count }}</div>
+              <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">{{ rt.label }}</div>
+              <UIcon v-if="runtimeFilter === rt.key" name="i-heroicons-funnel-solid" class="absolute top-2 right-2 w-3 h-3 text-blue-400" />
+            </button>
+          </div>
+        </UCard>
       </div>
 
       <!-- Savings Banner + Donut Chart Row -->
@@ -295,10 +337,16 @@
                     class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
                     :class="expandedIds.has(inst.instanceId) ? 'bg-gray-50 dark:bg-gray-800/50' : ''"
                   >
-                    <!-- Classification -->
+                    <!-- Classification (Optimizer) -->
                     <td class="px-3 py-3 whitespace-nowrap">
                       <UBadge :color="classificationColor(inst.classification)" variant="soft" size="sm">
                         {{ classificationLabel(inst.classification) }}
+                      </UBadge>
+                    </td>
+                    <!-- Runtime (7 days) -->
+                    <td class="px-3 py-3 whitespace-nowrap">
+                      <UBadge :color="runtimeColor(inst.runtimeClassification)" variant="soft" size="sm">
+                        {{ runtimeLabel(inst.runtimeClassification) }}
                       </UBadge>
                     </td>
                     <!-- Instance Name -->
@@ -315,10 +363,10 @@
                     <td class="px-3 py-3 whitespace-nowrap">
                       <UBadge color="gray" variant="soft" size="sm">{{ inst.instanceType }}</UBadge>
                     </td>
-                    <!-- Active Days -->
+                    <!-- Hours Running (7d) -->
                     <td class="px-3 py-3 whitespace-nowrap">
-                      <span v-if="inst.totalDaysMonitored > 0" :class="cpuColor(inst.activeDaysCount / inst.totalDaysMonitored * 100)">
-                        {{ inst.activeDaysCount }}/{{ inst.totalDaysMonitored }}d
+                      <span v-if="inst.hoursRunningLast7Days != null" :class="inst.hoursRunningLast7Days > 1 ? 'text-green-600 dark:text-green-400' : 'text-orange-500'">
+                        {{ inst.hoursRunningLast7Days }}h
                       </span>
                       <span v-else class="text-gray-400">&mdash;</span>
                     </td>
@@ -360,7 +408,16 @@
                     <td :colspan="tableColumns.length" class="p-0">
                       <div class="bg-gray-50 dark:bg-gray-800/30 px-6 py-5 space-y-5">
                         <!-- Key Activity Metrics -->
-                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        <div class="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                          <div class="bg-white dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                            <div class="text-xs uppercase tracking-wider text-gray-500 mb-1">Runtime (7 days)</div>
+                            <div class="text-base font-semibold" :class="inst.hoursRunningLast7Days == null ? 'text-gray-400' : inst.hoursRunningLast7Days > 1 ? 'text-green-600 dark:text-green-400' : 'text-orange-500'">
+                              {{ inst.hoursRunningLast7Days != null ? inst.hoursRunningLast7Days + 'h' : 'No data' }}
+                            </div>
+                            <div class="text-xs text-gray-500 mt-1">
+                              {{ inst.hoursRunningLast7Days != null ? (inst.hoursRunningLast7Days > 1 ? 'Usually Running' : 'Usually Stopped') : '—' }}
+                            </div>
+                          </div>
                           <div class="bg-white dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
                             <div class="text-xs uppercase tracking-wider text-gray-500 mb-1">Last Active</div>
                             <div class="text-base font-semibold text-gray-900 dark:text-white">
@@ -633,6 +690,7 @@ const {
 } = useUtilizationAnalysis(accountIdRef, environment, expectedCount)
 
 const activeFilter = ref<string | null>(null)
+const runtimeFilter = ref<string | null>(null)
 const expandedIds = reactive(new Set<string>())
 const showAll = ref(false)
 const currentPage = ref(1)
@@ -719,6 +777,16 @@ const categories = computed(() => {
   ]
 })
 
+const runtimeCategories = computed(() => {
+  if (!data.value) return []
+  const rt = data.value.summary.runtimeSummary || { usuallyRunning: 0, usuallyStopped: 0, noData: 0 }
+  return [
+    { key: 'usually-running', label: 'Usually Running', count: rt.usuallyRunning, borderClass: 'border-l-green-500', textClass: 'text-green-600 dark:text-green-400' },
+    { key: 'usually-stopped', label: 'Usually Stopped', count: rt.usuallyStopped, borderClass: 'border-l-orange-500', textClass: 'text-orange-600 dark:text-orange-400' },
+    { key: 'no-data', label: 'No Data', count: rt.noData, borderClass: 'border-l-gray-400', textClass: 'text-gray-500 dark:text-gray-400' }
+  ]
+})
+
 const flaggedCount = computed(() => {
   if (!data.value) return 0
   const s = data.value.summary
@@ -733,7 +801,12 @@ const nonFlaggedCount = computed(() => {
 
 const filteredInstances = computed(() => {
   if (!data.value?.instances) return []
-  const all: any[] = data.value.instances
+  let all: any[] = data.value.instances
+
+  // Apply runtime filter first if set
+  if (runtimeFilter.value) {
+    all = all.filter((i: any) => i.runtimeClassification === runtimeFilter.value)
+  }
 
   let result: any[]
   if (activeFilter.value) {
@@ -768,6 +841,9 @@ const filteredInstances = computed(() => {
       case 'peakCpu':
         cmp = (a.metrics?.maxCpuPercent ?? -1) - (b.metrics?.maxCpuPercent ?? -1)
         break
+      case 'hoursRunning':
+        cmp = (a.hoursRunningLast7Days ?? -1) - (b.hoursRunningLast7Days ?? -1)
+        break
       case 'monthlyCost':
         cmp = (a.monthlyEstimate || 0) - (b.monthlyEstimate || 0)
         break
@@ -790,17 +866,18 @@ const paginatedInstances = computed(() => {
 })
 
 // Reset page when filter changes
-watch([activeFilter, showAll], () => {
+watch([activeFilter, runtimeFilter, showAll], () => {
   currentPage.value = 1
 })
 
 // Table columns definition
 const tableColumns = [
-  { key: 'classification', label: 'Classification', sortable: true },
+  { key: 'classification', label: 'Optimizer', sortable: true },
+  { key: 'runtime', label: 'Runtime (7d)', sortable: true },
   { key: 'instanceName', label: 'Instance Name', sortable: true },
   { key: 'instanceId', label: 'Instance ID', sortable: true },
   { key: 'instanceType', label: 'Type', sortable: true },
-  { key: 'activeDays', label: 'Active Days', sortable: true },
+  { key: 'hoursRunning', label: 'Hours Running', sortable: true },
   { key: 'peakCpu', label: 'Peak CPU', sortable: true },
   { key: 'trend', label: 'Trend' },
   { key: 'monthlyCost', label: 'Monthly Cost', sortable: true },
@@ -823,6 +900,22 @@ function handleSort(column: string) {
 
 function toggleFilter(key: string) {
   activeFilter.value = activeFilter.value === key ? null : key
+}
+
+function toggleRuntimeFilter(key: string) {
+  runtimeFilter.value = runtimeFilter.value === key ? null : key
+}
+
+function runtimeColor(rc: string): string {
+  if (rc === 'usually-running') return 'green'
+  if (rc === 'usually-stopped') return 'orange'
+  return 'gray'
+}
+
+function runtimeLabel(rc: string): string {
+  if (rc === 'usually-running') return 'Usually Running'
+  if (rc === 'usually-stopped') return 'Usually Stopped'
+  return 'No Data'
 }
 
 function toggleExpand(id: string) {

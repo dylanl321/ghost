@@ -24,6 +24,11 @@ export type UtilizationClassification =
   | 'right-sized'
   | 'insufficient-data'
 
+export type RuntimeClassification =
+  | 'usually-running'
+  | 'usually-stopped'
+  | 'no-data'
+
 export interface InstanceApiActivity {
   instanceId: string
   totalCalls: number
@@ -51,6 +56,8 @@ export interface UtilizationConfig {
   networkOnlyRightSizedThreshold: number
   /** Instance age below this (hours) = new instance, skip classification (default 24) */
   newInstanceGraceHours: number
+  /** Hours running over last 7 days above this = "Usually Running" (default 1) */
+  usuallyRunningHoursThreshold: number
 
   // --- Utilization score weights (should sum to ~100 max) ---
   score: {
@@ -90,6 +97,7 @@ export const DEFAULT_CONFIG: UtilizationConfig = {
   activeDayNetworkThreshold: 1_000_000,    // 1 MB/day
   networkOnlyRightSizedThreshold: 50_000_000, // 50 MB/day
   newInstanceGraceHours: 24,
+  usuallyRunningHoursThreshold: 1,
 
   // Scoring weights
   score: {
@@ -138,6 +146,8 @@ export interface InstanceClassification {
   region: string
   classification: UtilizationClassification
   classificationReasons: string[]
+  runtimeClassification: RuntimeClassification
+  hoursRunningLast7Days: number | null
   explanation: string
   evidence: string[]
   cpuDailyValues: number[]
@@ -161,6 +171,7 @@ export interface InstanceClassification {
     diskReadOps: number | null
     diskWriteOps: number | null
     diskOpsPerDay: number | null
+    hoursRunningLast7Days: number | null
     lookbackDays: number
   }
   optimization?: {
@@ -185,6 +196,11 @@ export interface ClassificationSummary {
   rightSized: number
   insufficientData: number
   totalPotentialMonthlySavings: number
+  runtimeSummary: {
+    usuallyRunning: number
+    usuallyStopped: number
+    noData: number
+  }
 }
 
 export interface ClassificationResult {
@@ -249,6 +265,8 @@ export function classifyInstance(
     region: instance.region,
     classification: 'insufficient-data',
     classificationReasons: [],
+    runtimeClassification: classifyRuntime(metrics?.hoursRunningLast7Days ?? null, thresholds),
+    hoursRunningLast7Days: metrics?.hoursRunningLast7Days ?? null,
     explanation: '',
     evidence: [],
     cpuDailyValues: cpuValues,
@@ -277,6 +295,7 @@ export function classifyInstance(
       diskReadOps: (metrics as any).diskReadOps ?? null,
       diskWriteOps: (metrics as any).diskWriteOps ?? null,
       diskOpsPerDay: (metrics as any).diskOpsPerDay ?? null,
+      hoursRunningLast7Days: metrics.hoursRunningLast7Days ?? null,
       lookbackDays: metrics.lookbackDays
     }
   }
@@ -679,6 +698,18 @@ export function classifyInstance(
 }
 
 /**
+ * Classify runtime behavior based on hours running over the last 7 days.
+ * Uses hourly CloudWatch CPU data point count as a proxy for hours running.
+ */
+export function classifyRuntime(
+  hoursRunning: number | null,
+  thresholds: UtilizationThresholds = DEFAULT_THRESHOLDS
+): RuntimeClassification {
+  if (hoursRunning === null) return 'no-data'
+  return hoursRunning > thresholds.usuallyRunningHoursThreshold ? 'usually-running' : 'usually-stopped'
+}
+
+/**
  * Classify all instances and produce a summary
  */
 export function classifyInstances(
@@ -713,7 +744,8 @@ export function classifyInstances(
     underProvisioned: 0,
     rightSized: 0,
     insufficientData: 0,
-    totalPotentialMonthlySavings: 0
+    totalPotentialMonthlySavings: 0,
+    runtimeSummary: { usuallyRunning: 0, usuallyStopped: 0, noData: 0 }
   }
 
   for (const inst of classified) {
@@ -743,6 +775,12 @@ export function classifyInstances(
       case 'insufficient-data':
         summary.insufficientData++
         break
+    }
+    // Runtime dimension
+    switch (inst.runtimeClassification) {
+      case 'usually-running': summary.runtimeSummary.usuallyRunning++; break
+      case 'usually-stopped': summary.runtimeSummary.usuallyStopped++; break
+      case 'no-data': summary.runtimeSummary.noData++; break
     }
   }
 

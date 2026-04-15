@@ -43,6 +43,8 @@ export interface InstanceMetrics {
   diskReadOps: number | null
   diskWriteOps: number | null
   diskOpsPerDay: number | null
+  // Runtime hours over last 7 days (count of hourly CPU data points)
+  hoursRunningLast7Days: number | null
   dataPointCount: number
   lookbackDays: number
 }
@@ -173,9 +175,9 @@ async function fetchRegionMetrics(
     const startTime = new Date()
     startTime.setDate(startTime.getDate() - lookbackDays)
 
-    // Each instance needs 6 metrics (CPU avg, CPU max, NetworkIn, NetworkOut, DiskReadOps, DiskWriteOps)
+    // Each instance needs 7 metrics (CPU avg, CPU max, NetworkIn, NetworkOut, DiskReadOps, DiskWriteOps, CPU hourly for runtime)
     // GetMetricData supports up to 500 queries per request
-    const metricsPerInstance = 6
+    const metricsPerInstance = 7
     const maxInstancesPerBatch = options?.maxInstancesPerBatch || Math.floor(DEFAULT_MAX_METRIC_QUERIES / metricsPerInstance)
     const batches = chunkArray(instanceIds, maxInstancesPerBatch)
     let throttleMultiplier = 1
@@ -283,6 +285,21 @@ async function fetchRegionMetrics(
           },
           ReturnData: true
         })
+
+        // Hourly CPU over 7 days — data point count = hours the instance was running
+        queries.push({
+          Id: `cpuhourly_${safeId}`,
+          MetricStat: {
+            Metric: {
+              Namespace: 'AWS/EC2',
+              MetricName: 'CPUUtilization',
+              Dimensions: [{ Name: 'InstanceId', Value: instanceId }]
+            },
+            Period: 3600, // 1 hour
+            Stat: 'Average'
+          },
+          ReturnData: true
+        })
       }
 
       const command = new GetMetricDataCommand({
@@ -344,6 +361,7 @@ async function fetchRegionMetrics(
         const netOutResult = allMetricResults.find(r => r.Id === `netout_${safeId}`)
         const diskRdResult = allMetricResults.find(r => r.Id === `diskrd_${safeId}`)
         const diskWrResult = allMetricResults.find(r => r.Id === `diskwr_${safeId}`)
+        const cpuHourlyResult = allMetricResults.find(r => r.Id === `cpuhourly_${safeId}`)
 
         const cpuValues = cpuResult?.Values || []
         const cpuTimestamps = cpuResult?.Timestamps || []
@@ -422,6 +440,18 @@ async function fetchRegionMetrics(
           ? totalDiskOps / diskDaysCount
           : null
 
+        // Runtime hours: count hourly CPU data points in the last 7 days
+        // CloudWatch only publishes data points when the instance is running,
+        // so the count of hourly data points = hours the instance was running
+        const sevenDaysAgo = new Date(endTime.getTime() - 7 * 24 * 60 * 60 * 1000)
+        const cpuHourlyTimestamps = cpuHourlyResult?.Timestamps || []
+        let hoursRunningLast7Days: number | null = null
+        if (cpuHourlyResult) {
+          hoursRunningLast7Days = cpuHourlyTimestamps.filter(
+            (ts: Date) => ts >= sevenDaysAgo
+          ).length
+        }
+
         result.metrics.set(instanceId, {
           instanceId,
           region,
@@ -439,6 +469,7 @@ async function fetchRegionMetrics(
           diskReadOps: totalDiskReadOps,
           diskWriteOps: totalDiskWriteOps,
           diskOpsPerDay,
+          hoursRunningLast7Days,
           dataPointCount: cpuValues.length,
           lookbackDays
         })
@@ -465,7 +496,8 @@ async function fetchRegionMetrics(
                 { Id: `netin_${safeId}`, MetricStat: { Metric: { Namespace: 'AWS/EC2', MetricName: 'NetworkIn', Dimensions: [{ Name: 'InstanceId', Value: instanceId }] }, Period: 86400, Stat: 'Sum' }, ReturnData: true },
                 { Id: `netout_${safeId}`, MetricStat: { Metric: { Namespace: 'AWS/EC2', MetricName: 'NetworkOut', Dimensions: [{ Name: 'InstanceId', Value: instanceId }] }, Period: 86400, Stat: 'Sum' }, ReturnData: true },
                 { Id: `diskrd_${safeId}`, MetricStat: { Metric: { Namespace: 'AWS/EC2', MetricName: 'DiskReadOps', Dimensions: [{ Name: 'InstanceId', Value: instanceId }] }, Period: 86400, Stat: 'Sum' }, ReturnData: true },
-                { Id: `diskwr_${safeId}`, MetricStat: { Metric: { Namespace: 'AWS/EC2', MetricName: 'DiskWriteOps', Dimensions: [{ Name: 'InstanceId', Value: instanceId }] }, Period: 86400, Stat: 'Sum' }, ReturnData: true }
+                { Id: `diskwr_${safeId}`, MetricStat: { Metric: { Namespace: 'AWS/EC2', MetricName: 'DiskWriteOps', Dimensions: [{ Name: 'InstanceId', Value: instanceId }] }, Period: 86400, Stat: 'Sum' }, ReturnData: true },
+                { Id: `cpuhourly_${safeId}`, MetricStat: { Metric: { Namespace: 'AWS/EC2', MetricName: 'CPUUtilization', Dimensions: [{ Name: 'InstanceId', Value: instanceId }] }, Period: 3600, Stat: 'Average' }, ReturnData: true }
               )
             }
             const subResponse = await client.send(new GetMetricDataCommand({
@@ -482,6 +514,7 @@ async function fetchRegionMetrics(
                 const netOutResult = subResponse.MetricDataResults.find(r => r.Id === `netout_${safeId}`)
                 const diskRdResult = subResponse.MetricDataResults.find(r => r.Id === `diskrd_${safeId}`)
                 const diskWrResult = subResponse.MetricDataResults.find(r => r.Id === `diskwr_${safeId}`)
+                const cpuHourlyResult = subResponse.MetricDataResults.find(r => r.Id === `cpuhourly_${safeId}`)
                 const cpuValues = cpuResult?.Values || []
                 const cpuTimestamps = cpuResult?.Timestamps || []
                 const avgCpu = cpuValues.length > 0 ? cpuValues.reduce((sum, v) => sum + v, 0) / cpuValues.length : null
@@ -510,6 +543,11 @@ async function fetchRegionMetrics(
                 const totalDiskOps = totalDiskReadOps != null && totalDiskWriteOps != null ? totalDiskReadOps + totalDiskWriteOps : totalDiskReadOps ?? totalDiskWriteOps
                 const diskDaysCount = Math.max(diskRdValues.length, diskWrValues.length)
                 const diskOpsPerDay = totalDiskOps != null && diskDaysCount > 0 ? totalDiskOps / diskDaysCount : null
+                const subSevenDaysAgo = new Date(endTime.getTime() - 7 * 24 * 60 * 60 * 1000)
+                const subCpuHourlyTimestamps = cpuHourlyResult?.Timestamps || []
+                const subHoursRunning = cpuHourlyResult
+                  ? subCpuHourlyTimestamps.filter((ts: Date) => ts >= subSevenDaysAgo).length
+                  : null
                 result.metrics.set(instanceId, {
                   instanceId, region,
                   avgCpuPercent: avgCpu != null ? Math.round(avgCpu * 100) / 100 : null,
@@ -522,6 +560,7 @@ async function fetchRegionMetrics(
                   networkDailyValues: networkPairs.map(p => p.value),
                   networkDailyTimestamps: networkPairs.map(p => p.timestamp),
                   diskReadOps: totalDiskReadOps, diskWriteOps: totalDiskWriteOps, diskOpsPerDay,
+                  hoursRunningLast7Days: subHoursRunning,
                   dataPointCount: cpuValues.length, lookbackDays
                 })
               }
