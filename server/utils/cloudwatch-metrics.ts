@@ -176,9 +176,12 @@ async function fetchRegionMetrics(
     startTime.setDate(startTime.getDate() - lookbackDays)
 
     // Each instance needs 7 metrics (CPU avg, CPU max, NetworkIn, NetworkOut, DiskReadOps, DiskWriteOps, CPU hourly for runtime)
-    // GetMetricData supports up to 500 queries per request
+    // Hourly CPU generates up to 336 data points per instance (14 days × 24h), so reduce batch size
     const metricsPerInstance = 7
-    const maxInstancesPerBatch = options?.maxInstancesPerBatch || Math.floor(DEFAULT_MAX_METRIC_QUERIES / metricsPerInstance)
+    const maxInstancesPerBatch = options?.maxInstancesPerBatch || Math.min(
+      Math.floor(DEFAULT_MAX_METRIC_QUERIES / metricsPerInstance),
+      15 // Cap at 15 instances per batch to stay well under the 100,800 data point limit
+    )
     const batches = chunkArray(instanceIds, maxInstancesPerBatch)
     let throttleMultiplier = 1
 
@@ -287,6 +290,7 @@ async function fetchRegionMetrics(
         })
 
         // Hourly CPU over 7 days — data point count = hours the instance was running
+        // Uses a separate 7-day window to minimize data volume (168 data points max vs 336 for 14 days)
         queries.push({
           Id: `cpuhourly_${safeId}`,
           MetricStat: {
@@ -316,9 +320,7 @@ async function fetchRegionMetrics(
 
       do {
         const paginatedCommand = new GetMetricDataCommand({
-          MetricDataQueries: queries,
-          StartTime: startTime,
-          EndTime: endTime,
+          ...(nextToken ? {} : { MetricDataQueries: queries, StartTime: startTime, EndTime: endTime }),
           NextToken: nextToken
         })
 
