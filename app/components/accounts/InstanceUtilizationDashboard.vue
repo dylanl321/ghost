@@ -752,28 +752,24 @@ function formatTimeAgo(dateStr?: string): string {
 }
 
 // Classification type
-type Classification = 'unused' | 'patching-only' | 'underutilized' | 'under-provisioned' | 'right-sized' | 'insufficient-data'
+type Classification = 'over-provisioned' | 'under-provisioned' | 'optimized' | 'no-data'
 
 // Classification sort order for table sorting
 const classificationOrder: Record<string, number> = {
-  'unused': 0,
-  'patching-only': 1,
-  'underutilized': 2,
-  'under-provisioned': 3,
-  'right-sized': 4,
-  'insufficient-data': 5
+  'over-provisioned': 0,
+  'under-provisioned': 1,
+  'optimized': 2,
+  'no-data': 3
 }
 
 const categories = computed(() => {
   if (!data.value) return []
   const s = data.value.summary
   return [
-    { key: 'unused', label: 'Unused', count: s.unused, borderClass: 'border-l-red-500', textClass: 'text-red-600 dark:text-red-400' },
-    { key: 'patching-only', label: 'Patching Only', count: s.patchingOnly, borderClass: 'border-l-orange-500', textClass: 'text-orange-600 dark:text-orange-400' },
-    { key: 'underutilized', label: 'Over-provisioned', count: s.underutilized, borderClass: 'border-l-yellow-500', textClass: 'text-yellow-600 dark:text-yellow-400' },
+    { key: 'over-provisioned', label: 'Over-provisioned', count: s.overProvisioned, borderClass: 'border-l-yellow-500', textClass: 'text-yellow-600 dark:text-yellow-400' },
     { key: 'under-provisioned', label: 'Under-provisioned', count: s.underProvisioned, borderClass: 'border-l-purple-500', textClass: 'text-purple-600 dark:text-purple-400' },
-    { key: 'right-sized', label: 'Right-sized', count: s.rightSized, borderClass: 'border-l-green-500', textClass: 'text-green-600 dark:text-green-400' },
-    { key: 'insufficient-data', label: 'No Data', count: s.insufficientData, borderClass: 'border-l-gray-400', textClass: 'text-gray-500 dark:text-gray-400' }
+    { key: 'optimized', label: 'Optimized', count: s.optimized, borderClass: 'border-l-green-500', textClass: 'text-green-600 dark:text-green-400' },
+    { key: 'no-data', label: 'No Data', count: s.noData, borderClass: 'border-l-gray-400', textClass: 'text-gray-500 dark:text-gray-400' }
   ]
 })
 
@@ -790,13 +786,13 @@ const runtimeCategories = computed(() => {
 const flaggedCount = computed(() => {
   if (!data.value) return 0
   const s = data.value.summary
-  return s.unused + s.patchingOnly + s.underutilized + (s.underProvisioned || 0)
+  return s.overProvisioned + s.underProvisioned
 })
 
 const nonFlaggedCount = computed(() => {
   if (!data.value) return 0
   const s = data.value.summary
-  return s.rightSized + s.insufficientData
+  return s.optimized + s.noData
 })
 
 const filteredInstances = computed(() => {
@@ -815,7 +811,7 @@ const filteredInstances = computed(() => {
     result = [...all]
   } else {
     result = all.filter((i: any) =>
-      ['unused', 'patching-only', 'underutilized', 'under-provisioned'].includes(i.classification)
+      ['over-provisioned', 'under-provisioned'].includes(i.classification)
     )
   }
 
@@ -928,24 +924,20 @@ function toggleExpand(id: string) {
 
 function classificationColor(classification: Classification): string {
   const colors: Record<Classification, string> = {
-    'unused': 'red',
-    'patching-only': 'orange',
-    'underutilized': 'yellow',
+    'over-provisioned': 'yellow',
     'under-provisioned': 'purple',
-    'right-sized': 'green',
-    'insufficient-data': 'gray'
+    'optimized': 'green',
+    'no-data': 'gray'
   }
   return colors[classification] || 'gray'
 }
 
 function classificationLabel(classification: Classification): string {
   const labels: Record<Classification, string> = {
-    'unused': 'Unused',
-    'patching-only': 'Patch Only',
-    'underutilized': 'Over-provisioned',
+    'over-provisioned': 'Over-provisioned',
     'under-provisioned': 'Under-provisioned',
-    'right-sized': 'Right-sized',
-    'insufficient-data': 'No Data'
+    'optimized': 'Optimized',
+    'no-data': 'No Data'
   }
   return labels[classification] || classification
 }
@@ -1024,12 +1016,10 @@ const donutChartOptions = computed(() => {
   const s = data.value.summary
 
   const chartData = [
-    { name: 'Unused', value: s.unused, itemStyle: { color: '#ef4444' } },
-    { name: 'Patching Only', value: s.patchingOnly, itemStyle: { color: '#f97316' } },
-    { name: 'Over-provisioned', value: s.underutilized, itemStyle: { color: '#eab308' } },
-    { name: 'Under-provisioned', value: s.underProvisioned || 0, itemStyle: { color: '#a855f7' } },
-    { name: 'Right-sized', value: s.rightSized, itemStyle: { color: '#22c55e' } },
-    { name: 'No Data', value: s.insufficientData, itemStyle: { color: '#9ca3af' } }
+    { name: 'Over-provisioned', value: s.overProvisioned, itemStyle: { color: '#eab308' } },
+    { name: 'Under-provisioned', value: s.underProvisioned, itemStyle: { color: '#a855f7' } },
+    { name: 'Optimized', value: s.optimized, itemStyle: { color: '#22c55e' } },
+    { name: 'No Data', value: s.noData, itemStyle: { color: '#9ca3af' } }
   ].filter(d => d.value > 0)
 
   return {

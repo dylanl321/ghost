@@ -6,96 +6,75 @@ icon: i-heroicons-chart-bar
 
 # Understanding Instance Utilization Classifications
 
-The Cost Optimization tab on each account page analyzes every EC2 instance and classifies it based on how actively it's being used. This helps you identify instances that can be terminated, downsized, or upsized to save money or improve performance.
+The Cost Optimization tab on each account page analyzes every EC2 instance across two independent dimensions: what AWS Compute Optimizer says about its sizing, and how much time it was actually running over the last 7 days.
 
-## How It Works
-
-The system looks at several data sources over the last 14 days to classify each instance:
-
-**Used for classification decisions:**
-- **CPU usage** — the highest (peak) CPU each day. If peak CPU stays below 5%, the instance may be idle.
-- **Network traffic** — total bytes in and out each day. Combined with CPU to determine idle status, and used on its own when CPU data is missing.
-- **AWS Compute Optimizer** — AWS's own analysis of whether the instance is the right size (over-provisioned, under-provisioned, or optimized).
-- **CloudTrail API activity** — whether the instance is making AWS API calls. Acts as a safety net: an instance with low CPU and network but active API calls won't be flagged as unused.
-- **Tags** — Schedule and Patch Group tags determine how stopped instances are classified.
-
-**Used for evidence and scoring only (does not affect classification):**
-- **Disk I/O** — read and write operations per day. Shown in the detail view and contributes to the utilization score, but does not change which classification an instance receives.
-
-Each instance receives one of six color-coded classifications.
+These two dimensions are shown side by side and can be filtered independently.
 
 ---
 
-## Classifications
+## Dimension 1: Compute Optimizer
 
-### 🔴 Unused
+AWS Compute Optimizer analyzes each instance's usage patterns and assigns one of four classifications.
 
-The instance is not doing meaningful work and is a candidate for termination.
+### 🟡 Over-provisioned
 
-**Stopped instances:** The instance is off, has no Schedule tag (nothing will turn it back on), no Patch Group tag, and no historical evidence that it was actively used before being stopped.
+AWS Compute Optimizer determined the instance is bigger than it needs to be. A smaller instance type could handle the workload, saving money. The detail view shows the recommended instance type and estimated monthly savings.
 
-**Running instances:** The instance is on, but over the last 14 days:
-- Peak CPU never exceeded 5% on any day
-- Network traffic was below 5 MB per day
-- No meaningful AWS API calls were detected
-
-These thresholds come from AWS Compute Optimizer's official idle criteria. If all three conditions are met, the instance is considered idle.
-
-**Potential savings shown:** The full monthly on-demand cost of the instance.
-
----
-
-### 🟠 Patching Only
-
-The instance is stopped and has a **Patch Group** tag but no **Schedule** tag. This means it only gets turned on during patching windows and has no scheduled workload. It exists solely to receive patches.
-
-**Potential savings shown:** The full monthly on-demand cost.
-
----
-
-### 🟡 Over-provisioned (Underutilized)
-
-The instance is being used, but it's bigger than it needs to be. There are two ways an instance ends up here:
-
-**Running and over-sized:** AWS Compute Optimizer analyzed the instance's usage patterns and determined a smaller instance type would handle the workload. The detail view shows the recommended instance type and estimated savings.
-
-**Stopped with prior usage:** The instance is stopped with no Schedule or Patch Group tag, but historical data shows it was actively used before being stopped (CPU activity, API calls, or a Compute Optimizer finding). This prevents recently-stopped active instances from being immediately labeled as "Unused." Review whether it should be restarted or terminated.
-
-**Potential savings shown:** Compute Optimizer's savings estimate if available, otherwise 50% of the monthly cost.
-
----
+**Action:** Consider downsizing to the recommended instance type.
 
 ### 🟣 Under-provisioned
 
-The instance needs MORE resources. AWS Compute Optimizer determined the current instance type is too small for the workload — it may be experiencing performance issues. The detail view shows the recommended (larger) instance type.
+AWS Compute Optimizer determined the instance needs more resources than its current type provides. It may be experiencing performance issues. The detail view shows the recommended (larger) instance type.
 
-This is a performance concern, not a cost-saving opportunity.
+**Action:** Consider upgrading to the recommended instance type.
 
----
+### 🟢 Optimized
 
-### 🟢 Right-Sized
-
-The instance appears appropriately sized for its workload. An instance is classified as right-sized when any of the following are true:
-
-- It is stopped but has a **Schedule** tag (it's intentionally off as part of its normal cycle)
-- AWS Compute Optimizer confirmed it as **Optimized**
-- Peak CPU is above 5% and Compute Optimizer has no concerns
-- CPU and network are low, but the instance is actively making AWS API calls (it may be running a lightweight workload like polling queues or reading from S3)
-- No CPU data is available, but network traffic exceeds 50 MB/day (clearly active)
-
-No action needed.
-
----
+AWS Compute Optimizer confirmed the instance is appropriately sized for its workload. No action needed.
 
 ### ⚪ No Data
 
-Not enough monitoring data to classify the instance. This typically means:
+AWS Compute Optimizer has not analyzed this instance yet. This typically means:
+- The instance was recently launched (Compute Optimizer needs at least 12 hours of data)
+- Compute Optimizer is not enabled for this account
 
-- CloudWatch metrics are not enabled or not reporting
-- The instance was launched very recently (less than 24 hours ago)
-- Network data exists but is low, and CPU data is missing
+---
 
-These instances are not flagged for action, but may warrant investigation to ensure monitoring is properly configured.
+## Dimension 2: Runtime — Last 7 Days
+
+This dimension answers a simple question: was this instance actually running over the last 7 days?
+
+It works by counting how many hours CloudWatch published CPU data for the instance. CloudWatch only publishes data when an instance is running, so the count of hourly data points equals the number of hours the instance was on.
+
+### 🟢 Usually Running
+
+The instance was running for more than 1 hour over the last 7 days.
+
+### 🟠 Usually Stopped
+
+The instance was running for 1 hour or less over the last 7 days.
+
+### ⚪ No Data
+
+CloudWatch returned no data for this instance. This could mean:
+- CloudWatch monitoring is not enabled
+- The instance is too new to have data
+- There was a permissions issue retrieving metrics
+
+---
+
+## Using Both Dimensions Together
+
+The two dimensions are independent — you can filter by either or both at the same time.
+
+Some useful combinations:
+
+| Compute Optimizer | Runtime | What it means |
+|---|---|---|
+| Over-provisioned | Usually Running | Running continuously but oversized — good candidate for downsizing |
+| Over-provisioned | Usually Stopped | Oversized AND rarely running — consider terminating instead of downsizing |
+| Optimized | Usually Stopped | Right-sized but barely used — worth investigating why it's stopped so often |
+| No Data | Usually Stopped | Rarely running and no Optimizer analysis — may be a forgotten instance |
 
 ---
 
@@ -103,15 +82,15 @@ These instances are not flagged for action, but may warrant investigation to ens
 
 ### Summary Cards
 
-The colored cards at the top show the count of instances in each classification. Click a card to filter the table to only that category. Click it again to clear the filter.
+Two side-by-side card groups show counts for each classification. Click any card to filter the instance table to that category. Click again to clear the filter.
 
 ### Savings Banner
 
-If any instances have estimated savings, a green banner shows the total potential monthly and annual savings across all flagged instances.
+If any instances are over-provisioned with a savings estimate from Compute Optimizer, a green banner shows the total potential monthly and annual savings.
 
 ### Instance Table
 
-The table shows all flagged instances by default (Unused, Patching Only, Over-provisioned, Under-provisioned). Click "Show all" to include Right-sized and No Data instances.
+The table shows over-provisioned and under-provisioned instances by default. Click "Show all" to include optimized and no-data instances.
 
 Columns are sortable — click any column header to sort. The table paginates at 25 rows.
 
@@ -119,59 +98,27 @@ Columns are sortable — click any column header to sort. The table paginates at
 
 Click any row to expand it. The detail view shows:
 
-- **Last Active** — The most recent day with meaningful activity, and how many days ago that was
-- **Active Days** — How many of the monitored days had activity (e.g., "10 of 14")
+- **Runtime (7 days)** — Hours the instance was running over the last 7 days and its runtime classification
 - **Launched** — When the instance was first started and its age
 - **Monthly Cost** — On-demand cost estimate with annual projection
-- **Data Sources Used** — A checklist showing which of the six data sources had data for this instance. Green check = data available, gray X = no data. This helps you understand how confident the classification is.
-- **Utilization Score** — A 0–100 bar combining all available signals. Higher = more evidence of active usage. This is informational only and does not affect the classification.
-- **Tags** — Owner, Project, Schedule, and Patch Group if present
-- **Peak CPU Chart** — Daily peak CPU over the lookback period
-- **Network I/O Chart** — Daily network traffic over the lookback period
-- **Explanation** — A plain-language summary of why the instance received its classification
+- **Explanation** — A plain-language summary of the Compute Optimizer finding
 - **Evidence** — Specific data points supporting the classification
-
----
-
-## Utilization Score
-
-Every instance gets a score from 0 to 100 based on how much evidence supports that it's actively used. The score combines:
-
-- AWS Compute Optimizer finding
-- CloudTrail API activity
-- Network traffic volume
-- Peak CPU level
-- CPU usage variability (bursty workloads score higher)
-- Disk I/O activity
-- A grace period bonus for instances less than 7 days old
-
-The score is for your reference only — it does not determine the classification. An instance can be "Right-sized" with a low score (limited data) or a high score (strong evidence from multiple sources).
 
 ---
 
 ## Common Questions
 
-**Q: An instance shows "No Data" but I know it's running. What's wrong?**
-CloudWatch metrics may not be enabled, or the analysis hasn't been run recently. Try clicking "Run Analysis" to trigger a fresh analysis. If the problem persists, check that CloudWatch basic monitoring is enabled on the instance.
+**Q: Why doesn't Compute Optimizer have data for my instance?**
+Compute Optimizer needs at least 12 hours of data after an instance starts. If the instance is new, wait and run a fresh analysis. If it's been running for a while, check that Compute Optimizer is enabled for the account.
 
-**Q: Why is a stopped instance "Over-provisioned" instead of "Unused"?**
-The system found historical evidence that the instance was actively used before being stopped — CPU activity, API calls, or a Compute Optimizer finding. This prevents recently-stopped active instances from being prematurely flagged for termination. Review whether it should be restarted or terminated.
-
-**Q: An instance has very low CPU but is "Right-sized." Why?**
-The instance is making meaningful AWS API calls (visible in the CloudTrail data source). It may be running a lightweight workload like polling SQS queues, reading from S3, or calling DynamoDB. Low CPU doesn't always mean idle.
+**Q: An instance shows "Usually Stopped" but I know it runs regularly. Why?**
+The runtime classification looks at the last 7 days only. If the instance runs on a schedule that didn't happen to run in the last 7 days, it would show as "Usually Stopped." Check the hours running count in the expanded detail view.
 
 **Q: How are savings calculated?**
-- Unused and Patching Only: full monthly on-demand cost
-- Over-provisioned: AWS Compute Optimizer's savings estimate if available, otherwise 50% of monthly cost
-- Under-provisioned and Right-sized: no savings (not applicable)
-
-All cost estimates are based on on-demand pricing. Actual savings will vary depending on Reserved Instances or Savings Plans.
+Savings come directly from AWS Compute Optimizer's estimate for downsizing to the recommended instance type. All estimates are based on on-demand pricing and will vary if you have Reserved Instances or Savings Plans.
 
 **Q: How often is the data refreshed?**
 Analysis results are cached for 30 minutes. CloudWatch metrics are cached for 1 hour. AWS Compute Optimizer refreshes its recommendations daily. Click "Run Analysis" to force a fresh analysis at any time.
 
-**Q: What does the "Filling in missing metrics" message mean?**
-After the initial analysis, the system detected that some instances were missing CloudWatch data (possibly due to API throttling on large accounts). It's automatically retrying those instances to fill in the gaps.
-
-**Q: Can I change the thresholds for what counts as "idle"?**
-The thresholds are aligned with AWS Compute Optimizer's official idle criteria (peak CPU < 5%, network < 5 MB/day). Contact your GHOST administrator if you need them adjusted.
+**Q: Can I change the threshold for "Usually Running"?**
+The threshold is 1 hour over 7 days. Contact your GHOST administrator if you need it adjusted.
