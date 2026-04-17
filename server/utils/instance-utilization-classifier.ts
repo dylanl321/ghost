@@ -300,7 +300,9 @@ export function classifyInstance(
     result.optimization = {
       finding: optimizerRec.finding,
       estimatedMonthlySavings: optimizerRec.estimatedMonthlySavings || 0,
-      recommendedType: optimizerRec.recommendationOptions?.[0]?.configuration?.instanceType
+      recommendedType: optimizerRec.recommendationOptions
+        ?.slice().sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99))[0]
+        ?.configuration?.instanceType
     }
   }
 
@@ -329,7 +331,9 @@ export function classifyInstance(
   }
 
   const savings = optimizerRec.estimatedMonthlySavings || 0
-  const recommended = optimizerRec.recommendationOptions?.[0]?.configuration?.instanceType
+  const recommended = optimizerRec.recommendationOptions
+    ?.slice().sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99))[0]
+    ?.configuration?.instanceType
   const hasCpuMetrics = metrics && metrics.maxCpuPercent != null
   const peakStr = hasCpuMetrics ? (metrics!.maxCpuPercent?.toFixed(1) ?? 'N/A') : null
   const avgStr = hasCpuMetrics ? metrics!.avgCpuPercent?.toFixed(1) ?? 'N/A' : null
@@ -441,6 +445,9 @@ export function classifyInstances(
         summary.overProvisioned++
         if (inst.optimization?.estimatedMonthlySavings) {
           summary.totalPotentialMonthlySavings += inst.optimization.estimatedMonthlySavings
+        } else if (inst.monthlyEstimate) {
+          // Compute Optimizer didn't provide a savings estimate — use 50% of current cost as conservative fallback
+          summary.totalPotentialMonthlySavings += inst.monthlyEstimate * 0.5
         }
         break
       case 'under-provisioned':

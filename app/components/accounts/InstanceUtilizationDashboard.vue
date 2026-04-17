@@ -179,7 +179,7 @@
         <!-- Donut Chart -->
         <UCard class="lg:col-span-1">
           <template #header>
-            <div class="text-sm font-semibold text-gray-900 dark:text-white">Classification Breakdown</div>
+            <div class="text-sm font-semibold text-gray-900 dark:text-white">Compute Optimizer Breakdown</div>
           </template>
           <div class="h-56 flex items-center justify-center">
             <VChart :option="donutChartOptions" autoresize class="w-full h-full" />
@@ -232,12 +232,12 @@
                 </div>
               </div>
               <div>
-                <div class="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">Right-sized</div>
-                <div class="text-2xl font-bold text-green-600 dark:text-green-400">{{ data.summary.rightSized }}</div>
+                <div class="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">Optimized</div>
+                <div class="text-2xl font-bold text-green-600 dark:text-green-400">{{ data.summary.optimized }}</div>
               </div>
               <div>
-                <div class="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">Insufficient Data</div>
-                <div class="text-2xl font-bold text-gray-500 dark:text-gray-400">{{ data.summary.insufficientData }}</div>
+                <div class="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">No Data</div>
+                <div class="text-2xl font-bold text-gray-500 dark:text-gray-400">{{ data.summary.noData }}</div>
               </div>
             </div>
           </UCard>
