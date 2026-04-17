@@ -110,8 +110,15 @@ export default defineEventHandler(handleAsync(async (event) => {
   const cacheKey = `utilization:${accountIdentifier}:${environment}:${lookbackDays}:${includeMetrics}`
   const cached = await cache.get<ClassificationResult>(cacheKey)
   if (cached) {
-    logger.info(`[Utilization API] Cache hit for ${accountIdentifier}`)
-    return sendSuccess(event, cached, { cached: true, environment })
+    // Validate schema — discard stale cached results with old field names
+    const s = cached.summary as any
+    if (s && ('unused' in s || 'rightSized' in s) && !('overProvisioned' in s)) {
+      logger.info(`[Utilization API] Stale in-memory cache for ${accountIdentifier}, discarding`)
+      await cache.delete(cacheKey)
+    } else {
+      logger.info(`[Utilization API] Cache hit for ${accountIdentifier}`)
+      return sendSuccess(event, cached, { cached: true, environment })
+    }
   }
 
   // Check DynamoDB for recent analysis before running expensive sync query
@@ -194,9 +201,13 @@ export default defineEventHandler(handleAsync(async (event) => {
   if (instanceIdentifiers.length === 0) {
     const emptyResult: ClassificationResult = {
       summary: {
-        totalInstances: 0, unused: 0, patchingOnly: 0,
-        underutilized: 0, underProvisioned: 0, rightSized: 0, insufficientData: 0,
-        totalPotentialMonthlySavings: 0
+        totalInstances: 0,
+        overProvisioned: 0,
+        underProvisioned: 0,
+        optimized: 0,
+        noData: 0,
+        totalPotentialMonthlySavings: 0,
+        runtimeSummary: { usuallyRunning: 0, usuallyStopped: 0, noData: 0 }
       },
       instances: []
     }

@@ -90,6 +90,16 @@ export async function getLatestAnalysis(accountId: string, env: string): Promise
     environment,
     tableAccountId
   )
+  if (!result) return null
+
+  // Validate summary schema — if it has old fields (unused, rightSized) but not new ones,
+  // treat as stale and return null to force a fresh analysis
+  const summary = (result as LatestPointer).summary
+  if (summary && ('unused' in summary || 'rightSized' in summary) && !('overProvisioned' in summary)) {
+    logger.info(`[Utilization Persistence] Stale summary schema detected for ${accountId}/${env}, treating as no results`)
+    return null
+  }
+
   return result as LatestPointer | null
 }
 

@@ -179,7 +179,7 @@ export function useUtilizationAnalysis(accountId: Ref<string>, environment: Ref<
           }
           const summary = data.value?.summary
           if (summary) {
-            const flagged = (summary.unused || 0) + (summary.underutilized || 0) + (summary.patchingOnly || 0) + (summary.underProvisioned || 0)
+          const flagged = (summary.overProvisioned || 0) + (summary.underProvisioned || 0)
             toast.add({
               title: 'Utilization analysis complete',
               description: `${summary.totalInstances} instances analyzed. ${flagged > 0 ? `${flagged} flagged for optimization.` : 'All instances are right-sized.'}`,
