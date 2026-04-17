@@ -187,16 +187,16 @@ async function fetchRegionMetrics(
 
     logger.info(`[CloudWatch Metrics] Region ${region}: ${instanceIds.length} instances in ${batches.length} batches (${maxInstancesPerBatch} per batch, ${metricsPerInstance} metrics each)`)
 
-    for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
-      const batch = batches[batchIdx]
-
-      // Adaptive delay: scales with batch index and throttle pressure
-      if (batchIdx > 0) {
-        const baseDelay = 200
-        const jitter = Math.random() * 100
-        const delay = Math.min((baseDelay * (1 + batchIdx * 0.3) + jitter) * throttleMultiplier, 5000)
-        await new Promise(resolve => setTimeout(resolve, delay))
-      }
+    // Process batches in parallel with concurrency limit of 5 to balance speed vs throttling
+    const CONCURRENCY = 5
+    for (let i = 0; i < batches.length; i += CONCURRENCY) {
+      const concurrentBatches = batches.slice(i, i + CONCURRENCY)
+      await Promise.all(concurrentBatches.map(async (batch, localIdx) => {
+        const batchIdx = i + localIdx
+        // Small stagger within each concurrent group to spread API calls
+        if (localIdx > 0) {
+          await new Promise(resolve => setTimeout(resolve, localIdx * 100))
+        }
 
       try {
 
@@ -573,7 +573,8 @@ async function fetchRegionMetrics(
           }
         }
       }
-    }
+    })) // end Promise.all for concurrent batch group
+    } // end outer for loop (concurrent groups)
   } catch (error: any) {
     logger.error(`[CloudWatch Metrics] Region ${region} setup error:`, error.message)
 
