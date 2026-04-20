@@ -807,7 +807,9 @@ const filteredInstances = computed(() => {
   let result: any[]
   if (activeFilter.value) {
     result = all.filter((i: any) => i.classification === activeFilter.value)
-  } else if (showAll.value) {
+  } else if (showAll.value || runtimeFilter.value) {
+    // When a runtime filter is active, show all instances matching that runtime category
+    // (not just flagged ones — "Usually Stopped" instances may be Optimized or No Data)
     result = [...all]
   } else {
     result = all.filter((i: any) =>
