@@ -257,7 +257,7 @@ export function classifyInstance(
     region: instance.region,
     classification: 'no-data',
     classificationReasons: [],
-    runtimeClassification: classifyRuntime(metrics?.daysActiveInLast7Days ?? null, thresholds),
+    runtimeClassification: classifyRuntime(metrics?.daysActiveInLast7Days ?? null, instance.instanceState, thresholds),
     daysActiveInLast7Days: metrics?.daysActiveInLast7Days ?? null,
     explanation: '',
     evidence: [],
@@ -394,10 +394,17 @@ export function classifyInstance(
  */
 export function classifyRuntime(
   daysActive: number | null,
+  instanceState?: string,
   thresholds: UtilizationThresholds = DEFAULT_THRESHOLDS
 ): RuntimeClassification {
-  if (daysActive === null) return 'no-data'
-  return daysActive >= thresholds.usuallyRunningDaysThreshold ? 'usually-running' : 'usually-stopped'
+  if (daysActive !== null) {
+    return daysActive >= thresholds.usuallyRunningDaysThreshold ? 'usually-running' : 'usually-stopped'
+  }
+  // No CloudWatch data — use instance state as fallback
+  // A stopped instance with no recent data was not running in the lookback window
+  if (instanceState === 'stopped') return 'usually-stopped'
+  // Running instance with no data — genuinely unknown
+  return 'no-data'
 }
 
 /**
