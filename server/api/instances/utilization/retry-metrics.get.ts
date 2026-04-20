@@ -71,9 +71,9 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.badRequest(event, 'No existing analysis found. Run a full analysis first.')
   }
 
-  // Find running instances with missing CPU metrics
+  // Find instances with missing CPU metrics — include stopped instances since
+  // CloudWatch retains historical data even after an instance is stopped
   const missingInstances = existingResult.instances.filter(inst =>
-    inst.instanceState === 'running' &&
     inst.metrics?.avgCpuPercent == null &&
     inst.metrics?.maxCpuPercent == null
   )
