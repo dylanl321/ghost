@@ -15,6 +15,9 @@
 import type { EnrichedInstanceData } from './instance-enrichment'
 import type { ComputeOptimizerRecommendation } from './compute-optimizer'
 import type { InstanceMetrics } from './cloudwatch-metrics'
+import type { InstanceApiActivity } from './instance-activity-detection'
+
+export type { InstanceApiActivity }
 
 export type UtilizationClassification =
   | 'over-provisioned'
@@ -26,13 +29,6 @@ export type RuntimeClassification =
   | 'usually-running'
   | 'usually-stopped'
   | 'no-data'
-
-export interface InstanceApiActivity {
-  instanceId: string
-  totalCalls: number
-  meaningfulCalls: number
-  topEvents: Array<{ eventName: string; eventSource: string; count: number }>
-}
 
 /**
  * Centralized configuration for all classification and scoring parameters.

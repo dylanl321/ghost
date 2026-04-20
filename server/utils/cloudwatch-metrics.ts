@@ -351,7 +351,7 @@ async function fetchRegionMetrics(
         nextToken = response.NextToken
       } while (nextToken)
 
-      if (allMetricResults.length === 0) continue
+      if (allMetricResults.length === 0) return // no data for this batch, skip parsing
 
       // Parse results back into per-instance metrics
       for (const instanceId of batch) {
