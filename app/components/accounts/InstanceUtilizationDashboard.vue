@@ -365,8 +365,8 @@
                     </td>
                     <!-- Hours Running (7d) -->
                     <td class="px-3 py-3 whitespace-nowrap">
-                      <span v-if="inst.hoursRunningLast7Days != null" :class="inst.hoursRunningLast7Days > 1 ? 'text-green-600 dark:text-green-400' : 'text-orange-500'">
-                        {{ inst.hoursRunningLast7Days }}h
+                      <span v-if="inst.daysActiveInLast7Days != null" :class="inst.daysActiveInLast7Days >= 1 ? 'text-green-600 dark:text-green-400' : 'text-orange-500'">
+                        {{ inst.daysActiveInLast7Days }}d
                       </span>
                       <span v-else class="text-gray-400">&mdash;</span>
                     </td>
@@ -411,11 +411,11 @@
                         <div class="grid grid-cols-2 sm:grid-cols-5 gap-4">
                           <div class="bg-white dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
                             <div class="text-xs uppercase tracking-wider text-gray-500 mb-1">Runtime (7 days)</div>
-                            <div class="text-base font-semibold" :class="inst.hoursRunningLast7Days == null ? 'text-gray-400' : inst.hoursRunningLast7Days > 1 ? 'text-green-600 dark:text-green-400' : 'text-orange-500'">
-                              {{ inst.hoursRunningLast7Days != null ? inst.hoursRunningLast7Days + 'h' : 'No data' }}
+                            <div class="text-base font-semibold" :class="inst.daysActiveInLast7Days == null ? 'text-gray-400' : inst.daysActiveInLast7Days >= 1 ? 'text-green-600 dark:text-green-400' : 'text-orange-500'">
+                              {{ inst.daysActiveInLast7Days != null ? inst.daysActiveInLast7Days + 'd active' : 'No data' }}
                             </div>
                             <div class="text-xs text-gray-500 mt-1">
-                              {{ inst.hoursRunningLast7Days != null ? (inst.hoursRunningLast7Days > 1 ? 'Usually Running' : 'Usually Stopped') : '—' }}
+                              {{ inst.daysActiveInLast7Days != null ? (inst.daysActiveInLast7Days >= 1 ? 'Usually Running' : 'Usually Stopped') : '—' }}
                             </div>
                           </div>
                           <div class="bg-white dark:bg-gray-900 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
@@ -838,7 +838,7 @@ const filteredInstances = computed(() => {
         cmp = (a.metrics?.maxCpuPercent ?? -1) - (b.metrics?.maxCpuPercent ?? -1)
         break
       case 'hoursRunning':
-        cmp = (a.hoursRunningLast7Days ?? -1) - (b.hoursRunningLast7Days ?? -1)
+        cmp = (a.daysActiveInLast7Days ?? -1) - (b.daysActiveInLast7Days ?? -1)
         break
       case 'monthlyCost':
         cmp = (a.monthlyEstimate || 0) - (b.monthlyEstimate || 0)
@@ -873,7 +873,7 @@ const tableColumns = [
   { key: 'instanceName', label: 'Instance Name', sortable: true },
   { key: 'instanceId', label: 'Instance ID', sortable: true },
   { key: 'instanceType', label: 'Type', sortable: true },
-  { key: 'hoursRunning', label: 'Hours Running', sortable: true },
+  { key: 'hoursRunning', label: 'Active Days (7d)', sortable: true },
   { key: 'peakCpu', label: 'Peak CPU', sortable: true },
   { key: 'trend', label: 'Trend' },
   { key: 'monthlyCost', label: 'Monthly Cost', sortable: true },

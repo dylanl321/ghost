@@ -186,14 +186,14 @@ async function runBackgroundAnalysis(
           status: 'completed',
           completedAt: new Date().toISOString(),
           totalInstances: 0,
-          summary: { totalInstances: 0, unused: 0, patchingOnly: 0, underutilized: 0, underProvisioned: 0, rightSized: 0, insufficientData: 0, totalPotentialMonthlySavings: 0 }
+          summary: { totalInstances: 0, overProvisioned: 0, underProvisioned: 0, optimized: 0, noData: 0, totalPotentialMonthlySavings: 0, runtimeSummary: { usuallyRunning: 0, usuallyStopped: 0, noData: 0 } }
         }
       )
       await saveLatestPointer({
         PK: `ACCOUNT#${targetAccountId}`, SK: `LATEST#${environment}`,
         type: 'latest-pointer', jobId, status: 'completed',
         completedAt: new Date().toISOString(),
-        summary: { totalInstances: 0, unused: 0, patchingOnly: 0, underutilized: 0, underProvisioned: 0, rightSized: 0, insufficientData: 0, totalPotentialMonthlySavings: 0 },
+        summary: { totalInstances: 0, overProvisioned: 0, underProvisioned: 0, optimized: 0, noData: 0, totalPotentialMonthlySavings: 0, runtimeSummary: { usuallyRunning: 0, usuallyStopped: 0, noData: 0 } },
         ttl: Math.floor(Date.now() / 1000) + 90 * 24 * 60 * 60
       })
       return
@@ -397,7 +397,7 @@ async function runBackgroundAnalysis(
       ttl: Math.floor(Date.now() / 1000) + 90 * 24 * 60 * 60
     })
 
-    logger.info(`[Background Analysis] Job ${jobId} completed: ${result.summary.unused} unused, ${result.summary.underutilized} underutilized, ${result.summary.patchingOnly} patching-only`)
+    logger.info(`[Background Analysis] Job ${jobId} completed: ${result.summary.overProvisioned} over-provisioned, ${result.summary.underProvisioned} under-provisioned, ${result.summary.optimized} optimized, ${result.summary.noData} no-data`)
 
   } catch (err: any) {
     logger.error(`[Background Analysis] Job ${jobId} failed:`, err)

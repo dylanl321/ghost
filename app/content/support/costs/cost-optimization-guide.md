@@ -44,19 +44,19 @@ AWS Compute Optimizer has not analyzed this instance yet. This typically means:
 
 This dimension answers a simple question: was this instance actually running over the last 7 days?
 
-It works by counting how many hours CloudWatch published CPU data for the instance. CloudWatch only publishes data when an instance is running, so the count of hourly data points equals the number of hours the instance was on.
+It works by counting how many of the last 7 days had a CloudWatch CPU data point. CloudWatch only publishes a daily CPU data point when the instance was running on that day, so the count of daily data points within the 7-day window equals the number of days the instance was active.
 
 ### 🟢 Usually Running
 
-The instance was running for more than 1 hour over the last 7 days.
+The instance had CPU data on at least 1 day in the last 7 days.
 
 ### 🟠 Usually Stopped
 
-The instance was running for 1 hour or less over the last 7 days.
+The instance had CPU data on 0 days in the last 7 days — it was not observed running on any day in the past week.
 
 ### ⚪ No Data
 
-CloudWatch returned no data for this instance. This could mean:
+CloudWatch returned no CPU data at all for this instance. This could mean:
 - CloudWatch monitoring is not enabled
 - The instance is too new to have data
 - There was a permissions issue retrieving metrics
@@ -112,7 +112,7 @@ Click any row to expand it. The detail view shows:
 Compute Optimizer needs at least 12 hours of data after an instance starts. If the instance is new, wait and run a fresh analysis. If it's been running for a while, check that Compute Optimizer is enabled for the account.
 
 **Q: An instance shows "Usually Stopped" but I know it runs regularly. Why?**
-The runtime classification looks at the last 7 days only. If the instance runs on a schedule that didn't happen to run in the last 7 days, it would show as "Usually Stopped." Check the hours running count in the expanded detail view.
+The runtime classification looks at the last 7 days only. If the instance runs on a schedule that didn't happen to produce a CloudWatch data point on any of the last 7 days, it would show as "Usually Stopped." Check the "Active Days (7d)" column in the table — it shows exactly how many days had CPU activity.
 
 **Q: How are savings calculated?**
 Savings come directly from AWS Compute Optimizer's estimate for downsizing to the recommended instance type. All estimates are based on on-demand pricing and will vary if you have Reserved Instances or Savings Plans.

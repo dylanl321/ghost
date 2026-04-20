@@ -50,8 +50,8 @@ export interface UtilizationConfig {
   networkOnlyRightSizedThreshold: number
   /** Instance age below this (hours) = new instance, skip classification (default 24) */
   newInstanceGraceHours: number
-  /** Hours running over last 7 days above this = "Usually Running" (default 1) */
-  usuallyRunningHoursThreshold: number
+  /** Days with CPU activity in last 7 days above this = "Usually Running" (default 1) */
+  usuallyRunningDaysThreshold: number
 
   // --- Utilization score weights (should sum to ~100 max) ---
   score: {
@@ -91,7 +91,7 @@ export const DEFAULT_CONFIG: UtilizationConfig = {
   activeDayNetworkThreshold: 1_000_000,    // 1 MB/day
   networkOnlyRightSizedThreshold: 50_000_000, // 50 MB/day
   newInstanceGraceHours: 24,
-  usuallyRunningHoursThreshold: 1,
+  usuallyRunningDaysThreshold: 1,
 
   // Scoring weights
   score: {
@@ -141,7 +141,7 @@ export interface InstanceClassification {
   classification: UtilizationClassification
   classificationReasons: string[]
   runtimeClassification: RuntimeClassification
-  hoursRunningLast7Days: number | null
+  daysActiveInLast7Days: number | null
   explanation: string
   evidence: string[]
   cpuDailyValues: number[]
@@ -165,7 +165,7 @@ export interface InstanceClassification {
     diskReadOps: number | null
     diskWriteOps: number | null
     diskOpsPerDay: number | null
-    hoursRunningLast7Days: number | null
+    daysActiveInLast7Days: number | null
     lookbackDays: number
   }
   optimization?: {
@@ -257,8 +257,8 @@ export function classifyInstance(
     region: instance.region,
     classification: 'no-data',
     classificationReasons: [],
-    runtimeClassification: classifyRuntime(metrics?.hoursRunningLast7Days ?? null, thresholds),
-    hoursRunningLast7Days: metrics?.hoursRunningLast7Days ?? null,
+    runtimeClassification: classifyRuntime(metrics?.daysActiveInLast7Days ?? null, thresholds),
+    daysActiveInLast7Days: metrics?.daysActiveInLast7Days ?? null,
     explanation: '',
     evidence: [],
     cpuDailyValues: cpuValues,
@@ -287,7 +287,7 @@ export function classifyInstance(
       diskReadOps: (metrics as any).diskReadOps ?? null,
       diskWriteOps: (metrics as any).diskWriteOps ?? null,
       diskOpsPerDay: (metrics as any).diskOpsPerDay ?? null,
-      hoursRunningLast7Days: metrics.hoursRunningLast7Days ?? null,
+      daysActiveInLast7Days: metrics.daysActiveInLast7Days ?? null,
       lookbackDays: metrics.lookbackDays
     }
   }
@@ -393,11 +393,11 @@ export function classifyInstance(
  * Uses hourly CloudWatch CPU data point count as a proxy for hours running.
  */
 export function classifyRuntime(
-  hoursRunning: number | null,
+  daysActive: number | null,
   thresholds: UtilizationThresholds = DEFAULT_THRESHOLDS
 ): RuntimeClassification {
-  if (hoursRunning === null) return 'no-data'
-  return hoursRunning > thresholds.usuallyRunningHoursThreshold ? 'usually-running' : 'usually-stopped'
+  if (daysActive === null) return 'no-data'
+  return daysActive >= thresholds.usuallyRunningDaysThreshold ? 'usually-running' : 'usually-stopped'
 }
 
 /**

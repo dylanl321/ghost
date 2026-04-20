@@ -157,7 +157,12 @@ export async function getInstanceClassifications(
   const result = await queryItems(params, environment, accountId)
 
   return {
-    items: (result.items || []) as InstanceClassification[],
+    items: ((result.items || []) as any[]).map(item => ({
+      ...item,
+      // Default missing fields from older schema versions
+      runtimeClassification: item.runtimeClassification ?? 'no-data',
+      daysActiveInLast7Days: item.daysActiveInLast7Days ?? item.hoursRunningLast7Days ?? null
+    })) as InstanceClassification[],
     nextToken: result.nextToken
   }
 }
