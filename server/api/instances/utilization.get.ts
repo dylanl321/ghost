@@ -131,7 +131,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     } else {
       dynLookupId = lookupResult.account.accountId || lookupResult.account.awsStandardAccountID || lookupResult.account.id
     }
-  } catch {
+  } catch { 
     // Account lookup failed — skip DynamoDB fallback, continue to sync path
   }
   const latestAnalysis = dynLookupId ? await getLatestAnalysis(dynLookupId, environment).catch(() => null) : null
