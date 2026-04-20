@@ -26,7 +26,7 @@ import { getLatestAnalysis, getInstanceClassifications } from '../../../utils/ut
 import type { AWSEnvironmentType } from '../../../types'
 import { logger } from '../../../utils/logger'
 
-const RETRY_BATCH_SIZE = 10 // Small batches to avoid throttling on retry
+const RETRY_BATCH_SIZE = 5 // Very small batches to maximize success rate on retry
 
 export default defineEventHandler(handleAsync(async (event) => {
   const query = getQuery(event)
