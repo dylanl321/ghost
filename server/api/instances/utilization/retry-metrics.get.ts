@@ -17,8 +17,7 @@ import {
   type ClassificationResult,
   type ClassificationSummary,
   type InstanceClassification,
-  type InstanceApiActivity,
-  type UtilizationClassification
+  type InstanceApiActivity
 } from '../../../utils/instance-utilization-classifier'
 import type { ComputeOptimizerRecommendation } from '../../../utils/compute-optimizer'
 import type { EnrichedInstanceData } from '../../../utils/instance-enrichment'
@@ -230,27 +229,18 @@ function reconstructEnrichedData(inst: InstanceClassification): EnrichedInstance
 function recomputeSummary(instances: InstanceClassification[]): ClassificationSummary {
   const summary: ClassificationSummary = {
     totalInstances: instances.length,
-    unused: 0,
-    patchingOnly: 0,
-    underutilized: 0,
+    overProvisioned: 0,
     underProvisioned: 0,
-    rightSized: 0,
-    insufficientData: 0,
-    totalPotentialMonthlySavings: 0
+    optimized: 0,
+    noData: 0,
+    totalPotentialMonthlySavings: 0,
+    runtimeSummary: { usuallyRunning: 0, usuallyStopped: 0, noData: 0 }
   }
 
   for (const inst of instances) {
     switch (inst.classification) {
-      case 'unused':
-        summary.unused++
-        if (inst.monthlyEstimate) summary.totalPotentialMonthlySavings += inst.monthlyEstimate
-        break
-      case 'patching-only':
-        summary.patchingOnly++
-        if (inst.monthlyEstimate) summary.totalPotentialMonthlySavings += inst.monthlyEstimate
-        break
-      case 'underutilized':
-        summary.underutilized++
+      case 'over-provisioned':
+        summary.overProvisioned++
         if (inst.optimization?.estimatedMonthlySavings) {
           summary.totalPotentialMonthlySavings += inst.optimization.estimatedMonthlySavings
         } else if (inst.monthlyEstimate) {
@@ -260,12 +250,17 @@ function recomputeSummary(instances: InstanceClassification[]): ClassificationSu
       case 'under-provisioned':
         summary.underProvisioned++
         break
-      case 'right-sized':
-        summary.rightSized++
+      case 'optimized':
+        summary.optimized++
         break
-      case 'insufficient-data':
-        summary.insufficientData++
+      case 'no-data':
+        summary.noData++
         break
+    }
+    switch (inst.runtimeClassification) {
+      case 'usually-running': summary.runtimeSummary.usuallyRunning++; break
+      case 'usually-stopped': summary.runtimeSummary.usuallyStopped++; break
+      default: summary.runtimeSummary.noData++; break
     }
   }
 
