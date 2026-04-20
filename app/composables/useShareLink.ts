@@ -40,6 +40,28 @@ export const useShareLink = (options: ShareLinkOptions) => {
     }
   }
 
+    /**
+   * Builds a clean URL from captured state
+   * Uses comma-separated accounts instead of Vue Router's
+   * default JSON array encoding
+   */
+  const buildOriginalUrl = (state: ShareLinkState): string => {
+    const params = new URLSearchParams()
+
+    if (state.selectedAccounts.length > 0) {
+      params.set('accounts', state.selectedAccounts.join(','))
+    } else {
+      logger.warn('buildOriginalUrl: No accounts selected when generating share link')
+    }
+
+    if (state.timeframe) params.set('timeframe', state.timeframe)
+    if (state.tab) params.set('tab', state.tab)
+    if (state.dataMode) params.set('mode', state.dataMode)
+    if (state.view) params.set('viewBy', state.view)
+
+    return `/account/costs?${params.toString()}`
+  }
+
   /**
    * Generates a shareable link by calling the shortlinks API
    */
@@ -54,11 +76,15 @@ export const useShareLink = (options: ShareLinkOptions) => {
       // Capture current state
       const state = captureState()
       logger.info('Generating share link with state:', state)
-      
-      // Build the original URL path
-      const route = useRoute()
-      const originalUrl = route.fullPath
-      
+
+      if (state.selectedAccounts.length === 0) {
+        logger.warn('generateShareLink: No accounts in state, link may be incomplete')
+      }
+
+      // Build clean URL from captured state
+      const originalUrl = buildOriginalUrl(state)
+      logger.info('generateShareLink: Built originalUrl:', originalUrl)
+
       // Create the short link via API
       const response = await $fetch<{
         success: boolean
