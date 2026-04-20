@@ -23,6 +23,10 @@ export interface BatchMetricsOptions {
   maxInstancesPerBatch?: number
   /** Skip reading from cache (useful for retry passes) */
   skipCache?: boolean
+  /** Run batches sequentially instead of in parallel (useful for retry passes on throttled accounts) */
+  sequential?: boolean
+  /** Delay in ms between sequential batches (default: 500) */
+  sequentialDelayMs?: number
 }
 
 export interface InstanceMetrics {
@@ -183,20 +187,12 @@ async function fetchRegionMetrics(
     )
     const batches = chunkArray(instanceIds, maxInstancesPerBatch)
     let throttleMultiplier = 1
+    const isSequential = options?.sequential === true
+    const sequentialDelay = options?.sequentialDelayMs ?? 500
 
-    logger.info(`[CloudWatch Metrics] Region ${region}: ${instanceIds.length} instances in ${batches.length} batches (${maxInstancesPerBatch} per batch, ${metricsPerInstance} metrics each)`)
+    logger.info(`[CloudWatch Metrics] Region ${region}: ${instanceIds.length} instances in ${batches.length} batches (${maxInstancesPerBatch} per batch, mode=${isSequential ? 'sequential' : 'parallel'})`)
 
-    // Process batches in parallel with concurrency limit of 5 to balance speed vs throttling
-    const CONCURRENCY = 5
-    for (let i = 0; i < batches.length; i += CONCURRENCY) {
-      const concurrentBatches = batches.slice(i, i + CONCURRENCY)
-      await Promise.all(concurrentBatches.map(async (batch, localIdx) => {
-        const batchIdx = i + localIdx
-        // Small stagger within each concurrent group to spread API calls
-        if (localIdx > 0) {
-          await new Promise(resolve => setTimeout(resolve, localIdx * 100))
-        }
-
+    const processBatch = async (batch: string[], batchIdx: number) => {
       try {
 
       const queries: MetricDataQuery[] = []
@@ -547,8 +543,29 @@ async function fetchRegionMetrics(
           }
         }
       }
-    })) // end Promise.all for concurrent batch group
-    } // end outer for loop (concurrent groups)
+    } // end processBatch
+
+    if (isSequential) {
+      // Sequential mode: one batch at a time with delay — used for retry passes on throttled accounts
+      for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+        if (batchIdx > 0) {
+          await new Promise(resolve => setTimeout(resolve, sequentialDelay))
+        }
+        await processBatch(batches[batchIdx], batchIdx)
+      }
+    } else {
+      // Parallel mode: 5 concurrent batches with small stagger
+      const CONCURRENCY = 5
+      for (let i = 0; i < batches.length; i += CONCURRENCY) {
+        const concurrentBatches = batches.slice(i, i + CONCURRENCY)
+        await Promise.all(concurrentBatches.map(async (batch, localIdx) => {
+          if (localIdx > 0) {
+            await new Promise(resolve => setTimeout(resolve, localIdx * 100))
+          }
+          await processBatch(batch, i + localIdx)
+        }))
+      }
+    }
   } catch (error: any) {
     logger.error(`[CloudWatch Metrics] Region ${region} setup error:`, error.message)
 

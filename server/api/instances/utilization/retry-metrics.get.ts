@@ -108,7 +108,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     targetAccountId,
     environment,
     lookbackDays,
-    { maxInstancesPerBatch: RETRY_BATCH_SIZE, skipCache: true }
+    { maxInstancesPerBatch: RETRY_BATCH_SIZE, skipCache: true, sequential: true, sequentialDelayMs: 1000 }
   ).catch(err => {
     logger.error('[Retry Metrics] CloudWatch retry failed:', err.message)
     return { metrics: new Map(), errors: [err.message], totalRequested: missingInstances.length }
