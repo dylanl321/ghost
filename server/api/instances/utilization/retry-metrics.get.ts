@@ -71,10 +71,10 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.badRequest(event, 'No existing analysis found. Run a full analysis first.')
   }
 
-  // Retry running instances with missing CPU metrics only.
-  // Stopped instances with no data are handled by the classifier's state fallback.
+  // Retry instances with missing CPU metrics — includes stopped instances since
+  // they may have recent CloudWatch data from before being stopped, and the main
+  // analysis batch may have failed for them due to throttling
   const missingInstances = existingResult.instances.filter(inst =>
-    inst.instanceState === 'running' &&
     inst.metrics?.avgCpuPercent == null &&
     inst.metrics?.maxCpuPercent == null
   )

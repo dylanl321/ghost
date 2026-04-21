@@ -87,7 +87,6 @@ export function useUtilizationAnalysis(accountId: Ref<string>, environment: Ref<
   function countMissingMetrics(): number {
     if (!data.value?.instances) return 0
     return data.value.instances.filter((inst: any) =>
-      inst.instanceState === 'running' &&
       inst.metrics?.avgCpuPercent == null &&
       inst.metrics?.maxCpuPercent == null
     ).length
