@@ -98,9 +98,16 @@ Columns are sortable — click any column header to sort. The table paginates at
 
 Click any row to expand it. The detail view shows:
 
-- **Runtime (7 days)** — Hours the instance was running over the last 7 days and its runtime classification
-- **Launched** — When the instance was first started and its age
+- **Runtime (7 days)** — Days the instance was active in the last 7 days and its runtime classification (Usually Running / Usually Stopped)
+- **Last Active** — The most recent day with meaningful CPU activity, and how many days ago that was
+- **Active Days** — How many of the monitored days had CPU activity, shown as "X of Y" where Y is the number of days CloudWatch had data (not always 14 — stopped instances have fewer)
+- **Launched** — When the instance was most recently started and how long it has been running since
 - **Monthly Cost** — On-demand cost estimate with annual projection
+- **Data Sources Used** — A checklist showing which data sources had data for this instance (CPU, Network, Disk I/O, Compute Optimizer, CloudTrail, Tags). Green check = data available, gray X = no data
+- **Utilization Score** — A 0–100 bar combining all available signals into a single number. Higher = more evidence of active usage. This is informational only and does not affect either classification dimension
+- **Tags** — Owner, Project, Schedule, and Patch Group if present
+- **Peak CPU Over 14 Days** — A chart showing the daily maximum CPU utilization. This is informational only and not used for classification
+- **Network I/O Over 14 Days** — A chart showing daily total network traffic (in + out). This is informational only and not used for classification
 - **Explanation** — A plain-language summary of the Compute Optimizer finding
 - **Evidence** — Specific data points supporting the classification
 
