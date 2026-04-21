@@ -264,6 +264,24 @@
               </NuxtLink>
             </div>
             <div class="flex items-center gap-2">
+              <UInput
+                v-model="searchQuery"
+                icon="i-heroicons-magnifying-glass"
+                placeholder="Search by ID or name..."
+                size="sm"
+                class="w-48"
+                :ui="{ icon: { trailing: { pointer: '' } } }"
+              >
+                <template v-if="searchQuery" #trailing>
+                  <UButton
+                    icon="i-heroicons-x-mark"
+                    color="gray"
+                    variant="link"
+                    size="2xs"
+                    @click="searchQuery = ''"
+                  />
+                </template>
+              </UInput>
               <UBadge
                 v-if="activeFilter"
                 color="blue"
@@ -691,6 +709,7 @@ const {
 
 const activeFilter = ref<string | null>(null)
 const runtimeFilter = ref<string | null>(null)
+const searchQuery = ref('')
 const expandedIds = reactive(new Set<string>())
 const showAll = ref(false)
 const currentPage = ref(1)
@@ -804,10 +823,19 @@ const filteredInstances = computed(() => {
     all = all.filter((i: any) => i.runtimeClassification === runtimeFilter.value)
   }
 
+  // Apply search filter
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.trim().toLowerCase()
+    all = all.filter((i: any) =>
+      i.instanceId?.toLowerCase().includes(q) ||
+      i.instanceName?.toLowerCase().includes(q)
+    )
+  }
+
   let result: any[]
   if (activeFilter.value) {
     result = all.filter((i: any) => i.classification === activeFilter.value)
-  } else if (showAll.value || runtimeFilter.value) {
+  } else if (showAll.value || runtimeFilter.value || searchQuery.value.trim()) {
     // When a runtime filter is active, show all instances matching that runtime category
     // (not just flagged ones — "Usually Stopped" instances may be Optimized or No Data)
     result = [...all]
@@ -864,7 +892,7 @@ const paginatedInstances = computed(() => {
 })
 
 // Reset page when filter changes
-watch([activeFilter, runtimeFilter, showAll], () => {
+watch([activeFilter, runtimeFilter, showAll, searchQuery], () => {
   currentPage.value = 1
 })
 
