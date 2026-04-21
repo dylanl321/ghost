@@ -426,16 +426,73 @@ function openShareLinkModal() {
 /**
  * Generate share URL
  */
+/**
+ * Generate share URL
+ */
 async function generateShareUrl() {
   shareLoading.value = true
   shareError.value = ''
 
   try {
     // Build clean URL from state instead of route.fullPath
+    // Avoids Vue Router's default JSON array encoding
     const params = new URLSearchParams()
 
-    if (props.se
+    if (props.selectedAccounts.length > 0) {
+      params.set('accounts', props.selectedAccounts.join(','))
+    }
+    if (modelSelectedTimeframe.value) {
+      params.set('timeframe', modelSelectedTimeframe.value)
+    }
+    if (props.activeTab) {
+      params.set('tab', props.activeTab)
+    }
+    if (modelMode.value) {
+      params.set('mode', modelMode.value)
+    }
 
+    const originalUrl = `/account/costs?${params.toString()}`
+
+    const response = await $fetch('/api/shortlinks', {
+      method: 'POST',
+      body: {
+        originalUrl,
+        pagePath: '/account/costs',
+        configData: {
+          selectedAccounts: props.selectedAccounts,
+          timeframe: modelSelectedTimeframe.value,
+          tab: props.activeTab,
+          dataMode: modelMode.value
+        },
+        description: 'Cost Analytics Share Link',
+        expiresInDays: 30
+      }
+    })
+
+    if (response && typeof response === 'object' && 'data' in response) {
+      generatedShareUrl.value = (response.data as any).shortUrl as string
+      toast.add({
+        title: 'Share Link Created',
+        description: 'Your shareable link is ready',
+        icon: 'i-heroicons-check-circle',
+        color: 'green'
+      })
+    } else {
+      throw new Error('Invalid response from server')
+    }
+  } catch (error: any) {
+    logger.error('Failed to generate share link:', error)
+    shareError.value = error.message || 'Failed to create share link'
+    toast.add({
+      title: 'Share Link Failed',
+      description: 'Could not create shareable link',
+      icon: 'i-heroicons-x-circle',
+      color: 'red'
+    })
+  } finally {
+    shareLoading.value = false
+  }
+}
 /**
  * Copy share URL to clipboard
  */
