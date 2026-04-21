@@ -260,17 +260,19 @@ async function runBackgroundAnalysis(
     }, { totalInstances: instances.length })
 
     // Step 3: Fetch data in parallel
+    // Fetch CloudWatch metrics for ALL instances (not just running) — stopped instances
+    // retain CloudWatch data and need it for accurate runtime classification
     const runningInstances = instances.filter(i => i.instanceState === 'running')
-    logger.info(`[Background Analysis] [${jobId}] Phase: parallel fetches — ${runningInstances.length} running instances for CW/Optimizer, ${instances.length} total for activity detection`)
+    logger.info(`[Background Analysis] [${jobId}] Phase: parallel fetches — ${instances.length} instances for CW, ${runningInstances.length} running for Optimizer, ${instances.length} total for activity detection`)
 
     const [metricsResult, optimizerRecs, pricingData, activityResult] = await Promise.all([
-      runningInstances.length > 0
+      instances.length > 0
         ? batchGetInstanceMetrics(
-            runningInstances.map(i => ({ instanceId: i.resourceId, region: i.region })),
+            instances.map(i => ({ instanceId: i.resourceId, region: i.region })),
             targetAccountId, environment, lookbackDays
           ).catch(err => {
             logger.error('[Background Analysis] CloudWatch metrics failed:', err.message)
-            return { metrics: new Map(), errors: [err.message], totalRequested: runningInstances.length }
+            return { metrics: new Map(), errors: [err.message], totalRequested: instances.length }
           })
         : Promise.resolve({ metrics: new Map(), errors: [] as string[], totalRequested: 0 }),
 

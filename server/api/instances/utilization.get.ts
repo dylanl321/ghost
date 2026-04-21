@@ -283,10 +283,10 @@ export default defineEventHandler(handleAsync(async (event) => {
   const runningInstances = instances.filter(i => i.instanceState === 'running')
 
   const [metricsResult, optimizerRecs, pricingData, activityResult] = await Promise.all([
-    // CloudWatch metrics (only for running instances, only if requested)
-    includeMetrics && runningInstances.length > 0
+    // CloudWatch metrics for ALL instances (stopped instances retain data for runtime classification)
+    includeMetrics && instances.length > 0
       ? batchGetInstanceMetrics(
-          runningInstances.map(i => ({ instanceId: i.resourceId, region: i.region })),
+          instances.map(i => ({ instanceId: i.resourceId, region: i.region })),
           targetAccountId,
           environment,
           lookbackDays
@@ -381,7 +381,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     logger.warn(`[Utilization API] Results too incomplete to cache (${(metricsCompletionRate * 100).toFixed(0)}% complete, ${metricsResult.errors.length} errors)`)
   }
 
-  logger.info(`[Utilization API] Classification complete: ${result.summary.unused} unused, ${result.summary.underutilized} underutilized, ${result.summary.patchingOnly} patching-only`)
+  logger.info(`[Utilization API] Classification complete: ${result.summary.overProvisioned} over-provisioned, ${result.summary.underProvisioned} under-provisioned, ${result.summary.optimized} optimized, ${result.summary.noData} no-data`)
 
   return sendSuccess(event, result, {
     environment,
