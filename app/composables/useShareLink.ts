@@ -145,8 +145,7 @@ export const useShareLink = (options: ShareLinkOptions) => {
           originalUrl,
           pagePath: '/account/costs',
           configData: state,
-          description: 'Cost Analytics Share Link',
-          expiresInDays: 30
+          description: 'Cost Analytics Share Link'
         }
       })
 
