@@ -95,35 +95,46 @@ export function useUtilizationAnalysis(accountId: Ref<string>, environment: Ref<
   /**
    * Retry CloudWatch metrics for instances that are missing data.
    * Uses a dedicated endpoint with smaller batch sizes to avoid throttling.
+   * Runs up to maxPasses to catch stragglers from throttled batches.
    */
-  async function retryMissing() {
-    const missing = countMissingMetrics()
-    if (missing === 0) return
+  async function retryMissing(maxPasses: number = 2) {
+    let totalFilled = 0
 
-    retrying.value = true
-    try {
-      const response = await fetch(
-        `/api/instances/utilization/retry-metrics?environment=${environment.value}&accountIds=${accountId.value}`
-      )
-      const json = await response.json()
-      if (json.success && json.data) {
-        const previousMissing = missing
-        data.value = json.data
-        const nowMissing = countMissingMetrics()
-        const filled = previousMissing - nowMissing
-        if (filled > 0) {
+    for (let pass = 1; pass <= maxPasses; pass++) {
+      const missing = countMissingMetrics()
+      if (missing === 0) break
+
+      retrying.value = true
+      try {
+        const response = await fetch(
+          `/api/instances/utilization/retry-metrics?environment=${environment.value}&accountIds=${accountId.value}`
+        )
+        const json = await response.json()
+        if (json.success && json.data) {
+          const previousMissing = missing
+          data.value = json.data
+          const nowMissing = countMissingMetrics()
+          const filled = previousMissing - nowMissing
+          totalFilled += filled
+
+          if (filled === 0) break // No progress, stop retrying
+
           toast.add({
-            title: 'Metrics updated',
+            title: `Metrics updated (pass ${pass}/${maxPasses})`,
             description: `Filled in data for ${filled} instance${filled !== 1 ? 's' : ''}.${nowMissing > 0 ? ` ${nowMissing} still missing.` : ''}`,
             icon: 'i-heroicons-arrow-path',
             color: 'blue'
           })
+
+          if (nowMissing === 0) break // All filled, done
+        } else {
+          break
         }
+      } catch {
+        break // Retry failure is non-fatal
+      } finally {
+        retrying.value = false
       }
-    } catch {
-      // Retry failure is non-fatal
-    } finally {
-      retrying.value = false
     }
   }
 
