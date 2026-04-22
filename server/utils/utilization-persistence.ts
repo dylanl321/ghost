@@ -134,35 +134,42 @@ export async function getInstanceClassifications(
   options?: { classification?: string; limit?: number; nextToken?: string }
 ): Promise<{ items: InstanceClassification[]; nextToken?: string }> {
   const { tableName, environment, accountId } = await getTableInfo()
+  const maxItems = options?.limit || 5000
+  const allItems: any[] = []
+  let currentToken = options?.nextToken
 
-  const params: any = {
-    tableName,
-    queryExpression: 'PK = :pk AND begins_with(SK, :sk)',
-    expressionAttributeValues: {
-      ':pk': `JOB#${jobId}`,
-      ':sk': 'INSTANCE#'
-    },
-    limit: options?.limit || 50
-  }
+  // Paginate through all results — DynamoDB has a 1MB response limit per query
+  do {
+    const params: any = {
+      tableName,
+      queryExpression: 'PK = :pk AND begins_with(SK, :sk)',
+      expressionAttributeValues: {
+        ':pk': `JOB#${jobId}`,
+        ':sk': 'INSTANCE#'
+      },
+      limit: Math.min(maxItems - allItems.length, 1000)
+    }
 
-  if (options?.classification) {
-    params.filterExpression = 'classification = :cls'
-    params.expressionAttributeValues[':cls'] = options.classification
-  }
+    if (options?.classification) {
+      params.filterExpression = 'classification = :cls'
+      params.expressionAttributeValues[':cls'] = options.classification
+    }
 
-  if (options?.nextToken) {
-    params.nextToken = options.nextToken
-  }
+    if (currentToken) {
+      params.nextToken = currentToken
+    }
 
-  const result = await queryItems(params, environment, accountId)
+    const result = await queryItems(params, environment, accountId)
+    allItems.push(...(result.items || []))
+    currentToken = result.nextToken
+  } while (currentToken && allItems.length < maxItems)
 
   return {
-    items: ((result.items || []) as any[]).map(item => ({
+    items: allItems.map(item => ({
       ...item,
-      // Default missing fields from older schema versions
       runtimeClassification: item.runtimeClassification ?? 'no-data',
       daysActiveInLast7Days: item.daysActiveInLast7Days ?? item.hoursRunningLast7Days ?? null
     })) as InstanceClassification[],
-    nextToken: result.nextToken
+    nextToken: currentToken
   }
 }
