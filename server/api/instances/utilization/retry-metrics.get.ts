@@ -22,7 +22,7 @@ import {
 import type { ComputeOptimizerRecommendation } from '../../../utils/compute-optimizer'
 import type { EnrichedInstanceData } from '../../../utils/instance-enrichment'
 import { getCacheManager } from '../../../utils/cache-manager'
-import { getLatestAnalysis, getInstanceClassifications } from '../../../utils/utilization-persistence'
+import { getLatestAnalysis, getInstanceClassifications, saveLatestPointer, saveInstanceClassifications } from '../../../utils/utilization-persistence'
 import type { AWSEnvironmentType } from '../../../types'
 import { logger } from '../../../utils/logger'
 
@@ -45,8 +45,9 @@ export default defineEventHandler(handleAsync(async (event) => {
   let existingResult = await cache.get<ClassificationResult>(cacheKey)
 
   // If not in memory cache, try DynamoDB
+  let dynLookupId: string | null = null
+  let latestJobId: string | null = null
   if (!existingResult) {
-    let dynLookupId: string | null = null
     try {
       const lookupResult = await lookupAccountOptimized(event, accountIdentifier, { includeDecommissioned: false })
       if (environment === 'govcloud') {
@@ -59,6 +60,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     if (dynLookupId) {
       const latestAnalysis = await getLatestAnalysis(dynLookupId, environment).catch(() => null)
       if (latestAnalysis?.status === 'completed' && latestAnalysis.summary) {
+        latestJobId = latestAnalysis.jobId
         const { items } = await getInstanceClassifications(latestAnalysis.jobId, { limit: 5000 }).catch(() => ({ items: [] }))
         if (items.length > 0) {
           existingResult = { summary: latestAnalysis.summary, instances: items }
@@ -178,6 +180,26 @@ export default defineEventHandler(handleAsync(async (event) => {
     await cache.set(cacheKey, existingResult, { ttl: 1800 })
   } else {
     await cache.set(cacheKey, existingResult, { ttl: 300 })
+  }
+
+  // Persist retry results to DynamoDB so they survive container restarts
+  if (dynLookupId && latestJobId && updated > 0) {
+    try {
+      await saveInstanceClassifications(latestJobId, existingResult.instances)
+      await saveLatestPointer({
+        PK: `ACCOUNT#${dynLookupId}`,
+        SK: `LATEST#${environment}`,
+        type: 'latest-pointer',
+        jobId: latestJobId,
+        status: 'completed',
+        completedAt: new Date().toISOString(),
+        summary: existingResult.summary,
+        ttl: Math.floor(Date.now() / 1000) + 90 * 24 * 60 * 60
+      })
+      logger.info(`[Retry Metrics] Persisted ${updated} updated instances to DynamoDB (job ${latestJobId})`)
+    } catch (err: any) {
+      logger.error(`[Retry Metrics] Failed to persist to DynamoDB: ${err.message}`)
+    }
   }
 
   logger.info(`[Retry Metrics] Updated ${updated} of ${missingInstances.length} instances with new metrics`)
