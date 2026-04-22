@@ -5,6 +5,9 @@
  * CloudWatch metrics, and Compute Optimizer findings to determine
  * whether instances are unused, underutilized, or right-sized.
  *
+ * Idle criteria aligned with AWS Compute Optimizer:
+ * - Peak CPU < 5% AND network I/O < 5 MB/day over 14-day lookback
+ *
  * Generates admin-friendly explanations and verification steps
  * so non-technical users can confidently act on recommendations.
  */
@@ -12,27 +15,122 @@
 import type { EnrichedInstanceData } from './instance-enrichment'
 import type { ComputeOptimizerRecommendation } from './compute-optimizer'
 import type { InstanceMetrics } from './cloudwatch-metrics'
+import type { InstanceApiActivity } from './instance-activity-detection'
+
+export type { InstanceApiActivity }
 
 export type UtilizationClassification =
-  | 'unused'
-  | 'patching-only'
-  | 'underutilized'
-  | 'right-sized'
-  | 'insufficient-data'
+  | 'over-provisioned'
+  | 'under-provisioned'
+  | 'optimized'
+  | 'no-data'
 
-export interface UtilizationThresholds {
-  unusedCpuPercent: number       // Below this = unused (default 1%)
-  underutilizedCpuPercent: number // Below this = underutilized (default 5%)
-  unusedNetworkBytes: number     // Below this total bytes = unused (default 1MB)
-  stoppedDaysThreshold: number   // Stopped longer than this = unused (default 14)
+export type RuntimeClassification =
+  | 'usually-running'
+  | 'usually-stopped'
+  | 'no-data'
+
+/**
+ * Centralized configuration for all classification and scoring parameters.
+ * Modify these values to tune how instances are classified and scored.
+ */
+export interface UtilizationConfig {
+  // --- Classification thresholds ---
+  /** Peak CPU below this = idle/unused (default 5%, per AWS Compute Optimizer) */
+  idlePeakCpuPercent: number
+  /** Network below this per day = idle/unused (default 5 MB/day) */
+  idleNetworkBytesPerDay: number
+  /** Stopped longer than this (days) = unused (default 14) */
+  stoppedDaysThreshold: number
+  /** Daily max CPU% above this counts as an "active" day (default 1%) */
+  activeDayCpuThreshold: number
+  /** Network bytes/day above this counts as an "active" day when CPU is missing (default 1 MB) */
+  activeDayNetworkThreshold: number
+  /** Network bytes/day above this = right-sized even without CPU data (default 50 MB) */
+  networkOnlyRightSizedThreshold: number
+  /** Instance age below this (hours) = new instance, skip classification (default 24) */
+  newInstanceGraceHours: number
+  /** Days with CPU activity in last 7 days above this = "Usually Running" (default 1) */
+  usuallyRunningDaysThreshold: number
+
+  // --- Utilization score weights (should sum to ~100 max) ---
+  score: {
+    /** Compute Optimizer: OPTIMIZED or UNDER_PROVISIONED */
+    optimizerOptimized: number
+    /** Compute Optimizer: OVER_PROVISIONED (active but wasteful) */
+    optimizerOverProvisioned: number
+
+    /** API activity tiers: [calls >= threshold, score] pairs, evaluated high-to-low */
+    apiActivityTiers: Array<{ minCalls: number; points: number }>
+
+    /** Network traffic tiers: [bytes/day >= threshold, score] pairs, evaluated high-to-low */
+    networkTiers: Array<{ minBytesPerDay: number; points: number }>
+
+    /** CPU peak tiers: [peak% >= threshold, score] pairs, evaluated high-to-low */
+    cpuPeakTiers: Array<{ minPercent: number; points: number }>
+
+    /** CPU volatility bonus: coefficient of variation thresholds */
+    cpuVolatilityTiers: Array<{ minCV: number; points: number }>
+
+    /** Disk I/O: points if ops/day > 0 */
+    diskIoActive: number
+
+    /** Grace period bonus for instances < graceAgeDays old */
+    newInstanceGrace: number
+    /** Max instance age (days) to receive grace bonus */
+    graceAgeDays: number
+  }
 }
 
-export const DEFAULT_THRESHOLDS: UtilizationThresholds = {
-  unusedCpuPercent: 1,
-  underutilizedCpuPercent: 5,
-  unusedNetworkBytes: 1_000_000, // 1 MB
-  stoppedDaysThreshold: 14
+export const DEFAULT_CONFIG: UtilizationConfig = {
+  // Classification thresholds
+  idlePeakCpuPercent: 5,
+  idleNetworkBytesPerDay: 5_000_000,       // 5 MB/day per AWS Compute Optimizer
+  stoppedDaysThreshold: 14,
+  activeDayCpuThreshold: 1,                // 1% daily max CPU
+  activeDayNetworkThreshold: 1_000_000,    // 1 MB/day
+  networkOnlyRightSizedThreshold: 50_000_000, // 50 MB/day
+  newInstanceGraceHours: 24,
+  usuallyRunningDaysThreshold: 1,
+
+  // Scoring weights
+  score: {
+    optimizerOptimized: 25,
+    optimizerOverProvisioned: 20,
+
+    apiActivityTiers: [
+      { minCalls: 100, points: 15 },
+      { minCalls: 10,  points: 10 },
+      { minCalls: 1,   points: 5 }
+    ],
+
+    networkTiers: [
+      { minBytesPerDay: 5_000_000_000, points: 20 },  // >5 GB/day
+      { minBytesPerDay: 500_000_000,   points: 15 },   // >500 MB/day
+      { minBytesPerDay: 50_000_000,    points: 10 },    // >50 MB/day
+      { minBytesPerDay: 5_000_000,     points: 5 }      // >5 MB/day
+    ],
+
+    cpuPeakTiers: [
+      { minPercent: 50, points: 15 },
+      { minPercent: 20, points: 10 },
+      { minPercent: 5,  points: 5 }
+    ],
+
+    cpuVolatilityTiers: [
+      { minCV: 1.0, points: 10 },   // Highly variable
+      { minCV: 0.5, points: 5 }     // Bursty
+    ],
+
+    diskIoActive: 5,
+    newInstanceGrace: 10,
+    graceAgeDays: 7
+  }
 }
+
+// Backwards-compatible alias
+export type UtilizationThresholds = UtilizationConfig
+export const DEFAULT_THRESHOLDS = DEFAULT_CONFIG
 
 export interface InstanceClassification {
   instanceId: string
@@ -42,26 +140,32 @@ export interface InstanceClassification {
   region: string
   classification: UtilizationClassification
   classificationReasons: string[]
-  // What the data shows, in plain language
+  runtimeClassification: RuntimeClassification
+  daysActiveInLast7Days: number | null
   explanation: string
-  // Key facts/evidence supporting the classification
   evidence: string[]
-  // CPU sparkline data
   cpuDailyValues: number[]
   cpuDailyTimestamps: string[]
-  // Derived activity metrics
-  lastActiveDate?: string        // Last day with CPU > 1%, ISO date string
-  activeDaysCount: number        // Days with meaningful CPU activity out of monitoring period
-  totalDaysMonitored: number     // Total days of CloudWatch data
-  launchTime?: string            // When the instance was first launched
-  // Ownership context
+  maxCpuDailyValues: number[]
+  networkDailyValues: number[]
+  networkDailyTimestamps: string[]
+  lastActiveDate?: string
+  activeDaysCount: number
+  totalDaysMonitored: number
+  launchTime?: string
   owner?: string
   project?: string
   schedule?: string
   patchGroup?: string
   metrics?: {
     avgCpuPercent: number | null
+    maxCpuPercent: number | null
     totalNetworkBytes: number | null
+    networkBytesPerDay: number | null
+    diskReadOps: number | null
+    diskWriteOps: number | null
+    diskOpsPerDay: number | null
+    daysActiveInLast7Days: number | null
     lookbackDays: number
   }
   optimization?: {
@@ -69,17 +173,26 @@ export interface InstanceClassification {
     estimatedMonthlySavings: number
     recommendedType?: string
   }
+  apiActivity?: {
+    meaningfulCalls: number
+    topEvents: Array<{ eventName: string; eventSource: string; count: number }>
+  }
+  utilizationScore: number
   monthlyEstimate?: number
 }
 
 export interface ClassificationSummary {
   totalInstances: number
-  unused: number
-  patchingOnly: number
-  underutilized: number
-  rightSized: number
-  insufficientData: number
+  overProvisioned: number
+  underProvisioned: number
+  optimized: number
+  noData: number
   totalPotentialMonthlySavings: number
+  runtimeSummary: {
+    usuallyRunning: number
+    usuallyStopped: number
+    noData: number
+  }
 }
 
 export interface ClassificationResult {
@@ -94,24 +207,47 @@ export function classifyInstance(
   instance: EnrichedInstanceData,
   metrics: InstanceMetrics | null,
   optimizerRec: ComputeOptimizerRecommendation | null,
+  apiActivity: InstanceApiActivity | null,
   thresholds: UtilizationThresholds = DEFAULT_THRESHOLDS
 ): InstanceClassification {
-  // Derive activity metrics from daily CPU data
+  // Derive activity metrics from daily max CPU data (peak-based, aligned with idle criteria)
+  // Falls back to network data when CPU is unavailable
   const cpuValues = metrics?.cpuDailyValues || []
   const cpuTimestamps = metrics?.cpuDailyTimestamps || []
-  const activeDayThreshold = 1 // CPU% above this counts as "active"
+  const maxCpuDailyValues = metrics?.maxCpuDailyValues || []
+  const networkDailyValues = metrics?.networkDailyValues || []
+  const networkDailyTimestamps = metrics?.networkDailyTimestamps || []
+  const activeDayThreshold = thresholds.activeDayCpuThreshold
+  const networkActiveDayThreshold = thresholds.activeDayNetworkThreshold
   let lastActiveDate: string | undefined
   let activeDaysCount = 0
 
-  for (let i = 0; i < cpuValues.length; i++) {
-    if (cpuValues[i] > activeDayThreshold) {
+  // Primary: use CPU daily max values
+  for (let i = 0; i < maxCpuDailyValues.length; i++) {
+    if (maxCpuDailyValues[i] > activeDayThreshold) {
       activeDaysCount++
-      // Track the most recent active date
-      if (!lastActiveDate || cpuTimestamps[i] > lastActiveDate) {
-        lastActiveDate = cpuTimestamps[i]
+      const ts = cpuTimestamps[i]
+      if (ts && (!lastActiveDate || ts > lastActiveDate)) {
+        lastActiveDate = ts
       }
     }
   }
+
+  // Fallback: if no CPU data, use network daily values to determine activity
+  if (maxCpuDailyValues.length === 0 && networkDailyValues.length > 0) {
+    for (let i = 0; i < networkDailyValues.length; i++) {
+      if (networkDailyValues[i] > networkActiveDayThreshold) {
+        activeDaysCount++
+        const ts = networkDailyTimestamps[i]
+        if (ts && (!lastActiveDate || ts > lastActiveDate)) {
+          lastActiveDate = ts
+        }
+      }
+    }
+  }
+
+  // Total days monitored = whichever source has more data points
+  const totalDaysMonitored = Math.max(maxCpuDailyValues.length, cpuValues.length, networkDailyValues.length)
 
   const result: InstanceClassification = {
     instanceId: instance.resourceId,
@@ -119,214 +255,156 @@ export function classifyInstance(
     instanceType: instance.instanceType,
     instanceState: instance.instanceState,
     region: instance.region,
-    classification: 'insufficient-data',
+    classification: 'no-data',
     classificationReasons: [],
+    runtimeClassification: classifyRuntime(metrics?.daysActiveInLast7Days ?? null, instance.instanceState, thresholds),
+    daysActiveInLast7Days: metrics?.daysActiveInLast7Days ?? null,
     explanation: '',
     evidence: [],
     cpuDailyValues: cpuValues,
     cpuDailyTimestamps: cpuTimestamps,
+    maxCpuDailyValues,
+    networkDailyValues,
+    networkDailyTimestamps,
     lastActiveDate,
     activeDaysCount,
-    totalDaysMonitored: cpuValues.length,
+    totalDaysMonitored,
     launchTime: instance.launchTime,
     owner: instance.metadata?.owner,
     project: instance.metadata?.project,
     schedule: instance.schedulingInfo?.scheduleName,
     patchGroup: instance.patchingInfo?.patchGroup,
+    utilizationScore: 0,
     monthlyEstimate: instance.pricingInfo?.monthlyEstimate
   }
 
-  // Add metrics if available
   if (metrics) {
     result.metrics = {
       avgCpuPercent: metrics.avgCpuPercent,
+      maxCpuPercent: metrics.maxCpuPercent,
       totalNetworkBytes: metrics.totalNetworkBytes,
+      networkBytesPerDay: metrics.networkBytesPerDay,
+      diskReadOps: (metrics as any).diskReadOps ?? null,
+      diskWriteOps: (metrics as any).diskWriteOps ?? null,
+      diskOpsPerDay: (metrics as any).diskOpsPerDay ?? null,
+      daysActiveInLast7Days: metrics.daysActiveInLast7Days ?? null,
       lookbackDays: metrics.lookbackDays
     }
   }
 
-  // Add optimizer data if available
   if (optimizerRec) {
     result.optimization = {
       finding: optimizerRec.finding,
       estimatedMonthlySavings: optimizerRec.estimatedMonthlySavings || 0,
-      recommendedType: optimizerRec.recommendationOptions?.[0]?.configuration?.instanceType
+      recommendedType: optimizerRec.recommendationOptions
+        ?.slice().sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99))[0]
+        ?.configuration?.instanceType
     }
   }
 
-  const isStopped = instance.instanceState === 'stopped'
-  const hasSchedule = instance.schedulingInfo?.hasSchedule === true
-  const hasPatchGroup = !!instance.patchingInfo?.patchGroup
-  const costStr = result.monthlyEstimate ? `$${result.monthlyEstimate.toFixed(0)}/month` : null
-  const annualStr = result.monthlyEstimate ? `$${(result.monthlyEstimate * 12).toLocaleString()}/year` : null
-  const ownerTag = instance.metadata?.owner
-  const projectTag = instance.metadata?.project
-
-  // Build common evidence items
-  const tagEvidence: string[] = []
-  if (instance.launchTime) tagEvidence.push(`Launched: ${new Date(instance.launchTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`)
-  if (ownerTag) tagEvidence.push(`Owner: ${ownerTag}`)
-  if (projectTag) tagEvidence.push(`Project: ${projectTag}`)
-  if (instance.schedulingInfo?.scheduleName) tagEvidence.push(`Schedule: ${instance.schedulingInfo.scheduleName}`)
-  if (instance.patchingInfo?.patchGroup) tagEvidence.push(`Patch Group: ${instance.patchingInfo.patchGroup}`)
-  if (instance.managementInfo?.isGDMSManaged) tagEvidence.push('GDMS Managed: Yes')
-
-  // Activity summary for evidence
-  const activityEvidence: string[] = []
-  if (activeDaysCount > 0 && lastActiveDate) {
-    const daysAgo = Math.floor((Date.now() - new Date(lastActiveDate).getTime()) / (1000 * 60 * 60 * 24))
-    activityEvidence.push(`Last active: ${daysAgo} day${daysAgo !== 1 ? 's' : ''} ago`)
-    activityEvidence.push(`Active ${activeDaysCount} of ${cpuValues.length} monitored days`)
-  } else if (cpuValues.length > 0) {
-    activityEvidence.push(`No activity detected in ${cpuValues.length} days of monitoring`)
-  }
-
-  // --- Stopped instance classification ---
-  if (isStopped) {
-    if (!hasSchedule && !hasPatchGroup) {
-      result.classification = 'unused'
-      result.classificationReasons.push('Instance is stopped with no schedule or patch group')
-      result.explanation = 'This instance is stopped and has no schedule or patch group configured. There is no automation that would restart it.'
-      result.evidence = [
-        'State: Stopped',
-        ...activityEvidence,
-        'Schedule: None configured',
-        'Patch Group: None configured',
-        ...tagEvidence,
-        ...(costStr ? [`Estimated cost: ${costStr} (${annualStr}) — EBS volumes may still incur charges`] : [])
-      ]
-      return result
-    }
-
-    if (hasPatchGroup && !hasSchedule) {
-      result.classification = 'patching-only'
-      result.classificationReasons.push(`Stopped with Patch Group "${instance.patchingInfo!.patchGroup}" but no schedule`)
-      result.explanation = `This instance is stopped and has a patch group ("${instance.patchingInfo!.patchGroup}") but no schedule to run workloads. It appears to only be started during patching windows.`
-      result.evidence = [
-        'State: Stopped',
-        `Patch Group: ${instance.patchingInfo!.patchGroup}`,
-        'Schedule: None configured — no scheduled workload runtime',
-        ...tagEvidence,
-        ...(costStr ? [`Estimated cost: ${costStr} (${annualStr})`] : [])
-      ]
-      return result
-    }
-
-    if (hasSchedule) {
-      result.classification = 'right-sized'
-      result.classificationReasons.push('Instance is on a schedule (currently stopped)')
-      result.explanation = 'This instance is currently stopped as part of its configured schedule.'
-      result.evidence = [
-        'State: Stopped (scheduled)',
-        `Schedule: ${instance.schedulingInfo?.scheduleName || 'Configured'}`,
-        ...tagEvidence
-      ]
-      return result
+  if (apiActivity && apiActivity.meaningfulCalls >= 0) {
+    result.apiActivity = {
+      meaningfulCalls: apiActivity.meaningfulCalls,
+      topEvents: apiActivity.topEvents
     }
   }
 
-  // --- Running instance classification ---
-  const hasMetrics = metrics && metrics.avgCpuPercent != null
-  const hasOptimizer = optimizerRec != null
+  const costStr = result.monthlyEstimate ? `${result.monthlyEstimate.toFixed(0)}/month` : null
+  const annualStr = result.monthlyEstimate ? `${(result.monthlyEstimate * 12).toLocaleString()}/year` : null
 
-  if (!hasMetrics && !hasOptimizer) {
-    result.classification = 'insufficient-data'
-    result.classificationReasons.push('No CloudWatch metrics or Compute Optimizer data available')
-    result.explanation = 'No monitoring data is available for this instance. CloudWatch metrics may not be enabled, or Compute Optimizer has not yet analyzed it.'
+  // --- Compute Optimizer only classification ---
+  if (!optimizerRec) {
+    result.classification = 'no-data'
+    result.classificationReasons.push('No Compute Optimizer analysis available')
+    result.explanation = 'AWS Compute Optimizer has not analyzed this instance yet. It can take up to 12 hours after an instance starts for recommendations to appear.'
     result.evidence = [
-      'State: Running',
-      'CloudWatch CPU data: Not available',
+      `State: ${instance.instanceState || 'Unknown'}`,
       'Compute Optimizer: No analysis available',
-      ...tagEvidence,
       ...(costStr ? [`Estimated cost: ${costStr} (${annualStr})`] : [])
     ]
+    result.utilizationScore = computeUtilizationScore(metrics, apiActivity, optimizerRec, instance, thresholds)
     return result
   }
 
-  // Check for unused (running but no activity)
-  if (hasMetrics) {
-    const cpu = metrics!.avgCpuPercent!
-    const network = metrics!.totalNetworkBytes
-    const days = metrics!.lookbackDays
+  const savings = optimizerRec.estimatedMonthlySavings || 0
+  const recommended = optimizerRec.recommendationOptions
+    ?.slice().sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99))[0]
+    ?.configuration?.instanceType
+  const hasCpuMetrics = metrics && metrics.maxCpuPercent != null
+  const peakStr = hasCpuMetrics ? (metrics!.maxCpuPercent?.toFixed(1) ?? 'N/A') : null
+  const avgStr = hasCpuMetrics ? metrics!.avgCpuPercent?.toFixed(1) ?? 'N/A' : null
 
-    if (cpu < thresholds.unusedCpuPercent && network != null && network < thresholds.unusedNetworkBytes) {
-      result.classification = 'unused'
-      result.classificationReasons.push(
-        `Avg CPU ${cpu.toFixed(1)}% over ${days} days`,
-        `Total network traffic ${formatBytes(network)} over ${days} days`
-      )
-      result.explanation = `This instance is running but showed near-zero CPU usage (${cpu.toFixed(1)}% average) and minimal network traffic (${formatBytes(network)} total) over the last ${days} days.${activeDaysCount === 0 ? ' It had zero days of meaningful activity during the monitoring period.' : ''}`
-      result.evidence = [
-        'State: Running',
-        ...activityEvidence,
-        `Average CPU: ${cpu.toFixed(1)}% over ${days} days`,
-        `Network traffic: ${formatBytes(network)} total over ${days} days`,
-        ...tagEvidence,
-        ...(costStr ? [`Estimated cost: ${costStr} (${annualStr})`] : [])
-      ]
-      return result
-    }
-
-    if (cpu < thresholds.underutilizedCpuPercent) {
-      result.classification = 'underutilized'
-      result.classificationReasons.push(
-        `Avg CPU ${cpu.toFixed(1)}% over ${days} days`
-      )
-    }
-  }
-
-  // Check Compute Optimizer findings
-  if (hasOptimizer) {
-    if (optimizerRec!.finding === 'OVER_PROVISIONED') {
-      if (result.classification !== 'unused') {
-        result.classification = 'underutilized'
-      }
-      result.classificationReasons.push('Compute Optimizer: OVER_PROVISIONED')
-      const savings = optimizerRec!.estimatedMonthlySavings || 0
-      if (savings > 0) {
-        result.classificationReasons.push(`Potential savings: $${savings.toFixed(2)}/month`)
-      }
-      const recommended = optimizerRec!.recommendationOptions?.[0]?.configuration?.instanceType
-      result.explanation = `AWS Compute Optimizer analyzed this instance's usage pattern and determined it is over-provisioned${recommended ? ` — a ${recommended} would handle the current workload` : ''}.${hasMetrics ? ` Average CPU over ${metrics!.lookbackDays} days was ${metrics!.avgCpuPercent!.toFixed(1)}%.` : ''}`
-      result.evidence = [
-        'State: Running',
-        ...activityEvidence,
-        `Current type: ${instance.instanceType}`,
-        `AWS Compute Optimizer finding: Over-provisioned`,
-        ...(recommended ? [`Recommended type: ${recommended}`] : []),
-        ...(savings > 0 ? [`Estimated savings: $${savings.toFixed(0)}/month ($${(savings * 12).toLocaleString()}/year)`] : []),
-        ...(hasMetrics ? [`Average CPU: ${metrics!.avgCpuPercent!.toFixed(1)}% over ${metrics!.lookbackDays} days`] : []),
-        ...tagEvidence,
-        ...(costStr ? [`Current cost: ${costStr} (${annualStr})`] : [])
-      ]
-      return result
-    }
-
-    if (optimizerRec!.finding === 'OPTIMIZED') {
-      if (result.classification === 'insufficient-data') {
-        result.classification = 'right-sized'
-        result.classificationReasons.push('Compute Optimizer: OPTIMIZED')
-        result.explanation = 'AWS Compute Optimizer has confirmed this instance is appropriately sized for its workload.'
-        result.evidence = ['Compute Optimizer finding: Optimized', ...tagEvidence]
-        return result
-      }
-    }
-  }
-
-  // If we had metrics but CPU was above underutilized threshold, it's right-sized
-  if (hasMetrics && result.classification === 'insufficient-data') {
-    result.classification = 'right-sized'
-    result.classificationReasons.push(
-      `Avg CPU ${metrics!.avgCpuPercent!.toFixed(1)}% — within normal range`
-    )
-    result.explanation = 'This instance shows active usage within a normal range.'
+  if (optimizerRec.finding === 'OVER_PROVISIONED') {
+    result.classification = 'over-provisioned'
+    result.classificationReasons.push('Compute Optimizer: OVER_PROVISIONED')
+    if (savings > 0) result.classificationReasons.push(`Potential savings: ${savings.toFixed(2)}/month`)
+    result.explanation = 'AWS Compute Optimizer determined this instance is over-provisioned'
+      + (recommended ? ` \u2014 a ${recommended} would handle the current workload` : '')
+      + '.'
+      + (hasCpuMetrics ? ` Peak CPU was ${peakStr}% (avg ${avgStr}%).` : '')
     result.evidence = [
-      `Average CPU: ${metrics!.avgCpuPercent!.toFixed(1)}% over ${metrics!.lookbackDays} days`,
-      ...tagEvidence
+      `State: ${instance.instanceState || 'Unknown'}`,
+      `Current type: ${instance.instanceType}`,
+      'AWS Compute Optimizer finding: Over-provisioned',
+      ...(recommended ? [`Recommended type: ${recommended}`] : []),
+      ...(savings > 0 ? [`Estimated savings: ${savings.toFixed(0)}/month (${(savings * 12).toLocaleString()}/year)`] : []),
+      ...(hasCpuMetrics ? [`Peak CPU: ${peakStr}%`, `Average CPU: ${avgStr}%`] : []),
+      ...(costStr ? [`Current cost: ${costStr} (${annualStr})`] : [])
     ]
+  } else if (optimizerRec.finding === 'UNDER_PROVISIONED') {
+    result.classification = 'under-provisioned'
+    result.classificationReasons.push('Compute Optimizer: UNDER_PROVISIONED')
+    const reasons = optimizerRec.findingReasonCodes || []
+    result.explanation = 'AWS Compute Optimizer determined this instance is under-provisioned — it needs more resources than its current type provides.'
+      + (recommended ? ` Consider upgrading to ${recommended}.` : '')
+      + (reasons.length > 0 ? ` Reasons: ${reasons.join(', ')}.` : '')
+    result.evidence = [
+      `State: ${instance.instanceState || 'Unknown'}`,
+      `Current type: ${instance.instanceType}`,
+      'AWS Compute Optimizer finding: Under-provisioned',
+      ...(reasons.length > 0 ? [`Finding reasons: ${reasons.join(', ')}`] : []),
+      ...(recommended ? [`Recommended type: ${recommended}`] : []),
+      ...(hasCpuMetrics ? [`Peak CPU: ${peakStr}%`, `Average CPU: ${avgStr}%`] : []),
+      ...(costStr ? [`Current cost: ${costStr} (${annualStr})`] : [])
+    ]
+  } else if (optimizerRec.finding === 'OPTIMIZED') {
+    result.classification = 'optimized'
+    result.classificationReasons.push('Compute Optimizer: OPTIMIZED')
+    result.explanation = 'AWS Compute Optimizer has confirmed this instance is appropriately sized for its workload.'
+    result.evidence = [
+      'AWS Compute Optimizer finding: Optimized',
+      ...(hasCpuMetrics ? [`Peak CPU: ${peakStr}%`, `Average CPU: ${avgStr}%`] : []),
+      ...(costStr ? [`Current cost: ${costStr} (${annualStr})`] : [])
+    ]
+  } else {
+    // Unknown finding — treat as no-data
+    result.classification = 'no-data'
+    result.classificationReasons.push(`Compute Optimizer finding: ${optimizerRec.finding}`)
+    result.explanation = `AWS Compute Optimizer returned an unrecognized finding: ${optimizerRec.finding}.`
+    result.evidence = [`Compute Optimizer finding: ${optimizerRec.finding}`]
   }
 
+  result.utilizationScore = computeUtilizationScore(metrics, apiActivity, optimizerRec, instance, thresholds)
   return result
+}
+
+/**
+ * Classify runtime behavior based on hours running over the last 7 days.
+ * Uses hourly CloudWatch CPU data point count as a proxy for hours running.
+ */
+export function classifyRuntime(
+  daysActive: number | null,
+  instanceState?: string,
+  thresholds: UtilizationThresholds = DEFAULT_THRESHOLDS
+): RuntimeClassification {
+  if (daysActive !== null) {
+    return daysActive >= thresholds.usuallyRunningDaysThreshold ? 'usually-running' : 'usually-stopped'
+  }
+  // No CloudWatch data — use instance state as fallback
+  // A stopped instance with no recent data was not running in the lookback window
+  if (instanceState === 'stopped') return 'usually-stopped'
+  // Running instance with no data — genuinely unknown
+  return 'no-data'
 }
 
 /**
@@ -336,64 +414,161 @@ export function classifyInstances(
   instances: EnrichedInstanceData[],
   metricsMap: Map<string, InstanceMetrics>,
   optimizerMap: Map<string, ComputeOptimizerRecommendation>,
+  activityMap: Map<string, InstanceApiActivity> = new Map(),
   thresholds: UtilizationThresholds = DEFAULT_THRESHOLDS
 ): ClassificationResult {
   const classified = instances.map(instance => {
     const metrics = metricsMap.get(instance.resourceId) || null
     const optimizer = optimizerMap.get(instance.resourceId) || null
-    return classifyInstance(instance, metrics, optimizer, thresholds)
+    const activity = activityMap.get(instance.resourceId) || null
+    return classifyInstance(instance, metrics, optimizer, activity, thresholds)
   })
 
-  // Sort: unused first, then patching-only, underutilized, insufficient-data, right-sized
   const order: Record<UtilizationClassification, number> = {
-    'unused': 0,
-    'patching-only': 1,
-    'underutilized': 2,
-    'insufficient-data': 3,
-    'right-sized': 4
+    'over-provisioned': 0,
+    'under-provisioned': 1,
+    'optimized': 2,
+    'no-data': 3
   }
   classified.sort((a, b) => order[a.classification] - order[b.classification])
 
   const summary: ClassificationSummary = {
     totalInstances: classified.length,
-    unused: 0,
-    patchingOnly: 0,
-    underutilized: 0,
-    rightSized: 0,
-    insufficientData: 0,
-    totalPotentialMonthlySavings: 0
+    overProvisioned: 0,
+    underProvisioned: 0,
+    optimized: 0,
+    noData: 0,
+    totalPotentialMonthlySavings: 0,
+    runtimeSummary: { usuallyRunning: 0, usuallyStopped: 0, noData: 0 }
   }
 
   for (const inst of classified) {
     switch (inst.classification) {
-      case 'unused':
-        summary.unused++
-        if (inst.monthlyEstimate) summary.totalPotentialMonthlySavings += inst.monthlyEstimate
-        break
-      case 'patching-only':
-        summary.patchingOnly++
-        if (inst.monthlyEstimate) summary.totalPotentialMonthlySavings += inst.monthlyEstimate
-        break
-      case 'underutilized':
-        summary.underutilized++
+      case 'over-provisioned':
+        summary.overProvisioned++
         if (inst.optimization?.estimatedMonthlySavings) {
           summary.totalPotentialMonthlySavings += inst.optimization.estimatedMonthlySavings
         } else if (inst.monthlyEstimate) {
+          // Compute Optimizer didn't provide a savings estimate — use 50% of current cost as conservative fallback
           summary.totalPotentialMonthlySavings += inst.monthlyEstimate * 0.5
         }
         break
-      case 'right-sized':
-        summary.rightSized++
+      case 'under-provisioned':
+        summary.underProvisioned++
         break
-      case 'insufficient-data':
-        summary.insufficientData++
+      case 'optimized':
+        summary.optimized++
         break
+      case 'no-data':
+        summary.noData++
+        break
+    }
+    // Runtime dimension
+    switch (inst.runtimeClassification) {
+      case 'usually-running': summary.runtimeSummary.usuallyRunning++; break
+      case 'usually-stopped': summary.runtimeSummary.usuallyStopped++; break
+      case 'no-data': summary.runtimeSummary.noData++; break
     }
   }
 
   summary.totalPotentialMonthlySavings = Math.round(summary.totalPotentialMonthlySavings * 100) / 100
 
   return { summary, instances: classified }
+}
+
+/**
+ * Compute a 0-100 utilization score combining all available signals.
+ *
+ * Weight distribution (max 100):
+ *   Compute Optimizer finding:                     up to +25
+ *   Meaningful API calls (CloudTrail):             up to +15
+ *   Network (scaled by volume):                    up to +20
+ *   CPU (scaled by peak + volatility bonus):       up to +25
+ *   Disk I/O:                                      up to +5
+ *   Instance age < 7 days (grace period):          up to +10
+ */
+function computeUtilizationScore(
+  metrics: InstanceMetrics | null,
+  apiActivity: InstanceApiActivity | null,
+  optimizerRec: ComputeOptimizerRecommendation | null,
+  instance: EnrichedInstanceData,
+  thresholds: UtilizationThresholds
+): number {
+  let score = 0
+
+  const sc = thresholds.score
+
+  // Compute Optimizer signal
+  if (optimizerRec) {
+    const finding = optimizerRec.finding
+    if (finding === 'UNDER_PROVISIONED' || finding === 'OPTIMIZED') {
+      score += sc.optimizerOptimized
+    } else if (finding === 'OVER_PROVISIONED') {
+      score += sc.optimizerOverProvisioned
+    }
+  }
+
+  // API activity signal — tiered by call count
+  if (apiActivity && apiActivity.meaningfulCalls > 0) {
+    for (const tier of sc.apiActivityTiers) {
+      if (apiActivity.meaningfulCalls >= tier.minCalls) {
+        score += tier.points
+        break
+      }
+    }
+  }
+
+  // Network signal — tiered by traffic volume
+  if (metrics && metrics.networkBytesPerDay != null) {
+    for (const tier of sc.networkTiers) {
+      if (metrics.networkBytesPerDay >= tier.minBytesPerDay) {
+        score += tier.points
+        break
+      }
+    }
+  }
+
+  // CPU signal — tiered by peak value
+  if (metrics && metrics.maxCpuPercent != null) {
+    for (const tier of sc.cpuPeakTiers) {
+      if (metrics.maxCpuPercent >= tier.minPercent) {
+        score += tier.points
+        break
+      }
+    }
+
+    // Volatility bonus — spiky workloads indicate real usage patterns
+    const dailyValues = metrics.maxCpuDailyValues || []
+    if (dailyValues.length >= 3) {
+      const mean = dailyValues.reduce((s, v) => s + v, 0) / dailyValues.length
+      if (mean > 0) {
+        const variance = dailyValues.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / dailyValues.length
+        const cv = Math.sqrt(variance) / mean
+        for (const tier of sc.cpuVolatilityTiers) {
+          if (cv >= tier.minCV) {
+            score += tier.points
+            break
+          }
+        }
+      }
+    }
+  }
+
+  // Disk I/O signal
+  const diskOpsPerDay = (metrics as any)?.diskOpsPerDay
+  if (diskOpsPerDay != null && diskOpsPerDay > 0) {
+    score += sc.diskIoActive
+  }
+
+  // Grace period for new instances
+  if (instance.launchTime) {
+    const ageDays = Math.floor((Date.now() - new Date(instance.launchTime).getTime()) / (1000 * 60 * 60 * 24))
+    if (ageDays < sc.graceAgeDays) {
+      score += sc.newInstanceGrace
+    }
+  }
+
+  return Math.min(score, 100)
 }
 
 function formatBytes(bytes: number): string {

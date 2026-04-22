@@ -426,16 +426,33 @@ function openShareLinkModal() {
 /**
  * Generate share URL
  */
+/**
+ * Generate share URL
+ */
 async function generateShareUrl() {
   shareLoading.value = true
   shareError.value = ''
 
   try {
-    // Build the current route URL
-    const route = useRoute()
-    const originalUrl = route.fullPath
+    // Build clean URL from state instead of route.fullPath
+    // Avoids Vue Router's default JSON array encoding
+    const params = new URLSearchParams()
 
-    // Create the short link with the correct API structure
+    if (props.selectedAccounts.length > 0) {
+      params.set('accounts', props.selectedAccounts.join(','))
+    }
+    if (modelSelectedTimeframe.value) {
+      params.set('timeframe', modelSelectedTimeframe.value)
+    }
+    if (props.activeTab) {
+      params.set('tab', props.activeTab)
+    }
+    if (modelMode.value) {
+      params.set('mode', modelMode.value)
+    }
+
+    const originalUrl = `/account/costs?${params.toString()}`
+
     const response = await $fetch('/api/shortlinks', {
       method: 'POST',
       body: {
@@ -476,7 +493,6 @@ async function generateShareUrl() {
     shareLoading.value = false
   }
 }
-
 /**
  * Copy share URL to clipboard
  */

@@ -6,6 +6,11 @@
       @toggle-mobile-menu="() => {}"
     />
 
+    <!-- Impersonation Banner -->
+    <ClientOnly>
+      <ImpersonationBanner />
+    </ClientOnly>
+
     <!-- Main Content Area with Admin Sidebar -->
     <div class="flex-1 min-h-0 flex overflow-hidden">
       <!-- Admin Sidebar Navigation -->

@@ -806,6 +806,53 @@ resource "aws_dynamodb_table" "achievement_progress" {
 }
 
 # ============================================================================
+# Utilization Analysis Table (GovCloud Environment)
+# ============================================================================
+# Stores background utilization analysis jobs and per-instance classification results
+# Single-table design: PK/SK pattern for jobs, latest pointers, and instance results
+resource "aws_dynamodb_table" "utilization_analysis" {
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-utilization-analysis-prod" : "ghost-utilization-analysis"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "PK"
+  range_key    = "SK"
+
+  attribute {
+    name = "PK"
+    type = "S"
+  }
+
+  attribute {
+    name = "SK"
+    type = "S"
+  }
+
+  # Enable TTL to auto-delete old analysis results (30 days)
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  # Enable encryption at rest
+  server_side_encryption {
+    enabled = true
+  }
+
+  # Enable point-in-time recovery
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Name        = "GHOST Utilization Analysis"
+    Environment = local.environment
+    ManagedBy   = "Terraform"
+    Service     = "GHOST"
+    Component   = "UtilizationAnalysis"
+  }
+}
+
+# ============================================================================
 # Outputs
 # ============================================================================
 
@@ -947,6 +994,16 @@ output "achievement_progress_table_name" {
 output "achievement_progress_table_arn" {
   description = "ARN of the DynamoDB table for achievement progress"
   value       = aws_dynamodb_table.achievement_progress.arn
+}
+
+output "utilization_analysis_table_name" {
+  description = "Name of the DynamoDB table for utilization analysis"
+  value       = aws_dynamodb_table.utilization_analysis.name
+}
+
+output "utilization_analysis_table_arn" {
+  description = "ARN of the DynamoDB table for utilization analysis"
+  value       = aws_dynamodb_table.utilization_analysis.arn
 }
 
 # NOTE: strands_agent_metrics table outputs removed

@@ -19,9 +19,11 @@ import { getEC2Recommendations } from '../../utils/compute-optimizer'
 import {
   classifyInstances,
   DEFAULT_THRESHOLDS,
-  type ClassificationResult
+  type ClassificationResult,
+  type InstanceApiActivity
 } from '../../utils/instance-utilization-classifier'
 import { getCacheManager } from '../../utils/cache-manager'
+import { getLatestAnalysis, getInstanceClassifications } from '../../utils/utilization-persistence'
 import type { AWSEnvironmentType } from '../../types'
 import type { EnrichedInstanceData } from '../../utils/instance-enrichment'
 import { logger } from '../../utils/logger'
@@ -108,8 +110,50 @@ export default defineEventHandler(handleAsync(async (event) => {
   const cacheKey = `utilization:${accountIdentifier}:${environment}:${lookbackDays}:${includeMetrics}`
   const cached = await cache.get<ClassificationResult>(cacheKey)
   if (cached) {
-    logger.info(`[Utilization API] Cache hit for ${accountIdentifier}`)
-    return sendSuccess(event, cached, { cached: true, environment })
+    // Validate schema — discard stale cached results with old field names
+    const s = cached.summary as any
+    if (s && ('unused' in s || 'rightSized' in s) && !('overProvisioned' in s)) {
+      logger.info(`[Utilization API] Stale in-memory cache for ${accountIdentifier}, discarding`)
+      await cache.delete(cacheKey)
+    } else {
+      logger.info(`[Utilization API] Cache hit for ${accountIdentifier}`)
+      return sendSuccess(event, cached, { cached: true, environment })
+    }
+  }
+
+  // Check DynamoDB for recent analysis before running expensive sync query
+  // Resolve account ID first — accountIdentifier may be email/name, but DynamoDB keys use 12-digit account IDs
+  let dynLookupId: string | null = null
+  try {
+    const lookupResult = await lookupAccountOptimized(event, accountIdentifier, { includeDecommissioned: false })
+    if (environment === 'govcloud') {
+      dynLookupId = lookupResult.account.govCloudAccountId || lookupResult.account.awsGovCloudAccountID || lookupResult.account.primaryAccountID
+    } else {
+      dynLookupId = lookupResult.account.accountId || lookupResult.account.awsStandardAccountID || lookupResult.account.id
+    }
+  } catch { 
+    // Account lookup failed — skip DynamoDB fallback, continue to sync path
+  }
+  const latestAnalysis = dynLookupId ? await getLatestAnalysis(dynLookupId, environment).catch(() => null) : null
+  if (latestAnalysis?.status === 'completed' && latestAnalysis.summary) {
+    const completedAt = latestAnalysis.completedAt ? new Date(latestAnalysis.completedAt).getTime() : 0
+    const age = Date.now() - completedAt
+    const MAX_DYNAMO_AGE = 2 * 60 * 60 * 1000 // 2 hours
+
+    if (age < MAX_DYNAMO_AGE) {
+      // Load full results from DynamoDB
+      const { items } = await getInstanceClassifications(latestAnalysis.jobId, { limit: 5000 }).catch(() => ({ items: [] }))
+      if (items.length > 0) {
+        const result = {
+          summary: latestAnalysis.summary,
+          instances: items
+        }
+        // Populate in-memory cache
+        await cache.set(cacheKey, result, { ttl: CACHE_TTL })
+        logger.info(`[Utilization API] Loaded from DynamoDB for ${accountIdentifier} (${age / 1000}s old)`)
+        return sendSuccess(event, result, { cached: true, source: 'dynamodb', environment })
+      }
+    }
   }
 
   // Resolve account identifier
@@ -148,7 +192,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     {
       resourceType: 'AWS::EC2::Instance',
       accountIds: [targetAccountId],
-      limit: 500
+      limit: 5000
     },
     environment,
     configRegion
@@ -157,9 +201,13 @@ export default defineEventHandler(handleAsync(async (event) => {
   if (instanceIdentifiers.length === 0) {
     const emptyResult: ClassificationResult = {
       summary: {
-        totalInstances: 0, unused: 0, patchingOnly: 0,
-        underutilized: 0, rightSized: 0, insufficientData: 0,
-        totalPotentialMonthlySavings: 0
+        totalInstances: 0,
+        overProvisioned: 0,
+        underProvisioned: 0,
+        optimized: 0,
+        noData: 0,
+        totalPotentialMonthlySavings: 0,
+        runtimeSummary: { usuallyRunning: 0, usuallyStopped: 0, noData: 0 }
       },
       instances: []
     }
@@ -234,11 +282,11 @@ export default defineEventHandler(handleAsync(async (event) => {
   // Step 3: Fetch data in parallel — CloudWatch metrics + Compute Optimizer
   const runningInstances = instances.filter(i => i.instanceState === 'running')
 
-  const [metricsResult, optimizerRecs, pricingData] = await Promise.all([
-    // CloudWatch metrics (only for running instances, only if requested)
-    includeMetrics && runningInstances.length > 0
+  const [metricsResult, optimizerRecs, pricingData, activityResult] = await Promise.all([
+    // CloudWatch metrics for ALL instances (stopped instances retain data for runtime classification)
+    includeMetrics && instances.length > 0
       ? batchGetInstanceMetrics(
-          runningInstances.map(i => ({ instanceId: i.resourceId, region: i.region })),
+          instances.map(i => ({ instanceId: i.resourceId, region: i.region })),
           targetAccountId,
           environment,
           lookbackDays
@@ -274,6 +322,18 @@ export default defineEventHandler(handleAsync(async (event) => {
         logger.error('[Utilization API] Pricing fetch failed:', err.message)
         return new Map()
       }
+    })(),
+
+    // CloudTrail API activity via Security Lake (all instances, single Athena query)
+    (async () => {
+      try {
+        const { batchGetInstanceActivity } = await import('../../utils/instance-activity-detection')
+        const allInstanceIds = instances.map(i => i.resourceId)
+        return await batchGetInstanceActivity(allInstanceIds, targetAccountId, environment, lookbackDays)
+      } catch (err: any) {
+        logger.error('[Utilization API] Activity detection failed:', err.message)
+        return { activities: new Map() as Map<string, InstanceApiActivity>, queryDurationMs: 0, errors: [err.message] }
+      }
     })()
   ])
 
@@ -291,19 +351,44 @@ export default defineEventHandler(handleAsync(async (event) => {
   // Build lookup maps
   const metricsMap = metricsResult.metrics
   const optimizerMap = new Map(optimizerRecs.map(r => [r.resourceId, r]))
+  const activityMap = activityResult.activities
+
+  if (activityResult.errors.length > 0) {
+    logger.warn(`[Utilization API] Activity detection had ${activityResult.errors.length} errors`)
+  }
+  if (activityResult.queryDurationMs > 0) {
+    logger.info(`[Utilization API] Activity detection: ${activityMap.size} instances with activity data (${activityResult.queryDurationMs}ms)`)
+  }
 
   // Step 4: Classify all instances
-  const result = classifyInstances(instances, metricsMap, optimizerMap, DEFAULT_THRESHOLDS)
+  const result = classifyInstances(instances, metricsMap, optimizerMap, activityMap, DEFAULT_THRESHOLDS)
 
-  // Cache the result
-  await cache.set(cacheKey, result, { ttl: CACHE_TTL })
+  // Cache with TTL based on data completeness
+  const hasMetricsErrors = metricsResult.errors.length > 0
+  const metricsCompletionRate = runningInstances.length > 0
+    ? metricsResult.metrics.size / runningInstances.length
+    : 1
 
-  logger.info(`[Utilization API] Classification complete: ${result.summary.unused} unused, ${result.summary.underutilized} underutilized, ${result.summary.patchingOnly} patching-only`)
+  if (!hasMetricsErrors || metricsCompletionRate >= 0.9) {
+    // Full cache - complete or near-complete results
+    await cache.set(cacheKey, result, { ttl: CACHE_TTL })
+  } else if (metricsCompletionRate >= 0.5) {
+    // Short cache - partial results, allow retry sooner
+    await cache.set(cacheKey, result, { ttl: 300 }) // 5 minutes
+    logger.warn(`[Utilization API] Partial results cached (${(metricsCompletionRate * 100).toFixed(0)}% complete) with short TTL`)
+  } else {
+    // Don't cache severely incomplete results
+    logger.warn(`[Utilization API] Results too incomplete to cache (${(metricsCompletionRate * 100).toFixed(0)}% complete, ${metricsResult.errors.length} errors)`)
+  }
+
+  logger.info(`[Utilization API] Classification complete: ${result.summary.overProvisioned} over-provisioned, ${result.summary.underProvisioned} under-provisioned, ${result.summary.optimized} optimized, ${result.summary.noData} no-data`)
 
   return sendSuccess(event, result, {
     environment,
     lookbackDays,
     includeMetrics,
-    metricsErrors: metricsResult.errors.length > 0 ? metricsResult.errors : undefined
+    metricsCompletionRate: Math.round(metricsCompletionRate * 100),
+    metricsErrors: metricsResult.errors.length > 0 ? metricsResult.errors : undefined,
+    partial: hasMetricsErrors && metricsCompletionRate < 0.9
   })
 }))

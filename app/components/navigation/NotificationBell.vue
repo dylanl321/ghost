@@ -98,6 +98,8 @@
             class="relative flex gap-3 px-5 py-3 cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-slate-700/30"
             :class="{ 'bg-blue-50/50 dark:bg-blue-900/10': notif.status === 'unread' }"
             @click="handleNotificationClick(notif)"
+            @mouseenter="startReadTimer(notif)"
+            @mouseleave="cancelReadTimer(notif)"
           >
             <!-- Unread dot -->
             <div class="flex-shrink-0 pt-1">
@@ -309,7 +311,28 @@ function formatRelativeTime(isoDate: string): string {
   return new Date(isoDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
+// Mark as read on hover after a short delay to avoid accidental triggers
+const hoverTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+function startReadTimer(notif: UserNotification) {
+  if (notif.status !== 'unread') return
+  const timer = setTimeout(() => {
+    markAsRead(notif.notificationId)
+    hoverTimers.delete(notif.notificationId)
+  }, 600)
+  hoverTimers.set(notif.notificationId, timer)
+}
+
+function cancelReadTimer(notif: UserNotification) {
+  const timer = hoverTimers.get(notif.notificationId)
+  if (timer) {
+    clearTimeout(timer)
+    hoverTimers.delete(notif.notificationId)
+  }
+}
+
 function handleNotificationClick(notif: UserNotification) {
+  cancelReadTimer(notif)
   if (notif.status === 'unread') {
     markAsRead(notif.notificationId)
   }

@@ -13,6 +13,11 @@
         @toggle-mobile-menu="handleMobileMenuToggle"
       />
 
+      <!-- Impersonation Banner -->
+      <ClientOnly>
+        <ImpersonationBanner />
+      </ClientOnly>
+
       <!-- Welcome Banner -->
       <WelcomeBanner v-if="!route.path.startsWith('/support')" />
 

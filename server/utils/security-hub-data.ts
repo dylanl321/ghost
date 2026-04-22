@@ -171,12 +171,12 @@ function buildSecurityHubFilters(filters: SecurityHubDatasetFilters) {
     ]
   }
 
-  // Filter by resource ID (uses CONTAINS to match partial IDs like instance IDs in ARNs)
+  // Filter by resource ID (uses PREFIX to match instance IDs within resource ARNs)
   if (filters.resourceId) {
     findingFilters.ResourceId = [
       {
         Value: filters.resourceId,
-        Comparison: 'CONTAINS',
+        Comparison: 'PREFIX',
       },
     ]
   }

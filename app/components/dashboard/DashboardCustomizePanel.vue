@@ -96,6 +96,15 @@
 
       <!-- Footer -->
       <div class="p-4 border-t border-gray-200 dark:border-gray-700 space-y-2">
+        <!-- Org default match indicator -->
+        <div v-if="isAdmin && matchesOrgDefault === true" class="flex items-center justify-center gap-1.5 py-1">
+          <UIcon name="i-heroicons-check-circle" class="w-4 h-4 text-green-500" />
+          <span class="text-xs text-green-600 dark:text-green-400 font-medium">Matches org default</span>
+        </div>
+        <div v-else-if="isAdmin && matchesOrgDefault === false" class="flex items-center justify-center gap-1.5 py-1">
+          <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-amber-500" />
+          <span class="text-xs text-amber-600 dark:text-amber-400 font-medium">Modified from default</span>
+        </div>
         <UButton
           v-if="isAdmin"
           label="Set as Org Default"
@@ -143,6 +152,7 @@ const { isAdmin } = useUserRoles()
 
 const {
   layout,
+  matchesOrgDefault,
   isSectionVisible,
   isMetricCardVisible,
   toggleSection,
@@ -229,8 +239,12 @@ const toast = useToast()
 async function handleExportDefault() {
   exportLoading.value = true
   try {
-    await exportAsDefault()
-    toast.add({ title: 'Layout saved as org default', color: 'green', icon: 'i-heroicons-check-circle' })
+    const result = await exportAsDefault()
+    if (result.verified) {
+      toast.add({ title: 'Layout saved and verified as org default', color: 'green', icon: 'i-heroicons-check-circle' })
+    } else {
+      toast.add({ title: 'Layout saved but verification failed', description: 'The stored default may differ. Try refreshing.', color: 'amber', icon: 'i-heroicons-exclamation-triangle' })
+    }
   } catch (e: any) {
     toast.add({ title: 'Failed to save default layout', description: e.message, color: 'red', icon: 'i-heroicons-x-circle' })
   } finally {

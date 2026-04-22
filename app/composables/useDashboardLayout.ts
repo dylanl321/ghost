@@ -16,25 +16,40 @@ import {
   ALL_METRIC_CARD_IDS,
   DEFAULT_DASHBOARD_LAYOUT,
   SECTION_STYLE_SUPPORT,
+  layoutsAreEqual,
 } from '#shared/types/dashboard-layout'
 
 const LAYOUT_KEY = 'dashboardLayout'
 
-// Cached org default layout (fetched once per session)
+// Cached org default layout with time-based invalidation
 const orgDefault = ref<DashboardLayoutConfig | null>(null)
-const orgDefaultFetched = ref(false)
+const orgDefaultLastFetched = ref(0)
+const ORG_DEFAULT_CACHE_MS = 5 * 60 * 1000 // 5 minutes
+let orgDefaultPromise: Promise<void> | null = null
 
-async function fetchOrgDefault() {
-  if (orgDefaultFetched.value) return
-  orgDefaultFetched.value = true
-  try {
-    const res = await $fetch<{ success: boolean; layout: DashboardLayoutConfig | null }>('/api/admin/dashboard-layout/get-default')
-    if (res.success && res.layout) {
-      orgDefault.value = res.layout
-    }
-  } catch {
-    // Silently fall back to hardcoded default
+async function fetchOrgDefault(force = false) {
+  const now = Date.now()
+  if (!force && orgDefaultLastFetched.value > 0 && now - orgDefaultLastFetched.value < ORG_DEFAULT_CACHE_MS) {
+    return
   }
+  // Deduplicate concurrent calls
+  if (orgDefaultPromise) return orgDefaultPromise
+  orgDefaultPromise = (async () => {
+    try {
+      const res = await $fetch<{ success: boolean; layout: DashboardLayoutConfig | null }>('/api/admin/dashboard-layout/get-default')
+      if (res.success && res.layout) {
+        orgDefault.value = res.layout
+      }
+      orgDefaultLastFetched.value = Date.now()
+    } catch (err) {
+      console.warn('[DashboardLayout] Failed to fetch org default:', err)
+      // Set a short cooldown on failure to avoid hammering the server
+      orgDefaultLastFetched.value = Date.now() - ORG_DEFAULT_CACHE_MS + 30_000 // retry after 30s
+    } finally {
+      orgDefaultPromise = null
+    }
+  })()
+  return orgDefaultPromise
 }
 
 const ADMIN_SECTION_IDS = new Set<DashboardSectionId>(['adminOverview', 'adminAlerts', 'adminPipeline', 'adminFeedback'])
@@ -43,8 +58,8 @@ export function useDashboardLayout() {
   const { setPreference, getPreference } = useUserPreferences()
   const { isAdmin } = useUserRoles()
 
-  // Fetch org default on first use (non-blocking)
-  if (import.meta.client && !orgDefaultFetched.value) {
+  // Fetch org default on first use (non-blocking, deduped)
+  if (import.meta.client) {
     fetchOrgDefault()
   }
 
@@ -79,8 +94,8 @@ export function useDashboardLayout() {
       ...ALL_SECTION_IDS.filter(id => !savedIds.has(id)).map(id => ({ id, visible: true })),
     ]
 
-    // Merge metric cards: keep saved values, default new ones to true
-    const mergedMetricCards = { ...DEFAULT_DASHBOARD_LAYOUT.metricCards }
+    // Merge metric cards: keep saved values, default new ones to org default (or hardcoded)
+    const mergedMetricCards = { ...effectiveDefault.value.metricCards }
     if (saved.metricCards) {
       for (const id of ALL_METRIC_CARD_IDS) {
         if (id in saved.metricCards) {
@@ -101,6 +116,12 @@ export function useDashboardLayout() {
   const visibleMetricCardCount = computed(() =>
     ALL_METRIC_CARD_IDS.filter(id => layout.value.metricCards[id]).length
   )
+
+  // Whether the current layout matches the org default: true/false/null (no default configured)
+  const matchesOrgDefault = computed<boolean | null>(() => {
+    if (!orgDefault.value) return null
+    return layoutsAreEqual(layout.value, orgDefault.value)
+  })
 
   // Returns Tailwind col-span classes for a section based on its display style
   function sectionColSpan(style?: DisplayStyle): string {
@@ -184,7 +205,7 @@ export function useDashboardLayout() {
     })
   }
 
-  async function exportAsDefault() {
+  async function exportAsDefault(): Promise<{ saved: true; verified: boolean }> {
     const current = layout.value
     await $fetch('/api/admin/dashboard-layout/set-default', {
       method: 'POST',
@@ -192,12 +213,27 @@ export function useDashboardLayout() {
     })
     // Update local cache so the org default reflects immediately
     orgDefault.value = current
+    orgDefaultLastFetched.value = Date.now()
+
+    // Verify by fetching back from the server (bypass cache)
+    try {
+      const res = await $fetch<{ success: boolean; layout: DashboardLayoutConfig | null }>('/api/admin/dashboard-layout/get-default', {
+        query: { nocache: '1' },
+      })
+      const verified = !!(res.success && res.layout && layoutsAreEqual(current, res.layout))
+      return { saved: true, verified }
+    } catch {
+      // Verification fetch failed but the save itself succeeded
+      return { saved: true, verified: false }
+    }
   }
 
   return {
     layout,
     visibleSections,
     visibleMetricCardCount,
+    matchesOrgDefault,
+    orgDefault: readonly(orgDefault),
     sectionColSpan,
     isSectionVisible,
     isMetricCardVisible,
@@ -209,5 +245,6 @@ export function useDashboardLayout() {
     reorderSections,
     resetLayout,
     exportAsDefault,
+    ensureOrgDefault: fetchOrgDefault,
   }
 }
