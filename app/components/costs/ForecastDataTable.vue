@@ -1083,25 +1083,46 @@ const loadFromURL = () => {
 
 // Update URL with current state
 const updateURL = () => {
-  const query: any = {}
+  // ✅ Start with existing route query to preserve accounts, timeframe, tab, mode
+  const query: any = { ...route.query }
   
   // Only add primitive values, not objects
   if (groupBy.value && typeof groupBy.value === 'string') query.groupBy = groupBy.value
+  else delete query.groupBy
+
   if (viewMode.value !== 'detailed') query.viewMode = viewMode.value
+  else delete query.viewMode
+
   if (sortColumn.value !== 'accountName') query.sortColumn = sortColumn.value
+  else delete query.sortColumn
+
   if (sortDirection.value !== 'asc') query.sortDirection = sortDirection.value
+  else delete query.sortDirection
   
   // Add filters to URL
   if (filters.value.accountName) query.accountName = filters.value.accountName
+  else delete query.accountName
+
   if (filters.value.enclaveId) query.enclaveId = filters.value.enclaveId
+  else delete query.enclaveId
+
   if (filters.value.projectType) query.projectType = filters.value.projectType
+  else delete query.projectType
+
   if (filters.value.lob) query.lob = filters.value.lob
+  else delete query.lob
+
   if (filters.value.minAmount) query.minAmount = filters.value.minAmount
+  else delete query.minAmount
+
   if (filters.value.maxAmount) query.maxAmount = filters.value.maxAmount
+  else delete query.maxAmount
   
   // Add expanded groups
   if (expandedGroups.value.size > 0) {
     query.expanded = Array.from(expandedGroups.value)
+  } else {
+    delete query.expanded
   }
   
   router.replace({ query })
