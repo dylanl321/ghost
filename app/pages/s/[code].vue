@@ -127,7 +127,7 @@ onMounted(async () => {
     if ('selectedAccounts' in configData && 'timeframe' in configData) {
       const costData = configData as CostShareLinkState
       if (costData.selectedAccounts?.length > 0) {
-        queryParams.set('accounts', JSON.stringify(costData.selectedAccounts))
+        queryParams.set('accounts', costData.selectedAccounts.join(','))
       }
       if (costData.timeframe) {
         queryParams.set('timeframe', costData.timeframe)
