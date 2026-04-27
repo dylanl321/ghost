@@ -69,7 +69,13 @@ export const useShareLink = (options: ShareLinkOptions) => {
       throw new Error('Cannot generate share link: at least one account must be selected')
     }
 
-    params.set(PARAM_MAPPING.selectedAccounts, state.selectedAccounts.join(','))
+    // Use 'account' (singular) for single account, 'accounts' (plural) for multiple
+    if (state.selectedAccounts.length === 1) {
+      params.set('account', state.selectedAccounts[0])
+    } else {
+      params.set(PARAM_MAPPING.selectedAccounts, state.selectedAccounts.join(','))
+    }
+    
     if (state.timeframe) params.set(PARAM_MAPPING.timeframe, state.timeframe)
     if (state.tab) params.set(PARAM_MAPPING.tab, state.tab)
     if (state.dataMode) params.set(PARAM_MAPPING.dataMode, state.dataMode)
@@ -86,11 +92,15 @@ export const useShareLink = (options: ShareLinkOptions) => {
   const parseSharedUrl = (query: Record<string, string>): Partial<ShareLinkState> => {
     const state: Partial<ShareLinkState> = {}
 
-    if (query[PARAM_MAPPING.selectedAccounts]) {
+    // Handle both 'account' (singular) and 'accounts' (plural)
+    if (query.account) {
+      state.selectedAccounts = [query.account]
+    } else if (query[PARAM_MAPPING.selectedAccounts]) {
       state.selectedAccounts = query[PARAM_MAPPING.selectedAccounts]
         .split(',')
         .filter(Boolean)
     }
+    
     if (query[PARAM_MAPPING.timeframe]) {
       state.timeframe = query[PARAM_MAPPING.timeframe]
     }

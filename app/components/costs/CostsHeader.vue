@@ -439,7 +439,12 @@ async function generateShareUrl() {
     const params = new URLSearchParams()
 
     if (props.selectedAccounts.length > 0) {
-      params.set('accounts', props.selectedAccounts.join(','))
+      // Use 'account' (singular) for single account, 'accounts' (plural) for multiple
+      if (props.selectedAccounts.length === 1) {
+        params.set('account', props.selectedAccounts[0])
+      } else {
+        params.set('accounts', props.selectedAccounts.join(','))
+      }
     }
     if (modelSelectedTimeframe.value) {
       params.set('timeframe', modelSelectedTimeframe.value)

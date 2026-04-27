@@ -445,9 +445,7 @@ const navigateToCostsPage = () => {
   router.push({
     path: '/account/costs',
     query: {
-      accounts: Array.isArray(accountId.value)
-        ? accountId.value.join(',')  // Multiple accounts - comma separated
-        : accountId.value,           // Single account - just the value
+      account: accountId.value,  // Single account - use 'account' (singular)
       timeframe: 'thisMonth',
       tab: 'all',
     },
