@@ -395,6 +395,302 @@ resource "aws_cloudwatch_query_definition" "slowest_by_average" {
 
 # --- CloudWatch Dashboard ---
 
+# =============================================================================
+# Container Insights & Custom Metric Logging
+# ECS Container Insights provides CPU, Memory, Network, and Storage metrics
+# at the task and service level. Custom metric filters below extract
+# additional application-level metrics from structured logs.
+# =============================================================================
+
+# Log group for Container Insights performance metrics
+resource "aws_cloudwatch_log_group" "container_insights" {
+  provider          = aws.target_deployment_account
+  name              = "/aws/ecs/containerinsights/${var.app_name}/performance"
+  retention_in_days = 30
+
+  tags = {
+    Application = var.app_name
+    Environment = var.env
+  }
+}
+
+# --- Custom Application Metric Filters ---
+# These extract EMF-style metrics from application logs for fine-grained observability
+
+# Track authentication events
+resource "aws_cloudwatch_log_metric_filter" "auth_success" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-auth-success"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "{ $.type = \"auth\" && $.status = \"success\" }"
+
+  metric_transformation {
+    name          = "AuthSuccessCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "auth_failure" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-auth-failure"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "{ $.type = \"auth\" && $.status = \"failure\" }"
+
+  metric_transformation {
+    name          = "AuthFailureCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+# Track DynamoDB operation latencies
+resource "aws_cloudwatch_log_metric_filter" "dynamodb_latency" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-dynamodb-latency"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "{ $.type = \"dynamodb\" }"
+
+  metric_transformation {
+    name      = "DynamoDBLatencyMs"
+    namespace = "${var.app_name}/Application"
+    value     = "$.durationMs"
+  }
+}
+
+# Track DynamoDB throttles
+resource "aws_cloudwatch_log_metric_filter" "dynamodb_throttle" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-dynamodb-throttle"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "{ $.type = \"dynamodb\" && $.error = \"ThrottlingException\" }"
+
+  metric_transformation {
+    name          = "DynamoDBThrottleCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+# Track Bedrock AI invocation latency
+resource "aws_cloudwatch_log_metric_filter" "bedrock_latency" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-bedrock-latency"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "{ $.type = \"bedrock\" }"
+
+  metric_transformation {
+    name      = "BedrockLatencyMs"
+    namespace = "${var.app_name}/Application"
+    value     = "$.durationMs"
+  }
+}
+
+# Track Bedrock token usage
+resource "aws_cloudwatch_log_metric_filter" "bedrock_tokens" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-bedrock-tokens"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "{ $.type = \"bedrock\" && $.totalTokens > 0 }"
+
+  metric_transformation {
+    name      = "BedrockTokensUsed"
+    namespace = "${var.app_name}/Application"
+    value     = "$.totalTokens"
+  }
+}
+
+# Track SES email sends
+resource "aws_cloudwatch_log_metric_filter" "email_sent" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-email-sent"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "{ $.type = \"email\" && $.status = \"sent\" }"
+
+  metric_transformation {
+    name          = "EmailSentCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+# Track active concurrent users (from session logs)
+resource "aws_cloudwatch_log_metric_filter" "active_sessions" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-active-sessions"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "{ $.type = \"session\" && $.event = \"created\" }"
+
+  metric_transformation {
+    name          = "SessionCreatedCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+# Track report generation
+resource "aws_cloudwatch_log_metric_filter" "report_generated" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-report-generated"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "{ $.type = \"report\" && $.status = \"completed\" }"
+
+  metric_transformation {
+    name          = "ReportGeneratedCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "report_duration" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-report-duration"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "{ $.type = \"report\" }"
+
+  metric_transformation {
+    name      = "ReportDurationMs"
+    namespace = "${var.app_name}/Application"
+    value     = "$.durationMs"
+  }
+}
+
+# --- Alarms for New Metrics ---
+
+resource "aws_cloudwatch_metric_alarm" "auth_failures_high" {
+  provider            = aws.target_deployment_account
+  alarm_name          = "${var.app_name}-auth-failures-high"
+  alarm_description   = "Authentication failures exceeded 20 in 5 minutes — possible brute force"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "AuthFailureCount"
+  namespace           = "${var.app_name}/Application"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 20
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Application = var.app_name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "dynamodb_throttles" {
+  provider            = aws.target_deployment_account
+  alarm_name          = "${var.app_name}-dynamodb-throttles"
+  alarm_description   = "DynamoDB throttling events detected — review table capacity"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "DynamoDBThrottleCount"
+  namespace           = "${var.app_name}/Application"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 5
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Application = var.app_name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "bedrock_latency_high" {
+  provider            = aws.target_deployment_account
+  alarm_name          = "${var.app_name}-bedrock-latency-high"
+  alarm_description   = "Bedrock AI response p95 latency exceeded 30 seconds"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "BedrockLatencyMs"
+  namespace           = "${var.app_name}/Application"
+  period              = 300
+  extended_statistic  = "p95"
+  threshold           = 30000
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Application = var.app_name
+  }
+}
+
+# --- Saved Queries for New Metrics ---
+
+resource "aws_cloudwatch_query_definition" "auth_events" {
+  provider        = aws.target_deployment_account
+  name            = "${var.app_name}/Authentication Events"
+  log_group_names = [aws_cloudwatch_log_group.ecs.name]
+
+  query_string = <<-EOT
+    filter type = "auth"
+    | stats count(*) as attempts,
+            sum(status = "success") as successes,
+            sum(status = "failure") as failures
+      by bin(15m)
+  EOT
+}
+
+resource "aws_cloudwatch_query_definition" "dynamodb_performance" {
+  provider        = aws.target_deployment_account
+  name            = "${var.app_name}/DynamoDB Performance"
+  log_group_names = [aws_cloudwatch_log_group.ecs.name]
+
+  query_string = <<-EOT
+    filter type = "dynamodb"
+    | stats avg(durationMs) as avg_ms,
+            pct(durationMs, 95) as p95_ms,
+            max(durationMs) as max_ms,
+            count(*) as operations
+      by table, operation
+    | sort p95_ms desc
+  EOT
+}
+
+resource "aws_cloudwatch_query_definition" "bedrock_usage" {
+  provider        = aws.target_deployment_account
+  name            = "${var.app_name}/Bedrock AI Usage"
+  log_group_names = [aws_cloudwatch_log_group.ecs.name]
+
+  query_string = <<-EOT
+    filter type = "bedrock"
+    | stats avg(durationMs) as avg_latency_ms,
+            pct(durationMs, 95) as p95_latency_ms,
+            sum(totalTokens) as total_tokens,
+            count(*) as invocations
+      by bin(1h)
+  EOT
+}
+
+resource "aws_cloudwatch_query_definition" "report_performance" {
+  provider        = aws.target_deployment_account
+  name            = "${var.app_name}/Report Generation Performance"
+  log_group_names = [aws_cloudwatch_log_group.ecs.name]
+
+  query_string = <<-EOT
+    filter type = "report"
+    | stats avg(durationMs) as avg_ms,
+            max(durationMs) as max_ms,
+            count(*) as reports,
+            sum(status = "error") as failures
+      by reportType
+    | sort avg_ms desc
+  EOT
+}
+
+# --- Dashboard Addition: Container Insights & Application Metrics ---
+
 resource "aws_cloudwatch_dashboard" "main" {
   provider       = aws.target_deployment_account
   dashboard_name = var.app_name
@@ -551,6 +847,118 @@ resource "aws_cloudwatch_dashboard" "main" {
           view   = "timeSeries"
           yAxis = {
             left = { min = 0, label = "seconds" }
+          }
+        }
+      },
+
+      # Row 6 Left: DynamoDB Latency
+      {
+        type   = "metric"
+        x      = 0
+        y      = 30
+        width  = 12
+        height = 6
+        properties = {
+          title  = "DynamoDB Latency (ms)"
+          region = local.child_region
+          metrics = [
+            ["${var.app_name}/Application", "DynamoDBLatencyMs", { stat = "Average", label = "Average" }],
+            ["...", { stat = "p95", label = "p95" }],
+          ]
+          period = 300
+          view   = "timeSeries"
+          yAxis = {
+            left = { min = 0, label = "ms" }
+          }
+        }
+      },
+
+      # Row 6 Right: Bedrock AI Latency & Tokens
+      {
+        type   = "metric"
+        x      = 12
+        y      = 30
+        width  = 12
+        height = 6
+        properties = {
+          title  = "Bedrock AI Latency & Token Usage"
+          region = local.child_region
+          metrics = [
+            ["${var.app_name}/Application", "BedrockLatencyMs", { stat = "Average", label = "Latency (avg ms)" }],
+            ["${var.app_name}/Application", "BedrockTokensUsed", { stat = "Sum", label = "Tokens Used", yAxis = "right" }],
+          ]
+          period = 300
+          view   = "timeSeries"
+          yAxis = {
+            left  = { min = 0, label = "ms" }
+            right = { min = 0, label = "tokens" }
+          }
+        }
+      },
+
+      # Row 7 Left: Authentication Events
+      {
+        type   = "metric"
+        x      = 0
+        y      = 36
+        width  = 12
+        height = 6
+        properties = {
+          title  = "Authentication Events"
+          region = local.child_region
+          metrics = [
+            ["${var.app_name}/Application", "AuthSuccessCount", { stat = "Sum", label = "Successes", color = "#2ca02c" }],
+            ["${var.app_name}/Application", "AuthFailureCount", { stat = "Sum", label = "Failures", color = "#d13212" }],
+          ]
+          period = 300
+          view   = "timeSeries"
+          yAxis = {
+            left = { min = 0 }
+          }
+        }
+      },
+
+      # Row 7 Right: Sessions & Reports
+      {
+        type   = "metric"
+        x      = 12
+        y      = 36
+        width  = 12
+        height = 6
+        properties = {
+          title  = "Sessions & Reports Generated"
+          region = local.child_region
+          metrics = [
+            ["${var.app_name}/Application", "SessionCreatedCount", { stat = "Sum", label = "Sessions", color = "#1f77b4" }],
+            ["${var.app_name}/Application", "ReportGeneratedCount", { stat = "Sum", label = "Reports", color = "#ff7f0e" }],
+            ["${var.app_name}/Application", "EmailSentCount", { stat = "Sum", label = "Emails Sent", color = "#9467bd" }],
+          ]
+          period = 300
+          view   = "timeSeries"
+          yAxis = {
+            left = { min = 0 }
+          }
+        }
+      },
+
+      # Row 8: Container Insights - Network I/O (full width)
+      {
+        type   = "metric"
+        x      = 0
+        y      = 42
+        width  = 24
+        height = 6
+        properties = {
+          title  = "Container Network I/O"
+          region = local.child_region
+          metrics = [
+            ["ECS/ContainerInsights", "NetworkRxBytes", "ClusterName", aws_ecs_cluster.main.name, "ServiceName", aws_ecs_service.main.name, { stat = "Average", label = "RX Bytes" }],
+            ["ECS/ContainerInsights", "NetworkTxBytes", "ClusterName", aws_ecs_cluster.main.name, "ServiceName", aws_ecs_service.main.name, { stat = "Average", label = "TX Bytes" }],
+          ]
+          period = 300
+          view   = "timeSeries"
+          yAxis = {
+            left = { min = 0, label = "bytes" }
           }
         }
       },
