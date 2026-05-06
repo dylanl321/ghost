@@ -11,7 +11,8 @@ import { sendSuccess, errors, handleAsync, parseQueryParams } from '../../utils/
 import { registerEndpoint } from '../../plugins/swagger'
 import {
   listAggregateResources,
-  batchGetResourceConfigs
+  batchGetResourceConfigs,
+  getAggregatorName
 } from '../../utils/config-service'
 import { lookupAccountOptimized } from '../../utils/account-lookup-optimized'
 import { batchGetInstanceMetrics } from '../../utils/cloudwatch-metrics'
@@ -179,9 +180,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   logger.info(`[Utilization API] Analyzing account ${targetAccountId} in ${environment}, lookback ${lookbackDays}d`)
 
   // Step 1: Fetch instances from Config
-  const aggregatorName = environment === 'commercial'
-    ? (process.env.AWS_COMMERCIAL_CONFIG_AGGREGATOR || 'CommercialAggregator')
-    : (process.env.AWS_GOVCLOUD_CONFIG_AGGREGATOR || 'GDMSAggregator')
+  const aggregatorName = getAggregatorName(environment)
 
   const configRegion = environment === 'commercial'
     ? (process.env.AWS_COMMERCIAL_REGION || 'us-east-1')

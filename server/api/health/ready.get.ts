@@ -435,6 +435,14 @@ export default defineEventHandler(handleAsync(async (event) => {
     logger.warn('Could not retrieve cache statistics:', error)
   }
 
+  // Circuit breaker stats for assume-role failures
+  try {
+    const { assumeRoleCircuitBreaker } = await import('../../utils/credential-circuit-breaker')
+    healthData.circuitBreaker = assumeRoleCircuitBreaker.getStats()
+  } catch (error) {
+    logger.warn('Could not retrieve circuit breaker statistics:', error)
+  }
+
   // Add warnings if no environments are configured
   if (!config.commercial && !config.govcloud) {
     healthData.warnings.push('No AWS environments configured')

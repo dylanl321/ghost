@@ -5,7 +5,7 @@
 
 import { defineEventHandler, getQuery } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
-import { queryResources } from '../../utils/config-service'
+import { queryResources, getAggregatorName } from '../../utils/config-service'
 import { getInstancePatchStatus, type PatchComplianceStatus } from '../../utils/ssm-patch-compliance'
 import { getInstanceVulnerabilities, type VulnerabilitySeverity } from '../../utils/inspector-findings'
 import { getInstanceAlarms } from '../../utils/cloudwatch-alarms'
@@ -280,9 +280,7 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   // Fetch instance details from Config (optional, for metadata)
   try {
-    const aggregatorName = environment === 'commercial'
-      ? (process.env.AWS_COMMERCIAL_CONFIG_AGGREGATOR || 'CommercialAggregator')
-      : (process.env.AWS_GOVCLOUD_CONFIG_AGGREGATOR || 'GDMSAggregator')
+    const aggregatorName = getAggregatorName(environment)
 
     const instanceQuery = `
       SELECT

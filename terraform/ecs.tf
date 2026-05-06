@@ -103,7 +103,7 @@ resource "aws_ecs_task_definition" "main" {
         },
         {
           name  = "AWS_COMMERCIAL_CONFIG_AGGREGATOR"
-          value = "CommercialAggregator"
+          value = "GDMS_Aggregator"
         },
         {
           name  = "AWS_GOVCLOUD_CONFIG_AGGREGATOR"

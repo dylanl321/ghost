@@ -18,6 +18,7 @@ import { sendSuccess, sendApiError, errors, handleAsync } from '../../utils/api-
 import { registerEndpoint } from '../../plugins/swagger'
 import { parseAndValidateAccountFilters, filterAccounts } from '../../utils/account-filters'
 import { lookupAccountOptimized } from '../../utils/account-lookup-optimized'
+import { getAggregatorName } from '../../utils/config-service'
 import { invokeBedrock, type BedrockModel } from '../../utils/bedrock-client'
 import { extractInstanceName, batchEnrichInstances } from '../../utils/instance-enrichment'
 import {
@@ -602,9 +603,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     const region = query.region as string | undefined
     
     // Use environment-specific aggregator names
-    const aggregatorName = environment === 'commercial' 
-      ? (process.env.AWS_COMMERCIAL_CONFIG_AGGREGATOR || 'CommercialAggregator')
-      : (process.env.AWS_GOVCLOUD_CONFIG_AGGREGATOR || 'GDMSAggregator')
+    const aggregatorName = getAggregatorName(environment)
     const tags = parseTagFilters(query.tags as string | undefined)
     const resourceName = query.resourceName as string | undefined
     const includeOptimization = query.includeOptimization === 'true'

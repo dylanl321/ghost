@@ -18,7 +18,8 @@ import {
   listAggregateResources,
   batchGetResourceConfigs,
   filterResourcesByTags,
-  calculateResourceStats
+  calculateResourceStats,
+  getAggregatorName
 } from '../../utils/config-service'
 import { parseAndValidateAccountFilters, filterAccounts } from '../../utils/account-filters'
 import { lookupAccountOptimized } from '../../utils/account-lookup-optimized'
@@ -247,9 +248,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     }
     
     // Get environment-specific configuration
-    const aggregatorName = environment === 'commercial' 
-      ? (process.env.AWS_COMMERCIAL_CONFIG_AGGREGATOR || 'CommercialAggregator')
-      : (process.env.AWS_GOVCLOUD_CONFIG_AGGREGATOR || 'GDMSAggregator')
+    const aggregatorName = getAggregatorName(environment)
       
     const region = environment === 'commercial'
       ? (process.env.AWS_COMMERCIAL_REGION || 'us-east-1')

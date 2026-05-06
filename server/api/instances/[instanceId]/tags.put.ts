@@ -14,7 +14,7 @@ import {
   generateTagSuggestions,
   enrichInstanceData
 } from '../../../utils/instance-enrichment'
-import { getResourceConfig } from '../../../utils/config-service'
+import { getResourceConfig, getAggregatorName } from '../../../utils/config-service'
 import { getEC2Client } from '../../../lib/aws-client-factory'
 import type { AWSEnvironmentType } from '../../../types'
 import { logger } from '../../../utils/logger'
@@ -184,9 +184,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     logger.info(`[Tag Management] ${action} tags for instance ${instanceId} in ${environment}`)
     
     // Get environment-specific configuration
-    const aggregatorName = environment === 'commercial' 
-      ? (process.env.AWS_COMMERCIAL_CONFIG_AGGREGATOR || 'CommercialAggregator')
-      : (process.env.AWS_GOVCLOUD_CONFIG_AGGREGATOR || 'GDMSAggregator')
+    const aggregatorName = getAggregatorName(environment)
       
     const region = environment === 'commercial'
       ? (process.env.AWS_COMMERCIAL_REGION || 'us-east-1')

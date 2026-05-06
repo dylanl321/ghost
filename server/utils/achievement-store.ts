@@ -37,7 +37,16 @@ export async function getAchievementProgress(userId: string): Promise<SavedProgr
     const existing = await getItem(tableName, { userId }, environment, accountId)
 
     if (existing) {
-      return existing as SavedProgress
+      const defaults = createDefaultProgress(userId)
+      return {
+        ...defaults,
+        ...existing,
+        counts: existing.counts ?? defaults.counts,
+        uniques: existing.uniques ?? defaults.uniques,
+        seen: existing.seen ?? defaults.seen,
+        awarded: existing.awarded ?? defaults.awarded,
+        awardedAt: existing.awardedAt ?? defaults.awardedAt,
+      } as SavedProgress
     }
 
     // Return defaults without auto-creating (created on first sync)
@@ -62,11 +71,11 @@ export async function saveAchievementProgress(
 
     const updated: SavedProgress = {
       userId,
-      counts: progress.counts,
-      uniques: progress.uniques,
-      seen: progress.seen,
-      awarded: progress.awarded,
-      awardedAt: progress.awardedAt,
+      counts: progress.counts ?? {},
+      uniques: progress.uniques ?? {},
+      seen: progress.seen ?? [],
+      awarded: progress.awarded ?? [],
+      awardedAt: progress.awardedAt ?? {},
       updatedAt: new Date().toISOString(),
       createdAt: existing.createdAt
     }
@@ -97,7 +106,7 @@ export async function recordBadgeAward(
     const existing = await getAchievementProgress(userId)
 
     // Skip if already awarded
-    if (existing.awarded.includes(badgeId)) {
+    if (existing.awarded?.includes(badgeId)) {
       return existing
     }
 

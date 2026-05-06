@@ -9,7 +9,7 @@ import { sendSuccess, errors, handleAsync, parseQueryParams } from '../../../uti
 import { registerEndpoint } from '../../../plugins/swagger'
 import { lookupAccountOptimized } from '../../../utils/account-lookup-optimized'
 import { getLatestAnalysis, saveAnalysisJob, saveLatestPointer, updateAnalysisProgress, saveInstanceClassifications } from '../../../utils/utilization-persistence'
-import { listAggregateResources, batchGetResourceConfigs } from '../../../utils/config-service'
+import { listAggregateResources, batchGetResourceConfigs, getAggregatorName } from '../../../utils/config-service'
 import { batchGetInstanceMetrics } from '../../../utils/cloudwatch-metrics'
 import { getEC2Recommendations } from '../../../utils/compute-optimizer'
 import { classifyInstances, DEFAULT_THRESHOLDS, type InstanceApiActivity } from '../../../utils/instance-utilization-classifier'
@@ -163,9 +163,7 @@ async function runBackgroundAnalysis(
     )
 
     // Step 1: Fetch instances from Config
-    const aggregatorName = environment === 'commercial'
-      ? (process.env.AWS_COMMERCIAL_CONFIG_AGGREGATOR || 'CommercialAggregator')
-      : (process.env.AWS_GOVCLOUD_CONFIG_AGGREGATOR || 'GDMSAggregator')
+    const aggregatorName = getAggregatorName(environment)
     const configRegion = environment === 'commercial'
       ? (process.env.AWS_COMMERCIAL_REGION || 'us-east-1')
       : (process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1')

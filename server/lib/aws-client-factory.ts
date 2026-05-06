@@ -34,6 +34,7 @@ import { Inspector2Client } from '@aws-sdk/client-inspector2'
 import { CloudWatchLogsClient } from '@aws-sdk/client-cloudwatch-logs'
 import { ResourceGroupsTaggingAPIClient } from '@aws-sdk/client-resource-groups-tagging-api'
 import { logger } from '../utils/logger'
+import { assumeRoleCircuitBreaker } from '../utils/credential-circuit-breaker'
 
 import type {
   AWSEnvironmentType,
@@ -349,9 +350,16 @@ export async function getClient<T = any>(
   let credentials: AWSCredentials | undefined
   let credentialExpiration: Date | undefined
 
-  try {
-    if (accountId) {
-      // Assume role into target account
+  if (accountId) {
+    // Circuit breaker: skip STS call if account is known-unreachable
+    if (!assumeRoleCircuitBreaker.canAttempt(accountId)) {
+      throw new Error(
+        `Circuit breaker OPEN for account ${accountId} in ${environment} environment. ` +
+        `Assume-role has failed repeatedly. Will retry after cooldown period.`
+      )
+    }
+
+    try {
       const baseCredentials = getBaseCredentials(environment)
       credentials = await assumeRole(
         baseCredentials,
@@ -360,22 +368,21 @@ export async function getClient<T = any>(
         environment,
         sessionName
       )
-      // Track expiration for assumed role credentials
       credentialExpiration = credentials.expiration
-    } else {
-      // Use base credentials (no expiration tracking needed)
-      credentials = getBaseCredentials(environment)
+      assumeRoleCircuitBreaker.recordSuccess(accountId)
+    } catch (error) {
+      assumeRoleCircuitBreaker.recordFailure(accountId, error as Error)
+      const enhancedError = new Error(
+        `Failed to get AWS credentials for ${environment} environment. ` +
+        `Region: ${targetRegion}, Service: ${service}. ` +
+        `Original error: ${(error as Error).message}. ` +
+        `HINT: Check if you're using ${environment} credentials with a ${environment} region.`
+      )
+      enhancedError.cause = error
+      throw enhancedError
     }
-  } catch (error) {
-    // Enhanced error message for credential issues
-    const enhancedError = new Error(
-      `Failed to get AWS credentials for ${environment} environment. ` +
-      `Region: ${targetRegion}, Service: ${service}. ` +
-      `Original error: ${error.message}. ` +
-      `HINT: Check if you're using ${environment} credentials with a ${environment} region.`
-    )
-    enhancedError.cause = error
-    throw enhancedError
+  } else {
+    credentials = getBaseCredentials(environment)
   }
   
   // Get the client class

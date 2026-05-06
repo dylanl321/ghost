@@ -11,7 +11,7 @@
 import { defineEventHandler, readBody } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { getAllAccountsUnified } from '../../utils/accounts-consolidated'
-import { queryResources } from '../../utils/config-service'
+import { queryResources, getAggregatorName } from '../../utils/config-service'
 import { fuzzySearchAccounts, calculateRelevanceScore } from '../../utils/fuzzy-search'
 import { invokeBedrock } from '../../utils/bedrock-client'
 import { logger } from '../../utils/logger'
@@ -252,9 +252,7 @@ export default defineEventHandler(handleAsync(async (event) => {
 
     // Search instances/resources if relevant
     if (searchTypes.includes('instances') || searchTypes.includes('resources')) {
-      const aggregatorName = environment === 'commercial'
-        ? (process.env.AWS_COMMERCIAL_CONFIG_AGGREGATOR || 'CommercialAggregator')
-        : (process.env.AWS_GOVCLOUD_CONFIG_AGGREGATOR || 'GDMSAggregator')
+      const aggregatorName = getAggregatorName(environment)
 
       // Build Config query based on parsed intent
       let configQuery = parsedIntent.configQuery

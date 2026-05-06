@@ -9,6 +9,7 @@ import type { CostsSummaryResponse } from '~/types/costs'
 const logger = createLogger('AccountCosts')
 
 export const useAccountCosts = () => {
+  const requestHeaders = useRequestHeaders(['cookie', 'authorization'])
 
   // State
   const accounts = ref<AWSEnclaveData[] | null>(null)
@@ -39,6 +40,7 @@ export const useAccountCosts = () => {
     
     try {
       const data = await $fetch('/api/accounts/list', {
+        headers: requestHeaders,
         query: {
           source: 'full',
           enrichment: options.enrichment || 'full',
@@ -105,6 +107,7 @@ export const useAccountCosts = () => {
       let data
       try {
         data = await $fetch('/api/costs/summary', {
+          headers: requestHeaders,
           query: params
         })
       } catch (enhancedError: any) {
@@ -113,6 +116,7 @@ export const useAccountCosts = () => {
           logger.warn('Enhanced cost data failed, falling back to basic cost data:', enhancedError.message)
           const fallbackParams = { ...params, enhanced: false }
           data = await $fetch('/api/costs/summary', {
+            headers: requestHeaders,
             query: fallbackParams
           })
         } else {
@@ -204,6 +208,7 @@ export const useAccountCosts = () => {
   const fetchLinesOfBusiness = async (includeDecommissioned: boolean = false) => {
     try {
       const data = await $fetch('/api/accounts/lines-of-business', {
+        headers: requestHeaders,
         query: {
           includeDecommissioned
         }
@@ -223,6 +228,7 @@ export const useAccountCosts = () => {
   const fetchDepartments = async (includeDecommissioned: boolean = false) => {
     try {
       const data = await $fetch('/api/accounts/departments', {
+        headers: requestHeaders,
         query: {
           includeDecommissioned
         }
@@ -346,7 +352,9 @@ export const useAccountCosts = () => {
         return accountDetails.value.get(accountId)
       }
       
-      const data = await $fetch(`/api/accounts/${accountId}`)
+      const data = await $fetch(`/api/accounts/${accountId}`, {
+        headers: requestHeaders
+      })
       const accountData = data?.account || data
       
       // Cache the result
@@ -379,6 +387,7 @@ export const useAccountCosts = () => {
       }
       
       const data = await $fetch('/api/costs/analysis', {
+        headers: requestHeaders,
         query: params
       })
       return data

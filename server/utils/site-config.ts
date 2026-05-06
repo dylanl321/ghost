@@ -431,6 +431,18 @@ function getDefaultConfig(key: string): SiteConfigItem | null {
   return DEFAULT_SITE_CONFIG.find((c) => c.key === key) || null;
 }
 
+const NON_CONFIG_KEY_PREFIXES = ['security:']
+
+// Track which orphan keys we've already warned about to avoid log spam
+const warnedOrphanKeys = new Set<string>()
+
+function isSiteConfigItem(item: Record<string, any>): boolean {
+  if (NON_CONFIG_KEY_PREFIXES.some(prefix => item.key?.startsWith(prefix))) {
+    return false
+  }
+  return Boolean(item.type && item.category)
+}
+
 /**
  * Helper: Merge a single DB item with its default metadata
  */
@@ -440,20 +452,21 @@ function mergeSingleItemWithDefault(dbItem: SiteConfigItem): SiteConfigItem {
   if (!defaultItem) {
     // DB item not in defaults - validate it has required fields
     if (!dbItem.type) {
-      logger.warn(`[Site Config] Orphaned config item "${dbItem.key}" is missing required type field. Skipping...`);
-      // Return a minimal valid item to prevent crashes
+      if (!warnedOrphanKeys.has(dbItem.key)) {
+        warnedOrphanKeys.add(dbItem.key);
+        logger.warn(`[Site Config] Orphaned config item "${dbItem.key}" has no type field. Defaulting to type 'string'.`);
+      }
       return {
         ...dbItem,
-        type: 'string', // Default to string if type is missing
+        type: 'string',
         category: dbItem.category || 'system',
         label: dbItem.label || dbItem.key,
-        description: dbItem.description || 'Legacy configuration item (no longer in use)',
+        description: dbItem.description || '',
         defaultValue: dbItem.value,
         isPublic: dbItem.isPublic ?? false,
         isEditable: dbItem.isEditable ?? false,
       };
     }
-    // Has type, return as-is
     return dbItem;
   }
 
@@ -480,13 +493,18 @@ function mergeWithDefaults(dbItems: SiteConfigItem[]): SiteConfigItem[] {
   const defaultsMap = new Map(DEFAULT_SITE_CONFIG.map((item) => [item.key, item]));
   const merged: SiteConfigItem[] = [];
 
-  // Merge DB items with default metadata
-  dbItems.forEach((dbItem) => {
-    // Use the single-item merge helper for consistency
+  const configItems = dbItems.filter((item) => {
+    if (!isSiteConfigItem(item)) {
+      logger.debug(`[Site Config] Skipping non-config item "${item.key}" in site-config table`)
+      return false
+    }
+    return true
+  })
+
+  configItems.forEach((dbItem) => {
     const mergedItem = mergeSingleItemWithDefault(dbItem);
     merged.push(mergedItem);
 
-    // Mark default as processed if it exists
     defaultsMap.delete(dbItem.key);
   });
 

@@ -1,6 +1,7 @@
 import { STSClient, AssumeRoleCommand } from "@aws-sdk/client-sts";
 import type { AwsCredentialIdentity } from "@aws-sdk/types";
 import { logger } from '../logger'
+import { assumeRoleCircuitBreaker } from '../credential-circuit-breaker'
 
 interface CachedAwsCredentialIdentity extends AwsCredentialIdentity {
   expiration?: Date;
@@ -48,6 +49,13 @@ export async function assumeChildAccountRole(environment: 'commercial' | 'govclo
     return cache
   }
 
+  // Circuit breaker: skip STS if account is known-unreachable
+  if (!assumeRoleCircuitBreaker.canAttempt(accountId)) {
+    throw new Error(
+      `Circuit breaker OPEN for account ${accountId}. Assume-role has failed repeatedly.`
+    )
+  }
+
   if (!aws_commercial_access_key || !aws_commercial_secret_access_key || !aws_commercial_region || !aws_govcloud_access_key ||
     !aws_govcloud_secret_access_key || !aws_govcloud_region) {
     throw new Error("One or more AWS credential environment variables is not set.");
@@ -89,18 +97,25 @@ export async function assumeChildAccountRole(environment: 'commercial' | 'govclo
       DurationSeconds: 3600,
     });
 
-    const response = await stsClient.send(assumeRoleCommand);
+    try {
+      const response = await stsClient.send(assumeRoleCommand);
 
-    if (!response.Credentials) throw new Error("Failed to assume role. Make sure 'environment' lines up with 'accountId'.");
+      if (!response.Credentials) throw new Error("Failed to assume role. Make sure 'environment' lines up with 'accountId'.");
 
-    const credential: CachedAwsCredentialIdentity = {
-      accessKeyId: response.Credentials.AccessKeyId!,
-      secretAccessKey: response.Credentials.SecretAccessKey!,
-      sessionToken: response.Credentials.SessionToken,
-      expiration: response.Credentials.Expiration,
-    };
-    credentialCache[accountId] = credential;
+      assumeRoleCircuitBreaker.recordSuccess(accountId)
 
-    return credential;
+      const credential: CachedAwsCredentialIdentity = {
+        accessKeyId: response.Credentials.AccessKeyId!,
+        secretAccessKey: response.Credentials.SecretAccessKey!,
+        sessionToken: response.Credentials.SessionToken,
+        expiration: response.Credentials.Expiration,
+      };
+      credentialCache[accountId] = credential;
+
+      return credential;
+    } catch (error) {
+      assumeRoleCircuitBreaker.recordFailure(accountId, error as Error)
+      throw error
+    }
   }
 }

@@ -14,6 +14,7 @@ import {
   type ConfigServiceClient,
 } from '@aws-sdk/client-config-service'
 import { getConfigServiceClient } from '../lib/aws-client-factory'
+import { getAggregatorName } from './config-service'
 import { getAllAccountsUnified } from './accounts-consolidated'
 import { logger } from './logger'
 import type {
@@ -22,16 +23,8 @@ import type {
 } from '../../shared/types/dataset-reports'
 import type { AWSConfigResourceType, ComplianceStatus } from '../../shared/types/aws-config'
 
-/**
- * Get environment-specific Config aggregator name
- * Commercial and GovCloud have separate aggregators
- */
-function getConfigAggregatorName(environment: 'commercial' | 'govcloud'): string {
-  if (environment === 'govcloud') {
-    return process.env.AWS_GOVCLOUD_CONFIG_AGGREGATOR || 'GDMSAggregator'
-  }
-  return process.env.AWS_COMMERCIAL_CONFIG_AGGREGATOR || 'GDMS_Aggregator'
-}
+// Use centralized getAggregatorName from config-service.ts
+const getConfigAggregatorName = getAggregatorName
 
 /**
  * Get Config client for a specific account/region
