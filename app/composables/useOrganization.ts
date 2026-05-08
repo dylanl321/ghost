@@ -20,6 +20,7 @@ export interface OrganizationData {
 }
 
 export function useOrganization() {
+  const requestHeaders = useRequestHeaders(['cookie', 'authorization'])
   const orgData = ref<OrganizationData | null>(null)
   const isLoading = ref(false)
   const error = ref<string | null>(null)
@@ -32,7 +33,9 @@ export function useOrganization() {
       isLoading.value = true
       error.value = null
 
-      const response = await $fetch(`/api/organization/structure?environment=${environment}`)
+      const response = await $fetch(`/api/organization/structure?environment=${environment}`, {
+        headers: requestHeaders
+      })
 
       if (response.success && response.data) {
         orgData.value = response.data
@@ -102,6 +105,7 @@ export function useOrganization() {
   ) => {
     try {
       const response = await $fetch('/api/organization/policies', {
+        headers: requestHeaders,
         params: {
           targetId,
           targetType,

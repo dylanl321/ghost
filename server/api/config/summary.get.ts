@@ -18,6 +18,7 @@ import { sendSuccess, sendApiError, errors, handleAsync } from '../../utils/api-
 import { registerEndpoint } from '../../plugins/swagger'
 import { parseAndValidateAccountFilters, filterAccounts } from '../../utils/account-filters'
 import { lookupAccountOptimized } from '../../utils/account-lookup-optimized'
+import { getAggregatorName } from '../../utils/config-service'
 import {
   listAggregateResources,
   calculateResourceStats,
@@ -614,9 +615,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     }
     
     // Get aggregator name
-    const aggregatorName = environment === 'commercial' 
-      ? (process.env.AWS_COMMERCIAL_CONFIG_AGGREGATOR || 'CommercialAggregator')
-      : (process.env.AWS_GOVCLOUD_CONFIG_AGGREGATOR || 'GDMSAggregator')
+    const aggregatorName = getAggregatorName(environment)
     
     logger.info(`[Config Summary API] Generating summary for env=${environment}, filters=${JSON.stringify(accountFilters)}`)
     

@@ -39,6 +39,48 @@ const CACHE_KEYS = {
     `config:aggregator:${aggregator}`
 }
 
+/**
+ * Get the correct Config aggregator name for a given environment
+ */
+export function getAggregatorName(environment: 'commercial' | 'govcloud'): string {
+  return environment === 'commercial'
+    ? (process.env.AWS_COMMERCIAL_CONFIG_AGGREGATOR || 'GDMS_Aggregator')
+    : (process.env.AWS_GOVCLOUD_CONFIG_AGGREGATOR || 'GDMSAggregator')
+}
+
+const AGGREGATOR_EXISTS_CACHE = new Map<string, { exists: boolean; checkedAt: number }>()
+const AGGREGATOR_CHECK_TTL = 300_000 // 5 minutes
+
+/**
+ * Check if a Config aggregator exists and is accessible (cached for 5 min)
+ */
+export async function isAggregatorAvailable(
+  environment: 'commercial' | 'govcloud',
+  region?: string
+): Promise<boolean> {
+  const aggregatorName = getAggregatorName(environment)
+  const cacheKey = `${environment}:${aggregatorName}`
+  const cached = AGGREGATOR_EXISTS_CACHE.get(cacheKey)
+
+  if (cached && (Date.now() - cached.checkedAt) < AGGREGATOR_CHECK_TTL) {
+    return cached.exists
+  }
+
+  try {
+    const client = await getConfigClient(environment, region)
+    const { DescribeConfigurationAggregatorsCommand } = await import('@aws-sdk/client-config-service')
+    const response = await client.send(new DescribeConfigurationAggregatorsCommand({
+      ConfigurationAggregatorNames: [aggregatorName]
+    }))
+    const exists = (response.ConfigurationAggregators?.length ?? 0) > 0
+    AGGREGATOR_EXISTS_CACHE.set(cacheKey, { exists, checkedAt: Date.now() })
+    return exists
+  } catch {
+    AGGREGATOR_EXISTS_CACHE.set(cacheKey, { exists: false, checkedAt: Date.now() })
+    return false
+  }
+}
+
 export interface ResourceFilter {
   resourceType?: string
   accountIds?: string[]

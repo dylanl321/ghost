@@ -6,7 +6,7 @@
 import { defineEventHandler, getQuery } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { getAllAccountsUnified } from '../../utils/accounts-consolidated'
-import { queryResources } from '../../utils/config-service'
+import { queryResources, getAggregatorName } from '../../utils/config-service'
 import {
   fuzzySearchAccounts,
   fuzzySearchResources,
@@ -176,9 +176,7 @@ export default defineEventHandler(handleAsync(async (event) => {
 
     // Search instances if requested
     if (searchTypes.includes('instances')) {
-      const aggregatorName = environment === 'commercial'
-        ? (process.env.AWS_COMMERCIAL_CONFIG_AGGREGATOR || 'CommercialAggregator')
-        : (process.env.AWS_GOVCLOUD_CONFIG_AGGREGATOR || 'GDMSAggregator')
+      const aggregatorName = getAggregatorName(environment)
 
       try {
         // Query EC2 instances from AWS Config
@@ -263,9 +261,7 @@ export default defineEventHandler(handleAsync(async (event) => {
 
     // Search resources if requested (broader than just instances)
     if (searchTypes.includes('resources')) {
-      const aggregatorName = environment === 'commercial'
-        ? (process.env.AWS_COMMERCIAL_CONFIG_AGGREGATOR || 'CommercialAggregator')
-        : (process.env.AWS_GOVCLOUD_CONFIG_AGGREGATOR || 'GDMSAggregator')
+      const aggregatorName = getAggregatorName(environment)
 
       try {
         // Query multiple resource types

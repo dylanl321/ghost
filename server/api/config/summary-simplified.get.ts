@@ -4,20 +4,16 @@ import { organizationCache, CacheTags } from '../../utils/cache-manager'
 import getMasterAccountCredentials from '~~/server/utils/credentials/awsAccountCredentials';
 import { ConfigServiceClient, SelectAggregateResourceConfigCommand } from "@aws-sdk/client-config-service"
 import { logger } from '../../utils/logger'
+import { getAggregatorName, isAggregatorAvailable } from '../../utils/config-service'
 import type { AWSEnvironmentType } from '../../types'
 
 // Environment configuration helper
 function getEnvironmentConfig(environment: AWSEnvironmentType) {
-  if (environment === 'govcloud') {
-    return {
-      region: process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1',
-      aggregatorName: process.env.AWS_GOVCLOUD_CONFIG_AGGREGATOR || 'GDMSAggregator'
-    }
-  } else {
-    return {
-      region: process.env.AWS_COMMERCIAL_REGION || 'us-east-1',
-      aggregatorName: process.env.AWS_COMMERCIAL_CONFIG_AGGREGATOR || 'CommercialAggregator'
-    }
+  return {
+    region: environment === 'govcloud'
+      ? (process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1')
+      : (process.env.AWS_COMMERCIAL_REGION || 'us-east-1'),
+    aggregatorName: getAggregatorName(environment)
   }
 }
 
@@ -259,6 +255,23 @@ export default defineEventHandler(handleAsync(async (event) => {
   // Validate environment parameter
   if (environment !== 'commercial' && environment !== 'govcloud') {
     return errors.badRequest(event, 'Invalid environment. Must be "commercial" or "govcloud"')
+  }
+
+  // Check if aggregator is available before querying
+  if (!await isAggregatorAvailable(environment)) {
+    const aggregatorName = getAggregatorName(environment)
+    logger.warn(`[ResourceCounts] Aggregator '${aggregatorName}' not available in ${environment} - skipping`)
+    return sendSuccess(event, {
+      ec2: { total: 0, stopped: 0, windows: 0 },
+      volumes: { total: 0, gp2: 0, gp3: 0, io1: 0 },
+      ecsContainers: { total: 0 },
+      eksClusters: { total: 0 },
+      buckets: { total: 0, versioned: 0 },
+      lambda: { total: 0 },
+      rds: { total: 0 },
+      metadata: { accountId: accountId || 'all', timestamp: new Date().toISOString() },
+      warning: `Config aggregator not available in ${environment} environment`
+    })
   }
 
   // Generate cache key with environment

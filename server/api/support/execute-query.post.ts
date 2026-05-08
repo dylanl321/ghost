@@ -5,7 +5,7 @@
 
 import { defineEventHandler, readBody } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
-import { queryResources } from '../../utils/config-service'
+import { queryResources, getAggregatorName } from '../../utils/config-service'
 import {
   CloudWatchLogsClient,
   FilterLogEventsCommand,
@@ -134,12 +134,7 @@ registerEndpoint('/api/support/execute-query', 'POST', {
   }
 })
 
-// Get Config aggregator name based on environment
-function getAggregatorName(environment: AWSEnvironmentType): string {
-  return environment === 'govcloud'
-    ? process.env.AWS_GOVCLOUD_CONFIG_AGGREGATOR || 'aws-controltower-GuardrailsComplianceAggregator'
-    : process.env.AWS_COMMERCIAL_CONFIG_AGGREGATOR || 'aws-controltower-GuardrailsComplianceAggregator'
-}
+// Use centralized getAggregatorName imported from config-service
 
 // Infer attribute schema from records
 function inferAttributeSchema(records: Record<string, any>[]): AttributeSchema[] {

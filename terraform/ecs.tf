@@ -6,6 +6,16 @@ locals {
 resource "aws_ecs_cluster" "main" {
   provider = aws.target_deployment_account
   name     = var.app_name
+
+  setting {
+    name  = "containerInsights"
+    value = "enabled"
+  }
+
+  tags = {
+    Application = var.app_name
+    Environment = var.env
+  }
 }
 
 resource "aws_ecs_task_definition" "main" {
@@ -93,7 +103,7 @@ resource "aws_ecs_task_definition" "main" {
         },
         {
           name  = "AWS_COMMERCIAL_CONFIG_AGGREGATOR"
-          value = "CommercialAggregator"
+          value = "GDMS_Aggregator"
         },
         {
           name  = "AWS_GOVCLOUD_CONFIG_AGGREGATOR"

@@ -3,6 +3,10 @@
  *
  * Persists pre-computed OrgSecuritySummary in the ghost-site-config table
  * so page loads can read from DynamoDB (<100ms) instead of running Athena.
+ *
+ * NOTE: This item shares the ghost-site-config table but is NOT a config item.
+ * The site-config scanner filters it via isSiteConfigItem() using key prefix
+ * and structural checks.
  */
 
 import { getItem, putItem } from './dynamodb'

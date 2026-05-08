@@ -20,6 +20,7 @@ import {
 import {
   getResourceConfig,
   queryResources,
+  getAggregatorName,
   type ResourceDetail
 } from '../../utils/config-service'
 import {
@@ -200,9 +201,7 @@ async function searchInstanceInEnvironment(
   env: AWSEnvironmentType,
   specificAccountId?: string
 ): Promise<{ resource: ResourceDetail | null; accountId?: string; environment: AWSEnvironmentType }> {
-  const aggregatorName = env === 'commercial'
-    ? (process.env.AWS_COMMERCIAL_CONFIG_AGGREGATOR || 'CommercialAggregator')
-    : (process.env.AWS_GOVCLOUD_CONFIG_AGGREGATOR || 'GDMSAggregator')
+  const aggregatorName = getAggregatorName(env)
 
   const region = env === 'commercial'
     ? (process.env.AWS_COMMERCIAL_REGION || 'us-east-1')

@@ -20,6 +20,8 @@ export interface UseConfigResourcesOptions extends ConfigResourcesQueryParams {
 export function useConfigResources(options: UseConfigResourcesOptions = {}) {
   const { immediate = false, onError, onSuccess, ...queryParams } = options
 
+  const requestHeaders = useRequestHeaders(['cookie', 'authorization'])
+
   // Reactive state
   const data = ref<ConfigResourcesResponse | null>(null)
   const resources = computed(() => data.value?.resources || [])
@@ -53,7 +55,9 @@ export function useConfigResources(options: UseConfigResourcesOptions = {}) {
       const queryString = buildQueryString(mergedParams)
       const url = `/api/config/resources${queryString ? `?${queryString}` : ''}`
 
-      const response = await $fetch<{ success: boolean; data: ConfigResourcesResponse }>(url)
+      const response = await $fetch<{ success: boolean; data: ConfigResourcesResponse }>(url, {
+        headers: requestHeaders
+      })
 
       if (!response.success) {
         throw new Error('Failed to fetch config resources')
