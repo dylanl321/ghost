@@ -64,6 +64,11 @@
                     <div class="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[200px]">
                       {{ prefs.userId }}
                     </div>
+                    <UserResourceLinks
+                      :username="truncateEmail(prefs.userId).name"
+                      :compact="true"
+                      class="mt-1"
+                    />
                   </div>
                 </div>
               </td>

@@ -63,6 +63,17 @@
         </div>
       </div>
 
+      <!-- Quick Links -->
+      <UCard class="mb-6">
+        <template #header>
+          <div class="flex items-center gap-2">
+            <Icon name="i-heroicons-link" class="w-4 h-4 text-blue-500" />
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Quick Links</h3>
+          </div>
+        </template>
+        <UserResourceLinks :username="derivedUsername" />
+      </UCard>
+
       <!-- Stats Grid -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <UCard>
@@ -469,6 +480,13 @@ const DetailRow = defineComponent({
 const route = useRoute()
 const userId = computed(() => decodeURIComponent(route.params.userId as string))
 const { fetchAllPreferences, fetchActivityMetrics, resetTourForUser } = useAdminUserDetail()
+
+// Derived username (local part of email) used for resource links
+const derivedUsername = computed(() => {
+  const id = userId.value
+  const atIdx = id.indexOf('@')
+  return atIdx !== -1 ? id.substring(0, atIdx) : id
+})
 
 // State
 const loading = ref(true)
