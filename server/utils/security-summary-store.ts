@@ -45,6 +45,7 @@ export async function saveSecuritySummary(
 
   const item = {
     key: DYNAMO_KEY,
+    type: 'json',  // Required by site-config loader; also filtered via NON_CONFIG_KEY_PREFIXES
     summary: truncated,
     computedAt: new Date().toISOString(),
     computeDurationMs: metadata?.durationMs || 0,
