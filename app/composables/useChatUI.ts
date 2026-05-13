@@ -517,7 +517,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
       return false
     }
 
-    const charBeforeAt = lastAtIndex > 0 ? textBeforeCursor[lastAtIndex - 1] : ' '
+    const charBeforeAt = lastAtIndex > 0 ? (textBeforeCursor[lastAtIndex - 1] ?? ' ') : ' '
     const isValidMentionStart = charBeforeAt === ' ' || lastAtIndex === 0
 
     if (!isValidMentionStart) {
@@ -565,6 +565,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   function selectHighlightedAccount(): string | null {
     if (!showMentionDropdown.value || filteredAccounts.value.length === 0) return null
     const account = filteredAccounts.value[selectedMentionIndex.value]
+    if (!account) return null
     return selectAccount(account)
   }
 
@@ -854,7 +855,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
       (((m as any)?.status?.status === 'pending') || ((m as any)?.status?.status === 'streaming'))
     ) as any
 
-    if (pendingMsg && pendingMsg.status) {
+    if (pendingMsg?.status) {
       // Initialize history array if not present
       if (!pendingMsg.status.statusHistory) {
         pendingMsg.status.statusHistory = []
@@ -1084,7 +1085,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   async function retryLastMessage(): Promise<void> {
     // Find the last user message
     const threadMessages = (threadsStore.currentThread?.messages || []) as StreamingChatMessage[]
-    const lastUserMsg = [...threadMessages].reverse().find((m: StreamingChatMessage) => m.role === 'user')
+    const lastUserMsg = [...threadMessages].reverse().find((m: StreamingChatMessage) => m?.role === 'user')
 
     if (!lastUserMsg) {
       logger.warn('No user message to retry')

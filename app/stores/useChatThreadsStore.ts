@@ -238,11 +238,11 @@ export const useChatThreadsStore = defineStore('chatThreads', {
       // Auto-create thread if no active thread
       if (!this.activeThreadId || !this.currentThread) {
         const thread = await this.createThread()
-        if (!thread) {
+        if (!thread || !this.currentThread) {
           return false
         }
-        if (!this.currentThread!.messages) {
-          this.currentThread!.messages = []
+        if (!this.currentThread.messages) {
+          this.currentThread.messages = []
         }
       }
 
@@ -259,7 +259,7 @@ export const useChatThreadsStore = defineStore('chatThreads', {
 
         // Preserve any pending/streaming messages in memory (managed by useChatUI)
         const pendingMessages = (this.currentThread?.messages || []).filter(m =>
-          m.status && (m.status.status === 'pending' || m.status.status === 'streaming')
+          m.status && (m.status?.status === 'pending' || m.status?.status === 'streaming')
         )
 
         // Update current thread
@@ -392,10 +392,13 @@ export const useChatThreadsStore = defineStore('chatThreads', {
         // Update thread in list
         const index = this.threads.findIndex(t => t.threadId === threadId)
         if (index !== -1) {
-          this.threads[index].isShared = true
-          this.threads[index].shareId = data.shareId
-          this.threads[index].shortCode = data.shortCode
-          this.threads[index].shortUrl = data.shortUrl
+          const thread = this.threads[index]
+          if (thread) {
+            thread.isShared = true
+            thread.shareId = data.shareId
+            thread.shortCode = data.shortCode
+            thread.shortUrl = data.shortUrl
+          }
         }
 
         // Update current thread
@@ -426,10 +429,13 @@ export const useChatThreadsStore = defineStore('chatThreads', {
         // Update thread in list
         const index = this.threads.findIndex(t => t.threadId === threadId)
         if (index !== -1) {
-          this.threads[index].isShared = false
-          this.threads[index].shareId = undefined
-          this.threads[index].shortCode = undefined
-          this.threads[index].shortUrl = undefined
+          const thread = this.threads[index]
+          if (thread) {
+            thread.isShared = false
+            thread.shareId = undefined
+            thread.shortCode = undefined
+            thread.shortUrl = undefined
+          }
         }
 
         // Update current thread

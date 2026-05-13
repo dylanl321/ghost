@@ -154,15 +154,15 @@ export class PDFExporter {
     }
 
     // Check if this is already a table structure with headers and rows
-    if (typeof data === 'object' && !Array.isArray(data) && 
-        data.headers && Array.isArray(data.headers) && 
+    if (typeof data === 'object' && !Array.isArray(data) &&
+        data.headers && Array.isArray(data.headers) &&
         data.rows && Array.isArray(data.rows)) {
       // Already in the correct format for a table
       return {
         headers: data.headers,
-        rows: data.rows.map(row => 
-          Array.isArray(row) ? row.map(cell => this.formatCellValue(cell)) : 
-          data.headers.map(h => this.formatCellValue(row[h]))
+        rows: data.rows.map(row =>
+          Array.isArray(row) ? row.map(cell => this.formatCellValue(cell)) :
+          data.headers.map((h: string) => this.formatCellValue(row?.[h]))
         )
       }
     }
@@ -474,8 +474,11 @@ export class PDFExporter {
 
       this.currentY += imgHeight + 10
     } finally {
-      if (typeof element === 'string' && targetElement.parentNode) {
-        targetElement.parentNode.removeChild(targetElement)
+      if (typeof element === 'string') {
+        const parent = targetElement.parentNode
+        if (parent) {
+          parent.removeChild(targetElement)
+        }
       }
     }
   }
