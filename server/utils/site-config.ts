@@ -218,7 +218,7 @@ export async function getAllSiteConfig(useCache = true): Promise<SiteConfigItem[
     return mergeWithDefaults(items);
   } catch (error: any) {
     // If table doesn't exist yet, return defaults
-    if (error.name === 'ResourceNotFoundException' || error.message?.includes('not found')) {
+    if ((error instanceof Error ? error.name : "Error") === 'ResourceNotFoundException' || (error instanceof Error ? error.message : String(error))?.includes('not found')) {
       logger.warn(`Site config table '${TABLE_NAME}' not found, using defaults. Run 'npx tsx scripts/init-site-config.ts' to initialize.`);
       return DEFAULT_SITE_CONFIG;
     }
@@ -291,7 +291,7 @@ export async function updateSiteConfig(
     return mergedUpdated;
   } catch (error: any) {
     // If table doesn't exist, provide helpful error message
-    if (error.name === 'ResourceNotFoundException' || error.message?.includes('not found')) {
+    if ((error instanceof Error ? error.name : "Error") === 'ResourceNotFoundException' || (error instanceof Error ? error.message : String(error))?.includes('not found')) {
       throw new Error(`Site config table '${TABLE_NAME}' not found. Please run 'npx tsx scripts/init-site-config.ts' to initialize the table.`);
     }
 

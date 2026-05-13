@@ -271,7 +271,7 @@ export async function exportToXLSX(
       success: false,
       format: 'xlsx',
       filename: '',
-      error: error instanceof Error ? error.message : 'Unknown error during XLSX export'
+      error: error instanceof Error ? (error instanceof Error ? error.message : String(error)) : 'Unknown error during XLSX export'
     }
   }
 }

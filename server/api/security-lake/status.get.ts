@@ -109,7 +109,7 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   } catch (error) {
     logger.error('[Security Lake] Status check failed:', error)
-    return errors.serverError(event, error instanceof Error ? error.message : 'Status check failed')
+    return errors.serverError(event, error instanceof Error ? (error instanceof Error ? error.message : String(error)) : 'Status check failed')
   }
 }))
 

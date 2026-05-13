@@ -196,7 +196,7 @@ async function getDefaultRegion(environment: AWSEnvironmentType): Promise<string
   try {
     validateRegionForPartition(defaultRegion, environment)
   } catch (error) {
-    logger.error(`[AWS Client Factory] Invalid default region configuration: ${error.message}`)
+    logger.error(`[AWS Client Factory] Invalid default region configuration: ${(error instanceof Error ? error.message : String(error))}`)
     // Fall back to safe defaults
     return fallbackDefault
   }

@@ -138,7 +138,7 @@ export async function getEC2InstancePricing(
       pricingRegion: region
     }
   } catch (error) {
-    logger.error(`[AWS Pricing] Error fetching pricing for ${instanceType} in ${region}:`, error.message)
+    logger.error(`[AWS Pricing] Error fetching pricing for ${instanceType} in ${region}:`, (error instanceof Error ? error.message : String(error)))
     return null
   }
 }
@@ -183,7 +183,7 @@ export async function batchGetEC2InstancePricing(
         await new Promise(resolve => setTimeout(resolve, 100))
       }
     } catch (error) {
-      logger.error(`[AWS Pricing] Failed to fetch pricing for ${key}:`, error.message)
+      logger.error(`[AWS Pricing] Failed to fetch pricing for ${key}:`, (error instanceof Error ? error.message : String(error)))
     }
   }
 
@@ -282,7 +282,7 @@ export async function getEBSVolumePricing(
       pricingRegion: region
     }
   } catch (error) {
-    logger.error(`[AWS Pricing] Error fetching EBS pricing for ${volumeType} in ${region}:`, error.message)
+    logger.error(`[AWS Pricing] Error fetching EBS pricing for ${volumeType} in ${region}:`, (error instanceof Error ? error.message : String(error)))
     return null
   }
 }
@@ -346,7 +346,7 @@ export async function batchGetEBSVolumePricing(
         await new Promise(resolve => setTimeout(resolve, 100))
       }
     } catch (error) {
-      logger.error(`[AWS Pricing] Failed to fetch EBS pricing for ${key}:`, error.message)
+      logger.error(`[AWS Pricing] Failed to fetch EBS pricing for ${key}:`, (error instanceof Error ? error.message : String(error)))
     }
   }
 

@@ -197,7 +197,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   } catch (error: any) {
     logger.error(`[Log Groups] Error listing log groups:`, error)
 
-    if (error.name === 'AccessDeniedException') {
+    if ((error instanceof Error ? error.name : "Error") === 'AccessDeniedException') {
       return errors.forbidden(event, `Access denied to list log groups in account ${accountId}`)
     }
 

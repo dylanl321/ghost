@@ -120,8 +120,8 @@ export async function getBudgetAlertLogStreams(limit: number = 50): Promise<LogS
         }
       } catch (error: any) {
         if (
-          error.name === 'ExpiredTokenException' ||
-          error.message?.includes('security token included in the request is expired')
+          (error instanceof Error ? error.name : "Error") === 'ExpiredTokenException' ||
+          (error instanceof Error ? error.message : String(error))?.includes('security token included in the request is expired')
         ) {
           logger.warn('[Budget Alert Logs] Security token expired. Refreshing...')
           await refreshBudgetAlertLogsClient()
@@ -195,8 +195,8 @@ export async function getBudgetAlertLogs(
         }
       } catch (error: any) {
         if (
-          error.name === 'ExpiredTokenException' ||
-          error.message?.includes('security token included in the request is expired')
+          (error instanceof Error ? error.name : "Error") === 'ExpiredTokenException' ||
+          (error instanceof Error ? error.message : String(error))?.includes('security token included in the request is expired')
         ) {
           logger.warn('[Budget Alert Logs] Security token expired. Refreshing...')
           await refreshBudgetAlertLogsClient()
@@ -216,8 +216,8 @@ export async function getBudgetAlertLogs(
     logger.error('[Budget Alert Logs] Error fetching logs:', error)
 
     if (
-      error.name === 'ResourceNotFoundException' ||
-      error.message?.includes('log group does not exist')
+      (error instanceof Error ? error.name : "Error") === 'ResourceNotFoundException' ||
+      (error instanceof Error ? error.message : String(error))?.includes('log group does not exist')
     ) {
       const enhancedError: any = new Error(
         `Log group "${BUDGET_ALERT_LOG_GROUP}" not found. ` +

@@ -193,7 +193,7 @@ export async function listAggregateResources(
 
     logger.info(`[Config] Verified aggregator '${aggregatorName}' exists in ${environment}`)
   } catch (error) {
-    if (error.name === 'NoSuchConfigurationAggregatorException' || error.message?.includes('does not exist')) {
+    if ((error instanceof Error ? error.name : "Error") === 'NoSuchConfigurationAggregatorException' || (error instanceof Error ? error.message : String(error))?.includes('does not exist')) {
       throw new Error(`Config aggregator '${aggregatorName}' not found in ${environment} environment. Please check your AWS Config setup or contact your AWS administrator.`)
     }
     throw error

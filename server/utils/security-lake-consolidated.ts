@@ -399,7 +399,7 @@ export async function executeStoredQuery(request: QueryExecutionRequest): Promis
     logger.error(`[Security Lake] Query execution failed:`, error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? (error instanceof Error ? error.message : String(error)) : String(error)
     }
   }
 }
@@ -673,7 +673,7 @@ export async function getAsyncQueryStatus(
     return {
       queryId: queryExecutionId,
       status: 'FAILED',
-      error: error instanceof Error ? error.message : String(error),
+      error: error instanceof Error ? (error instanceof Error ? error.message : String(error)) : String(error),
       metadata: { queryName }
     }
   }

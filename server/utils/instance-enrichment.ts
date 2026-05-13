@@ -324,7 +324,7 @@ async function getInstanceTypeInfo(instanceType: string, environment: AWSEnviron
     
     return instanceTypeInfo
   } catch (error) {
-    logger.warn(`[Instance Enrichment] Failed to get instance type info for ${instanceType}:`, error.message)
+    logger.warn(`[Instance Enrichment] Failed to get instance type info for ${instanceType}:`, (error instanceof Error ? error.message : String(error)))
     return null
   }
 }

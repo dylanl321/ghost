@@ -259,7 +259,7 @@ export async function sendStrandsQuery(
 
     } catch (error: any) {
       // Handle abort (timeout)
-      if (error.name === 'AbortError') {
+      if ((error instanceof Error ? error.name : "Error") === 'AbortError') {
         lastError = new StrandsClientError(
           `Request timeout after ${config.timeout}ms. Strands MCP operations can take 2+ minutes for new accounts.`,
           'TIMEOUT',
@@ -274,7 +274,7 @@ export async function sendStrandsQuery(
       } else {
         // Network or other errors
         lastError = new StrandsClientError(
-          error.message || 'Network error',
+          (error instanceof Error ? error.message : String(error)) || 'Network error',
           'NETWORK_ERROR',
           undefined,
           error
@@ -284,7 +284,7 @@ export async function sendStrandsQuery(
       // Retry logic
       if (attempt < maxRetries) {
         const delay = config.retryDelay! * Math.pow(2, attempt)
-        logger.warn(`[Strands Client] Request failed, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries + 1}):`, error.message)
+        logger.warn(`[Strands Client] Request failed, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries + 1}):`, (error instanceof Error ? error.message : String(error)))
         await new Promise(resolve => setTimeout(resolve, delay))
         continue
       }
@@ -411,7 +411,7 @@ export async function sendStrandsAsyncQuery(
   } catch (error: any) {
     logger.error('[Strands Client] Failed to submit async query:', error)
     throw error instanceof StrandsClientError ? error : new StrandsClientError(
-      error.message || 'Network error',
+      (error instanceof Error ? error.message : String(error)) || 'Network error',
       'NETWORK_ERROR',
       undefined,
       error
@@ -474,7 +474,7 @@ export async function pollStrandsJobStatus(
   } catch (error: any) {
     logger.error('[Strands Client] Failed to poll job status:', error)
     throw error instanceof StrandsClientError ? error : new StrandsClientError(
-      error.message || 'Network error',
+      (error instanceof Error ? error.message : String(error)) || 'Network error',
       'NETWORK_ERROR',
       undefined,
       error

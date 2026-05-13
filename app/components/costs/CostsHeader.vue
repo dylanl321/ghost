@@ -487,7 +487,7 @@ async function generateShareUrl() {
     }
   } catch (error: any) {
     logger.error('Failed to generate share link:', error)
-    shareError.value = error.message || 'Failed to create share link'
+    shareError.value = (error instanceof Error ? error.message : String(error)) || 'Failed to create share link'
     toast.add({
       title: 'Share Link Failed',
       description: 'Could not create shareable link',
@@ -770,7 +770,7 @@ async function handleBomExport() {
     toast.remove('bom-export-progress')
     toast.add({
       title: 'BOM Export Failed',
-      description: error instanceof Error ? error.message : 'An error occurred while generating the BOM export',
+      description: error instanceof Error ? (error instanceof Error ? error.message : String(error)) : 'An error occurred while generating the BOM export',
       icon: 'i-heroicons-x-circle',
       color: 'red'
     })

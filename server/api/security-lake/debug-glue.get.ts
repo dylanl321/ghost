@@ -89,7 +89,7 @@ export default defineEventHandler(handleAsync(async (event) => {
         
       } catch (error) {
         results[testQuery.name] = { 
-          error: error instanceof Error ? error.message : 'Unknown error' 
+          error: error instanceof Error ? (error instanceof Error ? error.message : String(error)) : 'Unknown error' 
         }
       }
     }
@@ -107,6 +107,6 @@ export default defineEventHandler(handleAsync(async (event) => {
     
   } catch (error) {
     logger.error('[Security Lake] Debug failed:', error)
-    return errors.serverError(event, error instanceof Error ? error.message : 'Debug failed')
+    return errors.serverError(event, error instanceof Error ? (error instanceof Error ? error.message : String(error)) : 'Debug failed')
   }
 }))

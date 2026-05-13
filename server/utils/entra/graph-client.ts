@@ -168,13 +168,13 @@ export async function graphRequest<T>(
             statusMessage: 'Authentication token expired. Please sign in again.',
             data: { 
               requiresReauth: true,
-              originalError: error.error?.message || error.message 
+              originalError: error.error?.message || (error instanceof Error ? error.message : String(error)) 
             }
           })
         }
         
         // Check for specific token expiration messages
-        const errorMessage = error.error?.message || error.message || `Graph API error: ${response.status}`
+        const errorMessage = error.error?.message || (error instanceof Error ? error.message : String(error)) || `Graph API error: ${response.status}`
         if (errorMessage.includes('Lifetime validation failed') || 
             errorMessage.includes('token is expired') ||
             errorMessage.includes('token has expired') ||

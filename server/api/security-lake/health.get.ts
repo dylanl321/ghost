@@ -41,7 +41,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     } catch (error) {
       checks.aws = { 
         commercial: 'failed',
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? (error instanceof Error ? error.message : String(error)) : String(error)
       }
     }
     
@@ -51,6 +51,6 @@ export default defineEventHandler(handleAsync(async (event) => {
     })
     
   } catch (error) {
-    return errors.serverError(event, error instanceof Error ? error.message : 'Health check failed')
+    return errors.serverError(event, error instanceof Error ? (error instanceof Error ? error.message : String(error)) : 'Health check failed')
   }
 }))

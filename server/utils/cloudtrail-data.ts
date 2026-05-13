@@ -384,8 +384,8 @@ async function querySecurityLakeForEvents(
 
   } catch (error: any) {
     logger.error('[CloudTrail Security Lake] Query failed', {
-      error: error.message,
-      stack: error.stack
+      error: (error instanceof Error ? error.message : String(error)),
+      stack: (error instanceof Error ? error.stack : String(error))
     })
     // Non-fatal - return empty results
   }
@@ -534,7 +534,7 @@ export async function getCloudTrailEvents(
 
   } catch (error) {
     logger.error('[CloudTrail] Failed to fetch events', { error })
-    throw new Error(`Failed to fetch CloudTrail events: ${error.message}`)
+    throw new Error(`Failed to fetch CloudTrail events: ${(error instanceof Error ? error.message : String(error))}`)
   }
 }
 

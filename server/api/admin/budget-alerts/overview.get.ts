@@ -217,7 +217,7 @@ export default defineEventHandler(async (event) => {
     logger.error('[Budget Alerts Overview] Error:', error)
     throw createError({
       statusCode: 500,
-      message: `Failed to fetch budget alerts overview: ${error.message}`,
+      message: `Failed to fetch budget alerts overview: ${(error instanceof Error ? error.message : String(error))}`,
     })
   }
 })

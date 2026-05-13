@@ -1561,7 +1561,7 @@ async function handleExport(format: string) {
 
     toast.add({
       title: 'Export Failed',
-      description: error.message || 'An error occurred while generating the report',
+      description: (error instanceof Error ? error.message : String(error)) || 'An error occurred while generating the report',
       icon: 'i-heroicons-x-circle',
       color: 'red',
       timeout: 5000

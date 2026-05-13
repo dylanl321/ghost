@@ -431,7 +431,7 @@ export default defineEventHandler(handleAsync(async (event) => {
 
         logger.info(`[Instances API] Added pricing data to ${pricingMap.size} instances`)
       } catch (error) {
-        logger.error('[Instances API] Failed to fetch pricing data:', error.message)
+        logger.error('[Instances API] Failed to fetch pricing data:', (error instanceof Error ? error.message : String(error)))
         // Continue without pricing data
       }
     }
@@ -535,6 +535,6 @@ export default defineEventHandler(handleAsync(async (event) => {
     
   } catch (error) {
     logger.error('[Instances API] Unexpected error:', error)
-    return errors.serverError(event, `Failed to list instances: ${error.message}`)
+    return errors.serverError(event, `Failed to list instances: ${(error instanceof Error ? error.message : String(error))}`)
   }
 }))

@@ -275,7 +275,7 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   } catch (error) {
     logger.error('[Security Lake] Enhanced queries failed:', error)
-    return errors.serverError(event, error instanceof Error ? error.message : 'Query listing failed')
+    return errors.serverError(event, error instanceof Error ? (error instanceof Error ? error.message : String(error)) : 'Query listing failed')
   }
 }))
 
