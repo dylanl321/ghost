@@ -99,45 +99,48 @@ export async function getCostAndUsage(
       const totalResponse: any = await speculativeTotalPromise
 
       logger.debug('Separate total call response:', {
-        hasResultsByTime: !!totalResponse.ResultsByTime,
-        resultsByTimeLength: totalResponse.ResultsByTime?.length || 0,
-        firstPeriodHasTotal: !!totalResponse.ResultsByTime?.[0]?.Total
+        hasResultsByTime: !!totalResponse?.ResultsByTime,
+        resultsByTimeLength: totalResponse?.ResultsByTime?.length || 0,
+        firstPeriodHasTotal: !!totalResponse?.ResultsByTime?.[0]?.Total
       })
 
       // AWS doesn't return a root-level Total; we need to sum from ResultsByTime
-      if (totalResponse.ResultsByTime && totalResponse.ResultsByTime.length > 0) {
+      if (totalResponse?.ResultsByTime && totalResponse.ResultsByTime.length > 0) {
         // Initialize accumulator for each metric
         const accumulatedTotal: any = {}
 
         // Build date-keyed map from total response to avoid index mismatch on pagination
         const totalsByDate = new Map<string, any>()
         totalResponse.ResultsByTime.forEach((result: any) => {
-          if (result.Total && result.TimePeriod?.Start) {
+          if (result?.Total && result.TimePeriod?.Start) {
             totalsByDate.set(result.TimePeriod.Start, result.Total)
           }
         })
 
         // Inject totals by matching date keys
         allResultsByTime.forEach((period: any) => {
-          const dateKey = period.TimePeriod?.Start
+          const dateKey = period?.TimePeriod?.Start
           if (dateKey && totalsByDate.has(dateKey)) {
-            period.Total = totalsByDate.get(dateKey)
-            logger.debug(`✓ Billable: Injected Total for ${dateKey}: ${period.Total?.UnblendedCost?.Amount}`)
+            const total = totalsByDate.get(dateKey)
+            if (total) {
+              period.Total = total
+              logger.debug(`✓ Billable: Injected Total for ${dateKey}: ${total?.UnblendedCost?.Amount}`)
+            }
           }
         })
 
         // Accumulate totals from the date-keyed map
         totalsByDate.forEach((periodTotal: any) => {
           params.metrics.forEach((metric: string) => {
-            if (periodTotal[metric]?.Amount) {
+            if (periodTotal?.[metric]?.Amount) {
               if (!accumulatedTotal[metric]) {
                 accumulatedTotal[metric] = {
                   Amount: '0',
-                  Unit: periodTotal[metric].Unit || 'USD'
+                  Unit: periodTotal[metric]?.Unit || 'USD'
                 }
               }
-              const currentAmount = parseFloat(accumulatedTotal[metric].Amount)
-              const addAmount = parseFloat(periodTotal[metric].Amount)
+              const currentAmount = parseFloat(accumulatedTotal[metric]?.Amount || '0')
+              const addAmount = parseFloat(periodTotal[metric]?.Amount || '0')
               accumulatedTotal[metric].Amount = (currentAmount + addAmount).toString()
             }
           })
@@ -147,7 +150,7 @@ export async function getCostAndUsage(
           total = accumulatedTotal
           logger.info('✓ Successfully retrieved total from separate call (summed from ResultsByTime):', {
             metrics: Object.keys(accumulatedTotal),
-            UnblendedCost: accumulatedTotal.UnblendedCost?.Amount
+            UnblendedCost: accumulatedTotal?.UnblendedCost?.Amount
           })
         } else {
           logger.warn('Separate call returned ResultsByTime but no Totals in periods')
@@ -402,7 +405,7 @@ export async function getMonthOverMonthChange(
   const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
   const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0)
 
-  const formatDate = (date: Date) => date.toISOString().split('T')[0]
+  const formatDate = (date: Date) => (date.toISOString().split('T')[0] ?? '')
 
   // Determine current month date range
   // AWS requires start < end, so on first day of month, return 0 for current month
@@ -637,19 +640,19 @@ export async function getProformaCosts(
       const proformaTotalResponse: any = await proformaRaw.speculativeTotalPromise
 
       logger.debug('Proforma separate total call response:', {
-        hasResultsByTime: !!proformaTotalResponse.ResultsByTime,
-        resultsByTimeLength: proformaTotalResponse.ResultsByTime?.length || 0,
-        firstPeriodHasTotal: !!proformaTotalResponse.ResultsByTime?.[0]?.Total
+        hasResultsByTime: !!proformaTotalResponse?.ResultsByTime,
+        resultsByTimeLength: proformaTotalResponse?.ResultsByTime?.length || 0,
+        firstPeriodHasTotal: !!proformaTotalResponse?.ResultsByTime?.[0]?.Total
       })
 
       // AWS doesn't return a root-level Total; we need to sum from ResultsByTime (same as billable side)
-      if (proformaTotalResponse.ResultsByTime && proformaTotalResponse.ResultsByTime.length > 0) {
+      if (proformaTotalResponse?.ResultsByTime && proformaTotalResponse.ResultsByTime.length > 0) {
         const accumulatedTotal: any = {}
 
         // Build date-keyed map from total response to avoid index mismatch on pagination
         const proformaTotalsByDate = new Map<string, any>()
         proformaTotalResponse.ResultsByTime.forEach((result: any) => {
-          if (result.Total && result.TimePeriod?.Start) {
+          if (result?.Total && result.TimePeriod?.Start) {
             proformaTotalsByDate.set(result.TimePeriod.Start, result.Total)
           }
         })
@@ -658,26 +661,29 @@ export async function getProformaCosts(
 
         // Inject totals by matching date keys
         proformaCosts.resultsByTime.forEach((period: any) => {
-          const dateKey = period.TimePeriod?.Start
+          const dateKey = period?.TimePeriod?.Start
           if (dateKey && proformaTotalsByDate.has(dateKey)) {
-            const before = period.Total?.UnblendedCost?.Amount
-            period.Total = proformaTotalsByDate.get(dateKey)
-            logger.info(`✓ Proforma ${dateKey}: Injected Total ${period.Total?.UnblendedCost?.Amount} (was: ${before || 'NONE'})`)
+            const before = period?.Total?.UnblendedCost?.Amount
+            const total = proformaTotalsByDate.get(dateKey)
+            if (total) {
+              period.Total = total
+              logger.info(`✓ Proforma ${dateKey}: Injected Total ${total?.UnblendedCost?.Amount} (was: ${before || 'NONE'})`)
+            }
           }
         })
 
         // Accumulate totals from the date-keyed map
         proformaTotalsByDate.forEach((periodTotal: any) => {
           params.metrics.forEach((metric: string) => {
-            if (periodTotal[metric]?.Amount) {
+            if (periodTotal?.[metric]?.Amount) {
               if (!accumulatedTotal[metric]) {
                 accumulatedTotal[metric] = {
                   Amount: '0',
-                  Unit: periodTotal[metric].Unit || 'USD'
+                  Unit: periodTotal[metric]?.Unit || 'USD'
                 }
               }
-              const currentAmount = parseFloat(accumulatedTotal[metric].Amount)
-              const addAmount = parseFloat(periodTotal[metric].Amount)
+              const currentAmount = parseFloat(accumulatedTotal[metric]?.Amount || '0')
+              const addAmount = parseFloat(periodTotal[metric]?.Amount || '0')
               accumulatedTotal[metric].Amount = (currentAmount + addAmount).toString()
             }
           })
@@ -687,7 +693,7 @@ export async function getProformaCosts(
           proformaCosts.total = accumulatedTotal
           logger.info('✓ Proforma: Successfully retrieved total from separate call (summed from ResultsByTime):', {
             metrics: Object.keys(accumulatedTotal),
-            UnblendedCost: accumulatedTotal.UnblendedCost?.Amount
+            UnblendedCost: accumulatedTotal?.UnblendedCost?.Amount
           })
         } else {
           logger.warn('Proforma: Separate call returned ResultsByTime but no Totals in periods')
@@ -808,16 +814,16 @@ export async function getProformaCosts(
     let accountComparisons = []
     if (params.groupBy?.some(g => g.key === 'LINKED_ACCOUNT')) {
       const proformaAccountMap = new Map()
-      proformaResult?.Groups?.forEach(group => {
-        if (group.Keys?.[0]) {
-          proformaAccountMap.set(group.Keys[0], parseFloat(group.Metrics?.['UnblendedCost']?.Amount || '0'))
+      proformaResult?.Groups?.forEach((group: any) => {
+        if (group?.Keys?.[0]) {
+          proformaAccountMap.set(group.Keys[0], parseFloat(group?.Metrics?.['UnblendedCost']?.Amount || '0'))
         }
       })
       
-      billableResult.Groups?.forEach(billableGroup => {
-        const accountId = billableGroup.Keys?.[0]
+      billableResult?.Groups?.forEach((billableGroup: any) => {
+        const accountId = billableGroup?.Keys?.[0]
         if (accountId) {
-          const billableCost = parseFloat(billableGroup.Metrics?.['UnblendedCost']?.Amount || '0')
+          const billableCost = parseFloat(billableGroup?.Metrics?.['UnblendedCost']?.Amount || '0')
           const proformaCost = proformaAccountMap.get(accountId) || 0
           const difference = proformaCost - billableCost
           const percentChange = safePercentChange(billableCost, proformaCost)
