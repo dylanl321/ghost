@@ -64,12 +64,12 @@ test_docker_build:
 
 code_quality_check:
   stage: test
-  image: node:23-alpine
+  image: node:22-alpine
   rules:
     - if: $CI_COMMIT_REF_NAME != "dev" && $CI_COMMIT_REF_NAME != "master"
   before_script:
     - echo "Installing dependencies for code quality checks..."
-    - npm ci --prefer-offline --no-audit
+    - npm install --legacy-peer-deps --no-audit
   script:
     - echo "Running code quality checks for feature branch $CI_COMMIT_REF_NAME"
     
