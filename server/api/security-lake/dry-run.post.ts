@@ -31,6 +31,6 @@ export default defineEventHandler(handleAsync(async (event) => {
     })
     
   } catch (error) {
-    return errors.serverError(event, error.message)
+    return errors.serverError(event, (error instanceof Error ? error.message : String(error)))
   }
 }))

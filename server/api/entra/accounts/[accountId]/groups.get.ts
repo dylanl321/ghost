@@ -299,7 +299,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Accoun
     // Handle other errors
     throw createError({
       statusCode: 500,
-      statusMessage: error.message || 'Failed to fetch account groups'
+      statusMessage: (error instanceof Error ? error.message : String(error)) || 'Failed to fetch account groups'
     })
   }
 })

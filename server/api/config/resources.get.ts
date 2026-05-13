@@ -929,6 +929,6 @@ export default defineEventHandler(handleAsync(async (event) => {
     return sendSuccess(event, response, { message: 'Resources fetched successfully' })
   } catch (error: any) {
     logger.error('[Config API] Unexpected error:', error)
-    return errors.serverError(event, `Configuration service error: ${error.message}`)
+    return errors.serverError(event, `Configuration service error: ${(error instanceof Error ? error.message : String(error))}`)
   }
 }))

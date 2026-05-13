@@ -268,13 +268,13 @@ async function fetchFindingsForRegion(
 
   } catch (error: any) {
     // Security Hub might not be enabled in Security Lake account/region
-    if (error.name === 'InvalidAccessException' || error.message?.includes('not subscribed')) {
+    if ((error instanceof Error ? error.name : "Error") === 'InvalidAccessException' || (error instanceof Error ? error.message : String(error))?.includes('not subscribed')) {
       logger.warn('[SecurityHub] Not enabled in Security Lake account/region', { region, environment })
     } else {
       logger.error('[SecurityHub] Failed to fetch findings', {
         region,
         environment,
-        error: error.message,
+        error: (error instanceof Error ? error.message : String(error)),
       })
     }
     // Non-fatal - continue with other regions
@@ -436,7 +436,7 @@ export async function getSecurityHubFindings(
 
   } catch (error) {
     logger.error('[SecurityHub] Failed to fetch findings', { error })
-    throw new Error(`Failed to fetch Security Hub findings: ${error.message}`)
+    throw new Error(`Failed to fetch Security Hub findings: ${(error instanceof Error ? error.message : String(error))}`)
   }
 }
 

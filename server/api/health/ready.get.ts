@@ -258,7 +258,7 @@ async function checkAWSEnvironment(environment: 'commercial' | 'govcloud') {
         error: null
       }
     } catch (error: any) {
-      result.services.dynamodb.error = error.message || 'DynamoDB check failed'
+      result.services.dynamodb.error = (error instanceof Error ? error.message : String(error)) || 'DynamoDB check failed'
     }
 
     // Check Organizations access (if configured)
@@ -281,12 +281,12 @@ async function checkAWSEnvironment(environment: 'commercial' | 'govcloud') {
         result.services.organizations.error = 'Organizations account ID not configured'
       }
     } catch (error: any) {
-      result.services.organizations.error = error.message || 'Organizations check failed'
+      result.services.organizations.error = (error instanceof Error ? error.message : String(error)) || 'Organizations check failed'
     }
 
   } catch (error: any) {
     // Handle credential errors
-    if (error.message?.includes('expired')) {
+    if ((error instanceof Error ? error.message : String(error))?.includes('expired')) {
       result.identity = {
         accountId: null,
         arn: null,
@@ -300,7 +300,7 @@ async function checkAWSEnvironment(environment: 'commercial' | 'govcloud') {
         arn: null,
         userId: null,
         status: 'error' as const,
-        error: error.message || 'Failed to verify AWS credentials'
+        error: (error instanceof Error ? error.message : String(error)) || 'Failed to verify AWS credentials'
       }
     }
   }

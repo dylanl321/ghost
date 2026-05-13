@@ -630,7 +630,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     
   } catch (error: any) {
     logger.error('Organization overview generation failed:', error)
-    return errors.serverError(event, `Failed to generate overview: ${error.message}`)
+    return errors.serverError(event, `Failed to generate overview: ${(error instanceof Error ? error.message : String(error))}`)
   }
 }))
 
@@ -802,7 +802,7 @@ async function generateOrganizationOverview(options: {
         errors.push({
           type: 'cost_analysis',
           code: costAnalysisResult.error.code,
-          message: costAnalysisResult.error.message,
+          message: costAnalysisResult.(error instanceof Error ? error.message : String(error)),
           details: costAnalysisResult.error.details,
           resolution: costAnalysisResult.error.resolution,
           retryable: costAnalysisResult.error.retryable
@@ -812,7 +812,7 @@ async function generateOrganizationOverview(options: {
         errors.push({
           type: 'budget_recommendations',
           code: budgetRecommendationsResult.error.code,
-          message: budgetRecommendationsResult.error.message,
+          message: budgetRecommendationsResult.(error instanceof Error ? error.message : String(error)),
           details: budgetRecommendationsResult.error.details,
           resolution: budgetRecommendationsResult.error.resolution,
           retryable: budgetRecommendationsResult.error.retryable
@@ -862,18 +862,18 @@ async function generateOrganizationOverview(options: {
       
       // Provide detailed error information for AI analysis failures
       let errorMessage = 'AI analysis failed'
-      let errorDetails = error.message || 'Unknown error'
+      let errorDetails = (error instanceof Error ? error.message : String(error)) || 'Unknown error'
       let errorResolution = 'AI analysis is optional. The overview data is still available without AI insights.'
       
-      if (error.message?.includes('credentials')) {
+      if ((error instanceof Error ? error.message : String(error))?.includes('credentials')) {
         errorMessage = 'AWS Bedrock credentials not configured'
         errorDetails = 'Unable to access Bedrock service with current credentials'
         errorResolution = 'Check AWS_GOVCLOUD credentials and Bedrock permissions. AI analysis will be skipped.'
-      } else if (error.message?.includes('not found') || error.message?.includes('ResourceNotFoundException')) {
+      } else if ((error instanceof Error ? error.message : String(error))?.includes('not found') || (error instanceof Error ? error.message : String(error))?.includes('ResourceNotFoundException')) {
         errorMessage = 'Bedrock model not available'
         errorDetails = `The requested AI model (${options.aiModel}) is not accessible`
         errorResolution = 'Ensure Bedrock models are enabled in your AWS GovCloud account. AI analysis will be skipped.'
-      } else if (error.message?.includes('throttl') || error.message?.includes('rate limit')) {
+      } else if ((error instanceof Error ? error.message : String(error))?.includes('throttl') || (error instanceof Error ? error.message : String(error))?.includes('rate limit')) {
         errorMessage = 'AI service rate limited'
         errorDetails = 'Too many requests to Bedrock service'
         errorResolution = 'AI analysis was skipped due to rate limiting. Try again later for AI insights.'

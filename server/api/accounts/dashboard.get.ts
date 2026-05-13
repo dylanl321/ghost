@@ -599,7 +599,7 @@ export default defineEventHandler(handleAsync(async (event) => {
         }
       }
     } catch (error) {
-      logger.error('Cost API failed:', error.message || error)
+      logger.error('Cost API failed:', (error instanceof Error ? error.message : String(error)) || error)
     }
     
     // Step 6: Fetch compliance and governance data
@@ -638,7 +638,7 @@ export default defineEventHandler(handleAsync(async (event) => {
         }
       }
     } catch (error) {
-      logger.error('Governance API failed:', error.message || error)
+      logger.error('Governance API failed:', (error instanceof Error ? error.message : String(error)) || error)
     }
     
     // Step 7: Fix tag coverage calculation

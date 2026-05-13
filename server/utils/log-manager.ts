@@ -64,7 +64,7 @@ async function setupLogging(): Promise<void> {
         5_000
       );
     } catch (error: any) {
-      if (error.name !== "ResourceAlreadyExistsException") {
+      if ((error instanceof Error ? error.name : "Error") !== "ResourceAlreadyExistsException") {
         logger.error("Error creating log stream:", error);
       }
     }
@@ -96,8 +96,8 @@ export async function logMessage(message: string): Promise<void> {
       logger.info("Log sent successfully");
     } catch (error: any) {
       if (
-        error.name === "ExpiredTokenException" ||
-        error.message?.includes("security token included in the request is expired")
+        (error instanceof Error ? error.name : "Error") === "ExpiredTokenException" ||
+        (error instanceof Error ? error.message : String(error))?.includes("security token included in the request is expired")
       ) {
         logger.warn("Security token expired. Refreshing...");
         isLoggingSetup = false;

@@ -89,7 +89,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     })
   } catch (error: any) {
     logger.error('Failed to fetch governance data:', error)
-    return errors.notFound(event, `Failed to fetch governance data: ${error.message || 'Unknown error'}`)
+    return errors.notFound(event, `Failed to fetch governance data: ${(error instanceof Error ? error.message : String(error)) || 'Unknown error'}`)
   }
 
   if (!governanceData.success) {

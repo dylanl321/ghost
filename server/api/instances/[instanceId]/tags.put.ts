@@ -328,7 +328,7 @@ export default defineEventHandler(handleAsync(async (event) => {
         }
       } catch (error) {
         logger.error('[Tag Management] Failed to update tags:', error)
-        return errors.serverError(event, `Failed to update tags: ${error.message}`)
+        return errors.serverError(event, `Failed to update tags: ${(error instanceof Error ? error.message : String(error))}`)
       }
     }
     
@@ -352,6 +352,6 @@ export default defineEventHandler(handleAsync(async (event) => {
     
   } catch (error) {
     logger.error('[Tag Management] Unexpected error:', error)
-    return errors.serverError(event, `Failed to manage tags: ${error.message}`)
+    return errors.serverError(event, `Failed to manage tags: ${(error instanceof Error ? error.message : String(error))}`)
   }
 }))

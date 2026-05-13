@@ -813,6 +813,6 @@ export default defineEventHandler(handleAsync(async (event) => {
     })
   } catch (error) {
     logger.error('[Config Summary API] Unexpected error:', error)
-    return errors.serverError(event, `Configuration service error: ${error.message}`)
+    return errors.serverError(event, `Configuration service error: ${(error instanceof Error ? error.message : String(error))}`)
   }
 }))

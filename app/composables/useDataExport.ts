@@ -99,7 +99,7 @@ export function useDataExport() {
         success: false,
         format,
         filename: '',
-        error: error instanceof Error ? error.message : 'Unknown export error'
+        error: error instanceof Error ? (error instanceof Error ? error.message : String(error)) : 'Unknown export error'
       }
 
       lastExportResult.value = errorResult
@@ -161,7 +161,7 @@ export function useDataExport() {
         success: false,
         format: 'json',
         filename: '',
-        error: error instanceof Error ? error.message : 'Unknown error during JSON export'
+        error: error instanceof Error ? (error instanceof Error ? error.message : String(error)) : 'Unknown error during JSON export'
       }
     }
   }

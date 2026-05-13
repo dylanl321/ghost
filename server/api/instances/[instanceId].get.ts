@@ -274,7 +274,7 @@ async function searchInstanceInEnvironment(
       }
     }
   } catch (error) {
-    logger.debug(`[Instance Details] Search in ${env} failed: ${error.message}`)
+    logger.debug(`[Instance Details] Search in ${env} failed: ${(error instanceof Error ? error.message : String(error))}`)
   }
 
   return { resource: null, environment: env }
@@ -380,7 +380,7 @@ export default defineEventHandler(handleAsync(async (event) => {
         logger.warn('[Instance Details] Optimization analysis failed:', error)
         responseData.optimization = {
           source: 'Limited Analysis (AWS services unavailable)',
-          message: `AWS service error: ${error.message}`,
+          message: `AWS service error: ${(error instanceof Error ? error.message : String(error))}`,
           awsInsights: enrichedInstance.awsOptimizationInsights
         }
       }
@@ -399,6 +399,6 @@ export default defineEventHandler(handleAsync(async (event) => {
     
   } catch (error) {
     logger.error('[Instance Details] Unexpected error:', error)
-    return errors.serverError(event, `Failed to get instance details: ${error.message}`)
+    return errors.serverError(event, `Failed to get instance details: ${(error instanceof Error ? error.message : String(error))}`)
   }
 }))
