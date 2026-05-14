@@ -117,7 +117,7 @@ export function useSidebarGroups(args: {
   const departmentGroups = computed<GroupData[]>(() => {
     const groups = new Map<string, GroupData>()
     accountsWithCosts.value.forEach((account: Account) => {
-      const deptName = account.departmentNumber || account.department || 'Unknown Department'
+      const deptName = account.pepDepartment || account.departmentNumber || account.department || 'Unknown Department'
       if (!groups.has(deptName)) {
         groups.set(deptName, { name: deptName, accounts: [], totalBudget: 0, totalSpend: 0 })
       }

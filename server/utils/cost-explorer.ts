@@ -1194,7 +1194,7 @@ export async function enhanceCostData(costData: any, includeDecommissioned: bool
         accountId: itemKey,
         accountName: account.name || 'Unknown',
         organizationalUnit: account.organizationalUnitPath || null,
-        departmentNumber: account.departmentNumber || null,
+        departmentNumber: account.pepDepartment || account.departmentNumber || null,
         linesOfBusiness: account.linesOfBusiness || null,
         enclaveStatus: account.enclaveStatus || null,
         estimatedMonthlyBudget: account.estimatedMonthlyCharge || null,

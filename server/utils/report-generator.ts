@@ -160,7 +160,7 @@ async function buildDataset(config: ReportConfig): Promise<NormalizedDataset> {
       utilizationPct: budgetedCost > 0 ? (actualCost / budgetedCost) * 100 : 0,
       // Additional metadata
       linesOfBusiness: account?.linesOfBusiness || '',
-      departmentNumber: account?.departmentNumber || ''
+      departmentNumber: account?.pepDepartment || account?.departmentNumber || ''
     }
   })
 

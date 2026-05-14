@@ -69,7 +69,7 @@
             </template>
 
             <div class="space-y-2 text-sm">
-              <AccountDetailsRow label="Department #" :value="enclave?.departmentNumber" />
+              <AccountDetailsRow label="Department #" :value="enclave?.pepDepartment || enclave?.departmentNumber" />
               <AccountDetailsRow label="Platform" :value="enclave?.platformType" />
               <AccountDetailsRow label="Approved Data Type" :value="enclave?.approvedDataType" />
             </div>

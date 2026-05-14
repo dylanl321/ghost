@@ -802,7 +802,7 @@ async function generateOrganizationOverview(options: {
         errors.push({
           type: 'cost_analysis',
           code: costAnalysisResult.error.code,
-          message: costAnalysisResult.(error instanceof Error ? error.message : String(error)),
+          message: costAnalysisResult.error.message,
           details: costAnalysisResult.error.details,
           resolution: costAnalysisResult.error.resolution,
           retryable: costAnalysisResult.error.retryable
@@ -812,7 +812,7 @@ async function generateOrganizationOverview(options: {
         errors.push({
           type: 'budget_recommendations',
           code: budgetRecommendationsResult.error.code,
-          message: budgetRecommendationsResult.(error instanceof Error ? error.message : String(error)),
+          message: budgetRecommendationsResult.error.message,
           details: budgetRecommendationsResult.error.details,
           resolution: budgetRecommendationsResult.error.resolution,
           retryable: budgetRecommendationsResult.error.retryable

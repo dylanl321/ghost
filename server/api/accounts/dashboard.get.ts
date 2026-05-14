@@ -319,7 +319,7 @@ export default defineEventHandler(handleAsync(async (event) => {
         },
         metadata: {
           environment: account.env || environment,
-          departmentNumber: account.departmentNumber || null,
+          departmentNumber: account.pepDepartment || account.departmentNumber || null,
           linesOfBusiness: Array.isArray(account.linesOfBusiness) ? 
             account.linesOfBusiness : 
             [account.linesOfBusiness].filter(Boolean),

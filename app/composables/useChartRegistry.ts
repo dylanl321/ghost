@@ -431,7 +431,7 @@ export const useChartRegistry = (args: {
 
         if (actualData?.accounts) {
           actualData.accounts.forEach((account: any) => {
-            const dept = account.departmentNumber || 'Unknown'
+            const dept = account.pepDepartment || account.departmentNumber || 'Unknown'
             const cost = account.totalCost || 0
             deptMap.set(dept, (deptMap.get(dept) || 0) + cost)
           })
@@ -608,7 +608,7 @@ export const useChartRegistry = (args: {
         const deptMap = new Map<string, { totalCost: number, totalBudget: number, accounts: number }>()
 
         byAccount.forEach((account: any) => {
-          const dept = account.departmentNumber || account.department || 'Unknown Dept'
+          const dept = account.pepDepartment || account.departmentNumber || account.department || 'Unknown Dept'
           const cost = account.actualCost || 0
           const budget = account.budgetedCost || 0
 
