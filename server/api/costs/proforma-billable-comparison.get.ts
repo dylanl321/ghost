@@ -107,6 +107,7 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   if (department) {
     accountsList = accountsList.filter(acc =>
+      acc.pepDepartment?.toLowerCase() === department.toLowerCase() ||
       acc.departmentNumber?.toLowerCase() === department.toLowerCase() ||
       acc.department?.toLowerCase() === department.toLowerCase()
     )

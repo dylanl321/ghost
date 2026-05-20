@@ -239,6 +239,6 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   } catch (error) {
     logger.error('[Security Lake] Dashboard failed:', error)
-    return errors.serverError(event, error instanceof Error ? error.message : 'Dashboard generation failed')
+    return errors.serverError(event, error instanceof Error ? (error instanceof Error ? error.message : String(error)) : 'Dashboard generation failed')
   }
 }))

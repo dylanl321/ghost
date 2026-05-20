@@ -59,6 +59,6 @@ export default defineEventHandler(handleAsync(async (event) => {
     })
   } catch (error) {
     logger.error('[Volumes Pricing API] Error:', error)
-    return errors.serverError(event, `Failed to calculate volume pricing: ${error.message}`)
+    return errors.serverError(event, `Failed to calculate volume pricing: ${(error instanceof Error ? error.message : String(error))}`)
   }
 }))

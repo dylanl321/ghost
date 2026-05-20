@@ -272,7 +272,7 @@ export function transformDynamoDBData(dynamoAccount: DynamoDBAccount): Partial<U
     projectName: dynamoAccount.projectName || undefined,
     projectType: dynamoAccount.projectType || undefined,
     projectNumber: dynamoAccount.projectNumber || undefined,
-    departmentNumber: dynamoAccount.departmentNumber || undefined,
+    departmentNumber: dynamoAccount.pepDepartment || dynamoAccount.departmentNumber || undefined,
     taskNumber: dynamoAccount.taskNumber || undefined,
     intendedUse: dynamoAccount.intendedUse || undefined,
     dataType: dynamoAccount.dataType || undefined,

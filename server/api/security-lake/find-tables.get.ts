@@ -94,7 +94,7 @@ export default defineEventHandler(handleAsync(async (event) => {
         }
         
       } catch (error) {
-        results[database] = { error: error instanceof Error ? error.message : 'Failed to query database' }
+        results[database] = { error: error instanceof Error ? (error instanceof Error ? error.message : String(error)) : 'Failed to query database' }
       }
     }
     
@@ -107,6 +107,6 @@ export default defineEventHandler(handleAsync(async (event) => {
     
   } catch (error) {
     logger.error('[Security Lake] Find tables failed:', error)
-    return errors.serverError(event, error instanceof Error ? error.message : 'Search failed')
+    return errors.serverError(event, error instanceof Error ? (error instanceof Error ? error.message : String(error)) : 'Search failed')
   }
 }))

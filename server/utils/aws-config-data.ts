@@ -179,7 +179,7 @@ async function fetchResourcesViaQuery(
 
   } catch (error) {
     logger.error('[Config] Advanced query failed', { error, expression })
-    throw new Error(`Failed to query Config resources: ${error.message}`)
+    throw new Error(`Failed to query Config resources: ${(error instanceof Error ? error.message : String(error))}`)
   }
 
   return results
@@ -351,7 +351,7 @@ export async function getConfigResources(
 
   } catch (error) {
     logger.error('[Config] Failed to fetch resources', { error })
-    throw new Error(`Failed to fetch Config resources: ${error.message}`)
+    throw new Error(`Failed to fetch Config resources: ${(error instanceof Error ? error.message : String(error))}`)
   }
 }
 

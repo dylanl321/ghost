@@ -67,7 +67,7 @@ export default defineEventHandler(async (event) => {
       } catch (error) {
         logger.warn('[Entra Filter Options] Failed to fetch members for department sampling', {
           groupId: group.id,
-          error: error instanceof Error ? error.message : 'Unknown error'
+          error: error instanceof Error ? (error instanceof Error ? error.message : String(error)) : 'Unknown error'
         })
         // Continue with other groups
       }
@@ -94,7 +94,7 @@ export default defineEventHandler(async (event) => {
 
     throw createError({
       statusCode: 500,
-      message: error.message || 'Failed to fetch Entra filter options'
+      message: (error instanceof Error ? error.message : String(error)) || 'Failed to fetch Entra filter options'
     })
   }
 })

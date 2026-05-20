@@ -57,8 +57,9 @@ function getAccountMetadata(account: any, accountsList: any[]) {
               account.LOB ||
               account.lineofbusiness || ''
 
-  // Check all possible field names for Department
-  const department = account.departmentNumber ||
+  // Check all possible field names for Department (prefer PEP as source of truth)
+  const department = account.pepDepartment ||
+                     account.departmentNumber ||
                      account.department ||
                      account.dept ||
                      account.Department ||
@@ -74,7 +75,7 @@ function getAccountMetadata(account: any, accountsList: any[]) {
 
     return {
       lob: lob || foundAccount?.linesOfBusiness || foundAccount?.lineOfBusiness || '',
-      department: department || foundAccount?.departmentNumber || foundAccount?.department || '',
+      department: department || foundAccount?.pepDepartment || foundAccount?.departmentNumber || foundAccount?.department || '',
       accountName: account.accountName || foundAccount?.accountName || foundAccount?.projectName || foundAccount?.name || account.accountId
     }
   }

@@ -236,7 +236,7 @@ export async function getGitLabJobDetails(jobUrl: string): Promise<GitLabJobDeta
     return jobDetails
 
   } catch (error: any) {
-    logger.error(`[GitLab API] Failed to fetch job details for ${jobUrl}:`, error.message)
+    logger.error(`[GitLab API] Failed to fetch job details for ${jobUrl}:`, (error instanceof Error ? error.message : String(error)))
     return null
   }
 }
@@ -293,7 +293,7 @@ export async function getGitLabPipelineDetails(jobUrl: string, pipelineId: numbe
     return pipelineDetails
 
   } catch (error: any) {
-    logger.error(`[GitLab API] Failed to fetch pipeline details:`, error.message)
+    logger.error(`[GitLab API] Failed to fetch pipeline details:`, (error instanceof Error ? error.message : String(error)))
     return null
   }
 }
@@ -350,7 +350,7 @@ export async function findMergeRequestForCommit(jobUrl: string, commitSha: strin
     return mr
 
   } catch (error: any) {
-    logger.error(`[GitLab API] Failed to find MR for commit ${commitSha}:`, error.message)
+    logger.error(`[GitLab API] Failed to find MR for commit ${commitSha}:`, (error instanceof Error ? error.message : String(error)))
     return null
   }
 }
@@ -431,7 +431,7 @@ export async function enrichPipelineWithGitLabData(pipelineRun: any): Promise<an
     }
 
   } catch (error: any) {
-    logger.error('[GitLab API] Failed to enrich pipeline data:', error.message)
+    logger.error('[GitLab API] Failed to enrich pipeline data:', (error instanceof Error ? error.message : String(error)))
     return pipelineRun
   }
 }

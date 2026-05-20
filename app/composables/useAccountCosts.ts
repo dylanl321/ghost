@@ -309,7 +309,7 @@ export const useAccountCosts = () => {
           spend: accounts.reduce((sum: number, acc: any) => sum + (acc.currentSpend || 0), 0),
           children: Object.entries(
           accounts.reduce((acc: Record<string, any[]>, account: any) => {
-            const dept = account.departmentNumber || 'Unassigned'
+            const dept = account.pepDepartment || account.departmentNumber || 'Unassigned'
             if (!acc[dept]) acc[dept] = []
             acc[dept].push(account)
             return acc

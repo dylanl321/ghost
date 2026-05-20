@@ -166,8 +166,8 @@ export async function getStrandsLogs(
           } catch (error: any) {
             // Handle expired token
             if (
-              error.name === "ExpiredTokenException" ||
-              error.message?.includes("security token included in the request is expired")
+              (error instanceof Error ? error.name : "Error") === "ExpiredTokenException" ||
+              (error instanceof Error ? error.message : String(error))?.includes("security token included in the request is expired")
             ) {
               logger.warn("Security token expired. Refreshing...");
               await refreshStrandsCloudWatchClient();
@@ -189,8 +189,8 @@ export async function getStrandsLogs(
       } catch (error: any) {
         // If a specific log group doesn't exist, log but continue with others
         if (
-          error.name === "ResourceNotFoundException" ||
-          error.message?.includes("log group does not exist")
+          (error instanceof Error ? error.name : "Error") === "ResourceNotFoundException" ||
+          (error instanceof Error ? error.message : String(error))?.includes("log group does not exist")
         ) {
           logger.warn(`Log group ${logGroupName} not found, skipping...`);
           continue;
@@ -206,8 +206,8 @@ export async function getStrandsLogs(
 
     // If there's an error, try to list available log groups to help debug
     if (
-      error.name === "ResourceNotFoundException" ||
-      error.message?.includes("log group does not exist")
+      (error instanceof Error ? error.name : "Error") === "ResourceNotFoundException" ||
+      (error instanceof Error ? error.message : String(error))?.includes("log group does not exist")
     ) {
       logger.error(
         `Some log groups not found. Attempting to list available Strands containers...`
@@ -226,7 +226,7 @@ export async function getStrandsLogs(
         const enhancedError: any = new Error(
           `Some Strands log groups not found. Available containers: ${containers.join(", ") || "None found"}`
         );
-        enhancedError.name = error.name;
+        enhancedError.name = (error instanceof Error ? error.name : "Error");
         enhancedError.availableContainers = containers;
         throw enhancedError;
       } catch (listError) {
@@ -275,8 +275,8 @@ export async function getStrandsLogStreams(
       } catch (error: any) {
         // Handle expired token
         if (
-          error.name === "ExpiredTokenException" ||
-          error.message?.includes("security token included in the request is expired")
+          (error instanceof Error ? error.name : "Error") === "ExpiredTokenException" ||
+          (error instanceof Error ? error.message : String(error))?.includes("security token included in the request is expired")
         ) {
           logger.warn("Security token expired. Refreshing...");
           await refreshStrandsCloudWatchClient();

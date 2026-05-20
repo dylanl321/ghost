@@ -102,7 +102,7 @@ export const useAwsAccountsStore = defineStore('awsAccounts', () => {
               environment: account.environment,
               organizationalUnit: account.organizationalUnit,
               linesOfBusiness: account.linesOfBusiness || account.lineOfBusiness,
-              departmentNumber: account.departmentNumber || account.department,
+              departmentNumber: account.pepDepartment || account.departmentNumber || account.department,
               tags: account.tags
             }
           }

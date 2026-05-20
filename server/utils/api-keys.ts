@@ -152,7 +152,7 @@ async function loadApiKeys(): Promise<ApiKey[]> {
     return apiKeys
   } catch (error: any) {
     // Handle table not existing gracefully
-    if (error.name === 'ResourceNotFoundException' || error.message?.includes('Requested resource not found')) {
+    if ((error instanceof Error ? error.name : "Error") === 'ResourceNotFoundException' || (error instanceof Error ? error.message : String(error))?.includes('Requested resource not found')) {
       const tableName = await getTableName('apiKeys').catch(() => 'ghost-api-keys')
       const environment = await getTableEnvironment('apiKeys').catch(() => 'commercial')
       logger.info(`API keys table ${tableName} does not exist yet in ${environment} environment`)

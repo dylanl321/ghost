@@ -213,7 +213,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Owners
     // Handle other errors
     throw createError({
       statusCode: 500,
-      statusMessage: error.message || 'Failed to fetch account owners'
+      statusMessage: (error instanceof Error ? error.message : String(error)) || 'Failed to fetch account owners'
     })
   }
 })

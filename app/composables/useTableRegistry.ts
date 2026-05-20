@@ -574,7 +574,7 @@ const budgetHealthByDepartment: TableDefinition = {
     analysisSource.budgetAnalysis.byAccount.forEach((acc: any) => {
       // Look up account metadata for Department
       const metadata = accountLookup.get(acc.accountId)
-      const dept = metadata?.departmentNumber || metadata?.department || 'Unknown'
+      const dept = metadata?.pepDepartment || metadata?.departmentNumber || metadata?.department || 'Unknown'
 
       if (!deptGroups.has(dept)) {
         deptGroups.set(dept, {

@@ -203,7 +203,7 @@ export async function exportToCSV(
       success: false,
       format: 'csv',
       filename: '',
-      error: error instanceof Error ? error.message : 'Unknown error during CSV export'
+      error: error instanceof Error ? (error instanceof Error ? error.message : String(error)) : 'Unknown error during CSV export'
     }
   }
 }

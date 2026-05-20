@@ -315,16 +315,16 @@ export default defineEventHandler(handleAsync(async (event) => {
     logger.error(`[CloudWatch Logs] Error searching logs:`, error)
 
     // Handle specific AWS errors
-    if (error.name === 'ResourceNotFoundException') {
+    if ((error instanceof Error ? error.name : "Error") === 'ResourceNotFoundException') {
       return errors.notFound(event, `Log group "${logGroup}" not found in account ${accountId}`)
     }
 
-    if (error.name === 'AccessDeniedException') {
+    if ((error instanceof Error ? error.name : "Error") === 'AccessDeniedException') {
       return errors.forbidden(event, `Access denied to log group "${logGroup}" in account ${accountId}`)
     }
 
-    if (error.name === 'InvalidParameterException') {
-      return errors.badRequest(event, `Invalid filter pattern: ${error.message}`)
+    if ((error instanceof Error ? error.name : "Error") === 'InvalidParameterException') {
+      return errors.badRequest(event, `Invalid filter pattern: ${(error instanceof Error ? error.message : String(error))}`)
     }
 
     return errors.awsError(event, error)
