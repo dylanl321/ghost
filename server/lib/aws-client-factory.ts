@@ -402,6 +402,13 @@ export async function getClient<T = any>(
     clientConfig.useFipsEndpoint = true
   }
 
+  // DynamoDB: use adaptive retry strategy to handle ProvisionedThroughputExceededException
+  // and ThrottlingException at the SDK level before application-level fallback kicks in.
+  if (service === 'dynamodb') {
+    clientConfig.maxAttempts = 10
+    clientConfig.retryMode = 'adaptive'
+  }
+
   const client = new ClientClass(clientConfig)
   
   // Cache the client with expiration tracking
