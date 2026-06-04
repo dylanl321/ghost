@@ -88,7 +88,8 @@ export default defineEventHandler(handleAsync(async (event) => {
       ouTreeCacheKey,
       async () => {
         logger.info(`Cache miss: Fetching organizational unit tree for ${environment} environment...`)
-        return await getOrganizationalUnitTree(environment)
+        const result = await getOrganizationalUnitTree(environment)
+        return result.tree
       },
       {
         ttl: 3600, // 1 hour - OU structure changes infrequently

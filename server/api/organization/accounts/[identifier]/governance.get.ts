@@ -262,7 +262,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       }
       
       // Get full OU hierarchy to trace inheritance path
-      const orgTree = await getOrganizationalUnitTree(environment)
+      const { tree: orgTree } = await getOrganizationalUnitTree(environment)
       
       // ================================
       // BUILD OU HIERARCHY PATH
