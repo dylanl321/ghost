@@ -83,8 +83,16 @@ const CONFIG_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
  */
 async function loadFromSecretsManager(): Promise<DynamoDBConfig | null> {
   try {
-    const secretName = `ghost-dynamodb-config-${process.env.NODE_ENV || 'dev'}`
+    // Check for direct config via environment variable first (skips Secrets Manager API call)
+    if (process.env.DYNAMODB_CONFIG) {
+      logger.info('Loading DynamoDB configuration from DYNAMODB_CONFIG env var')
+      return JSON.parse(process.env.DYNAMODB_CONFIG) as DynamoDBConfig
+    }
+
+    const secretName = process.env.DYNAMODB_CONFIG_SECRET_NAME || `ghost-dynamodb-config-${process.env.NODE_ENV || 'dev'}`
     const region = process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1'
+
+    logger.debug('Fetching DynamoDB config from Secrets Manager:', secretName)
 
     const client = new SecretsManagerClient({
       region,
