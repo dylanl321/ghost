@@ -125,21 +125,77 @@ export async function getAllAccountsFromOrganizations(
  * - Primary key: requestID
  * - Contains both commercial and govcloud account IDs
  */
+
+// NOTE: Consider switching externalAccounts DynamoDB table to on-demand billing to
+// eliminate ProvisionedThroughputExceededException / ThrottlingException at scale.
+
+/**
+ * Module-level stale cache for DynamoDB accounts.
+ * Populated on each successful read; returned when all retries are exhausted.
+ */
+let _staleAccountsCache: any[] | null = null
+
+/**
+ * Sleep helper for exponential-backoff retries.
+ */
+function _sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 export async function getAllAccountMetadataFromDynamoDB(): Promise<any[]> {
   if (!hasCredentials('govcloud')) {
     logger.warn('No credentials available for govcloud environment, skipping DynamoDB query')
     return []
   }
-  
-  try {
-    const tableName = await getAccountsTableName()
-    const environment = await getTableEnvironment('externalAccounts')
-    const result = await scanItems(tableName, undefined, undefined, undefined, environment)
-    return result.items
-  } catch (error) {
-    logger.error('Failed to get accounts from DynamoDB:', error)
-    return []
+
+  const MAX_ATTEMPTS = 5
+  let lastThrottleError: Error | null = null
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    try {
+      const tableName = await getAccountsTableName()
+      const environment = await getTableEnvironment('externalAccounts')
+      const result = await scanItems(tableName, undefined, undefined, undefined, environment)
+      // Successful read — refresh stale cache and return
+      _staleAccountsCache = result.items
+      return result.items
+    } catch (error: any) {
+      const isThrottled =
+        error?.name === 'ProvisionedThroughputExceededException' ||
+        error?.name === 'ThrottlingException'
+
+      if (isThrottled) {
+        lastThrottleError = error
+        const backoffMs = Math.pow(2, attempt) * 200
+        logger.warn(
+          `DynamoDB accounts scan throttled (${error.name}), attempt ${attempt + 1}/${MAX_ATTEMPTS}. ` +
+          `Retrying in ${backoffMs}ms...`
+        )
+        await _sleep(backoffMs)
+        continue
+      }
+
+      // Non-throttle error — fall through to original behaviour
+      logger.error('Failed to get accounts from DynamoDB:', error)
+      return []
+    }
   }
+
+  // All retry attempts exhausted due to throttling
+  if (_staleAccountsCache !== null) {
+    logger.error(
+      `DynamoDB accounts scan failed after ${MAX_ATTEMPTS} attempts (${lastThrottleError?.name}). ` +
+      `Serving stale cached accounts (${_staleAccountsCache.length} entries).`
+    )
+    return _staleAccountsCache
+  }
+
+  // No stale cache available — hard fail so callers know data is unavailable
+  logger.error(
+    `DynamoDB accounts scan failed after ${MAX_ATTEMPTS} attempts (${lastThrottleError?.name}) ` +
+    `and no stale cache is available.`
+  )
+  throw lastThrottleError!
 }
 
 /**

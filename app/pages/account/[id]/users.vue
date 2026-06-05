@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AccountUsers from '~/components/accounts/AccountUsers.vue'
 import type { GraphUser } from '~/composables/useGroupMembers'
+import type { DataExportConfig, ColumnConfig } from '#shared/types/export'
 
 const logger = createLogger('IDC Sessions')
 
@@ -16,6 +17,8 @@ const groupMembers = useGroupMembers()
 const { user } = useOidcAuth()
 const enclaveStore = useEnclaveStore()
 const idcSessions = useIDCSessions()
+const { exportData, isExporting } = useDataExport()
+const toast = useToast()
 
 // Users state
 const users = ref<GraphUser[]>([])
@@ -83,6 +86,119 @@ const fetchIDCSessions = async () => {
   }
 }
 
+// ---------------------------------------------------------------------------
+// User access list export
+// Flattens GraphUser[] into rows suitable for an SSP user-access list.
+// roles[] is joined with "; " so each user is a single row.
+// ---------------------------------------------------------------------------
+interface UserExportRow {
+  displayName: string
+  userPrincipalName: string
+  roles: string
+}
+
+const exportRows = computed<UserExportRow[]>(() =>
+  [...users.value]
+    .sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''))
+    .map(u => ({
+      displayName: u.displayName || '',
+      userPrincipalName: u.userPrincipalName || '',
+      roles: (u.roles || []).join('; ')
+    }))
+)
+
+const exportColumns: ColumnConfig[] = [
+  { key: 'displayName', header: 'Display Name', format: 'text' },
+  { key: 'userPrincipalName', header: 'User Principal Name', format: 'text' },
+  { key: 'roles', header: 'Roles', format: 'text' }
+]
+
+function buildExportConfig(): DataExportConfig {
+  const accountName = enhancedAccountInfo.value?.displayName || `Account ${accountId.value}`
+  return {
+    title: `${accountName} - User Access List`,
+    subtitle: `AWS Account ${accountId.value}`,
+    metadata: {
+      generatedBy: user.value?.claims?.name || user.value?.claims?.email || 'GHOST',
+      timestamp: new Date().toISOString(),
+      scope: 'single-account' as const,
+      selectedAccounts: [accountId.value],
+      selectedAccountsCount: 1
+    },
+    sheets: [
+      {
+        name: 'Users',
+        type: 'table' as const,
+        description: `${exportRows.value.length} users with access to ${accountName}`,
+        data: exportRows.value,
+        columns: exportColumns
+      }
+    ],
+    options: {
+      filename: `${accountName}-user-access-list`
+    }
+  }
+}
+
+async function onExport(format: 'csv' | 'xlsx') {
+  if (exportRows.value.length === 0) {
+    toast.add({ title: 'No users to export', color: 'yellow', timeout: 3000 })
+    return
+  }
+  await exportData(buildExportConfig(), format)
+}
+
+// Copy the user access list to the clipboard as tab-separated rows,
+// ready to paste directly into the SSP user-access table (Excel/Word).
+async function onCopyToClipboard() {
+  if (exportRows.value.length === 0) {
+    toast.add({ title: 'No users to copy', color: 'yellow', timeout: 3000 })
+    return
+  }
+  const header = ['Display Name', 'User Principal Name', 'Roles'].join('\t')
+  const lines = exportRows.value.map(r =>
+    [r.displayName, r.userPrincipalName, r.roles].join('\t')
+  )
+  const text = [header, ...lines].join('\n')
+  try {
+    await navigator.clipboard.writeText(text)
+    toast.add({
+      title: 'Copied to clipboard',
+      description: `${exportRows.value.length} users copied. Paste into the SSP user access list.`,
+      color: 'green',
+      timeout: 3000
+    })
+  } catch (err) {
+    logger.error('Clipboard copy failed:', err)
+    toast.add({
+      title: 'Copy failed',
+      description: 'Clipboard access was blocked. Use the CSV or Excel export instead.',
+      color: 'red',
+      timeout: 5000
+    })
+  }
+}
+
+const exportMenuItems = computed(() => [
+  [
+    {
+      label: 'Copy to clipboard',
+      icon: 'i-heroicons-clipboard-document',
+      click: onCopyToClipboard
+    },
+    {
+      label: 'Download CSV',
+      icon: 'i-heroicons-document-text',
+      click: () => onExport('csv')
+    },
+    {
+      label: 'Download Excel',
+      icon: 'i-heroicons-table-cells',
+      click: () => onExport('xlsx')
+    }
+  ]
+])
+
 // Initialize data
 onMounted(async () => {
   await enclaveStore.initialize()
@@ -144,6 +260,29 @@ onMounted(async () => {
           
           <!-- Right Column: Navigation Actions -->
           <div class="flex items-center justify-end gap-3">
+            <UDropdown
+              :items="exportMenuItems"
+              :popper="{ placement: 'bottom-end' }"
+            >
+              <UButton
+                icon="i-heroicons-arrow-down-tray"
+                color="primary"
+                variant="solid"
+                size="sm"
+                :loading="isExporting"
+                :disabled="isExporting || usersLoading || users.length === 0"
+              >
+                Export Users
+              </UButton>
+
+              <template #item="{ item }">
+                <div class="flex items-center gap-2 w-full">
+                  <UIcon :name="item.icon" class="w-4 h-4" />
+                  <span class="flex-1 text-left">{{ item.label }}</span>
+                </div>
+              </template>
+            </UDropdown>
+
             <UButton 
               :to="`/account/${accountId}`"
               icon="i-heroicons-arrow-left" 

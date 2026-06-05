@@ -194,6 +194,14 @@ const popularArticles = [
     link: '/support/docs#org-chart-guide'
   },
   {
+    id: 'account-users-export-guide',
+    title: 'Exporting an Account User List',
+    description: 'Export users and roles for your SSP access list',
+    icon: 'i-heroicons-arrow-down-tray',
+    color: 'text-teal-600 dark:text-teal-400',
+    link: '/support/docs#account-users-export-guide'
+  },
+  {
     id: 'swagger-ui-guide',
     title: 'Swagger UI for API Testing',
     description: 'Interactive API testing and exploration',
