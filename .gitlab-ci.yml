@@ -180,3 +180,28 @@ Refresh Service:
     - aws sts get-caller-identity
     # - aws ecs update-service --cluster $ECR_REPO --service $ECR_REPO-service --force-new-deployment
     - aws ecs update-service --cluster $APP_NAME --service $APP_NAME-service --force-new-deployment
+
+# TEMP diagnostic job - reads prod ECS logs. Remove after use.
+prod_logs_diag:
+  stage: test
+  extends: .assume_role
+  tags:
+    - govcloud-production
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "diag/prod-ecs-logs"
+      when: manual
+  script:
+    - aws sts get-caller-identity --region us-gov-west-1
+    - |
+      echo "=== latest log streams for /ecs/ghost-dashboard ==="
+      aws logs describe-log-streams --log-group-name /ecs/ghost-dashboard \
+        --region us-gov-west-1 --order-by LastEventTime --descending --max-items 3 \
+        --query 'logStreams[*].logStreamName' --output text
+    - |
+      echo "=== last 30 min of ERROR/500/DynamoDB events ==="
+      START=$(( ($(date +%s) - 1800) * 1000 ))
+      aws logs filter-log-events --log-group-name /ecs/ghost-dashboard \
+        --region us-gov-west-1 --start-time $START \
+        --filter-pattern '?Error ?error ?Exception ?ValidationException ?ResourceNotFound ?AccessDenied ?undefined ?500' \
+        --max-items 60 \
+        --query 'events[*].message' --output text
