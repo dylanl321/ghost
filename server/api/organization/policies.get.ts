@@ -134,7 +134,7 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   try {
     // Get the organizational tree to find parent hierarchy
-    const orgTree = await getOrganizationalUnitTree(environment)
+    const { tree: orgTree } = await getOrganizationalUnitTree(environment)
     if (!orgTree) {
       return errors.serverError(event, 'Failed to fetch organizational tree')
     }
