@@ -285,12 +285,6 @@ async function fetchRegionMetrics(
         })
       }
 
-      const command = new GetMetricDataCommand({
-        MetricDataQueries: queries,
-        StartTime: startTime,
-        EndTime: endTime
-      })
-
       // Retry with exponential backoff for throttling
       // Paginate through all results (GetMetricData may return partial results with NextToken)
       let allMetricResults: any[] = []
@@ -298,9 +292,12 @@ async function fetchRegionMetrics(
       const maxRetries = 3
 
       do {
+        // Always include required fields on every page; only add NextToken when present
         const paginatedCommand = new GetMetricDataCommand({
-          ...(nextToken ? {} : { MetricDataQueries: queries, StartTime: startTime, EndTime: endTime }),
-          NextToken: nextToken
+          MetricDataQueries: queries,
+          StartTime: startTime,
+          EndTime: endTime,
+          ...(nextToken ? { NextToken: nextToken } : {})
         })
 
         let response
@@ -474,6 +471,8 @@ async function fetchRegionMetrics(
                 { Id: `diskwr_${safeId}`, MetricStat: { Metric: { Namespace: 'AWS/EC2', MetricName: 'DiskWriteOps', Dimensions: [{ Name: 'InstanceId', Value: instanceId }] }, Period: 86400, Stat: 'Sum' }, ReturnData: true }
               )
             }
+            // Guard: skip empty sub-batches to avoid sending null MetricDataQueries
+            if (subQueries.length === 0) continue
             const subResponse = await client.send(new GetMetricDataCommand({
               MetricDataQueries: subQueries,
               StartTime: startTime,

@@ -234,7 +234,7 @@ async function querySecurityLakeForEvents(
         class_name,
         activity_name,
         severity,
-        status_code,
+        status,
         api.service.name as service_name,
         actor.user.name as user_name,
         actor.user.type as user_type,
