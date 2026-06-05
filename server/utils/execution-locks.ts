@@ -23,6 +23,13 @@ export interface ExecutionLock {
 }
 
 /**
+ * Sleep for a given number of milliseconds
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/**
  * Generate a unique container ID for this instance
  */
 function getContainerId(): string {
@@ -41,6 +48,10 @@ export function createLockId(reportId: string, scheduledTime: string): string {
 /**
  * Try to claim an execution lock
  * Returns true if lock was successfully claimed, false if another container already has it
+ *
+ * Includes retry logic (2 attempts with backoff) to absorb transient DynamoDB
+ * conditional-write contention or clock skew. ConditionalCheckFailedException
+ * (meaning another container definitely has the lock) is never retried.
  */
 export async function claimExecutionLock(
   reportId: string,
@@ -52,7 +63,10 @@ export async function claimExecutionLock(
     const accountId = await getTableAccountId('reportExecutionLocks')
     const lockId = createLockId(reportId, scheduledTime)
     const now = new Date().toISOString()
-    const expiresAt = Math.floor(Date.now() / 1000) + 3600 // 1 hour from now
+
+    // TTL set to 1 hour — well above the 15-minute budget-alert-notifier job window
+    // (and the ~1-hour scheduled-reports window), preventing self-eviction during slow runs.
+    const expiresAt = Math.floor(Date.now() / 1000) + 3600
 
     const lock: ExecutionLock = {
       lockId,
@@ -63,48 +77,69 @@ export async function claimExecutionLock(
       expiresAt
     }
 
-    // Try to create the lock with a conditional write
-    // This will only succeed if no lock exists for this lockId
-    try {
-      const client = await getDynamoDBClient(environment, undefined, accountId)
+    // Retry delays for transient failures (ms). ConditionalCheckFailed is never retried.
+    const retryDelays = [100, 300]
 
-      const command = new PutItemCommand({
-        TableName: tableName,
-        Item: marshall(lock, { removeUndefinedValues: true }),
-        ConditionExpression: 'attribute_not_exists(lockId)'
-      })
+    for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
+      try {
+        // Try to create the lock with a conditional write
+        // This will only succeed if no lock exists for this lockId
+        const client = await getDynamoDBClient(environment, undefined, accountId)
 
-      await client.send(command)
+        const command = new PutItemCommand({
+          TableName: tableName,
+          Item: marshall(lock, { removeUndefinedValues: true }),
+          ConditionExpression: 'attribute_not_exists(lockId)'
+        })
 
-      // Additional check: verify we actually own the lock
-      // (in case of race condition with TTL expiry)
-      const verification = await getItem(
-        tableName,
-        { lockId },
-        environment,
-        accountId
-      )
+        await client.send(command)
 
-      if (verification && verification.claimedBy === lock.claimedBy) {
-        logger.info(`✓ Lock claimed by ${lock.claimedBy}: ${lockId}`)
-        return true
-      } else {
-        logger.error(`✗ Lock verification failed for ${lockId}`)
+        // Additional check: verify we actually own the lock
+        // (in case of race condition with TTL expiry)
+        const verification = await getItem(
+          tableName,
+          { lockId },
+          environment,
+          accountId
+        )
+
+        if (verification && verification.claimedBy === lock.claimedBy) {
+          logger.info(`✓ Lock claimed by ${lock.claimedBy}: ${lockId}`)
+          return true
+        } else {
+          // Lock verification failed — another instance holds the lock or TTL race.
+          // This is a recoverable skip condition, not a fatal event.
+          if (attempt < retryDelays.length) {
+            logger.warn(`✗ Lock verification failed for ${lockId} (attempt ${attempt + 1}/${retryDelays.length + 1}), retrying after ${retryDelays[attempt]}ms...`)
+            await sleep(retryDelays[attempt])
+            continue
+          }
+          logger.warn(`✗ Lock verification failed for ${lockId} — skipping this tick, lock held elsewhere`)
+          return false
+        }
+      } catch (error: any) {
+        // ConditionalCheckFailedException means another container definitely has the lock — don't retry
+        if (error.name === 'ConditionalCheckFailedException' ||
+            error.message?.includes('ConditionalCheckFailed')) {
+          logger.info(`✗ Lock already claimed by another container: ${lockId}`)
+          return false
+        }
+
+        // For other transient errors, retry if attempts remain
+        if (attempt < retryDelays.length) {
+          logger.warn(`Error claiming lock ${lockId} (attempt ${attempt + 1}/${retryDelays.length + 1}), retrying after ${retryDelays[attempt]}ms:`, error)
+          await sleep(retryDelays[attempt])
+          continue
+        }
+
+        // All retries exhausted — log at warn (not error/fatal), this is a skip condition
+        logger.warn(`Error claiming lock ${lockId} after ${retryDelays.length + 1} attempts — skipping this tick:`, error)
         return false
       }
-    } catch (error: any) {
-      // Check if it's a conditional check failure
-      // This means another container already claimed the lock
-      if (error.name === 'ConditionalCheckFailedException' ||
-          error.message?.includes('ConditionalCheckFailed')) {
-        logger.info(`✗ Lock already claimed by another container: ${lockId}`)
-        return false
-      }
-
-      // For other errors, we can't safely claim the lock
-      logger.error(`Error claiming lock ${lockId}:`, error)
-      return false
     }
+
+    // Should not reach here, but TypeScript needs a return
+    return false
   } catch (error: any) {
     logger.error('Error in claimExecutionLock:', error)
     return false
