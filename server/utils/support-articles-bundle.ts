@@ -1,5 +1,5 @@
 // Auto-generated file - DO NOT EDIT
-// Generated at: 2026-05-06T14:08:30.059Z
+// Generated at: 2026-06-05T14:05:16.933Z
 // Run 'npm run bundle:support' to regenerate
 
 export interface SupportArticle {
@@ -117,6 +117,13 @@ export const supportArticlesBundle: SupportCategory[] = [
     "id": "features",
     "title": "Features",
     "articles": [
+      {
+        "id": "account-users-export-guide",
+        "title": "Exporting an Account's User Access List",
+        "content": "# Exporting an Account's User Access List\n\n## Overview\n\nThe **Account Users** page (`/account/{accountId}/users`) lists every user with\naccess to an AWS account along with their assigned roles. You can export this\nlist to copy it into a System Security Plan (SSP) user-access table or any other\ndocument.\n\nThis is the fastest way to grab the current authoritative list of users for an\naccount when you need to refresh the user-access section of an SSP.\n\n## Accessing the Export\n\n1. Open the account you want (e.g. from the **Account Explorer** or a favorite).\n2. Click **Users** (or **View All** on the account's Users card).\n3. In the top-right of the account header you'll see the **Export Users** button.\n\nThe button is disabled while users are still loading and when the account has no\nusers.\n\n## Export Options\n\nClick **Export Users** to open the menu. Three options are available:\n\n### Copy to clipboard\nCopies the full user list as **tab-separated rows** (Display Name, User Principal\nName, Roles). This is the recommended option for an SSP:\n\n- Paste directly into an Excel/Word table — each tab becomes a new column and each\n  user becomes a new row.\n- A user with multiple roles has those roles joined with `; ` in a single cell, so\n  every user stays on one row.\n\n### Download CSV\nDownloads a `.csv` file named\n`{account-name}-user-access-list-{timestamp}.csv`. Open it in Excel or import it\ninto your SSP workbook.\n\n### Download Excel\nDownloads a styled `.xlsx` workbook with the same three columns, a bold frozen\nheader row, and auto-sized columns.\n\n## What's Included\n\n| Column | Description |\n| --- | --- |\n| Display Name | The user's full display name |\n| User Principal Name | The user's UPN / sign-in name |\n| Roles | All roles the user holds in this account, joined with `; ` |\n\nUsers are sorted alphabetically by display name. The exported list reflects the\nusers currently loaded on the page — refresh the page first if you want the very\nlatest membership.\n\n## Tips for the SSP User Access List\n\n- Use **Copy to clipboard** when pasting into an existing SSP table — it preserves\n  the column layout without an intermediate file.\n- Use **Download Excel** when you want a standalone, formatted artifact to attach\n  or archive.\n- The export only contains users with access to this single account. To compile a\n  multi-account list, export each account and combine them.",
+        "lastUpdated": "2026-06-05T00:00:00.000Z",
+        "icon": "i-heroicons-arrow-down-tray"
+      },
       {
         "id": "org-chart-guide",
         "title": "Using the Organization Chart",
