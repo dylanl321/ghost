@@ -46,6 +46,67 @@ const DEFAULT_TIMEOUT_SECONDS = 60
 const POLL_INTERVAL_MS = 2000
 const ATHENA_RESULT_REUSE_MAX_AGE_MINUTES = 60 // Reuse Athena query results up to 60 minutes old
 
+// ---------------------------------------------------------------------------
+// Athena concurrency limiter
+// Caps total in-flight StartQueryExecution calls across all callers in this
+// module so we stay below the account-level concurrent-query quota (~20-25).
+// Configurable via ATHENA_MAX_CONCURRENT_QUERIES env var (default: 6).
+// ---------------------------------------------------------------------------
+const ATHENA_MAX_CONCURRENT = parseInt(process.env.ATHENA_MAX_CONCURRENT_QUERIES || '6', 10)
+
+class AthenaQuerySemaphore {
+  private running = 0
+  private queue: Array<() => void> = []
+
+  async acquire(): Promise<void> {
+    if (this.running < ATHENA_MAX_CONCURRENT) {
+      this.running++
+      return
+    }
+    await new Promise<void>(resolve => this.queue.push(resolve))
+    this.running++
+  }
+
+  release(): void {
+    this.running--
+    const next = this.queue.shift()
+    if (next) next()
+  }
+
+  async run<T>(fn: () => Promise<T>): Promise<T> {
+    await this.acquire()
+    try {
+      return await fn()
+    } finally {
+      this.release()
+    }
+  }
+}
+
+/** Shared module-level semaphore - one instance for the entire process. */
+const athenaSemaphore = new AthenaQuerySemaphore()
+
+// ---------------------------------------------------------------------------
+// Retry helper for throttled StartQueryExecution calls
+// ---------------------------------------------------------------------------
+const START_QUERY_MAX_ATTEMPTS = 5
+const START_QUERY_BASE_DELAY_MS = 500  // 500 ms base; doubles each attempt
+const START_QUERY_MAX_DELAY_MS = 15000 // cap at 15 s
+
+/** Returns true for error names that Athena treats as retryable throttles. */
+function isAthenaThrottleError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false
+  const e = err as Record<string, unknown>
+  const name = (e.name as string) || ''
+  const meta = e.$metadata as { httpStatusCode?: number } | undefined
+  return (
+    name === 'TooManyRequestsException' ||
+    name === 'ThrottlingException' ||
+    name === 'RequestThrottledException' ||
+    (typeof meta?.httpStatusCode === 'number' && meta.httpStatusCode === 429)
+  )
+}
+
 /**
  * Paginate an array of results (Athena has no OFFSET support)
  */
@@ -84,6 +145,9 @@ async function executeAthenaQuery(
   const config = getPipelineEnvironmentConfig(environment)
   const startTime = Date.now()
 
+  // Gate actual query execution through the shared semaphore.
+  // Cache hits above bypass this entirely - only real Athena queries are counted.
+  return athenaSemaphore.run(async () => {
   try {
     // Get Athena client
     const athenaClient = await getAthenaClient(environment, config.region, config.accountId)
@@ -91,29 +155,50 @@ async function executeAthenaQuery(
     logger.info(`[Pipeline Queries] Executing query '${queryName}' in ${environment}`)
     logger.debug(`[Pipeline Queries] SQL: ${sql}`)
 
-    // Start query execution
-    const { StartQueryExecutionCommand, GetQueryExecutionCommand, GetQueryResultsCommand } = await import('@aws-sdk/client-athena')
+    // Start query execution with exponential-backoff retry for throttle errors
+    const { GetQueryExecutionCommand, GetQueryResultsCommand } = await import('@aws-sdk/client-athena')
 
-    const startResponse = await athenaClient.send(new StartQueryExecutionCommand({
-      QueryString: sql,
-      QueryExecutionContext: {
-        Database: config.database
-      },
-      WorkGroup: process.env.ATHENA_PIPELINE_WORKGROUP || 'primary',
-      ResultConfiguration: {
-        OutputLocation: `s3://${config.athenaResultsBucket}/query-results/`
-      },
-      // Enable query result reuse to speed up repeated queries
-      // Athena will reuse results from identical queries within the time window
-      ResultReuseConfiguration: {
-        ResultReuseByAgeConfiguration: {
-          Enabled: true,
-          MaxAgeInMinutes: ATHENA_RESULT_REUSE_MAX_AGE_MINUTES
+    // Retry loop for TooManyRequestsException / ThrottlingException
+    let startAttempt = 0
+    let startResponse: import('@aws-sdk/client-athena').StartQueryExecutionCommandOutput | undefined
+    while (true) {
+      try {
+        const { StartQueryExecutionCommand } = await import('@aws-sdk/client-athena')
+        startResponse = await athenaClient.send(new StartQueryExecutionCommand({
+          QueryString: sql,
+          QueryExecutionContext: {
+            Database: config.database
+          },
+          WorkGroup: process.env.ATHENA_PIPELINE_WORKGROUP || 'primary',
+          ResultConfiguration: {
+            OutputLocation: `s3://${config.athenaResultsBucket}/query-results/`
+          },
+          // Enable query result reuse to speed up repeated queries
+          // Athena will reuse results from identical queries within the time window
+          ResultReuseConfiguration: {
+            ResultReuseByAgeConfiguration: {
+              Enabled: true,
+              MaxAgeInMinutes: ATHENA_RESULT_REUSE_MAX_AGE_MINUTES
+            }
+          }
+        }))
+        break // success
+      } catch (startErr) {
+        startAttempt++
+        if (!isAthenaThrottleError(startErr) || startAttempt >= START_QUERY_MAX_ATTEMPTS) {
+          throw startErr
         }
+        const base = Math.min(START_QUERY_BASE_DELAY_MS * Math.pow(2, startAttempt - 1), START_QUERY_MAX_DELAY_MS)
+        const delay = Math.random() * base
+        logger.warn(
+          `[Pipeline Queries] StartQueryExecution throttled for '${queryName}' ` +
+          `(attempt ${startAttempt}/${START_QUERY_MAX_ATTEMPTS}), retrying in ${Math.round(delay)}ms`
+        )
+        await new Promise(resolve => setTimeout(resolve, delay))
       }
-    }))
+    }
 
-    if (!startResponse.QueryExecutionId) {
+    if (!startResponse?.QueryExecutionId) {
       throw new Error('Failed to start Athena query')
     }
 
@@ -203,6 +288,7 @@ async function executeAthenaQuery(
     logger.error(`[Pipeline Queries] Query execution failed:`, error)
     throw error
   }
+  }) // end athenaSemaphore.run
 }
 
 /**
