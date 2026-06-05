@@ -290,7 +290,18 @@ function loadFromEnvironment(): DynamoDBConfig {
 
 /**
  * Get DynamoDB configuration with caching
- * Tries Secrets Manager first, then falls back to environment variables
+ *
+ * Resolution order:
+ *   1. Secrets Manager / DYNAMODB_CONFIG env var (if present)
+ *   2. Environment-variable defaults (loadFromEnvironment)
+ *
+ * The env-variable config is the complete, authoritative superset of every
+ * table key. A secret-sourced config may be stale and omit newer tables
+ * (e.g. userNotifications), which previously caused
+ * `Cannot read properties of undefined (reading 'tableName')` at call sites.
+ * To prevent that, the secret config is MERGED OVER the env defaults: any key
+ * the secret omits falls back to its built-in default, while keys the secret
+ * provides still win. This makes a partial/stale secret safe.
  */
 export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
   // Return cached config if still valid
@@ -298,17 +309,33 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
     return cachedConfig
   }
 
-  // Try loading from Secrets Manager first
+  // Env-variable config is the complete set of defaults for every table.
+  const envConfig = loadFromEnvironment()
+
+  // Try loading from Secrets Manager first; merge over defaults so a stale or
+  // partial secret can never drop a table key.
   const secretsConfig = await loadFromSecretsManager()
 
   if (secretsConfig) {
-    cachedConfig = secretsConfig
+    const mergedConfig = { ...envConfig, ...secretsConfig }
+
+    // Warn if the secret was missing keys the defaults supplied (signals a
+    // stale secret that should be refreshed), so the gap is observable.
+    const missingKeys = (Object.keys(envConfig) as (keyof DynamoDBConfig)[])
+      .filter(k => !(k in secretsConfig))
+    if (missingKeys.length > 0) {
+      logger.warn(
+        `DynamoDB config from secret was missing ${missingKeys.length} table key(s); ` +
+        `using env defaults for: ${missingKeys.join(', ')}`
+      )
+    }
+
+    cachedConfig = mergedConfig
     configLoadedAt = Date.now()
-    return secretsConfig
+    return mergedConfig
   }
 
-  // Fall back to environment variables
-  const envConfig = loadFromEnvironment()
+  // No secret available — use env defaults directly.
   cachedConfig = envConfig
   configLoadedAt = Date.now()
 
