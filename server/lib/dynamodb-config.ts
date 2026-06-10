@@ -78,6 +78,9 @@ let cachedConfig: DynamoDBConfig | null = null
 let configLoadedAt: number | null = null
 const CONFIG_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
+// Fingerprint of the last logged missing-key set; prevents log spam on every TTL refresh
+let lastLoggedMissingKeyFingerprint: string | null = null
+
 /**
  * Get DynamoDB configuration from Secrets Manager
  */
@@ -324,10 +327,15 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
     const missingKeys = (Object.keys(envConfig) as (keyof DynamoDBConfig)[])
       .filter(k => !(k in secretsConfig))
     if (missingKeys.length > 0) {
-      logger.warn(
-        `DynamoDB config from secret was missing ${missingKeys.length} table key(s); ` +
-        `using env defaults for: ${missingKeys.join(', ')}`
-      )
+      const fingerprint = [...missingKeys].sort().join(',')
+      if (fingerprint !== lastLoggedMissingKeyFingerprint) {
+        lastLoggedMissingKeyFingerprint = fingerprint
+        logger.warn(
+          'DynamoDB config from secret was missing ' + missingKeys.length + ' table key(s): ' +
+          '[' + missingKeys.join(', ') + ']. ' +
+          'Using env defaults for missing keys. Remediation: regenerate the Secrets Manager secret (ghost-dynamodb-config-*) to include all current table keys.'
+        )
+      }
     }
 
     cachedConfig = mergedConfig

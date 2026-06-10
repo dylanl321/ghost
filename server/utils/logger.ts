@@ -46,7 +46,7 @@ function safeSerialize(value: unknown): unknown {
 // JSON reporter for production — writes one JSON line per log entry to stdout
 const jsonReporter = {
   log(logObj: LogObject) {
-    const level = LEVEL_NAMES[logObj.level] ?? 'info'
+    const level = logObj.type ?? LEVEL_NAMES[logObj.level] ?? 'info'
     const message = logObj.args
       .map(arg => (typeof arg === 'string' ? arg : JSON.stringify(safeSerialize(arg))))
       .join(' ')
