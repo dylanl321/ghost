@@ -180,3 +180,104 @@ Refresh Service:
     - aws sts get-caller-identity
     # - aws ecs update-service --cluster $ECR_REPO --service $ECR_REPO-service --force-new-deployment
     - aws ecs update-service --cluster $APP_NAME --service $APP_NAME-service --force-new-deployment
+
+# One-shot operational job: regenerate ghost-dynamodb-config-prod secret with all 24 table keys.
+# Run manually on ops/regenerate-dynamodb-secret branch only.
+# After the secret is updated and the ECS task restarts, delete this branch.
+update_dynamodb_secret:
+  stage: deploy
+  extends: .assume_role
+  needs: []
+  variables:
+    AWS_ACCOUNT_ID: "461760157232"
+    AWS_REGION: "us-gov-west-1"
+    SECRET_NAME: "ghost-dynamodb-config-prod"
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "ops/regenerate-dynamodb-secret"
+      when: manual
+  script:
+    - aws sts get-caller-identity
+    - |
+      CURRENT_SECRET=$(aws secretsmanager get-secret-value \
+        --secret-id "$SECRET_NAME" \
+        --region "$AWS_REGION" \
+        --query 'SecretString' \
+        --output text 2>&1)
+      echo "Current secret fetch status: $?"
+      echo "Current keys in secret: $(echo "$CURRENT_SECRET" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(list(d.keys()))' 2>/dev/null || echo 'parse failed')"
+    - |
+      # Build complete 24-key secret JSON, merging over whatever is currently in the secret
+      python3 << 'PYEOF'
+      import json, subprocess, os
+
+      govcloud_region = "us-gov-west-1"
+      commercial_region = "us-east-1"
+      deployment_account_id = "461760157232"
+      org_account_id = "374673712317"
+      commercial_account_id = "205950196477"
+
+      # Canonical full secret - all 24 keys with correct prod table names
+      full_secret = {
+          "scheduledReports":    {"tableName": "ghost-scheduled-reports-prod",        "environment": "govcloud",    "region": govcloud_region,   "accountId": deployment_account_id},
+          "emailTemplates":      {"tableName": "ghost-email-templates-prod",          "environment": "govcloud",    "region": govcloud_region,   "accountId": deployment_account_id},
+          "reportExecutions":    {"tableName": "ghost-report-executions-prod",        "environment": "govcloud",    "region": govcloud_region,   "accountId": deployment_account_id},
+          "reportExecutionLocks":{"tableName": "ghost-report-execution-locks-prod",   "environment": "govcloud",    "region": govcloud_region,   "accountId": deployment_account_id},
+          "sharedReports":       {"tableName": "ghost-shared-reports-prod",           "environment": "govcloud",    "region": govcloud_region,   "accountId": deployment_account_id},
+          "apiKeys":             {"tableName": "ghost-api-keys-prod",                 "environment": "govcloud",    "region": govcloud_region,   "accountId": deployment_account_id},
+          "apiKeysUsage":        {"tableName": "ghost-api-keys-usage-prod",           "environment": "govcloud",    "region": govcloud_region,   "accountId": deployment_account_id},
+          "shortlinks":          {"tableName": "ghost-dashboard-shortlinks-prod",     "environment": "govcloud",    "region": govcloud_region,   "accountId": deployment_account_id},
+          "externalAccounts":    {"tableName": "gdms_aws_accounts-master",            "environment": "govcloud",    "region": govcloud_region,   "accountId": org_account_id,         "readOnly": True},
+          "userPreferences":     {"tableName": "ghost-user-preferences-prod",         "environment": "govcloud",    "region": govcloud_region,   "accountId": deployment_account_id},
+          "accountNotes":        {"tableName": "ghost-account-notes-prod",            "environment": "govcloud",    "region": govcloud_region,   "accountId": deployment_account_id},
+          "chatThreads":         {"tableName": "ghost-chat-threads-prod",             "environment": "govcloud",    "region": govcloud_region,   "accountId": deployment_account_id},
+          "siteConfig":          {"tableName": "ghost-site-config-prod",              "environment": "govcloud",    "region": govcloud_region,   "accountId": deployment_account_id},
+          "adminNotifications":  {"tableName": "ghost-admin-notifications-prod",      "environment": "govcloud",    "region": govcloud_region,   "accountId": deployment_account_id},
+          "streamingMetrics":    {"tableName": "ghost-streaming-metrics",             "environment": "govcloud",    "region": govcloud_region,   "accountId": deployment_account_id},
+          "asyncChatJobs":       {"tableName": "ghost-async-chat-jobs-prod",          "environment": "govcloud",    "region": govcloud_region,   "accountId": deployment_account_id},
+          "asyncMetrics":        {"tableName": "ghost-async-metrics-prod",            "environment": "govcloud",    "region": govcloud_region,   "accountId": deployment_account_id},
+          "budgetAlerts":        {"tableName": "budget-alert-system-alert-history-prod","environment": "commercial","region": commercial_region, "accountId": commercial_account_id,  "readOnly": True},
+          "budgetAlertConfig":   {"tableName": "budget-alert-system-config-prod",     "environment": "commercial",  "region": commercial_region, "accountId": commercial_account_id},
+          "costTagConfig":       {"tableName": "ghost-cost-tag-config-prod",          "environment": "govcloud",    "region": govcloud_region,   "accountId": deployment_account_id},
+          "userNotifications":   {"tableName": "ghost-user-notifications-prod",       "environment": "govcloud",    "region": govcloud_region,   "accountId": deployment_account_id},
+          "notificationBroadcasts":{"tableName":"ghost-notification-broadcasts-prod", "environment": "govcloud",    "region": govcloud_region,   "accountId": deployment_account_id},
+          "achievementProgress": {"tableName": "ghost-achievement-progress-prod",     "environment": "govcloud",    "region": govcloud_region,   "accountId": deployment_account_id},
+          "utilizationAnalysis": {"tableName": "ghost-utilization-analysis-prod",     "environment": "govcloud",    "region": govcloud_region,   "accountId": deployment_account_id},
+      }
+
+      # Attempt to read the current secret value and merge (preserve any custom overrides)
+      try:
+          result = subprocess.run(
+              ["aws", "secretsmanager", "get-secret-value",
+               "--secret-id", os.environ["SECRET_NAME"],
+               "--region", os.environ["AWS_REGION"],
+               "--query", "SecretString", "--output", "text"],
+              capture_output=True, text=True, check=True
+          )
+          current = json.loads(result.stdout.strip())
+          # Merge: full_secret wins for all keys (we are intentionally resetting)
+          merged = {**current, **full_secret}
+          print(f"Merged over existing secret. Old key count: {len(current)}, new key count: {len(merged)}")
+      except Exception as e:
+          print(f"Could not read existing secret (will write fresh): {e}")
+          merged = full_secret
+
+      secret_json = json.dumps(merged)
+      print(f"Writing secret with keys: {list(merged.keys())}")
+
+      write_result = subprocess.run(
+          ["aws", "secretsmanager", "put-secret-value",
+           "--secret-id", os.environ["SECRET_NAME"],
+           "--region", os.environ["AWS_REGION"],
+           "--secret-string", secret_json],
+          capture_output=True, text=True
+      )
+      if write_result.returncode != 0:
+          print("ERROR writing secret:", write_result.stderr)
+          exit(1)
+      else:
+          print("Secret updated successfully.")
+          print(write_result.stdout)
+      PYEOF
+    - echo "Secret update complete. Forcing ECS task restart to pick up new secret..."
+    - aws ecs update-service --cluster ghost-dashboard --service ghost-dashboard-service --force-new-deployment --region $AWS_REGION
+    - echo "ECS service restart triggered. Monitor CloudWatch /ecs/ghost-dashboard for absence of missing-keys warning."
