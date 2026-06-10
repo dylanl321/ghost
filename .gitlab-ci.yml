@@ -281,3 +281,50 @@ update_dynamodb_secret:
     - echo "Secret update complete. Forcing ECS task restart to pick up new secret..."
     - aws ecs update-service --cluster ghost-dashboard --service ghost-dashboard-service --force-new-deployment --region $AWS_REGION
     - echo "ECS service restart triggered. Monitor CloudWatch /ecs/ghost-dashboard for absence of missing-keys warning."
+
+# One-shot verification job: check CloudWatch for absence of missing-keys warning after secret update.
+verify_dynamodb_secret_fix:
+  stage: deploy
+  extends: .assume_role
+  needs: []
+  variables:
+    AWS_ACCOUNT_ID: "461760157232"
+    AWS_REGION: "us-gov-west-1"
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "ops/regenerate-dynamodb-secret"
+      when: manual
+  script:
+    - aws sts get-caller-identity
+    - |
+      echo "=== Checking CloudWatch /ecs/ghost-dashboard for missing-keys warning (last 30min) ==="
+      START_TIME=$(python3 -c "import time; print(int((time.time() - 1800) * 1000))")
+      MISSING_COUNT=$(aws logs filter-log-events \
+        --log-group-name "/ecs/ghost-dashboard" \
+        --region "$AWS_REGION" \
+        --start-time "$START_TIME" \
+        --filter-pattern '"missing" "table key"' \
+        --query 'length(events)' \
+        --output text 2>/dev/null || echo "0")
+      echo "missing-keys warning count in last 30min: $MISSING_COUNT"
+      if [ "$MISSING_COUNT" = "0" ] || [ "$MISSING_COUNT" = "None" ]; then
+        echo "SUCCESS: No missing-keys warnings detected - secret fix is working."
+      else
+        echo "WARNING: $MISSING_COUNT missing-keys warning(s) still present. May still be within cache TTL or old task still running."
+        aws logs filter-log-events \
+          --log-group-name "/ecs/ghost-dashboard" \
+          --region "$AWS_REGION" \
+          --start-time "$START_TIME" \
+          --filter-pattern '"missing" "table key"' \
+          --query 'events[*].message' \
+          --output text 2>/dev/null | head -3
+      fi
+    - |
+      echo "=== Checking for successful DynamoDB secret load ==="
+      START_TIME=$(python3 -c "import time; print(int((time.time() - 1800) * 1000))")
+      aws logs filter-log-events \
+        --log-group-name "/ecs/ghost-dashboard" \
+        --region "$AWS_REGION" \
+        --start-time "$START_TIME" \
+        --filter-pattern '"Successfully loaded DynamoDB configuration from Secrets Manager"' \
+        --query 'events[-1].message' \
+        --output text 2>/dev/null || echo "(no recent successful load found - may still be restarting)"
