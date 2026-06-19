@@ -51,6 +51,69 @@ export function getAggregatorName(environment: 'commercial' | 'govcloud'): strin
 const AGGREGATOR_EXISTS_CACHE = new Map<string, { exists: boolean; checkedAt: number }>()
 const AGGREGATOR_CHECK_TTL = 300_000 // 5 minutes
 
+// ---------------------------------------------------------------------------
+// Throttle-retry helper
+// ---------------------------------------------------------------------------
+
+const THROTTLE_ERROR_NAMES = new Set([
+  'ThrottlingException',
+  'RequestThrottledException',
+  'Throttling',
+])
+
+function isThrottleError(err: unknown): boolean {
+  if (err && typeof err === 'object') {
+    const e = err as Record<string, unknown>
+    if (typeof e.name === 'string' && THROTTLE_ERROR_NAMES.has(e.name)) return true
+    if (typeof e.message === 'string' && e.message.includes('Rate exceeded')) return true
+    if (typeof e.$metadata === 'object' && e.$metadata !== null) {
+      const meta = e.$metadata as Record<string, unknown>
+      if (meta.httpStatusCode === 429) return true
+    }
+  }
+  return false
+}
+
+/**
+ * Wrap an AWS SDK call with jittered-exponential-backoff retry for throttling.
+ * Non-throttle errors propagate immediately.
+ * After all attempts are exhausted, rethrows the throttle error with
+ * name === 'ThrottlingException' and isThrottled = true set so route handlers
+ * can map it to a 429/503 response.
+ */
+async function withThrottleRetry<T>(
+  fn: () => Promise<T>,
+  label: string,
+  maxAttempts = 4,
+  baseDelayMs = 200
+): Promise<T> {
+  let lastErr: unknown
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn()
+    } catch (err) {
+      if (isThrottleError(err) && attempt < maxAttempts) {
+        // Full-jitter exponential: delay in [0, base * 2^attempt]
+        const cap = baseDelayMs * Math.pow(2, attempt)
+        const delay = Math.floor(Math.random() * cap)
+        logger.warn(
+          `[Config] Throttled on ${label} (attempt ${attempt}/${maxAttempts}), ` +
+          `retrying in ${delay}ms`
+        )
+        await new Promise<void>(resolve => setTimeout(resolve, delay))
+        lastErr = err
+      } else {
+        throw err
+      }
+    }
+  }
+  // All retries exhausted — surface a distinguishable throttle error
+  const throttleErr = lastErr as Error & { isThrottled?: boolean }
+  throttleErr.name = 'ThrottlingException'
+  throttleErr.isThrottled = true
+  throw throttleErr
+}
+
 /**
  * Check if a Config aggregator exists and is accessible (cached for 5 min)
  */
@@ -241,7 +304,10 @@ export async function listAggregateResources(
         }
 
         const command = new ListAggregateDiscoveredResourcesCommand(params)
-        const response = await client.send(command)
+        const response = await withThrottleRetry(
+          () => client.send(command),
+          `ListAggregateDiscoveredResources(${resourceType})`
+        )
 
         if (response.ResourceIdentifiers) {
           resources.push(...response.ResourceIdentifiers)
@@ -292,7 +358,10 @@ export async function listAggregateResources(
     logger.info(`[Config] Query params: ${JSON.stringify(params, null, 2)}`)
 
     const command = new ListAggregateDiscoveredResourcesCommand(params)
-    const response = await client.send(command)
+    const response = await withThrottleRetry(
+      () => client.send(command),
+      `ListAggregateDiscoveredResources(${filter.resourceType})`
+    )
 
     if (response.ResourceIdentifiers) {
       resources.push(...response.ResourceIdentifiers)
@@ -414,7 +483,10 @@ export async function batchGetResourceConfigs(
           ResourceIdentifiers: chunk
         })
 
-        const response = await client.send(command)
+        const response = await withThrottleRetry(
+          () => client.send(command),
+          `BatchGetAggregateResourceConfig(chunk[${chunk.length}])`
+        )
 
         // Process successful results
         if (response.BaseConfigurationItems) {
