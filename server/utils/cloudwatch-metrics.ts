@@ -12,6 +12,7 @@ import {
 import { getCloudWatchClient } from '../lib/aws-client-factory'
 import { getCacheManager } from './cache-manager'
 import { logger } from './logger'
+import { acquireLimiter } from './cloudwatch-limiter'
 import type { AWSEnvironmentType } from '../types'
 
 const CACHE_TTL = 3600 // 1 hour
@@ -473,11 +474,11 @@ async function fetchRegionMetrics(
             }
             // Guard: skip empty sub-batches to avoid sending null MetricDataQueries
             if (subQueries.length === 0) continue
-            const subResponse = await client.send(new GetMetricDataCommand({
+            const subResponse = await acquireLimiter(() => client.send(new GetMetricDataCommand({
               MetricDataQueries: subQueries,
               StartTime: startTime,
               EndTime: endTime
-            }))
+            })))
             if (subResponse.MetricDataResults) {
               for (const instanceId of subBatch) {
                 const safeId = instanceId.replace(/-/g, '_')
@@ -553,17 +554,8 @@ async function fetchRegionMetrics(
         await processBatch(batches[batchIdx], batchIdx)
       }
     } else {
-      // Parallel mode: 5 concurrent batches with small stagger
-      const CONCURRENCY = 5
-      for (let i = 0; i < batches.length; i += CONCURRENCY) {
-        const concurrentBatches = batches.slice(i, i + CONCURRENCY)
-        await Promise.all(concurrentBatches.map(async (batch, localIdx) => {
-          if (localIdx > 0) {
-            await new Promise(resolve => setTimeout(resolve, localIdx * 100))
-          }
-          await processBatch(batch, i + localIdx)
-        }))
-      }
+      // Parallel mode: use global limiter for concurrency control
+      await Promise.all(batches.map((batch, idx) => acquireLimiter(() => processBatch(batch, idx))))
     }
   } catch (error: any) {
     logger.error(`[CloudWatch Metrics] Region ${region} setup error:`, error.message)
