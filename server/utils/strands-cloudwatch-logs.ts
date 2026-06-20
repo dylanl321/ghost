@@ -169,7 +169,7 @@ export async function getStrandsLogs(
               (error instanceof Error ? error.name : "Error") === "ExpiredTokenException" ||
               (error instanceof Error ? error.message : String(error))?.includes("security token included in the request is expired")
             ) {
-              logger.warn("Security token expired. Refreshing...");
+              logger.info("Security token expired. Refreshing...");
               await refreshStrandsCloudWatchClient();
               // Retry once after refresh
               const retryClient = await initStrandsCloudWatchClient();
@@ -278,7 +278,7 @@ export async function getStrandsLogStreams(
           (error instanceof Error ? error.name : "Error") === "ExpiredTokenException" ||
           (error instanceof Error ? error.message : String(error))?.includes("security token included in the request is expired")
         ) {
-          logger.warn("Security token expired. Refreshing...");
+          logger.info("Security token expired. Refreshing...");
           await refreshStrandsCloudWatchClient();
           // Retry once after refresh
           const retryClient = await initStrandsCloudWatchClient();
