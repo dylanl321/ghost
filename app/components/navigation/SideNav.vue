@@ -124,6 +124,41 @@
             </NuxtLink>
           </ClientOnly>
 
+          <!-- Financial Forecast - Finance & Admin only (permission: costs.budget_vs_actual) -->
+          <ClientOnly v-else-if="item.label === 'Financial Forecast'">
+            <NuxtLink
+              v-if="can('costs.budget_vs_actual')"
+              :to="item.to"
+              prefetch
+              class="flex items-center px-3 py-2 rounded-md text-sm text-slate-700 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors relative group overflow-hidden"
+              :class="{ 'text-slate-900 bg-slate-100 dark:text-white dark:bg-slate-800': isActive(item) }"
+            >
+              <UIcon :name="item.icon" class="flex-shrink-0 w-5 h-5" />
+              <span
+                class="font-medium ml-3 truncate transition-all duration-300"
+                :class="{
+                  'opacity-0 w-0':
+                    navigationStore.isCollapsed && !navigationStore.isHovered,
+                  'opacity-100 w-full':
+                    !navigationStore.isCollapsed || navigationStore.isHovered,
+                }"
+              >
+                {{ item.label }}
+              </span>
+
+              <!-- Tooltip for collapsed state -->
+              <div
+                v-if="navigationStore.isCollapsed && !navigationStore.isHovered"
+                class="absolute left-full ml-2 px-2 py-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-slate-200 dark:border-slate-600 shadow-lg"
+              >
+                {{ item.label }}
+                <div
+                  class="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-0 h-0 border-r-4 border-r-white dark:border-r-slate-800 border-t-2 border-b-2 border-t-transparent border-b-transparent"
+                ></div>
+              </div>
+            </NuxtLink>
+          </ClientOnly>
+
           <!-- Pipeline Analytics - Admin only -->
           <ClientOnly v-else-if="item.label === 'Pipeline Analytics'">
             <NuxtLink
@@ -302,7 +337,7 @@ const logger = createLogger('SideNav')
 
 const route = useRoute();
 const navigationStore = useNavigationStore();
-const { isAdmin } = useUserRoles();
+const { isAdmin, can } = useUserRoles();
 const siteConfigStore = useSiteConfigStore();
 
 // Check if Strands chat is enabled
@@ -491,6 +526,13 @@ const navigationItems = computed(() => {
       to: "/account/costs",
       icon: "i-heroicons-currency-dollar",
       collapseRule: "default-collapsed",
+    },
+    // Financial Forecast - Finance & Admin only (permission: costs.budget_vs_actual)
+    // Visibility controlled by ClientOnly + can() check in template
+    {
+      label: "Financial Forecast",
+      to: "/admin/costs/budget-vs-actual",
+      icon: "i-heroicons-scale",
     },
     {
       label: "Users & Access",
