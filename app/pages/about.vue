@@ -4,7 +4,7 @@
   >
     <!-- Simplified Background - Static for performance -->
     <div class="fixed inset-0 overflow-hidden pointer-events-none">
-      <!-- Subtle gradient overlay only -->
+      <!-- Subtle gradient overlay only  -->
       <div class="absolute inset-0 bg-gradient-radial from-primary/5 via-transparent to-transparent opacity-50"></div>
     </div>
 
