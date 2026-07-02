@@ -131,11 +131,16 @@ build:
     - source ecr-credentials
     - echo $ECR_PASS | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
 
-    # Build and push docker image to ECR
-    # - docker build -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$ENV . # Tag image with ENV
-    # - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$ENV
-    - docker build -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$APP_NAME:$ENV . # Tag image with ENV
-    - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$APP_NAME:$ENV
+    # Build and push docker image to ECR.
+    # Dual-tag every image:
+    #   $ENV                 - mutable tag the ECS task definition pulls (deploy contract)
+    #   $ENV-$CI_COMMIT_SHORT_SHA - immutable per-commit tag for traceability + rollback
+    # The ECR lifecycle policy (terraform/ecr.tf) keeps the last N $ENV-<sha> tags
+    # and expires untagged orphans left behind when the mutable $ENV tag moves.
+    - REPO_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$APP_NAME
+    - docker build -t $REPO_URI:$ENV -t $REPO_URI:$ENV-$CI_COMMIT_SHORT_SHA .
+    - docker push $REPO_URI:$ENV
+    - docker push $REPO_URI:$ENV-$CI_COMMIT_SHORT_SHA
   allow_failure: true
 
 plan:

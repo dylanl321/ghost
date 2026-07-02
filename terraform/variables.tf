@@ -51,6 +51,19 @@ variable "env" {
   default = "dev"
 }
 
+# ECR image cleanup tuning (see terraform/ecr.tf lifecycle policy)
+variable "ecr_keep_tagged_images" {
+  description = "Number of most-recent per-commit (<env>-<sha>) images to retain for rollback before older ones are expired."
+  type        = number
+  default     = 10
+}
+
+variable "ecr_untagged_expiry_days" {
+  description = "Days an untagged image (orphaned by a mutable <env> tag move) is retained before expiry."
+  type        = number
+  default     = 7
+}
+
 # Admin Notifications
 variable "admin_notification_emails" {
   description = "Comma-separated list of email addresses to receive admin notifications (feedback, errors, etc.)"
