@@ -92,23 +92,30 @@ async function withThrottleRetry<T>(
     try {
       return await fn()
     } catch (err) {
-      if (isThrottleError(err) && attempt < maxAttempts) {
-        // Full-jitter exponential: delay in [0, base * 2^attempt]
-        const cap = baseDelayMs * Math.pow(2, attempt)
-        const delay = Math.floor(Math.random() * cap)
-        logger.warn(
-          `[Config] Throttled on ${label} (attempt ${attempt}/${maxAttempts}), ` +
-          `retrying in ${delay}ms`
-        )
-        await new Promise<void>(resolve => setTimeout(resolve, delay))
-        lastErr = err
-      } else {
+      if (!isThrottleError(err)) {
         throw err
       }
+
+      lastErr = err
+
+      if (attempt >= maxAttempts) {
+        break
+      }
+
+      // Full-jitter exponential: delay in [0, base * 2^attempt]
+      const cap = baseDelayMs * Math.pow(2, attempt)
+      const delay = Math.floor(Math.random() * cap)
+      logger.warn(
+        `[Config] Throttled on ${label} (attempt ${attempt}/${maxAttempts}), ` +
+        `retrying in ${delay}ms`
+      )
+      await new Promise<void>(resolve => setTimeout(resolve, delay))
     }
   }
   // All retries exhausted — surface a distinguishable throttle error
-  const throttleErr = lastErr as Error & { isThrottled?: boolean }
+  const throttleErr = (lastErr instanceof Error
+    ? lastErr
+    : new Error(`Config request throttled on ${label}`)) as Error & { isThrottled?: boolean }
   throttleErr.name = 'ThrottlingException'
   throttleErr.isThrottled = true
   throw throttleErr
