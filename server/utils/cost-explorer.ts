@@ -557,9 +557,12 @@ export async function getProformaCosts(
   // Always use commercial environment for proforma data
   const environment = 'commercial'
   
-  // Run billable and proforma fetches in parallel — they hit different AWS accounts
+  // Both billable and proforma CE calls assume into the proforma account (253821132832).
+  // The proforma account's billing view covers all GDMS org linked accounts for both
+  // actual (billable) and proforma cost views. GDMS Cloud payer and DevOrg are
+  // intentionally excluded from this call and fetched separately by the caller.
   const [billableCosts, proformaRaw] = await Promise.all([
-    getCostAndUsage(params, environment),
+    getCostAndUsage(params, environment, proformaAccountId),
     (async () => {
       const proformaClient = await getCostExplorerClient(environment, undefined, proformaAccountId)
 
@@ -567,6 +570,14 @@ export async function getProformaCosts(
         Type: group.type,
         Key: group.key
       }))
+
+      // The grouped call starts one month earlier so CE returns the prior month's
+      // data under its TimePeriod.End key, which aligns with our month-keying convention.
+      const [sy, sm] = params.startDate.split('-').map(Number)
+      const prevMonth = sm - 1
+      const groupedStartDate = prevMonth === 0
+        ? `${sy - 1}-12-01`
+        : `${sy}-${String(prevMonth).padStart(2, '0')}-01`
 
       // Start speculative total query in parallel when GroupBy is used
       const speculativeProformaTotalPromise = (groupBy && groupBy.length > 0)
@@ -587,7 +598,7 @@ export async function getProformaCosts(
       do {
         const proformaCommand = new GetCostAndUsageCommand({
           TimePeriod: {
-            Start: params.startDate,
+            Start: groupedStartDate,
             End: params.endDate
           },
           Granularity: params.granularity as Granularity,

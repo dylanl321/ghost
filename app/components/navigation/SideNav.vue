@@ -493,6 +493,11 @@ const navigationItems = computed(() => {
       collapseRule: "default-collapsed",
     },
     {
+      label: "Financial Metrics",
+      to: "/admin/costs/budget-vs-actual",
+      icon: "i-heroicons-chart-bar",
+    },
+    {
       label: "Users & Access",
       to: "/account/user",
       icon: "i-heroicons-users",

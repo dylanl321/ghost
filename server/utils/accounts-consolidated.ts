@@ -31,8 +31,8 @@ export async function getAccountsTableName(): Promise<string> {
  * Get the Organizations account ID for the environment
  */
 function getOrganizationsAccountId(environment: AWSEnvironmentType = 'commercial'): string | undefined {
-  return environment === 'commercial' 
-    ? process.env.AWS_COMMERCIAL_ORGANIZATIONS_ACCOUNT_ID
+  return environment === 'commercial'
+    ? (process.env.COMMERCIAL_AWS_ORGANIZATIONS_ACCOUNT_ID || process.env.AWS_COMMERCIAL_ORGANIZATIONS_ACCOUNT_ID)
     : process.env.AWS_GOVCLOUD_ORGANIZATIONS_ACCOUNT_ID
 }
 
