@@ -14,9 +14,9 @@ RUN npm install -g npm@latest
 COPY package*.json ./
 
 # Install dependencies
-# Use --legacy-peer-deps for compatibility, then run nuxt prepare
-RUN npm install --legacy-peer-deps && \
-    npx nuxt prepare || true
+RUN npm install --legacy-peer-deps
+# nuxt prepare can fail on first build (no .nuxt dir yet), so allow it to
+RUN npx nuxt prepare || true
 
 # Copy the application files from the build context into the image
 COPY . .
