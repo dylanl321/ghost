@@ -33,6 +33,7 @@ import { SSMClient } from '@aws-sdk/client-ssm'
 import { Inspector2Client } from '@aws-sdk/client-inspector2'
 import { CloudWatchLogsClient } from '@aws-sdk/client-cloudwatch-logs'
 import { ResourceGroupsTaggingAPIClient } from '@aws-sdk/client-resource-groups-tagging-api'
+import { BillingClient } from '@aws-sdk/client-billing'
 import { logger } from '../utils/logger'
 import { assumeRoleCircuitBreaker } from '../utils/credential-circuit-breaker'
 
@@ -88,7 +89,8 @@ const SERVICE_CLIENT_MAP = {
   'ssm': SSMClient,
   'inspector2': Inspector2Client,
   'cloudwatch-logs': CloudWatchLogsClient,
-  'resource-groups-tagging': ResourceGroupsTaggingAPIClient
+  'resource-groups-tagging': ResourceGroupsTaggingAPIClient,
+  'billing': BillingClient
 } as const
 
 // Cache for AWS clients with expiration tracking
@@ -156,28 +158,44 @@ function getPartitionFromRegion(region: string): AWSEnvironmentType | null {
  * Get base credentials for an environment
  */
 function getBaseCredentials(environment: AWSEnvironmentType): AWSCredentials {
-  const prefix = environment === 'commercial' ? 'AWS_COMMERCIAL' : 'AWS_GOVCLOUD'
-  
-  const accessKeyId = process.env[`${prefix}_ACCESS_KEY_ID`]
-  const secretAccessKey = process.env[`${prefix}_SECRET_ACCESS_KEY`]
-  
+  let accessKeyId: string | undefined
+  let secretAccessKey: string | undefined
+  let sessionToken: string | undefined
+
+  if (environment === 'commercial') {
+    // Support both naming conventions for commercial credentials
+    accessKeyId = process.env.COMMERCIAL_AWS_ACCESS_KEY_ID || process.env.AWS_COMMERCIAL_ACCESS_KEY_ID
+    secretAccessKey = process.env.COMMERCIAL_AWS_SECRET_ACCESS_KEY || process.env.AWS_COMMERCIAL_SECRET_ACCESS_KEY
+    sessionToken = process.env.COMMERCIAL_AWS_SESSION_TOKEN || process.env.AWS_COMMERCIAL_SESSION_TOKEN
+  } else {
+    accessKeyId = process.env.AWS_GOVCLOUD_ACCESS_KEY_ID
+    secretAccessKey = process.env.AWS_GOVCLOUD_SECRET_ACCESS_KEY
+    sessionToken = process.env.AWS_GOVCLOUD_SESSION_TOKEN
+  }
+
   if (!accessKeyId || !secretAccessKey) {
-    throw new Error(`Missing AWS credentials for ${environment} environment. Please set ${prefix}_ACCESS_KEY_ID and ${prefix}_SECRET_ACCESS_KEY`)
+    throw new Error(
+      `Missing AWS credentials for ${environment} environment. ` +
+      (environment === 'commercial'
+        ? 'Please set COMMERCIAL_AWS_ACCESS_KEY_ID and COMMERCIAL_AWS_SECRET_ACCESS_KEY'
+        : 'Please set AWS_GOVCLOUD_ACCESS_KEY_ID and AWS_GOVCLOUD_SECRET_ACCESS_KEY')
+    )
   }
-  
-  return {
-    accessKeyId,
-    secretAccessKey,
-    sessionToken: process.env[`${prefix}_SESSION_TOKEN`]
-  }
+
+  return { accessKeyId, secretAccessKey, sessionToken }
 }
 
 /**
  * Check if credentials are available for an environment
  */
 export function hasCredentials(environment: AWSEnvironmentType): boolean {
-  const prefix = environment === 'commercial' ? 'AWS_COMMERCIAL' : 'AWS_GOVCLOUD'
-  return !!(process.env[`${prefix}_ACCESS_KEY_ID`] && process.env[`${prefix}_SECRET_ACCESS_KEY`])
+  if (environment === 'commercial') {
+    return !!(
+      (process.env.COMMERCIAL_AWS_ACCESS_KEY_ID || process.env.AWS_COMMERCIAL_ACCESS_KEY_ID) &&
+      (process.env.COMMERCIAL_AWS_SECRET_ACCESS_KEY || process.env.AWS_COMMERCIAL_SECRET_ACCESS_KEY)
+    )
+  }
+  return !!(process.env.AWS_GOVCLOUD_ACCESS_KEY_ID && process.env.AWS_GOVCLOUD_SECRET_ACCESS_KEY)
 }
 
 
@@ -187,7 +205,7 @@ export function hasCredentials(environment: AWSEnvironmentType): boolean {
  */
 async function getDefaultRegion(environment: AWSEnvironmentType): Promise<string> {
   const configKey = environment === 'commercial' ? 'aws.commercial.region' : 'aws.govcloud.region'
-  const envVar = environment === 'commercial' ? 'AWS_COMMERCIAL_REGION' : 'AWS_GOVCLOUD_REGION'
+  const envVar = environment === 'commercial' ? 'COMMERCIAL_REGION' : 'AWS_GOVCLOUD_REGION'
   const fallbackDefault = environment === 'commercial' ? 'us-east-1' : 'us-gov-west-1'
 
   const defaultRegion = getConfigValue<string>(configKey, envVar, fallbackDefault)
@@ -713,6 +731,14 @@ export async function getResourceGroupsTaggingClient(
   accountId?: string
 ): Promise<ResourceGroupsTaggingAPIClient> {
   return getClient(environment, 'resource-groups-tagging', region, accountId)
+}
+
+export async function getBillingClient(
+  environment: AWSEnvironmentType = 'commercial',
+  region?: string,
+  accountId?: string
+): Promise<BillingClient> {
+  return getClient(environment, 'billing', region, accountId)
 }
 
 // Export validation functions for testing
