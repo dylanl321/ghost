@@ -7,6 +7,9 @@ LABEL maintainer="AWSProductTeam@gd-ms.com"
 # Set working directory
 WORKDIR /app
 
+# Upgrade npm to avoid the "Exit handler never called" crash in npm 10.x
+RUN npm install -g npm@latest
+
 # Copy package.json and package-lock.json first (for efficient caching of dependencies)
 COPY package*.json ./
 
