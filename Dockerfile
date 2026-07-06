@@ -11,13 +11,9 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-# Workaround for npm optional dependencies bug with oxc-parser:
-# 1. Install without running postinstall scripts
-# 2. Rebuild optional dependencies
-# 3. Run postinstall script (nuxt prepare) separately
-RUN npm install --legacy-peer-deps --ignore-scripts && \
-    npm rebuild && \
-    npm run postinstall || true
+# Use --legacy-peer-deps for compatibility, then run nuxt prepare
+RUN npm install --legacy-peer-deps && \
+    npx nuxt prepare || true
 
 # Copy the application files from the build context into the image
 COPY . .
