@@ -66,6 +66,7 @@ export const ROLES: RoleDefinition[] = [
       'forecast.edit',
       'costs.settings',
       'costs.export',
+      'costs.budget_vs_actual',
       'accounts.edit'
     ],
     rules: {
@@ -97,6 +98,7 @@ export const ROLES: RoleDefinition[] = [
     priority: 99,
     permissions: [
       'costs.view',
+      'costs.budget_vs_actual',
       'accounts.view',
       'users.view'
     ],

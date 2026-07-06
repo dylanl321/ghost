@@ -22,6 +22,9 @@ RUN npm install --legacy-peer-deps --ignore-scripts && \
 # Copy the application files from the build context into the image
 COPY . .
 
+# Ensure tsx is available for the bundle:support prebuild script
+RUN npm install -g tsx
+
 # Build the application with more heap to avoid OOM errors
 RUN NODE_OPTIONS="--max-old-space-size=8192" npm run build
 
