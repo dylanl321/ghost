@@ -7,22 +7,20 @@ LABEL maintainer="AWSProductTeam@gd-ms.com"
 # Set working directory
 WORKDIR /app
 
-# Upgrade npm to avoid the "Exit handler never called" crash in npm 10.x
-RUN npm install -g npm@latest
-
-# Copy package.json, lock file, and .npmrc (registry + SSL config for internal Nexus)
-COPY package*.json .npmrc ./
+# Copy package.json and package-lock.json first (for efficient caching of dependencies)
+COPY package*.json ./
 
 # Install dependencies
-RUN npm install --legacy-peer-deps
-# nuxt prepare can fail on first build (no .nuxt dir yet), so allow it to
-RUN npx nuxt prepare || true
+# Workaround for npm optional dependencies bug with oxc-parser:
+# 1. Install without running postinstall scripts
+# 2. Rebuild optional dependencies
+# 3. Run postinstall script (nuxt prepare) separately
+RUN npm install --legacy-peer-deps --ignore-scripts && \
+    npm rebuild && \
+    npm run postinstall || true
 
 # Copy the application files from the build context into the image
 COPY . .
-
-# Ensure tsx is available for the bundle:support prebuild script
-RUN npm install -g tsx
 
 # Build the application with more heap to avoid OOM errors
 RUN NODE_OPTIONS="--max-old-space-size=8192" npm run build

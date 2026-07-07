@@ -102,6 +102,9 @@
     "vue-router": "^4.5.1",
     "xlsx": "^0.18.5"
   },
+  "overrides": {
+    "undici": "8.5.0"
+  },
   "devDependencies": {
     "@iconify-json/simple-icons": "^1.2.59",
     "@types/node": "^25.5.0",
