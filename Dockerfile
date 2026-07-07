@@ -7,6 +7,10 @@ LABEL maintainer="AWSProductTeam@gd-ms.com"
 # Set working directory
 WORKDIR /app
 
+# node:22 ships with npm 10.x which has a crash bug ("Exit handler never called")
+# that silently leaves node_modules incomplete. Upgrade to npm 11 before anything else.
+RUN npm install -g npm@latest
+
 # Copy package.json and package-lock.json first (for efficient caching of dependencies)
 COPY package*.json ./
 
