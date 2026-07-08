@@ -34,10 +34,10 @@ export default defineEventHandler(handleAsync(async (event) => {
   const { tableName, environment, accountId } = config.financialPlanOverrides
 
   // Fetch existing item to preserve months from other years
-  const existing = await getItem(tableName, { department }, environment, accountId) || {}
+  const existing = await getItem(tableName, { pk: department }, environment, accountId) || {}
 
   // Convert incoming YYYY-MM-01 keys → MM/YYYY, merging over existing item
-  const item: Record<string, any> = { ...existing, department }
+  const item: Record<string, any> = { ...existing, pk: department }
   for (const [isoKey, value] of Object.entries(monthlyValues)) {
     const match = isoKey.match(/^(\d{4})-(\d{2})-01$/)
     if (match) {
