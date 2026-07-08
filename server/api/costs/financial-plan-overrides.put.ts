@@ -5,12 +5,17 @@
  *
  * Body:
  *   { department: string, year: number, monthlyValues: Record<string, number> }
+ *   monthlyValues keys must be "YYYY-MM-01" (e.g. "2026-01-01")
+ *
+ * DynamoDB item shape:
+ *   PK: department (e.g. "DE158")
+ *   month keys: "MM/YYYY" (e.g. "01/2026")
  */
 
 import { defineEventHandler, readBody } from 'h3'
 import { handleAsync, sendSuccess, errors } from '../../utils/api-response'
 import { requirePermission } from '../../utils/user-roles'
-import { putItem } from '../../utils/dynamodb'
+import { getItem, putItem } from '../../utils/dynamodb'
 import { getDynamoDBConfig } from '../../lib/dynamodb-config'
 
 export default defineEventHandler(handleAsync(async (event) => {
@@ -28,18 +33,19 @@ export default defineEventHandler(handleAsync(async (event) => {
   const config = await getDynamoDBConfig()
   const { tableName, environment, accountId } = config.financialPlanOverrides
 
-  await putItem(
-    tableName,
-    {
-      pk: `PLAN#${department}#${year}`,
-      department,
-      year,
-      monthlyValues,
-      updatedAt: new Date().toISOString()
-    },
-    environment,
-    accountId
-  )
+  // Fetch existing item to preserve months from other years
+  const existing = await getItem(tableName, { department }, environment, accountId) || {}
+
+  // Convert incoming YYYY-MM-01 keys → MM/YYYY, merging over existing item
+  const item: Record<string, any> = { ...existing, department }
+  for (const [isoKey, value] of Object.entries(monthlyValues)) {
+    const match = isoKey.match(/^(\d{4})-(\d{2})-01$/)
+    if (match) {
+      item[`${match[2]}/${match[1]}`] = value
+    }
+  }
+
+  await putItem(tableName, item, environment, accountId)
 
   return sendSuccess(event, { department, year, monthlyValues })
 }))
