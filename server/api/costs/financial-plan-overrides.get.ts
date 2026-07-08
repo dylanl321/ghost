@@ -8,9 +8,10 @@
  *   year:       number (e.g. 2026)
  *
  * DynamoDB item shape:
- *   PK: "PLAN#DE158#2026"
- *   monthlyValues: { "2026-01-01": 150000, ... }
- *   updatedAt: ISO string
+ *   PK: department (e.g. "DE158")
+ *   month keys: "MM/YYYY" (e.g. "01/2026")
+ *
+ * Response monthlyValues keys are converted to "YYYY-MM-01" for frontend compatibility.
  */
 
 import { defineEventHandler, getQuery } from 'h3'
@@ -33,14 +34,22 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   const item = await getItem(
     tableName,
-    { pk: `PLAN#${department}#${year}` },
+    { department },
     environment,
     accountId
   )
 
-  return sendSuccess(event, {
-    department,
-    year,
-    monthlyValues: (item?.monthlyValues as Record<string, number>) || {}
-  })
+  // Convert MM/YYYY keys → YYYY-MM-01, filtering to the requested year only
+  const monthlyValues: Record<string, number> = {}
+  if (item) {
+    for (const [key, value] of Object.entries(item)) {
+      if (key === 'department') continue
+      const match = key.match(/^(\d{2})\/(\d{4})$/)
+      if (match && parseInt(match[2]) === year) {
+        monthlyValues[`${match[2]}-${match[1]}-01`] = value as number
+      }
+    }
+  }
+
+  return sendSuccess(event, { department, year, monthlyValues })
 }))
