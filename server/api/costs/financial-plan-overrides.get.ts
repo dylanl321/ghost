@@ -34,7 +34,7 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   const item = await getItem(
     tableName,
-    { department },
+    { pk: department },
     environment,
     accountId
   )
@@ -43,7 +43,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   const monthlyValues: Record<string, number> = {}
   if (item) {
     for (const [key, value] of Object.entries(item)) {
-      if (key === 'department') continue
+      if (key === 'pk') continue
       const match = key.match(/^(\d{2})\/(\d{4})$/)
       if (match && parseInt(match[2]) === year) {
         monthlyValues[`${match[2]}-${match[1]}-01`] = value as number
