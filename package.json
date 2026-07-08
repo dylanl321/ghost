@@ -108,7 +108,8 @@
     "simple-git": "3.36.0",
     "seroval": "1.4.1",
     "rollup": "4.59.0",
-    "node-forge": "1.4.0"
+    "node-forge": "1.4.0",
+    "nanotar": "0.2.1"
   },
   "devDependencies": {
     "@iconify-json/simple-icons": "^1.2.59",
