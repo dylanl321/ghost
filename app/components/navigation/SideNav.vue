@@ -493,8 +493,8 @@ const navigationItems = computed(() => {
       collapseRule: "default-collapsed",
     },
     {
-      label: "Financial Metrics",
-      to: "/admin/costs/budget-vs-actual",
+      label: "GDMS Finance",
+      to: "/gdms-finance",
       icon: "i-heroicons-chart-bar",
     },
     {

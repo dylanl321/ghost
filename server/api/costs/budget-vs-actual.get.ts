@@ -38,6 +38,7 @@ import { getAllAccountsUnified } from '../../utils/accounts-consolidated'
 import { requirePermission } from '../../utils/user-roles'
 import { logger } from '../../utils/logger'
 import { queryDevOrgChargesByMonth } from '../../utils/dev-org-charges'
+import { getAnnualBudgetArray } from '../../../shared/utils/budget-utils'
 
 // Departments this report is scoped to. Kept explicit per Finance's request.
 const ALLOWED_DEPARTMENTS = ['DE158', 'DT509'] as const
@@ -84,6 +85,8 @@ interface AccountRow {
   ytdActual: number
   ytdVariance: number
   monthlyActuals: Record<string, number>
+  pepExpectedSpend?: number
+  pepMonthlyExpected?: Record<string, number> // CE month key (YYYY-MM-01) → pep value
 }
 
 interface CategoryRow {
@@ -181,6 +184,7 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   const accountNameMap = new Map<string, string>()
   const accountProjectNameMap = new Map<string, string>()
+  const accountPepMonthlyMap = new Map<string, string>() // accountId → pepBudget2026Monthly JSON
 
   for (const acc of allAccounts) {
     const accountId = environment === 'govcloud'
@@ -193,6 +197,7 @@ export default defineEventHandler(handleAsync(async (event) => {
 
     accountNameMap.set(accountId, acc.name || acc.projectName || accountId)
     accountProjectNameMap.set(accountId, acc.projectName || acc.name || '')
+    if (acc.pepBudget2026Monthly) accountPepMonthlyMap.set(accountId, acc.pepBudget2026Monthly)
 
     // Proforma management account always rolls into DE158 regardless of pepDepartment
     const dept = accountId === PROFORMA_ACCOUNT_ID ? 'DE158' : accountDepartment(acc).toUpperCase()
@@ -233,9 +238,15 @@ export default defineEventHandler(handleAsync(async (event) => {
   const budgetByAcct = indexByAccountMonth(proformaResult.proforma?.costs?.resultsByTime)
   const actualByAcct = indexByAccountMonth(proformaResult.billable?.costs?.resultsByTime)
 
-  // Extract payer budget from proforma before stripping it from the index.
-  // The payer account appears in the proforma CE results but its actuals come
-  // from a separate CE call against the payer account directly.
+  // Sum all linked account proforma budgets per month (before stripping exclusions).
+  // Used to derive GDMS Cloud budget: proforma org total − linked account proforma budgets − Enterprise Support.
+  const linkedAccountBudgetByMonth = new Map<string, number>()
+  for (const [, acctMonths] of budgetByAcct) {
+    for (const [month, cost] of acctMonths) {
+      linkedAccountBudgetByMonth.set(month, (linkedAccountBudgetByMonth.get(month) || 0) + cost)
+    }
+  }
+
   const payerBudgetFromProforma = budgetByAcct.get(PAYER_ACCOUNT_ID)
 
   budgetByAcct.delete(PAYER_ACCOUNT_ID)
@@ -260,6 +271,12 @@ export default defineEventHandler(handleAsync(async (event) => {
   const yearMonthMin = allMonths[0]   // ${year}-01-01
   const yearMonthMax = allMonths[11]  // ${year}-12-01
 
+  // YTD cap: include up to and including the current month, exclude future months.
+  // CE End keys are YYYY-MM-01. The current month key is the first day of now's month.
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+  // Cap to the year being viewed — don't exceed Dec of selected year
+  const ytdMonthMax = currentMonthKey > yearMonthMax ? yearMonthMax : currentMonthKey
+
   // ── 3. GDMS Cloud actuals + DevOrg (Billing API + CE) — fetched in parallel ──
   //
   // GDMS Cloud (205950196477) is the catch-all for non-allocated charges.
@@ -273,6 +290,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   // the query is scoped to that group with a full per-account breakdown.
   let payerActualByMonth = new Map<string, number>()
   let payerBudgetByMonth = new Map<string, number>()
+  let enterpriseSupportActualByMonth = new Map<string, number>()
   let devOrgResult: Awaited<ReturnType<typeof queryDevOrgChargesByMonth>> = {
     byMonth: new Map(),
     byAccountMonth: new Map(),
@@ -287,7 +305,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       metrics: ['UnblendedCost'],
     }
 
-    const [masterBillable, proformaOrgTotals, devOrg] = await Promise.all([
+    const [masterBillable, proformaOrgTotals, devOrg, enterpriseSupportRaw] = await Promise.all([
       // Step 1: org-level billable totals via master account credentials
       getCostAndUsage(ceParams, 'commercial', PAYER_ACCOUNT_ID),
       // Step 2: org-level proforma totals via proforma account credentials
@@ -295,6 +313,15 @@ export default defineEventHandler(handleAsync(async (event) => {
       queryDevOrgChargesByMonth(year).catch(err => {
         logger.warn('[BudgetVsActual] DevOrg CE query failed, charges will be $0:', err)
         return devOrgResult
+      }),
+      // Step 4: Enterprise Support billed to payer — extracted separately so it gets its own category
+      getCostAndUsage({
+        ...ceParams,
+        groupBy: [{ type: 'DIMENSION', key: 'SERVICE' }],
+        filter: { Dimensions: { Key: 'SERVICE', Values: ['AWS Support (Enterprise)'] } }
+      }, 'commercial', PAYER_ACCOUNT_ID).catch(err => {
+        logger.warn('[BudgetVsActual] Enterprise Support CE query failed:', err)
+        return { resultsByTime: [] }
       })
     ])
 
@@ -313,13 +340,36 @@ export default defineEventHandler(handleAsync(async (event) => {
       proformaOrgByMonth.set(month, parseFloat(period.Total?.UnblendedCost?.Amount || '0'))
     }
 
-    logger.info('[BudgetVsActual] GDMS Cloud calculation (billable − proforma):')
+    // Build Enterprise Support by month from the grouped CE response
+    const enterpriseSupportByMonth = enterpriseSupportActualByMonth
+    for (const period of enterpriseSupportRaw.resultsByTime || []) {
+      const month = period.TimePeriod?.End || period.TimePeriod?.Start || ''
+      if (!month) continue
+      const cost = (period.Groups || []).reduce((s: number, g: any) =>
+        s + parseFloat(g.Metrics?.UnblendedCost?.Amount || '0'), 0)
+        || parseFloat(period.Total?.UnblendedCost?.Amount || '0')
+      if (cost > 0) enterpriseSupportByMonth.set(month, cost)
+    }
+
+    logger.info('[BudgetVsActual] proformaOrgByMonth:', Object.fromEntries(proformaOrgByMonth))
+    logger.info('[BudgetVsActual] linkedAccountBudgetByMonth:', Object.fromEntries(linkedAccountBudgetByMonth))
+    logger.info('[BudgetVsActual] GDMS Cloud calculation (billable − proforma − enterprise support):')
     for (const month of allMonths) {
       const billable = billableByMonth.get(month) ?? 0
       const proforma = proformaOrgByMonth.get(month) ?? 0
-      const gdmsCloud = billable - proforma
-      logger.info(`  ${month}: billable=${billable.toFixed(2)}  proforma=${proforma.toFixed(2)}  gdmsCloud=${gdmsCloud.toFixed(2)}`)
-      if (gdmsCloud > 0) payerActualByMonth.set(month, gdmsCloud)
+      const entSupport = enterpriseSupportByMonth.get(month) ?? 0
+      // GDMS Cloud actual = payer charges not allocated to linked accounts, minus Enterprise Support
+      // (which gets its own category row). Savings plan fees are excluded by EXCLUDED_RECORD_TYPES.
+      const gdmsCloudActual = billable - proforma - entSupport
+      // GDMS Cloud budget = same residual on the proforma side: org proforma total minus what
+      // proforma allocated to linked accounts, minus Enterprise Support hardcoded budget.
+      // proformaLinked = sum of linked account proforma budgets for this month (pre-strip).
+      const proformaLinked = linkedAccountBudgetByMonth.get(month) ?? 0
+      const ENT_SUPPORT_MONTHLY_BUDGET = 56900
+      const gdmsCloudBudget = Math.max(0, proforma - proformaLinked - ENT_SUPPORT_MONTHLY_BUDGET)
+      logger.info(`  ${month}: billable=${billable.toFixed(2)}  proforma=${proforma.toFixed(2)}  proformaLinked=${proformaLinked.toFixed(2)}  entSupport=${entSupport.toFixed(2)}  gdmsCloudActual=${gdmsCloudActual.toFixed(2)}  gdmsCloudBudget=${gdmsCloudBudget.toFixed(2)}`)
+      if (gdmsCloudActual > 0) payerActualByMonth.set(month, gdmsCloudActual)
+      if (gdmsCloudBudget > 0) payerBudgetByMonth.set(month, gdmsCloudBudget)
     }
 
     // Payer budget from proforma side (saved before the index was stripped)
@@ -328,7 +378,26 @@ export default defineEventHandler(handleAsync(async (event) => {
     devOrgResult = devOrg
   }
 
-  const resolvedDevOrgActual = [...devOrgResult.byMonth.values()].reduce((s, v) => s + v, 0)
+  const resolvedDevOrgActual = [...devOrgResult.byMonth.entries()]
+    .filter(([m]) => m >= yearMonthMin && m <= ytdMonthMax)
+    .reduce((s, [, v]) => s + v, 0)
+
+  // Compute pep expected spend fields for an account given the months that have actual data.
+  // Only covers months present in monthlyActuals so it stays in sync with what's been billed.
+  function calcPepFields(accountId: string, monthlyActuals: Record<string, number>): { pepExpectedSpend: number; pepMonthlyExpected: Record<string, number> } | undefined {
+    const pepJson = accountPepMonthlyMap.get(accountId)
+    if (!pepJson) return undefined
+    const { monthlyArray } = getAnnualBudgetArray({ pepBudget2026Monthly: pepJson })
+    const pepMonthlyExpected: Record<string, number> = {}
+    let pepExpectedSpend = 0
+    for (const m of Object.keys(monthlyActuals).filter(m => m >= yearMonthMin && m <= ytdMonthMax)) {
+      const idx = parseInt(m.split('-')[1]) - 1
+      const val = monthlyArray[idx] ?? 0
+      pepMonthlyExpected[m] = val
+      pepExpectedSpend += val
+    }
+    return { pepExpectedSpend, pepMonthlyExpected }
+  }
 
   // ── 4. Aggregate per department ──
   const results: DepartmentResult[] = []
@@ -348,8 +417,35 @@ export default defineEventHandler(handleAsync(async (event) => {
     for (const accountId of deptAccounts.get(dept)!) {
       let acctBudget = 0
       let acctActual = 0
-      for (const [m, c] of budgetByAcct.get(accountId) || []) { ensure(m).budget += c; acctBudget += c }
-      for (const [m, c] of actualByAcct.get(accountId) || []) { ensure(m).actual += c; acctActual += c }
+
+      // Collect months with actual data first so pep budget aligns to the same months
+      const acctActualMonths = new Set<string>()
+      for (const [m, c] of actualByAcct.get(accountId) || []) {
+        ensure(m).actual += c
+        if (m >= yearMonthMin && m <= ytdMonthMax) {
+          acctActual += c
+          acctActualMonths.add(m)
+        }
+      }
+
+      const pepJson = accountPepMonthlyMap.get(accountId)
+      if (pepJson) {
+        // Use pep values as the plan — only for months with actual data
+        const { monthlyArray } = getAnnualBudgetArray({ pepBudget2026Monthly: pepJson })
+        for (const m of acctActualMonths) {
+          const idx = parseInt(m.split('-')[1]) - 1
+          const pepVal = monthlyArray[idx] ?? 0
+          ensure(m).budget += pepVal
+          acctBudget += pepVal
+        }
+      } else {
+        // Fall back to proforma budget
+        for (const [m, c] of budgetByAcct.get(accountId) || []) {
+          ensure(m).budget += c
+          if (m >= yearMonthMin && m <= ytdMonthMax) acctBudget += c
+        }
+      }
+
       if (acctBudget > 0 || acctActual > 0) accountTotals.set(accountId, { budget: acctBudget, actual: acctActual })
     }
 
@@ -358,6 +454,9 @@ export default defineEventHandler(handleAsync(async (event) => {
       for (const [m, c] of payerBudgetByMonth) ensure(m).budget += c
       // Payer stored separately — not added to accountTotals so it gets its own category row
       actualByAcct.set(PAYER_ACCOUNT_ID, new Map(payerActualByMonth))
+
+      // Enterprise Support is subtracted from GDMS Cloud but still counts toward dept actual
+      for (const [m, c] of enterpriseSupportActualByMonth) ensure(m).actual += c
 
       for (const [m, c] of devOrgResult.byMonth) ensure(m).actual += c
     }
@@ -388,6 +487,33 @@ export default defineEventHandler(handleAsync(async (event) => {
     })
 
     for (const def of namedDefs) {
+      // Enterprise Support is a service charge on the payer account, not an account itself.
+      // Extract it directly from the CE service query rather than account name matching.
+      if (def.name === 'Enterprise Support') {
+        const ENT_SUPPORT_MONTHLY_BUDGET = 56900
+        const entMonthlyActuals: Record<string, number> = Object.fromEntries(
+          [...enterpriseSupportActualByMonth.entries()].filter(([m]) => m >= yearMonthMin && m <= ytdMonthMax)
+        )
+        const entYtdActual = Object.values(entMonthlyActuals).reduce((s, v) => s + v, 0)
+        const entYtdBudget = Object.keys(entMonthlyActuals).length * ENT_SUPPORT_MONTHLY_BUDGET
+        categories.push({
+          name: def.name,
+          ytdBudget: entYtdBudget,
+          ytdActual: entYtdActual,
+          ytdVariance: entYtdActual - entYtdBudget,
+          note: def.note,
+          accounts: entYtdActual > 0 ? [{
+            accountId: PAYER_ACCOUNT_ID,
+            name: 'Enterprise Support',
+            ytdBudget: entYtdBudget,
+            ytdActual: entYtdActual,
+            ytdVariance: entYtdActual - entYtdBudget,
+            monthlyActuals: entMonthlyActuals
+          }] : []
+        })
+        continue
+      }
+
       const nameLower = def.name.toLowerCase()
       let catBudget = 0
       let catActual = 0
@@ -401,13 +527,15 @@ export default defineEventHandler(handleAsync(async (event) => {
           claimedIds.add(accountId)
           const monthlyActuals = Object.fromEntries(actualByAcct.get(accountId) || [])
           logger.info(`[BudgetVsActual] monthlyActuals for ${accountId} (${accountNameMap.get(accountId)}):`, monthlyActuals)
+          const pepFields = calcPepFields(accountId, monthlyActuals)
           catAccounts.push({
             accountId,
             name: accountNameMap.get(accountId) || accountId,
             ytdBudget: totals.budget,
             ytdActual: totals.actual,
             ytdVariance: totals.actual - totals.budget,
-            monthlyActuals
+            monthlyActuals,
+            ...pepFields
           })
         }
       }
@@ -422,91 +550,85 @@ export default defineEventHandler(handleAsync(async (event) => {
       })
     }
 
-    // DevOrg fixed category for DE158 — sourced from Billing API + CE BillingViewArn
+    // DevOrg fixed category for DE158 — $10,000/month hardcoded budget, actuals from Billing API + CE
     if (dept === DEV_ORG_ROLLS_INTO) {
       claimedIds.add(DEV_ORG_ACCOUNT_ID)
-      let devOrgAccounts: AccountRow[] = [...devOrgResult.byAccountMonth.entries()].map(([accountId, monthlyMap]) => {
-        const ytdActual = [...monthlyMap.values()].reduce((s, v) => s + v, 0)
-        return {
-          accountId,
-          name: devOrgResult.accountNames.get(accountId) || accountId,
-          ytdBudget: 0,
-          ytdActual,
-          ytdVariance: ytdActual,
-          monthlyActuals: Object.fromEntries(monthlyMap)
-        }
-      })
-      // Build a set of months already covered by per-account CE data
-      const coveredByAcct = new Set<string>()
-      for (const monthlyMap of devOrgResult.byAccountMonth.values()) {
-        for (const m of monthlyMap.keys()) coveredByAcct.add(m)
-      }
-      // Any months in byMonth not covered by account-level data (e.g. manual charges)
-      // get a synthetic top-level DevOrg row so the month drill-down shows the charges.
-      const manualMonthlyActuals: Record<string, number> = {}
-      for (const [m, v] of devOrgResult.byMonth) {
-        if (!coveredByAcct.has(m)) manualMonthlyActuals[m] = v
-      }
-      const manualYtd = Object.values(manualMonthlyActuals).reduce((s, v) => s + v, 0)
-      if (manualYtd > 0) {
-        devOrgAccounts.push({
-          accountId: DEV_ORG_ACCOUNT_ID,
-          name: 'GDMS-DevOrg (manual)',
-          ytdBudget: 0,
-          ytdActual: manualYtd,
-          ytdVariance: manualYtd,
-          monthlyActuals: manualMonthlyActuals
-        })
-      }
+      const DEV_ORG_MONTHLY_BUDGET = 10000
+      // Only include months that have actual data (same as other accounts — no future months)
+      const monthsWithDevOrgData = allMonths.filter(m => m <= ytdMonthMax && devOrgResult.byMonth.has(m))
+      const devOrgMonthlyActuals: Record<string, number> = Object.fromEntries(
+        monthsWithDevOrgData.map(m => [m, devOrgResult.byMonth.get(m) ?? 0])
+      )
+      const devOrgYtdBudget = monthsWithDevOrgData.length * DEV_ORG_MONTHLY_BUDGET
       categories.push({
         name: 'GDMS-DevOrg',
-        ytdBudget: 0,
+        ytdBudget: devOrgYtdBudget,
         ytdActual: resolvedDevOrgActual,
-        ytdVariance: resolvedDevOrgActual,
-        accounts: devOrgAccounts
+        ytdVariance: resolvedDevOrgActual - devOrgYtdBudget,
+        accounts: [{
+          accountId: DEV_ORG_ACCOUNT_ID,
+          name: 'GDMS-DevOrg',
+          ytdBudget: devOrgYtdBudget,
+          ytdActual: resolvedDevOrgActual,
+          ytdVariance: resolvedDevOrgActual - devOrgYtdBudget,
+          monthlyActuals: devOrgMonthlyActuals
+        }]
       })
     }
 
-    // GDMS Cloud payer — separate category, not part of accountTotals
+    // Remaining accounts — each gets its own category row, sorted by largest YTD variance (absolute)
+    const otherAccounts = [...accountTotals.entries()]
+      .filter(([id]) => !claimedIds.has(id))
+      .sort(([, a], [, b]) => Math.abs(b.actual - b.budget) - Math.abs(a.actual - a.budget))
+    for (const [accountId, totals] of otherAccounts) {
+      const monthlyActuals = Object.fromEntries(actualByAcct.get(accountId) || [])
+      const pepFields = calcPepFields(accountId, monthlyActuals)
+      const acctRow = {
+        accountId,
+        name: accountNameMap.get(accountId) || accountId,
+        ytdBudget: totals.budget,
+        ytdActual: totals.actual,
+        ytdVariance: totals.actual - totals.budget,
+        monthlyActuals,
+        ...pepFields
+      }
+      categories.push({
+        name: accountNameMap.get(accountId) || accountId,
+        ytdBudget: totals.budget,
+        ytdActual: totals.actual,
+        ytdVariance: totals.actual - totals.budget,
+        accounts: [acctRow]
+      })
+    }
+
+    // GDMS Cloud payer — budget = DE158 total plan minus the sum of all linked account proforma
+    // budgets (named cats + other accounts). DevOrg is excluded — it's not a proforma account.
+    // budgetTotal already includes payerBudgetByMonth, so stripping linked account budgets
+    // and DevOrg leaves the remainder for GDMS Cloud.
     if (dept === PAYER_ROLLS_INTO) {
-      const payerBudget = [...payerBudgetByMonth.values()].reduce((s, v) => s + v, 0)
-      const payerActual = [...payerActualByMonth.values()].reduce((s, v) => s + v, 0)
+      const payerActual = [...payerActualByMonth.entries()].filter(([m]) => m >= yearMonthMin && m <= ytdMonthMax).reduce((s, [, v]) => s + v, 0)
+      // GDMS Cloud budget = YTD dept budget total minus all other category budgets (residual).
+      const ytdDeptBudget = monthly.filter(m => m.month >= yearMonthMin && m.month <= ytdMonthMax).reduce((s, m) => s + m.budget, 0)
+      // Exclude hardcoded-budget categories (Enterprise Support, GDMS-DevOrg) — their budgets
+      // are not sourced from monthMap so subtracting them would make the residual go negative.
+      const HARDCODED_CATS = new Set(['Enterprise Support', 'GDMS-DevOrg'])
+      const linkedCategoryBudgets = categories.filter(c => !HARDCODED_CATS.has(c.name)).reduce((s, c) => s + c.ytdBudget, 0)
+      const gdmsCloudBudget = Math.max(0, ytdDeptBudget - linkedCategoryBudgets)
+      logger.info('[BudgetVsActual] GDMS Cloud budget:', { ytdDeptBudget, linkedCategoryBudgets, gdmsCloudBudget, payerActual })
       claimedIds.add(PAYER_ACCOUNT_ID)
       categories.push({
         name: 'GDMS Cloud',
-        ytdBudget: payerBudget,
+        ytdBudget: gdmsCloudBudget,
         ytdActual: payerActual,
-        ytdVariance: payerActual - payerBudget,
-        accounts: payerActual > 0 || payerBudget > 0 ? [{
+        ytdVariance: payerActual - gdmsCloudBudget,
+        accounts: payerActual > 0 || gdmsCloudBudget > 0 ? [{
           accountId: PAYER_ACCOUNT_ID,
           name: 'GDMS Cloud (Payer)',
-          ytdBudget: payerBudget,
+          ytdBudget: gdmsCloudBudget,
           ytdActual: payerActual,
-          ytdVariance: payerActual - payerBudget,
+          ytdVariance: payerActual - gdmsCloudBudget,
           monthlyActuals: Object.fromEntries(payerActualByMonth)
         }] : []
-      })
-    }
-
-    // Remaining accounts → "Other N AWS accounts"
-    const otherAccounts = [...accountTotals.entries()].filter(([id]) => !claimedIds.has(id))
-    if (otherAccounts.length > 0) {
-      const otherBudget = otherAccounts.reduce((s, [, v]) => s + v.budget, 0)
-      const otherActual = otherAccounts.reduce((s, [, v]) => s + v.actual, 0)
-      categories.push({
-        name: `Other ${otherAccounts.length} AWS account${otherAccounts.length === 1 ? '' : 's'}`,
-        ytdBudget: otherBudget,
-        ytdActual: otherActual,
-        ytdVariance: otherActual - otherBudget,
-        note: 'cost saving opportunities being pursued',
-        accounts: otherAccounts.map(([accountId, totals]) => ({
-          accountId,
-          name: accountNameMap.get(accountId) || accountId,
-          ytdBudget: totals.budget,
-          ytdActual: totals.actual,
-          ytdVariance: totals.actual - totals.budget,
-          monthlyActuals: Object.fromEntries(actualByAcct.get(accountId) || [])
-        }))
       })
     }
 
