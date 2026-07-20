@@ -101,14 +101,23 @@
     "vue": "^3.5.18",
     "vue-echarts": "^8.0.0-beta.1",
     "vue-router": "^4.5.1",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "tsx": "^4.21.0"
+  },
+  "overrides": {
+    "undici": "8.5.0",
+    "simple-git": "3.36.0",
+    "seroval": "1.4.1",
+    "rollup": "4.59.0",
+    "node-forge": "1.4.0",
+    "nanotar": "0.2.1",
+    "vite": "7.2.6"
   },
   "devDependencies": {
     "@iconify-json/simple-icons": "^1.2.59",
     "@types/node": "^25.5.0",
     "depcheck": "^1.4.7",
     "ts-prune": "^0.10.3",
-    "tsx": "^4.21.0",
     "unimported": "^1.31.0"
   }
 }
