@@ -39,19 +39,24 @@ let cachedDevOrgBillingViewArn: string | null | undefined = undefined
 async function getDevOrgBillingViewArn(): Promise<string | null> {
   if (cachedDevOrgBillingViewArn !== undefined) return cachedDevOrgBillingViewArn
 
-  const billingClient = await getBillingClient('commercial', 'us-east-1', PAYER_ACCOUNT_ID)
-  const response = await billingClient.send(new ListBillingViewsCommand({}))
+  try {
+    const billingClient = await getBillingClient('commercial', 'us-east-1', PAYER_ACCOUNT_ID)
+    const response = await billingClient.send(new ListBillingViewsCommand({}))
 
-  const views = response.billingViews || []
-  logger.info('[DevOrgCharges] Available billing views:', views.map(v => ({ name: v.name, arn: v.arn })))
+    const views = response.billingViews || []
+    logger.info('[DevOrgCharges] Available billing views:', views.map(v => ({ name: v.name, arn: v.arn })))
 
-  const match = views.find(v => v.name && (v.name.includes('DevOrg') || v.name.includes('GDMS-DevOrg')))
-  cachedDevOrgBillingViewArn = match?.arn ?? null
+    const match = views.find(v => v.name && (v.name.includes('DevOrg') || v.name.includes('GDMS-DevOrg')))
+    cachedDevOrgBillingViewArn = match?.arn ?? null
 
-  if (cachedDevOrgBillingViewArn) {
-    logger.info('[DevOrgCharges] Found billing view:', { name: match!.name, arn: cachedDevOrgBillingViewArn })
-  } else {
-    logger.warn('[DevOrgCharges] No GDMS-DevOrg billing view found. Available:', views.map(v => v.name))
+    if (cachedDevOrgBillingViewArn) {
+      logger.info('[DevOrgCharges] Found billing view:', { name: match!.name, arn: cachedDevOrgBillingViewArn })
+    } else {
+      logger.warn('[DevOrgCharges] No GDMS-DevOrg billing view found. Available:', views.map(v => v.name))
+    }
+  } catch (err) {
+    logger.warn('[DevOrgCharges] Could not list billing views (missing billing:ListBillingViews permission?):', err)
+    cachedDevOrgBillingViewArn = null
   }
 
   return cachedDevOrgBillingViewArn
