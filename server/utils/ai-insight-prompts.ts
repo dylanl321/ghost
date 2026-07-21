@@ -202,5 +202,45 @@ export const insightPrompts: Record<string, InsightPromptConfig> = {
 
       return lines.join('\n')
     }
+  },
+
+  'variance-driver': {
+    systemPrompt: [
+      'You are an AWS FinOps analyst writing a one-sentence variance explanation for a cost category in a finance dashboard.',
+      'Write exactly 1 sentence (under 20 words). State the primary driver of any variance — over or under budget.',
+      'If budget is zero or not set, note the spend without a budget reference.',
+      'If the variance is small (under 5%), say the category is tracking close to plan.',
+      'Do NOT start with any introduction, preamble, or category name. Jump directly to the variance observation.',
+      'Write in plain prose — no headings, no bullet points, no markdown, no dollar signs unless quoting a specific figure.',
+      DATA_CONSTRAINT
+    ].join(' '),
+    ttl: 3600,
+    buildPrompt(ctx) {
+      const lines: string[] = ['Explain the primary variance driver for this AWS cost category:']
+
+      lines.push(`- Category: ${ctx.categoryName || 'Unknown'}`)
+      lines.push(`- Department: ${ctx.department || 'Unknown'}`)
+      lines.push(`- YTD plan: ${formatCurrency(ctx.ytdBudget || 0)}`)
+      lines.push(`- YTD actual: ${formatCurrency(ctx.ytdActual || 0)}`)
+
+      const variance = (ctx.ytdActual || 0) - (ctx.ytdBudget || 0)
+      const variancePct = ctx.ytdBudget > 0 ? (variance / ctx.ytdBudget) * 100 : 0
+      lines.push(`- YTD variance: ${variance >= 0 ? '+' : ''}${formatCurrency(variance)} (${variancePct >= 0 ? '+' : ''}${variancePct.toFixed(1)}%)`)
+
+      if (ctx.monthlyActuals && Object.keys(ctx.monthlyActuals).length > 0) {
+        const sorted = Object.entries(ctx.monthlyActuals as Record<string, number>).sort(([a], [b]) => a.localeCompare(b))
+        const recent = sorted.slice(-3).map(([m, v]) => {
+          const [, mo] = m.split('-').map(Number)
+          const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+          return `${monthNames[mo - 1]}: ${formatCurrency(v)}`
+        }).join(', ')
+        lines.push(`- Recent monthly actuals: ${recent}`)
+      }
+
+      if (ctx.accountCount !== undefined) lines.push(`- Accounts in category: ${ctx.accountCount}`)
+      if (ctx.topAccount) lines.push(`- Largest account: ${ctx.topAccount.name} (${formatCurrency(ctx.topAccount.ytdActual)} YTD)`)
+
+      return lines.join('\n')
+    }
   }
 }

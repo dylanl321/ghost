@@ -2,17 +2,14 @@
   <div class="container mx-auto px-6 py-8 max-w-7xl">
     <!-- Header -->
     <div class="mb-6">
-      <UButton color="gray" variant="ghost" icon="i-heroicons-arrow-left" @click="navigateTo('/admin/costs')" class="mb-4">
-        Back to Cost Management
-      </UButton>
-      <div class="flex items-center gap-3 mb-2">
+<div class="flex items-center gap-3 mb-2">
         <div class="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
           <UIcon name="i-heroicons-scale" class="w-6 h-6 text-purple-600 dark:text-purple-400" />
         </div>
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Financial Metrics</h1>
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">GDMS Finance</h1>
       </div>
       <p class="text-gray-600 dark:text-gray-400">
-        Plan vs actual spend for finance-tracked departments.
+        AWS IT account spend tracked by GDMS Finance.
       </p>
     </div>
 
@@ -76,79 +73,12 @@
 
       <!-- ── OVERVIEW TAB ── -->
       <template v-if="activeTab === 0">
-        <!-- Grand summary cards -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <!-- Plan card -->
-          <UCard>
-            <div class="flex items-center gap-3 mb-4">
-              <UIcon name="i-heroicons-calendar-days" class="w-5 h-5 text-blue-500 dark:text-blue-400 flex-shrink-0" />
-              <span class="text-base font-semibold text-gray-900 dark:text-white">Total Plan</span>
-            </div>
-            <div class="text-2xl font-bold text-blue-600 dark:text-blue-400 tabular-nums">{{ formatCurrency(grandBudget, 0) }}</div>
-            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">budgeted spend across all departments for {{ selectedYear }}</div>
-          </UCard>
-
-          <!-- Actual card -->
-          <UCard>
-            <div class="flex items-center gap-3 mb-4">
-              <UIcon name="i-heroicons-chart-bar" class="w-5 h-5 text-orange-500 dark:text-orange-400 flex-shrink-0" />
-              <span class="text-base font-semibold text-gray-900 dark:text-white">Total Actual</span>
-            </div>
-            <div class="text-2xl font-bold text-orange-500 dark:text-orange-400 tabular-nums">{{ formatCurrency(grandActual, 0) }}</div>
-            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">real charges billed to date across all departments</div>
-          </UCard>
-
-          <!-- Variance card -->
-          <UCard>
-            <div class="flex items-center gap-3 mb-4">
-              <UIcon
-                :name="grandVariance > 0 ? 'i-heroicons-arrow-trending-up' : 'i-heroicons-arrow-trending-down'"
-                class="w-5 h-5 flex-shrink-0"
-                :class="grandVariance > 0 ? 'text-red-500 dark:text-red-400' : 'text-emerald-500 dark:text-emerald-400'"
-              />
-              <span class="text-base font-semibold text-gray-900 dark:text-white">YTD Variance</span>
-            </div>
-            <div class="text-2xl font-bold tabular-nums" :class="grandVariance > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">
-              {{ grandVariance > 0 ? '+' : '' }}{{ formatCurrency(grandVariance, 0) }}
-            </div>
-            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">{{ grandVariance > 0 ? 'over plan — actual exceeds budget' : 'under plan — spending below budget' }}</div>
-          </UCard>
-        </div>
-
-        <!-- Overview secondary metrics -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <!-- Burn rate -->
-          <UCard>
-            <div class="flex items-center gap-3 mb-3">
-              <UIcon name="i-heroicons-fire" class="w-5 h-5 text-amber-500 dark:text-amber-400 flex-shrink-0" />
-              <span class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Monthly Burn Rate</span>
-            </div>
-            <div class="text-2xl font-bold text-gray-900 dark:text-white tabular-nums">{{ formatCurrency(grandBurnRate, 0) }}</div>
-            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">average actual spend per month so far this year</div>
-          </UCard>
-
-          <!-- Forecast to year-end -->
-          <UCard>
-            <div class="flex items-center gap-3 mb-3">
-              <UIcon name="i-heroicons-flag" class="w-5 h-5 flex-shrink-0"
-                :class="grandForecast > grandBudget ? 'text-red-500 dark:text-red-400' : 'text-emerald-500 dark:text-emerald-400'"
-              />
-              <span class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Forecast to Year-End</span>
-            </div>
-            <div class="text-2xl font-bold tabular-nums"
-              :class="grandForecast > grandBudget ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'"
-            >{{ formatCurrency(grandForecast, 0) }}</div>
-            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">projected year-end total based on current burn rate · {{ grandForecast > grandBudget ? '+' : '' }}{{ formatCurrency(grandForecast - grandBudget, 0) }} vs full-year plan</div>
-          </UCard>
-
-        </div>
-
         <!-- Overview charts: side-by-side -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
           <UCard>
             <template #header>
               <div class="flex items-center justify-between">
-                <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Actual Spend by Department</h2>
+                <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Plan vs Actual by Department</h2>
                 <UBadge color="gray" variant="soft" size="sm">{{ selectedYear }}</UBadge>
               </div>
             </template>
@@ -158,11 +88,51 @@
           <UCard>
             <template #header>
               <div class="flex items-center justify-between">
-                <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Cumulative YTD Spend by Department</h2>
+                <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Cumulative YTD Plan vs Actual</h2>
                 <UBadge color="gray" variant="soft" size="sm">{{ selectedYear }}</UBadge>
               </div>
             </template>
             <VChart :option="overviewYtdChartOption" class="h-64" autoresize />
+          </UCard>
+        </div>
+
+        <!-- Grand summary metrics: 2×3 grid -->
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+          <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
+            <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Total Plan</div>
+            <div class="text-lg font-bold text-blue-600 dark:text-blue-400 tabular-nums">{{ formatCurrency(grandBudget, 0) }}</div>
+            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">YTD budgeted spend across all departments for {{ selectedYear }}</div>
+          </UCard>
+          <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
+            <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Total Actual</div>
+            <div class="text-lg font-bold text-orange-500 dark:text-orange-400 tabular-nums">{{ formatCurrency(grandActual, 0) }}</div>
+            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">YTD real charges billed to date across all departments</div>
+          </UCard>
+          <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
+            <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">YTD Variance</div>
+            <div class="text-lg font-bold tabular-nums" :class="grandVariance > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">
+              {{ grandVariance > 0 ? '+' : '' }}{{ formatCurrency(grandVariance, 0) }}
+            </div>
+            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">{{ grandVariance > 0 ? 'YTD over plan — actual exceeds budget' : 'YTD under plan — spending below budget' }}</div>
+          </UCard>
+          <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
+            <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Monthly Burn Rate</div>
+            <div class="text-lg font-bold text-gray-900 dark:text-white tabular-nums">{{ formatCurrency(grandBurnRate, 0) }}</div>
+            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">Average YTD actual spend per month across all departments</div>
+          </UCard>
+          <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
+            <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Forecast to Year-End</div>
+            <div class="text-lg font-bold tabular-nums" :class="grandForecast > grandBudget ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">
+              {{ formatCurrency(grandForecast, 0) }}
+            </div>
+            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">{{ grandMonthsWithData.length }} of 12 months elapsed ({{ Math.round(grandMonthsWithData.length / 12 * 100) }}% of year)</div>
+          </UCard>
+          <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
+            <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Projected Variance</div>
+            <div class="text-lg font-bold tabular-nums" :class="grandForecast > grandBudget ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">
+              {{ grandForecast > grandBudget ? '+' : '' }}{{ formatCurrency(grandForecast - grandBudget, 0) }}
+            </div>
+            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">Projected year-end variance vs full-year plan</div>
           </UCard>
         </div>
 
@@ -176,7 +146,7 @@
               <thead>
                 <tr class="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   <th class="px-4 py-3">Department</th>
-                  <th class="px-4 py-3">Trend</th>
+                  <th class="px-4 py-3">Actual Spend Trend</th>
                   <th class="px-4 py-3 text-right">YTD Plan</th>
                   <th class="px-4 py-3 text-right">YTD Actual</th>
                   <th class="px-4 py-3 text-right">YTD Variance</th>
@@ -187,194 +157,110 @@
                 <tr
                   v-for="d in departments"
                   :key="d.department"
-                  class="text-gray-900 dark:text-gray-100 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
+                  class="text-gray-900 dark:text-gray-100 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors group"
+                  :title="`View ${d.department} details`"
                   @click="activeTab = departments.indexOf(d) + 1"
                 >
                   <td class="px-4 py-3 font-medium">{{ d.department }}</td>
                   <td class="px-4 py-3">
                     <VChart :option="sparklineOption(d)" class="h-8 w-24" autoresize />
                   </td>
-                  <td class="px-4 py-3 text-right tabular-nums">{{ formatCurrency(d.budgetTotal, 0) }}</td>
-                  <td class="px-4 py-3 text-right tabular-nums">{{ formatCurrency(d.actualTotal, 0) }}</td>
+                  <td class="px-4 py-3 text-right tabular-nums">{{ formatCurrency(resolvedDeptPlan(d), 0) }}</td>
+                  <td class="px-4 py-3 text-right tabular-nums">{{ formatCurrency(deptVisibleActual(d), 0) }}</td>
                   <td
                     class="px-4 py-3 text-right font-medium tabular-nums"
-                    :class="d.variance > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'"
+                    :class="(deptVisibleActual(d) - resolvedDeptPlan(d)) > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'"
                   >
-                    {{ d.variance > 0 ? '+' : '' }}{{ formatCurrency(d.variance, 0) }}
+                    {{ (deptVisibleActual(d) - resolvedDeptPlan(d)) > 0 ? '+' : '' }}{{ formatCurrency(deptVisibleActual(d) - resolvedDeptPlan(d), 0) }}
                   </td>
                   <td class="px-4 py-3 text-right">
-                    <UIcon name="i-heroicons-chevron-right" class="w-4 h-4 text-gray-300 dark:text-gray-600" />
+                    <UIcon name="i-heroicons-chevron-right" class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-gray-500 dark:group-hover:text-gray-300 transition-colors" />
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
         </UCard>
+
       </template>
 
       <!-- ── DEPARTMENT TAB ── -->
       <template v-else>
         <div v-if="activeDept">
-          <!-- Department summary — At a Glance -->
-          <div class="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">At a Glance</div>
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-2">
-            <!-- Plan card -->
-            <UCard class="md:col-span-1">
-              <div class="flex items-center gap-3 mb-3">
-                <UIcon name="i-heroicons-calendar-days" class="w-5 h-5 text-blue-500 dark:text-blue-400 flex-shrink-0" />
-                <span class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">YTD Plan</span>
-              </div>
-              <div class="text-2xl font-bold text-blue-600 dark:text-blue-400 tabular-nums">
-                {{ formatCurrency(Object.values(resolvedMonthlyPlan).reduce((s, v) => s + v, 0) || activeDept.budgetTotal, 0) }}
-              </div>
-              <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">total budgeted spend for this department in {{ selectedYear }}</div>
-            </UCard>
-
-            <!-- Actual card -->
-            <UCard class="md:col-span-1">
-              <div class="flex items-center gap-3 mb-3">
-                <UIcon name="i-heroicons-chart-bar" class="w-5 h-5 text-orange-500 dark:text-orange-400 flex-shrink-0" />
-                <span class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">YTD Actual</span>
-              </div>
-              <div class="text-2xl font-bold text-orange-500 dark:text-orange-400 tabular-nums">
-                {{ formatCurrency(activeDept.actualTotal, 0) }}
-              </div>
-              <div class="flex items-center gap-1 mt-1">
-                <UIcon
-                  :name="deptMoMChange && deptMoMChange.change > 0 ? 'i-heroicons-arrow-trending-up' : 'i-heroicons-arrow-trending-down'"
-                  class="w-3 h-3 flex-shrink-0"
-                  :class="deptMoMChange && deptMoMChange.change > 0 ? 'text-red-400' : 'text-emerald-400'"
-                  v-if="deptMoMChange"
-                />
-                <span class="text-xs text-gray-400 dark:text-gray-500">
-                  {{ deptMoMChange ? (deptMoMChange.change > 0 ? '+' : '') + deptMoMChange.pct.toFixed(1) + '% vs last month' : 'real charges billed to this department to date' }}
-                </span>
-              </div>
-            </UCard>
-
-            <!-- Biggest swing card -->
-            <UCard class="md:col-span-2">
-              <div class="flex items-center gap-3 mb-3">
-                <UIcon name="i-heroicons-bolt"
-                  class="w-5 h-5 flex-shrink-0"
-                  :class="biggestVarianceAccount && biggestVarianceAccount.variance > 0 ? 'text-red-500 dark:text-red-400' : 'text-emerald-500 dark:text-emerald-400'"
-                />
-                <span class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Highest Monthly Variance</span>
-              </div>
-              <template v-if="biggestVarianceAccount">
-                <div class="text-2xl font-bold tabular-nums mb-1"
-                  :class="biggestVarianceAccount.variance > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'"
-                >
-                  {{ biggestVarianceAccount.variance > 0 ? '+' : '' }}{{ formatCurrency(biggestVarianceAccount.variance, 0) }}
+          <!-- Monthly summary table (spreadsheet-style) -->
+          <UCard class="mb-4">
+            <template #header>
+              <div class="flex items-center justify-between">
+                <div>
+                  <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Monthly Plan vs Actual — {{ activeDept.department }}</h2>
+                  <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Plan and actual spend by invoicing month. Cumulative actual stops at the last month with data.</p>
                 </div>
-                <div class="text-xs text-gray-500 dark:text-gray-400 truncate" :title="biggestVarianceAccount.name">{{ biggestVarianceAccount.name }}</div>
-                <div class="text-xs text-gray-400 dark:text-gray-500">{{ biggestVarianceAccount.category !== biggestVarianceAccount.name ? biggestVarianceAccount.category + ' · ' : '' }}{{ formatMonth(biggestVarianceAccount.month) }}</div>
-                <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">largest single-month spend jump or drop across all accounts</div>
-              </template>
-              <div v-else class="text-sm text-gray-400 dark:text-gray-500">—</div>
-            </UCard>
-          </div>
-
-          <!-- Department secondary metrics — Detail Metrics -->
-          <div class="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">Detail Metrics</div>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <!-- Plan attainment -->
-            <UCard>
-              <div class="flex items-center gap-3 mb-3">
-                <UIcon name="i-heroicons-check-circle" class="w-5 h-5 flex-shrink-0"
-                  :class="deptPlanAttainment !== null && deptPlanAttainment > 100 ? 'text-red-500 dark:text-red-400' : 'text-emerald-500 dark:text-emerald-400'"
-                />
-                <span class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Plan Attainment</span>
-              </div>
-              <div class="text-2xl font-bold tabular-nums mb-1"
-                :class="deptPlanAttainment !== null && deptPlanAttainment > 100 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'"
-              >{{ deptPlanAttainment !== null ? deptPlanAttainment.toFixed(1) + '%' : '—' }}</div>
-              <div class="text-xs text-gray-400 dark:text-gray-500">YTD actual as % of plan</div>
-            </UCard>
-
-            <!-- Top cost driver -->
-            <UCard>
-              <div class="flex items-center gap-3 mb-3">
-                <UIcon name="i-heroicons-arrow-up-circle" class="w-5 h-5 text-purple-500 dark:text-purple-400 flex-shrink-0" />
-                <span class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Top Cost Driver</span>
-              </div>
-              <template v-if="deptTopCostDriver">
-                <div class="text-2xl font-bold text-gray-900 dark:text-white tabular-nums">{{ formatCurrency(deptTopCostDriver.actual, 0) }}</div>
-                <div class="text-xs text-gray-500 dark:text-gray-400 truncate mt-1" :title="deptTopCostDriver.name">{{ deptTopCostDriver.name }}</div>
-                <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">highest spend account this year</div>
-              </template>
-              <div v-else class="text-2xl font-bold text-gray-300 dark:text-gray-600">—</div>
-            </UCard>
-
-            <!-- Plan overruns — month dot grid -->
-            <UCard>
-              <div class="flex items-center gap-3 mb-3">
-                <UIcon name="i-heroicons-calendar" class="w-5 h-5 flex-shrink-0"
-                  :class="deptMonthsOverPlan > 0 ? 'text-red-500 dark:text-red-400' : 'text-emerald-500 dark:text-emerald-400'"
-                />
-                <span class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Plan Overruns</span>
-              </div>
-              <div class="text-2xl font-bold tabular-nums mb-2"
-                :class="deptMonthsOverPlan > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'"
-              >{{ deptMonthsOverPlan }} <span class="text-sm font-normal text-gray-400 dark:text-gray-500">/ {{ deptMonthsWithData.length }}</span></div>
-              <!-- Month dot grid — fixed 12-column row, one dot per month -->
-              <div class="grid grid-cols-12 gap-0.5 mb-1">
-                <div
-                  v-for="m in activeDept.monthly"
-                  :key="m.month"
-                  class="w-5 h-5 rounded-sm flex items-center justify-center"
-                  :class="m.actual === 0
-                    ? 'bg-gray-100 dark:bg-gray-700'
-                    : m.actual > (resolvedMonthlyPlan[m.month] ?? m.budget)
-                      ? 'bg-red-100 dark:bg-red-900/40'
-                      : 'bg-emerald-100 dark:bg-emerald-900/40'"
-                  :title="formatMonthShort(m.month) + ': ' + (m.actual === 0 ? 'no data' : m.actual > (resolvedMonthlyPlan[m.month] ?? m.budget) ? 'over plan' : 'under plan')"
-                >
-                  <span class="text-[9px] font-semibold leading-none"
-                    :class="m.actual === 0
-                      ? 'text-gray-300 dark:text-gray-600'
-                      : m.actual > (resolvedMonthlyPlan[m.month] ?? m.budget)
-                        ? 'text-red-500 dark:text-red-400'
-                        : 'text-emerald-500 dark:text-emerald-400'"
-                  >{{ formatMonthShort(m.month).charAt(0) }}</span>
+                <div class="flex flex-col items-end gap-1">
+                  <UButton color="gray" variant="ghost" icon="i-heroicons-arrow-down-tray" size="xs" :loading="excelExporting" :disabled="excelExporting" @click="exportExcel">
+                    {{ excelExporting ? 'Generating…' : 'Export Excel' }}
+                  </UButton>
+                  <span v-if="excelExportError" class="text-xs text-red-500">{{ excelExportError }}</span>
                 </div>
               </div>
-              <div class="text-xs text-gray-400 dark:text-gray-500">months where actual spend exceeded the plan</div>
-            </UCard>
-
-            <!-- Forecast to year-end -->
-            <UCard>
-              <div class="flex items-center gap-3 mb-3">
-                <UIcon name="i-heroicons-flag" class="w-5 h-5 flex-shrink-0"
-                  :class="deptForecast > deptFullYearPlan ? 'text-red-500 dark:text-red-400' : 'text-emerald-500 dark:text-emerald-400'"
-                />
-                <span class="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Forecast to Year-End</span>
-              </div>
-              <div class="text-2xl font-bold tabular-nums"
-                :class="deptForecast > deptFullYearPlan ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'"
-              >{{ formatCurrency(deptForecast, 0) }}</div>
-              <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">projected year-end total based on current burn rate · {{ deptForecast > deptFullYearPlan ? '+' : '' }}{{ formatCurrency(deptForecast - deptFullYearPlan, 0) }} vs full-year plan</div>
-            </UCard>
-          </div>
+            </template>
+            <div class="overflow-x-auto">
+              <table class="w-full text-xs tabular-nums">
+                <thead>
+                  <tr class="border-b border-gray-200 dark:border-gray-700">
+                    <th class="py-2 pr-4 text-left font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap"></th>
+                    <th
+                      v-for="m in activeDept.monthly"
+                      :key="m.month"
+                      class="py-2 px-3 text-right font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap"
+                    >{{ formatMonthShort(m.month) }}</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-700/60">
+                  <tr>
+                    <td class="py-2 pr-4 font-semibold text-blue-600 dark:text-blue-400 whitespace-nowrap">Plan By Month</td>
+                    <td
+                      v-for="m in activeDept.monthly"
+                      :key="m.month"
+                      class="py-2 px-3 text-right text-blue-600 dark:text-blue-400"
+                    >{{ formatCurrency(resolvedMonthlyPlan[m.month] ?? m.budget, 0) }}</td>
+                  </tr>
+                  <tr>
+                    <td class="py-2 pr-4 font-semibold text-orange-500 dark:text-orange-400 whitespace-nowrap">Actual By Month</td>
+                    <td
+                      v-for="m in activeDept.monthly"
+                      :key="m.month"
+                      class="py-2 px-3 text-right"
+                      :class="visibleActual(m) > 0 ? 'text-orange-500 dark:text-orange-400' : 'text-gray-300 dark:text-gray-600'"
+                    >{{ visibleActual(m) > 0 ? formatCurrency(visibleActual(m), 0) : '—' }}</td>
+                  </tr>
+                  <tr class="border-t border-gray-200 dark:border-gray-600">
+                    <td class="py-2 pr-4 font-semibold text-blue-400 dark:text-blue-500 whitespace-nowrap">Plan (Cumulative)</td>
+                    <td
+                      v-for="(m, i) in activeDept.monthly"
+                      :key="m.month"
+                      class="py-2 px-3 text-right text-blue-400 dark:text-blue-500"
+                    >{{ formatCurrency(activeDept.monthly.slice(0, i + 1).reduce((s, p) => s + (resolvedMonthlyPlan[p.month] ?? p.budget), 0), 0) }}</td>
+                  </tr>
+                  <tr>
+                    <td class="py-2 pr-4 font-semibold text-orange-400 dark:text-orange-500 whitespace-nowrap">Actual (Cumulative)</td>
+                    <td
+                      v-for="(m, i) in activeDept.monthly"
+                      :key="m.month"
+                      class="py-2 px-3 text-right"
+                      :class="activeDept.monthly.slice(0, i + 1).every(p => visibleActual(p) > 0) ? 'text-orange-400 dark:text-orange-500' : 'text-gray-300 dark:text-gray-600'"
+                    >{{ activeDept.monthly.slice(0, i + 1).every(p => visibleActual(p) > 0) ? formatCurrency(activeDept.monthly.slice(0, i + 1).reduce((s, p) => s + visibleActual(p), 0), 0) : '—' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </UCard>
 
           <!-- Charts: side-by-side -->
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
             <!-- Monthly bar chart -->
             <UCard>
               <template #header>
-                <div class="flex items-center justify-between">
-                  <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Plan vs Actual by Month</h2>
-                  <div class="flex items-center gap-2">
-                    <template v-if="editingPlan">
-                      <UButton color="green" variant="soft" size="xs" icon="i-heroicons-check" :loading="planOverridesLoading" @click="savePlan">Save</UButton>
-                      <UButton color="gray" variant="ghost" size="xs" @click="cancelEditPlan">Cancel</UButton>
-                    </template>
-                    <template v-else>
-                      <UButton color="blue" variant="soft" size="xs" icon="i-heroicons-pencil-square" @click="startEditPlan">Edit Plan</UButton>
-                      <UButton color="gray" variant="ghost" icon="i-heroicons-arrow-down-tray" size="xs" @click="exportCSV">Export CSV</UButton>
-                    </template>
-                  </div>
-                </div>
+                <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Plan vs Actual by Month</h2>
               </template>
 
               <VChart :option="deptBarChartOption" class="h-64" autoresize @click="onBarClick" />
@@ -408,106 +294,107 @@
                   </div>
                 </div>
               </div>
-
-              <!-- Plan input row -->
-              <div v-if="editingPlan" class="mt-4 border-t border-gray-100 dark:border-gray-700 pt-4">
-                <div v-if="planSaveError" class="mb-2 text-xs text-red-500 dark:text-red-400">{{ planSaveError }}</div>
-                <div class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Monthly Plan Values</div>
-                <div class="overflow-x-auto">
-                  <div class="flex gap-2 min-w-max">
-                    <div v-for="m in activeDept.monthly" :key="m.month" class="flex flex-col gap-1 w-24">
-                      <label class="text-xs text-gray-400 text-center whitespace-nowrap">{{ formatMonth(m.month) }}</label>
-                      <input
-                        v-model="planDraft[m.month]"
-                        type="number"
-                        min="0"
-                        class="w-full text-xs text-center border border-gray-200 dark:border-gray-600 rounded px-1 py-1.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-400 tabular-nums"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
             </UCard>
 
             <!-- Cumulative YTD chart -->
             <UCard>
               <template #header>
-                <div class="flex items-center justify-between">
-                  <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Cumulative YTD Plan vs Actual</h2>
-                  <div class="flex items-center gap-2">
-                    <template v-if="editingPlan">
-                      <UButton color="green" variant="soft" size="xs" icon="i-heroicons-check" :loading="planOverridesLoading" @click="savePlan">Save</UButton>
-                      <UButton color="gray" variant="ghost" size="xs" @click="cancelEditPlan">Cancel</UButton>
-                    </template>
-                    <template v-else>
-                      <UButton color="blue" variant="soft" size="xs" icon="i-heroicons-pencil-square" @click="startEditPlan">Edit Plan</UButton>
-                    </template>
-                  </div>
-                </div>
+                <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Cumulative YTD Plan vs Actual</h2>
               </template>
               <VChart :option="deptYtdChartOption" class="h-64" autoresize />
-              <!-- Plan input row -->
-              <div v-if="editingPlan" class="mt-4 border-t border-gray-100 dark:border-gray-700 pt-4">
-                <div v-if="planSaveError" class="mb-2 text-xs text-red-500 dark:text-red-400">{{ planSaveError }}</div>
-                <div class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Monthly Plan Values</div>
-                <div class="overflow-x-auto">
-                  <div class="flex gap-2 min-w-max">
-                    <div v-for="m in activeDept.monthly" :key="m.month" class="flex flex-col gap-1 w-24">
-                      <label class="text-xs text-gray-400 text-center whitespace-nowrap">{{ formatMonth(m.month) }}</label>
-                      <input
-                        v-model="planDraft[m.month]"
-                        type="number"
-                        min="0"
-                        class="w-full text-xs text-center border border-gray-200 dark:border-gray-600 rounded px-1 py-1.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-400 tabular-nums"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
+            </UCard>
+          </div>
+
+          <!-- Metrics strip -->
+          <div class="grid grid-cols-3 gap-3 mb-6">
+            <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
+              <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Forecast to Year-End</div>
+              <div class="text-lg font-bold tabular-nums" :class="deptForecast > deptFullYearPlan ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">{{ formatCurrency(deptForecast, 0) }}</div>
+              <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">Full-year plan: {{ formatCurrency(deptFullYearPlan, 0) }}</div>
+            </UCard>
+            <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
+              <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Top Cost Driver</div>
+              <template v-if="deptTopCostDriver">
+                <div class="text-lg font-bold text-gray-900 dark:text-white tabular-nums">{{ formatCurrency(deptTopCostDriver.actual, 0) }}</div>
+                <div class="text-xs text-gray-400 dark:text-gray-500 mt-1 truncate" :title="deptTopCostDriver.name">{{ deptTopCostDriver.name }}</div>
+                <div class="text-xs text-gray-300 dark:text-gray-600 mt-1">Highest YTD actual spend across all accounts in this department</div>
+              </template>
+              <template v-else>
+                <div class="text-lg font-bold text-gray-400 dark:text-gray-500">—</div>
+              </template>
+            </UCard>
+            <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
+              <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Highest Monthly Variance</div>
+              <template v-if="biggestVarianceAccount">
+                <div class="text-lg font-bold tabular-nums" :class="biggestVarianceAccount.variance > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">{{ biggestVarianceAccount.variance > 0 ? '+' : '' }}{{ formatCurrency(biggestVarianceAccount.variance, 0) }}</div>
+                <div class="text-xs text-gray-400 dark:text-gray-500 mt-1 truncate" :title="biggestVarianceAccount.name">{{ biggestVarianceAccount.name }} · {{ formatMonth(biggestVarianceAccount.month) }}</div>
+                <div class="text-xs text-gray-300 dark:text-gray-600 mt-1">Largest YTD month-over-month swing across all accounts</div>
+              </template>
+              <template v-else>
+                <div class="text-lg font-bold text-gray-400 dark:text-gray-500">—</div>
+                <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">No variance data</div>
+              </template>
             </UCard>
           </div>
 
           <!-- Category breakdown: compact list rows -->
           <UCard>
             <template #header>
-              <div class="flex items-center justify-between">
-                <h2 class="text-base font-semibold text-gray-900 dark:text-white">Cost Breakdown</h2>
-                <span class="text-sm text-gray-500 dark:text-gray-400 tabular-nums">
-                  <span class="text-orange-500 dark:text-orange-400 font-medium">{{ formatCurrency(activeDept.actualTotal, 0) }}</span>
-                  <span class="mx-1">of</span>
-                  <span class="text-blue-600 dark:text-blue-400 font-medium">{{ formatCurrency(activeDept.budgetTotal, 0) }}</span>
-                  <span class="ml-1">plan</span>
-                </span>
-              </div>
+              <h2 class="text-base font-semibold text-gray-900 dark:text-white">Cost Breakdown</h2>
+              <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Individual accounts sorted by largest YTD variance</p>
             </template>
-            <div class="divide-y divide-gray-100 dark:divide-gray-700/60">
-              <div v-for="cat in activeDept.categories" :key="cat.name" class="py-4">
-                <!-- Category header -->
-                <div class="flex items-start gap-3">
-                  <div class="w-1 self-stretch rounded-full flex-shrink-0 mt-0.5"
-                    :class="cat.ytdActual > cat.ytdBudget && cat.ytdBudget > 0 ? 'bg-red-400' : 'bg-emerald-400'"
-                  />
-                  <div class="flex-1 min-w-0">
-                    <div class="font-semibold text-sm text-gray-900 dark:text-white">{{ cat.name }}</div>
-                    <div v-if="cat.note" class="text-xs text-gray-400 italic mt-0.5">{{ cat.note }}</div>
-                    <!-- Stats row -->
-                    <div class="mt-2 text-sm">
-                      <span class="text-xs text-gray-500 dark:text-gray-400 mr-1">Actual</span>
-                      <span class="font-semibold text-orange-500 dark:text-orange-400 tabular-nums">{{ formatCurrency(cat.ytdActual, 0) }}</span>
-                    </div>
-                    <!-- Account list toggle -->
-                    <div v-if="cat.accounts?.length" class="mt-3">
-                      <button
-                        class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 select-none transition-colors"
-                        @click.stop="toggleAccountList(activeDept.department + ':' + cat.name)"
-                      >
-                        <UIcon
-                          :name="expandedAccountLists.has(activeDept.department + ':' + cat.name) ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'"
-                          class="w-3 h-3 flex-shrink-0"
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="border-b border-gray-200 dark:border-gray-700">
+                    <th class="py-2 pr-4 text-left font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-xs">Category</th>
+                    <th class="py-2 px-4 text-right font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-xs">YTD Plan</th>
+                    <th class="py-2 px-4 text-right font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-xs">YTD Actual</th>
+                    <th class="py-2 px-4 text-right font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-xs">YTD Variance</th>
+                    <th class="py-2 pl-4 text-left font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-xs">AI Variance Summary</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-700/60">
+                  <!-- Totals row -->
+                  <tr class="bg-gray-50 dark:bg-gray-800/40 font-semibold">
+                    <td class="py-3 pr-4 text-gray-900 dark:text-white">Total IT {{ activeDept.department }} AWS</td>
+                    <td class="py-3 px-4 text-right tabular-nums text-blue-600 dark:text-blue-400">{{ formatCurrency(resolvedDeptPlan(activeDept), 0) }}</td>
+                    <td class="py-3 px-4 text-right tabular-nums text-orange-500 dark:text-orange-400">{{ formatCurrency(deptVisibleActual(activeDept), 0) }}</td>
+                    <td class="py-3 px-4 text-right tabular-nums"
+                      :class="deptVisibleActual(activeDept) > resolvedDeptPlan(activeDept) ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'"
+                    >{{ formatCurrency(deptVisibleActual(activeDept) - resolvedDeptPlan(activeDept), 0) }}</td>
+                    <td class="py-3 pl-4"></td>
+                  </tr>
+                  <!-- Category rows -->
+                  <tr v-for="cat in activeDept.categories" :key="cat.name">
+                    <td class="py-3 pr-4">
+                      <div class="flex items-center gap-2">
+                        <div class="w-1 h-4 rounded-full flex-shrink-0"
+                          :class="cat.ytdActual > cat.ytdBudget && cat.ytdBudget > 0 ? 'bg-red-400' : 'bg-emerald-400'"
                         />
-                        {{ cat.accounts.length }} account{{ cat.accounts.length === 1 ? '' : 's' }}
-                      </button>
-                      <div v-if="expandedAccountLists.has(activeDept.department + ':' + cat.name)" class="mt-1 space-y-0.5">
+                        <button
+                          class="text-left text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                          @click.stop="toggleAccountList(activeDept.department + ':' + cat.name)"
+                        >
+                          {{ cat.name }}
+                          <UIcon
+                            v-if="cat.accounts?.length"
+                            :name="expandedAccountLists.has(activeDept.department + ':' + cat.name) ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'"
+                            class="w-3 h-3 inline ml-1 text-gray-400"
+                          />
+                        </button>
+                      </div>
+                      <!-- Expanded accounts -->
+                      <div v-if="expandedAccountLists.has(activeDept.department + ':' + cat.name) && cat.accounts?.length" class="mt-2 space-y-0.5">
+                        <!-- Plan methodology note -->
+                        <div v-if="cat.name === 'Enterprise Support'" class="ml-4 mb-1.5 flex items-start gap-1.5 text-xs text-gray-400 dark:text-gray-500">
+                          <UIcon name="i-heroicons-information-circle" class="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                          <span>Plan value is hardcoded at $56,900/month — a fixed Finance estimate proportional to overall AWS spend.</span>
+                        </div>
+                        <div v-else-if="cat.name === 'GDMS-DevOrg'" class="ml-4 mb-1.5 flex items-start gap-1.5 text-xs text-gray-400 dark:text-gray-500">
+                          <UIcon name="i-heroicons-information-circle" class="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                          <span>Plan value is hardcoded at $10,000/month — GDMS-DevOrg does not have a per-account PEP budget breakdown.</span>
+                        </div>
                         <div v-for="acct in cat.accounts" :key="acct.accountId">
                           <button
                             class="w-full flex items-center gap-2 py-1.5 px-2 ml-4 rounded text-sm hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
@@ -519,6 +406,7 @@
                             />
                             <span class="font-mono text-xs text-gray-400 dark:text-gray-500 flex-shrink-0">{{ acct.accountId }}</span>
                             <span class="text-gray-700 dark:text-gray-300 truncate flex-1 text-left">{{ acct.name }}</span>
+                            <span v-if="acct.pepExpectedSpend !== undefined" class="text-purple-500 dark:text-purple-400 tabular-nums flex-shrink-0 text-xs">PEP {{ formatCurrency(acct.pepExpectedSpend, 0) }}</span>
                             <span class="text-gray-500 dark:text-gray-400 tabular-nums flex-shrink-0">{{ formatCurrency(acct.ytdActual, 0) }}</span>
                           </button>
                           <div
@@ -528,8 +416,9 @@
                             <table class="text-xs text-gray-500 dark:text-gray-400">
                               <thead>
                                 <tr>
+                                  <th class="px-2 py-0.5 text-left font-normal whitespace-nowrap text-gray-400 dark:text-gray-500"></th>
                                   <th
-                                    v-for="m in Object.keys(acct.monthlyActuals).sort()"
+                                    v-for="m in Object.keys(acct.monthlyActuals).sort().filter(m => m <= ytdCutoff)"
                                     :key="m"
                                     class="px-2 py-0.5 text-right font-normal whitespace-nowrap"
                                   >{{ formatMonth(m) }}</th>
@@ -537,22 +426,54 @@
                               </thead>
                               <tbody>
                                 <tr>
+                                  <td class="px-2 py-0.5 text-left whitespace-nowrap text-gray-400 dark:text-gray-500">Actual</td>
                                   <td
-                                    v-for="m in Object.keys(acct.monthlyActuals).sort()"
+                                    v-for="m in Object.keys(acct.monthlyActuals).sort().filter(m => m <= ytdCutoff)"
                                     :key="m"
                                     class="px-2 py-0.5 text-right tabular-nums whitespace-nowrap"
-                                    :class="(acct.monthlyActuals[m] || 0) > 0 ? 'text-gray-700 dark:text-gray-300' : 'text-gray-300 dark:text-gray-600'"
-                                  >{{ formatCurrency(acct.monthlyActuals[m] || 0, 0) }}</td>
+                                    :class="visibleMonthActual(m, acct.monthlyActuals[m] || 0) > 0 ? 'text-gray-700 dark:text-gray-300' : 'text-gray-300 dark:text-gray-600'"
+                                  >{{ formatCurrency(visibleMonthActual(m, acct.monthlyActuals[m] || 0), 0) }}</td>
+                                </tr>
+                                <tr v-if="acct.pepExpectedSpend !== undefined">
+                                  <td class="px-2 py-0.5 text-left whitespace-nowrap text-purple-500 dark:text-purple-400">PEP Expected</td>
+                                  <td
+                                    v-for="m in Object.keys(acct.monthlyActuals).sort().filter(m => m <= ytdCutoff)"
+                                    :key="m"
+                                    class="px-2 py-0.5 text-right tabular-nums whitespace-nowrap text-purple-500 dark:text-purple-400"
+                                  >{{ formatCurrency((acct.pepMonthlyExpected?.[m] ?? 0), 0) }}</td>
+                                </tr>
+                                <tr v-if="acct.pepExpectedSpend !== undefined">
+                                  <td class="px-2 py-0.5 text-left whitespace-nowrap text-gray-400 dark:text-gray-500">Variance</td>
+                                  <td
+                                    v-for="m in Object.keys(acct.monthlyActuals).sort().filter(m => m <= ytdCutoff)"
+                                    :key="m"
+                                    class="px-2 py-0.5 text-right tabular-nums whitespace-nowrap"
+                                    :class="visibleMonthActual(m, acct.monthlyActuals[m] || 0) - (acct.pepMonthlyExpected?.[m] ?? 0) > 0 ? 'text-red-500 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'"
+                                  >{{ formatCurrency(visibleMonthActual(m, acct.monthlyActuals[m] || 0) - (acct.pepMonthlyExpected?.[m] ?? 0), 0) }}</td>
                                 </tr>
                               </tbody>
                             </table>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                    </td>
+                    <td class="py-3 px-4 text-right tabular-nums text-blue-600 dark:text-blue-400">{{ formatCurrency(cat.ytdBudget, 0) }}</td>
+                    <td class="py-3 px-4 text-right tabular-nums text-orange-500 dark:text-orange-400">{{ formatCurrency(cat.ytdActual, 0) }}</td>
+                    <td class="py-3 px-4 text-right tabular-nums"
+                      :class="cat.ytdActual > cat.ytdBudget && cat.ytdBudget > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'"
+                    >{{ formatCurrency(cat.ytdActual - cat.ytdBudget, 0) }}</td>
+                    <td class="py-3 pl-4 text-xs text-gray-400 dark:text-gray-500 italic max-w-xs">
+                      <span v-if="varianceInsights[activeDept.department + ':' + cat.name]?.loading" class="inline-flex items-center gap-1 text-gray-300 dark:text-gray-600">
+                        <span class="animate-pulse">Analyzing…</span>
+                      </span>
+                      <span v-else-if="varianceInsights[activeDept.department + ':' + cat.name]?.insight">
+                        {{ varianceInsights[activeDept.department + ':' + cat.name].insight }}
+                      </span>
+                      <span v-else class="text-gray-300 dark:text-gray-600">—</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </UCard>
         </div>
@@ -577,15 +498,12 @@ import { formatCurrency } from '~/utils/formatters'
 echarts.use([BarChart, LineChart, TooltipComponent, GridComponent, LegendComponent, CanvasRenderer])
 
 definePageMeta({
-  layout: 'admin',
-  middleware: 'auth-permission',
-  permission: 'costs.budget_vs_actual',
-  title: 'Financial Metrics',
+  title: 'GDMS Finance',
   description: 'Plan vs actual spend for finance-tracked departments'
 })
 
 interface MonthlyPoint { month: string; budget: number; actual: number }
-interface AccountRow { accountId: string; name: string; ytdBudget: number; ytdActual: number; ytdVariance: number; monthlyActuals: Record<string, number> }
+interface AccountRow { accountId: string; name: string; ytdBudget: number; ytdActual: number; ytdVariance: number; monthlyActuals: Record<string, number>; pepExpectedSpend?: number; pepMonthlyExpected?: Record<string, number> }
 interface CategoryRow { name: string; ytdBudget: number; ytdActual: number; ytdVariance: number; note?: string; accounts: AccountRow[] }
 interface DepartmentResult {
   department: string
@@ -599,6 +517,31 @@ interface DepartmentResult {
 
 const currentYear = new Date().getFullYear()
 const selectedYear = ref<number>(currentYear)
+
+// Current month key in CE format (YYYY-MM-01). Months after this are not yet complete
+// and should not display actuals.
+const now = new Date()
+const ytdCutoff = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+
+// Hide the current month's actuals until the month is fully closed.
+const lastDayOfCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+const isCurrentMonthPartial = now.getDate() < lastDayOfCurrentMonth
+// The cutoff for displaying actuals: previous month if mid-month, current month if complete.
+const prevMonthKey = (() => {
+  const d = new Date(now.getFullYear(), now.getMonth(), 1)
+  d.setMonth(d.getMonth() - 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+})()
+const displayCutoff = isCurrentMonthPartial ? prevMonthKey : ytdCutoff
+
+// Returns the actual for a monthly point, or 0 if the month is beyond the display cutoff.
+function visibleActual(m: MonthlyPoint): number {
+  return m.month <= displayCutoff ? m.actual : 0
+}
+// Same for a raw month key + value pair (e.g. monthlyActuals records).
+function visibleMonthActual(month: string, actual: number): number {
+  return month <= displayCutoff ? actual : 0
+}
 const yearOptions = [currentYear, currentYear - 1, currentYear - 2]
 
 const activeTab = ref(0)
@@ -679,6 +622,17 @@ function cancelEditPlan() {
   planSaveError.value = null
 }
 
+// Override-aware YTD plan total for any department — capped to displayCutoff so it matches actuals
+function resolvedDeptPlan(d: DepartmentResult): number {
+  const overrides = planOverrides.value[d.department] || {}
+  return d.monthly.reduce((s, m) => m.month <= displayCutoff ? s + (overrides[m.month] ?? m.budget) : s, 0)
+}
+
+// Visible actual total for a department — sums only months at or before ytdCutoff
+function deptVisibleActual(d: DepartmentResult): number {
+  return d.monthly.reduce((s, m) => s + visibleActual(m), 0)
+}
+
 // Resolved monthly plan values for the active dept (overrides take precedence)
 const resolvedMonthlyPlan = computed<Record<string, number>>(() => {
   const dept = activeDept.value
@@ -715,7 +669,7 @@ const monthDrillDown = computed(() => {
   if (!dept || !month) return []
   const rows = dept.categories.map(cat => {
     const accounts = cat.accounts
-      .map(acct => ({ accountId: acct.accountId, name: acct.name, actual: acct.monthlyActuals[month] || 0 }))
+      .map(acct => ({ accountId: acct.accountId, name: acct.name, actual: visibleMonthActual(month, acct.monthlyActuals[month] || 0) }))
       .filter(a => a.actual > 0)
       .sort((a, b) => b.actual - a.actual)
     const actual = accounts.reduce((s, a) => s + a.actual, 0)
@@ -742,27 +696,32 @@ const activeDept = computed<DepartmentResult | null>(() => {
   return departments.value[activeTab.value - 1] ?? null
 })
 
-// Load overrides for the active dept whenever it changes (client-side only)
+// Load overrides for the active dept whenever it changes (client-side only).
+// Also pre-load all depts so the overview table has accurate override-aware plan/variance.
 if (import.meta.client) {
   watch(activeDept, async (dept) => {
     selectedMonth.value = null
     if (dept) await loadPlanOverrides(dept.department, selectedYear.value)
   }, { immediate: true })
+
+  watch([departments, selectedYear], async ([depts]) => {
+    await Promise.all(depts.map(d => loadPlanOverrides(d.department, selectedYear.value)))
+  }, { immediate: true })
 }
 
-const grandBudget = computed(() => departments.value.reduce((s, d) => s + d.budgetTotal, 0))
-const grandActual = computed(() => departments.value.reduce((s, d) => s + d.actualTotal, 0))
+const grandBudget = computed(() => departments.value.reduce((s, d) => s + resolvedDeptPlan(d), 0))
+const grandActual = computed(() => departments.value.reduce((s, d) => s + d.monthly.reduce((ms, m) => ms + visibleActual(m), 0), 0))
 const grandVariance = computed(() => grandActual.value - grandBudget.value)
 const grandVariancePct = computed(() => grandBudget.value > 0 ? (grandVariance.value / grandBudget.value) * 100 : 0)
 
 // ── Overview metrics ──
 
-// Months with actual data across all depts combined
+// Months with actual data across all depts combined (capped to ytdCutoff)
 const grandMonthsWithData = computed(() => {
   const monthTotals = new Map<string, number>()
   for (const d of departments.value) {
     for (const m of d.monthly) {
-      if (m.actual > 0) monthTotals.set(m.month, (monthTotals.get(m.month) || 0) + m.actual)
+      if (visibleActual(m) > 0) monthTotals.set(m.month, (monthTotals.get(m.month) || 0) + visibleActual(m))
     }
   }
   return [...monthTotals.entries()].sort(([a], [b]) => a.localeCompare(b))
@@ -787,18 +746,18 @@ const grandForecast = computed(() => {
 
 // ── Department metrics ──
 
-// Months with actual data for active dept
+// Months with actual data for active dept (capped to ytdCutoff)
 const deptMonthsWithData = computed(() => {
   const dept = activeDept.value
   if (!dept) return []
-  return dept.monthly.filter(m => m.actual > 0)
+  return dept.monthly.filter(m => visibleActual(m) > 0)
 })
 
 // Burn rate for active dept
 const deptBurnRate = computed(() => {
   const months = deptMonthsWithData.value
   if (!months.length) return 0
-  return activeDept.value!.actualTotal / months.length
+  return deptVisibleActual(activeDept.value!) / months.length
 })
 
 // Forecast to year-end for active dept
@@ -808,7 +767,7 @@ const deptForecast = computed(() => {
   const lastMonth = deptMonthsWithData.value[deptMonthsWithData.value.length - 1].month
   const lastMonthNum = parseInt(lastMonth.split('-')[1])
   const remaining = 12 - lastMonthNum
-  return dept.actualTotal + deptBurnRate.value * remaining
+  return deptVisibleActual(dept) + deptBurnRate.value * remaining
 })
 
 // Plan attainment: YTD actual as % of YTD plan (months with data only)
@@ -819,7 +778,8 @@ const deptPlanAttainment = computed(() => {
   if (!dataMonths.length) return null
   const ytdPlan = dataMonths.reduce((s, m) => s + (resolvedMonthlyPlan.value[m] ?? 0), 0)
   if (ytdPlan === 0) return null
-  return (dept.actualTotal / ytdPlan) * 100
+  const ytdActual = dept.monthly.reduce((s, m) => s + visibleActual(m), 0)
+  return (ytdActual / ytdPlan) * 100
 })
 
 // Month-over-month change: last two months with data
@@ -860,14 +820,14 @@ const deptFullYearPlan = computed(() => {
 const deptMonthsOverPlan = computed(() => {
   const dept = activeDept.value
   if (!dept) return 0
-  return dept.monthly.filter(m => m.actual > 0 && m.actual > (resolvedMonthlyPlan.value[m.month] ?? m.budget)).length
+  return dept.monthly.filter(m => visibleActual(m) > 0 && visibleActual(m) > (resolvedMonthlyPlan.value[m.month] ?? m.budget)).length
 })
 
 const ytdLabel = computed(() => {
   let last = ''
   for (const d of departments.value) {
     for (const m of d.monthly) {
-      if (m.actual > 0 && m.month > last) last = m.month
+      if (visibleActual(m) > 0 && m.month > last) last = m.month
     }
   }
   return last ? formatMonth(last) : String(selectedYear.value)
@@ -903,10 +863,10 @@ const biggestVarianceAccount = computed(() => {
   for (const cat of dept.categories || []) {
     for (const acct of cat.accounts || []) {
       if (SYNTHETIC_ACCOUNT_IDS.has(acct.accountId)) continue
-      const months = Object.keys(acct.monthlyActuals).sort()
+      const months = Object.keys(acct.monthlyActuals).sort().filter(m => m <= ytdCutoff)
       for (let i = 1; i < months.length; i++) {
-        const prev = acct.monthlyActuals[months[i - 1]] || 0
-        const curr = acct.monthlyActuals[months[i]] || 0
+        const prev = visibleMonthActual(months[i - 1], acct.monthlyActuals[months[i - 1]] || 0)
+        const curr = visibleMonthActual(months[i], acct.monthlyActuals[months[i]] || 0)
         if (prev === 0 && curr === 0) continue
         const variance = curr - prev
         if (Math.abs(variance) > topAbs) {
@@ -919,12 +879,14 @@ const biggestVarianceAccount = computed(() => {
   return topAccount
 })
 
-// Colour palette
+// Colour palette — one blue, one orange used consistently across every chart
+const PLAN_COLOR = '#4a7ca8'
+const ACTUAL_COLOR = '#f28e2b' // orange
+// Overview: DE158 = orange, DT509 = blue (same two shades, nothing else)
 const DEPT_COLORS: Record<string, string> = {
-  DE158: '#6366f1',
-  DT509: '#f28e2b',
+  DE158: '#f28e2b',
+  DT509: '#4a7ca8',
 }
-const PLAN_COLOR = '#94a3b8'
 
 // Overview: one smooth line per department, actuals only
 const overviewChartOption = computed(() => {
@@ -970,8 +932,8 @@ const overviewChartOption = computed(() => {
       splitLine: { show: false }
     },
     series: departments.value.map(d => {
-      const color = DEPT_COLORS[d.department] || '#64748b'
-      const monthlyMap = new Map(d.monthly.map(m => [m.month, m.actual]))
+      const color = DEPT_COLORS[d.department] || ACTUAL_COLOR
+      const monthlyMap = new Map(d.monthly.map(m => [m.month, visibleActual(m)]))
       const lastIdx = (() => {
         for (let i = allMonths.length - 1; i >= 0; i--) {
           if ((monthlyMap.get(allMonths[i]) || 0) > 0) return i
@@ -996,12 +958,12 @@ const overviewChartOption = computed(() => {
 
 // Sparkline for department summary table rows
 function sparklineOption(d: DepartmentResult) {
-  const color = DEPT_COLORS[d.department] || '#64748b'
-  const values = d.monthly.map(m => Math.round(m.actual))
+  const color = DEPT_COLORS[d.department] || ACTUAL_COLOR
+  const withData = d.monthly.filter(m => visibleActual(m) > 0)
   return {
     animation: false,
     grid: { left: 0, right: 0, top: 2, bottom: 2 },
-    xAxis: { type: 'category', show: false, data: d.monthly.map(m => m.month) },
+    xAxis: { type: 'category', show: false, data: withData.map(m => m.month) },
     yAxis: { type: 'value', show: false },
     series: [{
       type: 'line',
@@ -1009,7 +971,7 @@ function sparklineOption(d: DepartmentResult) {
       symbol: 'none',
       lineStyle: { color, width: 1.5 },
       areaStyle: { color, opacity: 0.08 },
-      data: values
+      data: withData.map(m => Math.round(visibleActual(m)))
     }]
   }
 }
@@ -1032,8 +994,8 @@ const deptBarChartOption = computed(() => {
         const vColor = variance > 0 ? '#f87171' : '#34d399'
         const vSign = variance > 0 ? '+' : ''
         return `<div style="font-weight:600;margin-bottom:4px">${label}</div>
-          <div style="display:flex;align-items:center;gap:8px;margin:2px 0"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#4e79a7"></span><span style="color:#94a3b8">Plan</span><span style="margin-left:auto;padding-left:16px;font-weight:600">${formatCurrency(plan, 0)}</span></div>
-          <div style="display:flex;align-items:center;gap:8px;margin:2px 0"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#f28e2b"></span><span style="color:#94a3b8">Actual</span><span style="margin-left:auto;padding-left:16px;font-weight:600">${formatCurrency(actual, 0)}</span></div>
+          <div style="display:flex;align-items:center;gap:8px;margin:2px 0"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${PLAN_COLOR}"></span><span style="color:#94a3b8">Plan</span><span style="margin-left:auto;padding-left:16px;font-weight:600">${formatCurrency(plan, 0)}</span></div>
+          <div style="display:flex;align-items:center;gap:8px;margin:2px 0"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${ACTUAL_COLOR}"></span><span style="color:#94a3b8">Actual</span><span style="margin-left:auto;padding-left:16px;font-weight:600">${formatCurrency(actual, 0)}</span></div>
           <div style="border-top:1px solid #e2e8f0;margin-top:4px;padding-top:4px;color:${vColor};font-weight:600">Variance ${vSign}${formatCurrency(variance, 0)}</div>`
       }
     },
@@ -1053,8 +1015,8 @@ const deptBarChartOption = computed(() => {
       splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } }
     },
     series: [
-      { name: 'Plan',   type: 'bar', barMaxWidth: 32, itemStyle: { color: '#4e79a7', borderRadius: [3,3,0,0] }, data: monthly.map(m => Math.round(resolvedMonthlyPlan.value[m.month] ?? m.budget)) },
-      { name: 'Actual', type: 'bar', barMaxWidth: 32, itemStyle: { color: '#f28e2b', borderRadius: [3,3,0,0] }, data: monthly.map(m => Math.round(m.actual)) }
+      { name: 'Plan',   type: 'bar', barMaxWidth: 32, itemStyle: { color: PLAN_COLOR, borderRadius: [3,3,0,0] }, data: monthly.map(m => Math.round(resolvedMonthlyPlan.value[m.month] ?? m.budget)) },
+      { name: 'Actual', type: 'bar', barMaxWidth: 32, itemStyle: { color: ACTUAL_COLOR, borderRadius: [3,3,0,0] }, data: monthly.map(m => Math.round(visibleActual(m))) }
     ]
   }
 })
@@ -1099,8 +1061,8 @@ const overviewYtdChartOption = computed(() => {
       splitLine: { show: false }
     },
     series: departments.value.map(d => {
-      const color = DEPT_COLORS[d.department] || '#64748b'
-      const monthlyMap = new Map(d.monthly.map(m => [m.month, m.actual]))
+      const color = DEPT_COLORS[d.department] || ACTUAL_COLOR
+      const monthlyMap = new Map(d.monthly.map(m => [m.month, visibleActual(m)]))
       let running = 0
       const lastIdx = (() => {
         for (let i = allMonths.length - 1; i >= 0; i--) {
@@ -1130,7 +1092,7 @@ const deptYtdChartOption = computed(() => {
   if (!activeDept.value) return {}
   const monthly = activeDept.value.monthly
   const labels = monthly.map(m => formatMonthShort(m.month))
-  const color = DEPT_COLORS[activeDept.value.department] || '#6366f1'
+  const color = ACTUAL_COLOR
 
   let runPlan = 0
   let runActual = 0
@@ -1139,7 +1101,7 @@ const deptYtdChartOption = computed(() => {
 
   const lastActualIdx = (() => {
     for (let i = monthly.length - 1; i >= 0; i--) {
-      if (monthly[i].actual > 0) return i
+      if (visibleActual(monthly[i]) > 0) return i
     }
     return -1
   })()
@@ -1151,7 +1113,7 @@ const deptYtdChartOption = computed(() => {
     if (i > lastActualIdx) {
       actualData.push(null)
     } else {
-      runActual += m.actual
+      runActual += visibleActual(m)
       actualData.push(Math.round(runActual))
     }
   }
@@ -1192,7 +1154,7 @@ const deptYtdChartOption = computed(() => {
         name: 'Plan',
         type: 'bar',
         barMaxWidth: 32,
-        itemStyle: { color: '#4e79a7', borderRadius: [3, 3, 0, 0] },
+        itemStyle: { color: PLAN_COLOR, borderRadius: [3, 3, 0, 0] },
         data: planData
       },
       {
@@ -1206,34 +1168,85 @@ const deptYtdChartOption = computed(() => {
   }
 })
 
-// Export the active department's categories + accounts to CSV
-function exportCSV() {
-  const dept = activeDept.value
-  if (!dept) return
 
-  const rows: string[][] = []
-  const monthLabels = months.value.map(formatMonth)
+// ── AI variance driver insights ──
+interface InsightState { loading: boolean; insight: string | null }
+const varianceInsights = ref<Record<string, InsightState>>({})
 
-  // Header
-  rows.push(['Category', 'Account ID', 'Account Name', 'YTD Plan', 'YTD Actual', 'YTD Variance', ...monthLabels])
+async function loadVarianceInsights(dept: DepartmentResult) {
+  const uncached = dept.categories.filter(cat => !varianceInsights.value[dept.department + ':' + cat.name])
+  if (!uncached.length) return
 
-  for (const cat of dept.categories) {
-    // Category summary row
-    rows.push([cat.name, '', '', String(cat.ytdBudget.toFixed(2)), String(cat.ytdActual.toFixed(2)), String(cat.ytdVariance.toFixed(2)), ...months.value.map(() => '')])
-    // Account rows
-    for (const acct of cat.accounts || []) {
-      const monthlyVals = months.value.map(m => String((acct.monthlyActuals[m] || 0).toFixed(2)))
-      rows.push([cat.name, acct.accountId, acct.name, String(acct.ytdBudget.toFixed(2)), String(acct.ytdActual.toFixed(2)), String(acct.ytdVariance.toFixed(2)), ...monthlyVals])
-    }
+  // Mark all as loading up front, then fire all fetches in parallel
+  for (const cat of uncached) {
+    varianceInsights.value[dept.department + ':' + cat.name] = { loading: true, insight: null }
   }
 
-  const csv = rows.map(r => r.map(cell => `"${cell.replace(/"/g, '""')}"`).join(',')).join('\n')
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${dept.department}-budget-vs-actual-${selectedYear.value}.csv`
-  a.click()
-  URL.revokeObjectURL(url)
+  await Promise.all(uncached.map(async (cat) => {
+    const key = dept.department + ':' + cat.name
+
+    const topAccount = cat.accounts.reduce<{ name: string; ytdActual: number } | null>((top, a) => {
+      return !top || a.ytdActual > top.ytdActual ? { name: a.name, ytdActual: a.ytdActual } : top
+    }, null)
+
+    const monthlyActuals: Record<string, number> = {}
+    for (const acct of cat.accounts) {
+      for (const [m, v] of Object.entries(acct.monthlyActuals)) {
+        monthlyActuals[m] = (monthlyActuals[m] || 0) + v
+      }
+    }
+
+    try {
+      const res = await $fetch<{ data: { insight: string } }>('/api/ai/insights', {
+        method: 'POST',
+        body: {
+          type: 'variance-driver',
+          context: {
+            categoryName: cat.name,
+            department: dept.department,
+            ytdBudget: cat.ytdBudget,
+            ytdActual: cat.ytdActual,
+            accountCount: cat.accounts.length,
+            monthlyActuals,
+            topAccount
+          }
+        }
+      })
+      varianceInsights.value[key] = { loading: false, insight: res?.data?.insight || null }
+    } catch {
+      varianceInsights.value[key] = { loading: false, insight: null }
+    }
+  }))
 }
+
+if (import.meta.client) {
+  watch(activeDept, (dept) => {
+    if (dept) loadVarianceInsights(dept)
+  }, { immediate: true })
+}
+
+const excelExporting = ref(false)
+const excelExportError = ref<string | null>(null)
+
+async function exportExcel() {
+  excelExporting.value = true
+  excelExportError.value = null
+  try {
+    const buf = await $fetch<ArrayBuffer>(`/api/costs/budget-vs-actual-export?year=${selectedYear.value}`, {
+      responseType: 'arrayBuffer'
+    })
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `IT-AWS-Cost-Tracking-${selectedYear.value}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch (err: any) {
+    excelExportError.value = err?.data?.message || err?.message || 'Export failed'
+  } finally {
+    excelExporting.value = false
+  }
+}
+
 </script>
