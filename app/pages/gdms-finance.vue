@@ -140,17 +140,17 @@
           </UCard>
           <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
             <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Forecast to Year-End</div>
-            <div class="text-lg font-bold tabular-nums" :class="grandForecast > grandBudget ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">
+            <div class="text-lg font-bold tabular-nums" :class="grandForecast > grandFullYearPlan ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">
               {{ formatCurrency(grandForecast, 0) }}
             </div>
             <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">{{ grandMonthsWithData.length }} of 12 months elapsed ({{ Math.round(grandMonthsWithData.length / 12 * 100) }}% of year)</div>
           </UCard>
           <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
             <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Projected Variance</div>
-            <div class="text-lg font-bold tabular-nums" :class="grandForecast > grandBudget ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">
-              {{ grandForecast > grandBudget ? '+' : '' }}{{ formatCurrency(grandForecast - grandBudget, 0) }}
+            <div class="text-lg font-bold tabular-nums" :class="grandForecast > grandFullYearPlan ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">
+              {{ grandForecast > grandFullYearPlan ? '+' : '' }}{{ formatCurrency(grandForecast - grandFullYearPlan, 0) }}
             </div>
-            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">Projected year-end variance vs full-year plan</div>
+            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">Projected year-end variance vs full-year plan of {{ formatCurrency(grandFullYearPlan, 0) }}</div>
           </UCard>
         </div>
 
@@ -724,6 +724,16 @@ if (import.meta.client) {
 }
 
 const grandBudget = computed(() => departments.value.reduce((s, d) => s + resolvedDeptPlan(d), 0))
+
+// Full-year plan: annualize the YTD plan based on months elapsed.
+// Future month budget values from the API are unreliable (proforma has no forward data,
+// PEP budgets are only populated for months with actuals). Annualizing the known YTD
+// plan is the correct basis for projected variance.
+const grandFullYearPlan = computed(() => {
+  const monthsElapsed = grandMonthsWithData.value.length
+  if (!monthsElapsed) return 0
+  return (grandBudget.value / monthsElapsed) * 12
+})
 const grandActual = computed(() => departments.value.reduce((s, d) => s + d.monthly.reduce((ms, m) => ms + visibleActual(m), 0), 0))
 const grandVariance = computed(() => grandActual.value - grandBudget.value)
 const grandVariancePct = computed(() => grandBudget.value > 0 ? (grandVariance.value / grandBudget.value) * 100 : 0)
