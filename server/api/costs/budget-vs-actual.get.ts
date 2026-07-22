@@ -38,6 +38,7 @@ import { getAllAccountsUnified } from '../../utils/accounts-consolidated'
 import { requirePermission } from '../../utils/user-roles'
 import { logger } from '../../utils/logger'
 import { queryDevOrgChargesByMonth } from '../../utils/dev-org-charges'
+import { CLASSIFIED_CLOUD_CHARGES_2026 } from '../../utils/classified-cloud-charges'
 import { getAnnualBudgetArray } from '../../../shared/utils/budget-utils'
 
 // Departments this report is scoped to. Kept explicit per Finance's request.
@@ -459,6 +460,10 @@ export default defineEventHandler(handleAsync(async (event) => {
       for (const [m, c] of enterpriseSupportActualByMonth) ensure(m).actual += c
 
       for (const [m, c] of devOrgResult.byMonth) ensure(m).actual += c
+
+      // Secret Cloud — not accessible via CE; actuals provided directly by Finance
+      const classifiedCharges = year === 2026 ? CLASSIFIED_CLOUD_CHARGES_2026 : {}
+      for (const [m, c] of Object.entries(classifiedCharges)) ensure(m).actual += c
     }
 
     const monthly: MonthlyPoint[] = [...monthMap.entries()]
@@ -576,6 +581,32 @@ export default defineEventHandler(handleAsync(async (event) => {
       })
     }
 
+    // Secret Cloud — hardcoded Finance-supplied actuals, no plan available
+    if (dept === DEV_ORG_ROLLS_INTO) {
+      const classifiedCharges = year === 2026 ? CLASSIFIED_CLOUD_CHARGES_2026 : {}
+      const classifiedMonthlyActuals: Record<string, number> = Object.fromEntries(
+        Object.entries(classifiedCharges).filter(([m]) => m >= yearMonthMin && m <= ytdMonthMax)
+      )
+      const classifiedYtdActual = Object.values(classifiedMonthlyActuals).reduce((s, v) => s + v, 0)
+      if (classifiedYtdActual > 0) {
+        categories.push({
+          name: 'Secret Cloud',
+          ytdBudget: 0,
+          ytdActual: classifiedYtdActual,
+          ytdVariance: classifiedYtdActual,
+          note: 'Finance-supplied actuals — not accessible via Cost Explorer',
+          accounts: [{
+            accountId: 'classified',
+            name: 'Secret Cloud',
+            ytdBudget: 0,
+            ytdActual: classifiedYtdActual,
+            ytdVariance: classifiedYtdActual,
+            monthlyActuals: classifiedMonthlyActuals
+          }]
+        })
+      }
+    }
+
     // Remaining accounts — each gets its own category row, sorted by largest YTD variance (absolute)
     const otherAccounts = [...accountTotals.entries()]
       .filter(([id]) => !claimedIds.has(id))
@@ -611,7 +642,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       const ytdDeptBudget = monthly.filter(m => m.month >= yearMonthMin && m.month <= ytdMonthMax).reduce((s, m) => s + m.budget, 0)
       // Exclude hardcoded-budget categories (Enterprise Support, GDMS-DevOrg) — their budgets
       // are not sourced from monthMap so subtracting them would make the residual go negative.
-      const HARDCODED_CATS = new Set(['Enterprise Support', 'GDMS-DevOrg'])
+      const HARDCODED_CATS = new Set(['Enterprise Support', 'GDMS-DevOrg', 'Secret Cloud'])
       const linkedCategoryBudgets = categories.filter(c => !HARDCODED_CATS.has(c.name)).reduce((s, c) => s + c.ytdBudget, 0)
       const gdmsCloudBudget = Math.max(0, ytdDeptBudget - linkedCategoryBudgets)
       logger.info('[BudgetVsActual] GDMS Cloud budget:', { ytdDeptBudget, linkedCategoryBudgets, gdmsCloudBudget, payerActual })

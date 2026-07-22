@@ -79,7 +79,16 @@
             <template #header>
               <div class="flex items-center justify-between">
                 <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Plan vs Actual by Department</h2>
-                <UBadge color="gray" variant="soft" size="sm">{{ selectedYear }}</UBadge>
+                <div class="flex items-center gap-2">
+                  <UButton
+                    size="xs"
+                    :color="overviewFullYear ? 'purple' : 'gray'"
+                    :variant="overviewFullYear ? 'soft' : 'ghost'"
+                    icon="i-heroicons-calendar"
+                    @click="overviewFullYear = !overviewFullYear"
+                  >Full Year</UButton>
+                  <UBadge color="gray" variant="soft" size="sm">{{ selectedYear }}</UBadge>
+                </div>
               </div>
             </template>
             <VChart :option="overviewChartOption" class="h-64" autoresize />
@@ -89,7 +98,16 @@
             <template #header>
               <div class="flex items-center justify-between">
                 <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Cumulative YTD Plan vs Actual</h2>
-                <UBadge color="gray" variant="soft" size="sm">{{ selectedYear }}</UBadge>
+                <div class="flex items-center gap-2">
+                  <UButton
+                    size="xs"
+                    :color="overviewFullYear ? 'purple' : 'gray'"
+                    :variant="overviewFullYear ? 'soft' : 'ghost'"
+                    icon="i-heroicons-calendar"
+                    @click="overviewFullYear = !overviewFullYear"
+                  >Full Year</UButton>
+                  <UBadge color="gray" variant="soft" size="sm">{{ selectedYear }}</UBadge>
+                </div>
               </div>
             </template>
             <VChart :option="overviewYtdChartOption" class="h-64" autoresize />
@@ -366,7 +384,7 @@
                     <td class="py-3 pl-4"></td>
                   </tr>
                   <!-- Category rows -->
-                  <tr v-for="cat in activeDept.categories" :key="cat.name">
+                  <tr v-for="cat in activeDept.categories.filter(c => c.name !== 'Secret Cloud')" :key="cat.name">
                     <td class="py-3 pr-4">
                       <div class="flex items-center gap-2">
                         <div class="w-1 h-4 rounded-full flex-shrink-0"
@@ -523,16 +541,9 @@ const selectedYear = ref<number>(currentYear)
 const now = new Date()
 const ytdCutoff = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
 
-// Hide the current month's actuals until the month is fully closed.
-const lastDayOfCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-const isCurrentMonthPartial = now.getDate() < lastDayOfCurrentMonth
-// The cutoff for displaying actuals: previous month if mid-month, current month if complete.
-const prevMonthKey = (() => {
-  const d = new Date(now.getFullYear(), now.getMonth(), 1)
-  d.setMonth(d.getMonth() - 1)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
-})()
-const displayCutoff = isCurrentMonthPartial ? prevMonthKey : ytdCutoff
+// July 2026 actuals are Finance-confirmed (Secret Cloud hardcoded values included).
+// Show the current month rather than waiting for month-end close.
+const displayCutoff = ytdCutoff
 
 // Returns the actual for a monthly point, or 0 if the month is beyond the display cutoff.
 function visibleActual(m: MonthlyPoint): number {
@@ -548,6 +559,9 @@ const activeTab = ref(0)
 const expandedAccountLists = ref(new Set<string>())
 const expandedAccounts = ref(new Set<string>())
 const selectedMonth = ref<string | null>(null)
+
+// Overview chart view toggle: false = truncated to last month with data, true = full year
+const overviewFullYear = ref(false)
 
 function toggleAccount(key: string) {
   if (expandedAccounts.value.has(key)) {
@@ -744,6 +758,17 @@ const grandForecast = computed(() => {
   return grandActual.value + grandBurnRate.value * remaining
 })
 
+// Last month key (YYYY-MM-01) that has any visible actual data across all departments
+const overviewLastDataMonth = computed(() => {
+  let last = ''
+  for (const d of departments.value) {
+    for (const m of d.monthly) {
+      if (visibleActual(m) > 0 && m.month > last) last = m.month
+    }
+  }
+  return last
+})
+
 // ── Department metrics ──
 
 // Months with actual data for active dept (capped to ytdCutoff)
@@ -888,33 +913,87 @@ const DEPT_COLORS: Record<string, string> = {
   DT509: '#4a7ca8',
 }
 
-// Overview: one smooth line per department, actuals only
+// Overview: grouped bars — one plan + one actual bar per department per month
 const overviewChartOption = computed(() => {
   const monthSet = new Set<string>()
   for (const d of departments.value) d.monthly.forEach(m => monthSet.add(m.month))
-  const allMonths = [...monthSet].sort()
+  const allMonthsFull = [...monthSet].sort()
+  const cutoff = overviewLastDataMonth.value
+  const allMonths = overviewFullYear.value || !cutoff
+    ? allMonthsFull
+    : allMonthsFull.filter(m => m <= cutoff)
   const labels = allMonths.map(formatMonthShort)
+
+  // Plan bars are the same hue as the dept but desaturated/lighter
+  const PLAN_TINTS: Record<string, string> = {
+    DE158: '#f9c88a',  // light orange
+    DT509: '#93b8d6',  // light blue
+  }
+
+  const legendNames: string[] = []
+  const series: any[] = []
+
+  for (const d of departments.value) {
+    const actualColor = DEPT_COLORS[d.department] || ACTUAL_COLOR
+    const planColor = PLAN_TINTS[d.department] || '#cbd5e1'
+    const overrides = planOverrides.value[d.department] || {}
+    const actualMap = new Map(d.monthly.map(m => [m.month, visibleActual(m)]))
+
+    const planName = `${d.department} Plan`
+    const actualName = `${d.department} Actual`
+    legendNames.push(planName, actualName)
+
+    series.push({
+      name: planName,
+      type: 'bar',
+      barMaxWidth: 28,
+      itemStyle: { color: planColor, borderRadius: [3, 3, 0, 0] },
+      data: allMonths.map(m => {
+        const point = d.monthly.find(p => p.month === m)
+        return point ? Math.round(overrides[m] ?? point.budget) : null
+      })
+    })
+
+    series.push({
+      name: actualName,
+      type: 'bar',
+      barMaxWidth: 28,
+      itemStyle: { color: actualColor, borderRadius: [3, 3, 0, 0] },
+      data: allMonths.map(m => {
+        const val = actualMap.get(m)
+        return (val && val > 0) ? Math.round(val) : null
+      })
+    })
+  }
 
   return {
     tooltip: {
       trigger: 'axis',
+      axisPointer: { type: 'shadow' },
       formatter: (params: any[]) => {
         const idx = params[0]?.dataIndex ?? 0
         const label = allMonths[idx] ? formatMonth(allMonths[idx]) : (params[0]?.axisValue || '')
         let html = `<div style="font-weight:600;margin-bottom:6px">${label}</div>`
-        for (const p of params) {
-          if (p.value == null) continue
-          html += `<div style="display:flex;align-items:center;gap:8px;margin:2px 0">
-            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${p.color}"></span>
-            <span style="color:#94a3b8">${p.seriesName}</span>
-            <span style="margin-left:auto;padding-left:24px;font-weight:600">${formatCurrency(p.value, 0)}</span>
-          </div>`
+        for (const d of departments.value) {
+          const color = DEPT_COLORS[d.department] || ACTUAL_COLOR
+          const planP = params.find(p => p.seriesName === `${d.department} Plan`)
+          const actualP = params.find(p => p.seriesName === `${d.department} Actual`)
+          const plan = planP?.value ?? null
+          const actual = actualP?.value ?? null
+          if (plan == null && actual == null) continue
+          const variance = actual != null && plan != null ? actual - plan : null
+          const vColor = variance != null ? (variance > 0 ? '#f87171' : '#34d399') : ''
+          const vSign = variance != null && variance > 0 ? '+' : ''
+          html += `<div style="margin-top:8px;padding-top:6px;border-top:1px solid #f1f5f9;font-weight:600;color:${color}">${d.department}</div>`
+          if (plan != null) html += `<div style="display:flex;align-items:center;gap:8px;margin:2px 0"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${PLAN_TINTS[d.department] || '#cbd5e1'}"></span><span style="color:#94a3b8">Plan</span><span style="margin-left:auto;padding-left:24px;font-weight:600">${formatCurrency(plan, 0)}</span></div>`
+          if (actual != null) html += `<div style="display:flex;align-items:center;gap:8px;margin:2px 0"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${color}"></span><span style="color:#94a3b8">Actual</span><span style="margin-left:auto;padding-left:24px;font-weight:600">${formatCurrency(actual, 0)}</span></div>`
+          if (variance != null) html += `<div style="display:flex;align-items:center;gap:8px;margin:2px 0;color:${vColor};font-weight:600"><span style="width:10px"></span><span>Variance</span><span style="margin-left:auto;padding-left:24px">${vSign}${formatCurrency(variance, 0)}</span></div>`
         }
         return html
       }
     },
     legend: {
-      data: departments.value.map(d => d.department),
+      data: legendNames,
       top: 0,
       textStyle: { color: '#94a3b8', fontSize: 11 }
     },
@@ -928,31 +1007,117 @@ const overviewChartOption = computed(() => {
     },
     yAxis: {
       type: 'value',
+      min: 0,
       axisLabel: { formatter: (v: number) => formatCurrency(v, { compact: true }), color: '#94a3b8', fontSize: 10 },
-      splitLine: { show: false }
+      splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } }
     },
-    series: departments.value.map(d => {
-      const color = DEPT_COLORS[d.department] || ACTUAL_COLOR
-      const monthlyMap = new Map(d.monthly.map(m => [m.month, visibleActual(m)]))
-      const lastIdx = (() => {
-        for (let i = allMonths.length - 1; i >= 0; i--) {
-          if ((monthlyMap.get(allMonths[i]) || 0) > 0) return i
-        }
-        return -1
-      })()
-      return {
-        name: d.department,
-        type: 'line',
-        smooth: true,
-        symbol: 'circle',
-        symbolSize: 5,
-        lineStyle: { color, width: 2.5 },
-        itemStyle: { color },
-        areaStyle: { color, opacity: 0.06 },
-        connectNulls: false,
-        data: allMonths.map((m, i) => i <= lastIdx ? Math.round(monthlyMap.get(m) || 0) : null)
+    series
+  }
+})
+
+// Overview: cumulative YTD — plan (dashed line) + actual (bars) per department
+const overviewYtdChartOption = computed(() => {
+  const monthSet = new Set<string>()
+  for (const d of departments.value) d.monthly.forEach(m => monthSet.add(m.month))
+  const allMonthsFull = [...monthSet].sort()
+  const cutoff = overviewLastDataMonth.value
+  const allMonths = overviewFullYear.value || !cutoff
+    ? allMonthsFull
+    : allMonthsFull.filter(m => m <= cutoff)
+  const labels = allMonths.map(formatMonthShort)
+
+  const PLAN_TINTS: Record<string, string> = { DE158: '#f9c88a', DT509: '#93b8d6' }
+  const legendNames: string[] = []
+  const series: any[] = []
+
+  for (const d of departments.value) {
+    const actualColor = DEPT_COLORS[d.department] || ACTUAL_COLOR
+    const planColor = PLAN_TINTS[d.department] || '#cbd5e1'
+    const overrides = planOverrides.value[d.department] || {}
+    const actualMap = new Map(d.monthly.map(m => [m.month, visibleActual(m)]))
+    const lastActualIdx = (() => {
+      for (let i = allMonths.length - 1; i >= 0; i--) {
+        if ((actualMap.get(allMonths[i]) || 0) > 0) return i
       }
+      return -1
+    })()
+
+    const planName = `${d.department} Plan`
+    const actualName = `${d.department} Actual`
+    legendNames.push(planName, actualName)
+
+    let runPlan = 0
+    series.push({
+      name: planName,
+      type: 'bar',
+      barMaxWidth: 28,
+      itemStyle: { color: planColor, borderRadius: [3, 3, 0, 0] },
+      data: allMonths.map(m => {
+        const point = d.monthly.find(p => p.month === m)
+        if (!point) return null
+        runPlan += overrides[m] ?? point.budget
+        return Math.round(runPlan)
+      })
     })
+
+    let runActual = 0
+    const actualData: (number | null)[] = []
+    for (let i = 0; i < allMonths.length; i++) {
+      if (i > lastActualIdx) { actualData.push(null); continue }
+      runActual += actualMap.get(allMonths[i]) || 0
+      actualData.push(Math.round(runActual))
+    }
+    series.push({
+      name: actualName,
+      type: 'bar',
+      barMaxWidth: 28,
+      itemStyle: { color: actualColor, borderRadius: [3, 3, 0, 0] },
+      data: actualData
+    })
+  }
+
+  return {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: (params: any[]) => {
+        const idx = params[0]?.dataIndex ?? 0
+        const label = allMonths[idx] ? formatMonth(allMonths[idx]) : (params[0]?.axisValue || '')
+        let html = `<div style="font-weight:600;margin-bottom:6px">${label}</div>`
+        for (const d of departments.value) {
+          const color = DEPT_COLORS[d.department] || ACTUAL_COLOR
+          const planP = params.find(p => p.seriesName === `${d.department} Plan`)
+          const actualP = params.find(p => p.seriesName === `${d.department} Actual`)
+          const plan = planP?.value ?? null
+          const actual = actualP?.value ?? null
+          if (plan == null && actual == null) continue
+          const variance = actual != null && plan != null ? actual - plan : null
+          const vColor = variance != null ? (variance > 0 ? '#f87171' : '#34d399') : ''
+          const vSign = variance != null && variance > 0 ? '+' : ''
+          html += `<div style="margin-top:8px;padding-top:6px;border-top:1px solid #f1f5f9;font-weight:600;color:${color}">${d.department}</div>`
+          if (plan != null) html += `<div style="display:flex;align-items:center;gap:8px;margin:2px 0"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${PLAN_TINTS[d.department] || '#cbd5e1'}"></span><span style="color:#94a3b8">Plan (cum.)</span><span style="margin-left:auto;padding-left:24px;font-weight:600">${formatCurrency(plan, 0)}</span></div>`
+          if (actual != null) html += `<div style="display:flex;align-items:center;gap:8px;margin:2px 0"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${color}"></span><span style="color:#94a3b8">Actual (cum.)</span><span style="margin-left:auto;padding-left:24px;font-weight:600">${formatCurrency(actual, 0)}</span></div>`
+          if (variance != null) html += `<div style="display:flex;align-items:center;gap:8px;margin:2px 0;color:${vColor};font-weight:600"><span style="width:10px"></span><span>Variance</span><span style="margin-left:auto;padding-left:24px">${vSign}${formatCurrency(variance, 0)}</span></div>`
+        }
+        return html
+      }
+    },
+    legend: { data: legendNames, top: 0, textStyle: { color: '#94a3b8', fontSize: 11 } },
+    grid: { left: '1%', right: '2%', bottom: '3%', top: 36, containLabel: true },
+    xAxis: {
+      type: 'category',
+      data: labels,
+      axisLabel: { color: '#94a3b8', fontSize: 11 },
+      axisLine: { lineStyle: { color: '#e2e8f0' } },
+      axisTick: { show: false }
+    },
+    yAxis: {
+      type: 'value',
+      min: 0,
+      axisLabel: { formatter: (v: number) => formatCurrency(v, { compact: true }), color: '#94a3b8', fontSize: 10 },
+      splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } }
+    },
+    series
   }
 })
 
@@ -1021,71 +1186,6 @@ const deptBarChartOption = computed(() => {
   }
 })
 
-// Overview: cumulative YTD actuals per department (area lines)
-const overviewYtdChartOption = computed(() => {
-  const monthSet = new Set<string>()
-  for (const d of departments.value) d.monthly.forEach(m => monthSet.add(m.month))
-  const allMonths = [...monthSet].sort()
-  const labels = allMonths.map(formatMonthShort)
-
-  return {
-    tooltip: {
-      trigger: 'axis',
-      formatter: (params: any[]) => {
-        const idx = params[0]?.dataIndex ?? 0
-        const label = allMonths[idx] ? formatMonth(allMonths[idx]) : (params[0]?.axisValue || '')
-        let html = `<div style="font-weight:600;margin-bottom:6px">${label}</div>`
-        for (const p of params) {
-          if (p.value == null) continue
-          html += `<div style="display:flex;align-items:center;gap:8px;margin:2px 0">
-            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${p.color}"></span>
-            <span style="color:#94a3b8">${p.seriesName}</span>
-            <span style="margin-left:auto;padding-left:24px;font-weight:600">${formatCurrency(p.value, 0)}</span>
-          </div>`
-        }
-        return html
-      }
-    },
-    legend: { data: departments.value.map(d => d.department), top: 0, textStyle: { color: '#94a3b8', fontSize: 11 } },
-    grid: { left: '1%', right: '2%', bottom: '3%', top: 36, containLabel: true },
-    xAxis: {
-      type: 'category',
-      data: labels,
-      axisLabel: { color: '#94a3b8', fontSize: 11 },
-      axisLine: { lineStyle: { color: '#e2e8f0' } },
-      axisTick: { show: false }
-    },
-    yAxis: {
-      type: 'value',
-      axisLabel: { formatter: (v: number) => formatCurrency(v, { compact: true }), color: '#94a3b8', fontSize: 10 },
-      splitLine: { show: false }
-    },
-    series: departments.value.map(d => {
-      const color = DEPT_COLORS[d.department] || ACTUAL_COLOR
-      const monthlyMap = new Map(d.monthly.map(m => [m.month, visibleActual(m)]))
-      let running = 0
-      const lastIdx = (() => {
-        for (let i = allMonths.length - 1; i >= 0; i--) {
-          if ((monthlyMap.get(allMonths[i]) || 0) > 0) return i
-        }
-        return -1
-      })()
-      const data: (number | null)[] = []
-      for (let i = 0; i < allMonths.length; i++) {
-        if (i > lastIdx) { data.push(null); continue }
-        running += monthlyMap.get(allMonths[i]) || 0
-        data.push(Math.round(running))
-      }
-      return {
-        name: d.department,
-        type: 'bar',
-        barMaxWidth: 32,
-        itemStyle: { color, borderRadius: [3, 3, 0, 0] },
-        data
-      }
-    })
-  }
-})
 
 // Department: cumulative YTD area chart (Plan vs Actual)
 const deptYtdChartOption = computed(() => {
@@ -1192,6 +1292,7 @@ async function loadVarianceInsights(dept: DepartmentResult) {
     const monthlyActuals: Record<string, number> = {}
     for (const acct of cat.accounts) {
       for (const [m, v] of Object.entries(acct.monthlyActuals)) {
+        if (m > displayCutoff || v <= 0) continue
         monthlyActuals[m] = (monthlyActuals[m] || 0) + v
       }
     }
