@@ -73,6 +73,27 @@
 
       <!-- ── OVERVIEW TAB ── -->
       <template v-if="activeTab === 0">
+        <!-- Grand summary metrics: top 3 KPI cards -->
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+          <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
+            <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Total Plan</div>
+            <div class="text-lg font-bold text-blue-600 dark:text-blue-400 tabular-nums">{{ formatCurrency(grandBudget, 0) }}</div>
+            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">YTD budgeted spend across all departments for {{ selectedYear }}</div>
+          </UCard>
+          <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
+            <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Total Actual</div>
+            <div class="text-lg font-bold text-orange-500 dark:text-orange-400 tabular-nums">{{ formatCurrency(grandActual, 0) }}</div>
+            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">YTD real charges billed to date across all departments</div>
+          </UCard>
+          <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
+            <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">YTD Variance</div>
+            <div class="text-lg font-bold tabular-nums" :class="grandVariance > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">
+              {{ grandVariance > 0 ? '+' : '' }}{{ formatCurrency(grandVariance, 0) }}
+            </div>
+            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">{{ grandVariance > 0 ? 'YTD over plan — actual exceeds budget' : 'YTD under plan — spending below budget' }}</div>
+          </UCard>
+        </div>
+
         <!-- Overview charts: side-by-side -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
           <UCard>
@@ -114,25 +135,8 @@
           </UCard>
         </div>
 
-        <!-- Grand summary metrics: 2×3 grid -->
+        <!-- Remaining summary metrics -->
         <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
-          <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
-            <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Total Plan</div>
-            <div class="text-lg font-bold text-blue-600 dark:text-blue-400 tabular-nums">{{ formatCurrency(grandBudget, 0) }}</div>
-            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">YTD budgeted spend across all departments for {{ selectedYear }}</div>
-          </UCard>
-          <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
-            <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Total Actual</div>
-            <div class="text-lg font-bold text-orange-500 dark:text-orange-400 tabular-nums">{{ formatCurrency(grandActual, 0) }}</div>
-            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">YTD real charges billed to date across all departments</div>
-          </UCard>
-          <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
-            <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">YTD Variance</div>
-            <div class="text-lg font-bold tabular-nums" :class="grandVariance > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">
-              {{ grandVariance > 0 ? '+' : '' }}{{ formatCurrency(grandVariance, 0) }}
-            </div>
-            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">{{ grandVariance > 0 ? 'YTD over plan — actual exceeds budget' : 'YTD under plan — spending below budget' }}</div>
-          </UCard>
           <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
             <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Monthly Burn Rate</div>
             <div class="text-lg font-bold text-gray-900 dark:text-white tabular-nums">{{ formatCurrency(grandBurnRate, 0) }}</div>
@@ -369,7 +373,7 @@
                     <th class="py-2 px-4 text-right font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-xs">YTD Plan</th>
                     <th class="py-2 px-4 text-right font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-xs">YTD Actual</th>
                     <th class="py-2 px-4 text-right font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-xs">YTD Variance</th>
-                    <th class="py-2 pl-4 text-left font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-xs">AI Variance Summary</th>
+                    <th class="py-2 pl-4 text-left font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-xs w-1/2">AI Variance Analysis</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100 dark:divide-gray-700/60">
@@ -412,6 +416,14 @@
                         <div v-else-if="cat.name === 'GDMS-DevOrg'" class="ml-4 mb-1.5 flex items-start gap-1.5 text-xs text-gray-400 dark:text-gray-500">
                           <UIcon name="i-heroicons-information-circle" class="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
                           <span>Plan value is hardcoded at $10,000/month — GDMS-DevOrg does not have a per-account PEP budget breakdown.</span>
+                        </div>
+                        <div v-else-if="cat.name === 'GDMS Cloud' && (gdmsCloudAdjustment.plan !== 0 || gdmsCloudAdjustment.actual !== 0)" class="ml-4 mb-1.5 flex items-start gap-1.5 text-xs text-gray-400 dark:text-gray-500">
+                          <UIcon name="i-heroicons-information-circle" class="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                          <span>
+                            Includes a reconciliation adjustment to ensure this row ties to the department totals above.
+                            GDMS Cloud absorbs any gap between the sum of all other category rows and the department-level plan/actual
+                            (plan adj: {{ formatCurrency(gdmsCloudAdjustment.plan, 0) }}, actual adj: {{ formatCurrency(gdmsCloudAdjustment.actual, 0) }}).
+                          </span>
                         </div>
                         <div v-for="acct in cat.accounts" :key="acct.accountId">
                           <button
@@ -475,19 +487,22 @@
                         </div>
                       </div>
                     </td>
-                    <td class="py-3 px-4 text-right tabular-nums text-blue-600 dark:text-blue-400">{{ formatCurrency(cat.ytdBudget, 0) }}</td>
-                    <td class="py-3 px-4 text-right tabular-nums text-orange-500 dark:text-orange-400">{{ formatCurrency(cat.ytdActual, 0) }}</td>
+                    <td class="py-3 px-4 text-right tabular-nums text-blue-600 dark:text-blue-400">{{ formatCurrency(cat.name === 'GDMS Cloud' ? cat.ytdBudget + gdmsCloudAdjustment.plan : cat.ytdBudget, 0) }}</td>
+                    <td class="py-3 px-4 text-right tabular-nums text-orange-500 dark:text-orange-400">{{ formatCurrency(cat.name === 'GDMS Cloud' ? cat.ytdActual + gdmsCloudAdjustment.actual : cat.ytdActual, 0) }}</td>
                     <td class="py-3 px-4 text-right tabular-nums"
-                      :class="cat.ytdActual > cat.ytdBudget && cat.ytdBudget > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'"
-                    >{{ formatCurrency(cat.ytdActual - cat.ytdBudget, 0) }}</td>
-                    <td class="py-3 pl-4 text-xs text-gray-400 dark:text-gray-500 italic max-w-xs">
-                      <span v-if="varianceInsights[activeDept.department + ':' + cat.name]?.loading" class="inline-flex items-center gap-1 text-gray-300 dark:text-gray-600">
-                        <span class="animate-pulse">Analyzing…</span>
+                      :class="(cat.name === 'GDMS Cloud' ? cat.ytdActual + gdmsCloudAdjustment.actual : cat.ytdActual) > (cat.name === 'GDMS Cloud' ? cat.ytdBudget + gdmsCloudAdjustment.plan : cat.ytdBudget) && cat.ytdBudget > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'"
+                    >{{ formatCurrency((cat.name === 'GDMS Cloud' ? cat.ytdActual + gdmsCloudAdjustment.actual : cat.ytdActual) - (cat.name === 'GDMS Cloud' ? cat.ytdBudget + gdmsCloudAdjustment.plan : cat.ytdBudget), 0) }}</td>
+                    <td class="py-3 pl-4 align-top w-1/2">
+                      <span v-if="varianceInsights[activeDept.department + ':' + cat.name]?.loading" class="inline-flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
+                        <UIcon name="i-heroicons-sparkles" class="w-3.5 h-3.5 animate-pulse text-purple-400" />
+                        <span class="animate-pulse">Analyzing service-level data…</span>
                       </span>
-                      <span v-else-if="varianceInsights[activeDept.department + ':' + cat.name]?.insight">
-                        {{ varianceInsights[activeDept.department + ':' + cat.name].insight }}
-                      </span>
-                      <span v-else class="text-gray-300 dark:text-gray-600">—</span>
+                      <div
+                        v-else-if="varianceInsights[activeDept.department + ':' + cat.name]?.insight"
+                        class="prose prose-sm dark:prose-invert max-w-none text-xs leading-relaxed [&_strong]:font-semibold [&_ul]:mt-1 [&_ul]:space-y-0.5 [&_li]:my-0 [&_p]:my-0.5"
+                        v-html="renderInsightMarkdown(varianceInsights[activeDept.department + ':' + cat.name].insight!)"
+                      />
+                      <span v-else class="text-xs text-gray-300 dark:text-gray-600">—</span>
                     </td>
                   </tr>
                 </tbody>
@@ -507,6 +522,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { marked } from 'marked'
 import * as echarts from 'echarts/core'
 import { BarChart, LineChart } from 'echarts/charts'
 import { TooltipComponent, GridComponent, LegendComponent } from 'echarts/components'
@@ -841,6 +857,19 @@ const deptTopCostDriver = computed(() => {
     }
   }
   return top
+})
+
+// Reconciliation adjustment for GDMS Cloud: the difference between the dept-level totals
+// (from monthly rollups, which are authoritative) and the sum of all category rows.
+// Any gap is absorbed by GDMS Cloud so the breakdown always ties to the header totals.
+const gdmsCloudAdjustment = computed<{ plan: number; actual: number }>(() => {
+  const dept = activeDept.value
+  if (!dept) return { plan: 0, actual: 0 }
+  const deptPlan = resolvedDeptPlan(dept)
+  const deptActual = deptVisibleActual(dept)
+  const catPlanSum = dept.categories.reduce((s, c) => s + c.ytdBudget, 0)
+  const catActualSum = dept.categories.reduce((s, c) => s + c.ytdActual, 0)
+  return { plan: deptPlan - catPlanSum, actual: deptActual - catActualSum }
 })
 
 // Full-year plan total for active dept (overrides take precedence over API budget)
@@ -1283,44 +1312,29 @@ const deptYtdChartOption = computed(() => {
 interface InsightState { loading: boolean; insight: string | null }
 const varianceInsights = ref<Record<string, InsightState>>({})
 
+function renderInsightMarkdown(markdown: string): string {
+  return marked.parse(markdown, { gfm: true, breaks: true }) as string
+}
+
 async function loadVarianceInsights(dept: DepartmentResult) {
   const uncached = dept.categories.filter(cat => !varianceInsights.value[dept.department + ':' + cat.name])
   if (!uncached.length) return
 
-  // Mark all as loading up front, then fire all fetches in parallel
   for (const cat of uncached) {
     varianceInsights.value[dept.department + ':' + cat.name] = { loading: true, insight: null }
   }
 
   await Promise.all(uncached.map(async (cat) => {
     const key = dept.department + ':' + cat.name
-
-    const topAccount = cat.accounts.reduce<{ name: string; ytdActual: number } | null>((top, a) => {
-      return !top || a.ytdActual > top.ytdActual ? { name: a.name, ytdActual: a.ytdActual } : top
-    }, null)
-
-    const monthlyActuals: Record<string, number> = {}
-    for (const acct of cat.accounts) {
-      for (const [m, v] of Object.entries(acct.monthlyActuals)) {
-        if (m > displayCutoff || v <= 0) continue
-        monthlyActuals[m] = (monthlyActuals[m] || 0) + v
-      }
-    }
-
     try {
-      const res = await $fetch<{ data: { insight: string } }>('/api/ai/insights', {
+      const res = await $fetch<{ data: { insight: string } }>('/api/ai/finance-variance-insight', {
         method: 'POST',
         body: {
-          type: 'variance-driver',
-          context: {
-            categoryName: cat.name,
-            department: dept.department,
-            ytdBudget: cat.ytdBudget,
-            ytdActual: cat.ytdActual,
-            accountCount: cat.accounts.length,
-            monthlyActuals,
-            topAccount
-          }
+          category: cat,
+          department: dept.department,
+          year: selectedYear.value,
+          deptPlan: resolvedDeptPlan(dept),
+          deptActual: deptVisibleActual(dept)
         }
       })
       varianceInsights.value[key] = { loading: false, insight: res?.data?.insight || null }
