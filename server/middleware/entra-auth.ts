@@ -31,7 +31,8 @@ function requiresAuthentication(url: string): boolean {
     '/_nuxt/',
     '/api/_content',      // Nuxt content API
     '/api/_auth',         // OIDC authentication endpoints
-    '/api/_nuxt_icon'     // Nuxt Icon API
+    '/api/_nuxt_icon',    // Nuxt Icon API
+    '/api/chat/threads/shared/' // Public read-only chat shares
   ]
 
   // Check if URL starts with any public endpoint
@@ -245,7 +246,7 @@ export function requireOIDCAuth(event: H3Event): void {
  * Legacy scope functions - updated to perform actual scope checks
  * For 'admin' scope, delegates to the real admin group membership check
  */
-export function hasScope(event: H3Event, requiredScope: string): boolean {
+export function hasScope(event: H3Event, _requiredScope: string): boolean {
   return isAuthenticated(event)
 }
 

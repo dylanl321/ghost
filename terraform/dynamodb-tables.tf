@@ -446,6 +446,47 @@ resource "aws_dynamodb_table" "chat_threads" {
   }
 }
 
+# Messages are stored independently so a conversation cannot exceed DynamoDB's
+# per-item size limit and concurrent completions cannot replace each other.
+resource "aws_dynamodb_table" "chat_messages" {
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-chat-messages-prod" : "ghost-chat-messages"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "threadId"
+  range_key    = "messageKey"
+
+  attribute {
+    name = "threadId"
+    type = "S"
+  }
+
+  attribute {
+    name = "messageKey"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  server_side_encryption {
+    enabled = true
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Name        = "GHOST Chat Messages"
+    Environment = local.environment
+    ManagedBy   = "Terraform"
+    Service     = "GHOST"
+    Component   = "ChatMessages"
+  }
+}
+
 # ============================================================================
 # Async Chat Jobs Table (GovCloud Environment)
 # ============================================================================

@@ -9,7 +9,8 @@
 import { defineEventHandler, readBody, getHeaders } from 'h3'
 import { logger } from '../../../utils/logger'
 import { submitAsyncQuery } from '../../../utils/strands-async-processor'
-import { buildUserContextForAI } from '../../../utils/user-context-builder'
+import { buildUserContextForAI, formatUserContextForAI } from '../../../utils/user-context-builder'
+import { getThreadById } from '../../../utils/chat-threads'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -29,6 +30,17 @@ export default defineEventHandler(async (event) => {
         success: false,
         error: 'Message is required'
       }
+    }
+    if (!body.threadId || typeof body.threadId !== 'string') {
+      return { success: false, error: 'Thread ID is required' }
+    }
+    if (body.message.length > 10000) {
+      return { success: false, error: 'Message exceeds maximum length of 10,000 characters' }
+    }
+
+    const thread = await getThreadById(body.threadId, userId)
+    if (!thread) {
+      return { success: false, error: 'Thread not found' }
     }
 
     logger.info('[Async Chat API] Submitting async query', {
@@ -50,12 +62,14 @@ export default defineEventHandler(async (event) => {
     const job = await submitAsyncQuery(
       body.message,
       userId,
+      thread,
       {
         accountIdentifier: body.accountIdentifier,
         conversationHistory: body.conversationHistory,
         timezone,
         region: body.region,
-        preferGovcloud: body.preferGovcloud
+        preferGovcloud: body.preferGovcloud,
+        userContext: formatUserContextForAI(userContext)
       }
     )
 

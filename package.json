@@ -55,6 +55,7 @@
     "@aws-sdk/client-securitylake": "^3.879.0",
     "@aws-sdk/client-ses": "^3.913.0",
     "@aws-sdk/client-sns": "^3.910.0",
+    "@aws-sdk/client-sqs": "3.693.0",
     "@aws-sdk/client-ssm": "^3.980.0",
     "@aws-sdk/client-sso": "^3.693.0",
     "@aws-sdk/client-sso-admin": "^3.693.0",
