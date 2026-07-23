@@ -12,8 +12,6 @@
  * - Toast notifications for background completions
  */
 
-import type { ChatMessage } from '#shared/types/chat-threads'
-
 const logger = createLogger('BackgroundPolling')
 
 // Storage key for pending jobs
@@ -104,7 +102,7 @@ export function useBackgroundPolling() {
 
       const jobs = JSON.parse(stored) as (PendingJob & { id: string })[]
       const now = Date.now()
-      const maxAge = 10 * 60 * 1000 // 10 minutes
+      const maxAge = 24 * 60 * 60 * 1000 // Match durable job TTL
 
       for (const job of jobs) {
         // Skip expired jobs
@@ -314,6 +312,12 @@ export function useBackgroundPolling() {
         return
       }
 
+      if (status.status === 'canceled') {
+        job.status = 'error'
+        await handleJobError(job, 'Query canceled by user')
+        return
+      }
+
     } catch (error: any) {
       logger.error('Fetch error for job:', job.jobId, error)
       // Don't fail immediately - will retry on next poll cycle
@@ -346,25 +350,6 @@ export function useBackgroundPolling() {
       } catch (err) {
         logger.error('Error in onComplete callback:', err)
       }
-    }
-
-    // Save to database directly via API (no thread switching!)
-    try {
-      await $fetch(`/api/chat/threads/${job.threadId}/messages`, {
-        method: 'POST',
-        body: {
-          message: {
-            role: 'assistant',
-            content: botResponse,
-            metadata,
-            suggestedLinks: status.suggestedLinks || [],
-            suggestedPrompts: status.suggestedPrompts || []
-          }
-        }
-      })
-      logger.info('Saved response to thread via API:', job.threadId)
-    } catch (err) {
-      logger.error('Failed to save message via API:', err)
     }
 
     // Show toast only if no UI callbacks (user navigated away)
@@ -431,33 +416,6 @@ export function useBackgroundPolling() {
       } catch (err) {
         logger.error('Error in onError callback:', err)
       }
-    }
-
-    // Build error content for database
-    const errorContent = isTimeout
-      ? `⏱️ Query timed out after ${duration} seconds.\n\nOriginal query: "${job.userMessage}"\n\nPlease try a more specific query or break it into smaller parts.`
-      : `❌ ${errorMsg}\n\nOriginal query: "${job.userMessage}"`
-
-    // Save to database directly via API (no thread switching!)
-    try {
-      await $fetch(`/api/chat/threads/${job.threadId}/messages`, {
-        method: 'POST',
-        body: {
-          message: {
-            role: 'assistant',
-            content: errorContent,
-            metadata: {
-              error: true,
-              errorType: isTimeout ? 'timeout' : 'error',
-              duration,
-              originalQuery: job.userMessage
-            }
-          }
-        }
-      })
-      logger.info('Saved error to thread via API:', job.threadId)
-    } catch (err) {
-      logger.error('Failed to save error message via API:', err)
     }
 
     // Show toast only if no UI callbacks (user navigated away)
@@ -573,4 +531,3 @@ export function useBackgroundPolling() {
     }
   }
 }
-

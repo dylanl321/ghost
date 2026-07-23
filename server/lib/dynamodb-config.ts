@@ -32,6 +32,7 @@ export interface DynamoDBConfig {
   userPreferences: DynamoDBTableConfig
   accountNotes: DynamoDBTableConfig
   chatThreads: DynamoDBTableConfig
+  chatMessages: DynamoDBTableConfig
   siteConfig: DynamoDBTableConfig
   adminNotifications: DynamoDBTableConfig
   streamingMetrics: DynamoDBTableConfig
@@ -206,6 +207,12 @@ function loadFromEnvironment(): DynamoDBConfig {
     },
     chatThreads: {
       tableName: process.env.CHAT_THREADS_TABLE_NAME || 'ghost-chat-threads',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
+    },
+    chatMessages: {
+      tableName: process.env.CHAT_MESSAGES_TABLE_NAME || 'ghost-chat-messages',
       environment: 'govcloud',
       region: govCloudRegion,
       accountId: deploymentAccountId

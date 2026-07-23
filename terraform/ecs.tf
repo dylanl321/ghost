@@ -215,12 +215,20 @@ resource "aws_ecs_task_definition" "main" {
           value = aws_dynamodb_table.chat_threads.name
         },
         {
+          name  = "CHAT_MESSAGES_TABLE_NAME"
+          value = aws_dynamodb_table.chat_messages.name
+        },
+        {
           name  = "ADMIN_NOTIFICATIONS_TABLE"
           value = aws_dynamodb_table.admin_notifications.name
         },
         {
           name  = "AWS_ASYNC_JOBS_TABLE_NAME"
           value = aws_dynamodb_table.async_chat_jobs.name
+        },
+        {
+          name  = "CHAT_JOBS_QUEUE_URL"
+          value = aws_sqs_queue.chat_jobs.url
         },
         {
           name  = "AWS_ASYNC_METRICS_TABLE_NAME"

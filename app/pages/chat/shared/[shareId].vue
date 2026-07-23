@@ -76,6 +76,11 @@
 
       <!-- Messages -->
       <div class="space-y-6">
+        <div v-if="threadData.hasMoreMessages" class="flex justify-center">
+          <UButton size="sm" color="gray" variant="soft" icon="i-heroicons-arrow-up" :loading="loadingEarlier" @click="loadEarlierMessages">
+            Load earlier
+          </UButton>
+        </div>
         <ChatMessage
           v-for="(msg, index) in threadData.messages"
           :key="msg.messageId || `msg-${index}`"
@@ -131,6 +136,7 @@ const shareId = route.params.shareId as string
 const isLoading = ref(true)
 const error = ref<string | null>(null)
 const threadData = ref<ChatThread | null>(null)
+const loadingEarlier = ref(false)
 
 
 // Toast notifications
@@ -164,6 +170,22 @@ async function copyMessageMarkdown(message: any) {
       color: 'red',
       timeout: 3000
     })
+  }
+}
+
+async function loadEarlierMessages() {
+  if (!threadData.value?.messagesNextToken || loadingEarlier.value) return
+  loadingEarlier.value = true
+  try {
+    const token = encodeURIComponent(threadData.value.messagesNextToken)
+    const response = await $fetch<{ success: boolean; data: ChatThread }>(
+      `/api/chat/threads/shared/${shareId}?limit=100&nextToken=${token}`
+    )
+    threadData.value.messages = [...(response.data.messages || []), ...(threadData.value.messages || [])]
+    threadData.value.hasMoreMessages = response.data.hasMoreMessages
+    threadData.value.messagesNextToken = response.data.messagesNextToken
+  } finally {
+    loadingEarlier.value = false
   }
 }
 

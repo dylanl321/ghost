@@ -45,6 +45,7 @@ export interface ChatMessage {
   links?: string[] // External reference links
   suggestedLinks?: SuggestedLink[] // GHOST page links
   suggestedPrompts?: SuggestedPrompt[] // Follow-up prompts for user
+  jobId?: string // Async job that produced this message (idempotency)
 }
 
 /**
@@ -74,6 +75,7 @@ export interface ChatThread {
   isArchived: boolean
   lastMessageAt: string // ISO timestamp (for sorting)
   lastModifiedAt: string // ISO timestamp
+  lastMessagePreview?: string
 
   // Sharing (if shared)
   isShared: boolean
@@ -86,6 +88,9 @@ export interface ChatThread {
   // TTL & Cleanup
   ttl?: number // Unix timestamp (auto-delete after X days)
   expiresAt?: string // ISO timestamp
+  messagesMigratedAt?: string // Set after embedded messages move to ChatMessages
+  hasMoreMessages?: boolean // More messages are available before the current page
+  messagesNextToken?: string // Opaque token for loading earlier messages
 }
 
 /**
@@ -305,7 +310,7 @@ export interface AdminAsyncJobSummary {
   jobId: string
   userId: string
   threadId?: string
-  status: 'queued' | 'running' | 'complete' | 'error'
+  status: 'queued' | 'running' | 'complete' | 'error' | 'canceled'
   progress?: string
   progressPercent?: number
   currentStep?: string

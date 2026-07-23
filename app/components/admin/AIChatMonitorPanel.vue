@@ -487,7 +487,7 @@ onUnmounted(() => {
 
               <template #status-data="{ row }">
                 <UBadge
-                  :color="row.status === 'complete' ? 'green' : row.status === 'error' ? 'red' : row.status === 'running' ? 'blue' : 'gray'"
+                  :color="row.status === 'complete' ? 'green' : row.status === 'error' ? 'red' : row.status === 'canceled' ? 'orange' : row.status === 'running' ? 'blue' : 'gray'"
                   size="xs"
                 >
                   {{ row.status.toUpperCase() }}

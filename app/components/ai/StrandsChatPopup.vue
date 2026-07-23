@@ -74,6 +74,11 @@
         leave-from-class="opacity-100 translate-y-0"
         leave-to-class="opacity-0 -translate-y-2"
       >
+        <div v-if="hasMoreMessages" class="flex justify-center pb-2">
+          <UButton size="xs" color="gray" variant="soft" icon="i-heroicons-arrow-up" @click="loadEarlierMessages">
+            Load earlier
+          </UButton>
+        </div>
         <div
           v-if="localShowExamples && showWelcome"
           class="p-3 bg-purple-50 dark:bg-purple-900/20 border-b border-purple-200 dark:border-purple-800"
@@ -302,6 +307,8 @@ const {
   retryLastMessage,
   cancelQuery,
   clearConversation,
+  loadEarlierMessages,
+  hasMoreMessages,
 
   // Disambiguation
   showDisambiguation,

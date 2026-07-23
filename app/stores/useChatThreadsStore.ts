@@ -81,7 +81,7 @@ export const useChatThreadsStore = defineStore('chatThreads', {
         title: thread.title,
         messageCount: thread.messageCount,
         lastMessageAt: thread.lastMessageAt,
-        lastMessagePreview: thread.messages?.[thread.messages.length - 1]?.content?.substring(0, 100) || '',
+        lastMessagePreview: thread.lastMessagePreview || thread.messages?.[thread.messages.length - 1]?.content?.substring(0, 100) || '',
         isPinned: thread.isPinned,
         isArchived: thread.isArchived,
         isShared: thread.isShared
@@ -195,6 +195,23 @@ export const useChatThreadsStore = defineStore('chatThreads', {
       } catch (err: any) {
         this.error = err.data?.error?.message || 'Failed to load thread'
         logger.error('Error loading thread:', err)
+        return false
+      }
+    },
+
+    async loadEarlierMessages(): Promise<boolean> {
+      if (!this.currentThread?.hasMoreMessages || !this.currentThread.messagesNextToken) return false
+      try {
+        const token = encodeURIComponent(this.currentThread.messagesNextToken)
+        const { data } = await $fetch<{ data: ChatThread }>(
+          `/api/chat/threads/${this.currentThread.threadId}?limit=100&nextToken=${token}`
+        )
+        this.currentThread.messages = [...(data.messages || []), ...(this.currentThread.messages || [])]
+        this.currentThread.hasMoreMessages = data.hasMoreMessages
+        this.currentThread.messagesNextToken = data.messagesNextToken
+        return true
+      } catch (err: any) {
+        this.error = err.data?.error?.message || 'Failed to load earlier messages'
         return false
       }
     },
