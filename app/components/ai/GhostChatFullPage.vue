@@ -2,6 +2,11 @@
   <div class="ghost-chat-container">
     <!-- Chat Messages Area -->
     <div class="chat-messages" ref="chatBoxRef">
+      <div v-if="hasMoreMessages" class="flex justify-center pb-3">
+        <UButton size="xs" color="gray" variant="soft" icon="i-heroicons-arrow-up" @click="loadEarlierMessages">
+          Load earlier
+        </UButton>
+      </div>
       <ChatMessage
         v-for="(msg, index) in messages"
         :key="msg.messageId || `msg-${index}`"
@@ -273,6 +278,8 @@ const {
   sendMessage,
   retryLastMessage,
   cancelQuery,
+  loadEarlierMessages,
+  hasMoreMessages,
 
   // Mention system
   showMentionDropdown,

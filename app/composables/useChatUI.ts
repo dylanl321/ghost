@@ -741,7 +741,8 @@ export function useChatUI(options: UseChatUIOptions = {}) {
       // No pending message found - add the response directly
       // This can happen if the thread was reloaded during polling
       logger.info('No pending message found, adding response directly')
-      if (threadsStore.currentThread?.messages) {
+      const alreadyPresent = threadMessages.some(message => (message as any).jobId === jobId)
+      if (!alreadyPresent && threadsStore.currentThread?.messages) {
         threadsStore.currentThread.messages.push({
           messageId: `response-${Date.now()}`,
           role: 'assistant',
@@ -749,7 +750,8 @@ export function useChatUI(options: UseChatUIOptions = {}) {
           timestamp: new Date().toISOString(),
           metadata,
           suggestedLinks: suggestedLinks || [],
-          suggestedPrompts: suggestedPrompts || []
+          suggestedPrompts: suggestedPrompts || [],
+          jobId
         } as any)
       }
     }
@@ -775,9 +777,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     // Trigger scroll
     scrollTrigger.value++
 
-    // NOTE: Don't reload thread here - the message is being saved by useBackgroundPolling
-    // and there's a race condition. The local update above is sufficient for UI display.
-    // The message will be persisted by useBackgroundPolling.handleJobComplete() via API.
+    // The worker has already persisted this message. Local replacement avoids a reload flicker.
   }
 
   /**
@@ -938,15 +938,17 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     try {
       const currentThreadId = threadsStore.activeThreadId!
 
-      // Add user message to store immediately
-      await threadsStore.addMessage({
+      // Optimistically render; the submission endpoint persists this message.
+      threadsStore.currentThread?.messages.push({
+        messageId: `user-local-${Date.now()}`,
         role: 'user',
         content: userInput,
+        timestamp: new Date().toISOString(),
         metadata: mentionedAccount ? {
           accountId: mentionedAccount.accountId,
           accountName: getAccountDisplay(mentionedAccount)
         } : undefined
-      })
+      } as any)
       scrollTrigger.value++
 
       // Create a local pending placeholder immediately; we will attach jobId once we have it.
@@ -975,6 +977,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
       // Get conversation history (exclude pending messages)
       const conversationHistory = ((threadsStore.currentThread?.messages || []) as StreamingChatMessage[])
         .filter((m: StreamingChatMessage) => !m.status || m.status.status === 'complete')
+        .filter((m: StreamingChatMessage) => !m.messageId.startsWith('user-local-'))
         .slice(-10)
         .map((m: StreamingChatMessage) => ({
           role: m.role === 'user' ? 'user' as const : 'assistant' as const,
@@ -988,6 +991,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
         method: 'POST',
         body: {
           message: userInput,
+          threadId: currentThreadId,
           accountIdentifier: mentionedAccount?.accountId || undefined,
           conversationHistory,
           timezone: userTimezone.value
@@ -1162,6 +1166,11 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     chatState.value = 'idle'
     errorMessage.value = ''
     scrollTrigger.value++
+  }
+
+  async function loadEarlierMessages(): Promise<void> {
+    const loaded = await threadsStore.loadEarlierMessages()
+    if (loaded) scrollTrigger.value++
   }
 
   // ============================================================================
@@ -1495,6 +1504,8 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     retryLastMessage,
     cancelQuery,
     clearConversation,
+    loadEarlierMessages,
+    hasMoreMessages: computed(() => !!threadsStore.currentThread?.hasMoreMessages),
 
     // Mention system
     showMentionDropdown: readonly(showMentionDropdown),

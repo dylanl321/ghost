@@ -14,6 +14,12 @@ import type {
 } from '#shared/types/chat-threads'
 import { logger } from './logger'
 import { getTableName, getTableEnvironment, getTableAccountId } from '../lib/dynamodb-config'
+import {
+  appendThreadMessage,
+  deleteAllThreadMessages,
+  listThreadMessages,
+  migrateLegacyMessages
+} from './chat-messages'
 
 // Get table configuration using centralized config system
 // Returns tableName, environment, and accountId for proper role assumption
@@ -163,7 +169,10 @@ export async function getThreadById(
 /**
  * Get a thread by share ID (for public access)
  */
-export async function getThreadByShareId(shareId: string): Promise<ChatThread | null> {
+export async function getThreadByShareId(
+  shareId: string,
+  options: { limit?: number; nextToken?: string } = {}
+): Promise<ChatThread | null> {
   const config = await getThreadsTableConfig()
   const result = await queryItems({
     tableName: config.tableName,
@@ -192,7 +201,11 @@ export async function getThreadByShareId(shareId: string): Promise<ChatThread | 
     return null
   }
 
-  return thread
+  const page = await listThreadMessages(thread, {
+    limit: options.limit || 100,
+    nextToken: options.nextToken
+  })
+  return { ...thread, messages: page.messages, hasMoreMessages: page.hasMore, messagesNextToken: page.nextToken }
 }
 
 /**
@@ -344,80 +357,22 @@ export async function addMessageToThread(
     return null
   }
 
-  // Create full message with ID and timestamp
-  const fullMessage: ChatMessage = {
-    ...message,
-    messageId: uuidv4(),
-    timestamp: new Date().toISOString()
-  }
-
-  // Update messages array and metadata
-  // Handle case where messages might be undefined (empty array was sanitized)
-  const existingMessages = thread.messages || []
-  const updatedMessages = [...existingMessages, fullMessage]
-  const now = new Date().toISOString()
-
-  const updates: Record<string, any> = {
-    messages: updatedMessages,
-    messageCount: updatedMessages.length,
-    lastMessageAt: now,
-    lastModifiedAt: now
-  }
-
-  // Auto-generate title from first user message
-  if (
-    message.role === 'user' &&
-    thread.messageCount === 0 &&
+  const title = message.role === 'user' && thread.messageCount === 0 &&
     (thread.title === 'New Conversation' || thread.title.startsWith('Conversation from'))
-  ) {
-    updates.title = generateTitleFromMessage(message.content)
-    logger.info(`[Chat Threads] Auto-generated title for thread ${threadId}: "${updates.title}"`)
-  }
-
-  const config = await getThreadsTableConfig()
-
-  try {
-    logger.info(`[Chat Threads] About to update DynamoDB`, {
-      threadId,
-      messageCount: updatedMessages.length,
-      updateKeys: Object.keys(updates),
-      lastMessagePreview: JSON.stringify(updatedMessages[updatedMessages.length - 1]).substring(0, 200)
-    })
-
-    // Log the updates object structure for debugging
-    logger.info(`[Chat Threads] Update payload structure`, {
-      threadId,
-      messagesCount: updates.messages?.length,
-      messageCount: updates.messageCount,
-      hasTitle: !!updates.title,
-      titleLength: updates.title?.length
-    })
-
-    // Log full update data for debugging (first message only)
-    if (updates.messages && updates.messages.length > 0) {
-      logger.info(`[Chat Threads] First message structure:`, {
-        message: JSON.stringify(updates.messages[0], null, 2).substring(0, 300)
-      })
-    }
-
-    const updated = await updateItem(
-      config.tableName,
-      { threadId, createdAt: thread.createdAt },
-      updates,
-      config.environment,
-      config.accountId
-    )
-
-    logger.info(`[Chat Threads] Added message to thread ${threadId}`)
-    return updated as ChatThread
-  } catch (error: any) {
-    logger.error(`[Chat Threads] Failed to add message to thread ${threadId}`, {
-      error: error.message,
-      stack: error.stack,
-      name: error.name
-    })
-    throw error
-  }
+    ? generateTitleFromMessage(message.content)
+    : undefined
+  const { message: fullMessage, inserted } = await appendThreadMessage(thread, message, { title })
+  const updated = inserted ? {
+    ...thread,
+    title: title || thread.title,
+    messageCount: thread.messageCount + 1,
+    lastMessageAt: fullMessage.timestamp,
+    lastModifiedAt: fullMessage.timestamp,
+    lastMessagePreview: fullMessage.content.substring(0, 100)
+  } : thread
+  const page = await listThreadMessages(updated, { limit: 100 })
+  logger.info(`[Chat Threads] Added message to thread ${threadId}`)
+  return { ...updated, messages: page.messages, hasMoreMessages: page.hasMore, messagesNextToken: page.nextToken }
 }
 
 /**
@@ -433,10 +388,12 @@ export async function clearThreadMessages(
     return null
   }
 
-  // Clear messages
+  await migrateLegacyMessages(thread)
+  await deleteAllThreadMessages(threadId)
+
+  // Clear metadata
   const now = new Date().toISOString()
   const updates = {
-    messages: [],
     messageCount: 0,
     sessionId: null, // Clear Strands session
     lastModifiedAt: now
@@ -452,7 +409,7 @@ export async function clearThreadMessages(
   )
 
   logger.info(`[Chat Threads] Cleared messages in thread ${threadId}`)
-  return updated as ChatThread
+  return { ...(updated as ChatThread), messages: [] }
 }
 
 /**
@@ -469,6 +426,8 @@ export async function deleteThread(
   }
 
   const config = await getThreadsTableConfig()
+  await migrateLegacyMessages(thread)
+  await deleteAllThreadMessages(threadId)
   await deleteItem(
     config.tableName,
     { threadId, createdAt: thread.createdAt },

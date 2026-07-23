@@ -290,11 +290,14 @@ resource "aws_iam_role_policy" "ecs_chat_threads_dynamodb" {
           "dynamodb:Query",
           "dynamodb:Scan",
           "dynamodb:BatchGetItem",
-          "dynamodb:BatchWriteItem"
+          "dynamodb:BatchWriteItem",
+          "dynamodb:TransactWriteItems"
         ]
         Resource = [
-          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-chat-threads",
-          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-chat-threads/index/*"
+          aws_dynamodb_table.chat_threads.arn,
+          "${aws_dynamodb_table.chat_threads.arn}/index/*",
+          aws_dynamodb_table.chat_messages.arn,
+          "${aws_dynamodb_table.chat_messages.arn}/index/*"
         ]
       }
     ]
@@ -464,14 +467,36 @@ resource "aws_iam_role_policy" "ecs_async_chat_jobs_dynamodb" {
           "dynamodb:UpdateItem",
           "dynamodb:DeleteItem",
           "dynamodb:Query",
-          "dynamodb:Scan"
+          "dynamodb:Scan",
+          "dynamodb:TransactWriteItems"
         ]
         Resource = [
-          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-async-chat-jobs",
-          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-async-chat-jobs/index/*"
+          aws_dynamodb_table.async_chat_jobs.arn,
+          "${aws_dynamodb_table.async_chat_jobs.arn}/index/*"
         ]
       }
     ]
+  })
+}
+
+resource "aws_iam_role_policy" "ecs_chat_jobs_sqs" {
+  provider = aws.target_deployment_account
+  name     = "${var.app_name}_chat_jobs_sqs"
+  role     = aws_iam_role.ecs_task_execution_role.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "sqs:SendMessage",
+        "sqs:ReceiveMessage",
+        "sqs:DeleteMessage",
+        "sqs:ChangeMessageVisibility",
+        "sqs:GetQueueAttributes"
+      ]
+      Resource = [aws_sqs_queue.chat_jobs.arn, aws_sqs_queue.chat_jobs_dlq.arn]
+    }]
   })
 }
 
