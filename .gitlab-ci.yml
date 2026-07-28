@@ -19,6 +19,10 @@ stages:
 
 workflow:
   rules:
+    # A branch push already creates the appropriate pipeline. Avoid running the
+    # same Docker build and deployment again as a merge-request pipeline.
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: never
     - if: $CI_COMMIT_REF_NAME == 'master'
       variables:
         ENV: prod # This determines which TF state file the changes get written to, and is also used to tag the image
@@ -64,36 +68,33 @@ test_docker_build:
 
 code_quality_check:
   stage: test
-  image: node:22-alpine
+  image: node:22.23.1-bookworm-slim
   rules:
     - if: $CI_COMMIT_REF_NAME != "dev" && $CI_COMMIT_REF_NAME != "master"
   before_script:
     - echo "Installing dependencies for code quality checks..."
-    - npm install --legacy-peer-deps --no-audit
+    - npm install -g npm@11.18.0
+    - npm ci --legacy-peer-deps --no-audit --no-fund
   script:
     - echo "Running code quality checks for feature branch $CI_COMMIT_REF_NAME"
-    
-    # Build test to ensure the project compiles (matches Dockerfile behavior)
-    - echo "Testing application build..."
-    - NODE_OPTIONS=--max-old-space-size=8192 npm run build
-    
+
+    # The parallel Docker job verifies the complete production build.
+    - echo "Running automated tests..."
+    - npm run test:chat
+
     # TypeScript strict checking (non-blocking until existing errors are resolved)
     - echo "Checking TypeScript types..."
     - npx nuxi typecheck || echo "TypeScript typecheck completed with errors (non-blocking)"
-    
+
     - echo "Code quality checks completed successfully"
+  variables:
+    NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/.npm"
   cache:
-    key: 
+    key:
       files:
         - package-lock.json
     paths:
-      - node_modules/
-      - .nuxt/
-  artifacts:
-    expire_in: 1 hour
-    paths:
-      - .output/
-    when: on_success
+      - .npm/
   allow_failure: false
 
 # Note that retrieving the ECR credentials has to be a separate stage from building and pushing the docker image.
@@ -130,6 +131,7 @@ build:
     # Authenticate Docker to ECR
     - source ecr-credentials
     - echo $ECR_PASS | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+    - rm -f ecr-credentials
 
     # Build and push docker image to ECR.
     # Dual-tag every image:
@@ -141,7 +143,7 @@ build:
     - docker build -t $REPO_URI:$ENV -t $REPO_URI:$ENV-$CI_COMMIT_SHORT_SHA .
     - docker push $REPO_URI:$ENV
     - docker push $REPO_URI:$ENV-$CI_COMMIT_SHORT_SHA
-  allow_failure: true
+  allow_failure: false
 
 plan:
   stage: build

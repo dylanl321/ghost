@@ -1,3 +1,20 @@
+/.git
 /.nuxt
 /.output
 /node_modules
+
+# Local and CI credentials must never enter the build context.
+/.env
+/.env.*
+/ecr-credentials
+
+# Local tooling and generated files are not needed by the image build.
+/.agents
+/.claude
+/.cursor
+/.kiro
+/.omc
+/.remember
+/.vscode
+*.log
+core.*

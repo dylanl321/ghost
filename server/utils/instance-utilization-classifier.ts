@@ -17,8 +17,6 @@ import type { ComputeOptimizerRecommendation } from './compute-optimizer'
 import type { InstanceMetrics } from './cloudwatch-metrics'
 import type { InstanceApiActivity } from './instance-activity-detection'
 
-export type { InstanceApiActivity }
-
 export type UtilizationClassification =
   | 'over-provisioned'
   | 'under-provisioned'
