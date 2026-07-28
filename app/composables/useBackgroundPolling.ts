@@ -44,10 +44,15 @@ export interface PollingErrorEvent extends PollingJobEvent {
   disambiguation?: any
 }
 
+export interface PollingDisambiguationEvent extends PollingJobEvent {
+  disambiguation: any
+}
+
 export interface PollingCallbacks {
   onProgress?: (event: PollingProgressEvent) => void
   onComplete?: (event: PollingCompleteEvent) => void
   onError?: (event: PollingErrorEvent) => void
+  onDisambiguation?: (event: PollingDisambiguationEvent) => void
 }
 
 export interface PendingJob {
@@ -55,7 +60,7 @@ export interface PendingJob {
   threadId: string
   userMessage: string
   timestamp: number
-  status: 'polling' | 'paused' | 'complete' | 'error'
+  status: 'polling' | 'paused' | 'waiting_for_input' | 'complete' | 'error'
   progress?: string
   progressPercent?: number
   toolsCalled?: string[]
@@ -63,6 +68,7 @@ export interface PendingJob {
   consecutiveFailures?: number
   nextPollAt?: number
   lastError?: string
+  disambiguation?: any
 }
 
 // Singleton state - shared across all instances
@@ -158,7 +164,7 @@ export function useBackgroundPolling() {
         // Skip expired jobs
         if (now - job.timestamp > maxAge) continue
         // Restore jobs that can still be polled or explicitly reconnected.
-        if (job.status === 'polling' || job.status === 'paused') {
+        if (job.status === 'polling' || job.status === 'paused' || job.status === 'waiting_for_input') {
           activeJobs.value.set(job.jobId, job)
         }
       }
@@ -361,6 +367,12 @@ export function useBackgroundPolling() {
         return
       }
 
+      if (status.status === 'waiting_for_input') {
+        job.status = 'waiting_for_input'
+        handleJobDisambiguation(job, status.disambiguation)
+        return
+      }
+
       // Check if errored
       if (status.status === 'error') {
         job.status = 'error'
@@ -475,6 +487,42 @@ export function useBackgroundPolling() {
         logger.error('Error in onError callback:', err)
       }
     }
+  }
+
+  function handleJobDisambiguation(job: PendingJob, disambiguation: any) {
+    const callbacks = jobCallbacks.get(job.jobId)
+    job.disambiguation = disambiguation
+    savePendingJobs()
+    logger.info('Job requires account selection:', job.jobId, 'hasCallbacks:', !!callbacks)
+
+    for (const callback of callbacks?.values() || []) {
+      try {
+        callback.onDisambiguation?.({
+          jobId: job.jobId,
+          threadId: job.threadId,
+          disambiguation
+        })
+      } catch (error) {
+        logger.error('Error in onDisambiguation callback:', error)
+      }
+    }
+
+    if (!callbacks?.size) {
+      toast.add({
+        title: 'Account selection required',
+        description: job.userMessage.substring(0, 80),
+        icon: 'i-heroicons-question-mark-circle',
+        color: 'blue',
+        timeout: 12000,
+        actions: [{
+          label: 'Choose Account',
+          click: () => router.push({ path: '/chat', query: { thread: job.threadId } })
+        }]
+      })
+    }
+
+    unregisterJobCallbacks(job.jobId)
+    if (![...activeJobs.value.values()].some(activeJob => activeJob.status === 'polling')) stopPolling()
   }
 
   async function handleJobError(job: PendingJob, errorMsg: string, disambiguation?: any) {

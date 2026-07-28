@@ -4,7 +4,7 @@ import type { AccountDisambiguation } from './strands'
  * Type definitions for Strands Async Polling API
  */
 
-export type AsyncChatJobStatus = 'queued' | 'running' | 'complete' | 'error' | 'canceled'
+export type AsyncChatJobStatus = 'queued' | 'running' | 'waiting_for_input' | 'complete' | 'error' | 'canceled'
 
 /**
  * Async chat job stored in DynamoDB

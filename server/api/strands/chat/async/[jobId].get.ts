@@ -68,10 +68,12 @@ export default defineEventHandler(async (event) => {
     }
 
     // If job errored, include error message
-    if (job.status === 'error' || job.status === 'canceled') {
+    if (job.status === 'waiting_for_input') {
+      response.disambiguation = job.disambiguation
+      response.completedAt = job.completedAt
+    } else if (job.status === 'error' || job.status === 'canceled') {
       response.errorMessage = job.errorMessage
       response.completedAt = job.completedAt
-      response.disambiguation = job.disambiguation
     }
 
     return response

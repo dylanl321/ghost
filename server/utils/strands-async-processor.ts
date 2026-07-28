@@ -99,7 +99,7 @@ export async function updateJob(jobId: string, updates: Partial<AsyncChatJob>): 
 
 export async function requestJobCancellation(jobId: string, userId: string): Promise<boolean> {
   const job = await getJob(jobId, userId)
-  if (!job || ['complete', 'error', 'canceled'].includes(job.status)) return false
+  if (!job || ['waiting_for_input', 'complete', 'error', 'canceled'].includes(job.status)) return false
 
   const now = new Date().toISOString()
   await updateJob(jobId, {

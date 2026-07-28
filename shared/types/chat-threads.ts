@@ -313,7 +313,7 @@ export interface AdminAsyncJobSummary {
   jobId: string
   userId: string
   threadId?: string
-  status: 'queued' | 'running' | 'complete' | 'error' | 'canceled'
+  status: 'queued' | 'running' | 'waiting_for_input' | 'complete' | 'error' | 'canceled'
   progress?: string
   progressPercent?: number
   currentStep?: string
