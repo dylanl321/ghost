@@ -79,6 +79,14 @@ interface MonthlyPoint {
   actual: number
 }
 
+// Accounts whose PEP records are being created but don't have budgets yet.
+// Their proforma allocation is treated as $0 plan and flows back to GDMS Cloud residual.
+const PENDING_PEP_NAME_FRAGMENTS = [
+  'gdms account monitoring',
+  'gdms amibuilder',
+  'gdms account auditing',
+]
+
 interface AccountRow {
   accountId: string
   name: string
@@ -88,6 +96,7 @@ interface AccountRow {
   monthlyActuals: Record<string, number>
   pepExpectedSpend?: number
   pepMonthlyExpected?: Record<string, number> // CE month key (YYYY-MM-01) → pep value
+  pendingPep?: boolean // true = PEP record in progress, no historical budget; show $0 plan with explanation
 }
 
 interface CategoryRow {
@@ -193,6 +202,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       : (acc.accountId || acc.awsStandardAccountID)
     if (!accountId) continue
     if (accountId === PAYER_ACCOUNT_ID) continue
+    if (accountId === '110317593805') continue // Dance Monkey — decommissioned, pre-chargeback
     // PROFORMA_ACCOUNT_ID (253821132832) is allowed through — it appears in CE results
     // as "GDMS Account Monitoring" and rolls into DE158 via its pepDepartment field.
 
@@ -206,6 +216,23 @@ export default defineEventHandler(handleAsync(async (event) => {
       const list = deptAccounts.get(dept as AllowedDepartment)!
       if (!list.includes(accountId)) list.push(accountId)
     }
+  }
+
+  // Accounts whose PEP records are being built but have no historical budget data yet.
+  // We zero out their plan and exclude their proforma allocation from linkedAccountBudgetByMonth
+  // so the budget flows back to GDMS Cloud's residual rather than appearing as perfect tracking.
+  const pendingPepAccountIds = new Set<string>()
+  for (const [accountId, name] of accountNameMap) {
+    const nameLower = name.toLowerCase()
+    if (
+      !accountPepMonthlyMap.has(accountId) &&
+      PENDING_PEP_NAME_FRAGMENTS.some(frag => nameLower.includes(frag))
+    ) {
+      pendingPepAccountIds.add(accountId)
+    }
+  }
+  if (pendingPepAccountIds.size) {
+    logger.info('[BudgetVsActual] Pending PEP accounts (plan zeroed, proforma to GDMS Cloud):', [...pendingPepAccountIds].map(id => `${id} (${accountNameMap.get(id)})`))
   }
 
   logger.info('[BudgetVsActual] Account mapping', {
@@ -240,9 +267,12 @@ export default defineEventHandler(handleAsync(async (event) => {
   const actualByAcct = indexByAccountMonth(proformaResult.billable?.costs?.resultsByTime)
 
   // Sum all linked account proforma budgets per month (before stripping exclusions).
-  // Used to derive GDMS Cloud budget: proforma org total − linked account proforma budgets − Enterprise Support.
+  // Pending-PEP accounts are intentionally excluded: their proforma allocation stays in
+  // GDMS Cloud's residual so GDMS Cloud absorbs it rather than those rows showing $0 plan
+  // with the budget perfectly matching actual.
   const linkedAccountBudgetByMonth = new Map<string, number>()
-  for (const [, acctMonths] of budgetByAcct) {
+  for (const [accountId, acctMonths] of budgetByAcct) {
+    if (pendingPepAccountIds.has(accountId)) continue
     for (const [month, cost] of acctMonths) {
       linkedAccountBudgetByMonth.set(month, (linkedAccountBudgetByMonth.get(month) || 0) + cost)
     }
@@ -262,6 +292,11 @@ export default defineEventHandler(handleAsync(async (event) => {
     budgetByAcct.delete(id)
     actualByAcct.delete(id)
   }
+
+  // Dance Monkey AWS account (110317593805) — decommissioned account previously assigned
+  // to DE158 before the chargeback billing model switchover. Exclude from all reporting.
+  budgetByAcct.delete('110317593805')
+  actualByAcct.delete('110317593805')
 
   // Invoicing months Jan–Dec of `year` use End keys ${year}-01-01 through ${year}-12-01.
   // Jan invoice → End key ${year}-01-01 (Dec prior year AWS charges), Dec invoice → ${year}-12-01.
@@ -430,7 +465,9 @@ export default defineEventHandler(handleAsync(async (event) => {
       }
 
       const pepJson = accountPepMonthlyMap.get(accountId)
-      if (pepJson) {
+      if (pendingPepAccountIds.has(accountId)) {
+        // PEP in progress — no historical budget. Show $0 plan; proforma stays in GDMS Cloud residual.
+      } else if (pepJson) {
         // Use pep values as the plan — only for months with actual data
         const { monthlyArray } = getAnnualBudgetArray({ pepBudget2026Monthly: pepJson })
         for (const m of acctActualMonths) {
@@ -614,14 +651,16 @@ export default defineEventHandler(handleAsync(async (event) => {
     for (const [accountId, totals] of otherAccounts) {
       const monthlyActuals = Object.fromEntries(actualByAcct.get(accountId) || [])
       const pepFields = calcPepFields(accountId, monthlyActuals)
-      const acctRow = {
+      const isPendingPep = pendingPepAccountIds.has(accountId)
+      const acctRow: AccountRow = {
         accountId,
         name: accountNameMap.get(accountId) || accountId,
         ytdBudget: totals.budget,
         ytdActual: totals.actual,
         ytdVariance: totals.actual - totals.budget,
         monthlyActuals,
-        ...pepFields
+        ...pepFields,
+        ...(isPendingPep ? { pendingPep: true } : {})
       }
       categories.push({
         name: accountNameMap.get(accountId) || accountId,
