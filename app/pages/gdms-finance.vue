@@ -369,10 +369,18 @@
               <table class="w-full text-sm">
                 <thead>
                   <tr class="border-b border-gray-200 dark:border-gray-700">
-                    <th class="py-2 pr-4 text-left font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-xs">Category</th>
-                    <th class="py-2 px-4 text-right font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-xs">YTD Plan</th>
-                    <th class="py-2 px-4 text-right font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-xs">YTD Actual</th>
-                    <th class="py-2 px-4 text-right font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-xs">YTD Variance</th>
+                    <th class="py-2 pr-4 text-left font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-xs">
+                      <span class="cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 transition-colors" @click="setCatSort('name')">Category</span>
+                    </th>
+                    <th class="py-2 px-4 text-right font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-xs">
+                      <span class="cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 transition-colors" @click="setCatSort('ytdBudget')">YTD Plan</span>
+                    </th>
+                    <th class="py-2 px-4 text-right font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-xs">
+                      <span class="cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 transition-colors" @click="setCatSort('ytdActual')">YTD Actual</span>
+                    </th>
+                    <th class="py-2 px-4 text-right font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-xs">
+                      <span class="cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 transition-colors" @click="setCatSort('ytdVariance')">YTD Variance</span>
+                    </th>
                     <th class="py-2 pl-4 text-left font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-xs w-1/2">AI Variance Analysis</th>
                   </tr>
                 </thead>
@@ -388,7 +396,7 @@
                     <td class="py-3 pl-4"></td>
                   </tr>
                   <!-- Category rows -->
-                  <tr v-for="cat in activeDept.categories.filter(c => c.name !== 'Secret Cloud')" :key="cat.name">
+                  <tr v-for="cat in sortedCategories" :key="cat.name">
                     <td class="py-3 pr-4">
                       <div class="flex items-center gap-2">
                         <div class="w-1 h-4 rounded-full flex-shrink-0"
@@ -880,6 +888,42 @@ const gdmsCloudAdjustment = computed<{ plan: number; actual: number }>(() => {
   const catPlanSum = dept.categories.reduce((s, c) => s + c.ytdBudget, 0)
   const catActualSum = dept.categories.reduce((s, c) => s + c.ytdActual, 0)
   return { plan: deptPlan - catPlanSum, actual: deptActual - catActualSum }
+})
+
+// ── Cost Breakdown sort ──
+type CatSortKey = 'name' | 'ytdBudget' | 'ytdActual' | 'ytdVariance'
+const catSortKey = ref<CatSortKey>('ytdVariance')
+const catSortAsc = ref(false)
+
+function setCatSort(key: CatSortKey) {
+  if (catSortKey.value === key) {
+    catSortAsc.value = !catSortAsc.value
+  } else {
+    catSortKey.value = key
+    catSortAsc.value = key === 'name'
+  }
+}
+
+const sortedCategories = computed(() => {
+  const dept = activeDept.value
+  if (!dept) return []
+  const cats = dept.categories.filter(c => c.name !== 'Secret Cloud')
+  const key = catSortKey.value
+  const dir = catSortAsc.value ? 1 : -1
+  return [...cats].sort((a, b) => {
+    if (key === 'name') return dir * a.name.localeCompare(b.name)
+    const aVal = key === 'ytdBudget'
+      ? (a.name === 'GDMS Cloud' ? a.ytdBudget + gdmsCloudAdjustment.value.plan : a.ytdBudget)
+      : key === 'ytdActual'
+        ? (a.name === 'GDMS Cloud' ? a.ytdActual + gdmsCloudAdjustment.value.actual : a.ytdActual)
+        : (a.name === 'GDMS Cloud' ? (a.ytdActual + gdmsCloudAdjustment.value.actual) - (a.ytdBudget + gdmsCloudAdjustment.value.plan) : a.ytdVariance)
+    const bVal = key === 'ytdBudget'
+      ? (b.name === 'GDMS Cloud' ? b.ytdBudget + gdmsCloudAdjustment.value.plan : b.ytdBudget)
+      : key === 'ytdActual'
+        ? (b.name === 'GDMS Cloud' ? b.ytdActual + gdmsCloudAdjustment.value.actual : b.ytdActual)
+        : (b.name === 'GDMS Cloud' ? (b.ytdActual + gdmsCloudAdjustment.value.actual) - (b.ytdBudget + gdmsCloudAdjustment.value.plan) : b.ytdVariance)
+    return dir * (aVal - bVal)
+  })
 })
 
 // Full-year plan total for active dept (overrides take precedence over API budget)
