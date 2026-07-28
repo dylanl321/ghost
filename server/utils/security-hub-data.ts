@@ -16,6 +16,8 @@ import { logger } from './logger'
 import type {
   SecurityHubFindingRecord,
   SecurityHubDatasetFilters,
+  DatasetQueryOptions,
+  DatasetQueryResult,
 } from '../../shared/types/dataset-reports'
 import type { FindingSeverity, WorkflowStatus } from '../../shared/types/security-hub'
 
@@ -191,8 +193,9 @@ async function fetchFindingsForRegion(
   accountNameMap: Map<string, string>,
   region: string,
   filters: SecurityHubDatasetFilters,
-  environment: 'commercial' | 'govcloud'
-): Promise<SecurityHubFindingRecord[]> {
+  environment: 'commercial' | 'govcloud',
+  options: DatasetQueryOptions = {}
+): Promise<{ records: SecurityHubFindingRecord[]; hasMore: boolean }> {
   const findings: SecurityHubFindingRecord[] = []
 
   try {
@@ -212,6 +215,7 @@ async function fetchFindingsForRegion(
     }
 
     for (const batch of accountBatches) {
+      if (options.signal?.aborted) throw options.signal.reason || new Error('Query canceled')
       const secHubFilters = buildSecurityHubFilters(filters)
 
       if (batch.length > 0) {
@@ -228,11 +232,11 @@ async function fetchFindingsForRegion(
       do {
         const command = new GetFindingsCommand({
           Filters: secHubFilters,
-          MaxResults: 100,
+          MaxResults: options.limit ? Math.min(100, Math.max(1, options.limit - findings.length)) : 100,
           NextToken: nextToken,
         })
 
-        const response = await client.send(command)
+        const response = await client.send(command, { abortSignal: options.signal })
         pageCount++
 
         if (response.Findings) {
@@ -243,6 +247,10 @@ async function fetchFindingsForRegion(
         }
 
         nextToken = response.NextToken
+        await options.onProgress?.({ phase: 'securityHub', processed: findings.length })
+        if (options.limit && findings.length >= options.limit) {
+          return { records: findings.slice(0, options.limit), hasMore: Boolean(nextToken) || batch !== accountBatches.at(-1) }
+        }
 
         logger.debug('[SecurityHub] Fetched findings page', {
           region,
@@ -278,7 +286,7 @@ async function fetchFindingsForRegion(
     }
   }
 
-  return findings
+  return { records: findings, hasMore: false }
 }
 
 /**
@@ -290,8 +298,17 @@ async function fetchFindingsForRegion(
  */
 export async function getSecurityHubFindings(
   accountIds: string[],
-  filters: SecurityHubDatasetFilters = {}
+  filters: SecurityHubDatasetFilters = {},
+  options: DatasetQueryOptions = {}
 ): Promise<SecurityHubFindingRecord[]> {
+  return (await querySecurityHubFindings(accountIds, filters, options)).records
+}
+
+export async function querySecurityHubFindings(
+  accountIds: string[],
+  filters: SecurityHubDatasetFilters = {},
+  options: DatasetQueryOptions = {}
+): Promise<DatasetQueryResult<SecurityHubFindingRecord>> {
   const startTime = Date.now()
 
   // Determine environment and appropriate regions
@@ -387,14 +404,18 @@ export async function getSecurityHubFindings(
     // Query the centralized Security Lake account which has all findings
     const allFindings: SecurityHubFindingRecord[] = []
 
-    // Process regions in parallel
-    const regionPromises = regions.map(region =>
-      fetchFindingsForRegion(targetAccountIds, accountNameMap, region, filters, environment)
-    )
-
-    const regionResults = await Promise.all(regionPromises)
-    for (const findings of regionResults) {
-      allFindings.push(...findings)
+    let hasMore = false
+    for (let index = 0; index < regions.length; index++) {
+      const region = regions[index]
+      if (!region) continue
+      const remaining = options.limit ? options.limit - allFindings.length : undefined
+      if (remaining !== undefined && remaining <= 0) {
+        hasMore = true
+        break
+      }
+      const result = await fetchFindingsForRegion(targetAccountIds, accountNameMap, region, filters, environment, { ...options, limit: remaining })
+      allFindings.push(...result.records)
+      hasMore ||= result.hasMore || (Boolean(options.limit) && allFindings.length >= options.limit! && index < regions.length - 1)
     }
 
     logger.info('[SecurityHub] All regions completed', {
@@ -427,7 +448,8 @@ export async function getSecurityHubFindings(
       regionsQueried: regions.length,
     })
 
-    return allFindings
+    const records = options.limit ? allFindings.slice(0, options.limit) : allFindings
+    return { records, sampleCount: records.length, hasMore, truncated: hasMore }
 
   } catch (error) {
     logger.error('[SecurityHub] Failed to fetch findings', { error })

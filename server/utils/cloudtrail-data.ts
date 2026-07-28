@@ -18,12 +18,15 @@ import { logger } from './logger'
 import type {
   CloudTrailEventRecord,
   CloudTrailDatasetFilters,
+  DatasetQueryOptions,
+  DatasetQueryResult,
 } from '../../shared/types/dataset-reports'
 
 import {
   StartQueryExecutionCommand,
   GetQueryExecutionCommand,
   GetQueryResultsCommand,
+  StopQueryExecutionCommand,
 } from '@aws-sdk/client-athena'
 
 /**
@@ -142,6 +145,11 @@ function buildWhereClause(
     conditions.push(`api.service.name IN (${sourceList})`)
   }
 
+  if (filters.userIdentities && filters.userIdentities.length > 0) {
+    const identities = filters.userIdentities.map(quote).join(', ')
+    conditions.push(`actor.user.name IN (${identities})`)
+  }
+
   // Write events only (exclude Get*, List*, Describe*)
   if (filters.writeEventsOnly) {
     conditions.push(`(api.operation NOT LIKE 'Get%' AND api.operation NOT LIKE 'List%' AND api.operation NOT LIKE 'Describe%')`)
@@ -197,9 +205,12 @@ async function querySecurityLakeForEvents(
   filters: CloudTrailDatasetFilters,
   startTime: Date,
   endTime: Date,
-  environment: 'commercial' | 'govcloud'
-): Promise<CloudTrailEventRecord[]> {
+  environment: 'commercial' | 'govcloud',
+  options: DatasetQueryOptions = {}
+): Promise<{ records: CloudTrailEventRecord[]; hasMore: boolean }> {
   const events: CloudTrailEventRecord[] = []
+  let activeClient: Awaited<ReturnType<typeof getAthenaClient>> | undefined
+  let activeQueryId: string | undefined
 
   try {
     // Get environment configuration
@@ -208,6 +219,7 @@ async function querySecurityLakeForEvents(
 
     // Get Athena client for Security Lake account
     const client = await getAthenaClient(environment, region, config.monitoringAccountId)
+    activeClient = client
 
     // Convert dates to Unix epoch milliseconds for OCSF
     const startEpoch = Math.floor(startTime.getTime())
@@ -245,6 +257,7 @@ async function querySecurityLakeForEvents(
       FROM ${tableName}
       WHERE ${whereClause}
       ORDER BY time DESC
+      ${options.limit ? `LIMIT ${options.limit}` : ''}
     `.trim()
 
     logger.info('[CloudTrail Security Lake] Executing Athena query', {
@@ -265,12 +278,14 @@ async function querySecurityLakeForEvents(
       }
     })
 
-    const startResponse = await client.send(startCommand)
+    const startResponse = await client.send(startCommand, { abortSignal: options.signal })
     const queryExecutionId = startResponse.QueryExecutionId
 
     if (!queryExecutionId) {
       throw new Error('Failed to start Athena query - no execution ID returned')
     }
+    activeQueryId = queryExecutionId
+    await options.onAthenaQuery?.(queryExecutionId)
 
     logger.debug('[CloudTrail Security Lake] Query started', { queryExecutionId })
 
@@ -281,18 +296,30 @@ async function querySecurityLakeForEvents(
 
     while (queryStatus === 'RUNNING' || queryStatus === 'QUEUED') {
       if (attempts >= maxAttempts) {
+        await client.send(new StopQueryExecutionCommand({ QueryExecutionId: queryExecutionId })).catch(() => undefined)
         throw new Error('Athena query timeout - exceeded maximum wait time')
       }
 
+      if (options.signal?.aborted) {
+        await client.send(new StopQueryExecutionCommand({ QueryExecutionId: queryExecutionId })).catch(() => undefined)
+        throw options.signal.reason || new Error('Query canceled')
+      }
+
       // Wait 2 seconds between checks
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, 2000)
+        options.signal?.addEventListener('abort', () => {
+          clearTimeout(timer)
+          reject(options.signal?.reason || new Error('Query canceled'))
+        }, { once: true })
+      })
       attempts++
 
       const statusCommand = new GetQueryExecutionCommand({
         QueryExecutionId: queryExecutionId
       })
 
-      const statusResponse = await client.send(statusCommand)
+      const statusResponse = await client.send(statusCommand, { abortSignal: options.signal })
       queryStatus = statusResponse.QueryExecution?.Status?.State || 'UNKNOWN'
 
       if (queryStatus === 'FAILED' || queryStatus === 'CANCELLED') {
@@ -305,6 +332,7 @@ async function querySecurityLakeForEvents(
         status: queryStatus,
         attempts
       })
+      await options.onProgress?.({ phase: 'cloudtrail', processed: attempts })
     }
 
     logger.info('[CloudTrail Security Lake] Query completed', {
@@ -319,14 +347,9 @@ async function querySecurityLakeForEvents(
       MaxResults: 1000
     })
 
-    let resultResponse = await client.send(resultsCommand)
+    const resultResponse = await client.send(resultsCommand, { abortSignal: options.signal })
     let processedRows = 0
-
-    do {
-      if (!resultResponse.ResultSet?.Rows) {
-        break
-      }
-
+    if (resultResponse.ResultSet?.Rows) {
       // First row is headers, skip it
       const rows = resultResponse.ResultSet.Rows.slice(processedRows === 0 ? 1 : 0)
 
@@ -364,25 +387,20 @@ async function querySecurityLakeForEvents(
 
       processedRows += rows.length
 
-      // Check for more results
-      if (resultResponse.NextToken) {
-        resultResponse = await client.send(new GetQueryResultsCommand({
-          QueryExecutionId: queryExecutionId,
-          NextToken: resultResponse.NextToken,
-          MaxResults: 1000
-        }))
-      } else {
-        break
-      }
-
-    } while (resultResponse.NextToken)
+    }
 
     logger.info('[CloudTrail Security Lake] Events retrieved', {
       totalEvents: events.length,
       processedRows
     })
 
+    activeQueryId = undefined
+    await options.onAthenaQuery?.(null)
   } catch (error: any) {
+    if (activeClient && activeQueryId && options.signal?.aborted) {
+      await activeClient.send(new StopQueryExecutionCommand({ QueryExecutionId: activeQueryId })).catch(() => undefined)
+    }
+    await options.onAthenaQuery?.(null)
     logger.error('[CloudTrail Security Lake] Query failed', {
       error: (error instanceof Error ? error.message : String(error)),
       stack: (error instanceof Error ? error.stack : String(error))
@@ -390,7 +408,7 @@ async function querySecurityLakeForEvents(
     throw new Error(`CloudTrail query failed: ${(error instanceof Error ? error.message : String(error))}`)
   }
 
-  return events
+  return { records: events, hasMore: Boolean(options.limit && events.length >= options.limit) }
 }
 
 /**
@@ -402,8 +420,17 @@ async function querySecurityLakeForEvents(
  */
 export async function getCloudTrailEvents(
   accountIds: string[],
-  filters: CloudTrailDatasetFilters = {}
+  filters: CloudTrailDatasetFilters = {},
+  options: DatasetQueryOptions = {}
 ): Promise<CloudTrailEventRecord[]> {
+  return (await queryCloudTrailEvents(accountIds, filters, options)).records
+}
+
+export async function queryCloudTrailEvents(
+  accountIds: string[],
+  filters: CloudTrailDatasetFilters = {},
+  options: DatasetQueryOptions = {}
+): Promise<DatasetQueryResult<CloudTrailEventRecord>> {
   const startTime = Date.now()
 
   // Determine environment
@@ -512,17 +539,18 @@ export async function getCloudTrailEvents(
       lookbackDays
     })
 
-    const allEvents = await querySecurityLakeForEvents(
+    const queryResult = await querySecurityLakeForEvents(
       queryAccountIds,
       accountNameMap,
       filters,
       startDate,
       endDate,
-      environment
+      environment,
+      options
     )
 
     // Apply client-side filters
-    const filteredEvents = applyClientSideFilters(allEvents, filters)
+    const filteredEvents = applyClientSideFilters(queryResult.records, filters)
 
     // Sort by event time (newest first)
     filteredEvents.sort((a, b) => {
@@ -536,7 +564,13 @@ export async function getCloudTrailEvents(
       accountsQueried: validAccounts.length,
     })
 
-    return filteredEvents
+    const records = options.limit ? filteredEvents.slice(0, options.limit) : filteredEvents
+    return {
+      records,
+      sampleCount: records.length,
+      hasMore: queryResult.hasMore,
+      truncated: queryResult.hasMore
+    }
 
   } catch (error) {
     logger.error('[CloudTrail] Failed to fetch events', { error })

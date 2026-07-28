@@ -153,6 +153,10 @@ resource "aws_ecs_task_definition" "main" {
           value = "https://login.microsoftonline.us"
         },
         {
+          name  = "ENTRA_TENANT_ID"
+          value = "7c5a26cf-ddf0-400c-9703-4070b4e3a54d"
+        },
+        {
           name  = "ENTRA_GRAPH_BASE_URL"
           value = "https://graph.microsoft.us"
         },
@@ -229,6 +233,14 @@ resource "aws_ecs_task_definition" "main" {
         {
           name  = "CHAT_JOBS_QUEUE_URL"
           value = aws_sqs_queue.chat_jobs.url
+        },
+        {
+          name  = "DATASET_EXPORT_JOBS_TABLE_NAME"
+          value = aws_dynamodb_table.dataset_export_jobs.name
+        },
+        {
+          name  = "DATASET_EXPORT_JOBS_QUEUE_URL"
+          value = aws_sqs_queue.dataset_export_jobs.url
         },
         {
           name  = "AWS_ASYNC_METRICS_TABLE_NAME"

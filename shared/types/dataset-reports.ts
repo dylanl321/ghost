@@ -13,12 +13,34 @@
 /**
  * Supported dataset types
  */
-export type DatasetType = 'config' | 'securityHub' | 'cloudtrail'
+export type DatasetType = 'config' | 'securityHub' | 'cloudtrail' | 'entraUsers'
+
+export type DatasetQueryMode = 'preview' | 'export'
+
+export interface DatasetQueryOptions {
+  mode?: DatasetQueryMode
+  limit?: number
+  maxScanned?: number
+  signal?: AbortSignal
+  onProgress?: (progress: { phase: string; processed: number; total?: number }) => void | Promise<void>
+  onAthenaQuery?: (queryExecutionId: string | null) => void | Promise<void>
+}
+
+export interface DatasetQueryResult<T> {
+  records: T[]
+  sampleCount: number
+  hasMore: boolean
+  truncated: boolean
+  scannedCount?: number
+}
 
 /**
  * AWS Config resource filter options
  */
 export interface ConfigDatasetFilters {
+  resourceId?: string
+  resourceName?: string
+  tags?: Record<string, string>
   /**
    * Filter by specific resource types (e.g., 'AWS::EC2::Instance', 'AWS::S3::Bucket')
    * Empty array = all resource types
@@ -243,6 +265,9 @@ export interface DatasetReportConfig {
    */
   accounts: string[]
 
+  /** Explicit selection intent. Absent preserves the legacy empty-array-means-all behavior. */
+  accountScope?: 'all' | 'selected'
+
   /**
    * Selected datasets and their configurations
    */
@@ -274,6 +299,46 @@ export interface DatasetReportConfig {
     startDate?: string     // ISO 8601
     endDate?: string       // ISO 8601
   }
+}
+
+export type DatasetExportJobStatus = 'queued' | 'running' | 'complete' | 'error' | 'canceled'
+
+export interface DatasetExportJob {
+  jobId: string
+  userId: string
+  status: DatasetExportJobStatus
+  phase: string
+  progressPercent: number
+  reportConfig: DatasetReportConfig
+  datasetCounts: Partial<Record<DatasetType, number>>
+  cancelRequested: boolean
+  activeAthenaQueryIds: string[]
+  s3Key?: string
+  filename?: string
+  mimeType?: string
+  sizeBytes?: number
+  errorMessage?: string
+  createdAt: string
+  startedAt?: string
+  completedAt?: string
+  heartbeatAt?: string
+  lastUpdated: string
+  ttl: number
+}
+
+export interface DatasetAccountMatch {
+  reference: string
+  accountId?: string
+  accountName?: string
+  candidates?: Array<{ accountId: string; accountName: string }>
+}
+
+export interface DatasetInterpretationResult {
+  config: DatasetReportConfig
+  explanation: string
+  warnings: string[]
+  accountMatches: DatasetAccountMatch[]
+  requiresResolution: boolean
 }
 
 // ============================================================================

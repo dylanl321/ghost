@@ -18,3 +18,11 @@ output "deployment_account_id" {
 output "chat_jobs_queue_url" {
   value = aws_sqs_queue.chat_jobs.url
 }
+
+output "dataset_export_jobs_queue_url" {
+  value = aws_sqs_queue.dataset_export_jobs.url
+}
+
+output "dataset_export_jobs_table_name" {
+  value = aws_dynamodb_table.dataset_export_jobs.name
+}

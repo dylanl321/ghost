@@ -4,7 +4,7 @@
  */
 
 import type { H3Event } from 'h3'
-import type { DatasetReportConfig, DatasetReportData } from '../../shared/types/dataset-reports'
+import type { DatasetQueryOptions, DatasetReportConfig, DatasetReportData, DatasetType } from '../../shared/types/dataset-reports'
 import { getConfigResources } from './aws-config-data'
 import { getSecurityHubFindings } from './security-hub-data'
 import { getCloudTrailEvents } from './cloudtrail-data'
@@ -21,13 +21,15 @@ import { flattenNestedData } from './dataset-schema-builder'
  */
 export async function generateDatasetReport(
   config: DatasetReportConfig,
-  event?: H3Event  // Optional to maintain backward compatibility
+  event?: H3Event,
+  options: DatasetQueryOptions = {}
 ): Promise<{
   success: boolean
   buffer?: Buffer
   filename?: string
   mimeType?: string
   error?: string
+  datasetCounts?: Partial<Record<DatasetType, number>>
 }> {
   try {
     logger.info('[Dataset Report] Generating with config:', {
@@ -38,22 +40,23 @@ export async function generateDatasetReport(
     })
 
     // Step 1: Fetch all required dataset data
-    const reportData = await buildDatasetReport(config, event)
+    const reportData = await buildDatasetReport(config, event, options)
 
     // Step 2: Generate AI insights if enabled
     if (config.enableAI) {
-      reportData.aiInsights = await generateAIInsights(reportData, config)
+      if (options.signal?.aborted) throw options.signal.reason || new Error('Export canceled')
+      reportData.aiInsights = await generateAIInsights(reportData, config, options.signal)
     }
 
     // Step 3: Generate export in requested format
     if (config.format === 'pdf') {
-      return await generatePDFDatasetReport(reportData, config)
+      return { ...await generatePDFDatasetReport(reportData, config), datasetCounts: getDatasetCounts(reportData) }
     } else if (config.format === 'csv') {
-      return await generateCSVDatasetReport(reportData, config)
+      return { ...await generateCSVDatasetReport(reportData, config), datasetCounts: getDatasetCounts(reportData) }
     } else if (config.format === 'json') {
-      return await generateJSONDatasetReport(reportData, config)
+      return { ...await generateJSONDatasetReport(reportData, config), datasetCounts: getDatasetCounts(reportData) }
     } else if (config.format === 'xlsx') {
-      return await generateXLSXDatasetReport(reportData, config)
+      return { ...await generateXLSXDatasetReport(reportData, config), datasetCounts: getDatasetCounts(reportData) }
     } else {
       throw new Error(`Unsupported format: ${config.format}`)
     }
@@ -71,7 +74,8 @@ export async function generateDatasetReport(
  */
 async function buildDatasetReport(
   config: DatasetReportConfig,
-  event?: H3Event
+  event?: H3Event,
+  options: DatasetQueryOptions = {}
 ): Promise<DatasetReportData> {
   const startTime = Date.now()
 
@@ -87,7 +91,9 @@ async function buildDatasetReport(
   )
 
   // Determine target accounts
-  const targetAccountIds = config.accounts.length > 0
+  const targetAccountIds = config.accountScope === 'all' || (!config.accountScope && config.accounts.length === 0)
+    ? accountsWithIds.map(acc => acc.accountId)
+    : config.accounts.length > 0
     ? config.accounts
     : accountsWithIds.map(acc => acc.accountId)
 
@@ -138,7 +144,7 @@ async function buildDatasetReport(
         logger.info('[Dataset Report] Fetching Config resources')
         const filters = config.datasets.config!.filters || {}
 
-        const records = await getConfigResources(targetAccountIds, filters)
+        const records = await getConfigResources(targetAccountIds, filters, options)
         const resourceTypeSummary: Record<string, number> = {}
         const complianceSummary = {
           compliant: 0,
@@ -177,10 +183,11 @@ async function buildDatasetReport(
     datasetPromises.push(
       (async () => {
         logger.info('[Dataset Report] Fetching Security Hub findings')
-        const filters = config.datasets.securityHub!.filters || {}
+        const filters = { ...(config.datasets.securityHub!.filters || {}) }
+        if (config.timeRange?.type === 'relative' && config.timeRange.relativeDays && !filters.lookbackDays) filters.lookbackDays = config.timeRange.relativeDays
 
         // Fetch records (regions are determined inside the function now)
-        const records = await getSecurityHubFindings(targetAccountIds, filters)
+        const records = await getSecurityHubFindings(targetAccountIds, filters, options)
 
         // Build summary from records
         const findingsBySeverity = {
@@ -237,9 +244,14 @@ async function buildDatasetReport(
     datasetPromises.push(
       (async () => {
         logger.info('[Dataset Report] Fetching CloudTrail events')
-        const filters = config.datasets.cloudtrail!.filters || {}
+        const filters = { ...(config.datasets.cloudtrail!.filters || {}) }
+        if (config.timeRange?.type === 'relative' && config.timeRange.relativeDays && !filters.lookbackDays) filters.lookbackDays = config.timeRange.relativeDays
+        if (config.timeRange?.type === 'absolute') {
+          filters.startTime ||= config.timeRange.startDate
+          filters.endTime ||= config.timeRange.endDate
+        }
 
-        const records = await getCloudTrailEvents(targetAccountIds, filters)
+        const records = await getCloudTrailEvents(targetAccountIds, filters, options)
 
         // Build statistics from records
         const eventsByType: Record<string, number> = {}
@@ -312,7 +324,7 @@ async function buildDatasetReport(
           const filters = config.datasets.entraUsers!.filters || {}
 
           try {
-            const records = await getEntraUsers(event, targetAccountIds, filters)
+            const records = await getEntraUsers(event, targetAccountIds, filters, options)
 
             // Build statistics from records
             const usersByRole: Record<string, number> = {}
@@ -383,7 +395,8 @@ async function buildDatasetReport(
  */
 async function generateAIInsights(
   reportData: DatasetReportData,
-  config: DatasetReportConfig
+  config: DatasetReportConfig,
+  signal?: AbortSignal
 ): Promise<{
   executiveSummary: string
   keyFindings: string[]
@@ -393,7 +406,7 @@ async function generateAIInsights(
 
   try {
     const { analyzeDatasetReport } = await import('./pdf-export-dataset')
-    const insights = await analyzeDatasetReport(reportData, config)
+    const insights = await analyzeDatasetReport(reportData, config, signal)
 
     logger.info('[Dataset Report] AI insights generated successfully')
     return insights
@@ -439,7 +452,7 @@ async function generatePDFDatasetReport(
  */
 async function generateCSVDatasetReport(
   reportData: DatasetReportData,
-  _config: DatasetReportConfig
+  config: DatasetReportConfig
 ): Promise<{
   success: boolean
   buffer: Buffer
@@ -578,7 +591,7 @@ function createCsvResult(csvRows: string[]) {
  */
 async function generateJSONDatasetReport(
   reportData: DatasetReportData,
-  _config: DatasetReportConfig
+  config: DatasetReportConfig
 ): Promise<{
   success: boolean
   buffer: Buffer
@@ -600,6 +613,15 @@ async function generateJSONDatasetReport(
     buffer,
     filename,
     mimeType: 'application/json'
+  }
+}
+
+function getDatasetCounts(reportData: DatasetReportData): Partial<Record<DatasetType, number>> {
+  return {
+    ...(reportData.config ? { config: reportData.config.records.length } : {}),
+    ...(reportData.securityHub ? { securityHub: reportData.securityHub.records.length } : {}),
+    ...(reportData.cloudtrail ? { cloudtrail: reportData.cloudtrail.records.length } : {}),
+    ...(reportData.entraUsers ? { entraUsers: reportData.entraUsers.records.length } : {})
   }
 }
 

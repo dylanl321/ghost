@@ -500,6 +500,32 @@ resource "aws_iam_role_policy" "ecs_chat_jobs_sqs" {
   })
 }
 
+resource "aws_iam_role_policy" "ecs_dataset_export_jobs" {
+  provider = aws.target_deployment_account
+  name     = "${var.app_name}_dataset_export_jobs"
+  role     = aws_iam_role.ecs_task_execution_role.name
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query", "dynamodb:Scan"]
+        Resource = [aws_dynamodb_table.dataset_export_jobs.arn, "${aws_dynamodb_table.dataset_export_jobs.arn}/index/*"]
+      },
+      {
+        Effect = "Allow"
+        Action = ["sqs:SendMessage", "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:ChangeMessageVisibility", "sqs:GetQueueAttributes"]
+        Resource = [aws_sqs_queue.dataset_export_jobs.arn, aws_sqs_queue.dataset_export_jobs_dlq.arn]
+      },
+      {
+        Effect = "Allow"
+        Action = ["athena:StopQueryExecution"]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 # DynamoDB permissions for async metrics (read/write)
 resource "aws_iam_role_policy" "ecs_async_metrics_dynamodb" {
   provider = aws.target_deployment_account

@@ -162,6 +162,7 @@
               <p class="text-sm text-gray-500 mb-4">Select the AWS accounts to pull data from.</p>
               <DatasetAccountSelector
                 v-model="form.reportConfig.accounts"
+                v-model:scope="form.reportConfig.accountScope"
                 :disabled="saving"
               />
             </div>
@@ -199,7 +200,7 @@
                       </div>
                       <div>
                         <label class="text-xs text-gray-500 block mb-1">Accounts</label>
-                        <p class="font-medium">{{ form.reportConfig.accounts.length > 0 ? `${form.reportConfig.accounts.length} selected` : 'All Accounts' }}</p>
+                        <p class="font-medium">{{ form.reportConfig.accountScope === 'all' ? 'All Accounts' : `${form.reportConfig.accounts.length} selected` }}</p>
                       </div>
                     </div>
 
@@ -360,6 +361,7 @@ const form = reactive<{
   description: '',
   reportConfig: {
     accounts: [],
+    accountScope: 'all',
     datasets: {
       config: { enabled: false, filters: {} },
       securityHub: { enabled: false, filters: {} },
@@ -518,6 +520,7 @@ function resetForm() {
   form.description = ''
   form.reportConfig = {
     accounts: [],
+    accountScope: 'all',
     datasets: {
       config: { enabled: false, filters: {} },
       securityHub: { enabled: false, filters: {} },
@@ -536,7 +539,7 @@ watch(() => props.report, (report) => {
   if (report) {
     form.reportName = report.reportName
     form.description = report.description || ''
-    form.reportConfig = structuredClone(report.reportConfig) as CompleteDatasetReportConfig
+    form.reportConfig = structuredClone(report.reportConfig) as unknown as CompleteDatasetReportConfig
     form.schedule = structuredClone(report.schedule)
     form.recipients = [...(report.recipients || [])]
     form.emailTemplate = structuredClone(report.emailTemplate || form.emailTemplate)
@@ -545,27 +548,12 @@ watch(() => props.report, (report) => {
 }, { immediate: true })
 
 async function downloadReportNow() {
-  const response = await fetch('/api/dataset-reports/export', {
+  await $fetch('/api/dataset-reports/export', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      accountIds: form.reportConfig.accounts,
+    body: {
       reportConfig: form.reportConfig
-    })
+    }
   })
-
-  if (!response.ok) {
-    throw new Error(await response.text() || 'Report export failed')
-  }
-
-  const blob = await response.blob()
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `dataset-report-${new Date().toISOString().slice(0, 10)}.${form.reportConfig.format}`
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  URL.revokeObjectURL(url)
+  useToast().add({ title: 'Export queued', description: 'Track and download it from Dataset Reports.', color: 'blue' })
 }
 </script>

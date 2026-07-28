@@ -18,6 +18,8 @@ import { logger } from './logger'
 import type {
   ConfigResourceRecord,
   ConfigDatasetFilters,
+  DatasetQueryOptions,
+  DatasetQueryResult,
 } from '../../shared/types/dataset-reports'
 
 type ConfigComplianceStatus = 'COMPLIANT' | 'NON_COMPLIANT' | 'NOT_APPLICABLE' | 'INSUFFICIENT_DATA'
@@ -47,10 +49,12 @@ async function fetchResourcesViaQuery(
   accounts: string[],
   filters: ConfigDatasetFilters,
   region: string = 'us-east-1',
-  environment: 'commercial' | 'govcloud' = 'govcloud'
-): Promise<ConfigResourceRecord[]> {
+  environment: 'commercial' | 'govcloud' = 'govcloud',
+  options: DatasetQueryOptions = {}
+): Promise<{ records: ConfigResourceRecord[]; hasMore: boolean; scannedCount: number }> {
   const client = await getConfigClient(undefined, region)
   const results: ConfigResourceRecord[] = []
+  let queryHasMore = false
   const aggregatorName = getConfigAggregatorName(environment)
 
   // Build SQL-like query
@@ -91,6 +95,15 @@ async function fetchResourcesViaQuery(
     whereStarted = true
   }
 
+  if (filters.resourceId) {
+    queryParts.push(`${whereStarted ? 'AND' : 'WHERE'} resourceId LIKE '%${filters.resourceId.replace(/'/g, "''")}%'`)
+    whereStarted = true
+  }
+  if (filters.resourceName) {
+    queryParts.push(`${whereStarted ? 'AND' : 'WHERE'} resourceName LIKE '%${filters.resourceName.replace(/'/g, "''")}%'`)
+    whereStarted = true
+  }
+
   const expression = queryParts.join('\n')
 
   logger.info('[Config] Executing advanced query', { expression })
@@ -98,17 +111,19 @@ async function fetchResourcesViaQuery(
   try {
     let nextToken: string | undefined
     let pageCount = 0
-    const maxPages = 50  // Prevent runaway queries
+    const preview = options.mode === 'preview'
+    const needsClientFiltering = filters.quickFilters || filters.tags || filters.complianceOnly || filters.complianceStatus?.length
+    const maxScanned = preview ? (options.maxScanned || (needsClientFiltering ? 250 : (options.limit || 25))) : Number.POSITIVE_INFINITY
 
     do {
       const command = new SelectAggregateResourceConfigCommand({
         Expression: expression,
         ConfigurationAggregatorName: aggregatorName,
-        Limit: 100,
+        Limit: preview ? Math.min(100, Math.max(1, maxScanned - results.length)) : 100,
         NextToken: nextToken,
       })
 
-      const response = await client.send(command)
+      const response = await client.send(command, { abortSignal: options.signal })
       pageCount++
 
       if (response.Results) {
@@ -163,6 +178,7 @@ async function fetchResourcesViaQuery(
       }
 
       nextToken = response.NextToken
+      await options.onProgress?.({ phase: 'config', processed: results.length })
       logger.debug('[Config] Query page completed', {
         page: pageCount,
         resultsInPage: response.Results?.length || 0,
@@ -170,11 +186,16 @@ async function fetchResourcesViaQuery(
         hasMore: !!nextToken
       })
 
-    } while (nextToken && pageCount < maxPages)
+      if (preview && results.length >= maxScanned) {
+        queryHasMore = Boolean(nextToken)
+        break
+      }
+    } while (nextToken && pageCount < 50)
 
     if (nextToken) {
+      queryHasMore = true
       logger.warn('[Config] Query exceeded max pages, results may be incomplete', {
-        maxPages,
+        maxPages: 50,
         totalResults: results.length
       })
     }
@@ -184,7 +205,7 @@ async function fetchResourcesViaQuery(
     throw new Error(`Failed to query Config resources: ${(error instanceof Error ? error.message : String(error))}`)
   }
 
-  return results
+  return { records: results, hasMore: queryHasMore, scannedCount: results.length }
 }
 
 /**
@@ -196,7 +217,8 @@ async function fetchComplianceDetails(
   accounts: string[],
   filters: ConfigDatasetFilters,
   region: string = 'us-east-1',
-  environment: 'commercial' | 'govcloud' = 'govcloud'
+  environment: 'commercial' | 'govcloud' = 'govcloud',
+  options: DatasetQueryOptions = {}
 ): Promise<Map<string, { status: ConfigComplianceStatus; rules: string[] }>> {
   const client = await getConfigClient(undefined, region)
   const complianceMap = new Map<string, { status: ConfigComplianceStatus; rules: string[] }>()
@@ -213,6 +235,7 @@ async function fetchComplianceDetails(
     let nextToken: string | undefined
 
     do {
+      if (options.signal?.aborted) throw options.signal.reason || new Error('Query canceled')
       const response = await client.send(new DescribeAggregateComplianceByConfigRulesCommand({
         ConfigurationAggregatorName: aggregatorName,
         Filters: filters.complianceStatus?.length === 1
@@ -220,7 +243,7 @@ async function fetchComplianceDetails(
           : undefined,
         Limit: 100,
         NextToken: nextToken
-      }))
+      }), { abortSignal: options.signal })
 
       for (const rule of response.AggregateComplianceByConfigRules || []) {
         if (!rule.ConfigRuleName || !rule.AccountId || !rule.AwsRegion) continue
@@ -235,6 +258,7 @@ async function fetchComplianceDetails(
       await Promise.all(ruleScopes.slice(offset, offset + 10).map(async scope => {
         let detailToken: string | undefined
         do {
+          if (options.signal?.aborted) throw options.signal.reason || new Error('Query canceled')
           const response = await client.send(new GetAggregateComplianceDetailsByConfigRuleCommand({
             ConfigurationAggregatorName: aggregatorName,
             ConfigRuleName: scope.ruleName,
@@ -243,7 +267,7 @@ async function fetchComplianceDetails(
             ComplianceType: filters.complianceStatus?.length === 1 ? filters.complianceStatus[0] : undefined,
             Limit: 100,
             NextToken: detailToken
-          }))
+          }), { abortSignal: options.signal })
 
           for (const result of response.AggregateEvaluationResults || []) {
             const qualifier = result.EvaluationResultIdentifier?.EvaluationResultQualifier
@@ -265,6 +289,7 @@ async function fetchComplianceDetails(
     }
 
   } catch (error) {
+    if (options.signal?.aborted) throw error
     logger.error('[Config] Failed to fetch compliance details', { error })
     // Non-fatal - continue without compliance data
   }
@@ -281,8 +306,17 @@ async function fetchComplianceDetails(
  */
 export async function getConfigResources(
   accountIds: string[],
-  filters: ConfigDatasetFilters = {}
+  filters: ConfigDatasetFilters = {},
+  options: DatasetQueryOptions = {}
 ): Promise<ConfigResourceRecord[]> {
+  return (await queryConfigResources(accountIds, filters, options)).records
+}
+
+export async function queryConfigResources(
+  accountIds: string[],
+  filters: ConfigDatasetFilters = {},
+  options: DatasetQueryOptions = {}
+): Promise<DatasetQueryResult<ConfigResourceRecord>> {
   const startTime = Date.now()
 
   logger.info('[Config] Fetching resources', {
@@ -352,10 +386,11 @@ export async function getConfigResources(
 
     // Fetch resources via advanced query
     // Config aggregator works across all regions, so we only need one call
-    const resources = await fetchResourcesViaQuery(validAccounts, filters, region, environment)
+    const queryResult = await fetchResourcesViaQuery(validAccounts, filters, region, environment, options)
+    const resources = queryResult.records
 
     // Fetch compliance details if needed
-    const complianceMap = await fetchComplianceDetails(validAccounts, filters, region, environment)
+    const complianceMap = await fetchComplianceDetails(validAccounts, filters, region, environment, options)
 
     // Enrich resources with account names and compliance
     const enrichedResources = resources.map(resource => {
@@ -386,15 +421,28 @@ export async function getConfigResources(
     if (filters.quickFilters) {
       filteredResources = filteredResources.filter(resource => matchesQuickFilters(resource, filters.quickFilters!))
     }
+    if (filters.tags && Object.keys(filters.tags).length > 0) {
+      filteredResources = filteredResources.filter(resource => Object.entries(filters.tags!).every(([key, value]) => resource.tags?.[key] === value))
+    }
+
+    const limit = options.limit
+    const truncated = Boolean(limit && (filteredResources.length > limit || queryResult.hasMore))
+    const records = limit ? filteredResources.slice(0, limit) : filteredResources
 
     const duration = Date.now() - startTime
     logger.info('[Config] Resources fetched successfully', {
-      totalResources: filteredResources.length,
+      totalResources: records.length,
       durationMs: duration,
       accountsQueried: validAccounts.length,
     })
 
-    return filteredResources
+    return {
+      records,
+      sampleCount: records.length,
+      hasMore: truncated,
+      truncated,
+      scannedCount: queryResult.scannedCount
+    }
 
   } catch (error) {
     logger.error('[Config] Failed to fetch resources', { error })

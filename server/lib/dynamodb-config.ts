@@ -37,6 +37,7 @@ export interface DynamoDBConfig {
   adminNotifications: DynamoDBTableConfig
   streamingMetrics: DynamoDBTableConfig
   asyncChatJobs: DynamoDBTableConfig
+  datasetExportJobs: DynamoDBTableConfig
   asyncMetrics: DynamoDBTableConfig
   budgetAlerts: DynamoDBTableConfig
   budgetAlertConfig: DynamoDBTableConfig
@@ -237,6 +238,12 @@ function loadFromEnvironment(): DynamoDBConfig {
     },
     asyncChatJobs: {
       tableName: process.env.AWS_ASYNC_JOBS_TABLE_NAME || 'ghost-async-chat-jobs',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
+    },
+    datasetExportJobs: {
+      tableName: process.env.DATASET_EXPORT_JOBS_TABLE_NAME || 'ghost-dataset-export-jobs',
       environment: 'govcloud',
       region: govCloudRegion,
       accountId: deploymentAccountId

@@ -23,7 +23,8 @@ import {
  */
 export async function analyzeDatasetReport(
   reportData: DatasetReportData,
-  _config: DatasetReportConfig
+  _config: DatasetReportConfig,
+  signal?: AbortSignal
 ): Promise<{
   executiveSummary: string
   keyFindings: string[]
@@ -60,7 +61,7 @@ export async function analyzeDatasetReport(
     })
 
     logger.debug('[Dataset AI] Invoking Bedrock model')
-    const response = await bedrockClient.send(command)
+    const response = await bedrockClient.send(command, { abortSignal: signal })
 
     const responseBody = JSON.parse(new TextDecoder().decode(response.body))
     const analysisText = responseBody.content[0].text

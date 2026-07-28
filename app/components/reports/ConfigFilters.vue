@@ -4,6 +4,10 @@
       Filter Options
     </div>
 
+    <UFormGroup label="Resource ID"><UInput v-model="filters.resourceId" placeholder="i-..., bucket, ARN..." /></UFormGroup>
+    <UFormGroup label="Resource Name"><UInput v-model="filters.resourceName" placeholder="Partial resource name" /></UFormGroup>
+    <UFormGroup label="Tags" help="Comma-separated key=value pairs"><UInput v-model="tagExpression" placeholder="Environment=prod,Owner=platform" /></UFormGroup>
+
     <!-- Resource Types -->
     <UFormGroup label="Resource Types" help="Leave empty to include all types">
       <USelectMenu
@@ -75,6 +79,13 @@
     <!-- Quick Filters -->
     <div class="pt-3 border-t border-gray-200 dark:border-gray-700">
       <div class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Quick Filters</div>
+      <div class="grid grid-cols-1 gap-2 mb-3">
+        <UCheckbox v-model="quickFilters.publicIpOnly" label="Has public IP" />
+        <UCheckbox v-model="quickFilters.publicAccessEnabled" label="Public access enabled" />
+        <UCheckbox v-model="quickFilters.openToInternet" label="Open to the internet" />
+        <UCheckbox v-model="quickFilters.unencryptedOnly" label="Unencrypted" />
+        <UCheckbox v-model="quickFilters.noMfaOnly" label="MFA not enabled" />
+      </div>
       <div class="flex flex-wrap gap-2">
         <UButton
           size="xs"
@@ -124,6 +135,20 @@ const filters = defineModel<ConfigDatasetFilters>({
   })
 })
 
+const tagExpression = computed({
+  get: () => Object.entries(filters.value.tags || {}).map(([key, value]) => `${key}=${value}`).join(','),
+  set: (value: string) => {
+    filters.value.tags = Object.fromEntries(value.split(',').map(part => part.trim()).filter(Boolean).map(part => {
+      const separator = part.indexOf('=')
+      return separator > 0 ? [part.slice(0, separator).trim(), part.slice(separator + 1).trim()] : [part, '']
+    }))
+  }
+})
+watch(() => filters.value.quickFilters, value => {
+  if (!value) filters.value.quickFilters = {}
+}, { immediate: true })
+const quickFilters = computed(() => filters.value.quickFilters!)
+
 // Computed wrappers to extract just the values from select menus
 const selectedResourceTypes = computed({
   get: () => filters.value.resourceTypes || [],
@@ -153,7 +178,7 @@ const complianceStatuses = [
   { value: 'NON_COMPLIANT', label: 'Non-Compliant', color: 'red' },
   { value: 'NOT_APPLICABLE', label: 'Not Applicable', color: 'gray' },
   { value: 'INSUFFICIENT_DATA', label: 'Insufficient Data', color: 'yellow' }
-]
+] as const
 
 const resourceTypeOptions = [
   // Compute
