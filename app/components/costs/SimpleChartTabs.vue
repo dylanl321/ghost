@@ -101,7 +101,10 @@
 
       <!-- Trends Tab -->
       <div v-else-if="activeTab === 'trends'" class="animate-fadeIn">
-        <HistoricalTrends />
+        <HistoricalTrends
+          :selected-accounts="selectedAccounts"
+          :data-mode="dataMode"
+        />
       </div>
 
       <!-- Budget Health Tab -->

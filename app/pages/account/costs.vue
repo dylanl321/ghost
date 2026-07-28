@@ -41,7 +41,7 @@
                         {{ formatAccountDisplayName(account) }}
                       </div>
                       <div class="text-gray-600 dark:text-gray-400 text-[10px] truncate">
-                        {{ account.accountId || account.awsStandardAccountID }}
+                        {{ account.accountId || account.awsStandardAccountID || account.awsCommercialAccountID }}
                       </div>
                     </div>
                     <button
@@ -585,6 +585,7 @@ import type { BudgetAlert } from '#shared/types/budget-alerts'
 const { accounts, isLoading, error, fetchAccounts } = useAccountCosts()
 const { favoriteIds } = useFavoriteAccounts()
 const { isAdmin } = useUserRoles()
+const selectedAccounts = ref<string[]>([])
 
 // Types
 interface Account {
@@ -605,6 +606,24 @@ interface Account {
   lineOfBusiness?: string
   departmentNumber?: string
   department?: string
+  requestID?: string | number
+  requestId?: string | number
+  status?: string
+  enclaveStatus?: string
+  accountAlias?: string
+  pepCloudRecordName?: string
+  pepEnvironmentName?: string
+}
+
+const supplementalAccounts = ref<Account[]>([])
+
+const getPossibleAccountIds = (account: Account): string[] => {
+  return [
+    account.accountId,
+    account.awsStandardAccountID,
+    account.awsCommercialAccountID,
+    account.id
+  ].filter((id): id is string => Boolean(id))
 }
 
 // =============================================================================
@@ -616,10 +635,19 @@ interface Account {
 // - Wrapped response: { data: [account1, account2, ...] }
 const accountsList = computed<Account[]>(() => {
   const data = accounts.value
-  if (!data) return [] as Account[]
-  if (Array.isArray(data)) return data as Account[]
-  if ((data as any).data && Array.isArray((data as any).data)) return (data as any).data as Account[]
-  return [] as Account[]
+  const baseAccounts = !data
+    ? []
+    : Array.isArray(data)
+      ? data as Account[]
+      : (data as any).data && Array.isArray((data as any).data)
+        ? (data as any).data as Account[]
+        : []
+
+  const knownIds = new Set(baseAccounts.flatMap(getPossibleAccountIds))
+  const missingSupplements = supplementalAccounts.value.filter(account =>
+    !getPossibleAccountIds(account).some(id => knownIds.has(id))
+  )
+  return [...baseAccounts, ...missingSupplements]
 })
 
 // =============================================================================
@@ -698,12 +726,7 @@ const accountsWithCosts = computed<Account[]>(() => {
   // Merge costs into accounts
   const enrichedAccounts = baseAccounts.map(account => {
     // Try multiple ID fields to match
-    const possibleIds = [
-      account.accountId,
-      account.awsStandardAccountID,
-      account.awsCommercialAccountID,
-      account.id
-    ].filter(Boolean)
+    const possibleIds = getPossibleAccountIds(account)
     
     let costFromData = 0
     for (const id of possibleIds) {
@@ -721,8 +744,16 @@ const accountsWithCosts = computed<Account[]>(() => {
     }
   })
   
-  // Apply cost filtering based on user settings
-  return applyAccountFilters(enrichedAccounts, costSettingsStore.$state)
+  // Explicit URL selections must remain visible even when general sidebar
+  // filters (for example, "hide dev accounts") would normally remove them.
+  const filteredAccounts = applyAccountFilters(enrichedAccounts, costSettingsStore.$state)
+  if (selectedAccounts.value.length === 0) return filteredAccounts
+
+  const filteredSet = new Set(filteredAccounts)
+  const selectedSet = new Set(selectedAccounts.value)
+  return enrichedAccounts.filter(account =>
+    filteredSet.has(account) || getPossibleAccountIds(account).some(id => selectedSet.has(id))
+  )
 })
 
 // Compare mode toggle
@@ -731,7 +762,6 @@ const compareMode = ref(false)
 // State
 const searchTerm = ref('')
 const searchScope = ref<'tab' | 'global'>('tab') // Default to searching within current tab
-const selectedAccounts = ref<string[]>([])
 const selectedTimeframe = ref('thisMonth')
 const activeTab = ref('all')
 const activeChartTab = ref('smart') // Chart tab selection (smart, organizational, trends, budget-health, data, forecast)
@@ -1040,7 +1070,7 @@ const remainingSelectedCount = computed(() => {
 })
 
 const formatAccountDisplayName = (account: Account) => {
-  const name = account.accountName || account.projectName || account.name || 'Unnamed Account'
+  const name = account.accountName || account.projectName || account.name || account.pepCloudRecordName || account.pepEnvironmentName || account.accountAlias || 'Unnamed Account'
   return name.length > 20 ? name.substring(0, 20) + '...' : name
 }
 
@@ -1049,7 +1079,7 @@ const getSelectedAccountName = (accountId: string): string => {
     (acc: Account) => getAccountKey(acc) === accountId
   )
   if (!account) return accountId
-  return account.accountName || account.projectName || account.name || accountId
+  return account.accountName || account.projectName || account.name || account.pepCloudRecordName || account.pepEnvironmentName || account.accountAlias || accountId
 }
 
 // Sidebar groups, helpers, and search matching -- extracted to composable
@@ -1103,6 +1133,31 @@ const refreshData = async () => {
   // as they may have had costs in the past
   const includeDecommissioned = isHistoricalTimeframe.value
   await fetchAccounts({ includeDecommissioned, enrichment: 'full' })
+}
+
+const ensureSelectedAccountMetadata = async () => {
+  const knownIds = new Set(accountsList.value.flatMap(getPossibleAccountIds))
+  const missingIds = selectedAccounts.value.filter(id => !knownIds.has(id))
+  if (missingIds.length === 0) return
+
+  const resolved = await Promise.all(missingIds.map(async (id) => {
+    try {
+      const response = await $fetch<any>(`/api/accounts/${encodeURIComponent(id)}`, {
+        query: { includeDecommissioned: true }
+      })
+      const account = response?.data?.account || response?.account
+      if (!account) return null
+      return {
+        ...account,
+        accountId: account.accountId || account.awsStandardAccountID || id
+      } as Account
+    } catch (err) {
+      logger.warn(`Unable to load metadata for selected account ${id}`, err)
+      return null
+    }
+  }))
+
+  supplementalAccounts.value = resolved.filter((account): account is Account => account !== null)
 }
 
 // Group interaction methods - generic handlers for SidebarGroupList events
@@ -1198,6 +1253,7 @@ onMounted(async () => {
     
     // Then refresh data with the applied state
     await refreshData()
+    await ensureSelectedAccountMetadata()
 
     // Trigger initial cost data fetch (watchers are not immediate)
     await fetchCosts()
