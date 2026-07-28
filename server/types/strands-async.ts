@@ -1,3 +1,5 @@
+import type { AccountDisambiguation } from './strands'
+
 /**
  * Type definitions for Strands Async Polling API
  */
@@ -37,6 +39,7 @@ export interface AsyncChatJob {
   } | null
   suggestedLinks?: Array<Record<string, any>>
   suggestedPrompts?: Array<Record<string, any>>
+  disambiguation?: AccountDisambiguation & { sessionId?: string }
   createdAt: string
   lastUpdated: string
   completedAt: string | null
@@ -91,4 +94,5 @@ export interface StrandsAsyncStatusResponse {
   }
   createdAt: string
   lastUpdated: string
+  disambiguation?: AccountDisambiguation & { sessionId?: string }
 }

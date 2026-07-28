@@ -5,6 +5,7 @@
  */
 
 import { marked } from 'marked'
+import { escapeHtml, normalizeSafeHref, sanitizeChatHtml } from '~/utils/sanitizeHtml'
 
 const logger = createLogger('Markdown Parser')
 
@@ -62,19 +63,21 @@ export function useMarkdownLinkParser() {
 
     // Override link rendering
     renderer.link = ({ href, title, text }) => {
-      const isInternal = isGhostUrl(href)
+      const safeHref = normalizeSafeHref(href)
+      if (!safeHref) return text
+      const isInternal = isGhostUrl(safeHref)
 
       if (isInternal) {
         // Convert to relative path for NuxtLink
-        const path = extractPath(href)
-        const titleAttr = title ? ` title="${title}"` : ''
+        const path = extractPath(safeHref)
+        const titleAttr = title ? ` title="${escapeHtml(title)}"` : ''
 
         // Use data-nuxt-link attribute for click handler identification
-        return `<a href="${path}" data-nuxt-link class="text-blue-600 dark:text-blue-400 hover:underline"${titleAttr}>${text}</a>`
+        return `<a href="${escapeHtml(path)}" data-nuxt-link class="text-blue-600 dark:text-blue-400 hover:underline"${titleAttr}>${text}</a>`
       } else {
         // External link with target="_blank" and external icon
-        const titleAttr = title ? ` title="${title}"` : ''
-        return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1"${titleAttr}>${text}<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg></a>`
+        const titleAttr = title ? ` title="${escapeHtml(title)}"` : ''
+        return `<a href="${escapeHtml(safeHref)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:underline"${titleAttr}>${text}</a>`
       }
     }
 
@@ -85,10 +88,10 @@ export function useMarkdownLinkParser() {
     })
 
     try {
-      return marked.parse(content) as string
+      return sanitizeChatHtml(marked.parse(content) as string)
     } catch (error) {
       logger.error('Error parsing markdown:', error)
-      return content.replace(/\n/g, '<br>')
+      return sanitizeChatHtml(escapeHtml(content).replace(/\n/g, '<br>'))
     }
   }
 

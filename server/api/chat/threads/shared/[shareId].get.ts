@@ -8,6 +8,7 @@ import { sendSuccess, errors, handleAsync } from '../../../../utils/api-response
 import { getThreadByShareId } from '../../../../utils/chat-threads'
 import { registerEndpoint } from '../../../../plugins/swagger'
 import { logger } from '../../../../utils/logger'
+import { serializePublicChatMessage } from '../../../../utils/public-chat'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/chat/threads/shared/{shareId}', 'GET', {
@@ -85,7 +86,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     threadId: thread.threadId,
     title: thread.title,
     description: thread.description,
-    messages: thread.messages,
+    messages: thread.messages.map(serializePublicChatMessage),
     messageCount: thread.messageCount,
     createdAt: thread.createdAt,
     sharedAt: thread.sharedAt,

@@ -71,6 +71,7 @@ export default defineEventHandler(async (event) => {
     if (job.status === 'error' || job.status === 'canceled') {
       response.errorMessage = job.errorMessage
       response.completedAt = job.completedAt
+      response.disambiguation = job.disambiguation
     }
 
     return response

@@ -8,7 +8,7 @@ import { getItem, queryItems, updateItem } from './dynamodb'
 import { getTableName, getTableEnvironment, getTableAccountId } from '../lib/dynamodb-config'
 import { enqueueChatJob } from './chat-job-queue'
 import type { AsyncChatJob } from '../types/strands-async'
-import type { ChatThread } from '#shared/types/chat-threads'
+import type { ChatMessage, ChatThread } from '#shared/types/chat-threads'
 import { createQueuedJobWithUserMessage } from './chat-messages'
 
 const JOB_TTL_HOURS = 24
@@ -26,7 +26,7 @@ export async function submitAsyncQuery(
   userId: string,
   thread: ChatThread,
   options: AsyncChatJob['queryOptions'] = {}
-): Promise<AsyncChatJob> {
+): Promise<AsyncChatJob & { userMessage?: ChatMessage }> {
   const jobId = uuidv4()
   const now = new Date().toISOString()
   const job: AsyncChatJob = {
@@ -56,7 +56,7 @@ export async function submitAsyncQuery(
   }
 
   const config = await getJobsTableConfig()
-  await createQueuedJobWithUserMessage(
+  const userMessage = await createQueuedJobWithUserMessage(
     thread,
     job,
     options.accountIdentifier ? { accountId: options.accountIdentifier } : undefined
@@ -73,15 +73,15 @@ export async function submitAsyncQuery(
       lastUpdated: failedAt,
       completedAt: failedAt
     }, config.environment, config.accountId)
-    return { ...job, status: 'error', errorMessage: error.message, completedAt: failedAt, lastUpdated: failedAt }
+    return { ...job, userMessage, status: 'error', errorMessage: error.message, completedAt: failedAt, lastUpdated: failedAt }
   }
 
-  return job
+  return { ...job, userMessage }
 }
 
 export async function getJob(jobId: string, userId?: string): Promise<AsyncChatJob | null> {
   const config = await getJobsTableConfig()
-  const job = await getItem<AsyncChatJob>(config.tableName, { jobId }, config.environment, config.accountId)
+  const job = await getItem(config.tableName, { jobId }, config.environment, config.accountId) as AsyncChatJob | null
   if (!job || (userId && job.userId !== userId)) return null
   return job
 }

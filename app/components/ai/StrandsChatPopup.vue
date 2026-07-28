@@ -158,8 +158,8 @@
           :key="msg.messageId || `msg-${idx}`"
           :message="msg"
           :view-mode="'popup'"
-          @retry="retryLastMessage"
-          @cancel="cancelQuery"
+          @retry="retryMessage(msg.messageId, msg.status?.jobId)"
+          @cancel="cancelQuery(msg.status?.jobId)"
           @prompt-click="handlePromptClick"
           @enriched-click="handleEnrichedClick"
           @disambiguate="handleDisambiguate"
@@ -187,7 +187,7 @@
                 </span>
               </div>
               <button
-                @click="cancelQuery"
+                @click="cancelQuery()"
                 class="px-2 py-1 text-[11px] rounded bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 active:bg-red-300 dark:active:bg-red-900/70 text-red-700 dark:text-red-300 transition-all duration-150 flex items-center gap-1 flex-shrink-0 active:scale-95"
                 title="Cancel query"
               >
@@ -283,6 +283,7 @@
  */
 
 import mermaid from 'mermaid'
+import { sanitizeMermaidSvg } from '~/utils/sanitizeHtml'
 
 const logger = createLogger('StrandsChatPopup')
 
@@ -296,6 +297,8 @@ const {
   showLoader,
   errorMessage,
   scrollTrigger,
+  activeThreadId,
+  pageContext,
   
   // Polling state
   pollingProgress,
@@ -304,7 +307,7 @@ const {
   
   // Actions
   sendMessage,
-  retryLastMessage,
+  retryMessage,
   cancelQuery,
   clearConversation,
   loadEarlierMessages,
@@ -326,9 +329,6 @@ const {
 
 // Entity enrichment for click handling only
 const { handleEnrichedClick } = useStrandsResponseEnricher()
-
-// Toast notifications
-const toast = useToast()
 
 // Local UI state (popup-specific)
 const isOpen = ref(false)
@@ -419,6 +419,7 @@ watch(messages, async () => {
       const code = element.textContent || ''
       const id = element.id
       const { svg } = await mermaid.render(id + '-svg', code)
+      const safeSvg = sanitizeMermaidSvg(svg)
 
       // Store the original code as a data attribute
       element.setAttribute('data-mermaid-code', code)
@@ -426,10 +427,11 @@ watch(messages, async () => {
       // Create wrapper with expand button
       element.innerHTML = `
         <div class="relative group">
-          <div class="mermaid-svg-container">${svg}</div>
+          <div class="mermaid-svg-container">${safeSvg}</div>
           <button
+            type="button"
+            data-open-full-chat
             class="absolute top-1 right-1 p-1.5 bg-white dark:bg-gray-800 rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-50 dark:hover:bg-gray-700 z-10"
-            onclick="window.open('/chat', '_blank')"
             title="View in full page"
           >
             <svg class="w-3 h-3 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -439,6 +441,15 @@ watch(messages, async () => {
         </div>
       `
       element.setAttribute('data-rendered', 'true')
+      element.querySelector('[data-open-full-chat]')?.addEventListener('click', () => {
+        navigateTo({
+          path: '/chat',
+          query: {
+            thread: activeThreadId.value || undefined,
+            context: pageContext.value ? JSON.stringify(pageContext.value) : undefined
+          }
+        })
+      })
 
       // FIX: Reorder SVG elements to move text/labels to the end (renders on top)
       await nextTick()
@@ -491,7 +502,7 @@ onMounted(async () => {
   mermaid.initialize({
     startOnLoad: false,
     theme: prefersDark ? 'dark' : 'default',
-    securityLevel: 'loose',
+    securityLevel: 'strict',
     themeVariables: prefersDark ? {
       // Dark mode customization with enhanced visibility
       darkMode: true,

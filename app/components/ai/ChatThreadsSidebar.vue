@@ -73,7 +73,7 @@
         <!-- Link to Full Page -->
         <div class="mt-3">
           <NuxtLink
-            to="/chat"
+            :to="fullPageLink"
             class="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
             @click="chatSidebar.close()"
           >
@@ -398,6 +398,7 @@ const {
   // Thread management
   currentThread,
   activeThreadId,
+  pageContext,
   
   // Initialize
   initialize
@@ -408,6 +409,13 @@ const chatBoxRef = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
 const showClearConfirm = ref(false)
 const selectedThreadId = ref<string | null>(null)
+const fullPageLink = computed(() => ({
+  path: '/chat',
+  query: {
+    thread: activeThreadId.value || undefined,
+    context: pageContext.value ? JSON.stringify(pageContext.value) : undefined
+  }
+}))
 
 // Thread options for dropdown
 const threadOptions = computed(() => {

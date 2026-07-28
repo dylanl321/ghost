@@ -23,6 +23,7 @@
     "check:unused": "npx ts-prune --project tsconfig.json",
     "check:deps": "npx depcheck --ignores=\"@nuxt/*,nuxt-*,@types/*,eslint,typescript\"",
     "check:files": "npx unimported",
+    "test:chat": "tsx --test tests/chat/*.test.ts",
     "changelog:generate": "tsx scripts/generate-changelog.ts"
   },
   "dependencies": {
@@ -86,6 +87,7 @@
     "got": "^14.6.5",
     "gray-matter": "^4.0.3",
     "html2canvas": "^1.4.1",
+    "isomorphic-dompurify": "2.24.0",
     "jspdf": "^3.0.2",
     "jspdf-autotable": "^5.0.2",
     "jszip": "^3.10.1",
@@ -123,6 +125,12 @@
     "@types/node": "^25.5.0",
     "depcheck": "^1.4.7",
     "ts-prune": "^0.10.3",
-    "unimported": "^1.31.0"
+    "unimported": "^1.31.0",
+    "vue-tsc": "3.0.8"
+  },
+  "optionalDependencies": {
+    "@oxc-minify/binding-linux-x64-gnu": "0.96.0",
+    "@oxc-parser/binding-linux-x64-gnu": "0.96.0",
+    "@oxc-transform/binding-linux-x64-gnu": "0.96.0"
   }
 }

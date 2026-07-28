@@ -16,10 +16,47 @@
         </div>
       </div>
 
+      <!-- Share Options -->
+      <div v-else-if="!shareData && !error" class="space-y-5">
+        <div>
+          <p class="text-sm font-medium text-gray-900 dark:text-white mb-2">Conversation preview</p>
+          <div class="max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-200 dark:divide-gray-700">
+            <div v-for="message in previewMessages" :key="message.messageId" class="p-3">
+              <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                {{ message.role === 'user' ? 'You' : 'GHOST' }}
+              </p>
+              <p class="text-sm text-gray-700 dark:text-gray-300 line-clamp-3 whitespace-pre-wrap">{{ message.content }}</p>
+            </div>
+          </div>
+          <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            Public links include message text only. Reasoning, tool details, model data, tokens, and job IDs are excluded.
+          </p>
+        </div>
+
+        <fieldset>
+          <legend class="text-sm font-medium text-gray-900 dark:text-white mb-2">Link expires after</legend>
+          <div class="grid grid-cols-4 gap-2">
+            <UButton
+              v-for="days in expirationOptions"
+              :key="days"
+              :variant="selectedExpiresInDays === days ? 'solid' : 'outline'"
+              :color="selectedExpiresInDays === days ? 'purple' : 'gray'"
+              @click="selectedExpiresInDays = days"
+            >
+              {{ days }} day{{ days === 1 ? '' : 's' }}
+            </UButton>
+          </div>
+        </fieldset>
+
+        <UButton block color="purple" icon="i-heroicons-link" @click="generateShareLink">
+          Create Public Link
+        </UButton>
+      </div>
+
       <!-- Share Link Ready -->
       <div v-else-if="shareData" class="space-y-4">
         <p class="text-sm text-gray-600 dark:text-gray-400">
-          Anyone with this link can view this conversation. The link will expire in {{ expiresInDays }} days.
+          Anyone with this link can view this conversation. The link will expire in {{ selectedExpiresInDays }} days.
         </p>
 
         <!-- Share URL -->
@@ -129,6 +166,7 @@
 
 <script setup lang="ts">
 import type { ShareThreadResponse } from '#shared/types/chat-threads'
+import { useChatThreadsStore } from '~/stores/useChatThreadsStore'
 
 const logger = createLogger('ChatShareModal')
 
@@ -138,7 +176,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  expiresInDays: 90
+  expiresInDays: 30
 })
 
 const emit = defineEmits<{
@@ -148,11 +186,22 @@ const emit = defineEmits<{
 
 const isOpen = defineModel<boolean>({ required: true })
 const toast = useToast()
+const threadsStore = useChatThreadsStore() as unknown as { currentThread: import('#shared/types/chat-threads').ChatThread | null }
 
 // State
 const loading = ref(false)
 const error = ref<string | null>(null)
 const shareData = ref<ShareThreadResponse | null>(null)
+const expirationOptions = [1, 7, 30, 90] as const
+const selectedExpiresInDays = ref<1 | 7 | 30 | 90>(
+  expirationOptions.includes(props.expiresInDays as 1 | 7 | 30 | 90)
+    ? props.expiresInDays as 1 | 7 | 30 | 90
+    : 30
+)
+const previewMessages = computed(() => {
+  if (threadsStore.currentThread?.threadId !== props.threadId) return []
+  return (threadsStore.currentThread.messages || []).slice(-4)
+})
 
 // Computed share URL - points to the human-readable page, not the API endpoint
 const shareUrl = computed(() => {
@@ -165,7 +214,7 @@ const shareUrl = computed(() => {
 const currentShareThreadId = ref<string | null>(null)
 
 // Watch for thread ID changes - clear stale share data and fetch if modal is open
-watch(() => props.threadId, async (newThreadId, oldThreadId) => {
+watch(() => props.threadId, (newThreadId, oldThreadId) => {
   // Clear share data if thread changed
   if (newThreadId !== oldThreadId) {
     shareData.value = null
@@ -173,18 +222,7 @@ watch(() => props.threadId, async (newThreadId, oldThreadId) => {
     error.value = null
   }
 
-  // Generate share link if modal is open and we don't have data for this thread
-  if (newThreadId && isOpen.value && currentShareThreadId.value !== newThreadId) {
-    await generateShareLink()
-  }
 }, { immediate: true })
-
-// Watch for modal open and generate link if needed
-watch(isOpen, async (open) => {
-  if (open && props.threadId && currentShareThreadId.value !== props.threadId) {
-    await generateShareLink()
-  }
-})
 
 // Generate share link (or fetch existing)
 async function generateShareLink() {
@@ -203,7 +241,7 @@ async function generateShareLink() {
     const response = await $fetch(`/api/chat/threads/${props.threadId}/share`, {
       method: 'POST',
       body: {
-        expiresInDays: props.expiresInDays
+        expiresInDays: selectedExpiresInDays.value
       }
     })
 

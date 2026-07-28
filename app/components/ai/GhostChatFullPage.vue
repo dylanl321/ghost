@@ -1,7 +1,7 @@
 <template>
   <div class="ghost-chat-container">
     <!-- Chat Messages Area -->
-    <div class="chat-messages" ref="chatBoxRef">
+    <div ref="chatBoxRef" class="chat-messages" role="log" aria-live="polite" aria-relevant="additions" @scroll="handleMessagesScroll">
       <div v-if="hasMoreMessages" class="flex justify-center pb-3">
         <UButton size="xs" color="gray" variant="soft" icon="i-heroicons-arrow-up" @click="loadEarlierMessages">
           Load earlier
@@ -12,8 +12,8 @@
         :key="msg.messageId || `msg-${index}`"
         :message="msg"
         :view-mode="'fullpage'"
-        @retry="retryLastMessage"
-        @cancel="cancelQuery"
+        @retry="retryMessage(msg.messageId, msg.status?.jobId)"
+        @cancel="cancelQuery(msg.status?.jobId)"
         @prompt-click="handlePromptClick"
         @enriched-click="handleEnrichedClick"
         @disambiguate="handleDisambiguate"
@@ -60,6 +60,14 @@
     <!-- Chat Input Area -->
     <div class="chat-input-container [view-transition-name:chat-input]">
       <form @submit.prevent="handleSubmit" class="input-form">
+        <div v-if="contextChips.length" class="flex flex-wrap gap-2 mb-3" aria-label="Chat context">
+          <span v-for="chip in contextChips" :key="`${chip.key}-${chip.value}`" class="inline-flex items-center gap-1.5 px-2 py-1 text-xs rounded-md bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+            {{ chip.label }}
+            <button type="button" class="p-0.5 rounded hover:bg-blue-100 dark:hover:bg-blue-800" :aria-label="`Remove ${chip.label} context`" @click="removeContextChip(chip.key, chip.value)">
+              <UIcon name="i-heroicons-x-mark" class="w-3 h-3" />
+            </button>
+          </span>
+        </div>
         <div class="input-wrapper">
           <!-- Account Mention Dropdown with fade transition -->
           <Transition
@@ -102,10 +110,10 @@
           </div>
           </Transition>
 
-          <input
+          <textarea
             v-model="inputValue"
-            type="text"
-            :disabled="isLoading"
+            rows="1"
+            maxlength="10000"
             placeholder="Ask about AWS costs, configurations, security... (use @ to mention accounts)"
             ref="inputRef"
             class="chat-input"
@@ -120,15 +128,29 @@
             />
           </button>
         </div>
-        <p class="input-hint">
+        <div class="input-hint flex items-center justify-between gap-3">
+          <p>
           Tip: Use <kbd class="kbd">@</kbd> to mention accounts or type "help" for examples.
           <span v-if="selectedAccountForMessage" class="ml-2 inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs">
             <UIcon name="i-heroicons-building-library" class="w-3 h-3" />
             Context: {{ getAccountDisplay(selectedAccountForMessage) }}
           </span>
-        </p>
+          </p>
+          <span :class="inputValue.length >= 9000 ? 'text-amber-600 dark:text-amber-400' : ''">{{ inputValue.length.toLocaleString() }} / 10,000</span>
+        </div>
       </form>
     </div>
+
+    <UButton
+      v-if="showJumpToLatest"
+      class="jump-to-latest"
+      size="sm"
+      color="gray"
+      icon="i-heroicons-arrow-down"
+      @click="scrollToLatest"
+    >
+      Jump to latest
+    </UButton>
 
     <!-- Account Disambiguation Modal -->
     <AccountDisambiguationModal
@@ -255,6 +277,7 @@
  */
 
 import mermaid from 'mermaid'
+import { escapeHtml, sanitizeMermaidSvg } from '~/utils/sanitizeHtml'
 
 const logger = createLogger('GhostChatFullPage')
 
@@ -266,17 +289,13 @@ const {
   inputValue,
   showWelcome,
   isLoading,
-  showLoader,
   scrollTrigger,
-  
-  // Polling state
-  pollingProgress,
-  pollingPercent,
-  pollingToolsCalled,
+  contextChips,
+  removeContextChip,
   
   // Actions
   sendMessage,
-  retryLastMessage,
+  retryMessage,
   cancelQuery,
   loadEarlierMessages,
   hasMoreMessages,
@@ -319,8 +338,10 @@ const { recentAccounts } = useRecentAccounts()
 
 // Local UI refs
 const chatBoxRef = ref<HTMLDivElement | null>(null)
-const inputRef = ref<HTMLInputElement | null>(null)
+const inputRef = ref<HTMLTextAreaElement | null>(null)
 const mentionDropdownRef = ref<HTMLDivElement | null>(null)
+const isNearBottom = ref(true)
+const showJumpToLatest = ref(false)
 
 // Default prompts
 const defaultPrompts = [
@@ -377,19 +398,18 @@ const toast = useToast()
 
 // Handle input updates for @ mention detection
 function handleInputUpdate(event: Event) {
-  const target = event.target as HTMLInputElement
+  const target = event.target as HTMLTextAreaElement
   const cursorPosition = target.selectionStart || 0
   handleMentionInput(inputValue.value, cursorPosition)
+  resizeComposer()
 }
 
 // Handle keyboard events for mention navigation
 function handleKeyDown(event: KeyboardEvent) {
-  if (!showMentionDropdown.value) return
-
-  if (event.key === 'ArrowDown') {
+  if (showMentionDropdown.value && event.key === 'ArrowDown') {
     event.preventDefault()
     navigateMentions('down')
-  } else if (event.key === 'ArrowUp') {
+  } else if (showMentionDropdown.value && event.key === 'ArrowUp') {
     event.preventDefault()
     navigateMentions('up')
   } else if (event.key === 'Enter' && showMentionDropdown.value) {
@@ -401,9 +421,18 @@ function handleKeyDown(event: KeyboardEvent) {
         inputRef.value.setSelectionRange(inputValue.value.length, inputValue.value.length)
       }
     })
-  } else if (event.key === 'Escape') {
+  } else if (event.key === 'Escape' && showMentionDropdown.value) {
     closeMentionDropdown()
+  } else if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault()
+    handleSubmit(event)
   }
+}
+
+function resizeComposer() {
+  if (!inputRef.value) return
+  inputRef.value.style.height = 'auto'
+  inputRef.value.style.height = `${Math.min(inputRef.value.scrollHeight, 160)}px`
 }
 
 // Handle mention click
@@ -460,7 +489,7 @@ function handleDisambiguate() {
 // Auto scroll when messages change
 watch(scrollTrigger, () => {
   nextTick(() => {
-    if (chatBoxRef.value) {
+    if (chatBoxRef.value && isNearBottom.value) {
       chatBoxRef.value.scrollTo({
         top: chatBoxRef.value.scrollHeight,
         behavior: 'smooth'
@@ -483,6 +512,7 @@ watch(messages, async () => {
       const code = element.textContent || ''
       const id = element.id
       const { svg } = await mermaid.render(id + '-svg', code)
+      const safeSvg = sanitizeMermaidSvg(svg)
 
       // Store the original code as a data attribute for fullscreen
       element.setAttribute('data-mermaid-code', code)
@@ -490,10 +520,11 @@ watch(messages, async () => {
       // Create wrapper with fullscreen button
       element.innerHTML = `
         <div class="relative group">
-          <div class="mermaid-svg-container">${svg}</div>
+          <div class="mermaid-svg-container">${safeSvg}</div>
           <button
+            type="button"
+            data-mermaid-fullscreen
             class="absolute top-2 right-2 p-2 bg-white dark:bg-gray-800 rounded-lg shadow-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-50 dark:hover:bg-gray-700 z-10"
-            onclick="this.closest('.mermaid-chart').dispatchEvent(new CustomEvent('mermaid-fullscreen', { bubbles: true }))"
             title="View fullscreen"
           >
             <svg class="w-4 h-4 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -503,6 +534,9 @@ watch(messages, async () => {
         </div>
       `
       element.setAttribute('data-rendered', 'true')
+      element.querySelector('[data-mermaid-fullscreen]')?.addEventListener('click', () => {
+        element.dispatchEvent(new CustomEvent('mermaid-fullscreen', { bubbles: true }))
+      })
 
       // FIX: Reorder SVG elements to move text/labels to the end (renders on top)
       await nextTick()
@@ -542,7 +576,7 @@ watch(messages, async () => {
             <summary class="cursor-pointer hover:text-gray-900 dark:hover:text-gray-200">
               Show diagram code
             </summary>
-            <pre class="mt-2 p-2 bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-700 rounded overflow-x-auto text-[10px]"><code>${code}</code></pre>
+            <pre class="mt-2 p-2 bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-700 rounded overflow-x-auto text-[10px]"><code>${escapeHtml(code)}</code></pre>
           </details>
         </div>
       `
@@ -550,14 +584,30 @@ watch(messages, async () => {
     }
   }
 
-  // Auto scroll
-  if (chatBoxRef.value) {
+  // Auto scroll only while the reader is following the latest messages.
+  if (chatBoxRef.value && isNearBottom.value) {
     chatBoxRef.value.scrollTo({
       top: chatBoxRef.value.scrollHeight,
       behavior: 'smooth'
     })
   }
 }, { deep: true })
+
+function handleMessagesScroll() {
+  if (!chatBoxRef.value) return
+  const distance = chatBoxRef.value.scrollHeight - chatBoxRef.value.scrollTop - chatBoxRef.value.clientHeight
+  isNearBottom.value = distance < 120
+  showJumpToLatest.value = !isNearBottom.value
+}
+
+function scrollToLatest() {
+  if (!chatBoxRef.value) return
+  chatBoxRef.value.scrollTo({ top: chatBoxRef.value.scrollHeight, behavior: 'smooth' })
+  isNearBottom.value = true
+  showJumpToLatest.value = false
+}
+
+watch(inputValue, () => nextTick(resizeComposer))
 
 // Refocus input after loading completes
 watch(isLoading, (newLoading) => {
@@ -658,7 +708,7 @@ onMounted(async () => {
   mermaid.initialize({
     startOnLoad: false,
     theme: prefersDark ? 'dark' : 'default',
-    securityLevel: 'loose',
+    securityLevel: 'strict',
     themeVariables: prefersDark ? {
       // Dark mode customization with enhanced visibility
       darkMode: true,
@@ -737,7 +787,7 @@ onMounted(async () => {
 
 <style scoped>
 .ghost-chat-container {
-  @apply flex flex-col h-full bg-white dark:bg-gray-900;
+  @apply relative flex flex-col h-full bg-white dark:bg-gray-900;
 }
 
 .chat-messages {
@@ -858,11 +908,15 @@ onMounted(async () => {
 }
 
 .input-wrapper {
-  @apply flex gap-3 items-center relative;
+  @apply flex gap-3 items-end relative;
 }
 
 .chat-input {
-  @apply flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent;
+  @apply flex-1 min-h-[46px] max-h-40 resize-none overflow-y-auto px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent;
+}
+
+.jump-to-latest {
+  @apply absolute right-6 bottom-28 z-10 shadow-lg;
 }
 
 .send-button {

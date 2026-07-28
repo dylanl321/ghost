@@ -20,10 +20,34 @@ const PENDING_JOBS_KEY = 'ghost-chat-pending-jobs'
 /**
  * Callbacks for UI updates during polling
  */
+export interface PollingJobEvent {
+  jobId: string
+  threadId: string
+}
+
+export interface PollingProgressEvent extends PollingJobEvent {
+  progress: string
+  percent: number
+  tools: string[]
+}
+
+export interface PollingCompleteEvent extends PollingJobEvent {
+  response: string
+  metadata: any
+  suggestedLinks: any[]
+  suggestedPrompts: any[]
+}
+
+export interface PollingErrorEvent extends PollingJobEvent {
+  error: string
+  recoverable: boolean
+  disambiguation?: any
+}
+
 export interface PollingCallbacks {
-  onProgress?: (jobId: string, progress: string, percent: number, tools: string[]) => void
-  onComplete?: (jobId: string, response: string, metadata: any, suggestedLinks?: any[], suggestedPrompts?: any[]) => void
-  onError?: (jobId: string, error: string) => void
+  onProgress?: (event: PollingProgressEvent) => void
+  onComplete?: (event: PollingCompleteEvent) => void
+  onError?: (event: PollingErrorEvent) => void
 }
 
 export interface PendingJob {
@@ -31,22 +55,39 @@ export interface PendingJob {
   threadId: string
   userMessage: string
   timestamp: number
-  status: 'polling' | 'complete' | 'error'
+  status: 'polling' | 'paused' | 'complete' | 'error'
   progress?: string
   progressPercent?: number
   toolsCalled?: string[]
   statusHistory?: Array<{ text: string; timestamp: number }>
+  consecutiveFailures?: number
+  nextPollAt?: number
+  lastError?: string
 }
 
 // Singleton state - shared across all instances
 const activeJobs = ref<Map<string, PendingJob>>(new Map())
-const jobCallbacks = ref<Map<string, PollingCallbacks>>(new Map())
+const jobCallbacks = new Map<string, Map<string, PollingCallbacks>>()
 const recentCompletions = ref<Array<{ job: PendingJob; completedAt: number; success: boolean; response?: string }>>([])
 const isPollingActive = ref(false)
 const pollIntervalId = ref<NodeJS.Timeout | null>(null)
+let pollCycleRunning = false
+let initialized = false
 
 // Max recent completions to keep
 const MAX_RECENT_COMPLETIONS = 10
+const MAX_POLL_FAILURES = 5
+const MAX_JOB_AGE_MS = 15 * 60 * 1000
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    if (pollIntervalId.value) clearInterval(pollIntervalId.value)
+    pollIntervalId.value = null
+    isPollingActive.value = false
+    pollCycleRunning = false
+    initialized = false
+  })
+}
 
 export function useBackgroundPolling() {
   const toast = useToast()
@@ -59,16 +100,24 @@ export function useBackgroundPolling() {
   /**
    * Register callbacks for a job to receive live UI updates
    */
-  function registerJobCallbacks(jobId: string, callbacks: PollingCallbacks) {
-    jobCallbacks.value.set(jobId, callbacks)
+  function registerJobCallbacks(jobId: string, owner: string, callbacks: PollingCallbacks) {
+    const owners = jobCallbacks.get(jobId) || new Map<string, PollingCallbacks>()
+    owners.set(owner, callbacks)
+    jobCallbacks.set(jobId, owners)
     logger.info('Registered callbacks for job:', jobId)
   }
 
   /**
    * Unregister callbacks (e.g., when switching threads)
    */
-  function unregisterJobCallbacks(jobId: string) {
-    jobCallbacks.value.delete(jobId)
+  function unregisterJobCallbacks(jobId: string, owner?: string) {
+    if (!owner) {
+      jobCallbacks.delete(jobId)
+      return
+    }
+    const owners = jobCallbacks.get(jobId)
+    owners?.delete(owner)
+    if (owners?.size === 0) jobCallbacks.delete(jobId)
     logger.info('Unregistered callbacks for job:', jobId)
   }
 
@@ -76,7 +125,7 @@ export function useBackgroundPolling() {
    * Check if a job has callbacks registered (UI is actively watching)
    */
   function hasCallbacks(jobId: string): boolean {
-    return jobCallbacks.value.has(jobId)
+    return (jobCallbacks.get(jobId)?.size || 0) > 0
   }
 
   // ============================================================================
@@ -89,7 +138,7 @@ export function useBackgroundPolling() {
         ...job,
         id
       }))
-      localStorage.setItem(PENDING_JOBS_KEY, JSON.stringify(jobs))
+      if (import.meta.client) localStorage.setItem(PENDING_JOBS_KEY, JSON.stringify(jobs))
     } catch (e) {
       logger.warn('Failed to save jobs:', e)
     }
@@ -97,6 +146,7 @@ export function useBackgroundPolling() {
 
   function loadPendingJobs() {
     try {
+      if (!import.meta.client) return
       const stored = localStorage.getItem(PENDING_JOBS_KEY)
       if (!stored) return
 
@@ -107,8 +157,8 @@ export function useBackgroundPolling() {
       for (const job of jobs) {
         // Skip expired jobs
         if (now - job.timestamp > maxAge) continue
-        // Only restore jobs that were still polling
-        if (job.status === 'polling') {
+        // Restore jobs that can still be polled or explicitly reconnected.
+        if (job.status === 'polling' || job.status === 'paused') {
           activeJobs.value.set(job.jobId, job)
         }
       }
@@ -135,7 +185,8 @@ export function useBackgroundPolling() {
       status: 'polling',
       progress: 'Starting...',
       progressPercent: 0,
-      toolsCalled: []
+      toolsCalled: [],
+      consecutiveFailures: 0
     }
 
     activeJobs.value.set(jobId, job)
@@ -181,7 +232,9 @@ export function useBackgroundPolling() {
 
   function unregisterJob(jobId: string) {
     activeJobs.value.delete(jobId)
+    jobCallbacks.delete(jobId)
     savePendingJobs()
+    if (![...activeJobs.value.values()].some(job => job.status === 'polling')) stopPolling()
   }
 
   // ============================================================================
@@ -213,28 +266,20 @@ export function useBackgroundPolling() {
   }
 
   async function pollAllJobs() {
-    const jobsToRemove: string[] = []
+    if (pollCycleRunning) return
+    pollCycleRunning = true
 
-    for (const [jobId, job] of activeJobs.value.entries()) {
-      if (job.status !== 'polling') continue
-
-      try {
+    try {
+      for (const job of activeJobs.value.values()) {
+        if (job.status !== 'polling') continue
         await pollJob(job)
-      } catch (error) {
-        logger.error('Error polling job:', jobId, error)
-        // Mark for removal after too many failures
-        job.status = 'error'
-        jobsToRemove.push(jobId)
       }
-    }
-
-    // Clean up completed/failed jobs
-    for (const jobId of jobsToRemove) {
-      unregisterJob(jobId)
+    } finally {
+      pollCycleRunning = false
     }
 
     // Stop polling if no more active jobs
-    if (activeJobs.value.size === 0) {
+    if (![...activeJobs.value.values()].some(job => job.status === 'polling')) {
       stopPolling()
     }
   }
@@ -243,6 +288,12 @@ export function useBackgroundPolling() {
     // Skip if already completed or being processed
     if (job.status !== 'polling') {
       logger.info('Skipping job', job.jobId, '- status is', job.status)
+      return
+    }
+
+    if (job.nextPollAt && Date.now() < job.nextPollAt) return
+    if (Date.now() - job.timestamp > MAX_JOB_AGE_MS) {
+      await handleJobError(job, 'Polling timed out before the job reached a terminal state')
       return
     }
     
@@ -254,6 +305,10 @@ export function useBackgroundPolling() {
       if (!status.success) {
         throw new Error(status.error || 'Failed to poll job status')
       }
+
+      job.consecutiveFailures = 0
+      job.nextPollAt = undefined
+      job.lastError = undefined
 
       // Double-check job wasn't completed while we were fetching
       if (job.status !== 'polling') {
@@ -281,15 +336,16 @@ export function useBackgroundPolling() {
       job.toolsCalled = status.toolsCalled || []
 
       // Call progress callback if registered
-      const callbacks = jobCallbacks.value.get(job.jobId)
-      if (callbacks?.onProgress) {
+      const callbacks = jobCallbacks.get(job.jobId)
+      for (const callback of callbacks?.values() || []) {
         try {
-          callbacks.onProgress(
-            job.jobId,
-            newProgress,
-            status.progressPercent || 0,
-            status.toolsCalled || []
-          )
+          callback.onProgress?.({
+            jobId: job.jobId,
+            threadId: job.threadId,
+            progress: newProgress,
+            percent: status.progressPercent || 0,
+            tools: status.toolsCalled || []
+          })
         } catch (err) {
           logger.error('Error in onProgress callback:', err)
         }
@@ -308,7 +364,7 @@ export function useBackgroundPolling() {
       // Check if errored
       if (status.status === 'error') {
         job.status = 'error'
-        await handleJobError(job, status.errorMessage || 'Query failed')
+        await handleJobError(job, status.errorMessage || 'Query failed', status.disambiguation)
         return
       }
 
@@ -320,7 +376,16 @@ export function useBackgroundPolling() {
 
     } catch (error: any) {
       logger.error('Fetch error for job:', job.jobId, error)
-      // Don't fail immediately - will retry on next poll cycle
+      job.consecutiveFailures = (job.consecutiveFailures || 0) + 1
+      job.lastError = error?.message || 'Unable to reach the polling service'
+      job.nextPollAt = Date.now() + Math.min(1000 * (2 ** job.consecutiveFailures), 30000)
+      savePendingJobs()
+
+      if (job.consecutiveFailures >= MAX_POLL_FAILURES) {
+        job.status = 'paused'
+        notifyError(job, `${job.lastError}. Polling paused after ${MAX_POLL_FAILURES} attempts.`, true)
+        savePendingJobs()
+      }
     }
   }
 
@@ -332,20 +397,21 @@ export function useBackgroundPolling() {
     const botResponse = status.response || 'No response received.'
     const metadata = status.metadata || {}
     const duration = Math.round((Date.now() - job.timestamp) / 1000)
-    const callbacks = jobCallbacks.value.get(job.jobId)
+    const callbacks = jobCallbacks.get(job.jobId)
 
     logger.info('Job complete:', job.jobId, 'hasCallbacks:', !!callbacks)
 
     // Call UI callbacks first (if registered)
-    if (callbacks?.onComplete) {
+    for (const callback of callbacks?.values() || []) {
       try {
-        callbacks.onComplete(
-          job.jobId,
-          botResponse,
+        callback.onComplete?.({
+          jobId: job.jobId,
+          threadId: job.threadId,
+          response: botResponse,
           metadata,
-          status.suggestedLinks || [],
-          status.suggestedPrompts || []
-        )
+          suggestedLinks: status.suggestedLinks || [],
+          suggestedPrompts: status.suggestedPrompts || []
+        })
         logger.info('Called onComplete callback for job:', job.jobId)
       } catch (err) {
         logger.error('Error in onComplete callback:', err)
@@ -353,7 +419,7 @@ export function useBackgroundPolling() {
     }
 
     // Show toast only if no UI callbacks (user navigated away)
-    if (!callbacks) {
+    if (!callbacks?.size) {
       const queryPreview = job.userMessage.length > 60
         ? job.userMessage.substring(0, 60) + '...'
         : job.userMessage
@@ -370,7 +436,7 @@ export function useBackgroundPolling() {
         actions: [{
           label: 'View Response',
           click: () => {
-            router.push('/chat')
+            router.push({ path: '/chat', query: { thread: job.threadId } })
           }
         }]
       })
@@ -400,26 +466,30 @@ export function useBackgroundPolling() {
     unregisterJob(job.jobId)
   }
 
-  async function handleJobError(job: PendingJob, errorMsg: string) {
+  function notifyError(job: PendingJob, errorMsg: string, recoverable: boolean, disambiguation?: any) {
+    const callbacks = jobCallbacks.get(job.jobId)
+    for (const callback of callbacks?.values() || []) {
+      try {
+        callback.onError?.({ jobId: job.jobId, threadId: job.threadId, error: errorMsg, recoverable, disambiguation })
+      } catch (err) {
+        logger.error('Error in onError callback:', err)
+      }
+    }
+  }
+
+  async function handleJobError(job: PendingJob, errorMsg: string, disambiguation?: any) {
     const duration = Math.round((Date.now() - job.timestamp) / 1000)
     const isTimeout = errorMsg.toLowerCase().includes('timeout')
-    const callbacks = jobCallbacks.value.get(job.jobId)
+    const callbacks = jobCallbacks.get(job.jobId)
     job.status = 'error'
 
     logger.error('Job error:', job.jobId, 'hasCallbacks:', !!callbacks, errorMsg)
 
     // Call UI callbacks first (if registered)
-    if (callbacks?.onError) {
-      try {
-        callbacks.onError(job.jobId, errorMsg)
-        logger.info('Called onError callback for job:', job.jobId)
-      } catch (err) {
-        logger.error('Error in onError callback:', err)
-      }
-    }
+    notifyError(job, errorMsg, false, disambiguation)
 
     // Show toast only if no UI callbacks (user navigated away)
-    if (!callbacks) {
+    if (!callbacks?.size) {
       const queryPreview = job.userMessage.length > 50
         ? job.userMessage.substring(0, 50) + '...'
         : job.userMessage
@@ -434,11 +504,11 @@ export function useBackgroundPolling() {
           actions: [
             {
               label: 'View Details',
-              click: () => router.push('/chat')
+              click: () => router.push({ path: '/chat', query: { thread: job.threadId } })
             },
             {
               label: 'Retry',
-              click: () => router.push('/chat')
+              click: () => router.push({ path: '/chat', query: { thread: job.threadId } })
             }
           ]
         })
@@ -452,11 +522,11 @@ export function useBackgroundPolling() {
           actions: [
             {
               label: 'View Details',
-              click: () => router.push('/chat')
+              click: () => router.push({ path: '/chat', query: { thread: job.threadId } })
             },
             {
               label: 'Try Again',
-              click: () => router.push('/chat')
+              click: () => router.push({ path: '/chat', query: { thread: job.threadId } })
             }
           ]
         })
@@ -476,6 +546,8 @@ export function useBackgroundPolling() {
   // ============================================================================
 
   function initialize() {
+    if (initialized) return
+    initialized = true
     // Load any pending jobs from storage
     loadPendingJobs()
 
@@ -483,6 +555,18 @@ export function useBackgroundPolling() {
     if (activeJobs.value.size > 0) {
       startPolling()
     }
+  }
+
+  function reconnectJob(jobId: string): boolean {
+    const job = activeJobs.value.get(jobId)
+    if (!job || job.status !== 'paused') return false
+    job.status = 'polling'
+    job.consecutiveFailures = 0
+    job.nextPollAt = undefined
+    job.lastError = undefined
+    savePendingJobs()
+    startPolling()
+    return true
   }
 
   // ============================================================================
@@ -499,6 +583,7 @@ export function useBackgroundPolling() {
     // Job registration
     registerJob,
     unregisterJob,
+    reconnectJob,
 
     // Callback management (for UI updates)
     registerJobCallbacks,

@@ -22,6 +22,8 @@ interface ChatThreadsState {
   loading: boolean
   error: string | null
   filters: ChatThreadFilters
+  hasMoreThreads: boolean
+  nextThreadKey: ChatThreadFilters['lastKey']
 }
 
 export const useChatThreadsStore = defineStore('chatThreads', {
@@ -31,6 +33,8 @@ export const useChatThreadsStore = defineStore('chatThreads', {
     currentThread: null,
     loading: false,
     error: null,
+    hasMoreThreads: false,
+    nextThreadKey: undefined,
     filters: {
       isArchived: false,
       limit: 50
@@ -93,7 +97,7 @@ export const useChatThreadsStore = defineStore('chatThreads', {
     /**
      * Fetch all threads for the user
      */
-    async fetchThreads(filters?: ChatThreadFilters) {
+    async fetchThreads(filters?: ChatThreadFilters, append = false) {
       this.loading = true
       this.error = null
 
@@ -122,12 +126,17 @@ export const useChatThreadsStore = defineStore('chatThreads', {
         if (appliedFilters.endDate) {
           params.append('endDate', appliedFilters.endDate)
         }
+        if (append && this.nextThreadKey) {
+          params.append('lastKey', JSON.stringify(this.nextThreadKey))
+        }
 
-        const { data } = await $fetch<{ data: { threads: ChatThread[] } }>(
+        const { data } = await $fetch<{ data: { threads: ChatThread[]; hasMore: boolean; lastKey?: ChatThreadFilters['lastKey'] } }>(
           `/api/chat/threads/list?${params.toString()}`
         )
 
-        this.threads = data.threads
+        this.threads = append ? [...this.threads, ...data.threads] : data.threads
+        this.hasMoreThreads = data.hasMore
+        this.nextThreadKey = data.lastKey
         this.filters = appliedFilters
       } catch (err: any) {
         this.error = err.data?.error?.message || 'Failed to fetch threads'
@@ -135,6 +144,11 @@ export const useChatThreadsStore = defineStore('chatThreads', {
       } finally {
         this.loading = false
       }
+    },
+
+    async loadMoreThreads(): Promise<void> {
+      if (!this.hasMoreThreads || this.loading) return
+      await this.fetchThreads(this.filters, true)
     },
 
     /**
@@ -399,7 +413,7 @@ export const useChatThreadsStore = defineStore('chatThreads', {
     /**
      * Share a thread
      */
-    async shareThread(threadId: string, expiresInDays: number = 90): Promise<ShareThreadResponse | null> {
+    async shareThread(threadId: string, expiresInDays: number = 30): Promise<ShareThreadResponse | null> {
       try {
         const { data } = await $fetch<{ data: ShareThreadResponse }>(`/api/chat/threads/${threadId}/share`, {
           method: 'POST',

@@ -56,7 +56,7 @@ function generateDefaultTitle(): string {
 function generateTitleFromMessage(content: string): string {
   // Remove markdown formatting
   let cleaned = content
-    .replace(/[#*_`~\[\]]/g, '') // Remove markdown symbols
+    .replace(/[#*_`~[\]]/g, '') // Remove markdown symbols
     .replace(/\n+/g, ' ') // Replace newlines with spaces
     .trim()
 
@@ -445,7 +445,7 @@ export async function deleteThread(
 export async function shareThread(
   threadId: string,
   userId: string,
-  expiresInDays: number = 90
+  expiresInDays: number = 30
 ): Promise<{ shareId: string; expiresAt: string } | null> {
   // Get the thread
   const thread = await getThreadById(threadId, userId)

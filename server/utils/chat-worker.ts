@@ -157,6 +157,7 @@ export async function processChatQueueMessage(message: Message): Promise<void> {
 
     let responseText = ''
     let metadata: any = null
+    let disambiguation: any = null
     const tools = new Set<string>()
     let eventCount = 0
     let lastWrite = 0
@@ -186,6 +187,12 @@ export async function processChatQueueMessage(message: Message): Promise<void> {
       } else if (event.type === 'complete') {
         responseText = event.data.response || responseText
         metadata = event.data.metadata || metadata
+      } else if (event.type === 'disambiguation') {
+        disambiguation = {
+          ...(event.data.disambiguation || event.data),
+          sessionId: job.jobId
+        }
+        currentStep = 'Waiting for account selection'
       } else if (event.type === 'error') {
         throw new Error(event.data.message || 'Agent query failed')
       }
@@ -200,6 +207,20 @@ export async function processChatQueueMessage(message: Message): Promise<void> {
           heartbeatAt: new Date().toISOString()
         })
       }
+    }
+
+    if (disambiguation) {
+      const completedAt = new Date().toISOString()
+      await updateJob(jobId, {
+        status: 'error',
+        progress: 'Account selection required',
+        errorMessage: disambiguation.message || 'Multiple accounts match this query',
+        disambiguation,
+        completedAt,
+        heartbeatAt: completedAt
+      })
+      await deleteChatJobMessage(message.ReceiptHandle)
+      return
     }
 
     if (!responseText.trim()) throw new Error('The AI agent returned an empty response')

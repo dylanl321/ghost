@@ -114,7 +114,8 @@ export default defineEventHandler(handleAsync(async (event) => {
     searchQuery: query.searchQuery as string | undefined,
     limit: query.limit ? parseInt(query.limit as string, 10) : 50,
     startDate: query.startDate as string | undefined,
-    endDate: query.endDate as string | undefined
+    endDate: query.endDate as string | undefined,
+    lastKey: query.lastKey ? JSON.parse(String(query.lastKey)) : undefined
   }
 
   logger.info(`[Chat Threads API] Listing threads for user ${userId}`, filters)

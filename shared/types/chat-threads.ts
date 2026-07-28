@@ -46,6 +46,9 @@ export interface ChatMessage {
   suggestedLinks?: SuggestedLink[] // GHOST page links
   suggestedPrompts?: SuggestedPrompt[] // Follow-up prompts for user
   jobId?: string // Async job that produced this message (idempotency)
+  reasoning?: string | null
+  status?: MessageStatus
+  streamBuffer?: string
 }
 
 /**
@@ -159,7 +162,7 @@ export interface ListThreadsResponse {
  * Request to share a thread
  */
 export interface ShareThreadRequest {
-  expiresInDays?: number // Default: 90 days
+  expiresInDays?: 1 | 7 | 30 | 90 // Default: 30 days
 }
 
 /**
@@ -422,12 +425,10 @@ export interface MessageStatus {
   statusHistory?: Array<{ text: string; timestamp: number }> // Recent step history (optional)
   error?: string             // Error message if failed
   errorType?: ErrorType      // Classified error type for enhanced display
+  recoverable?: boolean      // Polling can be explicitly reconnected
 }
 
 /**
  * Enhanced chat message for streaming support
  */
-export interface StreamingChatMessage extends ChatMessage {
-  status?: MessageStatus
-  streamBuffer?: string     // Partial content being streamed
-}
+export type StreamingChatMessage = ChatMessage
