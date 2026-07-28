@@ -16,6 +16,7 @@ import { useChatThreadsStore } from '~/stores/useChatThreadsStore'
 import {
   useBackgroundPolling,
   type PollingCompleteEvent,
+  type PollingDisambiguationEvent,
   type PollingErrorEvent,
   type PollingProgressEvent
 } from './useBackgroundPolling'
@@ -662,7 +663,15 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     const threadId = threadsStore.activeThreadId
     if (!threadId) return false
 
-    const jobs = backgroundPolling.getJobsForThread(threadId).filter(j => j.status === 'polling')
+    const threadJobs = backgroundPolling.getJobsForThread(threadId)
+    const waitingJob = threadJobs.find(job => job.status === 'waiting_for_input' && job.disambiguation)
+    if (waitingJob?.disambiguation) {
+      const presented = presentDisambiguation(waitingJob.jobId, threadId, waitingJob.disambiguation)
+      if (presented) backgroundPolling.unregisterJob(waitingJob.jobId)
+      return presented
+    }
+
+    const jobs = threadJobs.filter(j => j.status === 'polling')
     if (jobs.length === 0) {
       // Ensure UI state is not stuck if we have no active jobs
       // Also remove any stale placeholders for this thread.
@@ -710,7 +719,8 @@ export function useChatUI(options: UseChatUIOptions = {}) {
       backgroundPolling.registerJobCallbacks(job.jobId, callbackOwner, {
         onProgress: handlePollingProgress,
         onComplete: handlePollingComplete,
-        onError: handlePollingError
+        onError: handlePollingError,
+        onDisambiguation: handlePollingDisambiguation
       })
     }
 
@@ -834,6 +844,36 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   /**
    * Handle job error from background polling
    */
+  function presentDisambiguation(jobId: string, threadId: string, disambiguation: any): boolean {
+    if (threadsStore.activeThreadId !== threadId) {
+      removePlaceholder(threadId, jobId)
+      return false
+    }
+
+    const job = backgroundPolling.getJob(jobId)
+    const disambig = {
+      ...disambiguation,
+      sessionId: disambiguation.sessionId || disambiguation.session_id || jobId,
+      originalQuery: job?.userMessage || pendingMessage.value
+    }
+    if (!Array.isArray(disambig.matches) || disambig.matches.length === 0) return false
+
+    showDisambiguation.value = true
+    disambiguationData.value = disambig
+    removePlaceholder(threadId, jobId)
+    const threadMessages = threadsStore.currentThread?.messages || []
+    const placeholderIndex = threadMessages.findIndex(message => (message as any).status?.jobId === jobId)
+    if (placeholderIndex !== -1) threadMessages.splice(placeholderIndex, 1)
+    resetThreadUiState(threadId)
+    return true
+  }
+
+  function handlePollingDisambiguation(event: PollingDisambiguationEvent) {
+    if (presentDisambiguation(event.jobId, event.threadId, event.disambiguation)) {
+      backgroundPolling.unregisterJob(event.jobId)
+    }
+  }
+
   function handlePollingError(event: PollingErrorEvent) {
     const { jobId, threadId, error, recoverable, disambiguation } = event
     logger.error('Job error:', jobId, error)
@@ -846,23 +886,8 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     // Check for disambiguation
     if (disambiguation || error.includes('Multiple accounts found matching')) {
       const job = backgroundPolling.getJob(jobId)
-      const disambig = disambiguation
-        ? {
-            ...disambiguation,
-            sessionId: disambiguation.sessionId || jobId,
-            originalQuery: job?.userMessage || pendingMessage.value
-          }
-        : parseDisambiguationError(error, jobId, job?.userMessage || pendingMessage.value)
-      if (disambig) {
-        showDisambiguation.value = true
-        disambiguationData.value = disambig
-        removePlaceholder(threadId, jobId)
-        const threadMessages = threadsStore.currentThread?.messages || []
-        const placeholderIndex = threadMessages.findIndex(message => (message as any).status?.jobId === jobId)
-        if (placeholderIndex !== -1) threadMessages.splice(placeholderIndex, 1)
-        resetThreadUiState(threadId)
-        return
-      }
+      const disambig = disambiguation || parseDisambiguationError(error, jobId, job?.userMessage || pendingMessage.value)
+      if (disambig && presentDisambiguation(jobId, threadId, disambig)) return
     }
 
     // Find and update the pending message
@@ -1141,7 +1166,8 @@ export function useChatUI(options: UseChatUIOptions = {}) {
         backgroundPolling.registerJobCallbacks(jobId, callbackOwner, {
           onProgress: handlePollingProgress,
           onComplete: handlePollingComplete,
-          onError: handlePollingError
+          onError: handlePollingError,
+          onDisambiguation: handlePollingDisambiguation
         })
       }
 
@@ -1302,22 +1328,30 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     const current = disambiguationData.value
     if (!current) return
 
+    const matchedAccount = current.matches.find(match => match.request_id === accountId)
+    let selectedAccount = matchedAccount
+
     try {
       const response = await $fetch<{ data: { account: DisambiguationData['matches'][number] } }>('/api/strands/account/select', {
         method: 'POST',
         body: { sessionId: current.sessionId, requestId: accountId }
       })
-      const selected = response.data.account
-      const selectedAccountId = selected.govcloud_account_id || selected.commercial_account_id
-      if (!selectedAccountId) throw new Error('The selected account did not include an account ID')
-
-      showDisambiguation.value = false
-      disambiguationData.value = null
-      pendingMessage.value = ''
-      await sendMessage(current.originalQuery, selectedAccountId)
+      selectedAccount = response.data.account || matchedAccount
     } catch (error: any) {
-      errorMessage.value = error?.data?.error?.message || error?.message || 'Unable to select that account'
+      logger.warn('Upstream account selection failed; using selected match metadata', error)
     }
+
+    const selectedAccountId = selectedAccount?.govcloud_account_id || selectedAccount?.commercial_account_id ||
+      matchedAccount?.govcloud_account_id || matchedAccount?.commercial_account_id
+    if (!selectedAccountId) {
+      errorMessage.value = 'The selected account did not include an account ID. Please choose another account.'
+      return
+    }
+
+    showDisambiguation.value = false
+    disambiguationData.value = null
+    pendingMessage.value = ''
+    await sendMessage(current.originalQuery, selectedAccountId)
   }
 
   function cancelDisambiguation(): void {
