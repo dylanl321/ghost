@@ -42,7 +42,10 @@ FROM node:${NODE_VERSION}-bookworm-slim AS runtime
 LABEL maintainer="AWSProductTeam@gd-ms.com"
 
 WORKDIR /app
-RUN chown node:node /app
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/* && \
+    chown node:node /app
 
 COPY --from=build --chown=node:node /app/.output ./.output
 

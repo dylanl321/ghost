@@ -187,3 +187,5 @@ Refresh Service:
     - aws sts get-caller-identity
     # - aws ecs update-service --cluster $ECR_REPO --service $ECR_REPO-service --force-new-deployment
     - aws ecs update-service --cluster $APP_NAME --service $APP_NAME-service --force-new-deployment
+    - aws ecs wait services-stable --cluster $APP_NAME --services $APP_NAME-service
+    - aws ecs describe-services --cluster $APP_NAME --services $APP_NAME-service --query 'services[0].deployments[0].{status:status,rolloutState:rolloutState,runningCount:runningCount,desiredCount:desiredCount}'
