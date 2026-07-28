@@ -3,17 +3,27 @@
  * Generates PDF reports for AWS datasets with AI-powered insights
  */
 
-import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime'
+import { InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime'
+import { jsPDF } from 'jspdf'
+import autoTable from 'jspdf-autotable'
 import { getBedrockRuntimeClient } from '../lib/aws-client-factory'
 import { logger } from './logger'
-import type { DatasetReportData, DatasetReportConfig } from '../../shared/types/dataset-reports'
+import {
+  CONFIG_COLUMNS,
+  SECURITY_HUB_COLUMNS,
+  CLOUDTRAIL_COLUMNS,
+  ENTRA_USERS_COLUMNS,
+  type DatasetColumnConfig,
+  type DatasetReportData,
+  type DatasetReportConfig
+} from '../../shared/types/dataset-reports'
 
 /**
  * Analyze dataset report using AI (AWS Bedrock - Claude)
  */
 export async function analyzeDatasetReport(
   reportData: DatasetReportData,
-  config: DatasetReportConfig
+  _config: DatasetReportConfig
 ): Promise<{
   executiveSummary: string
   keyFindings: string[]
@@ -261,23 +271,131 @@ export async function exportDatasetToPDF(
 ): Promise<Buffer> {
   logger.info('[Dataset PDF] Generating PDF report')
 
-  // Build HTML content for PDF
-  const html = buildDatasetReportHTML(reportData, config)
+  const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4', compress: true })
+  const pageWidth = pdf.internal.pageSize.getWidth()
+  let cursorY = 44
 
-  // Convert HTML to PDF using shared PDF generator
-  // For now, return a simple placeholder buffer
-  // TODO: Integrate with actual PDF generation library (puppeteer/pdfkit)
+  pdf.setProperties({
+    title: 'AWS Dataset Report',
+    subject: 'AWS resource, security, audit, and access datasets',
+    author: 'GHOST AWS Dashboard',
+    creator: 'GHOST AWS Dashboard'
+  })
 
-  logger.warn('[Dataset PDF] PDF generation not yet fully implemented, returning HTML as buffer')
-  return Buffer.from(html, 'utf-8')
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(22)
+  pdf.text('AWS Dataset Report', 36, cursorY)
+  cursorY += 24
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(9)
+  pdf.text(`Generated: ${new Date(reportData.metadata.generatedAt).toLocaleString()}`, 36, cursorY)
+  cursorY += 14
+  pdf.text(`Accounts: ${reportData.metadata.accounts.length || 'All'}`, 36, cursorY)
+  cursorY += 22
+
+  if (config.enableAI && reportData.aiInsights) {
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(14)
+    pdf.text('Executive Summary', 36, cursorY)
+    cursorY += 16
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(9)
+    const summaryLines = pdf.splitTextToSize(cleanPdfText(reportData.aiInsights.executiveSummary), pageWidth - 72)
+    pdf.text(summaryLines, 36, cursorY)
+    cursorY += summaryLines.length * 11 + 14
+  }
+
+  const tables: Array<{
+    title: string
+    records: Record<string, unknown>[]
+    columns: readonly DatasetColumnConfig[]
+  }> = []
+
+  if (reportData.config) {
+    tables.push({ title: `AWS Config Resources (${reportData.config.totalResources})`, records: reportData.config.records as unknown as Record<string, unknown>[], columns: CONFIG_COLUMNS })
+  }
+  if (reportData.securityHub) {
+    tables.push({ title: `Security Hub Findings (${reportData.securityHub.totalFindings})`, records: reportData.securityHub.records as unknown as Record<string, unknown>[], columns: SECURITY_HUB_COLUMNS })
+  }
+  if (reportData.cloudtrail) {
+    tables.push({ title: `CloudTrail Events (${reportData.cloudtrail.totalEvents})`, records: reportData.cloudtrail.records as unknown as Record<string, unknown>[], columns: CLOUDTRAIL_COLUMNS })
+  }
+  if (reportData.entraUsers) {
+    tables.push({ title: `Entra ID Access (${reportData.entraUsers.totalUsers})`, records: reportData.entraUsers.records as unknown as Record<string, unknown>[], columns: ENTRA_USERS_COLUMNS })
+  }
+
+  for (const [index, table] of tables.entries()) {
+    if (index > 0 || cursorY > 130) {
+      pdf.addPage()
+      cursorY = 40
+    }
+
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(14)
+    pdf.text(table.title, 36, cursorY)
+    cursorY += 10
+
+    const columns = resolvePdfColumns(table.columns, table.records, config.columns)
+    autoTable(pdf, {
+      startY: cursorY,
+      head: [columns.map(column => column.label)],
+      body: table.records.map(record => columns.map(column => formatPdfValue(readPath(record, column.key)))),
+      theme: 'striped',
+      margin: { left: 24, right: 24 },
+      styles: { font: 'helvetica', fontSize: 6, cellPadding: 2, overflow: 'linebreak' },
+      headStyles: { fillColor: [31, 41, 55], textColor: [255, 255, 255], fontStyle: 'bold' }
+    })
+
+    cursorY = ((pdf as any).lastAutoTable?.finalY || cursorY) + 18
+  }
+
+  if (tables.length === 0) {
+    pdf.setFontSize(11)
+    pdf.text('No data matched the selected datasets and filters.', 36, cursorY)
+  }
+
+  return Buffer.from(pdf.output('arraybuffer'))
+}
+
+function resolvePdfColumns(
+  defaults: readonly DatasetColumnConfig[],
+  records: Record<string, unknown>[],
+  selected?: string[]
+): DatasetColumnConfig[] {
+  if (!selected?.length) return [...defaults]
+  const defaultsByKey = new Map(defaults.map(column => [column.key, column]))
+  return selected
+    .filter(key => records.some(record => readPath(record, key) !== undefined))
+    .map(key => defaultsByKey.get(key) || {
+      key,
+      label: (key.split('.').pop() || key).replace(/([A-Z])/g, ' $1').replace(/^./, char => char.toUpperCase()).trim()
+    })
+}
+
+function readPath(record: Record<string, unknown>, key: string): unknown {
+  return key.split('.').reduce<unknown>((value, segment) => {
+    if (!value || typeof value !== 'object') return undefined
+    return (value as Record<string, unknown>)[segment]
+  }, record)
+}
+
+function formatPdfValue(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  if (Array.isArray(value)) return cleanPdfText(value.join(', '))
+  if (typeof value === 'object') return cleanPdfText(JSON.stringify(value))
+  return cleanPdfText(String(value))
+}
+
+function cleanPdfText(value: string): string {
+  return value.replace(/[^\x20-\x7E\n\r\t]/g, '')
 }
 
 /**
  * Build HTML for dataset report
  */
-function buildDatasetReportHTML(
+function _buildDatasetReportHTML(
   reportData: DatasetReportData,
-  config: DatasetReportConfig
+  _config: DatasetReportConfig
 ): string {
   const sections: string[] = []
 

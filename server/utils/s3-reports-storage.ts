@@ -4,7 +4,7 @@
  */
 
 import { uploadToS3, getPresignedDownloadUrl, deleteFromS3, listObjectsByPrefix, type S3UploadResult } from './s3-storage'
-import type { ReportConfig } from '../../shared/types/scheduled-reports'
+import type { ReportFormat } from '../../shared/types/scheduled-reports'
 import { logger } from './logger'
 
 /**
@@ -21,7 +21,7 @@ export interface ReportMetadata {
   userId: string
   executionId?: string
   shareId?: string
-  format: 'pdf' | 'csv'
+  format: ReportFormat
 }
 
 /**
@@ -55,8 +55,14 @@ function generateReportKey(
 /**
  * Get content type for report format
  */
-function getContentType(format: 'pdf' | 'csv'): string {
-  return format === 'pdf' ? 'application/pdf' : 'text/csv'
+function getContentType(format: ReportFormat): string {
+  const contentTypes: Record<ReportFormat, string> = {
+    pdf: 'application/pdf',
+    csv: 'text/csv',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    json: 'application/json'
+  }
+  return contentTypes[format]
 }
 
 /**

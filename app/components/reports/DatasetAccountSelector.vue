@@ -10,14 +10,6 @@
       >
         All Accounts ({{ totalAccountCount }})
       </UButton>
-      <UButton
-        size="xs"
-        color="gray"
-        variant="soft"
-        @click="clearAll"
-      >
-        Clear All
-      </UButton>
       <div class="border-l border-gray-300 dark:border-gray-600 mx-1" />
       <UButton
         size="xs"
@@ -186,9 +178,10 @@ const govCloudCount = computed(() =>
   accounts.value.filter(a => a.awsGovCloudAccountID).length
 )
 
-const selectedCount = computed(() => selectedAccountIds.value.length)
+const selectedCount = computed(() => selectedAccountIds.value.length || filteredAccounts.value.length)
 
 const selectedCommercialCount = computed(() => {
+  if (selectedAccountIds.value.length === 0) return commercialCount.value
   return selectedAccountIds.value.filter(id => {
     const account = accounts.value.find(a => a.accountId === id)
     return account && !account.awsGovCloudAccountID
@@ -196,6 +189,7 @@ const selectedCommercialCount = computed(() => {
 })
 
 const selectedGovCloudCount = computed(() => {
+  if (selectedAccountIds.value.length === 0) return govCloudCount.value
   return selectedAccountIds.value.filter(id => {
     const account = accounts.value.find(a => a.accountId === id)
     return account && account.awsGovCloudAccountID
@@ -203,8 +197,10 @@ const selectedGovCloudCount = computed(() => {
 })
 
 const isAllSelected = computed(() => {
-  return selectedAccountIds.value.length === filteredAccounts.value.length &&
-         filteredAccounts.value.length > 0
+  return filteredAccounts.value.length > 0 && (
+    selectedAccountIds.value.length === 0 ||
+    filteredAccounts.value.every(account => selectedAccountIds.value.includes(account.accountId))
+  )
 })
 
 const isSomeSelected = computed(() => {
@@ -213,10 +209,13 @@ const isSomeSelected = computed(() => {
 
 // Methods
 function isSelected(accountId: string): boolean {
-  return selectedAccountIds.value.includes(accountId)
+  return selectedAccountIds.value.length === 0 || selectedAccountIds.value.includes(accountId)
 }
 
 function toggle(accountId: string) {
+  if (selectedAccountIds.value.length === 0) {
+    selectedAccountIds.value = filteredAccounts.value.map(account => account.accountId)
+  }
   const index = selectedAccountIds.value.indexOf(accountId)
   if (index > -1) {
     selectedAccountIds.value.splice(index, 1)
@@ -243,10 +242,6 @@ function selectAll() {
   // Empty array = all accounts in backend
 }
 
-function clearAll() {
-  selectedAccountIds.value = []
-}
-
 function selectCommercial() {
   selectedAccountIds.value = accounts.value
     .filter(a => !a.awsGovCloudAccountID)
@@ -257,14 +252,6 @@ function selectGovCloud() {
   selectedAccountIds.value = accounts.value
     .filter(a => a.awsGovCloudAccountID)
     .map(a => a.accountId)
-}
-
-function getStatusColor(status: string): string {
-  const s = status?.toUpperCase() || ''
-  if (s === 'ACTIVE' || s === 'PROVISIONED') return 'green'
-  if (s === 'SUSPENDED' || s === 'DELETED') return 'red'
-  if (s === 'PENDING') return 'yellow'
-  return 'gray'
 }
 
 // Load accounts on mount

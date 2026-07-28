@@ -9,6 +9,7 @@ import { generateDatasetReport } from '../../utils/dataset-report-generator'
 import { errors } from '../../utils/api-response'
 import { logger } from '../../utils/logger'
 import type { DatasetReportConfig } from '../../../shared/types/dataset-reports'
+import { getDatasetReportConfigErrors } from '../../utils/dataset-report-validation'
 
 interface ExportRequest {
   accountIds: string[]
@@ -24,20 +25,22 @@ export default defineEventHandler(async (event) => {
     }
 
     const body = await readBody<ExportRequest>(event)
-    const { reportConfig } = body
+    const reportConfig = body?.reportConfig
 
-    if (!reportConfig || !reportConfig.datasets) {
-      return errors.badRequest(event, 'Missing report configuration')
+    const validationErrors = getDatasetReportConfigErrors(reportConfig)
+    if (validationErrors.length > 0) {
+      return errors.badRequest(event, validationErrors.join('; '))
     }
+    const validatedConfig = reportConfig as DatasetReportConfig
 
     logger.info('[Dataset Export] Starting export', {
-      accountIds: reportConfig.accounts?.length || 'all',
-      format: reportConfig.format,
-      datasets: Object.keys(reportConfig.datasets).filter(k => reportConfig.datasets[k as keyof typeof reportConfig.datasets]?.enabled)
+      accountIds: validatedConfig.accounts?.length || 'all',
+      format: validatedConfig.format,
+      datasets: Object.keys(validatedConfig.datasets).filter(k => validatedConfig.datasets[k as keyof typeof validatedConfig.datasets]?.enabled)
     })
 
     // Generate the report (pass event for Entra Users Graph API access)
-    const result = await generateDatasetReport(reportConfig, event)
+    const result = await generateDatasetReport(validatedConfig, event)
 
     if (!result.success || !result.buffer) {
       logger.error('[Dataset Export] Generation failed', { error: result.error })
@@ -47,7 +50,7 @@ export default defineEventHandler(async (event) => {
     // Set appropriate headers for file download
     setHeader(event, 'Content-Type', result.mimeType)
     setHeader(event, 'Content-Disposition', `attachment; filename="${result.filename}"`)
-    setHeader(event, 'Content-Length', result.buffer.length.toString())
+    setHeader(event, 'Content-Length', result.buffer.length)
 
     logger.info('[Dataset Export] Export complete', {
       filename: result.filename,

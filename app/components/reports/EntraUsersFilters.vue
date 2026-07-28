@@ -132,14 +132,14 @@ const filters = defineModel<EntraUsersDatasetFilters>({
 // Computed for two-way binding with USelectMenu
 const selectedRoles = computed({
   get: () => filters.value.roles || [],
-  set: (val) => {
+  set: (val: Array<string | { value: string }>) => {
     filters.value.roles = val.map(v => typeof v === 'object' ? v.value : v)
   }
 })
 
 const selectedDepartments = computed({
   get: () => filters.value.departments || [],
-  set: (val) => {
+  set: (val: Array<string | { value: string }>) => {
     filters.value.departments = val.map(v => typeof v === 'object' ? v.value : v)
   }
 })
@@ -209,7 +209,8 @@ function setAdminUsers() {
 }
 
 function setInactiveUsers() {
-  filters.value.activeOnly = true
+  filters.value.activeOnly = false
+  filters.value.activityStatus = 'inactive'
   filters.value.lookbackDays = 90
   filters.value.roles = []
   filters.value.userSearch = ''
@@ -221,6 +222,7 @@ function clearFilters() {
     roles: [],
     userSearch: '',
     activeOnly: false,
+    activityStatus: 'all',
     departments: [],
     lookbackDays: 30
   }

@@ -5,7 +5,7 @@
 
 import type { H3Event } from 'h3'
 import type { DatasetReportConfig, DatasetReportData } from '../../shared/types/dataset-reports'
-import { getConfigResources, getConfigComplianceSummary, getConfigResourceTypeSummary } from './aws-config-data'
+import { getConfigResources } from './aws-config-data'
 import { getSecurityHubFindings } from './security-hub-data'
 import { getCloudTrailEvents } from './cloudtrail-data'
 import { getEntraUsers } from './entra-users-data'
@@ -13,6 +13,7 @@ import { getAllAccountsUnified } from './accounts-consolidated'
 import { exportDatasetToPDF } from './pdf-export-dataset'
 import { generateXLSXDatasetReport as generateXLSX } from './dataset-xlsx-exporter'
 import { logger } from './logger'
+import { flattenNestedData } from './dataset-schema-builder'
 
 /**
  * Generate a dataset report based on configuration
@@ -78,14 +79,17 @@ async function buildDatasetReport(
 
   // Get account information
   const allAccounts = await getAllAccountsUnified()
+  const accountsWithIds = allAccounts.filter(
+    (account): account is typeof account & { accountId: string } => Boolean(account.accountId)
+  )
   const accountMap = new Map(
-    allAccounts.map(acc => [acc.accountId, acc.accountName || acc.accountId])
+    accountsWithIds.map(acc => [acc.accountId, acc.accountName || acc.accountId])
   )
 
   // Determine target accounts
   const targetAccountIds = config.accounts.length > 0
     ? config.accounts
-    : allAccounts.map(acc => acc.accountId)
+    : accountsWithIds.map(acc => acc.accountId)
 
   const targetAccounts = targetAccountIds
     .filter(id => accountMap.has(id))
@@ -134,11 +138,23 @@ async function buildDatasetReport(
         logger.info('[Dataset Report] Fetching Config resources')
         const filters = config.datasets.config!.filters || {}
 
-        const [records, complianceSummary, resourceTypeSummary] = await Promise.all([
-          getConfigResources(targetAccountIds, filters),
-          getConfigComplianceSummary(targetAccountIds, filters),
-          getConfigResourceTypeSummary(targetAccountIds, filters)
-        ])
+        const records = await getConfigResources(targetAccountIds, filters)
+        const resourceTypeSummary: Record<string, number> = {}
+        const complianceSummary = {
+          compliant: 0,
+          nonCompliant: 0,
+          notApplicable: 0,
+          insufficientData: 0,
+          total: records.length
+        }
+
+        for (const record of records) {
+          resourceTypeSummary[record.resourceType] = (resourceTypeSummary[record.resourceType] || 0) + 1
+          if (record.complianceStatus === 'COMPLIANT') complianceSummary.compliant++
+          if (record.complianceStatus === 'NON_COMPLIANT') complianceSummary.nonCompliant++
+          if (record.complianceStatus === 'NOT_APPLICABLE') complianceSummary.notApplicable++
+          if (record.complianceStatus === 'INSUFFICIENT_DATA') complianceSummary.insufficientData++
+        }
 
         reportData.config = {
           enabled: true,
@@ -288,7 +304,7 @@ async function buildDatasetReport(
   // Entra ID Users
   if (config.datasets.entraUsers?.enabled) {
     if (!event) {
-      logger.warn('[Dataset Report] Entra Users requested but H3Event not available - skipping')
+      throw new Error('Entra Users reports require an interactive user session and cannot run in the background')
     } else {
       datasetPromises.push(
         (async () => {
@@ -423,7 +439,7 @@ async function generatePDFDatasetReport(
  */
 async function generateCSVDatasetReport(
   reportData: DatasetReportData,
-  config: DatasetReportConfig
+  _config: DatasetReportConfig
 ): Promise<{
   success: boolean
   buffer: Buffer
@@ -433,6 +449,14 @@ async function generateCSVDatasetReport(
   logger.info('[Dataset Report] Generating CSV')
 
   const csvRows: string[] = []
+
+  if (config.columns?.length) {
+    appendSelectedCsvRows(csvRows, 'AWS Config Resources', reportData.config?.records || [], config.columns)
+    appendSelectedCsvRows(csvRows, 'AWS Security Hub Findings', reportData.securityHub?.records || [], config.columns)
+    appendSelectedCsvRows(csvRows, 'AWS CloudTrail Events', reportData.cloudtrail?.records || [], config.columns)
+    appendSelectedCsvRows(csvRows, 'Entra ID Users', reportData.entraUsers?.records || [], config.columns)
+    return createCsvResult(csvRows)
+  }
 
   // Config resources
   if (reportData.config) {
@@ -522,15 +546,29 @@ async function generateCSVDatasetReport(
     csvRows.push('')
   }
 
-  const csvContent = csvRows.join('\n')
-  const buffer = Buffer.from(csvContent, 'utf-8')
-  const timestamp = new Date().toISOString().split('T')[0]
-  const filename = `dataset-report-${timestamp}.csv`
+  return createCsvResult(csvRows)
+}
 
+function appendSelectedCsvRows(csvRows: string[], title: string, records: object[], columns: string[]): void {
+  if (records.length === 0) return
+  const flattened = records.map(record => flattenNestedData(record as Record<string, any>))
+  const available = columns.filter(key => flattened.some(record => record[key] !== undefined))
+  if (available.length === 0) return
+  csvRows.push(`=== ${title} ===`, available.map(csvEscape).join(','))
+  for (const record of flattened) csvRows.push(available.map(key => csvEscape(record[key])).join(','))
+  csvRows.push('')
+}
+
+function csvEscape(value: unknown): string {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`
+}
+
+function createCsvResult(csvRows: string[]) {
+  const timestamp = new Date().toISOString().split('T')[0]
   return {
-    success: true,
-    buffer,
-    filename,
+    success: true as const,
+    buffer: Buffer.from(csvRows.join('\n'), 'utf-8'),
+    filename: `dataset-report-${timestamp}.csv`,
     mimeType: 'text/csv'
   }
 }
@@ -540,7 +578,7 @@ async function generateCSVDatasetReport(
  */
 async function generateJSONDatasetReport(
   reportData: DatasetReportData,
-  config: DatasetReportConfig
+  _config: DatasetReportConfig
 ): Promise<{
   success: boolean
   buffer: Buffer
@@ -549,7 +587,10 @@ async function generateJSONDatasetReport(
 }> {
   logger.info('[Dataset Report] Generating JSON')
 
-  const jsonContent = JSON.stringify(reportData, null, 2)
+  const outputData = config.columns?.length
+    ? projectDatasetColumns(reportData, config.columns)
+    : reportData
+  const jsonContent = JSON.stringify(outputData, null, 2)
   const buffer = Buffer.from(jsonContent, 'utf-8')
   const timestamp = new Date().toISOString().split('T')[0]
   const filename = `dataset-report-${timestamp}.json`
@@ -560,6 +601,20 @@ async function generateJSONDatasetReport(
     filename,
     mimeType: 'application/json'
   }
+}
+
+function projectDatasetColumns(reportData: DatasetReportData, columns: string[]): DatasetReportData {
+  const projected = structuredClone(reportData)
+  const project = (records: object[]) => records.map(record => {
+    const flat = flattenNestedData(record as Record<string, any>)
+    return Object.fromEntries(columns.filter(key => flat[key] !== undefined).map(key => [key, flat[key]]))
+  })
+
+  if (projected.config) projected.config.records = project(projected.config.records) as any
+  if (projected.securityHub) projected.securityHub.records = project(projected.securityHub.records) as any
+  if (projected.cloudtrail) projected.cloudtrail.records = project(projected.cloudtrail.records) as any
+  if (projected.entraUsers) projected.entraUsers.records = project(projected.entraUsers.records) as any
+  return projected
 }
 
 /**

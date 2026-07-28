@@ -10,10 +10,7 @@
  */
 
 import type {
-  ConfigResourceRecord,
-  SecurityHubFindingRecord,
-  CloudTrailEventRecord,
-  DatasetColumnConfig
+  ConfigResourceRecord
 } from '../../shared/types/dataset-reports'
 
 /**
@@ -254,7 +251,7 @@ function getEntraUsersSchema(): AttributeSchema[] {
  */
 function extractKeysFromRecords(
   records: Record<string, any>[],
-  datasetType: DatasetSchemaType
+  _datasetType: DatasetSchemaType
 ): Set<string> {
   const keys = new Set<string>()
 
@@ -262,7 +259,7 @@ function extractKeysFromRecords(
   const sampleSize = Math.min(records.length, 10)
 
   for (let i = 0; i < sampleSize; i++) {
-    const flatRecord = flattenNestedData(records[i], MAX_FLATTEN_DEPTH)
+    const flatRecord = flattenNestedData(records[i]!, MAX_FLATTEN_DEPTH)
     for (const key of Object.keys(flatRecord)) {
       // Skip internal/private keys
       if (!key.startsWith('_') && !key.startsWith('$')) {
@@ -396,7 +393,7 @@ function estimateColumnWidth(key: string, type: 'string' | 'number' | 'date' | '
  */
 export function getResourceTypeSchema(
   resourceType: string,
-  sampleRecords: ConfigResourceRecord[]
+  _sampleRecords: ConfigResourceRecord[]
 ): AttributeSchema[] {
   const baseSchema = getConfigSchema()
 

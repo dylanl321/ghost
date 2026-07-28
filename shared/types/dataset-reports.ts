@@ -168,6 +168,8 @@ export interface CloudTrailDatasetFilters {
  * Entra ID (Azure AD) user filter options
  */
 export interface EntraUsersDatasetFilters {
+  /** Activity state. Prefer this over the legacy activeOnly flag. */
+  activityStatus?: 'all' | 'active' | 'inactive'
   /**
    * Filter by specific role names
    */
@@ -257,6 +259,9 @@ export interface DatasetReportConfig {
    */
   enableAI?: boolean
 
+  /** Optional export column keys selected by the user. */
+  columns?: string[]
+
   /**
    * Time range for dataset queries
    * Some datasets (CloudTrail, Security Hub) are time-based
@@ -290,6 +295,7 @@ export interface ConfigResourceRecord {
   configurationItemCaptureTime: string
   tags?: Record<string, string>
   arn?: string
+  configuration?: Record<string, any>
 }
 
 /**

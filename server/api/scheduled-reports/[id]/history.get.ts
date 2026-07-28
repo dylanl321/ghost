@@ -4,7 +4,7 @@
  */
 
 import { getReport, getExecutionHistory } from '../../../utils/scheduled-reports'
-import { isUserAdmin } from '../../../utils/user-roles'
+import { getUserEmail, isUserAdmin } from '../../../utils/user-roles'
 import { logger } from '../../../utils/logger'
 
 export default defineEventHandler(async (event) => {
@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    const userEmail = user.claims?.email || user.claims?.preferred_username
+    const userEmail = getUserEmail(event)
 
     // Get report ID from route params
     const reportId = getRouterParam(event, 'id')
@@ -39,7 +39,9 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Allow all authenticated users to view execution history
+    if (!userEmail || (report.createdBy !== userEmail && !await isUserAdmin(event))) {
+      throw createError({ statusCode: 403, message: 'Access denied' })
+    }
 
     // Get query parameters
     const query = getQuery(event)

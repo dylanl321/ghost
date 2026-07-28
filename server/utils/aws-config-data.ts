@@ -7,9 +7,7 @@
 
 import {
   SelectAggregateResourceConfigCommand,
-  DescribeComplianceByResourceCommand,
-  DescribeComplianceByConfigRuleCommand,
-  ListDiscoveredResourcesCommand,
+  DescribeAggregateComplianceByConfigRulesCommand,
   GetAggregateComplianceDetailsByConfigRuleCommand,
   type ConfigServiceClient,
 } from '@aws-sdk/client-config-service'
@@ -21,7 +19,8 @@ import type {
   ConfigResourceRecord,
   ConfigDatasetFilters,
 } from '../../shared/types/dataset-reports'
-import type { AWSConfigResourceType, ComplianceStatus } from '../../shared/types/aws-config'
+
+type ConfigComplianceStatus = 'COMPLIANT' | 'NON_COMPLIANT' | 'NOT_APPLICABLE' | 'INSUFFICIENT_DATA'
 
 // Use centralized getAggregatorName from config-service.ts
 const getConfigAggregatorName = getAggregatorName
@@ -55,7 +54,7 @@ async function fetchResourcesViaQuery(
   const aggregatorName = getConfigAggregatorName(environment)
 
   // Build SQL-like query
-  let queryParts: string[] = [
+  const queryParts: string[] = [
     'SELECT',
     '  accountId,',
     '  awsRegion,',
@@ -73,21 +72,21 @@ async function fetchResourcesViaQuery(
 
   // Filter by accounts if specified
   if (accounts.length > 0) {
-    const accountList = accounts.map(id => `'${id}'`).join(', ')
+    const accountList = accounts.map(id => `'${id.replace(/'/g, "''")}'`).join(', ')
     queryParts.push(`${whereStarted ? 'AND' : 'WHERE'} accountId IN (${accountList})`)
     whereStarted = true
   }
 
   // Filter by resource types
   if (filters.resourceTypes && filters.resourceTypes.length > 0) {
-    const typeList = filters.resourceTypes.map(t => `'${t}'`).join(', ')
+    const typeList = filters.resourceTypes.map(t => `'${t.replace(/'/g, "''")}'`).join(', ')
     queryParts.push(`${whereStarted ? 'AND' : 'WHERE'} resourceType IN (${typeList})`)
     whereStarted = true
   }
 
   // Filter by regions
   if (filters.regions && filters.regions.length > 0) {
-    const regionList = filters.regions.map(r => `'${r}'`).join(', ')
+    const regionList = filters.regions.map(r => `'${r.replace(/'/g, "''")}'`).join(', ')
     queryParts.push(`${whereStarted ? 'AND' : 'WHERE'} awsRegion IN (${regionList})`)
     whereStarted = true
   }
@@ -132,11 +131,13 @@ async function fetchResourcesViaQuery(
 
             // Parse configuration to extract ARN if available
             let arn: string | undefined
+            let configuration: Record<string, any> | undefined
             if (resource.configuration) {
               try {
                 const config = typeof resource.configuration === 'string'
                   ? JSON.parse(resource.configuration)
                   : resource.configuration
+                configuration = config
                 arn = config.arn || config.ARN
               } catch {
                 // Ignore parsing errors
@@ -153,6 +154,7 @@ async function fetchResourcesViaQuery(
               configurationItemCaptureTime: resource.configurationItemCaptureTime,
               tags,
               arn,
+              configuration,
             })
           } catch (error) {
             logger.warn('[Config] Failed to parse resource result', { error, resultStr })
@@ -195,9 +197,9 @@ async function fetchComplianceDetails(
   filters: ConfigDatasetFilters,
   region: string = 'us-east-1',
   environment: 'commercial' | 'govcloud' = 'govcloud'
-): Promise<Map<string, { status: ComplianceStatus; rules: string[] }>> {
+): Promise<Map<string, { status: ConfigComplianceStatus; rules: string[] }>> {
   const client = await getConfigClient(undefined, region)
-  const complianceMap = new Map<string, { status: ComplianceStatus; rules: string[] }>()
+  const complianceMap = new Map<string, { status: ConfigComplianceStatus; rules: string[] }>()
   const aggregatorName = getConfigAggregatorName(environment)
 
   // If complianceOnly filter is set, we need compliance data
@@ -207,22 +209,60 @@ async function fetchComplianceDetails(
   }
 
   try {
-    // Use aggregator to get compliance across all accounts
-    const command = new GetAggregateComplianceDetailsByConfigRuleCommand({
-      ConfigurationAggregatorName: aggregatorName,
-      ConfigRuleName: undefined,  // Get all rules
-      AccountId: accounts.length > 0 ? accounts[0] : undefined,
-      AwsRegion: region,
-      ComplianceType: filters.complianceStatus?.[0],  // Filter by compliance status if specified
-      Limit: 100,
-    })
+    const ruleScopes: Array<{ ruleName: string; accountId: string; awsRegion: string }> = []
+    let nextToken: string | undefined
 
-    // Note: This is a simplified version. In production, you'd need to:
-    // 1. Iterate through all config rules
-    // 2. Fetch compliance for each rule
-    // 3. Build a comprehensive map
-    // For now, we'll log a warning and continue
-    logger.warn('[Config] Compliance enrichment not fully implemented - returning basic data')
+    do {
+      const response = await client.send(new DescribeAggregateComplianceByConfigRulesCommand({
+        ConfigurationAggregatorName: aggregatorName,
+        Filters: filters.complianceStatus?.length === 1
+          ? { ComplianceType: filters.complianceStatus[0] }
+          : undefined,
+        Limit: 100,
+        NextToken: nextToken
+      }))
+
+      for (const rule of response.AggregateComplianceByConfigRules || []) {
+        if (!rule.ConfigRuleName || !rule.AccountId || !rule.AwsRegion) continue
+        if (accounts.length > 0 && !accounts.includes(rule.AccountId)) continue
+        if (filters.regions?.length && !filters.regions.includes(rule.AwsRegion)) continue
+        ruleScopes.push({ ruleName: rule.ConfigRuleName, accountId: rule.AccountId, awsRegion: rule.AwsRegion })
+      }
+      nextToken = response.NextToken
+    } while (nextToken)
+
+    for (let offset = 0; offset < ruleScopes.length; offset += 10) {
+      await Promise.all(ruleScopes.slice(offset, offset + 10).map(async scope => {
+        let detailToken: string | undefined
+        do {
+          const response = await client.send(new GetAggregateComplianceDetailsByConfigRuleCommand({
+            ConfigurationAggregatorName: aggregatorName,
+            ConfigRuleName: scope.ruleName,
+            AccountId: scope.accountId,
+            AwsRegion: scope.awsRegion,
+            ComplianceType: filters.complianceStatus?.length === 1 ? filters.complianceStatus[0] : undefined,
+            Limit: 100,
+            NextToken: detailToken
+          }))
+
+          for (const result of response.AggregateEvaluationResults || []) {
+            const qualifier = result.EvaluationResultIdentifier?.EvaluationResultQualifier
+            const status = result.ComplianceType as ConfigComplianceStatus | undefined
+            if (!qualifier?.ResourceId || !qualifier.ResourceType || !status) continue
+
+            const key = `${scope.accountId}:${qualifier.ResourceType}:${qualifier.ResourceId}`
+            const existing = complianceMap.get(key)
+            if (!existing) {
+              complianceMap.set(key, { status, rules: [scope.ruleName] })
+            } else {
+              existing.rules.push(scope.ruleName)
+              if (status === 'NON_COMPLIANT') existing.status = status
+            }
+          }
+          detailToken = response.NextToken
+        } while (detailToken)
+      }))
+    }
 
   } catch (error) {
     logger.error('[Config] Failed to fetch compliance details', { error })
@@ -253,6 +293,9 @@ export async function getConfigResources(
   try {
     // Get all accounts for name mapping
     const allAccounts = await getAllAccountsUnified()
+    const accountsWithIds = allAccounts.filter(
+      (account): account is typeof account & { accountId: string } => Boolean(account.accountId)
+    )
 
     // Determine the appropriate environment based on configuration
     const environment = (process.env.AWS_CONFIG_ENVIRONMENT as 'commercial' | 'govcloud') || 'govcloud'
@@ -260,10 +303,10 @@ export async function getConfigResources(
 
     // Build account maps for both Commercial and GovCloud IDs
     const commercialAccountMap = new Map(
-      allAccounts.map(acc => [acc.accountId, acc.accountName || acc.projectName || acc.accountId])
+      accountsWithIds.map(acc => [acc.accountId, acc.accountName || acc.projectName || acc.accountId])
     )
     const govCloudAccountMap = new Map(
-      allAccounts
+      accountsWithIds
         .filter(acc => acc.awsGovCloudAccountID)
         .map(acc => [acc.awsGovCloudAccountID!, acc.accountName || acc.projectName || acc.accountId])
     )
@@ -277,7 +320,7 @@ export async function getConfigResources(
           .filter(acc => acc.awsGovCloudAccountID)
           .map(acc => acc.awsGovCloudAccountID!)
       } else {
-        targetAccounts = allAccounts.map(acc => acc.accountId)
+        targetAccounts = accountsWithIds.map(acc => acc.accountId)
       }
     } else {
       // User selected specific accounts (by commercial ID)
@@ -317,7 +360,7 @@ export async function getConfigResources(
     // Enrich resources with account names and compliance
     const enrichedResources = resources.map(resource => {
       const accountName = accountMap.get(resource.accountId) || resource.accountId
-      const compliance = complianceMap.get(`${resource.accountId}:${resource.resourceId}`)
+      const compliance = complianceMap.get(`${resource.accountId}:${resource.resourceType}:${resource.resourceId}`)
 
       return {
         ...resource,
@@ -340,6 +383,10 @@ export async function getConfigResources(
       filteredResources = filteredResources.filter(r => r.complianceStatus !== undefined)
     }
 
+    if (filters.quickFilters) {
+      filteredResources = filteredResources.filter(resource => matchesQuickFilters(resource, filters.quickFilters!))
+    }
+
     const duration = Date.now() - startTime
     logger.info('[Config] Resources fetched successfully', {
       totalResources: filteredResources.length,
@@ -353,6 +400,41 @@ export async function getConfigResources(
     logger.error('[Config] Failed to fetch resources', { error })
     throw new Error(`Failed to fetch Config resources: ${(error instanceof Error ? error.message : String(error))}`)
   }
+}
+
+function matchesQuickFilters(
+  resource: ConfigResourceRecord,
+  filters: NonNullable<ConfigDatasetFilters['quickFilters']>
+): boolean {
+  const config = resource.configuration || {}
+  const serialized = JSON.stringify(config).toLowerCase()
+
+  if (filters.publicIpOnly) {
+    const hasPublicIp = Boolean(config.publicIpAddress || config.publicIp) ||
+      /"publicip"\s*:\s*"(?!null|none|)\d{1,3}(?:\.\d{1,3}){3}"/i.test(serialized)
+    if (!hasPublicIp) return false
+  }
+
+  if (filters.publicAccessEnabled) {
+    const block = config.publicAccessBlockConfiguration || config.PublicAccessBlockConfiguration
+    const fullyBlocked = block && ['blockPublicAcls', 'ignorePublicAcls', 'blockPublicPolicy', 'restrictPublicBuckets']
+      .every(key => block[key] === true)
+    if (fullyBlocked || (!block && !serialized.includes('public'))) return false
+  }
+
+  if (filters.openToInternet && !serialized.includes('0.0.0.0/0') && !serialized.includes('::/0')) {
+    return false
+  }
+
+  if (filters.unencryptedOnly && config.encrypted !== false && config.storageEncrypted !== false) {
+    return false
+  }
+
+  if (filters.noMfaOnly && config.mfaActive !== false && config.mfaEnabled !== false) {
+    return false
+  }
+
+  return true
 }
 
 /**

@@ -380,7 +380,7 @@
                               </td>
 
                               <td class="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
-                                {{ formatDateTime(row.timestamp) }}
+                                {{ formatDateTime(getRowTimestamp(row)) }}
                               </td>
                               <td class="px-4 py-3">
                                 <UButton
@@ -720,7 +720,8 @@
         accounts: selectedAccounts,
         datasets: queryBuilder.datasets,
         format: outputFormat,
-        enableAI: enableAI
+        enableAI: enableAI,
+        columns: selectedExportColumns.length > 0 ? selectedExportColumns : undefined
       }"
     />
 
@@ -869,11 +870,11 @@
           </div>
 
           <!-- Resource-specific attributes -->
-          <div v-if="selectedResourceForDetails.resourceAttributes && Object.keys(selectedResourceForDetails.resourceAttributes).length > 0" class="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
+          <div class="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
             <h4 class="text-sm font-semibold text-white mb-3">Resource Attributes</h4>
             <div class="grid grid-cols-2 gap-3">
               <div
-                v-for="(value, key) in selectedResourceForDetails.resourceAttributes"
+                v-for="(value, key) in getDetailAttributes(selectedResourceForDetails)"
                 :key="key"
                 class="flex flex-col"
               >
@@ -886,7 +887,7 @@
           <!-- Full configuration (collapsible) -->
           <UAccordion :items="[{ label: 'Full Configuration (JSON)', slot: 'config', defaultOpen: false }]">
             <template #config>
-              <pre class="bg-gray-950 rounded p-4 text-xs text-gray-300 overflow-auto max-h-96">{{ JSON.stringify(selectedResourceForDetails.configuration, null, 2) }}</pre>
+              <pre class="bg-gray-950 rounded p-4 text-xs text-gray-300 overflow-auto max-h-96">{{ JSON.stringify(selectedResourceForDetails, null, 2) }}</pre>
             </template>
           </UAccordion>
         </div>
@@ -937,7 +938,7 @@ import ReportHistory from '../../components/reports/ReportHistory.vue'
 
 const logger = createLogger('Datasets')
 
-const { fetchReports, reports, loading } = useDatasetReports()
+const { fetchReports, reports } = useDatasetReports()
 const toast = useToast()
 
 // Tabs
@@ -1014,7 +1015,7 @@ const queryBuilder = ref({
 // Preview State
 const previewLoading = ref(false)
 const previewData = ref<any[]>([])
-const previewLimit = ref(25)
+const previewSchemas = ref<Record<string, Array<{ key: string; label: string; type?: string; category?: string }>>>({})
 const previewRowCount = ref(0)
 
 // Export State
@@ -1185,20 +1186,6 @@ function toggleDataset(key: string) {
   }
 }
 
-function getDatasetColor(dataset: string) {
-  const colors: Record<string, string> = {
-    'Config': 'blue',
-    'SecurityHub': 'red',
-    'CloudTrail': 'green'
-  }
-  return colors[dataset] || 'gray'
-}
-
-// Get preview rows for a specific dataset
-function getDatasetPreviewRows(dataset: string) {
-  return previewData.value.filter((row: any) => row.dataset === dataset)
-}
-
 // Progressive flow actions
 function adjustFilters() {
   workflowStage.value = 1
@@ -1229,21 +1216,12 @@ function handleQuickExport() {
 }
 
 function openScheduleModal() {
-  selectedReport.value = null
+  selectedReport.value = buildScheduleDraft()
   showModal.value = true
 }
 
 function quickSchedule() {
   // Validate query is configured
-  if (selectedAccounts.value.length === 0) {
-    toast.add({
-      title: 'No accounts selected',
-      description: 'Please select at least one account',
-      color: 'orange'
-    })
-    return
-  }
-
   if (!hasAnyDatasetSelected.value) {
     toast.add({
       title: 'No datasets selected',
@@ -1267,25 +1245,7 @@ function quickSchedule() {
     })
 
   // Pre-populate modal with current configuration
-  selectedReport.value = {
-    reportName: `${enabledDatasetNames.join(' + ')} Report`,
-    reportType: 'dataset',
-    config: {
-      accounts: selectedAccounts.value,
-      datasets: queryBuilder.value.datasets,
-      format: outputFormat.value,
-      enableAI: enableAI.value
-    } as any,
-    schedule: {
-      frequency: 'weekly',
-      dayOfWeek: 1,
-      hour: 9,
-      minute: 0,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York'
-    },
-    recipients: [],
-    status: 'active'
-  } as any
+  selectedReport.value = buildScheduleDraft(`${enabledDatasetNames.join(' + ')} Report`)
 
   // Open schedule modal
   showModal.value = true
@@ -1295,6 +1255,34 @@ function quickSchedule() {
     description: 'Configure schedule and recipients to save',
     color: 'blue'
   })
+}
+
+function buildScheduleDraft(reportName = 'Dataset Report'): ScheduledReport {
+  return {
+    reportId: '',
+    reportName,
+    reportType: 'dataset',
+    reportConfig: {
+      accounts: selectedAccounts.value,
+      datasets: queryBuilder.value.datasets,
+      format: outputFormat.value,
+      enableAI: enableAI.value,
+      columns: selectedExportColumns.value.length > 0 ? selectedExportColumns.value : undefined
+    } as any,
+    schedule: {
+      frequency: 'weekly',
+      dayOfWeek: 1,
+      time: '09:00',
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York'
+    },
+    recipients: [],
+    emailTemplate: {
+      subject: 'AWS Dataset Report - {{reportName}}',
+      body: '',
+      isCustom: false
+    },
+    status: 'active'
+  } as any
 }
 
 function openCreateModal() {
@@ -1419,13 +1407,16 @@ async function handleRunNow() {
         previewLimit: number
         estimatedSize: number
         query: any
+        datasets: Record<string, { attributeSchema: Array<{ key: string; label: string; type?: string; category?: string }> } | null>
+        errors: Record<string, string>
       }
     }>('/api/dataset-reports/preview', {
       method: 'POST',
       body: {
         accountIds: selectedAccounts.value,
         reportConfig: {
-          // format: outputFormat.value, // Moved to export
+          accounts: selectedAccounts.value,
+          format: outputFormat.value,
           enableAI: enableAI.value,
           datasets: queryBuilder.value.datasets
         }
@@ -1435,6 +1426,20 @@ async function handleRunNow() {
     if (response.success) {
       previewData.value = response.data.previewData
       previewRowCount.value = response.data.totalRecords
+      previewSchemas.value = {
+        Config: response.data.datasets.config?.attributeSchema || [],
+        SecurityHub: response.data.datasets.securityHub?.attributeSchema || [],
+        CloudTrail: response.data.datasets.cloudtrail?.attributeSchema || [],
+        EntraUsers: response.data.datasets.entraUsers?.attributeSchema || []
+      }
+      const failures = Object.entries(response.data.errors || {})
+      if (failures.length > 0) {
+        toast.add({
+          title: 'Some datasets failed',
+          description: failures.map(([dataset, message]) => `${dataset}: ${message}`).join('; '),
+          color: 'orange'
+        })
+      }
 
       // Auto-collapse accordion after successful preview to focus on results
       openAccordionIndex.value = -1
@@ -1452,6 +1457,7 @@ async function handleRunNow() {
     })
     // Show error to user
     previewData.value = []
+    previewSchemas.value = {}
     previewRowCount.value = 0
   } finally {
     previewLoading.value = false
@@ -1463,8 +1469,22 @@ function refreshPreview() {
 }
 
 function handleSaveQuery() {
-  // TODO: Implement save query functionality
-  logger.info('Saving query:', queryBuilder.value)
+  const name = window.prompt('Name this query template')?.trim()
+  if (!name) return
+
+  const saved = JSON.parse(localStorage.getItem('dataset-report-presets') || '[]') as DatasetPreset[]
+  saved.push({
+    id: `custom-${Date.now()}`,
+    name,
+    description: 'Saved dataset report query',
+    category: 'operations',
+    icon: 'i-heroicons-bookmark',
+    datasets: structuredClone(queryBuilder.value.datasets),
+    suggestedFormat: outputFormat.value as DatasetPreset['suggestedFormat'],
+    enableAI: enableAI.value
+  })
+  localStorage.setItem('dataset-report-presets', JSON.stringify(saved))
+  toast.add({ title: 'Query saved', description: `${name} is available in Presets`, color: 'green' })
 }
 
 async function handleExport(format: string) {
@@ -1500,7 +1520,8 @@ async function handleExport(format: string) {
           accounts: selectedAccounts.value,
           datasets: queryBuilder.value.datasets,
           format: format,
-          enableAI: enableAI.value
+          enableAI: enableAI.value,
+          columns: selectedExportColumns.value.length > 0 ? selectedExportColumns.value : undefined
         }
       })
     })
@@ -1610,22 +1631,13 @@ function getFilteredDatasetRows(dataset: string) {
 
 // Get columns for the currently displayed resource type
 function getCurrentColumns(dataset: string) {
-  const rows = getFilteredDatasetRows(dataset)
-  if (rows.length === 0) return []
-
-  // If we have schema information, use it
-  const firstRowWithSchema = rows.find((row: any) => row.attributeSchema && row.attributeSchema.length > 0)
-  if (firstRowWithSchema) {
-    return firstRowWithSchema.attributeSchema
-  }
-
-  // Fallback: no schema available
-  return []
+  const fixedColumns = new Set(['accountId', 'accountName', 'region'])
+  return (previewSchemas.value[dataset] || []).filter(column => !fixedColumns.has(column.key))
 }
 
 // Format column value using the schema's format function if defined
 function formatColumnValue(row: any, column: any) {
-  const value = row.resourceAttributes?.[column.key]
+  const value = row[column.key]
 
   if (value === undefined || value === null) return '-'
 
@@ -1650,6 +1662,15 @@ function formatColumnValue(row: any, column: any) {
 function viewResourceDetails(row: any) {
   selectedResourceForDetails.value = row
   showResourceDetailsModal.value = true
+}
+
+function getRowTimestamp(row: any): string | undefined {
+  return row.eventTime || row.updatedAt || row.configurationItemCaptureTime || row.lastSignIn
+}
+
+function getDetailAttributes(row: any): Record<string, any> {
+  const excluded = new Set(['dataset', 'accountId', 'accountName', 'region'])
+  return Object.fromEntries(Object.entries(row).filter(([key]) => !excluded.has(key)))
 }
 
 // Format attribute name for display
@@ -1709,17 +1730,15 @@ function buildAvailableColumns() {
     columnsMap.set(col.key, col)
   }
 
-  // Extract dynamic columns from preview data
-  for (const row of previewData.value) {
-    if (row.attributeSchema && Array.isArray(row.attributeSchema)) {
-      for (const attr of row.attributeSchema) {
-        if (!columnsMap.has(attr.key)) {
-          columnsMap.set(attr.key, {
-            key: attr.key,
-            label: attr.label || attr.key,
-            category: attr.category || 'attribute'
-          })
-        }
+  // Extract dynamic columns from the schemas returned by the preview API
+  for (const schema of Object.values(previewSchemas.value)) {
+    for (const attr of schema) {
+      if (!columnsMap.has(attr.key)) {
+        columnsMap.set(attr.key, {
+          key: attr.key,
+          label: attr.label || attr.key,
+          category: attr.category || 'attribute'
+        })
       }
     }
   }

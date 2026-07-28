@@ -4,7 +4,7 @@
  * Allows users to manually execute their dataset reports
  */
 
-import { getReport } from '../../../utils/scheduled-reports'
+import { requireDatasetReportAccess } from '../../../utils/dataset-report-access'
 import { executeScheduledReport } from '../../../utils/report-scheduler'
 import { logger } from '../../../utils/logger'
 
@@ -19,22 +19,7 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Get the report
-    const report = await getReport(reportId)
-    if (!report) {
-      throw createError({
-        statusCode: 404,
-        statusMessage: 'Report not found'
-      })
-    }
-
-    // Verify this is a dataset report
-    if (report.reportType !== 'dataset') {
-      throw createError({
-        statusCode: 400,
-        statusMessage: 'This endpoint only supports dataset reports'
-      })
-    }
+    const report = await requireDatasetReportAccess(event, reportId)
 
     // Execute the report immediately
     logger.info(`[User] Re-running dataset report: ${report.reportName} (${reportId})`)

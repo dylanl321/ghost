@@ -137,6 +137,7 @@ export interface ReportExecution {
 export interface CreateReportRequest {
   reportName: string
   description?: string
+  reportType?: ReportType
   reportConfig: ReportConfig
   schedule: ScheduleConfig
   recipients: string[]

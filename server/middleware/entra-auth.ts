@@ -32,7 +32,10 @@ function requiresAuthentication(url: string): boolean {
     '/api/_content',      // Nuxt content API
     '/api/_auth',         // OIDC authentication endpoints
     '/api/_nuxt_icon',    // Nuxt Icon API
-    '/api/chat/threads/shared/' // Public read-only chat shares
+    '/api/chat/threads/shared/', // Public read-only chat shares
+    '/api/shortlinks/',
+    '/api/reports/download/',
+    '/api/dataset-reports/download/'
   ]
 
   // Check if URL starts with any public endpoint

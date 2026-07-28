@@ -24,7 +24,6 @@ import {
   StartQueryExecutionCommand,
   GetQueryExecutionCommand,
   GetQueryResultsCommand,
-  type AthenaClient,
 } from '@aws-sdk/client-athena'
 
 /**
@@ -54,7 +53,7 @@ function normalizeSecurityLakeEvent(row: any, accountName: string): CloudTrailEv
       // Only try to parse if it's a string
       try {
         unmappedData = JSON.parse(row.unmapped)
-      } catch (e) {
+      } catch {
         // Not valid JSON, might be empty or malformed
       }
     }
@@ -62,7 +61,7 @@ function normalizeSecurityLakeEvent(row: any, accountName: string): CloudTrailEv
 
   // Extract data - prioritize OCSF fields over unmapped
   const eventName = row.event_name || row.activity_name || unmappedData.eventName || ''
-  const eventType = row.class_name || unmappedData.eventType || 'API Activity'
+  const eventType = unmappedData.eventType || row.class_name || 'API Activity'
   const eventSource = row.service_name || unmappedData.eventSource || ''
 
   // Determine if event is read-only based on operation name
@@ -114,31 +113,32 @@ function buildWhereClause(
   endEpoch: number
 ): string {
   const conditions: string[] = []
+  const quote = (value: string) => `'${value.replace(/'/g, "''")}'`
 
   // Time range (required)
   conditions.push(`time BETWEEN ${startEpoch} AND ${endEpoch}`)
 
   // Account filter
   if (accountIds.length > 0) {
-    const accountList = accountIds.map(id => `'${id}'`).join(', ')
+    const accountList = accountIds.map(quote).join(', ')
     conditions.push(`accountid IN (${accountList})`)
   }
 
   // Regions filter
   if (filters.regions && filters.regions.length > 0) {
-    const regionList = filters.regions.map(r => `'${r}'`).join(', ')
+    const regionList = filters.regions.map(quote).join(', ')
     conditions.push(`cloud.region IN (${regionList})`)
   }
 
   // Event names filter (api.operation)
   if (filters.eventNames && filters.eventNames.length > 0) {
-    const eventList = filters.eventNames.map(name => `'${name}'`).join(', ')
+    const eventList = filters.eventNames.map(quote).join(', ')
     conditions.push(`api.operation IN (${eventList})`)
   }
 
   // Event sources filter (api.service.name)
   if (filters.eventSources && filters.eventSources.length > 0) {
-    const sourceList = filters.eventSources.map(src => `'${src}'`).join(', ')
+    const sourceList = filters.eventSources.map(quote).join(', ')
     conditions.push(`api.service.name IN (${sourceList})`)
   }
 
@@ -387,7 +387,7 @@ async function querySecurityLakeForEvents(
       error: (error instanceof Error ? error.message : String(error)),
       stack: (error instanceof Error ? error.stack : String(error))
     })
-    // Non-fatal - return empty results
+    throw new Error(`CloudTrail query failed: ${(error instanceof Error ? error.message : String(error))}`)
   }
 
   return events
@@ -414,9 +414,12 @@ export async function getCloudTrailEvents(
     filters.lookbackDays || DEFAULT_LOOKBACK_DAYS,
     MAX_LOOKBACK_DAYS
   )
-  const endDate = new Date()
-  const startDate = new Date()
-  startDate.setDate(startDate.getDate() - lookbackDays)
+  const endDate = filters.endTime ? new Date(filters.endTime) : new Date()
+  const startDate = filters.startTime ? new Date(filters.startTime) : new Date()
+  if (!filters.startTime) startDate.setDate(startDate.getDate() - lookbackDays)
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || startDate >= endDate) {
+    throw new Error('Invalid CloudTrail time range')
+  }
 
   logger.info('[CloudTrail] Fetching events', {
     accountCount: accountIds.length || 'all',
@@ -430,13 +433,16 @@ export async function getCloudTrailEvents(
   try {
     // Get all accounts for name mapping
     const allAccounts = await getAllAccountsUnified()
+    const accountsWithIds = allAccounts.filter(
+      (account): account is typeof account & { accountId: string } => Boolean(account.accountId)
+    )
 
     // Build account maps for both Commercial and GovCloud IDs
     const commercialAccountMap = new Map(
-      allAccounts.map(acc => [acc.accountId, acc.accountName || acc.projectName || acc.accountId])
+      accountsWithIds.map(acc => [acc.accountId, acc.accountName || acc.projectName || acc.accountId])
     )
     const govCloudAccountMap = new Map(
-      allAccounts
+      accountsWithIds
         .filter(acc => acc.awsGovCloudAccountID)
         .map(acc => [acc.awsGovCloudAccountID!, acc.accountName || acc.projectName || acc.accountId])
     )
@@ -450,10 +456,10 @@ export async function getCloudTrailEvents(
           .filter(acc => acc.awsGovCloudAccountID)
           .map(acc => ({
             accountId: acc.awsGovCloudAccountID!,
-            accountName: acc.accountName || acc.projectName || acc.accountId
+            accountName: acc.accountName || acc.projectName || acc.accountId || acc.awsGovCloudAccountID!
           }))
       } else {
-        targetAccounts = allAccounts.map(acc => ({
+        targetAccounts = accountsWithIds.map(acc => ({
           accountId: acc.accountId,
           accountName: acc.accountName || acc.projectName || acc.accountId
         }))

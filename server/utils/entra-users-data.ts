@@ -67,8 +67,9 @@ export async function getEntraUsers(
           const membersResponse = await getGroupMembers(event, group.id, true)
 
           for (const member of membersResponse.members || []) {
+            const graphMember = member as any
             // Only include users (not groups or service principals)
-            if (member['@odata.type'] !== '#microsoft.graph.user') {
+            if (graphMember['@odata.type'] !== '#microsoft.graph.user') {
               continue
             }
 
@@ -82,10 +83,10 @@ export async function getEntraUsers(
               role: group.role,
               groupName: group.displayName,
               groupId: group.id,
-              lastSignIn: member.signInActivity?.lastSignInDateTime,
+              lastSignIn: graphMember.signInActivity?.lastSignInDateTime,
               jobTitle: member.jobTitle,
               department: member.department,
-              manager: member.manager?.displayName
+              manager: graphMember.manager?.displayName
             })
           }
 
@@ -112,23 +113,16 @@ export async function getEntraUsers(
       )
     }
 
-    // Active/inactive filter
-    if (filters.activeOnly !== undefined) {
-      if (filters.activeOnly) {
-        // Only users with sign-in activity
-        filteredRecords = filteredRecords.filter(r => r.lastSignIn !== undefined)
-      }
-
-      // Apply lookback period if specified
-      if (filters.lookbackDays) {
-        const cutoffDate = new Date()
-        cutoffDate.setDate(cutoffDate.getDate() - filters.lookbackDays)
-
-        filteredRecords = filteredRecords.filter(r => {
-          if (!r.lastSignIn) return !filters.activeOnly
-          return new Date(r.lastSignIn) >= cutoffDate
-        })
-      }
+    // Apply activity state against the requested lookback window.
+    const activityStatus = filters.activityStatus || (filters.activeOnly ? 'active' : 'all')
+    if (activityStatus !== 'all') {
+      const cutoffDate = new Date()
+      cutoffDate.setDate(cutoffDate.getDate() - (filters.lookbackDays || 30))
+      filteredRecords = filteredRecords.filter(record => {
+        const lastSignIn = record.lastSignIn ? new Date(record.lastSignIn) : null
+        if (activityStatus === 'active') return !!lastSignIn && lastSignIn >= cutoffDate
+        return !lastSignIn || lastSignIn < cutoffDate
+      })
     }
 
     // Department filter
@@ -186,7 +180,6 @@ export async function getEntraUsersSummary(
 
   for (const user of users) {
     // Count unique users per account
-    const key = `${user.accountId}`
     const uniqueUsersForAccount = users
       .filter(u => u.accountId === user.accountId)
       .map(u => u.userId)

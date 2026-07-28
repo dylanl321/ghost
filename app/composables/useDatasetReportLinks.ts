@@ -192,7 +192,7 @@ export function useDatasetReportLinks() {
       accountIds,
       {
         severities: ['CRITICAL', 'HIGH'],
-        workflowStatuses: ['NEW', 'NOTIFIED']
+        statuses: ['NEW', 'NOTIFIED']
       },
       { autoPreview: true }
     )
@@ -205,7 +205,7 @@ export function useDatasetReportLinks() {
     return buildConfigLink(
       accountIds,
       {
-        complianceStatuses: ['NON_COMPLIANT']
+        complianceStatus: ['NON_COMPLIANT']
       },
       { autoPreview: true }
     )
@@ -222,7 +222,9 @@ export function useDatasetReportLinks() {
     return buildCloudTrailLink(
       accountIds,
       {
-        errorCodesOnly: true
+        errorsOnly: true,
+        startTime: startDate.toISOString(),
+        endTime: endDate.toISOString()
       },
       {
         autoPreview: true,

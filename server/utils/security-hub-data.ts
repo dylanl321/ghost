@@ -7,8 +7,6 @@
 
 import {
   GetFindingsCommand,
-  DescribeStandardsCommand,
-  GetEnabledStandardsCommand,
   type SecurityHubClient,
   type AwsSecurityFinding,
 } from '@aws-sdk/client-securityhub'
@@ -276,8 +274,8 @@ async function fetchFindingsForRegion(
         environment,
         error: (error instanceof Error ? error.message : String(error)),
       })
+      throw error
     }
-    // Non-fatal - continue with other regions
   }
 
   return findings
@@ -311,17 +309,14 @@ export async function getSecurityHubFindings(
   try {
     // Get all accounts for name mapping
     const allAccounts = await getAllAccountsUnified()
+    const accountsWithIds = allAccounts.filter(
+      (account): account is typeof account & { accountId: string } => Boolean(account.accountId)
+    )
 
     // Build account maps for both Commercial and GovCloud IDs
     const commercialAccountMap = new Map(
-      allAccounts.map(acc => [acc.accountId, acc.accountName || acc.projectName || acc.accountId])
+      accountsWithIds.map(acc => [acc.accountId, acc.accountName || acc.projectName || acc.accountId])
     )
-    const govCloudAccountMap = new Map(
-      allAccounts
-        .filter(acc => acc.awsGovCloudAccountID)
-        .map(acc => [acc.awsGovCloudAccountID!, acc.accountName || acc.projectName || acc.accountId])
-    )
-
     // Determine which accounts to query - use correct IDs for the environment
     let targetAccounts: Array<{ accountId: string; accountName: string }> = []
     if (accountIds.length === 0) {
@@ -331,10 +326,10 @@ export async function getSecurityHubFindings(
           .filter(acc => acc.awsGovCloudAccountID)
           .map(acc => ({
             accountId: acc.awsGovCloudAccountID!,
-            accountName: acc.accountName || acc.projectName || acc.accountId
+            accountName: acc.accountName || acc.projectName || acc.accountId || acc.awsGovCloudAccountID!
           }))
       } else {
-        targetAccounts = allAccounts.map(acc => ({
+        targetAccounts = accountsWithIds.map(acc => ({
           accountId: acc.accountId,
           accountName: acc.accountName || acc.projectName || acc.accountId
         }))
