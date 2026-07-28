@@ -392,7 +392,7 @@
                     <td class="py-3 pr-4">
                       <div class="flex items-center gap-2">
                         <div class="w-1 h-4 rounded-full flex-shrink-0"
-                          :class="cat.ytdActual > cat.ytdBudget && cat.ytdBudget > 0 ? 'bg-red-400' : 'bg-emerald-400'"
+                          :class="cat.accounts[0]?.pendingPep ? 'bg-gray-300 dark:bg-gray-600' : cat.ytdActual > cat.ytdBudget && cat.ytdBudget > 0 ? 'bg-red-400' : 'bg-emerald-400'"
                         />
                         <button
                           class="text-left text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
@@ -487,11 +487,21 @@
                         </div>
                       </div>
                     </td>
-                    <td class="py-3 px-4 text-right tabular-nums text-blue-600 dark:text-blue-400">{{ formatCurrency(cat.name === 'GDMS Cloud' ? cat.ytdBudget + gdmsCloudAdjustment.plan : cat.ytdBudget, 0) }}</td>
+                    <td class="py-3 px-4 text-right tabular-nums">
+                      <template v-if="cat.accounts[0]?.pendingPep">
+                        <span class="inline-flex items-center gap-1">
+                          <span class="text-gray-400 dark:text-gray-500">$0</span>
+                          <UTooltip text="PEP record is being created for this account. No historical budget is available yet — budget for prior months flows into GDMS Cloud." :popper="{ placement: 'top' }">
+                            <UIcon name="i-heroicons-information-circle" class="w-3.5 h-3.5 text-amber-400 dark:text-amber-500 cursor-help" />
+                          </UTooltip>
+                        </span>
+                      </template>
+                      <span v-else class="text-blue-600 dark:text-blue-400">{{ formatCurrency(cat.name === 'GDMS Cloud' ? cat.ytdBudget + gdmsCloudAdjustment.plan : cat.ytdBudget, 0) }}</span>
+                    </td>
                     <td class="py-3 px-4 text-right tabular-nums text-orange-500 dark:text-orange-400">{{ formatCurrency(cat.name === 'GDMS Cloud' ? cat.ytdActual + gdmsCloudAdjustment.actual : cat.ytdActual, 0) }}</td>
                     <td class="py-3 px-4 text-right tabular-nums"
-                      :class="(cat.name === 'GDMS Cloud' ? cat.ytdActual + gdmsCloudAdjustment.actual : cat.ytdActual) > (cat.name === 'GDMS Cloud' ? cat.ytdBudget + gdmsCloudAdjustment.plan : cat.ytdBudget) && cat.ytdBudget > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'"
-                    >{{ formatCurrency((cat.name === 'GDMS Cloud' ? cat.ytdActual + gdmsCloudAdjustment.actual : cat.ytdActual) - (cat.name === 'GDMS Cloud' ? cat.ytdBudget + gdmsCloudAdjustment.plan : cat.ytdBudget), 0) }}</td>
+                      :class="cat.accounts[0]?.pendingPep ? 'text-gray-400 dark:text-gray-500' : (cat.name === 'GDMS Cloud' ? cat.ytdActual + gdmsCloudAdjustment.actual : cat.ytdActual) > (cat.name === 'GDMS Cloud' ? cat.ytdBudget + gdmsCloudAdjustment.plan : cat.ytdBudget) && cat.ytdBudget > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'"
+                    >{{ cat.accounts[0]?.pendingPep ? '—' : formatCurrency((cat.name === 'GDMS Cloud' ? cat.ytdActual + gdmsCloudAdjustment.actual : cat.ytdActual) - (cat.name === 'GDMS Cloud' ? cat.ytdBudget + gdmsCloudAdjustment.plan : cat.ytdBudget), 0) }}</td>
                     <td class="py-3 pl-4 align-top w-1/2">
                       <span v-if="varianceInsights[activeDept.department + ':' + cat.name]?.loading" class="inline-flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
                         <UIcon name="i-heroicons-sparkles" class="w-3.5 h-3.5 animate-pulse text-purple-400" />
@@ -537,7 +547,7 @@ definePageMeta({
 })
 
 interface MonthlyPoint { month: string; budget: number; actual: number }
-interface AccountRow { accountId: string; name: string; ytdBudget: number; ytdActual: number; ytdVariance: number; monthlyActuals: Record<string, number>; pepExpectedSpend?: number; pepMonthlyExpected?: Record<string, number> }
+interface AccountRow { accountId: string; name: string; ytdBudget: number; ytdActual: number; ytdVariance: number; monthlyActuals: Record<string, number>; pepExpectedSpend?: number; pepMonthlyExpected?: Record<string, number>; pendingPep?: boolean }
 interface CategoryRow { name: string; ytdBudget: number; ytdActual: number; ytdVariance: number; note?: string; accounts: AccountRow[] }
 interface DepartmentResult {
   department: string
