@@ -3,6 +3,7 @@ import type { Message } from '@aws-sdk/client-sqs'
 import { generateSmartLinks } from './strands-link-generator'
 import { extractFollowUpPrompts } from './bedrock-prompt-extractor'
 import { appendThreadMessage } from './chat-messages'
+import { normalizeStrandsDisambiguation } from './strands-disambiguation'
 import { getThreadById } from './chat-threads'
 import { deleteChatJobMessage, extendChatJobVisibility, releaseChatJobMessage } from './chat-job-queue'
 import { getJob, updateJob } from './strands-async-processor'
@@ -188,10 +189,7 @@ export async function processChatQueueMessage(message: Message): Promise<void> {
         responseText = event.data.response || responseText
         metadata = event.data.metadata || metadata
       } else if (event.type === 'disambiguation') {
-        disambiguation = {
-          ...(event.data.disambiguation || event.data),
-          sessionId: job.jobId
-        }
+        disambiguation = normalizeStrandsDisambiguation(event.data, job.jobId)
         currentStep = 'Waiting for account selection'
       } else if (event.type === 'error') {
         throw new Error(event.data.message || 'Agent query failed')
@@ -212,9 +210,9 @@ export async function processChatQueueMessage(message: Message): Promise<void> {
     if (disambiguation) {
       const completedAt = new Date().toISOString()
       await updateJob(jobId, {
-        status: 'error',
+        status: 'waiting_for_input',
         progress: 'Account selection required',
-        errorMessage: disambiguation.message || 'Multiple accounts match this query',
+        errorMessage: null,
         disambiguation,
         completedAt,
         heartbeatAt: completedAt
