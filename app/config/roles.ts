@@ -43,6 +43,7 @@ export const ROLES: RoleDefinition[] = [
       'forecast.clear',
       'costs.settings',
       'costs.export',
+      'costs.budget_vs_actual',
       'admin.logs',
       'admin.issues',
       'accounts.edit',
@@ -65,6 +66,7 @@ export const ROLES: RoleDefinition[] = [
       'forecast.edit',
       'costs.settings',
       'costs.export',
+      'costs.budget_vs_actual',
       'accounts.edit'
     ],
     rules: {
@@ -81,7 +83,8 @@ export const ROLES: RoleDefinition[] = [
     permissions: [
       'forecast.import',
       'forecast.edit',
-      'costs.export'
+      'costs.export',
+      'costs.budget_vs_actual'
     ],
     rules: {
       groups_exact: ['AWS-Finance-Team'],
@@ -95,6 +98,7 @@ export const ROLES: RoleDefinition[] = [
     priority: 99,
     permissions: [
       'costs.view',
+      'costs.budget_vs_actual',
       'accounts.view',
       'users.view'
     ],
@@ -120,7 +124,8 @@ export const PERMISSION_CATEGORIES = {
     permissions: {
       'costs.view': 'View cost data and reports',
       'costs.settings': 'Modify cost display settings',
-      'costs.export': 'Export cost data'
+      'costs.export': 'Export cost data',
+      'costs.budget_vs_actual': 'View Budget vs Actual by Department report'
     }
   },
   accounts: {

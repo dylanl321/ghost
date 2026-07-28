@@ -7,6 +7,12 @@ import type { H3Event } from 'h3'
 import { createError } from 'h3'
 import { getUserGroups } from './entra/graph-client'
 import { logger } from './logger'
+import {
+  ROLES,
+  evaluateUserRoles,
+  getRolePermissions,
+  type UserContext
+} from '../../app/config/roles'
 
 // In-memory cache for admin status checks (TTL: 10 minutes)
 const adminCache = new Map<string, { isAdmin: boolean, expiresAt: number }>()
@@ -117,6 +123,81 @@ export async function requireAdmin(event: H3Event): Promise<void> {
     throw createError({
       statusCode: 403,
       message: 'Admin access required'
+    })
+  }
+}
+
+/**
+ * Resolve the set of permissions for the current user by re-evaluating the
+ * shared role definitions (app/config/roles.ts) server-side.
+ *
+ * This mirrors the client-side useUserRoles() composable, but runs on the
+ * backend so API endpoints can enforce permissions independently of the
+ * client middleware (which only runs in the browser and can be bypassed).
+ *
+ * Group source is identical to isUserAdmin(): session groups when present
+ * (API-key / dev sessions), otherwise Microsoft Graph memberOf for OIDC users.
+ */
+export async function getUserPermissions(event: H3Event): Promise<Set<string>> {
+  const auth = event.context.auth
+  if (!auth || !auth.isAuthenticated || !auth.user) {
+    return new Set<string>()
+  }
+
+  // Non-production bypass: same env flag isUserAdmin honours.
+  if (process.env.ADMIN_BYPASS === 'true') {
+    logger.warn('⚠️  ADMIN_BYPASS enabled - granting all permissions')
+    const everything = ROLES.flatMap(r => r.permissions)
+    return new Set<string>(everything)
+  }
+
+  const user = auth.user
+
+  // Gather the user's group display names.
+  let groupNames: string[] = []
+  const sessionGroups: string[] = user.groups || user.claims?.groups || []
+  if (sessionGroups.length > 0) {
+    groupNames = sessionGroups
+  } else if (auth.authType === 'oidc') {
+    const userId = user.id || user.oid || user.sub ||
+                   user.claims?.id || user.claims?.oid || user.claims?.sub ||
+                   user.email || user.claims?.email
+    if (userId) {
+      try {
+        const groups = await getUserGroups(event, userId)
+        groupNames = groups.map(g => g.displayName).filter(Boolean)
+      } catch (error) {
+        logger.error('Failed to fetch user groups for permission check:', error)
+        // Fail closed - no groups means only default (viewer) permissions.
+      }
+    }
+  }
+
+  const context: UserContext = {
+    userPrincipalName: user.email || user.claims?.email || user.claims?.preferred_username || '',
+    displayName: user.displayName || user.claims?.name,
+    jobTitle: user.claims?.jobTitle,
+    department: user.department || user.claims?.department,
+    groups: groupNames,
+    claims: user.claims
+  }
+
+  const roles = evaluateUserRoles(context)
+  return getRolePermissions(roles)
+}
+
+/**
+ * Require the current user to hold a specific permission (throws 403 if not).
+ * Use in API handlers to enforce access server-side, independent of the
+ * client-side route middleware.
+ */
+export async function requirePermission(event: H3Event, permission: string): Promise<void> {
+  const permissions = await getUserPermissions(event)
+
+  if (!permissions.has(permission)) {
+    throw createError({
+      statusCode: 403,
+      message: `Missing required permission: ${permission}`
     })
   }
 }

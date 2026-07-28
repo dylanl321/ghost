@@ -956,6 +956,49 @@ output "chat_threads_table_arn" {
   value       = aws_dynamodb_table.chat_threads.arn
 }
 
+# ============================================================================
+# Manual Plan Values Table (GovCloud Environment)
+# Stores manually entered monthly plan values per department + year.
+# PK: "PLAN#<DEPARTMENT>#<YEAR>" (e.g. "PLAN#DE158#2026")
+# ============================================================================
+resource "aws_dynamodb_table" "manual_plan_values" {
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-manual-plan-values-prod" : "ghost-manual-plan-values"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  server_side_encryption {
+    enabled = true
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Name        = "GHOST Manual Plan Values"
+    Environment = local.environment
+    ManagedBy   = "Terraform"
+    Service     = "GHOST"
+    Component   = "FinancialMetrics"
+  }
+}
+
+output "manual_plan_values_table_name" {
+  description = "Name of the DynamoDB table for manual plan values"
+  value       = aws_dynamodb_table.manual_plan_values.name
+}
+
+output "manual_plan_values_table_arn" {
+  description = "ARN of the DynamoDB table for manual plan values"
+  value       = aws_dynamodb_table.manual_plan_values.arn
+}
+
 output "async_chat_jobs_table_name" {
   description = "Name of the DynamoDB table for async chat jobs"
   value       = aws_dynamodb_table.async_chat_jobs.name

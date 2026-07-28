@@ -33,6 +33,7 @@ import { SSMClient } from '@aws-sdk/client-ssm'
 import { Inspector2Client } from '@aws-sdk/client-inspector2'
 import { CloudWatchLogsClient } from '@aws-sdk/client-cloudwatch-logs'
 import { ResourceGroupsTaggingAPIClient } from '@aws-sdk/client-resource-groups-tagging-api'
+import { BillingClient } from '@aws-sdk/client-billing'
 import { logger } from '../utils/logger'
 import { assumeRoleCircuitBreaker } from '../utils/credential-circuit-breaker'
 
@@ -88,7 +89,8 @@ const SERVICE_CLIENT_MAP = {
   'ssm': SSMClient,
   'inspector2': Inspector2Client,
   'cloudwatch-logs': CloudWatchLogsClient,
-  'resource-groups-tagging': ResourceGroupsTaggingAPIClient
+  'resource-groups-tagging': ResourceGroupsTaggingAPIClient,
+  'billing': BillingClient
 } as const
 
 // Cache for AWS clients with expiration tracking
@@ -713,6 +715,14 @@ export async function getResourceGroupsTaggingClient(
   accountId?: string
 ): Promise<ResourceGroupsTaggingAPIClient> {
   return getClient(environment, 'resource-groups-tagging', region, accountId)
+}
+
+export async function getBillingClient(
+  environment: AWSEnvironmentType = 'commercial',
+  region?: string,
+  accountId?: string
+): Promise<BillingClient> {
+  return getClient(environment, 'billing', region, accountId)
 }
 
 // Export validation functions for testing
