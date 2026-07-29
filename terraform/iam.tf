@@ -417,6 +417,35 @@ resource "aws_iam_role_policy" "ecs_account_notes_dynamodb" {
   })
 }
 
+# DynamoDB permissions for manual plan values (read/write)
+resource "aws_iam_role_policy" "ecs_manual_plan_values_dynamodb" {
+  provider = aws.target_deployment_account
+  name     = "${var.app_name}_manual_plan_values_dynamodb"
+  role     = aws_iam_role.ecs_task_execution_role.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "ManualPlanValuesDynamoDB"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Resource = [
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-manual-plan-values",
+          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-manual-plan-values/index/*"
+        ]
+      }
+    ]
+  })
+}
+
 # DynamoDB permissions for async chat jobs (read/write)
 resource "aws_iam_role_policy" "ecs_async_chat_jobs_dynamodb" {
   provider = aws.target_deployment_account
