@@ -1330,15 +1330,20 @@ export function useChatUI(options: UseChatUIOptions = {}) {
 
     const matchedAccount = current.matches.find(match => match.request_id === accountId)
     let selectedAccount = matchedAccount
+    const matchedAccountId = matchedAccount?.govcloud_account_id || matchedAccount?.commercial_account_id
 
-    try {
-      const response = await $fetch<{ data: { account: DisambiguationData['matches'][number] } }>('/api/strands/account/select', {
-        method: 'POST',
-        body: { sessionId: current.sessionId, requestId: accountId }
-      })
-      selectedAccount = response.data.account || matchedAccount
-    } catch (error: any) {
-      logger.warn('Upstream account selection failed; using selected match metadata', error)
+    // Structured disambiguation matches already contain the account ID needed
+    // to rerun the query. Only ask Strands to resolve legacy matches that do not.
+    if (!matchedAccountId) {
+      try {
+        const response = await $fetch<{ data: { account: DisambiguationData['matches'][number] } }>('/api/strands/account/select', {
+          method: 'POST',
+          body: { sessionId: current.sessionId, requestId: accountId }
+        })
+        selectedAccount = response.data.account || matchedAccount
+      } catch (error: any) {
+        logger.warn('Upstream account selection failed; using selected match metadata', error)
+      }
     }
 
     const selectedAccountId = selectedAccount?.govcloud_account_id || selectedAccount?.commercial_account_id ||
