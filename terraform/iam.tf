@@ -500,10 +500,9 @@ resource "aws_iam_role_policy" "ecs_chat_jobs_sqs" {
   })
 }
 
-resource "aws_iam_role_policy" "ecs_dataset_export_jobs" {
+resource "aws_iam_policy" "ecs_dataset_export_jobs" {
   provider = aws.target_deployment_account
   name     = "${var.app_name}_dataset_export_jobs"
-  role     = aws_iam_role.ecs_task_execution_role.name
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -524,6 +523,12 @@ resource "aws_iam_role_policy" "ecs_dataset_export_jobs" {
       }
     ]
   })
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_dataset_export_jobs" {
+  provider   = aws.target_deployment_account
+  role       = aws_iam_role.ecs_task_execution_role.name
+  policy_arn = aws_iam_policy.ecs_dataset_export_jobs.arn
 }
 
 # DynamoDB permissions for async metrics (read/write)
