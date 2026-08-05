@@ -1,3 +1,5 @@
+import type { CostTagCreatorType } from '../utils/cost-tag-identities'
+
 export interface AccountCostTagConfig {
   importantTags: string[]
   defaultGroupByTag?: string
@@ -13,6 +15,8 @@ export interface TagCoverageAccount {
   taggedCost: number
   untaggedCost: number
   coveragePercent: number
+  positiveTaggedCost?: number
+  positiveUntaggedCost?: number
   estimatedProformaTaggedCost?: number
   estimatedProformaUntaggedCost?: number
 }
@@ -22,12 +26,17 @@ export interface TagValueAccountCost {
   accountName?: string
   billableCost: number
   estimatedProformaCost?: number
+  rawValues: string[]
 }
 
 export interface TagValueCost {
   groupKey: string
   tagValue: string
+  displayName: string
   isUntagged: boolean
+  isPerson: boolean
+  creatorType?: CostTagCreatorType
+  rawValues: string[]
   billableCost: number
   estimatedProformaCost?: number
   accounts: TagValueAccountCost[]
@@ -36,7 +45,7 @@ export interface TagValueCost {
 export interface TagProformaEstimation {
   requested: boolean
   available: boolean
-  method: 'account-weighted-billable-distribution'
+  method: 'account-time-bucket-weighted-billable-distribution'
   unavailableAccountIds: string[]
 }
 
@@ -45,6 +54,9 @@ export interface TagCoverageData {
   accounts: TagCoverageAccount[]
   totalTaggedCost: number
   totalUntaggedCost: number
+  signedTotalCost: number
+  positiveTaggedCost: number
+  positiveUntaggedCost: number
   overallCoverage: number
   estimatedProformaTaggedCost?: number
   estimatedProformaUntaggedCost?: number

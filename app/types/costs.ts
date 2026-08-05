@@ -1,4 +1,5 @@
 import type { AWSEnclaveData } from '~~/shared/types/accounts'
+import type { CostDataset } from '~~/shared/types/cost-domain'
 
 export type DataMode = 'billable' | 'proforma'
 
@@ -78,6 +79,8 @@ export interface CostsSummaryResponse {
    */
   proforma?: CostsSummaryResponse
   billable?: CostsSummaryResponse // Billable nested data when mode=proforma
+  costDataset?: CostDataset
+  datasets?: Partial<Record<DataMode, CostDataset>>
 }
 
 // Historical API response (server/api/costs/historical.get.ts)
@@ -141,6 +144,7 @@ export interface CostsAnalysisResponse {
   }
   monthOverMonth?: Record<string, unknown>
   costTrends?: Record<string, unknown>
+  costDataset?: CostDataset
 }
 
 // Normalized dataset for charts
@@ -162,5 +166,4 @@ export interface NormalizedDataset {
   lastMonthServices?: { resultsByTime?: AwsResultsByTime[] } | null // Last month service breakdown for variance chart
   yearEndForecast?: CostsForecastResponse | null // Rest-of-year forecast
 }
-
 

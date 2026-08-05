@@ -12,7 +12,8 @@
     <div class="space-y-4">
       <div class="flex items-center gap-3 flex-wrap">
         <USelectMenu
-          v-model="selectedTag"
+          :model-value="selectedTag ?? undefined"
+          @update:model-value="selectedTag = $event ?? null"
           :options="tagSelectOptions"
           value-attribute="value"
           option-attribute="label"
@@ -72,7 +73,7 @@
         />
         <p class="text-xs" :class="proformaAvailable ? 'text-blue-700 dark:text-blue-300' : 'text-amber-700 dark:text-amber-300'">
           <template v-if="proformaAvailable">
-            Dollar amounts are <strong>account-weighted proforma estimates</strong>. Each account's billable tag distribution is applied to that account's proforma total before the results are combined.
+            Dollar amounts are <strong>account-and-month weighted proforma estimates</strong>. Each account's billable tag distribution is applied within the same AWS time bucket before results are combined.
           </template>
           <template v-else>
             A complete proforma estimate is unavailable for this scope. Exact billable costs are shown instead.
@@ -116,11 +117,34 @@
     </div>
 
     <div v-if="selectedTag">
-      <div class="flex items-center justify-between mb-2">
-        <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Cost Breakdown</h3>
-        <UButton v-if="aliasesDirty && isSingleAccount" color="blue" variant="soft" size="xs" :loading="isSavingConfig" @click="saveAliases">
-          Save Aliases
-        </UButton>
+      <div class="flex items-start justify-between gap-2 flex-wrap mb-2">
+        <div>
+          <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Cost Breakdown</h3>
+          <p v-if="isCreatedBy && createdByView === 'people'" class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            {{ peopleValues.length }} people · {{ formatCostValue(peopleDisplayCost) }} · {{ peopleShareOfAllSpend.toFixed(1) }}% of all spend
+          </p>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <UButtonGroup v-if="isCreatedBy" size="xs">
+            <UButton
+              :color="createdByView === 'people' ? 'blue' : 'gray'"
+              :variant="createdByView === 'people' ? 'solid' : 'outline'"
+              @click="createdByView = 'people'"
+            >
+              People ({{ peopleValues.length }})
+            </UButton>
+            <UButton
+              :color="createdByView === 'all' ? 'blue' : 'gray'"
+              :variant="createdByView === 'all' ? 'solid' : 'outline'"
+              @click="createdByView = 'all'"
+            >
+              All creators ({{ creatorCount }})
+            </UButton>
+          </UButtonGroup>
+          <UButton v-if="aliasesDirty && isSingleAccount" color="blue" variant="soft" size="xs" :loading="isSavingConfig" @click="saveAliases">
+            Save Aliases
+          </UButton>
+        </div>
       </div>
       <TagCostBreakdown
         ref="breakdownRef"
@@ -134,6 +158,7 @@
         :data-mode="dataMode"
         :proforma-available="proformaAvailable"
         :show-account-breakdown="!isSingleAccount"
+        :percentage-denominator="scopeDisplayTotal"
         @update:alias="handleAliasUpdate"
       />
     </div>
@@ -145,6 +170,7 @@
       :tag-key="selectedTag"
       :tag-value-aliases="currentAliases"
       :period="activePeriod"
+      :creator-view="createdByView"
     />
 
     <TagConfigManager
@@ -160,6 +186,7 @@
 import { formatCostValue } from '~/utils/cost-filters'
 import { downloadBlob } from '~/utils/export/export-utils'
 import type { AccountCostTagConfig, TagValueCost } from '~~/shared/types/cost-tags'
+import { isCreatedByTag } from '~~/shared/utils/cost-tag-identities'
 
 const props = withDefaults(defineProps<{
   selectedAccounts: string[]
@@ -207,6 +234,7 @@ const selectedTag = ref<string | null>(null)
 const showSettings = ref(false)
 const draftAliases = ref<Record<string, string>>({})
 const aliasesDirty = ref(false)
+const createdByView = ref<'people' | 'all'>('people')
 let loadingScope = false
 let scopeGeneration = 0
 
@@ -220,6 +248,17 @@ const displayTaggedCost = computed(() => showProforma.value
 const displayUntaggedCost = computed(() => showProforma.value
   ? tagCoverage.value?.estimatedProformaUntaggedCost || 0
   : tagCoverage.value?.totalUntaggedCost || 0)
+const scopeDisplayTotal = computed(() => displayTaggedCost.value + displayUntaggedCost.value)
+const isCreatedBy = computed(() => Boolean(selectedTag.value && isCreatedByTag(selectedTag.value)))
+const allTagValues = computed(() => tagCoverage.value?.values || [])
+const peopleValues = computed(() => isCreatedBy.value ? allTagValues.value.filter(value => value.isPerson) : allTagValues.value)
+const visibleTagValues = computed(() => isCreatedBy.value && createdByView.value === 'people' ? peopleValues.value : allTagValues.value)
+const creatorCount = computed(() => allTagValues.value.filter(value => !value.isUntagged).length)
+const displayCostForValue = (value: TagValueCost) => showProforma.value
+  ? value.estimatedProformaCost || 0
+  : value.billableCost
+const peopleDisplayCost = computed(() => peopleValues.value.reduce((sum, value) => sum + displayCostForValue(value), 0))
+const peopleShareOfAllSpend = computed(() => scopeDisplayTotal.value > 0 ? (peopleDisplayCost.value / scopeDisplayTotal.value) * 100 : 0)
 
 const tagSelectOptions = computed(() => {
   const important = isSingleAccount.value ? tagConfig.value?.importantTags || [] : []
@@ -235,8 +274,14 @@ const tagSelectOptions = computed(() => {
 })
 
 const breakdownData = computed(() => ({
-  groups: (tagCoverage.value?.values || []).map(value => ({
+  groups: visibleTagValues.value.map(value => ({
     groupKey: value.groupKey,
+    tagValue: value.tagValue,
+    displayName: value.displayName,
+    isUntagged: value.isUntagged,
+    isPerson: value.isPerson,
+    creatorType: value.creatorType,
+    rawValues: value.rawValues,
     billableCost: value.billableCost,
     estimatedProformaCost: value.estimatedProformaCost,
     accounts: value.accounts
@@ -334,7 +379,7 @@ async function saveAliases() {
 }
 
 function exportBreakdownCSV() {
-  const values = tagCoverage.value?.values || []
+  const values = visibleTagValues.value
   if (!values.length) return
 
   const rowMap = new Map<string, any>(
@@ -346,13 +391,32 @@ function exportBreakdownCSV() {
   }
   const lines: string[] = []
 
-  if (isSingleAccount.value) {
+  if (isCreatedBy.value && createdByView.value === 'people') {
+    lines.push(['Display Name', 'Identity', 'Billable Cost ($)', 'Estimated Proforma Cost ($)', 'Displayed Cost ($)', 'Share of All Spend (%)', 'Contributing Accounts', 'Account Names', 'Account IDs', 'Source Values'].join(','))
+    for (const value of values) {
+      const displayedCost = displayCostForValue(value)
+      const accountNames = value.accounts.map(account => account.accountName || account.accountId)
+      const accountIds = value.accounts.map(account => account.accountId)
+      lines.push([
+        esc(value.displayName),
+        esc(value.tagValue),
+        value.billableCost.toFixed(2),
+        value.estimatedProformaCost?.toFixed(2) || '',
+        displayedCost.toFixed(2),
+        (scopeDisplayTotal.value > 0 ? (displayedCost / scopeDisplayTotal.value) * 100 : 0).toFixed(2),
+        String(value.accounts.length),
+        esc(accountNames.join('; ')),
+        esc(accountIds.join('; ')),
+        String(value.rawValues.length)
+      ].join(','))
+    }
+  } else if (isSingleAccount.value) {
     lines.push(['Display Name', 'Raw Value', 'Billable Cost ($)', 'Estimated Proforma Cost ($)', 'Displayed Cost ($)', 'Percentage (%)'].join(','))
     for (const value of values) {
       const row: any = rowMap.get(value.groupKey)
       lines.push([
-        esc(row?.label || value.tagValue || 'Untagged'),
-        esc(value.tagValue),
+        esc(row?.label || value.displayName || 'Untagged'),
+        esc(value.rawValues.join('; ')),
         value.billableCost.toFixed(2),
         value.estimatedProformaCost?.toFixed(2) || '',
         (row?.cost || value.billableCost).toFixed(2),
@@ -364,8 +428,8 @@ function exportBreakdownCSV() {
     for (const value of values) appendAccountRows(lines, value, rowMap, esc)
   }
 
-  lines.push('', `# Scope: ${scopeLabel.value}`, `# Tag Key: ${selectedTag.value}`, `# Period: ${activePeriod.value}`, `# Mode: ${showProforma.value ? 'estimated proforma' : 'billable'}`, `# Exported: ${new Date().toISOString()}`)
-  if (showProforma.value) lines.push('# Note: Proforma values are account-weighted estimates and are not suitable for chargeback.')
+  lines.push('', `# Scope: ${scopeLabel.value}`, `# Tag Key: ${selectedTag.value}`, `# Creator View: ${isCreatedBy.value ? createdByView.value : 'all'}`, `# Period: ${activePeriod.value}`, `# Mode: ${showProforma.value ? 'estimated proforma' : 'billable'}`, `# Exported: ${new Date().toISOString()}`)
+  if (showProforma.value) lines.push('# Note: Proforma values are account-and-month weighted estimates and are not suitable for chargeback.')
 
   const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
   const scope = isSingleAccount.value ? accountId.value : props.selectedAccounts.length ? `${props.selectedAccounts.length}-accounts` : 'all-accounts'
@@ -385,8 +449,8 @@ function appendAccountRows(
   for (const account of value.accounts) {
     const displayedCost = showProforma.value ? account.estimatedProformaCost || 0 : account.billableCost
     lines.push([
-      esc(row?.label || value.tagValue || 'Untagged'),
-      esc(value.tagValue),
+      esc(row?.label || value.displayName || 'Untagged'),
+      esc(account.rawValues.join('; ')),
       esc(account.accountName || account.accountId),
       account.accountId,
       account.billableCost.toFixed(2),
@@ -404,5 +468,8 @@ async function refreshAll() {
 
 watch([accountScopeKey, activePeriod], () => { void loadScope() }, { immediate: true })
 watch(() => props.dataMode, () => { if (!loadingScope) void fetchAnalysis() })
-watch(selectedTag, () => { if (!loadingScope) void fetchAnalysis() })
+watch(selectedTag, () => {
+  createdByView.value = 'people'
+  if (!loadingScope) void fetchAnalysis()
+})
 </script>

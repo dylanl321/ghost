@@ -7,6 +7,7 @@ import { defineEventHandler, getQuery } from 'h3'
 import {
   GetResourcesCommand
 } from '@aws-sdk/client-resource-groups-tagging-api'
+import type { Expression } from '@aws-sdk/client-cost-explorer'
 import { getCostAndUsageWithResources } from '../../utils/cost-explorer'
 import { getResourceGroupsTaggingClient } from '../../lib/aws-client-factory'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
@@ -14,6 +15,7 @@ import { registerEndpoint } from '../../plugins/swagger'
 import { costCache, CacheTags } from '../../utils/cache-manager'
 import { validateDateParams, type RelativePeriod } from '../../utils/date-helpers'
 import { logger } from '../../utils/logger'
+import { getCostTagFilterCacheKey, parseQueryValues } from '../../utils/cost-tag-filters'
 
 registerEndpoint('/api/costs/resources', 'GET', {
   summary: 'Get resource-level cost breakdown',
@@ -23,7 +25,8 @@ registerEndpoint('/api/costs/resources', 'GET', {
     { name: 'accountId', in: 'query', required: true, schema: { type: 'string' }, description: 'AWS account ID' },
     { name: 'service', in: 'query', required: true, schema: { type: 'string' }, description: 'AWS service name (e.g., "Amazon Elastic Compute Cloud - Compute")' },
     { name: 'tagKey', in: 'query', required: true, schema: { type: 'string' }, description: 'Tag key to filter by' },
-    { name: 'tagValue', in: 'query', required: true, schema: { type: 'string' }, description: 'Tag value to filter by' },
+    { name: 'tagValue', in: 'query', required: false, schema: { type: 'string' }, description: 'Single tag value to filter by (legacy)' },
+    { name: 'tagValues', in: 'query', required: false, schema: { type: 'array', items: { type: 'string' } }, style: 'form', explode: true, description: 'One or more tag values matched with OR semantics' },
     { name: 'period', in: 'query', required: false, schema: { type: 'string', default: 'last90days' }, description: 'Relative date period' },
     { name: 'top', in: 'query', required: false, schema: { type: 'integer', default: 15 }, description: 'Number of top resources to return' },
     { $ref: '#/components/parameters/Environment' }
@@ -167,7 +170,7 @@ async function resolveResourceNames(
   }
 
   // Resolve names per region in parallel
-  const results = await Promise.allSettled(
+  const _results = await Promise.allSettled(
     Array.from(byRegion.entries()).map(async ([region, regionArns]) => {
       try {
         const client = await getResourceGroupsTaggingClient(environment, region, accountId)
@@ -206,17 +209,19 @@ export default defineEventHandler(handleAsync(async (event) => {
   const accountId = query.accountId as string
   const service = query.service as string
   const tagKey = query.tagKey as string
-  const tagValue = query.tagValue as string
+  const tagValues = parseQueryValues(query.tagValues)
+  if (tagValues.length === 0 && query.tagValue) tagValues.push(String(query.tagValue))
   const period = (query.period as string) || 'last90days'
   const top = parseInt(query.top as string) || 15
   const environment = (query.environment as 'commercial' | 'govcloud') || 'commercial'
 
-  if (!accountId || !service || !tagKey || !tagValue) {
-    return errors.badRequest(event, 'accountId, service, tagKey, and tagValue are required')
+  if (!accountId || !service || !tagKey || tagValues.length === 0) {
+    return errors.badRequest(event, 'accountId, service, tagKey, and at least one tag value are required')
   }
 
   // Check cache
-  const cacheKey = `costs:resources:${accountId}:${service}:${tagKey}:${tagValue}:${period}:${top}`
+  const tagFilterKey = getCostTagFilterCacheKey({ key: tagKey, values: tagValues })
+  const cacheKey = `costs:resources:${accountId}:${service}:${tagFilterKey}:${period}:${top}`
   const cached = await costCache.get(cacheKey)
   if (cached) return sendSuccess(event, cached, { source: 'cache' })
 
@@ -229,11 +234,11 @@ export default defineEventHandler(handleAsync(async (event) => {
   const startDate = dateRange.startDate > earliestStart ? dateRange.startDate : earliestStart
 
   // Build filter: account + service + tag
-  const filter = {
+  const filter: Expression = {
     And: [
       { Dimensions: { Key: 'LINKED_ACCOUNT', Values: [accountId] } },
       { Dimensions: { Key: 'SERVICE', Values: [service] } },
-      { Tags: { Key: tagKey, Values: [tagValue] } }
+      { Tags: { Key: tagKey, Values: tagValues } }
     ]
   }
 
@@ -247,7 +252,8 @@ export default defineEventHandler(handleAsync(async (event) => {
         metrics: ['UnblendedCost'],
         filter
       },
-      environment
+      environment,
+      environment === 'commercial' ? process.env.AWS_MASTER_ACCOUNT_ID || '205950196477' : undefined
     )
     resultsByTime = result.resultsByTime
   } catch (err: any) {
@@ -260,6 +266,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       accountId,
       service,
       tagKey,
+      tagValuesCount: tagValues.length,
       startDate,
       endDate
     })
@@ -310,6 +317,9 @@ export default defineEventHandler(handleAsync(async (event) => {
   const responseData = {
     resources,
     dateRange: { startDate, endDate },
+    billingDomain: 'billable' as const,
+    metric: 'UnblendedCost' as const,
+    exact: true,
     // Let the frontend know the range was limited
     ...(wasCapped && { notice: `Resource-level data is limited to the last 14 days (${startDate} to ${endDate})` })
   }

@@ -26,6 +26,8 @@ import { getAccountScopeCacheKey } from '../../utils/cache-keys'
 import { costCache, accountCache, CacheTags } from '../../utils/cache-manager'
 import { validateDateParams, getRecommendedGranularity, type RelativePeriod } from '../../utils/date-helpers'
 import { logger } from '../../utils/logger'
+import { getPeriodBudget } from '../../../shared/utils/budget-utils'
+import type { CostDataset } from '../../../shared/types/cost-domain'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/costs/analysis', 'GET', {
@@ -241,12 +243,14 @@ interface CostAnalysisResult {
   summary: {
     totalCost: number
     totalBudget: number
+    paceToDateBudget: number | null
     budgetVariance: number
     averageDailyCost: number
     accountsAnalyzed: number
   }
   proformaAnalysis?: any
   dataSource?: any
+  costDataset?: CostDataset
   budgetAnalysis: {
     byAccount: Array<{
       accountId: string
@@ -292,7 +296,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   // ================================
   
   // Validate date parameters - either explicit dates or relative period
-  let dateRange: { startDate: string; endDate: string; description?: string }
+  let dateRange: { startDate: string; endDate: string; description?: string; empty: boolean }
   try {
     dateRange = validateDateParams({
       startDate: query.startDate as string,
@@ -482,17 +486,10 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   // Extract cost data - different format depending on proforma flag
   let resultsByTime: any[]
-  let proformaBreakdown: any = null
 
   if (proforma && 'masterAccount' in costData) {
-    // getProformaCosts returns a different structure
-    // Use billable costs resultsByTime for the main analysis
-    resultsByTime = costData.billable.costs.resultsByTime || []
-    proformaBreakdown = {
-      masterAccount: costData.masterAccount,
-      proformaAccount: costData.proforma,
-      totals: costData.comparison.totals
-    }
+    // Analyze the requested billing domain. Billable data remains available in the breakdown.
+    resultsByTime = costData.proforma.costs.resultsByTime || []
   } else if ('resultsByTime' in costData) {
     // Standard getCostAndUsage format
     resultsByTime = costData.resultsByTime || []
@@ -501,7 +498,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
   
   // Check if we have any cost data to analyze
-  if (!resultsByTime || resultsByTime.length === 0) {
+  if ((!resultsByTime || resultsByTime.length === 0) && !dateRange.empty) {
     return errors.notFound(event, 'No cost data found for the specified date range and filters')
   }
   
@@ -541,8 +538,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   let totalCostAmount = 0
 
   if (proforma && 'masterAccount' in costData) {
-    // For proforma data, use the billable total from the comparison
-    totalCostAmount = costData.comparison.totals.billable
+    totalCostAmount = costData.comparison.totals.proforma
   } else if ('total' in costData && costData.total?.['UnblendedCost']?.Amount) {
     // Use the total if available (no grouping)
     totalCostAmount = parseFloat(costData.total['UnblendedCost'].Amount)
@@ -571,6 +567,8 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
   
   let totalBudget = 0
+  let totalPaceToDateBudget = 0
+  let accountsWithPaceBudget = 0
   
   // ================================
   // BUDGET vs ACTUAL COMPARISON
@@ -595,23 +593,24 @@ export default defineEventHandler(handleAsync(async (event) => {
     // Step 2: Compare aggregated costs with budgets for each account
     accountCosts.forEach((actualCost, accountId) => {
       const account = accountMap.get(accountId)
-      
-      // Extract budget from account metadata (stored as estimatedMonthlyCharge)
-      const budgetStr = account?.estimatedMonthlyCharge || '0'
-      const budgetedCost = parseFloat(budgetStr.replace(/[^0-9.-]/g, '')) || 0
-      
+      const periodBudget = getPeriodBudget(account, startDate, endDate, {
+        includeFullCurrentMonth: ['thisMonth', 'thisQuarter', 'thisYear', 'ytd'].includes(String(query.period || ''))
+      })
+      const budgetedCost = periodBudget.periodBudget || 0
+      const paceBudget = periodBudget.paceToDateBudget
       totalBudget += budgetedCost
-      
-      // Calculate variance and percentage
-      const variance = actualCost - budgetedCost
-      const variancePercent = budgetedCost > 0 ? (variance / budgetedCost) * 100 : 0
+      if (paceBudget !== null) {
+        totalPaceToDateBudget += paceBudget
+        accountsWithPaceBudget += 1
+      }
+      const variance = paceBudget === null ? 0 : actualCost - paceBudget
+      const variancePercent = paceBudget && paceBudget > 0 ? (variance / paceBudget) * 100 : 0
       
       // Determine budget status with 10% tolerance
       let status: 'over' | 'under' | 'on_target' = 'on_target'
       
-      if (budgetedCost === 0) {
-        // No budget set - any cost is considered over budget
-        status = actualCost > 0 ? 'over' : 'on_target'
+      if (paceBudget === null || paceBudget === 0) {
+        status = 'on_target'
       } else {
         // Apply 10% tolerance for budget variance
         if (variancePercent > 10) status = 'over'
@@ -624,6 +623,9 @@ export default defineEventHandler(handleAsync(async (event) => {
         accountName: account?.name || 'Unknown',
         actualCost,          // Cost from selected data source (master or proforma)
         budgetedCost,        // Budget from account metadata
+        paceToDateBudget: paceBudget,
+        budgetSource: periodBudget.source,
+        healthBasis: paceBudget === null ? 'unavailable' : 'pace',
         variance,            // Dollar difference (actual - budget)
         variancePercent,     // Percentage difference
         status               // over/under/on_target based on 10% tolerance
@@ -687,7 +689,10 @@ export default defineEventHandler(handleAsync(async (event) => {
   
   // Get month-over-month comparison for broader trend context
   // Note: This always uses master account data for consistency in trend analysis
-  const monthOverMonth = await getMonthOverMonthChange(environment)
+  const monthOverMonth = await getMonthOverMonthChange(
+    environment,
+    proforma ? proformaAccountId : (environment === 'commercial' ? masterAccountId : undefined)
+  )
   
   // ================================
   // RESULT ASSEMBLY
@@ -698,8 +703,17 @@ export default defineEventHandler(handleAsync(async (event) => {
     summary: {
       totalCost: totalCostAmount,                                    // Total from selected data source
       totalBudget,                                                   // Sum of all account budgets
-      budgetVariance: totalCostAmount - totalBudget,                 // Overall budget performance
-      averageDailyCost: daysDiff > 0 ? totalCostAmount / daysDiff : 0, // Daily spend rate
+      paceToDateBudget: accountsWithPaceBudget > 0 ? totalPaceToDateBudget : null,
+      budgetVariance: totalCostAmount - (accountsWithPaceBudget > 0 ? totalPaceToDateBudget : totalBudget),
+      averageDailyCost: (() => {
+        if (resultsByTime.length === 0) return 0
+        const starts = resultsByTime.map(result => result.TimePeriod?.Start).filter(Boolean).sort()
+        const ends = resultsByTime.map(result => result.TimePeriod?.End).filter(Boolean).sort()
+        const observedDays = starts.length && ends.length
+          ? Math.max(0, Math.round((new Date(`${ends.at(-1)}T00:00:00Z`).getTime() - new Date(`${starts[0]}T00:00:00Z`).getTime()) / 86400000))
+          : 0
+        return observedDays > 0 ? totalCostAmount / observedDays : 0
+      })(),
       accountsAnalyzed: budgetAnalysis.byAccount.length              // Number of accounts in analysis
     },
     budgetAnalysis,     // Account-by-account budget vs actual comparison
@@ -708,7 +722,10 @@ export default defineEventHandler(handleAsync(async (event) => {
       dailyAverages,    // Daily progression (if daily granularity)
       costTrends        // Statistical trend analysis
     },
-    anomalies           // Cost spikes/drops beyond threshold
+    anomalies,          // Cost spikes/drops beyond threshold
+    costDataset: proforma && 'masterAccount' in costData
+      ? costData.proforma.dataset
+      : 'dataset' in costData ? costData.dataset : undefined
   }
   
   // ================================
@@ -727,10 +744,8 @@ export default defineEventHandler(handleAsync(async (event) => {
         accountId: proformaAccountId,
         costs: costData.comparison.totals.proforma
       },
-      masterOnlyCosts: costData.masterAccount.unallocatedCost,
-      note: 'This analysis shows master account costs minus proforma account costs. ' +
-            'This represents the true cost per account after enterprise savings plans ' +
-            'and discounts are allocated from the master account based on usage patterns.'
+      billingDomain: 'proforma',
+      note: 'The primary analysis uses the AWS Billing Conductor proforma billing view. Billable totals are retained only for comparison.'
     }
   } else {
     result.dataSource = {
@@ -767,7 +782,15 @@ export default defineEventHandler(handleAsync(async (event) => {
       analysisTimeMs: Date.now() - startTime,
       accountsProcessed: budgetAnalysis.byAccount.length,
       anomaliesDetected: anomalies.detected.length
-    }
+    },
+    dateRange: {
+      startDate,
+      endDate,
+      empty: dateRange.empty,
+      dataThroughDate: result.costDataset?.dataThroughDate || null
+    },
+    billingDomain: proforma ? 'proforma' : 'billable',
+    metric: 'UnblendedCost'
   }
   
   return sendSuccess(event, result, metadata)

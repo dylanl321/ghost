@@ -9,6 +9,7 @@ import { sendSuccess, parseQueryParams, errors, handleAsync } from '../../utils/
 import { registerEndpoint } from '../../plugins/swagger'
 import { parseAndValidateAccountFilters, getAccountIdsFromCriteria } from '../../utils/account-filters'
 import { getAccountScopeCacheKey } from '../../utils/cache-keys'
+import { buildCostExplorerTagFilter, getCostTagFilterCacheKey, parseCostTagFilter } from '../../utils/cost-tag-filters'
 import { costCache, CacheTags } from '../../utils/cache-manager'
 import { validateDateParams, getRecommendedGranularity, type RelativePeriod } from '../../utils/date-helpers'
 import { logger } from '../../utils/logger'
@@ -148,6 +149,22 @@ registerEndpoint('/api/costs/summary', 'GET', {
       required: false,
       schema: { type: 'string' },
       description: 'Filter by a specific tag value before grouping. Format: "tagKey||tagValue" (split on "||" delimiter to support colons in tag keys)'
+    },
+    {
+      name: 'tagFilterKey',
+      in: 'query',
+      required: false,
+      schema: { type: 'string' },
+      description: 'Tag key used with tagFilterValues. Preferred for multi-value filtering.'
+    },
+    {
+      name: 'tagFilterValues',
+      in: 'query',
+      required: false,
+      schema: { type: 'array', items: { type: 'string' } },
+      style: 'form',
+      explode: true,
+      description: 'One or more tag values matched with OR semantics.'
     }
   ],
   responses: {
@@ -211,7 +228,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   const { environment } = parseQueryParams(event)
   
   // Validate date parameters - either explicit dates or relative period
-  let dateRange: { startDate: string; endDate: string; description?: string }
+  let dateRange: { startDate: string; endDate: string; description?: string; empty: boolean }
   try {
     dateRange = validateDateParams({
       startDate: query.startDate as string,
@@ -293,6 +310,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   // Detect TAG: prefix — e.g. "TAG:Environment" means group by tag key "Environment"
   const isTagGroupBy = groupByDimension.startsWith('TAG:')
   const tagGroupKey = isTagGroupBy ? groupByDimension.slice(4) : null
+  const costTagFilter = parseCostTagFilter(query)
 
   // Build cost parameters
   const costParams = {
@@ -306,9 +324,8 @@ export default defineEventHandler(handleAsync(async (event) => {
     }],
     // Build filter: combine account filter and tag filter if both present
     filter: (() => {
-      const tagFilterParam = query.tagFilter as string | undefined
       let accountFilter: any = undefined
-      let tagFilter: any = undefined
+      const tagFilter = buildCostExplorerTagFilter(costTagFilter)
 
       if (filteredAccountIds && filteredAccountIds.length > 0) {
         accountFilter = {
@@ -316,19 +333,6 @@ export default defineEventHandler(handleAsync(async (event) => {
             Key: 'LINKED_ACCOUNT',
             Values: filteredAccountIds,
             MatchOptions: ['EQUALS']
-          }
-        }
-      }
-
-      if (tagFilterParam) {
-        const idx = tagFilterParam.indexOf('||')
-        if (idx > 0) {
-          tagFilter = {
-            Tags: {
-              Key: tagFilterParam.substring(0, idx),
-              Values: [tagFilterParam.substring(idx + 2)],
-              MatchOptions: ['EQUALS']
-            }
           }
         }
       }
@@ -347,7 +351,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     granularity,
     groupByDimension: groupByDimension === 'MONTHLY_ONLY' ? 'NONE_MONTHLY' : groupByDimension,
     tagGroupKey,
-    tagFilter: query.tagFilter || null,
+    tagFilter: getCostTagFilterCacheKey(costTagFilter),
     environment,
     proforma,
     proformaAccountId: proforma ? proformaAccountId : null,
@@ -390,6 +394,8 @@ export default defineEventHandler(handleAsync(async (event) => {
           return {
             billable: billableEnhanced,
             proforma: proformaEnhanced,
+            costDataset: proformaData.datasets.proforma,
+            datasets: proformaData.datasets,
             comparison: proformaData.comparison,
             validation: proformaData.validation,
             masterAccount: {
@@ -398,59 +404,19 @@ export default defineEventHandler(handleAsync(async (event) => {
             }
           }
         } else {
-          // For non-enhanced mode, combine proforma results with master unallocated costs
-          const proformaResultsByTime = proformaData.proforma.costs.resultsByTime || []
-          const combinedProformaResultsByTime = proformaResultsByTime.map((proformaResult, index) => {
-            const masterResult = proformaData.masterAccount.proformaCosts.resultsByTime[index]
-            
-            // Combine groups from both proforma and master
-            const combinedGroups = [...(proformaResult.Groups || [])]
-            
-            // Add master account groups if they have costs
-            if (masterResult?.Groups) {
-              masterResult.Groups.forEach(masterGroup => {
-                if (parseFloat(masterGroup.Metrics?.['UnblendedCost']?.Amount || '0') > 0) {
-                  combinedGroups.push(masterGroup)
-                }
-              })
-            }
-            
-            // Calculate combined total
-            const proformaTotal = parseFloat(proformaResult.Total?.['UnblendedCost']?.Amount || '0')
-            const masterTotal = parseFloat(masterResult?.Total?.['UnblendedCost']?.Amount || '0')
-            const combinedTotal = proformaTotal + masterTotal
-            
-            return {
-              ...proformaResult,
-              Groups: combinedGroups,
-              Total: {
-                ...proformaResult.Total,
-                'UnblendedCost': {
-                  ...proformaResult.Total?.['UnblendedCost'],
-                  Amount: combinedTotal.toString()
-                }
-              }
-            }
-          })
-          
-          // Calculate combined total
-          const combinedTotal = proformaData.proforma.total + proformaData.masterAccount.unallocatedCost
-          
           return {
             billable: {
               resultsByTime: proformaData.billable.costs.resultsByTime || [],
-              total: proformaData.billable.costs.total
+              total: proformaData.billable.costs.total,
+              costDataset: proformaData.datasets.billable
             },
             proforma: {
-              resultsByTime: combinedProformaResultsByTime,
-              total: {
-                ...proformaData.proforma.costs.total,
-                'UnblendedCost': {
-                  ...proformaData.proforma.costs.total?.['UnblendedCost'],
-                  Amount: combinedTotal.toString()
-                }
-              }
+              resultsByTime: proformaData.proforma.costs.resultsByTime || [],
+              total: proformaData.proforma.costs.total,
+              costDataset: proformaData.datasets.proforma
             },
+            costDataset: proformaData.datasets.proforma,
+            datasets: proformaData.datasets,
             comparison: proformaData.comparison,
             validation: proformaData.validation,
             masterAccount: {
@@ -484,7 +450,8 @@ export default defineEventHandler(handleAsync(async (event) => {
           return {
             groups,
             resultsByTime: costData.resultsByTime,
-            total: costData.total
+            total: costData.total,
+            costDataset: costData.dataset
           }
         }
 
@@ -518,10 +485,12 @@ export default defineEventHandler(handleAsync(async (event) => {
                 granularity,
                 groupBy: 'NONE',
                 includeDecommissioned
-              }
+              },
+              costDataset: costData.dataset
             }
           } else {
-            return await enhanceCostData(costData, includeDecommissioned, groupByDimension)
+            const enhancedData = await enhanceCostData(costData, includeDecommissioned, groupByDimension)
+            return { ...enhancedData, costDataset: costData.dataset }
           }
         } else {
           return costData
@@ -557,11 +526,16 @@ export default defineEventHandler(handleAsync(async (event) => {
       endDate,
       description: dateRange.description || null,
       granularity,
-      isRelativePeriod: !!query.period
+      isRelativePeriod: !!query.period,
+      empty: dateRange.empty
     },
     dataSource: proforma 
-      ? { type: 'proforma', accounts: [proformaAccountId, masterAccountId] }
-      : { type: 'standard', environment }
+      ? { type: 'proforma', billingDomain: 'proforma', accountId: proformaAccountId }
+      : { type: 'standard', billingDomain: 'billable', accountId: environment === 'commercial' ? masterAccountId : null, environment },
+    compatibility: {
+      deprecatedFields: ['masterAccount.unallocatedCost', 'validation.passed'],
+      canonicalField: 'data.costDataset'
+    }
   }
 
   // Normalize proforma nesting: ensure resultsByTime is directly on the proforma object

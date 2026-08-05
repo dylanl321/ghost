@@ -58,6 +58,10 @@ The `aws:createdBy` tag produces several value formats depending on how the reso
 | `arn:aws:iam::123456:user/username` | An IAM user directly created the resource | `username` |
 | `arn:aws:iam::123456:role/rolename` | An IAM role created the resource | `rolename` |
 
+When `aws:createdBy` is selected, GHOST opens in **People** view. Email-backed assumed-role sessions are combined case-insensitively across role IDs and accounts. Explicit IAM user ARNs are combined by their user path across accounts. The **All creators** option adds automation sessions, AWS services, IAM roles, Root, instance sessions, and untagged costs back to the table.
+
+People view keeps the complete account scope as its percentage denominator, so each person's percentage remains their share of all spend even though non-user rows are hidden. Coverage cards are also unchanged by the People filter.
+
 ## Using the Tag Analysis Tab
 
 1. Navigate to the **Cost Dashboard** and choose the account scope in the sidebar:
@@ -79,7 +83,7 @@ Below the coverage cards, a table shows every value for the selected tag, sorted
 | Column | Description |
 |---|---|
 | **Display Name** | Friendly name for the tag value. Click to edit (set an alias). A pencil icon appears on hover. |
-| **Raw Value** | The original value from AWS Cost Explorer. Hover to see the full value in a tooltip. |
+| **Raw Value** | The original value from AWS Cost Explorer. Combined people show a source-value count; hover to see every underlying value. |
 | **Cost Distribution** | Visual bar showing relative cost (blue for tagged values, amber for untagged). |
 | **Total Cost** | Dollar amount for this tag value. |
 | **%** | Percentage of total cost. |
@@ -90,7 +94,7 @@ Below the coverage cards, a table shows every value for the selected tag, sorted
 - **Click a row** to expand its detail panel. In a multi-account view, the panel first shows each contributing account and its share of that tag value. Expand an account to see its service-level costs, trend, and resource detail. A single-account view opens the existing service and trend detail directly.
 - **Edit display names** — in a single-account view, click any display name or the pencil icon to set a custom alias. When you've made changes, a **Save Aliases** button appears above the table. Click it to persist all pending alias changes at once.
 - **$0-cost values** — a toggle at the bottom of the table lets you show or hide tag values with zero cost
-- **Export** — use the download button in the toolbar to export the breakdown as CSV. Multi-account exports contain one row per tag value and contributing account so they can be filtered or pivoted without additional AWS exports.
+- **Export** — use the download button in the toolbar to export the breakdown as CSV. People view exports one combined row per person with contributing accounts and source-value count. Other multi-account views contain one row per tag value and contributing account.
 
 ## Historical Trend
 
@@ -110,7 +114,7 @@ Click **Save Settings** at the bottom to persist your changes.
 
 By default, the Cost Dashboard shows **proforma costs** (what your account is actually charged via AWS Billing Conductor). However, AWS Billing Conductor **does not support cost allocation tags** — tag-level cost breakdowns are only available from billable (master account) data via Cost Explorer.
 
-To bridge this gap, GHOST **extrapolates proforma costs per account** by applying each account's billable tag distribution to that account's proforma total. GHOST then adds those estimates together for multi-account views. This account-weighted approach avoids applying one organization-wide adjustment to projects or users whose costs occur in different accounts.
+To bridge this gap, GHOST **extrapolates proforma costs per account and AWS time bucket** by applying each account's billable tag distribution to that account's proforma total for the same month. GHOST publishes the estimate only when every account/month bucket is available, then combines the results for multi-account views.
 
 **What this means for you:**
 
@@ -132,7 +136,7 @@ Resources without a value for the selected tag are grouped as **Untagged**. This
 
 ### Why do some `aws:createdBy` values show emails and others show role names?
 
-The format depends on how the resource was created. Users signing in through SSO typically show up as `AssumedRole:...:email@example.com`, which GHOST parses to show the email. Resources created by AWS services or IAM roles without an email session will show the service or role name instead. See the parsing table above for all formats.
+The format depends on how the resource was created. Users signing in through SSO typically show up as `AssumedRole:...:email@example.com`. GHOST combines those values by email even when the role ID or account differs. Explicit IAM user ARNs are combined by user path. Resources created by AWS services or assumed roles without an email session remain non-user creators and appear under **All creators**.
 
 ### Can I rename tag values?
 
@@ -144,7 +148,7 @@ Any user with access to an account can configure its favorite tags, default tag,
 
 ### Why do tag costs show as estimated?
 
-AWS Billing Conductor (which calculates proforma costs) does not support cost allocation tags. GHOST works around this by applying each account's billable tag distribution to that account's proforma total, then combining the results. The resulting dollar amounts are estimates and are marked with "(est.)". To see exact costs per tag, switch the Cost Dashboard to billable mode. These tag-level estimates should not be used for chargeback; use proforma account-level totals for that purpose.
+AWS Billing Conductor (which calculates proforma costs) does not support cost allocation tags. GHOST applies each account's billable tag distribution to that account's proforma total in the same monthly bucket, then combines complete results. The resulting dollar amounts are estimates and are marked with "(est.)". To see exact costs per tag, switch the Cost Dashboard to billable mode. These tag-level estimates should not be used for chargeback; use proforma account-level totals for that purpose.
 
 ### Do tags affect my actual AWS bill?
 

@@ -21,7 +21,7 @@
     <div v-else class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
       <div class="flex items-center justify-between mb-3">
         <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">
-          Cost Over Time by "{{ tagKey }}"
+          {{ isPeopleView ? 'People Cost Over Time' : `Cost Over Time by "${tagKey}"` }}
         </h3>
         <UTooltip text="Export trend data as CSV">
           <UButton
@@ -42,15 +42,19 @@
 import { ref, computed, watch } from 'vue'
 import VChart from 'vue-echarts'
 import { downloadBlob } from '~/utils/export/export-utils'
+import { isCreatedByTag, normalizeCostTagIdentity } from '~~/shared/utils/cost-tag-identities'
 
 const logger = createLogger('TagHistoricalTrend')
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   accountIds: string[]
   tagKey: string
   tagValueAliases?: Record<string, string>
   period?: string
-}>()
+  creatorView?: 'people' | 'all'
+}>(), {
+  creatorView: 'all'
+})
 
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -91,39 +95,7 @@ async function fetchData() {
   }
 }
 
-/**
- * Parse an AWS Cost Explorer tag group key — strip "tagKey$" prefix
- * and extract human-readable parts from special values.
- */
-function parseTagValue(rawKey: string): string {
-  if (!rawKey) return rawKey
-
-  let value = rawKey
-  const dollarIdx = rawKey.indexOf('$')
-  if (dollarIdx !== -1) {
-    const prefix = rawKey.substring(0, dollarIdx)
-    if (prefix === props.tagKey || prefix === '') {
-      value = rawKey.substring(dollarIdx + 1)
-    }
-  }
-
-  if (!value) return rawKey
-
-  if (value.startsWith('AssumedRole:')) {
-    const parts = value.split(':')
-    if (parts.length >= 3) return parts[parts.length - 1]
-  }
-  if (value.startsWith('AWSService:')) return value.substring('AWSService:'.length)
-  if (value.includes(':user/')) return value.split(':user/').pop() || value
-  if (value.includes(':role/')) return value.split(':role/').pop() || value
-
-  return value
-}
-
-function getDisplayName(rawKey: string): string {
-  if (!props.tagValueAliases) return parseTagValue(rawKey)
-  return props.tagValueAliases[`${props.tagKey}::${rawKey}`] || parseTagValue(rawKey)
-}
+const isPeopleView = computed(() => isCreatedByTag(props.tagKey) && props.creatorView === 'people')
 
 const COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
@@ -138,6 +110,7 @@ const processedData = computed(() => {
   if (!resultsByTime.length) return null
 
   const tagValueMap: Record<string, Record<string, number>> = {}
+  const displayNames: Record<string, string> = {}
   const timeKeys: string[] = []
   // Detect granularity from data: if start dates differ by ~1 day, it's DAILY
   const isDaily = resultsByTime.length >= 2 &&
@@ -150,21 +123,30 @@ const processedData = computed(() => {
     if (timeKey && !timeKeys.includes(timeKey)) timeKeys.push(timeKey)
 
     ;(period.Groups || []).forEach((group: any) => {
-      const key = group.Keys?.[0] || 'Unknown'
+      const rawKey = group.Keys?.[0] || 'Unknown'
+      const identity = normalizeCostTagIdentity(rawKey, props.tagKey)
+      if (isPeopleView.value && !identity.isPerson) return
+      const key = identity.groupKey
       const cost = parseFloat(group.Metrics?.UnblendedCost?.Amount || '0')
       if (!tagValueMap[key]) tagValueMap[key] = {}
       tagValueMap[key][timeKey] = (tagValueMap[key][timeKey] || 0) + cost
+      displayNames[key] = props.tagValueAliases?.[`${props.tagKey}::${key}`]
+        || props.tagValueAliases?.[`${props.tagKey}::${rawKey}`]
+        || displayNames[key]
+        || identity.displayName
     })
   })
 
   const sorted = Object.entries(tagValueMap)
     .map(([key, periodCosts]) => ({
       key,
-      displayName: getDisplayName(key),
+      displayName: displayNames[key] || key,
       total: Object.values(periodCosts).reduce((s, c) => s + c, 0),
       periodCosts
     }))
     .sort((a, b) => b.total - a.total)
+
+  if (sorted.length === 0) return null
 
   return { timeKeys, isDaily, sorted, top: sorted.slice(0, 10), rest: sorted.slice(10) }
 })
@@ -231,10 +213,10 @@ const chartOption = computed(() => {
       type: 'category',
       data: timeKeys.map(k => {
         if (isDaily) {
-          const [y, mo, d] = k.split('-')
+          const [y = '1970', mo = '01', d = '01'] = k.split('-')
           return new Date(+y, +mo - 1, +d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
         }
-        const [y, mo] = k.split('-')
+        const [y = '1970', mo = '01'] = k.split('-')
         return new Date(+y, +mo - 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
       }),
       axisLabel: { color: '#9ca3af' },

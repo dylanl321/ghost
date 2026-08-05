@@ -27,13 +27,13 @@
           <TagValueServiceBreakdown
             :account-id="account.accountId"
             :tag-key="tagKey"
-            :tag-value="tagValue"
+            :tag-values="account.rawValues"
             :period="period"
           />
           <TagValueTrend
             :account-id="account.accountId"
             :tag-key="tagKey"
-            :tag-value="tagValue"
+            :tag-values="account.rawValues"
             :tag-value-label="tagValueLabel"
             :period="period"
           />

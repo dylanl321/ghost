@@ -23,6 +23,7 @@
 
     <!-- Resource bars -->
     <div v-else class="space-y-1">
+      <UBadge color="gray" variant="soft" size="xs" class="mb-1">Exact billable</UBadge>
       <div v-if="notice" class="text-[10px] text-amber-500 dark:text-amber-400 mb-1 flex items-center gap-1">
         <UIcon name="i-heroicons-clock" class="w-3 h-3 flex-shrink-0" />
         <span>{{ notice }}</span>
@@ -50,18 +51,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { formatCostValue } from '~/utils/cost-filters'
 
 const logger = createLogger('TagValueResourceBreakdown')
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   accountId: string
   serviceName: string
   tagKey: string
-  tagValue: string
+  tagValue?: string
+  tagValues?: string[]
   period?: string
-}>()
+}>(), {
+  tagValue: '',
+  tagValues: () => []
+})
 
 interface ResourceItem {
   resourceId: string
@@ -88,8 +93,12 @@ function stripTagPrefix(rawValue: string, tagKey: string): string {
   return rawValue
 }
 
+const effectiveTagValues = computed(() => props.tagValues.length > 0
+  ? props.tagValues
+  : props.tagValue ? [stripTagPrefix(props.tagValue, props.tagKey)] : [])
+
 async function fetchData() {
-  if (!props.accountId || !props.serviceName || !props.tagKey || !props.tagValue) return
+  if (!props.accountId || !props.serviceName || !props.tagKey || effectiveTagValues.value.length === 0) return
 
   loading.value = true
   error.value = null
@@ -97,13 +106,12 @@ async function fetchData() {
   notice.value = null
 
   try {
-    const strippedValue = stripTagPrefix(props.tagValue, props.tagKey)
     const response = await $fetch('/api/costs/resources', {
       params: {
         accountId: props.accountId,
         service: props.serviceName,
         tagKey: props.tagKey,
-        tagValue: strippedValue,
+        tagValues: effectiveTagValues.value,
         period: props.period || 'last90days'
       }
     }) as any
@@ -126,7 +134,7 @@ async function fetchData() {
 }
 
 watch(
-  [() => props.accountId, () => props.serviceName, () => props.tagKey, () => props.tagValue, () => props.period],
+  [() => props.accountId, () => props.serviceName, () => props.tagKey, () => props.tagValue, () => props.tagValues.join('|'), () => props.period],
   () => { fetchData() },
   { immediate: true }
 )

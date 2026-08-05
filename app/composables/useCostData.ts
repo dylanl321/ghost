@@ -5,8 +5,6 @@ import type { AWSEnclaveData } from '~~/shared/types/accounts'
 import { getCachedDataset, setCachedDataset, invalidateByMode } from '~/composables/useCostDataCache'
 import { getUserFriendlyMessage, retryWithBackoff } from '~/utils/error-helpers'
 
-const logger = createLogger('CostData')
-
 /**
  * CLIENT-SIDE CACHING GAP
  *
@@ -430,29 +428,12 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     }, { deep: true })
   }
 
-  // Watch for mode changes separately to clear cache BEFORE the fetch triggers
-  let modeCacheClearing = false
-  watch(mode, async (newMode, oldMode) => {
+  // Server caches are source-keyed; a mode change only invalidates local snapshots.
+  watch(mode, (newMode, oldMode) => {
     if (!initialized.value) return
-    // Only clear cache if mode actually changed (not on initial mount)
     if (oldMode !== undefined && newMode !== oldMode) {
-      // Invalidate client-side cache for both old and new modes
       invalidateByMode(oldMode)
       invalidateByMode(newMode)
-      modeCacheClearing = true
-      try {
-        await $fetch('/api/costs/cache-clear', {
-          method: 'POST',
-          body: { tags: ['costs'] }
-        })
-      } catch (error) {
-        logger.error('Failed to clear cache:', error)
-      } finally {
-        modeCacheClearing = false
-      }
-      // Fetch after cache is cleared (the [selectedTimeframe, mode] watcher
-      // may have already fired, but with stale cache -- re-fetch now)
-      void fetchCosts()
     }
   })
 
@@ -460,8 +441,6 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
   // NOT immediate -- initial fetch is triggered explicitly by the page's onMounted
   watch([selectedTimeframe, mode], () => {
     if (!initialized.value) return
-    // Skip if mode cache is being cleared -- the mode watcher above handles the fetch
-    if (modeCacheClearing) return
     void fetchCosts()
   })
 

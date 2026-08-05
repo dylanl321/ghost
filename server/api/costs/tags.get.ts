@@ -114,6 +114,9 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   const { startDate, endDate } = dateRange
   const tagKey = query.tagKey as string | undefined
+  const billableAccountId = environment === 'commercial'
+    ? process.env.AWS_MASTER_ACCOUNT_ID || '205950196477'
+    : undefined
 
   const { criteria: accountFilters, errors: filterErrors } = parseAndValidateAccountFilters(query)
   if (filterErrors.length > 0) {
@@ -149,7 +152,8 @@ export default defineEventHandler(handleAsync(async (event) => {
         { Start: startDate, End: endDate },
         tagKey,
         accountFilter,
-        environment
+        environment,
+        billableAccountId
       )
 
       return {

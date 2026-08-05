@@ -24,7 +24,7 @@
       <div v-if="showProforma" class="flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2 mb-3">
         <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
         <p class="text-xs text-amber-700 dark:text-amber-300">
-          Costs shown are <strong>account-weighted estimates</strong> based on each account's billable tag distribution. Percentages are directional. Not suitable for chargeback.
+          Costs shown are <strong>account-and-month weighted estimates</strong> based on billable tag distribution in the same AWS time bucket. Percentages are directional. Not suitable for chargeback.
           <NuxtLink to="/support/docs?topic=cost-tags-guide" class="underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-100">Why estimated?</NuxtLink>
         </p>
       </div>
@@ -126,9 +126,9 @@
                   <span class="text-xs text-gray-400">&mdash;</span>
                 </template>
                 <template v-else>
-                  <UTooltip :text="row.rawValue">
+                  <UTooltip :text="row.rawValues.join('\n')">
                     <span class="text-xs font-mono text-gray-500 dark:text-gray-400 truncate max-w-[150px] block">
-                      {{ row.rawValue }}
+                      {{ row.rawValues.length > 1 ? `${row.rawValues.length} source values` : row.rawValue }}
                     </span>
                   </UTooltip>
                 </template>
@@ -168,7 +168,7 @@
                 {{ formatCostValue(totalCost) }}
               </td>
               <td class="px-4 py-2 text-right text-xs text-gray-500 dark:text-gray-400">
-                100%
+                {{ totalPercentage.toFixed(1) }}%
               </td>
             </tr>
           </tfoot>
@@ -210,8 +210,11 @@
                 <div class="font-medium text-gray-700 dark:text-gray-300 truncate" :title="selectedRow.parsedValue">{{ selectedRow.parsedValue }}</div>
               </div>
             </div>
-            <div v-if="selectedRow.rawValue !== selectedRow.parsedValue">
-              <div class="text-[10px] text-gray-400 dark:text-gray-500">Raw: <span class="font-mono select-all">{{ selectedRow.rawValue }}</span></div>
+            <div v-if="selectedRow.rawValues.length > 0">
+              <div class="text-[10px] text-gray-400 dark:text-gray-500">
+                {{ selectedRow.rawValues.length === 1 ? 'Raw' : 'Source values' }}:
+                <span class="font-mono select-all">{{ selectedRow.rawValues.join(', ') }}</span>
+              </div>
             </div>
 
             <!-- Service breakdown drill-down (only for tagged values) -->
@@ -233,7 +236,7 @@
                 <TagValueServiceBreakdown
                   :account-id="accountId"
                   :tag-key="tagKey"
-                  :tag-value="selectedRow.value"
+                  :tag-values="selectedRow.rawValues"
                   :period="period"
                 />
               </div>
@@ -241,7 +244,7 @@
                 <TagValueTrend
                   :account-id="accountId"
                   :tag-key="tagKey"
-                  :tag-value="selectedRow.value"
+                  :tag-values="selectedRow.rawValues"
                   :tag-value-label="selectedRow.label"
                   :period="period"
                 />
@@ -255,7 +258,7 @@
                 color="blue"
                 variant="ghost"
                 size="xs"
-                @click="copyValue(selectedRow.rawValue)"
+                @click="copyValue(selectedRow.rawValues.join('\n'))"
               />
             </UTooltip>
             <UTooltip text="Copy parsed value">
@@ -284,6 +287,7 @@
 <script setup lang="ts">
 import { formatCostValue } from '~/utils/cost-filters'
 import type { TagValueAccountCost } from '~~/shared/types/cost-tags'
+import { normalizeCostTagIdentity } from '~~/shared/utils/cost-tag-identities'
 
 const logger = createLogger('TagCostBreakdown')
 
@@ -299,6 +303,7 @@ const props = withDefaults(defineProps<{
   dataMode?: 'billable' | 'proforma'
   proformaAvailable?: boolean
   showAccountBreakdown?: boolean
+  percentageDenominator?: number | null
 }>(), {
   tagValueAliases: () => ({}),
   editable: false,
@@ -306,7 +311,8 @@ const props = withDefaults(defineProps<{
   period: '',
   dataMode: 'proforma',
   proformaAvailable: false,
-  showAccountBreakdown: false
+  showAccountBreakdown: false,
+  percentageDenominator: null
 })
 
 const emit = defineEmits<{
@@ -325,6 +331,9 @@ export interface TagRow {
   percentage: number
   isUntagged: boolean
   accounts: TagValueAccountCost[]
+  rawValues: string[]
+  isPerson: boolean
+  creatorType?: string
 }
 
 const toast = useToast()
@@ -411,46 +420,7 @@ async function copyValue(value: string) {
  * Also extracts human-readable parts from special AWS tag values.
  */
 function parseTagValue(rawKey: string, tagKey: string): string {
-  if (!rawKey) return rawKey
-
-  // Strip "tagKey$" prefix if present (AWS Cost Explorer format)
-  let value = rawKey
-  const dollarIdx = rawKey.indexOf('$')
-  if (dollarIdx !== -1) {
-    const prefix = rawKey.substring(0, dollarIdx)
-    // Only strip if the prefix matches the tag key we're grouping by
-    if (prefix === tagKey || prefix === '') {
-      value = rawKey.substring(dollarIdx + 1)
-    }
-  }
-
-  if (!value) return rawKey
-
-  // Parse aws:createdBy values — extract email or role name
-  // e.g. "AssumedRole:AROAXNNO7DI3QZTU5I44R:Michael.Neiderhauser@gd-ms.com" → "Michael.Neiderhauser@gd-ms.com"
-  if (value.startsWith('AssumedRole:')) {
-    const parts = value.split(':')
-    if (parts.length >= 3) return parts[parts.length - 1]
-  }
-
-  // Parse "AWSService:serviceName" → "serviceName"
-  if (value.startsWith('AWSService:')) {
-    return value.substring('AWSService:'.length)
-  }
-
-  // Parse IAM user ARN-style: "arn:aws:iam::123456:user/username" → "username"
-  if (value.includes(':user/')) {
-    const userPart = value.split(':user/').pop()
-    if (userPart) return userPart
-  }
-
-  // Parse IAM role ARN-style: "arn:aws:iam::123456:role/rolename" → "rolename"
-  if (value.includes(':role/')) {
-    const rolePart = value.split(':role/').pop()
-    if (rolePart) return rolePart
-  }
-
-  return value
+  return normalizeCostTagIdentity(rawKey, tagKey).displayName
 }
 
 const rows = computed<TagRow[]>(() => {
@@ -465,30 +435,37 @@ const rows = computed<TagRow[]>(() => {
   const getDisplayCost = (group: any) => showProforma.value && group.estimatedProformaCost !== undefined
     ? group.estimatedProformaCost
     : (group.billableCost ?? group.totalCost ?? group.cost ?? 0)
-  const totalRaw = groups.reduce((sum: number, group: any) => sum + getDisplayCost(group), 0)
-  if (totalRaw === 0) return []
+  const visibleTotal = groups.reduce((sum: number, group: any) => sum + getDisplayCost(group), 0)
+  const percentageTotal = props.percentageDenominator && props.percentageDenominator > 0
+    ? props.percentageDenominator
+    : visibleTotal
+  if (visibleTotal === 0) return []
 
   return groups
     .map((g: any): TagRow => {
-      const rawValue: string = g.groupKey ?? g.tagValue ?? ''
-      const isUntagged = rawValue === '$not_tagged' || rawValue === '' || rawValue === '__untagged__'
-        || rawValue === `${props.tagKey}$` // AWS returns "tagKey$" for untagged
+      const rawValues: string[] = g.rawValues?.length ? g.rawValues : [g.tagValue ?? g.groupKey ?? '']
+      const rawValue = rawValues[0] || ''
+      const isUntagged = g.isUntagged ?? (rawValue === '$not_tagged' || rawValue === '' || rawValue === '__untagged__'
+        || rawValue === `${props.tagKey}$`) // AWS returns "tagKey$" for untagged
       const billableCost = g.billableCost ?? g.totalCost ?? g.cost ?? 0
       const estimatedProformaCost = g.estimatedProformaCost
       const cost = getDisplayCost(g)
-      const parsedValue = isUntagged ? 'Untagged' : parseTagValue(rawValue, props.tagKey)
-      const alias = getAlias(rawValue)
+      const parsedValue = isUntagged ? 'Untagged' : (g.displayName || parseTagValue(rawValue, props.tagKey))
+      const alias = getAlias(g.groupKey ?? rawValue)
       return {
-        value: rawValue,
+        value: g.groupKey ?? rawValue,
         rawValue,
+        rawValues,
         parsedValue,
         label: isUntagged ? 'Untagged' : (alias || parsedValue),
         cost,
         billableCost,
         estimatedProformaCost,
-        percentage: totalRaw > 0 ? (cost / totalRaw) * 100 : 0,
+        percentage: percentageTotal > 0 ? (cost / percentageTotal) * 100 : 0,
         isUntagged,
-        accounts: g.accounts || []
+        accounts: g.accounts || [],
+        isPerson: Boolean(g.isPerson),
+        creatorType: g.creatorType
       }
     })
     .sort((a, b) => b.cost - a.cost)
@@ -510,6 +487,12 @@ const displayRows = computed(() => {
 const totalCost = computed(() =>
   rows.value.reduce((sum, r) => sum + r.cost, 0)
 )
+const totalPercentage = computed(() => {
+  const denominator = props.percentageDenominator && props.percentageDenominator > 0
+    ? props.percentageDenominator
+    : totalCost.value
+  return denominator > 0 ? (totalCost.value / denominator) * 100 : 0
+})
 
 // Clear selection when data changes
 watch(() => props.costData, () => {

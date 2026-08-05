@@ -21,7 +21,7 @@ export function buildAccountForecastComparisonOptions(data: any, _context: Chart
         const item = data[dataIndex]
         return `${item.accountName}<br/>
                         Current: ${formatCurrency(item.currentCost)}<br/>
-                        Forecast: ${formatCurrency(item.forecastCost)}<br/>
+                        Estimated allocation: ${formatCurrency(item.forecastCost)}<br/>
                         Budget: ${formatCurrency(item.budget)}<br/>
                         Growth: ${(item.growthProjection ?? 0) > 0 ? '+' : ''}${(item.growthProjection ?? 0).toFixed(1)}%<br/>
                         Risk: ${item.riskLevel}`
@@ -55,7 +55,7 @@ export function buildAccountForecastComparisonOptions(data: any, _context: Chart
         itemStyle: { color: '#3b82f6' }
       },
       {
-        name: 'Forecast',
+        name: 'Estimated allocation',
         type: 'bar',
         data: data.map((d: any) => d.forecastCost),
         itemStyle: { color: '#10b981' }

@@ -394,7 +394,7 @@
               Exit Compare
             </UButton>
           </div>
-          <CostComparisonView />
+          <CostComparisonView :selected-accounts="selectedAccounts" :mode="dataMode" />
         </div>
 
         <!-- Loading State -->
@@ -425,11 +425,9 @@
               <div class="flex-1">
                 <div class="flex items-start justify-between">
                   <div class="flex-1">
-                    <h4 class="text-sm font-medium text-amber-300">Showing Previous Month's Data</h4>
+                    <h4 class="text-sm font-medium text-amber-300">Current Month Has No Observed Days Yet</h4>
                     <p class="text-xs text-amber-400 mt-1">
-                      It's the first day of {{ new Date().toLocaleDateString('en-US', { month: 'long' }) }}, and AWS Cost Explorer doesn't have data available yet for today.
-                      Currently displaying the last day of {{ new Date(new Date().setMonth(new Date().getMonth() - 1)).toLocaleDateString('en-US', { month: 'long' }) }} instead.
-                      Check back tomorrow for {{ new Date().toLocaleDateString('en-US', { month: 'long' }) }} data.
+                      This Month is empty because AWS Cost Explorer reports through yesterday and uses an exclusive end date. No prior-month charges are substituted.
                     </p>
                   </div>
                   <UButton
@@ -456,7 +454,7 @@
                   <div class="flex-1">
                     <h4 class="text-sm font-medium text-blue-300">Limited Data Available for Current Month</h4>
                     <p class="text-xs text-blue-400 mt-1">
-                      It's early in the month, so cost data for {{ new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) }} is still accumulating.
+                      It's early in the month, so cost data for {{ new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }) }} is still accumulating.
                       Data shown is through yesterday due to AWS Cost Explorer's 24-hour processing lag.
                       For a complete view of recent spending patterns, you may want to review last month's data.
                     </p>
@@ -670,29 +668,8 @@ const accountsWithCosts = computed<Account[]>(() => {
   // Create a map of accountId -> cost data
   const costMap = new Map<string, number>()
   
-  // Priority 1: Extract costs from analysis.budgetAnalysis.byAccount (most accurate)
-  if (dataset.value.analysis) {
-    const analysisData = dataset.value.analysis as any
-    
-    // The API returns data wrapped in { success: true, data: {...} }
-    const actualData = analysisData?.data || analysisData
-    
-    // Handle proforma mode - data is nested under proforma property
-    const analysisSource = dataMode.value === 'proforma' && actualData?.proforma 
-      ? actualData.proforma 
-      : actualData
-    
-    if (analysisSource?.budgetAnalysis?.byAccount && Array.isArray(analysisSource.budgetAnalysis.byAccount)) {
-      analysisSource.budgetAnalysis.byAccount.forEach((item: any) => {
-        if (item.accountId && typeof item.actualCost === 'number') {
-          costMap.set(item.accountId, item.actualCost)
-        }
-      })
-    }
-  }
-  
-  // Priority 2: Check summary data for account costs (enhanced summary endpoint)
-  if (dataset.value.summary && costMap.size === 0) {
+  // The requested-mode summary is the authoritative source for displayed spend.
+  if (dataset.value.summary) {
     const summaryData = dataset.value.summary as any
     
     // The API returns data wrapped in { success: true, data: {...} }
@@ -701,26 +678,25 @@ const accountsWithCosts = computed<Account[]>(() => {
     // Handle proforma mode - data structure is different
     let accountsData: any[] = []
     
-    if (dataMode.value === 'proforma') {
-      // In proforma mode, data is structured as { billable: {...}, proforma: {...} }
-      // Use proforma accounts for display
-      if (actualData?.proforma?.accounts && Array.isArray(actualData.proforma.accounts)) {
-        accountsData = actualData.proforma.accounts
-      }
-    } else {
-      // Standard billable mode - accounts at top level
-      if (actualData?.accounts && Array.isArray(actualData.accounts)) {
-        accountsData = actualData.accounts
-      }
-    }
+    const summarySource = actualData?.[dataMode.value] || actualData
+    if (Array.isArray(summarySource?.accounts)) accountsData = summarySource.accounts
     
     accountsData.forEach((account: any) => {
       const accountId = account.accountId
-      const cost = account.totalCost || 0
-      if (accountId && cost > 0) {
+      const cost = Number(account.totalCost || 0)
+      if (accountId && Number.isFinite(cost)) {
         costMap.set(accountId, cost)
       }
     })
+  }
+
+  // Analysis enriches budgets only; this fallback supports older cached responses.
+  if (dataset.value.analysis && costMap.size === 0) {
+    const analysisData = dataset.value.analysis as any
+    const actualData = analysisData?.data || analysisData
+    for (const item of actualData?.budgetAnalysis?.byAccount || []) {
+      if (item.accountId && typeof item.actualCost === 'number') costMap.set(item.accountId, item.actualCost)
+    }
   }
   
   // Merge costs into accounts
@@ -829,7 +805,7 @@ onMounted(() => fetchAlertsSummary())
 // Detect if we're in the early days of a new month
 const isEarlyInMonth = computed(() => {
   const today = new Date()
-  const dayOfMonth = today.getDate()
+  const dayOfMonth = today.getUTCDate()
   // Consider days 1-5 as early in the month
   return dayOfMonth <= 5 && selectedTimeframe.value === 'thisMonth'
 })
@@ -837,7 +813,7 @@ const isEarlyInMonth = computed(() => {
 // Detect if we're on the first day (special case: showing previous month's data)
 const isFirstDayOfMonth = computed(() => {
   const today = new Date()
-  return today.getDate() === 1 && selectedTimeframe.value === 'thisMonth'
+  return today.getUTCDate() === 1 && selectedTimeframe.value === 'thisMonth'
 })
 
 // Helper to switch to last month view

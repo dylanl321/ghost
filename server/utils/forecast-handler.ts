@@ -230,6 +230,12 @@ export async function handleForecastRequest(event: H3Event, options: ForecastHan
       proformaAccount: proformaData.proformaAccount,
       [masterOnlyKey]: proformaData.masterOnlyForecast,
       combinedTotals: proformaData.totals,
+      forecastMetadata: {
+        source: 'aws-cost-explorer',
+        allocation: 'direct',
+        estimated: true,
+        scope: accountIds.length > 0 ? 'filtered-aggregate' : 'organization'
+      },
       note: `Proforma ${responseKey} represents linked account costs with enterprise savings plans ` +
             `and discounts allocated from the master account. ${masterOnlyKey === 'masterOnlyForecast' ? 'MasterOnlyForecast' : 'MasterOnlyProjection'} ($` +
             Math.round(proformaData.totals.masterOnly).toLocaleString() +
@@ -249,7 +255,8 @@ export async function handleForecastRequest(event: H3Event, options: ForecastHan
       metric,
       granularity,
       filter,
-      environment
+      environment,
+      environment === 'commercial' ? masterAccountId : undefined
     )
 
     // Validate data was returned
@@ -280,6 +287,12 @@ export async function handleForecastRequest(event: H3Event, options: ForecastHan
         endDate: endDateStr
       },
       [responseKey]: data,
+      forecastMetadata: {
+        source: 'aws-cost-explorer',
+        allocation: 'direct',
+        estimated: true,
+        scope: accountIds.length > 0 ? 'filtered-aggregate' : 'organization'
+      },
       note: accountIds.length > 0
         ? `${responseKey === 'forecast' ? 'Forecast' : 'AWS ML projection'} for ${accountIds.length} selected account(s): ${accountIds.join(', ')}`
         : `${responseKey === 'forecast' ? 'Forecast' : 'AWS ML projection'} based on raw AWS billing data from master account (all accounts)`

@@ -13,7 +13,7 @@ import { costCache, CacheTags } from '../../utils/cache-manager'
 import { validateDateParams, type RelativePeriod } from '../../utils/date-helpers'
 import { logger } from '../../utils/logger'
 import { getAllAccountsUnified } from '../../utils/accounts-consolidated'
-import { buildTagCoverageData, extractProformaAccountTotals } from '../../utils/cost-tag-analysis'
+import { buildTagCoverageData, extractProformaAccountPeriodTotals, extractProformaAccountTotals } from '../../utils/cost-tag-analysis'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/costs/tag-coverage', 'GET', {
@@ -127,7 +127,11 @@ registerEndpoint('/api/costs/tag-coverage', 'GET', {
                       properties: {
                         groupKey: { type: 'string' },
                         tagValue: { type: 'string' },
+                        displayName: { type: 'string' },
                         isUntagged: { type: 'boolean' },
+                        isPerson: { type: 'boolean' },
+                        creatorType: { type: 'string', enum: ['email', 'iam-user', 'automation', 'service', 'root', 'untagged'] },
+                        rawValues: { type: 'array', items: { type: 'string' } },
                         billableCost: { type: 'number' },
                         estimatedProformaCost: { type: 'number' },
                         accounts: { type: 'array', items: { type: 'object' } }
@@ -281,12 +285,16 @@ export default defineEventHandler(handleAsync(async (event) => {
       const proformaAccountTotals = proformaResult.status === 'fulfilled' && proformaResult.value
         ? extractProformaAccountTotals(proformaResult.value)
         : undefined
+      const proformaAccountPeriodTotals = proformaResult.status === 'fulfilled' && proformaResult.value
+        ? extractProformaAccountPeriodTotals(proformaResult.value)
+        : undefined
 
       return buildTagCoverageData(tagKey, taggedResult.value.resultsByTime || [], {
         includeValues,
         accountNames: accountNameMap,
         proformaRequested: proforma,
-        proformaAccountTotals
+        proformaAccountTotals,
+        proformaAccountPeriodTotals
       })
     },
     {
