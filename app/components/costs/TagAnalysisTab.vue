@@ -1,193 +1,165 @@
 <template>
-  <div>
-    <!-- Multi-account gate -->
-    <div v-if="selectedAccounts.length !== 1" class="flex items-center justify-center py-16">
-      <div class="text-center max-w-md">
-        <UIcon name="i-heroicons-tag" class="w-16 h-16 text-gray-400 mx-auto mb-4 opacity-50" />
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Select a Single Account</h3>
-        <p class="text-sm text-gray-500 dark:text-gray-400">
-          Tag analysis provides deep cost breakdown by tag for a single account.
-          Select exactly one account from the sidebar to get started.
+  <div class="space-y-6">
+    <div class="flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2">
+      <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+      <p class="text-xs text-amber-700 dark:text-amber-300">
+        Tag analysis uses exact <strong>billable</strong> Cost Explorer data. Proforma mode estimates each account separately because AWS Billing Conductor does not expose cost allocation tags.
+        Estimated values are directional and <strong>should not be used for chargeback</strong>.
+        <NuxtLink to="/support/docs?topic=cost-tags-guide" class="underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-100">Learn more</NuxtLink>
+      </p>
+    </div>
+
+    <div class="space-y-4">
+      <div class="flex items-center gap-3 flex-wrap">
+        <USelectMenu
+          v-model="selectedTag"
+          :options="tagSelectOptions"
+          value-attribute="value"
+          option-attribute="label"
+          placeholder="Select a tag..."
+          size="sm"
+          class="w-56"
+          :loading="isLoadingTags"
+        />
+        <UBadge color="gray" variant="soft" size="sm">{{ scopeLabel }}</UBadge>
+        <UTooltip text="Refresh data">
+          <UButton
+            color="gray"
+            variant="ghost"
+            icon="i-heroicons-arrow-path"
+            size="sm"
+            :loading="isLoadingTags || isLoadingCoverage"
+            @click="refreshAll"
+          />
+        </UTooltip>
+        <UTooltip text="Export breakdown as CSV">
+          <UButton
+            icon="i-heroicons-arrow-down-tray"
+            color="gray"
+            variant="ghost"
+            size="sm"
+            :disabled="!tagCoverage?.values?.length"
+            @click="exportBreakdownCSV"
+          />
+        </UTooltip>
+        <UTooltip v-if="isSingleAccount" text="Tag Settings">
+          <UButton
+            icon="i-heroicons-adjustments-horizontal"
+            color="gray"
+            variant="ghost"
+            size="sm"
+            @click="showSettings = true"
+          />
+        </UTooltip>
+      </div>
+
+      <div v-if="tagsError" class="rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-xs text-red-700 dark:text-red-300">
+        {{ tagsError }}
+      </div>
+      <div v-if="coverageError" class="rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-xs text-red-700 dark:text-red-300">
+        {{ coverageError }}
+      </div>
+
+      <div v-if="selectedTag && dataMode === 'proforma' && tagCoverage && !isLoadingCoverage" class="flex items-start gap-2 rounded-md px-3 py-2 border"
+        :class="proformaAvailable
+          ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+          : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'"
+      >
+        <UIcon
+          :name="proformaAvailable ? 'i-heroicons-information-circle' : 'i-heroicons-exclamation-triangle'"
+          class="w-4 h-4 mt-0.5 flex-shrink-0"
+          :class="proformaAvailable ? 'text-blue-500' : 'text-amber-500'"
+        />
+        <p class="text-xs" :class="proformaAvailable ? 'text-blue-700 dark:text-blue-300' : 'text-amber-700 dark:text-amber-300'">
+          <template v-if="proformaAvailable">
+            Dollar amounts are <strong>account-weighted proforma estimates</strong>. Each account's billable tag distribution is applied to that account's proforma total before the results are combined.
+          </template>
+          <template v-else>
+            A complete proforma estimate is unavailable for this scope. Exact billable costs are shown instead.
+          </template>
         </p>
+      </div>
+
+      <div v-if="selectedTag && tagCoverage && !isLoadingCoverage" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+          <div class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Coverage</div>
+          <div class="text-3xl font-bold" :class="coverageColorClass">{{ tagCoverage.overallCoverage.toFixed(1) }}%</div>
+          <div class="mt-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+            <div class="h-2 rounded-full transition-all duration-500" :class="coverageBarClass" :style="{ width: `${tagCoverage.overallCoverage}%` }" />
+          </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+          <div class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Tagged Cost{{ showProforma ? ' (est.)' : '' }}</div>
+          <div class="text-3xl font-bold text-green-600 dark:text-green-400">{{ formatCostValue(displayTaggedCost) }}</div>
+          <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ showProforma ? 'Estimated proforma' : `Resources with "${selectedTag}"` }}</div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4" :class="untaggedIsHigh ? 'border-amber-300 dark:border-amber-600' : ''">
+          <div class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Untagged Cost{{ showProforma ? ' (est.)' : '' }}</div>
+          <div class="text-3xl font-bold" :class="untaggedIsHigh ? 'text-amber-600 dark:text-amber-400' : 'text-gray-700 dark:text-gray-300'">{{ formatCostValue(displayUntaggedCost) }}</div>
+          <div class="text-xs mt-1" :class="untaggedIsHigh ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'">
+            {{ untaggedIsHigh ? 'High untagged spend detected' : (showProforma ? 'Estimated proforma' : 'Resources without this tag') }}
+          </div>
+        </div>
+      </div>
+
+      <div v-if="selectedTag && isLoadingCoverage" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-center">
+        <UIcon name="i-heroicons-arrow-path" class="w-5 h-5 animate-spin text-blue-500 mx-auto mb-2" />
+        <p class="text-sm text-gray-400">Calculating tag costs across {{ scopeLabel.toLowerCase() }}...</p>
+      </div>
+
+      <div v-if="!isLoadingTags && availableTags.length === 0 && !tagsError" class="py-10 text-center border border-gray-200 dark:border-gray-700 rounded-lg">
+        <UIcon name="i-heroicons-tag" class="w-8 h-8 text-gray-400 mx-auto mb-2" />
+        <p class="text-sm text-gray-500 dark:text-gray-400">No active cost allocation tags were found for this scope and timeframe.</p>
       </div>
     </div>
 
-    <!-- Single account selected -->
-    <div v-else class="space-y-6">
-      <!-- Billable data / chargeback disclaimer (always visible on tag tab) -->
-      <div class="flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2">
-        <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
-        <p class="text-xs text-amber-700 dark:text-amber-300">
-          Tag analysis uses <strong>billable</strong> cost data. AWS Billing Conductor (proforma) does not support cost allocation tags.
-          This data is for directional insight only and <strong>should not be used for chargeback</strong>.
-          <NuxtLink to="/support/docs?topic=cost-tags-guide" class="underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-100">Learn more</NuxtLink>
-        </p>
+    <div v-if="selectedTag">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Cost Breakdown</h3>
+        <UButton v-if="aliasesDirty && isSingleAccount" color="blue" variant="soft" size="xs" :loading="isSavingConfig" @click="saveAliases">
+          Save Aliases
+        </UButton>
       </div>
-
-      <!-- Section A: Tag Selector + Coverage Stats -->
-      <div class="space-y-4">
-        <div class="flex items-center gap-3 flex-wrap">
-          <USelectMenu
-            v-model="selectedTag"
-            :options="tagSelectOptions"
-            value-attribute="value"
-            option-attribute="label"
-            placeholder="Select a tag..."
-            size="sm"
-            class="w-56"
-            :loading="isLoadingTags"
-          />
-          <span v-if="hiddenTagCount > 0" class="text-xs text-gray-400 dark:text-gray-500">
-            ({{ hiddenTagCount }} tag{{ hiddenTagCount === 1 ? '' : 's' }} with $0 cost hidden)
-          </span>
-          <UTooltip text="Refresh data">
-            <UButton
-              color="gray"
-              variant="ghost"
-              icon="i-heroicons-arrow-path"
-              size="sm"
-              :loading="isLoadingCoverage || isLoadingBreakdown"
-              @click="refreshAll"
-            />
-          </UTooltip>
-          <UTooltip text="Export breakdown as CSV">
-            <UButton
-              icon="i-heroicons-arrow-down-tray"
-              color="gray"
-              variant="ghost"
-              size="sm"
-              :disabled="!breakdownRef?.rows?.length"
-              @click="exportBreakdownCSV"
-            />
-          </UTooltip>
-          <UTooltip text="Tag Settings">
-            <UButton
-              icon="i-heroicons-adjustments-horizontal"
-              color="gray"
-              variant="ghost"
-              size="sm"
-              @click="showSettings = true"
-            />
-          </UTooltip>
-        </div>
-
-        <!-- Proforma estimation banner -->
-        <div v-if="selectedTag && showProforma && tagCoverage && !isLoadingCoverage" class="flex items-start gap-2 rounded-md bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 px-3 py-2">
-          <UIcon name="i-heroicons-information-circle" class="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
-          <p class="text-xs text-blue-700 dark:text-blue-300">
-            Dollar amounts below are <strong>estimated proforma costs</strong> extrapolated from billable tag distribution. Percentages are exact.
-            <NuxtLink to="/support/docs?topic=cost-tags-guide" class="underline underline-offset-2 hover:text-blue-900 dark:hover:text-blue-100">Learn why</NuxtLink>
-          </p>
-        </div>
-
-        <!-- Coverage stat cards -->
-        <div v-if="selectedTag && tagCoverage && !isLoadingCoverage" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-            <div class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Coverage</div>
-            <div class="text-3xl font-bold" :class="coverageColorClass">
-              {{ tagCoverage.overallCoverage.toFixed(1) }}%
-            </div>
-            <div class="mt-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-              <div
-                class="h-2 rounded-full transition-all duration-500"
-                :class="coverageBarClass"
-                :style="{ width: `${tagCoverage.overallCoverage}%` }"
-              />
-            </div>
-          </div>
-
-          <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-            <div class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-              {{ showProforma ? 'Tagged Cost (est.)' : 'Tagged Cost' }}
-            </div>
-            <div class="text-3xl font-bold text-green-600 dark:text-green-400">
-              {{ showProforma ? formatCostValue(tagCoverage.totalTaggedCost * proformaRatio!) : formatCostValue(tagCoverage.totalTaggedCost) }}
-            </div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              {{ showProforma ? 'Estimated proforma' : `Resources with "${selectedTag}"` }}
-            </div>
-          </div>
-
-          <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4"
-            :class="untaggedIsHigh ? 'border-amber-300 dark:border-amber-600' : ''"
-          >
-            <div class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-              {{ showProforma ? 'Untagged Cost (est.)' : 'Untagged Cost' }}
-            </div>
-            <div class="text-3xl font-bold" :class="untaggedIsHigh ? 'text-amber-600 dark:text-amber-400' : 'text-gray-700 dark:text-gray-300'">
-              {{ showProforma ? formatCostValue(tagCoverage.totalUntaggedCost * proformaRatio!) : formatCostValue(tagCoverage.totalUntaggedCost) }}
-            </div>
-            <div class="text-xs mt-1" :class="untaggedIsHigh ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'">
-              {{ untaggedIsHigh ? 'High untagged spend detected' : (showProforma ? 'Estimated proforma' : 'Resources without this tag') }}
-            </div>
-          </div>
-        </div>
-
-        <!-- Loading coverage -->
-        <div v-if="selectedTag && isLoadingCoverage" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-center">
-          <UIcon name="i-heroicons-arrow-path" class="w-5 h-5 animate-spin text-blue-500 mx-auto mb-2" />
-          <p class="text-sm text-gray-400">Calculating tag coverage...</p>
-        </div>
-      </div>
-
-      <!-- Section B: Cost Breakdown Table -->
-      <div v-if="selectedTag">
-        <div class="flex items-center justify-between mb-2">
-          <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Cost Breakdown</h3>
-          <UButton
-            v-if="aliasesDirty"
-            color="blue"
-            variant="soft"
-            size="xs"
-            :loading="isSavingConfig"
-            @click="saveAliases"
-          >
-            Save Aliases
-          </UButton>
-        </div>
-        <TagCostBreakdown
-          ref="breakdownRef"
-          :cost-data="breakdownData"
-          :tag-key="selectedTag"
-          :loading="isLoadingBreakdown"
-          :tag-value-aliases="currentAliases"
-          :editable="true"
-          :account-id="accountId"
-          :period="activePeriod"
-          :proforma-ratio="showProforma ? proformaRatio : null"
-          :data-mode="dataMode"
-          @update:alias="handleAliasUpdate"
-        />
-      </div>
-
-      <!-- Section C: Historical Trend Chart -->
-      <div v-if="selectedTag">
-        <TagHistoricalTrend
-          ref="trendRef"
-          :account-id="accountId"
-          :tag-key="selectedTag"
-          :tag-value-aliases="currentAliases"
-          :period="activePeriod"
-        />
-      </div>
-
-      <!-- Tag Settings Slideover -->
-      <TagConfigManager
-        v-model="showSettings"
+      <TagCostBreakdown
+        ref="breakdownRef"
+        :cost-data="breakdownData"
+        :tag-key="selectedTag"
+        :loading="isLoadingCoverage"
+        :tag-value-aliases="currentAliases"
+        :editable="isSingleAccount"
         :account-id="accountId"
-        :environment="environment"
+        :period="activePeriod"
+        :data-mode="dataMode"
+        :proforma-available="proformaAvailable"
+        :show-account-breakdown="!isSingleAccount"
+        @update:alias="handleAliasUpdate"
       />
     </div>
+
+    <TagHistoricalTrend
+      v-if="selectedTag"
+      ref="trendRef"
+      :account-ids="selectedAccounts"
+      :tag-key="selectedTag"
+      :tag-value-aliases="currentAliases"
+      :period="activePeriod"
+    />
+
+    <TagConfigManager
+      v-if="isSingleAccount"
+      v-model="showSettings"
+      :account-id="accountId"
+      :environment="environment"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
 import { formatCostValue } from '~/utils/cost-filters'
 import { downloadBlob } from '~/utils/export/export-utils'
-import type { AccountCostTagConfig } from '~~/shared/types/cost-tags'
-
-const logger = createLogger('TagAnalysisTab')
+import type { AccountCostTagConfig, TagValueCost } from '~~/shared/types/cost-tags'
 
 const props = withDefaults(defineProps<{
   selectedAccounts: string[]
@@ -199,155 +171,142 @@ const props = withDefaults(defineProps<{
 
 const enclaveStore = useEnclaveStore()
 const toast = useToast()
-
-const accountId = computed(() => props.selectedAccounts[0] || '')
+const accountId = computed(() => props.selectedAccounts.length === 1 ? props.selectedAccounts[0] || '' : '')
+const isSingleAccount = computed(() => props.selectedAccounts.length === 1)
+const accountScopeKey = computed(() => [...props.selectedAccounts].sort().join(','))
+const activePeriod = computed(() => props.selectedTimeframe || 'last90days')
+const scopeLabel = computed(() => props.selectedAccounts.length === 0
+  ? 'All accounts'
+  : props.selectedAccounts.length === 1
+    ? '1 account'
+    : `${props.selectedAccounts.length} accounts`)
 const environment = computed(() => {
   const enc = enclaveStore.enclaves[accountId.value]
   return enc?.awsGovCloudAccountID ? 'govcloud' : 'commercial'
 })
 
-// Template refs for child components
 const breakdownRef = ref<any>(null)
 const trendRef = ref<any>(null)
-
-// Cost tags composable
 const {
   availableTags,
   tagCoverage,
   tagConfig,
   isLoadingTags,
   isLoadingCoverage,
-  isLoadingConfig,
   isSavingConfig,
+  tagsError,
+  coverageError,
   fetchAvailableTags,
   fetchTagCoverage,
   fetchAccountTagConfig,
-  saveAccountTagConfig
+  saveAccountTagConfig,
+  clearTagCache
 } = useCostTags()
 
-// Local state
 const selectedTag = ref<string | null>(null)
 const showSettings = ref(false)
-const breakdownData = ref<any>(null)
-const isLoadingBreakdown = ref(false)
 const draftAliases = ref<Record<string, string>>({})
 const aliasesDirty = ref(false)
-const tagsWithCost = ref<string[]>([])
-const hiddenTagCount = ref(0)
+let loadingScope = false
+let scopeGeneration = 0
 
-// Proforma ratio state
-const proformaTotals = ref<{ billableTotal: number; proformaTotal: number } | null>(null)
+const proformaAvailable = computed(() =>
+  props.dataMode === 'proforma' && tagCoverage.value?.proformaEstimation?.available === true
+)
+const showProforma = computed(() => props.dataMode === 'proforma' && proformaAvailable.value)
+const displayTaggedCost = computed(() => showProforma.value
+  ? tagCoverage.value?.estimatedProformaTaggedCost || 0
+  : tagCoverage.value?.totalTaggedCost || 0)
+const displayUntaggedCost = computed(() => showProforma.value
+  ? tagCoverage.value?.estimatedProformaUntaggedCost || 0
+  : tagCoverage.value?.totalUntaggedCost || 0)
 
-const proformaRatio = computed(() => {
-  if (!proformaTotals.value) return null
-  const { billableTotal, proformaTotal } = proformaTotals.value
-  if (billableTotal <= 0) return null
-  return proformaTotal / billableTotal
-})
-
-const showProforma = computed(() => props.dataMode === 'proforma' && proformaRatio.value !== null)
-
-// Use global timeframe from parent (values already match API period params)
-const activePeriod = computed(() => props.selectedTimeframe || 'last90days')
-
-// Build tag select options: use filtered tags (with cost), important tags first
 const tagSelectOptions = computed(() => {
-  const important = tagConfig.value?.importantTags || []
-  const all = tagsWithCost.value.length > 0 ? tagsWithCost.value : (availableTags.value || [])
-  const options: { label: string; value: string; disabled?: boolean }[] = []
-
-  if (important.length > 0) {
-    const importantWithCost = important.filter(t => all.includes(t))
-    if (importantWithCost.length > 0) {
-      options.push({ label: '--- Important Tags ---', value: '__divider_imp__', disabled: true })
-      importantWithCost.forEach(t => options.push({ label: t, value: t }))
-      options.push({ label: '--- All Tags ---', value: '__divider_all__', disabled: true })
-    }
+  const important = isSingleAccount.value ? tagConfig.value?.importantTags || [] : []
+  const options: Array<{ label: string; value: string; disabled?: boolean }> = []
+  const importantAvailable = important.filter(tag => availableTags.value.includes(tag))
+  if (importantAvailable.length > 0) {
+    options.push({ label: '--- Important Tags ---', value: '__divider_imp__', disabled: true })
+    importantAvailable.forEach(tag => options.push({ label: tag, value: tag }))
+    options.push({ label: '--- All Tags ---', value: '__divider_all__', disabled: true })
   }
-
-  all.filter(t => !important.includes(t)).forEach(t => options.push({ label: t, value: t }))
+  availableTags.value.filter(tag => !important.includes(tag)).forEach(tag => options.push({ label: tag, value: tag }))
   return options
 })
 
-// Coverage display helpers
-const coverageColorClass = computed(() => {
-  const cov = tagCoverage.value?.overallCoverage ?? 0
-  if (cov >= 80) return 'text-green-600 dark:text-green-400'
-  if (cov >= 50) return 'text-amber-600 dark:text-amber-400'
-  return 'text-red-600 dark:text-red-400'
-})
-
-const coverageBarClass = computed(() => {
-  const cov = tagCoverage.value?.overallCoverage ?? 0
-  if (cov >= 80) return 'bg-green-500'
-  if (cov >= 50) return 'bg-amber-500'
-  return 'bg-red-500'
-})
-
-const untaggedIsHigh = computed(() => {
-  if (!tagCoverage.value) return false
-  return tagCoverage.value.overallCoverage < 70
-})
-
-// Current aliases: merge saved config with local drafts
-const currentAliases = computed(() => ({
-  ...(tagConfig.value?.tagValueAliases || {}),
-  ...draftAliases.value
+const breakdownData = computed(() => ({
+  groups: (tagCoverage.value?.values || []).map(value => ({
+    groupKey: value.groupKey,
+    billableCost: value.billableCost,
+    estimatedProformaCost: value.estimatedProformaCost,
+    accounts: value.accounts
+  }))
 }))
 
+const coverageColorClass = computed(() => {
+  const coverage = tagCoverage.value?.overallCoverage ?? 0
+  if (coverage >= 80) return 'text-green-600 dark:text-green-400'
+  if (coverage >= 50) return 'text-amber-600 dark:text-amber-400'
+  return 'text-red-600 dark:text-red-400'
+})
+const coverageBarClass = computed(() => {
+  const coverage = tagCoverage.value?.overallCoverage ?? 0
+  if (coverage >= 80) return 'bg-green-500'
+  if (coverage >= 50) return 'bg-amber-500'
+  return 'bg-red-500'
+})
+const untaggedIsHigh = computed(() => (tagCoverage.value?.overallCoverage ?? 100) < 70)
+const currentAliases = computed(() => isSingleAccount.value ? {
+  ...(tagConfig.value?.tagValueAliases || {}),
+  ...draftAliases.value
+} : {})
 
-// Fetch cost breakdown for selected tag
-async function fetchBreakdown() {
-  if (!selectedTag.value || !accountId.value) return
-
-  isLoadingBreakdown.value = true
-  try {
-    const response = await $fetch('/api/costs/summary', {
-      params: {
-        groupBy: `TAG:${selectedTag.value}`,
-        accountIds: accountId.value,
-        period: activePeriod.value
-      }
-    }) as any
-    breakdownData.value = response?.data || response || null
-  } catch (err: any) {
-    logger.error('Error fetching tag breakdown:', err)
-    breakdownData.value = null
-  } finally {
-    isLoadingBreakdown.value = false
-  }
+async function fetchAnalysis() {
+  if (!selectedTag.value) return
+  await fetchTagCoverage(selectedTag.value, props.selectedAccounts, activePeriod.value, {
+    includeValues: true,
+    proforma: props.dataMode === 'proforma'
+  })
+  logUserAction('cost.tag_drilldown', `tag:${selectedTag.value};accounts:${props.selectedAccounts.length || 'all'}`)
 }
 
-// Fetch proforma/billable totals for ratio computation
-async function fetchProformaRatio() {
-  if (!accountId.value || props.dataMode !== 'proforma') {
-    proformaTotals.value = null
-    return
-  }
-  try {
-    const response = await $fetch('/api/costs/summary', {
-      params: {
-        proforma: 'true',
-        groupBy: 'NONE',
-        accountIds: accountId.value,
-        period: activePeriod.value
-      }
-    }) as any
-    const billableTotal = parseFloat(response?.billable?.total?.UnblendedCost?.Amount || '0')
-    const proformaTotal = parseFloat(response?.proforma?.total?.UnblendedCost?.Amount || '0')
-    proformaTotals.value = { billableTotal, proformaTotal }
-  } catch (err) {
-    logger.error('Error fetching proforma ratio:', err)
-    proformaTotals.value = null
-  }
+async function loadScope() {
+  const generation = ++scopeGeneration
+  loadingScope = true
+  draftAliases.value = {}
+  aliasesDirty.value = false
+
+  const configPromise = isSingleAccount.value
+    ? fetchAccountTagConfig(accountId.value)
+    : Promise.resolve(null)
+  const [tags] = await Promise.all([
+    fetchAvailableTags(props.selectedAccounts, activePeriod.value),
+    configPromise
+  ])
+
+  if (generation !== scopeGeneration) return
+  if (!isSingleAccount.value) tagConfig.value = null
+
+  const previousTag = selectedTag.value
+  const defaultTag = isSingleAccount.value ? tagConfig.value?.defaultGroupByTag : undefined
+  const importantTag = isSingleAccount.value ? tagConfig.value?.importantTags?.find(tag => tags.includes(tag)) : undefined
+  const nextTag = previousTag && tags.includes(previousTag)
+    ? previousTag
+    : defaultTag && tags.includes(defaultTag)
+      ? defaultTag
+      : importantTag || tags[0] || null
+  const tagChanged = nextTag !== selectedTag.value
+  selectedTag.value = nextTag
+
+  loadingScope = false
+  if (!tagChanged) await fetchAnalysis()
 }
 
-// Handle alias updates
 function handleAliasUpdate(payload: { tagKey: string; tagValue: string; alias: string }) {
+  if (!isSingleAccount.value) return
   const key = `${payload.tagKey}::${payload.tagValue}`
-  if (payload.alias) {
-    draftAliases.value = { ...draftAliases.value, [key]: payload.alias }
-  } else {
+  if (payload.alias) draftAliases.value = { ...draftAliases.value, [key]: payload.alias }
+  else {
     const { [key]: _, ...rest } = draftAliases.value
     draftAliases.value = rest
   }
@@ -356,187 +315,94 @@ function handleAliasUpdate(payload: { tagKey: string; tagValue: string; alias: s
 
 async function saveAliases() {
   if (!accountId.value || !tagConfig.value) return
-
   const merged: AccountCostTagConfig = {
     ...tagConfig.value,
     tagValueAliases: { ...(tagConfig.value.tagValueAliases || {}), ...draftAliases.value }
   }
-
-  // Remove empty aliases
-  if (merged.tagValueAliases) {
-    Object.entries(merged.tagValueAliases).forEach(([k, v]) => {
-      if (!v) delete merged.tagValueAliases![k]
-    })
-  }
+  merged.tagValueAliases = Object.fromEntries(
+    Object.entries(merged.tagValueAliases || {}).filter(([, value]) => Boolean(value))
+  )
 
   try {
     await saveAccountTagConfig(accountId.value, merged)
     draftAliases.value = {}
     aliasesDirty.value = false
-    toast.add({
-      title: 'Aliases Saved',
-      description: 'Tag value aliases updated successfully',
-      icon: 'i-heroicons-check-circle',
-      color: 'green'
-    })
+    toast.add({ title: 'Aliases Saved', description: 'Tag value aliases updated successfully', icon: 'i-heroicons-check-circle', color: 'green' })
   } catch {
-    toast.add({
-      title: 'Save Failed',
-      description: 'Could not save aliases. Please try again.',
-      icon: 'i-heroicons-x-circle',
-      color: 'red'
-    })
+    toast.add({ title: 'Save Failed', description: 'Could not save aliases. Please try again.', icon: 'i-heroicons-x-circle', color: 'red' })
   }
 }
 
-// Export breakdown table as CSV
 function exportBreakdownCSV() {
-  const rows = breakdownRef.value?.rows
-  if (!rows?.length) return
+  const values = tagCoverage.value?.values || []
+  if (!values.length) return
 
-  const escCSV = (v: any) => {
-    const s = String(v ?? '')
-    return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
+  const rowMap = new Map<string, any>(
+    (breakdownRef.value?.rows || []).map((row: any): [string, any] => [row.value, row])
+  )
+  const esc = (value: unknown) => {
+    const text = String(value ?? '')
+    return text.includes(',') || text.includes('"') || text.includes('\n') ? `"${text.replace(/"/g, '""')}"` : text
   }
+  const lines: string[] = []
 
-  const hasProforma = showProforma.value && proformaRatio.value !== null
-  const headers = hasProforma
-    ? ['Display Name', 'Raw Value', 'Tag Value (Parsed)', 'Billable Cost ($)', 'Est. Proforma Cost ($)', 'Percentage (%)']
-    : ['Display Name', 'Raw Value', 'Tag Value (Parsed)', 'Cost ($)', 'Percentage (%)']
-  const lines = [headers.join(',')]
-
-  rows.forEach((row: any) => {
-    const cols = [
-      escCSV(row.label),
-      escCSV(row.rawValue || row.value),
-      escCSV(row.parsedValue || row.label),
-      (row.cost || 0).toFixed(2)
-    ]
-    if (hasProforma) cols.push(((row.cost || 0) * proformaRatio.value!).toFixed(2))
-    cols.push((row.percentage || 0).toFixed(2))
-    lines.push(cols.join(','))
-  })
-
-  // Append summary
-  const total = breakdownRef.value?.totalCost || 0
-  lines.push('')
-  if (hasProforma) {
-    const proformaTotal = proformaTotals.value?.proformaTotal || 0
-    lines.push(`Total,,,${total.toFixed(2)},${proformaTotal.toFixed(2)},100.00`)
+  if (isSingleAccount.value) {
+    lines.push(['Display Name', 'Raw Value', 'Billable Cost ($)', 'Estimated Proforma Cost ($)', 'Displayed Cost ($)', 'Percentage (%)'].join(','))
+    for (const value of values) {
+      const row: any = rowMap.get(value.groupKey)
+      lines.push([
+        esc(row?.label || value.tagValue || 'Untagged'),
+        esc(value.tagValue),
+        value.billableCost.toFixed(2),
+        value.estimatedProformaCost?.toFixed(2) || '',
+        (row?.cost || value.billableCost).toFixed(2),
+        (row?.percentage || 0).toFixed(2)
+      ].join(','))
+    }
   } else {
-    lines.push(`Total,,,"${total.toFixed(2)}",100.00`)
+    lines.push(['Display Name', 'Raw Value', 'Account Name', 'Account ID', 'Billable Cost ($)', 'Estimated Proforma Cost ($)', 'Displayed Cost ($)', 'Share of Tag Value (%)'].join(','))
+    for (const value of values) appendAccountRows(lines, value, rowMap, esc)
   }
 
-  // Append metadata
-  lines.push('')
-  lines.push(`# Account: ${accountId.value}`)
-  lines.push(`# Tag Key: ${selectedTag.value}`)
-  lines.push(`# Period: ${activePeriod.value}`)
-  lines.push(`# Exported: ${new Date().toISOString()}`)
-  if (hasProforma) {
-    lines.push(`# Note: Proforma dollar amounts are estimates extrapolated from billable tag distribution. Not suitable for chargeback.`)
-  }
+  lines.push('', `# Scope: ${scopeLabel.value}`, `# Tag Key: ${selectedTag.value}`, `# Period: ${activePeriod.value}`, `# Mode: ${showProforma.value ? 'estimated proforma' : 'billable'}`, `# Exported: ${new Date().toISOString()}`)
+  if (showProforma.value) lines.push('# Note: Proforma values are account-weighted estimates and are not suitable for chargeback.')
 
   const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
-  const timestamp = new Date().toISOString().slice(0, 10)
-  downloadBlob(blob, `tag-breakdown-${selectedTag.value}-${accountId.value}-${timestamp}.csv`)
-
-  toast.add({
-    title: 'Exported',
-    description: `Tag breakdown exported as CSV (${rows.length} rows)`,
-    icon: 'i-heroicons-arrow-down-tray',
-    color: 'green'
-  })
+  const scope = isSingleAccount.value ? accountId.value : props.selectedAccounts.length ? `${props.selectedAccounts.length}-accounts` : 'all-accounts'
+  downloadBlob(blob, `tag-breakdown-${selectedTag.value}-${scope}-${new Date().toISOString().slice(0, 10)}.csv`)
+  toast.add({ title: 'Exported', description: `Tag breakdown exported as CSV`, icon: 'i-heroicons-arrow-down-tray', color: 'green' })
   logUserAction('export.csv', 'source:tag-analysis')
 }
 
-// Initial data load when single account is selected
-async function loadInitialData() {
-  if (props.selectedAccounts.length !== 1) return
-
-  draftAliases.value = {}
-  aliasesDirty.value = false
-  tagsWithCost.value = []
-  hiddenTagCount.value = 0
-  proformaTotals.value = null
-
-  const [tags] = await Promise.all([
-    fetchAvailableTags([accountId.value]),
-    fetchAccountTagConfig(accountId.value),
-    fetchProformaRatio()
-  ])
-
-  // Filter tags to only those with actual charges
-  if (tags.length > 0) {
-    const costChecks = await Promise.allSettled(
-      tags.map(tag =>
-        $fetch('/api/costs/summary', {
-          params: {
-            groupBy: `TAG:${tag}`,
-            accountIds: accountId.value,
-            period: 'last90days'
-          }
-        })
-      )
-    )
-
-    const filtered: string[] = []
-    costChecks.forEach((result, i) => {
-      if (result.status === 'fulfilled') {
-        const data = (result.value as any)?.data || result.value
-        const groups: any[] = data?.groups || []
-        // Keep if any non-untagged group has cost > 0
-        const hasCharges = groups.some((g: any) => {
-          const key: string = g.groupKey ?? ''
-          const isUntagged = key === '$not_tagged' || key === '' || key === '__untagged__' || key === `${tags[i]}$`
-          return !isUntagged && (g.totalCost ?? 0) > 0
-        })
-        if (hasCharges) filtered.push(tags[i])
-      } else {
-        // On failure, keep the tag (don't hide it)
-        filtered.push(tags[i])
-      }
-    })
-
-    tagsWithCost.value = filtered
-    hiddenTagCount.value = tags.length - filtered.length
-  }
-
-  // Set default selected tag (using filtered list)
-  const effectiveTags = tagsWithCost.value.length > 0 ? tagsWithCost.value : tags
-  const defaultTag = tagConfig.value?.defaultGroupByTag
-  const importantTags = tagConfig.value?.importantTags || []
-
-  if (defaultTag && effectiveTags.includes(defaultTag)) {
-    selectedTag.value = defaultTag
-  } else if (importantTags.length > 0 && effectiveTags.includes(importantTags[0])) {
-    selectedTag.value = importantTags[0]
-  } else if (effectiveTags.length > 0) {
-    selectedTag.value = effectiveTags[0]
-  } else {
-    selectedTag.value = null
+function appendAccountRows(
+  lines: string[],
+  value: TagValueCost,
+  rowMap: Map<string, any>,
+  esc: (value: unknown) => string
+) {
+  const row: any = rowMap.get(value.groupKey)
+  const displayedTotal = showProforma.value ? value.estimatedProformaCost || 0 : value.billableCost
+  for (const account of value.accounts) {
+    const displayedCost = showProforma.value ? account.estimatedProformaCost || 0 : account.billableCost
+    lines.push([
+      esc(row?.label || value.tagValue || 'Untagged'),
+      esc(value.tagValue),
+      esc(account.accountName || account.accountId),
+      account.accountId,
+      account.billableCost.toFixed(2),
+      account.estimatedProformaCost?.toFixed(2) || '',
+      displayedCost.toFixed(2),
+      (displayedTotal > 0 ? (displayedCost / displayedTotal) * 100 : 0).toFixed(2)
+    ].join(','))
   }
 }
 
-function refreshAll() {
-  if (selectedTag.value) {
-    fetchTagCoverage(selectedTag.value, [accountId.value], activePeriod.value)
-    fetchBreakdown()
-    fetchProformaRatio()
-  }
+async function refreshAll() {
+  clearTagCache()
+  await loadScope()
 }
 
-// Watch for tag/period changes to fetch data
-watch([selectedTag, activePeriod], ([tag, period]) => {
-  if (!tag || !accountId.value) return
-  fetchTagCoverage(tag, [accountId.value], period)
-  fetchBreakdown()
-  fetchProformaRatio()
-  logUserAction('cost.tag_drilldown', `tag:${tag}`)
-})
-
-// Watch for account changes
-watch(accountId, () => {
-  loadInitialData()
-}, { immediate: true })
+watch([accountScopeKey, activePeriod], () => { void loadScope() }, { immediate: true })
+watch(() => props.dataMode, () => { if (!loadingScope) void fetchAnalysis() })
+watch(selectedTag, () => { if (!loadingScope) void fetchAnalysis() })
 </script>

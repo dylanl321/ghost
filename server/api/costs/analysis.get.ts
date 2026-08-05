@@ -22,6 +22,7 @@ import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { getAllAccountsUnified } from '../../utils/accounts-consolidated'
 import { parseAndValidateAccountFilters, getAccountIdsFromCriteria } from '../../utils/account-filters'
+import { getAccountScopeCacheKey } from '../../utils/cache-keys'
 import { costCache, accountCache, CacheTags } from '../../utils/cache-manager'
 import { validateDateParams, getRecommendedGranularity, type RelativePeriod } from '../../utils/date-helpers'
 import { logger } from '../../utils/logger'
@@ -430,7 +431,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     proforma,
     proformaAccountId,
     masterAccountId,
-    filteredAccountIds: filteredAccountIds ? `${filteredAccountIds.length}:${filteredAccountIds.sort().join(',').substring(0, 100)}` : null // Hash for key uniqueness
+    accountScope: getAccountScopeCacheKey(filteredAccountIds)
   })}`
 
   const accountDataCacheKey = `accounts:unified:${includeDecommissioned}`

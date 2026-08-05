@@ -11,6 +11,7 @@ import { getCostAndUsage, getProformaCosts } from '../../utils/cost-explorer'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { parseAndValidateAccountFilters, getAccountIdsFromCriteria } from '../../utils/account-filters'
+import { getAccountScopeCacheKey } from '../../utils/cache-keys'
 import { costCache, CacheTags } from '../../utils/cache-manager'
 import { validateDateParams, type RelativePeriod } from '../../utils/date-helpers'
 import { logger } from '../../utils/logger'
@@ -313,7 +314,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     proforma,
     proformaAccountId: proforma ? proformaAccountId : null,
     masterAccountId: proforma ? masterAccountId : null,
-    filteredAccountIds: filteredAccountIds ? `${filteredAccountIds.length}:${filteredAccountIds.sort().join(',').substring(0, 100)}` : null // Hash for uniqueness
+    accountScope: getAccountScopeCacheKey(filteredAccountIds)
   })}`
 
   // Helper function to process results into historical format

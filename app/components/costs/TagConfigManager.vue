@@ -135,7 +135,7 @@ function populateDraft() {
 
 async function loadData() {
   await Promise.all([
-    fetchAvailableTags(),
+    fetchAvailableTags([props.accountId]),
     fetchAccountTagConfig(props.accountId)
   ])
   populateDraft()

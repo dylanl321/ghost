@@ -8,6 +8,7 @@ import { getCostAndUsage, getProformaCosts, enhanceCostData } from '../../utils/
 import { sendSuccess, parseQueryParams, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { parseAndValidateAccountFilters, getAccountIdsFromCriteria } from '../../utils/account-filters'
+import { getAccountScopeCacheKey } from '../../utils/cache-keys'
 import { costCache, CacheTags } from '../../utils/cache-manager'
 import { validateDateParams, getRecommendedGranularity, type RelativePeriod } from '../../utils/date-helpers'
 import { logger } from '../../utils/logger'
@@ -353,7 +354,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     masterAccountId: proforma ? masterAccountId : null,
     enhanced,
     includeDecommissioned,
-    filteredAccountIds: filteredAccountIds ? `${filteredAccountIds.length}:${filteredAccountIds.sort().join(',').substring(0, 100)}` : null // Hash for uniqueness
+    accountScope: getAccountScopeCacheKey(filteredAccountIds)
   })}`
 
   // Get cost data with caching

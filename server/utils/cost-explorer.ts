@@ -283,19 +283,30 @@ export async function getCostAllocationTags(
   environment: 'commercial' | 'govcloud' = 'commercial'
 ) {
   const client = await getCostExplorerClient(environment)
-  
-  const command = new GetTagsCommand({
-    TimePeriod: timePeriod,
-    TagKey: tagKey,
-    Filter: filter
-  })
 
-  const response = await client.send(command)
-  
+  const tags = new Set<string>()
+  let returnSize = 0
+  let totalSize = 0
+  let nextPageToken: string | undefined
+
+  do {
+    const response = await client.send(new GetTagsCommand({
+      TimePeriod: timePeriod,
+      TagKey: tagKey,
+      Filter: filter,
+      NextPageToken: nextPageToken
+    }))
+
+    for (const tag of response.Tags || []) tags.add(tag)
+    returnSize += response.ReturnSize || 0
+    totalSize = Math.max(totalSize, response.TotalSize || 0)
+    nextPageToken = response.NextPageToken
+  } while (nextPageToken)
+
   return {
-    tags: response.Tags || [],
-    returnSize: response.ReturnSize || 0,
-    totalSize: response.TotalSize || 0
+    tags: Array.from(tags).sort((a, b) => a.localeCompare(b)),
+    returnSize,
+    totalSize
   }
 }
 

@@ -24,9 +24,17 @@
       <div v-if="showProforma" class="flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2 mb-3">
         <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
         <p class="text-xs text-amber-700 dark:text-amber-300">
-          Costs shown are <strong>estimates</strong> &mdash; billable tag distribution applied to your proforma total of <strong>{{ formatCostValue(totalCost * proformaRatio!) }}</strong>. Percentages are exact. Not suitable for chargeback.
+          Costs shown are <strong>account-weighted estimates</strong> based on each account's billable tag distribution. Percentages are directional. Not suitable for chargeback.
           <NuxtLink to="/support/docs?topic=cost-tags-guide" class="underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-100">Why estimated?</NuxtLink>
         </p>
+      </div>
+      <div class="mb-3 max-w-sm">
+        <UInput
+          v-model="tagValueSearch"
+          icon="i-heroicons-magnifying-glass"
+          size="sm"
+          placeholder="Filter tag values..."
+        />
       </div>
       <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
         <table class="w-full text-sm">
@@ -137,7 +145,7 @@
                 </div>
               </td>
               <td class="px-4 py-3 text-right text-xs text-gray-900 dark:text-gray-100 font-mono">
-                {{ showProforma ? formatCostValue(row.cost * proformaRatio!) : formatCostValue(row.cost) }}
+                {{ formatCostValue(row.cost) }}
               </td>
               <td class="px-4 py-3 text-right text-xs text-gray-500 dark:text-gray-400">
                 {{ row.percentage.toFixed(1) }}%
@@ -157,7 +165,7 @@
                 </button>
               </td>
               <td class="px-4 py-2 text-right text-xs font-semibold text-gray-900 dark:text-gray-100 font-mono">
-                {{ showProforma ? formatCostValue(totalCost * proformaRatio!) : formatCostValue(totalCost) }}
+                {{ formatCostValue(totalCost) }}
               </td>
               <td class="px-4 py-2 text-right text-xs text-gray-500 dark:text-gray-400">
                 100%
@@ -191,7 +199,7 @@
                   </template>
                   <template v-else>Cost</template>
                 </div>
-                <div class="font-semibold text-gray-900 dark:text-gray-100 font-mono">{{ showProforma ? formatCostValue(selectedRow.cost * proformaRatio!) : formatCostValue(selectedRow.cost) }}</div>
+                <div class="font-semibold text-gray-900 dark:text-gray-100 font-mono">{{ formatCostValue(selectedRow.cost) }}</div>
               </div>
               <div>
                 <div class="text-gray-500 dark:text-gray-400">Share</div>
@@ -207,7 +215,20 @@
             </div>
 
             <!-- Service breakdown drill-down (only for tagged values) -->
-            <template v-if="!selectedRow.isUntagged && accountId">
+            <template v-if="!selectedRow.isUntagged && showAccountBreakdown">
+              <div class="mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
+                <TagValueAccountBreakdown
+                  :accounts="selectedRow.accounts"
+                  :tag-key="tagKey"
+                  :tag-value="selectedRow.value"
+                  :tag-value-label="selectedRow.label"
+                  :period="period"
+                  :data-mode="dataMode"
+                  :proforma-available="proformaAvailable"
+                />
+              </div>
+            </template>
+            <template v-else-if="!selectedRow.isUntagged && accountId">
               <div class="mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
                 <TagValueServiceBreakdown
                   :account-id="accountId"
@@ -262,6 +283,7 @@
 
 <script setup lang="ts">
 import { formatCostValue } from '~/utils/cost-filters'
+import type { TagValueAccountCost } from '~~/shared/types/cost-tags'
 
 const logger = createLogger('TagCostBreakdown')
 
@@ -274,15 +296,17 @@ const props = withDefaults(defineProps<{
   editable?: boolean
   accountId?: string
   period?: string
-  proformaRatio?: number | null
   dataMode?: 'billable' | 'proforma'
+  proformaAvailable?: boolean
+  showAccountBreakdown?: boolean
 }>(), {
   tagValueAliases: () => ({}),
   editable: false,
   accountId: '',
   period: '',
-  proformaRatio: null,
-  dataMode: 'proforma'
+  dataMode: 'proforma',
+  proformaAvailable: false,
+  showAccountBreakdown: false
 })
 
 const emit = defineEmits<{
@@ -296,16 +320,20 @@ export interface TagRow {
   parsedValue: string // cleaned tag value after stripping prefix
   label: string       // display label (alias > parsed > raw)
   cost: number
+  billableCost: number
+  estimatedProformaCost?: number
   percentage: number
   isUntagged: boolean
+  accounts: TagValueAccountCost[]
 }
 
 const toast = useToast()
 
-const showProforma = computed(() => props.dataMode === 'proforma' && props.proformaRatio != null)
+const showProforma = computed(() => props.dataMode === 'proforma' && props.proformaAvailable)
 
 const selectedValue = ref<string | null>(null)
 const showZeroCost = ref(false)
+const tagValueSearch = ref('')
 const detailPanelRef = ref<HTMLElement | null>(null)
 
 const editingAlias = ref<string | null>(null)
@@ -434,7 +462,10 @@ const rows = computed<TagRow[]>(() => {
     return []
   }
 
-  const totalRaw = groups.reduce((sum: number, g: any) => sum + (g.totalCost ?? g.cost ?? 0), 0)
+  const getDisplayCost = (group: any) => showProforma.value && group.estimatedProformaCost !== undefined
+    ? group.estimatedProformaCost
+    : (group.billableCost ?? group.totalCost ?? group.cost ?? 0)
+  const totalRaw = groups.reduce((sum: number, group: any) => sum + getDisplayCost(group), 0)
   if (totalRaw === 0) return []
 
   return groups
@@ -442,7 +473,9 @@ const rows = computed<TagRow[]>(() => {
       const rawValue: string = g.groupKey ?? g.tagValue ?? ''
       const isUntagged = rawValue === '$not_tagged' || rawValue === '' || rawValue === '__untagged__'
         || rawValue === `${props.tagKey}$` // AWS returns "tagKey$" for untagged
-      const cost = g.totalCost ?? g.cost ?? 0
+      const billableCost = g.billableCost ?? g.totalCost ?? g.cost ?? 0
+      const estimatedProformaCost = g.estimatedProformaCost
+      const cost = getDisplayCost(g)
       const parsedValue = isUntagged ? 'Untagged' : parseTagValue(rawValue, props.tagKey)
       const alias = getAlias(rawValue)
       return {
@@ -451,8 +484,11 @@ const rows = computed<TagRow[]>(() => {
         parsedValue,
         label: isUntagged ? 'Untagged' : (alias || parsedValue),
         cost,
+        billableCost,
+        estimatedProformaCost,
         percentage: totalRaw > 0 ? (cost / totalRaw) * 100 : 0,
-        isUntagged
+        isUntagged,
+        accounts: g.accounts || []
       }
     })
     .sort((a, b) => b.cost - a.cost)
@@ -460,7 +496,16 @@ const rows = computed<TagRow[]>(() => {
 
 const visibleRows = computed(() => rows.value.filter(r => r.cost > 0 || r.isUntagged))
 const zeroCostRows = computed(() => rows.value.filter(r => r.cost <= 0 && !r.isUntagged))
-const displayRows = computed(() => showZeroCost.value ? rows.value : visibleRows.value)
+const displayRows = computed(() => {
+  const baseRows = showZeroCost.value ? rows.value : visibleRows.value
+  const search = tagValueSearch.value.trim().toLowerCase()
+  if (!search) return baseRows
+  return baseRows.filter(row =>
+    row.label.toLowerCase().includes(search) ||
+    row.rawValue.toLowerCase().includes(search) ||
+    row.parsedValue.toLowerCase().includes(search)
+  )
+})
 
 const totalCost = computed(() =>
   rows.value.reduce((sum, r) => sum + r.cost, 0)

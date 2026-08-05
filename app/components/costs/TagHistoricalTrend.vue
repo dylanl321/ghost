@@ -46,7 +46,7 @@ import { downloadBlob } from '~/utils/export/export-utils'
 const logger = createLogger('TagHistoricalTrend')
 
 const props = defineProps<{
-  accountId: string
+  accountIds: string[]
   tagKey: string
   tagValueAliases?: Record<string, string>
   period?: string
@@ -64,20 +64,22 @@ function getGranularity(period: string): 'DAILY' | 'MONTHLY' {
 }
 
 async function fetchData() {
-  if (!props.tagKey || !props.accountId) return
+  if (!props.tagKey) return
 
   loading.value = true
   error.value = null
 
   try {
     const apiPeriod = props.period || 'last90days'
+    const params: Record<string, string> = {
+      groupBy: `TAG:${props.tagKey}`,
+      period: apiPeriod,
+      granularity: getGranularity(apiPeriod)
+    }
+    if (props.accountIds.length > 0) params.accountIds = props.accountIds.join(',')
+
     const response = await $fetch('/api/costs/historical', {
-      params: {
-        groupBy: `TAG:${props.tagKey}`,
-        accountIds: props.accountId,
-        period: apiPeriod,
-        granularity: getGranularity(apiPeriod)
-      }
+      params
     }) as any
 
     chartData.value = response?.data || response || null
@@ -278,7 +280,7 @@ function exportTrendCSV() {
   downloadBlob(blob, `tag-trend-${props.tagKey}-${timestamp}.csv`)
 }
 
-watch([() => props.tagKey, () => props.period, () => props.accountId], () => {
+watch([() => props.tagKey, () => props.period, () => props.accountIds.join(',')], () => {
   fetchData()
 }, { immediate: true })
 
