@@ -317,6 +317,9 @@
         :timeframe-options="timeframeOptions"
         :selected-accounts="selectedAccounts"
         :active-tab="activeTab"
+        :active-chart-tab="activeChartTab"
+        :selected-tag="selectedTag"
+        :tag-view="tagView"
         :dataset="dataset"
         :alerts-count="!isHistoricalTimeframe ? alertsCount : 0"
         :alerts-by-severity="!isHistoricalTimeframe ? alertsBySeverity : { critical: 0, escalation: 0, warning: 0, info: 0 }"
@@ -327,7 +330,7 @@
       />
 
       <!-- Compare Toggle -->
-      <div class="px-4 md:px-5 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center gap-2">
+      <div v-if="!isTagAnalysis" class="px-4 md:px-5 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center gap-2">
         <UTooltip text="Compare two time periods side by side">
           <UButton
             size="xs"
@@ -342,7 +345,7 @@
       </div>
 
       <!-- Selected Account Context Banner -->
-      <div v-if="selectedAccounts.length > 0" class="px-4 md:px-6 pt-4">
+      <div v-if="selectedAccounts.length > 0 && !isTagAnalysis" class="px-4 md:px-6 pt-4">
         <div class="bg-blue-900/30 border border-blue-700 rounded-lg px-4 py-3 flex items-center justify-between gap-4">
           <div class="flex items-center gap-3 min-w-0 flex-1">
             <div class="flex-shrink-0 p-1.5 bg-blue-900/50 rounded-lg">
@@ -387,7 +390,7 @@
       <!-- Content Area -->
       <div class="flex-1 overflow-auto min-h-0 p-4 md:p-6">
         <!-- Comparison Mode -->
-        <div v-if="compareMode">
+        <div v-if="compareMode && !isTagAnalysis">
           <div class="mb-4 flex items-center gap-3">
             <h2 class="text-base font-semibold text-white">Period Comparison</h2>
             <UButton size="xs" color="gray" variant="soft" icon="i-heroicons-x-mark" @click="compareMode = false">
@@ -419,7 +422,7 @@
         <!-- Main Content -->
         <div v-else class="space-y-6">
           <!-- First Day of Month Notice -->
-          <div v-if="isFirstDayOfMonth" class="bg-amber-900/20 border border-amber-700 rounded-lg p-4">
+          <div v-if="isFirstDayOfMonth && !isTagAnalysis" class="bg-amber-900/20 border border-amber-700 rounded-lg p-4">
             <div class="flex items-start gap-3">
               <Icon name="i-heroicons-calendar" class="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
               <div class="flex-1">
@@ -446,7 +449,7 @@
           </div>
 
           <!-- Early Month Notice (days 2-5) -->
-          <div v-else-if="isEarlyInMonth" class="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
+          <div v-else-if="isEarlyInMonth && !isTagAnalysis" class="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
             <div class="flex items-start gap-3">
               <Icon name="i-heroicons-calendar" class="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
               <div class="flex-1">
@@ -475,7 +478,7 @@
           </div>
 
           <!-- Historical Data Warning -->
-          <div v-if="isHistoricalTimeframe" class="bg-yellow-900/20 border border-yellow-700 rounded-lg p-4">
+          <div v-if="isHistoricalTimeframe && !isTagAnalysis" class="bg-yellow-900/20 border border-yellow-700 rounded-lg p-4">
             <div class="flex items-start gap-3">
               <Icon name="i-heroicons-information-circle" class="w-5 h-5 text-yellow-500 mt-0.5 flex-shrink-0" />
               <div class="flex-1">
@@ -489,7 +492,7 @@
           </div>
 
           <!-- Summary Cards -->
-          <div data-tour="costs-summary">
+          <div v-if="!isTagAnalysis" data-tour="costs-summary">
             <CostsSummaryCards
               :total-accounts="selectedAccounts.length || accountsWithCosts.length"
               :total-budget="isHistoricalTimeframe ? 0 : totalBudget"
@@ -501,14 +504,14 @@
             />
           </div>
 
-          <div v-if="isCostPending" class="bg-white dark:bg-gray-900 border border-amber-300 dark:border-amber-600 rounded-lg p-4 text-amber-700 dark:text-amber-400 flex items-center gap-2">
+          <div v-if="isCostPending && !isTagAnalysis" class="bg-white dark:bg-gray-900 border border-amber-300 dark:border-amber-600 rounded-lg p-4 text-amber-700 dark:text-amber-400 flex items-center gap-2">
             <Icon name="i-heroicons-clock" class="w-5 h-5 animate-pulse" />
             <span>Waiting for account selection to complete...</span>
           </div>
-          <div v-else-if="isCostFetching" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-gray-700 dark:text-gray-300">
+          <div v-else-if="isCostFetching && !isTagAnalysis" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-gray-700 dark:text-gray-300">
             Loading charts...
           </div>
-          <div v-else-if="costError" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-red-600 dark:text-red-400">
+          <div v-else-if="costError && !isTagAnalysis" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-red-600 dark:text-red-400">
             {{ costError }}
           </div>
           <!-- =============================================================
@@ -521,11 +524,13 @@
                ============================================================= -->
           <div v-else data-tour="costs-chart">
             <!-- Subtle indicator while forecast/supplementary data loads in background -->
-            <div v-if="isDeferredLoading" class="mb-3 flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg text-xs text-blue-600 dark:text-blue-400">
+            <div v-if="isDeferredLoading && !isTagAnalysis" class="mb-3 flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg text-xs text-blue-600 dark:text-blue-400">
               <Icon name="i-heroicons-arrow-path" class="w-3.5 h-3.5 animate-spin flex-shrink-0" />
               <span>Loading forecast and supplementary data...</span>
             </div>
             <ChartTabs
+              v-model:tag="selectedTag"
+              v-model:tag-view="tagView"
               :smart-charts="charts"
               :dataset="dataset"
               :show-regression-line="showRegressionLine"
@@ -553,6 +558,18 @@
 </template>
 
 <script setup lang="ts">
+import CostsHeader from '~/components/costs/CostsHeader.vue'
+import CostsSummaryCards from '~/components/costs/CostsSummaryCards.vue'
+import ChartTabs from '~/components/costs/SimpleChartTabs.vue'
+import SidebarGroupList from '~/components/costs/SidebarGroupList.vue'
+import { useCostData } from '~/composables/useCostData'
+import { useCostScenario } from '~/composables/useCostScenario'
+import { useChartRegistry } from '~/composables/useChartRegistry'
+import type { DataMode } from '~/types/costs'
+import type { BudgetAlert } from '#shared/types/budget-alerts'
+import { getCostTagWorkspaceQuery, normalizeCostTagCreatorView } from '~/utils/cost-tag-workspace'
+import type { CostTagCreatorView } from '~/utils/cost-tag-workspace'
+
 definePageMeta({
   keepalive: false
 })
@@ -561,12 +578,6 @@ definePageMeta({
 // COMPOSABLES AND IMPORTS
 // =============================================================================
 // useAccountCosts: Fetches raw account data from the API
-// Component imports for UI elements
-import CostsHeader from '~/components/costs/CostsHeader.vue'
-import CostsSummaryCards from '~/components/costs/CostsSummaryCards.vue'
-import ChartTabs from '~/components/costs/SimpleChartTabs.vue'
-import SidebarGroupList from '~/components/costs/SidebarGroupList.vue'
-
 const { handleStartTour, initTourOnMount } = useCostTour()
 
 // Core composables that power the chart system:
@@ -574,15 +585,9 @@ const { handleStartTour, initTourOnMount } = useCostTour()
 // - useCostScenario: Determines which charts to show based on selection context
 // - useChartRegistry: Contains all chart definitions and selection logic
 // - useCostFilters (cost-filters.ts): Handles filtering accounts by cost thresholds
-import { useCostData } from '~/composables/useCostData'
-import { useCostScenario } from '~/composables/useCostScenario'
-import { useChartRegistry } from '~/composables/useChartRegistry'
-import type { DataMode } from '~/types/costs'
-import type { BudgetAlert } from '#shared/types/budget-alerts'
 
 const { accounts, isLoading, error, fetchAccounts } = useAccountCosts()
 const { favoriteIds } = useFavoriteAccounts()
-const { isAdmin } = useUserRoles()
 const selectedAccounts = ref<string[]>([])
 
 // Types
@@ -741,12 +746,15 @@ const searchScope = ref<'tab' | 'global'>('tab') // Default to searching within 
 const selectedTimeframe = ref('thisMonth')
 const activeTab = ref('all')
 const activeChartTab = ref('smart') // Chart tab selection (smart, organizational, trends, budget-health, data, forecast)
+const selectedTag = ref<string | null>(null)
+const tagView = ref<CostTagCreatorView>('people')
 const expandedGroups = ref(new Set<string>())
 const accountSortBy = ref<'cost' | 'name' | 'budget' | 'utilization'>('cost') // Default sort by cost
 const showRegressionLine = ref(false) // Toggle for budget variance regression line
 
 // View By state: controls how cost data is grouped (account, service, or region)
 const viewBy = ref('LINKED_ACCOUNT')
+const isTagAnalysis = computed(() => activeChartTab.value === 'tags')
 
 // Computed property to detect if we're viewing historical data
 const isHistoricalTimeframe = computed(() => {
@@ -1050,7 +1058,8 @@ const formatAccountDisplayName = (account: Account) => {
   return name.length > 20 ? name.substring(0, 20) + '...' : name
 }
 
-const getSelectedAccountName = (accountId: string): string => {
+const getSelectedAccountName = (accountId?: string): string => {
+  if (!accountId) return ''
   const account = accountsWithCosts.value.find(
     (acc: Account) => getAccountKey(acc) === accountId
   )
@@ -1059,7 +1068,7 @@ const getSelectedAccountName = (accountId: string): string => {
 }
 
 // Sidebar groups, helpers, and search matching -- extracted to composable
-const { lobGroups, departmentGroups, smartGroups, favoriteAccounts, matchesSearchTerm, getAccountKey, getBudget, getSpend } = useSidebarGroups({
+const { lobGroups, departmentGroups, smartGroups, matchesSearchTerm, getAccountKey, getBudget, getSpend } = useSidebarGroups({
   accountsWithCosts,
   favoriteIds,
   searchTerm,
@@ -1162,19 +1171,30 @@ const navigateToBudgetAlerts = () => {
 }
 
 // Apply a filter preset from CostsHeader
-const applyPreset = (preset: { selectedAccounts: string[]; timeframe: string; dataMode: string; viewBy: string; activeTab: string }) => {
+const applyPreset = (preset: {
+  selectedAccounts: string[]
+  timeframe: string
+  dataMode: string
+  viewBy: string
+  activeTab: string
+  chartTab?: string
+  tag?: string | null
+  tagView?: CostTagCreatorView
+}) => {
   selectedAccounts.value = preset.selectedAccounts || []
   if (preset.timeframe) selectedTimeframe.value = preset.timeframe
   if (preset.dataMode === 'billable' || preset.dataMode === 'proforma') {
     dataMode.value = preset.dataMode as DataMode
   }
+  if (preset.viewBy) viewBy.value = preset.viewBy
   if (preset.activeTab) activeTab.value = preset.activeTab
+  if (preset.chartTab) activeChartTab.value = preset.chartTab
+  if (preset.tag !== undefined) selectedTag.value = preset.tag
+  if (preset.tagView) tagView.value = normalizeCostTagCreatorView(preset.tagView)
 }
 
 // Handle shared state from URL parameters
 const applySharedStateFromUrl = () => {
-  const route = useRoute()
-
   // Check for share parameters in URL
   // Support 'account' (single), 'accounts' (comma-separated or JSON array)
   if (route.query.account && typeof route.query.account === 'string') {
@@ -1193,7 +1213,7 @@ const applySharedStateFromUrl = () => {
           if (Array.isArray(accounts)) {
             selectedAccounts.value = accounts
           }
-        } catch (err) {
+        } catch {
           // If not JSON, treat as single account ID
           selectedAccounts.value = [route.query.accounts]
         }
@@ -1212,6 +1232,12 @@ const applySharedStateFromUrl = () => {
   if (route.query.chartTab && typeof route.query.chartTab === 'string') {
     activeChartTab.value = route.query.chartTab
   }
+
+  if (route.query.tag && typeof route.query.tag === 'string') {
+    selectedTag.value = route.query.tag
+  }
+
+  tagView.value = normalizeCostTagCreatorView(route.query.tagView)
 
   if (route.query.mode && typeof route.query.mode === 'string') {
     const mode = route.query.mode as DataMode
@@ -1295,6 +1321,33 @@ const showAdvancedCharts = ref(false)
 //    - Historical timeframes exclude budget-dependent charts
 //    - showAdvanced toggle includes power-user charts when enabled
 const { charts } = useChartRegistry({ scenario, timeframe: selectedTimeframe, mode: dataMode, showAdvanced: showAdvancedCharts })
+
+const route = useRoute()
+const router = useRouter()
+
+// Keep the focused workspace bookmarkable without coupling tag controls to the
+// broader cost-data request pipeline.
+watch([activeChartTab, selectedTag, tagView], () => {
+  if (!import.meta.client) return
+
+  const workspaceQuery = getCostTagWorkspaceQuery({
+    chartTab: activeChartTab.value,
+    selectedTag: selectedTag.value,
+    tagView: tagView.value
+  })
+  const nextQuery: Record<string, any> = Object.fromEntries(
+    Object.entries(route.query).filter(([key]) =>
+      !(key in workspaceQuery) || workspaceQuery[key as keyof typeof workspaceQuery] !== undefined
+    )
+  )
+  const changed = Object.entries(workspaceQuery).some(([key, value]) => route.query[key] !== value)
+
+  for (const [key, value] of Object.entries(workspaceQuery)) {
+    if (value !== undefined) nextQuery[key] = value
+  }
+
+  if (changed) void router.replace({ query: nextQuery })
+})
 
 // Activity tracking for cost dashboard interactions
 watch(selectedTimeframe, (val) => { if (initialized.value) logUserAction('cost.timeframe_change', `timeframe:${val}`) })

@@ -4,6 +4,11 @@ import { getAccountScopeCacheKey } from '../../server/utils/cache-keys'
 import { buildCostExplorerTagFilter, getCostTagFilterCacheKey, parseCostTagFilter } from '../../server/utils/cost-tag-filters'
 import { buildTagCoverageData, extractProformaAccountPeriodTotals, extractProformaAccountTotals } from '../../server/utils/cost-tag-analysis'
 import { normalizeCostTagIdentity } from '../../shared/utils/cost-tag-identities'
+import {
+  getCostTagWorkspaceQuery,
+  normalizeCostTagCreatorView,
+  resolveCostTagSelection
+} from '../../app/utils/cost-tag-workspace'
 
 const resultsByTime = [
   {
@@ -201,4 +206,49 @@ test('parses multi-value and legacy cost tag filters with stable cache identity'
   assert.deepEqual(buildCostExplorerTagFilter(multi)?.Tags.Values, ['role-value-2', 'role-value-1'])
   assert.equal(getCostTagFilterCacheKey(multi), getCostTagFilterCacheKey(reordered))
   assert.deepEqual(legacy, { key: 'Project', values: ['Phoenix'] })
+})
+
+test('resolves requested tag with account defaults and favorites as fallbacks', () => {
+  const availableTags = ['Environment', 'Project', 'Team']
+
+  assert.equal(resolveCostTagSelection({ availableTags, requestedTag: 'Team' }), 'Team')
+  assert.equal(resolveCostTagSelection({
+    availableTags,
+    requestedTag: 'Unavailable',
+    defaultTag: 'Project',
+    favoriteTags: ['Team']
+  }), 'Project')
+  assert.equal(resolveCostTagSelection({
+    availableTags,
+    requestedTag: 'Unavailable',
+    defaultTag: 'Unavailable',
+    favoriteTags: ['Missing', 'Team']
+  }), 'Team')
+  assert.equal(resolveCostTagSelection({ availableTags, requestedTag: 'Unavailable' }), 'Environment')
+  assert.equal(resolveCostTagSelection({ availableTags: [], requestedTag: 'Team' }), null)
+})
+
+test('serializes valid tag workspace URL state only for Tag Analysis', () => {
+  assert.equal(normalizeCostTagCreatorView('all'), 'all')
+  assert.equal(normalizeCostTagCreatorView('invalid'), 'people')
+
+  assert.deepEqual(getCostTagWorkspaceQuery({
+    chartTab: 'tags',
+    selectedTag: 'aws:createdBy',
+    tagView: 'all'
+  }), {
+    chartTab: 'tags',
+    tag: 'aws:createdBy',
+    tagView: 'all'
+  })
+
+  assert.deepEqual(getCostTagWorkspaceQuery({
+    chartTab: 'smart',
+    selectedTag: 'Project',
+    tagView: 'people'
+  }), {
+    chartTab: 'smart',
+    tag: undefined,
+    tagView: undefined
+  })
 })

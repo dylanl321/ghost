@@ -1,150 +1,182 @@
 <template>
-  <div class="space-y-6">
-    <div class="flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2">
-      <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
-      <p class="text-xs text-amber-700 dark:text-amber-300">
-        Tag analysis uses exact <strong>billable</strong> Cost Explorer data. Proforma mode estimates each account separately because AWS Billing Conductor does not expose cost allocation tags.
-        Estimated values are directional and <strong>should not be used for chargeback</strong>.
-        <NuxtLink to="/support/docs?topic=cost-tags-guide" class="underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-100">Learn more</NuxtLink>
-      </p>
-    </div>
+  <div class="space-y-4">
+    <header class="border-b border-gray-200 dark:border-gray-700 pb-4">
+      <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div class="min-w-0">
+          <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Tag Analysis</p>
+          <h2 class="mt-0.5 break-words text-2xl font-semibold text-gray-900 dark:text-white">
+            {{ selectedTag || (isLoadingTags ? 'Loading tag keys...' : 'Choose a tag key') }}
+          </h2>
+          <p v-if="configuredTagDescription" class="mt-1 max-w-3xl text-sm text-gray-600 dark:text-gray-300">
+            {{ configuredTagDescription }}
+          </p>
+        </div>
 
-    <div class="space-y-4">
-      <div class="flex items-center gap-3 flex-wrap">
-        <USelectMenu
-          :model-value="selectedTag ?? undefined"
-          @update:model-value="selectedTag = $event ?? null"
-          :options="tagSelectOptions"
-          value-attribute="value"
-          option-attribute="label"
-          placeholder="Select a tag..."
-          size="sm"
-          class="w-56"
-          :loading="isLoadingTags"
-        />
-        <UBadge color="gray" variant="soft" size="sm">{{ scopeLabel }}</UBadge>
-        <UTooltip text="Refresh data">
+        <div class="flex flex-wrap items-center gap-2">
           <UButton
             color="gray"
-            variant="ghost"
+            variant="soft"
             icon="i-heroicons-arrow-path"
             size="sm"
             :loading="isLoadingTags || isLoadingCoverage"
             @click="refreshAll"
-          />
-        </UTooltip>
-        <UTooltip text="Export breakdown as CSV">
+          >
+            Refresh
+          </UButton>
           <UButton
             icon="i-heroicons-arrow-down-tray"
             color="gray"
-            variant="ghost"
+            variant="soft"
             size="sm"
             :disabled="!tagCoverage?.values?.length"
             @click="exportBreakdownCSV"
-          />
-        </UTooltip>
-        <UTooltip v-if="isSingleAccount" text="Tag Settings">
+          >
+            Export
+          </UButton>
           <UButton
             icon="i-heroicons-adjustments-horizontal"
             color="gray"
-            variant="ghost"
+            variant="soft"
             size="sm"
-            @click="showSettings = true"
+            @click="openSettings"
+          >
+            Tag Settings
+          </UButton>
+        </div>
+      </div>
+
+      <div class="mt-4 flex flex-col gap-3 xl:flex-row xl:items-end">
+        <div class="w-full sm:w-72">
+          <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300">Tag key</label>
+          <USelectMenu
+            :model-value="selectedTag ?? undefined"
+            :options="tagSelectOptions"
+            value-attribute="value"
+            option-attribute="label"
+            placeholder="Select a tag..."
+            size="sm"
+            class="w-full"
+            :loading="isLoadingTags"
+            @update:model-value="selectedTag = $event ?? null"
           />
-        </UTooltip>
-      </div>
-
-      <div v-if="tagsError" class="rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-xs text-red-700 dark:text-red-300">
-        {{ tagsError }}
-      </div>
-      <div v-if="coverageError" class="rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-xs text-red-700 dark:text-red-300">
-        {{ coverageError }}
-      </div>
-
-      <div v-if="selectedTag && dataMode === 'proforma' && tagCoverage && !isLoadingCoverage" class="flex items-start gap-2 rounded-md px-3 py-2 border"
-        :class="proformaAvailable
-          ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
-          : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'"
-      >
-        <UIcon
-          :name="proformaAvailable ? 'i-heroicons-information-circle' : 'i-heroicons-exclamation-triangle'"
-          class="w-4 h-4 mt-0.5 flex-shrink-0"
-          :class="proformaAvailable ? 'text-blue-500' : 'text-amber-500'"
-        />
-        <p class="text-xs" :class="proformaAvailable ? 'text-blue-700 dark:text-blue-300' : 'text-amber-700 dark:text-amber-300'">
-          <template v-if="proformaAvailable">
-            Dollar amounts are <strong>account-and-month weighted proforma estimates</strong>. Each account's billable tag distribution is applied within the same AWS time bucket before results are combined.
-          </template>
-          <template v-else>
-            A complete proforma estimate is unavailable for this scope. Exact billable costs are shown instead.
-          </template>
-        </p>
-      </div>
-
-      <div v-if="selectedTag && tagCoverage && !isLoadingCoverage" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-          <div class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Coverage</div>
-          <div class="text-3xl font-bold" :class="coverageColorClass">{{ tagCoverage.overallCoverage.toFixed(1) }}%</div>
-          <div class="mt-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-            <div class="h-2 rounded-full transition-all duration-500" :class="coverageBarClass" :style="{ width: `${tagCoverage.overallCoverage}%` }" />
-          </div>
         </div>
 
-        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-          <div class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Tagged Cost{{ showProforma ? ' (est.)' : '' }}</div>
-          <div class="text-3xl font-bold text-green-600 dark:text-green-400">{{ formatCostValue(displayTaggedCost) }}</div>
-          <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ showProforma ? 'Estimated proforma' : `Resources with "${selectedTag}"` }}</div>
-        </div>
-
-        <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4" :class="untaggedIsHigh ? 'border-amber-300 dark:border-amber-600' : ''">
-          <div class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Untagged Cost{{ showProforma ? ' (est.)' : '' }}</div>
-          <div class="text-3xl font-bold" :class="untaggedIsHigh ? 'text-amber-600 dark:text-amber-400' : 'text-gray-700 dark:text-gray-300'">{{ formatCostValue(displayUntaggedCost) }}</div>
-          <div class="text-xs mt-1" :class="untaggedIsHigh ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'">
-            {{ untaggedIsHigh ? 'High untagged spend detected' : (showProforma ? 'Estimated proforma' : 'Resources without this tag') }}
-          </div>
-        </div>
-      </div>
-
-      <div v-if="selectedTag && isLoadingCoverage" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-center">
-        <UIcon name="i-heroicons-arrow-path" class="w-5 h-5 animate-spin text-blue-500 mx-auto mb-2" />
-        <p class="text-sm text-gray-400">Calculating tag costs across {{ scopeLabel.toLowerCase() }}...</p>
-      </div>
-
-      <div v-if="!isLoadingTags && availableTags.length === 0 && !tagsError" class="py-10 text-center border border-gray-200 dark:border-gray-700 rounded-lg">
-        <UIcon name="i-heroicons-tag" class="w-8 h-8 text-gray-400 mx-auto mb-2" />
-        <p class="text-sm text-gray-500 dark:text-gray-400">No active cost allocation tags were found for this scope and timeframe.</p>
-      </div>
-    </div>
-
-    <div v-if="selectedTag">
-      <div class="flex items-start justify-between gap-2 flex-wrap mb-2">
-        <div>
-          <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Cost Breakdown</h3>
-          <p v-if="isCreatedBy && createdByView === 'people'" class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            {{ peopleValues.length }} people · {{ formatCostValue(peopleDisplayCost) }} · {{ peopleShareOfAllSpend.toFixed(1) }}% of all spend
-          </p>
-        </div>
-        <div class="flex items-center gap-2 flex-wrap">
+        <div class="flex flex-wrap items-center gap-2">
+          <UBadge color="gray" variant="soft" size="sm">
+            <UIcon name="i-heroicons-building-office" class="mr-1 h-3.5 w-3.5" />
+            {{ scopeLabel }}
+          </UBadge>
+          <UBadge color="gray" variant="soft" size="sm">
+            <UIcon name="i-heroicons-calendar-days" class="mr-1 h-3.5 w-3.5" />
+            {{ timeframeLabel }}
+          </UBadge>
+          <UBadge :color="dataMode === 'proforma' ? 'blue' : 'gray'" variant="soft" size="sm">
+            <UIcon name="i-heroicons-banknotes" class="mr-1 h-3.5 w-3.5" />
+            {{ modeLabel }}
+          </UBadge>
           <UButtonGroup v-if="isCreatedBy" size="xs">
             <UButton
               :color="createdByView === 'people' ? 'blue' : 'gray'"
               :variant="createdByView === 'people' ? 'solid' : 'outline'"
               @click="createdByView = 'people'"
             >
-              People ({{ peopleValues.length }})
+              People
             </UButton>
             <UButton
               :color="createdByView === 'all' ? 'blue' : 'gray'"
               :variant="createdByView === 'all' ? 'solid' : 'outline'"
               @click="createdByView = 'all'"
             >
-              All creators ({{ creatorCount }})
+              All creators
             </UButton>
           </UButtonGroup>
-          <UButton v-if="aliasesDirty && isSingleAccount" color="blue" variant="soft" size="xs" :loading="isSavingConfig" @click="saveAliases">
-            Save Aliases
-          </UButton>
+          <UBadge v-else color="gray" variant="soft" size="sm">
+            <UIcon name="i-heroicons-list-bullet" class="mr-1 h-3.5 w-3.5" />
+            All tag values
+          </UBadge>
         </div>
+      </div>
+    </header>
+
+    <div v-if="tagsError" class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+      {{ tagsError }}
+    </div>
+    <div v-if="coverageError" class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+      {{ coverageError }}
+    </div>
+
+    <div
+      v-if="selectedTag"
+      class="flex items-start gap-2 rounded-md border px-3 py-2"
+      :class="dataBasisClasses"
+    >
+      <UIcon :name="dataBasisIcon" class="mt-0.5 h-4 w-4 flex-shrink-0" />
+      <p class="text-xs">
+        <template v-if="dataMode === 'billable'">
+          Exact billable Cost Explorer tag data is shown. Account-level proforma totals remain the source for chargeback.
+        </template>
+        <template v-else-if="tagCoverage && !proformaAvailable">
+          A complete proforma estimate is unavailable for this scope, so exact billable tag costs are shown instead.
+        </template>
+        <template v-else>
+          Tag costs are account-and-month weighted proforma estimates based on billable tag distribution. They are directional and not suitable for chargeback.
+        </template>
+        <NuxtLink to="/support/docs?topic=cost-tags-guide" class="ml-1 underline underline-offset-2">Learn more</NuxtLink>
+      </p>
+    </div>
+
+    <div
+      v-if="selectedTag && tagCoverage && !isLoadingCoverage"
+      class="grid grid-cols-1 overflow-hidden rounded-md border border-gray-200 bg-white sm:grid-cols-3 sm:divide-x dark:border-gray-700 dark:bg-gray-900 dark:divide-gray-700"
+    >
+      <div class="px-4 py-3">
+        <div class="flex items-baseline justify-between gap-3">
+          <span class="text-xs font-medium text-gray-500 dark:text-gray-400">Coverage</span>
+          <span class="text-lg font-semibold" :class="coverageColorClass">{{ tagCoverage.overallCoverage.toFixed(1) }}%</span>
+        </div>
+        <div class="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+          <div class="h-1.5 rounded-full transition-all duration-500" :class="coverageBarClass" :style="{ width: `${tagCoverage.overallCoverage}%` }" />
+        </div>
+      </div>
+      <div class="border-t border-gray-200 px-4 py-3 sm:border-t-0 dark:border-gray-700">
+        <div class="flex items-baseline justify-between gap-3">
+          <span class="text-xs font-medium text-gray-500 dark:text-gray-400">Tagged Cost{{ showProforma ? ' (est.)' : '' }}</span>
+          <span class="text-lg font-semibold text-green-600 dark:text-green-400">{{ formatCostValue(displayTaggedCost) }}</span>
+        </div>
+      </div>
+      <div class="border-t border-gray-200 px-4 py-3 sm:border-t-0 dark:border-gray-700">
+        <div class="flex items-baseline justify-between gap-3">
+          <span class="text-xs font-medium text-gray-500 dark:text-gray-400">Untagged Cost{{ showProforma ? ' (est.)' : '' }}</span>
+          <span class="text-lg font-semibold" :class="untaggedIsHigh ? 'text-amber-600 dark:text-amber-400' : 'text-gray-700 dark:text-gray-300'">
+            {{ formatCostValue(displayUntaggedCost) }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="selectedTag && isLoadingCoverage" class="rounded-md border border-gray-200 bg-white px-4 py-3 text-center dark:border-gray-700 dark:bg-gray-900">
+      <div class="flex items-center justify-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+        <UIcon name="i-heroicons-arrow-path" class="h-4 w-4 animate-spin text-blue-500" />
+        Calculating tag costs across {{ scopeLabel.toLowerCase() }}...
+      </div>
+    </div>
+
+    <div v-if="!isLoadingTags && availableTags.length === 0 && !tagsError" class="rounded-md border border-gray-200 py-10 text-center dark:border-gray-700">
+      <UIcon name="i-heroicons-tag" class="mx-auto mb-2 h-8 w-8 text-gray-400" />
+      <p class="text-sm text-gray-500 dark:text-gray-400">No active cost allocation tags were found for this scope and timeframe.</p>
+    </div>
+
+    <div v-if="selectedTag">
+      <div class="mb-2 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Cost Breakdown</h3>
+          <p v-if="isCreatedBy && createdByView === 'people'" class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+            {{ peopleValues.length }} people · {{ formatCostValue(peopleDisplayCost) }} · {{ peopleShareOfAllSpend.toFixed(1) }}% of all spend
+          </p>
+        </div>
+        <UButton v-if="aliasesDirty && isSingleAccount" color="blue" variant="soft" size="xs" :loading="isSavingConfig" @click="saveAliases">
+          Save Aliases
+        </UButton>
       </div>
       <TagCostBreakdown
         ref="breakdownRef"
@@ -178,13 +210,35 @@
       v-model="showSettings"
       :account-id="accountId"
       :environment="environment"
+      @saved="handleSettingsSaved"
     />
+
+    <UModal v-model="showScopeSettings" :ui="{ width: 'sm:max-w-md' }">
+      <UCard>
+        <template #header>
+          <div class="flex items-center gap-2">
+            <UIcon name="i-heroicons-adjustments-horizontal" class="h-5 w-5 text-gray-500" />
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Tag Settings</h3>
+          </div>
+        </template>
+        <p class="text-sm text-gray-600 dark:text-gray-300">
+          Favorites, default tags, notes, and aliases are account-specific. Select exactly one account in the account selector to view or edit its settings.
+        </p>
+        <template #footer>
+          <div class="flex justify-end">
+            <UButton color="gray" variant="soft" @click="showScopeSettings = false">Close</UButton>
+          </div>
+        </template>
+      </UCard>
+    </UModal>
   </div>
 </template>
 
 <script setup lang="ts">
 import { formatCostValue } from '~/utils/cost-filters'
 import { downloadBlob } from '~/utils/export/export-utils'
+import { resolveCostTagSelection } from '~/utils/cost-tag-workspace'
+import type { CostTagCreatorView } from '~/utils/cost-tag-workspace'
 import type { AccountCostTagConfig, TagValueCost } from '~~/shared/types/cost-tags'
 import { isCreatedByTag } from '~~/shared/utils/cost-tag-identities'
 
@@ -207,6 +261,21 @@ const scopeLabel = computed(() => props.selectedAccounts.length === 0
   : props.selectedAccounts.length === 1
     ? '1 account'
     : `${props.selectedAccounts.length} accounts`)
+const timeframeLabel = computed(() => {
+  const labels: Record<string, string> = {
+    last7days: 'Last 7 Days',
+    last30days: 'Last 30 Days',
+    last90days: 'Last 90 Days',
+    thisMonth: 'This Month',
+    lastMonth: 'Last Month',
+    thisQuarter: 'This Quarter',
+    lastQuarter: 'Last Quarter',
+    ytd: 'Year-to-Date',
+    last12months: 'Last 12 Months',
+    lastYear: 'Last Year'
+  }
+  return labels[activePeriod.value] || activePeriod.value
+})
 const environment = computed(() => {
   const enc = enclaveStore.enclaves[accountId.value]
   return enc?.awsGovCloudAccountID ? 'govcloud' : 'commercial'
@@ -230,11 +299,12 @@ const {
   clearTagCache
 } = useCostTags()
 
-const selectedTag = ref<string | null>(null)
+const selectedTag = defineModel<string | null>('tag', { default: null })
+const createdByView = defineModel<CostTagCreatorView>('tagView', { default: 'people' })
 const showSettings = ref(false)
+const showScopeSettings = ref(false)
 const draftAliases = ref<Record<string, string>>({})
 const aliasesDirty = ref(false)
-const createdByView = ref<'people' | 'all'>('people')
 let loadingScope = false
 let scopeGeneration = 0
 
@@ -242,6 +312,20 @@ const proformaAvailable = computed(() =>
   props.dataMode === 'proforma' && tagCoverage.value?.proformaEstimation?.available === true
 )
 const showProforma = computed(() => props.dataMode === 'proforma' && proformaAvailable.value)
+const modeLabel = computed(() => {
+  if (props.dataMode === 'billable') return 'Billable'
+  if (tagCoverage.value && !proformaAvailable.value) return 'Billable fallback'
+  return 'Proforma estimate'
+})
+const configuredTagDescription = computed(() => isSingleAccount.value && selectedTag.value
+  ? tagConfig.value?.tagDescriptions?.[selectedTag.value] || ''
+  : '')
+const dataBasisClasses = computed(() => props.dataMode === 'proforma'
+  ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300'
+  : 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300')
+const dataBasisIcon = computed(() => props.dataMode === 'proforma'
+  ? 'i-heroicons-exclamation-triangle'
+  : 'i-heroicons-information-circle')
 const displayTaggedCost = computed(() => showProforma.value
   ? tagCoverage.value?.estimatedProformaTaggedCost || 0
   : tagCoverage.value?.totalTaggedCost || 0)
@@ -253,7 +337,6 @@ const isCreatedBy = computed(() => Boolean(selectedTag.value && isCreatedByTag(s
 const allTagValues = computed(() => tagCoverage.value?.values || [])
 const peopleValues = computed(() => isCreatedBy.value ? allTagValues.value.filter(value => value.isPerson) : allTagValues.value)
 const visibleTagValues = computed(() => isCreatedBy.value && createdByView.value === 'people' ? peopleValues.value : allTagValues.value)
-const creatorCount = computed(() => allTagValues.value.filter(value => !value.isUntagged).length)
 const displayCostForValue = (value: TagValueCost) => showProforma.value
   ? value.estimatedProformaCost || 0
   : value.billableCost
@@ -332,14 +415,13 @@ async function loadScope() {
   if (generation !== scopeGeneration) return
   if (!isSingleAccount.value) tagConfig.value = null
 
-  const previousTag = selectedTag.value
   const defaultTag = isSingleAccount.value ? tagConfig.value?.defaultGroupByTag : undefined
-  const importantTag = isSingleAccount.value ? tagConfig.value?.importantTags?.find(tag => tags.includes(tag)) : undefined
-  const nextTag = previousTag && tags.includes(previousTag)
-    ? previousTag
-    : defaultTag && tags.includes(defaultTag)
-      ? defaultTag
-      : importantTag || tags[0] || null
+  const nextTag = resolveCostTagSelection({
+    availableTags: tags,
+    requestedTag: selectedTag.value,
+    defaultTag,
+    favoriteTags: isSingleAccount.value ? tagConfig.value?.importantTags : []
+  })
   const tagChanged = nextTag !== selectedTag.value
   selectedTag.value = nextTag
 
@@ -466,10 +548,27 @@ async function refreshAll() {
   await loadScope()
 }
 
+function openSettings() {
+  if (isSingleAccount.value) showSettings.value = true
+  else showScopeSettings.value = true
+}
+
+function handleSettingsSaved(config: AccountCostTagConfig) {
+  tagConfig.value = config
+}
+
 watch([accountScopeKey, activePeriod], () => { void loadScope() }, { immediate: true })
 watch(() => props.dataMode, () => { if (!loadingScope) void fetchAnalysis() })
-watch(selectedTag, () => {
-  createdByView.value = 'people'
+watch(selectedTag, (tag) => {
+  if (!loadingScope && availableTags.value.length > 0 && (!tag || !availableTags.value.includes(tag))) {
+    selectedTag.value = resolveCostTagSelection({
+      availableTags: availableTags.value,
+      requestedTag: tag,
+      defaultTag: isSingleAccount.value ? tagConfig.value?.defaultGroupByTag : undefined,
+      favoriteTags: isSingleAccount.value ? tagConfig.value?.importantTags : []
+    })
+    return
+  }
   if (!loadingScope) void fetchAnalysis()
 })
 </script>

@@ -3,7 +3,7 @@
     <!-- Tab Navigation with Show More Toggle -->
     <div class="border-b border-gray-200 dark:border-gray-700 mb-4" data-tour="chart-tabs">
       <div class="flex items-center justify-between mb-2">
-        <div class="flex-1"></div>
+        <div class="flex-1" />
         <!-- Show Advanced Charts Toggle -->
         <UButton
           v-if="activeTab === 'smart'"
@@ -20,13 +20,13 @@
         <button
           v-for="tab in tabs"
           :key="tab.id"
-          @click="activeTab = tab.id"
           :class="[
             activeTab === tab.id
               ? 'border-blue-500 text-blue-500'
               : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-300 hover:border-gray-300',
             'whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-150'
           ]"
+          @click="activeTab = tab.id"
         >
           <UIcon v-if="tab.icon" :name="tab.icon" class="w-4 h-4 inline-block mr-1" />
           <span class="hidden sm:inline">{{ tab.label }}</span>
@@ -203,7 +203,13 @@
 
       <!-- Tag Analysis Tab -->
       <div v-else-if="activeTab === 'tags'" class="animate-fadeIn">
-        <TagAnalysisTab :selected-accounts="selectedAccounts" :selected-timeframe="selectedTimeframe" :data-mode="dataMode || 'proforma'" />
+        <TagAnalysisTab
+          v-model:tag="selectedTag"
+          v-model:tag-view="selectedTagView"
+          :selected-accounts="selectedAccounts"
+          :selected-timeframe="selectedTimeframe"
+          :data-mode="dataMode || 'proforma'"
+        />
       </div>
     </div>
   </div>
@@ -223,6 +229,7 @@ import CostDashboardAlerts from './CostDashboardAlerts.vue'
 import type { ChartDefinition } from '~/composables/useChartRegistry'
 import { useTableRegistry } from '~/composables/useTableRegistry'
 import { useCostScenario } from '~/composables/useCostScenario'
+import type { CostTagCreatorView } from '~/utils/cost-tag-workspace'
 
 // Props
 const props = defineProps<{
@@ -248,6 +255,9 @@ const emit = defineEmits<{
   'tab-changed': [tabId: string]
   'refresh-data': []
 }>()
+
+const selectedTag = defineModel<string | null>('tag', { default: null })
+const selectedTagView = defineModel<CostTagCreatorView>('tagView', { default: 'people' })
 
 // State
 const activeTab = ref(props.activeTabProp || 'smart')
