@@ -18,9 +18,6 @@ RUN npm install -g npm@${NPM_VERSION} && \
 # Copy package.json and package-lock.json first (for efficient caching of dependencies)
 COPY package*.json ./
 
-# Patches must be present before postinstall so patch-package can apply them
-COPY patches/ ./patches/
-
 # Install dependencies
 # Workaround for npm optional dependencies bug with oxc-parser:
 # 1. Install without running postinstall scripts
