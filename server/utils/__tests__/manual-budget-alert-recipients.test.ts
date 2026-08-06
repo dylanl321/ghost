@@ -60,7 +60,7 @@ test('adds an audited recipient as an additive CC without replacing existing con
 
   assert.deepEqual(updated.to, ['legacy.to@gd-ms.com'])
   assert.deepEqual(updated.cc, ['legacy.cc@gd-ms.com', 'jane.doe@gd-ms.com'])
-  assert.equal(updated.override, false)
+  assert.equal(updated.override, true)
   assert.deepEqual(updated.by_type, {
     MONTHLY: { cc: ['monthly.only@gd-ms.com', 'jane.doe@gd-ms.com'] },
     FORECAST: { INFO: { to: ['forecast.owner@gd-ms.com'], cc: ['jane.doe@gd-ms.com'] } }
@@ -70,6 +70,13 @@ test('adds an audited recipient as an additive CC without replacing existing con
     added_by: 'admin.user@gd-ms.com',
     added_at: '2026-08-06T12:00:00.000Z'
   }])
+})
+
+test('new manual recipient records are additive by default', () => {
+  const updated = addManualRecipient(null, 'jane.doe', 'admin.user@gd-ms.com', '2026-08-06T12:00:00.000Z')
+
+  assert.equal(updated.override, false)
+  assert.deepEqual(updated.cc, ['jane.doe@gd-ms.com'])
 })
 
 test('does not duplicate an existing manual recipient', () => {

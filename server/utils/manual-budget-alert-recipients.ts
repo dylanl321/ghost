@@ -137,8 +137,9 @@ export function addManualRecipient(
     config_section: 'custom_recipients#main',
     section_type: 'custom_recipients',
     cc: uniqueEmails([...(existing?.cc || []), email]),
-    // Manual additions are always an overlay. Never suppress PEP/default roles.
-    override: false,
+    // New records are additive. Preserve an existing override policy rather
+    // than silently changing legacy routing when a manual user is added.
+    override: existing?.override ?? false,
     by_type: mapByTypeCc(existing?.by_type, email) as Record<string, unknown> | undefined,
     manual_recipients: [
       ...manualRecipients,
@@ -161,7 +162,7 @@ export function removeManualRecipient(
   return {
     ...existing,
     cc: (existing.cc || []).filter(recipient => recipient.toLowerCase() !== email),
-    override: false,
+    override: existing.override ?? false,
     by_type: mapByTypeCc(existing.by_type, email, true) as Record<string, unknown> | undefined,
     manual_recipients: manualRecipients.filter(recipient => recipient.email.toLowerCase() !== email)
   }
