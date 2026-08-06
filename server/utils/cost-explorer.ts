@@ -717,6 +717,12 @@ export async function getProformaCosts(
     }
   }
   
+  // Strip the extra early period introduced by groupedStartDate — callers only want periods
+  // within the originally requested date range.
+  proformaCosts.resultsByTime = proformaCosts.resultsByTime.filter(
+    (period: any) => (period?.TimePeriod?.Start ?? '') >= params.startDate
+  )
+
   // Calculate totals from both accounts
   let billableTotal = 0
   let proformaTotal = 0
