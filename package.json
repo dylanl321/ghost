@@ -26,6 +26,7 @@
     "check:deps": "npx depcheck --ignores=\"@nuxt/*,nuxt-*,@types/*,eslint,typescript\"",
     "check:files": "npx unimported",
     "test:chat": "tsx --test tests/chat/*.test.ts",
+    "test:vmaas": "tsx --test tests/vmaas/*.test.ts",
     "changelog:generate": "tsx scripts/generate-changelog.ts"
   },
   "dependencies": {

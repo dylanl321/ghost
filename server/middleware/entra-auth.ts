@@ -17,6 +17,11 @@ interface AuthContext {
   scopes?: string[]
 }
 
+export function isAllowedVmaasCostPath(pathname: string, method: string): boolean {
+  return method === 'GET' && (pathname === '/api/integrations/vmaas/costs' ||
+    /^\/api\/integrations\/vmaas\/instances\/i-[0-9a-f]{8,17}\/cost$/.test(pathname))
+}
+
 /**
  * Check if request is for API endpoints that require authentication
  */
@@ -178,6 +183,18 @@ export default defineEventHandler(async (event) => {
   // Add auth context to event for use in API handlers
   event.context.auth = authContext
 
+  // Compute Foundry's VMaaS key is intentionally incapable of reaching any
+  // other GHOST surface, even if it is accidentally sent to the wrong path.
+  if (authContext.authType === 'apikey' && authContext.scopes?.includes('vmaas:costs:read')) {
+    const pathname = getRequestURL(event).pathname
+    if (!isAllowedVmaasCostPath(pathname, event.node.req.method || '')) {
+      throw createError({
+        statusCode: 403,
+        statusMessage: 'The VMaaS cost key is restricted to VMaaS cost APIs.'
+      })
+    }
+  }
+
   // Log successful authentication
   logger.debug(`Authenticated via ${authContext.authType} for ${event.node.req.url}`)
 
@@ -249,8 +266,11 @@ export function requireOIDCAuth(event: H3Event): void {
  * Legacy scope functions - updated to perform actual scope checks
  * For 'admin' scope, delegates to the real admin group membership check
  */
-export function hasScope(event: H3Event, _requiredScope: string): boolean {
-  return isAuthenticated(event)
+export function hasScope(event: H3Event, requiredScope: string): boolean {
+  const auth = getAuthContext(event)
+  if (!auth?.isAuthenticated) return false
+  if (auth.authType !== 'apikey' || !requiredScope.includes(':')) return true
+  return Boolean(auth.scopes?.includes(requiredScope) || auth.scopes?.includes('admin:all'))
 }
 
 export async function requireScope(event: H3Event, requiredScope: string): Promise<void> {
@@ -258,6 +278,13 @@ export async function requireScope(event: H3Event, requiredScope: string): Promi
     throw createError({
       statusCode: 401,
       statusMessage: 'Authentication required'
+    })
+  }
+
+  if (!hasScope(event, requiredScope)) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: `API key requires ${requiredScope} scope`
     })
   }
 

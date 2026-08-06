@@ -62,6 +62,7 @@ export const API_KEY_SCOPES = {
   // Cost scopes
   'costs:read': 'View AWS cost data and reports',
   'costs:write': 'Import and modify cost forecasts',
+  'vmaas:costs:read': 'Read fixed-account VMaaS cost projections',
 
   // Forecast scopes
   'forecast:read': 'View cost forecast data',

@@ -493,6 +493,11 @@ const navigationItems = computed(() => {
       collapseRule: "default-collapsed",
     },
     {
+      label: "VMaaS Costs",
+      to: "/account/vmaas-costs",
+      icon: "i-heroicons-server-stack",
+    },
+    {
       label: "GDMS Finance",
       to: "/gdms-finance",
       icon: "i-heroicons-chart-bar",
