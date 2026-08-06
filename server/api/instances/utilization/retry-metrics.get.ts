@@ -16,9 +16,9 @@ import {
   DEFAULT_THRESHOLDS,
   type ClassificationResult,
   type ClassificationSummary,
-  type InstanceClassification,
-  type InstanceApiActivity
+  type InstanceClassification
 } from '../../../utils/instance-utilization-classifier'
+import type { InstanceApiActivity } from '../../../utils/instance-activity-detection'
 import type { ComputeOptimizerRecommendation } from '../../../utils/compute-optimizer'
 import type { EnrichedInstanceData } from '../../../utils/instance-enrichment'
 import { getCacheManager } from '../../../utils/cache-manager'

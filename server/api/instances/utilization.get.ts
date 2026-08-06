@@ -20,9 +20,9 @@ import { getEC2Recommendations } from '../../utils/compute-optimizer'
 import {
   classifyInstances,
   DEFAULT_THRESHOLDS,
-  type ClassificationResult,
-  type InstanceApiActivity
+  type ClassificationResult
 } from '../../utils/instance-utilization-classifier'
+import type { InstanceApiActivity } from '../../utils/instance-activity-detection'
 import { getCacheManager } from '../../utils/cache-manager'
 import { getLatestAnalysis, getInstanceClassifications } from '../../utils/utilization-persistence'
 import type { AWSEnvironmentType } from '../../types'

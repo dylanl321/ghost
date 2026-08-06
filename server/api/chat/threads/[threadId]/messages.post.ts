@@ -37,7 +37,7 @@ registerEndpoint('/api/chat/threads/{threadId}/messages', 'POST', {
               type: 'object',
               required: ['role', 'content'],
               properties: {
-                role: { type: 'string', enum: ['user', 'assistant'] },
+                role: { type: 'string', enum: ['user'] },
                 content: { type: 'string' },
                 metadata: {
                   type: 'object',
@@ -107,6 +107,10 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   if (!body.message || !body.message.role || !body.message.content) {
     return errors.badRequest(event, 'Message with role and content is required')
+  }
+
+  if (body.message.role !== 'user') {
+    return errors.badRequest(event, 'Only user messages may be submitted from the client')
   }
 
   logger.info(`[Chat Threads API] Adding message to thread ${threadId}`, {

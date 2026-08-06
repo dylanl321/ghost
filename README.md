@@ -8,8 +8,10 @@ See `DEPLOYMENT_STEPS.md` for deployment and environment setup notes.
 
 ## Quick start guide
 
-Install dependencies (NOTE: `--legacy-peer-deps` is required to resolve some dependency issues with the Histoire module until they update it to support Nuxt 4):
-`npm install --legacy-peer-deps`
+Use Node 22.19 or newer with npm 11. The container build currently pins Node 22.23.1 and npm 11.18.0.
+
+Install the exact locked dependencies:
+`npm ci --legacy-peer-deps`
 
 Start the development server on `http://localhost:3000`:
 `npm run dev`

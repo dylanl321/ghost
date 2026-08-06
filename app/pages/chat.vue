@@ -23,12 +23,14 @@
   <!-- Full-Page Chat with Thread Management (when enabled) -->
   <div v-else class="flex h-full overflow-hidden">
     <!-- Thread List Sidebar -->
-    <ThreadListSidebar
-      @thread-selected="handleThreadSelected"
-      @new-thread="handleNewThread"
-      @share-thread="handleShareThread"
-      @export-thread="handleExportThread"
-    />
+    <div class="hidden md:block h-full">
+      <ThreadListSidebar
+        @thread-selected="handleThreadSelected"
+        @new-thread="handleNewThread"
+        @share-thread="handleShareThread"
+        @export-thread="handleExportThread"
+      />
+    </div>
 
     <!-- Main Chat Area -->
     <div class="flex-1 flex flex-col min-w-0">
@@ -36,6 +38,14 @@
       <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800">
         <!-- Thread Info -->
         <div class="flex items-center gap-3 min-w-0">
+          <UButton
+            class="md:hidden"
+            icon="i-heroicons-bars-3"
+            variant="ghost"
+            color="gray"
+            aria-label="Open conversations"
+            @click="showMobileThreads = true"
+          />
           <UIcon name="i-heroicons-chat-bubble-left-right" class="w-6 h-6 text-purple-500 flex-shrink-0" />
           <div class="min-w-0 flex-1">
             <!-- Editable Title -->
@@ -94,13 +104,6 @@
 
             <div class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
               <span>{{ currentThreadInfo }}</span>
-              <span class="text-gray-400">•</span>
-              <UBadge color="green" variant="subtle" size="xs">
-                <div class="flex items-center gap-1">
-                  <div class="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-                  <span>Connected</span>
-                </div>
-              </UBadge>
             </div>
           </div>
         </div>
@@ -141,11 +144,19 @@
       <div class="flex-1 min-h-0">
         <ClientOnly>
           <GhostChatFullPage
-            @message-sent="handleMessageSent"
           />
         </ClientOnly>
       </div>
     </div>
+
+    <USlideover v-model="showMobileThreads" side="left" :ui="{ width: 'max-w-xs' }">
+      <ThreadListSidebar
+        @thread-selected="handleThreadSelected"
+        @new-thread="handleNewThread"
+        @share-thread="handleShareThread"
+        @export-thread="handleExportThread"
+      />
+    </USlideover>
 
     <!-- Share Modal -->
     <ChatShareModal
@@ -200,6 +211,8 @@ import { useChatUI } from '~/composables/useChatUI'
 const siteConfigStore = useSiteConfigStore()
 const threadsStore = useChatThreadsStore()
 const toast = useToast()
+const route = useRoute()
+const router = useRouter()
 
 // Chat UI composable - used to properly handle thread creation with callback cleanup
 const chatUI = useChatUI({ viewMode: 'fullpage' })
@@ -211,6 +224,7 @@ const strandsEnabled = computed(() => siteConfigStore.isStrandsChatEnabled)
 const showShareModal = ref(false)
 const showExportModal = ref(false)
 const showClearConfirm = ref(false)
+const showMobileThreads = ref(false)
 const shareThreadId = ref<string | null>(null)
 const exportThreadId = ref<string | null>(null)
 
@@ -235,30 +249,51 @@ const currentThreadInfo = computed(() => {
 
 // Initialize on mount
 onMounted(async () => {
-  await threadsStore.fetchThreads()
+  await chatUI.initialize()
 
-  // Load active thread if exists
-  if (threadsStore.activeThreadId) {
-    await threadsStore.loadThread(threadsStore.activeThreadId)
+  const requestedThreadId = typeof route.query.thread === 'string' ? route.query.thread : undefined
+  if (requestedThreadId && requestedThreadId !== threadsStore.activeThreadId) {
+    await chatUI.switchThread(requestedThreadId)
   }
-  // Note: If no active thread, one will be auto-created when the user sends their first message
 
   // Pre-fill input from command palette "Ask AI" routing (?q= query param)
-  const route = useRoute()
-  const prefillQuery = route.query.q as string | undefined
+  const prefillQuery = typeof route.query.q === 'string' ? route.query.q : undefined
   if (prefillQuery?.trim()) {
     chatUI.inputValue.value = prefillQuery.trim()
   }
 })
 
+watch(() => route.query.thread, async (value) => {
+  const threadId = typeof value === 'string' ? value : undefined
+  if (threadId && threadId !== threadsStore.activeThreadId) {
+    await chatUI.switchThread(threadId)
+  }
+})
+
+watch(() => route.query.q, (value) => {
+  if (typeof value === 'string' && value.trim()) chatUI.inputValue.value = value.trim()
+})
+
+async function updateChatRoute(threadId?: string) {
+  const query = { ...route.query }
+  delete query.q
+  if (threadId) query.thread = threadId
+  else delete query.thread
+  await router.replace({ path: '/chat', query })
+}
+
 // Handle thread selection - use chatUI to properly handle callback registration for active jobs
 async function handleThreadSelected(threadId: string) {
   await chatUI.switchThread(threadId)
+  await updateChatRoute(threadId)
+  showMobileThreads.value = false
 }
 
 // Handle new thread - use chatUI to properly cleanup polling callbacks and reset UI state
 async function handleNewThread() {
   await chatUI.createNewThread()
+  await updateChatRoute(threadsStore.activeThreadId || undefined)
+  showMobileThreads.value = false
   toast.add({
     title: 'New conversation started',
     color: 'green'
@@ -324,12 +359,6 @@ async function confirmClearThread() {
   }
 
   showClearConfirm.value = false
-}
-
-// Handle message sent (save to thread)
-async function handleMessageSent(message: any) {
-  // This will be called when a message is sent from GhostChatFullPage
-  // Messages should already be saved via the store
 }
 
 // Inline title editing functions
@@ -417,4 +446,3 @@ definePageMeta({
   @apply ring-0;
 }
 </style>
-

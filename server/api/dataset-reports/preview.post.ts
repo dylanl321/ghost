@@ -1,213 +1,122 @@
-/**
- * API Endpoint: POST /api/dataset-reports/preview
- *
- * Runs a dataset query and returns preview data (limited results)
- * Used for testing queries before saving/scheduling them
- *
- * Returns attributeSchema with each dataset for proper column rendering
- */
-
 import { defineEventHandler, readBody } from 'h3'
 import { sendSuccess, errors } from '../../utils/api-response'
-import { getConfigResources } from '../../utils/aws-config-data'
-import { getSecurityHubFindings } from '../../utils/security-hub-data'
-import { getCloudTrailEvents } from '../../utils/cloudtrail-data'
-import { getEntraUsers } from '../../utils/entra-users-data'
+import { queryConfigResources } from '../../utils/aws-config-data'
+import { querySecurityHubFindings } from '../../utils/security-hub-data'
+import { queryCloudTrailEvents } from '../../utils/cloudtrail-data'
+import { queryEntraUsers } from '../../utils/entra-users-data'
 import { logger } from '../../utils/logger'
 import { buildAttributeSchema, flattenNestedData } from '../../utils/dataset-schema-builder'
-import type { DatasetReportConfig } from '../../../shared/types/dataset-reports'
+import type { DatasetQueryResult, DatasetReportConfig, DatasetType } from '../../../shared/types/dataset-reports'
+import { getDatasetReportConfigErrors } from '../../utils/dataset-report-validation'
+
+const PREVIEW_LIMIT = 25
 
 interface PreviewRequest {
-  accountIds: string[]
   reportConfig: DatasetReportConfig
 }
 
-/**
- * Dataset preview result with records and schema
- */
 interface DatasetPreview {
   records: Record<string, any>[]
   attributeSchema: ReturnType<typeof buildAttributeSchema>
+  sampleCount: number
+  hasMore: boolean
+  truncated: boolean
+  /** Compatibility alias. This is a sample count, not an exact total. */
   totalCount: number
 }
 
 export default defineEventHandler(async (event) => {
   try {
-    // Verify authentication
     const auth = event.context.auth
-    if (!auth || !auth.isAuthenticated) {
-      return errors.unauthorized(event, 'Authentication required')
-    }
+    if (!auth?.isAuthenticated) return errors.unauthorized(event, 'Authentication required')
 
-    const body = await readBody<PreviewRequest>(event)
-    const { accountIds, reportConfig } = body
+    const { reportConfig } = await readBody<PreviewRequest>(event)
+    const validationErrors = getDatasetReportConfigErrors(reportConfig)
+    if (validationErrors.length > 0) return errors.badRequest(event, validationErrors.join('; '))
 
-    if (!reportConfig || !reportConfig.datasets) {
-      return errors.badRequest(event, 'Missing report configuration')
-    }
+    const config = reportConfig as DatasetReportConfig
+    const accountIds = config.accountScope === 'all' ? [] : config.accounts
+    const controller = new AbortController()
+    event.node.req.once('aborted', () => controller.abort(new Error('Preview canceled')))
+    const options = { mode: 'preview' as const, limit: PREVIEW_LIMIT, signal: controller.signal }
 
-    logger.info('[Dataset Preview] Starting query', {
-      accountIds: accountIds?.length || 'all',
-      datasets: Object.keys(reportConfig.datasets).filter(k => reportConfig.datasets[k as keyof typeof reportConfig.datasets].enabled)
-    })
-
-    // Track preview results by dataset type with schemas
-    const datasetPreviews: {
-      config: DatasetPreview | null
-      securityHub: DatasetPreview | null
-      cloudtrail: DatasetPreview | null
-      entraUsers: DatasetPreview | null
-    } = {
+    const previews: Record<DatasetType, DatasetPreview | null> = {
       config: null,
       securityHub: null,
       cloudtrail: null,
       entraUsers: null
     }
+    const datasetErrors: Partial<Record<DatasetType, string>> = {}
 
-    let totalRecords = 0
-
-    // Fetch Config data if enabled
-    if (reportConfig.datasets.config?.enabled) {
+    const run = async <T extends object>(
+      type: DatasetType,
+      label: 'config' | 'securityHub' | 'cloudtrail' | 'entraUsers',
+      query: () => Promise<DatasetQueryResult<T>>
+    ) => {
       try {
-        const configData = await getConfigResources(
-          accountIds || [],
-          reportConfig.datasets.config.filters || {}
-        )
-        // Limit preview to 100 records per dataset
-        const previewRecords = configData.slice(0, 100).map(r => flattenNestedData(r))
-        const attributeSchema = buildAttributeSchema(previewRecords, 'config')
-
-        datasetPreviews.config = {
-          records: previewRecords,
-          attributeSchema,
-          totalCount: configData.length
+        const result = await query()
+        const records = result.records.slice(0, PREVIEW_LIMIT).map(record => flattenNestedData(record as Record<string, any>))
+        previews[type] = {
+          records,
+          attributeSchema: buildAttributeSchema(records, label),
+          sampleCount: records.length,
+          hasMore: result.hasMore,
+          truncated: result.truncated,
+          totalCount: records.length
         }
-        totalRecords += configData.length
       } catch (error: any) {
-        logger.error('[Dataset Preview] Config fetch failed', { error: error.message })
+        logger.error(`[Dataset Preview] ${type} fetch failed`, { error: error.message })
+        datasetErrors[type] = error.message || `${type} query failed`
       }
     }
 
-    // Fetch Security Hub data if enabled
-    if (reportConfig.datasets.securityHub?.enabled) {
-      try {
-        const securityHubData = await getSecurityHubFindings(
-          accountIds || [],
-          reportConfig.datasets.securityHub.filters || {}
-        )
-        // Limit preview to 100 records per dataset
-        const previewRecords = securityHubData.slice(0, 100).map(r => flattenNestedData(r))
-        const attributeSchema = buildAttributeSchema(previewRecords, 'securityHub')
-
-        datasetPreviews.securityHub = {
-          records: previewRecords,
-          attributeSchema,
-          totalCount: securityHubData.length
-        }
-        totalRecords += securityHubData.length
-      } catch (error: any) {
-        logger.error('[Dataset Preview] SecurityHub fetch failed', { error: error.message })
+    const tasks: Promise<void>[] = []
+    if (config.datasets.config?.enabled) tasks.push(run('config', 'config', () => queryConfigResources(accountIds, config.datasets.config!.filters || {}, options)))
+    if (config.datasets.securityHub?.enabled) {
+      const filters = { ...(config.datasets.securityHub.filters || {}) }
+      if (config.timeRange?.type === 'relative' && config.timeRange.relativeDays && !filters.lookbackDays) filters.lookbackDays = config.timeRange.relativeDays
+      tasks.push(run('securityHub', 'securityHub', () => querySecurityHubFindings(accountIds, filters, options)))
+    }
+    if (config.datasets.cloudtrail?.enabled) {
+      const filters = { ...(config.datasets.cloudtrail.filters || {}) }
+      if (config.timeRange?.type === 'relative' && config.timeRange.relativeDays && !filters.lookbackDays) filters.lookbackDays = config.timeRange.relativeDays
+      if (config.timeRange?.type === 'absolute') {
+        filters.startTime ||= config.timeRange.startDate
+        filters.endTime ||= config.timeRange.endDate
       }
+      tasks.push(run('cloudtrail', 'cloudtrail', () => queryCloudTrailEvents(accountIds, filters, options)))
     }
+    if (config.datasets.entraUsers?.enabled) tasks.push(run('entraUsers', 'entraUsers', () => queryEntraUsers(event, accountIds, config.datasets.entraUsers!.filters || {}, options)))
+    await Promise.all(tasks)
 
-    // Fetch CloudTrail data if enabled
-    if (reportConfig.datasets.cloudtrail?.enabled) {
-      try {
-        const cloudTrailData = await getCloudTrailEvents(
-          accountIds || [],
-          reportConfig.datasets.cloudtrail.filters || {}
-        )
-        // Limit preview to 100 records per dataset
-        const previewRecords = cloudTrailData.slice(0, 100).map(r => flattenNestedData(r))
-        const attributeSchema = buildAttributeSchema(previewRecords, 'cloudtrail')
-
-        datasetPreviews.cloudtrail = {
-          records: previewRecords,
-          attributeSchema,
-          totalCount: cloudTrailData.length
-        }
-        totalRecords += cloudTrailData.length
-      } catch (error: any) {
-        logger.error('[Dataset Preview] CloudTrail fetch failed', { error: error.message })
-      }
+    const datasetLabels: Record<DatasetType, string> = {
+      config: 'Config', securityHub: 'SecurityHub', cloudtrail: 'CloudTrail', entraUsers: 'EntraUsers'
     }
-
-    // Fetch Entra Users data if enabled
-    if (reportConfig.datasets.entraUsers?.enabled) {
-      try {
-        const entraUsersData = await getEntraUsers(
-          event,  // Pass H3Event for session token (Graph API auth)
-          accountIds || [],
-          reportConfig.datasets.entraUsers.filters || {}
-        )
-        // Limit preview to 100 records per dataset
-        const previewRecords = entraUsersData.slice(0, 100).map(r => flattenNestedData(r))
-        const attributeSchema = buildAttributeSchema(previewRecords, 'entraUsers')
-
-        datasetPreviews.entraUsers = {
-          records: previewRecords,
-          attributeSchema,
-          totalCount: entraUsersData.length
-        }
-        totalRecords += entraUsersData.length
-      } catch (error: any) {
-        logger.error('[Dataset Preview] Entra Users fetch failed', { error: error.message })
-        // Non-fatal - continue with other datasets
-      }
-    }
-
-    // Calculate estimated size (rough estimate: 2KB per record)
-    const estimatedSizeBytes = totalRecords * 2048
-    const estimatedSizeMB = estimatedSizeBytes / (1024 * 1024)
-
-    // Build combined preview data for backwards compatibility
-    const previewData: any[] = []
-
-    if (datasetPreviews.config) {
-      previewData.push(...datasetPreviews.config.records.map(r => ({
-        ...r,
-        dataset: 'Config'
-      })))
-    }
-    if (datasetPreviews.securityHub) {
-      previewData.push(...datasetPreviews.securityHub.records.map(r => ({
-        ...r,
-        dataset: 'SecurityHub'
-      })))
-    }
-    if (datasetPreviews.cloudtrail) {
-      previewData.push(...datasetPreviews.cloudtrail.records.map(r => ({
-        ...r,
-        dataset: 'CloudTrail'
-      })))
-    }
-    if (datasetPreviews.entraUsers) {
-      previewData.push(...datasetPreviews.entraUsers.records.map(r => ({
-        ...r,
-        dataset: 'EntraUsers'
-      })))
-    }
-
-    logger.info('[Dataset Preview] Query complete', {
-      previewRecords: previewData.length,
-      totalRecords,
-      estimatedSizeMB: estimatedSizeMB.toFixed(2)
-    })
+    const previewData = (Object.entries(previews) as Array<[DatasetType, DatasetPreview | null]>).flatMap(([type, preview]) =>
+      (preview?.records || []).map(record => ({ ...record, dataset: datasetLabels[type] })))
+    const sampleCount = previewData.length
+    const hasMore = Object.values(previews).some(preview => preview?.hasMore)
+    const failedCount = Object.keys(datasetErrors).length
+    const successfulCount = Object.values(previews).filter(Boolean).length
+    const status = failedCount > 0 ? (successfulCount > 0 ? 'partial' : 'error') : (sampleCount > 0 ? 'success' : 'empty')
 
     return sendSuccess(event, {
-      // Primary response: dataset-specific previews with schemas
-      datasets: datasetPreviews,
-      // Backwards compatible combined data
+      status,
+      datasets: previews,
       previewData,
-      totalRecords,
-      previewLimit: previewData.length,
-      estimatedSize: estimatedSizeBytes,
+      sampleCount,
+      hasMore,
+      truncated: hasMore,
+      errors: datasetErrors,
+      // Compatibility aliases intentionally contain sample values only.
+      totalRecords: sampleCount,
+      previewLimit: PREVIEW_LIMIT,
+      estimatedSize: sampleCount * 2048,
       query: {
-        accountCount: accountIds?.length || 'all',
-        datasetCount: Object.values(reportConfig.datasets).filter((ds: any) => ds?.enabled).length
+        accountCount: config.accountScope === 'all' || (!config.accountScope && accountIds.length === 0) ? 'all' : accountIds.length,
+        datasetCount: tasks.length
       }
     })
-
   } catch (error: any) {
     logger.error('[Dataset Preview] Error', { error: error.message, stack: error.stack })
     return errors.serverError(event, error.message || 'Failed to run preview query')

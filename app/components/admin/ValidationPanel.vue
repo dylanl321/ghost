@@ -9,12 +9,12 @@
     </div>
 
     <!-- Metric Cards -->
-    <div v-if="validationResult" class="grid grid-cols-1 gap-4 sm:grid-cols-4">
+    <div v-if="validationResult" class="grid grid-cols-1 gap-4 sm:grid-cols-5">
       <UCard>
         <div class="text-sm text-gray-400">Overall Status</div>
         <div class="mt-2 flex items-center gap-2">
           <UBadge
-            :color="validationResult.summary.overallStatus === 'PASS' ? 'green' : 'red'"
+            :color="statusColor(validationResult.summary.overallStatus)"
             variant="soft"
             size="lg"
           >
@@ -41,6 +41,13 @@
         <div class="text-sm text-gray-400">Tests Failed</div>
         <p class="mt-2 text-2xl font-bold text-red-600">
           {{ validationResult.summary.failed }}
+        </p>
+      </UCard>
+
+      <UCard>
+        <div class="text-sm text-gray-400">Unavailable</div>
+        <p class="mt-2 text-2xl font-bold text-amber-600">
+          {{ validationResult.summary.unavailable || 0 }}
         </p>
       </UCard>
     </div>
@@ -112,18 +119,18 @@
 
       <UAlert
         v-if="validationResult"
-        :color="validationResult.summary.overallStatus === 'PASS' ? 'green' : 'red'"
+        :color="statusColor(validationResult.summary.overallStatus)"
         variant="soft"
         class="mt-4"
       >
         <template #icon>
           <Icon
-            :name="validationResult.summary.overallStatus === 'PASS' ? 'i-heroicons-check-circle' : 'i-heroicons-x-circle'"
+            :name="statusIcon(validationResult.summary.overallStatus)"
             class="w-5 h-5"
           />
         </template>
         <template #title>
-          {{ validationResult.summary.overallStatus === 'PASS' ? 'All validations passed' : 'Some validations failed' }}
+          {{ statusMessage(validationResult.summary.overallStatus) }}
         </template>
         <template #description>
           Last validated: {{ formatTimestamp(validationResult.timestamp) }}
@@ -155,10 +162,10 @@
 
         <template #passed-data="{ row }">
           <UBadge
-            :color="row.passed ? 'green' : 'red'"
+            :color="statusColor(row.status || (row.passed ? 'PASS' : 'FAIL'))"
             variant="soft"
           >
-            {{ row.passed ? 'PASS' : 'FAIL' }}
+            {{ row.status || (row.passed ? 'PASS' : 'FAIL') }}
           </UBadge>
         </template>
 
@@ -329,6 +336,18 @@ const accountSearch = ref('')
 const accountFilter = ref('all')
 const currentPage = ref(1)
 const itemsPerPage = 20
+
+const statusColor = (status: string) => status === 'PASS' ? 'green' : status === 'UNAVAILABLE' ? 'yellow' : 'red'
+const statusIcon = (status: string) => status === 'PASS'
+  ? 'i-heroicons-check-circle'
+  : status === 'UNAVAILABLE'
+    ? 'i-heroicons-question-mark-circle'
+    : 'i-heroicons-x-circle'
+const statusMessage = (status: string) => status === 'PASS'
+  ? 'All validations passed'
+  : status === 'UNAVAILABLE'
+    ? 'Validation could not reach an authoritative source'
+    : 'Some validations failed'
 
 // Options
 const periodOptions = [

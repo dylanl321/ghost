@@ -3,8 +3,8 @@
  * DELETE /api/dataset-reports/:id
  */
 
-import { deleteReport, getReport } from '../../utils/scheduled-reports'
-import { getUserEmail } from '../../utils/user-roles'
+import { deleteReport } from '../../utils/scheduled-reports'
+import { requireDatasetReportAccess } from '../../utils/dataset-report-access'
 import { logger } from '../../utils/logger'
 
 export default defineEventHandler(async (event) => {
@@ -35,33 +35,7 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Get user email
-    const userEmail = getUserEmail(event)
-    if (!userEmail) {
-      throw createError({
-        statusCode: 400,
-        message: 'User email not available'
-      })
-    }
-
-    // Get existing report
-    const existingReport = await getReport(reportId)
-
-    // Verify ownership
-    if (existingReport.createdBy !== userEmail) {
-      throw createError({
-        statusCode: 403,
-        message: 'Access denied'
-      })
-    }
-
-    // Verify it's a dataset report
-    if (existingReport.reportType !== 'dataset') {
-      throw createError({
-        statusCode: 404,
-        message: 'Dataset report not found'
-      })
-    }
+    await requireDatasetReportAccess(event, reportId)
 
     // Delete the report
     await deleteReport(reportId)

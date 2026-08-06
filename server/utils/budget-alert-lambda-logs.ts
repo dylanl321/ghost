@@ -123,7 +123,7 @@ export async function getBudgetAlertLogStreams(limit: number = 50): Promise<LogS
           (error instanceof Error ? error.name : "Error") === 'ExpiredTokenException' ||
           (error instanceof Error ? error.message : String(error))?.includes('security token included in the request is expired')
         ) {
-          logger.warn('[Budget Alert Logs] Security token expired. Refreshing...')
+          logger.info('[Budget Alert Logs] Security token expired. Refreshing...')
           await refreshBudgetAlertLogsClient()
           const retryClient = await initBudgetAlertLogsClient()
           const response = await retryClient.send(command)
@@ -198,7 +198,7 @@ export async function getBudgetAlertLogs(
           (error instanceof Error ? error.name : "Error") === 'ExpiredTokenException' ||
           (error instanceof Error ? error.message : String(error))?.includes('security token included in the request is expired')
         ) {
-          logger.warn('[Budget Alert Logs] Security token expired. Refreshing...')
+          logger.info('[Budget Alert Logs] Security token expired. Refreshing...')
           await refreshBudgetAlertLogsClient()
           const retryClient = await initBudgetAlertLogsClient()
           const response = await retryClient.send(command)

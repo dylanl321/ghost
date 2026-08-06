@@ -28,9 +28,9 @@ interface CreateDatasetReportRequest {
 }
 
 export function useDatasetReports() {
-  const reports = ref<ScheduledReport[]>([])
-  const loading = ref(false)
-  const error = ref<string | null>(null)
+  const reports = useState<ScheduledReport[]>('dataset-reports:list', () => [])
+  const loading = useState<boolean>('dataset-reports:loading', () => false)
+  const error = useState<string | null>('dataset-reports:error', () => null)
 
   /**
    * Fetch all dataset reports for the current user
@@ -215,7 +215,7 @@ export function useDatasetReports() {
   }
 
   return {
-    reports: readonly(reports),
+    reports,
     loading: readonly(loading),
     error: readonly(error),
     fetchReports,

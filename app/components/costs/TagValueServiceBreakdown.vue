@@ -17,7 +17,10 @@
 
     <!-- Service bars -->
     <div v-else class="space-y-1.5">
-      <h4 class="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">Service Breakdown</h4>
+      <div class="flex items-center gap-2 mb-2">
+        <h4 class="text-xs font-semibold text-gray-600 dark:text-gray-400">Service Breakdown</h4>
+        <UBadge color="gray" variant="soft" size="xs">Exact billable</UBadge>
+      </div>
       <template v-for="svc in services" :key="svc.name">
         <div
           :class="[
@@ -49,7 +52,7 @@
           :account-id="accountId"
           :service-name="svc.name"
           :tag-key="tagKey"
-          :tag-value="tagValue"
+          :tag-values="effectiveTagValues"
           :period="period"
         />
       </template>
@@ -63,12 +66,16 @@ import { formatCostValue } from '~/utils/cost-filters'
 
 const logger = createLogger('TagValueServiceBreakdown')
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   accountId: string
   tagKey: string
-  tagValue: string
+  tagValue?: string
+  tagValues?: string[]
   period?: string
-}>()
+}>(), {
+  tagValue: '',
+  tagValues: () => []
+})
 
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -95,19 +102,23 @@ function stripTagPrefix(rawValue: string, tagKey: string): string {
   return rawValue
 }
 
+const effectiveTagValues = computed(() => props.tagValues.length > 0
+  ? props.tagValues
+  : props.tagValue ? [stripTagPrefix(props.tagValue, props.tagKey)] : [])
+
 async function fetchData() {
-  if (!props.accountId || !props.tagKey || !props.tagValue) return
+  if (!props.accountId || !props.tagKey || effectiveTagValues.value.length === 0) return
 
   loading.value = true
   error.value = null
 
   try {
-    const strippedValue = stripTagPrefix(props.tagValue, props.tagKey)
     const response = await $fetch('/api/costs/summary', {
       params: {
         groupBy: 'SERVICE',
         accountIds: props.accountId,
-        tagFilter: `${props.tagKey}||${strippedValue}`,
+        tagFilterKey: props.tagKey,
+        tagFilterValues: effectiveTagValues.value,
         period: props.period || 'last90days',
         enhanced: false
       }
@@ -173,7 +184,7 @@ const services = computed(() => {
   return top
 })
 
-watch([() => props.accountId, () => props.tagKey, () => props.tagValue, () => props.period], () => {
+watch([() => props.accountId, () => props.tagKey, () => props.tagValue, () => props.tagValues.join('|'), () => props.period], () => {
   fetchData()
 }, { immediate: true })
 </script>

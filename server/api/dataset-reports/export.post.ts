@@ -1,64 +1,25 @@
-/**
- * API Endpoint: POST /api/dataset-reports/export
- *
- * Generates and downloads a dataset report in the requested format
- */
-
-import { defineEventHandler, readBody, setHeader } from 'h3'
-import { generateDatasetReport } from '../../utils/dataset-report-generator'
-import { errors } from '../../utils/api-response'
-import { logger } from '../../utils/logger'
+import { defineEventHandler, readBody } from 'h3'
 import type { DatasetReportConfig } from '../../../shared/types/dataset-reports'
+import { sendSuccess, errors } from '../../utils/api-response'
+import { getDatasetReportConfigErrors } from '../../utils/dataset-report-validation'
+import { createDatasetExportJob } from '../../utils/dataset-export-jobs'
+import { getUserEmail } from '../../utils/user-roles'
+import { logger } from '../../utils/logger'
 
-interface ExportRequest {
-  accountIds: string[]
-  reportConfig: DatasetReportConfig
-}
+interface ExportRequest { reportConfig: DatasetReportConfig }
 
 export default defineEventHandler(async (event) => {
   try {
-    // Verify authentication
-    const auth = event.context.auth
-    if (!auth || !auth.isAuthenticated) {
-      return errors.unauthorized(event, 'Authentication required')
-    }
-
-    const body = await readBody<ExportRequest>(event)
-    const { reportConfig } = body
-
-    if (!reportConfig || !reportConfig.datasets) {
-      return errors.badRequest(event, 'Missing report configuration')
-    }
-
-    logger.info('[Dataset Export] Starting export', {
-      accountIds: reportConfig.accounts?.length || 'all',
-      format: reportConfig.format,
-      datasets: Object.keys(reportConfig.datasets).filter(k => reportConfig.datasets[k as keyof typeof reportConfig.datasets]?.enabled)
-    })
-
-    // Generate the report (pass event for Entra Users Graph API access)
-    const result = await generateDatasetReport(reportConfig, event)
-
-    if (!result.success || !result.buffer) {
-      logger.error('[Dataset Export] Generation failed', { error: result.error })
-      return errors.serverError(event, result.error || 'Failed to generate report')
-    }
-
-    // Set appropriate headers for file download
-    setHeader(event, 'Content-Type', result.mimeType)
-    setHeader(event, 'Content-Disposition', `attachment; filename="${result.filename}"`)
-    setHeader(event, 'Content-Length', result.buffer.length.toString())
-
-    logger.info('[Dataset Export] Export complete', {
-      filename: result.filename,
-      sizeBytes: result.buffer.length
-    })
-
-    // Return the binary buffer
-    return result.buffer
-
+    if (!event.context.auth?.isAuthenticated) return errors.unauthorized(event, 'Authentication required')
+    const userId = getUserEmail(event)
+    if (!userId) return errors.unauthorized(event, 'User email not available')
+    const { reportConfig } = await readBody<ExportRequest>(event)
+    const validation = getDatasetReportConfigErrors(reportConfig)
+    if (validation.length) return errors.badRequest(event, validation.join('; '))
+    const job = await createDatasetExportJob(userId, reportConfig)
+    return sendSuccess(event, { job }, { message: 'Export queued' })
   } catch (error: any) {
-    logger.error('[Dataset Export] Error', { error: error.message, stack: error.stack })
-    return errors.serverError(event, error.message || 'Failed to export dataset report')
+    logger.error('[Dataset Export] Failed to queue export', error)
+    return errors.serverError(event, error.message || 'Failed to queue export')
   }
 })

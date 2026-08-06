@@ -4,7 +4,9 @@ import { getAllAccountsUnified } from './accounts-consolidated'
 import { logger } from './logger'
 import type {
   EntraUserRecord,
-  EntraUsersDatasetFilters
+  EntraUsersDatasetFilters,
+  DatasetQueryOptions,
+  DatasetQueryResult
 } from '../../shared/types/dataset-reports'
 
 /**
@@ -14,8 +16,18 @@ import type {
 export async function getEntraUsers(
   event: H3Event,
   accountIds: string[],
-  filters: EntraUsersDatasetFilters = {}
+  filters: EntraUsersDatasetFilters = {},
+  options: DatasetQueryOptions = {}
 ): Promise<EntraUserRecord[]> {
+  return (await queryEntraUsers(event, accountIds, filters, options)).records
+}
+
+export async function queryEntraUsers(
+  event: H3Event,
+  accountIds: string[],
+  filters: EntraUsersDatasetFilters = {},
+  options: DatasetQueryOptions = {}
+): Promise<DatasetQueryResult<EntraUserRecord>> {
   const startTime = Date.now()
 
   logger.info('[EntraUsers] Fetching user access data', {
@@ -39,11 +51,12 @@ export async function getEntraUsers(
     const { data: groupsByAccount } = await getAWSGroups(event, {
       accountId: undefined, // Get all groups
       includeDistribution: false // Only role groups for access reports
-    })
+    }, options.mode === 'preview' ? { maxPages: 2, signal: options.signal } : { signal: options.signal })
 
     // 4. Build user-account-role mappings
     const userRecords: EntraUserRecord[] = []
     const processedGroups: string[] = []
+    let hasMore = false
 
     // groupsByAccount structure: Record<accountId, AccountGroups>
     // AccountGroups has: { accountId, commercial: ParsedAWSGroup[], govcloud: ParsedAWSGroup[], distribution, uniqueOwners }
@@ -57,6 +70,11 @@ export async function getEntraUsers(
       const allGroups = [...accountGroups.commercial, ...accountGroups.govcloud]
 
       for (const group of allGroups) {
+        if (options.signal?.aborted) throw options.signal.reason || new Error('Query canceled')
+        if (options.limit && userRecords.length >= options.limit) {
+          hasMore = true
+          break
+        }
         // Filter by roles if specified
         if (filters.roles && filters.roles.length > 0 && !filters.roles.includes(group.role)) {
           continue
@@ -64,11 +82,14 @@ export async function getEntraUsers(
 
         try {
           // Get members of this group
-          const membersResponse = await getGroupMembers(event, group.id, true)
+          const membersResponse = await getGroupMembers(event, group.id, true, options.mode === 'preview'
+            ? { limit: Math.max(1, (options.limit || 25) - userRecords.length), maxPages: 2, signal: options.signal }
+            : { signal: options.signal })
 
           for (const member of membersResponse.members || []) {
+            const graphMember = member as any
             // Only include users (not groups or service principals)
-            if (member['@odata.type'] !== '#microsoft.graph.user') {
+            if (graphMember['@odata.type'] !== '#microsoft.graph.user') {
               continue
             }
 
@@ -82,14 +103,19 @@ export async function getEntraUsers(
               role: group.role,
               groupName: group.displayName,
               groupId: group.id,
-              lastSignIn: member.signInActivity?.lastSignInDateTime,
+              lastSignIn: graphMember.signInActivity?.lastSignInDateTime,
               jobTitle: member.jobTitle,
               department: member.department,
-              manager: member.manager?.displayName
+              manager: graphMember.manager?.displayName
             })
+            if (options.limit && userRecords.length >= options.limit) {
+              hasMore = true
+              break
+            }
           }
 
           processedGroups.push(group.displayName)
+          await options.onProgress?.({ phase: 'entraUsers', processed: userRecords.length })
         } catch (error: any) {
           logger.warn('[EntraUsers] Failed to fetch members for group', {
             groupName: group.displayName,
@@ -112,23 +138,16 @@ export async function getEntraUsers(
       )
     }
 
-    // Active/inactive filter
-    if (filters.activeOnly !== undefined) {
-      if (filters.activeOnly) {
-        // Only users with sign-in activity
-        filteredRecords = filteredRecords.filter(r => r.lastSignIn !== undefined)
-      }
-
-      // Apply lookback period if specified
-      if (filters.lookbackDays) {
-        const cutoffDate = new Date()
-        cutoffDate.setDate(cutoffDate.getDate() - filters.lookbackDays)
-
-        filteredRecords = filteredRecords.filter(r => {
-          if (!r.lastSignIn) return !filters.activeOnly
-          return new Date(r.lastSignIn) >= cutoffDate
-        })
-      }
+    // Apply activity state against the requested lookback window.
+    const activityStatus = filters.activityStatus || (filters.activeOnly ? 'active' : 'all')
+    if (activityStatus !== 'all') {
+      const cutoffDate = new Date()
+      cutoffDate.setDate(cutoffDate.getDate() - (filters.lookbackDays || 30))
+      filteredRecords = filteredRecords.filter(record => {
+        const lastSignIn = record.lastSignIn ? new Date(record.lastSignIn) : null
+        if (activityStatus === 'active') return !!lastSignIn && lastSignIn >= cutoffDate
+        return !lastSignIn || lastSignIn < cutoffDate
+      })
     }
 
     // Department filter
@@ -145,7 +164,14 @@ export async function getEntraUsers(
       durationMs: duration
     })
 
-    return filteredRecords
+    const records = options.limit ? filteredRecords.slice(0, options.limit) : filteredRecords
+    return {
+      records,
+      sampleCount: records.length,
+      hasMore,
+      truncated: hasMore,
+      scannedCount: userRecords.length
+    }
 
   } catch (error: any) {
     logger.error('[EntraUsers] Failed to fetch user data', { error: error.message, stack: error.stack })
@@ -186,7 +212,6 @@ export async function getEntraUsersSummary(
 
   for (const user of users) {
     // Count unique users per account
-    const key = `${user.accountId}`
     const uniqueUsersForAccount = users
       .filter(u => u.accountId === user.accountId)
       .map(u => u.userId)

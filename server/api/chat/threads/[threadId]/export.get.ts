@@ -10,6 +10,7 @@ import { getThreadById } from '../../../../utils/chat-threads'
 import { registerEndpoint } from '../../../../plugins/swagger'
 import { logger } from '../../../../utils/logger'
 import type { ChatThread, ChatExportFormat } from '#shared/types/chat-threads'
+import { listAllThreadMessages } from '../../../../utils/chat-messages'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/chat/threads/{threadId}/export', 'GET', {
@@ -164,17 +165,18 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.notFound(event, 'Thread not found')
   }
 
+  const allMessages = await listAllThreadMessages(thread)
   // Filter messages based on query parameters
-  let filteredMessages = thread.messages
+  let filteredMessages = allMessages
 
   if (lastResponseOnly) {
     // Get only the last assistant message
-    const lastAssistant = [...thread.messages].reverse().find(m => m.role === 'assistant')
+    const lastAssistant = [...allMessages].reverse().find(m => m.role === 'assistant')
     filteredMessages = lastAssistant ? [lastAssistant] : []
   } else if (messageIdsParam) {
     // Filter to specific message IDs
     const messageIds = new Set(messageIdsParam.split(',').map(id => id.trim()))
-    filteredMessages = thread.messages.filter(m => messageIds.has(m.messageId))
+    filteredMessages = allMessages.filter(m => messageIds.has(m.messageId))
   }
 
   // Create a copy of thread with filtered messages for export

@@ -10,11 +10,16 @@
       <div class="text-red-400">{{ error }}</div>
     </div>
 
+    <!-- Empty State -->
+    <div v-else-if="monthlyPoints.length === 0" class="text-center py-12 text-gray-500 dark:text-gray-400">
+      No historical cost data is available for this selection.
+    </div>
+
     <!-- Historical Charts -->
     <div v-else class="space-y-6">
-      <!-- Organization-wide 2-Year Trend -->
+      <!-- 2-Year Trend -->
       <div class="bg-gray-900 border border-gray-700 rounded-lg p-4">
-        <h3 class="text-lg font-semibold text-gray-200 mb-4">Organization-Wide 2-Year Cost Trend</h3>
+        <h3 class="text-lg font-semibold text-gray-200 mb-4">{{ scopeLabel }} 2-Year Cost Trend</h3>
         <v-chart ref="orgTrendChartRef" :option="orgTrendChart" :autoresize="true" style="height: 400px" />
       </div>
 
@@ -41,12 +46,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import VChart from 'vue-echarts'
 import { chartAnimationDefaults } from '~/utils/chartAnimationDefaults'
 import { useChartGroup } from '~/composables/useChartGroup'
 
 const logger = createLogger('HistoricalTrends')
+
+const props = withDefaults(defineProps<{
+  selectedAccounts?: string[]
+  dataMode?: 'billable' | 'proforma'
+}>(), {
+  selectedAccounts: () => [],
+  dataMode: 'proforma'
+})
 
 // Chart group for crosshair linking across cost page charts
 const { registerChart, unregisterAll } = useChartGroup('costCharts')
@@ -64,29 +77,64 @@ onUnmounted(() => {
 // State
 const loading = ref(true)
 const error = ref<string | null>(null)
-const historicalData = ref<any>(null)
+const historicalData = ref<{ monthlyBreakdown?: Array<{ month: string; cost: number }> } | null>(null)
+let fetchGeneration = 0
+
+const monthlyPoints = computed(() => {
+  return (historicalData.value?.monthlyBreakdown || [])
+    .filter(point => /^\d{4}-\d{2}$/.test(point.month) && Number.isFinite(Number(point.cost)))
+    .map(point => ({ month: point.month, cost: Number(point.cost) }))
+    .sort((a, b) => a.month.localeCompare(b.month))
+})
+
+const scopeLabel = computed(() => {
+  if (props.selectedAccounts.length === 1) return `Account ${props.selectedAccounts[0]}`
+  if (props.selectedAccounts.length > 1) return `${props.selectedAccounts.length} Accounts`
+  return 'Organization-Wide'
+})
+
+const formatMonth = (month: string, includeYear = true) => {
+  const date = new Date(`${month}-01T00:00:00`)
+  return date.toLocaleDateString('en-US', includeYear
+    ? { month: 'short', year: '2-digit' }
+    : { month: 'short' })
+}
 
 // Fetch historical data
 const fetchHistoricalData = async () => {
+  const generation = ++fetchGeneration
   loading.value = true
   error.value = null
   
   try {
     // Fetch 2 years of historical data
+    const params: Record<string, string> = {
+      period: 'last24months',
+      granularity: 'MONTHLY',
+      groupBy: 'LINKED_ACCOUNT',
+      proforma: String(props.dataMode === 'proforma')
+    }
+    if (props.selectedAccounts.length > 0) {
+      params.accountIds = props.selectedAccounts.join(',')
+    }
+
     const response = await $fetch('/api/costs/historical', {
-      params: {
-        period: 'last24months',
-        groupBy: 'MONTHLY'
-      }
+      params
     })
-    
-    historicalData.value = (response as any).data || response || {}
+
+    if (generation !== fetchGeneration) return
+
+    const payload = (response as any).data || response || {}
+    historicalData.value = props.dataMode === 'proforma'
+      ? (payload.proforma || payload.billable || payload)
+      : (payload.billable || payload)
     logger.info('Historical data loaded:', historicalData.value)
   } catch (err: any) {
+    if (generation !== fetchGeneration) return
     logger.error('Error fetching historical data:', err)
     error.value = err.message || 'Failed to load historical data'
   } finally {
-    loading.value = false
+    if (generation === fetchGeneration) loading.value = false
   }
 }
 
@@ -97,31 +145,9 @@ const formatCurrencyCompact = (value: number) => {
   return value.toFixed(2)
 }
 
-// Generate month labels for charts
-const generateMonthLabels = (count: number) => {
-  const months: string[] = []
-  const now = new Date()
-  for (let i = count - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    months.push(d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }))
-  }
-  return months
-}
-
-// Organization-wide 2-year trend chart
+// Two-year trend chart
 const orgTrendChart = computed(() => {
-  const months = generateMonthLabels(24)
-  
-  // Generate sample data with realistic growth pattern
-  const generateOrgData = () => {
-    const baseValue = 500000 // $500K base monthly spend
-    return months.map((_, i) => {
-      const growthFactor = 1 + (i / 24) * 0.35 // 35% growth over 2 years
-      const seasonalVariation = Math.sin((i % 12) * 0.524) * baseValue * 0.1 // Seasonal variation
-      const randomVariation = (Math.random() - 0.5) * baseValue * 0.05 // Random variation
-      return Math.max(0, baseValue * growthFactor + seasonalVariation + randomVariation)
-    })
-  }
+  const months = monthlyPoints.value.map(point => formatMonth(point.month))
   
   return {
     ...chartAnimationDefaults,
@@ -170,7 +196,7 @@ const orgTrendChart = computed(() => {
     series: [{
       name: 'Total Spend',
       type: 'line',
-      data: generateOrgData(),
+      data: monthlyPoints.value.map(point => point.cost),
       smooth: true,
       lineStyle: {
         width: 3,
@@ -193,12 +219,15 @@ const orgTrendChart = computed(() => {
 
 // Year-over-Year comparison chart
 const yoyComparisonChart = computed(() => {
-  const currentYear = new Date().getFullYear()
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-  
-  // Generate sample data for two years
-  const lastYearData = months.map((_, i) => 400000 + Math.random() * 100000)
-  const thisYearData = months.map((_, i) => 500000 + Math.random() * 150000)
+  const years = [...new Set(monthlyPoints.value.map(point => point.month.substring(0, 4)))].slice(-2)
+  const costsByMonth = new Map(monthlyPoints.value.map(point => [point.month, point.cost]))
+  const series = years.map((year, index) => ({
+    name: year,
+    type: 'bar',
+    data: months.map((_, monthIndex) => costsByMonth.get(`${year}-${String(monthIndex + 1).padStart(2, '0')}`) ?? null),
+    itemStyle: { color: index === years.length - 1 ? '#3b82f6' : 'rgba(107, 114, 128, 0.8)' }
+  }))
   
   return {
     ...chartAnimationDefaults,
@@ -214,7 +243,7 @@ const yoyComparisonChart = computed(() => {
       }
     },
     legend: {
-      data: [`${currentYear - 1}`, `${currentYear}`],
+      data: years,
       textStyle: { color: '#9ca3af' },
       bottom: 0
     },
@@ -245,32 +274,17 @@ const yoyComparisonChart = computed(() => {
         lineStyle: { color: 'rgba(156, 163, 175, 0.05)' }
       }
     },
-    series: [
-      {
-        name: `${currentYear - 1}`,
-        type: 'bar',
-        data: lastYearData,
-        itemStyle: { color: 'rgba(107, 114, 128, 0.8)' }
-      },
-      {
-        name: `${currentYear}`,
-        type: 'bar',
-        data: thisYearData,
-        itemStyle: { color: '#3b82f6' }
-      }
-    ]
+    series
   }
 })
 
 // Monthly growth rate chart
 const growthRateChart = computed(() => {
-  const months = generateMonthLabels(12)
-  
-  // Generate growth rate data (percentage change month-over-month)
-  const growthRates = months.map((_, i) => {
-    const baseRate = 2.5 // Average 2.5% monthly growth
-    const variation = (Math.random() - 0.5) * 5 // +/- 2.5% variation
-    return baseRate + variation
+  const points = monthlyPoints.value.slice(-13)
+  const months = points.slice(1).map(point => formatMonth(point.month))
+  const growthRates = points.slice(1).map((point, index) => {
+    const previous = points[index]?.cost || 0
+    return previous === 0 ? 0 : ((point.cost - previous) / previous) * 100
   })
   
   return {
@@ -338,14 +352,19 @@ const growthRateChart = computed(() => {
 
 // Quarterly breakdown chart
 const quarterlyChart = computed(() => {
-  const currentYear = new Date().getFullYear()
-  const quarters = [
-    `Q1 ${currentYear - 1}`, `Q2 ${currentYear - 1}`, `Q3 ${currentYear - 1}`, `Q4 ${currentYear - 1}`,
-    `Q1 ${currentYear}`, `Q2 ${currentYear}`, `Q3 ${currentYear}`, `Q4 ${currentYear}`
-  ]
-  
-  // Generate quarterly data
-  const quarterlyData = quarters.map((_, i) => 1500000 + i * 100000 + Math.random() * 200000)
+  const totals = new Map<string, number>()
+  monthlyPoints.value.forEach((point) => {
+    const year = point.month.substring(0, 4)
+    const month = Number(point.month.substring(5, 7))
+    const key = `${year}-Q${Math.floor((month - 1) / 3) + 1}`
+    totals.set(key, (totals.get(key) || 0) + point.cost)
+  })
+  const quarterEntries = [...totals.entries()].sort(([a], [b]) => a.localeCompare(b))
+  const quarters = quarterEntries.map(([key]) => {
+    const [year, quarter] = key.split('-')
+    return `${quarter} ${year}`
+  })
+  const quarterlyData = quarterEntries.map(([, cost]) => cost)
   
   return {
     ...chartAnimationDefaults,
@@ -391,7 +410,7 @@ const quarterlyChart = computed(() => {
       data: quarterlyData.map((value, i) => ({
         value,
         itemStyle: {
-          color: i >= 4 ? '#3b82f6' : 'rgba(107, 114, 128, 0.6)'
+          color: i >= Math.max(0, quarterlyData.length - 4) ? '#3b82f6' : 'rgba(107, 114, 128, 0.6)'
         }
       })),
       label: {
@@ -414,4 +433,9 @@ onMounted(async () => {
   registerChart(growthRateChartRef.value)
   registerChart(quarterlyChartRef.value)
 })
+
+watch(
+  () => [props.dataMode, ...props.selectedAccounts],
+  () => fetchHistoricalData()
+)
 </script>

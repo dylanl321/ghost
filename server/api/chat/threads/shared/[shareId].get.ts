@@ -3,11 +3,12 @@
  * View a publicly shared thread (no authentication required)
  */
 
-import { defineEventHandler } from 'h3'
+import { defineEventHandler, getQuery } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../../../utils/api-response'
 import { getThreadByShareId } from '../../../../utils/chat-threads'
 import { registerEndpoint } from '../../../../plugins/swagger'
 import { logger } from '../../../../utils/logger'
+import { serializePublicChatMessage } from '../../../../utils/public-chat'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/chat/threads/shared/{shareId}', 'GET', {
@@ -67,7 +68,11 @@ export default defineEventHandler(handleAsync(async (event) => {
   logger.info(`[Chat Threads API] Accessing shared thread ${shareId}`)
 
   // Get thread by share ID (no authentication required)
-  const thread = await getThreadByShareId(shareId)
+  const query = getQuery(event)
+  const thread = await getThreadByShareId(shareId, {
+    limit: query.limit ? parseInt(String(query.limit), 10) : 100,
+    nextToken: query.nextToken ? String(query.nextToken) : undefined
+  })
 
   if (!thread) {
     logger.warn(`[Chat Threads API] Shared thread ${shareId} not found or expired`)
@@ -81,12 +86,14 @@ export default defineEventHandler(handleAsync(async (event) => {
     threadId: thread.threadId,
     title: thread.title,
     description: thread.description,
-    messages: thread.messages,
+    messages: thread.messages.map(serializePublicChatMessage),
     messageCount: thread.messageCount,
     createdAt: thread.createdAt,
     sharedAt: thread.sharedAt,
     shareExpiresAt: thread.shareExpiresAt,
-    isShared: true
+    isShared: true,
+    hasMoreMessages: thread.hasMoreMessages,
+    messagesNextToken: thread.messagesNextToken
   }
 
   return sendSuccess(event, publicThread)

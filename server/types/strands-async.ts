@@ -1,8 +1,10 @@
+import type { AccountDisambiguation } from './strands'
+
 /**
  * Type definitions for Strands Async Polling API
  */
 
-export type AsyncChatJobStatus = 'queued' | 'running' | 'complete' | 'error'
+export type AsyncChatJobStatus = 'queued' | 'running' | 'waiting_for_input' | 'complete' | 'error' | 'canceled'
 
 /**
  * Async chat job stored in DynamoDB
@@ -10,6 +12,7 @@ export type AsyncChatJobStatus = 'queued' | 'running' | 'complete' | 'error'
 export interface AsyncChatJob {
   jobId: string
   strandsJobId: string | null
+  threadId: string
   userId: string
   status: AsyncChatJobStatus
   query: string
@@ -19,6 +22,7 @@ export interface AsyncChatJob {
     timezone?: string
     region?: string
     preferGovcloud?: boolean
+    userContext?: string
   }
   progress: string
   progressPercent: number
@@ -33,9 +37,18 @@ export interface AsyncChatJob {
     toolCallsCount?: number
     executionTimeMs?: number
   } | null
+  suggestedLinks?: Array<Record<string, any>>
+  suggestedPrompts?: Array<Record<string, any>>
+  disambiguation?: AccountDisambiguation & { sessionId?: string }
   createdAt: string
   lastUpdated: string
   completedAt: string | null
+  startedAt?: string | null
+  heartbeatAt?: string | null
+  workerId?: string | null
+  attemptCount: number
+  cancelRequested: boolean
+  resultMessageKey: string
   ttl: number
 }
 
@@ -66,7 +79,7 @@ export interface StrandsAsyncSubmitResponse {
  */
 export interface StrandsAsyncStatusResponse {
   jobId: string
-  status: 'queued' | 'running' | 'complete' | 'error'
+  status: AsyncChatJobStatus
   currentStep: string
   progressPercent: number
   eventCount: number
@@ -81,4 +94,5 @@ export interface StrandsAsyncStatusResponse {
   }
   createdAt: string
   lastUpdated: string
+  disambiguation?: AccountDisambiguation & { sessionId?: string }
 }

@@ -5,6 +5,43 @@ All notable changes to GHOST are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.0] - 2026-07-28
+<!-- highlights: Dataset Reports, Durable AI Chat, Finance & Cost Reporting -->
+
+### New Features
+- Dataset Reports now provide a complete workflow for previewing, exporting, sharing, saving, scheduling, and reviewing AWS Config, Security Hub, CloudTrail, and Entra user data
+- Dataset exports support PDF, Excel, CSV, and JSON with customizable columns, reusable query presets, AI summaries, and secure share links
+- AI chat work now continues reliably in the background, so long-running conversations and analyses can finish even when you navigate away or the application restarts
+- Finance reporting now includes departmental Budget vs. Actual views and improved AI-assisted variance analysis
+- Account user-access lists can now be copied or exported to CSV and Excel for audits and access reviews
+- Infrastructure monitoring now includes container health and application metrics for improved operational visibility
+
+### Improvements
+- Historical cost charts now use live billable or pro forma data for the selected accounts instead of sample values
+- Selected and decommissioned accounts retain their names and metadata when opened through direct links or filtered dashboard views
+- Dataset schedules, execution history, downloads, test delivery, and shared links now use consistent report metadata and file formats
+- AWS Config compliance and common security presets now return evaluated resource data, including public exposure, encryption, internet access, and MFA checks
+- CloudTrail reports now honor exact time ranges and clearly surface query failures instead of presenting failed requests as empty results
+- Entra activity filters now distinguish active and inactive users correctly, including the 90-day inactive-user preset
+- Cost and finance views include more consistent account identifiers, names, department data, forecasts, and variance context
+- AWS Organizations, Athena, DynamoDB, credential loading, and scheduled-report processing now use stronger retry and recovery behavior under throttling or temporary service failures
+- Container images and deployment pipelines have been streamlined with health-check preservation, dependency hardening, lifecycle cleanup, and immutable image references
+
+### Bug Fixes
+- Fixed dataset schedules disappearing after creation or running through the cost-report generator
+- Fixed generated PDF reports containing HTML instead of valid PDF data
+- Fixed dataset preview tables showing blank dynamic columns, timestamps, and detail views
+- Fixed report history downloads using IDs that did not match stored executions
+- Fixed test report delivery calling outdated storage and email workflows
+- Fixed users being able to run, pause, inspect, or download reports owned by other users
+- Fixed report updates accepting ownership, identifier, and administrative fields that should not be editable
+- Fixed Excel and JSON reports being stored or downloaded with CSV file metadata
+- Fixed shared report links incorrectly requiring an authenticated session
+- Fixed cost trend charts losing explicitly selected accounts when general sidebar filters were enabled
+- Fixed several account matching, forecast, DynamoDB configuration, CloudTrail query, and authentication redirect reliability issues
+
+---
+
 ## [1.17.0] - 2026-03-30
 <!-- highlights: Achievement Badges, Gamification, User Milestones -->
 

@@ -99,7 +99,7 @@ export async function logMessage(message: string): Promise<void> {
         (error instanceof Error ? error.name : "Error") === "ExpiredTokenException" ||
         (error instanceof Error ? error.message : String(error))?.includes("security token included in the request is expired")
       ) {
-        logger.warn("Security token expired. Refreshing...");
+        logger.info("Security token expired. Refreshing...");
         isLoggingSetup = false;
         await withTimeout(setupLogging(), 8_000);
         await sendLog();

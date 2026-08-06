@@ -226,15 +226,12 @@ async function loadExecutionDetails() {
 
   loading.value = true
   try {
-    // Construct executionId from reportId and lastRunTime
-    const executionId = `${props.report.reportId}-${new Date(props.report.lastRunTime).getTime()}`
+    const response = await $fetch<{
+      success: boolean
+      data: { executions: ReportExecution[] }
+    }>(`/api/scheduled-reports/${props.report.reportId}/history?limit=1`)
 
-    // Fetch execution details from API
-    const response = await $fetch<ReportExecution>(
-      `/api/dataset-reports/${props.report.reportId}/executions/${executionId}`
-    )
-
-    execution.value = response
+    execution.value = response.data.executions[0] || null
   } catch (error: any) {
     logger.error('Failed to load execution details:', error)
 

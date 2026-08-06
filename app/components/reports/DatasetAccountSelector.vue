@@ -10,14 +10,6 @@
       >
         All Accounts ({{ totalAccountCount }})
       </UButton>
-      <UButton
-        size="xs"
-        color="gray"
-        variant="soft"
-        @click="clearAll"
-      >
-        Clear All
-      </UButton>
       <div class="border-l border-gray-300 dark:border-gray-600 mx-1" />
       <UButton
         size="xs"
@@ -130,10 +122,12 @@
 
 <script setup lang="ts">
 import type { AWSEnclaveData } from '#shared/types/accounts'
+import { toggleDatasetAccount, toggleFilteredDatasetAccounts } from '#shared/utils/dataset-account-selection'
 
 const logger = createLogger('DatasetAccountSelector')
 
 const selectedAccountIds = defineModel<string[]>({ default: () => [] })
+const accountScope = defineModel<'all' | 'selected'>('scope', { default: 'all' })
 
 // State
 const searchQuery = ref('')
@@ -141,16 +135,15 @@ const accounts = ref<AWSEnclaveData[]>([])
 const loading = ref(false)
 
 // Computed
-const filteredAccounts = computed(() => {
-  let filtered = accounts.value
-
-  // Filter out decommissioned accounts and null/undefined entries
-  filtered = filtered.filter(a => {
+const eligibleAccounts = computed(() => accounts.value.filter(a => {
     if (!a) return false
     const enclaveStatus = (a.enclaveStatus || '').toLowerCase()
     const accountStatus = (a.accountStatus || '').toLowerCase()
     return !enclaveStatus.includes('decommission') && !accountStatus.includes('decommission')
-  })
+  }))
+
+const filteredAccounts = computed(() => {
+  let filtered = eligibleAccounts.value
 
   // Search filter
   if (searchQuery.value) {
@@ -176,19 +169,20 @@ const filteredAccounts = computed(() => {
   })
 })
 
-const totalAccountCount = computed(() => accounts.value.length)
+const totalAccountCount = computed(() => eligibleAccounts.value.length)
 
 const commercialCount = computed(() =>
-  accounts.value.filter(a => !a.awsGovCloudAccountID).length
+  eligibleAccounts.value.filter(a => !a.awsGovCloudAccountID).length
 )
 
 const govCloudCount = computed(() =>
-  accounts.value.filter(a => a.awsGovCloudAccountID).length
+  eligibleAccounts.value.filter(a => a.awsGovCloudAccountID).length
 )
 
-const selectedCount = computed(() => selectedAccountIds.value.length)
+const selectedCount = computed(() => accountScope.value === 'all' ? filteredAccounts.value.length : selectedAccountIds.value.length)
 
 const selectedCommercialCount = computed(() => {
+  if (accountScope.value === 'all') return commercialCount.value
   return selectedAccountIds.value.filter(id => {
     const account = accounts.value.find(a => a.accountId === id)
     return account && !account.awsGovCloudAccountID
@@ -196,6 +190,7 @@ const selectedCommercialCount = computed(() => {
 })
 
 const selectedGovCloudCount = computed(() => {
+  if (accountScope.value === 'all') return govCloudCount.value
   return selectedAccountIds.value.filter(id => {
     const account = accounts.value.find(a => a.accountId === id)
     return account && account.awsGovCloudAccountID
@@ -203,68 +198,58 @@ const selectedGovCloudCount = computed(() => {
 })
 
 const isAllSelected = computed(() => {
-  return selectedAccountIds.value.length === filteredAccounts.value.length &&
-         filteredAccounts.value.length > 0
+  return filteredAccounts.value.length > 0 && (
+    accountScope.value === 'all' ||
+    filteredAccounts.value.every(account => selectedAccountIds.value.includes(account.accountId))
+  )
 })
 
 const isSomeSelected = computed(() => {
-  return selectedAccountIds.value.length > 0 && !isAllSelected.value
+  return accountScope.value === 'selected' && selectedAccountIds.value.length > 0 && !isAllSelected.value
 })
 
 // Methods
 function isSelected(accountId: string): boolean {
-  return selectedAccountIds.value.includes(accountId)
+  return accountScope.value === 'all' || selectedAccountIds.value.includes(accountId)
 }
 
 function toggle(accountId: string) {
-  const index = selectedAccountIds.value.indexOf(accountId)
-  if (index > -1) {
-    selectedAccountIds.value.splice(index, 1)
-  } else {
-    selectedAccountIds.value.push(accountId)
-  }
+  const next = toggleDatasetAccount(
+    { scope: accountScope.value, accountIds: selectedAccountIds.value },
+    accountId,
+    eligibleAccounts.value.map(account => account.accountId)
+  )
+  accountScope.value = next.scope
+  selectedAccountIds.value = next.accountIds
 }
 
 function toggleAll() {
-  if (isAllSelected.value) {
-    // Deselect all from filtered list
-    const filteredIds = filteredAccounts.value.map(a => a.accountId)
-    selectedAccountIds.value = selectedAccountIds.value.filter(id => !filteredIds.includes(id))
-  } else {
-    // Select all from filtered list
-    const filteredIds = filteredAccounts.value.map(a => a.accountId)
-    const newIds = filteredIds.filter(id => !selectedAccountIds.value.includes(id))
-    selectedAccountIds.value.push(...newIds)
-  }
+  const next = toggleFilteredDatasetAccounts(
+    { scope: accountScope.value, accountIds: selectedAccountIds.value },
+    filteredAccounts.value.map(account => account.accountId),
+    eligibleAccounts.value.map(account => account.accountId)
+  )
+  accountScope.value = next.scope
+  selectedAccountIds.value = next.accountIds
 }
 
 function selectAll() {
   selectedAccountIds.value = []
-  // Empty array = all accounts in backend
-}
-
-function clearAll() {
-  selectedAccountIds.value = []
+  accountScope.value = 'all'
 }
 
 function selectCommercial() {
-  selectedAccountIds.value = accounts.value
+  selectedAccountIds.value = eligibleAccounts.value
     .filter(a => !a.awsGovCloudAccountID)
     .map(a => a.accountId)
+  accountScope.value = 'selected'
 }
 
 function selectGovCloud() {
-  selectedAccountIds.value = accounts.value
+  selectedAccountIds.value = eligibleAccounts.value
     .filter(a => a.awsGovCloudAccountID)
     .map(a => a.accountId)
-}
-
-function getStatusColor(status: string): string {
-  const s = status?.toUpperCase() || ''
-  if (s === 'ACTIVE' || s === 'PROVISIONED') return 'green'
-  if (s === 'SUSPENDED' || s === 'DELETED') return 'red'
-  if (s === 'PENDING') return 'yellow'
-  return 'gray'
+  accountScope.value = 'selected'
 }
 
 // Load accounts on mount

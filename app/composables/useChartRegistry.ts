@@ -273,8 +273,8 @@ export const useChartRegistry = (args: {
     // Compares projected end-of-month (actual MTD + forecast remainder) vs last month
     serviceCostVariance: {
       id: 'serviceCostVariance',
-      title: 'Service Cost Changes',
-      description: 'Projected end-of-month vs last month by service',
+      title: 'Estimated Service Cost Changes',
+      description: 'Proportional end-of-month estimate vs last month by service',
       type: 'bar',
       extractor: (dataset) => {
         const services = dataset.services as any
@@ -338,6 +338,7 @@ export const useChartRegistry = (args: {
             projected,
             previous,
             change,
+            allocationMethod: 'proportional-estimate',
             percentChange: previous > 0 ? ((projected - previous) / previous) * 100 : null
           }
         })
@@ -873,11 +874,11 @@ export const useChartRegistry = (args: {
       }
     },
 
-    // Last Month vs This Month vs AWS Projection (Multi-bar Chart)
+    // Last Month vs This Month vs proportional aggregate-forecast allocation
     monthlyTrendWithForecast: {
       id: 'monthlyTrendWithForecast',
-      title: 'Monthly Trend with AWS Projection',
-      description: 'Compare last month, current month, and next month AWS projection',
+      title: 'Monthly Trend with Estimated Allocation',
+      description: 'Compare last month, current month, and a proportional allocation of the aggregate AWS forecast',
       type: 'bar',
       extractor: (dataset) => {
         const summary = dataset.summary as any
@@ -951,6 +952,7 @@ export const useChartRegistry = (args: {
             lastMonth: data.lastMonth,
             currentMonth: data.current,
             forecast: data.forecast,
+            allocationMethod: 'proportional-estimate',
             monthOverMonth: data.lastMonth > 0 ? ((data.current - data.lastMonth) / data.lastMonth) * 100 : 0,
             forecastChange: data.current > 0 ? ((data.forecast - data.current) / data.current) * 100 : 0
           }))
@@ -1017,8 +1019,8 @@ export const useChartRegistry = (args: {
     // Account Forecast Comparison (Horizontal Bar Chart)
     accountForecastComparison: {
       id: 'accountForecastComparison',
-      title: 'Account AWS Projection Comparison',
-      description: 'Side-by-side AWS projection comparison across accounts',
+      title: 'Estimated Account Forecast Allocation',
+      description: 'Aggregate AWS forecast allocated to accounts in proportion to current spend',
       type: 'bar',
       extractor: (dataset) => {
         const forecast = dataset.forecast as any
@@ -1071,6 +1073,7 @@ export const useChartRegistry = (args: {
               accountName: account.accountName || account.accountId,
               currentCost,
               forecastCost,
+              allocationMethod: 'proportional-estimate',
               budget,
               forecastToBudgetRatio: budget > 0 ? (forecastCost / budget) * 100 : 0,
               growthProjection: currentCost > 0 ? ((forecastCost - currentCost) / currentCost) * 100 : 0,
@@ -1204,8 +1207,8 @@ export const useChartRegistry = (args: {
     // Historical vs Forecast Comparison
     historicalVsForecastComparison: {
       id: 'historicalVsForecastComparison',
-      title: 'Historical Average vs AWS Projection',
-      description: 'Compare AWS projection to historical spending patterns',
+      title: 'Historical Average vs Estimated Allocation',
+      description: 'Compare a proportional allocation of the aggregate AWS forecast to historical spending',
       type: 'bar',
       extractor: (dataset) => {
         const historical = dataset.historical as any
@@ -1249,6 +1252,7 @@ export const useChartRegistry = (args: {
               accountName: account.accountName || account.accountId,
               historicalAverage: historicalAvg,
               forecastValue: accountForecast,
+              allocationMethod: 'proportional-estimate',
               variance: accountForecast - historicalAvg,
               variancePercent: historicalAvg > 0 ? ((accountForecast - historicalAvg) / historicalAvg) * 100 : 0,
               trend: accountForecast > historicalAvg ? 'increasing' : accountForecast < historicalAvg ? 'decreasing' : 'stable'

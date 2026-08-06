@@ -220,6 +220,14 @@
 
 <script setup lang="ts">
 import { useCostComparison } from '~/composables/useCostComparison'
+import type { DataMode } from '~/types/costs'
+
+const props = defineProps<{
+  selectedAccounts: string[]
+  mode: DataMode
+}>()
+const selectedAccountIds = toRef(props, 'selectedAccounts')
+const selectedMode = toRef(props, 'mode')
 
 const {
   selectedPeriodA,
@@ -233,7 +241,7 @@ const {
   error,
   periodOptions,
   fetchComparison
-} = useCostComparison()
+} = useCostComparison(selectedAccountIds, selectedMode)
 
 const selectedA = computed({
   get: () => selectedPeriodA.value,
@@ -246,10 +254,14 @@ const selectedB = computed({
 })
 
 const periodLabelA = computed(
-  () => periodOptions.find(p => p.value === selectedPeriodA.value)?.label ?? selectedPeriodA.value
+  () => periodA.value?.dateRange.start
+    ? `${periodOptions.find(p => p.value === selectedPeriodA.value)?.label ?? selectedPeriodA.value} (${periodA.value.dateRange.start} to ${periodA.value.dateRange.end}, exclusive)`
+    : periodOptions.find(p => p.value === selectedPeriodA.value)?.label ?? selectedPeriodA.value
 )
 const periodLabelB = computed(
-  () => periodOptions.find(p => p.value === selectedPeriodB.value)?.label ?? selectedPeriodB.value
+  () => periodB.value?.dateRange.start
+    ? `${periodOptions.find(p => p.value === selectedPeriodB.value)?.label ?? selectedPeriodB.value} (${periodB.value.dateRange.start} to ${periodB.value.dateRange.end}, exclusive)`
+    : periodOptions.find(p => p.value === selectedPeriodB.value)?.label ?? selectedPeriodB.value
 )
 
 // Delta visual helpers

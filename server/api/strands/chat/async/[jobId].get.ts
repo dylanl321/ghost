@@ -9,8 +9,6 @@
 import { defineEventHandler, getRouterParam } from 'h3'
 import { logger } from '../../../../utils/logger'
 import { pollJobStatus } from '../../../../utils/strands-async-processor'
-import { generateSmartLinks } from '../../../../utils/strands-link-generator'
-import { extractFollowUpPrompts } from '../../../../utils/bedrock-prompt-extractor'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -59,34 +57,21 @@ export default defineEventHandler(async (event) => {
       lastUpdated: job.lastUpdated
     }
 
-    // If job is complete, include response and generate smart links/prompts
+    // The worker already persisted and enriched the assistant message.
     if (job.status === 'complete' && job.response) {
       response.response = job.response
       response.metadata = job.metadata
       response.completedAt = job.completedAt
+      response.suggestedLinks = job.suggestedLinks || []
+      response.suggestedPrompts = job.suggestedPrompts || []
 
-      // Generate smart links and follow-up prompts (async, non-blocking)
-      try {
-        const [smartLinks, followUpPrompts] = await Promise.all([
-          generateSmartLinks(job.query, job.response, { accountId: job.metadata?.accountId }),
-          extractFollowUpPrompts(job.response)
-        ])
-
-        // Merge embedded links from Strands response with generated smart links
-        const embeddedLinks = (job.metadata as any)?.embeddedLinks || []
-        response.suggestedLinks = [...embeddedLinks, ...smartLinks]
-        response.suggestedPrompts = followUpPrompts
-      } catch (linkError: any) {
-        logger.warn('[Async Chat API] Failed to generate links/prompts:', linkError.message)
-        // Still include embedded links even if generation fails
-        const embeddedLinks = (job.metadata as any)?.embeddedLinks || []
-        response.suggestedLinks = embeddedLinks
-        response.suggestedPrompts = []
-      }
     }
 
     // If job errored, include error message
-    if (job.status === 'error') {
+    if (job.status === 'waiting_for_input') {
+      response.disambiguation = job.disambiguation
+      response.completedAt = job.completedAt
+    } else if (job.status === 'error' || job.status === 'canceled') {
       response.errorMessage = job.errorMessage
       response.completedAt = job.completedAt
     }

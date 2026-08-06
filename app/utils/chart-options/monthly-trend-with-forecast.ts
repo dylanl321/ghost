@@ -22,9 +22,9 @@ export function buildMonthlyTrendWithForecastOptions(data: any, _context: ChartB
         return `${item.accountName}<br/>
                         Last Month: ${formatCurrency(item.lastMonth)}<br/>
                         Current: ${formatCurrency(item.currentMonth)}<br/>
-                        Forecast: ${formatCurrency(item.forecast)}<br/>
+                        Estimated allocation: ${formatCurrency(item.forecast)}<br/>
                         MoM Change: ${(item.monthOverMonth ?? 0) > 0 ? '+' : ''}${(item.monthOverMonth ?? 0).toFixed(1)}%<br/>
-                        Forecast Change: ${(item.forecastChange ?? 0) > 0 ? '+' : ''}${(item.forecastChange ?? 0).toFixed(1)}%`
+                        Estimate Change: ${(item.forecastChange ?? 0) > 0 ? '+' : ''}${(item.forecastChange ?? 0).toFixed(1)}%`
       }
     },
     xAxis: {
@@ -61,7 +61,7 @@ export function buildMonthlyTrendWithForecastOptions(data: any, _context: ChartB
         itemStyle: { color: SEMANTIC_COLORS.primary }
       },
       {
-        name: 'Forecast',
+        name: 'Estimated allocation',
         type: 'bar',
         data: data.map((d: any) => d.forecast),
         itemStyle: { color: SEMANTIC_COLORS.forecast }

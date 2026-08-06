@@ -14,10 +14,10 @@
       >
       <div class="min-w-0 flex-1">
         <div class="text-gray-900 dark:text-gray-200 truncate" :class="showBoldName ? 'font-medium' : ''">
-          {{ account.accountName || account.projectName || account.name || 'Unnamed Account' }}
+          {{ account.accountName || account.projectName || account.name || account.pepCloudRecordName || account.pepEnvironmentName || account.accountAlias || 'Unnamed Account' }}
         </div>
         <div class="text-xs text-gray-600 dark:text-gray-400">
-          {{ account.accountId || account.awsStandardAccountID }}
+          {{ account.accountId || account.awsStandardAccountID || account.awsCommercialAccountID }}
         </div>
       </div>
     </div>

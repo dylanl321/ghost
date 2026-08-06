@@ -18,13 +18,15 @@ import { logger } from './logger'
 import type {
   CloudTrailEventRecord,
   CloudTrailDatasetFilters,
+  DatasetQueryOptions,
+  DatasetQueryResult,
 } from '../../shared/types/dataset-reports'
 
 import {
   StartQueryExecutionCommand,
   GetQueryExecutionCommand,
   GetQueryResultsCommand,
-  type AthenaClient,
+  StopQueryExecutionCommand,
 } from '@aws-sdk/client-athena'
 
 /**
@@ -54,7 +56,7 @@ function normalizeSecurityLakeEvent(row: any, accountName: string): CloudTrailEv
       // Only try to parse if it's a string
       try {
         unmappedData = JSON.parse(row.unmapped)
-      } catch (e) {
+      } catch {
         // Not valid JSON, might be empty or malformed
       }
     }
@@ -62,7 +64,7 @@ function normalizeSecurityLakeEvent(row: any, accountName: string): CloudTrailEv
 
   // Extract data - prioritize OCSF fields over unmapped
   const eventName = row.event_name || row.activity_name || unmappedData.eventName || ''
-  const eventType = row.class_name || unmappedData.eventType || 'API Activity'
+  const eventType = unmappedData.eventType || row.class_name || 'API Activity'
   const eventSource = row.service_name || unmappedData.eventSource || ''
 
   // Determine if event is read-only based on operation name
@@ -114,32 +116,38 @@ function buildWhereClause(
   endEpoch: number
 ): string {
   const conditions: string[] = []
+  const quote = (value: string) => `'${value.replace(/'/g, "''")}'`
 
   // Time range (required)
   conditions.push(`time BETWEEN ${startEpoch} AND ${endEpoch}`)
 
   // Account filter
   if (accountIds.length > 0) {
-    const accountList = accountIds.map(id => `'${id}'`).join(', ')
+    const accountList = accountIds.map(quote).join(', ')
     conditions.push(`accountid IN (${accountList})`)
   }
 
   // Regions filter
   if (filters.regions && filters.regions.length > 0) {
-    const regionList = filters.regions.map(r => `'${r}'`).join(', ')
+    const regionList = filters.regions.map(quote).join(', ')
     conditions.push(`cloud.region IN (${regionList})`)
   }
 
   // Event names filter (api.operation)
   if (filters.eventNames && filters.eventNames.length > 0) {
-    const eventList = filters.eventNames.map(name => `'${name}'`).join(', ')
+    const eventList = filters.eventNames.map(quote).join(', ')
     conditions.push(`api.operation IN (${eventList})`)
   }
 
   // Event sources filter (api.service.name)
   if (filters.eventSources && filters.eventSources.length > 0) {
-    const sourceList = filters.eventSources.map(src => `'${src}'`).join(', ')
+    const sourceList = filters.eventSources.map(quote).join(', ')
     conditions.push(`api.service.name IN (${sourceList})`)
+  }
+
+  if (filters.userIdentities && filters.userIdentities.length > 0) {
+    const identities = filters.userIdentities.map(quote).join(', ')
+    conditions.push(`actor.user.name IN (${identities})`)
   }
 
   // Write events only (exclude Get*, List*, Describe*)
@@ -197,9 +205,12 @@ async function querySecurityLakeForEvents(
   filters: CloudTrailDatasetFilters,
   startTime: Date,
   endTime: Date,
-  environment: 'commercial' | 'govcloud'
-): Promise<CloudTrailEventRecord[]> {
+  environment: 'commercial' | 'govcloud',
+  options: DatasetQueryOptions = {}
+): Promise<{ records: CloudTrailEventRecord[]; hasMore: boolean }> {
   const events: CloudTrailEventRecord[] = []
+  let activeClient: Awaited<ReturnType<typeof getAthenaClient>> | undefined
+  let activeQueryId: string | undefined
 
   try {
     // Get environment configuration
@@ -208,6 +219,7 @@ async function querySecurityLakeForEvents(
 
     // Get Athena client for Security Lake account
     const client = await getAthenaClient(environment, region, config.monitoringAccountId)
+    activeClient = client
 
     // Convert dates to Unix epoch milliseconds for OCSF
     const startEpoch = Math.floor(startTime.getTime())
@@ -245,6 +257,7 @@ async function querySecurityLakeForEvents(
       FROM ${tableName}
       WHERE ${whereClause}
       ORDER BY time DESC
+      ${options.limit ? `LIMIT ${options.limit}` : ''}
     `.trim()
 
     logger.info('[CloudTrail Security Lake] Executing Athena query', {
@@ -265,12 +278,14 @@ async function querySecurityLakeForEvents(
       }
     })
 
-    const startResponse = await client.send(startCommand)
+    const startResponse = await client.send(startCommand, { abortSignal: options.signal })
     const queryExecutionId = startResponse.QueryExecutionId
 
     if (!queryExecutionId) {
       throw new Error('Failed to start Athena query - no execution ID returned')
     }
+    activeQueryId = queryExecutionId
+    await options.onAthenaQuery?.(queryExecutionId)
 
     logger.debug('[CloudTrail Security Lake] Query started', { queryExecutionId })
 
@@ -281,18 +296,30 @@ async function querySecurityLakeForEvents(
 
     while (queryStatus === 'RUNNING' || queryStatus === 'QUEUED') {
       if (attempts >= maxAttempts) {
+        await client.send(new StopQueryExecutionCommand({ QueryExecutionId: queryExecutionId })).catch(() => undefined)
         throw new Error('Athena query timeout - exceeded maximum wait time')
       }
 
+      if (options.signal?.aborted) {
+        await client.send(new StopQueryExecutionCommand({ QueryExecutionId: queryExecutionId })).catch(() => undefined)
+        throw options.signal.reason || new Error('Query canceled')
+      }
+
       // Wait 2 seconds between checks
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, 2000)
+        options.signal?.addEventListener('abort', () => {
+          clearTimeout(timer)
+          reject(options.signal?.reason || new Error('Query canceled'))
+        }, { once: true })
+      })
       attempts++
 
       const statusCommand = new GetQueryExecutionCommand({
         QueryExecutionId: queryExecutionId
       })
 
-      const statusResponse = await client.send(statusCommand)
+      const statusResponse = await client.send(statusCommand, { abortSignal: options.signal })
       queryStatus = statusResponse.QueryExecution?.Status?.State || 'UNKNOWN'
 
       if (queryStatus === 'FAILED' || queryStatus === 'CANCELLED') {
@@ -305,6 +332,7 @@ async function querySecurityLakeForEvents(
         status: queryStatus,
         attempts
       })
+      await options.onProgress?.({ phase: 'cloudtrail', processed: attempts })
     }
 
     logger.info('[CloudTrail Security Lake] Query completed', {
@@ -319,14 +347,9 @@ async function querySecurityLakeForEvents(
       MaxResults: 1000
     })
 
-    let resultResponse = await client.send(resultsCommand)
+    const resultResponse = await client.send(resultsCommand, { abortSignal: options.signal })
     let processedRows = 0
-
-    do {
-      if (!resultResponse.ResultSet?.Rows) {
-        break
-      }
-
+    if (resultResponse.ResultSet?.Rows) {
       // First row is headers, skip it
       const rows = resultResponse.ResultSet.Rows.slice(processedRows === 0 ? 1 : 0)
 
@@ -364,33 +387,28 @@ async function querySecurityLakeForEvents(
 
       processedRows += rows.length
 
-      // Check for more results
-      if (resultResponse.NextToken) {
-        resultResponse = await client.send(new GetQueryResultsCommand({
-          QueryExecutionId: queryExecutionId,
-          NextToken: resultResponse.NextToken,
-          MaxResults: 1000
-        }))
-      } else {
-        break
-      }
-
-    } while (resultResponse.NextToken)
+    }
 
     logger.info('[CloudTrail Security Lake] Events retrieved', {
       totalEvents: events.length,
       processedRows
     })
 
+    activeQueryId = undefined
+    await options.onAthenaQuery?.(null)
   } catch (error: any) {
+    if (activeClient && activeQueryId && options.signal?.aborted) {
+      await activeClient.send(new StopQueryExecutionCommand({ QueryExecutionId: activeQueryId })).catch(() => undefined)
+    }
+    await options.onAthenaQuery?.(null)
     logger.error('[CloudTrail Security Lake] Query failed', {
       error: (error instanceof Error ? error.message : String(error)),
       stack: (error instanceof Error ? error.stack : String(error))
     })
-    // Non-fatal - return empty results
+    throw new Error(`CloudTrail query failed: ${(error instanceof Error ? error.message : String(error))}`)
   }
 
-  return events
+  return { records: events, hasMore: Boolean(options.limit && events.length >= options.limit) }
 }
 
 /**
@@ -402,8 +420,17 @@ async function querySecurityLakeForEvents(
  */
 export async function getCloudTrailEvents(
   accountIds: string[],
-  filters: CloudTrailDatasetFilters = {}
+  filters: CloudTrailDatasetFilters = {},
+  options: DatasetQueryOptions = {}
 ): Promise<CloudTrailEventRecord[]> {
+  return (await queryCloudTrailEvents(accountIds, filters, options)).records
+}
+
+export async function queryCloudTrailEvents(
+  accountIds: string[],
+  filters: CloudTrailDatasetFilters = {},
+  options: DatasetQueryOptions = {}
+): Promise<DatasetQueryResult<CloudTrailEventRecord>> {
   const startTime = Date.now()
 
   // Determine environment
@@ -414,9 +441,12 @@ export async function getCloudTrailEvents(
     filters.lookbackDays || DEFAULT_LOOKBACK_DAYS,
     MAX_LOOKBACK_DAYS
   )
-  const endDate = new Date()
-  const startDate = new Date()
-  startDate.setDate(startDate.getDate() - lookbackDays)
+  const endDate = filters.endTime ? new Date(filters.endTime) : new Date()
+  const startDate = filters.startTime ? new Date(filters.startTime) : new Date()
+  if (!filters.startTime) startDate.setDate(startDate.getDate() - lookbackDays)
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || startDate >= endDate) {
+    throw new Error('Invalid CloudTrail time range')
+  }
 
   logger.info('[CloudTrail] Fetching events', {
     accountCount: accountIds.length || 'all',
@@ -430,13 +460,16 @@ export async function getCloudTrailEvents(
   try {
     // Get all accounts for name mapping
     const allAccounts = await getAllAccountsUnified()
+    const accountsWithIds = allAccounts.filter(
+      (account): account is typeof account & { accountId: string } => Boolean(account.accountId)
+    )
 
     // Build account maps for both Commercial and GovCloud IDs
     const commercialAccountMap = new Map(
-      allAccounts.map(acc => [acc.accountId, acc.accountName || acc.projectName || acc.accountId])
+      accountsWithIds.map(acc => [acc.accountId, acc.accountName || acc.projectName || acc.accountId])
     )
     const govCloudAccountMap = new Map(
-      allAccounts
+      accountsWithIds
         .filter(acc => acc.awsGovCloudAccountID)
         .map(acc => [acc.awsGovCloudAccountID!, acc.accountName || acc.projectName || acc.accountId])
     )
@@ -450,10 +483,10 @@ export async function getCloudTrailEvents(
           .filter(acc => acc.awsGovCloudAccountID)
           .map(acc => ({
             accountId: acc.awsGovCloudAccountID!,
-            accountName: acc.accountName || acc.projectName || acc.accountId
+            accountName: acc.accountName || acc.projectName || acc.accountId || acc.awsGovCloudAccountID!
           }))
       } else {
-        targetAccounts = allAccounts.map(acc => ({
+        targetAccounts = accountsWithIds.map(acc => ({
           accountId: acc.accountId,
           accountName: acc.accountName || acc.projectName || acc.accountId
         }))
@@ -506,17 +539,18 @@ export async function getCloudTrailEvents(
       lookbackDays
     })
 
-    const allEvents = await querySecurityLakeForEvents(
+    const queryResult = await querySecurityLakeForEvents(
       queryAccountIds,
       accountNameMap,
       filters,
       startDate,
       endDate,
-      environment
+      environment,
+      options
     )
 
     // Apply client-side filters
-    const filteredEvents = applyClientSideFilters(allEvents, filters)
+    const filteredEvents = applyClientSideFilters(queryResult.records, filters)
 
     // Sort by event time (newest first)
     filteredEvents.sort((a, b) => {
@@ -530,7 +564,13 @@ export async function getCloudTrailEvents(
       accountsQueried: validAccounts.length,
     })
 
-    return filteredEvents
+    const records = options.limit ? filteredEvents.slice(0, options.limit) : filteredEvents
+    return {
+      records,
+      sampleCount: records.length,
+      hasMore: queryResult.hasMore,
+      truncated: queryResult.hasMore
+    }
 
   } catch (error) {
     logger.error('[CloudTrail] Failed to fetch events', { error })

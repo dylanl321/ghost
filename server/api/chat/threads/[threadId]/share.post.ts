@@ -35,7 +35,7 @@ registerEndpoint('/api/chat/threads/{threadId}/share', 'POST', {
           properties: {
             expiresInDays: {
               type: 'number',
-              default: 90,
+              default: 30,
               description: 'Number of days until the share link expires'
             }
           }
@@ -85,7 +85,10 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   // Parse request body (optional)
   const body = (await readBody(event).catch(() => ({}))) as ShareThreadRequest
-  const expiresInDays = body.expiresInDays || 90
+  const expiresInDays = body.expiresInDays || 30
+  if (![1, 7, 30, 90].includes(expiresInDays)) {
+    return errors.badRequest(event, 'Expiration must be 1, 7, 30, or 90 days')
+  }
 
   logger.info(`[Chat Threads API] Sharing thread ${threadId} for user ${userId}`, { expiresInDays })
 
