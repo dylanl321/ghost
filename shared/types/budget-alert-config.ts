@@ -257,16 +257,27 @@ export interface LobRecipientsConfig extends ConfigItemBase {
  *
  * Key: config_scope={ACCOUNT_ID}, config_section=custom_recipients#main
  */
+export interface ManualAccountRecipient {
+  /** Normalized GDMS email address */
+  email: string
+  /** User who added the recipient */
+  added_by: string
+  /** ISO 8601 timestamp when the recipient was added */
+  added_at: string
+}
+
 export interface AccountRecipientsConfig extends ConfigItemBase {
   section_type: 'custom_recipients'
   /** TO recipients for this account (flat mode - applies to all alert types) */
   to?: string[]
-  /** CC recipients for this account (flat mode - applies to all alert types) */
+  /** Additional CC recipients (flat mode - applies to all alert types) */
   cc?: string[]
   /** If true, completely replace default and LOB recipients */
   override?: boolean
   /** Type-specific recipients structure (overrides flat to/cc if present) */
   by_type?: RecipientsByTypeStructure
+  /** Audited recipients managed manually from the GHOST account page */
+  manual_recipients?: ManualAccountRecipient[]
 }
 
 // -----------------------------------------------------------------------------
