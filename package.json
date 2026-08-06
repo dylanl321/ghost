@@ -23,6 +23,7 @@
     "check:unused": "npx ts-prune --project tsconfig.json",
     "check:deps": "npx depcheck --ignores=\"@nuxt/*,nuxt-*,@types/*,eslint,typescript\"",
     "check:files": "npx unimported",
+    "test:budget-recipients": "tsx --test server/utils/__tests__/manual-budget-alert-recipients.test.ts",
     "changelog:generate": "tsx scripts/generate-changelog.ts"
   },
   "dependencies": {
