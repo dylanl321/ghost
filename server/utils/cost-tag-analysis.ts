@@ -14,6 +14,7 @@ interface AccountCostPair {
 interface BuildTagCoverageOptions {
   includeValues?: boolean
   accountNames?: Map<string, string>
+  costMetric?: 'UnblendedCost' | 'NetUnblendedCost'
   proformaRequested?: boolean
   proformaAccountTotals?: Map<string, AccountCostPair>
   proformaAccountPeriodTotals?: Map<string, AccountCostPair>
@@ -60,6 +61,7 @@ export function buildTagCoverageData(
   resultsByTime: any[],
   options: BuildTagCoverageOptions = {}
 ): TagCoverageData {
+  const costMetric = options.costMetric || 'UnblendedCost'
   const accountTotals = new Map<string, number>()
   const accountTaggedCosts = new Map<string, number>()
   const accountPositiveTotals = new Map<string, number>()
@@ -92,7 +94,7 @@ export function buildTagCoverageData(
       const rawGroupKey = group.Keys?.[1] || `${tagKey}$`
       const identity = normalizeCostTagIdentity(rawGroupKey, tagKey)
       const groupKey = identity.groupKey
-      const cost = Number.parseFloat(group.Metrics?.UnblendedCost?.Amount || '0') || 0
+      const cost = Number.parseFloat(group.Metrics?.[costMetric]?.Amount || '0') || 0
 
       valueIdentities.set(groupKey, valueIdentities.get(groupKey) || identity)
       const rawValues = valueRawValues.get(groupKey) || new Set<string>()
@@ -223,6 +225,7 @@ export function buildTagCoverageData(
 
   return {
     tagKey,
+    costMetric,
     accounts,
     totalTaggedCost,
     totalUntaggedCost,

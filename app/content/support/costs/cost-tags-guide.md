@@ -114,11 +114,11 @@ Click **Save Settings** at the bottom to persist your changes.
 
 By default, the Cost Dashboard shows **proforma costs** (what your account is actually charged via AWS Billing Conductor). However, AWS Billing Conductor **does not support cost allocation tags** — tag-level cost breakdowns are only available from billable (master account) data via Cost Explorer.
 
-To bridge this gap, GHOST **extrapolates proforma costs per account and AWS time bucket** by applying each account's billable tag distribution to that account's proforma total for the same month. GHOST publishes the estimate only when every account/month bucket is available, then combines the results for multi-account views.
+To bridge this gap, GHOST **extrapolates proforma costs per account and AWS time bucket** by applying each account's billable Net Unblended tag distribution to that account's proforma total for the same month. GHOST publishes the estimate only when every account/month bucket is available, then combines the results for multi-account views.
 
 **What this means for you:**
 
-- **Billable percentages are exact** — the relative distribution in Cost Explorer comes directly from billable data
+- **Billable percentages are exact** — the relative distribution comes directly from the same Net Unblended metric used by the Cost Explorer console
 - **Dollar amounts are estimates** — indicated by "(est.)" labels throughout the interface
 - **Coverage % remains billable** — coverage measures the exact tagged vs. untagged billable ratio
 - **Switch to billable mode** on the Cost Dashboard toggle to see exact billable costs per tag (without estimation)
@@ -148,7 +148,7 @@ Any user with access to an account can configure its favorite tags, default tag,
 
 ### Why do tag costs show as estimated?
 
-AWS Billing Conductor (which calculates proforma costs) does not support cost allocation tags. GHOST applies each account's billable tag distribution to that account's proforma total in the same monthly bucket, then combines complete results. The resulting dollar amounts are estimates and are marked with "(est.)". To see exact costs per tag, switch the Cost Dashboard to billable mode. These tag-level estimates should not be used for chargeback; use proforma account-level totals for that purpose.
+AWS Billing Conductor (which calculates proforma costs) does not support cost allocation tags. GHOST applies each account's billable Net Unblended tag distribution to that account's proforma total in the same monthly bucket, then combines complete results. The resulting dollar amounts are estimates and are marked with "(est.)". To see exact costs per tag, switch the Cost Dashboard to billable mode. These tag-level estimates should not be used for chargeback; use proforma account-level totals for that purpose.
 
 ### Do tags affect my actual AWS bill?
 

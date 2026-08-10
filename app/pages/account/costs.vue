@@ -532,7 +532,7 @@
               v-model:tag="selectedTag"
               v-model:tag-view="tagView"
               :smart-charts="charts"
-              :dataset="dataset"
+              :dataset="chartDataset"
               :show-regression-line="showRegressionLine"
               :selected-accounts="selectedAccounts"
               :smart-charts-loading="isCostFetching"
@@ -658,6 +658,20 @@ const accountsList = computed<Account[]>(() => {
 // =============================================================================
 // Cost filtering setup - respects user's cost threshold settings
 const costSettingsStore = useCostSettingsStore()
+
+// Forecast APIs need an explicit scope so the default "All accounts" view
+// excludes the same hidden development/decommissioned accounts as the UI.
+const defaultCostScopeAccountIds = computed<string[]>(() => {
+  const metadataSettings = {
+    ...costSettingsStore.$state,
+    // Spend thresholds are applied after costs load; they are not a stable forecast scope.
+    minCostThreshold: 0
+  }
+
+  return applyAccountFilters(accountsList.value, metadataSettings)
+    .map(account => getPossibleAccountIds(account)[0])
+    .filter((id): id is string => Boolean(id))
+})
 
 // CRITICAL COMPUTED PROPERTY: Merges live cost data with account metadata
 // This is where account costs are populated from the dataset returned by API calls
@@ -992,6 +1006,21 @@ const totalSpend = computed<number>(() => {
   return accountsSubset.reduce((sum: number, acc: Account) => sum + getSpend(acc), 0)
 })
 
+const chartDataset = computed<NormalizedDataset | null>(() => {
+  if (!dataset.value) return null
+
+  const displayedAccounts = selectedAccounts.value.length > 0
+    ? accountsWithCosts.value.filter((account: Account) =>
+        getPossibleAccountIds(account).some(id => selectedAccounts.value.includes(id)))
+    : accountsWithCosts.value
+
+  return {
+    ...dataset.value,
+    displayedAccountIds: displayedAccounts.flatMap(getPossibleAccountIds),
+    displayedCurrentSpend: totalSpend.value
+  }
+})
+
 const utilization = computed(() => {
   if (totalBudget.value === 0) return 0
   return Math.round((totalSpend.value / totalBudget.value) * 100)
@@ -1304,6 +1333,7 @@ const { mode: dataMode, isFetching: isCostFetching, isDeferredLoading, isPending
   selectedTimeframe,
   initialMode: 'proforma',
   accountsList, // Pass full accounts data for LOB/Department mapping
+  defaultAccountScope: defaultCostScopeAccountIds,
   debounceMs: 800 // Wait 800ms after user stops selecting accounts
 })
 

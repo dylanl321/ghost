@@ -102,6 +102,7 @@ registerEndpoint('/api/costs/tag-coverage', 'GET', {
                 type: 'object',
                 properties: {
                   tagKey: { type: 'string' },
+                  costMetric: { type: 'string', enum: ['NetUnblendedCost'] },
                   accounts: {
                     type: 'array',
                     items: {
@@ -184,6 +185,9 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
 
   const { startDate, endDate } = dateRange
+  // Match the Cost Explorer console's default net metric so discounts and
+  // credits stay attached to the same tag distribution users validate there.
+  const costMetric = 'NetUnblendedCost' as const
   const includeValues = query.includeValues === 'true' || query.includeValues === true
   const proforma = query.proforma === 'true' || query.proforma === true
   const proformaAccountId = (query.proformaAccountId as string) || process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832'
@@ -219,6 +223,7 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   const cacheKey = `costs:tag-coverage:${JSON.stringify({
     tagKey,
+    costMetric,
     startDate,
     endDate,
     environment,
@@ -240,7 +245,7 @@ export default defineEventHandler(handleAsync(async (event) => {
         startDate,
         endDate,
         granularity: 'MONTHLY',
-        metrics: ['UnblendedCost'],
+        metrics: ['UnblendedCost', costMetric],
         groupBy: [
           { type: 'DIMENSION', key: 'LINKED_ACCOUNT' },
           { type: 'TAG', key: tagKey }
@@ -253,10 +258,10 @@ export default defineEventHandler(handleAsync(async (event) => {
             startDate,
             endDate,
             granularity: 'MONTHLY',
-            metrics: ['UnblendedCost'],
+            metrics: ['UnblendedCost', costMetric],
             groupBy: [{ type: 'DIMENSION', key: 'LINKED_ACCOUNT' }],
             filter: accountFilter
-          }, proformaAccountId, masterAccountId)
+          }, proformaAccountId, masterAccountId, costMetric)
         : Promise.resolve(null)
 
       const [taggedResult, proformaResult] = await Promise.allSettled([
@@ -292,6 +297,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       return buildTagCoverageData(tagKey, taggedResult.value.resultsByTime || [], {
         includeValues,
         accountNames: accountNameMap,
+        costMetric,
         proformaRequested: proforma,
         proformaAccountTotals,
         proformaAccountPeriodTotals

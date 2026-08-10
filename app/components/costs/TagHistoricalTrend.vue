@@ -23,6 +23,7 @@
         <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">
           {{ isPeopleView ? 'People Cost Over Time' : `Cost Over Time by "${tagKey}"` }}
         </h3>
+        <span class="text-xs text-gray-500 dark:text-gray-400">Billable Net Unblended</span>
         <UTooltip text="Export trend data as CSV">
           <UButton
             icon="i-heroicons-arrow-down-tray"
@@ -78,7 +79,8 @@ async function fetchData() {
     const params: Record<string, string> = {
       groupBy: `TAG:${props.tagKey}`,
       period: apiPeriod,
-      granularity: getGranularity(apiPeriod)
+      granularity: getGranularity(apiPeriod),
+      metric: 'NetUnblendedCost'
     }
     if (props.accountIds.length > 0) params.accountIds = props.accountIds.join(',')
 
@@ -127,7 +129,8 @@ const processedData = computed(() => {
       const identity = normalizeCostTagIdentity(rawKey, props.tagKey)
       if (isPeopleView.value && !identity.isPerson) return
       const key = identity.groupKey
-      const cost = parseFloat(group.Metrics?.UnblendedCost?.Amount || '0')
+      const metric = chartData.value.costMetric || 'NetUnblendedCost'
+      const cost = parseFloat(group.Metrics?.[metric]?.Amount || '0')
       if (!tagValueMap[key]) tagValueMap[key] = {}
       tagValueMap[key][timeKey] = (tagValueMap[key][timeKey] || 0) + cost
       displayNames[key] = props.tagValueAliases?.[`${props.tagKey}::${key}`]

@@ -420,15 +420,16 @@ export async function getProformaForecast(
 export async function getProformaCosts(
   params: CostExplorerParams,
   proformaAccountId: string = process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832',
-  masterAccountId: string = process.env.AWS_MASTER_ACCOUNT_ID || '205950196477'
+  masterAccountId: string = process.env.AWS_MASTER_ACCOUNT_ID || '205950196477',
+  comparisonMetric: string = 'UnblendedCost'
 ) {
   const { billable: billableCosts, proforma: proformaCosts } = await queryBillingDomains(
     params,
     proformaAccountId,
     masterAccountId
   )
-  const billableTotal = billableCosts.dataset.reconciliation.authoritativeTotal
-  const proformaTotal = proformaCosts.dataset.reconciliation.authoritativeTotal
+  const billableTotal = parseFloat(billableCosts.total?.[comparisonMetric]?.Amount || '0')
+  const proformaTotal = parseFloat(proformaCosts.total?.[comparisonMetric]?.Amount || '0')
   const periodId = (period: any) => `${period.TimePeriod?.Start || ''}|${period.TimePeriod?.End || ''}`
   const billablePeriods = new Map<string, any>(billableCosts.resultsByTime.map(period => [periodId(period), period]))
   const proformaPeriods = new Map<string, any>(proformaCosts.resultsByTime.map(period => [periodId(period), period]))
@@ -437,8 +438,8 @@ export async function getProformaCosts(
   const comparisonByTime = [...periods].sort().map(id => {
     const billablePeriod = billablePeriods.get(id)
     const proformaPeriod = proformaPeriods.get(id)
-    const billablePeriodTotal = parseFloat(billablePeriod?.Total?.UnblendedCost?.Amount || '0')
-    const proformaPeriodTotal = parseFloat(proformaPeriod?.Total?.UnblendedCost?.Amount || '0')
+    const billablePeriodTotal = parseFloat(billablePeriod?.Total?.[comparisonMetric]?.Amount || '0')
+    const proformaPeriodTotal = parseFloat(proformaPeriod?.Total?.[comparisonMetric]?.Amount || '0')
     const groupId = (group: any) => JSON.stringify(group.Keys || [])
     const billableGroups = new Map<string, any>((billablePeriod?.Groups || []).map((group: any) => [groupId(group), group]))
     const proformaGroups = new Map<string, any>((proformaPeriod?.Groups || []).map((group: any) => [groupId(group), group]))
@@ -448,8 +449,8 @@ export async function getProformaCosts(
           const billableGroup: any = billableGroups.get(id)
           const proformaGroup: any = proformaGroups.get(id)
           const accountId = billableGroup?.Keys?.[0] || proformaGroup?.Keys?.[0] || ''
-          const billable = parseFloat(billableGroup?.Metrics?.UnblendedCost?.Amount || '0')
-          const proforma = parseFloat(proformaGroup?.Metrics?.UnblendedCost?.Amount || '0')
+          const billable = parseFloat(billableGroup?.Metrics?.[comparisonMetric]?.Amount || '0')
+          const proforma = parseFloat(proformaGroup?.Metrics?.[comparisonMetric]?.Amount || '0')
           return {
             accountId,
             billable,
@@ -508,6 +509,7 @@ export async function getProformaCosts(
       }
     },
     comparison: {
+      metric: comparisonMetric,
       byTime: comparisonByTime,
       totals: {
         billable: billableTotal,

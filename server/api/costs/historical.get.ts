@@ -119,6 +119,17 @@ registerEndpoint('/api/costs/historical', 'GET', {
       description: 'Time granularity for results. DAILY gives day-level data points, MONTHLY gives month-level. Defaults to MONTHLY.'
     },
     {
+      name: 'metric',
+      in: 'query',
+      required: false,
+      schema: {
+        type: 'string',
+        enum: ['UnblendedCost', 'NetUnblendedCost'],
+        default: 'UnblendedCost'
+      },
+      description: 'Cost metric used for totals and grouped values.'
+    },
+    {
       name: 'tagFilter',
       in: 'query',
       required: false,
@@ -267,6 +278,10 @@ export default defineEventHandler(handleAsync(async (event) => {
   if (granularity !== 'DAILY' && granularity !== 'MONTHLY') {
     return errors.badRequest(event, 'Granularity must be DAILY or MONTHLY')
   }
+  const costMetric = (query.metric as string) || 'UnblendedCost'
+  if (!['UnblendedCost', 'NetUnblendedCost'].includes(costMetric)) {
+    return errors.badRequest(event, 'Metric must be UnblendedCost or NetUnblendedCost')
+  }
 
   // Parse groupBy param — supports TAG: prefix for tag-based grouping
   const groupByParam = (query.groupBy as string) || 'LINKED_ACCOUNT'
@@ -279,7 +294,9 @@ export default defineEventHandler(handleAsync(async (event) => {
     startDate,
     endDate,
     granularity,
-    metrics: ['UnblendedCost'],
+    metrics: costMetric === 'UnblendedCost'
+      ? ['UnblendedCost']
+      : ['UnblendedCost', costMetric],
     groupBy: [{
       type: isTagGroupBy ? 'TAG' as const : 'DIMENSION' as const,
       key: groupByKey
@@ -312,6 +329,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     granularity,
     environment,
     groupByParam,
+    costMetric,
     tagFilter: getCostTagFilterCacheKey(costTagFilter),
     proforma,
     proformaAccountId: proforma ? proformaAccountId : null,
@@ -328,14 +346,14 @@ export default defineEventHandler(handleAsync(async (event) => {
 
     resultsByTime.forEach((result: any) => {
       const monthKey = result.TimePeriod?.Start?.substring(0, 7) // YYYY-MM format
-      const authoritativePeriodCost = parseFloat(result.Total?.UnblendedCost?.Amount || '0')
+      const authoritativePeriodCost = parseFloat(result.Total?.[costMetric]?.Amount || '0')
       totalCost += authoritativePeriodCost
       if (monthKey) monthlyData[monthKey] = (monthlyData[monthKey] || 0) + authoritativePeriodCost
 
       if (result.Groups) {
         result.Groups.forEach((group: any) => {
           const accountId = group.Keys?.[0]
-          const cost = parseFloat(group.Metrics?.UnblendedCost?.Amount || '0')
+          const cost = parseFloat(group.Metrics?.[costMetric]?.Amount || '0')
 
           if (accountId) {
             accountSet.add(accountId)
@@ -367,6 +385,7 @@ export default defineEventHandler(handleAsync(async (event) => {
 
     return {
       period: periodLabel,
+      costMetric,
       totalCost,
       totalCostFormatted: `$${totalCost.toFixed(2)}`,
       accountCount,
@@ -414,10 +433,10 @@ export default defineEventHandler(handleAsync(async (event) => {
           }
 
           logger.info('Fetching first 12 months of 24-month period (proforma)...')
-          const firstPeriodData = await getProformaCosts(firstPeriodParams, proformaAccountId, masterAccountId)
+          const firstPeriodData = await getProformaCosts(firstPeriodParams, proformaAccountId, masterAccountId, costMetric)
 
           logger.info('Fetching second 12 months of 24-month period (proforma)...')
-          const secondPeriodData = await getProformaCosts(secondPeriodParams, proformaAccountId, masterAccountId)
+          const secondPeriodData = await getProformaCosts(secondPeriodParams, proformaAccountId, masterAccountId, costMetric)
 
           // Combine results
           billableResultsByTime = mergeCostExplorerPeriods([[
@@ -430,7 +449,7 @@ export default defineEventHandler(handleAsync(async (event) => {
           ]])
         } else {
           // Single call for periods <= 12 months
-          const proformaData = await getProformaCosts(costParams, proformaAccountId, masterAccountId)
+          const proformaData = await getProformaCosts(costParams, proformaAccountId, masterAccountId, costMetric)
           billableResultsByTime = proformaData?.billable?.costs?.resultsByTime || []
           proformaResultsByTime = proformaData?.proforma?.costs?.resultsByTime || []
         }

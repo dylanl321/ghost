@@ -48,6 +48,88 @@ test('aggregates tag values across accounts and weights proforma per account', (
   assert.deepEqual(phoenix?.accounts.map(account => account.accountName), ['Production', 'Development'])
 })
 
+test('uses NetUnblendedCost for tag distribution when requested', () => {
+  const data = buildTagCoverageData('Project', [{
+    TimePeriod: { Start: '2026-07-01', End: '2026-08-01' },
+    Groups: [
+      {
+        Keys: ['tagged-account', 'Project$Phoenix'],
+        Metrics: {
+          UnblendedCost: { Amount: '250' },
+          NetUnblendedCost: { Amount: '100' }
+        }
+      },
+      {
+        Keys: ['tagged-account', 'Project$'],
+        Metrics: {
+          UnblendedCost: { Amount: '-150' },
+          NetUnblendedCost: { Amount: '100' }
+        }
+      },
+      {
+        Keys: ['untagged-account', 'Project$'],
+        Metrics: {
+          UnblendedCost: { Amount: '300' },
+          NetUnblendedCost: { Amount: '300' }
+        }
+      }
+    ]
+  }], {
+    includeValues: true,
+    costMetric: 'NetUnblendedCost',
+    proformaRequested: true,
+    proformaAccountTotals: new Map([
+      ['tagged-account', { billable: 200, proforma: 400 }],
+      ['untagged-account', { billable: 300, proforma: 300 }]
+    ]),
+    proformaAccountPeriodTotals: new Map([
+      ['2026-07-01|tagged-account', { billable: 200, proforma: 400 }],
+      ['2026-07-01|untagged-account', { billable: 300, proforma: 300 }]
+    ])
+  })
+
+  assert.equal(data.costMetric, 'NetUnblendedCost')
+  assert.equal(data.totalTaggedCost, 100)
+  assert.equal(data.totalUntaggedCost, 400)
+  assert.equal(data.estimatedProformaTaggedCost, 200)
+  assert.equal(data.estimatedProformaUntaggedCost, 500)
+  assert.equal(data.overallCoverage, 20)
+})
+
+test('does not inflate Joe July Project tags with signed unblended adjustments', () => {
+  const data = buildTagCoverageData('Project', [{
+    TimePeriod: { Start: '2026-07-01', End: '2026-08-01' },
+    Groups: [
+      { Keys: ['143468284131', 'Project$'], Metrics: { UnblendedCost: { Amount: '-1618.0356264646' }, NetUnblendedCost: { Amount: '1437.6599580215' } } },
+      { Keys: ['143468284131', 'Project$DE Demo'], Metrics: { UnblendedCost: { Amount: '2507.6222225408' }, NetUnblendedCost: { Amount: '441.6479977488' } } },
+      { Keys: ['143468284131', 'Project$Other'], Metrics: { UnblendedCost: { Amount: '2520.3053190478' }, NetUnblendedCost: { Amount: '1530.5839593537' } } },
+      { Keys: ['244184125976', 'Project$'], Metrics: { UnblendedCost: { Amount: '4418.8733143301' }, NetUnblendedCost: { Amount: '4418.8733143301' } } },
+      { Keys: ['583621598929', 'Project$'], Metrics: { UnblendedCost: { Amount: '89.0831576859' }, NetUnblendedCost: { Amount: '89.0831576859' } } },
+      { Keys: ['967802823695', 'Project$'], Metrics: { UnblendedCost: { Amount: '1948.2620051986' }, NetUnblendedCost: { Amount: '1948.2620051986' } } }
+    ]
+  }], {
+    includeValues: true,
+    costMetric: 'NetUnblendedCost',
+    proformaRequested: true,
+    proformaAccountTotals: new Map([
+      ['143468284131', { billable: 3409.891915124, proforma: 5557.7598320818 }],
+      ['244184125976', { billable: 4418.8733143301, proforma: 4674.2214389856 }],
+      ['583621598929', { billable: 89.0831576859, proforma: 114.7241924947 }],
+      ['967802823695', { billable: 1948.2620051986, proforma: 1932.650458419 }]
+    ]),
+    proformaAccountPeriodTotals: new Map([
+      ['2026-07-01|143468284131', { billable: 3409.891915124, proforma: 5557.7598320818 }],
+      ['2026-07-01|244184125976', { billable: 4418.8733143301, proforma: 4674.2214389856 }],
+      ['2026-07-01|583621598929', { billable: 89.0831576859, proforma: 114.7241924947 }],
+      ['2026-07-01|967802823695', { billable: 1948.2620051986, proforma: 1932.650458419 }]
+    ])
+  })
+
+  assert.ok(Math.abs((data.estimatedProformaTaggedCost || 0) - 3214.5275637963) < 0.01)
+  assert.ok(Math.abs((data.estimatedProformaUntaggedCost || 0) - 9064.8283581848) < 0.01)
+  assert.ok((data.estimatedProformaTaggedCost || 0) < 4000)
+})
+
 test('does not publish partial proforma estimates', () => {
   const data = buildTagCoverageData('Project', resultsByTime, {
     includeValues: true,

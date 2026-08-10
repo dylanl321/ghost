@@ -150,6 +150,9 @@ export interface CostsAnalysisResponse {
 // Normalized dataset for charts
 export interface NormalizedDataset {
   accounts: string[] // Selected account IDs
+  costScopeAccounts?: string[] // Effective account IDs used for contextual forecasts when no explicit selection exists
+  displayedAccountIds?: string[] // Account IDs currently represented by dashboard totals after client-side filters
+  displayedCurrentSpend?: number // Exact spend shown by the dashboard summary cards
   accountsList?: AWSEnclaveData[] // Full account objects with metadata for LOB/Department mapping
   mode: DataMode // Current mode (billable or proforma)
   timeframe: string // Selected timeframe (thisMonth, lastMonth, etc.)
@@ -166,4 +169,3 @@ export interface NormalizedDataset {
   lastMonthServices?: { resultsByTime?: AwsResultsByTime[] } | null // Last month service breakdown for variance chart
   yearEndForecast?: CostsForecastResponse | null // Rest-of-year forecast
 }
-

@@ -51,23 +51,11 @@ export async function handleForecastRequest(event: H3Event, options: ForecastHan
   let filter: any = undefined
   if (accountIds.length > 0) {
     logger.info(`${logPrefix} Filtering ${responseKey} for ${accountIds.length} accounts:`, accountIds)
-    // Create filter for specific accounts
-    if (accountIds.length === 1) {
-      filter = {
-        Dimensions: {
-          Key: 'LINKED_ACCOUNT',
-          Values: [accountIds[0]]
-        }
-      }
-    } else {
-      // Multiple accounts - use OR filter
-      filter = {
-        Or: accountIds.map(accountId => ({
-          Dimensions: {
-            Key: 'LINKED_ACCOUNT',
-            Values: [accountId]
-          }
-        }))
+    // Multiple dimension values use OR semantics and avoid deeply nested expressions.
+    filter = {
+      Dimensions: {
+        Key: 'LINKED_ACCOUNT',
+        Values: accountIds
       }
     }
   } else {

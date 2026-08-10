@@ -51,6 +51,7 @@ export interface TagProformaEstimation {
 
 export interface TagCoverageData {
   tagKey: string
+  costMetric: 'UnblendedCost' | 'NetUnblendedCost'
   accounts: TagCoverageAccount[]
   totalTaggedCost: number
   totalUntaggedCost: number
