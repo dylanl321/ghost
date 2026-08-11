@@ -38,7 +38,7 @@ export function useAccountData(
   const forecastData = ref<any>(null)
   const loading = ref(true)
 
-  const currentSpend = computed(() => costResponse.value?.data.proformaMonthToDateTotal || 0)
+  const currentSpend = computed(() => costResponse.value?.data?.proformaMonthToDateTotal ?? 0)
 
   const budget = computed(() => {
     const enclave = enclaveStore.enclaves[accountId.value]
@@ -46,13 +46,11 @@ export function useAccountData(
   })
 
   const billableTimeSeries = computed(() => {
-    if (!costResponse.value) return []
-    return costResponse.value.data.billableLast14Days
+    return costResponse.value?.data?.billableLast14Days ?? []
   })
 
   const proformaTimeSeries = computed(() => {
-    if (!costResponse.value) return []
-    return costResponse.value.data.proformaLast14Days
+    return costResponse.value?.data?.proformaLast14Days ?? []
   })
 
   async function fetchAll() {

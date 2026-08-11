@@ -5,6 +5,7 @@ import { getCostAndUsage } from '../../utils/cost-explorer'
 import { logger } from '../../utils/logger'
 
 const monitoringAccountId = '253821132832'
+const COST_METRIC = 'UnblendedCost'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/accounts/dashboard-simplified', 'GET', {
@@ -68,7 +69,7 @@ registerEndpoint('/api/accounts/dashboard-simplified', 'GET', {
 
 function sumResults(resultsByTime: any[]) {
   return resultsByTime.reduce((sum, r) => {
-    const cost = parseFloat(r.Total?.BlendedCost?.Amount || "0");
+    const cost = parseFloat(r.Total?.[COST_METRIC]?.Amount || "0");
     return sum + cost;
   }, 0);
 }
@@ -76,7 +77,7 @@ function sumResults(resultsByTime: any[]) {
 function mapDaily(resultsByTime: any[]) {
   return resultsByTime.map((r) => ({
     date: r.TimePeriod?.Start,
-    cost: parseFloat(r.Total?.BlendedCost?.Amount || "0"),
+    cost: parseFloat(r.Total?.[COST_METRIC]?.Amount || "0"),
   }));
 }
 
@@ -123,28 +124,28 @@ async function getOverview(accountId: string, days: number = 14) {
       startDate: startOfMonth,
       endDate: tomorrow,
       granularity: "MONTHLY",
-      metrics: ["BlendedCost"],
+      metrics: [COST_METRIC],
       filter: linkedAccountFilter,
     }, 'commercial'),
     getCostAndUsage({
       startDate: dailyStart,
       endDate: dailyEnd,
       granularity: "DAILY",
-      metrics: ["BlendedCost"],
+      metrics: [COST_METRIC],
       filter: linkedAccountFilter,
     }, 'commercial'),
     getCostAndUsage({
       startDate: startOfMonth,
       endDate: tomorrow,
       granularity: "MONTHLY",
-      metrics: ["BlendedCost"],
+      metrics: [COST_METRIC],
       filter: linkedAccountFilter,
     }, 'commercial', monitoringAccountId),
     getCostAndUsage({
       startDate: dailyStart,
       endDate: dailyEnd,
       granularity: "DAILY",
-      metrics: ["BlendedCost"],
+      metrics: [COST_METRIC],
       filter: linkedAccountFilter,
     }, 'commercial', monitoringAccountId),
   ]);
