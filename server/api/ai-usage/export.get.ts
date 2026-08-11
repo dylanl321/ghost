@@ -25,12 +25,12 @@ export default defineEventHandler(handleAsync(async event => {
   }
   const overview = await queryAIUsage(input)
   const headers = [
-    'Group', 'Label', 'Environment', 'Account', 'Provider', 'Service', 'Project', 'Model', 'Region',
+    'Group', 'Label', 'Environment', 'Account', 'Provider', 'Services', 'Project', 'Model', 'Region', 'Telemetry Available',
     'Invocations', 'Input Tokens', 'Output Tokens', 'Client Errors', 'Server Errors', 'Throttles',
     'Actual Cost USD', 'Estimated Unbilled Cost USD', 'Estimate Coverage Percent', 'Last Seen'
   ]
   const rows = overview.breakdown.map(row => [
-    row.key, row.label, row.environment, row.accountId, row.provider, row.service, row.projectId, row.modelId, row.region,
+    row.key, row.label, row.environment, row.accountId, row.provider, row.services.join('; '), row.projectId, row.modelId, row.region, row.telemetryAvailable,
     row.metrics.invocations, row.metrics.inputTokens, row.metrics.outputTokens, row.metrics.clientErrors,
     row.metrics.serverErrors, row.metrics.throttles, row.cost.actual.toFixed(6), row.cost.estimated.toFixed(6),
     row.cost.estimateCoveragePercent?.toFixed(2), row.lastSeen

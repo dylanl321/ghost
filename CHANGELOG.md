@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AI usage actuals and current estimates are clearly separated, with Commercial pro forma and billable cost views available alongside GovCloud billable costs
 - Side navigation is now organized into Workspace, Accounts, FinOps, Insights, Manage, and Admin sections while keeping every destination one click away
 - Collection errors and account-access details are now restricted to administrators; general users see only aggregate coverage status
+- AI usage breakdowns distinguish cost-only services from services with invocation telemetry, preventing unavailable usage from appearing as zero
 - AI usage snapshots refresh hourly and retain daily adoption history for long-term comparisons
 
 ### Bug Fixes

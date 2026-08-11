@@ -12,12 +12,24 @@ function errorCategory(message: string): string {
   return 'Other'
 }
 
+function errorAccountId(message: string): string | undefined {
+  return message.match(/resource: arn:(?:aws|aws-us-gov):iam::(\d{12}):role/)?.[1] ||
+    message.match(/account (\d{12})/)?.[1]
+}
+
+function errorRegion(message: string): string | undefined {
+  return message.match(/Region: ([a-z0-9-]+)/)?.[1]
+}
+
 export default defineEventHandler(async event => {
   await requireAdmin(event)
   const state = await getAIUsageCollectorState()
   const errors = (state?.warnings || []).map((message, index) => ({
     id: `${index + 1}`,
     category: errorCategory(message),
+    accountId: errorAccountId(message),
+    environment: message.includes('govcloud') || message.includes('aws-us-gov') ? 'govcloud' : 'commercial',
+    region: errorRegion(message),
     message
   }))
   const errorSummary = Object.entries(errors.reduce<Record<string, number>>((summary, error) => {
@@ -32,6 +44,7 @@ export default defineEventHandler(async event => {
       ? (state.accountsSucceeded / state.accountsAttempted) * 100
       : 0,
     errors,
-    errorSummary
+    errorSummary,
+    affectedAccounts: new Set(errors.map(error => error.accountId).filter(Boolean)).size
   })
 })

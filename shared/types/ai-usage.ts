@@ -95,6 +95,8 @@ export interface AIUsageBreakdownRow {
   projectId?: string
   modelId?: string
   region?: string
+  services: string[]
+  telemetryAvailable: boolean
   metrics: AIUsageMetrics
   cost: AIUsageCost
   active: boolean
@@ -136,6 +138,12 @@ export interface AIUsageOverviewResponse {
   previousSummary: AIUsageSummary | null
   trend: AIUsageTrendPoint[]
   breakdown: AIUsageBreakdownRow[]
+  analysis: {
+    byAccount: AIUsageBreakdownRow[]
+    byModel: AIUsageBreakdownRow[]
+    byProvider: AIUsageBreakdownRow[]
+    byService: AIUsageBreakdownRow[]
+  }
   options: AIUsageOptions
   dataQuality: AIUsageDataQuality
 }

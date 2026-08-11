@@ -216,6 +216,8 @@ function breakdownForFacts(
       projectId: groupBy === 'project' ? first.projectId : undefined,
       modelId: groupBy === 'model' ? first.modelId : undefined,
       region: groupBy === 'region' ? first.region : undefined,
+      services: [...new Set(group.facts.map(fact => fact.service))].sort(),
+      telemetryAvailable: group.facts.some(fact => fact.provider === 'bedrock-runtime' || fact.provider === 'bedrock-mantle'),
       metrics,
       cost: costForFacts(group.facts, through, basis),
       active: group.facts.some(fact => fact.metrics.invocations > 0 || fact.actualCost > 0),
@@ -340,6 +342,12 @@ export async function queryAIUsage(input: AIUsageQueryInput): Promise<AIUsageOve
     previousSummary,
     trend: trendForFacts(current, through, filters.costBasis),
     breakdown: breakdownForFacts(current, filters.groupBy, through, filters.costBasis),
+    analysis: {
+      byAccount: breakdownForFacts(current, 'account', through, filters.costBasis),
+      byModel: breakdownForFacts(current, 'model', through, filters.costBasis),
+      byProvider: breakdownForFacts(current, 'provider', through, filters.costBasis),
+      byService: breakdownForFacts(current, 'service', through, filters.costBasis)
+    },
     options: optionsForFacts(currentRaw),
     dataQuality
   }

@@ -125,6 +125,51 @@
       </section>
 
       <section class="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+        <header class="flex flex-col gap-3 border-b border-gray-200 p-4 dark:border-gray-800 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 class="font-semibold text-gray-950 dark:text-white">Usage and error analysis</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400">{{ analysisRows.length }} {{ analysisLabel.toLowerCase() }} row{{ analysisRows.length === 1 ? '' : 's' }}</p>
+          </div>
+          <UTabs v-model="analysisView" :items="analysisTabs" />
+        </header>
+        <div v-if="!analysisRows.length" class="py-16 text-center text-sm text-gray-500 dark:text-gray-400">No analysis data is available for this scope.</div>
+        <div v-else class="max-h-[560px] overflow-auto">
+          <table class="w-full min-w-[1180px] text-left text-sm">
+            <thead class="sticky top-0 z-10 border-b border-gray-200 bg-gray-50 text-xs text-gray-500 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400">
+              <tr>
+                <th class="px-4 py-3 font-medium">{{ analysisLabel }}</th>
+                <th class="px-3 py-3 text-right font-medium">Invocations</th>
+                <th class="px-3 py-3 text-right font-medium">Tokens</th>
+                <th class="px-3 py-3 text-right font-medium">Client errors</th>
+                <th class="px-3 py-3 text-right font-medium">Server errors</th>
+                <th class="px-3 py-3 text-right font-medium">Throttles</th>
+                <th class="px-3 py-3 text-right font-medium">Error rate</th>
+                <th class="px-4 py-3 text-right font-medium">Actual cost</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+              <tr v-for="row in analysisRows" :key="row.key" class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                <td class="px-4 py-3">
+                  <p class="max-w-[340px] truncate font-medium text-gray-950 dark:text-white">{{ analysisView === 2 ? providerLabel(row.label) : row.label }}</p>
+                  <div class="mt-1 flex items-center gap-1.5">
+                    <UBadge v-if="row.environment" :color="row.environment === 'govcloud' ? 'amber' : 'blue'" variant="soft" size="xs">{{ row.environment }}</UBadge>
+                    <span class="max-w-[300px] truncate text-xs text-gray-500 dark:text-gray-400">{{ row.services.join(', ') }}</span>
+                  </div>
+                </td>
+                <td class="px-3 py-3 text-right tabular-nums">{{ row.telemetryAvailable ? compact(row.metrics.invocations) : '—' }}</td>
+                <td class="px-3 py-3 text-right tabular-nums">{{ row.telemetryAvailable ? compact(row.metrics.inputTokens + row.metrics.outputTokens) : '—' }}</td>
+                <td class="px-3 py-3 text-right tabular-nums" :class="row.metrics.clientErrors ? 'text-red-600 dark:text-red-400' : 'text-gray-500'">{{ row.telemetryAvailable ? compact(row.metrics.clientErrors) : '—' }}</td>
+                <td class="px-3 py-3 text-right tabular-nums" :class="row.metrics.serverErrors ? 'text-red-600 dark:text-red-400' : 'text-gray-500'">{{ row.telemetryAvailable ? compact(row.metrics.serverErrors) : '—' }}</td>
+                <td class="px-3 py-3 text-right tabular-nums" :class="row.metrics.throttles ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500'">{{ row.telemetryAvailable ? compact(row.metrics.throttles) : '—' }}</td>
+                <td class="px-3 py-3 text-right tabular-nums" :class="errorRate(row) > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500'">{{ row.telemetryAvailable ? `${errorRate(row).toFixed(2)}%` : '—' }}</td>
+                <td class="px-4 py-3 text-right tabular-nums">{{ money(row.cost.actual) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
         <header class="flex flex-col gap-2 border-b border-gray-200 p-4 dark:border-gray-800 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 class="font-semibold text-gray-950 dark:text-white">Adoption trend</h2>
@@ -170,11 +215,12 @@
                     <UBadge v-if="row.environment" :color="row.environment === 'govcloud' ? 'amber' : 'blue'" variant="soft" size="xs">{{ row.environment }}</UBadge>
                     <span v-if="row.accountId" class="font-mono text-xs text-gray-500">{{ row.accountId }}</span>
                   </div>
+                  <p class="mt-1 max-w-[360px] truncate text-xs text-gray-500 dark:text-gray-400">{{ row.services.join(', ') }}</p>
                 </td>
-                <td class="px-3 py-3 text-right tabular-nums">{{ compact(row.metrics.invocations) }}</td>
-                <td class="px-3 py-3 text-right tabular-nums">{{ compact(row.metrics.inputTokens) }}</td>
-                <td class="px-3 py-3 text-right tabular-nums">{{ compact(row.metrics.outputTokens) }}</td>
-                <td class="px-3 py-3 text-right tabular-nums" :class="errorCount(row) ? 'text-red-600 dark:text-red-400' : 'text-gray-500'">{{ compact(errorCount(row)) }}</td>
+                <td class="px-3 py-3 text-right tabular-nums">{{ row.telemetryAvailable ? compact(row.metrics.invocations) : '—' }}</td>
+                <td class="px-3 py-3 text-right tabular-nums">{{ row.telemetryAvailable ? compact(row.metrics.inputTokens) : '—' }}</td>
+                <td class="px-3 py-3 text-right tabular-nums">{{ row.telemetryAvailable ? compact(row.metrics.outputTokens) : '—' }}</td>
+                <td class="px-3 py-3 text-right tabular-nums" :class="row.telemetryAvailable && errorCount(row) ? 'text-red-600 dark:text-red-400' : 'text-gray-500'">{{ row.telemetryAvailable ? compact(errorCount(row)) : '—' }}</td>
                 <td class="px-3 py-3 text-right tabular-nums">{{ money(row.cost.actual) }}</td>
                 <td class="px-3 py-3 text-right tabular-nums text-amber-700 dark:text-amber-400">{{ row.cost.estimated ? money(row.cost.estimated) : '—' }}</td>
                 <td class="px-4 py-3 text-right text-xs text-gray-500 dark:text-gray-400">{{ row.lastSeen ? formatDate(row.lastSeen) : '—' }}</td>
@@ -229,6 +275,7 @@ const search = ref('')
 const loading = ref(true)
 const error = ref<string | null>(null)
 const data = ref<AIUsageOverviewResponse | null>(null)
+const analysisView = ref(0)
 let timer: ReturnType<typeof setTimeout> | null = null
 const accountsResponse = ref<any>(null)
 
@@ -278,6 +325,12 @@ const providerOptions = [
   { label: 'Bedrock cost', value: 'bedrock-cost' },
   { label: 'Other AWS AI', value: 'aws-ai-service' }
 ]
+const analysisTabs = [
+  { label: 'Accounts', icon: 'i-heroicons-building-office-2' },
+  { label: 'Models', icon: 'i-heroicons-cpu-chip' },
+  { label: 'Sources', icon: 'i-heroicons-circle-stack' },
+  { label: 'Services', icon: 'i-heroicons-squares-2x2' }
+]
 
 const activeFilterCount = computed(() => [providers, services, projects, models, regions, linesOfBusiness, departments]
   .reduce((sum, filter) => sum + filter.value.length, 0))
@@ -286,6 +339,14 @@ const scopeLabel = computed(() => selectedAccounts.value.length
   : environment.value === 'all' ? 'All environments' : environment.value === 'commercial' ? 'Commercial' : 'GovCloud')
 const periodLabel = computed(() => data.value?.filters.periodLabel || periodOptions.find(option => option.value === period.value)?.label || 'Custom')
 const groupLabel = computed(() => groupByOptions.find(option => option.value === groupBy.value)?.label || 'Enclave')
+const analysisLabel = computed(() => analysisTabs[analysisView.value]?.label || 'Accounts')
+const analysisRows = computed(() => {
+  if (!data.value) return []
+  if (analysisView.value === 1) return data.value.analysis.byModel.filter(row => row.telemetryAvailable)
+  if (analysisView.value === 2) return data.value.analysis.byProvider
+  if (analysisView.value === 3) return data.value.analysis.byService
+  return data.value.analysis.byAccount
+})
 
 const summaryMetrics = computed(() => {
   const summary = data.value!.summary
@@ -385,6 +446,20 @@ function money(value: number) { return new Intl.NumberFormat('en-US', { style: '
 function coverage(value: number | null) { return value === null ? 'No token estimate' : `${value.toFixed(0)}% of tokens priced` }
 function growth(value: number | null) { return value === null ? 'New adoption in this period' : `${value >= 0 ? '+' : ''}${value.toFixed(1)}% vs prior period` }
 function errorCount(row: AIUsageBreakdownRow) { return row.metrics.clientErrors + row.metrics.serverErrors + row.metrics.throttles }
+function errorRate(row: AIUsageBreakdownRow) {
+  const errors = errorCount(row)
+  const attempts = row.metrics.invocations + errors
+  return attempts ? (errors / attempts) * 100 : 0
+}
+function providerLabel(value: string) {
+  const labels: Record<string, string> = {
+    'bedrock-runtime': 'Bedrock Runtime',
+    'bedrock-mantle': 'Bedrock Mantle',
+    'bedrock-cost': 'Bedrock cost (unattributed)',
+    'aws-ai-service': 'Other AWS AI services'
+  }
+  return labels[value] || value
+}
 function formatDate(value: string) { return new Date(value.length === 10 ? `${value}T00:00:00Z` : value).toLocaleDateString() }
 function relativeTime(value: string) {
   const minutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60000))
