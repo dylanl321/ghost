@@ -3,7 +3,7 @@ import test from 'node:test'
 import { resolveAIUsageDateRange } from '../../server/utils/ai-usage-query'
 import { toAIUsageAccountScope } from '../../server/utils/ai-usage-scope'
 import { selectMantleDetailMetrics } from '../../server/utils/ai-usage-collector'
-import { withAIUsageFactKeys } from '../../server/utils/ai-usage-storage'
+import { isAIUsageTableMissing, withAIUsageFactKeys } from '../../server/utils/ai-usage-storage'
 import { emptyAIUsageMetrics } from '../../shared/types/ai-usage'
 
 test('pairs Commercial and GovCloud accounts into one enclave scope', () => {
@@ -72,4 +72,10 @@ test('fact keys isolate environment accounts and preserve stable dimensions', ()
   })
   assert.equal(fact.pk, 'GOVCLOUD#222222222222')
   assert.match(fact.sk, /^D#2026-08-11#bedrock-mantle#usage#us-gov-west-1/)
+})
+
+test('only missing-table errors are treated as an empty undeployed data source', () => {
+  assert.equal(isAIUsageTableMissing({ name: 'ResourceNotFoundException' }), true)
+  assert.equal(isAIUsageTableMissing(new Error('Requested resource not found')), true)
+  assert.equal(isAIUsageTableMissing(new Error('Access denied')), false)
 })
