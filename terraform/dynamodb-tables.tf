@@ -660,6 +660,46 @@ resource "aws_dynamodb_table" "async_metrics" {
   }
 }
 
+# Normalized organization-wide AI adoption, telemetry, and cost snapshots.
+resource "aws_dynamodb_table" "ai_usage" {
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-ai-usage-prod" : "ghost-ai-usage"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  server_side_encryption {
+    enabled = true
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Name        = "GHOST AI Usage"
+    Environment = local.environment
+    ManagedBy   = "Terraform"
+    Service     = "GHOST"
+    Component   = "AIUsage"
+  }
+}
+
 # ============================================================================
 # Strands Agent Metrics Table (GovCloud Environment)
 # ============================================================================
@@ -1112,6 +1152,16 @@ output "async_metrics_table_name" {
 output "async_metrics_table_arn" {
   description = "ARN of the DynamoDB table for async metrics"
   value       = aws_dynamodb_table.async_metrics.arn
+}
+
+output "ai_usage_table_name" {
+  description = "Name of the normalized AI usage table"
+  value       = aws_dynamodb_table.ai_usage.name
+}
+
+output "ai_usage_table_arn" {
+  description = "ARN of the normalized AI usage table"
+  value       = aws_dynamodb_table.ai_usage.arn
 }
 
 output "cost_tag_config_table_name" {

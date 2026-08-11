@@ -247,6 +247,14 @@ resource "aws_ecs_task_definition" "main" {
           value = aws_dynamodb_table.async_metrics.name
         },
         {
+          name  = "AI_USAGE_TABLE_NAME"
+          value = aws_dynamodb_table.ai_usage.name
+        },
+        {
+          name  = "AI_USAGE_COLLECTION_ENABLED"
+          value = "true"
+        },
+        {
           name  = "ACCOUNT_NOTES_TABLE"
           value = aws_dynamodb_table.account_notes.name
         },

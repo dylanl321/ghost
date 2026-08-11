@@ -493,6 +493,11 @@ const navigationItems = computed(() => {
       collapseRule: "default-collapsed",
     },
     {
+      label: "AI Usage",
+      to: "/account/ai-usage",
+      icon: "i-heroicons-sparkles",
+    },
+    {
       label: "VMaaS Costs",
       to: "/account/vmaas-costs",
       icon: "i-heroicons-server-stack",
