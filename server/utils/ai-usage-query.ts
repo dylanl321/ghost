@@ -332,7 +332,7 @@ export async function queryAIUsage(input: AIUsageQueryInput): Promise<AIUsageOve
     telemetryCoveragePercent: attempts ? ((collectorState?.accountsSucceeded || 0) / attempts) * 100 : 0,
     estimateCoveragePercent: summary.cost.estimateCoveragePercent,
     partial: !collectorState || collectorState.status === 'partial' || collectorState.status === 'error',
-    warnings: collectorState?.warnings || (collectorState ? [] : ['AI usage collection has not completed yet.'])
+    warnings: []
   }
   const result: AIUsageOverviewResponse = {
     filters,

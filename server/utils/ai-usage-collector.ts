@@ -356,65 +356,83 @@ export async function collectAIUsage(options: { backfillDays?: number } = {}): P
   const initialBackfill = !existingState?.completedAt
   const backfillDays = Math.min(400, Math.max(1, options.backfillDays || (initialBackfill ? 400 : 3)))
   const startedAt = new Date().toISOString()
-  const scopes = await resolveAIUsageScopes()
-  const work = scopes.flatMap(scope => scope.members.flatMap(member =>
-    configuredRegions(member.environment).map(region => ({ scope, ...member, region }))))
   const warnings: string[] = []
+  let accountsAttempted = 0
+  let accountsSucceeded = 0
+  let factsWritten = 0
 
   await saveAIUsageCollectorState({
     pk: 'META', sk: 'COLLECTOR', status: 'running', startedAt,
-    accountsAttempted: work.length, accountsSucceeded: 0, factsWritten: 0, warnings: []
+    accountsAttempted, accountsSucceeded, factsWritten, warnings: []
   })
 
-  const now = new Date()
-  const hourStart = new Date(now.getTime() - 2 * HOUR_MS)
-  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
-  const dayStart = new Date(todayStart.getTime() - (backfillDays - 1) * DAY_MS)
-  const telemetryResults = await concurrentMap(work, TELEMETRY_CONCURRENCY, async item => {
-    const [hourly, daily] = await Promise.all([
-      fetchTelemetryFacts({ ...item, granularity: 'hour', startTime: hourStart, endTime: now }),
-      fetchTelemetryFacts({ ...item, granularity: 'day', startTime: dayStart, endTime: now })
-    ])
-    return [...hourly, ...daily]
-  })
+  try {
+    const scopes = await resolveAIUsageScopes()
+    const work = scopes.flatMap(scope => scope.members.flatMap(member =>
+      configuredRegions(member.environment).map(region => ({ scope, ...member, region }))))
+    accountsAttempted = work.length
+    await saveAIUsageCollectorState({
+      pk: 'META', sk: 'COLLECTOR', status: 'running', startedAt,
+      accountsAttempted, accountsSucceeded, factsWritten, warnings: []
+    })
 
-  const telemetryFacts: AIUsageFact[] = []
-  let accountsSucceeded = 0
-  for (const result of telemetryResults) {
-    if (result.status === 'fulfilled') {
-      telemetryFacts.push(...result.value)
-      accountsSucceeded++
-    } else {
-      warnings.push(result.reason instanceof Error ? result.reason.message : String(result.reason))
+    const now = new Date()
+    const hourStart = new Date(now.getTime() - 2 * HOUR_MS)
+    const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+    const dayStart = new Date(todayStart.getTime() - (backfillDays - 1) * DAY_MS)
+    const telemetryResults = await concurrentMap(work, TELEMETRY_CONCURRENCY, async item => {
+      const [hourly, daily] = await Promise.all([
+        fetchTelemetryFacts({ ...item, granularity: 'hour', startTime: hourStart, endTime: now }),
+        fetchTelemetryFacts({ ...item, granularity: 'day', startTime: dayStart, endTime: now })
+      ])
+      return [...hourly, ...daily]
+    })
+
+    const telemetryFacts: AIUsageFact[] = []
+    for (const result of telemetryResults) {
+      if (result.status === 'fulfilled') {
+        telemetryFacts.push(...result.value)
+        accountsSucceeded++
+      } else {
+        warnings.push(result.reason instanceof Error ? result.reason.message : String(result.reason))
+      }
     }
-  }
 
-  const endDate = now.toISOString().slice(0, 10)
-  const startDate = new Date(todayStart.getTime() - backfillDays * DAY_MS).toISOString().slice(0, 10)
-  const costResults = await Promise.allSettled([
-    collectCostFacts(scopes, 'commercial', 'billable', startDate, endDate),
-    collectCostFacts(scopes, 'commercial', 'proforma', startDate, endDate),
-    collectCostFacts(scopes, 'govcloud', 'billable', startDate, endDate)
-  ])
-  const costFacts: AIUsageFact[] = []
-  for (const result of costResults) {
-    if (result.status === 'fulfilled') costFacts.push(...result.value)
-    else warnings.push(result.reason instanceof Error ? result.reason.message : String(result.reason))
-  }
+    const endDate = now.toISOString().slice(0, 10)
+    const startDate = new Date(todayStart.getTime() - backfillDays * DAY_MS).toISOString().slice(0, 10)
+    const costResults = await Promise.allSettled([
+      collectCostFacts(scopes, 'commercial', 'billable', startDate, endDate),
+      collectCostFacts(scopes, 'commercial', 'proforma', startDate, endDate),
+      collectCostFacts(scopes, 'govcloud', 'billable', startDate, endDate)
+    ])
+    const costFacts: AIUsageFact[] = []
+    for (const result of costResults) {
+      if (result.status === 'fulfilled') costFacts.push(...result.value)
+      else warnings.push(result.reason instanceof Error ? result.reason.message : String(result.reason))
+    }
 
-  const facts = [...telemetryFacts, ...costFacts]
-  await saveAIUsageFacts(facts)
-  await getCacheManager().invalidateByTags(['ai-usage'])
-  const completedAt = new Date().toISOString()
-  await saveAIUsageCollectorState({
-    pk: 'META', sk: 'COLLECTOR',
-    status: warnings.length ? 'partial' : 'complete',
-    startedAt, completedAt,
-    accountsAttempted: work.length,
-    accountsSucceeded,
-    factsWritten: facts.length,
-    warnings: warnings.slice(0, 50)
-  })
-  logger.info(`[AI Usage] Collection complete: ${facts.length} facts, ${warnings.length} warning(s)`)
-  return { factsWritten: facts.length, warnings, initialBackfill }
+    const facts = [...telemetryFacts, ...costFacts]
+    factsWritten = facts.length
+    await saveAIUsageFacts(facts)
+    await getCacheManager().invalidateByTags(['ai-usage'])
+    const completedAt = new Date().toISOString()
+    await saveAIUsageCollectorState({
+      pk: 'META', sk: 'COLLECTOR',
+      status: warnings.length ? 'partial' : 'complete',
+      startedAt, completedAt,
+      accountsAttempted,
+      accountsSucceeded,
+      factsWritten,
+      warnings: warnings.slice(0, 50)
+    })
+    logger.info(`[AI Usage] Collection complete: ${factsWritten} facts, ${warnings.length} warning(s)`)
+    return { factsWritten, warnings, initialBackfill }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await saveAIUsageCollectorState({
+      pk: 'META', sk: 'COLLECTOR', status: 'error', startedAt, completedAt: new Date().toISOString(),
+      accountsAttempted, accountsSucceeded, factsWritten, warnings: [...warnings, message].slice(0, 50)
+    }).catch(() => {})
+    throw error
+  }
 }

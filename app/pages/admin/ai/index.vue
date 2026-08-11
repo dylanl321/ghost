@@ -19,6 +19,7 @@
       <StrandsAgentTester v-else-if="activeTab === 2" />
       <StrandsHealthCheck v-else-if="activeTab === 3" />
       <AIMetricsPanel v-else-if="activeTab === 4" />
+      <AIUsageCollectionPanel v-else-if="activeTab === 5" />
     </div>
   </div>
 </template>
@@ -29,6 +30,7 @@ import StrandsLogsViewer from '~/components/admin/StrandsLogsViewer.vue'
 import StrandsAgentTester from '~/components/admin/StrandsAgentTester.vue'
 import StrandsHealthCheck from '~/components/admin/StrandsHealthCheck.vue'
 import AIMetricsPanel from '~/components/admin/AIMetricsPanel.vue'
+import AIUsageCollectionPanel from '~/components/admin/AIUsageCollectionPanel.vue'
 
 definePageMeta({
   layout: 'admin',
@@ -40,14 +42,15 @@ definePageMeta({
 
 const route = useRoute()
 const activeTab = ref(0)
-const tabNames = ['chat-monitor', 'agent-logs', 'agent-testing', 'agent-health', 'ai-metrics']
+const tabNames = ['chat-monitor', 'agent-logs', 'agent-testing', 'agent-health', 'ai-metrics', 'usage-collection']
 
 const tabs = [
   { label: 'Chat Monitor', icon: 'i-heroicons-chat-bubble-left-right' },
   { label: 'Agent Logs', icon: 'i-heroicons-document-text' },
   { label: 'Agent Testing', icon: 'i-heroicons-beaker' },
   { label: 'Agent Health', icon: 'i-heroicons-heart' },
-  { label: 'AI Metrics', icon: 'i-heroicons-chart-bar' }
+  { label: 'AI Metrics', icon: 'i-heroicons-chart-bar' },
+  { label: 'Usage Collection', icon: 'i-heroicons-circle-stack' }
 ]
 
 onMounted(() => {

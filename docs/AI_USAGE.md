@@ -30,7 +30,7 @@ The cross-account `GDMSOrganizationsRole` in member accounts must allow:
 
 The existing payer credentials must retain Cost Explorer access. Set `AI_USAGE_COMMERCIAL_REGIONS` and `AI_USAGE_GOVCLOUD_REGIONS` when AI is permitted outside the default US regions.
 
-The first enabled collection performs an idempotent 400-day daily backfill. Administrators can also start a bounded backfill with `POST /api/ai-usage/collect` and `{ "backfillDays": 400 }`.
+The first enabled collection performs an idempotent 400-day daily backfill. Administrators can review status and errors or start incremental and full backfills from **Admin > AI & Agents > Usage Collection**. The admin-only trigger is `POST /api/admin/ai-usage/collect`.
 
 ## Cost Semantics
 

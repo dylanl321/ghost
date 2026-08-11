@@ -87,7 +87,21 @@
     <!-- Navigation Menu -->
     <div class="flex-1 overflow-y-auto py-6 overflow-x-hidden flex flex-col">
       <nav class="space-y-1 px-3 min-w-0 flex-shrink-0">
-        <template v-for="item in navigationItems" :key="item.label">
+        <template v-for="(item, index) in navigationItems" :key="item.label">
+          <div
+            v-if="item.section && (index === 0 || navigationItems[index - 1]?.section !== item.section) && (item.section !== 'Admin' || isAdmin)"
+            class="transition-all duration-300"
+            :class="index === 0 ? 'mb-1' : 'mb-1 mt-5'"
+          >
+            <span
+              v-if="!navigationStore.isCollapsed || navigationStore.isHovered"
+              class="block px-3 text-[11px] font-semibold uppercase text-slate-400 dark:text-slate-500"
+            >
+              {{ item.section }}
+            </span>
+            <div v-else class="mx-2 border-t border-slate-200 dark:border-slate-700" />
+          </div>
+
           <!-- Menu Item -->
           <!-- AI Assistant - Controlled by feature flag -->
           <ClientOnly v-if="item.label === 'AI Assistant'">
@@ -311,7 +325,7 @@ const strandsEnabled = computed(() => siteConfigStore.isStrandsChatEnabled);
 // Mobile detection - SSR safe
 const isMobile = computed(() => {
   // During SSR, assume desktop to avoid hydration mismatches
-  if (process.server) return false;
+  if (import.meta.server) return false;
   // On client, use the store value or fallback to window check
   return (
     navigationStore.isMobile ??
@@ -360,7 +374,7 @@ const toggleSidebar = () => {
     );
 
     // Add a subtle shake animation to indicate it's not allowed
-    if (process.client) {
+    if (import.meta.client) {
       const button = document.querySelector(".animate-pulse");
       if (button) {
         button.classList.add("animate-bounce");
@@ -463,7 +477,7 @@ defineExpose({
 });
 
 // Cleanup on unmount
-if (process.client) {
+if (import.meta.client) {
   onBeforeUnmount(() => {
     window.removeEventListener("resize", updateMobileState);
   });
@@ -475,62 +489,74 @@ const navigationItems = computed(() => {
       label: "Overview",
       to: "/",
       icon: "i-heroicons-home",
+      section: "Workspace",
+    },
+    {
+      label: "AI Assistant",
+      to: "/chat",
+      icon: "i-heroicons-sparkles",
+      section: "Workspace",
     },
     {
       label: "Account Explorer",
       to: "/account/explorer",
       icon: "i-heroicons-magnifying-glass",
+      section: "Accounts",
     },
     {
       label: "Organization Chart",
       to: "/account/org-chart",
       icon: "i-heroicons-building-library",
+      section: "Accounts",
+    },
+    {
+      label: "Users & Access",
+      to: "/account/user",
+      icon: "i-heroicons-users",
+      section: "Accounts",
     },
     {
       label: "Cost Dashboard",
       to: "/account/costs",
       icon: "i-heroicons-currency-dollar",
       collapseRule: "default-collapsed",
+      section: "FinOps",
     },
     {
       label: "AI Usage",
       to: "/account/ai-usage",
       icon: "i-heroicons-sparkles",
+      section: "FinOps",
     },
     {
       label: "VMaaS Costs",
       to: "/account/vmaas-costs",
       icon: "i-heroicons-server-stack",
+      section: "FinOps",
     },
     {
       label: "GDMS Finance",
       to: "/gdms-finance",
       icon: "i-heroicons-chart-bar",
-    },
-    {
-      label: "Users & Access",
-      to: "/account/user",
-      icon: "i-heroicons-users",
+      section: "FinOps",
     },
     {
       label: "Dataset Reports",
       to: "/reports/datasets",
       icon: "i-heroicons-server-stack",
+      section: "Insights",
     },
     {
       label: "Security Health",
       to: "/security",
       icon: "i-heroicons-shield-exclamation",
-    },
-    {
-      label: "AI Assistant",
-      to: "/chat",
-      icon: "i-heroicons-sparkles",
+      section: "Insights",
     },
     {
       label: "Settings",
       to: "/settings",
       icon: "i-heroicons-cog-6-tooth",
+      section: "Manage",
     },
     // Always include Pipeline Analytics in structure to avoid hydration mismatch
     // Visibility controlled by ClientOnly in template
@@ -538,12 +564,14 @@ const navigationItems = computed(() => {
       label: "Pipeline Analytics",
       to: "/admin/pipelines",
       icon: "i-heroicons-arrow-path",
+      section: "Admin",
     },
     // Support Tools - Admin only, visibility controlled by ClientOnly in template
     {
       label: "Support Tools",
       to: "/support-tools",
       icon: "i-heroicons-wrench-screwdriver",
+      section: "Admin",
     }
   ];
 });

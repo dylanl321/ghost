@@ -5,6 +5,26 @@ All notable changes to GHOST are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.0] - 2026-08-11
+<!-- highlights: Organization AI Usage, Usage Collection -->
+
+### New Features
+- Added an organization AI Usage workspace for reviewing adoption, invocations, tokens, models, projects, and spend across Commercial AWS, GovCloud, individual enclaves, and custom account selections
+- Added detailed Amazon Bedrock Runtime and Bedrock Mantle reporting alongside cost-based adoption tracking for other AWS AI services
+- Administrators can now monitor collection health, review categorized collection errors, and start incremental or full historical collections from the AI & Agents area
+
+### Improvements
+- AI usage actuals and current estimates are clearly separated, with Commercial pro forma and billable cost views available alongside GovCloud billable costs
+- Side navigation is now organized into Workspace, Accounts, FinOps, Insights, Manage, and Admin sections while keeping every destination one click away
+- Collection errors and account-access details are now restricted to administrators; general users see only aggregate coverage status
+- AI usage snapshots refresh hourly and retain daily adoption history for long-term comparisons
+
+### Bug Fixes
+- AI Usage now opens cleanly before its storage infrastructure has been initialized
+- AI usage permissions now deploy without exceeding the ECS task role inline-policy size limit
+
+---
+
 ## [1.18.0] - 2026-07-28
 <!-- highlights: Dataset Reports, Durable AI Chat, Finance & Cost Reporting -->
 

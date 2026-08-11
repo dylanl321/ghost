@@ -98,8 +98,8 @@
       color="amber"
       variant="soft"
       icon="i-heroicons-exclamation-triangle"
-      title="Some sources could not be collected"
-      :description="data.dataQuality.warnings[0] || 'The totals below include all available snapshots.'"
+      title="Coverage is incomplete"
+      description="The totals below include all available snapshots. Collection details are available to administrators."
     />
 
     <template v-if="loading && !data">
