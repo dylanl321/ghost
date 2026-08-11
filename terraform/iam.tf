@@ -560,10 +560,9 @@ resource "aws_iam_role_policy" "ecs_async_metrics_dynamodb" {
   })
 }
 
-resource "aws_iam_role_policy" "ecs_ai_usage_dynamodb" {
+resource "aws_iam_policy" "ecs_ai_usage_dynamodb" {
   provider = aws.target_deployment_account
   name     = "${var.app_name}_ai_usage_dynamodb"
-  role     = aws_iam_role.ecs_task_execution_role.name
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -579,6 +578,12 @@ resource "aws_iam_role_policy" "ecs_ai_usage_dynamodb" {
       Resource = [aws_dynamodb_table.ai_usage.arn]
     }]
   })
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_ai_usage_dynamodb" {
+  provider   = aws.target_deployment_account
+  role       = aws_iam_role.ecs_task_execution_role.name
+  policy_arn = aws_iam_policy.ecs_ai_usage_dynamodb.arn
 }
 
 # DynamoDB permissions for cost tag config (read/write)
