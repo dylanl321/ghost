@@ -26,6 +26,7 @@
     "check:deps": "depcheck --ignores=\"@nuxt/*,nuxt-*,@types/*,eslint,typescript\"",
     "test:chat": "tsx --test tests/chat/*.test.ts",
     "test:vmaas": "tsx --test tests/vmaas/*.test.ts",
+    "test:budget-recipients": "tsx --test server/utils/__tests__/manual-budget-alert-recipients.test.ts",
     "changelog:generate": "tsx scripts/generate-changelog.ts"
   },
   "dependencies": {
