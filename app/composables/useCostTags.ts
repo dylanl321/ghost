@@ -75,7 +75,7 @@ export const useCostTags = () => {
     tagKey: string,
     accountIds?: string[],
     period?: string,
-    options?: { includeValues?: boolean; proforma?: boolean }
+    options?: { includeValues?: boolean; includeAccounts?: boolean; proforma?: boolean }
   ) => {
     const requestId = ++coverageRequestId
     isLoadingCoverage.value = true
@@ -86,6 +86,7 @@ export const useCostTags = () => {
       if (accountIds?.length) query.accountIds = accountIds.join(',')
       if (period) query.period = period
       if (options?.includeValues) query.includeValues = true
+      if (options?.includeAccounts !== undefined) query.includeAccounts = options.includeAccounts
       if (options?.proforma) query.proforma = true
 
       const response = await $fetch('/api/costs/tag-coverage', { query }) as any
@@ -102,6 +103,30 @@ export const useCostTags = () => {
       return null
     } finally {
       if (requestId === coverageRequestId) isLoadingCoverage.value = false
+    }
+  }
+
+  /**
+   * Read tag-value details without replacing the active coverage snapshot.
+   * The server reuses the cached aggregate and only serializes the requested values.
+   */
+  const fetchTagCoverageDetails = async (
+    tagKey: string,
+    accountIds?: string[],
+    period?: string,
+    options?: { valueGroupKey?: string; proforma?: boolean }
+  ): Promise<TagCoverageData | null> => {
+    try {
+      const query: Record<string, any> = { tagKey, includeValues: true, includeAccounts: true }
+      if (accountIds?.length) query.accountIds = accountIds.join(',')
+      if (period) query.period = period
+      if (options?.valueGroupKey) query.valueGroupKey = options.valueGroupKey
+      if (options?.proforma) query.proforma = true
+      const response = await $fetch('/api/costs/tag-coverage', { query }) as any
+      return response?.data ?? response
+    } catch (err: any) {
+      logger.error(`Error fetching tag-value details for "${tagKey}":`, err)
+      return null
     }
   }
 
@@ -211,6 +236,7 @@ export const useCostTags = () => {
     fetchAvailableTags,
     fetchResourceTags,
     fetchTagCoverage,
+    fetchTagCoverageDetails,
     fetchAccountTagConfig,
     saveAccountTagConfig,
     clearTagCache

@@ -13,7 +13,7 @@ import { costCache, CacheTags } from '../../utils/cache-manager'
 import { validateDateParams, type RelativePeriod } from '../../utils/date-helpers'
 import { logger } from '../../utils/logger'
 import { getAllAccountsUnified } from '../../utils/accounts-consolidated'
-import { buildTagCoverageData, extractProformaAccountPeriodTotals, extractProformaAccountTotals } from '../../utils/cost-tag-analysis'
+import { buildTagCoverageData, extractProformaAccountPeriodTotals, extractProformaAccountTotals, shapeTagCoverageData } from '../../utils/cost-tag-analysis'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/costs/tag-coverage', 'GET', {
@@ -79,7 +79,21 @@ registerEndpoint('/api/costs/tag-coverage', 'GET', {
       in: 'query',
       required: false,
       schema: { type: 'boolean', default: false },
-      description: 'Include tag-value totals and per-account cost contributions'
+      description: 'Include tag-value totals'
+    },
+    {
+      name: 'includeAccounts',
+      in: 'query',
+      required: false,
+      schema: { type: 'boolean', default: true },
+      description: 'Include per-account contributions for returned tag values'
+    },
+    {
+      name: 'valueGroupKey',
+      in: 'query',
+      required: false,
+      schema: { type: 'string' },
+      description: 'Return one normalized tag value, typically for a lazy account drill-down'
     },
     {
       name: 'proforma',
@@ -189,6 +203,8 @@ export default defineEventHandler(handleAsync(async (event) => {
   // credits stay attached to the same tag distribution users validate there.
   const costMetric = 'NetUnblendedCost' as const
   const includeValues = query.includeValues === 'true' || query.includeValues === true
+  const includeAccounts = query.includeAccounts !== 'false' && query.includeAccounts !== false
+  const valueGroupKey = typeof query.valueGroupKey === 'string' ? query.valueGroupKey : undefined
   const proforma = query.proforma === 'true' || query.proforma === true
   const proformaAccountId = (query.proformaAccountId as string) || process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832'
   const masterAccountId = (query.masterAccountId as string) || process.env.AWS_MASTER_ACCOUNT_ID || '205950196477'
@@ -312,7 +328,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   const cacheInfo = costCache.getEntryInfo(cacheKey)
   const cacheStats = costCache.getStats()
 
-  return sendSuccess(event, result, {
+  return sendSuccess(event, shapeTagCoverageData(result, { includeAccounts, valueGroupKey }), {
     cache: {
       hit: !!cacheInfo,
       age: cacheInfo?.age || null,

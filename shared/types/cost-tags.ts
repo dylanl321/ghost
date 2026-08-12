@@ -39,6 +39,7 @@ export interface TagValueCost {
   rawValues: string[]
   billableCost: number
   estimatedProformaCost?: number
+  accountCount?: number
   accounts: TagValueAccountCost[]
 }
 

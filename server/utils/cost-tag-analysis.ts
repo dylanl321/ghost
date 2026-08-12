@@ -252,3 +252,25 @@ export function buildTagCoverageData(
       : {})
   }
 }
+
+export function shapeTagCoverageData(
+  data: TagCoverageData,
+  options: { includeAccounts?: boolean; valueGroupKey?: string } = {}
+): TagCoverageData {
+  if (!data.values) return data
+  const includeAccounts = options.includeAccounts !== false
+  const values = options.valueGroupKey
+    ? data.values.filter(value => value.groupKey === options.valueGroupKey)
+    : data.values
+
+  return {
+    ...data,
+    values: includeAccounts
+      ? values
+      : values.map(value => ({
+          ...value,
+          accountCount: value.accounts.length,
+          accounts: []
+        }))
+  }
+}

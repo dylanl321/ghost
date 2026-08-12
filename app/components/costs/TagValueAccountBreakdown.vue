@@ -1,11 +1,16 @@
 <template>
   <div>
-    <h4 class="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">Account Contributions</h4>
+    <div class="mb-2 flex items-center justify-between gap-3">
+      <h4 class="text-xs font-semibold text-gray-600 dark:text-gray-400">Account Contributions</h4>
+      <span v-if="sortedAccounts.length" class="text-[11px] text-gray-500 dark:text-gray-400">
+        Showing {{ paginationStart + 1 }}-{{ paginationEnd }} of {{ sortedAccounts.length }}
+      </span>
+    </div>
 
     <div v-if="!accounts.length" class="text-xs text-gray-500 py-2">No account contributions available</div>
 
     <div v-else class="divide-y divide-blue-200 dark:divide-blue-800 border-y border-blue-200 dark:border-blue-800">
-      <div v-for="account in sortedAccounts" :key="account.accountId">
+      <div v-for="account in paginatedAccounts" :key="account.accountId">
         <button
           type="button"
           class="w-full grid grid-cols-[1rem_minmax(0,1fr)_5.5rem_3.5rem] items-center gap-2 py-2 text-xs hover:bg-blue-100/60 dark:hover:bg-blue-900/30 transition-colors"
@@ -40,6 +45,9 @@
         </div>
       </div>
     </div>
+    <div v-if="sortedAccounts.length > pageSize" class="mt-3 flex justify-end">
+      <UPagination v-model="currentPage" :total="sortedAccounts.length" :page-count="pageSize" size="xs" />
+    </div>
   </div>
 </template>
 
@@ -63,6 +71,8 @@ const props = withDefaults(defineProps<{
 })
 
 const expandedAccountId = ref<string | null>(null)
+const currentPage = ref(1)
+const pageSize = 20
 
 function displayCost(account: TagValueAccountCost): number {
   if (props.dataMode === 'proforma' && props.proformaAvailable && account.estimatedProformaCost !== undefined) {
@@ -76,6 +86,9 @@ const sortedAccounts = computed(() =>
 )
 
 const totalCost = computed(() => sortedAccounts.value.reduce((sum, account) => sum + displayCost(account), 0))
+const paginationStart = computed(() => (currentPage.value - 1) * pageSize)
+const paginationEnd = computed(() => Math.min(paginationStart.value + pageSize, sortedAccounts.value.length))
+const paginatedAccounts = computed(() => sortedAccounts.value.slice(paginationStart.value, paginationEnd.value))
 
 function accountShare(account: TagValueAccountCost): number {
   return totalCost.value > 0 ? (displayCost(account) / totalCost.value) * 100 : 0
@@ -87,5 +100,6 @@ function toggleAccount(accountId: string) {
 
 watch(() => [props.tagKey, props.tagValue, props.accounts], () => {
   expandedAccountId.value = null
+  currentPage.value = 1
 })
 </script>

@@ -20,13 +20,15 @@
 
     <!-- Table + bars -->
     <div v-else>
-      <div class="mb-3 max-w-sm">
+      <div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <UInput
           v-model="tagValueSearch"
           icon="i-heroicons-magnifying-glass"
           size="sm"
           placeholder="Filter tag values..."
+          class="sm:w-80"
         />
+        <USelect v-model="pageSize" :options="pageSizeOptions" size="sm" class="w-32" />
       </div>
       <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
         <table class="w-full text-sm">
@@ -58,8 +60,13 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+            <tr v-if="!displayRows.length">
+              <td colspan="5" class="px-4 py-8 text-center text-xs text-gray-500 dark:text-gray-400">
+                No tag values match this filter.
+              </td>
+            </tr>
             <tr
-              v-for="row in displayRows"
+              v-for="row in paginatedRows"
               :key="row.value"
               class="group transition-colors cursor-pointer"
               :class="selectedValue === row.value
@@ -147,7 +154,10 @@
           <tfoot class="bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
             <tr>
               <td colspan="3" class="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">
-                <span>{{ displayRows.length }} tag values</span>
+                <span v-if="displayRows.length">
+                  Showing {{ paginationStart + 1 }}-{{ paginationEnd }} of {{ displayRows.length }} tag values
+                </span>
+                <span v-else>0 tag values</span>
                 <button
                   v-if="zeroCostRows.length > 0"
                   class="ml-2 text-blue-500 hover:text-blue-400 underline underline-offset-2"
@@ -165,6 +175,9 @@
             </tr>
           </tfoot>
         </table>
+      </div>
+      <div v-if="displayRows.length > pageSize" class="mt-3 flex justify-end">
+        <UPagination v-model="currentPage" :total="displayRows.length" :page-count="pageSize" />
       </div>
 
       <!-- Selected tag value detail panel -->
@@ -212,7 +225,12 @@
             <!-- Service breakdown drill-down (only for tagged values) -->
             <template v-if="!selectedRow.isUntagged && showAccountBreakdown">
               <div class="mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
+                <div v-if="loadingAccountContributions.includes(selectedRow.value)" class="flex items-center gap-2 py-3 text-xs text-gray-500 dark:text-gray-400">
+                  <UIcon name="i-heroicons-arrow-path" class="h-4 w-4 animate-spin" />
+                  Loading account contributions...
+                </div>
                 <TagValueAccountBreakdown
+                  v-else
                   :accounts="selectedRow.accounts"
                   :tag-key="tagKey"
                   :tag-value="selectedRow.value"
@@ -295,6 +313,8 @@ const props = withDefaults(defineProps<{
   dataMode?: 'billable' | 'proforma'
   proformaAvailable?: boolean
   showAccountBreakdown?: boolean
+  accountContributions?: Record<string, TagValueAccountCost[]>
+  loadingAccountContributions?: string[]
   percentageDenominator?: number | null
 }>(), {
   tagValueAliases: () => ({}),
@@ -304,6 +324,8 @@ const props = withDefaults(defineProps<{
   dataMode: 'proforma',
   proformaAvailable: false,
   showAccountBreakdown: false,
+  accountContributions: () => ({}),
+  loadingAccountContributions: () => [],
   percentageDenominator: null
 })
 
@@ -335,6 +357,13 @@ const showProforma = computed(() => props.dataMode === 'proforma' && props.profo
 const selectedValue = ref<string | null>(null)
 const showZeroCost = ref(false)
 const tagValueSearch = ref('')
+const currentPage = ref(1)
+const pageSize = ref(25)
+const pageSizeOptions = [
+  { label: '25 per page', value: 25 },
+  { label: '50 per page', value: 50 },
+  { label: '100 per page', value: 100 }
+]
 const detailPanelRef = ref<HTMLElement | null>(null)
 
 const editingAlias = ref<string | null>(null)
@@ -455,7 +484,7 @@ const rows = computed<TagRow[]>(() => {
         estimatedProformaCost,
         percentage: percentageTotal > 0 ? (cost / percentageTotal) * 100 : 0,
         isUntagged,
-        accounts: g.accounts || [],
+        accounts: props.accountContributions[g.groupKey ?? rawValue] ?? g.accounts ?? [],
         isPerson: Boolean(g.isPerson),
         creatorType: g.creatorType
       }
@@ -475,6 +504,9 @@ const displayRows = computed(() => {
     row.parsedValue.toLowerCase().includes(search)
   )
 })
+const paginationStart = computed(() => (currentPage.value - 1) * pageSize.value)
+const paginationEnd = computed(() => Math.min(paginationStart.value + pageSize.value, displayRows.value.length))
+const paginatedRows = computed(() => displayRows.value.slice(paginationStart.value, paginationEnd.value))
 
 const totalCost = computed(() =>
   rows.value.reduce((sum, r) => sum + r.cost, 0)
@@ -489,6 +521,14 @@ const totalPercentage = computed(() => {
 // Clear selection when data changes
 watch(() => props.costData, () => {
   selectedValue.value = null
+  currentPage.value = 1
+})
+watch([tagValueSearch, showZeroCost, pageSize], () => {
+  currentPage.value = 1
+})
+watch(() => displayRows.value.length, (length) => {
+  const lastPage = Math.max(1, Math.ceil(length / pageSize.value))
+  if (currentPage.value > lastPage) currentPage.value = lastPage
 })
 
 defineExpose({ rows, totalCost })

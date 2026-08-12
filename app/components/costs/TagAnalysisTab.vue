@@ -28,6 +28,7 @@
             color="gray"
             variant="soft"
             size="sm"
+            :loading="isExporting"
             :disabled="!tagCoverage?.values?.length"
             @click="exportBreakdownCSV"
           >
@@ -190,7 +191,10 @@
         :data-mode="dataMode"
         :proforma-available="proformaAvailable"
         :show-account-breakdown="!isSingleAccount"
+        :account-contributions="valueAccountContributions"
+        :loading-account-contributions="loadingAccountContributionKeys"
         :percentage-denominator="scopeDisplayTotal"
+        @select="handleValueSelected"
         @update:alias="handleAliasUpdate"
       />
     </div>
@@ -239,7 +243,7 @@ import { formatCostValue } from '~/utils/cost-filters'
 import { downloadBlob } from '~/utils/export/export-utils'
 import { resolveCostTagSelection } from '~/utils/cost-tag-workspace'
 import type { CostTagCreatorView } from '~/utils/cost-tag-workspace'
-import type { AccountCostTagConfig, TagValueCost } from '~~/shared/types/cost-tags'
+import type { AccountCostTagConfig, TagValueAccountCost, TagValueCost } from '~~/shared/types/cost-tags'
 import { isCreatedByTag } from '~~/shared/utils/cost-tag-identities'
 
 const props = withDefaults(defineProps<{
@@ -294,6 +298,7 @@ const {
   coverageError,
   fetchAvailableTags,
   fetchTagCoverage,
+  fetchTagCoverageDetails,
   fetchAccountTagConfig,
   saveAccountTagConfig,
   clearTagCache
@@ -305,6 +310,9 @@ const showSettings = ref(false)
 const showScopeSettings = ref(false)
 const draftAliases = ref<Record<string, string>>({})
 const aliasesDirty = ref(false)
+const isExporting = ref(false)
+const valueAccountContributions = ref<Record<string, TagValueAccountCost[]>>({})
+const loadingAccountContributionKeys = ref<string[]>([])
 let loadingScope = false
 let scopeGeneration = 0
 
@@ -391,11 +399,26 @@ const currentAliases = computed(() => isSingleAccount.value ? {
 
 async function fetchAnalysis() {
   if (!selectedTag.value) return
+  valueAccountContributions.value = {}
+  loadingAccountContributionKeys.value = []
   await fetchTagCoverage(selectedTag.value, props.selectedAccounts, activePeriod.value, {
     includeValues: true,
+    includeAccounts: false,
     proforma: props.dataMode === 'proforma'
   })
   logUserAction('cost.tag_drilldown', `tag:${selectedTag.value};accounts:${props.selectedAccounts.length || 'all'}`)
+}
+
+async function handleValueSelected(row: { value: string }) {
+  if (isSingleAccount.value || Object.prototype.hasOwnProperty.call(valueAccountContributions.value, row.value)) return
+  loadingAccountContributionKeys.value = [...loadingAccountContributionKeys.value, row.value]
+  const details = await fetchTagCoverageDetails(selectedTag.value || '', props.selectedAccounts, activePeriod.value, {
+    valueGroupKey: row.value,
+    proforma: props.dataMode === 'proforma'
+  })
+  const accounts = details?.values?.find(value => value.groupKey === row.value)?.accounts || []
+  valueAccountContributions.value = { ...valueAccountContributions.value, [row.value]: accounts }
+  loadingAccountContributionKeys.value = loadingAccountContributionKeys.value.filter(key => key !== row.value)
 }
 
 async function loadScope() {
@@ -460,9 +483,24 @@ async function saveAliases() {
   }
 }
 
-function exportBreakdownCSV() {
-  const values = visibleTagValues.value
+async function exportBreakdownCSV() {
+  let values = visibleTagValues.value
   if (!values.length) return
+
+  if (!isSingleAccount.value && values.some(value => (value.accountCount || 0) > value.accounts.length)) {
+    isExporting.value = true
+    const details = await fetchTagCoverageDetails(selectedTag.value || '', props.selectedAccounts, activePeriod.value, {
+      proforma: props.dataMode === 'proforma'
+    })
+    isExporting.value = false
+    if (!details?.values) {
+      toast.add({ title: 'Export Failed', description: 'Could not load account contributions for the export.', color: 'red' })
+      return
+    }
+    values = isCreatedBy.value && createdByView.value === 'people'
+      ? details.values.filter(value => value.isPerson)
+      : details.values
+  }
 
   const rowMap = new Map<string, any>(
     (breakdownRef.value?.rows || []).map((row: any): [string, any] => [row.value, row])

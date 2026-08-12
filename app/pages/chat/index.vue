@@ -1,27 +1,28 @@
 <template>
-  <!-- Feature Disabled Notice -->
-  <div v-if="!strandsEnabled" class="disabled-notice">
-    <UCard>
-      <div class="p-8 text-center">
-        <UIcon name="i-heroicons-no-symbol" class="w-16 h-16 text-gray-400 mx-auto mb-4" />
-        <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-          GHOST Chat is Currently Disabled
-        </h2>
-        <p class="text-gray-600 dark:text-gray-400 mb-6">
-          This feature has been temporarily disabled by an administrator.
-          Please check back later or contact support if you need access.
-        </p>
-        <UButton
-          icon="i-heroicons-home"
-          label="Return to Dashboard"
-          @click="navigateTo('/')"
-        />
-      </div>
-    </UCard>
-  </div>
+  <div class="h-full min-h-0">
+    <!-- Feature Disabled Notice -->
+    <div v-if="!strandsEnabled" class="disabled-notice h-full">
+      <UCard>
+        <div class="p-8 text-center">
+          <UIcon name="i-heroicons-no-symbol" class="w-16 h-16 text-gray-400 mx-auto mb-4" />
+          <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+            GHOST Chat is Currently Disabled
+          </h2>
+          <p class="text-gray-600 dark:text-gray-400 mb-6">
+            This feature has been temporarily disabled by an administrator.
+            Please check back later or contact support if you need access.
+          </p>
+          <UButton
+            icon="i-heroicons-home"
+            label="Return to Dashboard"
+            @click="navigateTo('/')"
+          />
+        </div>
+      </UCard>
+    </div>
 
-  <!-- Full-Page Chat with Thread Management (when enabled) -->
-  <div v-else class="flex h-full overflow-hidden">
+    <!-- Full-Page Chat with Thread Management (when enabled) -->
+    <div v-else class="flex h-full overflow-hidden">
     <!-- Thread List Sidebar -->
     <div class="hidden md:block h-full">
       <ThreadListSidebar
@@ -199,6 +200,7 @@
         </template>
       </UCard>
     </UModal>
+    </div>
   </div>
 </template>
 
@@ -426,6 +428,7 @@ defineShortcuts({
 
 // Page metadata
 definePageMeta({
+  keepalive: false,
   title: 'GHOST Chat',
   description: 'AI-powered assistant for AWS operations - ask questions about costs, configurations, security, and more'
 })

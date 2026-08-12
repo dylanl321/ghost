@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { getAccountScopeCacheKey } from '../../server/utils/cache-keys'
 import { buildCostExplorerTagFilter, getCostTagFilterCacheKey, parseCostTagFilter } from '../../server/utils/cost-tag-filters'
-import { buildTagCoverageData, extractProformaAccountPeriodTotals, extractProformaAccountTotals } from '../../server/utils/cost-tag-analysis'
+import { buildTagCoverageData, extractProformaAccountPeriodTotals, extractProformaAccountTotals, shapeTagCoverageData } from '../../server/utils/cost-tag-analysis'
 import { normalizeCostTagIdentity } from '../../shared/utils/cost-tag-identities'
 import {
   getCostTagWorkspaceQuery,
@@ -46,6 +46,19 @@ test('aggregates tag values across accounts and weights proforma per account', (
   assert.equal(phoenix?.billableCost, 150)
   assert.equal(phoenix?.estimatedProformaCost, 125)
   assert.deepEqual(phoenix?.accounts.map(account => account.accountName), ['Production', 'Development'])
+})
+
+test('omits account contributions from the initial tag-value payload and returns one value on demand', () => {
+  const full = buildTagCoverageData('Project', resultsByTime, { includeValues: true })
+  const compact = shapeTagCoverageData(full, { includeAccounts: false })
+  const phoenix = compact.values?.find(value => value.groupKey === 'Project$Phoenix')
+
+  assert.equal(phoenix?.accountCount, 2)
+  assert.deepEqual(phoenix?.accounts, [])
+
+  const detail = shapeTagCoverageData(full, { valueGroupKey: 'Project$Phoenix' })
+  assert.equal(detail.values?.length, 1)
+  assert.equal(detail.values?.[0]?.accounts.length, 2)
 })
 
 test('uses NetUnblendedCost for tag distribution when requested', () => {
