@@ -15,7 +15,6 @@ import { buildCostFilter } from '../../utils/cost-domain'
 import { getCostAllocationTags, getCostAndUsage, getCostAndUsageWithResources, getCostForecast } from '../../utils/cost-explorer'
 import { validateDateParams, type RelativePeriod } from '../../utils/date-helpers'
 import { getAlertsByAccount, getAlertsByMonth, getAlertsByType, getAllAlerts } from '../../utils/budget-alerts'
-import { createEntraServiceEvent } from '../../utils/entra/service-session'
 import { queryEntraUsers } from '../../utils/entra-users-data'
 import { queryConfigResources } from '../../utils/aws-config-data'
 import { querySecurityHubFindings } from '../../utils/security-hub-data'
@@ -51,10 +50,15 @@ import { getLatestAnalysis, getInstanceClassifications } from '../../utils/utili
 import { getPeriodBudget } from '../../../shared/utils/budget-utils'
 import type { DatasetReportConfig } from '../../../shared/types/dataset-reports'
 import type { GhostMcpPrincipal } from '../types'
-import { beginMcpIdentityCenterAuthorization, issueMcpIdentityCenterCredentials } from '../idc-credentials'
+import {
+  beginMcpIdentityCenterAuthorization,
+  issueMcpIdentityCenterCredentials,
+  listMcpIdentityCenterAccess
+} from '../idc-credentials'
+import { createMcpDelegatedGraphEvent } from '../oauth/delegated-graph'
 import { renderGhostOutput } from '../output-format'
 import { searchSupportKnowledgeBase } from '../support-knowledge'
-import { getMcpUserAccountAccess, requireMcpAccountRole } from '../user-access'
+import { getMcpUserAccountAccess } from '../user-access'
 import { normalizeLimit, toolError, toolRenderedOutput, toolSuccess } from '../results'
 import { runIdempotent } from '../idempotency'
 import { registerGhostTool } from './register'
@@ -176,12 +180,16 @@ export function registerCatalogTools(
 
   read({
     name: 'ghost.access.mine', title: 'Get my AWS accounts',
-    description: 'List the authenticated MCP user\'s AWS accounts, Entra role groups, and Commercial/GovCloud access.',
-    inputSchema: z.object({}),
-    handler: async () => {
+    description: 'List the authenticated user\'s effective AWS accounts and roles from IAM Identity Center. Start Identity Center authorization first and pass its session ID; without one, returns the last Entra snapshot as a fallback.',
+    inputSchema: z.object({ session_id: z.string().uuid().optional() }),
+    handler: async args => {
+      if (args.session_id) {
+        const access = await listMcpIdentityCenterAccess(principal, args.session_id)
+        return toolSuccess(access, `Loaded ${access.accounts.length} effective account assignment(s) from IAM Identity Center.`, 'AWS IAM Identity Center')
+      }
       const access = await getMcpUserAccountAccess(principal)
-      return toolSuccess(access, `Loaded ${access.accounts.length} account(s) assigned to the authenticated user.`, 'Microsoft Graph and GHOST account metadata', {
-        warnings: access.warning ? [access.warning] : undefined
+      return toolSuccess(access, `Loaded ${access.accounts.length} account(s) from the last Entra authorization snapshot.`, 'OAuth grant snapshot and GHOST account metadata', {
+        warnings: ['For effective AWS roles, start Identity Center authorization and call this tool with its session ID.', ...(access.warning ? [access.warning] : [])]
       })
     }
   })
@@ -336,7 +344,7 @@ export function registerCatalogTools(
     name: 'ghost.users.search', title: 'Search users', description: 'Search Entra users who have access to GHOST-managed AWS accounts.',
     inputSchema: z.object({ query: z.string().min(1), limit: z.number().int().min(1).max(100).default(25) }),
     handler: async args => {
-      const event = await createEntraServiceEvent()
+      const event = await createMcpDelegatedGraphEvent(principal)
       const result = await queryEntraUsers(event, [], { userSearch: args.query }, { mode: 'preview', limit: args.limit })
       return toolSuccess(result, `Found ${result.records.length} user access record(s).`, 'Microsoft Graph')
     }
@@ -348,7 +356,7 @@ export function registerCatalogTools(
     handler: async args => {
       const { account } = await resolveAccount(args.identifier)
       const id = account.accountId || account.awsStandardAccountID
-      const result = await queryEntraUsers(await createEntraServiceEvent(), [id], {}, { mode: 'preview', limit: args.limit })
+      const result = await queryEntraUsers(await createMcpDelegatedGraphEvent(principal), [id], {}, { mode: 'preview', limit: args.limit })
       return toolSuccess(result, `Loaded ${result.records.length} access mapping(s).`, 'Microsoft Graph')
     }
   })
@@ -357,7 +365,7 @@ export function registerCatalogTools(
     name: 'ghost.access.for_user', title: 'Get user access', description: 'List account and role mappings for one Entra user.',
     inputSchema: z.object({ user: z.string().min(1), limit: z.number().int().min(1).max(100).default(50) }),
     handler: async args => {
-      const result = await queryEntraUsers(await createEntraServiceEvent(), [], { userSearch: args.user }, { mode: 'preview', limit: args.limit })
+      const result = await queryEntraUsers(await createMcpDelegatedGraphEvent(principal), [], { userSearch: args.user }, { mode: 'preview', limit: args.limit })
       return toolSuccess(result, `Loaded ${result.records.length} access mapping(s).`, 'Microsoft Graph')
     }
   })
@@ -395,12 +403,12 @@ export function registerCatalogTools(
   const credentialConfirmationSchema = z.object({ confirm: z.boolean() })
   credentials({
     name: 'ghost.credentials.start', title: 'Start AWS Identity Center authorization',
-    description: 'Begin an AWS Identity Center device authorization for user-owned, short-lived account credentials.',
+    description: 'Begin IAM Identity Center device authorization for effective account/role discovery and optional short-lived credentials.',
     inputSchema: z.object({ environment: z.enum(['commercial', 'govcloud']).default('commercial') }),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     handler: async args => toolSuccess(
       await beginMcpIdentityCenterAuthorization(principal, args.environment),
-      'Open the verification URL, complete AWS Identity Center sign-in, then request the selected role credentials.',
+      'Open the verification URL and complete IAM Identity Center sign-in. Then call ghost.access.mine with this session ID.',
       'AWS IAM Identity Center'
     )
   })
@@ -417,22 +425,27 @@ export function registerCatalogTools(
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     getAuditTargetIds: args => [args.account_id],
     handler: async (args, context: ServerContext) => {
-      const authorized = await requireMcpAccountRole(principal, args.account_id, args.role_name, args.environment)
+      let displayName = args.account_id
+      try {
+        displayName = accountDisplayName((await resolveAccount(args.account_id)).account)
+      } catch {
+        // IDC remains authoritative even when an assigned account is absent from GHOST metadata.
+      }
       const confirmed = acceptedContent(context.mcpReq.inputResponses, 'confirm_credential_issue', credentialConfirmationSchema)
       const state = context.mcpReq.requestState<{ tool: string; targetId: string }>()
-      const targetId = `${args.environment}:${authorized.resolvedAccountId}:${args.role_name}`
+      const targetId = `${args.environment}:${args.account_id}:${args.role_name}`
       if (!confirmed?.confirm || state?.tool !== 'ghost.credentials.issue' || state.targetId !== targetId) {
         return inputRequired({
           inputRequests: {
             confirm_credential_issue: inputRequired.elicit({
-              message: `Issue short-lived ${args.environment} credentials for ${authorized.account.accountName} (${authorized.resolvedAccountId}) as ${args.role_name}?`,
+              message: `Issue short-lived ${args.environment} credentials for ${displayName} (${args.account_id}) as ${args.role_name}? IAM Identity Center will enforce the assignment.`,
               requestedSchema: credentialConfirmationSchema
             })
           },
           requestState: await confirmationCodec.mint({ tool: 'ghost.credentials.issue', targetId }, context)
         })
       }
-      const credential = await issueMcpIdentityCenterCredentials(principal, args.session_id, authorized.resolvedAccountId, args.role_name)
+      const credential = await issueMcpIdentityCenterCredentials(principal, args.session_id, args.account_id, args.role_name)
       return toolSuccess({
         ...credential,
         localRunner: {

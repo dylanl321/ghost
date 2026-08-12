@@ -11,6 +11,12 @@ GHOST is a web dashboard providing centralized access to AWS account data and fu
 3. **Add simple comments for complex logic** - Explain the "why" not the "what"
 4. **Check the Swagger UI** (`/api/swagger-ui`) to understand existing API endpoints
 
+## CRITICAL: Never Build This App Locally
+- **NEVER run any local application build on this machine.** Builds are too slow and interrupt development.
+- Do not run `npm run build`, `npm run generate`, `npm run preview`, `npm run story:build`, `npm run story:preview`, `nuxt build`, `nuxi build`, or any local `docker build` for this repository.
+- Do not use a production build as a verification step. Use focused tests, linting, formatting, or targeted type checks instead.
+- CI/CD owns application and image builds. Do not change or trigger deployment/build jobs unless the user explicitly requests it.
+
 ## Essential Commands
 
 ### Development
@@ -19,18 +25,9 @@ npm install --legacy-peer-deps  # Install dependencies (legacy-peer-deps require
 npm run dev                     # Start development server on http://localhost:3000
 ```
 
-### Build and Production
-```bash
-npm run build    # Build for production
-npm run preview  # Preview production build
-npm run generate # Generate static site
-```
-
 ### Component Development
 ```bash
 npm run story:dev      # Start Histoire component development
-npm run story:build    # Build Histoire stories
-npm run story:preview  # Preview Histoire build
 ```
 
 ### Versioning & Releases

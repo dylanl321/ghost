@@ -7,6 +7,7 @@ import { logger } from '../../utils/logger'
 import { getGhostBaseUrl, getMcpResourceUrl, getOAuthCookieKeys, getOAuthIssuer, isProductionEnvironment, useDurableOAuthStore } from '../config'
 import { GHOST_MCP_SCOPES } from '../types'
 import { DynamoOidcAdapter } from './adapter'
+import { deleteMcpGraphDelegation } from './delegated-graph'
 import { getGhostMcpIdentity } from './identity'
 
 let providerPromise: Promise<Provider> | undefined
@@ -149,6 +150,13 @@ async function createProvider(): Promise<Provider> {
   const provider = new Provider(issuer, configuration)
   provider.proxy = true
   provider.on('server_error', (_ctx: unknown, error: Error) => logger.error('[MCP OAuth] Provider error', error))
+  provider.on('grant.destroyed', (grant: { accountId?: string }) => {
+    if (grant.accountId) {
+      void deleteMcpGraphDelegation(grant.accountId).catch(error => {
+        logger.error('[MCP Graph] Failed to remove delegated token after grant revocation', error)
+      })
+    }
+  })
   logger.info('[MCP OAuth] Provider initialized', { issuer, resource, baseUrl: getGhostBaseUrl().origin })
   return provider
 }

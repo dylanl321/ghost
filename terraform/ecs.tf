@@ -276,6 +276,10 @@ resource "aws_ecs_task_definition" "main" {
           value = aws_dynamodb_table.mcp_audit.name
         },
         {
+          name  = "GHOST_MCP_SECRET_KMS_KEY_ARN"
+          value = aws_kms_key.mcp_secrets.arn
+        },
+        {
           name  = "GHOST_MCP_IDC_DEVICE_FLOW_ENABLED"
           value = "true"
         },

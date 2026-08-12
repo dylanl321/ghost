@@ -1,10 +1,6 @@
 import type { CallToolResult } from '@modelcontextprotocol/server'
 import type { GhostToolEnvelope } from './types'
 
-function jsonText(value: unknown): string {
-  return JSON.stringify(value, null, 2)
-}
-
 export function toolSuccess<T>(
   data: T,
   summary: string,
@@ -22,7 +18,7 @@ export function toolSuccess<T>(
   }
 
   return {
-    content: [{ type: 'text', text: `${summary}\n\n${jsonText(envelope)}` }],
+    content: [{ type: 'text', text: summary }],
     structuredContent: envelope as unknown as Record<string, unknown>,
     isError: false
   }

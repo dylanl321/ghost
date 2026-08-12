@@ -4,6 +4,7 @@ import { getUserGroups } from '../../../utils/entra/graph-client'
 import { getUserSession } from '../../../utils/entra/session'
 import { logger } from '../../../utils/logger'
 import { getOAuthProvider } from '../../../mcp/oauth/provider'
+import { saveMcpGraphDelegation } from '../../../mcp/oauth/delegated-graph'
 import { saveGhostMcpIdentity } from '../../../mcp/oauth/identity'
 import { GHOST_MCP_SCOPES, type GhostMcpIdentity } from '../../../mcp/types'
 
@@ -19,7 +20,7 @@ function userValue(user: any, ...keys: string[]): string | undefined {
   return undefined
 }
 
-async function getAuthenticatedIdentity(event: H3Event): Promise<GhostMcpIdentity> {
+async function getAuthenticatedIdentity(event: H3Event): Promise<{ identity: GhostMcpIdentity; refreshToken?: string }> {
   const session = await getUserSession(event)
   if (!session?.user) throw createError({ statusCode: 401, statusMessage: 'Entra authentication is required' })
 
@@ -32,7 +33,8 @@ async function getAuthenticatedIdentity(event: H3Event): Promise<GhostMcpIdentit
   let groups: string[]
   try {
     groups = (await getUserGroups(event, oid)).map(group => group.displayName).filter(Boolean)
-  } catch {
+  } catch (error) {
+    logger.warn('[MCP OAuth] Could not capture delegated Graph groups', error)
     groups = []
   }
   const roles = evaluateUserRoles({
@@ -46,15 +48,18 @@ async function getAuthenticatedIdentity(event: H3Event): Promise<GhostMcpIdentit
 
   const now = new Date().toISOString()
   return {
-    subject: `${tenantId}:${oid}`,
-    oid,
-    tenantId,
-    email,
-    displayName: userValue(user, 'name', 'displayName', 'given_name') || email,
-    groups,
-    roles,
-    createdAt: now,
-    updatedAt: now
+    identity: {
+      subject: `${tenantId}:${oid}`,
+      oid,
+      tenantId,
+      email,
+      displayName: userValue(user, 'name', 'displayName', 'given_name') || email,
+      groups,
+      roles,
+      createdAt: now,
+      updatedAt: now
+    },
+    refreshToken: session.refreshToken
   }
 }
 
@@ -93,7 +98,7 @@ export default defineEventHandler(async event => {
     return { redirectTo }
   }
 
-  const identity = await getAuthenticatedIdentity(event)
+  const { identity, refreshToken } = await getAuthenticatedIdentity(event)
   await saveGhostMcpIdentity(identity)
 
   if (body.action === 'login') {
@@ -115,6 +120,11 @@ export default defineEventHandler(async event => {
   }
   if (!details.session?.accountId || details.session.accountId !== identity.subject) {
     throw createError({ statusCode: 401, statusMessage: 'OAuth and Entra sessions do not match' })
+  }
+  if (refreshToken) {
+    await saveMcpGraphDelegation(identity.subject, identity.tenantId, refreshToken)
+  } else {
+    logger.warn('[MCP Graph] GHOST session did not provide a delegated refresh token')
   }
 
   const grant = details.grantId

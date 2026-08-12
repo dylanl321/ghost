@@ -52,6 +52,7 @@
     "@aws-sdk/client-iam": "^3.1104.0",
     "@aws-sdk/client-identitystore": "^3.1104.0",
     "@aws-sdk/client-inspector2": "^3.1104.0",
+    "@aws-sdk/client-kms": "^3.1104.0",
     "@aws-sdk/client-lambda": "^3.1104.0",
     "@aws-sdk/client-organizations": "^3.1104.0",
     "@aws-sdk/client-pricing": "^3.1104.0",

@@ -1,5 +1,24 @@
 # Durable OAuth state for oidc-provider. The GSIs implement its secondary
 # lookups without coupling MCP authentication to one ECS task.
+resource "aws_kms_key" "mcp_secrets" {
+  provider                = aws.target_deployment_account
+  description             = "Application-level encryption for delegated Graph and Identity Center MCP tokens"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+
+  tags = {
+    Application = var.app_name
+    Environment = var.env
+    Component   = "mcp-secret-encryption"
+  }
+}
+
+resource "aws_kms_alias" "mcp_secrets" {
+  provider      = aws.target_deployment_account
+  name          = "alias/${var.app_name}-mcp-secrets"
+  target_key_id = aws_kms_key.mcp_secrets.key_id
+}
+
 resource "aws_dynamodb_table" "oauth_artifacts" {
   provider     = aws.target_deployment_account
   name         = "ghost-oauth-artifacts-${var.env}"
@@ -151,6 +170,12 @@ resource "aws_iam_policy" "ecs_mcp_dynamodb" {
         Effect   = "Allow"
         Action   = ["dynamodb:PutItem"]
         Resource = aws_dynamodb_table.mcp_audit.arn
+      },
+      {
+        Sid      = "McpSecretEncryption"
+        Effect   = "Allow"
+        Action   = ["kms:GenerateDataKey", "kms:Decrypt"]
+        Resource = aws_kms_key.mcp_secrets.arn
       }
     ]
   })
@@ -170,4 +195,9 @@ output "oauth_artifacts_table_name" {
 output "mcp_audit_table_name" {
   description = "DynamoDB table containing redacted MCP tool audit events"
   value       = aws_dynamodb_table.mcp_audit.name
+}
+
+output "mcp_secret_kms_key_arn" {
+  description = "KMS key used for application-level encryption of delegated MCP tokens"
+  value       = aws_kms_key.mcp_secrets.arn
 }

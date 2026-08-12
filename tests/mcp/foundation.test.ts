@@ -33,6 +33,7 @@ test('MCP result limits are bounded', () => {
 test('MCP tool results include structured content and explicit errors', () => {
   const success = toolSuccess({ total: 12 }, 'Loaded.', 'test')
   assert.equal(success.isError, false)
+  assert.deepEqual(success.content, [{ type: 'text', text: 'Loaded.' }])
   assert.deepEqual((success.structuredContent as any).data, { total: 12 })
 
   const failure = toolError('TEST_ERROR', 'Nope')

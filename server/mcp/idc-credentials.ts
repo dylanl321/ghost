@@ -5,7 +5,15 @@ import {
   SSOOIDCClient,
   StartDeviceAuthorizationCommand
 } from '@aws-sdk/client-sso-oidc'
-import { GetRoleCredentialsCommand, SSOClient } from '@aws-sdk/client-sso'
+import {
+  GetRoleCredentialsCommand,
+  ListAccountRolesCommand,
+  ListAccountsCommand,
+  SSOClient
+} from '@aws-sdk/client-sso'
+import { deleteItem, getItem, putItem } from '../utils/dynamodb'
+import { getOAuthTableConfig } from './config'
+import { decryptMcpSecret, encryptMcpSecret, isMcpSecretVaultEnabled } from './secret-vault'
 import type { GhostMcpPrincipal } from './types'
 
 type IdentityCenterEnvironment = 'commercial' | 'govcloud'
@@ -26,12 +34,19 @@ interface DeviceAuthorizationSession extends RegisteredClient, IdentityCenterCon
   sessionId: string
   subject: string
   deviceCode: string
-  expiresAt: number
   expiresAtIso: string
+  accessToken?: string
+  accessTokenExpiresAt?: number
+}
+
+export interface McpIdentityCenterAccountAccess {
+  accountId: string
+  accountName: string
+  emailAddress?: string
+  roles: string[]
 }
 
 const registeredClients = new Map<IdentityCenterEnvironment, RegisteredClient>()
-const deviceSessions = new Map<string, DeviceAuthorizationSession>()
 const DEVICE_CODE_GRANT = 'urn:ietf:params:oauth:grant-type:device_code'
 
 export function isMcpIdentityCenterDeviceFlowEnabled(): boolean {
@@ -53,11 +68,47 @@ function getConfig(environment: IdentityCenterEnvironment): IdentityCenterConfig
   }
 }
 
-function cleanupExpiredSessions() {
-  const now = Date.now()
-  for (const [id, session] of deviceSessions) {
-    if (session.expiresAt <= now) deviceSessions.delete(id)
-  }
+function sessionKey(sessionId: string) {
+  return { artifactId: `IdentityCenterSession#${sessionId}` }
+}
+
+function sessionEncryptionContext(sessionId: string, subject: string) {
+  return { purpose: 'ghost-mcp-idc-session', sessionId, subject }
+}
+
+async function saveDeviceSession(session: DeviceAuthorizationSession, expiresAt: number): Promise<void> {
+  if (!isMcpSecretVaultEnabled()) throw new Error('Identity Center session encryption is not configured.')
+  const config = getOAuthTableConfig()
+  await putItem(config.tableName, {
+    ...sessionKey(session.sessionId),
+    model: 'IdentityCenterSession',
+    payload: {
+      ciphertext: await encryptMcpSecret(
+        JSON.stringify(session),
+        sessionEncryptionContext(session.sessionId, session.subject)
+      )
+    },
+    ttl: Math.floor(expiresAt / 1000)
+  }, config.environment, config.accountId)
+}
+
+async function loadDeviceSession(sessionId: string, subject: string): Promise<DeviceAuthorizationSession | null> {
+  const config = getOAuthTableConfig()
+  const item = await getItem(config.tableName, sessionKey(sessionId), config.environment, config.accountId) as {
+    payload?: { ciphertext?: string }
+    ttl?: number
+  } | null
+  if (!item?.payload?.ciphertext || (item.ttl && item.ttl <= Math.floor(Date.now() / 1000))) return null
+  const session = JSON.parse(await decryptMcpSecret(
+    item.payload.ciphertext,
+    sessionEncryptionContext(sessionId, subject)
+  )) as DeviceAuthorizationSession
+  return session.subject === subject ? session : null
+}
+
+async function deleteDeviceSession(sessionId: string): Promise<void> {
+  const config = getOAuthTableConfig()
+  await deleteItem(config.tableName, sessionKey(sessionId), config.environment, config.accountId)
 }
 
 async function getRegisteredClient(config: IdentityCenterConfig): Promise<RegisteredClient> {
@@ -84,14 +135,16 @@ async function getRegisteredClient(config: IdentityCenterConfig): Promise<Regist
   return registered
 }
 
-export async function beginMcpIdentityCenterAuthorization(principal: GhostMcpPrincipal, environment: IdentityCenterEnvironment) {
+export async function beginMcpIdentityCenterAuthorization(
+  principal: GhostMcpPrincipal,
+  environment: IdentityCenterEnvironment
+) {
   if (!isMcpIdentityCenterDeviceFlowEnabled()) {
-    const error = new Error('Identity Center credential brokering is not enabled for this GHOST deployment.')
+    const error = new Error('Identity Center authorization is not enabled for this GHOST deployment.')
     error.name = 'IDC_DEVICE_FLOW_DISABLED'
     throw error
   }
 
-  cleanupExpiredSessions()
   const config = getConfig(environment)
   const registered = await getRegisteredClient(config)
   const client = new SSOOIDCClient({ region: config.region })
@@ -106,23 +159,102 @@ export async function beginMcpIdentityCenterAuthorization(principal: GhostMcpPri
 
   const sessionId = randomUUID()
   const expiresAt = Date.now() + authorization.expiresIn * 1000
-  deviceSessions.set(sessionId, {
+  const session: DeviceAuthorizationSession = {
     ...config,
     ...registered,
     sessionId,
     subject: principal.subject,
     deviceCode: authorization.deviceCode,
-    expiresAt,
     expiresAtIso: new Date(expiresAt).toISOString()
-  })
+  }
+  await saveDeviceSession(session, expiresAt)
 
   return {
     sessionId,
+    environment,
     verificationUri: authorization.verificationUri,
     verificationUriComplete: authorization.verificationUriComplete,
     userCode: authorization.userCode,
-    expiresAt: new Date(expiresAt).toISOString(),
+    expiresAt: session.expiresAtIso,
     pollIntervalSeconds: authorization.interval || 5
+  }
+}
+
+async function getIdentityCenterAccessToken(
+  principal: GhostMcpPrincipal,
+  sessionId: string
+): Promise<{ session: DeviceAuthorizationSession; accessToken: string }> {
+  const session = await loadDeviceSession(sessionId, principal.subject)
+  if (!session) {
+    const error = new Error('Identity Center authorization session was not found for the authenticated user.')
+    error.name = 'IDC_SESSION_NOT_FOUND'
+    throw error
+  }
+  if (session.accessToken && (session.accessTokenExpiresAt || 0) > Date.now() + 60_000) {
+    return { session, accessToken: session.accessToken }
+  }
+
+  const oidc = new SSOOIDCClient({ region: session.region })
+  try {
+    const token = await oidc.send(new CreateTokenCommand({
+      clientId: session.clientId,
+      clientSecret: session.clientSecret,
+      deviceCode: session.deviceCode,
+      grantType: DEVICE_CODE_GRANT
+    }))
+    if (!token.accessToken) throw new Error('IAM Identity Center did not return an access token.')
+    session.accessToken = token.accessToken
+    session.accessTokenExpiresAt = Date.now() + (token.expiresIn || 3600) * 1000
+    await saveDeviceSession(session, session.accessTokenExpiresAt)
+    return { session, accessToken: token.accessToken }
+  } catch (error: any) {
+    if (error?.name === 'AuthorizationPendingException' || error?.name === 'SlowDownException') {
+      const pending = new Error('Complete the IAM Identity Center browser authorization, then try again.')
+      pending.name = 'IDC_AUTHORIZATION_PENDING'
+      throw pending
+    }
+    throw error
+  }
+}
+
+export async function listMcpIdentityCenterAccess(
+  principal: GhostMcpPrincipal,
+  sessionId: string
+): Promise<{ environment: IdentityCenterEnvironment; accounts: McpIdentityCenterAccountAccess[] }> {
+  const { session, accessToken } = await getIdentityCenterAccessToken(principal, sessionId)
+  const sso = new SSOClient({ region: session.region })
+  const accounts: McpIdentityCenterAccountAccess[] = []
+  let nextToken: string | undefined
+
+  do {
+    const response = await sso.send(new ListAccountsCommand({ accessToken, nextToken, maxResults: 100 }))
+    for (const account of response.accountList || []) {
+      if (!account.accountId) continue
+      const roles: string[] = []
+      let roleToken: string | undefined
+      do {
+        const roleResponse = await sso.send(new ListAccountRolesCommand({
+          accessToken,
+          accountId: account.accountId,
+          nextToken: roleToken,
+          maxResults: 100
+        }))
+        roles.push(...(roleResponse.roleList || []).map(role => role.roleName).filter((role): role is string => Boolean(role)))
+        roleToken = roleResponse.nextToken
+      } while (roleToken)
+      accounts.push({
+        accountId: account.accountId,
+        accountName: account.accountName || account.accountId,
+        emailAddress: account.emailAddress,
+        roles: Array.from(new Set(roles)).sort()
+      })
+    }
+    nextToken = response.nextToken
+  } while (nextToken)
+
+  return {
+    environment: session.environment,
+    accounts: accounts.sort((left, right) => left.accountName.localeCompare(right.accountName))
   }
 }
 
@@ -132,33 +264,7 @@ export async function issueMcpIdentityCenterCredentials(
   accountId: string,
   roleName: string
 ) {
-  cleanupExpiredSessions()
-  const session = deviceSessions.get(sessionId)
-  if (!session || session.subject !== principal.subject) {
-    const error = new Error('Identity Center authorization session was not found for the authenticated user.')
-    error.name = 'IDC_SESSION_NOT_FOUND'
-    throw error
-  }
-
-  const oidc = new SSOOIDCClient({ region: session.region })
-  let accessToken: string
-  try {
-    const token = await oidc.send(new CreateTokenCommand({
-      clientId: session.clientId,
-      clientSecret: session.clientSecret,
-      deviceCode: session.deviceCode,
-      grantType: DEVICE_CODE_GRANT
-    }))
-    if (!token.accessToken) throw new Error('IAM Identity Center did not return an access token.')
-    accessToken = token.accessToken
-  } catch (error: any) {
-    if (error?.name === 'AuthorizationPendingException' || error?.name === 'SlowDownException') {
-      const pending = new Error('Complete the IAM Identity Center browser authorization, then request credentials again.')
-      pending.name = 'IDC_AUTHORIZATION_PENDING'
-      throw pending
-    }
-    throw error
-  }
+  const { session, accessToken } = await getIdentityCenterAccessToken(principal, sessionId)
 
   try {
     const sso = new SSOClient({ region: session.region })
@@ -178,7 +284,7 @@ export async function issueMcpIdentityCenterCredentials(
       region: session.region
     }
   } finally {
-    // Device grants are one-time. Never retain a user access token or refresh token in GHOST.
-    deviceSessions.delete(sessionId)
+    // Credential issuance is terminal; do not retain the user access token afterward.
+    await deleteDeviceSession(sessionId)
   }
 }
