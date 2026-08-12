@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { McpServer } from '@modelcontextprotocol/server'
+import { McpServer, createMcpHandler } from '@modelcontextprotocol/server'
 import * as z from 'zod-v4'
 import { registerGhostTool } from '../../server/mcp/tools/register'
 import type { GhostMcpPrincipal } from '../../server/mcp/types'
@@ -34,4 +34,34 @@ function listTools(scopes: GhostMcpPrincipal['scopes']) {
 test('tool discovery only returns OAuth-scope-eligible tools', () => {
   assert.deepEqual(listTools(['ghost.read']), ['ghost.read.test'])
   assert.deepEqual(listTools(['ghost.read', 'ghost.collaborate']), ['ghost.read.test', 'ghost.write.test'])
+})
+
+test('HTTP handler negotiates the protocol version used by Codex', async () => {
+  const handler = createMcpHandler(async () => new McpServer({ name: 'ghost-test', version: '1.0.0' }), {
+    legacy: 'stateless'
+  })
+  const response = await handler.fetch(new Request('https://ghost.example.test/mcp', {
+    method: 'POST',
+    headers: {
+      accept: 'application/json, text/event-stream',
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'codex-test', version: '0.147.0' }
+      }
+    })
+  }))
+
+  assert.equal(response.status, 200)
+  const responseText = await response.text()
+  const dataLine = responseText.split('\n').find(line => line.startsWith('data: '))
+  assert.ok(dataLine)
+  const body = JSON.parse(dataLine.slice(6)) as { result?: { protocolVersion?: string } }
+  assert.equal(body.result?.protocolVersion, '2025-06-18')
 })

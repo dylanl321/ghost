@@ -117,5 +117,5 @@ export async function createGhostMcpServer(context: McpRequestContext): Promise<
 }
 
 export const ghostMcpHandler = createMcpHandler(createGhostMcpServer, {
-  legacy: 'reject'
+  legacy: 'stateless'
 })
