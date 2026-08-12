@@ -1,7 +1,15 @@
 <template>
   <div class="ghost-chat-container">
     <!-- Chat Messages Area -->
-    <div ref="chatBoxRef" class="chat-messages" role="log" aria-live="polite" aria-relevant="additions" @scroll="handleMessagesScroll">
+    <div
+      ref="chatBoxRef"
+      class="chat-messages"
+      role="log"
+      aria-live="polite"
+      aria-relevant="additions"
+      @scroll="handleMessagesScroll"
+      @wheel.passive="handleMessagesWheel"
+    >
       <div v-if="hasMoreMessages" class="flex justify-center pb-3">
         <UButton size="xs" color="gray" variant="soft" icon="i-heroicons-arrow-up" @click="loadEarlierMessages">
           Load earlier
@@ -490,10 +498,7 @@ function handleDisambiguate() {
 watch(scrollTrigger, () => {
   nextTick(() => {
     if (chatBoxRef.value && isNearBottom.value) {
-      chatBoxRef.value.scrollTo({
-        top: chatBoxRef.value.scrollHeight,
-        behavior: 'smooth'
-      })
+      chatBoxRef.value.scrollTop = chatBoxRef.value.scrollHeight
     }
   })
 })
@@ -584,13 +589,6 @@ watch(messages, async () => {
     }
   }
 
-  // Auto scroll only while the reader is following the latest messages.
-  if (chatBoxRef.value && isNearBottom.value) {
-    chatBoxRef.value.scrollTo({
-      top: chatBoxRef.value.scrollHeight,
-      behavior: 'smooth'
-    })
-  }
 }, { deep: true })
 
 function handleMessagesScroll() {
@@ -598,6 +596,14 @@ function handleMessagesScroll() {
   const distance = chatBoxRef.value.scrollHeight - chatBoxRef.value.scrollTop - chatBoxRef.value.clientHeight
   isNearBottom.value = distance < 120
   showJumpToLatest.value = !isNearBottom.value
+}
+
+function handleMessagesWheel(event: WheelEvent) {
+  // Pause following before the next progress update can start another scroll.
+  if (event.deltaY < 0) {
+    isNearBottom.value = false
+    showJumpToLatest.value = true
+  }
 }
 
 function scrollToLatest() {
@@ -696,6 +702,8 @@ async function copyToClipboard(text: string) {
 // Initialize on mount
 onMounted(async () => {
   await initialize()
+  await nextTick()
+  scrollToLatest()
 
   // Initialize mermaid with dark mode support
   // Detect if user prefers dark mode

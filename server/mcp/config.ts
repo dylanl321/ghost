@@ -61,7 +61,8 @@ export function getRequestStateKey(): string {
 export function getOAuthTableConfig() {
   return {
     tableName: process.env.GHOST_OAUTH_TABLE_NAME || 'ghost-oauth-artifacts',
-    environment: (process.env.GHOST_OAUTH_TABLE_ENVIRONMENT || 'govcloud') as 'commercial' | 'govcloud'
+    environment: (process.env.GHOST_OAUTH_TABLE_ENVIRONMENT || 'govcloud') as 'commercial' | 'govcloud',
+    accountId: process.env.AWS_DEPLOYMENT_ACCOUNT_ID || undefined
   }
 }
 
@@ -72,6 +73,7 @@ export function useDurableOAuthStore(): boolean {
 export function getMcpAuditTableConfig() {
   return {
     tableName: process.env.GHOST_MCP_AUDIT_TABLE_NAME || 'ghost-mcp-audit',
-    environment: (process.env.GHOST_MCP_AUDIT_TABLE_ENVIRONMENT || 'govcloud') as 'commercial' | 'govcloud'
+    environment: (process.env.GHOST_MCP_AUDIT_TABLE_ENVIRONMENT || 'govcloud') as 'commercial' | 'govcloud',
+    accountId: process.env.AWS_DEPLOYMENT_ACCOUNT_ID || undefined
   }
 }

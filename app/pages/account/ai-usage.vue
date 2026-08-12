@@ -87,15 +87,6 @@
       title="AI usage is unavailable"
       :description="error"
     />
-    <UAlert
-      v-else-if="data"
-      :color="data.dataQuality.partial ? 'amber' : 'green'"
-      variant="soft"
-      :icon="data.dataQuality.partial ? 'i-heroicons-exclamation-triangle' : 'i-heroicons-check-circle'"
-      :title="freshnessMessage"
-      :description="accountCoverageMessage"
-    />
-
     <template v-if="loading && !data">
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
         <USkeleton v-for="index in 6" :key="index" class="h-28" />
@@ -219,18 +210,6 @@ const periodLabel = computed(() => data.value?.filters.periodLabel || periodOpti
 const telemetrySummaryAvailable = computed(() => Boolean(data.value?.dataQuality.accountRegionTargetsCollected))
 const actualSummaryAvailable = computed(() => Boolean(data.value?.dataQuality.actualCostThrough) &&
   providers.value.length === 0 && projects.value.length === 0 && models.value.length === 0 && regions.value.length === 0)
-const freshnessMessage = computed(() => {
-  if (!data.value) return ''
-  const quality = data.value.dataQuality
-  const coverage = `${quality.telemetryCoveragePercent.toFixed(0)}% of account-region targets collected`
-  const costs = quality.actualCostThrough ? `costs complete through ${formatShortDate(quality.actualCostThrough)}` : 'cost freshness unavailable'
-  return `${coverage}; ${costs}.`
-})
-const accountCoverageMessage = computed(() => {
-  if (!data.value) return ''
-  const quality = data.value.dataQuality
-  return `${quality.accountsCollected} of ${quality.accountsTargeted} unique accounts have telemetry coverage.`
-})
 const summaryMetrics = computed(() => {
   const summary = data.value!.summary
   const tokenTotal = summary.metrics.inputTokens + summary.metrics.outputTokens
@@ -248,9 +227,14 @@ const summaryMetrics = computed(() => {
 })
 const trendOption = computed(() => ({
   tooltip: { trigger: 'axis' },
-  legend: { data: ['Active enclaves', 'Invocations'], textStyle: { color: '#9ca3af' } },
-  grid: { left: 52, right: 52, top: 42, bottom: 36 },
-  xAxis: { type: 'category', data: data.value?.trend.map(point => point.date) || [], axisLabel: { color: '#9ca3af' }, axisLine: { lineStyle: { color: '#6b7280' } } },
+  legend: { top: 8, data: ['Active enclaves', 'Invocations'], textStyle: { color: '#9ca3af' } },
+  grid: { left: 52, right: 52, top: 54, bottom: 58, containLabel: true },
+  xAxis: {
+    type: 'category',
+    data: data.value?.trend.map(point => point.date) || [],
+    axisLabel: { color: '#9ca3af', margin: 14, hideOverlap: true },
+    axisLine: { lineStyle: { color: '#6b7280' } }
+  },
   yAxis: [
     { type: 'value', minInterval: 1, axisLabel: { color: '#9ca3af' }, splitLine: { lineStyle: { color: '#d1d5db' } } },
     { type: 'value', axisLabel: { color: '#9ca3af', formatter: (value: number) => compact(value) }, splitLine: { show: false } }
@@ -330,7 +314,6 @@ function compact(value: number) { return new Intl.NumberFormat('en-US', { notati
 function money(value: number) { return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: value < 10 ? 2 : 0 }).format(value) }
 function coverage(value: number | null) { return value === null ? 'No token estimate' : `${value.toFixed(0)}% of tokens priced` }
 function growth(value: number | null) { return value === null ? 'New adoption in this period' : `${value >= 0 ? '+' : ''}${value.toFixed(1)}% vs prior period` }
-function formatShortDate(value: string) { return new Date(`${value}T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) }
 function relativeTime(value: string) {
   const minutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60000))
   return minutes < 60 ? `${minutes}m ago` : `${Math.round(minutes / 60)}h ago`

@@ -127,11 +127,6 @@
           </div>
         </div>
       </div>
-
-      <p v-if="row.sources.includes('bedrock-mantle')" class="mt-4 flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
-        <UIcon name="i-heroicons-information-circle" class="h-4 w-4" />
-        {{ causes.sourceAvailability.mantleMessage }}
-      </p>
     </template>
   </div>
 </template>

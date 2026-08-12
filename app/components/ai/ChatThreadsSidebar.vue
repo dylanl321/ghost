@@ -10,7 +10,7 @@
       }
     }"
   >
-    <div class="flex flex-col h-full">
+    <div class="relative flex flex-col h-full">
       <!-- Header -->
       <div class="p-4 border-b border-gray-200 dark:border-slate-700">
         <div class="flex items-center justify-between mb-3">
@@ -84,7 +84,12 @@
       </div>
 
       <!-- Chat Messages -->
-      <div class="flex-1 overflow-y-auto p-4" ref="chatBoxRef">
+      <div
+        ref="chatBoxRef"
+        class="flex-1 overflow-y-auto p-4"
+        @scroll="handleMessagesScroll"
+        @wheel.passive="handleMessagesWheel"
+      >
         <!-- Welcome Message -->
         <div v-if="!chatSidebar.hasSeenWelcome.value && showWelcome" class="mb-4 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
           <div class="flex items-start gap-3">
@@ -241,6 +246,17 @@
           </div>
         </div>
       </div>
+
+      <UButton
+        v-if="showJumpToLatest"
+        class="absolute right-4 bottom-24 z-10 shadow-lg"
+        size="xs"
+        color="gray"
+        icon="i-heroicons-arrow-down"
+        @click="scrollToLatest"
+      >
+        Jump to latest
+      </UButton>
 
       <!-- Input Form -->
       <div class="p-4 border-t border-gray-200 dark:border-slate-700">
@@ -409,6 +425,8 @@ const chatBoxRef = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
 const showClearConfirm = ref(false)
 const selectedThreadId = ref<string | null>(null)
+const isNearBottom = ref(true)
+const showJumpToLatest = ref(false)
 const fullPageLink = computed(() => ({
   path: '/chat',
   query: {
@@ -462,6 +480,8 @@ onMounted(async () => {
   chatSidebar.initialize()
   await initialize()
   selectedThreadId.value = activeThreadId.value
+  await nextTick()
+  scrollToLatest()
 })
 
 // Sync selected thread with active thread
@@ -539,11 +559,26 @@ function formatTimestamp(timestamp: string) {
   return 'Just now'
 }
 
-// Scroll to bottom
-function scrollToBottom() {
-  if (chatBoxRef.value) {
-    chatBoxRef.value.scrollTop = chatBoxRef.value.scrollHeight
+function handleMessagesScroll() {
+  if (!chatBoxRef.value) return
+  const distance = chatBoxRef.value.scrollHeight - chatBoxRef.value.scrollTop - chatBoxRef.value.clientHeight
+  isNearBottom.value = distance < 80
+  showJumpToLatest.value = !isNearBottom.value
+}
+
+function handleMessagesWheel(event: WheelEvent) {
+  // Progress can update rapidly, so pause following as soon as scrolling starts.
+  if (event.deltaY < 0) {
+    isNearBottom.value = false
+    showJumpToLatest.value = true
   }
+}
+
+function scrollToLatest() {
+  if (!chatBoxRef.value) return
+  chatBoxRef.value.scrollTo({ top: chatBoxRef.value.scrollHeight, behavior: 'smooth' })
+  isNearBottom.value = true
+  showJumpToLatest.value = false
 }
 
 // Handle input updates for @ mention detection
@@ -601,14 +636,14 @@ async function handleSubmit() {
   await sendMessage()
 }
 
-// Auto scroll when messages change
-watch([scrollTrigger, messages], () => {
+// Follow progress only while the reader remains at the latest message.
+watch(scrollTrigger, () => {
   nextTick(() => {
-    nextTick(() => {
-      scrollToBottom()
-    })
+    if (chatBoxRef.value && isNearBottom.value) {
+      chatBoxRef.value.scrollTop = chatBoxRef.value.scrollHeight
+    }
   })
-}, { deep: true })
+})
 </script>
 
 <style scoped>

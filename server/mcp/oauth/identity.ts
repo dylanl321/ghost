@@ -18,12 +18,12 @@ export async function saveGhostMcpIdentity(identity: GhostMcpIdentity): Promise<
     ...identityKey(identity.subject),
     model: 'GhostIdentity',
     payload: identity
-  }, config.environment)
+  }, config.environment, config.accountId)
 }
 
 export async function getGhostMcpIdentity(subject: string): Promise<GhostMcpIdentity | null> {
   if (!useDurableOAuthStore()) return developmentIdentities.get(subject) || null
   const config = getOAuthTableConfig()
-  const item = await getItem(config.tableName, identityKey(subject), config.environment) as { payload?: GhostMcpIdentity } | null
+  const item = await getItem(config.tableName, identityKey(subject), config.environment, config.accountId) as { payload?: GhostMcpIdentity } | null
   return item?.payload || null
 }

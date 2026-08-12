@@ -29,12 +29,12 @@ export class DynamoOidcAdapter {
       uid: payload.uid,
       ttl: expiresIn ? Math.floor(Date.now() / 1000) + expiresIn : undefined
     }
-    await putItem(config.tableName, artifact, config.environment)
+    await putItem(config.tableName, artifact, config.environment, config.accountId)
   }
 
   async find(id: string): Promise<Record<string, any> | undefined> {
     const config = getOAuthTableConfig()
-    const artifact = await getItem(config.tableName, this.key(id), config.environment) as StoredArtifact | null
+    const artifact = await getItem(config.tableName, this.key(id), config.environment, config.accountId) as StoredArtifact | null
     if (!artifact || (artifact.ttl && artifact.ttl <= Math.floor(Date.now() / 1000))) return undefined
     return artifact.payload
   }
@@ -56,7 +56,7 @@ export class DynamoOidcAdapter {
       expressionAttributeNames: { '#field': field },
       expressionAttributeValues: { ':value': value },
       limit: 1
-    }, config.environment)
+    }, config.environment, config.accountId)
     const artifact = result.items[0] as StoredArtifact | undefined
     return artifact?.payload
   }
@@ -68,7 +68,7 @@ export class DynamoOidcAdapter {
 
   async destroy(id: string): Promise<void> {
     const config = getOAuthTableConfig()
-    await deleteItem(config.tableName, this.key(id), config.environment)
+    await deleteItem(config.tableName, this.key(id), config.environment, config.accountId)
   }
 
   async revokeByGrantId(grantId: string): Promise<void> {
@@ -82,8 +82,8 @@ export class DynamoOidcAdapter {
         expressionAttributeValues: { ':grantId': grantId },
         limit: 100,
         nextToken
-      }, config.environment)
-      await Promise.all(result.items.map((item: Record<string, any>) => deleteItem(config.tableName, { artifactId: item.artifactId }, config.environment)))
+      }, config.environment, config.accountId)
+      await Promise.all(result.items.map((item: Record<string, any>) => deleteItem(config.tableName, { artifactId: item.artifactId }, config.environment, config.accountId)))
       nextToken = result.nextToken
     } while (nextToken)
   }

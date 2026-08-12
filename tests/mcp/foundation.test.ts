@@ -1,7 +1,21 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { getMcpAuditTableConfig, getOAuthTableConfig } from '../../server/mcp/config'
 import { checkMcpRateLimit } from '../../server/mcp/rate-limit'
 import { decodeCursor, encodeCursor, normalizeLimit, toolError, toolSuccess } from '../../server/mcp/results'
+
+test('MCP persistence targets the deployment account when configured', () => {
+  const previousAccountId = process.env.AWS_DEPLOYMENT_ACCOUNT_ID
+  process.env.AWS_DEPLOYMENT_ACCOUNT_ID = '461760157232'
+
+  try {
+    assert.equal(getOAuthTableConfig().accountId, '461760157232')
+    assert.equal(getMcpAuditTableConfig().accountId, '461760157232')
+  } finally {
+    if (previousAccountId === undefined) delete process.env.AWS_DEPLOYMENT_ACCOUNT_ID
+    else process.env.AWS_DEPLOYMENT_ACCOUNT_ID = previousAccountId
+  }
+})
 
 test('MCP pagination cursors round-trip structured values', () => {
   const value = { offset: 25, account: '123456789012' }
@@ -34,4 +48,3 @@ test('MCP rate limiting returns a stable retry window', () => {
   assert.equal(denied.allowed, false)
   assert.ok(denied.retryAfterSeconds > 0)
 })
-

@@ -18,7 +18,7 @@ export async function runIdempotent<T>(
 ): Promise<{ value: T; replayed: boolean }> {
   const config = getOAuthTableConfig()
   const artifactKey = key(principal, tool, idempotencyKey)
-  const existing = await getItem(config.tableName, artifactKey, config.environment) as { payload?: { value: T } } | null
+  const existing = await getItem(config.tableName, artifactKey, config.environment, config.accountId) as { payload?: { value: T } } | null
   if (existing?.payload) return { value: existing.payload.value, replayed: true }
 
   const value = await execute()
@@ -27,7 +27,6 @@ export async function runIdempotent<T>(
     model: 'McpIdempotency',
     payload: { value },
     ttl: Math.floor(Date.now() / 1000) + IDEMPOTENCY_TTL_SECONDS
-  }, config.environment)
+  }, config.environment, config.accountId)
   return { value, replayed: false }
 }
-

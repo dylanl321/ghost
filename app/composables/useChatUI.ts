@@ -30,6 +30,7 @@ export type ChatState = 'idle' | 'sending' | 'polling' | 'error' | 'canceled'
 
 const logger = createLogger('useChatUI')
 const newThreadDraft = ref('')
+const newThreadError = ref('')
 let sendWithoutThreadInFlight = false
 let chatUiInstanceCounter = 0
 let chatThreadsInitializationPromise: Promise<void> | null = null
@@ -351,13 +352,13 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   const errorMessage = computed<string>({
     get: () => {
       const id = threadsStore.activeThreadId
-      if (!id) return newThreadDraft.value
+      if (!id) return newThreadError.value
       return getThreadUiState(id).errorMessage
     },
     set: (value) => {
       const id = threadsStore.activeThreadId
       if (!id) {
-        newThreadDraft.value = value
+        newThreadError.value = value
         return
       }
       getThreadUiState(id).errorMessage = value
@@ -446,12 +447,15 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   const inputValue = computed<string>({
     get: () => {
       const id = threadsStore.activeThreadId
-      if (!id) return ''
+      if (!id) return newThreadDraft.value
       return getThreadUiState(id).inputValue
     },
     set: (value) => {
       const id = threadsStore.activeThreadId
-      if (!id) return
+      if (!id) {
+        newThreadDraft.value = value
+        return
+      }
       getThreadUiState(id).inputValue = value
 
       // Emit input change event for cross-view synchronization
@@ -1027,11 +1031,13 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     if (!threadsStore.activeThreadId) {
       if (sendWithoutThreadInFlight) return
       sendWithoutThreadInFlight = true
+      newThreadError.value = ''
       logger.info('Creating new thread')
       try {
         const thread = await threadsStore.createThread()
         if (!thread) {
           newThreadDraft.value = userInput
+          newThreadError.value = threadsStore.error || 'Unable to start a new conversation. Please try again.'
           return
         }
       } finally {
@@ -1042,6 +1048,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     // Reset input immediately
     inputValue.value = ''
     newThreadDraft.value = ''
+    newThreadError.value = ''
     clearSelectedAccount()
     closeMentionDropdown()
     errorMessage.value = ''

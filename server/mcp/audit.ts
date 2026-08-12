@@ -33,9 +33,8 @@ export async function recordMcpAudit(input: {
       ttl: Math.floor(Date.now() / 1000) + AUDIT_RETENTION_SECONDS
     }
     const config = getMcpAuditTableConfig()
-    await putItem(config.tableName, event, config.environment)
+    await putItem(config.tableName, event, config.environment, config.accountId)
   } catch (error) {
     logger.error('[MCP Audit] Failed to persist audit event', error)
   }
 }
-
