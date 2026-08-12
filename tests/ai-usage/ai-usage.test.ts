@@ -1,10 +1,20 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { resolveAIUsageDateRange } from '../../server/utils/ai-usage-query'
+import {
+  canonicalAIUsageService,
+  deriveAIUsageTelemetryStatus,
+  resolveAIUsageDateRange
+} from '../../server/utils/ai-usage-query'
 import { toAIUsageAccountScope } from '../../server/utils/ai-usage-scope'
 import { selectMantleDetailMetrics } from '../../server/utils/ai-usage-collector'
-import { isAIUsageTableMissing, withAIUsageFactKeys } from '../../server/utils/ai-usage-storage'
-import { emptyAIUsageMetrics } from '../../shared/types/ai-usage'
+import { classifyAIUsageCollectionFailure } from '../../server/utils/ai-usage-failures'
+import {
+  isAIUsageTableMissing,
+  withAIUsageCollectionMarkerKeys,
+  withAIUsageFactKeys
+} from '../../server/utils/ai-usage-storage'
+import { summarizeAIUsageCostDriverPeriods } from '../../server/utils/ai-usage-cost-drivers'
+import { aiUsageErrorRate, emptyAIUsageMetrics } from '../../shared/types/ai-usage'
 
 test('pairs Commercial and GovCloud accounts into one enclave scope', () => {
   const scope = toAIUsageAccountScope({
@@ -78,4 +88,67 @@ test('only missing-table errors are treated as an empty undeployed data source',
   assert.equal(isAIUsageTableMissing({ name: 'ResourceNotFoundException' }), true)
   assert.equal(isAIUsageTableMissing(new Error('Requested resource not found')), true)
   assert.equal(isAIUsageTableMissing(new Error('Access denied')), false)
+})
+
+test('collection markers persist successful zero-activity account-region targets', () => {
+  const marker = withAIUsageCollectionMarkerKeys({
+    recordType: 'collection-marker',
+    bucket: '2026-08-11',
+    environment: 'commercial',
+    enclaveId: '111111111111',
+    enclaveName: 'Zero Usage',
+    accountId: '111111111111',
+    region: 'us-east-1',
+    status: 'complete',
+    collectedAt: '2026-08-11T15:00:00Z',
+    ttl: 1
+  })
+  assert.equal(marker.pk, 'COMMERCIAL#111111111111')
+  assert.equal(marker.sk, 'M#2026-08-11#us-east-1')
+})
+
+test('telemetry states distinguish zero usage, partial, unavailable, and cost-only data', () => {
+  assert.equal(deriveAIUsageTelemetryStatus({ telemetryCapable: true, hasTelemetryFacts: false, hasCostFacts: false, targets: 2, targetsCollected: 2 }), 'complete')
+  assert.equal(deriveAIUsageTelemetryStatus({ telemetryCapable: true, hasTelemetryFacts: true, hasCostFacts: false, targets: 2, targetsCollected: 1 }), 'partial')
+  assert.equal(deriveAIUsageTelemetryStatus({ telemetryCapable: true, hasTelemetryFacts: false, hasCostFacts: false, targets: 2, targetsCollected: 0 }), 'unavailable')
+  assert.equal(deriveAIUsageTelemetryStatus({ telemetryCapable: false, hasTelemetryFacts: false, hasCostFacts: true, targets: 0, targetsCollected: 0 }), 'cost-only')
+})
+
+test('Bedrock billing has one parent service while Runtime and Mantle remain sources', () => {
+  assert.equal(canonicalAIUsageService('Amazon Bedrock Runtime', 'bedrock-runtime'), 'Amazon Bedrock')
+  assert.equal(canonicalAIUsageService('Amazon Bedrock Mantle', 'bedrock-mantle'), 'Amazon Bedrock')
+  assert.equal(canonicalAIUsageService('Amazon Bedrock Service', 'bedrock-cost'), 'Amazon Bedrock')
+})
+
+test('Capstone SageMaker cost remains cost-only with actionable driver totals', () => {
+  const summary = summarizeAIUsageCostDriverPeriods([{
+    Groups: [{
+      Keys: ['USE1-Hosting:ml.g5.2xlarge', 'RunInstance'],
+      Metrics: { UnblendedCost: { Amount: '2030', Unit: 'USD' } }
+    }]
+  }])
+  assert.equal(summary.groupedCost, 2030)
+  assert.equal(summary.usageTypes[0]?.cost, 2030)
+  assert.equal(deriveAIUsageTelemetryStatus({ telemetryCapable: false, hasTelemetryFacts: false, hasCostFacts: true, targets: 0, targetsCollected: 0 }), 'cost-only')
+})
+
+test('error rate includes client, server, and throttle failures in attempts', () => {
+  const metrics = { ...emptyAIUsageMetrics(), invocations: 90, clientErrors: 4, serverErrors: 3, throttles: 3 }
+  assert.equal(aiUsageErrorRate(metrics), 10)
+})
+
+test('DynamoDB-only accounts retain cost scope but are excluded from telemetry targets', () => {
+  const scope = toAIUsageAccountScope({
+    accountId: '111111111111',
+    name: 'Historical account',
+    source: 'dynamodb'
+  })
+  assert.equal(scope?.telemetryEligible, false)
+  assert.equal(scope?.members.length, 1)
+})
+
+test('collector failures provide actionable categories', () => {
+  const failure = classifyAIUsageCollectionFailure('AccessDenied for cloudwatch:ListMetrics')
+  assert.equal(failure.category, 'CloudWatch permission')
+  assert.match(failure.remediation, /ListMetrics/)
 })

@@ -19,6 +19,7 @@ export type DatasetQueryMode = 'preview' | 'export'
 
 export interface DatasetQueryOptions {
   mode?: DatasetQueryMode
+  environment?: 'commercial' | 'govcloud'
   limit?: number
   maxScanned?: number
   signal?: AbortSignal

@@ -25,16 +25,27 @@ export default defineEventHandler(handleAsync(async event => {
   }
   const overview = await queryAIUsage(input)
   const headers = [
-    'Group', 'Label', 'Environment', 'Account', 'Provider', 'Services', 'Project', 'Model', 'Region', 'Telemetry Available',
+    'Group', 'Label', 'Environment', 'Accounts', 'Provider', 'Services', 'Project', 'Model', 'Region', 'Telemetry Status',
+    'Targets Collected', 'Targets Expected',
     'Invocations', 'Input Tokens', 'Output Tokens', 'Client Errors', 'Server Errors', 'Throttles',
     'Actual Cost USD', 'Estimated Unbilled Cost USD', 'Estimate Coverage Percent', 'Last Seen'
   ]
-  const rows = overview.breakdown.map(row => [
-    row.key, row.label, row.environment, row.accountId, row.provider, row.services.join('; '), row.projectId, row.modelId, row.region, row.telemetryAvailable,
-    row.metrics.invocations, row.metrics.inputTokens, row.metrics.outputTokens, row.metrics.clientErrors,
-    row.metrics.serverErrors, row.metrics.throttles, row.cost.actual.toFixed(6), row.cost.estimated.toFixed(6),
-    row.cost.estimateCoveragePercent?.toFixed(2), row.lastSeen
-  ])
+  const rows = overview.breakdown.map(row => {
+    const telemetryAvailable = row.telemetryStatus === 'complete' || row.telemetryStatus === 'partial'
+    return [
+      row.key, row.label, row.environment, row.accountIds.join('; '), row.provider, row.services.join('; '), row.projectId, row.modelId, row.region, row.telemetryStatus,
+      row.telemetryTargetsCollected, row.telemetryTargets,
+      telemetryAvailable ? row.metrics.invocations : '',
+      telemetryAvailable ? row.metrics.inputTokens : '',
+      telemetryAvailable ? row.metrics.outputTokens : '',
+      telemetryAvailable ? row.metrics.clientErrors : '',
+      telemetryAvailable ? row.metrics.serverErrors : '',
+      telemetryAvailable ? row.metrics.throttles : '',
+      row.actualCostAvailable ? row.cost.actual.toFixed(6) : '',
+      row.estimatedCostAvailable ? row.cost.estimated.toFixed(6) : '',
+      row.cost.estimateCoveragePercent?.toFixed(2), row.lastSeen
+    ]
+  })
   const content = [headers, ...rows].map(row => row.map(csv).join(',')).join('\n')
   setResponseHeaders(event, {
     'content-type': 'text/csv; charset=utf-8',

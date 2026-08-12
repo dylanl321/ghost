@@ -4,19 +4,31 @@ import {
   type Dimension,
   type Metric
 } from '@aws-sdk/client-cloudwatch'
-import type { AIUsageEnvironment, AIUsageFact, AIUsageGranularity, AIUsageMetrics, AIUsageProvider } from '../../shared/types/ai-usage'
+import type {
+  AIUsageCollectionMarker,
+  AIUsageEnvironment,
+  AIUsageFact,
+  AIUsageGranularity,
+  AIUsageMetrics,
+  AIUsageProvider
+} from '../../shared/types/ai-usage'
 import { emptyAIUsageMetrics } from '../../shared/types/ai-usage'
 import { getCloudWatchClient } from '../lib/aws-client-factory'
 import { getCostAndUsage } from './cost-explorer'
 import { AI_COST_EXPLORER_SERVICES, isBedrockService } from './ai-service-catalog'
 import { estimateBedrockTokenCost } from './ai-usage-pricing'
-import { findAIUsageScope, resolveAIUsageScopes, type AIUsageAccountScope } from './ai-usage-scope'
+import { findAIUsageScope, getAIUsageRegions, resolveAIUsageScopes, type AIUsageAccountScope } from './ai-usage-scope'
 import {
   getAIUsageCollectorState,
+  saveAIUsageCollectionMarkers,
   saveAIUsageCollectorState,
   saveAIUsageFacts,
+  withAIUsageCollectionMarkerKeys,
+  type AIUsageCollectorFailure,
   withAIUsageFactKeys
 } from './ai-usage-storage'
+import { collectRuntimeErrorCauses } from './ai-usage-error-causes'
+import { classifyAIUsageCollectionFailure } from './ai-usage-failures'
 import { logger } from './logger'
 import { getCacheManager } from './cache-manager'
 
@@ -59,18 +71,6 @@ interface FactAccumulator {
   region: string
   metrics: AIUsageMetrics
   latencyTotal: number
-}
-
-function configuredRegions(environment: AIUsageEnvironment): string[] {
-  const configured = environment === 'commercial'
-    ? process.env.AI_USAGE_COMMERCIAL_REGIONS
-    : process.env.AI_USAGE_GOVCLOUD_REGIONS
-  const defaults = environment === 'commercial'
-    ? ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2']
-    : ['us-gov-west-1', 'us-gov-east-1']
-  return configured
-    ? [...new Set(configured.split(',').map(region => region.trim()).filter(Boolean))]
-    : defaults
 }
 
 function dimensionValue(dimensions: Dimension[] | undefined, name: string): string | undefined {
@@ -216,7 +216,7 @@ async function fetchTelemetryFacts(input: {
             accumulator = {
               bucket,
               provider: stream.provider,
-              service: stream.provider === 'bedrock-runtime' ? 'Amazon Bedrock Runtime' : 'Amazon Bedrock Mantle',
+              service: 'Amazon Bedrock',
               projectId,
               modelId,
               region: input.region,
@@ -347,6 +347,52 @@ async function concurrentMap<T, R>(items: T[], concurrency: number, worker: (ite
   return results
 }
 
+function collectionFailure(input: {
+  environment: AIUsageEnvironment
+  error: unknown
+  accountId?: string
+  enclaveName?: string
+  region?: string
+}): AIUsageCollectorFailure {
+  const message = input.error instanceof Error ? input.error.message : String(input.error)
+  return {
+    environment: input.environment,
+    accountId: input.accountId,
+    enclaveName: input.enclaveName,
+    region: input.region,
+    category: classifyAIUsageCollectionFailure(message).category,
+    message
+  }
+}
+
+function markerDates(start: Date, end: Date): string[] {
+  const dates: string[] = []
+  for (let timestamp = start.getTime(); timestamp <= end.getTime(); timestamp += DAY_MS) {
+    dates.push(new Date(timestamp).toISOString().slice(0, 10))
+  }
+  return dates
+}
+
+function collectionMarker(
+  item: { scope: AIUsageAccountScope; environment: AIUsageEnvironment; accountId: string; region: string },
+  bucket: string,
+  status: AIUsageCollectionMarker['status'],
+  collectedAt: string
+): AIUsageCollectionMarker {
+  return withAIUsageCollectionMarkerKeys({
+    recordType: 'collection-marker',
+    bucket,
+    environment: item.environment,
+    enclaveId: item.scope.enclaveId,
+    enclaveName: item.scope.enclaveName,
+    accountId: item.accountId,
+    region: item.region,
+    status,
+    collectedAt,
+    ttl: factTtl(bucket, 'day')
+  })
+}
+
 export async function collectAIUsage(options: { backfillDays?: number } = {}): Promise<{
   factsWritten: number
   warnings: string[]
@@ -354,26 +400,35 @@ export async function collectAIUsage(options: { backfillDays?: number } = {}): P
 }> {
   const existingState = await getAIUsageCollectorState()
   const initialBackfill = !existingState?.completedAt
+  const initialCauseBackfill = !existingState?.causeCollection?.collectedAt
   const backfillDays = Math.min(400, Math.max(1, options.backfillDays || (initialBackfill ? 400 : 3)))
   const startedAt = new Date().toISOString()
   const warnings: string[] = []
+  const failures: AIUsageCollectorFailure[] = []
   let accountsAttempted = 0
   let accountsSucceeded = 0
+  let uniqueAccountsAttempted = 0
+  let uniqueAccountsSucceeded = 0
   let factsWritten = 0
+  let markersWritten = 0
+  let causesWritten = 0
 
   await saveAIUsageCollectorState({
     pk: 'META', sk: 'COLLECTOR', status: 'running', startedAt,
-    accountsAttempted, accountsSucceeded, factsWritten, warnings: []
+    accountsAttempted, accountsSucceeded, factsWritten, warnings: [], failures: []
   })
 
   try {
     const scopes = await resolveAIUsageScopes()
-    const work = scopes.flatMap(scope => scope.members.flatMap(member =>
-      configuredRegions(member.environment).map(region => ({ scope, ...member, region }))))
+    const work = scopes.filter(scope => scope.telemetryEligible).flatMap(scope => scope.members.flatMap(member =>
+      getAIUsageRegions(member.environment).map(region => ({ scope, ...member, region }))))
     accountsAttempted = work.length
+    uniqueAccountsAttempted = new Set(work.map(item => `${item.environment}#${item.accountId}`)).size
     await saveAIUsageCollectorState({
       pk: 'META', sk: 'COLLECTOR', status: 'running', startedAt,
-      accountsAttempted, accountsSucceeded, factsWritten, warnings: []
+      accountsAttempted, accountsSucceeded, uniqueAccountsAttempted, uniqueAccountsSucceeded,
+      accountRegionTargetsAttempted: accountsAttempted, accountRegionTargetsSucceeded: accountsSucceeded,
+      factsWritten, warnings: [], failures: []
     })
 
     const now = new Date()
@@ -389,31 +444,69 @@ export async function collectAIUsage(options: { backfillDays?: number } = {}): P
     })
 
     const telemetryFacts: AIUsageFact[] = []
-    for (const result of telemetryResults) {
+    const markers: AIUsageCollectionMarker[] = []
+    const collectedAt = new Date().toISOString()
+    const coveredAccounts = new Set<string>()
+    const coveredDates = markerDates(dayStart, todayStart)
+    for (let index = 0; index < telemetryResults.length; index++) {
+      const result = telemetryResults[index]!
+      const item = work[index]!
       if (result.status === 'fulfilled') {
         telemetryFacts.push(...result.value)
         accountsSucceeded++
+        coveredAccounts.add(`${item.environment}#${item.accountId}`)
+        markers.push(...coveredDates.map(bucket => collectionMarker(item, bucket, 'complete', collectedAt)))
       } else {
-        warnings.push(result.reason instanceof Error ? result.reason.message : String(result.reason))
+        const failure = collectionFailure({
+          environment: item.environment,
+          accountId: item.accountId,
+          enclaveName: item.scope.enclaveName,
+          region: item.region,
+          error: result.reason
+        })
+        failures.push(failure)
+        warnings.push(failure.message)
+        markers.push(...coveredDates.map(bucket => collectionMarker(item, bucket, 'unavailable', collectedAt)))
       }
     }
+    uniqueAccountsSucceeded = coveredAccounts.size
 
     const endDate = now.toISOString().slice(0, 10)
     const startDate = new Date(todayStart.getTime() - backfillDays * DAY_MS).toISOString().slice(0, 10)
-    const costResults = await Promise.allSettled([
-      collectCostFacts(scopes, 'commercial', 'billable', startDate, endDate),
-      collectCostFacts(scopes, 'commercial', 'proforma', startDate, endDate),
-      collectCostFacts(scopes, 'govcloud', 'billable', startDate, endDate)
-    ])
+    const costRequests = [
+      { environment: 'commercial' as const, basis: 'billable' as const },
+      { environment: 'commercial' as const, basis: 'proforma' as const },
+      { environment: 'govcloud' as const, basis: 'billable' as const }
+    ]
+    const costResults = await Promise.allSettled(costRequests.map(request =>
+      collectCostFacts(scopes, request.environment, request.basis, startDate, endDate)))
     const costFacts: AIUsageFact[] = []
-    for (const result of costResults) {
+    for (let index = 0; index < costResults.length; index++) {
+      const result = costResults[index]!
       if (result.status === 'fulfilled') costFacts.push(...result.value)
-      else warnings.push(result.reason instanceof Error ? result.reason.message : String(result.reason))
+      else {
+        const failure = collectionFailure({
+          environment: costRequests[index]!.environment,
+          error: result.reason
+        })
+        failures.push(failure)
+        warnings.push(failure.message)
+      }
     }
+
+    const causeResult = await collectRuntimeErrorCauses(scopes, initialCauseBackfill ? 90 : 2)
+    causesWritten = causeResult.causes.length
+    failures.push(...causeResult.failures)
+    warnings.push(...causeResult.failures.map(failure => failure.message))
+    const causeStatuses = Object.values(causeResult.environments)
+    const causeRuntimeStatus = causeStatuses.length > 0 && causeStatuses.every(status => status === 'complete')
+      ? 'complete'
+      : causeStatuses.some(status => status === 'complete') ? 'partial' : 'unavailable'
 
     const facts = [...telemetryFacts, ...costFacts]
     factsWritten = facts.length
-    await saveAIUsageFacts(facts)
+    markersWritten = markers.length
+    await Promise.all([saveAIUsageFacts(facts), saveAIUsageCollectionMarkers(markers)])
     await getCacheManager().invalidateByTags(['ai-usage'])
     const completedAt = new Date().toISOString()
     await saveAIUsageCollectorState({
@@ -422,8 +515,20 @@ export async function collectAIUsage(options: { backfillDays?: number } = {}): P
       startedAt, completedAt,
       accountsAttempted,
       accountsSucceeded,
+      uniqueAccountsAttempted,
+      uniqueAccountsSucceeded,
+      accountRegionTargetsAttempted: accountsAttempted,
+      accountRegionTargetsSucceeded: accountsSucceeded,
       factsWritten,
-      warnings: warnings.slice(0, 50)
+      markersWritten,
+      causesWritten,
+      causeCollection: {
+        runtime: causeRuntimeStatus,
+        collectedAt: completedAt,
+        environments: causeResult.environments
+      },
+      warnings: warnings.slice(0, 100),
+      failures: failures.slice(0, 100)
     })
     logger.info(`[AI Usage] Collection complete: ${factsWritten} facts, ${warnings.length} warning(s)`)
     return { factsWritten, warnings, initialBackfill }
@@ -431,7 +536,15 @@ export async function collectAIUsage(options: { backfillDays?: number } = {}): P
     const message = error instanceof Error ? error.message : String(error)
     await saveAIUsageCollectorState({
       pk: 'META', sk: 'COLLECTOR', status: 'error', startedAt, completedAt: new Date().toISOString(),
-      accountsAttempted, accountsSucceeded, factsWritten, warnings: [...warnings, message].slice(0, 50)
+      accountsAttempted, accountsSucceeded, uniqueAccountsAttempted, uniqueAccountsSucceeded,
+      accountRegionTargetsAttempted: accountsAttempted, accountRegionTargetsSucceeded: accountsSucceeded,
+      factsWritten, markersWritten, causesWritten,
+      warnings: [...warnings, message].slice(0, 100),
+      failures: [...failures, {
+        environment: 'commercial',
+        category: classifyAIUsageCollectionFailure(message).category,
+        message
+      }].slice(0, 100)
     }).catch(() => {})
     throw error
   }

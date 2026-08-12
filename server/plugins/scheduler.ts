@@ -247,15 +247,15 @@ export default defineNitroPlugin(async () => {
 
   if (AI_USAGE_COLLECTION_ENABLED) {
     aiUsageJob = new Cron('10 * * * *', async () => {
-      const hourKey = new Date().toISOString().substring(0, 13)
+      const lockKey = 'active'
       const start = performance.now()
       markJobRunning('ai-usage-collector')
       try {
-        const locked = await claimExecutionLock('ai-usage-collector', hourKey)
+        const locked = await claimExecutionLock('ai-usage-collector', lockKey)
         if (!locked) return
         const { collectAIUsage } = await import('../utils/ai-usage-collector')
         const result = await collectAIUsage()
-        await releaseExecutionLock('ai-usage-collector', hourKey)
+        await releaseExecutionLock('ai-usage-collector', lockKey)
         logJobCompletion('ai-usage-collector', 'success', performance.now() - start, {
           factsWritten: result.factsWritten,
           warnings: result.warnings.length,
@@ -269,7 +269,7 @@ export default defineNitroPlugin(async () => {
         })
       } catch (error) {
         logger.error('[AI Usage] Hourly collection failed:', error)
-        await releaseExecutionLock('ai-usage-collector', hourKey).catch(() => {})
+        await releaseExecutionLock('ai-usage-collector', lockKey).catch(() => {})
         logJobCompletion('ai-usage-collector', 'error', performance.now() - start)
         writeSourceHeartbeat('ai-usage-collector', {
           lastRun: new Date().toISOString(),

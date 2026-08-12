@@ -4,6 +4,7 @@ export type AIUsageProvider = 'bedrock-runtime' | 'bedrock-mantle' | 'bedrock-co
 export type AIUsageCostBasis = 'billable' | 'proforma'
 export type AIUsageGranularity = 'hour' | 'day'
 export type AIUsageGroupBy = 'enclave' | 'account' | 'environment' | 'provider' | 'service' | 'project' | 'model' | 'region' | 'day'
+export type AIUsageTelemetryStatus = 'complete' | 'partial' | 'unavailable' | 'cost-only'
 
 export interface AIUsageMetrics {
   invocations: number
@@ -56,6 +57,41 @@ export interface AIUsageFact {
   ttl: number
 }
 
+export interface AIUsageCollectionMarker {
+  pk: string
+  sk: string
+  recordType: 'collection-marker'
+  bucket: string
+  environment: AIUsageEnvironment
+  enclaveId: string
+  enclaveName: string
+  accountId: string
+  region: string
+  status: 'complete' | 'unavailable'
+  collectedAt: string
+  ttl: number
+}
+
+export interface AIUsageErrorCause {
+  pk: string
+  sk: string
+  recordType: 'error-cause'
+  eventId: string
+  environment: AIUsageEnvironment
+  enclaveId: string
+  enclaveName: string
+  accountId: string
+  region: string
+  source: 'bedrock-runtime'
+  modelId?: string
+  operation: string
+  errorCode: string
+  errorMessage?: string
+  callerIdentity?: string
+  timestamp: string
+  ttl: number
+}
+
 export interface AIUsageFilters {
   startDate: string
   endDate: string
@@ -95,8 +131,14 @@ export interface AIUsageBreakdownRow {
   projectId?: string
   modelId?: string
   region?: string
+  accountIds: string[]
   services: string[]
-  telemetryAvailable: boolean
+  sources: AIUsageProvider[]
+  telemetryStatus: AIUsageTelemetryStatus
+  telemetryTargets: number
+  telemetryTargetsCollected: number
+  actualCostAvailable: boolean
+  estimatedCostAvailable: boolean
   metrics: AIUsageMetrics
   cost: AIUsageCost
   active: boolean
@@ -127,6 +169,11 @@ export interface AIUsageDataQuality {
   collectedAt: string | null
   actualCostThrough: string | null
   telemetryCoveragePercent: number
+  accountCoveragePercent: number
+  accountsCollected: number
+  accountsTargeted: number
+  accountRegionTargetsCollected: number
+  accountRegionTargets: number
   estimateCoveragePercent: number | null
   partial: boolean
   warnings: string[]
@@ -139,13 +186,61 @@ export interface AIUsageOverviewResponse {
   trend: AIUsageTrendPoint[]
   breakdown: AIUsageBreakdownRow[]
   analysis: {
-    byAccount: AIUsageBreakdownRow[]
+    byEnclave: AIUsageBreakdownRow[]
     byModel: AIUsageBreakdownRow[]
     byProvider: AIUsageBreakdownRow[]
     byService: AIUsageBreakdownRow[]
   }
   options: AIUsageOptions
   dataQuality: AIUsageDataQuality
+}
+
+export interface AIUsageErrorCauseGroup {
+  key: string
+  errorCode: string
+  operation: string
+  message?: string
+  count: number
+  affectedAccounts: number
+  affectedModels: number
+}
+
+export interface AIUsageErrorCauseResponse {
+  metricErrorTotal: number
+  matchedCloudTrailEvents: number
+  affectedAccounts: Array<{ accountId: string; enclaveName: string; count: number }>
+  affectedModels: Array<{ modelId: string; count: number }>
+  groups: AIUsageErrorCauseGroup[]
+  recentExamples: AIUsageErrorCause[]
+  sourceAvailability: {
+    runtime: 'available' | 'partial' | 'unavailable'
+    mantle: 'unavailable'
+    mantleMessage: string
+  }
+}
+
+export interface AIUsageCostDriverRow {
+  key: string
+  label: string
+  cost: number
+  usageType?: string
+  operation?: string
+}
+
+export interface AIUsageCostDriverResource {
+  resourceId: string
+  cost: number
+}
+
+export interface AIUsageCostDriverResponse {
+  service: string
+  totalCost: number
+  usageTypes: AIUsageCostDriverRow[]
+  operations: AIUsageCostDriverRow[]
+  combinations: AIUsageCostDriverRow[]
+  resources: AIUsageCostDriverResource[]
+  resourceDataAvailable: boolean
+  resourceDataMessage?: string
 }
 
 export function emptyAIUsageMetrics(): AIUsageMetrics {
@@ -162,4 +257,14 @@ export function emptyAIUsageMetrics(): AIUsageMetrics {
     latencySamples: 0,
     outputImages: 0
   }
+}
+
+export function aiUsageErrorCount(metrics: AIUsageMetrics): number {
+  return metrics.clientErrors + metrics.serverErrors + metrics.throttles
+}
+
+export function aiUsageErrorRate(metrics: AIUsageMetrics): number {
+  const errors = aiUsageErrorCount(metrics)
+  const attempts = metrics.invocations + errors
+  return attempts ? (errors / attempts) * 100 : 0
 }

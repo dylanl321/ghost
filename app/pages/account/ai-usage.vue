@@ -7,12 +7,10 @@
           Organization adoption
         </div>
         <h1 class="text-2xl font-semibold text-gray-950 dark:text-white">AI Usage</h1>
-        <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          {{ scopeLabel }} · {{ periodLabel }}
-        </p>
+        <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">{{ scopeLabel }} · {{ periodLabel }}</p>
       </div>
       <div class="flex items-center gap-2">
-        <UTooltip text="Export current view">
+        <UTooltip text="Export current tab">
           <UButton color="gray" variant="soft" icon="i-heroicons-arrow-down-tray" @click="exportCsv" />
         </UTooltip>
         <UTooltip text="Refresh snapshot">
@@ -45,7 +43,7 @@
           <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Cost basis</label>
           <USelect v-model="costBasis" :options="costBasisOptions" size="sm" />
         </div>
-        <div class="min-w-[260px] flex-1 xl:max-w-md">
+        <div class="min-w-[250px] flex-1 xl:max-w-md">
           <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Accounts</label>
           <USelectMenu
             v-model="selectedAccounts"
@@ -58,10 +56,6 @@
             placeholder="All enclaves"
           />
         </div>
-        <div class="w-40">
-          <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Group by</label>
-          <USelect v-model="groupBy" :options="groupByOptions" size="sm" />
-        </div>
         <UPopover>
           <UButton color="gray" variant="soft" icon="i-heroicons-adjustments-horizontal" size="sm">
             Filters
@@ -69,7 +63,7 @@
           </UButton>
           <template #panel>
             <div class="grid w-[min(92vw,720px)] gap-4 p-4 sm:grid-cols-2">
-              <FilterSelect v-model="providers" label="Provider" :options="providerOptions" />
+              <FilterSelect v-model="providers" label="Telemetry source" :options="providerOptions" />
               <FilterSelect v-model="services" label="Service" :options="stringOptions(data?.options.services)" />
               <FilterSelect v-model="projects" label="Mantle project" :options="stringOptions(data?.options.projects)" />
               <FilterSelect v-model="models" label="Model" :options="stringOptions(data?.options.models)" />
@@ -94,19 +88,19 @@
       :description="error"
     />
     <UAlert
-      v-else-if="data?.dataQuality.partial"
-      color="amber"
+      v-else-if="data"
+      :color="data.dataQuality.partial ? 'amber' : 'green'"
       variant="soft"
-      icon="i-heroicons-exclamation-triangle"
-      title="Coverage is incomplete"
-      description="The totals below include all available snapshots. Collection details are available to administrators."
+      :icon="data.dataQuality.partial ? 'i-heroicons-exclamation-triangle' : 'i-heroicons-check-circle'"
+      :title="freshnessMessage"
+      :description="accountCoverageMessage"
     />
 
     <template v-if="loading && !data">
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
         <USkeleton v-for="index in 6" :key="index" class="h-28" />
       </div>
-      <USkeleton class="h-80" />
+      <USkeleton class="h-72" />
       <USkeleton class="h-96" />
     </template>
 
@@ -117,56 +111,11 @@
             <div class="min-w-0">
               <p class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400">{{ metric.label }}</p>
               <p class="mt-2 text-xl font-semibold tabular-nums text-gray-950 dark:text-white">{{ metric.value }}</p>
-              <p class="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">{{ metric.note }}</p>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ metric.note }}</p>
             </div>
             <UIcon :name="metric.icon" class="h-5 w-5 flex-none" :class="metric.color" />
           </div>
         </UCard>
-      </section>
-
-      <section class="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-        <header class="flex flex-col gap-3 border-b border-gray-200 p-4 dark:border-gray-800 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 class="font-semibold text-gray-950 dark:text-white">Usage and error analysis</h2>
-            <p class="text-sm text-gray-500 dark:text-gray-400">{{ analysisRows.length }} {{ analysisLabel.toLowerCase() }} row{{ analysisRows.length === 1 ? '' : 's' }}</p>
-          </div>
-          <UTabs v-model="analysisView" :items="analysisTabs" />
-        </header>
-        <div v-if="!analysisRows.length" class="py-16 text-center text-sm text-gray-500 dark:text-gray-400">No analysis data is available for this scope.</div>
-        <div v-else class="max-h-[560px] overflow-auto">
-          <table class="w-full min-w-[1180px] text-left text-sm">
-            <thead class="sticky top-0 z-10 border-b border-gray-200 bg-gray-50 text-xs text-gray-500 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400">
-              <tr>
-                <th class="px-4 py-3 font-medium">{{ analysisLabel }}</th>
-                <th class="px-3 py-3 text-right font-medium">Invocations</th>
-                <th class="px-3 py-3 text-right font-medium">Tokens</th>
-                <th class="px-3 py-3 text-right font-medium">Client errors</th>
-                <th class="px-3 py-3 text-right font-medium">Server errors</th>
-                <th class="px-3 py-3 text-right font-medium">Throttles</th>
-                <th class="px-3 py-3 text-right font-medium">Error rate</th>
-                <th class="px-4 py-3 text-right font-medium">Actual cost</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-              <tr v-for="row in analysisRows" :key="row.key" class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                <td class="px-4 py-3">
-                  <p class="max-w-[340px] truncate font-medium text-gray-950 dark:text-white">{{ analysisView === 2 ? providerLabel(row.label) : row.label }}</p>
-                  <div class="mt-1 flex items-center gap-1.5">
-                    <UBadge v-if="row.environment" :color="row.environment === 'govcloud' ? 'amber' : 'blue'" variant="soft" size="xs">{{ row.environment }}</UBadge>
-                    <span class="max-w-[300px] truncate text-xs text-gray-500 dark:text-gray-400">{{ row.services.join(', ') }}</span>
-                  </div>
-                </td>
-                <td class="px-3 py-3 text-right tabular-nums">{{ row.telemetryAvailable ? compact(row.metrics.invocations) : '—' }}</td>
-                <td class="px-3 py-3 text-right tabular-nums">{{ row.telemetryAvailable ? compact(row.metrics.inputTokens + row.metrics.outputTokens) : '—' }}</td>
-                <td class="px-3 py-3 text-right tabular-nums" :class="row.metrics.clientErrors ? 'text-red-600 dark:text-red-400' : 'text-gray-500'">{{ row.telemetryAvailable ? compact(row.metrics.clientErrors) : '—' }}</td>
-                <td class="px-3 py-3 text-right tabular-nums" :class="row.metrics.serverErrors ? 'text-red-600 dark:text-red-400' : 'text-gray-500'">{{ row.telemetryAvailable ? compact(row.metrics.serverErrors) : '—' }}</td>
-                <td class="px-3 py-3 text-right tabular-nums" :class="row.metrics.throttles ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500'">{{ row.telemetryAvailable ? compact(row.metrics.throttles) : '—' }}</td>
-                <td class="px-3 py-3 text-right tabular-nums" :class="errorRate(row) > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500'">{{ row.telemetryAvailable ? `${errorRate(row).toFixed(2)}%` : '—' }}</td>
-                <td class="px-4 py-3 text-right tabular-nums">{{ money(row.cost.actual) }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
       </section>
 
       <section class="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
@@ -175,60 +124,13 @@
             <h2 class="font-semibold text-gray-950 dark:text-white">Adoption trend</h2>
             <p class="text-sm text-gray-500 dark:text-gray-400">Daily active enclaves and inference volume</p>
           </div>
-          <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-            <span v-if="data.dataQuality.actualCostThrough">Actuals through {{ data.dataQuality.actualCostThrough }}</span>
-            <span v-if="data.dataQuality.collectedAt">· Snapshot {{ relativeTime(data.dataQuality.collectedAt) }}</span>
-          </div>
+          <p v-if="data.dataQuality.collectedAt" class="text-xs text-gray-500 dark:text-gray-400">Snapshot {{ relativeTime(data.dataQuality.collectedAt) }}</p>
         </header>
         <VChart v-if="data.trend.length" :option="trendOption" class="h-72" autoresize />
         <div v-else class="py-20 text-center text-sm text-gray-500 dark:text-gray-400">No AI activity was found for this scope.</div>
       </section>
 
-      <section class="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-        <header class="flex flex-col gap-3 border-b border-gray-200 p-4 dark:border-gray-800 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 class="font-semibold text-gray-950 dark:text-white">{{ groupLabel }} breakdown</h2>
-            <p class="text-sm text-gray-500 dark:text-gray-400">{{ filteredRows.length }} row{{ filteredRows.length === 1 ? '' : 's' }}</p>
-          </div>
-          <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Search breakdown" class="sm:w-72" size="sm" />
-        </header>
-        <div v-if="!filteredRows.length" class="py-20 text-center text-sm text-gray-500 dark:text-gray-400">No rows match this view.</div>
-        <div v-else class="overflow-x-auto">
-          <table class="w-full min-w-[1100px] text-left text-sm">
-            <thead class="border-b border-gray-200 text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
-              <tr>
-                <th class="px-4 py-3 font-medium">{{ groupLabel }}</th>
-                <th class="px-3 py-3 text-right font-medium">Invocations</th>
-                <th class="px-3 py-3 text-right font-medium">Input tokens</th>
-                <th class="px-3 py-3 text-right font-medium">Output tokens</th>
-                <th class="px-3 py-3 text-right font-medium">Errors</th>
-                <th class="px-3 py-3 text-right font-medium">Actual</th>
-                <th class="px-3 py-3 text-right font-medium">Unbilled est.</th>
-                <th class="px-4 py-3 text-right font-medium">Last seen</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-              <tr v-for="row in filteredRows" :key="row.key" class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                <td class="px-4 py-3">
-                  <p class="max-w-[360px] truncate font-medium text-gray-950 dark:text-white">{{ row.label }}</p>
-                  <div class="mt-1 flex items-center gap-1.5">
-                    <UBadge v-if="row.environment" :color="row.environment === 'govcloud' ? 'amber' : 'blue'" variant="soft" size="xs">{{ row.environment }}</UBadge>
-                    <span v-if="row.accountId" class="font-mono text-xs text-gray-500">{{ row.accountId }}</span>
-                  </div>
-                  <p class="mt-1 max-w-[360px] truncate text-xs text-gray-500 dark:text-gray-400">{{ row.services.join(', ') }}</p>
-                </td>
-                <td class="px-3 py-3 text-right tabular-nums">{{ row.telemetryAvailable ? compact(row.metrics.invocations) : '—' }}</td>
-                <td class="px-3 py-3 text-right tabular-nums">{{ row.telemetryAvailable ? compact(row.metrics.inputTokens) : '—' }}</td>
-                <td class="px-3 py-3 text-right tabular-nums">{{ row.telemetryAvailable ? compact(row.metrics.outputTokens) : '—' }}</td>
-                <td class="px-3 py-3 text-right tabular-nums" :class="row.telemetryAvailable && errorCount(row) ? 'text-red-600 dark:text-red-400' : 'text-gray-500'">{{ row.telemetryAvailable ? compact(errorCount(row)) : '—' }}</td>
-                <td class="px-3 py-3 text-right tabular-nums">{{ money(row.cost.actual) }}</td>
-                <td class="px-3 py-3 text-right tabular-nums text-amber-700 dark:text-amber-400">{{ row.cost.estimated ? money(row.cost.estimated) : '—' }}</td>
-                <td class="px-4 py-3 text-right text-xs text-gray-500 dark:text-gray-400">{{ row.lastSeen ? formatDate(row.lastSeen) : '—' }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <UsageAnalysisTable :analysis="data.analysis" :query="apiParams(false)" @view-change="exportGroupBy = $event" />
     </template>
   </div>
 </template>
@@ -244,7 +146,6 @@ import VChart from 'vue-echarts'
 import { definePageMeta, useRoute, useRouter } from '#imports'
 import FilterSelect from '~/components/ai-usage/FilterSelect.vue'
 import type {
-  AIUsageBreakdownRow,
   AIUsageCostBasis,
   AIUsageEnvironmentFilter,
   AIUsageGroupBy,
@@ -253,16 +154,13 @@ import type {
 } from '#shared/types/ai-usage'
 
 echarts.use([LineChart, BarChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
-
 definePageMeta({ middleware: 'auth', title: 'AI Usage' })
 
 const route = useRoute()
 const router = useRouter()
-
 const environment = ref<AIUsageEnvironmentFilter>((route.query.environment as AIUsageEnvironmentFilter) || 'all')
 const period = ref((route.query.period as string) || 'last30days')
 const costBasis = ref<AIUsageCostBasis>((route.query.costBasis as AIUsageCostBasis) || 'proforma')
-const groupBy = ref<AIUsageGroupBy>((route.query.groupBy as AIUsageGroupBy) || 'enclave')
 const selectedAccounts = ref(queryList('accountIds'))
 const providers = ref<AIUsageProvider[]>(queryList('providers') as AIUsageProvider[])
 const services = ref(queryList('services'))
@@ -271,13 +169,12 @@ const models = ref(queryList('models'))
 const regions = ref(queryList('regions'))
 const linesOfBusiness = ref(queryList('linesOfBusiness'))
 const departments = ref(queryList('departments'))
-const search = ref('')
 const loading = ref(true)
 const error = ref<string | null>(null)
 const data = ref<AIUsageOverviewResponse | null>(null)
-const analysisView = ref(0)
-let timer: ReturnType<typeof setTimeout> | null = null
+const exportGroupBy = ref<AIUsageGroupBy>('enclave')
 const accountsResponse = ref<any>(null)
+let timer: ReturnType<typeof setTimeout> | null = null
 
 const accounts = computed<any[]>(() => {
   const raw = accountsResponse.value?.data || accountsResponse.value
@@ -287,7 +184,7 @@ const accountOptions = computed(() => accounts.value.map(account => {
   const value = account.accountId || account.awsStandardAccountID || account.id
   const name = account.accountName || account.projectName || account.name || account.pepCloudRecordName || value
   const gov = account.govCloudAccountId || account.awsGovCloudAccountID
-  return { label: `${name} · ${value}${gov ? ' + GovCloud' : ''}`, value }
+  return { label: `${name} · ${value}${gov ? ` · ${gov}` : ''}`, value }
 }).filter(option => option.value))
 
 const environmentOptions = [
@@ -308,28 +205,9 @@ const costBasisOptions = [
   { label: 'Proforma + Gov billable', value: 'proforma' },
   { label: 'Billable', value: 'billable' }
 ]
-const groupByOptions = [
-  { label: 'Enclave', value: 'enclave' },
-  { label: 'AWS account', value: 'account' },
-  { label: 'Environment', value: 'environment' },
-  { label: 'Provider', value: 'provider' },
-  { label: 'Service', value: 'service' },
-  { label: 'Mantle project', value: 'project' },
-  { label: 'Model', value: 'model' },
-  { label: 'Region', value: 'region' },
-  { label: 'Day', value: 'day' }
-]
 const providerOptions = [
   { label: 'Bedrock Runtime', value: 'bedrock-runtime' },
-  { label: 'Bedrock Mantle', value: 'bedrock-mantle' },
-  { label: 'Bedrock cost', value: 'bedrock-cost' },
-  { label: 'Other AWS AI', value: 'aws-ai-service' }
-]
-const analysisTabs = [
-  { label: 'Accounts', icon: 'i-heroicons-building-office-2' },
-  { label: 'Models', icon: 'i-heroicons-cpu-chip' },
-  { label: 'Sources', icon: 'i-heroicons-circle-stack' },
-  { label: 'Services', icon: 'i-heroicons-squares-2x2' }
+  { label: 'Bedrock Mantle', value: 'bedrock-mantle' }
 ]
 
 const activeFilterCount = computed(() => [providers, services, projects, models, regions, linesOfBusiness, departments]
@@ -338,49 +216,50 @@ const scopeLabel = computed(() => selectedAccounts.value.length
   ? `${selectedAccounts.value.length} enclave${selectedAccounts.value.length === 1 ? '' : 's'}`
   : environment.value === 'all' ? 'All environments' : environment.value === 'commercial' ? 'Commercial' : 'GovCloud')
 const periodLabel = computed(() => data.value?.filters.periodLabel || periodOptions.find(option => option.value === period.value)?.label || 'Custom')
-const groupLabel = computed(() => groupByOptions.find(option => option.value === groupBy.value)?.label || 'Enclave')
-const analysisLabel = computed(() => analysisTabs[analysisView.value]?.label || 'Accounts')
-const analysisRows = computed(() => {
-  if (!data.value) return []
-  if (analysisView.value === 1) return data.value.analysis.byModel.filter(row => row.telemetryAvailable)
-  if (analysisView.value === 2) return data.value.analysis.byProvider
-  if (analysisView.value === 3) return data.value.analysis.byService
-  return data.value.analysis.byAccount
+const telemetrySummaryAvailable = computed(() => Boolean(data.value?.dataQuality.accountRegionTargetsCollected))
+const actualSummaryAvailable = computed(() => Boolean(data.value?.dataQuality.actualCostThrough) &&
+  providers.value.length === 0 && projects.value.length === 0 && models.value.length === 0 && regions.value.length === 0)
+const freshnessMessage = computed(() => {
+  if (!data.value) return ''
+  const quality = data.value.dataQuality
+  const coverage = `${quality.telemetryCoveragePercent.toFixed(0)}% of account-region targets collected`
+  const costs = quality.actualCostThrough ? `costs complete through ${formatShortDate(quality.actualCostThrough)}` : 'cost freshness unavailable'
+  return `${coverage}; ${costs}.`
 })
-
+const accountCoverageMessage = computed(() => {
+  if (!data.value) return ''
+  const quality = data.value.dataQuality
+  return `${quality.accountsCollected} of ${quality.accountsTargeted} unique accounts have telemetry coverage.`
+})
 const summaryMetrics = computed(() => {
   const summary = data.value!.summary
   const tokenTotal = summary.metrics.inputTokens + summary.metrics.outputTokens
+  const telemetry = telemetrySummaryAvailable.value
+  const estimateCapable = services.value.length === 0 || services.value.some(service => service === 'Amazon Bedrock')
+  const estimateAvailable = telemetry && estimateCapable && (tokenTotal === 0 || (summary.cost.estimateCoveragePercent || 0) > 0)
   return [
     { label: 'Active enclaves', value: number(summary.activeEnclaves), note: growth(summary.growthPercent), icon: 'i-heroicons-building-office-2', color: 'text-emerald-600' },
-    { label: 'Mantle projects', value: number(summary.activeProjects), note: `${number(summary.activeModels)} active models`, icon: 'i-heroicons-folder-open', color: 'text-blue-600' },
-    { label: 'Invocations', value: compact(summary.metrics.invocations), note: `${compact(summary.metrics.clientErrors + summary.metrics.serverErrors + summary.metrics.throttles)} errors or throttles`, icon: 'i-heroicons-bolt', color: 'text-violet-600' },
-    { label: 'Tokens', value: compact(tokenTotal), note: `${compact(summary.metrics.inputTokens)} in · ${compact(summary.metrics.outputTokens)} out`, icon: 'i-heroicons-circle-stack', color: 'text-cyan-600' },
-    { label: 'Actual spend', value: money(summary.cost.actual), note: costBasis.value === 'proforma' ? 'Commercial proforma + Gov billable' : 'Billable actual', icon: 'i-heroicons-banknotes', color: 'text-green-600' },
-    { label: 'Unbilled estimate', value: summary.cost.estimated ? money(summary.cost.estimated) : '—', note: coverage(summary.cost.estimateCoveragePercent), icon: 'i-heroicons-calculator', color: 'text-amber-600' }
+    { label: 'Mantle projects', value: telemetry ? number(summary.activeProjects) : '—', note: telemetry ? `${number(summary.activeModels)} active models` : 'Telemetry unavailable', icon: 'i-heroicons-folder-open', color: 'text-blue-600' },
+    { label: 'Invocations', value: telemetry ? compact(summary.metrics.invocations) : '—', note: telemetry ? `${compact(summary.metrics.clientErrors + summary.metrics.serverErrors + summary.metrics.throttles)} errors or throttles` : 'Telemetry unavailable', icon: 'i-heroicons-bolt', color: 'text-red-600' },
+    { label: 'Tokens', value: telemetry ? compact(tokenTotal) : '—', note: telemetry ? `${compact(summary.metrics.inputTokens)} in · ${compact(summary.metrics.outputTokens)} out` : 'Telemetry unavailable', icon: 'i-heroicons-circle-stack', color: 'text-cyan-600' },
+    { label: 'Actual spend', value: actualSummaryAvailable.value ? money(summary.cost.actual) : '—', note: actualSummaryAvailable.value ? (costBasis.value === 'proforma' ? 'Commercial proforma + Gov billable' : 'Billable actual') : 'Not allocatable to active telemetry filters', icon: 'i-heroicons-banknotes', color: 'text-green-600' },
+    { label: 'Unbilled estimate', value: estimateAvailable ? money(summary.cost.estimated) : '—', note: estimateAvailable ? coverage(summary.cost.estimateCoveragePercent) : 'Estimate unavailable for this scope', icon: 'i-heroicons-calculator', color: 'text-amber-600' }
   ]
 })
-
 const trendOption = computed(() => ({
   tooltip: { trigger: 'axis' },
   legend: { data: ['Active enclaves', 'Invocations'], textStyle: { color: '#9ca3af' } },
   grid: { left: 52, right: 52, top: 42, bottom: 36 },
-  xAxis: { type: 'category', data: data.value?.trend.map(point => point.date) || [], axisLabel: { color: '#9ca3af' }, axisLine: { lineStyle: { color: '#374151' } } },
+  xAxis: { type: 'category', data: data.value?.trend.map(point => point.date) || [], axisLabel: { color: '#9ca3af' }, axisLine: { lineStyle: { color: '#6b7280' } } },
   yAxis: [
-    { type: 'value', minInterval: 1, axisLabel: { color: '#9ca3af' }, splitLine: { lineStyle: { color: '#1f2937' } } },
+    { type: 'value', minInterval: 1, axisLabel: { color: '#9ca3af' }, splitLine: { lineStyle: { color: '#d1d5db' } } },
     { type: 'value', axisLabel: { color: '#9ca3af', formatter: (value: number) => compact(value) }, splitLine: { show: false } }
   ],
   series: [
-    { name: 'Active enclaves', type: 'line', smooth: true, symbolSize: 5, data: data.value?.trend.map(point => point.activeEnclaves) || [], lineStyle: { color: '#10b981', width: 2 }, itemStyle: { color: '#10b981' }, areaStyle: { color: 'rgba(16,185,129,0.10)' } },
-    { name: 'Invocations', type: 'bar', yAxisIndex: 1, barMaxWidth: 18, data: data.value?.trend.map(point => point.invocations) || [], itemStyle: { color: '#6366f1' } }
+    { name: 'Active enclaves', type: 'line', smooth: true, symbolSize: 5, data: data.value?.trend.map(point => point.activeEnclaves) || [], lineStyle: { color: '#059669', width: 2 }, itemStyle: { color: '#059669' }, areaStyle: { color: 'rgba(5,150,105,0.10)' } },
+    { name: 'Invocations', type: 'bar', yAxisIndex: 1, barMaxWidth: 18, data: data.value?.trend.map(point => point.invocations) || [], itemStyle: { color: '#2563eb' } }
   ]
 }))
-
-const filteredRows = computed(() => {
-  const query = search.value.trim().toLowerCase()
-  if (!query) return data.value?.breakdown || []
-  return (data.value?.breakdown || []).filter(row => `${row.label} ${row.accountId || ''}`.toLowerCase().includes(query))
-})
 
 function queryList(key: string): string[] {
   const value = route.query[key]
@@ -388,11 +267,18 @@ function queryList(key: string): string[] {
   return (Array.isArray(value) ? value : String(value).split(',')).map(String).map(item => item.trim()).filter(Boolean)
 }
 
-function apiParams(): Record<string, string> {
-  const params: Record<string, string> = { environment: environment.value, period: period.value, costBasis: costBasis.value, groupBy: groupBy.value }
+function apiParams(includeGroupBy = true): Record<string, string> {
+  const params: Record<string, string> = { environment: environment.value, period: period.value, costBasis: costBasis.value }
+  if (includeGroupBy) params.groupBy = 'enclave'
   const lists: Record<string, string[]> = {
-    accountIds: selectedAccounts.value, providers: providers.value, services: services.value, projects: projects.value,
-    models: models.value, regions: regions.value, linesOfBusiness: linesOfBusiness.value, departments: departments.value
+    accountIds: selectedAccounts.value,
+    providers: providers.value,
+    services: services.value,
+    projects: projects.value,
+    models: models.value,
+    regions: regions.value,
+    linesOfBusiness: linesOfBusiness.value,
+    departments: departments.value
   }
   for (const [key, values] of Object.entries(lists)) if (values.length) params[key] = values.join(',')
   return params
@@ -413,9 +299,7 @@ async function loadData() {
 
 async function loadAccounts() {
   try {
-    accountsResponse.value = await $fetch('/api/accounts/list', {
-      query: { source: 'full', enrichment: 'basic', includeLZAccounts: true }
-    })
+    accountsResponse.value = await $fetch('/api/accounts/list', { query: { source: 'full', enrichment: 'basic', includeLZAccounts: true } })
   } catch {
     accountsResponse.value = []
   }
@@ -436,8 +320,9 @@ function stringOptions(values?: string[]) {
 }
 
 function exportCsv() {
-  const query = new URLSearchParams(apiParams())
-  window.location.assign(`/api/ai-usage/export?${query.toString()}`)
+  const params = apiParams(false)
+  params.groupBy = exportGroupBy.value
+  window.location.assign(`/api/ai-usage/export?${new URLSearchParams(params).toString()}`)
 }
 
 function number(value: number) { return new Intl.NumberFormat('en-US').format(value) }
@@ -445,31 +330,16 @@ function compact(value: number) { return new Intl.NumberFormat('en-US', { notati
 function money(value: number) { return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: value < 10 ? 2 : 0 }).format(value) }
 function coverage(value: number | null) { return value === null ? 'No token estimate' : `${value.toFixed(0)}% of tokens priced` }
 function growth(value: number | null) { return value === null ? 'New adoption in this period' : `${value >= 0 ? '+' : ''}${value.toFixed(1)}% vs prior period` }
-function errorCount(row: AIUsageBreakdownRow) { return row.metrics.clientErrors + row.metrics.serverErrors + row.metrics.throttles }
-function errorRate(row: AIUsageBreakdownRow) {
-  const errors = errorCount(row)
-  const attempts = row.metrics.invocations + errors
-  return attempts ? (errors / attempts) * 100 : 0
-}
-function providerLabel(value: string) {
-  const labels: Record<string, string> = {
-    'bedrock-runtime': 'Bedrock Runtime',
-    'bedrock-mantle': 'Bedrock Mantle',
-    'bedrock-cost': 'Bedrock cost (unattributed)',
-    'aws-ai-service': 'Other AWS AI services'
-  }
-  return labels[value] || value
-}
-function formatDate(value: string) { return new Date(value.length === 10 ? `${value}T00:00:00Z` : value).toLocaleDateString() }
+function formatShortDate(value: string) { return new Date(`${value}T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) }
 function relativeTime(value: string) {
   const minutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60000))
   return minutes < 60 ? `${minutes}m ago` : `${Math.round(minutes / 60)}h ago`
 }
 
-watch([environment, period, costBasis, groupBy, selectedAccounts, providers, services, projects, models, regions, linesOfBusiness, departments], () => {
+watch([environment, period, costBasis, selectedAccounts, providers, services, projects, models, regions, linesOfBusiness, departments], () => {
   if (timer) clearTimeout(timer)
   timer = setTimeout(() => {
-    router.replace({ query: apiParams() })
+    router.replace({ query: apiParams(false) })
     void loadData()
   }, 300)
 }, { deep: true })

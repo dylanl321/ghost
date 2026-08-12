@@ -27,6 +27,7 @@ import {
   GetQueryExecutionCommand,
   GetQueryResultsCommand,
   StopQueryExecutionCommand,
+  type ColumnInfo,
 } from '@aws-sdk/client-athena'
 
 /**
@@ -94,8 +95,8 @@ function normalizeSecurityLakeEvent(row: any, accountName: string): CloudTrailEv
     userIdentityUserName: userName,
     sourceIPAddress: row.source_ip || unmappedData.sourceIPAddress,
     userAgent: row.user_agent || unmappedData.userAgent,
-    errorCode: unmappedData.errorCode,
-    errorMessage: unmappedData.errorMessage,
+    errorCode: unmappedData.errorCode || row.api_error || (Number(row.api_response_code) >= 400 ? String(row.api_response_code) : undefined),
+    errorMessage: unmappedData.errorMessage || row.api_error,
     readOnly,
     resources: unmappedData.resources,
     requestParameters: unmappedData.requestParameters,
@@ -153,6 +154,11 @@ function buildWhereClause(
   // Write events only (exclude Get*, List*, Describe*)
   if (filters.writeEventsOnly) {
     conditions.push(`(api.operation NOT LIKE 'Get%' AND api.operation NOT LIKE 'List%' AND api.operation NOT LIKE 'Describe%')`)
+  }
+
+
+  if (filters.errorsOnly) {
+    conditions.push(`(api.response.error IS NOT NULL OR api.response.code >= 400 OR status <> 'Success')`)
   }
 
   // Note: Event types and errors-only filters will still be applied client-side
@@ -248,6 +254,8 @@ async function querySecurityLakeForEvents(
         severity,
         status,
         api.service.name as service_name,
+        api.response.error as api_error,
+        api.response.code as api_response_code,
         actor.user.name as user_name,
         actor.user.type as user_type,
         actor.user.uid as user_uid,
@@ -341,24 +349,26 @@ async function querySecurityLakeForEvents(
       durationSeconds: attempts * 2
     })
 
-    // Fetch query results
-    const resultsCommand = new GetQueryResultsCommand({
-      QueryExecutionId: queryExecutionId,
-      MaxResults: 1000
-    })
-
-    const resultResponse = await client.send(resultsCommand, { abortSignal: options.signal })
+    // Athena returns at most 1,000 rows per page; cause rollups can span many pages.
     let processedRows = 0
-    if (resultResponse.ResultSet?.Rows) {
-      // First row is headers, skip it
-      const rows = resultResponse.ResultSet.Rows.slice(processedRows === 0 ? 1 : 0)
+    let nextToken: string | undefined
+    let firstPage = true
+    let columns: ColumnInfo[] = []
+    do {
+      const remaining = options.limit ? Math.max(1, options.limit - processedRows + (firstPage ? 1 : 0)) : 1000
+      const resultResponse = await client.send(new GetQueryResultsCommand({
+        QueryExecutionId: queryExecutionId,
+        MaxResults: Math.min(1000, remaining),
+        NextToken: nextToken
+      }), { abortSignal: options.signal })
+      columns = resultResponse.ResultSet?.ResultSetMetadata?.ColumnInfo || columns
+      const rows = (resultResponse.ResultSet?.Rows || []).slice(firstPage ? 1 : 0)
 
       for (const row of rows) {
         if (!row.Data) continue
 
         // Parse row data into object
         const rowData: any = {}
-        const columns = resultResponse.ResultSet.ResultSetMetadata?.ColumnInfo || []
 
         row.Data.forEach((cell, index) => {
           const columnName = columns[index]?.Name || `col_${index}`
@@ -386,8 +396,10 @@ async function querySecurityLakeForEvents(
       }
 
       processedRows += rows.length
-
-    }
+      nextToken = resultResponse.NextToken
+      firstPage = false
+      await options.onProgress?.({ phase: 'cloudtrail-results', processed: processedRows, total: options.limit })
+    } while (nextToken && (!options.limit || processedRows < options.limit))
 
     logger.info('[CloudTrail Security Lake] Events retrieved', {
       totalEvents: events.length,
@@ -405,7 +417,7 @@ async function querySecurityLakeForEvents(
       error: (error instanceof Error ? error.message : String(error)),
       stack: (error instanceof Error ? error.stack : String(error))
     })
-    throw new Error(`CloudTrail query failed: ${(error instanceof Error ? error.message : String(error))}`)
+    throw new Error(`CloudTrail query failed: ${(error instanceof Error ? error.message : String(error))}`, { cause: error })
   }
 
   return { records: events, hasMore: Boolean(options.limit && events.length >= options.limit) }
@@ -434,7 +446,9 @@ export async function queryCloudTrailEvents(
   const startTime = Date.now()
 
   // Determine environment
-  const environment = (process.env.AWS_CLOUDTRAIL_ENVIRONMENT as 'commercial' | 'govcloud') || 'govcloud'
+  const environment = options.environment ||
+    (process.env.AWS_CLOUDTRAIL_ENVIRONMENT as 'commercial' | 'govcloud') ||
+    'govcloud'
 
   // Calculate time range
   const lookbackDays = Math.min(
@@ -496,12 +510,15 @@ export async function queryCloudTrailEvents(
       // Need to map to the correct environment's account IDs
       if (environment === 'govcloud') {
         targetAccounts = accountIds
-          .map(commercialId => {
-            const account = allAccounts.find(acc => acc.accountId === commercialId)
+          .map(requestedId => {
+            const account = allAccounts.find(acc =>
+              acc.accountId === requestedId ||
+              acc.govCloudAccountId === requestedId ||
+              acc.awsGovCloudAccountID === requestedId)
             if (!account?.awsGovCloudAccountID) return null
             return {
               accountId: account.awsGovCloudAccountID,
-              accountName: account.accountName || account.projectName || commercialId
+              accountName: account.accountName || account.projectName || requestedId
             }
           })
           .filter((acc): acc is { accountId: string; accountName: string } => acc !== null)
@@ -574,7 +591,7 @@ export async function queryCloudTrailEvents(
 
   } catch (error) {
     logger.error('[CloudTrail] Failed to fetch events', { error })
-    throw new Error(`Failed to fetch CloudTrail events: ${(error instanceof Error ? error.message : String(error))}`)
+    throw new Error(`Failed to fetch CloudTrail events: ${(error instanceof Error ? error.message : String(error))}`, { cause: error })
   }
 }
 

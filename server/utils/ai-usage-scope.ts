@@ -8,7 +8,20 @@ export interface AIUsageAccountScope {
   govCloudAccountId?: string
   lineOfBusiness?: string
   department?: string
+  telemetryEligible: boolean
   members: Array<{ environment: AIUsageEnvironment; accountId: string }>
+}
+
+export function getAIUsageRegions(environment: AIUsageEnvironment): string[] {
+  const configured = environment === 'commercial'
+    ? process.env.AI_USAGE_COMMERCIAL_REGIONS
+    : process.env.AI_USAGE_GOVCLOUD_REGIONS
+  const defaults = environment === 'commercial'
+    ? ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2']
+    : ['us-gov-west-1', 'us-gov-east-1']
+  return configured
+    ? [...new Set(configured.split(',').map(region => region.trim()).filter(Boolean))]
+    : defaults
 }
 
 function value(account: UnifiedAccount, ...keys: string[]): string | undefined {
@@ -40,6 +53,8 @@ export function toAIUsageAccountScope(
     govCloudAccountId,
     lineOfBusiness: value(account, 'linesOfBusiness', 'lineOfBusiness', 'pepLob', 'pepContractLineOfBusiness'),
     department: value(account, 'pepDepartment', 'departmentNumber', 'department'),
+    // DynamoDB-only records are historical metadata, not active collection targets.
+    telemetryEligible: account.source !== 'dynamodb' && account.status !== 'SUSPENDED',
     members
   }
 }

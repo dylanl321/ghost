@@ -22,12 +22,17 @@ export function parseAIUsageQuery(query: Record<string, unknown>): AIUsageQueryI
   if (!GROUPS.has(groupBy)) throw new Error('Unsupported groupBy value')
   if (providers.some(provider => !PROVIDERS.has(provider))) throw new Error('Unsupported provider value')
 
+  const accountIds = [...new Set([
+    ...list(query.accountIds),
+    ...list(query.enclaveIds),
+    ...list(query.enclaveId)
+  ])]
   return {
     period: query.period as string | undefined,
     startDate: query.startDate as string | undefined,
     endDate: query.endDate as string | undefined,
     environment,
-    accountIds: list(query.accountIds),
+    accountIds,
     linesOfBusiness: list(query.linesOfBusiness),
     departments: list(query.departments),
     providers,

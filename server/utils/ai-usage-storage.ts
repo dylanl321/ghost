@@ -1,4 +1,10 @@
-import type { AIUsageFact, AIUsageGranularity } from '../../shared/types/ai-usage'
+import type {
+  AIUsageCollectionMarker,
+  AIUsageEnvironment,
+  AIUsageErrorCause,
+  AIUsageFact,
+  AIUsageGranularity
+} from '../../shared/types/ai-usage'
 import { batchPutItems, getItem, putItem, queryItems } from './dynamodb'
 import { getTableConfig } from '../lib/dynamodb-config'
 import { logger } from './logger'
@@ -49,6 +55,38 @@ export async function saveAIUsageFacts(facts: AIUsageFact[]): Promise<void> {
   await batchPutItems(config.tableName, facts, config.environment, config.accountId)
 }
 
+export function withAIUsageCollectionMarkerKeys(
+  marker: Omit<AIUsageCollectionMarker, 'pk' | 'sk'>
+): AIUsageCollectionMarker {
+  return {
+    pk: `${marker.environment.toUpperCase()}#${marker.accountId}`,
+    sk: `M#${marker.bucket}#${encodeURIComponent(marker.region)}`,
+    ...marker
+  }
+}
+
+export function withAIUsageErrorCauseKeys(
+  cause: Omit<AIUsageErrorCause, 'pk' | 'sk'>
+): AIUsageErrorCause {
+  return {
+    pk: `CAUSE#${cause.environment.toUpperCase()}#${cause.accountId}`,
+    sk: `E#${cause.timestamp}#${encodeURIComponent(cause.eventId)}`,
+    ...cause
+  }
+}
+
+export async function saveAIUsageCollectionMarkers(markers: AIUsageCollectionMarker[]): Promise<void> {
+  if (markers.length === 0) return
+  const config = await tableConfig()
+  await batchPutItems(config.tableName, markers, config.environment, config.accountId)
+}
+
+export async function saveAIUsageErrorCauses(causes: AIUsageErrorCause[]): Promise<void> {
+  if (causes.length === 0) return
+  const config = await tableConfig()
+  await batchPutItems(config.tableName, causes, config.environment, config.accountId)
+}
+
 async function queryPartition(
   pk: string,
   granularity: AIUsageGranularity,
@@ -74,6 +112,85 @@ async function queryPartition(
   } while (nextToken)
 
   return facts
+}
+
+async function queryPrefixedPartition<T>(
+  pk: string,
+  prefix: string,
+  startDate: string,
+  endDate: string
+): Promise<T[]> {
+  const config = await tableConfig()
+  const items: T[] = []
+  let nextToken: string | undefined
+
+  do {
+    const result = await queryItems({
+      tableName: config.tableName,
+      queryExpression: 'pk = :pk AND sk BETWEEN :start AND :end',
+      expressionAttributeValues: {
+        ':pk': pk,
+        ':start': `${prefix}#${startDate}`,
+        ':end': `${prefix}#${endDate}~`
+      },
+      nextToken
+    }, config.environment, config.accountId)
+    items.push(...result.items as T[])
+    nextToken = result.nextToken
+  } while (nextToken)
+
+  return items
+}
+
+async function loadPrefixedItems<T>(
+  partitions: string[],
+  prefix: string,
+  startDate: string,
+  endDate: string
+): Promise<T[]> {
+  const uniquePartitions = [...new Set(partitions)]
+  if (uniquePartitions.length === 0) return []
+  const items: T[] = []
+  try {
+    for (let index = 0; index < uniquePartitions.length; index += QUERY_CONCURRENCY) {
+      const batch = uniquePartitions.slice(index, index + QUERY_CONCURRENCY)
+      const results = await Promise.all(batch.map(pk => queryPrefixedPartition<T>(pk, prefix, startDate, endDate)))
+      items.push(...results.flat())
+    }
+  } catch (error) {
+    if (isAIUsageTableMissing(error)) {
+      warnMissingTable()
+      return []
+    }
+    throw error
+  }
+  return items
+}
+
+export async function loadAIUsageCollectionMarkers(
+  partitions: string[],
+  startDate: string,
+  endDate: string
+): Promise<AIUsageCollectionMarker[]> {
+  return loadPrefixedItems(partitions, 'M', startDate, endDate)
+}
+
+export async function loadAIUsageErrorCauses(
+  targets: Array<{ environment: AIUsageEnvironment; accountId: string }>,
+  startDate: string,
+  endDate: string
+): Promise<AIUsageErrorCause[]> {
+  const partitions = targets.map(target => `CAUSE#${target.environment.toUpperCase()}#${target.accountId}`)
+  return loadPrefixedItems(partitions, 'E', startDate, endDate)
+}
+
+export interface AIUsageCollectorFailure {
+  accountId?: string
+  enclaveName?: string
+  environment: AIUsageEnvironment
+  region?: string
+  category: string
+  message: string
 }
 
 export async function loadAIUsageFacts(
@@ -111,8 +228,20 @@ export interface AIUsageCollectorState {
   completedAt?: string
   accountsAttempted: number
   accountsSucceeded: number
+  uniqueAccountsAttempted?: number
+  uniqueAccountsSucceeded?: number
+  accountRegionTargetsAttempted?: number
+  accountRegionTargetsSucceeded?: number
   factsWritten: number
+  markersWritten?: number
+  causesWritten?: number
+  causeCollection?: {
+    runtime: 'complete' | 'partial' | 'unavailable'
+    collectedAt: string
+    environments: Partial<Record<AIUsageEnvironment, 'complete' | 'unavailable'>>
+  }
   warnings: string[]
+  failures?: AIUsageCollectorFailure[]
 }
 
 export async function saveAIUsageCollectorState(state: AIUsageCollectorState): Promise<void> {
