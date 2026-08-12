@@ -124,10 +124,9 @@ resource "aws_dynamodb_table" "mcp_audit" {
   }
 }
 
-resource "aws_iam_role_policy" "ecs_mcp_dynamodb" {
+resource "aws_iam_policy" "ecs_mcp_dynamodb" {
   provider = aws.target_deployment_account
   name     = "${var.app_name}_mcp_dynamodb"
-  role     = aws_iam_role.ecs_task_execution_role.name
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -157,6 +156,12 @@ resource "aws_iam_role_policy" "ecs_mcp_dynamodb" {
   })
 }
 
+resource "aws_iam_role_policy_attachment" "ecs_mcp_dynamodb" {
+  provider   = aws.target_deployment_account
+  role       = aws_iam_role.ecs_task_execution_role.name
+  policy_arn = aws_iam_policy.ecs_mcp_dynamodb.arn
+}
+
 output "oauth_artifacts_table_name" {
   description = "DynamoDB table used by the GHOST OAuth authorization server"
   value       = aws_dynamodb_table.oauth_artifacts.name
@@ -166,4 +171,3 @@ output "mcp_audit_table_name" {
   description = "DynamoDB table containing redacted MCP tool audit events"
   value       = aws_dynamodb_table.mcp_audit.name
 }
-
