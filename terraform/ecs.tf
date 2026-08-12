@@ -276,6 +276,30 @@ resource "aws_ecs_task_definition" "main" {
           value = aws_dynamodb_table.mcp_audit.name
         },
         {
+          name  = "GHOST_MCP_IDC_DEVICE_FLOW_ENABLED"
+          value = "true"
+        },
+        {
+          name  = "GHOST_SUPPORT_KNOWLEDGE_BASE_NAME"
+          value = "isgddocs-knowledge-base"
+        },
+        {
+          name  = "GHOST_SUPPORT_KNOWLEDGE_BASE_ID"
+          value = "MWEQITO53C"
+        },
+        {
+          name  = "GHOST_SUPPORT_KNOWLEDGE_BASE_ACCOUNT_ID"
+          value = "926182194632"
+        },
+        {
+          name  = "GHOST_SUPPORT_KNOWLEDGE_BASE_ENVIRONMENT"
+          value = "commercial"
+        },
+        {
+          name  = "GHOST_SUPPORT_KNOWLEDGE_BASE_REGION"
+          value = "us-east-1"
+        },
+        {
           name  = "ACCOUNT_NOTES_TABLE"
           value = aws_dynamodb_table.account_notes.name
         },

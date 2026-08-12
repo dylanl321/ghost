@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict'
+import { webcrypto } from 'node:crypto'
 import test from 'node:test'
 import { McpServer, createMcpHandler } from '@modelcontextprotocol/server'
 import * as z from 'zod-v4'
 import { registerGhostTool } from '../../server/mcp/tools/register'
 import type { GhostMcpPrincipal } from '../../server/mcp/types'
+
+if (!globalThis.crypto) Object.defineProperty(globalThis, 'crypto', { value: webcrypto })
 
 function principal(scopes: GhostMcpPrincipal['scopes']): GhostMcpPrincipal {
   const timestamp = new Date().toISOString()
@@ -27,6 +30,11 @@ function listTools(scopes: GhostMcpPrincipal['scopes']) {
     inputSchema: z.object({}), annotations: { readOnlyHint: false },
     handler: () => ({ content: [{ type: 'text', text: 'write' }] })
   })
+  registerGhostTool(server, user, {
+    name: 'ghost.credentials.test', title: 'Credential test', description: 'Credential test', scope: 'ghost.credentials.issue',
+    inputSchema: z.object({}), annotations: { readOnlyHint: false },
+    handler: () => ({ content: [{ type: 'text', text: 'credential' }] })
+  })
 
   return Object.keys((server as any)._registeredTools)
 }
@@ -34,6 +42,7 @@ function listTools(scopes: GhostMcpPrincipal['scopes']) {
 test('tool discovery only returns OAuth-scope-eligible tools', () => {
   assert.deepEqual(listTools(['ghost.read']), ['ghost.read.test'])
   assert.deepEqual(listTools(['ghost.read', 'ghost.collaborate']), ['ghost.read.test', 'ghost.write.test'])
+  assert.deepEqual(listTools(['ghost.read', 'ghost.credentials.issue']), ['ghost.read.test', 'ghost.credentials.test'])
 })
 
 test('HTTP handler negotiates the protocol version used by Codex', async () => {

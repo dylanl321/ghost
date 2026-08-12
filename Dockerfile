@@ -39,9 +39,11 @@ FROM node:${NODE_VERSION}-bookworm-slim AS runtime
 LABEL maintainer="AWSProductTeam@gd-ms.com"
 
 WORKDIR /app
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl && \
-    rm -rf /var/lib/apt/lists/* && \
+
+# Nitro is self-contained; package managers and OS-level HTTP clients are build-time only.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v* && \
+    rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+      /usr/local/bin/pnpm /usr/local/bin/pnpx /usr/local/bin/yarn /usr/local/bin/yarnpkg && \
     chown node:node /app
 
 COPY --from=build --chown=node:node /app/.output ./.output

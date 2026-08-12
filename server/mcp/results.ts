@@ -37,6 +37,21 @@ export function toolError(code: string, message: string, retryable = false): Cal
   }
 }
 
+export function toolRenderedOutput(
+  data: { format: string; mimeType: string; content: string },
+  source: string
+): CallToolResult {
+  const envelope: GhostToolEnvelope<typeof data> = {
+    data,
+    metadata: { asOf: new Date().toISOString(), source }
+  }
+  return {
+    content: [{ type: 'text', text: data.content }],
+    structuredContent: envelope as unknown as Record<string, unknown>,
+    isError: false
+  }
+}
+
 export function normalizeLimit(limit: number | undefined, fallback = 25, maximum = 100): number {
   if (!Number.isFinite(limit)) return fallback
   return Math.max(1, Math.min(Math.trunc(limit!), maximum))
@@ -54,4 +69,3 @@ export function decodeCursor<T>(cursor?: string): T | undefined {
     throw new Error('Invalid pagination cursor')
   }
 }
-

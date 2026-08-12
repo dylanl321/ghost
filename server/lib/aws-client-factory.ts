@@ -24,6 +24,7 @@ import { SecurityLakeClient } from '@aws-sdk/client-securitylake'
 import { AthenaClient } from '@aws-sdk/client-athena'
 import { RAMClient } from '@aws-sdk/client-ram'
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime'
+import { BedrockAgentRuntimeClient } from '@aws-sdk/client-bedrock-agent-runtime'
 import { ComputeOptimizerClient } from '@aws-sdk/client-compute-optimizer'
 import { PricingClient } from '@aws-sdk/client-pricing'
 import { SESClient } from '@aws-sdk/client-ses'
@@ -81,6 +82,7 @@ const SERVICE_CLIENT_MAP = {
   'athena': AthenaClient,
   'ram': RAMClient,
   'bedrock-runtime': BedrockRuntimeClient,
+  'bedrock-agent-runtime': BedrockAgentRuntimeClient,
   'compute-optimizer': ComputeOptimizerClient,
   'pricing': PricingClient,
   'ses': SESClient,

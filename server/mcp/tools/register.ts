@@ -15,6 +15,7 @@ export interface GhostToolDefinition {
     idempotentHint?: boolean
     openWorldHint?: boolean
   }
+  getAuditTargetIds?: (args: any, result?: any) => string[] | undefined
   handler: (args: any, context: ServerContext) => Promise<any> | any
 }
 
@@ -34,7 +35,8 @@ export function registerGhostTool(server: McpServer, principal: GhostMcpPrincipa
         principal,
         tool: definition.name,
         status: result?.resultType === 'input_required' ? 'confirmation_required' : result?.isError ? 'error' : 'success',
-        durationMs: performance.now() - start
+        durationMs: performance.now() - start,
+        targetIds: definition.getAuditTargetIds?.(args, result)
       })
       return result
     } catch (error: any) {

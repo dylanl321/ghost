@@ -51,7 +51,11 @@ import { getLatestAnalysis, getInstanceClassifications } from '../../utils/utili
 import { getPeriodBudget } from '../../../shared/utils/budget-utils'
 import type { DatasetReportConfig } from '../../../shared/types/dataset-reports'
 import type { GhostMcpPrincipal } from '../types'
-import { normalizeLimit, toolError, toolSuccess } from '../results'
+import { beginMcpIdentityCenterAuthorization, issueMcpIdentityCenterCredentials } from '../idc-credentials'
+import { renderGhostOutput } from '../output-format'
+import { searchSupportKnowledgeBase } from '../support-knowledge'
+import { getMcpUserAccountAccess, requireMcpAccountRole } from '../user-access'
+import { normalizeLimit, toolError, toolRenderedOutput, toolSuccess } from '../results'
 import { runIdempotent } from '../idempotency'
 import { registerGhostTool } from './register'
 
@@ -114,6 +118,10 @@ export function registerCatalogTools(
     ...definition,
     scope: 'ghost.ai.invoke'
   })
+  const credentials = (definition: Omit<Parameters<typeof registerGhostTool>[2], 'scope'>) => registerGhostTool(server, principal, {
+    ...definition,
+    scope: 'ghost.credentials.issue'
+  })
 
   read({
     name: 'ghost.accounts.search', title: 'Search GHOST accounts',
@@ -164,6 +172,18 @@ export function registerCatalogTools(
   read({
     name: 'ghost.accounts.statistics', title: 'Get account statistics', description: 'Return aggregate counts and classifications for the GHOST account catalog.',
     inputSchema: z.object({}), handler: async () => toolSuccess(await getAccountStatistics(), 'Account statistics loaded.', 'GHOST account metadata')
+  })
+
+  read({
+    name: 'ghost.access.mine', title: 'Get my AWS accounts',
+    description: 'List the authenticated MCP user\'s AWS accounts, Entra role groups, and Commercial/GovCloud access.',
+    inputSchema: z.object({}),
+    handler: async () => {
+      const access = await getMcpUserAccountAccess(principal)
+      return toolSuccess(access, `Loaded ${access.accounts.length} account(s) assigned to the authenticated user.`, 'Microsoft Graph and GHOST account metadata', {
+        warnings: access.warning ? [access.warning] : undefined
+      })
+    }
   })
 
   read({
@@ -339,6 +359,88 @@ export function registerCatalogTools(
     handler: async args => {
       const result = await queryEntraUsers(await createEntraServiceEvent(), [], { userSearch: args.user }, { mode: 'preview', limit: args.limit })
       return toolSuccess(result, `Loaded ${result.records.length} access mapping(s).`, 'Microsoft Graph')
+    }
+  })
+
+  read({
+    name: 'ghost.support.search', title: 'Search GHOST support knowledge',
+    description: 'Retrieve cited support documentation from the isgddocs Bedrock Knowledge Base.',
+    inputSchema: z.object({
+      query: z.string().min(2).max(2000),
+      max_results: z.number().int().min(1).max(10).default(5),
+      cursor: z.string().optional()
+    }),
+    handler: async args => {
+      const result = await searchSupportKnowledgeBase(args.query, args.max_results, args.cursor)
+      return toolSuccess(result, `Retrieved ${result.results.length} support result(s).`, 'Amazon Bedrock Knowledge Bases', {
+        nextCursor: result.nextToken
+      })
+    }
+  })
+
+  read({
+    name: 'ghost.outputs.render', title: 'Render GHOST values',
+    description: 'Render supplied GHOST data as JSON, Markdown, CSV, or plain text for reuse outside the MCP client.',
+    inputSchema: z.object({
+      value: z.unknown(),
+      format: z.enum(['json', 'markdown', 'csv', 'text']).default('json')
+    }),
+    handler: async args => {
+      const serialized = JSON.stringify(args.value) || ''
+      if (serialized.length > 200_000) return toolError('OUTPUT_TOO_LARGE', 'Rendered output is limited to 200 KB. Narrow the source query or use a dataset export.')
+      return toolRenderedOutput(renderGhostOutput(args.value, args.format), 'GHOST MCP output renderer')
+    }
+  })
+
+  const credentialConfirmationSchema = z.object({ confirm: z.boolean() })
+  credentials({
+    name: 'ghost.credentials.start', title: 'Start AWS Identity Center authorization',
+    description: 'Begin an AWS Identity Center device authorization for user-owned, short-lived account credentials.',
+    inputSchema: z.object({ environment: z.enum(['commercial', 'govcloud']).default('commercial') }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    handler: async args => toolSuccess(
+      await beginMcpIdentityCenterAuthorization(principal, args.environment),
+      'Open the verification URL, complete AWS Identity Center sign-in, then request the selected role credentials.',
+      'AWS IAM Identity Center'
+    )
+  })
+
+  credentials({
+    name: 'ghost.credentials.issue', title: 'Issue AWS role credentials',
+    description: 'After Identity Center authorization, issue short-lived role credentials only for an account and role assigned to the authenticated user.',
+    inputSchema: z.object({
+      session_id: z.string().uuid(),
+      account_id: z.string().regex(/^\d{12}$/),
+      role_name: z.string().min(1).max(128),
+      environment: z.enum(['commercial', 'govcloud']).default('commercial')
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    getAuditTargetIds: args => [args.account_id],
+    handler: async (args, context: ServerContext) => {
+      const authorized = await requireMcpAccountRole(principal, args.account_id, args.role_name, args.environment)
+      const confirmed = acceptedContent(context.mcpReq.inputResponses, 'confirm_credential_issue', credentialConfirmationSchema)
+      const state = context.mcpReq.requestState<{ tool: string; targetId: string }>()
+      const targetId = `${args.environment}:${authorized.resolvedAccountId}:${args.role_name}`
+      if (!confirmed?.confirm || state?.tool !== 'ghost.credentials.issue' || state.targetId !== targetId) {
+        return inputRequired({
+          inputRequests: {
+            confirm_credential_issue: inputRequired.elicit({
+              message: `Issue short-lived ${args.environment} credentials for ${authorized.account.accountName} (${authorized.resolvedAccountId}) as ${args.role_name}?`,
+              requestedSchema: credentialConfirmationSchema
+            })
+          },
+          requestState: await confirmationCodec.mint({ tool: 'ghost.credentials.issue', targetId }, context)
+        })
+      }
+      const credential = await issueMcpIdentityCenterCredentials(principal, args.session_id, authorized.resolvedAccountId, args.role_name)
+      return toolSuccess({
+        ...credential,
+        localRunner: {
+          command: 'npm run ghost:aws -- <service> <operation> [--parameter value]',
+          recommendedRegion: credential.region,
+          note: 'Set the returned credentials only in the command process environment. The runner uses the AWS SDK and does not require an AWS CLI installation or profile.'
+        }
+      }, 'Short-lived AWS role credentials issued. Keep them process-local and do not persist or log them.', 'AWS IAM Identity Center')
     }
   })
 

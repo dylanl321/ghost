@@ -16,7 +16,8 @@ export default defineEventHandler(() => {
     scopes: [
       { id: 'ghost.read', label: 'GHOST data', description: 'Read account, cost, user, access, resource, security, audit, and pipeline data.' },
       { id: 'ghost.ai.invoke', label: 'GHOST AI', description: 'Invoke bounded Bedrock insights, troubleshooting, and the GHOST Strands agent.' },
-      { id: 'ghost.collaborate', label: 'Personal workflows', description: 'Manage your preferences, chat threads, reports, and export jobs.' }
+      { id: 'ghost.collaborate', label: 'Personal workflows', description: 'Manage your preferences, chat threads, reports, and export jobs.' },
+      { id: 'ghost.credentials.issue', label: 'AWS Identity Center credentials', description: 'Authorize and issue short-lived, user-assigned AWS role credentials after confirmation.' }
     ],
     codex: {
       addCommand: `codex mcp add ghost --url ${serverUrl} --oauth-resource ${serverUrl}`,
@@ -27,4 +28,3 @@ export default defineEventHandler(() => {
     }
   }
 })
-

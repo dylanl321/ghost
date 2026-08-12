@@ -3,7 +3,8 @@ import type { AuthInfo } from '@modelcontextprotocol/server'
 export const GHOST_MCP_SCOPES = [
   'ghost.read',
   'ghost.ai.invoke',
-  'ghost.collaborate'
+  'ghost.collaborate',
+  'ghost.credentials.issue'
 ] as const
 
 export type GhostMcpScope = typeof GHOST_MCP_SCOPES[number]
@@ -58,4 +59,3 @@ export interface GhostMcpAuditEvent {
   errorCode?: string
   ttl: number
 }
-

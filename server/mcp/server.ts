@@ -50,9 +50,9 @@ function registerResources(server: McpServer, authInfo?: AuthInfo) {
     mimeType: 'application/json',
     cacheHint: { ttlMs: 300_000, cacheScope: 'private' }
   }, async (uri: URL) => jsonResource(uri, {
-    domains: ['accounts', 'organization', 'costs', 'users', 'access', 'resources', 'security', 'cloudtrail', 'pipelines', 'ai-usage', 'reports', 'preferences', 'chat'],
+    domains: ['accounts', 'organization', 'costs', 'users', 'access', 'credentials', 'resources', 'security', 'cloudtrail', 'support', 'pipelines', 'ai-usage', 'reports', 'preferences', 'chat', 'outputs'],
     scopes: principal.scopes,
-    boundaries: ['organization-wide reads', 'user-owned collaboration writes', 'no administrative or AWS infrastructure mutations']
+    boundaries: ['organization-wide reads', 'user-owned collaboration writes', 'explicitly confirmed user-assigned Identity Center credentials', 'no administrative or AWS infrastructure mutations']
   }))
 
   server.registerResource('ghost-user', 'ghost://users/me', {
@@ -99,7 +99,7 @@ function registerPrompts(server: McpServer) {
 export async function createGhostMcpServer(context: McpRequestContext): Promise<McpServer> {
   const principal = getMcpPrincipal(context.authInfo)
   const server = new McpServer({ name: 'ghost-aws', version: '1.0.0' }, {
-    instructions: 'GHOST provides internal AWS account, cost, user, security, resource, pipeline, report, and AI context. Resolve account identifiers before account-specific calls. Prefer bounded queries and exports for large datasets. Never imply that a write occurred unless the tool result confirms it.',
+    instructions: 'GHOST provides internal AWS account, cost, user, security, resource, pipeline, support, report, and AI context. Use ghost.access.mine for the authenticated user\'s AWS accounts. For user-requested AWS access, use the Identity Center device authorization tools only with the credentials scope and explicit confirmation; never persist, echo unnecessarily, or use service credentials as user credentials. Prefer bounded queries and exports for large datasets. Never imply that a write occurred unless the tool result confirms it.',
     cacheHints: {
       'server/discover': { ttlMs: 300_000, cacheScope: 'private' },
       'tools/list': { ttlMs: 300_000, cacheScope: 'private' },

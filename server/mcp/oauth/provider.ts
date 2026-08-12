@@ -11,6 +11,18 @@ import { getGhostMcpIdentity } from './identity'
 
 let providerPromise: Promise<Provider> | undefined
 
+interface RefreshTokenClient {
+  applicationType?: string
+  clientAuthMethod?: string
+  grantTypeAllowed(grantType: string): boolean
+}
+
+export function shouldIssueGhostRefreshToken(client: RefreshTokenClient): boolean {
+  return client.applicationType === 'native' &&
+    client.clientAuthMethod === 'none' &&
+    client.grantTypeAllowed('refresh_token')
+}
+
 function isPrivateAddress(address: string): boolean {
   if (address === '::1' || address === '0:0:0:0:0:0:0:1') return true
   if (address.startsWith('fc') || address.startsWith('fd') || address.startsWith('fe8') || address.startsWith('fe9') || address.startsWith('fea') || address.startsWith('feb')) return true
@@ -65,6 +77,9 @@ async function createProvider(): Promise<Provider> {
     clientAuthMethods: ['none'],
     pkce: { required: () => true, methods: ['S256'] },
     scopes: ['openid', 'offline_access', ...GHOST_MCP_SCOPES],
+    // Codex uses the MCP consent screen without sending OIDC prompt=consent, which
+    // makes oidc-provider strip offline_access before its default refresh policy.
+    issueRefreshToken: async (_ctx: unknown, client: RefreshTokenClient) => shouldIssueGhostRefreshToken(client),
     features: {
       devInteractions: { enabled: false },
       registration: {
