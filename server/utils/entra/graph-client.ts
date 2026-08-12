@@ -24,6 +24,7 @@ import {
   buildDistributionGroupFilter,
   GRAPH_SELECT_FIELDS,
   getGraphBaseUrl,
+  isAwsAuthorizationGroupName,
   entraConfig
 } from './config'
 import { groupByAccount } from './group-parser'
@@ -505,12 +506,12 @@ export async function getUserGroups(
       '$top': entraConfig.search.batchSize.toString()
     })
     
-    const endpoint = `/users/${userId}/memberOf?${queryParams}`
+    const endpoint = `/users/${userId}/transitiveMemberOf/microsoft.graph.group?${queryParams}`
     const groups = await getAllPages<EntraGroup>(event, endpoint)
     
     // Filter to only AWS-related groups
     const awsGroups = groups.filter(g => 
-      g.displayName.startsWith(entraConfig.search.groupPrefix) ||
+      isAwsAuthorizationGroupName(g.displayName) ||
       g.displayName.endsWith(entraConfig.search.distributionSuffix)
     )
     

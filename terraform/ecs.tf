@@ -170,7 +170,7 @@ resource "aws_ecs_task_definition" "main" {
         },
         {
           name  = "ENTRA_AWS_GROUP_PREFIX"
-          value = "AWS_"
+          value = "AWS-"
         },
         {
           name  = "ENTRA_DISTRIBUTION_GROUP_SUFFIX"

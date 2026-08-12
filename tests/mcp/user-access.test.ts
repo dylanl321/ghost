@@ -5,6 +5,7 @@ import { mapMcpGroupsToAccounts } from '../../server/mcp/user-access'
 test('maps the caller AWS groups to paired Commercial and GovCloud accounts', () => {
   const result = mapMcpGroupsToAccounts([
     { id: 'commercial-admin', displayName: 'AWS-111111111111_GDSSO_IAMAdmin' },
+    { id: 'commercial-read', displayName: 'AWS_111111111111-GDSSO_ReadOnly' },
     { id: 'gov-read', displayName: 'AWS-222222222222_GDSSO_ReadOnly' },
     { id: 'unknown', displayName: 'AWS-333333333333_GDSSO_ReadOnly' }
   ], [{
@@ -19,9 +20,9 @@ test('maps the caller AWS groups to paired Commercial and GovCloud accounts', ()
     accountName: 'Example account',
     commercialAccountId: '111111111111',
     govCloudAccountId: '222222222222',
-    commercialRoles: ['GDSSO_IAMAdmin'],
+    commercialRoles: ['GDSSO_IAMAdmin', 'GDSSO_ReadOnly'],
     govCloudRoles: ['GDSSO_ReadOnly'],
-    groups: ['AWS-111111111111_GDSSO_IAMAdmin', 'AWS-222222222222_GDSSO_ReadOnly']
+    groups: ['AWS-111111111111_GDSSO_IAMAdmin', 'AWS_111111111111-GDSSO_ReadOnly', 'AWS-222222222222_GDSSO_ReadOnly']
   })
   assert.deepEqual(result.unmatchedGroups, ['AWS-333333333333_GDSSO_ReadOnly'])
 })
