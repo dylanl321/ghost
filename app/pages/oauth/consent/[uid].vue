@@ -6,9 +6,10 @@ const loading = ref(true)
 const submitting = ref(false)
 const error = ref('')
 const details = ref<{
+  prompt: string
   client: { name: string; uri?: string }
   scopes: string[]
-  resource: string
+  resource?: string | string[]
 } | null>(null)
 
 const scopeLabels: Record<string, string> = {
@@ -17,16 +18,25 @@ const scopeLabels: Record<string, string> = {
   'ghost.collaborate': 'Manage your preferences, chat threads, and report jobs'
 }
 
-async function submit(action: 'details' | 'approve' | 'deny') {
+interface InteractionResponse {
+  redirectTo?: string
+  prompt?: string
+  client?: { name: string; uri?: string }
+  scopes?: string[]
+  resource?: string | string[]
+}
+
+async function submit(action: 'details' | 'login' | 'approve' | 'deny') {
   if (action !== 'details') submitting.value = true
   error.value = ''
   try {
-    const response = await $fetch<{ redirectTo?: string; client?: any; scopes?: string[]; resource?: string }>(
+    const response = await $fetch<InteractionResponse>(
       `/oauth/consent/${encodeURIComponent(String(route.params.uid))}`,
       { method: 'POST', body: { action } }
     )
     if (action === 'details') {
       details.value = response as typeof details.value
+      if (response.prompt === 'login') await submit('login')
     } else if (response.redirectTo) {
       window.location.href = response.redirectTo
     }
@@ -63,12 +73,12 @@ onMounted(() => submit('details'))
             <span>{{ scopeLabels[scope] || scope }}</span>
           </li>
         </ul>
-        <p class="text-xs text-gray-500 mb-6 break-all">{{ details.resource }}</p>
+        <p v-if="details.resource" class="text-xs text-gray-500 mb-6 break-all">{{ details.resource }}</p>
       </template>
 
       <p v-if="error" class="text-sm text-red-400 mb-4">{{ error }}</p>
 
-      <div class="flex justify-end gap-3">
+      <div v-if="details?.prompt === 'consent'" class="flex justify-end gap-3">
         <UButton icon="i-heroicons-x-mark" color="gray" variant="ghost" :disabled="submitting" @click="submit('deny')">
           Deny
         </UButton>
@@ -79,4 +89,3 @@ onMounted(() => submit('details'))
     </section>
   </main>
 </template>
-
