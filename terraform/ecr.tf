@@ -30,20 +30,10 @@ resource "aws_ecr_repository_policy" "main" {
 
 # Lifecycle policy to clean up accumulated images.
 #
-# The CI build dual-tags every image (see .gitlab-ci.yml):
-#   - <env>                     mutable tag the ECS task definition pulls (dev/master/test)
-#   - <env>-<short_sha>         immutable, per-commit tag for traceability + rollback
-#
-# Rules are evaluated in priority order; the first matching rule wins for a given image.
-#   1. Keep the last N immutable per-commit tags (rollback window), expire older ones.
-#   2. Expire untagged images after a short grace period. Each new push to the
-#      mutable <env> tag orphans the previous image as untagged; this sweeps them
-#      (including the existing backlog on first apply). The grace period leaves a
-#      brief window to recover a just-orphaned image by digest if a deploy goes bad.
-#
-# Safety: the live <env> tag is never selected by either rule (rule 1 only matches
-# the <env>- SHA prefix; rule 2 only matches untagged), so a running service's
-# image can never be expired out from under it.
+# CI dual-tags each build with <env> and <env>-<short_sha>. The active digest
+# therefore matches both tagged-image rules. ECR prevents a lower-priority rule
+# from expiring an image that matches a higher-priority rule, so rule 1 acts as a
+# keep guard for the exact live tag while rule 2 ages out historical commit tags.
 resource "aws_ecr_lifecycle_policy" "main" {
   provider   = aws.target_deployment_account
   repository = aws_ecr_repository.main.name
@@ -52,17 +42,29 @@ resource "aws_ecr_lifecycle_policy" "main" {
     rules = [
       {
         rulePriority = 1
-        description  = "Keep last ${var.ecr_keep_tagged_images} per-commit (<env>-<sha>) images for rollback"
+        description  = "Protect the image carrying the live ${var.env} tag"
         selection = {
-          tagStatus     = "tagged"
-          tagPrefixList = ["${var.env}-"]
-          countType     = "imageCountMoreThan"
-          countNumber   = var.ecr_keep_tagged_images
+          tagStatus      = "tagged"
+          tagPatternList = [var.env]
+          countType      = "imageCountMoreThan"
+          countNumber    = 1
         }
         action = { type = "expire" }
       },
       {
         rulePriority = 2
+        description  = "Expire ${var.env}-<sha> images after ${var.ecr_tagged_expiry_days} days"
+        selection = {
+          tagStatus      = "tagged"
+          tagPatternList = ["${var.env}-*"]
+          countType      = "sinceImagePushed"
+          countUnit      = "days"
+          countNumber    = var.ecr_tagged_expiry_days
+        }
+        action = { type = "expire" }
+      },
+      {
+        rulePriority = 3
         description  = "Expire untagged images after ${var.ecr_untagged_expiry_days} days"
         selection = {
           tagStatus   = "untagged"

@@ -171,6 +171,21 @@ resource "aws_cloudwatch_log_metric_filter" "api_5xx" {
   }
 }
 
+# Credential failures can leave the task alive while most AWS-backed pages fail.
+resource "aws_cloudwatch_log_metric_filter" "aws_credential_failure" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-aws-credential-failure"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "\"The security token included in the request is invalid\""
+
+  metric_transformation {
+    name          = "AWSCredentialFailureCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
 resource "aws_cloudwatch_log_metric_filter" "job_failure" {
   provider       = aws.target_deployment_account
   name           = "${var.app_name}-job-failure"
@@ -224,6 +239,27 @@ resource "aws_cloudwatch_metric_alarm" "api_p95_latency" {
   period              = 300
   extended_statistic  = "p95"
   threshold           = 5000
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Application = var.app_name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "aws_credential_failures" {
+  provider            = aws.target_deployment_account
+  alarm_name          = "${var.app_name}-aws-credential-failures"
+  alarm_description   = "AWS rejected the application's configured credentials"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "AWSCredentialFailureCount"
+  namespace           = "${var.app_name}/Application"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
   treat_missing_data  = "notBreaching"
 
   alarm_actions = [aws_sns_topic.alerts.arn]
@@ -964,4 +1000,62 @@ resource "aws_cloudwatch_dashboard" "main" {
       },
     ]
   })
+}
+
+# Hosted MCP protocol and authorization telemetry.
+resource "aws_cloudwatch_log_metric_filter" "mcp_request_count" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-mcp-request-count"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "{ $.type = \"mcp_request\" }"
+
+  metric_transformation {
+    name          = "MCPRequestCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "mcp_error_count" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-mcp-error-count"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "{ $.type = \"mcp_request\" && $.statusCode >= 400 }"
+
+  metric_transformation {
+    name          = "MCPErrorCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "mcp_latency" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-mcp-latency"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "{ $.type = \"mcp_request\" }"
+
+  metric_transformation {
+    name      = "MCPLatencyMs"
+    namespace = "${var.app_name}/Application"
+    value     = "$.durationMs"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "mcp_errors_high" {
+  provider            = aws.target_deployment_account
+  alarm_name          = "${var.app_name}-mcp-errors-high"
+  alarm_description   = "MCP authorization or protocol errors exceeded 20 in 5 minutes"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "MCPErrorCount"
+  namespace           = "${var.app_name}/Application"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 20
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
 }

@@ -90,16 +90,19 @@
         <template v-for="(item, index) in navigationItems" :key="item.label">
           <div
             v-if="item.section && (index === 0 || navigationItems[index - 1]?.section !== item.section) && (item.section !== 'Admin' || isAdmin)"
-            class="transition-all duration-300"
+            class="relative h-4 overflow-hidden"
             :class="index === 0 ? 'mb-1' : 'mb-1 mt-5'"
           >
             <span
-              v-if="!navigationStore.isCollapsed || navigationStore.isHovered"
-              class="block px-3 text-[11px] font-semibold uppercase text-slate-400 dark:text-slate-500"
+              class="absolute inset-0 block px-3 text-[11px] leading-4 font-semibold uppercase text-slate-400 dark:text-slate-500 whitespace-nowrap transition-opacity duration-200"
+              :class="isSidebarExpanded ? 'opacity-100 delay-100' : 'opacity-0'"
             >
               {{ item.section }}
             </span>
-            <div v-else class="mx-2 border-t border-slate-200 dark:border-slate-700" />
+            <div
+              class="absolute inset-x-2 top-1/2 border-t border-slate-200 dark:border-slate-700 transition-opacity duration-150"
+              :class="isSidebarExpanded ? 'opacity-0' : 'opacity-100 delay-100'"
+            />
           </div>
 
           <!-- Menu Item -->
@@ -321,6 +324,9 @@ const siteConfigStore = useSiteConfigStore();
 
 // Check if Strands chat is enabled
 const strandsEnabled = computed(() => siteConfigStore.isStrandsChatEnabled);
+const isSidebarExpanded = computed(
+  () => !navigationStore.isCollapsed || navigationStore.isHovered
+);
 
 // Mobile detection - SSR safe
 const isMobile = computed(() => {
@@ -495,6 +501,12 @@ const navigationItems = computed(() => {
       label: "AI Assistant",
       to: "/chat",
       icon: "i-heroicons-sparkles",
+      section: "Workspace",
+    },
+    {
+      label: "MCP Connections",
+      to: "/chat/mcp",
+      icon: "i-heroicons-link",
       section: "Workspace",
     },
     {

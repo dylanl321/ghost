@@ -82,6 +82,10 @@ resource "aws_ecs_task_definition" "main" {
           value = "374673712317"
         },
         {
+          name  = "AWS_GOVCLOUD_ORGANIZATIONS_ROLE_PATH"
+          value = "GD"
+        },
+        {
           name  = "AWS_MASTER_ACCOUNT_ID"
           value = "205950196477"
         },
@@ -253,6 +257,23 @@ resource "aws_ecs_task_definition" "main" {
         {
           name  = "AI_USAGE_COLLECTION_ENABLED"
           value = "true"
+        },
+        # GHOST hosted MCP and OAuth state
+        {
+          name  = "GHOST_MCP_BASE_URL"
+          value = var.env == "prod" ? "https://ghost-aws.gd-ms.com" : "https://ghost-aws-dev.gd-ms.com"
+        },
+        {
+          name  = "GHOST_OAUTH_ISSUER"
+          value = var.env == "prod" ? "https://ghost-aws.gd-ms.com" : "https://ghost-aws-dev.gd-ms.com"
+        },
+        {
+          name  = "GHOST_OAUTH_TABLE_NAME"
+          value = aws_dynamodb_table.oauth_artifacts.name
+        },
+        {
+          name  = "GHOST_MCP_AUDIT_TABLE_NAME"
+          value = aws_dynamodb_table.mcp_audit.name
         },
         {
           name  = "ACCOUNT_NOTES_TABLE"
@@ -459,6 +480,18 @@ resource "aws_ecs_task_definition" "main" {
         {
           name      = "NUXT_OIDC_AUTH_SESSION_SECRET"
           valueFrom = "${local.secret_arn}:oidc_auth_session_secret::"
+        },
+        {
+          name      = "GHOST_OAUTH_JWKS_JSON"
+          valueFrom = "${local.secret_arn}:ghost_oauth_jwks_json::"
+        },
+        {
+          name      = "GHOST_OAUTH_COOKIE_KEYS"
+          valueFrom = "${local.secret_arn}:ghost_oauth_cookie_keys::"
+        },
+        {
+          name      = "GHOST_MCP_REQUEST_STATE_KEY"
+          valueFrom = "${local.secret_arn}:ghost_mcp_request_state_key::"
         },
       ],
       healthCheck = {

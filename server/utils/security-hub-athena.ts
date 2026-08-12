@@ -2,22 +2,14 @@
  * Security Hub Athena Aggregation
  *
  * Queries the `security_hub` database via Athena to get complete
- * finding statistics. This database contains pre-processed, flat tables
- * with correct workflow_status values and rich account metadata.
- *
- * Tables queried (UNION ALL):
- *   - security_hub."shub-api-compliance-findings"
- *   - security_hub."shub-inspector-vuln-findings"
- *   - security_hub."shub-os-inspec-findings"
+ * finding statistics. The parquet_findings table contains normalized findings
+ * from Security Hub, Inspector, and operating-system benchmark scans.
  *
  * Falls back to the legacy Security Hub API if Athena fails.
  */
 
 import { getAthenaClient } from '../lib/aws-client-factory'
-import {
-  getEnvironmentConfig,
-  type EnvironmentConfig,
-} from './security-lake-consolidated'
+import { getEnvironmentConfig } from './security-lake-consolidated'
 import { getAllAccountsUnified, lookupAccountUnified } from './accounts-consolidated'
 import { logger } from './logger'
 import type {
@@ -48,36 +40,23 @@ interface AthenaProgressEvent {
 type ProgressCallback = (event: AthenaProgressEvent) => void
 
 // ---------------------------------------------------------------------------
-// security_hub UNION subquery helper
+// security_hub source subquery helper
 // ---------------------------------------------------------------------------
 
 const SECURITY_HUB_DATABASE = 'security_hub'
-const SECURITY_HUB_TABLES = [
-  'shub-api-compliance-findings',
-  'shub-inspector-vuln-findings',
-  'shub-os-inspec-findings',
-]
+const SECURITY_HUB_TABLE = 'parquet_findings'
 
-/** Builds a UNION ALL subquery filtered by source type */
-function buildFindingsUnionFiltered(source: SecuritySourceFilter): string {
-  const tablesBySource: Record<SecuritySourceFilter, string[]> = {
-    all: SECURITY_HUB_TABLES,
-    platform: SECURITY_HUB_TABLES.slice(0, 2), // compliance + inspector
-    os: [SECURITY_HUB_TABLES[2]],              // os-inspec only
+/** Builds a findings subquery while preserving the dashboard source filters. */
+export function buildFindingsSource(source: SecuritySourceFilter = 'all'): string {
+  const sourcePredicates: Record<SecuritySourceFilter, string | null> = {
+    all: null,
+    platform: "productname IN ('Security Hub', 'Inspector')",
+    os: "productname LIKE 'Inspector CIS Benchmark%'",
   }
-  const tables = tablesBySource[source]
-  const selects = tables
-    .map(t => `SELECT * FROM ${SECURITY_HUB_DATABASE}."${t}"`)
-    .join('\n  UNION ALL\n  ')
-  return `(\n  ${selects}\n) AS findings`
-}
+  const predicate = sourcePredicates[source]
+  const where = predicate ? `\n  WHERE ${predicate}` : ''
 
-/** Builds a UNION ALL subquery across all 3 security_hub tables */
-function buildFindingsUnion(): string {
-  const selects = SECURITY_HUB_TABLES
-    .map(t => `SELECT * FROM ${SECURITY_HUB_DATABASE}."${t}"`)
-    .join('\n  UNION ALL\n  ')
-  return `(\n  ${selects}\n) AS findings`
+  return `(\n  SELECT * FROM ${SECURITY_HUB_DATABASE}.${SECURITY_HUB_TABLE}${where}\n) AS findings`
 }
 
 // ---------------------------------------------------------------------------
@@ -185,7 +164,7 @@ export async function buildAccountSecurityViaAthena(
   sourceFilter: SecuritySourceFilter = 'all'
 ): Promise<AccountSecuritySummary> {
   const environment = (process.env.AWS_SECURITYHUB_ENVIRONMENT as 'commercial' | 'govcloud') || 'govcloud'
-  const findingsUnion = buildFindingsUnionFiltered(sourceFilter)
+  const findingsSource = buildFindingsSource(sourceFilter)
 
   // Resolve the correct account ID for the Athena tables (GovCloud stores GovCloud IDs)
   let resolvedAccountId = accountId
@@ -204,19 +183,19 @@ export async function buildAccountSecurityViaAthena(
   const queries = {
     severity: `
       SELECT severity_label AS severity, COUNT(*) AS cnt
-      FROM ${findingsUnion}
+      FROM ${findingsSource}
       WHERE ${baseWhere}
       GROUP BY severity_label
     `,
     product: `
       SELECT productname AS product_name, COUNT(*) AS cnt
-      FROM ${findingsUnion}
+      FROM ${findingsSource}
       WHERE ${baseWhere}
       GROUP BY productname
     `,
     compliance: `
       SELECT compliance_status, COUNT(*) AS cnt
-      FROM ${findingsUnion}
+      FROM ${findingsSource}
       WHERE ${baseWhere}
         AND compliance_status IS NOT NULL AND compliance_status != ''
       GROUP BY compliance_status
@@ -235,7 +214,7 @@ export async function buildAccountSecurityViaAthena(
         description AS recommendation,
         createdat AS created_at,
         updatedat AS updated_at
-      FROM ${findingsUnion}
+      FROM ${findingsSource}
       WHERE ${baseWhere}
         AND severity_label IN ('CRITICAL', 'HIGH')
       ORDER BY CASE severity_label WHEN 'CRITICAL' THEN 5 ELSE 4 END DESC,
@@ -244,14 +223,14 @@ export async function buildAccountSecurityViaAthena(
     `,
     byResource: `
       SELECT resourceids AS resource_id, severity_label AS severity, COUNT(*) AS cnt
-      FROM ${findingsUnion}
+      FROM ${findingsSource}
       WHERE ${baseWhere}
         AND resourceids IS NOT NULL AND resourceids != ''
       GROUP BY resourceids, severity_label
     `,
     byTitle: `
       SELECT title, severity_label AS severity, productname AS product_name, COUNT(*) AS cnt
-      FROM ${findingsUnion}
+      FROM ${findingsSource}
       WHERE ${baseWhere}
       GROUP BY title, severity_label, productname
       ORDER BY cnt DESC
@@ -268,26 +247,28 @@ export async function buildAccountSecurityViaAthena(
     executeAthenaSQL(queries.byTitle, environment),
   ])
 
+  // Risk and total counts depend on severity; use the API fallback rather than
+  // returning a misleading empty/healthy summary when this core query fails.
+  if (sevResult.status === 'rejected') {
+    throw new Error(`Athena account severity query failed: ${sevResult.reason instanceof Error ? sevResult.reason.message : String(sevResult.reason)}`)
+  }
+
   // Parse severity breakdown
   const severityBreakdown: Record<FindingSeverity, number> = {
     CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, INFORMATIONAL: 0,
   }
-  if (sevResult.status === 'fulfilled') {
-    for (const row of sevResult.value) {
-      const sev = (row.severity || '').toUpperCase() as FindingSeverity
-      if (sev in severityBreakdown) {
-        severityBreakdown[sev] += parseInt(row.cnt, 10) || 0
-      }
+  for (const row of sevResult.value) {
+    const sev = (row.severity || '').toUpperCase() as FindingSeverity
+    if (sev in severityBreakdown) {
+      severityBreakdown[sev] = (severityBreakdown[sev] || 0) + (parseInt(row.cnt || '0', 10) || 0)
     }
-  } else {
-    logger.error('[SecurityAthena] Account severity query failed:', sevResult.reason)
   }
 
   // Parse product breakdown
   const findingsByProduct: Record<string, number> = {}
   if (prodResult.status === 'fulfilled') {
     for (const row of prodResult.value) {
-      findingsByProduct[row.product_name || 'Unknown'] = parseInt(row.cnt, 10) || 0
+      findingsByProduct[row.product_name || 'Unknown'] = parseInt(row.cnt || '0', 10) || 0
     }
   } else {
     logger.error('[SecurityAthena] Account product query failed:', prodResult.reason)
@@ -298,7 +279,7 @@ export async function buildAccountSecurityViaAthena(
   if (compResult.status === 'fulfilled') {
     for (const row of compResult.value) {
       const status = (row.compliance_status || '').toUpperCase()
-      const count = parseInt(row.cnt, 10) || 0
+      const count = parseInt(row.cnt || '0', 10) || 0
       complianceCounts.total += count
       if (status === 'PASSED' || status === 'PASS') complianceCounts.passed += count
       else if (status === 'FAILED' || status === 'FAIL') complianceCounts.failed += count
@@ -342,7 +323,7 @@ export async function buildAccountSecurityViaAthena(
     for (const row of resResult.value) {
       const resId = row.resource_id || ''
       const sev = (row.severity || '').toUpperCase()
-      const count = parseInt(row.cnt, 10) || 0
+      const count = parseInt(row.cnt || '0', 10) || 0
       const group = resourceMap.get(resId) || { resourceId: resId, totalFindings: 0, critical: 0, high: 0, medium: 0, low: 0 }
       group.totalFindings += count
       if (sev === 'CRITICAL') group.critical += count
@@ -363,16 +344,16 @@ export async function buildAccountSecurityViaAthena(
     const cvePattern = /^(CVE-\d{4}-\d+)/
     for (const row of titleResult.value) {
       const title = row.title || ''
-      const count = parseInt(row.cnt, 10) || 0
+      const count = parseInt(row.cnt || '0', 10) || 0
       const sev = (row.severity || '').toUpperCase() as FindingSeverity
       const productName = row.product_name || ''
 
       findingsByTitle.push({ title, count, severity: sev, productName })
 
       // Extract CVE entries from Inspector findings
-      const cveMatch = title.match(cvePattern)
-      if (cveMatch && productName.toLowerCase().includes('inspector')) {
-        findingsByCve.push({ cveId: cveMatch[1], title, count, severity: sev })
+      const cveId = title.match(cvePattern)?.[1]
+      if (cveId && productName.toLowerCase().includes('inspector')) {
+        findingsByCve.push({ cveId, title, count, severity: sev })
       }
     }
   } else {
@@ -448,7 +429,7 @@ export async function buildSecuritySummaryViaAthena(
   onProgress?: ProgressCallback
 ): Promise<OrgSecuritySummary> {
   const environment = (process.env.AWS_SECURITYHUB_ENVIRONMENT as 'commercial' | 'govcloud') || 'govcloud'
-  const findingsUnion = buildFindingsUnion()
+  const findingsSource = buildFindingsSource()
 
   onProgress?.({ stage: 'init', message: 'Initializing Athena security scan...', percent: 0 })
 
@@ -456,11 +437,13 @@ export async function buildSecuritySummaryViaAthena(
   const allAccounts = await getAllAccountsUnified()
   const accountNameMap = new Map<string, string>()
   for (const acc of allAccounts) {
-    const name = acc.accountName || acc.projectName || acc.accountId
+    const name = acc.accountName || acc.projectName || acc.accountId || 'Unknown'
     if (environment === 'govcloud' && acc.awsGovCloudAccountID) {
       accountNameMap.set(acc.awsGovCloudAccountID, name)
     }
-    accountNameMap.set(acc.accountId, name)
+    if (acc.accountId) {
+      accountNameMap.set(acc.accountId, name)
+    }
   }
 
   onProgress?.({
@@ -474,21 +457,21 @@ export async function buildSecuritySummaryViaAthena(
   const queries = {
     severityByAccount: `
       SELECT awsaccountid AS accountid, severity_label AS severity, COUNT(*) AS cnt
-      FROM ${findingsUnion}
+      FROM ${findingsSource}
       WHERE workflow_status IN ('NEW', 'NOTIFIED')
         AND from_iso8601_timestamp(lastobservedat) >= date_add('day', -90, current_timestamp)
       GROUP BY awsaccountid, severity_label
     `,
     productBreakdown: `
       SELECT productname AS product_name, COUNT(*) AS cnt
-      FROM ${findingsUnion}
+      FROM ${findingsSource}
       WHERE workflow_status IN ('NEW', 'NOTIFIED')
         AND from_iso8601_timestamp(lastobservedat) >= date_add('day', -90, current_timestamp)
       GROUP BY productname
     `,
     complianceStatus: `
       SELECT compliance_status, COUNT(*) AS cnt
-      FROM ${findingsUnion}
+      FROM ${findingsSource}
       WHERE workflow_status IN ('NEW', 'NOTIFIED')
         AND from_iso8601_timestamp(lastobservedat) >= date_add('day', -90, current_timestamp)
         AND compliance_status IS NOT NULL AND compliance_status != ''
@@ -512,7 +495,7 @@ export async function buildSecuritySummaryViaAthena(
         description AS recommendation,
         createdat AS created_at,
         updatedat AS updated_at
-      FROM ${findingsUnion}
+      FROM ${findingsSource}
       WHERE workflow_status IN ('NEW', 'NOTIFIED')
         AND severity_label IN ('CRITICAL', 'HIGH')
         AND from_iso8601_timestamp(lastobservedat) >= date_add('day', -90, current_timestamp)
@@ -523,7 +506,7 @@ export async function buildSecuritySummaryViaAthena(
     // --- Extended analysis queries ---
     findingsByRegion: `
       SELECT region, COUNT(*) AS cnt
-      FROM ${findingsUnion}
+      FROM ${findingsSource}
       WHERE workflow_status IN ('NEW', 'NOTIFIED')
         AND from_iso8601_timestamp(lastobservedat) >= date_add('day', -90, current_timestamp)
         AND region IS NOT NULL AND region != ''
@@ -535,7 +518,7 @@ export async function buildSecuritySummaryViaAthena(
         date_format(date_trunc('week', from_iso8601_timestamp(createdat)), '%Y-%m-%d') AS week_start,
         severity_label,
         COUNT(*) AS cnt
-      FROM ${findingsUnion}
+      FROM ${findingsSource}
       WHERE workflow_status IN ('NEW', 'NOTIFIED')
         AND from_iso8601_timestamp(createdat) >= date_add('day', -90, current_timestamp)
       GROUP BY date_trunc('week', from_iso8601_timestamp(createdat)), severity_label
@@ -543,7 +526,7 @@ export async function buildSecuritySummaryViaAthena(
     `,
     severityByProduct: `
       SELECT productname, severity_label, COUNT(*) AS cnt
-      FROM ${findingsUnion}
+      FROM ${findingsSource}
       WHERE workflow_status IN ('NEW', 'NOTIFIED')
         AND from_iso8601_timestamp(lastobservedat) >= date_add('day', -90, current_timestamp)
       GROUP BY productname, severity_label
@@ -557,7 +540,7 @@ export async function buildSecuritySummaryViaAthena(
           ELSE 'over90'
         END AS age_bucket,
         COUNT(*) AS cnt
-      FROM ${findingsUnion}
+      FROM ${findingsSource}
       WHERE workflow_status IN ('NEW', 'NOTIFIED')
         AND from_iso8601_timestamp(lastobservedat) >= date_add('day', -90, current_timestamp)
       GROUP BY 1
@@ -579,6 +562,10 @@ export async function buildSecuritySummaryViaAthena(
       executeAthenaSQL(queries.findingAge, environment),
     ])
 
+    if (sevResult.status === 'rejected') {
+      throw new Error(`Athena organization severity query failed: ${sevResult.reason instanceof Error ? sevResult.reason.message : String(sevResult.reason)}`)
+    }
+
     onProgress?.({ stage: 'athena_complete', message: 'Athena queries complete', percent: 75 })
 
     // Parse severity-by-account results
@@ -587,26 +574,22 @@ export async function buildSecuritySummaryViaAthena(
     }
     const accountBreakdown = new Map<string, { critical: number; high: number; medium: number; low: number; total: number }>()
 
-    if (sevResult.status === 'fulfilled') {
-      for (const row of sevResult.value) {
-        const accountId = row.accountid || ''
-        const severity = (row.severity || '').toUpperCase() as FindingSeverity
-        const count = parseInt(row.cnt, 10) || 0
+    for (const row of sevResult.value) {
+      const accountId = row.accountid || ''
+      const severity = (row.severity || '').toUpperCase() as FindingSeverity
+      const count = parseInt(row.cnt || '0', 10) || 0
 
-        if (severity in severityBreakdown) {
-          severityBreakdown[severity] += count
-        }
-
-        const acct = accountBreakdown.get(accountId) || { critical: 0, high: 0, medium: 0, low: 0, total: 0 }
-        acct.total += count
-        if (severity === 'CRITICAL') acct.critical += count
-        else if (severity === 'HIGH') acct.high += count
-        else if (severity === 'MEDIUM') acct.medium += count
-        else if (severity === 'LOW') acct.low += count
-        accountBreakdown.set(accountId, acct)
+      if (severity in severityBreakdown) {
+        severityBreakdown[severity] = (severityBreakdown[severity] || 0) + count
       }
-    } else {
-      logger.error('[SecurityAthena] Severity-by-account query failed:', sevResult.reason)
+
+      const acct = accountBreakdown.get(accountId) || { critical: 0, high: 0, medium: 0, low: 0, total: 0 }
+      acct.total += count
+      if (severity === 'CRITICAL') acct.critical += count
+      else if (severity === 'HIGH') acct.high += count
+      else if (severity === 'MEDIUM') acct.medium += count
+      else if (severity === 'LOW') acct.low += count
+      accountBreakdown.set(accountId, acct)
     }
 
     // Parse product breakdown
@@ -614,7 +597,7 @@ export async function buildSecuritySummaryViaAthena(
     if (prodResult.status === 'fulfilled') {
       for (const row of prodResult.value) {
         const product = row.product_name || 'Unknown'
-        findingsByProduct[product] = parseInt(row.cnt, 10) || 0
+        findingsByProduct[product] = parseInt(row.cnt || '0', 10) || 0
       }
     } else {
       logger.error('[SecurityAthena] Product breakdown query failed:', prodResult.reason)
@@ -625,7 +608,7 @@ export async function buildSecuritySummaryViaAthena(
     if (compResult.status === 'fulfilled') {
       for (const row of compResult.value) {
         const status = (row.compliance_status || '').toUpperCase()
-        const count = parseInt(row.cnt, 10) || 0
+        const count = parseInt(row.cnt || '0', 10) || 0
         complianceCounts.total += count
         if (status === 'PASSED' || status === 'PASS') complianceCounts.passed += count
         else if (status === 'FAILED' || status === 'FAIL') complianceCounts.failed += count
@@ -640,7 +623,7 @@ export async function buildSecuritySummaryViaAthena(
     const topFindings: SecurityFindingSummary[] = []
     if (topResult.status === 'fulfilled') {
       for (const row of topResult.value) {
-        const sevId = parseInt(row.severity_id, 10) || 0
+        const sevId = parseInt(row.severity_id || '0', 10) || 0
         const severity: FindingSeverity = sevId >= 5 ? 'CRITICAL' : sevId >= 4 ? 'HIGH' : sevId >= 3 ? 'MEDIUM' : sevId >= 2 ? 'LOW' : 'INFORMATIONAL'
         topFindings.push({
           id: row.id || '',
@@ -668,7 +651,7 @@ export async function buildSecuritySummaryViaAthena(
     if (regionResult.status === 'fulfilled') {
       for (const row of regionResult.value) {
         const region = row.region || 'Unknown'
-        findingsByRegion[region] = parseInt(row.cnt, 10) || 0
+        findingsByRegion[region] = parseInt(row.cnt || '0', 10) || 0
       }
     } else {
       logger.error('[SecurityAthena] Findings-by-region query failed:', regionResult.reason)
@@ -681,7 +664,7 @@ export async function buildSecuritySummaryViaAthena(
         const week = row.week_start || ''
         if (!week) continue
         const sev = (row.severity_label || '').toUpperCase()
-        const count = parseInt(row.cnt, 10) || 0
+        const count = parseInt(row.cnt || '0', 10) || 0
         const point = trendMap.get(week) || { week, critical: 0, high: 0, medium: 0, low: 0, informational: 0, total: 0 }
         point.total += count
         if (sev === 'CRITICAL') point.critical += count
@@ -702,7 +685,7 @@ export async function buildSecuritySummaryViaAthena(
       for (const row of sevProdResult.value) {
         const product = row.productname || 'Unknown'
         const sev = (row.severity_label || '').toUpperCase()
-        const count = parseInt(row.cnt, 10) || 0
+        const count = parseInt(row.cnt || '0', 10) || 0
         const entry = sevProdMap.get(product) || { product, critical: 0, high: 0, medium: 0, low: 0, informational: 0, total: 0 }
         entry.total += count
         if (sev === 'CRITICAL') entry.critical += count
@@ -722,7 +705,7 @@ export async function buildSecuritySummaryViaAthena(
     if (ageResult.status === 'fulfilled') {
       for (const row of ageResult.value) {
         const bucket = row.age_bucket || ''
-        const count = parseInt(row.cnt, 10) || 0
+        const count = parseInt(row.cnt || '0', 10) || 0
         if (bucket === 'under7') findingAgeBuckets.under7Days = count
         else if (bucket === 'under30') findingAgeBuckets.under30Days = count
         else if (bucket === 'under90') findingAgeBuckets.under90Days = count

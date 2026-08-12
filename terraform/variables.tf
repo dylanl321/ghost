@@ -52,10 +52,10 @@ variable "env" {
 }
 
 # ECR image cleanup tuning (see terraform/ecr.tf lifecycle policy)
-variable "ecr_keep_tagged_images" {
-  description = "Number of most-recent per-commit (<env>-<sha>) images to retain for rollback before older ones are expired."
+variable "ecr_tagged_expiry_days" {
+  description = "Days a historical per-commit (<env>-<sha>) image is retained before expiry."
   type        = number
-  default     = 10
+  default     = 30
 }
 
 variable "ecr_untagged_expiry_days" {

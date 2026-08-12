@@ -76,6 +76,27 @@
           </UButton>
         </div>
       </UCard>
+
+      <!-- MCP Setup -->
+      <UCard
+        class="cursor-pointer"
+        @click="navigateTo('/chat/mcp')"
+      >
+        <div class="p-6">
+          <div class="w-12 h-12 bg-cyan-100 dark:bg-cyan-900/30 rounded-lg flex items-center justify-center mb-4">
+            <Icon name="i-heroicons-server-stack" class="w-6 h-6 text-cyan-700 dark:text-cyan-300" />
+          </div>
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+            MCP Connections
+          </h3>
+          <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Connect Codex and other authorized MCP clients
+          </p>
+          <UButton color="cyan" variant="soft" size="sm">
+            Open Connections
+          </UButton>
+        </div>
+      </UCard>
       </div>
 
       <!-- Popular Articles -->

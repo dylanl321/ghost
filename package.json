@@ -17,6 +17,7 @@
     "start": "nuxt start",
     "bundle:support": "tsx scripts/bundle-support-articles.ts",
     "seed:email-templates": "tsx scripts/seed-email-templates.ts",
+    "mcp:secrets": "tsx scripts/generate-mcp-oauth-secrets.ts",
     "validate": "tsx scripts/validate-codebase.ts",
     "validate:fix": "tsx scripts/validate-codebase.ts --fix",
     "check:types": "nuxi typecheck",
@@ -25,6 +26,7 @@
     "check:unused": "ts-prune --project tsconfig.json",
     "check:deps": "depcheck --ignores=\"@nuxt/*,nuxt-*,@types/*,eslint,typescript\"",
     "test:chat": "tsx --test tests/chat/*.test.ts",
+    "test:mcp": "tsx --test tests/mcp/*.test.ts",
     "test:vmaas": "tsx --test tests/vmaas/*.test.ts",
     "test:budget-recipients": "tsx --test server/utils/__tests__/manual-budget-alert-recipients.test.ts",
     "changelog:generate": "tsx scripts/generate-changelog.ts"
@@ -69,6 +71,7 @@
     "@aws-sdk/s3-request-presigner": "^3.1104.0",
     "@aws-sdk/util-dynamodb": "^3.996.7",
     "@iconify-json/fa6-solid": "^1.2.4",
+    "@modelcontextprotocol/server": "^2.0.0",
     "@nuxt/eslint": "^1.17.0",
     "@nuxt/ui": "^2.22.1",
     "@pinia/nuxt": "^0.11.2",
@@ -89,6 +92,7 @@
     "gray-matter": "^4.0.3",
     "html2canvas": "^1.4.1",
     "isomorphic-dompurify": "3.22.0",
+    "jose": "^6.2.8",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "jszip": "^3.10.1",
@@ -97,6 +101,7 @@
     "nuxt": "^4.5.2",
     "nuxt-echarts": "^1.0.0",
     "nuxt-oidc-auth": "^1.0.0-beta.11",
+    "oidc-provider": "^9.11.3",
     "pinia": "^3.0.3",
     "pinia-plugin-persistedstate": "^4.7.1",
     "sortablejs": "^1.15.7",
@@ -107,7 +112,8 @@
     "vue-echarts": "^8.0.0-beta.1",
     "vue-router": "^5.2.0",
     "xlsx": "npm:@e965/xlsx@0.20.3",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "zod-v4": "npm:zod@^4.2.0"
   },
   "overrides": {
     "undici": "8.10.0",
@@ -143,6 +149,7 @@
   "devDependencies": {
     "@iconify-json/simple-icons": "^1.2.93",
     "@types/node": "^22.19.0",
+    "@types/oidc-provider": "^9.11.1",
     "ajv": "^8.20.0",
     "commander": "15.0.0",
     "depcheck": "^1.4.7",
@@ -150,7 +157,7 @@
     "oxc-parser": "0.143.0",
     "ts-prune": "^0.10.3",
     "unplugin": "3.3.0",
-    "webpack": "^5.109.2",
-    "vue-tsc": "3.3.9"
+    "vue-tsc": "3.3.9",
+    "webpack": "^5.109.2"
   }
 }

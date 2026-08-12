@@ -229,6 +229,35 @@ async function getAssumeRoleName(): Promise<string> {
   return getConfigValue<string>('aws.roleAssumption.roleName', 'AWS_ASSUME_ROLE_NAME', 'GDMSOrganizationsRole')
 }
 
+function normalizeRolePath(path: string | undefined): string {
+  return path?.replace(/^\/+|\/+$/g, '') || ''
+}
+
+/**
+ * Organization master roles can live under a path while member-account roles
+ * remain at the IAM root. GovCloud uses /GD/ for the organizations master.
+ */
+export function buildAssumeRoleArn(
+  environment: AWSEnvironmentType,
+  targetAccountId: string,
+  roleName: string,
+): string {
+  const partition = environment === 'commercial' ? 'aws' : 'aws-us-gov'
+  const organizationsAccountId = environment === 'commercial'
+    ? process.env.AWS_COMMERCIAL_ORGANIZATIONS_ACCOUNT_ID
+    : process.env.AWS_GOVCLOUD_ORGANIZATIONS_ACCOUNT_ID
+  const configuredPath = environment === 'commercial'
+    ? process.env.AWS_COMMERCIAL_ORGANIZATIONS_ROLE_PATH
+    : process.env.AWS_GOVCLOUD_ORGANIZATIONS_ROLE_PATH
+  const defaultPath = environment === 'govcloud' ? 'GD' : ''
+  const rolePath = targetAccountId === organizationsAccountId
+    ? normalizeRolePath(configuredPath ?? defaultPath)
+    : ''
+  const qualifiedRoleName = rolePath ? `${rolePath}/${roleName}` : roleName
+
+  return `arn:${partition}:iam::${targetAccountId}:role/${qualifiedRoleName}`
+}
+
 /**
  * Get assume role duration from site config with env fallback
  * Default: 43200 seconds (12 hours) - max for role chaining
@@ -268,10 +297,8 @@ async function assumeRole(
     credentials: baseCredentials
   })
 
-  // Determine role ARN based on environment
-  const partition = environment === 'commercial' ? 'aws' : 'aws-us-gov'
   const roleName = await getAssumeRoleName()
-  const roleArn = `arn:${partition}:iam::${targetAccountId}:role/${roleName}`
+  const roleArn = buildAssumeRoleArn(environment, targetAccountId, roleName)
 
   logger.info('[AWS Client Factory] Assuming role:', { roleArn })
 
