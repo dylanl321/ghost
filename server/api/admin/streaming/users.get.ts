@@ -17,14 +17,12 @@ export default defineEventHandler(async (event) => {
   // Require admin access
   await requireAdmin(event)
 
+  const query = getQuery(event)
+  const period = (query.period as '24h' | '7d' | '30d') || '7d'
+  const limit = query.limit ? parseInt(query.limit as string) : 20
+  const { startDate, endDate } = getDateRange(period)
+
   try {
-    const query = getQuery(event)
-    const period = (query.period as '24h' | '7d' | '30d') || '7d'
-    const limit = query.limit ? parseInt(query.limit as string) : 20
-
-    // Calculate date range
-    const { startDate, endDate } = getDateRange(period)
-
     // Fetch user-level metrics for the period
     // Query all metrics with metricType starting with "user:"
     const result = await scanItems(
@@ -99,6 +97,18 @@ export default defineEventHandler(async (event) => {
     }
   } catch (error: any) {
     logger.error('[Admin] Error fetching user streaming metrics:', error)
+
+    if (error.name === 'ResourceNotFoundException' || error.message?.includes('Requested resource not found')) {
+      logger.warn(`[Admin] Streaming metrics table ${TABLE_NAME} is not deployed; returning an empty user list`)
+      return {
+        success: true,
+        users: [],
+        count: 0,
+        period,
+        startDate,
+        endDate
+      }
+    }
 
     throw createError({
       statusCode: 500,

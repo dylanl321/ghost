@@ -16,19 +16,18 @@ import type {
 } from '#shared/types/strands-agent-metrics'
 import { logger } from '../../../utils/logger'
 
-const TABLE_NAME = process.env.STRANDS_AGENT_METRICS_TABLE_NAME || 'strands-agent-metrics-prod'
+const TABLE_NAME = process.env.STRANDS_AGENT_METRICS_TABLE_NAME ||
+  `strands-agent-metrics-${process.env.NODE_ENV === 'prod' ? 'prod' : 'dev'}`
 
 export default defineEventHandler(async (event) => {
   // Require admin access
   await requireAdmin(event)
 
+  const query = getQuery(event)
+  const period = (query.period as '24h' | '7d' | '30d') || '7d'
+  const { startDate, endDate } = getDateRange(period)
+
   try {
-    const query = getQuery(event)
-    const period = (query.period as '24h' | '7d' | '30d') || '7d'
-
-    // Calculate date range
-    const { startDate, endDate } = getDateRange(period)
-
     // Fetch metrics for the period
     const result = await scanItems(
       TABLE_NAME,
@@ -63,6 +62,14 @@ export default defineEventHandler(async (event) => {
     } as StrandsAgentMetricsResponse
   } catch (error: any) {
     logger.error('[Admin] Error fetching Strands agent dashboard:', error)
+
+    if (error.name === 'ResourceNotFoundException' || error.message?.includes('Requested resource not found')) {
+      logger.warn(`[Admin] Strands agent metrics table ${TABLE_NAME} is not deployed; returning an empty dashboard`)
+      return {
+        success: true,
+        metrics: calculateDashboardMetrics([], [], period, startDate, endDate)
+      } as StrandsAgentMetricsResponse
+    }
 
     throw createError({
       statusCode: 500,
