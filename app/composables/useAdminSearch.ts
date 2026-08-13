@@ -238,6 +238,16 @@ export function useAdminSearch() {
       tab: 'usage-collection',
       keywords: ['usage', 'collection', 'bedrock', 'mantle', 'errors', 'status']
     },
+    {
+      id: 'ai-mcp-usage',
+      label: 'MCP Usage',
+      description: 'View organization MCP tool usage and adoption',
+      icon: 'i-heroicons-chart-bar-square',
+      category: 'ai',
+      categoryLabel: 'AI & Agents',
+      to: '/admin/mcp-usage',
+      keywords: ['mcp', 'usage', 'tools', 'adoption', 'calls', 'latency', 'fallbacks']
+    },
 
     // System Health (4 tabs)
     {
