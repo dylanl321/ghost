@@ -6,6 +6,9 @@ export function classifyAIUsageCollectionFailure(message: string): { category: s
   if (lower.includes('service control policy') || lower.includes('explicit deny')) {
     return { category: 'SCP deny', remediation: 'Update the applicable service control policy to allow the collection action.' }
   }
+  if (lower.includes('model invocation logging is not configured')) {
+    return { category: 'GenAI observability configuration', remediation: 'Enable Bedrock model invocation logging to CloudWatch Logs in the target account and region.' }
+  }
   if (lower.includes('cloudwatch') || lower.includes('getmetricdata') || lower.includes('listmetrics') || lower.includes('logs insights')) {
     return { category: 'CloudWatch permission', remediation: 'Allow cloudwatch:ListMetrics, cloudwatch:GetMetricData, logs:StartQuery, logs:GetQueryResults, and logs:StopQuery in the target account.' }
   }

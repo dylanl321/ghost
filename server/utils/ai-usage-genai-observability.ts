@@ -70,7 +70,7 @@ function rowMap(row: ResultField[]): Record<string, string> {
  */
 export function genAIObservabilityQuery(): string {
   return [
-    'fields @timestamp as timestamp, @ptr as pointer, errorCode, modelId, operation, accountId, region, requestId',
+    'fields @timestamp, errorCode, modelId, operation, accountId, region, requestId',
     '| filter ispresent(errorCode)',
     '| sort @timestamp desc'
   ].join(' ')
@@ -79,12 +79,12 @@ export function genAIObservabilityQuery(): string {
 export function parseGenAIObservabilityRows(rows: ResultField[][]): GenAIObservabilityRow[] {
   return rows.flatMap(row => {
     const fields = rowMap(row)
-    const timestamp = fields.timestamp
+    const timestamp = fields.timestamp || fields['@timestamp']
     const errorCode = bounded(fields.errorCode, 200)
     if (!timestamp || Number.isNaN(new Date(timestamp).getTime()) || !errorCode) return []
     return [{
       timestamp,
-      pointer: bounded(fields.pointer, 2_000),
+      pointer: bounded(fields.pointer || fields['@ptr'], 2_000),
       errorCode,
       modelId: bounded(fields.modelId, 300),
       operation: bounded(fields.operation, 200),

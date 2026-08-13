@@ -55,7 +55,7 @@ test('Mantle normalization chooses project and model dimensions without duplicat
 
 test('GenAI observability parsing retains only allowlisted error metadata', () => {
   const rows = [[
-    { field: 'timestamp', value: '2026-08-12T12:00:00.000Z' },
+    { field: '@timestamp', value: '2026-08-12T12:00:00.000Z' },
     { field: 'pointer', value: 'pointer-1' },
     { field: 'errorCode', value: 'ThrottlingException' },
     { field: 'modelId', value: 'example.model' },
@@ -201,4 +201,8 @@ test('collector failures provide actionable categories', () => {
   const failure = classifyAIUsageCollectionFailure('AccessDenied for cloudwatch:ListMetrics')
   assert.equal(failure.category, 'CloudWatch permission')
   assert.match(failure.remediation, /ListMetrics/)
+
+  const missingLogging = classifyAIUsageCollectionFailure('Bedrock model invocation logging is not configured to send events to CloudWatch Logs.')
+  assert.equal(missingLogging.category, 'GenAI observability configuration')
+  assert.match(missingLogging.remediation, /Enable Bedrock model invocation logging/)
 })
