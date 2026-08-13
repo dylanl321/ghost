@@ -11,6 +11,7 @@ import { deleteMcpGraphDelegation } from './delegated-graph'
 import { getGhostMcpIdentity } from './identity'
 
 let providerPromise: Promise<Provider> | undefined
+export const GHOST_REFRESH_TOKEN_ROTATION = false
 
 interface RefreshTokenClient {
   applicationType?: string
@@ -81,6 +82,10 @@ async function createProvider(): Promise<Provider> {
     // Codex uses the MCP consent screen without sending OIDC prompt=consent, which
     // makes oidc-provider strip offline_access before its default refresh policy.
     issueRefreshToken: async (_ctx: unknown, client: RefreshTokenClient) => shouldIssueGhostRefreshToken(client),
+    // Codex stores MCP credentials locally. A rotating token is consumed before
+    // the client has durably saved its replacement, making startup retries fail
+    // if that persistence step is interrupted. Keep the 30-day token stable.
+    rotateRefreshToken: GHOST_REFRESH_TOKEN_ROTATION,
     features: {
       devInteractions: { enabled: false },
       registration: {
@@ -150,6 +155,19 @@ async function createProvider(): Promise<Provider> {
   const provider = new Provider(issuer, configuration)
   provider.proxy = true
   provider.on('server_error', (_ctx: unknown, error: Error) => logger.error('[MCP OAuth] Provider error', error))
+  provider.on('grant.success', (ctx: any) => {
+    if (ctx.oidc?.params?.grant_type === 'refresh_token') {
+      logger.info('[MCP OAuth] Refresh grant succeeded', { clientId: ctx.oidc.client?.clientId })
+    }
+  })
+  provider.on('grant.error', (ctx: any, error: Error) => {
+    logger.warn('[MCP OAuth] Refresh grant failed', {
+      grantType: ctx.oidc?.params?.grant_type,
+      clientId: ctx.oidc?.client?.clientId,
+      error: error.name,
+      message: error.message
+    })
+  })
   provider.on('grant.destroyed', (grant: { accountId?: string }) => {
     if (grant.accountId) {
       void deleteMcpGraphDelegation(grant.accountId).catch(error => {
