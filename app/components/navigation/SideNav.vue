@@ -216,7 +216,13 @@
             :to="item.to"
             prefetch
             class="flex items-center px-3 py-2 rounded-md text-sm text-slate-700 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors relative group overflow-hidden"
-            :class="{ 'text-slate-900 bg-slate-100 dark:text-white dark:bg-slate-800': isActive(item) }"
+            :class="[
+              { 'text-slate-900 bg-slate-100 dark:text-white dark:bg-slate-800': isActive(item) },
+              {
+                'mcp-nav-accent': item.accent === 'mcp',
+                'mcp-nav-accent--intro': item.accent === 'mcp' && mcpIntroActive,
+              },
+            ]"
           >
             <UIcon :name="item.icon" class="flex-shrink-0 w-5 h-5" />
             <span
@@ -321,6 +327,7 @@ const route = useRoute();
 const navigationStore = useNavigationStore();
 const { isAdmin } = useUserRoles();
 const siteConfigStore = useSiteConfigStore();
+const { isIntroActive: mcpIntroActive } = useMcpOfferingDiscovery();
 
 // Check if Strands chat is enabled
 const strandsEnabled = computed(() => siteConfigStore.isStrandsChatEnabled);
@@ -508,6 +515,7 @@ const navigationItems = computed(() => {
       to: "/chat/mcp",
       icon: "i-heroicons-link",
       section: "Workspace",
+      accent: "mcp",
     },
     {
       label: "Account Explorer",
@@ -588,3 +596,11 @@ const navigationItems = computed(() => {
   ];
 });
 </script>
+
+<style scoped>
+@property --mcp-nav-angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+.mcp-nav-accent::before { position: absolute; inset: 0; padding: 1px; pointer-events: none; content: ''; background: conic-gradient(from var(--mcp-nav-angle), rgb(132 101 238), rgb(74 168 244), rgb(242 167 87), rgb(216 110 234), rgb(132 101 238)); border-radius: inherit; opacity: 0; transition: opacity 180ms ease; -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+.mcp-nav-accent:hover::before, .mcp-nav-accent:focus-visible::before, .mcp-nav-accent--intro::before { opacity: .82; animation: mcp-nav-trace 7s linear infinite; }
+@keyframes mcp-nav-trace { to { --mcp-nav-angle: 360deg; } }
+@media (prefers-reduced-motion: reduce) { .mcp-nav-accent:hover::before, .mcp-nav-accent:focus-visible::before, .mcp-nav-accent--intro::before { animation: none; } }
+</style>

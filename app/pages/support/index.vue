@@ -175,6 +175,14 @@ definePageMeta({
 // Popular articles
 const popularArticles = [
   {
+    id: 'mcp-connections-guide',
+    title: 'Connecting Codex to GHOST',
+    description: 'Set up GHOST in Codex and troubleshoot connection issues',
+    icon: 'i-heroicons-link',
+    color: 'text-cyan-600 dark:text-cyan-400',
+    link: '/support/docs?topic=mcp-connections-guide'
+  },
+  {
     id: 'cost-dashboard',
     title: 'Using the Cost Dashboard',
     description: 'Learn how to track costs, use filters, and share reports',

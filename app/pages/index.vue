@@ -138,6 +138,10 @@
       </div>
     </div>
 
+    <ClientOnly>
+      <DashboardMcpOfferingBanner />
+    </ClientOnly>
+
     <!-- Error Alert -->
     <UAlert v-if="fetchError" color="red" icon="i-heroicons-exclamation-triangle" variant="soft">
       <template #title>{{ fetchError }}</template>
@@ -338,7 +342,7 @@
 const { user } = useOidcAuth()
 const userGroupStore = useUserGroupStore()
 const enclaveStore = useEnclaveStore()
-const { getPreference, setPreference, initialized: prefsInitialized, load: loadPrefs } = useUserPreferences()
+const { getPreference, setPreference, initialized: prefsInitialized, loading: prefsLoading, load: loadPrefs } = useUserPreferences()
 const { isAdmin } = useUserRoles()
 const { favoriteIds } = useFavoriteAccounts()
 const { visibleSections, visibleMetricCardCount, sectionColSpan, setSectionStyle, layout: layoutConfig, ensureOrgDefault } = useDashboardLayout()
@@ -703,10 +707,27 @@ function handleProformaToggle(value: boolean) {
   fetchOverview(true)
 }
 
+async function ensureDashboardPreferences() {
+  if (prefsInitialized.value) return
+  if (!prefsLoading.value) {
+    await loadPrefs()
+    return
+  }
+
+  await new Promise<void>((resolve) => {
+    const stop = watch([prefsInitialized, prefsLoading], ([ready, stillLoading]) => {
+      if (ready || !stillLoading) {
+        stop()
+        resolve()
+      }
+    }, { immediate: true })
+  })
+}
+
 onMounted(async () => {
   // Load user prefs and org default in parallel so layout renders correctly
   await Promise.all([
-    prefsInitialized.value ? Promise.resolve() : loadPrefs(),
+    ensureDashboardPreferences(),
     ensureOrgDefault(),
   ])
   useProforma.value = getPreference('dashboardProforma', true)
