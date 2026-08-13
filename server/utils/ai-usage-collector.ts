@@ -28,6 +28,7 @@ import {
   withAIUsageFactKeys
 } from './ai-usage-storage'
 import { collectRuntimeErrorCauses } from './ai-usage-error-causes'
+import { collectGenAIObservabilityErrorCauses } from './ai-usage-genai-observability'
 import { classifyAIUsageCollectionFailure } from './ai-usage-failures'
 import { logger } from './logger'
 import { getCacheManager } from './cache-manager'
@@ -494,14 +495,27 @@ export async function collectAIUsage(options: { backfillDays?: number } = {}): P
       }
     }
 
-    const causeResult = await collectRuntimeErrorCauses(scopes, initialCauseBackfill ? 90 : 2)
-    causesWritten = causeResult.causes.length
-    failures.push(...causeResult.failures)
-    warnings.push(...causeResult.failures.map(failure => failure.message))
-    const causeStatuses = Object.values(causeResult.environments)
-    const causeRuntimeStatus = causeStatuses.length > 0 && causeStatuses.every(status => status === 'complete')
+    const runtimeCauseResult = await collectRuntimeErrorCauses(scopes, initialCauseBackfill ? 90 : 2)
+    const mantleTargets = work.filter(item => telemetryFacts.some(fact =>
+      fact.provider === 'bedrock-mantle' &&
+      fact.environment === item.environment &&
+      fact.accountId === item.accountId &&
+      fact.region === item.region))
+    const genAICauseResult = await collectGenAIObservabilityErrorCauses(
+      mantleTargets,
+      initialCauseBackfill ? 90 : 2
+    )
+    causesWritten = runtimeCauseResult.causes.length + genAICauseResult.causes.length
+    failures.push(...runtimeCauseResult.failures, ...genAICauseResult.failures)
+    warnings.push(...runtimeCauseResult.failures.map(failure => failure.message), ...genAICauseResult.failures.map(failure => failure.message))
+    const runtimeCauseStatuses = Object.values(runtimeCauseResult.environments)
+    const causeRuntimeStatus = runtimeCauseStatuses.length > 0 && runtimeCauseStatuses.every(status => status === 'complete')
       ? 'complete'
-      : causeStatuses.some(status => status === 'complete') ? 'partial' : 'unavailable'
+      : runtimeCauseStatuses.some(status => status === 'complete') ? 'partial' : 'unavailable'
+    const genAICauseStatuses = Object.values(genAICauseResult.environments)
+    const causeGenAIStatus = genAICauseStatuses.length > 0 && genAICauseStatuses.every(status => status === 'complete')
+      ? 'complete'
+      : genAICauseStatuses.some(status => status === 'complete') ? 'partial' : 'unavailable'
 
     const facts = [...telemetryFacts, ...costFacts]
     factsWritten = facts.length
@@ -524,8 +538,9 @@ export async function collectAIUsage(options: { backfillDays?: number } = {}): P
       causesWritten,
       causeCollection: {
         runtime: causeRuntimeStatus,
+        genai: causeGenAIStatus,
         collectedAt: completedAt,
-        environments: causeResult.environments
+        environments: runtimeCauseResult.environments
       },
       warnings: warnings.slice(0, 100),
       failures: failures.slice(0, 100)

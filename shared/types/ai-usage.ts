@@ -82,7 +82,7 @@ export interface AIUsageErrorCause {
   enclaveName: string
   accountId: string
   region: string
-  source: 'bedrock-runtime'
+  source: 'bedrock-runtime' | 'cloudwatch-genai'
   modelId?: string
   operation: string
   errorCode: string
@@ -197,6 +197,7 @@ export interface AIUsageOverviewResponse {
 
 export interface AIUsageErrorCauseGroup {
   key: string
+  source: AIUsageErrorCause['source']
   errorCode: string
   operation: string
   message?: string
@@ -205,18 +206,22 @@ export interface AIUsageErrorCauseGroup {
   affectedModels: number
 }
 
+export interface AIUsageErrorCauseSourceSummary {
+  source: AIUsageErrorCause['source']
+  label: string
+  availability: 'available' | 'partial' | 'unavailable'
+  eventCount: number
+  message?: string
+}
+
 export interface AIUsageErrorCauseResponse {
   metricErrorTotal: number
-  matchedCloudTrailEvents: number
+  matchedCauseEvents: number
   affectedAccounts: Array<{ accountId: string; enclaveName: string; count: number }>
   affectedModels: Array<{ modelId: string; count: number }>
   groups: AIUsageErrorCauseGroup[]
   recentExamples: AIUsageErrorCause[]
-  sourceAvailability: {
-    runtime: 'available' | 'partial' | 'unavailable'
-    mantle: 'unavailable'
-    mantleMessage: string
-  }
+  sources: AIUsageErrorCauseSourceSummary[]
 }
 
 export interface AIUsageCostDriverRow {

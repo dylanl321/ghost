@@ -69,9 +69,12 @@ export function withAIUsageErrorCauseKeys(
   cause: Omit<AIUsageErrorCause, 'pk' | 'sk'>
 ): AIUsageErrorCause {
   return {
+    ...cause,
     pk: `CAUSE#${cause.environment.toUpperCase()}#${cause.accountId}`,
-    sk: `E#${cause.timestamp}#${encodeURIComponent(cause.eventId)}`,
-    ...cause
+    // Preserve Runtime's existing key shape so collection does not duplicate stored CloudTrail events.
+    sk: cause.source === 'bedrock-runtime'
+      ? `E#${cause.timestamp}#${encodeURIComponent(cause.eventId)}`
+      : `E#${cause.timestamp}#${cause.source}#${encodeURIComponent(cause.eventId)}`
   }
 }
 
@@ -237,6 +240,7 @@ export interface AIUsageCollectorState {
   causesWritten?: number
   causeCollection?: {
     runtime: 'complete' | 'partial' | 'unavailable'
+    genai?: 'complete' | 'partial' | 'unavailable'
     collectedAt: string
     environments: Partial<Record<AIUsageEnvironment, 'complete' | 'unavailable'>>
   }

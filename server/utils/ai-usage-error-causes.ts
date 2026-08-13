@@ -138,10 +138,12 @@ export async function queryAIUsageErrorCauses(input: AIUsageQueryInput): Promise
   const raw = await loadAIUsageErrorCauses(targets, range.startDate, range.endDate)
   const selectedProviders = input.providers || []
   const runtimeSelected = selectedProviders.length === 0 || selectedProviders.includes('bedrock-runtime')
+  const genAISelected = selectedProviders.length === 0 || selectedProviders.includes('bedrock-mantle')
   const bedrockServiceSelected = !(input.services || []).length ||
     (input.services || []).some(service => service.toLowerCase().includes('bedrock'))
-  const causes = runtimeSelected && bedrockServiceSelected
+  const causes = bedrockServiceSelected
     ? raw.filter(cause =>
+        (cause.source === 'bedrock-runtime' ? runtimeSelected : genAISelected) &&
         matches(cause.modelId, input.models || []) &&
         matches(cause.region, input.regions || []))
     : []
@@ -152,21 +154,28 @@ export async function queryAIUsageErrorCauses(input: AIUsageQueryInput): Promise
     overview.summary.metrics.throttles
   const groupMap = new Map<string, AIUsageErrorCause[]>()
   for (const cause of causes) {
-    const key = `${cause.errorCode}|${cause.operation}|${cause.errorMessage || ''}`
+    const key = `${cause.source}|${cause.errorCode}|${cause.operation}|${cause.errorMessage || ''}`
     if (!groupMap.has(key)) groupMap.set(key, [])
     groupMap.get(key)!.push(cause)
   }
   const collectorState = await getAIUsageCollectorState()
-  const runtimeAvailability = collectorState?.causeCollection?.runtime === 'complete' || causes.length > 0
+  const runtimeCauses = causes.filter(cause => cause.source === 'bedrock-runtime')
+  const genAICauses = causes.filter(cause => cause.source === 'cloudwatch-genai')
+  const runtimeAvailability = collectorState?.causeCollection?.runtime === 'complete' || runtimeCauses.length > 0
     ? 'available'
     : collectorState?.causeCollection?.runtime === 'partial'
+      ? 'partial'
+      : 'unavailable'
+  const genAIAvailability = collectorState?.causeCollection?.genai === 'complete' || genAICauses.length > 0
+    ? 'available'
+    : collectorState?.causeCollection?.genai === 'partial'
       ? 'partial'
       : 'unavailable'
   const accountCounts = countBy(causes, cause => cause.accountId)
   const modelCounts = countBy(causes, cause => cause.modelId)
   const result: AIUsageErrorCauseResponse = {
     metricErrorTotal,
-    matchedCloudTrailEvents: causes.length,
+    matchedCauseEvents: causes.length,
     affectedAccounts: accountCounts.map(item => ({
       accountId: item.key,
       enclaveName: causes.find(cause => cause.accountId === item.key)?.enclaveName || item.key,
@@ -175,6 +184,7 @@ export async function queryAIUsageErrorCauses(input: AIUsageQueryInput): Promise
     affectedModels: modelCounts.map(item => ({ modelId: item.key, count: item.count })),
     groups: [...groupMap.entries()].map(([key, group]) => ({
       key,
+      source: group[0]!.source,
       errorCode: group[0]!.errorCode,
       operation: group[0]!.operation,
       message: group[0]!.errorMessage,
@@ -183,11 +193,21 @@ export async function queryAIUsageErrorCauses(input: AIUsageQueryInput): Promise
       affectedModels: new Set(group.map(cause => cause.modelId).filter(Boolean)).size
     })).sort((a, b) => b.count - a.count),
     recentExamples: causes.sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, 10),
-    sourceAvailability: {
-      runtime: runtimeAvailability,
-      mantle: 'unavailable',
-      mantleMessage: 'Cause logging unavailable because Mantle CloudTrail data events are not configured.'
-    }
+    sources: [
+      ...(runtimeSelected ? [{
+        source: 'bedrock-runtime' as const,
+        label: 'Runtime CloudTrail',
+        availability: runtimeAvailability,
+        eventCount: runtimeCauses.length
+      }] : []),
+      ...(genAISelected ? [{
+        source: 'cloudwatch-genai' as const,
+        label: 'CloudWatch GenAI Observability',
+        availability: genAIAvailability,
+        eventCount: genAICauses.length,
+        message: 'Includes all Bedrock causes in this account, model, and region scope; events are not project-attributed.'
+      }] : [])
+    ]
   }
   await cache.set(cacheKey, result, { ttl: 300, tags: ['ai-usage'] })
   return result

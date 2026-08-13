@@ -7,9 +7,11 @@ import {
 } from '../../server/utils/ai-usage-query'
 import { toAIUsageAccountScope } from '../../server/utils/ai-usage-scope'
 import { selectMantleDetailMetrics } from '../../server/utils/ai-usage-collector'
+import { genAIObservabilityQuery, parseGenAIObservabilityRows } from '../../server/utils/ai-usage-genai-observability'
 import { classifyAIUsageCollectionFailure } from '../../server/utils/ai-usage-failures'
 import {
   isAIUsageTableMissing,
+  withAIUsageErrorCauseKeys,
   withAIUsageCollectionMarkerKeys,
   withAIUsageFactKeys
 } from '../../server/utils/ai-usage-storage'
@@ -49,6 +51,54 @@ test('Mantle normalization chooses project and model dimensions without duplicat
   const selected = selectMantleDetailMetrics(metrics)
   assert.equal(selected.length, 1)
   assert.equal(selected[0]?.Dimensions?.length, 2)
+})
+
+test('GenAI observability parsing retains only allowlisted error metadata', () => {
+  const rows = [[
+    { field: 'timestamp', value: '2026-08-12T12:00:00.000Z' },
+    { field: 'pointer', value: 'pointer-1' },
+    { field: 'errorCode', value: 'ThrottlingException' },
+    { field: 'modelId', value: 'example.model' },
+    { field: 'operation', value: 'InvokeModel' },
+    { field: 'accountId', value: '111111111111' },
+    { field: 'region', value: 'us-east-1' },
+    { field: 'requestId', value: 'request-1' },
+    { field: 'inputBodyJson', value: '{"prompt":"must never persist"}' },
+    { field: 'outputBodyJson', value: '{"completion":"must never persist"}' }
+  ]]
+  const parsed = parseGenAIObservabilityRows(rows)
+  assert.deepEqual(parsed, [{
+    timestamp: '2026-08-12T12:00:00.000Z',
+    pointer: 'pointer-1',
+    errorCode: 'ThrottlingException',
+    modelId: 'example.model',
+    operation: 'InvokeModel',
+    accountId: '111111111111',
+    region: 'us-east-1',
+    requestId: 'request-1'
+  }])
+  assert.doesNotMatch(genAIObservabilityQuery(), /inputBodyJson|outputBodyJson/)
+})
+
+test('GenAI causes use source-qualified keys', () => {
+  const cause = withAIUsageErrorCauseKeys({
+    recordType: 'error-cause',
+    eventId: 'request-1',
+    environment: 'commercial',
+    enclaveId: '111111111111',
+    enclaveName: 'AI Platform',
+    accountId: '111111111111',
+    region: 'us-east-1',
+    source: 'cloudwatch-genai',
+    operation: 'InvokeModel',
+    errorCode: 'ThrottlingException',
+    timestamp: '2026-08-12T12:00:00.000Z',
+    ttl: 1
+  })
+  assert.equal(cause.sk, 'E#2026-08-12T12:00:00.000Z#cloudwatch-genai#request-1')
+
+  const runtimeCause = withAIUsageErrorCauseKeys({ ...cause, source: 'bedrock-runtime' })
+  assert.equal(runtimeCause.sk, 'E#2026-08-12T12:00:00.000Z#request-1')
 })
 
 test('AI usage periods include the current UTC day with an exclusive end', () => {

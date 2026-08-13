@@ -24,6 +24,7 @@ export type AWSServiceType =
   | 'securityhub'
   | 'securitylake'
   | 'athena'
+  | 'bedrock'
   | 'bedrock-agent-runtime'
   | 'ram'
   | 'bedrock-runtime'

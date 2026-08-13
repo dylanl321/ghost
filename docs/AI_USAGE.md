@@ -9,7 +9,7 @@ The AI Usage workspace at `/account/ai-usage` combines Cost Explorer actuals wit
 - Cost Explorer: billable and Commercial proforma actual costs for the AWS AI service catalog.
 - AWS public Price List: token-based estimates for usage newer than Cost Explorer's `dataThroughDate`.
 
-Prompts and model responses are never collected. Bedrock model invocation logging and Mantle CloudTrail data events are not required.
+Prompts and model responses are never collected. Runtime cause enrichment uses Security Lake CloudTrail data. Mantle drill-downs use Bedrock model invocation logging in CloudWatch and retain only error code, model, operation, account, region, request ID, and timestamp. Those CloudWatch events represent all Bedrock causes in scope; they are not project-attributed.
 
 ## Deployment
 
@@ -22,7 +22,11 @@ The cross-account `GDMSOrganizationsRole` in member accounts must allow:
   "Effect": "Allow",
   "Action": [
     "cloudwatch:GetMetricData",
-    "cloudwatch:ListMetrics"
+    "cloudwatch:ListMetrics",
+    "logs:StartQuery",
+    "logs:GetQueryResults",
+    "logs:StopQuery",
+    "bedrock:GetModelInvocationLoggingConfiguration"
   ],
   "Resource": "*"
 }

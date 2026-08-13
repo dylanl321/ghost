@@ -24,6 +24,7 @@ import { SecurityLakeClient } from '@aws-sdk/client-securitylake'
 import { AthenaClient } from '@aws-sdk/client-athena'
 import { RAMClient } from '@aws-sdk/client-ram'
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime'
+import { BedrockClient } from '@aws-sdk/client-bedrock'
 import { BedrockAgentRuntimeClient } from '@aws-sdk/client-bedrock-agent-runtime'
 import { ComputeOptimizerClient } from '@aws-sdk/client-compute-optimizer'
 import { PricingClient } from '@aws-sdk/client-pricing'
@@ -81,6 +82,7 @@ const SERVICE_CLIENT_MAP = {
   'securitylake': SecurityLakeClient,
   'athena': AthenaClient,
   'ram': RAMClient,
+  'bedrock': BedrockClient,
   'bedrock-runtime': BedrockRuntimeClient,
   'bedrock-agent-runtime': BedrockAgentRuntimeClient,
   'compute-optimizer': ComputeOptimizerClient,
@@ -582,6 +584,14 @@ export async function getBedrockRuntimeClient(
   accountId?: string
 ): Promise<BedrockRuntimeClient> {
   return getClient(environment, 'bedrock-runtime', region, accountId)
+}
+
+export async function getBedrockClient(
+  environment: AWSEnvironmentType = 'govcloud',
+  region?: string,
+  accountId?: string
+): Promise<BedrockClient> {
+  return getClient(environment, 'bedrock', region, accountId)
 }
 
 export async function getConfigServiceClient(

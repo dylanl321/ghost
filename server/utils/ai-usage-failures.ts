@@ -6,8 +6,8 @@ export function classifyAIUsageCollectionFailure(message: string): { category: s
   if (lower.includes('service control policy') || lower.includes('explicit deny')) {
     return { category: 'SCP deny', remediation: 'Update the applicable service control policy to allow the collection action.' }
   }
-  if (lower.includes('cloudwatch') || lower.includes('getmetricdata') || lower.includes('listmetrics')) {
-    return { category: 'CloudWatch permission', remediation: 'Allow cloudwatch:ListMetrics and cloudwatch:GetMetricData in the target account.' }
+  if (lower.includes('cloudwatch') || lower.includes('getmetricdata') || lower.includes('listmetrics') || lower.includes('logs insights')) {
+    return { category: 'CloudWatch permission', remediation: 'Allow cloudwatch:ListMetrics, cloudwatch:GetMetricData, logs:StartQuery, logs:GetQueryResults, and logs:StopQuery in the target account.' }
   }
   if (lower.includes('athena') || lower.includes('security lake')) {
     return { category: 'Error cause collection', remediation: 'Verify Security Lake, Athena, Glue, and result-bucket access for this environment.' }

@@ -5,11 +5,11 @@ import { parseAIUsageQuery } from '../../utils/ai-usage-api'
 import { queryAIUsageErrorCauses } from '../../utils/ai-usage-error-causes'
 
 registerEndpoint('/api/ai-usage/error-causes', 'GET', {
-  summary: 'Get AI Runtime error causes',
-  description: 'Returns cached, sanitized Bedrock Runtime CloudTrail error causes for the active AI usage scope.',
+  summary: 'Get AI usage error causes',
+  description: 'Returns cached, sanitized Runtime CloudTrail and CloudWatch GenAI observability causes for the active AI usage scope.',
   tags: ['AI Usage'],
   responses: {
-    200: { description: 'Matched Runtime error causes and CloudWatch error totals' },
+    200: { description: 'Matched cause events and CloudWatch error totals' },
     400: { $ref: '#/components/schemas/Error' }
   }
 })
