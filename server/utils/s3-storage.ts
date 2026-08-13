@@ -65,6 +65,14 @@ export interface S3ListResult {
   nextToken?: string
 }
 
+export async function getObjectBuffer(key: string): Promise<Buffer> {
+  const bucket = getBucketName()
+  const s3Client = await getS3Client('govcloud', getRegion(), deploymentAccountId)
+  const response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }))
+  if (!response.Body) throw new Error(`S3 object ${key} has no body`)
+  return Buffer.from(await response.Body.transformToByteArray())
+}
+
 /**
  * Get S3 bucket name from environment
  */

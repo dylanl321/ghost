@@ -57,5 +57,21 @@ export interface GhostMcpAuditEvent {
   targetIds?: string[]
   changedFields?: string[]
   errorCode?: string
+  eventDate?: string
+  environment?: 'commercial' | 'govcloud' | 'unknown'
+  source?: string
+  resultCount?: number
+  serializedSizeBytes?: number
+  truncated?: boolean
+  fallback?: boolean
+  cacheHit?: boolean
+  warningCount?: number
+  retryable?: boolean
+  errorCategory?: string
+  correlationId?: string
+  toolSequence?: number
+  targetCount?: number
+  teamKeys?: string[]
+  interactionType?: 'lookup' | 'analysis' | 'generation' | 'credential' | 'evidence' | 'output' | 'write'
   ttl: number
 }

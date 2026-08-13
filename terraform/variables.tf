@@ -76,3 +76,8 @@ variable "admin_notifications_enabled" {
   type        = bool
   default     = true
 }
+variable "ghost_support_knowledge_base_model_arn" {
+  description = "Approved GovCloud Bedrock foundation model or inference-profile ARN used by ghost.docs.answer"
+  type        = string
+  default     = ""
+}

@@ -54,10 +54,15 @@ import {
   beginMcpIdentityCenterAuthorization,
   issueMcpIdentityCenterCredentials
 } from '../idc-credentials'
-import { getMcpIdentityCenterAccountAccess, getMcpIdentityCenterUserAccess } from '../idc-admin-access'
+import { explainMcpIdentityCenterUserAccess, getMcpIdentityCenterAccountAccess, getMcpIdentityCenterUserAccess } from '../idc-admin-access'
 import { createMcpDelegatedGraphEvent } from '../oauth/delegated-graph'
 import { renderGhostOutput } from '../output-format'
-import { searchSupportKnowledgeBase } from '../support-knowledge'
+import { answerSupportKnowledgeBase, searchSupportKnowledgeBase } from '../support-knowledge'
+import { collectCompliance } from '../compliance'
+import { getGoldenAmis } from '../golden-amis'
+import { createRemediationPlan } from '../remediation'
+import { buildAccountHealth } from '../account-health'
+import { EVIDENCE_DOMAINS, createEvidenceBundle, deleteEvidenceBundle, evidenceDownloadUrl, getEvidenceBundle, listEvidenceBundles } from '../evidence'
 import { normalizeLimit, toolError, toolRenderedOutput, toolSuccess } from '../results'
 import { runIdempotent } from '../idempotency'
 import { registerGhostTool } from './register'
@@ -385,6 +390,34 @@ export function registerCatalogTools(
     }
   })
 
+  read({
+    name: 'ghost.access.explain', title: 'Explain effective AWS access',
+    description: 'Explain direct and group-derived IAM Identity Center assignments for the current user, another user, or an account. Entra directory metadata is shown only as non-authoritative comparison context.',
+    inputSchema: z.discriminatedUnion('target_type', [
+      z.object({ target_type: z.literal('current_user'), environment: z.enum(['commercial', 'govcloud', 'both']).default('both') }),
+      z.object({ target_type: z.literal('user'), user: z.string().min(1), environment: z.enum(['commercial', 'govcloud', 'both']).default('both') }),
+      z.object({ target_type: z.literal('account'), account_identifier: z.string().min(1), environment: z.enum(['commercial', 'govcloud', 'both']).default('both'), limit: z.number().int().min(1).max(250).default(100) })
+    ]),
+    getAuditTargetIds: args => args.target_type === 'account' ? [args.account_identifier] : undefined,
+    handler: async args => {
+      const environments = args.environment === 'both' ? ['commercial', 'govcloud'] as const : [args.environment]
+      if (args.target_type === 'account') {
+        const { account } = await resolveAccount(args.account_identifier)
+        const targets = environments.flatMap(environment => {
+          const accountId = environment === 'govcloud' ? account.govCloudAccountId || account.awsGovCloudAccountID : account.accountId || account.awsStandardAccountID
+          return accountId ? [{ environment, accountId }] : []
+        })
+        if (!targets.length) return toolError('ACCOUNT_ENVIRONMENT_MISSING', 'The account has no identifier for the requested IDC environment.')
+        const effective = await getMcpIdentityCenterAccountAccess(targets, args.limit)
+        return toolSuccess({ account: { name: accountDisplayName(account), commercialAccountId: account.accountId || account.awsStandardAccountID, govCloudAccountId: account.govCloudAccountId || account.awsGovCloudAccountID }, effective, directoryMetadata: { authoritative: false, available: false, reason: 'Account access is derived from IDC assignments; directory groups are user-specific.' } }, 'Explained effective IDC access for the account.', 'AWS IAM Identity Center Admin and Identity Store')
+      }
+      const userName = args.target_type === 'current_user' ? principal.email : (args.user.includes('@') ? args.user : `${args.user}@${process.env.ENTRA_DEFAULT_DOMAIN || 'gd-ms.com'}`)
+      const assignments = await explainMcpIdentityCenterUserAccess(userName, [...environments])
+      const directoryGroups = args.target_type === 'current_user' ? principal.groups : []
+      return toolSuccess({ user: userName, assignments, directoryMetadata: { authoritative: false, groups: directoryGroups, available: args.target_type === 'current_user', difference: 'IDC assignments are effective AWS access. Entra groups are directory metadata and may not map to an IDC assignment.' } }, 'Explained direct and group-derived IDC access.', 'AWS IAM Identity Center Admin and Identity Store')
+    }
+  })
+
   const documentationSearch = async (args: { query: string; max_results: number; cursor?: string }) => {
     const result = await searchSupportKnowledgeBase(args.query, args.max_results, args.cursor)
     return toolSuccess(result, `Retrieved ${result.results.length} official documentation result(s).`, 'ISGDDocs Amazon Bedrock Knowledge Base', {
@@ -401,6 +434,33 @@ export function registerCatalogTools(
       cursor: z.string().optional()
     }),
     handler: documentationSearch
+  })
+
+  read({
+    name: 'ghost.docs.answer', title: 'Answer from official GDMS documentation',
+    description: 'Generate a concise, cited answer from the GovCloud ISGDDocs knowledge base. Keeps Bedrock follow-up sessions server-side and returns the next session ID for a related question.',
+    inputSchema: z.object({
+      question: z.string().min(2).max(2_000),
+      result_limit: z.number().int().min(1).max(10).default(5),
+      kb_session_id: z.string().min(1).optional()
+    }),
+    handler: async args => toolSuccess(
+      await answerSupportKnowledgeBase(args.question, args.result_limit, args.kb_session_id),
+      'Generated a grounded answer from official documentation.',
+      'ISGDDocs Amazon Bedrock Knowledge Base'
+    )
+  })
+
+  read({
+    name: 'ghost.catalog.golden_amis', title: 'List Golden AMIs',
+    description: 'Combine ISGDDocs approved-image guidance with live GovCloud AMIBuilder images. Only GD_Approved=Y and Release=Latest images are live catalog entries; documentation and inventory mismatches are explicit.',
+    inputSchema: z.object({
+      regions: z.array(z.enum(['us-gov-west-1', 'us-gov-east-1'])).min(1).max(2).default(['us-gov-west-1', 'us-gov-east-1'])
+    }),
+    handler: async args => {
+      const catalog = await getGoldenAmis(args.regions)
+      return toolSuccess(catalog, `Loaded ${catalog.entries.length} live Golden AMI catalog entry(ies).`, 'ISGDDocs and GovCloud AMIBuilder')
+    }
   })
 
   read({
@@ -528,6 +588,33 @@ export function registerCatalogTools(
   })
 
   read({
+    name: 'ghost.compliance.summary', title: 'Get compliance summary',
+    description: 'Return separate Security Hub control, Inspector vulnerability, Config rule, and SSM patch/scan domains with evidence, timestamps, coverage gaps, and independent healthy/warning/critical/unknown statuses. Never returns an overall compliance percentage.',
+    inputSchema: z.object({
+      account_identifier: z.string().min(1),
+      environment: operationalEnvironmentSchema,
+      detail_level: z.enum(['summary', 'detailed']).default('summary')
+    }),
+    getAuditTargetIds: args => [args.account_identifier],
+    handler: async args => {
+      const { account } = await resolveAccount(args.account_identifier)
+      const operationalId = args.environment === 'govcloud'
+        ? account.govCloudAccountId || account.awsGovCloudAccountID
+        : account.accountId || account.awsStandardAccountID
+      if (!operationalId) return toolError('ACCOUNT_ENVIRONMENT_MISSING', `The account has no ${args.environment} identifier.`)
+      const domains = await collectCompliance(operationalId, args.environment, account.accountId || account.awsStandardAccountID)
+      const response = {
+        account: { name: accountDisplayName(account), commercialAccountId: account.accountId || account.awsStandardAccountID, govCloudAccountId: account.govCloudAccountId || account.awsGovCloudAccountID },
+        environment: args.environment,
+        ...domains,
+        coverageGaps: Object.entries(domains).flatMap(([domain, value]) => value.coverageGaps.map(gap => ({ domain, gap }))),
+        detailLevel: args.detail_level
+      }
+      return toolSuccess(response, `Loaded separate compliance evidence for ${accountDisplayName(account)}.`, 'AWS Security Hub, Inspector, Config, and Systems Manager')
+    }
+  })
+
+  read({
     name: 'ghost.security.findings', title: 'Query security findings', description: 'Query a bounded subset of current Security Hub findings across selected accounts. Do not treat the returned page count as the account-wide finding total; use ghost.security.summary for that.',
     inputSchema: z.object({ account_identifiers: accountIdentifiersSchema, severities: z.array(z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFORMATIONAL'])).default([]), statuses: z.array(z.enum(['NEW', 'NOTIFIED', 'RESOLVED', 'SUPPRESSED'])).default([]), lookback_days: z.number().int().min(1).max(90).default(30), limit: z.number().int().min(1).max(100).default(25) }),
     handler: async args => {
@@ -549,6 +636,32 @@ export function registerCatalogTools(
     name: 'ghost.support.patch_compliance', title: 'Get patch compliance', description: 'Get SSM patch compliance for an account or a specific EC2 instance. This measures managed-instance patch state only, not Security Hub or AWS Config control compliance.',
     inputSchema: z.object({ account_id: z.string(), instance_id: z.string().optional(), environment: operationalEnvironmentSchema, region: z.string().optional() }),
     handler: async args => toolSuccess(args.instance_id ? await getInstancePatchStatus(args.instance_id, args.account_id, args.environment, args.region) : await getAccountPatchCompliance(args.account_id, args.environment, args.region), 'Patch compliance loaded.', 'AWS Systems Manager')
+  })
+
+  read({
+    name: 'ghost.security.remediation_plan', title: 'Build security remediation plan',
+    description: 'Deduplicate active Inspector findings into read-only remediation groups with deployment-state evidence and fixed-version guidance. Does not create tickets or mutate AWS findings.',
+    inputSchema: z.object({ account_identifier: z.string().min(1), environment: operationalEnvironmentSchema }),
+    getAuditTargetIds: args => [args.account_identifier],
+    handler: async args => {
+      const { account } = await resolveAccount(args.account_identifier)
+      const accountId = args.environment === 'govcloud' ? account.govCloudAccountId || account.awsGovCloudAccountID : account.accountId || account.awsStandardAccountID
+      if (!accountId) return toolError('ACCOUNT_ENVIRONMENT_MISSING', `The account has no ${args.environment} identifier.`)
+      const plan = await createRemediationPlan(accountId, args.environment)
+      return toolSuccess(plan, `Built ${plan.groups.length} remediation group(s) without making changes.`, 'AWS Inspector, Config, and pipeline evidence')
+    }
+  })
+
+  read({
+    name: 'ghost.account.health', title: 'Get account health',
+    description: 'Return independent security, controls, Config, patching, proforma budget, ownership, and pipeline health domains with evidence and remediation guidance. Never returns a composite score.',
+    inputSchema: z.object({ account_identifier: z.string().min(1), environment: operationalEnvironmentSchema }),
+    getAuditTargetIds: args => [args.account_identifier],
+    handler: async args => {
+      const { account } = await resolveAccount(args.account_identifier)
+      const health = await buildAccountHealth(account, args.environment)
+      return toolSuccess(health, `Loaded independent health domains for ${accountDisplayName(account)}.`, 'GHOST authoritative account health sources')
+    }
   })
 
   read({
@@ -620,6 +733,58 @@ export function registerCatalogTools(
     name: 'ghost.preferences.get', title: 'Get my preferences', description: 'Return the authenticated user’s GHOST preferences.',
     inputSchema: z.object({}), annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
     handler: async () => toolSuccess(await getUserPreferences(principal.email), 'Preferences loaded.', 'GHOST user preferences')
+  })
+
+  collaborate({
+    name: 'ghost.evidence.create', title: 'Create evidence bundle',
+    description: 'Explicitly rerun authoritative account-health queries and create a private 90-day JSON and Markdown evidence bundle. It never captures credentials or delegated tokens.',
+    inputSchema: z.object({ account_identifier: z.string().min(1), title: z.string().min(1).max(160), selected_domains: z.array(z.enum(EVIDENCE_DOMAINS)).min(1), lookback_days: z.number().int().min(1).max(90).default(30), environment: operationalEnvironmentSchema }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    getAuditTargetIds: args => [args.account_identifier],
+    handler: async args => {
+      const { account } = await resolveAccount(args.account_identifier)
+      const bundle = await createEvidenceBundle({ ownerSubject: principal.subject, accountIdentifier: args.account_identifier, title: args.title, selectedDomains: args.selected_domains, lookbackDays: args.lookback_days, account, environment: args.environment })
+      return toolSuccess(bundle, 'Created a private evidence bundle with a 90-day retention period.', 'GHOST private evidence storage')
+    }
+  })
+
+  collaborate({
+    name: 'ghost.evidence.list', title: 'List my evidence bundles', description: 'List only evidence bundles owned by the authenticated MCP user.',
+    inputSchema: z.object({ limit: z.number().int().min(1).max(100).default(50) }), annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+    handler: async args => toolSuccess(await listEvidenceBundles(principal.subject, args.limit), 'Evidence bundles loaded.', 'GHOST private evidence storage')
+  })
+
+  collaborate({
+    name: 'ghost.evidence.get', title: 'Get my evidence bundle', description: 'Get metadata and JSON evidence for one authenticated-user-owned evidence bundle.',
+    inputSchema: z.object({ bundle_id: z.string().uuid(), include_content: z.boolean().default(true) }), annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+    handler: async args => {
+      const bundle = await getEvidenceBundle(args.bundle_id, principal.subject, args.include_content)
+      return bundle ? toolSuccess(bundle, 'Evidence bundle loaded.', 'GHOST private evidence storage') : toolError('EVIDENCE_NOT_FOUND', 'Evidence bundle not found.')
+    }
+  })
+
+  collaborate({
+    name: 'ghost.evidence.download', title: 'Download my evidence bundle', description: 'Create a five-minute private download URL for a JSON or Markdown evidence bundle.',
+    inputSchema: z.object({ bundle_id: z.string().uuid(), format: z.enum(['json', 'markdown']).default('json') }), annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    handler: async args => {
+      const result = await evidenceDownloadUrl(args.bundle_id, principal.subject, args.format)
+      return result ? toolSuccess(result, 'Evidence download URL created.', 'GHOST private evidence storage') : toolError('EVIDENCE_NOT_FOUND', 'Evidence bundle not found.')
+    }
+  })
+
+  collaborate({
+    name: 'ghost.evidence.delete', title: 'Delete my evidence bundle', description: 'Permanently delete an authenticated-user-owned evidence bundle after explicit confirmation.',
+    inputSchema: z.object({ bundle_id: z.string().uuid() }), annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    handler: async (args, context: ServerContext) => {
+      const confirmed = acceptedContent(context.mcpReq.inputResponses, 'confirm_evidence_delete', confirmationSchema)
+      const state = context.mcpReq.requestState<{ tool: string; targetId: string }>()
+      if (!confirmed?.confirm || state?.tool !== 'ghost.evidence.delete' || state.targetId !== args.bundle_id) {
+        return inputRequired({ inputRequests: { confirm_evidence_delete: inputRequired.elicit({ message: `Permanently delete evidence bundle ${args.bundle_id}?`, requestedSchema: confirmationSchema }) }, requestState: await confirmationCodec.mint({ tool: 'ghost.evidence.delete', targetId: args.bundle_id }, context) })
+      }
+      return await deleteEvidenceBundle(args.bundle_id, principal.subject)
+        ? toolSuccess({ deleted: true, bundleId: args.bundle_id }, 'Evidence bundle deleted.', 'GHOST private evidence storage')
+        : toolError('EVIDENCE_NOT_FOUND', 'Evidence bundle not found.')
+    }
   })
 
   collaborate({

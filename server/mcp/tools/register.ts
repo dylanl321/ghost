@@ -36,7 +36,9 @@ export function registerGhostTool(server: McpServer, principal: GhostMcpPrincipa
         tool: definition.name,
         status: result?.resultType === 'input_required' ? 'confirmation_required' : result?.isError ? 'error' : 'success',
         durationMs: performance.now() - start,
-        targetIds: definition.getAuditTargetIds?.(args, result)
+        targetIds: definition.getAuditTargetIds?.(args, result),
+        result,
+        environment: args?.environment || 'unknown'
       })
       return result
     } catch (error: any) {
@@ -45,7 +47,8 @@ export function registerGhostTool(server: McpServer, principal: GhostMcpPrincipa
         tool: definition.name,
         status: 'error',
         durationMs: performance.now() - start,
-        errorCode: error?.name || 'TOOL_ERROR'
+        errorCode: error?.name || 'TOOL_ERROR',
+        environment: args?.environment || 'unknown'
       })
       return toolError(error?.name || 'TOOL_ERROR', error?.message || 'The tool failed unexpectedly', Boolean(error?.retryable))
     }

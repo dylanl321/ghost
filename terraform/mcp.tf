@@ -109,9 +109,21 @@ resource "aws_dynamodb_table" "mcp_audit" {
     type = "S"
   }
 
+  attribute {
+    name = "eventDate"
+    type = "S"
+  }
+
   global_secondary_index {
     name            = "SubjectTimestampIndex"
     hash_key        = "subject"
+    range_key       = "timestamp"
+    projection_type = "ALL"
+  }
+
+  global_secondary_index {
+    name            = "EventDateIndex"
+    hash_key        = "eventDate"
     range_key       = "timestamp"
     projection_type = "ALL"
   }
@@ -143,6 +155,79 @@ resource "aws_dynamodb_table" "mcp_audit" {
   }
 }
 
+resource "aws_dynamodb_table" "mcp_evidence" {
+  provider     = aws.target_deployment_account
+  name         = "ghost-mcp-evidence-${var.env}"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "bundleId"
+
+  attribute {
+    name = "bundleId"
+    type = "S"
+  }
+
+  attribute {
+    name = "ownerSubject"
+    type = "S"
+  }
+
+  attribute {
+    name = "createdAt"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "OwnerCreatedAtIndex"
+    hash_key        = "ownerSubject"
+    range_key       = "createdAt"
+    projection_type = "ALL"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  server_side_encryption {
+    enabled = true
+  }
+}
+
+resource "aws_dynamodb_table" "mcp_usage_daily" {
+  provider     = aws.target_deployment_account
+  name         = "ghost-mcp-usage-daily-${var.env}"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  server_side_encryption {
+    enabled = true
+  }
+}
+
 resource "aws_iam_policy" "ecs_mcp_dynamodb" {
   provider = aws.target_deployment_account
   name     = "${var.app_name}_mcp_dynamodb"
@@ -166,10 +251,22 @@ resource "aws_iam_policy" "ecs_mcp_dynamodb" {
         ]
       },
       {
-        Sid      = "McpAuditWrite"
+        Sid      = "McpAuditReadWrite"
         Effect   = "Allow"
-        Action   = ["dynamodb:PutItem"]
-        Resource = aws_dynamodb_table.mcp_audit.arn
+        Action   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query", "dynamodb:Scan"]
+        Resource = [aws_dynamodb_table.mcp_audit.arn, "${aws_dynamodb_table.mcp_audit.arn}/index/*"]
+      },
+      {
+        Sid      = "McpEvidence"
+        Effect   = "Allow"
+        Action   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem", "dynamodb:Query"]
+        Resource = [aws_dynamodb_table.mcp_evidence.arn, "${aws_dynamodb_table.mcp_evidence.arn}/index/*"]
+      },
+      {
+        Sid      = "McpUsageDaily"
+        Effect   = "Allow"
+        Action   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query"]
+        Resource = aws_dynamodb_table.mcp_usage_daily.arn
       },
       {
         Sid      = "McpSecretEncryption"
@@ -201,3 +298,6 @@ output "mcp_secret_kms_key_arn" {
   description = "KMS key used for application-level encryption of delegated MCP tokens"
   value       = aws_kms_key.mcp_secrets.arn
 }
+
+output "mcp_evidence_table_name" { value = aws_dynamodb_table.mcp_evidence.name }
+output "mcp_usage_daily_table_name" { value = aws_dynamodb_table.mcp_usage_daily.name }

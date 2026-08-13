@@ -77,3 +77,19 @@ export function getMcpAuditTableConfig() {
     accountId: process.env.AWS_DEPLOYMENT_ACCOUNT_ID || undefined
   }
 }
+
+export function getMcpEvidenceTableConfig() {
+  return {
+    tableName: process.env.GHOST_MCP_EVIDENCE_TABLE_NAME || 'ghost-mcp-evidence',
+    environment: (process.env.GHOST_MCP_EVIDENCE_TABLE_ENVIRONMENT || 'govcloud') as 'commercial' | 'govcloud',
+    accountId: process.env.AWS_DEPLOYMENT_ACCOUNT_ID || undefined
+  }
+}
+
+export function getMcpUsageDailyTableConfig() {
+  return {
+    tableName: process.env.GHOST_MCP_USAGE_DAILY_TABLE_NAME || 'ghost-mcp-usage-daily',
+    environment: (process.env.GHOST_MCP_USAGE_DAILY_TABLE_ENVIRONMENT || 'govcloud') as 'commercial' | 'govcloud',
+    accountId: process.env.AWS_DEPLOYMENT_ACCOUNT_ID || undefined
+  }
+}

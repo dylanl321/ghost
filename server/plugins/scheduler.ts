@@ -18,6 +18,7 @@ let securitySummaryJob: Cron | null = null
 let digestJob: Cron | null = null
 let budgetAlertJob: Cron | null = null
 let aiUsageJob: Cron | null = null
+let mcpUsageAggregateJob: Cron | null = null
 const AI_USAGE_COLLECTION_ENABLED = process.env.AI_USAGE_COLLECTION_ENABLED === 'true'
 
 export default defineNitroPlugin(async () => {
@@ -56,6 +57,10 @@ export default defineNitroPlugin(async () => {
   if (aiUsageJob) {
     aiUsageJob.stop()
     aiUsageJob = null
+  }
+  if (mcpUsageAggregateJob) {
+    mcpUsageAggregateJob.stop()
+    mcpUsageAggregateJob = null
   }
 
   // Run every minute to check for due reports
@@ -110,6 +115,10 @@ export default defineNitroPlugin(async () => {
       logger.info('Stopping AI usage collector on shutdown...')
       aiUsageJob.stop()
       aiUsageJob = null
+    }
+    if (mcpUsageAggregateJob) {
+      mcpUsageAggregateJob.stop()
+      mcpUsageAggregateJob = null
     }
   }
 
@@ -283,4 +292,16 @@ export default defineNitroPlugin(async () => {
     })
     logger.info('AI usage collector initialized (hourly at :10)')
   }
+
+  mcpUsageAggregateJob = new Cron('25 0 * * *', async () => {
+    const day = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
+    const locked = await claimExecutionLock('mcp-usage-aggregate', day)
+    if (!locked) return
+    try {
+      const { writeMcpDailyUsageAggregate } = await import('../mcp/usage')
+      await writeMcpDailyUsageAggregate(day)
+    } finally {
+      await releaseExecutionLock('mcp-usage-aggregate', day).catch(() => {})
+    }
+  })
 })

@@ -37,6 +37,11 @@ export interface VulnerabilityFinding {
   firstObservedAt?: string
   lastObservedAt?: string
   updatedAt?: string
+  resourceArn?: string
+  imageDigest?: string
+  repository?: string
+  lambdaArn?: string
+  workload?: string
 }
 
 export interface InstanceVulnerabilitySummary {
@@ -69,6 +74,10 @@ function parseFinding(finding: Finding): VulnerabilityFinding {
     cveIds.push(...finding.packageVulnerabilityDetails.relatedVulnerabilities)
   }
 
+  const resource: any = finding.resources?.[0]
+  const details: any = resource?.details || {}
+  const image = details.awsEcrContainerImage || details.awsEcsContainer || details.awsEksCluster || {}
+  const lambda = details.awsLambdaFunction || {}
   return {
     findingArn: finding.findingArn || '',
     instanceId: finding.resources?.[0]?.id,
@@ -88,7 +97,12 @@ function parseFinding(finding: Finding): VulnerabilityFinding {
     remediation: finding.remediation?.recommendation?.text,
     firstObservedAt: finding.firstObservedAt?.toISOString(),
     lastObservedAt: finding.lastObservedAt?.toISOString(),
-    updatedAt: finding.updatedAt?.toISOString()
+    updatedAt: finding.updatedAt?.toISOString(),
+    resourceArn: resource?.id,
+    imageDigest: image.imageHash || image.imageDigest,
+    repository: image.repositoryName || image.repository,
+    lambdaArn: lambda.functionArn,
+    workload: resource?.id || image.containerName || lambda.functionName
   }
 }
 

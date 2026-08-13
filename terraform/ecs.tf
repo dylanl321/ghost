@@ -276,6 +276,14 @@ resource "aws_ecs_task_definition" "main" {
           value = aws_dynamodb_table.mcp_audit.name
         },
         {
+          name  = "GHOST_MCP_EVIDENCE_TABLE_NAME"
+          value = aws_dynamodb_table.mcp_evidence.name
+        },
+        {
+          name  = "GHOST_MCP_USAGE_DAILY_TABLE_NAME"
+          value = aws_dynamodb_table.mcp_usage_daily.name
+        },
+        {
           name  = "GHOST_MCP_SECRET_KMS_KEY_ARN"
           value = aws_kms_key.mcp_secrets.arn
         },
@@ -302,6 +310,10 @@ resource "aws_ecs_task_definition" "main" {
         {
           name  = "GHOST_SUPPORT_KNOWLEDGE_BASE_REGION"
           value = "us-gov-west-1"
+        },
+        {
+          name  = "GHOST_SUPPORT_KNOWLEDGE_BASE_MODEL_ARN"
+          value = var.ghost_support_knowledge_base_model_arn
         },
         {
           name  = "ACCOUNT_NOTES_TABLE"

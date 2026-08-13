@@ -2,6 +2,7 @@ import {
   DescribeGroupCommand,
   DescribeUserCommand,
   GetUserIdCommand,
+  ListGroupMembershipsForMemberCommand,
   IdentitystoreClient
 } from '@aws-sdk/client-identitystore'
 import {
@@ -120,6 +121,62 @@ async function listUserAssignments(context: IdentityCenterContext, userName: str
     names.set(arn, await permissionSetName(context, arn))
   }))
   return assignments.map(item => ({ ...item, role: names.get(item.permissionSetArn) || item.permissionSetArn }))
+}
+
+async function listGroupMemberships(context: IdentityCenterContext, userId: string) {
+  const groups: Array<{ groupId: string; displayName: string }> = []
+  let nextToken: string | undefined
+  do {
+    const response = await context.identityStore.send(new ListGroupMembershipsForMemberCommand({
+      IdentityStoreId: context.identityStoreId,
+      MemberId: { UserId: userId },
+      NextToken: nextToken,
+      MaxResults: 100
+    }))
+    for (const membership of response.GroupMemberships || []) {
+      const groupId = membership.GroupId
+      if (!groupId) continue
+      const group = await context.identityStore.send(new DescribeGroupCommand({ IdentityStoreId: context.identityStoreId, GroupId: groupId }))
+      groups.push({ groupId, displayName: group.DisplayName || groupId })
+    }
+    nextToken = response.NextToken
+  } while (nextToken)
+  return groups
+}
+
+async function listPrincipalAssignments(context: IdentityCenterContext, principalId: string, principalType: 'USER' | 'GROUP') {
+  const assignments: Array<{ accountId: string; permissionSetArn: string; role: string }> = []
+  let nextToken: string | undefined
+  do {
+    const response = await context.ssoAdmin.send(new ListAccountAssignmentsForPrincipalCommand({
+      InstanceArn: context.instanceArn,
+      PrincipalId: principalId,
+      PrincipalType: principalType,
+      NextToken: nextToken,
+      MaxResults: 100
+    }))
+    for (const assignment of response.AccountAssignments || []) {
+      if (!assignment.AccountId || !assignment.PermissionSetArn) continue
+      assignments.push({ accountId: assignment.AccountId, permissionSetArn: assignment.PermissionSetArn, role: await permissionSetName(context, assignment.PermissionSetArn) })
+    }
+    nextToken = response.NextToken
+  } while (nextToken)
+  return assignments
+}
+
+export async function explainMcpIdentityCenterUserAccess(userName: string, environments: IdentityCenterEnvironment[] = ['commercial', 'govcloud']) {
+  const records: Array<{ environment: IdentityCenterEnvironment; accountId: string; permissionSet: string; assignmentSource: 'direct' | 'group'; groupName?: string }> = []
+  for (const environment of environments) {
+    const context = await getIdentityCenterContext(environment)
+    const userId = await getIdentityCenterUserId(context, userName)
+    const [direct, groups] = await Promise.all([listPrincipalAssignments(context, userId, 'USER'), listGroupMemberships(context, userId)])
+    for (const assignment of direct) records.push({ environment, accountId: assignment.accountId, permissionSet: assignment.role, assignmentSource: 'direct' })
+    for (const group of groups) {
+      const assignments = await listPrincipalAssignments(context, group.groupId, 'GROUP')
+      for (const assignment of assignments) records.push({ environment, accountId: assignment.accountId, permissionSet: assignment.role, assignmentSource: 'group', groupName: group.displayName })
+    }
+  }
+  return records.sort((left, right) => `${left.accountId}:${left.permissionSet}:${left.assignmentSource}`.localeCompare(`${right.accountId}:${right.permissionSet}:${right.assignmentSource}`))
 }
 
 export async function getMcpIdentityCenterUserAccess(
