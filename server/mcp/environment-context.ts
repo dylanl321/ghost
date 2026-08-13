@@ -6,6 +6,7 @@ export const ghostEnvironmentContext = {
     'Default generic AWS account, resource, security, patching, troubleshooting, and operational questions to GovCloud.',
     'Resolve GHOST account metadata before AWS work and use the paired GovCloud account ID when one exists.',
     'Use Commercial only when the user explicitly requests it or the service is Commercial-only, especially payer billing, Cost Explorer, Pricing, Billing Conductor, and proforma chargeback.',
+    'Default cost analysis, dashboards, and forecasts to proforma. Use billable only when explicitly requested or when a detail domain such as resource-level or tag-level Cost Explorer data cannot support proforma.',
     'GHOST service APIs and management-account roles are the normal source for centralized data. User IDC authorization is only for explicitly requested short-lived user credentials.',
     'Never interpret a Commercial billing account ID as the operational workload account when a paired GovCloud ID exists.'
   ],
@@ -46,6 +47,7 @@ export const ghostMcpInstructions = [
   'GHOST provides internal GDMS AWS account, cost, user, security, resource, pipeline, support, report, and AI context.',
   'GDMS is GovCloud-first. Default generic AWS operational work to GovCloud and us-gov-west-1. Resolve account metadata first and prefer the paired GovCloud account ID.',
   'Use Commercial only when explicitly requested or for Commercial-only domains such as payer billing, Cost Explorer, Pricing, Billing Conductor, and proforma chargeback.',
+  'Default cost analysis, dashboards, and forecasts to proforma. Use billable only when explicitly requested or when resource-level or tag-level detail requires the payer Cost Explorer domain.',
   'Use GHOST service APIs and management-account roles for centralized reads. Use user IDC device authorization only when the user explicitly requests short-lived credentials.',
   'For internal GDMS catalogs, golden or approved offerings, standards, processes, architecture, onboarding, or team terminology, MUST call ghost.docs.search before AWS inventory or ghost.ai.chat. Documentation is authoritative for what is offered; AWS inventory only verifies what is deployed.',
   'Use ghost.access.mine for effective IDC assignments. Entra directory groups are not authoritative AWS access.',

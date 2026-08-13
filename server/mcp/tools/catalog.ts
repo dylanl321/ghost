@@ -12,7 +12,7 @@ import { findAccountByIdentifierOptimized } from '../../utils/account-lookup-opt
 import { getOrganizationInfo, getOrganizationalUnitTree, getAccountPolicies } from '../../utils/organizations'
 import { resolveToCommercialAccountIds } from '../../utils/account-filters'
 import { buildCostFilter } from '../../utils/cost-domain'
-import { getCostAllocationTags, getCostAndUsage, getCostAndUsageWithResources, getCostForecast } from '../../utils/cost-explorer'
+import { getCostAllocationTags, getCostAndUsage, getCostAndUsageWithResources, getCostForecast, getProformaForecast } from '../../utils/cost-explorer'
 import { validateDateParams, type RelativePeriod } from '../../utils/date-helpers'
 import { getAlertsByAccount, getAlertsByMonth, getAlertsByType, getAllAlerts } from '../../utils/budget-alerts'
 import { queryEntraUsers } from '../../utils/entra-users-data'
@@ -218,14 +218,14 @@ export function registerCatalogTools(
     start_date: z.string().optional(), end_date: z.string().optional(),
     period: z.enum(['last7days', 'last30days', 'last90days', 'thisMonth', 'lastMonth', 'thisQuarter', 'lastQuarter', 'thisYear', 'lastYear', 'ytd', 'last12months']).optional(),
     environment: costEnvironmentSchema,
-    mode: z.enum(['billable', 'proforma']).default('billable'),
+    mode: z.enum(['billable', 'proforma']).default('proforma'),
     account_identifiers: accountIdentifiersSchema,
     group_by: z.enum(['SERVICE', 'LINKED_ACCOUNT', 'REGION', 'NONE']).default('SERVICE'),
     granularity: z.enum(['DAILY', 'MONTHLY']).default('MONTHLY')
   })
 
   read({
-    name: 'ghost.costs.query', title: 'Query AWS costs', description: 'Query GHOST canonical billable or proforma costs for a date range, account scope, and grouping.',
+    name: 'ghost.costs.query', title: 'Query AWS costs', description: 'Query GHOST canonical costs for a date range, account scope, and grouping. Defaults to proforma chargeback costs; use billable only when explicitly needed.',
     inputSchema: costQuerySchema,
     handler: async args => {
       const range = dateRange(args)
@@ -243,7 +243,7 @@ export function registerCatalogTools(
   })
 
   read({
-    name: 'ghost.costs.dashboard', title: 'Get cost dashboard', description: 'Return account and service cost totals for dashboard-style analysis.',
+    name: 'ghost.costs.dashboard', title: 'Get cost dashboard', description: 'Return account and service cost totals for dashboard-style analysis. Defaults to proforma chargeback costs.',
     inputSchema: costQuerySchema.omit({ group_by: true, granularity: true }),
     handler: async args => {
       const range = dateRange(args)
@@ -259,17 +259,21 @@ export function registerCatalogTools(
   })
 
   read({
-    name: 'ghost.costs.forecast', title: 'Forecast AWS costs', description: 'Return AWS Cost Explorer forecast values for an optional account scope.',
-    inputSchema: z.object({ start_date: z.string(), end_date: z.string(), environment: costEnvironmentSchema, account_identifiers: accountIdentifiersSchema, granularity: z.enum(['DAILY', 'MONTHLY']).default('DAILY') }),
+    name: 'ghost.costs.forecast', title: 'Forecast AWS costs', description: 'Return cost forecasts for an optional account scope. Defaults to proforma chargeback forecasts.',
+    inputSchema: z.object({ start_date: z.string(), end_date: z.string(), mode: z.enum(['billable', 'proforma']).default('proforma'), environment: costEnvironmentSchema, account_identifiers: accountIdentifiersSchema, granularity: z.enum(['DAILY', 'MONTHLY']).default('DAILY') }),
     handler: async args => {
       const ids = await commercialIds(args.account_identifiers)
-      const result = await getCostForecast(args.start_date, args.end_date, 'UNBLENDED_COST', args.granularity, buildCostFilter({ accountIds: ids.length ? ids : undefined }), args.environment)
+      if (args.mode === 'proforma' && args.environment !== 'commercial') return toolError('INVALID_COST_MODE', 'Proforma forecasts are available only in Commercial.')
+      const filter = buildCostFilter({ accountIds: ids.length ? ids : undefined })
+      const result = args.mode === 'proforma'
+        ? await getProformaForecast(args.start_date, args.end_date, 'UNBLENDED_COST', args.granularity, filter)
+        : await getCostForecast(args.start_date, args.end_date, 'UNBLENDED_COST', args.granularity, filter, args.environment, process.env.AWS_MASTER_ACCOUNT_ID || '205950196477')
       return toolSuccess(result, 'Cost forecast loaded.', 'AWS Cost Explorer')
     }
   })
 
   read({
-    name: 'ghost.costs.resources', title: 'Get resource-level costs', description: 'Return resource-level Cost Explorer data for a required account and date range.',
+    name: 'ghost.costs.resources', title: 'Get resource-level costs', description: 'Return billable resource-level Cost Explorer data for a required account and date range. Billing Conductor does not provide resource-level proforma allocation.',
     inputSchema: z.object({ identifier: z.string(), start_date: z.string(), end_date: z.string(), environment: costEnvironmentSchema, granularity: z.enum(['DAILY', 'MONTHLY']).default('DAILY') }),
     handler: async args => {
       const ids = await commercialIds([args.identifier])
@@ -280,14 +284,14 @@ export function registerCatalogTools(
   })
 
   read({
-    name: 'ghost.costs.tags', title: 'Discover cost tags', description: 'List cost-allocation tag keys or values for a date range.',
+    name: 'ghost.costs.tags', title: 'Discover cost tags', description: 'List billable Cost Explorer allocation tag keys or values for a date range. Billing Conductor does not provide native tag-level proforma allocation.',
     inputSchema: z.object({ start_date: z.string(), end_date: z.string(), tag_key: z.string().optional(), environment: costEnvironmentSchema }),
     handler: async args => toolSuccess(await getCostAllocationTags({ Start: args.start_date, End: args.end_date }, args.tag_key, undefined, args.environment), 'Cost tags loaded.', 'AWS Cost Explorer')
   })
 
   read({
-    name: 'ghost.costs.budget_vs_actual', title: 'Compare budget and actual cost', description: 'Compare canonical account actuals with GHOST account budgets for a date range.',
-    inputSchema: costQuerySchema.omit({ group_by: true, granularity: true, mode: true }),
+    name: 'ghost.costs.budget_vs_actual', title: 'Compare budget and actual cost', description: 'Compare account actuals with GHOST account budgets for a date range. Defaults to proforma chargeback actuals.',
+    inputSchema: costQuerySchema.omit({ group_by: true, granularity: true }),
     handler: async args => {
       const range = dateRange(args)
       const ids = await commercialIds(args.account_identifiers)
@@ -295,7 +299,9 @@ export function registerCatalogTools(
         startDate: range.startDate, endDate: range.endDate, granularity: 'MONTHLY', metrics: ['UnblendedCost'],
         filter: buildCostFilter({ accountIds: ids.length ? ids : undefined }),
         groupBy: [{ type: 'DIMENSION', key: 'LINKED_ACCOUNT' }]
-      }, args.environment, args.environment === 'commercial' ? process.env.AWS_MASTER_ACCOUNT_ID || '205950196477' : undefined)
+      }, args.environment, args.mode === 'proforma'
+        ? process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832'
+        : args.environment === 'commercial' ? process.env.AWS_MASTER_ACCOUNT_ID || '205950196477' : undefined)
       const actuals = new Map<string, number>()
       for (const period of response.resultsByTime) {
         for (const group of period.Groups || []) {
@@ -319,11 +325,16 @@ export function registerCatalogTools(
   })
 
   read({
-    name: 'ghost.forecasts.get', title: 'Get cost forecast', description: 'Return an AWS Cost Explorer forecast for the requested account scope and future date range.',
-    inputSchema: z.object({ start_date: z.string(), end_date: z.string(), environment: costEnvironmentSchema, account_identifiers: accountIdentifiersSchema, granularity: z.enum(['DAILY', 'MONTHLY']).default('MONTHLY') }),
+    name: 'ghost.forecasts.get', title: 'Get cost forecast', description: 'Return a cost forecast for the requested account scope and future date range. Defaults to proforma chargeback forecasts.',
+    inputSchema: z.object({ start_date: z.string(), end_date: z.string(), mode: z.enum(['billable', 'proforma']).default('proforma'), environment: costEnvironmentSchema, account_identifiers: accountIdentifiersSchema, granularity: z.enum(['DAILY', 'MONTHLY']).default('MONTHLY') }),
     handler: async args => {
       const ids = await commercialIds(args.account_identifiers)
-      return toolSuccess(await getCostForecast(args.start_date, args.end_date, 'UNBLENDED_COST', args.granularity, buildCostFilter({ accountIds: ids.length ? ids : undefined }), args.environment), 'Forecast loaded.', 'AWS Cost Explorer')
+      if (args.mode === 'proforma' && args.environment !== 'commercial') return toolError('INVALID_COST_MODE', 'Proforma forecasts are available only in Commercial.')
+      const filter = buildCostFilter({ accountIds: ids.length ? ids : undefined })
+      const result = args.mode === 'proforma'
+        ? await getProformaForecast(args.start_date, args.end_date, 'UNBLENDED_COST', args.granularity, filter)
+        : await getCostForecast(args.start_date, args.end_date, 'UNBLENDED_COST', args.granularity, filter, args.environment, process.env.AWS_MASTER_ACCOUNT_ID || '205950196477')
+      return toolSuccess(result, 'Forecast loaded.', 'AWS Cost Explorer')
     }
   })
 
