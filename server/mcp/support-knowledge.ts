@@ -14,12 +14,16 @@ function normalizeAccountId(value: string): string {
 }
 
 export function getSupportKnowledgeBaseConfig(): SupportKnowledgeBaseConfig {
-  const environment = process.env.GHOST_SUPPORT_KNOWLEDGE_BASE_ENVIRONMENT === 'commercial' ? 'commercial' : 'govcloud'
+  const accountId = normalizeAccountId(process.env.GHOST_SUPPORT_KNOWLEDGE_BASE_ACCOUNT_ID || '9261-8219-4632')
+  const isGovCloudDocs = accountId === '926182194632'
+  const environment = isGovCloudDocs
+    ? 'govcloud'
+    : process.env.GHOST_SUPPORT_KNOWLEDGE_BASE_ENVIRONMENT === 'commercial' ? 'commercial' : 'govcloud'
   return {
     name: process.env.GHOST_SUPPORT_KNOWLEDGE_BASE_NAME || 'isgddocs-knowledge-base',
     knowledgeBaseId: process.env.GHOST_SUPPORT_KNOWLEDGE_BASE_ID || 'MWEQITO53C',
-    accountId: normalizeAccountId(process.env.GHOST_SUPPORT_KNOWLEDGE_BASE_ACCOUNT_ID || '9261-8219-4632'),
-    region: process.env.GHOST_SUPPORT_KNOWLEDGE_BASE_REGION || (environment === 'govcloud' ? 'us-gov-west-1' : 'us-east-1'),
+    accountId,
+    region: isGovCloudDocs ? 'us-gov-west-1' : process.env.GHOST_SUPPORT_KNOWLEDGE_BASE_REGION || (environment === 'govcloud' ? 'us-gov-west-1' : 'us-east-1'),
     environment
   }
 }
