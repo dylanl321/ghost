@@ -38,7 +38,7 @@ The first enabled collection performs an idempotent 400-day daily backfill. Admi
 
 ## Cost Semantics
 
-- Default: Commercial proforma plus GovCloud billable actuals.
-- Billable mode: billable actuals in both environments.
+- Default: Commercial proforma actuals.
+- Billable mode: Commercial billable actuals. Cost Explorer is not available in GovCloud.
 - Bedrock costs that Cost Explorer cannot distinguish by endpoint appear as `bedrock-cost` rather than being assigned to Runtime or Mantle.
 - Estimates are shown separately and are omitted when a model/token rate cannot be matched safely.

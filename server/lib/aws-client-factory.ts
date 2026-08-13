@@ -446,8 +446,8 @@ export async function getClient<T = any>(
     credentials
   }
 
-  // GovCloud requires FIPS endpoints for most services
-  if (environment === 'govcloud') {
+  // Cost Explorer has no GovCloud FIPS endpoint; using one fails DNS resolution.
+  if (environment === 'govcloud' && service !== 'cost-explorer') {
     clientConfig.useFipsEndpoint = true
   }
 

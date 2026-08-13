@@ -177,15 +177,8 @@ async function collectTarget(target: GenAIObservabilityTarget, startTime: Date, 
       return {
         environment: target.environment,
         causes: [],
-        status: 'unavailable',
-        failure: {
-          environment: target.environment,
-          accountId: target.accountId,
-          enclaveName: target.scope.enclaveName,
-          region: target.region,
-          category: 'GenAI observability configuration',
-          message: 'Bedrock model invocation logging is not configured to send events to CloudWatch Logs.'
-        }
+        // Missing logging is an expected source-availability state, not a failed usage collection.
+        status: 'unavailable'
       }
     }
 

@@ -95,7 +95,7 @@ function normalizeSecurityLakeEvent(row: any, accountName: string): CloudTrailEv
     userIdentityUserName: userName,
     sourceIPAddress: row.source_ip || unmappedData.sourceIPAddress,
     userAgent: row.user_agent || unmappedData.userAgent,
-    errorCode: unmappedData.errorCode || row.api_error || (Number(row.api_response_code) >= 400 ? String(row.api_response_code) : undefined),
+    errorCode: unmappedData.errorCode || row.api_error,
     errorMessage: unmappedData.errorMessage || row.api_error,
     readOnly,
     resources: unmappedData.resources,
@@ -158,7 +158,7 @@ function buildWhereClause(
 
 
   if (filters.errorsOnly) {
-    conditions.push(`(api.response.error IS NOT NULL OR api.response.code >= 400 OR status <> 'Success')`)
+    conditions.push(`(api.response.error IS NOT NULL OR status <> 'Success')`)
   }
 
   // Note: Event types and errors-only filters will still be applied client-side
@@ -255,7 +255,6 @@ async function querySecurityLakeForEvents(
         status,
         api.service.name as service_name,
         api.response.error as api_error,
-        api.response.code as api_response_code,
         actor.user.name as user_name,
         actor.user.type as user_type,
         actor.user.uid as user_uid,

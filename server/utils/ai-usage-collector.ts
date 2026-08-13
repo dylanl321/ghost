@@ -277,7 +277,8 @@ async function collectCostFacts(
   startDate: string,
   endDate: string
 ): Promise<AIUsageFact[]> {
-  if (environment === 'govcloud' && costBasis === 'proforma') return []
+  // Cost Explorer is not available in the GovCloud partition.
+  if (environment === 'govcloud') return []
   const targetAccountId = environment === 'commercial'
     ? costBasis === 'proforma'
       ? process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832'
@@ -476,8 +477,7 @@ export async function collectAIUsage(options: { backfillDays?: number } = {}): P
     const startDate = new Date(todayStart.getTime() - backfillDays * DAY_MS).toISOString().slice(0, 10)
     const costRequests = [
       { environment: 'commercial' as const, basis: 'billable' as const },
-      { environment: 'commercial' as const, basis: 'proforma' as const },
-      { environment: 'govcloud' as const, basis: 'billable' as const }
+      { environment: 'commercial' as const, basis: 'proforma' as const }
     ]
     const costResults = await Promise.allSettled(costRequests.map(request =>
       collectCostFacts(scopes, request.environment, request.basis, startDate, endDate)))
