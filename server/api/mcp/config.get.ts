@@ -1,6 +1,7 @@
 import { defineEventHandler } from 'h3'
 import { getMcpResourceUrl, getOAuthIssuer } from '../../mcp/config'
 import { GHOST_MCP_SCOPES } from '../../mcp/types'
+import { ghostEnvironmentContext } from '../../mcp/environment-context'
 
 export default defineEventHandler(() => {
   const serverUrl = getMcpResourceUrl().href
@@ -13,6 +14,7 @@ export default defineEventHandler(() => {
     resource: serverUrl,
     authorizationServer: getOAuthIssuer(),
     protectedResourceMetadata: new URL('/.well-known/oauth-protected-resource/mcp', serverUrl).href,
+    environmentContext: ghostEnvironmentContext,
     scopes: [
       { id: 'ghost.read', label: 'GHOST data', description: 'Read account, cost, user, access, resource, security, audit, and pipeline data.' },
       { id: 'ghost.ai.invoke', label: 'GHOST AI', description: 'Invoke bounded Bedrock insights, troubleshooting, and the GHOST Strands agent.' },

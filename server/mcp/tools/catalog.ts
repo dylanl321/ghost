@@ -52,18 +52,18 @@ import type { DatasetReportConfig } from '../../../shared/types/dataset-reports'
 import type { GhostMcpPrincipal } from '../types'
 import {
   beginMcpIdentityCenterAuthorization,
-  issueMcpIdentityCenterCredentials,
-  listMcpIdentityCenterAccess
+  issueMcpIdentityCenterCredentials
 } from '../idc-credentials'
+import { getMcpIdentityCenterAccountAccess, getMcpIdentityCenterUserAccess } from '../idc-admin-access'
 import { createMcpDelegatedGraphEvent } from '../oauth/delegated-graph'
 import { renderGhostOutput } from '../output-format'
 import { searchSupportKnowledgeBase } from '../support-knowledge'
-import { getMcpUserAccountAccess } from '../user-access'
 import { normalizeLimit, toolError, toolRenderedOutput, toolSuccess } from '../results'
 import { runIdempotent } from '../idempotency'
 import { registerGhostTool } from './register'
 
-const environmentSchema = z.enum(['commercial', 'govcloud']).default('commercial')
+const operationalEnvironmentSchema = z.enum(['commercial', 'govcloud']).default('govcloud')
+const costEnvironmentSchema = z.enum(['commercial', 'govcloud']).default('commercial')
 const accountIdentifiersSchema = z.array(z.string().min(1)).max(100).default([])
 const paginationSchema = {
   limit: z.number().int().min(1).max(100).optional(),
@@ -180,35 +180,32 @@ export function registerCatalogTools(
 
   read({
     name: 'ghost.access.mine', title: 'Get my AWS accounts',
-    description: 'List the authenticated user\'s effective AWS accounts and roles from IAM Identity Center. Start Identity Center authorization first and pass its session ID; without one, returns the last Entra snapshot as a fallback.',
-    inputSchema: z.object({ session_id: z.string().uuid().optional() }),
+    description: 'List the authenticated user\'s effective AWS accounts and roles from IAM Identity Center using GHOST management-account APIs. No user AWS session is required.',
+    inputSchema: z.object({
+      environment: z.enum(['commercial', 'govcloud', 'both']).default('both')
+    }),
     handler: async args => {
-      if (args.session_id) {
-        const access = await listMcpIdentityCenterAccess(principal, args.session_id)
-        return toolSuccess(access, `Loaded ${access.accounts.length} effective account assignment(s) from IAM Identity Center.`, 'AWS IAM Identity Center')
-      }
-      const access = await getMcpUserAccountAccess(principal)
-      return toolSuccess(access, `Loaded ${access.accounts.length} account(s) from the last Entra authorization snapshot.`, 'OAuth grant snapshot and GHOST account metadata', {
-        warnings: ['For effective AWS roles, start Identity Center authorization and call this tool with its session ID.', ...(access.warning ? [access.warning] : [])]
-      })
+      const environments = args.environment === 'both' ? ['commercial', 'govcloud'] as const : [args.environment]
+      const access = await getMcpIdentityCenterUserAccess(principal.email, [...environments])
+      return toolSuccess(access, `Loaded ${access.accounts.length} effective account assignment(s) from IAM Identity Center.`, 'AWS IAM Identity Center Admin and GHOST account metadata')
     }
   })
 
   read({
     name: 'ghost.organization.overview', title: 'Get organization overview', description: 'Return AWS Organizations metadata and GHOST account statistics for Commercial or GovCloud.',
-    inputSchema: z.object({ environment: environmentSchema }),
+    inputSchema: z.object({ environment: operationalEnvironmentSchema }),
     handler: async args => toolSuccess({ organization: await getOrganizationInfo(args.environment), accounts: await getAccountStatistics() }, 'Organization overview loaded.', 'AWS Organizations')
   })
 
   read({
     name: 'ghost.organization.structure', title: 'Get organization structure', description: 'Return the cached AWS Organizations OU and account hierarchy.',
-    inputSchema: z.object({ environment: environmentSchema }),
+    inputSchema: z.object({ environment: operationalEnvironmentSchema }),
     handler: async args => toolSuccess(await getOrganizationalUnitTree(args.environment), 'Organization structure loaded.', 'AWS Organizations')
   })
 
   read({
     name: 'ghost.organization.governance', title: 'Get account governance', description: 'Return service control policies attached to a resolved account.',
-    inputSchema: z.object({ identifier: z.string().min(1), environment: environmentSchema }),
+    inputSchema: z.object({ identifier: z.string().min(1), environment: operationalEnvironmentSchema }),
     handler: async args => {
       const { account } = await resolveAccount(args.identifier)
       const id = args.environment === 'govcloud' ? account.govCloudAccountId || account.awsGovCloudAccountID : account.accountId || account.awsStandardAccountID
@@ -220,7 +217,7 @@ export function registerCatalogTools(
   const costQuerySchema = z.object({
     start_date: z.string().optional(), end_date: z.string().optional(),
     period: z.enum(['last7days', 'last30days', 'last90days', 'thisMonth', 'lastMonth', 'thisQuarter', 'lastQuarter', 'thisYear', 'lastYear', 'ytd', 'last12months']).optional(),
-    environment: environmentSchema,
+    environment: costEnvironmentSchema,
     mode: z.enum(['billable', 'proforma']).default('billable'),
     account_identifiers: accountIdentifiersSchema,
     group_by: z.enum(['SERVICE', 'LINKED_ACCOUNT', 'REGION', 'NONE']).default('SERVICE'),
@@ -263,7 +260,7 @@ export function registerCatalogTools(
 
   read({
     name: 'ghost.costs.forecast', title: 'Forecast AWS costs', description: 'Return AWS Cost Explorer forecast values for an optional account scope.',
-    inputSchema: z.object({ start_date: z.string(), end_date: z.string(), environment: environmentSchema, account_identifiers: accountIdentifiersSchema, granularity: z.enum(['DAILY', 'MONTHLY']).default('DAILY') }),
+    inputSchema: z.object({ start_date: z.string(), end_date: z.string(), environment: costEnvironmentSchema, account_identifiers: accountIdentifiersSchema, granularity: z.enum(['DAILY', 'MONTHLY']).default('DAILY') }),
     handler: async args => {
       const ids = await commercialIds(args.account_identifiers)
       const result = await getCostForecast(args.start_date, args.end_date, 'UNBLENDED_COST', args.granularity, buildCostFilter({ accountIds: ids.length ? ids : undefined }), args.environment)
@@ -273,7 +270,7 @@ export function registerCatalogTools(
 
   read({
     name: 'ghost.costs.resources', title: 'Get resource-level costs', description: 'Return resource-level Cost Explorer data for a required account and date range.',
-    inputSchema: z.object({ identifier: z.string(), start_date: z.string(), end_date: z.string(), environment: environmentSchema, granularity: z.enum(['DAILY', 'MONTHLY']).default('DAILY') }),
+    inputSchema: z.object({ identifier: z.string(), start_date: z.string(), end_date: z.string(), environment: costEnvironmentSchema, granularity: z.enum(['DAILY', 'MONTHLY']).default('DAILY') }),
     handler: async args => {
       const ids = await commercialIds([args.identifier])
       if (!ids[0]) return toolError('ACCOUNT_NOT_FOUND', 'Account could not be resolved.')
@@ -284,7 +281,7 @@ export function registerCatalogTools(
 
   read({
     name: 'ghost.costs.tags', title: 'Discover cost tags', description: 'List cost-allocation tag keys or values for a date range.',
-    inputSchema: z.object({ start_date: z.string(), end_date: z.string(), tag_key: z.string().optional(), environment: environmentSchema }),
+    inputSchema: z.object({ start_date: z.string(), end_date: z.string(), tag_key: z.string().optional(), environment: costEnvironmentSchema }),
     handler: async args => toolSuccess(await getCostAllocationTags({ Start: args.start_date, End: args.end_date }, args.tag_key, undefined, args.environment), 'Cost tags loaded.', 'AWS Cost Explorer')
   })
 
@@ -323,7 +320,7 @@ export function registerCatalogTools(
 
   read({
     name: 'ghost.forecasts.get', title: 'Get cost forecast', description: 'Return an AWS Cost Explorer forecast for the requested account scope and future date range.',
-    inputSchema: z.object({ start_date: z.string(), end_date: z.string(), environment: environmentSchema, account_identifiers: accountIdentifiersSchema, granularity: z.enum(['DAILY', 'MONTHLY']).default('MONTHLY') }),
+    inputSchema: z.object({ start_date: z.string(), end_date: z.string(), environment: costEnvironmentSchema, account_identifiers: accountIdentifiersSchema, granularity: z.enum(['DAILY', 'MONTHLY']).default('MONTHLY') }),
     handler: async args => {
       const ids = await commercialIds(args.account_identifiers)
       return toolSuccess(await getCostForecast(args.start_date, args.end_date, 'UNBLENDED_COST', args.granularity, buildCostFilter({ accountIds: ids.length ? ids : undefined }), args.environment), 'Forecast loaded.', 'AWS Cost Explorer')
@@ -351,39 +348,59 @@ export function registerCatalogTools(
   })
 
   read({
-    name: 'ghost.access.for_account', title: 'Get account access', description: 'List Entra users and AWS authorization roles mapped to one account.',
-    inputSchema: z.object({ identifier: z.string(), limit: z.number().int().min(1).max(100).default(50) }),
+    name: 'ghost.access.for_account', title: 'Get account access', description: 'List effective IAM Identity Center user/group assignments for one GHOST account using management-account APIs.',
+    inputSchema: z.object({ identifier: z.string(), environment: z.enum(['commercial', 'govcloud', 'both']).default('both'), limit: z.number().int().min(1).max(100).default(50) }),
     handler: async args => {
       const { account } = await resolveAccount(args.identifier)
-      const id = account.accountId || account.awsStandardAccountID
-      const result = await queryEntraUsers(await createMcpDelegatedGraphEvent(principal), [id], {}, { mode: 'preview', limit: args.limit })
-      return toolSuccess(result, `Loaded ${result.records.length} access mapping(s).`, 'Microsoft Graph')
+      const commercialId = account.accountId || account.awsStandardAccountID
+      const govCloudId = account.govCloudAccountId || account.awsGovCloudAccountID
+      const targets = [] as Array<{ environment: 'commercial' | 'govcloud'; accountId: string }>
+      if (args.environment !== 'govcloud' && commercialId) targets.push({ environment: 'commercial', accountId: commercialId })
+      if (args.environment !== 'commercial' && govCloudId) targets.push({ environment: 'govcloud', accountId: govCloudId })
+      if (!targets.length) return toolError('ACCOUNT_ENVIRONMENT_MISSING', 'The account has no identifier for the requested IDC environment.')
+      const result = await getMcpIdentityCenterAccountAccess(targets, args.limit)
+      return toolSuccess(result, `Loaded ${result.records.length} effective IDC assignment(s).`, 'AWS IAM Identity Center Admin')
     }
   })
 
   read({
-    name: 'ghost.access.for_user', title: 'Get user access', description: 'List account and role mappings for one Entra user.',
-    inputSchema: z.object({ user: z.string().min(1), limit: z.number().int().min(1).max(100).default(50) }),
+    name: 'ghost.access.for_user', title: 'Get user access', description: 'List effective IAM Identity Center account and permission-set assignments for one user using management-account APIs.',
+    inputSchema: z.object({ user: z.string().min(1), environment: z.enum(['commercial', 'govcloud', 'both']).default('both') }),
     handler: async args => {
-      const result = await queryEntraUsers(await createMcpDelegatedGraphEvent(principal), [], { userSearch: args.user }, { mode: 'preview', limit: args.limit })
-      return toolSuccess(result, `Loaded ${result.records.length} access mapping(s).`, 'Microsoft Graph')
+      const userName = args.user.includes('@') ? args.user : `${args.user}@${process.env.ENTRA_DEFAULT_DOMAIN || 'gd-ms.com'}`
+      const environments = args.environment === 'both' ? ['commercial', 'govcloud'] as const : [args.environment]
+      const result = await getMcpIdentityCenterUserAccess(userName, [...environments])
+      return toolSuccess(result, `Loaded ${result.accounts.length} effective IDC account assignment(s).`, 'AWS IAM Identity Center Admin and GHOST account metadata')
     }
   })
 
+  const documentationSearch = async (args: { query: string; max_results: number; cursor?: string }) => {
+    const result = await searchSupportKnowledgeBase(args.query, args.max_results, args.cursor)
+    return toolSuccess(result, `Retrieved ${result.results.length} official documentation result(s).`, 'ISGDDocs Amazon Bedrock Knowledge Base', {
+      nextCursor: result.nextToken
+    })
+  }
+
   read({
-    name: 'ghost.support.search', title: 'Search GHOST support knowledge',
-    description: 'Retrieve cited support documentation from the isgddocs Bedrock Knowledge Base.',
+    name: 'ghost.docs.search', title: 'Search official GDMS documentation',
+    description: 'Mandatory first lookup for internal GDMS/GHOST catalogs and concepts, including golden AMIs, approved images, baselines, standards, architecture, processes, onboarding, and team terminology. Returns cited ISGDDocs knowledge-base passages. Search this before AWS inventory or the downstream agent; no AWS inventory result proves that a documented offering does not exist.',
     inputSchema: z.object({
       query: z.string().min(2).max(2000),
       max_results: z.number().int().min(1).max(10).default(5),
       cursor: z.string().optional()
     }),
-    handler: async args => {
-      const result = await searchSupportKnowledgeBase(args.query, args.max_results, args.cursor)
-      return toolSuccess(result, `Retrieved ${result.results.length} support result(s).`, 'Amazon Bedrock Knowledge Bases', {
-        nextCursor: result.nextToken
-      })
-    }
+    handler: documentationSearch
+  })
+
+  read({
+    name: 'ghost.support.search', title: 'Search GHOST support knowledge',
+    description: 'Compatibility alias for ghost.docs.search. Use ghost.docs.search as the first lookup for internal catalogs, policy, process, and team concepts.',
+    inputSchema: z.object({
+      query: z.string().min(2).max(2000),
+      max_results: z.number().int().min(1).max(10).default(5),
+      cursor: z.string().optional()
+    }),
+    handler: documentationSearch
   })
 
   read({
@@ -404,11 +421,11 @@ export function registerCatalogTools(
   credentials({
     name: 'ghost.credentials.start', title: 'Start AWS Identity Center authorization',
     description: 'Begin IAM Identity Center device authorization for effective account/role discovery and optional short-lived credentials.',
-    inputSchema: z.object({ environment: z.enum(['commercial', 'govcloud']).default('commercial') }),
+    inputSchema: z.object({ environment: z.enum(['commercial', 'govcloud']).default('govcloud') }),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     handler: async args => toolSuccess(
       await beginMcpIdentityCenterAuthorization(principal, args.environment),
-      'Open the verification URL and complete IAM Identity Center sign-in. Then call ghost.access.mine with this session ID.',
+      'Open the verification URL and complete IAM Identity Center sign-in. Use the returned session ID only when requesting short-lived credentials.',
       'AWS IAM Identity Center'
     )
   })
@@ -420,7 +437,7 @@ export function registerCatalogTools(
       session_id: z.string().uuid(),
       account_id: z.string().regex(/^\d{12}$/),
       role_name: z.string().min(1).max(128),
-      environment: z.enum(['commercial', 'govcloud']).default('commercial')
+      environment: z.enum(['commercial', 'govcloud']).default('govcloud')
     }),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     getAuditTargetIds: args => [args.account_id],
@@ -458,7 +475,7 @@ export function registerCatalogTools(
   })
 
   read({
-    name: 'ghost.resources.search', title: 'Search AWS resources', description: 'Search AWS Config aggregate inventory across GHOST accounts with resource, region, compliance, and tag filters.',
+    name: 'ghost.resources.search', title: 'Search AWS resources', description: 'Search live AWS Config aggregate inventory across GHOST accounts with resource, region, compliance, and tag filters. This is deployment inventory, not the authoritative source for documented catalogs such as golden AMIs; call ghost.docs.search first for those questions.',
     inputSchema: z.object({ account_identifiers: accountIdentifiersSchema, resource_types: z.array(z.string()).max(20).default([]), regions: z.array(z.string()).max(20).default([]), resource_id: z.string().optional(), resource_name: z.string().optional(), limit: z.number().int().min(1).max(100).default(25) }),
     handler: async args => {
       const ids = await commercialIds(args.account_identifiers)
@@ -478,7 +495,7 @@ export function registerCatalogTools(
 
   read({
     name: 'ghost.instances.utilization', title: 'Get EC2 utilization analysis', description: 'Return the latest persisted GHOST utilization summary and bounded instance classifications for an account.',
-    inputSchema: z.object({ account_id: z.string(), environment: environmentSchema, classification: z.string().optional(), limit: z.number().int().min(1).max(100).default(25) }),
+    inputSchema: z.object({ account_id: z.string(), environment: operationalEnvironmentSchema, classification: z.string().optional(), limit: z.number().int().min(1).max(100).default(25) }),
     handler: async args => {
       const latest = await getLatestAnalysis(args.account_id, args.environment)
       if (!latest) return toolError('UTILIZATION_NOT_FOUND', 'No completed utilization analysis is available for this account.')
@@ -519,7 +536,7 @@ export function registerCatalogTools(
 
   read({
     name: 'ghost.support.patch_compliance', title: 'Get patch compliance', description: 'Get SSM patch compliance for an account or a specific EC2 instance.',
-    inputSchema: z.object({ account_id: z.string(), instance_id: z.string().optional(), environment: environmentSchema, region: z.string().optional() }),
+    inputSchema: z.object({ account_id: z.string(), instance_id: z.string().optional(), environment: operationalEnvironmentSchema, region: z.string().optional() }),
     handler: async args => toolSuccess(args.instance_id ? await getInstancePatchStatus(args.instance_id, args.account_id, args.environment, args.region) : await getAccountPatchCompliance(args.account_id, args.environment, args.region), 'Patch compliance loaded.', 'AWS Systems Manager')
   })
 
@@ -572,7 +589,7 @@ export function registerCatalogTools(
 
   ai({
     name: 'ghost.ai.troubleshoot', title: 'Generate a troubleshooting plan', description: 'Generate a bounded AWS troubleshooting plan using GHOST diagnostic capabilities.',
-    inputSchema: z.object({ problem: z.string().min(1).max(2000), account_id: z.string().optional(), environment: environmentSchema, service: z.string().optional() }),
+    inputSchema: z.object({ problem: z.string().min(1).max(2000), account_id: z.string().optional(), environment: operationalEnvironmentSchema, service: z.string().optional() }),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     handler: async args => {
       const response = await invokeBedrock({ prompt: `Problem: ${args.problem}\nAccount: ${args.account_id || 'not specified'}\nEnvironment: ${args.environment}\nService: ${args.service || 'not specified'}\nReturn a prioritized diagnostic plan and do not claim that any action was executed.`, model: 'claude-sonnet', maxTokens: 1800, temperature: 0.3 })
@@ -582,7 +599,7 @@ export function registerCatalogTools(
   })
 
   ai({
-    name: 'ghost.ai.chat', title: 'Chat with the GHOST agent', description: 'Ask the existing GHOST Strands agent an AWS question. The downstream agent must not be configured with this GHOST MCP server.',
+    name: 'ghost.ai.chat', title: 'Chat with the GHOST agent', description: 'Ask the existing GHOST Strands agent an AWS question after using direct GHOST tools. For internal catalogs, standards, processes, architecture, or team concepts, call ghost.docs.search first. The downstream agent must not be configured with this GHOST MCP server.',
     inputSchema: z.object({ message: z.string().min(1).max(10000), account_identifier: z.string().optional(), session_id: z.string().optional(), timezone: z.string().optional(), prefer_govcloud: z.boolean().default(true) }),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     handler: async args => toolSuccess(await sendStrandsQuery(args.message, { accountIdentifier: args.account_identifier, sessionId: args.session_id, timezone: args.timezone, preferGovcloud: args.prefer_govcloud }), 'GHOST agent response received.', 'GHOST Strands agent')

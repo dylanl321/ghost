@@ -14,7 +14,7 @@ function normalizeAccountId(value: string): string {
 }
 
 export function getSupportKnowledgeBaseConfig(): SupportKnowledgeBaseConfig {
-  const environment = process.env.GHOST_SUPPORT_KNOWLEDGE_BASE_ENVIRONMENT === 'govcloud' ? 'govcloud' : 'commercial'
+  const environment = process.env.GHOST_SUPPORT_KNOWLEDGE_BASE_ENVIRONMENT === 'commercial' ? 'commercial' : 'govcloud'
   return {
     name: process.env.GHOST_SUPPORT_KNOWLEDGE_BASE_NAME || 'isgddocs-knowledge-base',
     knowledgeBaseId: process.env.GHOST_SUPPORT_KNOWLEDGE_BASE_ID || 'MWEQITO53C',

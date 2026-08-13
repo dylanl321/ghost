@@ -12,6 +12,7 @@ import { searchAccountsUnified } from '../utils/accounts-consolidated'
 import { getDatasetExportJob } from '../utils/dataset-export-jobs'
 import { getUserPreferences } from '../utils/user-preferences'
 import { getRequestStateKey } from './config'
+import { ghostEnvironmentContext, ghostMcpInstructions } from './environment-context'
 import { getMcpPrincipal } from './policy'
 import { registerCatalogTools } from './tools/catalog'
 
@@ -51,9 +52,17 @@ function registerResources(server: McpServer, authInfo?: AuthInfo) {
     cacheHint: { ttlMs: 300_000, cacheScope: 'private' }
   }, async (uri: URL) => jsonResource(uri, {
     domains: ['accounts', 'organization', 'costs', 'users', 'access', 'credentials', 'resources', 'security', 'cloudtrail', 'support', 'pipelines', 'ai-usage', 'reports', 'preferences', 'chat', 'outputs'],
+    environmentContext: ghostEnvironmentContext,
     scopes: principal.scopes,
     boundaries: ['organization-wide reads', 'user-owned collaboration writes', 'explicitly confirmed user-assigned Identity Center credentials', 'no administrative or AWS infrastructure mutations']
   }))
+
+  server.registerResource('ghost-environment-context', 'ghost://context/environment', {
+    title: 'GDMS AWS environment context',
+    description: 'GovCloud-first operating rules, Commercial exceptions, management accounts, account pairing, and GHOST terminology.',
+    mimeType: 'application/json',
+    cacheHint: { ttlMs: 3_600_000, cacheScope: 'public' }
+  }, async (uri: URL) => jsonResource(uri, ghostEnvironmentContext))
 
   server.registerResource('ghost-user', 'ghost://users/me', {
     title: 'Current GHOST MCP user', mimeType: 'application/json', cacheHint: { ttlMs: 60_000, cacheScope: 'private' }
@@ -99,7 +108,7 @@ function registerPrompts(server: McpServer) {
 export async function createGhostMcpServer(context: McpRequestContext): Promise<McpServer> {
   const principal = getMcpPrincipal(context.authInfo)
   const server = new McpServer({ name: 'ghost-aws', version: '1.0.0' }, {
-    instructions: 'GHOST provides internal AWS account, cost, user, security, resource, pipeline, support, report, and AI context. Use ghost.access.mine for the authenticated user\'s AWS accounts. For user-requested AWS access, use the Identity Center device authorization tools only with the credentials scope and explicit confirmation; never persist, echo unnecessarily, or use service credentials as user credentials. Prefer bounded queries and exports for large datasets. Never imply that a write occurred unless the tool result confirms it.',
+    instructions: ghostMcpInstructions,
     cacheHints: {
       'server/discover': { ttlMs: 300_000, cacheScope: 'private' },
       'tools/list': { ttlMs: 300_000, cacheScope: 'private' },

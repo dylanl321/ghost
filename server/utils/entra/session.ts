@@ -7,6 +7,24 @@ import type { H3Event } from 'h3'
 import { createError } from 'h3'
 import { logger } from '../logger'
 
+async function getPersistentOidcRefreshToken(event: H3Event): Promise<string | undefined> {
+  try {
+    const [{ getUserSessionId }, { decryptToken }, { useStorage }] = await Promise.all([
+      import('nuxt-oidc-auth/runtime/server/utils/session.js'),
+      import('nuxt-oidc-auth/runtime/server/utils/security.js'),
+      import('nitropack/runtime')
+    ])
+    const sessionId = await getUserSessionId(event)
+    const persistentSession = await useStorage('oidc').getItem<{ refreshToken?: unknown }>(sessionId)
+    const tokenKey = process.env.NUXT_OIDC_TOKEN_KEY
+    if (!persistentSession?.refreshToken || !tokenKey) return undefined
+    return await decryptToken(persistentSession.refreshToken as any, tokenKey)
+  } catch (error) {
+    logger.warn('Unable to read the persistent delegated refresh token:', error)
+    return undefined
+  }
+}
+
 /**
  * Validate JWT token expiration
  */
@@ -158,7 +176,7 @@ export async function getUserSession(event: H3Event): Promise<{
 
     return {
       accessToken: accessToken,
-      refreshToken: sessionData.refreshToken || sessionData.refresh_token || session.refreshToken || session.refresh_token,
+      refreshToken: sessionData.refreshToken || sessionData.refresh_token || session.refreshToken || session.refresh_token || await getPersistentOidcRefreshToken(event),
       user: user || { id: 'session-user', email: 'unknown' }
     }
   } catch (error) {

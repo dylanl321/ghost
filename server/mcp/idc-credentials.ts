@@ -7,8 +7,6 @@ import {
 } from '@aws-sdk/client-sso-oidc'
 import {
   GetRoleCredentialsCommand,
-  ListAccountRolesCommand,
-  ListAccountsCommand,
   SSOClient
 } from '@aws-sdk/client-sso'
 import { deleteItem, getItem, putItem } from '../utils/dynamodb'
@@ -37,17 +35,14 @@ interface DeviceAuthorizationSession extends RegisteredClient, IdentityCenterCon
   expiresAtIso: string
   accessToken?: string
   accessTokenExpiresAt?: number
-}
-
-export interface McpIdentityCenterAccountAccess {
-  accountId: string
-  accountName: string
-  emailAddress?: string
-  roles: string[]
+  refreshToken?: string
+  refreshTokenExpiresAt?: number
 }
 
 const registeredClients = new Map<IdentityCenterEnvironment, RegisteredClient>()
 const DEVICE_CODE_GRANT = 'urn:ietf:params:oauth:grant-type:device_code'
+const REFRESH_TOKEN_GRANT = 'refresh_token'
+const IDC_REFRESH_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
 export function isMcpIdentityCenterDeviceFlowEnabled(): boolean {
   return process.env.GHOST_MCP_IDC_DEVICE_FLOW_ENABLED === 'true'
@@ -79,16 +74,16 @@ function sessionEncryptionContext(sessionId: string, subject: string) {
 async function saveDeviceSession(session: DeviceAuthorizationSession, expiresAt: number): Promise<void> {
   if (!isMcpSecretVaultEnabled()) throw new Error('Identity Center session encryption is not configured.')
   const config = getOAuthTableConfig()
+  const ttl = Math.floor(expiresAt / 1000)
+  const encryptedSession = await encryptMcpSecret(
+    JSON.stringify(session),
+    sessionEncryptionContext(session.sessionId, session.subject)
+  )
   await putItem(config.tableName, {
     ...sessionKey(session.sessionId),
     model: 'IdentityCenterSession',
-    payload: {
-      ciphertext: await encryptMcpSecret(
-        JSON.stringify(session),
-        sessionEncryptionContext(session.sessionId, session.subject)
-      )
-    },
-    ttl: Math.floor(expiresAt / 1000)
+    payload: { ciphertext: encryptedSession },
+    ttl
   }, config.environment, config.accountId)
 }
 
@@ -106,9 +101,9 @@ async function loadDeviceSession(sessionId: string, subject: string): Promise<De
   return session.subject === subject ? session : null
 }
 
-async function deleteDeviceSession(sessionId: string): Promise<void> {
+async function deleteDeviceSession(session: DeviceAuthorizationSession): Promise<void> {
   const config = getOAuthTableConfig()
-  await deleteItem(config.tableName, sessionKey(sessionId), config.environment, config.accountId)
+  await deleteItem(config.tableName, sessionKey(session.sessionId), config.environment, config.accountId)
 }
 
 async function getRegisteredClient(config: IdentityCenterConfig): Promise<RegisteredClient> {
@@ -120,7 +115,7 @@ async function getRegisteredClient(config: IdentityCenterConfig): Promise<Regist
     clientName: 'ghost-mcp',
     clientType: 'public',
     scopes: ['sso:account:access'],
-    grantTypes: [DEVICE_CODE_GRANT]
+    grantTypes: [DEVICE_CODE_GRANT, REFRESH_TOKEN_GRANT]
   }))
   if (!response.clientId || !response.clientSecret || !response.clientSecretExpiresAt) {
     throw new Error('IAM Identity Center did not return a usable client registration.')
@@ -196,16 +191,30 @@ async function getIdentityCenterAccessToken(
 
   const oidc = new SSOOIDCClient({ region: session.region })
   try {
-    const token = await oidc.send(new CreateTokenCommand({
-      clientId: session.clientId,
-      clientSecret: session.clientSecret,
-      deviceCode: session.deviceCode,
-      grantType: DEVICE_CODE_GRANT
-    }))
+    const token = await oidc.send(new CreateTokenCommand(session.refreshToken
+      ? {
+          clientId: session.clientId,
+          clientSecret: session.clientSecret,
+          refreshToken: session.refreshToken,
+          grantType: REFRESH_TOKEN_GRANT
+        }
+      : {
+          clientId: session.clientId,
+          clientSecret: session.clientSecret,
+          deviceCode: session.deviceCode,
+          grantType: DEVICE_CODE_GRANT
+        }))
     if (!token.accessToken) throw new Error('IAM Identity Center did not return an access token.')
     session.accessToken = token.accessToken
     session.accessTokenExpiresAt = Date.now() + (token.expiresIn || 3600) * 1000
-    await saveDeviceSession(session, session.accessTokenExpiresAt)
+    if (token.refreshToken) session.refreshToken = token.refreshToken
+    if (session.refreshToken) {
+      session.refreshTokenExpiresAt = Math.min(
+        session.expiresAt,
+        Date.now() + IDC_REFRESH_SESSION_TTL_MS
+      )
+    }
+    await saveDeviceSession(session, session.refreshTokenExpiresAt || session.accessTokenExpiresAt)
     return { session, accessToken: token.accessToken }
   } catch (error: any) {
     if (error?.name === 'AuthorizationPendingException' || error?.name === 'SlowDownException') {
@@ -213,48 +222,13 @@ async function getIdentityCenterAccessToken(
       pending.name = 'IDC_AUTHORIZATION_PENDING'
       throw pending
     }
-    throw error
-  }
-}
-
-export async function listMcpIdentityCenterAccess(
-  principal: GhostMcpPrincipal,
-  sessionId: string
-): Promise<{ environment: IdentityCenterEnvironment; accounts: McpIdentityCenterAccountAccess[] }> {
-  const { session, accessToken } = await getIdentityCenterAccessToken(principal, sessionId)
-  const sso = new SSOClient({ region: session.region })
-  const accounts: McpIdentityCenterAccountAccess[] = []
-  let nextToken: string | undefined
-
-  do {
-    const response = await sso.send(new ListAccountsCommand({ accessToken, nextToken, maxResults: 100 }))
-    for (const account of response.accountList || []) {
-      if (!account.accountId) continue
-      const roles: string[] = []
-      let roleToken: string | undefined
-      do {
-        const roleResponse = await sso.send(new ListAccountRolesCommand({
-          accessToken,
-          accountId: account.accountId,
-          nextToken: roleToken,
-          maxResults: 100
-        }))
-        roles.push(...(roleResponse.roleList || []).map(role => role.roleName).filter((role): role is string => Boolean(role)))
-        roleToken = roleResponse.nextToken
-      } while (roleToken)
-      accounts.push({
-        accountId: account.accountId,
-        accountName: account.accountName || account.accountId,
-        emailAddress: account.emailAddress,
-        roles: Array.from(new Set(roles)).sort()
-      })
+    if (['InvalidGrantException', 'InvalidClientException', 'ExpiredTokenException'].includes(error?.name)) {
+      await deleteDeviceSession(session)
+      const reauth = new Error('IAM Identity Center authorization expired or was revoked. Start a new IDC authorization session.')
+      reauth.name = 'IDC_REAUTH_REQUIRED'
+      throw reauth
     }
-    nextToken = response.nextToken
-  } while (nextToken)
-
-  return {
-    environment: session.environment,
-    accounts: accounts.sort((left, right) => left.accountName.localeCompare(right.accountName))
+    throw error
   }
 }
 
@@ -266,25 +240,20 @@ export async function issueMcpIdentityCenterCredentials(
 ) {
   const { session, accessToken } = await getIdentityCenterAccessToken(principal, sessionId)
 
-  try {
-    const sso = new SSOClient({ region: session.region })
-    const response = await sso.send(new GetRoleCredentialsCommand({ accountId, roleName, accessToken }))
-    const credentials = response.roleCredentials
-    if (!credentials?.accessKeyId || !credentials.secretAccessKey || !credentials.sessionToken || !credentials.expiration) {
-      throw new Error('IAM Identity Center did not return complete role credentials.')
-    }
-    return {
-      accessKeyId: credentials.accessKeyId,
-      secretAccessKey: credentials.secretAccessKey,
-      sessionToken: credentials.sessionToken,
-      expiration: new Date(credentials.expiration).toISOString(),
-      accountId,
-      roleName,
-      environment: session.environment,
-      region: session.region
-    }
-  } finally {
-    // Credential issuance is terminal; do not retain the user access token afterward.
-    await deleteDeviceSession(sessionId)
+  const sso = new SSOClient({ region: session.region })
+  const response = await sso.send(new GetRoleCredentialsCommand({ accountId, roleName, accessToken }))
+  const credentials = response.roleCredentials
+  if (!credentials?.accessKeyId || !credentials.secretAccessKey || !credentials.sessionToken || !credentials.expiration) {
+    throw new Error('IAM Identity Center did not return complete role credentials.')
+  }
+  return {
+    accessKeyId: credentials.accessKeyId,
+    secretAccessKey: credentials.secretAccessKey,
+    sessionToken: credentials.sessionToken,
+    expiration: new Date(credentials.expiration).toISOString(),
+    accountId,
+    roleName,
+    environment: session.environment,
+    region: session.region
   }
 }

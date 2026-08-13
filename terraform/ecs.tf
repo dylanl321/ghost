@@ -297,11 +297,11 @@ resource "aws_ecs_task_definition" "main" {
         },
         {
           name  = "GHOST_SUPPORT_KNOWLEDGE_BASE_ENVIRONMENT"
-          value = "commercial"
+          value = "govcloud"
         },
         {
           name  = "GHOST_SUPPORT_KNOWLEDGE_BASE_REGION"
-          value = "us-east-1"
+          value = "us-gov-west-1"
         },
         {
           name  = "ACCOUNT_NOTES_TABLE"

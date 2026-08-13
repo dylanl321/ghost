@@ -7,5 +7,6 @@ test('uses the configured ISGDDocs Bedrock Knowledge Base by default', () => {
   assert.equal(config.name, 'isgddocs-knowledge-base')
   assert.equal(config.knowledgeBaseId, 'MWEQITO53C')
   assert.equal(config.accountId, '926182194632')
-  assert.equal(config.environment, 'commercial')
+  assert.equal(config.environment, 'govcloud')
+  assert.equal(config.region, 'us-gov-west-1')
 })
