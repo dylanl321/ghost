@@ -4,6 +4,7 @@ import { getUserGroups } from '../../../utils/entra/graph-client'
 import { getUserSession } from '../../../utils/entra/session'
 import { logger } from '../../../utils/logger'
 import { getOAuthProvider } from '../../../mcp/oauth/provider'
+import { getMcpResourceUrl } from '../../../mcp/config'
 import { saveMcpGraphDelegation } from '../../../mcp/oauth/delegated-graph'
 import { saveGhostMcpIdentity } from '../../../mcp/oauth/identity'
 import { GHOST_MCP_SCOPES, type GhostMcpIdentity } from '../../../mcp/types'
@@ -137,12 +138,14 @@ export default defineEventHandler(async event => {
     missingOIDCClaims?: string[]
     missingResourceScopes?: Record<string, string[]>
   }
-  // Use the provider's computed gaps because advertised custom scopes can require both grant types.
+  // Use the provider's computed gaps for OIDC claims, then grant the normal GHOST
+  // capability set. Clients should not need to know or choose internal scope names.
   if (missing.missingOIDCScope?.length) grant.addOIDCScope(missing.missingOIDCScope)
   if (missing.missingOIDCClaims?.length) grant.addOIDCClaims(missing.missingOIDCClaims)
   for (const [resource, scopes] of Object.entries(missing.missingResourceScopes || {})) {
     grant.addResourceScope(resource, scopes)
   }
+  grant.addResourceScope(getMcpResourceUrl().href, GHOST_MCP_SCOPES)
   const grantId = await grant.save()
   const consent = details.grantId ? {} : { grantId }
 

@@ -5,7 +5,6 @@ import { ghostEnvironmentContext } from '../../mcp/environment-context'
 
 export default defineEventHandler(() => {
   const serverUrl = getMcpResourceUrl().href
-  const scopeList = GHOST_MCP_SCOPES.join(',')
   return {
     name: 'ghost',
     protocolVersion: '2026-07-28',
@@ -23,7 +22,7 @@ export default defineEventHandler(() => {
     ],
     codex: {
       addCommand: `codex mcp add ghost --url ${serverUrl} --oauth-resource ${serverUrl}`,
-      loginCommand: `codex mcp login ghost --scopes ${scopeList}`,
+      loginCommand: 'codex mcp login ghost',
       verifyCommands: ['codex mcp get ghost --json', 'codex mcp list'],
       resetCommands: ['codex mcp logout ghost', 'codex mcp remove ghost'],
       configToml: `[mcp_servers.ghost]\nurl = "${serverUrl}"\noauth_resource = "${serverUrl}"`
