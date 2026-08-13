@@ -496,7 +496,7 @@ export function registerCatalogTools(
   })
 
   read({
-    name: 'ghost.instances.get', title: 'Get an EC2 instance', description: 'Find an EC2 instance in AWS Config by instance ID and optional account scope.',
+    name: 'ghost.instances.get', title: 'Get an EC2 instance', description: 'Find one EC2 instance by exact instance ID in AWS Config and optional account scope.',
     inputSchema: z.object({ instance_id: z.string().regex(/^i-[0-9a-f]{8,17}$/), account_identifiers: accountIdentifiersSchema }),
     handler: async args => {
       const result = await queryConfigResources(await commercialIds(args.account_identifiers), { resourceTypes: ['AWS::EC2::Instance'], resourceId: args.instance_id }, { mode: 'preview', limit: 10 })
@@ -516,7 +516,7 @@ export function registerCatalogTools(
   })
 
   read({
-    name: 'ghost.security.summary', title: 'Get security summary', description: 'Return organization or account-level GHOST security posture computed from Security Hub data.',
+    name: 'ghost.security.summary', title: 'Get security summary', description: 'Return a 90-day Security Hub and Inspector posture summary, including vulnerability findings and Security Hub control results. This is distinct from AWS Config rule compliance and SSM patch compliance.',
     inputSchema: z.object({ account_id: z.string().optional() }),
     handler: async args => {
       const account = args.account_id ? (await resolveAccount(args.account_id)).account : undefined
@@ -528,7 +528,7 @@ export function registerCatalogTools(
   })
 
   read({
-    name: 'ghost.security.findings', title: 'Query security findings', description: 'Query bounded Security Hub findings across selected accounts.',
+    name: 'ghost.security.findings', title: 'Query security findings', description: 'Query a bounded subset of current Security Hub findings across selected accounts. Do not treat the returned page count as the account-wide finding total; use ghost.security.summary for that.',
     inputSchema: z.object({ account_identifiers: accountIdentifiersSchema, severities: z.array(z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFORMATIONAL'])).default([]), statuses: z.array(z.enum(['NEW', 'NOTIFIED', 'RESOLVED', 'SUPPRESSED'])).default([]), lookback_days: z.number().int().min(1).max(90).default(30), limit: z.number().int().min(1).max(100).default(25) }),
     handler: async args => {
       const result = await querySecurityHubFindings(await commercialIds(args.account_identifiers), { severities: args.severities, statuses: args.statuses, lookbackDays: args.lookback_days }, { mode: 'preview', limit: args.limit })
@@ -546,7 +546,7 @@ export function registerCatalogTools(
   })
 
   read({
-    name: 'ghost.support.patch_compliance', title: 'Get patch compliance', description: 'Get SSM patch compliance for an account or a specific EC2 instance.',
+    name: 'ghost.support.patch_compliance', title: 'Get patch compliance', description: 'Get SSM patch compliance for an account or a specific EC2 instance. This measures managed-instance patch state only, not Security Hub or AWS Config control compliance.',
     inputSchema: z.object({ account_id: z.string(), instance_id: z.string().optional(), environment: operationalEnvironmentSchema, region: z.string().optional() }),
     handler: async args => toolSuccess(args.instance_id ? await getInstancePatchStatus(args.instance_id, args.account_id, args.environment, args.region) : await getAccountPatchCompliance(args.account_id, args.environment, args.region), 'Patch compliance loaded.', 'AWS Systems Manager')
   })

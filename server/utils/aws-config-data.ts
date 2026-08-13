@@ -96,7 +96,9 @@ async function fetchResourcesViaQuery(
   }
 
   if (filters.resourceId) {
-    queryParts.push(`${whereStarted ? 'AND' : 'WHERE'} resourceId LIKE '%${filters.resourceId.replace(/'/g, "''")}%'`)
+    // resourceId is an immutable identifier (for example, an EC2 instance ID),
+    // so exact matching avoids AWS Config's short wildcard restrictions.
+    queryParts.push(`${whereStarted ? 'AND' : 'WHERE'} resourceId = '${filters.resourceId.replace(/'/g, "''")}'`)
     whereStarted = true
   }
   if (filters.resourceName) {

@@ -51,5 +51,6 @@ export const ghostMcpInstructions = [
   'Use GHOST service APIs and management-account roles for centralized reads. Use user IDC device authorization only when the user explicitly requests short-lived credentials.',
   'For internal GDMS catalogs, golden or approved offerings, standards, processes, architecture, onboarding, or team terminology, MUST call ghost.docs.search before AWS inventory or ghost.ai.chat. Documentation is authoritative for what is offered; AWS inventory only verifies what is deployed.',
   'Use ghost.access.mine for effective IDC assignments. Entra directory groups are not authoritative AWS access.',
+  'For compliance questions, distinguish Security Hub/Inspector vulnerability posture, Security Hub control compliance, AWS Config rule compliance, and SSM patch compliance. Do not combine them into one unsupported compliance percentage or infer that a bounded findings list is the complete account total.',
   'Prefer bounded queries and exports for large datasets. Never imply that a write occurred unless the tool result confirms it.'
 ].join(' ')

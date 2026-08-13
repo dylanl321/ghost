@@ -10,4 +10,5 @@ test('GHOST MCP context is GovCloud-first with explicit Commercial exceptions', 
   assert.match(ghostMcpInstructions, /GovCloud-first/)
   assert.match(ghostMcpInstructions, /user IDC device authorization only/)
   assert.match(ghostMcpInstructions, /MUST call ghost\.docs\.search/)
+  assert.match(ghostMcpInstructions, /SSM patch compliance/)
 })
