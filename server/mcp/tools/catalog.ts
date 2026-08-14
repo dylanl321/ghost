@@ -47,8 +47,9 @@ import { getDatasetReportConfigErrors } from '../../utils/dataset-report-validat
 import { getReport, listUserReports } from '../../utils/scheduled-reports'
 import { executeScheduledReport } from '../../utils/report-scheduler'
 import { getLatestAnalysis, getInstanceClassifications } from '../../utils/utilization-persistence'
-import { getPeriodBudget } from '../../../shared/utils/budget-utils'
+import { getAnnualBudgetArray, getPeriodBudget } from '../../../shared/utils/budget-utils'
 import type { DatasetReportConfig } from '../../../shared/types/dataset-reports'
+import type { NotificationCategory, NotificationStatus } from '../../../shared/types/notifications'
 import type { GhostMcpPrincipal } from '../types'
 import {
   beginMcpIdentityCenterAuthorization,
@@ -65,11 +66,19 @@ import { buildAccountHealth } from '../account-health'
 import { EVIDENCE_DOMAINS, createEvidenceBundle, deleteEvidenceBundle, evidenceDownloadUrl, getEvidenceBundle, listEvidenceBundles } from '../evidence'
 import { normalizeLimit, toolError, toolRenderedOutput, toolSuccess } from '../results'
 import { runIdempotent } from '../idempotency'
+import { buildMcpCostDashboard } from '../cost-dashboard'
+import { buildPersonalAccountContext } from '../personal-account-context'
 import { registerGhostTool } from './register'
 
 const operationalEnvironmentSchema = z.enum(['commercial', 'govcloud']).default('govcloud')
 const costEnvironmentSchema = z.enum(['commercial', 'govcloud']).default('commercial')
 const accountIdentifiersSchema = z.array(z.string().min(1)).max(100).default([])
+const notificationCategorySchema = z.enum([
+  'BUDGET_THRESHOLD', 'COST_ANOMALY', 'COST_SUMMARY', 'SECURITY_CRITICAL',
+  'COMPLIANCE', 'SECURITY_SCORE', 'PIPELINE_FAILURE', 'DEPLOYMENT',
+  'REPORT_READY', 'CHAT_COMPLETE', 'SYSTEM', 'ACHIEVEMENT'
+])
+const notificationStatusSchema = z.enum(['unread', 'read', 'archived'])
 const paginationSchema = {
   limit: z.number().int().min(1).max(100).optional(),
   cursor: z.string().optional()
@@ -103,6 +112,27 @@ function dateRange(args: { start_date?: string; end_date?: string; period?: stri
     endDate: args.end_date,
     period: args.period as RelativePeriod | undefined
   })
+}
+
+function groupTotals(resultsByTime: any[]): Map<string, number> {
+  const totals = new Map<string, number>()
+  for (const period of resultsByTime) {
+    for (const group of period.Groups || []) {
+      const key = group.Keys?.[0]
+      if (!key) continue
+      totals.set(key, (totals.get(key) || 0) + Number(group.Metrics?.UnblendedCost?.Amount || 0))
+    }
+  }
+  return totals
+}
+
+function formatDate(date: Date): string {
+  return date.toISOString().slice(0, 10)
+}
+
+function forecastTotal(result: any, mode: 'billable' | 'proforma'): number {
+  const forecast = mode === 'proforma' ? result?.proformaAccount?.forecast : result
+  return Number(forecast?.total?.Amount || 0)
 }
 
 function idempotencyKeySchema() {
@@ -248,18 +278,115 @@ export function registerCatalogTools(
   })
 
   read({
-    name: 'ghost.costs.dashboard', title: 'Get cost dashboard', description: 'Return account and service cost totals for dashboard-style analysis. Defaults to proforma chargeback costs.',
+    name: 'ghost.costs.dashboard', title: 'Get cost dashboard', description: 'Return dashboard cost totals plus budget health, end-of-month and year-end projections, account estimates, and methodology. Defaults to proforma chargeback costs.',
     inputSchema: costQuerySchema.omit({ group_by: true, granularity: true }),
     handler: async args => {
       const range = dateRange(args)
       const ids = await commercialIds(args.account_identifiers)
+      if (args.account_identifiers.length && !ids.length) return toolError('ACCOUNT_NOT_FOUND', 'No account identifiers could be resolved.')
+      if (args.mode === 'proforma' && args.environment !== 'commercial') return toolError('INVALID_COST_MODE', 'Proforma costs are available only in Commercial.')
       const target = args.mode === 'proforma' ? process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832' : args.environment === 'commercial' ? process.env.AWS_MASTER_ACCOUNT_ID || '205950196477' : undefined
       const base = { startDate: range.startDate, endDate: range.endDate, granularity: 'MONTHLY' as const, metrics: ['UnblendedCost'], filter: buildCostFilter({ accountIds: ids.length ? ids : undefined }) }
-      const [accounts, services] = await Promise.all([
+      const [accounts, services, accountMetadata] = await Promise.all([
         getCostAndUsage({ ...base, groupBy: [{ type: 'DIMENSION', key: 'LINKED_ACCOUNT' }] }, args.environment, target),
-        getCostAndUsage({ ...base, groupBy: [{ type: 'DIMENSION', key: 'SERVICE' }] }, args.environment, target)
+        getCostAndUsage({ ...base, groupBy: [{ type: 'DIMENSION', key: 'SERVICE' }] }, args.environment, target),
+        getAllAccountsUnified(true)
       ])
-      return toolSuccess({ accounts: accounts.dataset, services: services.dataset }, 'Cost dashboard data loaded.', 'AWS Cost Explorer')
+      const now = new Date()
+      const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+      const currentMonthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1))
+      const nextMonthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 1))
+      const nextYearStart = new Date(Date.UTC(today.getUTCFullYear() + 1, 0, 1))
+      const isCurrentPeriod = range.startDate < formatDate(nextMonthStart) && range.endDate > formatDate(currentMonthStart)
+      const currentBase = {
+        startDate: formatDate(currentMonthStart), endDate: formatDate(today), granularity: 'MONTHLY' as const,
+        metrics: ['UnblendedCost'], filter: buildCostFilter({ accountIds: ids.length ? ids : undefined }),
+        groupBy: [{ type: 'DIMENSION' as const, key: 'LINKED_ACCOUNT' }]
+      }
+      const completedBase = {
+        startDate: formatDate(new Date(Date.UTC(today.getUTCFullYear(), 0, 1))), endDate: formatDate(currentMonthStart), granularity: 'MONTHLY' as const,
+        metrics: ['UnblendedCost'], filter: buildCostFilter({ accountIds: ids.length ? ids : undefined }),
+        groupBy: [{ type: 'DIMENSION' as const, key: 'LINKED_ACCOUNT' }]
+      }
+      const previousMonthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1))
+      const previousMonthMtdEnd = new Date(Math.min(
+        previousMonthStart.getTime() + (today.getTime() - currentMonthStart.getTime()),
+        currentMonthStart.getTime()
+      ))
+      const currentForecastRange = { startDate: formatDate(today), endDate: formatDate(nextMonthStart) }
+      const forecastFilter = buildCostFilter({ accountIds: ids.length ? ids : undefined })
+      const currentForecast = () => args.mode === 'proforma'
+        ? getProformaForecast(currentForecastRange.startDate, currentForecastRange.endDate, 'UNBLENDED_COST', 'DAILY', forecastFilter)
+        : getCostForecast(currentForecastRange.startDate, currentForecastRange.endDate, 'UNBLENDED_COST', 'DAILY', forecastFilter, args.environment, target)
+      const futureForecast = () => args.mode === 'proforma'
+        ? getProformaForecast(formatDate(nextMonthStart), formatDate(nextYearStart), 'UNBLENDED_COST', 'MONTHLY', forecastFilter)
+        : getCostForecast(formatDate(nextMonthStart), formatDate(nextYearStart), 'UNBLENDED_COST', 'MONTHLY', forecastFilter, args.environment, target)
+
+      const currentData = isCurrentPeriod
+        ? await Promise.all([
+            getCostAndUsage(currentBase, args.environment, target),
+            getCostAndUsage({ ...currentBase, groupBy: undefined }, args.environment, target),
+            getCostAndUsage({ ...currentBase, startDate: formatDate(previousMonthStart), endDate: formatDate(previousMonthMtdEnd), groupBy: undefined }, args.environment, target),
+            getCostAndUsage({ ...currentBase, startDate: formatDate(previousMonthStart), endDate: formatDate(currentMonthStart), groupBy: undefined }, args.environment, target),
+            getCostAndUsage(completedBase, args.environment, target),
+            Promise.allSettled([currentForecast(), today.getUTCMonth() === 11 ? Promise.resolve(null) : futureForecast()])
+          ])
+        : null
+      const periodTotals = groupTotals(accounts.resultsByTime)
+      const metadataById = new Map<string, any>()
+      for (const account of accountMetadata) {
+        for (const id of [account.accountId, account.awsStandardAccountID, account.awsGovCloudAccountID, account.govCloudAccountId]) {
+          if (id) metadataById.set(id, account)
+        }
+      }
+      const currentTotals = currentData ? groupTotals(currentData[0].resultsByTime) : new Map<string, number>()
+      const completedTotals = currentData ? groupTotals(currentData[4].resultsByTime) : new Map<string, number>()
+      const accountIds = new Set([...periodTotals.keys(), ...currentTotals.keys(), ...completedTotals.keys(), ...ids])
+      const projectionResults = currentData?.[5]
+      const currentProjection = projectionResults?.[0]
+      const futureProjection = projectionResults?.[1]
+      const currentProjectionValue = currentProjection?.status === 'fulfilled' ? currentProjection.value : undefined
+      const futureProjectionValue = futureProjection?.status === 'fulfilled' ? futureProjection.value : undefined
+      const projectionsAvailable = isCurrentPeriod && currentProjection?.status === 'fulfilled' && futureProjection?.status !== 'rejected'
+      const projectionReason = !isCurrentPeriod
+        ? 'Forecasts are unavailable for historical dashboard periods.'
+        : !projectionsAvailable
+          ? 'AWS Cost Explorer forecast data is currently unavailable for this scope.'
+          : undefined
+      const dashboard = buildMcpCostDashboard({
+        mode: args.mode,
+        environment: args.environment,
+        period: { startDate: range.startDate, endDate: range.endDate, description: range.description },
+        accountIdentifiers: args.account_identifiers,
+        resolvedAccountIds: ids,
+        accounts: [...accountIds].map(accountId => {
+          const account = metadataById.get(accountId)
+          const budget = getPeriodBudget(account, range.startDate, range.endDate)
+          const annualBudget = getAnnualBudgetArray(account).monthlyArray.reduce((total, amount) => total + amount, 0)
+          return {
+            accountId,
+            accountName: accountDisplayName(account || { accountId }),
+            periodSpend: periodTotals.get(accountId) || 0,
+            currentMonthSpend: currentTotals.get(accountId) || 0,
+            completedMonthsSpend: completedTotals.get(accountId) || 0,
+            periodBudget: budget.periodBudget,
+            paceToDateBudget: budget.paceToDateBudget,
+            budgetSource: budget.source,
+            annualBudget
+          }
+        }),
+        services: [...groupTotals(services.resultsByTime)].map(([service, spend]) => ({ service, spend })),
+        previousMonthMtd: currentData ? currentData[2].dataset.reconciliation.authoritativeTotal : null,
+        previousMonthFull: currentData ? currentData[3].dataset.reconciliation.authoritativeTotal : null,
+        projectionAvailability: projectionsAvailable ? 'available' : isCurrentPeriod ? 'unavailable' : 'not_applicable',
+        projectionReason,
+        currentMonthRemainderForecast: projectionsAvailable ? forecastTotal(currentProjectionValue, args.mode) : undefined,
+        futureMonthsForecast: projectionsAvailable ? futureProjectionValue ? forecastTotal(futureProjectionValue, args.mode) : 0 : undefined,
+        dayOfMonth: today.getUTCDate()
+      })
+      return toolSuccess({ accounts: accounts.dataset, services: services.dataset, dashboard }, 'Cost dashboard data loaded.', 'AWS Cost Explorer and GHOST account budgets', {
+        warnings: projectionReason ? [projectionReason] : undefined
+      })
     }
   })
 
@@ -733,6 +860,49 @@ export function registerCatalogTools(
     name: 'ghost.preferences.get', title: 'Get my preferences', description: 'Return the authenticated user’s GHOST preferences.',
     inputSchema: z.object({}), annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
     handler: async () => toolSuccess(await getUserPreferences(principal.email), 'Preferences loaded.', 'GHOST user preferences')
+  })
+
+  collaborate({
+    name: 'ghost.accounts.personal_context', title: 'Get my favorite and recent accounts',
+    description: 'Return the authenticated user’s saved favorite accounts and recently viewed accounts, resolved to current GHOST account metadata.',
+    inputSchema: z.object({ limit: z.number().int().min(1).max(100).default(50) }),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+    handler: async args => {
+      const [preferences, accounts] = await Promise.all([
+        getUserPreferences(principal.email),
+        getAllAccountsUnified(true)
+      ])
+      const context = buildPersonalAccountContext(preferences, accounts, args.limit)
+      return toolSuccess(context, `Loaded ${context.favorites.total} favorite and ${context.recentAccounts.total} recently viewed account(s).`, 'GHOST user preferences and account metadata', {
+        warnings: context.favorites.truncated || context.recentAccounts.truncated
+          ? [`Only the first ${args.limit} account(s) from each list are included.`]
+          : undefined
+      })
+    }
+  })
+
+  collaborate({
+    name: 'ghost.notifications.list', title: 'List my notifications',
+    description: 'List the authenticated user’s GHOST notifications by category or read status.',
+    inputSchema: z.object({
+      categories: z.array(notificationCategorySchema).max(12).optional(),
+      status: notificationStatusSchema.optional(),
+      limit: z.number().int().min(1).max(50).default(20),
+      cursor: z.string().optional()
+    }),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+    handler: async args => {
+      const { getUserNotifications } = await import('../../utils/notification-service')
+      const notifications = await getUserNotifications(principal.email, {
+        category: args.categories as NotificationCategory[] | undefined,
+        status: args.status as NotificationStatus | undefined,
+        limit: args.limit,
+        lastKey: args.cursor
+      })
+      return toolSuccess(notifications, `Loaded ${notifications.notifications.length} notification(s).`, 'GHOST user notification inbox', {
+        nextCursor: notifications.nextKey || undefined
+      })
+    }
   })
 
   collaborate({

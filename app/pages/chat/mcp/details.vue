@@ -14,7 +14,7 @@ const modeClasses = {
       <UButton to="/chat/mcp" icon="i-heroicons-arrow-left" color="gray" variant="ghost" size="xs">MCP Connections</UButton>
       <p class="mt-5 text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">GHOST MCP</p>
       <h1 class="mt-1 text-3xl font-semibold" style="color: var(--ghost-text)">What GHOST can do</h1>
-      <p class="mt-2 max-w-2xl text-sm leading-6" style="color: var(--ghost-text-muted)">A living, user-facing map of the MCP command families. Update <code>app/utils/mcp-capabilities.ts</code> as the server catalog evolves.</p>
+      <p class="mt-2 max-w-2xl text-sm leading-6" style="color: var(--ghost-text-muted)">Explore the command families GHOST makes available to your MCP client, from official Handbook guidance to live AWS and personal workspace context.</p>
     </header>
 
     <main class="grid gap-x-8 gap-y-10 py-9 md:grid-cols-2">
