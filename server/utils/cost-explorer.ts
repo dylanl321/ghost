@@ -4,18 +4,17 @@
  */
 
 import {
-  GetCostAndUsageCommand,
   GetCostAndUsageWithResourcesCommand,
   GetCostForecastCommand,
   GetDimensionValuesCommand,
   GetTagsCommand,
   type DateInterval,
   type Granularity,
-  type GroupDefinition,
   type Expression
 } from '@aws-sdk/client-cost-explorer'
 import { getCostExplorerClient } from '../lib/aws-client-factory'
 import type { CostExplorerParams } from '../types'
+import { mergeCostExplorerPeriods, queryBillingDomains, queryCostDataset } from './cost-domain'
 import { logger } from './logger'
 
 /** Safe percentage change: returns null when base is 0 and target > 0 (indicates "new" cost) */
@@ -33,142 +32,10 @@ export async function getCostAndUsage(
   environment: 'commercial' | 'govcloud' = 'commercial',
   targetAccountId?: string
 ) {
-  const client = await getCostExplorerClient(environment, undefined, targetAccountId)
-  
-  const groupBy: GroupDefinition[] | undefined = params.groupBy?.map(group => ({
-    Type: group.type,
-    Key: group.key
-  }))
-
-  // Handle pagination for Cost Explorer API
-  let allResultsByTime: any[] = []
-  let dimensionValueAttributes: any[] = []
-  let total: any = {}
-  let nextPageToken: string | undefined = undefined
-
-  // Start speculative total query in parallel when GroupBy is used.
-  // AWS never returns root totals with GroupBy, so we'll almost always need this.
-  const speculativeTotalPromise = (groupBy && groupBy.length > 0)
-    ? client.send(new GetCostAndUsageCommand({
-        TimePeriod: { Start: params.startDate, End: params.endDate },
-        Granularity: params.granularity as Granularity,
-        Metrics: params.metrics,
-        Filter: params.filter
-        // No GroupBy — returns totals
-      }))
-    : null
-
-  do {
-    const command = new GetCostAndUsageCommand({
-      TimePeriod: {
-        Start: params.startDate,
-        End: params.endDate
-      },
-      Granularity: params.granularity as Granularity,
-      Metrics: params.metrics,
-      GroupBy: groupBy,
-      Filter: params.filter,
-      NextPageToken: nextPageToken
-    })
-
-    const response = await client.send(command)
-    
-    // Accumulate results
-    allResultsByTime = allResultsByTime.concat(response.ResultsByTime || [])
-    dimensionValueAttributes = dimensionValueAttributes.concat(response.DimensionValueAttributes || [])
-    
-    // Use the total from the last response (should be consistent across pages)
-    if (response.Total) {
-      total = response.Total
-    }
-    
-    // Check for next page
-    nextPageToken = response.NextPageToken
-    
-    logger.debug(`Cost Explorer pagination: fetched ${response.ResultsByTime?.length || 0} results, nextToken: ${!!nextPageToken}`)
-    
-  } while (nextPageToken)
-  
-  logger.info(`Cost Explorer total results: ${allResultsByTime.length} time periods`)
-  
-  // IMPORTANT: When using GroupBy, AWS doesn't return a root-level Total
-  // Use the speculative total query started before the pagination loop
-  if (groupBy && groupBy.length > 0 && Object.keys(total).length === 0 && speculativeTotalPromise) {
-    logger.info('GroupBy detected with no root Total - awaiting speculative total query')
-    try {
-      const totalResponse: any = await speculativeTotalPromise
-
-      logger.debug('Separate total call response:', {
-        hasResultsByTime: !!totalResponse?.ResultsByTime,
-        resultsByTimeLength: totalResponse?.ResultsByTime?.length || 0,
-        firstPeriodHasTotal: !!totalResponse?.ResultsByTime?.[0]?.Total
-      })
-
-      // AWS doesn't return a root-level Total; we need to sum from ResultsByTime
-      if (totalResponse?.ResultsByTime && totalResponse.ResultsByTime.length > 0) {
-        // Initialize accumulator for each metric
-        const accumulatedTotal: any = {}
-
-        // Build date-keyed map from total response to avoid index mismatch on pagination
-        const totalsByDate = new Map<string, any>()
-        totalResponse.ResultsByTime.forEach((result: any) => {
-          if (result?.Total && result.TimePeriod?.Start) {
-            totalsByDate.set(result.TimePeriod.Start, result.Total)
-          }
-        })
-
-        // Inject totals by matching date keys
-        allResultsByTime.forEach((period: any) => {
-          const dateKey = period?.TimePeriod?.Start
-          if (dateKey && totalsByDate.has(dateKey)) {
-            const total = totalsByDate.get(dateKey)
-            if (total) {
-              period.Total = total
-              logger.debug(`✓ Billable: Injected Total for ${dateKey}: ${total?.UnblendedCost?.Amount}`)
-            }
-          }
-        })
-
-        // Accumulate totals from the date-keyed map
-        totalsByDate.forEach((periodTotal: any) => {
-          params.metrics.forEach((metric: string) => {
-            if (periodTotal?.[metric]?.Amount) {
-              if (!accumulatedTotal[metric]) {
-                accumulatedTotal[metric] = {
-                  Amount: '0',
-                  Unit: periodTotal[metric]?.Unit || 'USD'
-                }
-              }
-              const currentAmount = parseFloat(accumulatedTotal[metric]?.Amount || '0')
-              const addAmount = parseFloat(periodTotal[metric]?.Amount || '0')
-              accumulatedTotal[metric].Amount = (currentAmount + addAmount).toString()
-            }
-          })
-        })
-
-        if (Object.keys(accumulatedTotal).length > 0) {
-          total = accumulatedTotal
-          logger.info('✓ Successfully retrieved total from separate call (summed from ResultsByTime):', {
-            metrics: Object.keys(accumulatedTotal),
-            UnblendedCost: accumulatedTotal?.UnblendedCost?.Amount
-          })
-        } else {
-          logger.warn('Separate call returned ResultsByTime but no Totals in periods')
-        }
-      } else {
-        logger.warn('Separate call returned no ResultsByTime')
-      }
-    } catch (error) {
-      logger.warn('Failed to get separate total:', error)
-      // Fall back to calculating from resultsByTime
-    }
-  }
-  
-  return {
-    resultsByTime: allResultsByTime,
-    dimensionValueAttributes: dimensionValueAttributes,
-    total: total
-  }
+  const source = targetAccountId === (process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832')
+    ? 'proforma'
+    : 'billable'
+  return queryCostDataset(params, { environment, source, accountId: targetAccountId })
 }
 
 /**
@@ -189,7 +56,7 @@ export async function getCostAndUsageWithResources(
 ) {
   const client = await getCostExplorerClient(environment, undefined, targetAccountId)
 
-  let allResultsByTime: any[] = []
+  const pages: any[][] = []
   let nextPageToken: string | undefined = undefined
 
   do {
@@ -203,12 +70,13 @@ export async function getCostAndUsageWithResources(
     })
 
     const response = await client.send(command)
-    allResultsByTime = allResultsByTime.concat(response.ResultsByTime || [])
+    pages.push(response.ResultsByTime || [])
     nextPageToken = response.NextPageToken
 
     logger.debug(`CostWithResources pagination: fetched ${response.ResultsByTime?.length || 0} results, nextToken: ${!!nextPageToken}`)
   } while (nextPageToken)
 
+  const allResultsByTime = mergeCostExplorerPeriods(pages)
   logger.info(`CostWithResources total results: ${allResultsByTime.length} time periods`)
 
   return { resultsByTime: allResultsByTime }
@@ -223,16 +91,17 @@ export async function getCostForecast(
   metric: string,
   granularity: 'DAILY' | 'MONTHLY' = 'DAILY',
   filter?: Expression,
-  environment: 'commercial' | 'govcloud' = 'commercial'
+  environment: 'commercial' | 'govcloud' = 'commercial',
+  targetAccountId?: string
 ) {
-  const client = await getCostExplorerClient(environment)
+  const client = await getCostExplorerClient(environment, undefined, targetAccountId)
   
   const command = new GetCostForecastCommand({
     TimePeriod: {
       Start: startDate,
       End: endDate
     },
-    Metric: metric,
+    Metric: metric as any,
     Granularity: granularity as Granularity,
     Filter: filter
   })
@@ -258,7 +127,7 @@ export async function getDimensionValues(
   const client = await getCostExplorerClient(environment)
   
   const command = new GetDimensionValuesCommand({
-    Dimension: dimension,
+    Dimension: dimension as any,
     TimePeriod: timePeriod,
     SearchString: searchString,
     Filter: filter
@@ -280,22 +149,34 @@ export async function getCostAllocationTags(
   timePeriod: DateInterval,
   tagKey?: string,
   filter?: Expression,
-  environment: 'commercial' | 'govcloud' = 'commercial'
+  environment: 'commercial' | 'govcloud' = 'commercial',
+  targetAccountId?: string
 ) {
-  const client = await getCostExplorerClient(environment)
-  
-  const command = new GetTagsCommand({
-    TimePeriod: timePeriod,
-    TagKey: tagKey,
-    Filter: filter
-  })
+  const client = await getCostExplorerClient(environment, undefined, targetAccountId)
 
-  const response = await client.send(command)
-  
+  const tags = new Set<string>()
+  let returnSize = 0
+  let totalSize = 0
+  let nextPageToken: string | undefined
+
+  do {
+    const response = await client.send(new GetTagsCommand({
+      TimePeriod: timePeriod,
+      TagKey: tagKey,
+      Filter: filter,
+      NextPageToken: nextPageToken
+    }))
+
+    for (const tag of response.Tags || []) tags.add(tag)
+    returnSize += response.ReturnSize || 0
+    totalSize = Math.max(totalSize, response.TotalSize || 0)
+    nextPageToken = response.NextPageToken
+  } while (nextPageToken)
+
   return {
-    tags: response.Tags || [],
-    returnSize: response.ReturnSize || 0,
-    totalSize: response.TotalSize || 0
+    tags: Array.from(tags).sort((a, b) => a.localeCompare(b)),
+    returnSize,
+    totalSize
   }
 }
 
@@ -397,55 +278,42 @@ export async function getTopSpendingServices(
  * Calculate month-over-month cost change
  */
 export async function getMonthOverMonthChange(
-  environment: 'commercial' | 'govcloud' = 'commercial'
+  environment: 'commercial' | 'govcloud' = 'commercial',
+  targetAccountId?: string
 ) {
   const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-  const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0)
-
-  const formatDate = (date: Date) => (date.toISOString().split('T')[0] ?? '')
-
-  // Determine current month date range
-  // AWS requires start < end, so on first day of month, return 0 for current month
-  let currentMonthStartDate = currentMonthStart
-  let currentMonthEndDate = today
-  let skipCurrentMonth = false
-
-  if (currentMonthStart.getTime() === today.getTime()) {
-    // First day of month: no meaningful data for current month yet
-    skipCurrentMonth = true
-  }
-
-  // Get current month costs (or return 0 if it's day 1)
-  let currentTotal = 0
-  if (!skipCurrentMonth) {
-    const currentMonthCosts = await getCostAndUsage({
-      startDate: formatDate(currentMonthStartDate),
-      endDate: formatDate(currentMonthEndDate),
-      granularity: 'MONTHLY',
-      metrics: ['UnblendedCost']
-    }, environment)
-    currentTotal = parseFloat(currentMonthCosts.total?.['UnblendedCost']?.Amount || '0')
-  }
-
-  // Get last month costs
-  const lastMonthCosts = await getCostAndUsage({
-    startDate: formatDate(lastMonthStart),
-    endDate: formatDate(lastMonthEnd),
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  const currentStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1))
+  const previousStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1))
+  const observedDays = Math.round((today.getTime() - currentStart.getTime()) / 86400000)
+  const previousMtdEnd = new Date(Math.min(
+    previousStart.getTime() + observedDays * 86400000,
+    currentStart.getTime()
+  ))
+  const iso = (date: Date) => date.toISOString().slice(0, 10)
+  const query = (startDate: Date, endDate: Date) => getCostAndUsage({
+    startDate: iso(startDate),
+    endDate: iso(endDate),
     granularity: 'MONTHLY',
     metrics: ['UnblendedCost']
-  }, environment)
+  }, environment, targetAccountId)
+  const [current, priorMtd, priorFull] = await Promise.all([
+    query(currentStart, today),
+    query(previousStart, previousMtdEnd),
+    query(previousStart, currentStart)
+  ])
+  const currentTotal = parseFloat(current.total?.UnblendedCost?.Amount || '0')
+  const previousMonthMtd = parseFloat(priorMtd.total?.UnblendedCost?.Amount || '0')
+  const previousMonthFull = parseFloat(priorFull.total?.UnblendedCost?.Amount || '0')
+  const change = currentTotal - previousMonthMtd
+  const percentChange = safePercentChange(previousMonthMtd, currentTotal)
 
-  const lastTotal = parseFloat(lastMonthCosts.total?.['UnblendedCost']?.Amount || '0')
-  
-  const change = currentTotal - lastTotal
-  const percentChange = lastTotal > 0 ? (change / lastTotal) * 100 : 0
-  
   return {
     currentMonth: currentTotal,
-    lastMonth: lastTotal,
+    lastMonth: previousMonthMtd,
+    previousMonthMtd,
+    previousMonthFull,
+    observedDays,
     change,
     percentChange
   }
@@ -469,7 +337,7 @@ export async function getProformaForecast(
 
   // Run master and proforma forecast fetches in parallel — they hit different AWS accounts
   const [masterForecast, proformaForecast] = await Promise.all([
-    getCostForecast(startDate, endDate, metric, granularity, filter, environment),
+    getCostForecast(startDate, endDate, metric, granularity, filter, environment, masterAccountId),
     (async () => {
       const proformaClient = await getCostExplorerClient(environment, undefined, proformaAccountId)
       const proformaCommand = new GetCostForecastCommand({
@@ -477,7 +345,7 @@ export async function getProformaForecast(
           Start: startDate,
           End: endDate
         },
-        Metric: metric,
+        Metric: metric as any,
         Granularity: granularity as Granularity,
         Filter: filter
       })
@@ -545,425 +413,123 @@ export async function getProformaForecast(
 }
 
 /**
- * Get proforma cost data with billable comparison
- * Returns both billable and proforma data with validation that proforma >= billable
- * Includes difference calculations and enterprise support cost handling
+ * Query the two independent AWS billing domains with identical parameters.
+ * Billing Conductor's primary view is authoritative for proforma costs; the
+ * management account is authoritative for billable costs.
  */
 export async function getProformaCosts(
   params: CostExplorerParams,
   proformaAccountId: string = process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832',
-  masterAccountId: string = process.env.AWS_MASTER_ACCOUNT_ID || '205950196477'
+  masterAccountId: string = process.env.AWS_MASTER_ACCOUNT_ID || '205950196477',
+  comparisonMetric: string = 'UnblendedCost'
 ) {
-  // Always use commercial environment for proforma data
-  const environment = 'commercial'
-  
-  // Both billable and proforma CE calls assume into the proforma account (253821132832).
-  // The proforma account's billing view covers all GDMS org linked accounts for both
-  // actual (billable) and proforma cost views. GDMS Cloud payer and DevOrg are
-  // intentionally excluded from this call and fetched separately by the caller.
-  const [billableCosts, proformaRaw] = await Promise.all([
-    getCostAndUsage(params, environment, proformaAccountId),
-    (async () => {
-      const proformaClient = await getCostExplorerClient(environment, undefined, proformaAccountId)
+  const { billable: billableCosts, proforma: proformaCosts } = await queryBillingDomains(
+    params,
+    proformaAccountId,
+    masterAccountId
+  )
+  const billableTotal = parseFloat(billableCosts.total?.[comparisonMetric]?.Amount || '0')
+  const proformaTotal = parseFloat(proformaCosts.total?.[comparisonMetric]?.Amount || '0')
+  const periodId = (period: any) => `${period.TimePeriod?.Start || ''}|${period.TimePeriod?.End || ''}`
+  const billablePeriods = new Map<string, any>(billableCosts.resultsByTime.map(period => [periodId(period), period]))
+  const proformaPeriods = new Map<string, any>(proformaCosts.resultsByTime.map(period => [periodId(period), period]))
+  const periods = new Set([...billablePeriods.keys(), ...proformaPeriods.keys()])
 
-      const groupBy = params.groupBy?.map(group => ({
-        Type: group.type,
-        Key: group.key
-      }))
-
-      // The grouped call starts one month earlier so CE returns the prior month's
-      // data under its TimePeriod.End key, which aligns with our month-keying convention.
-      const [sy, sm] = params.startDate.split('-').map(Number)
-      const prevMonth = sm - 1
-      const groupedStartDate = prevMonth === 0
-        ? `${sy - 1}-12-01`
-        : `${sy}-${String(prevMonth).padStart(2, '0')}-01`
-
-      // Start speculative total query in parallel when GroupBy is used
-      const speculativeProformaTotalPromise = (groupBy && groupBy.length > 0)
-        ? proformaClient.send(new GetCostAndUsageCommand({
-            TimePeriod: { Start: params.startDate, End: params.endDate },
-            Granularity: params.granularity as Granularity,
-            Metrics: params.metrics,
-            Filter: params.filter
-            // No GroupBy — returns totals
-          }))
-        : null
-
-      let allProformaResultsByTime: any[] = []
-      let proformaDimensionValueAttributes: any[] = []
-      let proformaRootTotal: any = {}
-      let proformaNextPageToken: string | undefined = undefined
-
-      do {
-        const proformaCommand = new GetCostAndUsageCommand({
-          TimePeriod: {
-            Start: groupedStartDate,
-            End: params.endDate
-          },
-          Granularity: params.granularity as Granularity,
-          Metrics: params.metrics,
-          GroupBy: groupBy,
-          Filter: params.filter,
-          NextPageToken: proformaNextPageToken
-        })
-
-        const proformaResponse: any = await proformaClient.send(proformaCommand)
-
-        allProformaResultsByTime = allProformaResultsByTime.concat(proformaResponse.ResultsByTime || [])
-        proformaDimensionValueAttributes = proformaDimensionValueAttributes.concat(proformaResponse.DimensionValueAttributes || [])
-
-        if (proformaResponse.Total) {
-          proformaRootTotal = proformaResponse.Total
-        }
-
-        proformaNextPageToken = proformaResponse.NextPageToken
-        logger.debug(`Proforma pagination: fetched ${proformaResponse.ResultsByTime?.length || 0} results, nextToken: ${!!proformaNextPageToken}`)
-      } while (proformaNextPageToken)
-
-      logger.info(`Proforma total results: ${allProformaResultsByTime.length} time periods`)
-
-      return {
-        resultsByTime: allProformaResultsByTime,
-        dimensionValueAttributes: proformaDimensionValueAttributes,
-        total: proformaRootTotal,
-        speculativeTotalPromise: speculativeProformaTotalPromise
-      }
-    })()
-  ])
-
-  const groupBy = params.groupBy?.map(group => ({
-    Type: group.type,
-    Key: group.key
-  }))
-
-  let proformaCosts = {
-    resultsByTime: proformaRaw.resultsByTime,
-    dimensionValueAttributes: proformaRaw.dimensionValueAttributes,
-    total: proformaRaw.total
-  }
-  
-  // IMPORTANT: When using GroupBy, AWS doesn't return a root-level Total
-  // Use the speculative total query started inside the proforma closure
-  if (groupBy && groupBy.length > 0 && (!proformaRaw.total || Object.keys(proformaRaw.total).length === 0) && proformaRaw.speculativeTotalPromise) {
-    logger.info('Proforma: GroupBy detected with no root Total - awaiting speculative total query')
-    try {
-      const proformaTotalResponse: any = await proformaRaw.speculativeTotalPromise
-
-      logger.debug('Proforma separate total call response:', {
-        hasResultsByTime: !!proformaTotalResponse?.ResultsByTime,
-        resultsByTimeLength: proformaTotalResponse?.ResultsByTime?.length || 0,
-        firstPeriodHasTotal: !!proformaTotalResponse?.ResultsByTime?.[0]?.Total
-      })
-
-      // AWS doesn't return a root-level Total; we need to sum from ResultsByTime (same as billable side)
-      if (proformaTotalResponse?.ResultsByTime && proformaTotalResponse.ResultsByTime.length > 0) {
-        const accumulatedTotal: any = {}
-
-        // Build date-keyed map from total response to avoid index mismatch on pagination
-        const proformaTotalsByDate = new Map<string, any>()
-        proformaTotalResponse.ResultsByTime.forEach((result: any) => {
-          if (result?.Total && result.TimePeriod?.Start) {
-            proformaTotalsByDate.set(result.TimePeriod.Start, result.Total)
-          }
-        })
-
-        logger.info(`Proforma: About to inject Totals. proformaTotalResponse has ${proformaTotalsByDate.size} date-keyed periods, proformaCosts has ${proformaCosts.resultsByTime.length} periods`)
-
-        // Inject totals by matching date keys
-        proformaCosts.resultsByTime.forEach((period: any) => {
-          const dateKey = period?.TimePeriod?.Start
-          if (dateKey && proformaTotalsByDate.has(dateKey)) {
-            const before = period?.Total?.UnblendedCost?.Amount
-            const total = proformaTotalsByDate.get(dateKey)
-            if (total) {
-              period.Total = total
-              logger.info(`✓ Proforma ${dateKey}: Injected Total ${total?.UnblendedCost?.Amount} (was: ${before || 'NONE'})`)
-            }
-          }
-        })
-
-        // Accumulate totals from the date-keyed map
-        proformaTotalsByDate.forEach((periodTotal: any) => {
-          params.metrics.forEach((metric: string) => {
-            if (periodTotal?.[metric]?.Amount) {
-              if (!accumulatedTotal[metric]) {
-                accumulatedTotal[metric] = {
-                  Amount: '0',
-                  Unit: periodTotal[metric]?.Unit || 'USD'
-                }
-              }
-              const currentAmount = parseFloat(accumulatedTotal[metric]?.Amount || '0')
-              const addAmount = parseFloat(periodTotal[metric]?.Amount || '0')
-              accumulatedTotal[metric].Amount = (currentAmount + addAmount).toString()
-            }
-          })
-        })
-
-        if (Object.keys(accumulatedTotal).length > 0) {
-          proformaCosts.total = accumulatedTotal
-          logger.info('✓ Proforma: Successfully retrieved total from separate call (summed from ResultsByTime):', {
-            metrics: Object.keys(accumulatedTotal),
-            UnblendedCost: accumulatedTotal?.UnblendedCost?.Amount
-          })
-        } else {
-          logger.warn('Proforma: Separate call returned ResultsByTime but no Totals in periods')
-        }
-      } else {
-        logger.warn('Proforma: Separate call returned no ResultsByTime')
-      }
-    } catch (error) {
-      logger.warn('Proforma: Failed to get separate total:', error)
-    }
-  }
-  
-  // Calculate totals from both accounts
-  let billableTotal = 0
-  let proformaTotal = 0
-
-  if (billableCosts.total?.['UnblendedCost']?.Amount) {
-    const cost = parseFloat(billableCosts.total['UnblendedCost'].Amount)
-    billableTotal = isNaN(cost) ? 0 : cost
-  } else if (billableCosts.resultsByTime && billableCosts.resultsByTime.length > 0) {
-    // Calculate total from grouped results
-    // IMPORTANT: Always use the API-provided Total when available to include unallocated costs
-    billableCosts.resultsByTime.forEach((result: any) => {
-      // ALWAYS prefer the Total if available (includes unallocated costs)
-      if (result.Total?.['UnblendedCost']?.Amount) {
-        const cost = parseFloat(result.Total['UnblendedCost'].Amount)
-        billableTotal += (isNaN(cost) ? 0 : cost)
-      } else if (result.Groups) {
-        // Only fall back to summing groups if Total is not available
-        // Note: This will miss unallocated costs like support fees, tax, etc.
-        // This should rarely happen after fix to sum ResultsByTime totals
-        logger.warn('Using Group summation for billable costs (period-level Total not available)', {
-          period: result.TimePeriod,
-          groupCount: result.Groups.length,
-          note: 'Unallocated costs may be missed - ensure separate Total call succeeded'
-        })
-        result.Groups.forEach((group: any) => {
-          const cost = parseFloat(group.Metrics?.['UnblendedCost']?.Amount || '0')
-          billableTotal += (isNaN(cost) ? 0 : cost)
-        })
-      }
-    })
-  }
-
-  if (proformaCosts.total?.['UnblendedCost']?.Amount) {
-    const cost = parseFloat(proformaCosts.total['UnblendedCost'].Amount)
-    proformaTotal = isNaN(cost) ? 0 : cost
-  } else if (proformaCosts.resultsByTime && proformaCosts.resultsByTime.length > 0) {
-    // Calculate total from grouped results
-    // IMPORTANT: Always use the API-provided Total when available to include unallocated costs
-    proformaCosts.resultsByTime.forEach((result: any) => {
-      // ALWAYS prefer the Total if available (includes unallocated costs)
-      if (result.Total?.['UnblendedCost']?.Amount) {
-        const cost = parseFloat(result.Total['UnblendedCost'].Amount)
-        proformaTotal += (isNaN(cost) ? 0 : cost)
-      } else if (result.Groups) {
-        // Only fall back to summing groups if Total is not available
-        // Note: This will miss unallocated costs like support fees, tax, etc.
-        // This should rarely happen after fix to sum ResultsByTime totals
-        logger.warn('Using Group summation for proforma costs (period-level Total not available)', {
-          period: result.TimePeriod,
-          groupCount: result.Groups.length,
-          note: 'Unallocated costs may be missed - ensure separate Total call succeeded'
-        })
-        result.Groups.forEach((group: any) => {
-          const cost = parseFloat(group.Metrics?.['UnblendedCost']?.Amount || '0')
-          proformaTotal += (isNaN(cost) ? 0 : cost)
-        })
-      }
-    })
-  }
-
-  // Master account's unallocated cost = billable total - proforma total
-  // This represents costs that remain in the master account after Billing Conductor allocation
-  const masterUnallocatedCost = Math.max(0, billableTotal - proformaTotal)
-  
-  logger.info(`Proforma calculation:
-    Master Account Total (billable): $${billableTotal.toFixed(2)}
-    Proforma Account Total: $${proformaTotal.toFixed(2)}
-    Master Unallocated: $${masterUnallocatedCost.toFixed(2)}
-    Formula: $${billableTotal.toFixed(2)} - $${proformaTotal.toFixed(2)} = $${masterUnallocatedCost.toFixed(2)}`)
-  
-  // Extract enterprise support costs if grouped by SERVICE
-  let enterpriseSupportCost = 0
-  const hasServiceGrouping = params.groupBy?.some(g => g.type === 'DIMENSION' && g.key === 'SERVICE')
-  
-  if (hasServiceGrouping && billableCosts.resultsByTime) {
-    billableCosts.resultsByTime.forEach((result: any) => {
-      if (result.Groups) {
-        result.Groups.forEach((group: any) => {
-          // Check if this is AWS Premium Support service
-          if (group.Keys?.includes('AWS Premium Support') || group.Keys?.includes('AWS Support')) {
-            const cost = parseFloat(group.Metrics?.['UnblendedCost']?.Amount || '0')
-            enterpriseSupportCost += isNaN(cost) ? 0 : cost
-          }
-        })
-      }
-    })
-  }
-  
-  // Create comparison data for each time period
-  const comparisonByTime = billableCosts.resultsByTime.map((billableResult, index) => {
-    const proformaResult = proformaCosts.resultsByTime[index]
-    
-    // Calculate period totals
-    const billablePeriodTotal = parseFloat(billableResult.Total?.['UnblendedCost']?.Amount || '0')
-    const proformaPeriodTotal = parseFloat(proformaResult?.Total?.['UnblendedCost']?.Amount || '0')
-    const periodDifference = proformaPeriodTotal - billablePeriodTotal
-    
-    // Validate proforma vs billable for this period
-    // Note: Proforma should typically be >= billable (savings plans allocated to accounts)
-    // Warn if proforma is significantly lower (may indicate allocation issues)
-    if (proformaPeriodTotal < billablePeriodTotal && Math.abs(periodDifference) > billablePeriodTotal * 0.05) {
-      logger.warn(`⚠️ Period ${billableResult.TimePeriod?.Start}: Proforma ($${proformaPeriodTotal.toFixed(2)}) < Billable ($${billablePeriodTotal.toFixed(2)}) - Check if savings plans are being allocated`)
-    }
-    
-    // Build account-level comparison if grouped by account
-    let accountComparisons = []
-    if (params.groupBy?.some(g => g.key === 'LINKED_ACCOUNT')) {
-      const proformaAccountMap = new Map()
-      proformaResult?.Groups?.forEach((group: any) => {
-        if (group?.Keys?.[0]) {
-          proformaAccountMap.set(group.Keys[0], parseFloat(group?.Metrics?.['UnblendedCost']?.Amount || '0'))
-        }
-      })
-      
-      billableResult?.Groups?.forEach((billableGroup: any) => {
-        const accountId = billableGroup?.Keys?.[0]
-        if (accountId) {
-          const billableCost = parseFloat(billableGroup?.Metrics?.['UnblendedCost']?.Amount || '0')
-          const proformaCost = proformaAccountMap.get(accountId) || 0
-          const difference = proformaCost - billableCost
-          const percentChange = safePercentChange(billableCost, proformaCost)
-          
-          // Validation: For individual linked accounts, proforma should be >= billable
-          // (Billing Conductor allocates savings plan costs to accounts that benefit from them)
-          // Proforma < Billable indicates savings plans may not be allocated properly
-          if (accountId !== masterAccountId && accountId !== proformaAccountId && proformaCost < billableCost && Math.abs(difference) > 5) {
-            logger.debug(`Account ${accountId}: Proforma ($${proformaCost.toFixed(2)}) < Billable ($${billableCost.toFixed(2)}) - Savings plan allocation may be incomplete`)
-          }
-          
-          accountComparisons.push({
+  const comparisonByTime = [...periods].sort().map(id => {
+    const billablePeriod = billablePeriods.get(id)
+    const proformaPeriod = proformaPeriods.get(id)
+    const billablePeriodTotal = parseFloat(billablePeriod?.Total?.[comparisonMetric]?.Amount || '0')
+    const proformaPeriodTotal = parseFloat(proformaPeriod?.Total?.[comparisonMetric]?.Amount || '0')
+    const groupId = (group: any) => JSON.stringify(group.Keys || [])
+    const billableGroups = new Map<string, any>((billablePeriod?.Groups || []).map((group: any) => [groupId(group), group]))
+    const proformaGroups = new Map<string, any>((proformaPeriod?.Groups || []).map((group: any) => [groupId(group), group]))
+    const groups = new Set([...billableGroups.keys(), ...proformaGroups.keys()])
+    const accountComparisons = params.groupBy?.some(group => group.key === 'LINKED_ACCOUNT')
+      ? [...groups].map(id => {
+          const billableGroup: any = billableGroups.get(id)
+          const proformaGroup: any = proformaGroups.get(id)
+          const accountId = billableGroup?.Keys?.[0] || proformaGroup?.Keys?.[0] || ''
+          const billable = parseFloat(billableGroup?.Metrics?.[comparisonMetric]?.Amount || '0')
+          const proforma = parseFloat(proformaGroup?.Metrics?.[comparisonMetric]?.Amount || '0')
+          return {
             accountId,
-            billable: billableCost,
-            proforma: proformaCost,
-            difference,
-            percentChange
-          })
-        }
-      })
-    }
-    
+            billable,
+            proforma,
+            difference: proforma - billable,
+            percentChange: safePercentChange(billable, proforma)
+          }
+        })
+      : []
+
     return {
-      timePeriod: billableResult.TimePeriod,
-      billable: {
-        total: billablePeriodTotal,
-        groups: billableResult.Groups
-      },
-      proforma: {
-        total: proformaPeriodTotal,
-        groups: proformaResult?.Groups || []
-      },
-      difference: periodDifference,
+      timePeriod: billablePeriod?.TimePeriod || proformaPeriod?.TimePeriod,
+      billable: { total: billablePeriodTotal, groups: billablePeriod?.Groups || [] },
+      proforma: { total: proformaPeriodTotal, groups: proformaPeriod?.Groups || [] },
+      difference: proformaPeriodTotal - billablePeriodTotal,
       percentChange: safePercentChange(billablePeriodTotal, proformaPeriodTotal),
       accountComparisons
     }
   })
-  
-  // Create synthetic master account cost structure for proforma view
-  const masterProformaResultsByTime = billableCosts.resultsByTime.map((billableResult, index) => {
-    const proformaResult = proformaCosts.resultsByTime[index]
-    
-    const billablePeriodTotal = parseFloat(billableResult.Total?.['UnblendedCost']?.Amount || '0')
-    const proformaPeriodTotal = parseFloat(proformaResult?.Total?.['UnblendedCost']?.Amount || '0')
-    const masterUnallocatedPeriodCost = Math.max(0, billablePeriodTotal - proformaPeriodTotal)
-    
-    const masterAccountGroup = {
-      Keys: [masterAccountId],
-      Attributes: {},
-      Metrics: {
-        'UnblendedCost': {
-          Amount: masterUnallocatedPeriodCost.toString(),
-          Unit: 'USD'
-        },
-        'UsageQuantity': {
-          Amount: '0',
-          Unit: 'N/A'
+
+  let enterpriseSupportCost = 0
+  if (params.groupBy?.some(group => group.key === 'SERVICE')) {
+    for (const period of billableCosts.resultsByTime) {
+      for (const group of period.Groups || []) {
+        if (group.Keys?.includes('AWS Premium Support') || group.Keys?.includes('AWS Support')) {
+          enterpriseSupportCost += parseFloat(group.Metrics?.UnblendedCost?.Amount || '0')
         }
       }
     }
-    
-    return {
-      ...billableResult,
-      Groups: masterUnallocatedPeriodCost > 0 ? [masterAccountGroup] : [],
-      Total: {
-        ...billableResult.Total,
-        'UnblendedCost': {
-          ...billableResult.Total?.['UnblendedCost'],
-          Amount: masterUnallocatedPeriodCost.toString()
-        }
-      }
-    }
-  })
-  
-  // Overall validation
-  // Expected: Proforma >= Billable (savings plans allocated to accounts increase their costs)
-  // Exception: Master account unallocated costs (support, overhead) stay in billable side
-  const masterUnallocated = billableTotal - proformaTotal
-
-  // Validation passes if proforma >= billable OR difference is small (< 5% of billable)
-  const validationPassed = proformaTotal >= billableTotal || Math.abs(masterUnallocated) < billableTotal * 0.05
-
-  const overallValidation = {
-    passed: validationPassed,
-    message: validationPassed
-      ? `✅ Proforma allocation validated: Billable ($${billableTotal.toFixed(2)}) → Proforma ($${proformaTotal.toFixed(2)}) | Master Unallocated: $${masterUnallocated.toFixed(2)}`
-      : `⚠️ Proforma validation issue: Proforma ($${proformaTotal.toFixed(2)}) < Billable ($${billableTotal.toFixed(2)}) by $${Math.abs(masterUnallocated).toFixed(2)} - Check savings plan allocation`,
-    billableTotal,
-    proformaTotal,
-    masterUnallocated,
-    savingsAllocated: proformaTotal - billableTotal, // Positive = savings allocated to accounts
-    allocationPercent: safePercentChange(billableTotal, proformaTotal)
   }
-  
+
+  const difference = proformaTotal - billableTotal
   return {
     billable: {
       accountId: masterAccountId,
       costs: billableCosts,
-      total: billableTotal
+      total: billableTotal,
+      dataset: billableCosts.dataset
     },
     proforma: {
       accountId: proformaAccountId,
       costs: proformaCosts,
-      total: proformaTotal
+      total: proformaTotal,
+      dataset: proformaCosts.dataset
     },
     masterAccount: {
       accountId: masterAccountId,
-      unallocatedCost: masterUnallocatedCost,
+      // Compatibility field only: this is a signed cross-domain difference, not an allocation.
+      unallocatedCost: billableTotal - proformaTotal,
       enterpriseSupportCost,
       proformaCosts: {
-        resultsByTime: masterProformaResultsByTime,
+        resultsByTime: [],
         total: {
-          'UnblendedCost': {
-            Amount: masterUnallocatedCost.toString(),
-            Unit: 'USD'
-          }
+          UnblendedCost: { Amount: String(billableTotal - proformaTotal), Unit: 'USD' }
         }
       }
     },
     comparison: {
+      metric: comparisonMetric,
       byTime: comparisonByTime,
       totals: {
         billable: billableTotal,
         proforma: proformaTotal,
-        difference: proformaTotal - billableTotal,
-        percentChange: billableTotal > 0 ? ((proformaTotal - billableTotal) / billableTotal) * 100 : 0
+        difference,
+        percentChange: safePercentChange(billableTotal, proformaTotal)
       }
     },
-    validation: overallValidation
+    validation: {
+      status: 'UNAVAILABLE' as const,
+      passed: null,
+      message: 'Billable and proforma are independent AWS billing domains; ordering is not a validity rule.',
+      billableTotal,
+      proformaTotal,
+      difference
+    },
+    datasets: {
+      billable: billableCosts.dataset,
+      proforma: proformaCosts.dataset
+    }
   }
 }
 

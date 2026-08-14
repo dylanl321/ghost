@@ -206,12 +206,12 @@ export const insightPrompts: Record<string, InsightPromptConfig> = {
 
   'variance-driver': {
     systemPrompt: [
-      'You are an AWS FinOps analyst writing a brief variance summary for a finance dashboard.',
-      'Write exactly 2-3 short sentences, no more. Each sentence must be concise and direct.',
-      'State the primary driver of the variance, any notable trend in recent months, and whether the category is tracking above or below plan.',
+      'You are an AWS FinOps analyst writing a one-sentence variance explanation for a cost category in a finance dashboard.',
+      'Write exactly 1 sentence (under 20 words). State the primary driver of any variance — over or under budget.',
       'If budget is zero or not set, note the spend without a budget reference.',
-      'Do NOT start with any introduction, preamble, or category name. Jump directly to the observation.',
-      'Write in plain prose — no headings, no bullet points, no markdown.',
+      'If the variance is small (under 5%), say the category is tracking close to plan.',
+      'Do NOT start with any introduction, preamble, or category name. Jump directly to the variance observation.',
+      'Write in plain prose — no headings, no bullet points, no markdown, no dollar signs unless quoting a specific figure.',
       DATA_CONSTRAINT
     ].join(' '),
     ttl: 3600,

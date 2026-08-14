@@ -51,6 +51,19 @@ variable "env" {
   default = "dev"
 }
 
+# ECR image cleanup tuning (see terraform/ecr.tf lifecycle policy)
+variable "ecr_tagged_expiry_days" {
+  description = "Days a historical per-commit (<env>-<sha>) image is retained before expiry."
+  type        = number
+  default     = 30
+}
+
+variable "ecr_untagged_expiry_days" {
+  description = "Days an untagged image (orphaned by a mutable <env> tag move) is retained before expiry."
+  type        = number
+  default     = 7
+}
+
 # Admin Notifications
 variable "admin_notification_emails" {
   description = "Comma-separated list of email addresses to receive admin notifications (feedback, errors, etc.)"
@@ -62,4 +75,9 @@ variable "admin_notifications_enabled" {
   description = "Enable/disable admin email notifications"
   type        = bool
   default     = true
+}
+variable "ghost_support_knowledge_base_model_arn" {
+  description = "Approved GovCloud Bedrock foundation model or inference-profile ARN used by ghost.docs.answer"
+  type        = string
+  default     = ""
 }

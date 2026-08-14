@@ -14,7 +14,8 @@ import type {
 } from '#shared/types/strands-agent-metrics'
 import { logger } from '../../../utils/logger'
 
-const TABLE_NAME = process.env.STRANDS_AGENT_METRICS_TABLE_NAME || 'strands-agent-metrics-prod'
+const TABLE_NAME = process.env.STRANDS_AGENT_METRICS_TABLE_NAME ||
+  `strands-agent-metrics-${process.env.NODE_ENV === 'prod' ? 'prod' : 'dev'}`
 
 export default defineEventHandler(async (event) => {
   // Require admin access

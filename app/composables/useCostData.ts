@@ -5,8 +5,6 @@ import type { AWSEnclaveData } from '~~/shared/types/accounts'
 import { getCachedDataset, setCachedDataset, invalidateByMode } from '~/composables/useCostDataCache'
 import { getUserFriendlyMessage, retryWithBackoff } from '~/utils/error-helpers'
 
-const logger = createLogger('CostData')
-
 /**
  * CLIENT-SIDE CACHING GAP
  *
@@ -36,11 +34,12 @@ interface UseCostDataArgs {
   selectedTimeframe: Ref<string>
   initialMode?: DataMode
   accountsList?: Ref<AWSEnclaveData[]> // Full accounts data with metadata
+  defaultAccountScope?: Ref<string[]> // Default filtered account scope when no accounts are explicitly selected
   debounceMs?: number // Debounce delay in milliseconds
   groupByTag?: Ref<string | null> // Tag key to group costs by (e.g. "Environment")
 }
 
-export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode = 'proforma', accountsList, debounceMs = 800, groupByTag }: UseCostDataArgs) => {
+export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode = 'proforma', accountsList, defaultAccountScope, debounceMs = 800, groupByTag }: UseCostDataArgs) => {
   const mode = ref<DataMode>(initialMode)
   const isFetching = ref(false)
   const isDeferredLoading = ref(false) // True while forecast/supplementary data loads in background
@@ -59,6 +58,17 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     timeframe: selectedTimeframe.value,
     mode: mode.value
   }))
+
+  const getCostScopeAccounts = (): string[] => {
+    return query.value.accounts.length > 0
+      ? query.value.accounts
+      : (defaultAccountScope?.value || [])
+  }
+
+  const addCostScope = (params: URLSearchParams): void => {
+    const accountIds = getCostScopeAccounts()
+    if (accountIds.length > 0) params.set('accountIds', accountIds.join(','))
+  }
 
   const mapUiToSummaryPeriod = (tf: string): string => {
     // summary supports: last7days, last30days, last90days, thisMonth, lastMonth, thisQuarter, lastQuarter, thisYear, lastYear, ytd, last12months
@@ -114,6 +124,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     const params = new URLSearchParams()
     params.set('period', 'last24months') // Get 2 years for LOB trend and year-over-year charts
     params.set('proforma', String(query.value.mode === 'proforma'))
+    addCostScope(params)
     return `/api/costs/historical?${params.toString()}`
   }
 
@@ -124,7 +135,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     params.set('proforma', String(query.value.mode === 'proforma'))
     params.set('groupBy', 'LINKED_ACCOUNT')
     params.set('enhanced', 'true')
-    // No accountIds = org-wide data
+    addCostScope(params)
     return `/api/costs/summary?${params.toString()}`
   }
 
@@ -158,10 +169,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     params.set('granularity', 'DAILY')
     params.set('proforma', String(query.value.mode === 'proforma'))
     // Add account filtering
-    const accounts = query.value.accounts
-    if (accounts.length > 0) {
-      params.set('accountIds', accounts.join(','))
-    }
+    addCostScope(params)
     return `/api/costs/forecast?${params.toString()}`
   }
 
@@ -172,9 +180,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     params.set('granularity', 'MONTHLY')
     params.set('proforma', String(query.value.mode === 'proforma'))
     // Add account filtering - MUST match regular forecast
-    if (query.value.accounts.length > 0) {
-      params.set('accountIds', query.value.accounts.join(','))
-    }
+    addCostScope(params)
     return `/api/costs/forecast?${params.toString()}`
   }
 
@@ -185,9 +191,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     params.set('granularity', 'MONTHLY')
     params.set('proforma', String(query.value.mode === 'proforma'))
     // Add account filtering
-    if (query.value.accounts.length > 0) {
-      params.set('accountIds', query.value.accounts.join(','))
-    }
+    addCostScope(params)
     return `/api/costs/forecast?${params.toString()}`
   }
 
@@ -254,10 +258,11 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     const currentTimeframe = query.value.timeframe
     const currentMode = query.value.mode
     const currentAccounts = [...query.value.accounts]
+    const currentCostScopeAccounts = [...getCostScopeAccounts()]
     const isHistorical = ['last7days', 'last30days', 'last90days', 'lastMonth', 'lastQuarter', 'lastYear', 'last12months'].includes(currentTimeframe)
 
     // Check client-side cache before making network requests
-    const cached = getCachedDataset(currentAccounts, currentTimeframe, currentMode)
+    const cached = getCachedDataset(currentCostScopeAccounts, currentTimeframe, currentMode)
     if (cached) {
       dataset.value = accountsList?.value
         ? { ...cached, accountsList: accountsList.value }
@@ -304,7 +309,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
       if (currentTimeframe !== 'lastMonth') {
         wave2.lastMonthSummary = $fetch(buildLastMonthSummaryUrl(), { signal }).catch(warnOnFail('Last month summary'))
       }
-      if (!isHistorical && !(currentTimeframe === 'thisMonth' && currentAccounts.length === 0)) {
+      if (!isHistorical && !(currentTimeframe === 'thisMonth' && currentCostScopeAccounts.length === 0)) {
         wave2.currentMonthOrgWide = $fetch(buildCurrentMonthOrgWideSummaryUrl(), { signal }).catch(warnOnFail('Current month org-wide'))
       }
       wave2.lastMonthServices = $fetch(buildLastMonthServicesSummaryUrl(), { signal }).catch(warnOnFail('Last month services'))
@@ -318,6 +323,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
 
       dataset.value = {
         accounts: currentAccounts,
+        costScopeAccounts: currentCostScopeAccounts,
         accountsList: accountsList?.value,
         mode: currentMode,
         timeframe: currentTimeframe,
@@ -366,7 +372,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
         if (currentTimeframe === 'lastMonth') {
           patch.lastMonthSummary = summaryRes
         }
-        if (!isHistorical && currentTimeframe === 'thisMonth' && currentAccounts.length === 0) {
+        if (!isHistorical && currentTimeframe === 'thisMonth' && currentCostScopeAccounts.length === 0) {
           patch.currentMonthOrgWide = summaryRes
         }
         dataset.value = { ...dataset.value, ...patch }
@@ -377,7 +383,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
 
       // Store completed dataset in client-side cache
       if (thisGeneration === fetchGeneration && dataset.value) {
-        setCachedDataset(currentAccounts, currentTimeframe, currentMode, dataset.value)
+        setCachedDataset(currentCostScopeAccounts, currentTimeframe, currentMode, dataset.value)
       }
 
     } catch (e: any) {
@@ -417,6 +423,13 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     debouncedFetch()
   }, { deep: true })
 
+  if (defaultAccountScope) {
+    watch(defaultAccountScope, () => {
+      if (!initialized.value || selectedAccounts.value.length > 0) return
+      debouncedFetch()
+    }, { deep: true })
+  }
+
   // Watch for accountsList changes to update dataset without refetching
   // This fixes a race condition where costs APIs return before accounts list
   if (accountsList) {
@@ -430,29 +443,12 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     }, { deep: true })
   }
 
-  // Watch for mode changes separately to clear cache BEFORE the fetch triggers
-  let modeCacheClearing = false
-  watch(mode, async (newMode, oldMode) => {
+  // Server caches are source-keyed; a mode change only invalidates local snapshots.
+  watch(mode, (newMode, oldMode) => {
     if (!initialized.value) return
-    // Only clear cache if mode actually changed (not on initial mount)
     if (oldMode !== undefined && newMode !== oldMode) {
-      // Invalidate client-side cache for both old and new modes
       invalidateByMode(oldMode)
       invalidateByMode(newMode)
-      modeCacheClearing = true
-      try {
-        await $fetch('/api/costs/cache-clear', {
-          method: 'POST',
-          body: { tags: ['costs'] }
-        })
-      } catch (error) {
-        logger.error('Failed to clear cache:', error)
-      } finally {
-        modeCacheClearing = false
-      }
-      // Fetch after cache is cleared (the [selectedTimeframe, mode] watcher
-      // may have already fired, but with stale cache -- re-fetch now)
-      void fetchCosts()
     }
   })
 
@@ -460,8 +456,6 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
   // NOT immediate -- initial fetch is triggered explicitly by the page's onMounted
   watch([selectedTimeframe, mode], () => {
     if (!initialized.value) return
-    // Skip if mode cache is being cleared -- the mode watcher above handles the fetch
-    if (modeCacheClearing) return
     void fetchCosts()
   })
 

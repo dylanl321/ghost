@@ -36,7 +36,7 @@
     <div class="mb-4">
       <div class="flex flex-wrap gap-2">
         <UBadge
-          v-if="report.reportConfig.datasets?.config?.enabled"
+          v-if="datasetConfig.datasets?.config?.enabled"
           color="blue"
           variant="soft"
         >
@@ -44,7 +44,7 @@
           AWS Config
         </UBadge>
         <UBadge
-          v-if="report.reportConfig.datasets?.securityHub?.enabled"
+          v-if="datasetConfig.datasets?.securityHub?.enabled"
           color="red"
           variant="soft"
         >
@@ -52,7 +52,7 @@
           Security Hub
         </UBadge>
         <UBadge
-          v-if="report.reportConfig.datasets?.cloudtrail?.enabled"
+          v-if="datasetConfig.datasets?.cloudtrail?.enabled"
           color="purple"
           variant="soft"
         >
@@ -102,7 +102,7 @@
         <UBadge color="gray" variant="subtle" size="xs">
           {{ report.reportConfig.format?.toUpperCase() || 'PDF' }}
         </UBadge>
-        <UBadge v-if="report.reportConfig.enableAI" color="purple" variant="subtle" size="xs">
+        <UBadge v-if="datasetConfig.enableAI" color="purple" variant="subtle" size="xs">
           <UIcon name="i-heroicons-sparkles" class="w-3 h-3 mr-1" />
           AI Insights
         </UBadge>
@@ -131,6 +131,7 @@
 
 <script setup lang="ts">
 import type { ScheduledReport } from '#shared/types/scheduled-reports'
+import type { DatasetReportConfig } from '#shared/types/dataset-reports'
 
 const props = defineProps<{
   report: ScheduledReport
@@ -143,6 +144,8 @@ const emit = defineEmits<{
   togglePause: [report: ScheduledReport]
   viewHistory: [report: ScheduledReport]
 }>()
+
+const datasetConfig = computed(() => props.report.reportConfig as unknown as DatasetReportConfig)
 
 // Computed
 const statusColor = computed(() => {

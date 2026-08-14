@@ -3,12 +3,13 @@
  * Get a specific thread by ID
  */
 
-import { defineEventHandler } from 'h3'
+import { defineEventHandler, getQuery } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../../utils/api-response'
 import { requireUserSession } from '../../../utils/entra/session'
 import { getThreadById } from '../../../utils/chat-threads'
 import { registerEndpoint } from '../../../plugins/swagger'
 import { logger } from '../../../utils/logger'
+import { listThreadMessages } from '../../../utils/chat-messages'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/chat/threads/{threadId}', 'GET', {
@@ -76,5 +77,16 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.notFound(event, 'Thread not found')
   }
 
-  return sendSuccess(event, thread)
+  const query = getQuery(event)
+  const page = await listThreadMessages(thread, {
+    limit: query.limit ? parseInt(String(query.limit), 10) : 100,
+    nextToken: query.nextToken ? String(query.nextToken) : undefined
+  })
+
+  return sendSuccess(event, {
+    ...thread,
+    messages: page.messages,
+    hasMoreMessages: page.hasMore,
+    messagesNextToken: page.nextToken
+  })
 }))

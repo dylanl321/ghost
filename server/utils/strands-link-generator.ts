@@ -4,8 +4,10 @@
  * Uses AI analysis + site schema for intelligent link generation
  */
 
-import { findMatchingPages, GHOST_SITE_SCHEMA, type PageSchema } from './ghost-site-schema'
+import { findMatchingPages, type PageSchema } from './ghost-site-schema'
 import type { SuggestedLink } from '#shared/types/chat-threads'
+import { buildChatDestination } from '#shared/utils/chat-routes'
+import { findStandaloneAwsAccountIds } from '#shared/utils/chat-entities'
 
 interface ParsedEntities {
   accountIds: string[]
@@ -21,9 +23,7 @@ interface ParsedEntities {
  * NOTE: This may include both commercial and GovCloud IDs
  */
 function extractAccountIds(text: string): string[] {
-  const accountRegex = /\b\d{12}\b/g
-  const matches = text.match(accountRegex) || []
-  return [...new Set(matches)] // Remove duplicates
+  return [...new Set(findStandaloneAwsAccountIds(text))]
 }
 
 /**
@@ -271,24 +271,11 @@ function generateCostLink(entities: ParsedEntities): SuggestedLink | null {
     return null
   }
 
-  const params = new URLSearchParams()
-  params.set('accounts', entities.accountIds.join(','))
-
-  if (entities.dateRange) {
-    params.set('start', entities.dateRange.start)
-    params.set('end', entities.dateRange.end)
-    params.set('range', 'custom')
-  }
-
-  params.set('granularity', 'DAILY')
-  params.set('metric', 'Billable')
-
-  if (entities.services && entities.services.length > 0) {
-    params.set('groupBy', 'SERVICE')
-    params.set('services', entities.services.join(','))
-  } else {
-    params.set('groupBy', 'SERVICE')
-  }
+  const timeframe = entities.dateRange?.label === 'Month to Date' ? 'thisMonth'
+    : entities.dateRange?.label === 'Last Month' ? 'lastMonth'
+      : entities.dateRange?.label === 'Year to Date' ? 'ytd'
+        : entities.dateRange?.label === 'Last 90 Days' ? 'last90days'
+          : 'last30days'
 
   const dateLabel = entities.dateRange?.label || 'specified period'
   const accountLabel = entities.accountIds.length === 1
@@ -297,7 +284,7 @@ function generateCostLink(entities: ParsedEntities): SuggestedLink | null {
 
   return {
     label: 'View Cost Dashboard',
-    url: `/account/costs?${params.toString()}`,
+    url: buildChatDestination({ name: 'costs', accountIds: entities.accountIds, timeframe }),
     description: `Detailed cost analysis for ${accountLabel} (${dateLabel})`,
     icon: 'i-heroicons-currency-dollar',
     type: 'cost'
@@ -312,20 +299,13 @@ function generateExplorerLink(entities: ParsedEntities): SuggestedLink | null {
     return null
   }
 
-  const params = new URLSearchParams()
-  params.set('accounts', entities.accountIds.join(','))
-
-  if (entities.resourceTypes && entities.resourceTypes.length > 0) {
-    params.set('resourceTypes', entities.resourceTypes.join(','))
-  }
-
   const resourceLabel = entities.resourceTypes && entities.resourceTypes.length > 0
     ? entities.resourceTypes.map(t => t.split('::')[2] || t).join(', ')
     : 'resources'
 
   return {
     label: 'Open Account Explorer',
-    url: `/account/explorer?${params.toString()}`,
+    url: buildChatDestination({ name: 'explorer', accountId: entities.accountIds.length === 1 ? entities.accountIds[0] : undefined }),
     description: `Browse ${resourceLabel} in selected accounts`,
     icon: 'i-heroicons-magnifying-glass',
     type: 'explorer'
@@ -343,7 +323,7 @@ function generateUsersLink(entities: ParsedEntities): SuggestedLink | null {
   // For now, just link to the users page - could be enhanced with specific user filters
   return {
     label: 'View Users & Access',
-    url: '/account/user',
+    url: buildChatDestination({ name: 'users' }),
     description: 'Explore user access and permissions',
     icon: 'i-heroicons-users',
     type: 'users'
@@ -358,14 +338,9 @@ function generateOrgChartLink(entities: ParsedEntities): SuggestedLink | null {
     return null
   }
 
-  const params = new URLSearchParams()
-  if (entities.accountIds.length === 1) {
-    params.set('highlight', entities.accountIds[0])
-  }
-
   return {
     label: 'View Organization Chart',
-    url: `/account/org-chart${params.toString() ? '?' + params.toString() : ''}`,
+    url: buildChatDestination({ name: 'organization' }),
     description: 'See account structure and relationships',
     icon: 'i-heroicons-building-library',
     type: 'org-chart'
@@ -382,7 +357,7 @@ function generateReportsLink(entities: ParsedEntities): SuggestedLink | null {
 
   return {
     label: 'Generate Dataset Report',
-    url: '/reports/datasets',
+    url: buildChatDestination({ name: 'reports', accountIds: entities.accountIds }),
     description: 'Create custom reports with CloudTrail, Config, and Security Hub data',
     icon: 'i-heroicons-server-stack',
     type: 'reports'
@@ -493,8 +468,6 @@ export async function generateSmartLinksFromSchema(
   metadata?: { accountId?: string }
 ): Promise<SuggestedLink[]> {
   const entities = await parseEntities(query, response, metadata)
-  const combinedText = `${query} ${response}`.toLowerCase()
-
   // Find matching pages from schema
   const matchingPages = findMatchingPages(query, 5)
 
@@ -538,15 +511,7 @@ export async function generateSmartLinks(
   response: string,
   metadata?: { accountId?: string }
 ): Promise<SuggestedLink[]> {
-  // Use new schema-based approach
-  const schemaLinks = await generateSmartLinksFromSchema(query, response, metadata)
-
-  // If we get good results from schema, return those
-  if (schemaLinks.length > 0) {
-    return schemaLinks
-  }
-
-  // Fallback to old hardcoded approach if needed
+  // Builders below only emit parameters consumed by their destination pages.
   const entities = await parseEntities(query, response, metadata)
   const intents = detectIntent(query)
   const links: SuggestedLink[] = []

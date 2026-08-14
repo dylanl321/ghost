@@ -4,6 +4,16 @@
       Filter Options
     </div>
 
+    <UFormGroup label="Users or Roles" help="Comma-separated"><UInput v-model="userIdentitiesText" placeholder="alice,DeploymentRole" /></UFormGroup>
+    <UFormGroup label="Regions" help="Comma-separated"><UInput v-model="regionsText" placeholder="us-east-1,us-gov-west-1" /></UFormGroup>
+    <UFormGroup label="Custom Event Names" help="Comma-separated"><UInput v-model="eventNamesText" placeholder="CreateBucket,AssumeRole" /></UFormGroup>
+    <UFormGroup label="Custom Services" help="Comma-separated"><UInput v-model="eventSourcesText" placeholder="s3.amazonaws.com,sts.amazonaws.com" /></UFormGroup>
+
+    <div class="grid grid-cols-2 gap-2">
+      <UFormGroup label="Start"><UInput v-model="filters.startTime" type="datetime-local" /></UFormGroup>
+      <UFormGroup label="End"><UInput v-model="filters.endTime" type="datetime-local" /></UFormGroup>
+    </div>
+
     <!-- Lookback Period -->
     <UFormGroup label="Lookback Period" help="How far back to search for events (max 90 days)">
       <USelectMenu
@@ -158,6 +168,17 @@ const filters = defineModel<CloudTrailDatasetFilters>({
     eventSources: []
   })
 })
+
+function csvModel(field: 'userIdentities' | 'regions' | 'eventNames' | 'eventSources') {
+  return computed({
+    get: () => (filters.value[field] || []).join(','),
+    set: (value: string) => { filters.value[field] = value.split(',').map(item => item.trim()).filter(Boolean) }
+  })
+}
+const userIdentitiesText = csvModel('userIdentities')
+const regionsText = csvModel('regions')
+const eventNamesText = csvModel('eventNames')
+const eventSourcesText = csvModel('eventSources')
 
 // Computed wrappers to extract just the values from select menus
 const selectedEventTypes = computed({

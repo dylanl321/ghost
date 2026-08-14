@@ -63,6 +63,8 @@ export async function getStrandsConfig(): Promise<StrandsClientConfig> {
  * Strands client error
  */
 export class StrandsClientError extends Error {
+  public retryable: boolean
+
   constructor(
     message: string,
     public code?: string,
@@ -71,6 +73,7 @@ export class StrandsClientError extends Error {
   ) {
     super(message)
     this.name = 'StrandsClientError'
+    this.retryable = statusCode === 429 || Boolean(statusCode && statusCode >= 500) || /TIMEOUT|UNAVAILABLE/i.test(code || '')
   }
 }
 
@@ -481,4 +484,3 @@ export async function pollStrandsJobStatus(
     )
   }
 }
-

@@ -7,6 +7,7 @@
 <script setup lang="ts">
 import { marked } from 'marked'
 import mermaid from 'mermaid'
+import { escapeHtml, sanitizeChatHtml, sanitizeMermaidSvg } from '~/utils/sanitizeHtml'
 
 const logger = createLogger('MarkdownContent')
 
@@ -29,7 +30,7 @@ onMounted(() => {
   mermaid.initialize({
     startOnLoad: false,
     theme: getMermaidTheme(),
-    securityLevel: 'loose',
+    securityLevel: 'strict',
   })
 })
 
@@ -43,15 +44,13 @@ marked.setOptions({
 const renderer = new marked.Renderer()
 
 // Override code block rendering to detect mermaid
-const originalCodeRenderer = renderer.code.bind(renderer)
-renderer.code = function(code: string, language: string | undefined) {
-  if (language === 'mermaid') {
+renderer.code = ({ text, lang }) => {
+  if (lang === 'mermaid') {
     const mermaidId = `mermaid-${mermaidCounter++}`
     // Return a placeholder that will be rendered by mermaid
-    return `<div class="mermaid-chart" id="${mermaidId}">${code}</div>`
+    return `<div class="mermaid-chart" id="${mermaidId}">${escapeHtml(text)}</div>`
   }
-  // Use default code rendering for other languages
-  return originalCodeRenderer(code, language)
+  return `<pre><code>${escapeHtml(text)}</code></pre>`
 }
 
 // Computed property to render markdown
@@ -61,7 +60,7 @@ const renderedContent = computed(() => {
     mermaidCounter = 0
     // Parse markdown with marked
     const html = marked.parse(props.content, { renderer }) as string
-    return html
+    return sanitizeChatHtml(html)
   } catch (error) {
     logger.error('Error parsing markdown:', error)
     return '<p class="text-red-500">Error rendering markdown content</p>'
@@ -77,7 +76,7 @@ async function renderMermaidCharts() {
       const code = element.textContent || ''
       const id = element.id
       const { svg } = await mermaid.render(id + '-svg', code)
-      element.innerHTML = svg
+      element.innerHTML = sanitizeMermaidSvg(svg)
     } catch (error) {
       logger.error('Error rendering mermaid chart:', error)
       element.innerHTML = '<p class="text-red-500">Error rendering chart</p>'
@@ -98,7 +97,7 @@ watch(
     mermaid.initialize({
       startOnLoad: false,
       theme: getMermaidTheme(),
-      securityLevel: 'loose',
+      securityLevel: 'strict',
     })
     await renderMermaidCharts()
   }

@@ -56,9 +56,8 @@
       </footer>
     </div>
 
-    <!-- Global AI Assistant Popup -->
+    <!-- Global AI Assistant -->
     <ClientOnly>
-      <StrandsChatPopup v-if="siteConfigStore.isStrandsChatPopupEnabled" />
       <ChatThreadsSidebar v-if="siteConfigStore.isStrandsChatEnabled" />
 
       <!-- Dev Options Panel (only shows in dev auth mode) -->

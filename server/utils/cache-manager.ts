@@ -68,8 +68,8 @@ class CacheManager {
     // Start cleanup interval with proper reference for cleanup
     this.cleanupInterval = setInterval(() => this.cleanup(), 60000) // Clean every minute
 
-    // Unref the interval in production to prevent keeping Node.js process alive
-    if (process.env.NODE_ENV === 'production' && this.cleanupInterval.unref) {
+    // Cache cleanup should never be the only reason a CLI/test process stays alive.
+    if (this.cleanupInterval.unref) {
       this.cleanupInterval.unref()
     }
   }

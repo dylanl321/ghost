@@ -171,7 +171,7 @@ export function useAdminSearch() {
       keywords: ['validation', 'data', 'integrity', 'quality', 'accuracy', 'cost']
     },
 
-    // AI & Agents (5 tabs)
+    // AI & Agents (6 tabs)
     {
       id: 'ai-chat-monitor',
       label: 'Chat Monitor',
@@ -226,6 +226,27 @@ export function useAdminSearch() {
       to: '/admin/ai',
       tab: 'ai-metrics',
       keywords: ['metrics', 'dashboard', 'performance', 'analytics', 'ai']
+    },
+    {
+      id: 'ai-usage-collection',
+      label: 'Usage Collection',
+      description: 'Run and review organization AI usage collection',
+      icon: 'i-heroicons-circle-stack',
+      category: 'ai',
+      categoryLabel: 'AI & Agents',
+      to: '/admin/ai',
+      tab: 'usage-collection',
+      keywords: ['usage', 'collection', 'bedrock', 'mantle', 'errors', 'status']
+    },
+    {
+      id: 'ai-mcp-usage',
+      label: 'MCP Usage',
+      description: 'View organization MCP tool usage and adoption',
+      icon: 'i-heroicons-chart-bar-square',
+      category: 'ai',
+      categoryLabel: 'AI & Agents',
+      to: '/admin/mcp-usage',
+      keywords: ['mcp', 'usage', 'tools', 'adoption', 'calls', 'latency', 'fallbacks']
     },
 
     // System Health (4 tabs)

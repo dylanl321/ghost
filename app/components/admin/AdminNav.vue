@@ -79,7 +79,7 @@
                   {{ panels[0]?.categoryLabel }}
                 </div>
                 <button
-                  v-for="(panel, idx) in panels"
+                  v-for="panel in panels"
                   :key="panel.id"
                   class="w-full flex items-center gap-3 px-3 py-2 text-sm transition-colors"
                   :class="[
@@ -383,7 +383,9 @@ const categories = [
       { label: 'Agent Logs', icon: 'i-heroicons-document-text', to: '/admin/ai?tab=agent-logs' },
       { label: 'Agent Testing', icon: 'i-heroicons-beaker', to: '/admin/ai?tab=agent-testing' },
       { label: 'Agent Health', icon: 'i-heroicons-heart', to: '/admin/ai?tab=agent-health' },
-      { label: 'AI Metrics', icon: 'i-heroicons-chart-bar', to: '/admin/ai?tab=ai-metrics' }
+      { label: 'AI Metrics', icon: 'i-heroicons-chart-bar', to: '/admin/ai?tab=ai-metrics' },
+      { label: 'Usage Collection', icon: 'i-heroicons-circle-stack', to: '/admin/ai?tab=usage-collection' },
+      { label: 'MCP Usage', icon: 'i-heroicons-chart-bar-square', to: '/admin/mcp-usage' }
     ]
   },
   {

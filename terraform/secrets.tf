@@ -84,6 +84,18 @@ resource "aws_secretsmanager_secret_version" "dynamodb_config" {
       region      = var.aws_region
       accountId   = local.child_account_id
     }
+    datasetExportJobs = {
+      tableName   = aws_dynamodb_table.dataset_export_jobs.name
+      environment = "govcloud"
+      region      = var.aws_region
+      accountId   = local.child_account_id
+    }
+    aiUsage = {
+      tableName   = aws_dynamodb_table.ai_usage.name
+      environment = "govcloud"
+      region      = var.aws_region
+      accountId   = local.child_account_id
+    }
 
     # External Accounts Table (GovCloud, in master/org account)
     externalAccounts = {

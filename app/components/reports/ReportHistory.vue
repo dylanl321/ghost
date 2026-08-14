@@ -30,6 +30,8 @@
         <USelectMenu
           v-model="dateRange"
           :options="dateRangeOptions"
+          value-attribute="value"
+          option-attribute="label"
           size="sm"
           class="w-40"
         />
@@ -221,7 +223,7 @@ import type { ScheduledReport } from '#shared/types/scheduled-reports'
 
 const logger = createLogger('ReportHistory')
 
-const emit = defineEmits<{
+defineEmits<{
   'view-details': [report: ScheduledReport]
 }>()
 
@@ -272,7 +274,7 @@ const filteredReports = computed(() => {
 
   // Date range filter
   if (dateRange.value !== 'all') {
-    const days = parseInt(dateRange.value.split('-')[1])
+    const days = Number(dateRange.value.replace('last-', ''))
     const cutoff = Date.now() - (days * 24 * 60 * 60 * 1000)
     filtered = filtered.filter(r => {
       const timestamp = reportTimestamp(r.lastRunTime)
@@ -342,12 +344,12 @@ function formatRelativeTime(value?: string) {
   }
 }
 
-function formatRecordCount(report: ScheduledReport): string {
+function formatRecordCount(_report: ScheduledReport): string {
   // This would come from execution metadata if available
   return 'N/A'
 }
 
-function formatDuration(report: ScheduledReport): string {
+function formatDuration(_report: ScheduledReport): string {
   // This would come from execution metadata if available
   return 'N/A'
 }
@@ -390,11 +392,10 @@ async function handleDownload(report: ScheduledReport) {
       color: 'blue'
     })
 
-    // For dataset reports, we need the executionId
-    // Since we don't have individual execution records in the UI yet,
-    // we'll use the reportId and lastRunTime to construct the key
-    // This matches the pattern used in the scheduled report execution
-    const executionId = `${report.reportId}-${new Date(report.lastRunTime).getTime()}`
+    const execution = await getLatestExecution(report.reportId)
+    if (!execution) {
+      throw new Error('Execution history not found')
+    }
 
     // Call the download endpoint
     const response = await $fetch<{
@@ -402,7 +403,7 @@ async function handleDownload(report: ScheduledReport) {
       reportSize?: number
       executionTime: string
       duration?: number
-    }>(`/api/dataset-reports/${report.reportId}/executions/${executionId}/download`)
+    }>(`/api/dataset-reports/${report.reportId}/executions/${execution.executionId}/download`)
 
     // Open presigned URL in new tab to trigger download
     window.open(response.presignedUrl, '_blank')
@@ -423,6 +424,14 @@ async function handleDownload(report: ScheduledReport) {
       color: 'red'
     })
   }
+}
+
+async function getLatestExecution(reportId: string) {
+  const response = await $fetch<{
+    success: boolean
+    data: { executions: Array<{ executionId: string }> }
+  }>(`/api/scheduled-reports/${reportId}/history?limit=1`)
+  return response.data.executions[0]
 }
 
 async function handleRerun(report: ScheduledReport) {
@@ -507,4 +516,3 @@ function handleDownloadFromModal() {
   }
 }
 </script>
-

@@ -41,7 +41,7 @@
                         {{ formatAccountDisplayName(account) }}
                       </div>
                       <div class="text-gray-600 dark:text-gray-400 text-[10px] truncate">
-                        {{ account.accountId || account.awsStandardAccountID }}
+                        {{ account.accountId || account.awsStandardAccountID || account.awsCommercialAccountID }}
                       </div>
                     </div>
                     <button
@@ -317,6 +317,9 @@
         :timeframe-options="timeframeOptions"
         :selected-accounts="selectedAccounts"
         :active-tab="activeTab"
+        :active-chart-tab="activeChartTab"
+        :selected-tag="selectedTag"
+        :tag-view="tagView"
         :dataset="dataset"
         :alerts-count="!isHistoricalTimeframe ? alertsCount : 0"
         :alerts-by-severity="!isHistoricalTimeframe ? alertsBySeverity : { critical: 0, escalation: 0, warning: 0, info: 0 }"
@@ -327,7 +330,7 @@
       />
 
       <!-- Compare Toggle -->
-      <div class="px-4 md:px-5 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center gap-2">
+      <div v-if="!isTagAnalysis" class="px-4 md:px-5 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center gap-2">
         <UTooltip text="Compare two time periods side by side">
           <UButton
             size="xs"
@@ -342,7 +345,7 @@
       </div>
 
       <!-- Selected Account Context Banner -->
-      <div v-if="selectedAccounts.length > 0" class="px-4 md:px-6 pt-4">
+      <div v-if="selectedAccounts.length > 0 && !isTagAnalysis" class="px-4 md:px-6 pt-4">
         <div class="bg-blue-900/30 border border-blue-700 rounded-lg px-4 py-3 flex items-center justify-between gap-4">
           <div class="flex items-center gap-3 min-w-0 flex-1">
             <div class="flex-shrink-0 p-1.5 bg-blue-900/50 rounded-lg">
@@ -387,14 +390,14 @@
       <!-- Content Area -->
       <div class="flex-1 overflow-auto min-h-0 p-4 md:p-6">
         <!-- Comparison Mode -->
-        <div v-if="compareMode">
+        <div v-if="compareMode && !isTagAnalysis">
           <div class="mb-4 flex items-center gap-3">
             <h2 class="text-base font-semibold text-white">Period Comparison</h2>
             <UButton size="xs" color="gray" variant="soft" icon="i-heroicons-x-mark" @click="compareMode = false">
               Exit Compare
             </UButton>
           </div>
-          <CostComparisonView />
+          <CostComparisonView :selected-accounts="selectedAccounts" :mode="dataMode" />
         </div>
 
         <!-- Loading State -->
@@ -419,17 +422,15 @@
         <!-- Main Content -->
         <div v-else class="space-y-6">
           <!-- First Day of Month Notice -->
-          <div v-if="isFirstDayOfMonth" class="bg-amber-900/20 border border-amber-700 rounded-lg p-4">
+          <div v-if="isFirstDayOfMonth && !isTagAnalysis" class="bg-amber-900/20 border border-amber-700 rounded-lg p-4">
             <div class="flex items-start gap-3">
               <Icon name="i-heroicons-calendar" class="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
               <div class="flex-1">
                 <div class="flex items-start justify-between">
                   <div class="flex-1">
-                    <h4 class="text-sm font-medium text-amber-300">Showing Previous Month's Data</h4>
+                    <h4 class="text-sm font-medium text-amber-300">Current Month Has No Observed Days Yet</h4>
                     <p class="text-xs text-amber-400 mt-1">
-                      It's the first day of {{ new Date().toLocaleDateString('en-US', { month: 'long' }) }}, and AWS Cost Explorer doesn't have data available yet for today.
-                      Currently displaying the last day of {{ new Date(new Date().setMonth(new Date().getMonth() - 1)).toLocaleDateString('en-US', { month: 'long' }) }} instead.
-                      Check back tomorrow for {{ new Date().toLocaleDateString('en-US', { month: 'long' }) }} data.
+                      This Month is empty because AWS Cost Explorer reports through yesterday and uses an exclusive end date. No prior-month charges are substituted.
                     </p>
                   </div>
                   <UButton
@@ -448,7 +449,7 @@
           </div>
 
           <!-- Early Month Notice (days 2-5) -->
-          <div v-else-if="isEarlyInMonth" class="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
+          <div v-else-if="isEarlyInMonth && !isTagAnalysis" class="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
             <div class="flex items-start gap-3">
               <Icon name="i-heroicons-calendar" class="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
               <div class="flex-1">
@@ -456,7 +457,7 @@
                   <div class="flex-1">
                     <h4 class="text-sm font-medium text-blue-300">Limited Data Available for Current Month</h4>
                     <p class="text-xs text-blue-400 mt-1">
-                      It's early in the month, so cost data for {{ new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) }} is still accumulating.
+                      It's early in the month, so cost data for {{ new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }) }} is still accumulating.
                       Data shown is through yesterday due to AWS Cost Explorer's 24-hour processing lag.
                       For a complete view of recent spending patterns, you may want to review last month's data.
                     </p>
@@ -477,7 +478,7 @@
           </div>
 
           <!-- Historical Data Warning -->
-          <div v-if="isHistoricalTimeframe" class="bg-yellow-900/20 border border-yellow-700 rounded-lg p-4">
+          <div v-if="isHistoricalTimeframe && !isTagAnalysis" class="bg-yellow-900/20 border border-yellow-700 rounded-lg p-4">
             <div class="flex items-start gap-3">
               <Icon name="i-heroicons-information-circle" class="w-5 h-5 text-yellow-500 mt-0.5 flex-shrink-0" />
               <div class="flex-1">
@@ -491,7 +492,7 @@
           </div>
 
           <!-- Summary Cards -->
-          <div data-tour="costs-summary">
+          <div v-if="!isTagAnalysis" data-tour="costs-summary">
             <CostsSummaryCards
               :total-accounts="selectedAccounts.length || accountsWithCosts.length"
               :total-budget="isHistoricalTimeframe ? 0 : totalBudget"
@@ -503,14 +504,14 @@
             />
           </div>
 
-          <div v-if="isCostPending" class="bg-white dark:bg-gray-900 border border-amber-300 dark:border-amber-600 rounded-lg p-4 text-amber-700 dark:text-amber-400 flex items-center gap-2">
+          <div v-if="isCostPending && !isTagAnalysis" class="bg-white dark:bg-gray-900 border border-amber-300 dark:border-amber-600 rounded-lg p-4 text-amber-700 dark:text-amber-400 flex items-center gap-2">
             <Icon name="i-heroicons-clock" class="w-5 h-5 animate-pulse" />
             <span>Waiting for account selection to complete...</span>
           </div>
-          <div v-else-if="isCostFetching" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-gray-700 dark:text-gray-300">
+          <div v-else-if="isCostFetching && !isTagAnalysis" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-gray-700 dark:text-gray-300">
             Loading charts...
           </div>
-          <div v-else-if="costError" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-red-600 dark:text-red-400">
+          <div v-else-if="costError && !isTagAnalysis" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-red-600 dark:text-red-400">
             {{ costError }}
           </div>
           <!-- =============================================================
@@ -523,13 +524,15 @@
                ============================================================= -->
           <div v-else data-tour="costs-chart">
             <!-- Subtle indicator while forecast/supplementary data loads in background -->
-            <div v-if="isDeferredLoading" class="mb-3 flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg text-xs text-blue-600 dark:text-blue-400">
+            <div v-if="isDeferredLoading && !isTagAnalysis" class="mb-3 flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg text-xs text-blue-600 dark:text-blue-400">
               <Icon name="i-heroicons-arrow-path" class="w-3.5 h-3.5 animate-spin flex-shrink-0" />
               <span>Loading forecast and supplementary data...</span>
             </div>
             <ChartTabs
+              v-model:tag="selectedTag"
+              v-model:tag-view="tagView"
               :smart-charts="charts"
-              :dataset="dataset"
+              :dataset="chartDataset"
               :show-regression-line="showRegressionLine"
               :selected-accounts="selectedAccounts"
               :smart-charts-loading="isCostFetching"
@@ -555,6 +558,18 @@
 </template>
 
 <script setup lang="ts">
+import CostsHeader from '~/components/costs/CostsHeader.vue'
+import CostsSummaryCards from '~/components/costs/CostsSummaryCards.vue'
+import ChartTabs from '~/components/costs/SimpleChartTabs.vue'
+import SidebarGroupList from '~/components/costs/SidebarGroupList.vue'
+import { useCostData } from '~/composables/useCostData'
+import { useCostScenario } from '~/composables/useCostScenario'
+import { useChartRegistry } from '~/composables/useChartRegistry'
+import type { DataMode } from '~/types/costs'
+import type { BudgetAlert } from '#shared/types/budget-alerts'
+import { getCostTagWorkspaceQuery, normalizeCostTagCreatorView } from '~/utils/cost-tag-workspace'
+import type { CostTagCreatorView } from '~/utils/cost-tag-workspace'
+
 definePageMeta({
   keepalive: false
 })
@@ -563,12 +578,6 @@ definePageMeta({
 // COMPOSABLES AND IMPORTS
 // =============================================================================
 // useAccountCosts: Fetches raw account data from the API
-// Component imports for UI elements
-import CostsHeader from '~/components/costs/CostsHeader.vue'
-import CostsSummaryCards from '~/components/costs/CostsSummaryCards.vue'
-import ChartTabs from '~/components/costs/SimpleChartTabs.vue'
-import SidebarGroupList from '~/components/costs/SidebarGroupList.vue'
-
 const { handleStartTour, initTourOnMount } = useCostTour()
 
 // Core composables that power the chart system:
@@ -576,15 +585,10 @@ const { handleStartTour, initTourOnMount } = useCostTour()
 // - useCostScenario: Determines which charts to show based on selection context
 // - useChartRegistry: Contains all chart definitions and selection logic
 // - useCostFilters (cost-filters.ts): Handles filtering accounts by cost thresholds
-import { useCostData } from '~/composables/useCostData'
-import { useCostScenario } from '~/composables/useCostScenario'
-import { useChartRegistry } from '~/composables/useChartRegistry'
-import type { DataMode } from '~/types/costs'
-import type { BudgetAlert } from '#shared/types/budget-alerts'
 
 const { accounts, isLoading, error, fetchAccounts } = useAccountCosts()
 const { favoriteIds } = useFavoriteAccounts()
-const { isAdmin } = useUserRoles()
+const selectedAccounts = ref<string[]>([])
 
 // Types
 interface Account {
@@ -605,6 +609,24 @@ interface Account {
   lineOfBusiness?: string
   departmentNumber?: string
   department?: string
+  requestID?: string | number
+  requestId?: string | number
+  status?: string
+  enclaveStatus?: string
+  accountAlias?: string
+  pepCloudRecordName?: string
+  pepEnvironmentName?: string
+}
+
+const supplementalAccounts = ref<Account[]>([])
+
+const getPossibleAccountIds = (account: Account): string[] => {
+  return [
+    account.accountId,
+    account.awsStandardAccountID,
+    account.awsCommercialAccountID,
+    account.id
+  ].filter((id): id is string => Boolean(id))
 }
 
 // =============================================================================
@@ -616,10 +638,19 @@ interface Account {
 // - Wrapped response: { data: [account1, account2, ...] }
 const accountsList = computed<Account[]>(() => {
   const data = accounts.value
-  if (!data) return [] as Account[]
-  if (Array.isArray(data)) return data as Account[]
-  if ((data as any).data && Array.isArray((data as any).data)) return (data as any).data as Account[]
-  return [] as Account[]
+  const baseAccounts = !data
+    ? []
+    : Array.isArray(data)
+      ? data as Account[]
+      : (data as any).data && Array.isArray((data as any).data)
+        ? (data as any).data as Account[]
+        : []
+
+  const knownIds = new Set(baseAccounts.flatMap(getPossibleAccountIds))
+  const missingSupplements = supplementalAccounts.value.filter(account =>
+    !getPossibleAccountIds(account).some(id => knownIds.has(id))
+  )
+  return [...baseAccounts, ...missingSupplements]
 })
 
 // =============================================================================
@@ -627,6 +658,20 @@ const accountsList = computed<Account[]>(() => {
 // =============================================================================
 // Cost filtering setup - respects user's cost threshold settings
 const costSettingsStore = useCostSettingsStore()
+
+// Forecast APIs need an explicit scope so the default "All accounts" view
+// excludes the same hidden development/decommissioned accounts as the UI.
+const defaultCostScopeAccountIds = computed<string[]>(() => {
+  const metadataSettings = {
+    ...costSettingsStore.$state,
+    // Spend thresholds are applied after costs load; they are not a stable forecast scope.
+    minCostThreshold: 0
+  }
+
+  return applyAccountFilters(accountsList.value, metadataSettings)
+    .map(account => getPossibleAccountIds(account)[0])
+    .filter((id): id is string => Boolean(id))
+})
 
 // CRITICAL COMPUTED PROPERTY: Merges live cost data with account metadata
 // This is where account costs are populated from the dataset returned by API calls
@@ -642,29 +687,8 @@ const accountsWithCosts = computed<Account[]>(() => {
   // Create a map of accountId -> cost data
   const costMap = new Map<string, number>()
   
-  // Priority 1: Extract costs from analysis.budgetAnalysis.byAccount (most accurate)
-  if (dataset.value.analysis) {
-    const analysisData = dataset.value.analysis as any
-    
-    // The API returns data wrapped in { success: true, data: {...} }
-    const actualData = analysisData?.data || analysisData
-    
-    // Handle proforma mode - data is nested under proforma property
-    const analysisSource = dataMode.value === 'proforma' && actualData?.proforma 
-      ? actualData.proforma 
-      : actualData
-    
-    if (analysisSource?.budgetAnalysis?.byAccount && Array.isArray(analysisSource.budgetAnalysis.byAccount)) {
-      analysisSource.budgetAnalysis.byAccount.forEach((item: any) => {
-        if (item.accountId && typeof item.actualCost === 'number') {
-          costMap.set(item.accountId, item.actualCost)
-        }
-      })
-    }
-  }
-  
-  // Priority 2: Check summary data for account costs (enhanced summary endpoint)
-  if (dataset.value.summary && costMap.size === 0) {
+  // The requested-mode summary is the authoritative source for displayed spend.
+  if (dataset.value.summary) {
     const summaryData = dataset.value.summary as any
     
     // The API returns data wrapped in { success: true, data: {...} }
@@ -673,37 +697,31 @@ const accountsWithCosts = computed<Account[]>(() => {
     // Handle proforma mode - data structure is different
     let accountsData: any[] = []
     
-    if (dataMode.value === 'proforma') {
-      // In proforma mode, data is structured as { billable: {...}, proforma: {...} }
-      // Use proforma accounts for display
-      if (actualData?.proforma?.accounts && Array.isArray(actualData.proforma.accounts)) {
-        accountsData = actualData.proforma.accounts
-      }
-    } else {
-      // Standard billable mode - accounts at top level
-      if (actualData?.accounts && Array.isArray(actualData.accounts)) {
-        accountsData = actualData.accounts
-      }
-    }
+    const summarySource = actualData?.[dataMode.value] || actualData
+    if (Array.isArray(summarySource?.accounts)) accountsData = summarySource.accounts
     
     accountsData.forEach((account: any) => {
       const accountId = account.accountId
-      const cost = account.totalCost || 0
-      if (accountId && cost > 0) {
+      const cost = Number(account.totalCost || 0)
+      if (accountId && Number.isFinite(cost)) {
         costMap.set(accountId, cost)
       }
     })
+  }
+
+  // Analysis enriches budgets only; this fallback supports older cached responses.
+  if (dataset.value.analysis && costMap.size === 0) {
+    const analysisData = dataset.value.analysis as any
+    const actualData = analysisData?.data || analysisData
+    for (const item of actualData?.budgetAnalysis?.byAccount || []) {
+      if (item.accountId && typeof item.actualCost === 'number') costMap.set(item.accountId, item.actualCost)
+    }
   }
   
   // Merge costs into accounts
   const enrichedAccounts = baseAccounts.map(account => {
     // Try multiple ID fields to match
-    const possibleIds = [
-      account.accountId,
-      account.awsStandardAccountID,
-      account.awsCommercialAccountID,
-      account.id
-    ].filter(Boolean)
+    const possibleIds = getPossibleAccountIds(account)
     
     let costFromData = 0
     for (const id of possibleIds) {
@@ -721,8 +739,16 @@ const accountsWithCosts = computed<Account[]>(() => {
     }
   })
   
-  // Apply cost filtering based on user settings
-  return applyAccountFilters(enrichedAccounts, costSettingsStore.$state)
+  // Explicit URL selections must remain visible even when general sidebar
+  // filters (for example, "hide dev accounts") would normally remove them.
+  const filteredAccounts = applyAccountFilters(enrichedAccounts, costSettingsStore.$state)
+  if (selectedAccounts.value.length === 0) return filteredAccounts
+
+  const filteredSet = new Set(filteredAccounts)
+  const selectedSet = new Set(selectedAccounts.value)
+  return enrichedAccounts.filter(account =>
+    filteredSet.has(account) || getPossibleAccountIds(account).some(id => selectedSet.has(id))
+  )
 })
 
 // Compare mode toggle
@@ -731,16 +757,18 @@ const compareMode = ref(false)
 // State
 const searchTerm = ref('')
 const searchScope = ref<'tab' | 'global'>('tab') // Default to searching within current tab
-const selectedAccounts = ref<string[]>([])
 const selectedTimeframe = ref('thisMonth')
 const activeTab = ref('all')
 const activeChartTab = ref('smart') // Chart tab selection (smart, organizational, trends, budget-health, data, forecast)
+const selectedTag = ref<string | null>(null)
+const tagView = ref<CostTagCreatorView>('people')
 const expandedGroups = ref(new Set<string>())
 const accountSortBy = ref<'cost' | 'name' | 'budget' | 'utilization'>('cost') // Default sort by cost
 const showRegressionLine = ref(false) // Toggle for budget variance regression line
 
 // View By state: controls how cost data is grouped (account, service, or region)
 const viewBy = ref('LINKED_ACCOUNT')
+const isTagAnalysis = computed(() => activeChartTab.value === 'tags')
 
 // Computed property to detect if we're viewing historical data
 const isHistoricalTimeframe = computed(() => {
@@ -799,7 +827,7 @@ onMounted(() => fetchAlertsSummary())
 // Detect if we're in the early days of a new month
 const isEarlyInMonth = computed(() => {
   const today = new Date()
-  const dayOfMonth = today.getDate()
+  const dayOfMonth = today.getUTCDate()
   // Consider days 1-5 as early in the month
   return dayOfMonth <= 5 && selectedTimeframe.value === 'thisMonth'
 })
@@ -807,7 +835,7 @@ const isEarlyInMonth = computed(() => {
 // Detect if we're on the first day (special case: showing previous month's data)
 const isFirstDayOfMonth = computed(() => {
   const today = new Date()
-  return today.getDate() === 1 && selectedTimeframe.value === 'thisMonth'
+  return today.getUTCDate() === 1 && selectedTimeframe.value === 'thisMonth'
 })
 
 // Helper to switch to last month view
@@ -978,6 +1006,21 @@ const totalSpend = computed<number>(() => {
   return accountsSubset.reduce((sum: number, acc: Account) => sum + getSpend(acc), 0)
 })
 
+const chartDataset = computed<NormalizedDataset | null>(() => {
+  if (!dataset.value) return null
+
+  const displayedAccounts = selectedAccounts.value.length > 0
+    ? accountsWithCosts.value.filter((account: Account) =>
+        getPossibleAccountIds(account).some(id => selectedAccounts.value.includes(id)))
+    : accountsWithCosts.value
+
+  return {
+    ...dataset.value,
+    displayedAccountIds: displayedAccounts.flatMap(getPossibleAccountIds),
+    displayedCurrentSpend: totalSpend.value
+  }
+})
+
 const utilization = computed(() => {
   if (totalBudget.value === 0) return 0
   return Math.round((totalSpend.value / totalBudget.value) * 100)
@@ -1040,20 +1083,21 @@ const remainingSelectedCount = computed(() => {
 })
 
 const formatAccountDisplayName = (account: Account) => {
-  const name = account.accountName || account.projectName || account.name || 'Unnamed Account'
+  const name = account.accountName || account.projectName || account.name || account.pepCloudRecordName || account.pepEnvironmentName || account.accountAlias || 'Unnamed Account'
   return name.length > 20 ? name.substring(0, 20) + '...' : name
 }
 
-const getSelectedAccountName = (accountId: string): string => {
+const getSelectedAccountName = (accountId?: string): string => {
+  if (!accountId) return ''
   const account = accountsWithCosts.value.find(
     (acc: Account) => getAccountKey(acc) === accountId
   )
   if (!account) return accountId
-  return account.accountName || account.projectName || account.name || accountId
+  return account.accountName || account.projectName || account.name || account.pepCloudRecordName || account.pepEnvironmentName || account.accountAlias || accountId
 }
 
 // Sidebar groups, helpers, and search matching -- extracted to composable
-const { lobGroups, departmentGroups, smartGroups, favoriteAccounts, matchesSearchTerm, getAccountKey, getBudget, getSpend } = useSidebarGroups({
+const { lobGroups, departmentGroups, smartGroups, matchesSearchTerm, getAccountKey, getBudget, getSpend } = useSidebarGroups({
   accountsWithCosts,
   favoriteIds,
   searchTerm,
@@ -1105,6 +1149,31 @@ const refreshData = async () => {
   await fetchAccounts({ includeDecommissioned, enrichment: 'full' })
 }
 
+const ensureSelectedAccountMetadata = async () => {
+  const knownIds = new Set(accountsList.value.flatMap(getPossibleAccountIds))
+  const missingIds = selectedAccounts.value.filter(id => !knownIds.has(id))
+  if (missingIds.length === 0) return
+
+  const resolved = await Promise.all(missingIds.map(async (id) => {
+    try {
+      const response = await $fetch<any>(`/api/accounts/${encodeURIComponent(id)}`, {
+        query: { includeDecommissioned: true }
+      })
+      const account = response?.data?.account || response?.account
+      if (!account) return null
+      return {
+        ...account,
+        accountId: account.accountId || account.awsStandardAccountID || id
+      } as Account
+    } catch (err) {
+      logger.warn(`Unable to load metadata for selected account ${id}`, err)
+      return null
+    }
+  }))
+
+  supplementalAccounts.value = resolved.filter((account): account is Account => account !== null)
+}
+
 // Group interaction methods - generic handlers for SidebarGroupList events
 const handleToggleGroup = (groupKey: string) => {
   if (expandedGroups.value.has(groupKey)) {
@@ -1131,19 +1200,30 @@ const navigateToBudgetAlerts = () => {
 }
 
 // Apply a filter preset from CostsHeader
-const applyPreset = (preset: { selectedAccounts: string[]; timeframe: string; dataMode: string; viewBy: string; activeTab: string }) => {
+const applyPreset = (preset: {
+  selectedAccounts: string[]
+  timeframe: string
+  dataMode: string
+  viewBy: string
+  activeTab: string
+  chartTab?: string
+  tag?: string | null
+  tagView?: CostTagCreatorView
+}) => {
   selectedAccounts.value = preset.selectedAccounts || []
   if (preset.timeframe) selectedTimeframe.value = preset.timeframe
   if (preset.dataMode === 'billable' || preset.dataMode === 'proforma') {
     dataMode.value = preset.dataMode as DataMode
   }
+  if (preset.viewBy) viewBy.value = preset.viewBy
   if (preset.activeTab) activeTab.value = preset.activeTab
+  if (preset.chartTab) activeChartTab.value = preset.chartTab
+  if (preset.tag !== undefined) selectedTag.value = preset.tag
+  if (preset.tagView) tagView.value = normalizeCostTagCreatorView(preset.tagView)
 }
 
 // Handle shared state from URL parameters
 const applySharedStateFromUrl = () => {
-  const route = useRoute()
-
   // Check for share parameters in URL
   // Support 'account' (single), 'accounts' (comma-separated or JSON array)
   if (route.query.account && typeof route.query.account === 'string') {
@@ -1162,7 +1242,7 @@ const applySharedStateFromUrl = () => {
           if (Array.isArray(accounts)) {
             selectedAccounts.value = accounts
           }
-        } catch (err) {
+        } catch {
           // If not JSON, treat as single account ID
           selectedAccounts.value = [route.query.accounts]
         }
@@ -1182,6 +1262,12 @@ const applySharedStateFromUrl = () => {
     activeChartTab.value = route.query.chartTab
   }
 
+  if (route.query.tag && typeof route.query.tag === 'string') {
+    selectedTag.value = route.query.tag
+  }
+
+  tagView.value = normalizeCostTagCreatorView(route.query.tagView)
+
   if (route.query.mode && typeof route.query.mode === 'string') {
     const mode = route.query.mode as DataMode
     if (mode === 'billable' || mode === 'proforma') {
@@ -1198,6 +1284,7 @@ onMounted(async () => {
     
     // Then refresh data with the applied state
     await refreshData()
+    await ensureSelectedAccountMetadata()
 
     // Trigger initial cost data fetch (watchers are not immediate)
     await fetchCosts()
@@ -1246,6 +1333,7 @@ const { mode: dataMode, isFetching: isCostFetching, isDeferredLoading, isPending
   selectedTimeframe,
   initialMode: 'proforma',
   accountsList, // Pass full accounts data for LOB/Department mapping
+  defaultAccountScope: defaultCostScopeAccountIds,
   debounceMs: 800 // Wait 800ms after user stops selecting accounts
 })
 
@@ -1263,6 +1351,33 @@ const showAdvancedCharts = ref(false)
 //    - Historical timeframes exclude budget-dependent charts
 //    - showAdvanced toggle includes power-user charts when enabled
 const { charts } = useChartRegistry({ scenario, timeframe: selectedTimeframe, mode: dataMode, showAdvanced: showAdvancedCharts })
+
+const route = useRoute()
+const router = useRouter()
+
+// Keep the focused workspace bookmarkable without coupling tag controls to the
+// broader cost-data request pipeline.
+watch([activeChartTab, selectedTag, tagView], () => {
+  if (!import.meta.client) return
+
+  const workspaceQuery = getCostTagWorkspaceQuery({
+    chartTab: activeChartTab.value,
+    selectedTag: selectedTag.value,
+    tagView: tagView.value
+  })
+  const nextQuery: Record<string, any> = Object.fromEntries(
+    Object.entries(route.query).filter(([key]) =>
+      !(key in workspaceQuery) || workspaceQuery[key as keyof typeof workspaceQuery] !== undefined
+    )
+  )
+  const changed = Object.entries(workspaceQuery).some(([key, value]) => route.query[key] !== value)
+
+  for (const [key, value] of Object.entries(workspaceQuery)) {
+    if (value !== undefined) nextQuery[key] = value
+  }
+
+  if (changed) void router.replace({ query: nextQuery })
+})
 
 // Activity tracking for cost dashboard interactions
 watch(selectedTimeframe, (val) => { if (initialized.value) logUserAction('cost.timeframe_change', `timeframe:${val}`) })

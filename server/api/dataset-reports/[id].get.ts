@@ -3,8 +3,7 @@
  * GET /api/dataset-reports/:id
  */
 
-import { getReport } from '../../utils/scheduled-reports'
-import { getUserEmail } from '../../utils/user-roles'
+import { requireDatasetReportAccess } from '../../utils/dataset-report-access'
 import { logger } from '../../utils/logger'
 
 export default defineEventHandler(async (event) => {
@@ -35,33 +34,7 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Get user email
-    const userEmail = getUserEmail(event)
-    if (!userEmail) {
-      throw createError({
-        statusCode: 400,
-        message: 'User email not available'
-      })
-    }
-
-    // Get the report
-    const report = await getReport(reportId)
-
-    // Verify ownership (unless admin)
-    if (report.createdBy !== userEmail && !report.isAdmin) {
-      throw createError({
-        statusCode: 403,
-        message: 'Access denied'
-      })
-    }
-
-    // Verify it's a dataset report
-    if (report.reportType !== 'dataset') {
-      throw createError({
-        statusCode: 404,
-        message: 'Dataset report not found'
-      })
-    }
+    const report = await requireDatasetReportAccess(event, reportId)
 
     return {
       success: true,

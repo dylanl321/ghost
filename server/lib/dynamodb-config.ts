@@ -32,11 +32,14 @@ export interface DynamoDBConfig {
   userPreferences: DynamoDBTableConfig
   accountNotes: DynamoDBTableConfig
   chatThreads: DynamoDBTableConfig
+  chatMessages: DynamoDBTableConfig
   siteConfig: DynamoDBTableConfig
   adminNotifications: DynamoDBTableConfig
   streamingMetrics: DynamoDBTableConfig
   asyncChatJobs: DynamoDBTableConfig
+  datasetExportJobs: DynamoDBTableConfig
   asyncMetrics: DynamoDBTableConfig
+  aiUsage: DynamoDBTableConfig
   budgetAlerts: DynamoDBTableConfig
   budgetAlertConfig: DynamoDBTableConfig
   costTagConfig: DynamoDBTableConfig
@@ -210,6 +213,12 @@ function loadFromEnvironment(): DynamoDBConfig {
       region: govCloudRegion,
       accountId: deploymentAccountId
     },
+    chatMessages: {
+      tableName: process.env.CHAT_MESSAGES_TABLE_NAME || 'ghost-chat-messages',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
+    },
     siteConfig: {
       tableName: process.env.SITE_CONFIG_TABLE || 'ghost-site-config',
       environment: 'govcloud',
@@ -234,8 +243,20 @@ function loadFromEnvironment(): DynamoDBConfig {
       region: govCloudRegion,
       accountId: deploymentAccountId
     },
+    datasetExportJobs: {
+      tableName: process.env.DATASET_EXPORT_JOBS_TABLE_NAME || 'ghost-dataset-export-jobs',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
+    },
     asyncMetrics: {
       tableName: process.env.AWS_ASYNC_METRICS_TABLE_NAME || 'ghost-async-metrics',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
+    },
+    aiUsage: {
+      tableName: process.env.AI_USAGE_TABLE_NAME || 'ghost-ai-usage',
       environment: 'govcloud',
       region: govCloudRegion,
       accountId: deploymentAccountId

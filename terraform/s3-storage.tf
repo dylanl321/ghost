@@ -67,6 +67,20 @@ resource "aws_s3_bucket_lifecycle_configuration" "app_storage" {
     }
   }
 
+  rule {
+    id     = "expire-dataset-exports"
+    status = "Enabled"
+    filter {
+      prefix = "exports/dataset/"
+    }
+    expiration {
+      days = 1
+    }
+    noncurrent_version_expiration {
+      noncurrent_days = 1
+    }
+  }
+
   # Attachments older than 60 days
   rule {
     id     = "expire-attachments"

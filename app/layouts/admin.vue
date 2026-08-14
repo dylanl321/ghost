@@ -44,11 +44,8 @@
       </div>
     </footer>
 
-    <!-- Global AI Assistant Popup (feature flag controlled) -->
+    <!-- Global AI Assistant -->
     <ClientOnly>
-      <StrandsChatPopup v-if="siteConfigStore.isStrandsChatPopupEnabled" />
-
-      <!-- Chat Threads Sidebar -->
       <ChatThreadsSidebar
         v-if="siteConfigStore.isStrandsChatEnabled"
       />

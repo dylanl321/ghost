@@ -19,8 +19,8 @@ import type {
   UnreadCountResponse,
   AdminNotificationListParams,
   NotificationStats
-} from '#shared/types/notifications'
-import { CATEGORY_PREFERENCE_MAP } from '#shared/types/notifications'
+} from '../../shared/types/notifications'
+import { CATEGORY_PREFERENCE_MAP } from '../../shared/types/notifications'
 import { getTableConfig } from '../lib/dynamodb-config'
 import { getItem, putItem, updateItem, deleteItem, queryItems, scanItems } from './dynamodb'
 import { getConfigValue } from './site-config'

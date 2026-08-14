@@ -53,6 +53,10 @@ const props = defineProps<{
 
 const isOpen = defineModel<boolean>({ required: true })
 
+const emit = defineEmits<{
+  (e: 'saved', config: AccountCostTagConfig): void
+}>()
+
 const toast = useToast()
 const {
   availableTags,
@@ -71,7 +75,8 @@ const {
 const draft = reactive<AccountCostTagConfig>({
   importantTags: [],
   defaultGroupByTag: undefined,
-  tagDescriptions: {}
+  tagDescriptions: {},
+  tagValueAliases: {}
 })
 
 const defaultGroupOptions = computed(() => [
@@ -104,7 +109,8 @@ function setDescription(tag: string, value: string) {
 
 async function save() {
   try {
-    await saveAccountTagConfig(props.accountId, { ...draft })
+    const saved = await saveAccountTagConfig(props.accountId, { ...draft })
+    emit('saved', saved)
     toast.add({
       title: 'Configuration Saved',
       description: 'Tag configuration updated successfully',
@@ -126,16 +132,18 @@ function populateDraft() {
     draft.importantTags = [...(tagConfig.value.importantTags ?? [])]
     draft.defaultGroupByTag = tagConfig.value.defaultGroupByTag
     draft.tagDescriptions = { ...(tagConfig.value.tagDescriptions ?? {}) }
+    draft.tagValueAliases = { ...(tagConfig.value.tagValueAliases ?? {}) }
   } else {
     draft.importantTags = []
     draft.defaultGroupByTag = undefined
     draft.tagDescriptions = {}
+    draft.tagValueAliases = {}
   }
 }
 
 async function loadData() {
   await Promise.all([
-    fetchAvailableTags(),
+    fetchAvailableTags([props.accountId]),
     fetchAccountTagConfig(props.accountId)
   ])
   populateDraft()

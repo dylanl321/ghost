@@ -87,7 +87,9 @@ export const useNavigationStore = defineStore('navigation', () => {
 
   const contentMargin = computed(() => {
     if (isMobile.value) return '0px'
-    if (isCollapsed.value && !isHovered.value) return '4rem'
+    // A collapsed sidebar temporarily expands over the page on hover. Keeping
+    // the content margin fixed prevents the entire workspace from shifting.
+    if (isCollapsed.value) return '4rem'
     return '16rem'
   })
 

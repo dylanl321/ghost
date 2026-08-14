@@ -70,6 +70,8 @@
 </template>
 
 <script setup lang="ts">
+import type { CostTagCreatorView } from '~/utils/cost-tag-workspace'
+
 interface CostFilterPreset {
   id: string
   name: string
@@ -78,6 +80,9 @@ interface CostFilterPreset {
   dataMode: string
   viewBy: string
   activeTab: string
+  chartTab?: string
+  tag?: string | null
+  tagView?: CostTagCreatorView
   createdAt: string
 }
 
@@ -87,10 +92,22 @@ const props = defineProps<{
   dataMode: string
   viewBy: string
   activeTab: string
+  chartTab: string
+  tag?: string | null
+  tagView: CostTagCreatorView
 }>()
 
 const emit = defineEmits<{
-  (e: 'load', preset: { selectedAccounts: string[]; timeframe: string; dataMode: string; viewBy: string; activeTab: string }): void
+  (e: 'load', preset: {
+    selectedAccounts: string[]
+    timeframe: string
+    dataMode: string
+    viewBy: string
+    activeTab: string
+    chartTab?: string
+    tag?: string | null
+    tagView?: CostTagCreatorView
+  }): void
 }>()
 
 const PRESETS_KEY = 'costFilterPresets'
@@ -176,9 +193,10 @@ async function confirmSave() {
 
   if (editingPresetId.value) {
     const idx = current.findIndex(p => p.id === editingPresetId.value)
-    if (idx !== -1) {
-      current[idx] = { ...current[idx], name }
-      if (activePresetName.value === current[idx].name) {
+    const existing = current[idx]
+    if (existing) {
+      current[idx] = { ...existing, name }
+      if (activePresetName.value === existing.name) {
         activePresetName.value = name
       }
     }
@@ -191,6 +209,9 @@ async function confirmSave() {
       dataMode: props.dataMode,
       viewBy: props.viewBy,
       activeTab: props.activeTab,
+      chartTab: props.chartTab,
+      tag: props.chartTab === 'tags' ? props.tag : undefined,
+      tagView: props.chartTab === 'tags' ? props.tagView : undefined,
       createdAt: new Date().toISOString()
     }
     current.push(newPreset)
@@ -234,7 +255,10 @@ function loadPreset(preset: CostFilterPreset) {
     timeframe: preset.timeframe,
     dataMode: preset.dataMode,
     viewBy: preset.viewBy,
-    activeTab: preset.activeTab
+    activeTab: preset.activeTab,
+    chartTab: preset.chartTab,
+    tag: preset.tag,
+    tagView: preset.tagView
   })
 
   toast.add({

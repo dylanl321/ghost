@@ -133,6 +133,7 @@ const categoryOptions = [
   { label: 'Service Configuration', value: 'services' },
   { label: 'Performance Settings', value: 'performance' },
   { label: 'UI Customization', value: 'ui' },
+  { label: 'System Settings', value: 'system' },
 ];
 
 // Filtered configs based on search and filters

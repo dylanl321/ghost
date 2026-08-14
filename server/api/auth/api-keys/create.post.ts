@@ -130,6 +130,13 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Create
         statusMessage: `Invalid scopes: ${invalidScopes.join(', ')}. Valid scopes: ${validScopes.join(', ')}`
       })
     }
+
+    if (body.scopes.includes('vmaas:costs:read') && body.scopes.length !== 1) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'vmaas:costs:read must be the only scope on a dedicated VMaaS key'
+      })
+    }
     
     // Validate expiration
     if (body.expiresInDays !== undefined) {
