@@ -133,10 +133,17 @@ export default defineEventHandler(async event => {
     : new provider.Grant({ accountId: details.session.accountId, clientId: String(details.params.client_id) })
   if (!grant) throw createError({ statusCode: 400, statusMessage: 'OAuth grant is unavailable' })
 
-  const missing = details.prompt.details as {
+  const missing = (details.prompt.details ?? {}) as {
     missingOIDCScope?: string[]
     missingOIDCClaims?: string[]
     missingResourceScopes?: Record<string, string[]>
+  }
+  if (!details.prompt.details) {
+    logger.warn('[MCP OAuth] Consent prompt had no details payload; granting default scopes only', {
+      prompt,
+      clientId: String(details.params.client_id),
+      hasGrant: Boolean(details.grantId)
+    })
   }
   // Use the provider's computed gaps for OIDC claims, then grant the normal GHOST
   // capability set. Clients should not need to know or choose internal scope names.

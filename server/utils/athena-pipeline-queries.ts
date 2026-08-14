@@ -901,7 +901,7 @@ export async function getResourceChangesForPipeline(
 
     // Query resources for each account with this pipeline_id
     const config = getPipelineEnvironmentConfig(environment)
-    const accountIdList = accountIds.map(id => `'${id}'`).join(',')
+    const accountIdList = accountIds.map(id => `'${sanitizeSqlString(id)}'`).join(',')
 
     const sql = `
       SELECT
@@ -992,7 +992,7 @@ export async function getModuleBreakdownForPipeline(
 
     // Query module breakdown for these accounts with this pipeline_id
     const config = getPipelineEnvironmentConfig(environment)
-    const accountIdList = accountIds.map(id => `'${id}'`).join(',')
+    const accountIdList = accountIds.map(id => `'${sanitizeSqlString(id)}'`).join(',')
 
     const sql = `
       SELECT

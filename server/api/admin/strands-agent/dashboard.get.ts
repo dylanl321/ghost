@@ -61,16 +61,22 @@ export default defineEventHandler(async (event) => {
       metrics: dashboardMetrics
     } as StrandsAgentMetricsResponse
   } catch (error: any) {
-    logger.error('[Admin] Error fetching Strands agent dashboard:', error)
+    const isResourceNotFound = error?.name === 'ResourceNotFoundException' ||
+      error?.message?.includes('Requested resource not found')
 
-    if (error.name === 'ResourceNotFoundException' || error.message?.includes('Requested resource not found')) {
-      logger.warn(`[Admin] Strands agent metrics table ${TABLE_NAME} is not deployed; returning an empty dashboard`)
+    if (isResourceNotFound) {
+      logger.warn('[Admin] Strands agent metrics table is not deployed; returning an empty dashboard', {
+        route: '/api/admin/strands-agent/dashboard',
+        table: TABLE_NAME,
+        period
+      })
       return {
         success: true,
         metrics: calculateDashboardMetrics([], [], period, startDate, endDate)
       } as StrandsAgentMetricsResponse
     }
 
+    logger.error('[Admin] Error fetching Strands agent dashboard:', error)
     throw createError({
       statusCode: 500,
       message: 'Failed to fetch Strands agent metrics'
