@@ -1,7 +1,7 @@
 <script setup lang="ts">
 definePageMeta({
   title: 'MCP Connections',
-  description: 'Connect your AI client to GHOST MCP'
+  description: 'Connect GHOST to Codex'
 })
 
 interface McpConfig {
@@ -19,16 +19,6 @@ interface McpConfig {
 
 type SetupMode = 'desktop' | 'cli'
 
-interface SourceDefinition {
-  id: 'handbook' | 'aws' | 'ghost'
-  label: string
-  shortLabel: string
-  description: string
-  example: string
-  image?: string
-  icon?: string
-}
-
 const config = ref<McpConfig | null>(null)
 const pending = ref(true)
 const error = ref<Error | null>(null)
@@ -37,53 +27,27 @@ const setupMode = ref<SetupMode>('desktop')
 const toast = useToast()
 const { acknowledge: acknowledgeMcpOffering } = useMcpOfferingDiscovery()
 
-const sources: SourceDefinition[] = [
-  {
-    id: 'handbook',
-    label: 'GDMS AWS Operations Handbook',
-    shortLabel: 'Handbook',
-    description: 'Approved offerings, standards, architecture, and operational guidance.',
-    example: 'What is the approved GDMS pattern for external collaboration in AWS?',
-    image: '/images/mcp/gdms-cloud-logo.png'
-  },
-  {
-    id: 'aws',
-    label: 'Live AWS',
-    shortLabel: 'AWS',
-    description: 'Resources, costs, security findings, compliance, and recent activity.',
-    example: 'What changed in account 123456789012 during the last 7 days?',
-    icon: 'i-simple-icons-amazonaws'
-  },
-  {
-    id: 'ghost',
-    label: 'GHOST platform',
-    shortLabel: 'GHOST',
-    description: 'Account pairings, ownership, access, budgets, pipelines, and reports.',
-    example: 'Find Project Atlas and summarize its account IDs, owners, access, and status.',
-    image: '/favicon.svg'
-  }
-]
-
-const combinedPrompt = 'Which EC2 instances in account 123456789012 are not using an approved Golden AMI, who owns them, and what is the remediation path?'
-
-const sourceContributions = [
-  { source: 'Handbook', className: 'handbook', detail: 'Finds the approved images and documented remediation guidance.' },
-  { source: 'AWS', className: 'aws', detail: 'Checks the live instance inventory and current deployment state.' },
-  { source: 'GHOST', className: 'ghost', detail: 'Resolves account ownership, access, and relevant pipeline context.' }
-] as const
+const examplePrompt = 'Which EC2 instances in account 123456789012 are not using an approved Golden AMI, who owns them, and what is the remediation path?'
 
 const desktopSteps = [
-  { number: '01', title: 'Open Custom MCP', description: 'In Codex, open Settings, select Plugins, choose MCP, then open Custom.' },
-  { number: '02', title: 'Add the connection', description: 'Use the name GHOST and paste the MCP server URL shown above.' },
-  { number: '03', title: 'Authorize GHOST', description: 'Save the connection and complete your normal GHOST sign-in when prompted.' },
-  { number: '04', title: 'Start a new task', description: 'Confirm GHOST is connected, then open a new Codex task.' }
+  { number: '1', title: 'Open settings', description: 'Open Plugins, choose MCP, then Custom.' },
+  { number: '2', title: 'Add GHOST', description: 'Paste the URL and name it GHOST.' },
+  { number: '3', title: 'Sign in', description: 'Complete the browser authorization.' },
+  { number: '4', title: 'Start a task', description: 'Open a new task after GHOST connects.' }
 ] as const
 
 const cliSteps = [
-  { number: '01', title: 'Add GHOST', description: 'Register the remote GHOST MCP server in Codex.', command: 'addCommand' },
-  { number: '02', title: 'Sign in', description: 'Open the browser flow and authenticate with your Entra ID.', command: 'loginCommand' },
-  { number: '03', title: 'Verify the connection', description: 'Confirm GHOST is enabled and available to new Codex tasks.', command: undefined }
+  { number: '1', title: 'Add GHOST', command: 'add' },
+  { number: '2', title: 'Sign in', command: 'login' },
+  { number: '3', title: 'Verify', command: 'verify' }
 ] as const
+
+function cliCommands(command: typeof cliSteps[number]['command']): string[] {
+  if (!config.value) return []
+  if (command === 'add') return [config.value.codex.addCommand]
+  if (command === 'login') return [config.value.codex.loginCommand]
+  return config.value.codex.verifyCommands
+}
 
 function isCopied(value: string) {
   return copiedValues.value.includes(value)
@@ -118,221 +82,145 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="mcp-page mx-auto max-w-7xl px-4 pb-12 sm:px-6">
-    <header class="mcp-hero" aria-labelledby="mcp-title">
-      <div class="hero-copy">
-        <p class="mcp-kicker">GHOST MCP</p>
-        <h1 id="mcp-title">One connection to your AWS context</h1>
-        <p class="hero-intro">
-          Ask Codex or another compatible MCP client questions across the GDMS AWS Operations Handbook,
-          live AWS services, and GHOST without switching systems or rebuilding the context yourself.
-        </p>
-        <div class="hero-actions">
-          <UButton to="#connect-ghost" icon="i-heroicons-link" color="green">Connect GHOST</UButton>
-          <UButton to="/chat/mcp/details" icon="i-heroicons-command-line" color="gray" variant="ghost">View capabilities</UButton>
-        </div>
-        <ul class="hero-benefits" aria-label="GHOST MCP benefits">
-          <li><UIcon name="i-heroicons-arrows-right-left" />Less tab switching</li>
-          <li><UIcon name="i-heroicons-check-badge" />Official guidance plus live state</li>
-          <li><UIcon name="i-heroicons-shield-check" />Your existing permissions</li>
-        </ul>
-      </div>
-
-      <div class="source-flow" aria-label="The Handbook, AWS, and GHOST combine through GHOST MCP for Codex and compatible clients">
-        <div class="source-grid">
-          <article v-for="source in sources" :key="source.id" class="source-node" :class="`source-node--${source.id}`">
-            <div class="source-logo">
-              <img v-if="source.image" :src="source.image" alt="">
-              <UIcon v-else :name="source.icon" />
-            </div>
-            <div class="min-w-0">
-              <p>{{ source.shortLabel }}</p>
-              <span>{{ source.description }}</span>
-            </div>
-          </article>
-        </div>
-        <div class="flow-trace" aria-hidden="true"><span /></div>
-        <div class="mcp-hub">
-          <div class="mcp-hub-core"><UIcon name="i-heroicons-link" /><strong>GHOST MCP</strong><span>One trusted context</span></div>
-        </div>
-        <div class="flow-trace flow-trace--out" aria-hidden="true"><span /></div>
-        <div class="client-node">
-          <UIcon name="i-simple-icons-openai" />
-          <strong>Codex</strong>
-          <span>and compatible clients</span>
-        </div>
-      </div>
+  <div class="mcp-page mx-auto max-w-6xl px-4 pb-12 sm:px-6">
+    <header class="page-intro">
+      <p class="eyebrow">GHOST MCP</p>
+      <h1>Connect GHOST to Codex</h1>
+      <p>Copy the URL, add it as a custom MCP connection, and sign in.</p>
     </header>
 
     <main>
-      <section class="mcp-section scenario-section" aria-labelledby="scenario-heading">
-        <div class="section-heading">
-          <p class="mcp-kicker">Why use it</p>
-          <h2 id="scenario-heading">Ask across systems, not one at a time</h2>
-          <p>GHOST MCP brings the right sources together for questions that normally require several tools and handoffs.</p>
-        </div>
+      <section class="workflow" aria-label="GHOST MCP setup">
+        <div class="workflow-band">
+          <div class="band-number">01</div>
+          <div class="band-content">
+            <div class="band-heading"><div><h2>Copy the MCP URL</h2><p>This is the only value you need from GHOST.</p></div></div>
 
-        <div class="scenario-grid">
-          <article class="combined-question">
-            <div class="question-heading">
-              <div><span>Combined example</span><h3>One question, grounded across three sources</h3></div>
-              <UTooltip :text="isCopied(combinedPrompt) ? 'Prompt copied' : 'Copy combined prompt'">
-                <UButton :icon="isCopied(combinedPrompt) ? 'i-heroicons-check' : 'i-heroicons-clipboard'" color="gray" variant="ghost" square size="xs" @click="copy(combinedPrompt, 'Combined prompt')" />
-              </UTooltip>
+            <div v-if="pending" class="connection-shell connection-loading" aria-live="polite">
+              <div class="connection-inner"><USkeleton class="h-8 w-36" /><USkeleton class="mt-3 h-11 w-full" /></div>
             </div>
-            <blockquote>{{ combinedPrompt }}</blockquote>
-            <div class="source-tags" aria-label="Sources used">
-              <span class="source-tag source-tag--handbook">Handbook</span>
-              <span class="source-tag source-tag--aws">AWS</span>
-              <span class="source-tag source-tag--ghost">GHOST</span>
-            </div>
-          </article>
-
-          <div class="answer-path" aria-label="How GHOST builds the answer">
-            <div v-for="item in sourceContributions" :key="item.source" class="answer-step">
-              <span class="answer-marker" :class="`answer-marker--${item.className}`" />
-              <div><strong>{{ item.source }}</strong><p>{{ item.detail }}</p></div>
-            </div>
-            <div class="answer-outcome"><UIcon name="i-heroicons-sparkles" /><span>A single answer with evidence and a practical next step.</span></div>
-          </div>
-        </div>
-
-        <div class="source-examples">
-          <article v-for="source in sources" :key="`${source.id}-example`" class="source-example" :class="`source-example--${source.id}`">
-            <div class="example-label"><span>{{ source.shortLabel }}</span><UTooltip :text="isCopied(source.example) ? 'Prompt copied' : `Copy ${source.shortLabel} prompt`"><UButton :icon="isCopied(source.example) ? 'i-heroicons-check' : 'i-heroicons-clipboard'" color="gray" variant="ghost" square size="xs" @click="copy(source.example, `${source.shortLabel} prompt`)" /></UTooltip></div>
-            <p>{{ source.example }}</p>
-          </article>
-        </div>
-      </section>
-
-      <section id="connect-ghost" class="mcp-section connection-section" aria-labelledby="connect-heading">
-        <div class="section-heading section-heading--actions">
-          <div><p class="mcp-kicker">Connection</p><h2 id="connect-heading">Add GHOST to your AI client</h2><p>Use this remote MCP endpoint in any compatible client that supports OAuth.</p></div>
-          <div class="section-actions"><UButton to="/support/docs?topic=mcp-connections-guide" icon="i-heroicons-lifebuoy" color="gray" variant="ghost" size="xs">Help and troubleshooting</UButton></div>
-        </div>
-
-        <div class="connection-tool">
-          <div class="connection-identity">
-            <div class="connection-icon"><img src="/favicon.svg" alt=""></div>
-            <div><span>Connection name</span><strong>GHOST</strong><p>Remote MCP with browser-based GHOST sign-in</p></div>
-          </div>
-
-          <div v-if="pending" class="connection-loading" aria-live="polite">
-            <USkeleton class="h-3 w-32" />
-            <USkeleton class="mt-3 h-11 w-full" />
-          </div>
-          <UAlert v-else-if="error" color="red" variant="soft" title="MCP configuration is unavailable" :description="error.message">
-            <template #actions><UButton icon="i-heroicons-arrow-path" color="red" variant="soft" size="xs" @click="refresh">Retry</UButton></template>
-          </UAlert>
-          <div v-else-if="config" class="connection-url">
-            <span>MCP server URL</span>
-            <CommandBlock class="mcp-command mt-2" :value="config.serverUrl" label="GHOST server URL" wrap :copied="isCopied(config.serverUrl)" @copy="copy(config.serverUrl, 'GHOST server URL')" />
-          </div>
-
-          <div class="connection-facts">
-            <span><UIcon name="i-heroicons-globe-alt" />Remote MCP</span>
-            <span><UIcon name="i-heroicons-key" />OAuth sign-in</span>
-            <span><UIcon name="i-heroicons-shield-check" />Existing access only</span>
-          </div>
-        </div>
-
-        <section v-if="config" class="codex-setup" aria-labelledby="codex-heading">
-          <div class="codex-heading">
-            <div><h3 id="codex-heading">Set up Codex</h3><p>Choose the Codex experience you use on this computer.</p></div>
-            <div class="setup-switch" role="tablist" aria-label="Codex setup method">
-              <button :class="{ active: setupMode === 'desktop' }" role="tab" :aria-selected="setupMode === 'desktop'" aria-controls="desktop-setup" @click="setupMode = 'desktop'"><UIcon name="i-heroicons-window" />Desktop app</button>
-              <button :class="{ active: setupMode === 'cli' }" role="tab" :aria-selected="setupMode === 'cli'" aria-controls="cli-setup" @click="setupMode = 'cli'"><UIcon name="i-heroicons-command-line" />CLI</button>
-            </div>
-          </div>
-
-          <div v-if="setupMode === 'desktop'" id="desktop-setup" role="tabpanel" class="setup-panel">
-            <ol class="setup-list">
-              <li v-for="step in desktopSteps" :key="`desktop-${step.number}`" class="setup-step">
-                <span class="step-number">{{ step.number }}</span><div><h4>{{ step.title }}</h4><p>{{ step.description }}</p></div>
-              </li>
-            </ol>
-          </div>
-
-          <div v-else id="cli-setup" role="tabpanel" class="setup-panel">
-            <ol class="setup-list">
-              <li v-for="step in cliSteps" :key="`cli-${step.number}`" class="setup-step">
-                <span class="step-number">{{ step.number }}</span>
-                <div class="min-w-0">
-                  <h4>{{ step.title }}</h4><p>{{ step.description }}</p>
-                  <CommandBlock v-if="step.command" class="mcp-command mt-4" :value="config.codex[step.command]" :label="`${step.title} command`" wrap :copied="isCopied(config.codex[step.command])" @copy="copy(config.codex[step.command], `${step.title} command`)" />
-                  <div v-else class="mt-4 space-y-3"><CommandBlock v-for="command in config.codex.verifyCommands" :key="command" class="mcp-command" :value="command" label="Verify command" wrap :copied="isCopied(command)" @copy="copy(command, 'Verify command')" /></div>
-                  <div v-if="step.command === 'loginCommand'" class="reauth-note"><UIcon name="i-heroicons-exclamation-triangle" /><span>If Codex reports "failed to reauthenticate" or "not logged in," close Codex, run the login command again, then reopen it.</span></div>
+            <UAlert v-else-if="error" color="red" variant="soft" title="MCP configuration is unavailable" :description="error.message">
+              <template #actions><UButton icon="i-heroicons-arrow-path" color="red" variant="soft" size="xs" @click="refresh">Retry</UButton></template>
+            </UAlert>
+            <div v-else-if="config" class="connection-shell">
+              <div class="connection-inner">
+                <div class="connection-meta">
+                  <div class="connection-name"><div class="ghost-mark"><img src="/favicon.svg" alt=""></div><div><span>Connection name</span><strong>GHOST</strong></div></div>
+                  <div class="connection-status">OAuth enabled</div>
                 </div>
-              </li>
-            </ol>
+                <div class="url-row">
+                  <code>{{ config.serverUrl }}</code>
+                  <UButton :icon="isCopied(config.serverUrl) ? 'i-heroicons-check' : 'i-heroicons-clipboard'" color="green" class="copy-url" @click="copy(config.serverUrl, 'MCP server URL')">{{ isCopied(config.serverUrl) ? 'Copied' : 'Copy URL' }}</UButton>
+                </div>
+                <p class="connection-note">Uses your existing GHOST and AWS permissions.</p>
+              </div>
+            </div>
           </div>
+        </div>
 
-          <div class="permission-note"><UIcon name="i-heroicons-shield-check" /><span>Connecting GHOST does not grant additional AWS accounts or roles. Sensitive credential requests still require explicit confirmation.</span></div>
-        </section>
+        <div class="workflow-band">
+          <div class="band-number">02</div>
+          <div class="band-content">
+            <div class="band-heading band-heading--switch">
+              <div><h2>Add it to Codex</h2><p>Choose the Codex experience you use.</p></div>
+              <div class="setup-tabs" role="tablist" aria-label="Codex setup method">
+                <button :class="{ active: setupMode === 'desktop' }" role="tab" :aria-selected="setupMode === 'desktop'" aria-controls="desktop-panel" @click="setupMode = 'desktop'"><UIcon name="i-heroicons-window" />Desktop app</button>
+                <button :class="{ active: setupMode === 'cli' }" role="tab" :aria-selected="setupMode === 'cli'" aria-controls="cli-panel" @click="setupMode = 'cli'"><UIcon name="i-heroicons-command-line" />CLI</button>
+              </div>
+            </div>
 
-        <details v-if="config" class="advanced-section">
-          <summary><span>Manual configuration and maintenance</span><UIcon name="i-heroicons-chevron-down" /></summary>
-          <div class="advanced-content">
-            <section><h3>Manual Codex configuration</h3><p>For managed Codex settings, use the equivalent TOML configuration.</p><CommandBlock class="mcp-command mt-3" :value="config.codex.configToml" label="TOML configuration" multiline :copied="isCopied(config.codex.configToml)" @copy="copy(config.codex.configToml, 'TOML configuration')" /></section>
-            <section><h3>Connection details</h3><dl class="technical-list"><div><dt>Server URL</dt><dd><code>{{ config.serverUrl }}</code><UTooltip text="Copy server URL"><UButton icon="i-heroicons-clipboard" color="gray" variant="ghost" square size="xs" @click="copy(config.serverUrl, 'Server URL')" /></UTooltip></dd></div><div><dt>MCP protocol</dt><dd>{{ config.protocolVersion }}</dd></div><div><dt>Authorization server</dt><dd><code>{{ config.authorizationServer }}</code></dd></div></dl></section>
-            <section><h3>Sign out or remove GHOST</h3><div class="mt-3 space-y-3"><CommandBlock v-for="command in config.codex.resetCommands" :key="command" class="mcp-command" :value="command" label="Reset command" wrap :copied="isCopied(command)" @copy="copy(command, 'Reset command')" /></div></section>
+            <div v-if="setupMode === 'desktop'" id="desktop-panel" role="tabpanel">
+              <ol class="setup-steps setup-steps--desktop">
+                <li v-for="step in desktopSteps" :key="step.number" class="setup-step"><span>{{ step.number }}</span><h3>{{ step.title }}</h3><p>{{ step.description }}</p></li>
+              </ol>
+            </div>
+            <div v-else id="cli-panel" role="tabpanel">
+              <ol v-if="config" class="setup-steps setup-steps--cli">
+                <li v-for="step in cliSteps" :key="step.number" class="setup-step">
+                  <span>{{ step.number }}</span><h3>{{ step.title }}</h3>
+                  <div class="command-list"><CommandBlock v-for="command in cliCommands(step.command)" :key="command" class="mcp-command" :value="command" :label="`${step.title} command`" wrap :copied="isCopied(command)" @copy="copy(command, `${step.title} command`)" /></div>
+                </li>
+              </ol>
+              <p v-else class="setup-unavailable">Load the MCP URL before using CLI setup.</p>
+            </div>
           </div>
-        </details>
+        </div>
+
+        <div class="workflow-band">
+          <div class="band-number">03</div>
+          <div class="band-content">
+            <div class="band-heading"><div><h2>Try it in a new task</h2><p>GHOST is ready when Codex shows the connection as enabled.</p></div></div>
+            <div class="question-row">
+              <blockquote>{{ examplePrompt }}</blockquote>
+              <UButton :icon="isCopied(examplePrompt) ? 'i-heroicons-check' : 'i-heroicons-clipboard'" color="gray" variant="soft" @click="copy(examplePrompt, 'Example prompt')">{{ isCopied(examplePrompt) ? 'Copied' : 'Copy example' }}</UButton>
+            </div>
+          </div>
+        </div>
       </section>
+
+      <section class="source-section" aria-labelledby="sources-heading">
+        <header><p class="eyebrow">What is connected</p><h2 id="sources-heading">Three sources, one connection</h2><p>GHOST MCP gathers the context before Codex answers.</p></header>
+        <div class="funnel">
+          <div class="funnel-stage">
+            <div class="source-row">
+              <article class="source-card source-card--handbook"><div class="source-logo"><img src="/images/mcp/gdms-cloud-logo.png" alt=""></div><div><strong>Handbook</strong><span>Approved guidance</span><em>What should be deployed?</em></div></article>
+              <article class="source-card source-card--aws"><div class="source-logo"><UIcon name="i-simple-icons-amazonaws" /></div><div><strong>Live AWS</strong><span>Current environment</span><em>What is deployed now?</em></div></article>
+              <article class="source-card source-card--ghost"><div class="source-logo"><img src="/favicon.svg" alt=""></div><div><strong>GHOST</strong><span>Ownership and access</span><em>Who owns it?</em></div></article>
+            </div>
+            <div class="feed-row" aria-hidden="true"><span class="feed feed--handbook" /><span class="feed feed--aws" /><span class="feed feed--ghost" /></div>
+            <div class="merge-shell">
+              <div class="merge-chamber"><div class="merge-field" aria-hidden="true" /><strong>GHOST MCP</strong><span>Combines the context</span></div>
+            </div>
+            <div class="funnel-neck" aria-hidden="true" />
+            <div class="codex-node"><UIcon name="i-simple-icons-openai" /><strong>Codex</strong><span>One grounded answer</span></div>
+          </div>
+        </div>
+      </section>
+
+      <details class="advanced-section">
+        <summary><span>Help, capabilities, and manual configuration</span><UIcon name="i-heroicons-chevron-down" /></summary>
+        <div class="advanced-links">
+          <UButton to="/support/docs?topic=mcp-connections-guide" icon="i-heroicons-lifebuoy" color="gray" variant="ghost">Help and troubleshooting</UButton>
+          <UButton to="/chat/mcp/details" icon="i-heroicons-command-line" color="gray" variant="ghost">View capabilities</UButton>
+        </div>
+        <div v-if="config" class="advanced-content">
+          <section><h3>Manual Codex configuration</h3><CommandBlock class="mcp-command mt-3" :value="config.codex.configToml" label="TOML configuration" multiline :copied="isCopied(config.codex.configToml)" @copy="copy(config.codex.configToml, 'TOML configuration')" /></section>
+          <section><h3>Connection details</h3><dl class="technical-list"><div><dt>MCP protocol</dt><dd>{{ config.protocolVersion }}</dd></div><div><dt>Authorization server</dt><dd><code>{{ config.authorizationServer }}</code></dd></div></dl></section>
+          <section><h3>Sign out or remove GHOST</h3><div class="command-list"><CommandBlock v-for="command in config.codex.resetCommands" :key="command" class="mcp-command" :value="command" label="Reset command" wrap :copied="isCopied(command)" @copy="copy(command, 'Reset command')" /></div></section>
+        </div>
+      </details>
     </main>
   </div>
 </template>
 
 <style scoped>
-.mcp-page { position: relative; isolation: isolate; padding-top: 1.5rem; overflow: hidden; color: var(--ghost-text); }
-.mcp-page::before { position: absolute; z-index: -2; inset: 0 -8% auto; height: 34rem; pointer-events: none; content: ''; background: linear-gradient(115deg, transparent 4%, rgb(59 130 246 / .12) 27%, transparent 42% 55%, rgb(245 158 11 / .1) 68%, rgb(16 185 129 / .1) 78%, transparent 94%); background-size: 220% 100%; mask-image: linear-gradient(to bottom, black, transparent 88%); animation: page-trace 18s ease-in-out infinite; }
-.mcp-kicker { margin: 0; color: rgb(5 150 105); font-size: .6875rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-.mcp-hero { position: relative; padding: clamp(1.4rem, 3vw, 2.25rem); overflow: hidden; background: linear-gradient(var(--ghost-surface), var(--ghost-surface)) padding-box, conic-gradient(from var(--trace-angle), rgb(59 130 246 / .85), rgb(16 185 129 / .85), rgb(245 158 11 / .8), rgb(168 85 247 / .8), rgb(59 130 246 / .85)) border-box; border: 1px solid transparent; border-radius: .5rem; box-shadow: 0 14px 38px rgb(15 23 42 / .12); animation: border-trace 16s linear infinite; }
-.mcp-hero::after { position: absolute; inset: 0; pointer-events: none; content: ''; background: linear-gradient(100deg, transparent 15%, rgb(255 255 255 / .05) 44%, transparent 67%); background-size: 240% 100%; animation: hero-scan 10s ease-in-out infinite; }
-.hero-copy { position: relative; z-index: 1; max-width: 52rem; }
-.hero-copy h1 { margin: .3rem 0 0; font-size: clamp(1.8rem, 4vw, 2.75rem); font-weight: 750; line-height: 1.08; letter-spacing: 0; }
-.hero-intro { max-width: 49rem; margin: .85rem 0 0; color: var(--ghost-text-muted); font-size: .9375rem; line-height: 1.7; }
-.hero-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1.25rem; }
-.hero-benefits { display: flex; flex-wrap: wrap; gap: .55rem 1.25rem; margin: 1.25rem 0 0; padding: 0; color: var(--ghost-text-muted); font-size: .75rem; list-style: none; }
-.hero-benefits li { display: flex; align-items: center; gap: .4rem; }.hero-benefits svg { width: 1rem; height: 1rem; color: rgb(5 150 105); }
-.source-flow { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1.8fr) 3.5rem minmax(8rem, .6fr) 3.5rem minmax(8rem, .6fr); gap: .75rem; align-items: center; margin-top: 2rem; }
-.source-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .65rem; }
-.source-node { --source-rgb: 59 130 246; display: flex; min-width: 0; min-height: 6rem; gap: .7rem; align-items: center; padding: .8rem; background: color-mix(in srgb, var(--ghost-surface-2) 90%, rgb(var(--source-rgb))); border: 1px solid rgb(var(--source-rgb) / .42); border-radius: .375rem; box-shadow: 0 0 18px rgb(var(--source-rgb) / .1); animation: source-breathe 5.5s ease-in-out infinite; }
-.source-node--aws { --source-rgb: 245 158 11; animation-delay: -1.8s; }.source-node--ghost { --source-rgb: 16 185 129; animation-delay: -3.6s; }
-.source-logo { display: grid; width: 2.65rem; height: 2.65rem; flex: 0 0 auto; place-items: center; padding: .42rem; background: rgb(255 255 255 / .92); border: 1px solid rgb(var(--source-rgb) / .5); border-radius: .375rem; box-shadow: 0 0 16px rgb(var(--source-rgb) / .28); animation: logo-pulse 3.8s ease-in-out infinite; }
-.source-node--aws .source-logo { animation-delay: -1.2s; }.source-node--ghost .source-logo { animation-delay: -2.4s; }
-.source-logo img, .source-logo svg { width: 100%; height: 100%; object-fit: contain; }.source-node--aws .source-logo svg { color: #111827; }
-.source-node p { margin: 0; font-size: .8125rem; font-weight: 800; }.source-node span { display: block; margin-top: .2rem; color: var(--ghost-text-muted); font-size: .6875rem; line-height: 1.4; }
-.flow-trace { position: relative; height: 2px; overflow: hidden; background: var(--ghost-border); }.flow-trace::after { position: absolute; inset: 0; content: ''; background: linear-gradient(90deg, transparent, rgb(59 130 246), rgb(16 185 129), transparent); background-size: 200% 100%; animation: flow-forward 2.4s linear infinite; }.flow-trace span::after { position: absolute; top: 50%; right: 0; width: .45rem; height: .45rem; content: ''; border-top: 2px solid rgb(16 185 129); border-right: 2px solid rgb(16 185 129); transform: translateY(-50%) rotate(45deg); }
-.flow-trace--out::after { background: linear-gradient(90deg, transparent, rgb(168 85 247), rgb(59 130 246), transparent); background-size: 200% 100%; }.flow-trace--out span::after { border-color: rgb(59 130 246); }
-.mcp-hub { position: relative; padding: 1px; background: conic-gradient(from var(--trace-angle), rgb(59 130 246), rgb(16 185 129), rgb(245 158 11), rgb(168 85 247), rgb(59 130 246)); border-radius: .5rem; box-shadow: 0 0 26px rgb(99 102 241 / .28); animation: border-trace 6s linear infinite, hub-glow 4s ease-in-out infinite; }
-.mcp-hub-core { display: grid; min-height: 6.5rem; place-items: center; align-content: center; padding: .75rem; text-align: center; background: var(--ghost-surface); border-radius: calc(.5rem - 1px); }.mcp-hub-core svg { width: 1.4rem; height: 1.4rem; color: rgb(16 185 129); }.mcp-hub-core strong { margin-top: .35rem; font-size: .8125rem; }.mcp-hub-core span, .client-node span { margin-top: .2rem; color: var(--ghost-text-muted); font-size: .625rem; line-height: 1.35; }
-.client-node { display: grid; min-height: 6.5rem; place-items: center; align-content: center; padding: .75rem; text-align: center; background: var(--ghost-surface-2); border: 1px solid color-mix(in srgb, var(--ghost-border) 62%, rgb(59 130 246)); border-radius: .5rem; box-shadow: 0 0 22px rgb(59 130 246 / .13); }.client-node svg { width: 1.45rem; height: 1.45rem; }.client-node strong { margin-top: .35rem; font-size: .8125rem; }
-.mcp-section { padding: clamp(2.5rem, 6vw, 4.5rem) clamp(.25rem, 1vw, .75rem) 0; }.section-heading { max-width: 48rem; }.section-heading h2 { margin: .25rem 0 0; font-size: clamp(1.3rem, 2.5vw, 1.75rem); font-weight: 750; line-height: 1.25; letter-spacing: 0; }.section-heading > p:last-child, .section-heading > div > p:last-child { margin: .55rem 0 0; color: var(--ghost-text-muted); font-size: .8125rem; line-height: 1.6; }
-.section-heading--actions { display: flex; max-width: none; align-items: end; justify-content: space-between; gap: 1rem; }.section-actions { flex: 0 0 auto; }
-.scenario-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(18rem, .85fr); gap: 1.5rem; margin-top: 1.5rem; }
-.combined-question { position: relative; padding: 1.25rem; overflow: hidden; background: linear-gradient(var(--ghost-surface-2), var(--ghost-surface-2)) padding-box, linear-gradient(120deg, rgb(59 130 246 / .75), rgb(16 185 129 / .75), rgb(245 158 11 / .7)) border-box; border: 1px solid transparent; border-radius: .5rem; box-shadow: 0 8px 24px rgb(15 23 42 / .07); }.combined-question::after { position: absolute; inset: auto -20% 0; height: 2px; content: ''; background: linear-gradient(90deg, transparent, rgb(59 130 246), rgb(16 185 129), rgb(245 158 11), transparent); animation: flow-forward 4s linear infinite; }
-.question-heading { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }.question-heading span { color: rgb(5 150 105); font-size: .625rem; font-weight: 800; text-transform: uppercase; }.question-heading h3 { margin: .25rem 0 0; font-size: .9375rem; }.combined-question blockquote { margin: 1.15rem 0 0; color: var(--ghost-text); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .875rem; line-height: 1.65; }
-.source-tags { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: 1.15rem; }.source-tag { padding: .2rem .5rem; border-radius: .25rem; font-size: .625rem; font-weight: 800; }.source-tag--handbook { color: rgb(30 64 175); background: rgb(219 234 254); }.source-tag--aws { color: rgb(146 64 14); background: rgb(254 243 199); }.source-tag--ghost { color: rgb(6 95 70); background: rgb(209 250 229); }
-.answer-path { display: grid; align-content: center; }.answer-step { display: grid; grid-template-columns: .75rem minmax(0, 1fr); gap: .75rem; padding: .75rem 0; border-bottom: 1px solid var(--ghost-border); }.answer-marker { width: .65rem; height: .65rem; margin-top: .2rem; background: rgb(59 130 246); border-radius: 50%; box-shadow: 0 0 10px rgb(59 130 246 / .55); }.answer-marker--aws { background: rgb(245 158 11); box-shadow: 0 0 10px rgb(245 158 11 / .55); }.answer-marker--ghost { background: rgb(16 185 129); box-shadow: 0 0 10px rgb(16 185 129 / .55); }.answer-step strong { font-size: .75rem; }.answer-step p { margin: .2rem 0 0; color: var(--ghost-text-muted); font-size: .75rem; line-height: 1.5; }.answer-outcome { display: flex; gap: .55rem; align-items: center; margin-top: .85rem; color: rgb(5 150 105); font-size: .75rem; font-weight: 700; }.answer-outcome svg { width: 1rem; height: 1rem; }
-.source-examples { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .65rem; margin-top: 1.25rem; }.source-example { --source-rgb: 59 130 246; padding: .8rem 1rem; background: var(--ghost-surface-2); border: 1px solid rgb(var(--source-rgb) / .35); border-radius: .375rem; transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease; }.source-example--aws { --source-rgb: 245 158 11; }.source-example--ghost { --source-rgb: 16 185 129; }.source-example:hover { border-color: rgb(var(--source-rgb) / .7); box-shadow: 0 0 18px rgb(var(--source-rgb) / .12); transform: translateY(-2px); }.example-label { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }.example-label > span { color: rgb(var(--source-rgb)); font-size: .6875rem; font-weight: 800; text-transform: uppercase; }.source-example p { margin: .45rem 0 0; color: var(--ghost-text-muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .6875rem; line-height: 1.5; }
-.connection-section { scroll-margin-top: 5rem; }.connection-tool { margin-top: 1.5rem; padding: 1.25rem; background: linear-gradient(var(--ghost-surface), var(--ghost-surface)) padding-box, conic-gradient(from var(--trace-angle), rgb(16 185 129), rgb(59 130 246), rgb(168 85 247), rgb(245 158 11), rgb(16 185 129)) border-box; border: 1px solid transparent; border-radius: .5rem; box-shadow: 0 10px 30px rgb(15 23 42 / .08), 0 0 26px rgb(16 185 129 / .08); animation: border-trace 12s linear infinite; }.connection-identity { display: flex; gap: .75rem; align-items: center; }.connection-icon { display: grid; width: 2.7rem; height: 2.7rem; place-items: center; padding: .55rem; background: color-mix(in srgb, var(--ghost-surface-2) 80%, rgb(16 185 129)); border: 1px solid rgb(16 185 129 / .4); border-radius: .375rem; box-shadow: 0 0 16px rgb(16 185 129 / .18); }.connection-icon img { width: 100%; height: 100%; }.connection-identity span, .connection-url > span { display: block; color: var(--ghost-text-muted); font-size: .6875rem; }.connection-identity strong { display: block; margin-top: .05rem; font-size: .9375rem; }.connection-identity p { margin: .1rem 0 0; color: var(--ghost-text-muted); font-size: .6875rem; }.connection-url, .connection-loading { margin-top: 1.25rem; }.connection-facts { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; margin-top: 1rem; color: var(--ghost-text-muted); font-size: .6875rem; }.connection-facts span { display: flex; align-items: center; gap: .35rem; }.connection-facts svg { width: .9rem; height: .9rem; color: rgb(5 150 105); }
-:deep(.mcp-command) { border-color: transparent !important; background: linear-gradient(rgb(3 11 23), rgb(3 11 23)) padding-box, conic-gradient(from var(--trace-angle), rgb(59 130 246), rgb(16 185 129), rgb(245 158 11), rgb(168 85 247), rgb(59 130 246)) border-box !important; animation: border-trace 5s linear infinite; }
-.codex-setup { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--ghost-border); }.codex-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }.codex-heading h3 { margin: 0; font-size: 1rem; }.codex-heading p { margin: .25rem 0 0; color: var(--ghost-text-muted); font-size: .75rem; }.setup-switch { display: inline-flex; flex: 0 0 auto; padding: .2rem; background: var(--ghost-surface-2); border: 1px solid var(--ghost-border); border-radius: .375rem; }.setup-switch button { display: flex; gap: .4rem; align-items: center; padding: .45rem .7rem; color: var(--ghost-text-muted); font-size: .75rem; font-weight: 700; background: transparent; border: 0; border-radius: .25rem; cursor: pointer; }.setup-switch button svg { width: 1rem; height: 1rem; }.setup-switch button.active { color: rgb(6 95 70); background: var(--ghost-surface); box-shadow: 0 1px 3px rgb(15 23 42 / .12); }:global(.dark) .setup-switch button.active { color: rgb(110 231 183); }
-.setup-panel { margin-top: 2rem; }.setup-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; padding: 0; list-style: none; }.setup-step { display: grid; grid-template-columns: 2rem minmax(0, 1fr); gap: .75rem; min-width: 0; padding: 1rem; border-bottom: 1px solid var(--ghost-border); }.setup-step:nth-child(odd) { padding-left: 0; padding-right: 1.5rem; border-right: 1px solid var(--ghost-border); }.setup-step:nth-child(even) { padding-right: 0; padding-left: 1.5rem; }.step-number { display: grid; width: 1.55rem; height: 1.55rem; place-items: center; color: rgb(217 119 6); font-size: .6rem; font-weight: 800; border: 1px solid color-mix(in srgb, var(--ghost-border) 65%, rgb(245 158 11)); border-radius: 999px; }.setup-step h4 { margin: 0; font-size: .8125rem; }.setup-step p { margin: .25rem 0 0; color: var(--ghost-text-muted); font-size: .75rem; line-height: 1.5; }.permission-note, .reauth-note { display: flex; gap: .5rem; margin-top: 1rem; padding: .7rem .8rem; font-size: .75rem; line-height: 1.5; }.permission-note { color: color-mix(in srgb, var(--ghost-text) 45%, rgb(16 185 129)); background: color-mix(in srgb, var(--ghost-surface-2) 90%, rgb(16 185 129)); border-left: 3px solid rgb(16 185 129); }.permission-note svg, .reauth-note svg { width: 1rem; height: 1rem; flex: 0 0 auto; margin-top: .1rem; }.reauth-note { color: color-mix(in srgb, var(--ghost-text) 68%, rgb(245 158 11)); background: color-mix(in srgb, var(--ghost-surface-2) 88%, rgb(245 158 11)); border-left: 3px solid rgb(245 158 11); }
-.advanced-section { margin-top: 1.5rem; border-top: 1px solid var(--ghost-border); border-bottom: 1px solid var(--ghost-border); }.advanced-section summary { display: flex; align-items: center; justify-content: space-between; padding: 1rem 0; font-size: .8125rem; font-weight: 700; cursor: pointer; list-style: none; }.advanced-section summary::-webkit-details-marker { display: none; }.advanced-section summary svg { width: 1rem; height: 1rem; transition: transform 180ms ease; }.advanced-section[open] summary svg { transform: rotate(180deg); }.advanced-content { display: grid; gap: 2rem; padding: .5rem 0 1.25rem; }.advanced-content h3 { margin: 0; font-size: .875rem; }.advanced-content p { margin: .35rem 0 0; color: var(--ghost-text-muted); font-size: .75rem; line-height: 1.5; }.technical-list { margin-top: .75rem; border-top: 1px solid var(--ghost-border); }.technical-list > div { display: grid; grid-template-columns: 10rem minmax(0, 1fr); gap: 1rem; padding: .65rem 0; border-bottom: 1px solid var(--ghost-border); font-size: .75rem; }.technical-list dt { color: var(--ghost-text-muted); }.technical-list dd { display: flex; align-items: center; gap: .35rem; min-width: 0; margin: 0; }.technical-list code { overflow-wrap: anywhere; }
-:global(.dark) .source-tag--handbook { color: rgb(147 197 253); background: rgb(30 58 138); }:global(.dark) .source-tag--aws { color: rgb(253 230 138); background: rgb(120 53 15); }:global(.dark) .source-tag--ghost { color: rgb(167 243 208); background: rgb(6 78 59); }
+.mcp-page { --mcp-blue: 82 158 255; --mcp-amber: 244 167 43; --mcp-green: 33 213 156; --mcp-violet: 168 116 242; position: relative; padding-top: 2rem; overflow: hidden; color: var(--ghost-text); }
+.mcp-page::before { position: absolute; z-index: -1; inset: 0 -8% auto; height: 28rem; pointer-events: none; content: ''; background: linear-gradient(115deg, transparent 5%, rgb(var(--mcp-blue) / .09) 28%, transparent 44% 58%, rgb(var(--mcp-amber) / .07) 72%, rgb(var(--mcp-green) / .08) 82%, transparent 96%); background-size: 220% 100%; mask-image: linear-gradient(to bottom, black, transparent 88%); animation: page-trace 18s ease-in-out infinite; }
+.eyebrow { margin: 0; color: rgb(5 150 105); font-size: .6875rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.page-intro { max-width: 42rem; margin-bottom: 1.5rem; }.page-intro h1 { margin: .3rem 0 0; font-size: clamp(1.9rem, 5vw, 2.75rem); line-height: 1.08; letter-spacing: 0; }.page-intro > p:last-child { margin: .55rem 0 0; color: var(--ghost-text-muted); font-size: .875rem; line-height: 1.55; }
+.workflow { overflow: hidden; background: var(--ghost-surface); border: 1px solid var(--ghost-border); border-radius: .5rem; box-shadow: 0 18px 45px rgb(15 23 42 / .1); }
+.workflow-band { display: grid; grid-template-columns: 4.875rem minmax(0, 1fr); background: var(--ghost-surface); border-bottom: 1px solid var(--ghost-border); }.workflow-band:nth-child(even) { background: color-mix(in srgb, var(--ghost-surface) 76%, var(--ghost-surface-2)); }.workflow-band:last-child { border-bottom: 0; }
+.band-number { display: grid; place-items: start center; padding-top: 1.75rem; color: color-mix(in srgb, var(--ghost-text-muted) 34%, transparent); font-size: 1.625rem; font-weight: 800; border-right: 1px solid var(--ghost-border); }.band-content { min-width: 0; padding: 1.625rem 1.75rem 1.75rem; }.band-heading { margin-bottom: 1rem; }.band-heading--switch { display: flex; align-items: end; justify-content: space-between; gap: 1rem; }.band-heading h2 { margin: 0; font-size: 1.125rem; letter-spacing: 0; }.band-heading p { margin: .25rem 0 0; color: var(--ghost-text-muted); font-size: .6875rem; line-height: 1.4; }
+.connection-shell { position: relative; padding: 1px; overflow: hidden; background: conic-gradient(from var(--trace-angle), rgb(var(--mcp-green)), rgb(var(--mcp-blue)), rgb(var(--mcp-violet)), rgb(var(--mcp-amber)), rgb(var(--mcp-green))); border-radius: .4375rem; box-shadow: 0 0 30px rgb(var(--mcp-green) / .1); animation: border-trace 10s linear infinite; }.connection-inner { padding: .95rem; background: rgb(3 11 23); border-radius: .375rem; }.connection-meta { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: .65rem; }.connection-name { display: flex; gap: .5rem; align-items: center; }.ghost-mark { display: grid; width: 1.9rem; height: 1.9rem; place-items: center; padding: .4rem; background: rgb(var(--mcp-green) / .08); border: 1px solid rgb(var(--mcp-green) / .38); border-radius: .3125rem; box-shadow: 0 0 15px rgb(var(--mcp-green) / .18); }.ghost-mark img { width: 100%; height: 100%; }.connection-name span { color: rgb(148 163 184); font-size: .5625rem; }.connection-name strong { display: block; margin-top: .05rem; color: white; font-size: .75rem; }.connection-status { display: flex; gap: .35rem; align-items: center; color: rgb(184 234 217); font-size: .5625rem; }.connection-status::before { width: .375rem; height: .375rem; content: ''; background: rgb(var(--mcp-green)); border-radius: 50%; box-shadow: 0 0 8px rgb(var(--mcp-green) / .75); }.url-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; overflow: hidden; border: 1px solid rgb(var(--mcp-green) / .48); border-radius: .3125rem; }.url-row code { min-width: 0; padding: .75rem .8rem; color: rgb(226 232 240); font-size: .6875rem; overflow-wrap: anywhere; }.copy-url { border-radius: 0 .25rem .25rem 0 !important; }.connection-note { margin: .55rem 0 0; color: rgb(148 163 184); font-size: .5625rem; }.connection-loading { min-height: 7.5rem; }
+.setup-tabs { display: inline-flex; flex: 0 0 auto; padding: .2rem; background: var(--ghost-surface-2); border: 1px solid var(--ghost-border); border-radius: .375rem; }.setup-tabs button { display: flex; gap: .35rem; align-items: center; padding: .45rem .7rem; color: var(--ghost-text-muted); font-size: .625rem; font-weight: 700; background: transparent; border: 0; border-radius: .25rem; cursor: pointer; }.setup-tabs button svg { width: .9rem; height: .9rem; }.setup-tabs button.active { color: rgb(6 95 70); background: var(--ghost-surface); box-shadow: 0 1px 4px rgb(15 23 42 / .15); }:global(.dark) .setup-tabs button.active { color: rgb(186 245 226); background: color-mix(in srgb, var(--ghost-surface-2) 65%, white); }
+.setup-steps { display: grid; margin: 0; padding: 0; list-style: none; }.setup-steps--desktop { grid-template-columns: repeat(4, minmax(0, 1fr)); }.setup-steps--cli { grid-template-columns: repeat(3, minmax(0, 1fr)); }.setup-step { min-width: 0; padding: 0 1rem; border-right: 1px solid var(--ghost-border); }.setup-step:first-child { padding-left: 0; }.setup-step:last-child { padding-right: 0; border-right: 0; }.setup-step > span { display: grid; width: 1.4rem; height: 1.4rem; margin-bottom: .5rem; place-items: center; color: rgb(217 119 6); border: 1px solid rgb(var(--mcp-amber) / .42); border-radius: 50%; font-size: .5rem; font-weight: 800; }.setup-step h3 { margin: 0; font-size: .6875rem; }.setup-step p { margin: .25rem 0 0; color: var(--ghost-text-muted); font-size: .5625rem; line-height: 1.45; }.setup-step :deep(.mcp-command) { margin-top: .55rem; }.command-list { display: grid; gap: .5rem; margin-top: .55rem; }.setup-unavailable { color: var(--ghost-text-muted); font-size: .6875rem; }
+:deep(.mcp-command) { border-color: transparent !important; background: linear-gradient(rgb(3 11 23), rgb(3 11 23)) padding-box, conic-gradient(from var(--trace-angle), rgb(var(--mcp-blue)), rgb(var(--mcp-green)), rgb(var(--mcp-amber)), rgb(var(--mcp-violet)), rgb(var(--mcp-blue))) border-box !important; animation: border-trace 5s linear infinite; }
+.question-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .75rem; align-items: center; }.question-row blockquote { position: relative; margin: 0; padding: .95rem 1rem; overflow: hidden; color: var(--ghost-text); background: var(--ghost-surface-2); border: 1px solid var(--ghost-border); border-radius: .375rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .6875rem; line-height: 1.6; }.question-row blockquote::after { position: absolute; inset: auto 0 0; height: 2px; content: ''; background: linear-gradient(90deg, rgb(var(--mcp-blue)), rgb(var(--mcp-green)), rgb(var(--mcp-amber))); }
+.source-section { margin-top: 2rem; }.source-section > header { margin-bottom: .875rem; }.source-section h2 { margin: .2rem 0 0; font-size: 1.125rem; }.source-section header > p:last-child { margin: .3rem 0 0; color: var(--ghost-text-muted); font-size: .625rem; }.funnel { padding: 1.25rem; overflow: hidden; background: var(--ghost-surface); border: 1px solid var(--ghost-border); border-radius: .5rem; }.funnel-stage { width: min(47.5rem, 100%); margin: 0 auto; }
+.source-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }.source-card { --source: var(--mcp-blue); display: grid; min-width: 0; min-height: 7rem; place-items: center; align-content: center; padding: .8rem; text-align: center; background: rgb(var(--source) / .07); border: 1px solid rgb(var(--source) / .4); border-radius: .375rem; animation: source-glow 5s ease-in-out infinite; }.source-card--aws { --source: var(--mcp-amber); animation-delay: -1.7s; }.source-card--ghost { --source: var(--mcp-green); animation-delay: -3.4s; }.source-logo { display: grid; width: 2.25rem; height: 2.25rem; place-items: center; padding: .375rem; color: rgb(15 23 42); background: white; border: 1px solid rgb(var(--source) / .55); border-radius: .3125rem; box-shadow: 0 0 16px rgb(var(--source) / .28); }.source-logo img, .source-logo svg { width: 100%; height: 100%; object-fit: contain; }.source-card strong { display: block; margin-top: .45rem; font-size: .6875rem; }.source-card span { display: block; margin-top: .2rem; color: var(--ghost-text-muted); font-size: .5625rem; }.source-card em { display: block; margin-top: .5rem; color: rgb(var(--source)); font-size: .5625rem; font-style: normal; font-weight: 700; }
+.feed-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; height: 2.625rem; }.feed { --feed: var(--mcp-blue); position: relative; width: 2px; height: 100%; margin: 0 auto; overflow: hidden; background: linear-gradient(rgb(var(--feed) / .25), rgb(var(--feed) / .8)); box-shadow: 0 0 8px rgb(var(--feed) / .28); }.feed--aws { --feed: var(--mcp-amber); }.feed--ghost { --feed: var(--mcp-green); }.feed::after { position: absolute; top: -.5rem; left: -2px; width: .375rem; height: .625rem; content: ''; background: rgb(var(--feed)); border-radius: 999px; box-shadow: 0 0 10px rgb(var(--feed) / .8); animation: feed-drop 2.2s linear infinite; }.feed--aws::after { animation-delay: -.75s; }.feed--ghost::after { animation-delay: -1.5s; }
+.merge-shell { position: relative; width: 80%; height: 6rem; margin: 0 auto; filter: drop-shadow(0 0 14px rgb(var(--mcp-violet) / .15)); }.merge-shell::before { position: absolute; inset: 0; content: ''; background: radial-gradient(ellipse at 50% 108%, rgb(194 115 255) 0 16%, rgb(102 92 255) 32%, transparent 58%), linear-gradient(90deg, rgb(var(--mcp-blue)) 0%, rgb(90 167 255) 19%, rgb(155 112 239) 34%, rgb(var(--mcp-amber)) 50%, rgb(165 206 104) 67%, rgb(56 210 165) 82%, rgb(var(--mcp-green)) 100%); clip-path: polygon(0 0, 100% 0, 64% 100%, 36% 100%); }.merge-chamber { position: absolute; inset: 1px; display: grid; place-items: center; align-content: center; padding: 1rem 20% 1.4rem; text-align: center; background: rgb(11 23 40); clip-path: polygon(0 0, 100% 0, 64% 100%, 36% 100%); }.merge-field { position: absolute; z-index: 0; inset: -1.75rem; background: radial-gradient(ellipse 34% 145% at 13% -6%, rgb(44 145 255 / .98) 0 20%, rgb(74 118 255 / .68) 40%, transparent 72%), radial-gradient(ellipse 36% 150% at 50% -8%, rgb(255 176 35 / .96) 0 18%, rgb(225 91 196 / .54) 44%, transparent 72%), radial-gradient(ellipse 34% 145% at 87% -6%, rgb(20 231 165 / .94) 0 20%, rgb(22 178 205 / .62) 42%, transparent 72%), radial-gradient(ellipse 62% 70% at 50% 92%, rgb(193 77 255 / .92) 0 20%, rgb(82 92 255 / .72) 45%, transparent 76%); filter: blur(22px) saturate(1.55) brightness(1.12); transform: translateZ(0); animation: field-breathe 5.5s ease-in-out infinite; }.merge-chamber::after { position: absolute; z-index: 1; inset: 0; content: ''; background: radial-gradient(ellipse at 50% 108%, rgb(204 90 255 / .42), transparent 50%), linear-gradient(100deg, transparent 18%, rgb(255 255 255 / .04) 48%, transparent 72%); background-size: 100% 100%, 220% 100%; animation: merge-scan 5.5s ease-in-out infinite; }.merge-chamber strong { position: relative; z-index: 2; color: white; font-size: .9375rem; text-shadow: 0 1px 8px rgb(0 0 0 / .7); }.merge-chamber > span { position: relative; z-index: 2; margin-top: .25rem; color: rgb(176 189 208); font-size: .5625rem; text-shadow: 0 1px 6px rgb(0 0 0 / .75); }
+.funnel-neck { position: relative; width: .375rem; height: 2.125rem; margin: 0 auto; background: linear-gradient(90deg, rgb(var(--mcp-blue)), rgb(var(--mcp-violet)) 48%, rgb(var(--mcp-green))); box-shadow: 0 0 10px rgb(var(--mcp-violet) / .6); }.funnel-neck::before { position: absolute; top: -.25rem; left: -.125rem; width: .625rem; height: .625rem; content: ''; background: rgb(var(--mcp-violet)); border-radius: 50%; box-shadow: 0 0 12px rgb(var(--mcp-violet) / .8); animation: neck-drop 1.8s linear infinite; }.funnel-neck::after { position: absolute; right: 50%; bottom: 0; width: .5rem; height: .5rem; content: ''; border-right: 2px solid rgb(var(--mcp-violet)); border-bottom: 2px solid rgb(var(--mcp-violet)); transform: translateX(50%) rotate(45deg); }.codex-node { display: grid; width: min(13.75rem, 100%); min-height: 4rem; margin: 0 auto; place-items: center; align-content: center; text-align: center; background: linear-gradient(var(--ghost-surface-2), var(--ghost-surface-2)) padding-box, linear-gradient(90deg, rgb(var(--mcp-blue)), rgb(var(--mcp-violet)), rgb(var(--mcp-green))) border-box; border: 1px solid transparent; border-radius: .375rem; box-shadow: 0 0 22px rgb(var(--mcp-violet) / .14); }.codex-node svg { width: 1rem; height: 1rem; margin-bottom: .25rem; }.codex-node strong { font-size: .75rem; }.codex-node span { margin-top: .2rem; color: var(--ghost-text-muted); font-size: .5rem; }
+.advanced-section { margin-top: 1.125rem; border-top: 1px solid var(--ghost-border); border-bottom: 1px solid var(--ghost-border); }.advanced-section summary { display: flex; align-items: center; justify-content: space-between; padding: .85rem 0; font-size: .6875rem; font-weight: 700; cursor: pointer; list-style: none; }.advanced-section summary::-webkit-details-marker { display: none; }.advanced-section summary svg { width: 1rem; height: 1rem; transition: transform 180ms ease; }.advanced-section[open] summary svg { transform: rotate(180deg); }.advanced-links { display: flex; flex-wrap: wrap; gap: .4rem; padding-bottom: .75rem; }.advanced-content { display: grid; gap: 1.5rem; padding: .25rem 0 1rem; }.advanced-content h3 { margin: 0; font-size: .75rem; }.technical-list { margin-top: .55rem; border-top: 1px solid var(--ghost-border); }.technical-list > div { display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: .75rem; padding: .55rem 0; border-bottom: 1px solid var(--ghost-border); font-size: .6875rem; }.technical-list dt { color: var(--ghost-text-muted); }.technical-list dd { min-width: 0; margin: 0; }.technical-list code { overflow-wrap: anywhere; }
 @property --trace-angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
 @keyframes border-trace { to { --trace-angle: 360deg; } }
 @keyframes page-trace { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
-@keyframes hero-scan { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
-@keyframes flow-forward { from { background-position: 100% 0; } to { background-position: -100% 0; } }
-@keyframes source-breathe { 0%, 100% { box-shadow: 0 0 16px rgb(var(--source-rgb) / .08); } 50% { box-shadow: 0 0 24px rgb(var(--source-rgb) / .2); } }
-@keyframes logo-pulse { 0%, 100% { transform: translateY(0); box-shadow: 0 0 12px rgb(var(--source-rgb) / .2); } 50% { transform: translateY(-2px); box-shadow: 0 0 24px rgb(var(--source-rgb) / .45); } }
-@keyframes hub-glow { 0%, 100% { box-shadow: 0 0 18px rgb(99 102 241 / .2); } 50% { box-shadow: 0 0 32px rgb(99 102 241 / .4); } }
-@media (max-width: 1100px) { .source-flow { grid-template-columns: 1fr; }.source-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }.flow-trace { width: 2px; height: 2rem; margin: 0 auto; }.flow-trace::after { background: linear-gradient(180deg, transparent, rgb(59 130 246), rgb(16 185 129), transparent); background-size: 100% 200%; animation-name: flow-down; }.flow-trace span::after { top: auto; right: 50%; bottom: 0; transform: translateX(50%) rotate(135deg); }.mcp-hub, .client-node { width: min(100%, 22rem); margin: 0 auto; } }
-@keyframes flow-down { from { background-position: 0 100%; } to { background-position: 0 -100%; } }
-@media (max-width: 800px) { .scenario-grid { grid-template-columns: 1fr; }.source-examples { grid-template-columns: 1fr; }.section-heading--actions, .codex-heading { align-items: flex-start; flex-direction: column; }.setup-list { grid-template-columns: 1fr; }.setup-step, .setup-step:nth-child(odd), .setup-step:nth-child(even) { padding: 1rem 0; border-right: 0; }.source-grid { grid-template-columns: 1fr; }.source-node { min-height: auto; }.source-flow { margin-top: 1.5rem; } }
-@media (max-width: 520px) { .mcp-hero { padding: 1rem; }.hero-copy h1 { font-size: 1.75rem; }.hero-actions :deep(a) { width: 100%; justify-content: center; }.setup-switch { width: 100%; }.setup-switch button { flex: 1; justify-content: center; }.technical-list > div { grid-template-columns: 1fr; gap: .25rem; }.connection-tool { padding: 1rem; } }
-@media (prefers-reduced-motion: reduce) { .mcp-page::before, .mcp-hero, .mcp-hero::after, .source-node, .source-logo, .flow-trace::after, .mcp-hub, .combined-question::after, .connection-tool, :deep(.mcp-command) { animation: none; transition: none; } }
+@keyframes source-glow { 0%, 100% { box-shadow: 0 0 14px rgb(var(--source) / .07); } 50% { box-shadow: 0 0 22px rgb(var(--source) / .18); } }
+@keyframes feed-drop { from { transform: translateY(0); } to { transform: translateY(3.25rem); } }
+@keyframes merge-scan { 0%, 100% { background-position: 0 50%; } 50% { background-position: 100% 50%; } }
+@keyframes field-breathe { 0%, 100% { opacity: .86; transform: scaleX(.98) translateY(0); } 50% { opacity: 1; transform: scaleX(1.04) translateY(2px); } }
+@keyframes neck-drop { from { transform: translateY(0); } to { transform: translateY(2rem); } }
+@media (max-width: 800px) { .workflow-band { grid-template-columns: 3rem minmax(0, 1fr); }.band-number { padding-top: 1.35rem; font-size: 1.25rem; }.band-content { padding: 1.3rem 1.1rem 1.4rem; }.setup-steps--desktop, .setup-steps--cli { grid-template-columns: repeat(2, minmax(0, 1fr)); }.setup-step { padding: .75rem; border-bottom: 1px solid var(--ghost-border); }.setup-step:nth-child(odd) { padding-left: 0; }.setup-step:nth-child(even) { padding-right: 0; border-right: 0; }.source-row { grid-template-columns: 1fr; }.source-card { grid-template-columns: 2.25rem minmax(0, 1fr); min-height: auto; text-align: left; }.source-card strong { margin-top: 0; }.source-card em { grid-column: 2; margin-top: .15rem; }.feed-row { display: block; height: 2rem; }.feed { height: 2rem; }.feed-row .feed:not(:first-child) { display: none; }.merge-shell { width: 100%; } }
+@media (max-width: 540px) { .mcp-page { padding-top: 1.25rem; }.workflow-band { display: block; }.band-number { display: none; }.band-content { padding: 1.15rem .9rem 1.25rem; }.band-heading--switch { align-items: flex-start; flex-direction: column; }.setup-tabs { width: 100%; }.setup-tabs button { flex: 1; justify-content: center; }.url-row { grid-template-columns: 1fr; }.copy-url { width: 100%; justify-content: center; border-radius: 0 0 .25rem .25rem !important; }.setup-steps--desktop, .setup-steps--cli { grid-template-columns: 1fr; }.setup-step, .setup-step:nth-child(odd), .setup-step:nth-child(even) { padding: .75rem 0; border-right: 0; }.question-row { grid-template-columns: 1fr; }.question-row :deep(button) { width: 100%; justify-content: center; }.funnel { padding: .9rem; }.merge-shell { height: 5.875rem; }.merge-chamber { padding-right: 16%; padding-left: 16%; }.technical-list > div { grid-template-columns: 1fr; gap: .2rem; } }
+@media (prefers-reduced-motion: reduce) { .mcp-page::before, .connection-shell, :deep(.mcp-command), .source-card, .feed::after, .merge-field, .merge-chamber::after, .funnel-neck::before { animation: none; transition: none; } }
 </style>
