@@ -102,7 +102,7 @@ async function fetchResourcesViaQuery(
     whereStarted = true
   }
   if (filters.resourceName) {
-    queryParts.push(`${whereStarted ? 'AND' : 'WHERE'} resourceName LIKE '%${filters.resourceName.replace(/'/g, "''")}%'`)
+    queryParts.push(`${whereStarted ? 'AND' : 'WHERE'} ${buildConfigResourceNamePredicate(filters.resourceName)}`)
     whereStarted = true
   }
 
@@ -208,6 +208,14 @@ async function fetchResourcesViaQuery(
   }
 
   return { records: results, hasMore: queryHasMore, scannedCount: results.length }
+}
+
+export function buildConfigResourceNamePredicate(resourceName: string): string {
+  // AWS Config supports prefix matching but rejects the leading wildcard used by contains searches.
+  const prefix = resourceName.trim().replace(/%/g, '')
+  if (!prefix) throw new Error('Resource name must include non-wildcard characters')
+  const escaped = prefix.replace(/'/g, "''")
+  return prefix.length < 3 ? `resourceName = '${escaped}'` : `resourceName LIKE '${escaped}%'`
 }
 
 /**

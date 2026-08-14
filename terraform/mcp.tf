@@ -19,6 +19,25 @@ resource "aws_kms_alias" "mcp_secrets" {
   target_key_id = aws_kms_key.mcp_secrets.key_id
 }
 
+resource "aws_kms_key" "mcp_raw_errors" {
+  provider                = aws.target_deployment_account
+  description             = "Encryption for sensitive MCP raw error diagnostics"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+
+  tags = {
+    Application = var.app_name
+    Environment = var.env
+    Component   = "mcp-raw-error-encryption"
+  }
+}
+
+resource "aws_kms_alias" "mcp_raw_errors" {
+  provider      = aws.target_deployment_account
+  name          = "alias/${var.app_name}-mcp-raw-errors"
+  target_key_id = aws_kms_key.mcp_raw_errors.key_id
+}
+
 resource "aws_dynamodb_table" "oauth_artifacts" {
   provider     = aws.target_deployment_account
   name         = "ghost-oauth-artifacts-${var.env}"
@@ -155,6 +174,38 @@ resource "aws_dynamodb_table" "mcp_audit" {
   }
 }
 
+resource "aws_dynamodb_table" "mcp_raw_errors" {
+  provider     = aws.target_deployment_account
+  name         = "ghost-mcp-raw-errors-${var.env}"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "eventId"
+
+  attribute {
+    name = "eventId"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  server_side_encryption {
+    enabled     = true
+    kms_key_arn = aws_kms_key.mcp_raw_errors.arn
+  }
+
+  tags = {
+    Application = var.app_name
+    Environment = var.env
+    Component   = "mcp-raw-errors"
+  }
+}
+
 resource "aws_dynamodb_table" "mcp_evidence" {
   provider     = aws.target_deployment_account
   name         = "ghost-mcp-evidence-${var.env}"
@@ -257,6 +308,12 @@ resource "aws_iam_policy" "ecs_mcp_dynamodb" {
         Resource = [aws_dynamodb_table.mcp_audit.arn, "${aws_dynamodb_table.mcp_audit.arn}/index/*"]
       },
       {
+        Sid      = "McpRawErrorsReadWrite"
+        Effect   = "Allow"
+        Action   = ["dynamodb:GetItem", "dynamodb:PutItem"]
+        Resource = aws_dynamodb_table.mcp_raw_errors.arn
+      },
+      {
         Sid      = "McpEvidence"
         Effect   = "Allow"
         Action   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem", "dynamodb:Query"]
@@ -292,6 +349,11 @@ output "oauth_artifacts_table_name" {
 output "mcp_audit_table_name" {
   description = "DynamoDB table containing redacted MCP tool audit events"
   value       = aws_dynamodb_table.mcp_audit.name
+}
+
+output "mcp_raw_errors_table_name" {
+  description = "DynamoDB table containing 30-day sensitive MCP failure diagnostics"
+  value       = aws_dynamodb_table.mcp_raw_errors.name
 }
 
 output "mcp_secret_kms_key_arn" {

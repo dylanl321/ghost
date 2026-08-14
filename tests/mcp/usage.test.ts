@@ -34,3 +34,17 @@ test('summarizes MCP adoption, reliability, and daily activity', () => {
   assert.equal(summary.byTool[0]?.count, 2)
   assert.equal(summary.byTool[0]?.errorCount, 1)
 })
+
+test('summarizes user, normalized client, and backend source attribution', () => {
+  const summary = summarizeMcpUsage([
+    event({ displayName: 'Ada Admin', source: 'AWS Config', client: { clientType: 'codex_cli', mcpClientName: 'Codex CLI' } }),
+    event({ displayName: 'Ada Admin', source: 'AWS Config', status: 'error', errorCode: 'TIMEOUT', client: { clientType: 'codex_cli' } }),
+    event({ subject: 'legacy-user', email: 'legacy@example.test', source: undefined, client: undefined })
+  ])
+
+  assert.deepEqual(summary.byUser.map(row => [row.label, row.count]), [['Ada Admin', 2], ['legacy@example.test', 1]])
+  assert.equal(summary.byUser[0]?.errorCount, 1)
+  assert.equal(summary.byUser[0]?.topTools[0]?.tool, 'ghost.accounts.search')
+  assert.deepEqual(summary.byClient.map(row => [row.label, row.count]), [['Codex CLI', 2], ['Unknown', 1]])
+  assert.deepEqual(summary.bySource.map(row => [row.label, row.count]), [['AWS Config', 2], ['Unknown source', 1]])
+})

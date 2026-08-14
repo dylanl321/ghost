@@ -220,6 +220,7 @@ async function getIdentityCenterAccessToken(
     if (error?.name === 'AuthorizationPendingException' || error?.name === 'SlowDownException') {
       const pending = new Error('Complete the IAM Identity Center browser authorization, then try again.')
       pending.name = 'IDC_AUTHORIZATION_PENDING'
+      ;(pending as Error & { retryable: boolean }).retryable = true
       throw pending
     }
     if (['InvalidGrantException', 'InvalidClientException', 'ExpiredTokenException'].includes(error?.name)) {

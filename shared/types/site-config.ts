@@ -84,6 +84,13 @@ export interface Announcement {
  * Type-safe configuration structure
  */
 export interface SiteConfig {
+  mcp?: {
+    audit?: {
+      rawErrors?: {
+        enabled?: boolean;
+      };
+    };
+  };
   features?: {
     strandsChat?: {
       enabled?: boolean;
@@ -139,6 +146,17 @@ export interface SiteConfig {
  * Default configuration values
  */
 export const DEFAULT_SITE_CONFIG: SiteConfigItem[] = [
+  {
+    key: 'mcp.audit.rawErrors.enabled',
+    value: true,
+    type: 'boolean',
+    category: 'system',
+    label: 'MCP Raw Error Capture',
+    description: 'Store full MCP tool failure context for 30 days in the encrypted raw-error audit table',
+    defaultValue: true,
+    isPublic: false,
+    isEditable: true,
+  },
   // Feature Flags
   {
     key: 'features.strandsChat.enabled',

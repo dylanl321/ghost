@@ -276,6 +276,10 @@ resource "aws_ecs_task_definition" "main" {
           value = aws_dynamodb_table.mcp_audit.name
         },
         {
+          name  = "GHOST_MCP_RAW_ERRORS_TABLE_NAME"
+          value = aws_dynamodb_table.mcp_raw_errors.name
+        },
+        {
           name  = "GHOST_MCP_EVIDENCE_TABLE_NAME"
           value = aws_dynamodb_table.mcp_evidence.name
         },

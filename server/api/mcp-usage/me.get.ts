@@ -9,5 +9,25 @@ export default defineEventHandler(async event => {
   if (!email) return errors.unauthorized(event, 'User email not available')
   const days = Math.min(Math.max(Number(getQuery(event).days || 30), 1), 90)
   const events = (await loadMcpAuditEvents(days)).filter(item => item.email === email)
-  return { success: true, data: { days, summary: summarizeMcpUsage(events), history: events.map(item => ({ timestamp: item.timestamp, tool: item.tool, status: item.status, durationMs: item.durationMs, environment: item.environment, source: item.source, resultCount: item.resultCount, warningCount: item.warningCount, errorCategory: item.errorCategory })) } }
+  return {
+    success: true,
+    data: {
+      days,
+      summary: summarizeMcpUsage(events),
+      history: [...events].sort((left, right) => right.timestamp.localeCompare(left.timestamp)).map(item => ({
+        timestamp: item.timestamp,
+        tool: item.tool,
+        status: item.status,
+        durationMs: item.durationMs,
+        environment: item.environment,
+        source: item.source,
+        client: item.client?.clientType || 'unknown',
+        resultCount: item.resultCount,
+        warningCount: item.warningCount,
+        errorCategory: item.errorCategory,
+        errorCode: item.errorCode,
+        errorExplanation: item.errorExplanation
+      }))
+    }
+  }
 })

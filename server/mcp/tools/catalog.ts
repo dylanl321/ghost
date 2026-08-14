@@ -50,7 +50,7 @@ import { getLatestAnalysis, getInstanceClassifications } from '../../utils/utili
 import { getAnnualBudgetArray, getPeriodBudget } from '../../../shared/utils/budget-utils'
 import type { DatasetReportConfig } from '../../../shared/types/dataset-reports'
 import type { NotificationCategory, NotificationStatus } from '../../../shared/types/notifications'
-import type { GhostMcpPrincipal } from '../types'
+import type { GhostMcpClientAttribution, GhostMcpPrincipal } from '../types'
 import {
   beginMcpIdentityCenterAuthorization,
   issueMcpIdentityCenterCredentials
@@ -142,25 +142,26 @@ function idempotencyKeySchema() {
 export function registerCatalogTools(
   server: McpServer,
   principal: GhostMcpPrincipal,
-  confirmationCodec: RequestStateCodec<{ tool: string; targetId: string }>
+  confirmationCodec: RequestStateCodec<{ tool: string; targetId: string }>,
+  requestClient: Partial<GhostMcpClientAttribution> = {}
 ): void {
   const read = (definition: Omit<Parameters<typeof registerGhostTool>[2], 'scope' | 'annotations'>) => registerGhostTool(server, principal, {
     ...definition,
     scope: 'ghost.read',
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }
-  })
+  }, requestClient)
   const collaborate = (definition: Omit<Parameters<typeof registerGhostTool>[2], 'scope'>) => registerGhostTool(server, principal, {
     ...definition,
     scope: 'ghost.collaborate'
-  })
+  }, requestClient)
   const ai = (definition: Omit<Parameters<typeof registerGhostTool>[2], 'scope'>) => registerGhostTool(server, principal, {
     ...definition,
     scope: 'ghost.ai.invoke'
-  })
+  }, requestClient)
   const credentials = (definition: Omit<Parameters<typeof registerGhostTool>[2], 'scope'>) => registerGhostTool(server, principal, {
     ...definition,
     scope: 'ghost.credentials.issue'
-  })
+  }, requestClient)
 
   read({
     name: 'ghost.accounts.search', title: 'Search GHOST accounts',
@@ -811,7 +812,7 @@ export function registerCatalogTools(
 
   read({
     name: 'ghost.pipelines.get_run', title: 'Get pipeline run', description: 'Return a pipeline run with account plans, resource changes, and errors.',
-    inputSchema: z.object({ pipeline_id: z.string().min(1) }),
+    inputSchema: z.object({ pipeline_id: z.string().regex(/^\d+$/, 'Pipeline ID must contain only digits') }),
     handler: async args => toolSuccess(await getPipelineByIdWithDetails(args.pipeline_id, 'govcloud'), 'Pipeline details loaded.', 'Athena pipeline telemetry')
   })
 

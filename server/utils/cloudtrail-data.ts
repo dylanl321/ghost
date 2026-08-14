@@ -304,7 +304,10 @@ async function querySecurityLakeForEvents(
     while (queryStatus === 'RUNNING' || queryStatus === 'QUEUED') {
       if (attempts >= maxAttempts) {
         await client.send(new StopQueryExecutionCommand({ QueryExecutionId: queryExecutionId })).catch(() => undefined)
-        throw new Error('Athena query timeout - exceeded maximum wait time')
+        const timeout = new Error('Athena query timeout - exceeded maximum wait time')
+        timeout.name = 'ATHENA_QUERY_TIMEOUT'
+        ;(timeout as Error & { retryable: boolean }).retryable = true
+        throw timeout
       }
 
       if (options.signal?.aborted) {

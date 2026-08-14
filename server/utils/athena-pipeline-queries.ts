@@ -46,6 +46,12 @@ const DEFAULT_TIMEOUT_SECONDS = 60
 const POLL_INTERVAL_MS = 2000
 const ATHENA_RESULT_REUSE_MAX_AGE_MINUTES = 60 // Reuse Athena query results up to 60 minutes old
 
+export function pipelineIdPredicate(column: 'pipeline_id' | 'plan_pipeline_id', pipelineId: string): string {
+  if (!/^\d+$/.test(pipelineId)) throw new Error('Pipeline ID must contain only digits')
+  // Telemetry table revisions disagree on numeric vs varchar IDs; varchar casting works for both.
+  return `CAST(${column} AS varchar) = '${pipelineId}'`
+}
+
 // ---------------------------------------------------------------------------
 // Athena concurrency limiter
 // Caps total in-flight StartQueryExecution calls across all callers in this
@@ -567,7 +573,7 @@ export async function getPipelineRunDetails(
         SELECT *
         FROM ${config.database}.pipeline_runs
         WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -90, current_date), '%Y%m')
-          AND pipeline_id = '${pipelineId}'
+          AND ${pipelineIdPredicate('pipeline_id', pipelineId)}
           AND job_id = '${jobId}'
         LIMIT 1
       `,
@@ -575,7 +581,7 @@ export async function getPipelineRunDetails(
         SELECT *
         FROM ${config.database}.resource_changes
         WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -90, current_date), '%Y%m')
-          AND plan_pipeline_id = '${pipelineId}'
+          AND ${pipelineIdPredicate('plan_pipeline_id', pipelineId)}
           AND plan_job_id = '${jobId}'
           AND account_id = '${accountId}'
         ORDER BY timestamp DESC
@@ -585,7 +591,7 @@ export async function getPipelineRunDetails(
         SELECT *
         FROM ${config.database}.error_details
         WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -90, current_date), '%Y%m')
-          AND pipeline_id = '${pipelineId}'
+          AND ${pipelineIdPredicate('pipeline_id', pipelineId)}
           AND job_id = '${jobId}'
           AND account_id = '${accountId}'
         ORDER BY timestamp DESC
@@ -725,7 +731,7 @@ export async function getPipelineById(
       commit_author,
       terraform_version
     FROM ${config.database}.pipeline_runs
-    WHERE pipeline_id = '${pipelineId}'
+    WHERE ${pipelineIdPredicate('pipeline_id', pipelineId)}
     LIMIT 1
   `
 
@@ -845,7 +851,7 @@ export async function getAccountPlansForPipeline(
   const config = getPipelineEnvironmentConfig(environment)
 
   // Query needs partition filtering for Athena - use a 90 day lookback
-  // Note: plan_pipeline_id is a numeric column
+  // The cast supports both historical varchar partitions and newer numeric schemas.
   const sql = `
     SELECT
       account_id,
@@ -862,7 +868,7 @@ export async function getAccountPlansForPipeline(
       failure_reason
     FROM ${config.database}.account_plans
     WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -90, current_date), '%Y%m')
-      AND plan_pipeline_id = ${pipelineId}
+      AND ${pipelineIdPredicate('plan_pipeline_id', pipelineId)}
     ORDER BY plan_created_at ASC
   `
 
@@ -910,7 +916,7 @@ export async function getResourceChangesForPipeline(
       FROM ${config.database}.resource_changes
       WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -90, current_date), '%Y%m')
         AND account_id IN (${accountIdList})
-        AND plan_pipeline_id = ${pipelineId}
+        AND ${pipelineIdPredicate('plan_pipeline_id', pipelineId)}
       LIMIT ${limit}
     `
 
@@ -936,7 +942,7 @@ export async function getErrorDetailsForPipeline(
   const config = getPipelineEnvironmentConfig(environment)
 
   // Query needs partition filtering for Athena - use a 90 day lookback
-  // Note: pipeline_id is a numeric column
+  // The cast supports both historical varchar partitions and newer numeric schemas.
   const sql = `
     SELECT
       pipeline_id,
@@ -949,7 +955,7 @@ export async function getErrorDetailsForPipeline(
       error_resource_type
     FROM ${config.database}.error_details
     WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -90, current_date), '%Y%m')
-      AND pipeline_id = ${pipelineId}
+      AND ${pipelineIdPredicate('pipeline_id', pipelineId)}
     ORDER BY timestamp ASC
   `
 
@@ -998,7 +1004,7 @@ export async function getModuleBreakdownForPipeline(
       FROM ${config.database}.resource_changes
       WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -90, current_date), '%Y%m')
         AND account_id IN (${accountIdList})
-        AND plan_pipeline_id = ${pipelineId}
+        AND ${pipelineIdPredicate('plan_pipeline_id', pipelineId)}
       GROUP BY module_name
       ORDER BY total_changes DESC
       LIMIT 500

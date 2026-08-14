@@ -78,6 +78,14 @@ export function getMcpAuditTableConfig() {
   }
 }
 
+export function getMcpRawErrorsTableConfig() {
+  return {
+    tableName: process.env.GHOST_MCP_RAW_ERRORS_TABLE_NAME || 'ghost-mcp-raw-errors',
+    environment: (process.env.GHOST_MCP_RAW_ERRORS_TABLE_ENVIRONMENT || 'govcloud') as 'commercial' | 'govcloud',
+    accountId: process.env.AWS_DEPLOYMENT_ACCOUNT_ID || undefined
+  }
+}
+
 export function getMcpEvidenceTableConfig() {
   return {
     tableName: process.env.GHOST_MCP_EVIDENCE_TABLE_NAME || 'ghost-mcp-evidence',

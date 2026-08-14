@@ -119,7 +119,9 @@ export async function createGhostMcpServer(context: McpRequestContext): Promise<
     requestState: { verify: confirmationCodec.verify },
     inputRequired: { maxRounds: 2, legacyShim: false }
   })
-  registerCatalogTools(server, principal, confirmationCodec)
+  registerCatalogTools(server, principal, confirmationCodec, {
+    userAgent: context.requestInfo?.headers.get('user-agent') || undefined
+  })
   registerResources(server, context.authInfo)
   registerPrompts(server)
   return server
