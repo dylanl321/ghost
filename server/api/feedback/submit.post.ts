@@ -37,6 +37,11 @@ registerEndpoint('/api/feedback/submit', 'POST', {
               type: 'string',
               format: 'email',
               description: 'Email address of the user submitting the report.'
+            },
+            source: {
+              type: 'string',
+              enum: ['mcp-connections'],
+              description: 'Optional product surface that opened the feedback form.'
             }
           }
         }
@@ -76,13 +81,17 @@ export default defineEventHandler(async (event) => {
     type: 'Issue' | 'Feature Request' | 'General Feedback'
     description: string
     reporter_email: string
+    source?: 'mcp-connections'
   }>(event)
 
-  const { type, description, reporter_email } = body
+  const { type, description, reporter_email, source } = body
 
   // Basic validation
   if (!type || !description || !reporter_email) {
     return errors.serverError(event, 'Missing fields.')
+  }
+  if (source && source !== 'mcp-connections') {
+    return errors.badRequest(event, 'Invalid feedback source.')
   }
 
   try {
@@ -112,6 +121,7 @@ export default defineEventHandler(async (event) => {
       type,
       description,
       reporter_email,
+      ...(source ? { source } : {}),
       resolved: false,
       environment,
       date_utc,

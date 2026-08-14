@@ -8,7 +8,8 @@ import {
 } from '@modelcontextprotocol/server'
 import * as z from 'zod-v4'
 import { findAccountByIdentifierOptimized } from '../utils/account-lookup-optimized'
-import { searchAccountsUnified } from '../utils/accounts-consolidated'
+import { getAllAccountsUnified } from '../utils/accounts-consolidated'
+import { resolveAccountReference } from './tool-input'
 import { getDatasetExportJob } from '../utils/dataset-export-jobs'
 import { getUserPreferences } from '../utils/user-preferences'
 import { getRequestStateKey } from './config'
@@ -38,9 +39,8 @@ function jsonResource(uri: URL, value: unknown) {
 async function resolveResourceAccount(identifier: string) {
   const optimized = await findAccountByIdentifierOptimized(identifier, { includeDecommissioned: true })
   if (optimized) return optimized
-  const matches = await searchAccountsUnified(identifier)
-  if (matches.length !== 1) throw new Error(matches.length ? 'Account name is ambiguous' : 'Account not found')
-  return { account: matches[0], identifierType: 'name', matchedValue: identifier, source: matches[0]?.source }
+  const account = await resolveAccountReference(identifier, await getAllAccountsUnified(true))
+  return { account, identifierType: 'name', matchedValue: identifier, source: account.source }
 }
 
 function registerResources(server: McpServer, authInfo?: AuthInfo) {

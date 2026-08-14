@@ -86,6 +86,38 @@ resource "aws_ecs_task_definition" "main" {
           value = "GD"
         },
         {
+          name  = "GHOST_CLOUDTRAIL_GOVCLOUD_ACCOUNT_ID"
+          value = "374673712317"
+        },
+        {
+          name  = "GHOST_CLOUDTRAIL_GOVCLOUD_ORGANIZATION_ID"
+          value = "o-oiu9mwd7zf"
+        },
+        {
+          name  = "GHOST_CLOUDTRAIL_GOVCLOUD_REGION"
+          value = "us-gov-west-1"
+        },
+        {
+          name  = "GHOST_CLOUDTRAIL_GOVCLOUD_LOG_GROUP"
+          value = "aws-cloudtrail-logs-374673712317-d7a04176"
+        },
+        {
+          name  = "GHOST_CLOUDTRAIL_COMMERCIAL_ACCOUNT_ID"
+          value = "205950196477"
+        },
+        {
+          name  = "GHOST_CLOUDTRAIL_COMMERCIAL_ORGANIZATION_ID"
+          value = "o-sb7o7424ts"
+        },
+        {
+          name  = "GHOST_CLOUDTRAIL_COMMERCIAL_REGION"
+          value = "us-east-1"
+        },
+        {
+          name  = "GHOST_CLOUDTRAIL_COMMERCIAL_LOG_GROUP"
+          value = "CloudTrail/DefaultLogGroup"
+        },
+        {
           name  = "AWS_MASTER_ACCOUNT_ID"
           value = "205950196477"
         },

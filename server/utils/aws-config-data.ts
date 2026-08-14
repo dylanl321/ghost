@@ -13,7 +13,7 @@ import {
 } from '@aws-sdk/client-config-service'
 import { getConfigServiceClient } from '../lib/aws-client-factory'
 import { getAggregatorName } from './config-service'
-import { getAllAccountsUnified } from './accounts-consolidated'
+import { getAllAccountsUnified, type UnifiedAccount } from './accounts-consolidated'
 import { logger } from './logger'
 import type {
   ConfigResourceRecord,
@@ -26,6 +26,37 @@ type ConfigComplianceStatus = 'COMPLIANT' | 'NON_COMPLIANT' | 'NOT_APPLICABLE' |
 
 // Use centralized getAggregatorName from config-service.ts
 const getConfigAggregatorName = getAggregatorName
+
+export function resolveConfigAccountScope(
+  allAccounts: UnifiedAccount[],
+  requestedIds: string[],
+  environment: 'commercial' | 'govcloud'
+): { validAccounts: string[]; accountMap: Map<string, string> } {
+  const accountIdFor = (account: UnifiedAccount) => environment === 'govcloud'
+    ? account.govCloudAccountId || account.awsGovCloudAccountID
+    : account.accountId || account.awsStandardAccountID
+  const accountMap = new Map(allAccounts.flatMap(account => {
+    const id = accountIdFor(account)
+    return id ? [[id, account.accountName || account.projectName || account.name || id] as const] : []
+  }))
+  const requestedTargets = requestedIds.map(requestedId => {
+    const account = allAccounts.find(item => [
+      item.accountId, item.awsStandardAccountID, item.govCloudAccountId, item.awsGovCloudAccountID
+    ].includes(requestedId))
+    return { requestedId, targetId: account ? accountIdFor(account) : undefined }
+  })
+  const unresolved = requestedTargets.filter(item => !item.targetId || !accountMap.has(item.targetId)).map(item => item.requestedId)
+  if (unresolved.length) {
+    const error = new Error(`Requested accounts are unavailable in ${environment}: ${unresolved.join(', ')}`)
+    error.name = 'ACCOUNT_NOT_FOUND'
+    throw error
+  }
+  const targetAccounts = requestedIds.length
+    ? requestedTargets.map(item => item.targetId!).filter(Boolean)
+    : [...accountMap.keys()]
+  const validAccounts = [...new Set(targetAccounts.filter(id => accountMap.has(id)))]
+  return { validAccounts, accountMap }
+}
 
 /**
  * Get Config client for a specific account/region
@@ -103,7 +134,6 @@ async function fetchResourcesViaQuery(
   }
   if (filters.resourceName) {
     queryParts.push(`${whereStarted ? 'AND' : 'WHERE'} ${buildConfigResourceNamePredicate(filters.resourceName)}`)
-    whereStarted = true
   }
 
   const expression = queryParts.join('\n')
@@ -204,7 +234,7 @@ async function fetchResourcesViaQuery(
 
   } catch (error) {
     logger.error('[Config] Advanced query failed', { error, expression })
-    throw new Error(`Failed to query Config resources: ${(error instanceof Error ? error.message : String(error))}`)
+    throw new Error(`Failed to query Config resources: ${(error instanceof Error ? error.message : String(error))}`, { cause: error })
   }
 
   return { records: results, hasMore: queryHasMore, scannedCount: results.length }
@@ -337,62 +367,11 @@ export async function queryConfigResources(
   try {
     // Get all accounts for name mapping
     const allAccounts = await getAllAccountsUnified()
-    const accountsWithIds = allAccounts.filter(
-      (account): account is typeof account & { accountId: string } => Boolean(account.accountId)
-    )
-
     // Determine the appropriate environment based on configuration
-    const environment = (process.env.AWS_CONFIG_ENVIRONMENT as 'commercial' | 'govcloud') || 'govcloud'
+    const environment = options.environment || (process.env.AWS_CONFIG_ENVIRONMENT as 'commercial' | 'govcloud') || 'govcloud'
     const region = environment === 'govcloud' ? 'us-gov-west-1' : 'us-east-1'
 
-    // Build account maps for both Commercial and GovCloud IDs
-    const commercialAccountMap = new Map(
-      accountsWithIds.map(acc => [acc.accountId, acc.accountName || acc.projectName || acc.accountId])
-    )
-    const govCloudAccountMap = new Map(
-      accountsWithIds
-        .filter(acc => acc.awsGovCloudAccountID)
-        .map(acc => [acc.awsGovCloudAccountID!, acc.accountName || acc.projectName || acc.accountId])
-    )
-
-    // Determine which accounts to query - need to use correct IDs for the environment
-    let targetAccounts: string[] = []
-    if (accountIds.length === 0) {
-      // Empty array = all accounts
-      if (environment === 'govcloud') {
-        targetAccounts = allAccounts
-          .filter(acc => acc.awsGovCloudAccountID)
-          .map(acc => acc.awsGovCloudAccountID!)
-      } else {
-        targetAccounts = accountsWithIds.map(acc => acc.accountId)
-      }
-    } else {
-      // User selected specific accounts (by commercial ID)
-      // Need to map to the correct environment's account IDs
-      if (environment === 'govcloud') {
-        targetAccounts = accountIds
-          .map(commercialId => {
-            const account = allAccounts.find(acc => acc.accountId === commercialId)
-            return account?.awsGovCloudAccountID
-          })
-          .filter((id): id is string => !!id) // Remove undefined values
-      } else {
-        targetAccounts = accountIds
-      }
-    }
-
-    // Validate accounts exist
-    const accountMap = environment === 'govcloud' ? govCloudAccountMap : commercialAccountMap
-    const validAccounts = targetAccounts.filter(id => accountMap.has(id))
-    if (validAccounts.length < targetAccounts.length) {
-      const missing = targetAccounts.filter(id => !accountMap.has(id))
-      logger.warn('[Config] Some accounts not found in environment', {
-        missing,
-        environment,
-        requestedCount: targetAccounts.length,
-        validCount: validAccounts.length
-      })
-    }
+    const { validAccounts, accountMap } = resolveConfigAccountScope(allAccounts, accountIds, environment)
 
     // Fetch resources via advanced query
     // Config aggregator works across all regions, so we only need one call
@@ -456,7 +435,7 @@ export async function queryConfigResources(
 
   } catch (error) {
     logger.error('[Config] Failed to fetch resources', { error })
-    throw new Error(`Failed to fetch Config resources: ${(error instanceof Error ? error.message : String(error))}`)
+    throw new Error(`Failed to fetch Config resources: ${(error instanceof Error ? error.message : String(error))}`, { cause: error })
   }
 }
 

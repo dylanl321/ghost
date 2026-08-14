@@ -22,6 +22,7 @@ export interface DatasetQueryOptions {
   environment?: 'commercial' | 'govcloud'
   limit?: number
   maxScanned?: number
+  cursor?: string
   signal?: AbortSignal
   onProgress?: (progress: { phase: string; processed: number; total?: number }) => void | Promise<void>
   onAthenaQuery?: (queryExecutionId: string | null) => void | Promise<void>
@@ -33,6 +34,7 @@ export interface DatasetQueryResult<T> {
   hasMore: boolean
   truncated: boolean
   scannedCount?: number
+  nextCursor?: string
 }
 
 /**

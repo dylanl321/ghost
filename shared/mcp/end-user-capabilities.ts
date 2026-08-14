@@ -59,9 +59,10 @@ export const endUserMcpCapabilityGroups: McpCapabilityGroup[] = [
     description: 'Search AWS inventory, inspect utilization, audit activity, and triage pipelines.',
     tools: [
       { name: 'ghost.resources.search', description: 'Search live AWS resource inventory across GHOST accounts.', mode: 'Read' },
+      { name: 'ghost.instances.search', description: 'List or find EC2 instances using a friendly account reference.', mode: 'Read' },
       { name: 'ghost.instances.utilization', description: 'Review persisted EC2 utilization and optimization findings.', mode: 'Read' },
-      { name: 'ghost.audit.cloudtrail', description: 'Query bounded CloudTrail activity.', mode: 'Read' },
-      { name: 'ghost.pipelines.for_account', description: 'Review pipeline runs and deployment activity for an account.', mode: 'Read' }
+      { name: 'ghost.audit.search', description: 'Search account-scoped organization CloudTrail logs.', mode: 'Read' },
+      { name: 'ghost.pipelines.search', description: 'Search pipeline runs and Terraform resource activity.', mode: 'Read' }
     ]
   },
   {

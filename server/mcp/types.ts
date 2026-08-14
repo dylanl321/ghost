@@ -57,6 +57,17 @@ export interface GhostToolMetadata {
   source: string
   warnings?: string[]
   nextCursor?: string
+  resolvedScope?: Record<string, unknown>
+  appliedFilters?: Record<string, unknown>
+  guidance?: GhostToolGuidance[]
+}
+
+export interface GhostToolGuidance {
+  code: string
+  message: string
+  tools?: string[]
+  commandTemplate?: string
+  requiresConfirmation?: boolean
 }
 
 export interface GhostToolEnvelope<T> {

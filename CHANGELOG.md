@@ -5,6 +5,30 @@ All notable changes to GHOST are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.20.0] - 2026-08-14
+<!-- highlights: GHOST MCP, Codex Integration, Flexible AWS Tools -->
+
+### New Features
+- Added the GHOST MCP offering, giving Codex secure access to GHOST account details, costs, AWS inventory, security posture, official documentation, pipeline activity, reports, and personal workspace data
+- Added guided MCP connection and authorization experiences so users can connect Codex, review available capabilities, and troubleshoot authentication from within GHOST
+- Added simplified searches for EC2 instances, organization CloudTrail activity, and deployment pipelines using account names, aliases, request IDs, or either Commercial or GovCloud account ID
+- Users with an assigned workload account can now request confirmed, short-lived IAM Identity Center credentials when an advanced direct AWS query is needed
+
+### Improvements
+- MCP tools now accept friendlier account references, single values or lists, common AWS resource names, flexible casing, and clearer corrected examples when a request is invalid
+- Tool responses now identify the resolved account scope, applied filters, result limitations, and safe next steps instead of repeatedly trying unrelated data sources
+- CloudTrail searches now use the organization trail stored in CloudWatch Logs and remain scoped to the requested accounts
+- Account, resource, security, cost, and pipeline tools share consistent resolution behavior while preserving compatibility with existing MCP tool calls
+- MCP usage diagnostics provide clearer visibility into client adoption, tool reliability, data sources, and errors without exposing credentials or sensitive failure details
+
+### Bug Fixes
+- Fixed account-scoped inventory searches returning unrelated organization resources when an account could not be resolved
+- Fixed AWS Config name and instance lookups that could fail because of unsupported wildcard matching
+- Fixed MCP OAuth refresh handling so supported Codex clients can retain authorization more reliably across sessions and service restarts
+- Prevented advanced credential guidance and issuance for organization, master, monitoring, deployment, payer, and other central accounts
+
+---
+
 ## [1.19.0] - 2026-08-11
 <!-- highlights: Organization AI Usage, Usage Collection -->
 

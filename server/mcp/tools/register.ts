@@ -2,6 +2,7 @@ import { CLIENT_INFO_META_KEY, type McpServer, type ServerContext, type Standard
 import { recordMcpAudit } from '../audit'
 import { toolError } from '../results'
 import type { GhostMcpClientAttribution, GhostMcpPrincipal, GhostMcpScope } from '../types'
+import { McpInputError } from '../tool-input'
 
 export interface GhostToolDefinition {
   name: string
@@ -65,7 +66,12 @@ export function registerGhostTool(
         client: clientAttribution(context, requestClient),
         environment: args?.environment || 'unknown'
       })
-      return toolError(error?.code || error?.name || 'TOOL_ERROR', error?.message || 'The tool failed unexpectedly', Boolean(error?.retryable))
+      return toolError(
+        error?.code || error?.name || 'TOOL_ERROR',
+        error?.message || 'The tool failed unexpectedly',
+        Boolean(error?.retryable),
+        error instanceof McpInputError ? error.details : undefined
+      )
     }
   })
 }

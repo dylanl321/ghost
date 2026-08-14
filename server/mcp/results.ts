@@ -1,31 +1,34 @@
 import type { CallToolResult } from '@modelcontextprotocol/server'
-import type { GhostToolEnvelope } from './types'
+import type { GhostToolEnvelope, GhostToolMetadata } from './types'
 
 export function toolSuccess<T>(
   data: T,
   summary: string,
   source: string,
-  options: { warnings?: string[]; nextCursor?: string } = {}
+  options: Partial<Omit<GhostToolMetadata, 'asOf' | 'source'>> = {}
 ): CallToolResult {
   const envelope: GhostToolEnvelope<T> = {
     data,
     metadata: {
       asOf: new Date().toISOString(),
       source,
-      warnings: options.warnings,
-      nextCursor: options.nextCursor
+      ...options
     }
   }
 
+  const comments = [
+    ...(options.warnings || []).map(warning => `Note: ${warning}`),
+    ...(options.guidance || []).map(item => `Advanced option: ${item.message}${item.tools?.length ? ` Tools: ${item.tools.join(', ')}.` : ''}`)
+  ]
   return {
-    content: [{ type: 'text', text: summary }],
+    content: [{ type: 'text', text: [summary, ...comments].join('\n') }],
     structuredContent: envelope as unknown as Record<string, unknown>,
     isError: false
   }
 }
 
-export function toolError(code: string, message: string, retryable = false): CallToolResult {
-  const error = { error: { code, message, retryable } }
+export function toolError(code: string, message: string, retryable = false, details?: Record<string, unknown>): CallToolResult {
+  const error = { error: { code, message, retryable, details } }
   return {
     content: [{ type: 'text', text: `${code}: ${message}` }],
     structuredContent: error,

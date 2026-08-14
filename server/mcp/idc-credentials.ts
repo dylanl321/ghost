@@ -7,6 +7,8 @@ import {
 } from '@aws-sdk/client-sso-oidc'
 import {
   GetRoleCredentialsCommand,
+  ListAccountRolesCommand,
+  ListAccountsCommand,
   SSOClient
 } from '@aws-sdk/client-sso'
 import { deleteItem, getItem, putItem } from '../utils/dynamodb'
@@ -257,4 +259,40 @@ export async function issueMcpIdentityCenterCredentials(
     environment: session.environment,
     region: session.region
   }
+}
+
+export async function validateMcpIdentityCenterCredentialRequest(
+  principal: GhostMcpPrincipal,
+  sessionId: string,
+  accountId: string,
+  roleName: string
+): Promise<{ environment: IdentityCenterEnvironment }> {
+  const { session, accessToken } = await getIdentityCenterAccessToken(principal, sessionId)
+  const sso = new SSOClient({ region: session.region })
+  let accountToken: string | undefined
+  let accountAssigned = false
+  do {
+    const response = await sso.send(new ListAccountsCommand({ accessToken, nextToken: accountToken, maxResults: 100 }))
+    accountAssigned ||= Boolean(response.accountList?.some(account => account.accountId === accountId))
+    accountToken = response.nextToken
+  } while (accountToken && !accountAssigned)
+  if (!accountAssigned) {
+    const error = new Error(`The authenticated Identity Center user is not assigned to account ${accountId}.`)
+    error.name = 'IDC_ACCOUNT_NOT_ASSIGNED'
+    throw error
+  }
+
+  let roleToken: string | undefined
+  let roleAssigned = false
+  do {
+    const response = await sso.send(new ListAccountRolesCommand({ accessToken, accountId, nextToken: roleToken, maxResults: 100 }))
+    roleAssigned ||= Boolean(response.roleList?.some(role => role.roleName === roleName))
+    roleToken = response.nextToken
+  } while (roleToken && !roleAssigned)
+  if (!roleAssigned) {
+    const error = new Error(`Role ${roleName} is not assigned to the authenticated user in account ${accountId}.`)
+    error.name = 'IDC_ROLE_NOT_ASSIGNED'
+    throw error
+  }
+  return { environment: session.environment }
 }

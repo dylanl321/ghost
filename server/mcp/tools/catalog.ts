@@ -7,10 +7,10 @@ import {
 } from '@modelcontextprotocol/server'
 import * as z from 'zod-v4'
 import { getPresignedDownloadUrl } from '../../utils/s3-storage'
-import { getAllAccountsUnified, getAccountStatistics, searchAccountsUnified } from '../../utils/accounts-consolidated'
+import { getAllAccountsUnified, getAccountStatistics } from '../../utils/accounts-consolidated'
+import { fuzzySearchAccounts } from '../../utils/fuzzy-search'
 import { findAccountByIdentifierOptimized } from '../../utils/account-lookup-optimized'
 import { getOrganizationInfo, getOrganizationalUnitTree, getAccountPolicies } from '../../utils/organizations'
-import { resolveToCommercialAccountIds } from '../../utils/account-filters'
 import { buildCostFilter } from '../../utils/cost-domain'
 import { getCostAllocationTags, getCostAndUsage, getCostAndUsageWithResources, getCostForecast, getProformaForecast } from '../../utils/cost-explorer'
 import { validateDateParams, type RelativePeriod } from '../../utils/date-helpers'
@@ -53,7 +53,8 @@ import type { NotificationCategory, NotificationStatus } from '../../../shared/t
 import type { GhostMcpClientAttribution, GhostMcpPrincipal } from '../types'
 import {
   beginMcpIdentityCenterAuthorization,
-  issueMcpIdentityCenterCredentials
+  issueMcpIdentityCenterCredentials,
+  validateMcpIdentityCenterCredentialRequest
 } from '../idc-credentials'
 import { explainMcpIdentityCenterUserAccess, getMcpIdentityCenterAccountAccess, getMcpIdentityCenterUserAccess } from '../idc-admin-access'
 import { createMcpDelegatedGraphEvent } from '../oauth/delegated-graph'
@@ -68,11 +69,27 @@ import { normalizeLimit, toolError, toolRenderedOutput, toolSuccess } from '../r
 import { runIdempotent } from '../idempotency'
 import { buildMcpCostDashboard } from '../cost-dashboard'
 import { buildPersonalAccountContext } from '../personal-account-context'
+import { advancedQueryGuidance, isCentralAccount } from '../guidance'
+import {
+  booleanValue,
+  boundedInteger,
+  enumList,
+  flexibleBooleanSchema,
+  flexibleEnvironmentSchema,
+  flexibleIntegerSchema,
+  flexibleStringListSchema,
+  operationalEnvironment,
+  resolveAccountReference,
+  resolveOperationalScope,
+  resourceTypes,
+  stringList,
+  type ResolvedOperationalScope
+} from '../tool-input'
 import { registerGhostTool } from './register'
 
-const operationalEnvironmentSchema = z.enum(['commercial', 'govcloud']).default('govcloud')
+const operationalEnvironmentSchema = z.string().default('govcloud').transform(value => operationalEnvironment(value))
 const costEnvironmentSchema = z.enum(['commercial', 'govcloud']).default('commercial')
-const accountIdentifiersSchema = z.array(z.string().min(1)).max(100).default([])
+const accountIdentifiersSchema = z.union([z.string(), z.array(z.string())]).default([]).transform(value => stringList(value))
 const notificationCategorySchema = z.enum([
   'BUDGET_THRESHOLD', 'COST_ANOMALY', 'COST_SUMMARY', 'SECURITY_CRITICAL',
   'COMPLIANCE', 'SECURITY_SCORE', 'PIPELINE_FAILURE', 'DEPLOYMENT',
@@ -91,19 +108,26 @@ function accountDisplayName(account: any): string {
 async function resolveAccount(identifier: string) {
   const result = await findAccountByIdentifierOptimized(identifier, { includeDecommissioned: true })
   if (result) return result
-  const matches = await searchAccountsUnified(identifier)
-  if (matches.length !== 1) {
-    const error = new Error(matches.length > 1 ? `Account name is ambiguous; ${matches.length} accounts matched` : 'Account not found')
-    error.name = matches.length > 1 ? 'ACCOUNT_AMBIGUOUS' : 'ACCOUNT_NOT_FOUND'
-    throw error
-  }
-  const account = matches[0]!
+  const account = await resolveAccountReference(identifier, await getAllAccountsUnified(true))
   return { account, identifierType: 'name' as any, matchedValue: identifier, source: account.source || 'both' }
 }
 
 async function commercialIds(identifiers: string[]): Promise<string[]> {
   if (!identifiers.length) return []
-  return resolveToCommercialAccountIds(identifiers)
+  const scope = await resolveOperationalScope(identifiers, 'commercial')
+  return scope.commercialAccountIds
+}
+
+function accountInput(args: any): unknown {
+  return args.account ?? args.accounts ?? args.account_identifiers ?? args.account_identifier ?? args.account_id ?? args.identifier
+}
+
+function scopeMetadata(scope: ResolvedOperationalScope): Record<string, unknown> {
+  return {
+    environment: scope.environment,
+    organizationWide: scope.organizationWide,
+    accounts: scope.accounts
+  }
 }
 
 function dateRange(args: { start_date?: string; end_date?: string; period?: string }) {
@@ -168,7 +192,8 @@ export function registerCatalogTools(
     description: 'Search enriched GHOST AWS account metadata by name, alias, ID, email, request ID, project, department, or line of business.',
     inputSchema: z.object({ query: z.string().min(1), ...paginationSchema }),
     handler: async args => {
-      const matches = await searchAccountsUnified(args.query)
+      const accounts = await getAllAccountsUnified(false)
+      const matches = (await fuzzySearchAccounts(args.query, accounts, normalizeLimit(args.limit))).map(result => result.item)
       const limit = normalizeLimit(args.limit)
       return toolSuccess(matches.slice(0, limit), `Found ${matches.length} matching account(s).`, 'Organizations and GHOST account metadata', {
         warnings: matches.length > limit ? [`Only the first ${limit} matches are included.`] : undefined
@@ -641,6 +666,13 @@ export function registerCatalogTools(
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     getAuditTargetIds: args => [args.account_id],
     handler: async (args, context: ServerContext) => {
+      if (isCentralAccount(args.account_id)) {
+        return toolError('CENTRAL_ACCOUNT_CREDENTIALS_DENIED', 'Direct credential issuance is disabled for organization, master, monitoring, deployment, payer, and proforma accounts.')
+      }
+      const eligibility = await validateMcpIdentityCenterCredentialRequest(principal, args.session_id, args.account_id, args.role_name)
+      if (eligibility.environment !== args.environment) {
+        return toolError('IDC_ENVIRONMENT_MISMATCH', `The Identity Center session is for ${eligibility.environment}, not ${args.environment}.`)
+      }
       let displayName = args.account_id
       try {
         displayName = accountDisplayName((await resolveAccount(args.account_id)).account)
@@ -675,21 +707,101 @@ export function registerCatalogTools(
 
   read({
     name: 'ghost.resources.search', title: 'Search AWS resources', description: 'Search live AWS Config aggregate inventory across GHOST accounts with resource, region, compliance, and tag filters. This is deployment inventory, not the authoritative source for documented catalogs such as golden AMIs; call ghost.docs.search first for those questions.',
-    inputSchema: z.object({ account_identifiers: accountIdentifiersSchema, resource_types: z.array(z.string()).max(20).default([]), regions: z.array(z.string()).max(20).default([]), resource_id: z.string().optional(), resource_name: z.string().optional(), limit: z.number().int().min(1).max(100).default(25) }),
+    inputSchema: z.object({
+      account: flexibleStringListSchema,
+      account_identifiers: flexibleStringListSchema,
+      environment: flexibleEnvironmentSchema,
+      resource_type: flexibleStringListSchema,
+      resource_types: flexibleStringListSchema,
+      region: flexibleStringListSchema,
+      regions: flexibleStringListSchema,
+      query: z.string().optional(),
+      resource_id: z.string().optional(),
+      resource_name: z.string().optional(),
+      limit: flexibleIntegerSchema
+    }),
+    getAuditTargetIds: args => stringList(accountInput(args)),
     handler: async args => {
-      const ids = await commercialIds(args.account_identifiers)
-      const result = await queryConfigResources(ids, { resourceTypes: args.resource_types, regions: args.regions, resourceId: args.resource_id, resourceName: args.resource_name }, { mode: 'preview', limit: args.limit })
-      return toolSuccess(result, `Loaded ${result.records.length} AWS resource(s).`, 'AWS Config')
+      const scope = await resolveOperationalScope(accountInput(args), args.environment)
+      const limit = boundedInteger(args.limit, { name: 'limit', minimum: 1, maximum: 100, fallback: 25 })
+      const filters = {
+        resourceTypes: resourceTypes(args.resource_type ?? args.resource_types),
+        regions: stringList(args.region ?? args.regions),
+        resourceId: args.resource_id,
+        resourceName: args.resource_name || args.query
+      }
+      const result = await queryConfigResources(scope.operationalAccountIds, filters, { mode: 'preview', limit, environment: scope.environment })
+      const guidance = scope.accounts.length === 1
+        ? await advancedQueryGuidance(principal, scope.accounts[0]!, `npm run ghost:aws -- config list-discovered-resources --resource-type ${filters.resourceTypes[0] || '<AWS::Resource::Type>'} --region ${scope.environment === 'govcloud' ? 'us-gov-west-1' : 'us-east-1'} --output json`)
+        : []
+      return toolSuccess(result, `Loaded ${result.records.length} AWS resource(s).`, 'AWS Config', {
+        warnings: result.hasMore ? ['Results are bounded. Narrow the filters or use a dataset export for complete inventory.'] : undefined,
+        resolvedScope: scopeMetadata(scope),
+        appliedFilters: filters,
+        guidance
+      })
     }
   })
 
+  const instanceSearchSchema = z.object({
+    account: flexibleStringListSchema,
+    account_identifiers: flexibleStringListSchema,
+    environment: flexibleEnvironmentSchema,
+    query: z.string().optional(),
+    instance_id: z.string().optional(),
+    state: flexibleStringListSchema,
+    region: flexibleStringListSchema,
+    regions: flexibleStringListSchema,
+    limit: flexibleIntegerSchema
+  })
+
+  const searchInstances = async (args: any) => {
+    const scope = await resolveOperationalScope(accountInput(args), args.environment, { requireAccount: true })
+    const limit = boundedInteger(args.limit, { name: 'limit', minimum: 1, maximum: 100, fallback: 25 })
+    const states = stringList(args.state).map(value => value.toLowerCase())
+    const regions = stringList(args.region ?? args.regions)
+    const result = await queryConfigResources(scope.operationalAccountIds, {
+      resourceTypes: ['AWS::EC2::Instance'],
+      regions,
+      resourceId: args.instance_id,
+      resourceName: args.instance_id ? undefined : args.query
+    }, { mode: 'preview', limit: states.length ? 100 : limit, environment: scope.environment })
+    const records = result.records.map(resource => {
+      const configuration = resource.configuration || {}
+      return {
+        instanceId: resource.resourceId,
+        name: resource.tags?.Name || resource.resourceName,
+        state: configuration.state?.name || 'unknown',
+        instanceType: configuration.instanceType,
+        region: resource.region,
+        privateIpAddress: configuration.privateIpAddress,
+        publicIpAddress: configuration.publicIpAddress,
+        configurationItemCaptureTime: resource.configurationItemCaptureTime,
+        accountId: resource.accountId,
+        accountName: resource.accountName
+      }
+    }).filter(record => !states.length || states.includes(record.state.toLowerCase())).slice(0, limit)
+    const guidance = await advancedQueryGuidance(principal, scope.accounts[0]!, `npm run ghost:aws -- ec2 describe-instances --region ${regions[0] || (scope.environment === 'govcloud' ? 'us-gov-west-1' : 'us-east-1')} --output json`)
+    return toolSuccess({ records, hasMore: result.hasMore || records.length >= limit }, `Loaded ${records.length} EC2 instance(s).`, 'AWS Config', {
+      warnings: result.hasMore ? ['Results are bounded. Narrow the account, region, state, or name filters for complete inventory.'] : undefined,
+      resolvedScope: scopeMetadata(scope),
+      appliedFilters: { query: args.query, instanceId: args.instance_id, states, regions, limit },
+      guidance
+    })
+  }
+
   read({
-    name: 'ghost.instances.get', title: 'Get an EC2 instance', description: 'Find one EC2 instance by exact instance ID in AWS Config and optional account scope.',
+    name: 'ghost.instances.search', title: 'Search EC2 instances',
+    description: 'Use this to list or find current EC2 instances in one GHOST account. Accepts account names, aliases, emails, request IDs, Commercial IDs, or GovCloud IDs.',
+    inputSchema: instanceSearchSchema,
+    getAuditTargetIds: args => stringList(accountInput(args)),
+    handler: searchInstances
+  })
+
+  read({
+    name: 'ghost.instances.get', title: 'Legacy: Get an EC2 instance', description: 'Compatibility alias for ghost.instances.search. Prefer ghost.instances.search for exact lookup or listing.',
     inputSchema: z.object({ instance_id: z.string().regex(/^i-[0-9a-f]{8,17}$/), account_identifiers: accountIdentifiersSchema }),
-    handler: async args => {
-      const result = await queryConfigResources(await commercialIds(args.account_identifiers), { resourceTypes: ['AWS::EC2::Instance'], resourceId: args.instance_id }, { mode: 'preview', limit: 10 })
-      return result.records.length ? toolSuccess(result.records, `Found ${result.records.length} instance record(s).`, 'AWS Config') : toolError('INSTANCE_NOT_FOUND', 'Instance was not found in the Config aggregator.')
-    }
+    handler: async args => searchInstances({ instance_id: args.instance_id, account_identifiers: args.account_identifiers, limit: 10 })
   })
 
   read({
@@ -744,20 +856,74 @@ export function registerCatalogTools(
 
   read({
     name: 'ghost.security.findings', title: 'Query security findings', description: 'Query a bounded subset of current Security Hub findings across selected accounts. Do not treat the returned page count as the account-wide finding total; use ghost.security.summary for that.',
-    inputSchema: z.object({ account_identifiers: accountIdentifiersSchema, severities: z.array(z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFORMATIONAL'])).default([]), statuses: z.array(z.enum(['NEW', 'NOTIFIED', 'RESOLVED', 'SUPPRESSED'])).default([]), lookback_days: z.number().int().min(1).max(90).default(30), limit: z.number().int().min(1).max(100).default(25) }),
+    inputSchema: z.object({ account_identifiers: accountIdentifiersSchema, severities: flexibleStringListSchema, statuses: flexibleStringListSchema, lookback_days: flexibleIntegerSchema, limit: flexibleIntegerSchema }),
     handler: async args => {
-      const result = await querySecurityHubFindings(await commercialIds(args.account_identifiers), { severities: args.severities, statuses: args.statuses, lookbackDays: args.lookback_days }, { mode: 'preview', limit: args.limit })
+      const severities = enumList(args.severities, ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFORMATIONAL'] as const, 'severities')
+      const statuses = enumList(args.statuses, ['NEW', 'NOTIFIED', 'RESOLVED', 'SUPPRESSED'] as const, 'statuses')
+      const lookbackDays = boundedInteger(args.lookback_days, { name: 'lookback_days', minimum: 1, maximum: 90, fallback: 30 })
+      const limit = boundedInteger(args.limit, { name: 'limit', minimum: 1, maximum: 100, fallback: 25 })
+      const result = await querySecurityHubFindings(await commercialIds(args.account_identifiers), { severities, statuses, lookbackDays }, { mode: 'preview', limit })
       return toolSuccess(result, `Loaded ${result.records.length} security finding(s).`, 'AWS Security Hub')
     }
   })
 
-  read({
-    name: 'ghost.audit.cloudtrail', title: 'Query CloudTrail activity', description: 'Query bounded CloudTrail activity for selected accounts, users, services, events, or errors.',
-    inputSchema: z.object({ account_identifiers: accountIdentifiersSchema, event_names: z.array(z.string()).max(20).default([]), event_sources: z.array(z.string()).max(20).default([]), user_identities: z.array(z.string()).max(20).default([]), errors_only: z.boolean().default(false), write_events_only: z.boolean().default(false), lookback_days: z.number().int().min(1).max(90).default(7), limit: z.number().int().min(1).max(100).default(25) }),
-    handler: async args => {
-      const result = await queryCloudTrailEvents(await commercialIds(args.account_identifiers), { eventNames: args.event_names, eventSources: args.event_sources, userIdentities: args.user_identities, errorsOnly: args.errors_only, writeEventsOnly: args.write_events_only, lookbackDays: args.lookback_days }, { mode: 'preview', limit: args.limit })
-      return toolSuccess(result, `Loaded ${result.records.length} CloudTrail event(s).`, 'AWS CloudTrail')
+  const auditSearchSchema = z.object({
+    account: flexibleStringListSchema,
+    account_identifiers: flexibleStringListSchema,
+    environment: flexibleEnvironmentSchema,
+    event_name: flexibleStringListSchema,
+    event_names: flexibleStringListSchema,
+    service: flexibleStringListSchema,
+    event_sources: flexibleStringListSchema,
+    user: flexibleStringListSchema,
+    user_identities: flexibleStringListSchema,
+    region: flexibleStringListSchema,
+    regions: flexibleStringListSchema,
+    errors_only: flexibleBooleanSchema,
+    write_only: flexibleBooleanSchema,
+    write_events_only: flexibleBooleanSchema,
+    lookback_days: flexibleIntegerSchema,
+    limit: flexibleIntegerSchema,
+    cursor: z.string().optional()
+  })
+  const searchAudit = async (args: any) => {
+    const scope = await resolveOperationalScope(accountInput(args), args.environment, { requireAccount: true })
+    const lookbackDays = boundedInteger(args.lookback_days, { name: 'lookback_days', minimum: 1, maximum: 90, fallback: 7 })
+    const limit = boundedInteger(args.limit, { name: 'limit', minimum: 1, maximum: 100, fallback: 25 })
+    const filters = {
+      eventNames: stringList(args.event_name ?? args.event_names),
+      eventSources: stringList(args.service ?? args.event_sources),
+      userIdentities: stringList(args.user ?? args.user_identities),
+      regions: stringList(args.region ?? args.regions),
+      errorsOnly: booleanValue(args.errors_only),
+      writeEventsOnly: booleanValue(args.write_only ?? args.write_events_only),
+      lookbackDays
     }
+    const result = await queryCloudTrailEvents(scope.operationalAccountIds, filters, {
+      mode: 'preview', environment: scope.environment, limit, cursor: args.cursor
+    })
+    return toolSuccess(result, `Loaded ${result.records.length} organization CloudTrail event(s).`, 'AWS CloudWatch Logs organization CloudTrail', {
+      warnings: result.hasMore ? ['More matching events are available; use the returned cursor to continue.'] : undefined,
+      nextCursor: result.nextCursor,
+      resolvedScope: scopeMetadata(scope),
+      appliedFilters: filters
+    })
+  }
+
+  read({
+    name: 'ghost.audit.search', title: 'Search organization CloudTrail logs',
+    description: 'Use this to search account-scoped CloudTrail events in the organization trail CloudWatch log group. Accepts friendly account references and scalar or list filters.',
+    inputSchema: auditSearchSchema,
+    getAuditTargetIds: args => stringList(accountInput(args)),
+    handler: searchAudit
+  })
+
+  read({
+    name: 'ghost.audit.cloudtrail', title: 'Legacy: Query CloudTrail activity',
+    description: 'Compatibility alias for ghost.audit.search. Queries the organization trail CloudWatch log group, not CloudTrail LookupEvents.',
+    inputSchema: auditSearchSchema,
+    getAuditTargetIds: args => stringList(accountInput(args)),
+    handler: searchAudit
   })
 
   read({
@@ -805,7 +971,57 @@ export function registerCatalogTools(
   })
 
   read({
-    name: 'ghost.pipelines.for_account', title: 'Get account pipelines', description: 'Return recent pipeline runs touching one AWS account.',
+    name: 'ghost.pipelines.search', title: 'Search pipeline activity',
+    description: 'Use this for pipeline overview, account runs, or Terraform resource search. Account names and either AWS account ID are accepted.',
+    inputSchema: z.object({
+      account: flexibleStringListSchema,
+      environment: flexibleEnvironmentSchema,
+      query: z.string().optional(),
+      days: flexibleIntegerSchema,
+      limit: flexibleIntegerSchema
+    }),
+    getAuditTargetIds: args => stringList(args.account),
+    handler: async args => {
+      const days = boundedInteger(args.days, { name: 'days', minimum: 1, maximum: 90, fallback: 30 })
+      const limit = boundedInteger(args.limit, { name: 'limit', minimum: 1, maximum: 100, fallback: 25 })
+      if (args.environment && String(args.environment).toLowerCase() !== 'auto' && operationalEnvironment(args.environment) !== 'govcloud') {
+        const error = new Error('Pipeline telemetry is stored in GovCloud; environment must be auto or govcloud.')
+        error.name = 'INVALID_ENVIRONMENT'
+        throw error
+      }
+      const scope = await resolveOperationalScope(args.account, 'govcloud')
+      if (args.query) {
+        if (scope.accounts.length > 1) {
+          const error = new Error('Pipeline resource search accepts one account at a time.')
+          error.name = 'TOO_MANY_ACCOUNTS'
+          throw error
+        }
+        const result = await searchResourceAcrossAccounts(args.query, days, scope.operationalAccountIds[0], 'govcloud')
+        return toolSuccess({ mode: 'resource_search', result }, 'Pipeline resource search complete.', 'Athena pipeline telemetry', {
+          resolvedScope: scopeMetadata(scope), appliedFilters: { query: args.query, days }
+        })
+      }
+      if (scope.accounts.length) {
+        const accounts = await Promise.all(scope.accounts.map(async account => ({
+          account,
+          runs: await getPipelineRunsForAccount(account.selectedAccountId, days, 'govcloud', limit)
+        })))
+        return toolSuccess({ mode: 'account_runs', accounts }, 'Account pipeline runs loaded.', 'Athena pipeline telemetry', {
+          resolvedScope: scopeMetadata(scope), appliedFilters: { days, limit }
+        })
+      }
+      const [summary, timeline] = await Promise.all([
+        getOrganizationSummary(days, 'govcloud'),
+        getOrganizationTimeline(days, limit, 'govcloud')
+      ])
+      return toolSuccess({ mode: 'overview', summary, timeline }, 'Pipeline overview loaded.', 'Athena pipeline telemetry', {
+        resolvedScope: scopeMetadata(scope), appliedFilters: { days, limit }
+      })
+    }
+  })
+
+  read({
+    name: 'ghost.pipelines.for_account', title: 'Legacy: Get account pipelines', description: 'Compatibility alias. Prefer ghost.pipelines.search with an account.',
     inputSchema: z.object({ account_id: z.string(), days: z.number().int().min(1).max(90).default(30), limit: z.number().int().min(1).max(100).default(25) }),
     handler: async args => toolSuccess(await getPipelineRunsForAccount(args.account_id, args.days, 'govcloud', args.limit), 'Account pipeline runs loaded.', 'Athena pipeline telemetry')
   })
@@ -817,7 +1033,7 @@ export function registerCatalogTools(
   })
 
   read({
-    name: 'ghost.pipelines.search_resources', title: 'Search pipeline resources', description: 'Search planned or applied Terraform resources across account pipelines.',
+    name: 'ghost.pipelines.search_resources', title: 'Legacy: Search pipeline resources', description: 'Compatibility alias. Prefer ghost.pipelines.search with a query.',
     inputSchema: z.object({ query: z.string().min(1), account_id: z.string().optional(), days: z.number().int().min(1).max(90).default(30) }),
     handler: async args => toolSuccess(await searchResourceAcrossAccounts(args.query, args.days, args.account_id, 'govcloud'), 'Pipeline resource search complete.', 'Athena pipeline telemetry')
   })
