@@ -37,6 +37,30 @@ const DEFAULT_LOOKBACK_DAYS = 7
 const MAX_LOOKBACK_DAYS = 365  // Security Lake can store much longer history
 
 /**
+ * Classify a Security Lake Athena failure into a coarse category for logging
+ * and alerting. This does not change control flow - it only annotates the
+ * failure so operators can tell an infrastructure timeout apart from a corrupt
+ * external Parquet object (ICEBERG_BAD_DATA) or a schema/query error.
+ */
+function classifySecurityLakeFailure(error: unknown): 'timeout' | 'iceberg_bad_data' | 'query_canceled' | 'schema_or_query' | 'unknown' {
+  const message = error instanceof Error ? error.message : String(error ?? '')
+  const lower = message.toLowerCase()
+
+  if (lower.includes('timeout') || lower.includes('exceeded maximum wait time')) return 'timeout'
+  if (lower.includes('iceberg_bad_data') || lower.includes('bad data')) return 'iceberg_bad_data'
+  if (lower.includes('canceled') || lower.includes('cancelled')) return 'query_canceled'
+  if (
+    lower.includes('column') ||
+    lower.includes('schema') ||
+    lower.includes('syntax') ||
+    lower.includes('type_mismatch') ||
+    lower.includes('cannot be resolved')
+  ) return 'schema_or_query'
+
+  return 'unknown'
+}
+
+/**
  * Normalize Security Lake OCSF CloudTrail event to our simplified record format
  *
  * Security Lake stores CloudTrail in OCSF format with most data in the 'unmapped' field.
@@ -218,10 +242,16 @@ async function querySecurityLakeForEvents(
   let activeClient: Awaited<ReturnType<typeof getAthenaClient>> | undefined
   let activeQueryId: string | undefined
 
+  // Failure-context tracking (used by the catch block for structured logging).
+  const queryStartedAt = Date.now()
+  const region = environment === 'govcloud' ? 'us-gov-west-1' : 'us-east-1'
+  let tableName = ''
+  let pollAttempts = 0
+  let timedOut = false
+
   try {
     // Get environment configuration
     const config = getEnvironmentConfig(environment)
-    const region = environment === 'govcloud' ? 'us-gov-west-1' : 'us-east-1'
 
     // Get Athena client for Security Lake account
     const client = await getAthenaClient(environment, region, config.monitoringAccountId)
@@ -233,7 +263,7 @@ async function querySecurityLakeForEvents(
 
     // Build table name from Security Lake
     // Map to the data source identifier used in Security Lake
-    const tableName = buildTableName(environment, 'cloud_trail_mgmt')
+    tableName = buildTableName(environment, 'cloud_trail_mgmt')
 
     // Build WHERE clause
     const whereClause = buildWhereClause(filters, accountIds, startEpoch, endEpoch)
@@ -298,11 +328,11 @@ async function querySecurityLakeForEvents(
 
     // Poll for query completion
     let queryStatus = 'RUNNING'
-    let attempts = 0
     const maxAttempts = 60 // 60 attempts * 2 seconds = 2 minutes max wait
 
     while (queryStatus === 'RUNNING' || queryStatus === 'QUEUED') {
-      if (attempts >= maxAttempts) {
+      if (pollAttempts >= maxAttempts) {
+        timedOut = true
         await client.send(new StopQueryExecutionCommand({ QueryExecutionId: queryExecutionId })).catch(() => undefined)
         throw new Error('Athena query timeout - exceeded maximum wait time')
       }
@@ -320,7 +350,7 @@ async function querySecurityLakeForEvents(
           reject(options.signal?.reason || new Error('Query canceled'))
         }, { once: true })
       })
-      attempts++
+      pollAttempts++
 
       const statusCommand = new GetQueryExecutionCommand({
         QueryExecutionId: queryExecutionId
@@ -337,15 +367,15 @@ async function querySecurityLakeForEvents(
       logger.debug('[CloudTrail Security Lake] Query status', {
         queryExecutionId,
         status: queryStatus,
-        attempts
+        attempts: pollAttempts
       })
-      await options.onProgress?.({ phase: 'cloudtrail', processed: attempts })
+      await options.onProgress?.({ phase: 'cloudtrail', processed: pollAttempts })
     }
 
     logger.info('[CloudTrail Security Lake] Query completed', {
       queryExecutionId,
-      attempts,
-      durationSeconds: attempts * 2
+      attempts: pollAttempts,
+      durationSeconds: pollAttempts * 2
     })
 
     // Athena returns at most 1,000 rows per page; cause rollups can span many pages.
@@ -408,13 +438,30 @@ async function querySecurityLakeForEvents(
     activeQueryId = undefined
     await options.onAthenaQuery?.(null)
   } catch (error: any) {
-    if (activeClient && activeQueryId && options.signal?.aborted) {
+    const classification = classifySecurityLakeFailure(error)
+
+    // Stop any still-active query so it does not keep consuming Athena capacity.
+    // Previously we only stopped signal-aborted queries; a timeout (or any other
+    // failure that leaves the query running) must also be stopped explicitly.
+    // StopQueryExecution is idempotent for already-finished/stopped queries.
+    if (activeClient && activeQueryId && (options.signal?.aborted || timedOut || classification !== 'query_canceled')) {
       await activeClient.send(new StopQueryExecutionCommand({ QueryExecutionId: activeQueryId })).catch(() => undefined)
     }
     await options.onAthenaQuery?.(null)
+
+    // Structured failure context for operators. We deliberately avoid logging the
+    // SQL text or any event payloads - only stable identifiers and metrics.
     logger.error('[CloudTrail Security Lake] Query failed', {
-      error: (error instanceof Error ? error.message : String(error)),
-      stack: (error instanceof Error ? error.stack : String(error))
+      classification,
+      queryExecutionId: activeQueryId,
+      environment,
+      region,
+      table: tableName,
+      accountCount: accountIds.length,
+      attempts: pollAttempts,
+      timedOut,
+      durationMs: Date.now() - queryStartedAt,
+      error: (error instanceof Error ? error.message : String(error))
     })
     throw new Error(`CloudTrail query failed: ${(error instanceof Error ? error.message : String(error))}`, { cause: error })
   }

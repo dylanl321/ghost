@@ -123,6 +123,29 @@ function sanitizeSqlString(input: string): string {
 }
 
 /**
+ * Produce a type-safe, injection-safe SQL literal for a pipeline ID.
+ *
+ * The deployed Glue columns (plan_pipeline_id / pipeline_id) are varchar even
+ * though GitLab pipeline IDs are numeric, so comparing against a bare numeric
+ * literal (e.g. `plan_pipeline_id = 123`) triggers a Presto/Athena
+ * TYPE_MISMATCH: `Cannot apply operator: varchar = integer`.
+ *
+ * We normalize the incoming value to a trimmed string, reject anything that is
+ * not a plausible GitLab pipeline ID (digits only), then emit a single-quoted,
+ * escaped string literal so the comparison stays `varchar = varchar`.
+ */
+export function sanitizePipelineId(pipelineId: string | number): string {
+  const normalized = String(pipelineId).trim()
+  // GitLab pipeline IDs are numeric; enforce this to avoid injection and to
+  // fail fast on obviously invalid input rather than issuing a broken query.
+  if (!/^\d+$/.test(normalized)) {
+    throw new Error('Invalid pipeline ID: expected a numeric identifier')
+  }
+  // Preserve the string form (varchar column) and escape defensively.
+  return `'${sanitizeSqlString(normalized)}'`
+}
+
+/**
  * Execute an Athena SQL query and return results
  */
 async function executeAthenaQuery(
@@ -843,9 +866,11 @@ export async function getAccountPlansForPipeline(
 ): Promise<AccountPlan[]> {
   const cacheKey = `pipelines:plans:${pipelineId}`
   const config = getPipelineEnvironmentConfig(environment)
+  const pipelineIdLiteral = sanitizePipelineId(pipelineId)
 
   // Query needs partition filtering for Athena - use a 90 day lookback
-  // Note: plan_pipeline_id is a numeric column
+  // Note: plan_pipeline_id is a varchar column in the deployed Glue schema,
+  // so compare against a quoted string literal to avoid a TYPE_MISMATCH.
   const sql = `
     SELECT
       account_id,
@@ -862,7 +887,7 @@ export async function getAccountPlansForPipeline(
       failure_reason
     FROM ${config.database}.account_plans
     WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -90, current_date), '%Y%m')
-      AND plan_pipeline_id = ${pipelineId}
+      AND plan_pipeline_id = ${pipelineIdLiteral}
     ORDER BY plan_created_at ASC
   `
 
@@ -895,7 +920,9 @@ export async function getResourceChangesForPipeline(
 
     // Query resources for each account with this pipeline_id
     const config = getPipelineEnvironmentConfig(environment)
-    const accountIdList = accountIds.map(id => `'${id}'`).join(',')
+    const accountIdList = accountIds.map(id => `'${sanitizeSqlString(id)}'`).join(',')
+    // plan_pipeline_id is varchar in the deployed schema - compare as a string.
+    const pipelineIdLiteral = sanitizePipelineId(pipelineId)
 
     const sql = `
       SELECT
@@ -910,7 +937,7 @@ export async function getResourceChangesForPipeline(
       FROM ${config.database}.resource_changes
       WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -90, current_date), '%Y%m')
         AND account_id IN (${accountIdList})
-        AND plan_pipeline_id = ${pipelineId}
+        AND plan_pipeline_id = ${pipelineIdLiteral}
       LIMIT ${limit}
     `
 
@@ -934,9 +961,11 @@ export async function getErrorDetailsForPipeline(
 ): Promise<ErrorDetail[]> {
   const cacheKey = `pipelines:errors:${pipelineId}`
   const config = getPipelineEnvironmentConfig(environment)
+  const pipelineIdLiteral = sanitizePipelineId(pipelineId)
 
   // Query needs partition filtering for Athena - use a 90 day lookback
-  // Note: pipeline_id is a numeric column
+  // Note: pipeline_id is a varchar column in the deployed Glue schema,
+  // so compare against a quoted string literal to avoid a TYPE_MISMATCH.
   const sql = `
     SELECT
       pipeline_id,
@@ -949,7 +978,7 @@ export async function getErrorDetailsForPipeline(
       error_resource_type
     FROM ${config.database}.error_details
     WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -90, current_date), '%Y%m')
-      AND pipeline_id = ${pipelineId}
+      AND pipeline_id = ${pipelineIdLiteral}
     ORDER BY timestamp ASC
   `
 
@@ -986,7 +1015,9 @@ export async function getModuleBreakdownForPipeline(
 
     // Query module breakdown for these accounts with this pipeline_id
     const config = getPipelineEnvironmentConfig(environment)
-    const accountIdList = accountIds.map(id => `'${id}'`).join(',')
+    const accountIdList = accountIds.map(id => `'${sanitizeSqlString(id)}'`).join(',')
+    // plan_pipeline_id is varchar in the deployed schema - compare as a string.
+    const pipelineIdLiteral = sanitizePipelineId(pipelineId)
 
     const sql = `
       SELECT
@@ -998,7 +1029,7 @@ export async function getModuleBreakdownForPipeline(
       FROM ${config.database}.resource_changes
       WHERE CONCAT(year, LPAD(month, 2, '0')) >= date_format(date_add('day', -90, current_date), '%Y%m')
         AND account_id IN (${accountIdList})
-        AND plan_pipeline_id = ${pipelineId}
+        AND plan_pipeline_id = ${pipelineIdLiteral}
       GROUP BY module_name
       ORDER BY total_changes DESC
       LIMIT 500

@@ -96,10 +96,18 @@ export default defineEventHandler(async (event) => {
       endDate
     }
   } catch (error: any) {
-    logger.error('[Admin] Error fetching user streaming metrics:', error)
+    // The streaming metrics table is an optional/undeployed dependency in some
+    // environments. Classify ResourceNotFound as expected and log a single
+    // warning (not an error/fatal stack trace) so it doesn't pollute alerting.
+    const isResourceNotFound = error?.name === 'ResourceNotFoundException' ||
+      error?.message?.includes('Requested resource not found')
 
-    if (error.name === 'ResourceNotFoundException' || error.message?.includes('Requested resource not found')) {
-      logger.warn(`[Admin] Streaming metrics table ${TABLE_NAME} is not deployed; returning an empty user list`)
+    if (isResourceNotFound) {
+      logger.warn('[Admin] Streaming metrics table is not deployed; returning an empty user list', {
+        route: '/api/admin/streaming/users',
+        table: TABLE_NAME,
+        period
+      })
       return {
         success: true,
         users: [],
@@ -110,6 +118,7 @@ export default defineEventHandler(async (event) => {
       }
     }
 
+    logger.error('[Admin] Error fetching user streaming metrics:', error)
     throw createError({
       statusCode: 500,
       message: 'Failed to fetch user streaming metrics'
