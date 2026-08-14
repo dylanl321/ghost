@@ -1,6 +1,9 @@
 import { randomBytes } from 'node:crypto'
 
 const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]']
+const DEFAULT_OAUTH_AUTHORIZATION_TTL_DAYS = 90
+const MIN_OAUTH_AUTHORIZATION_TTL_DAYS = 1
+const MAX_OAUTH_AUTHORIZATION_TTL_DAYS = 365
 
 export function isProductionEnvironment(): boolean {
   return ['production', 'prod'].includes((process.env.NODE_ENV || '').toLowerCase())
@@ -21,6 +24,14 @@ export function getMcpResourceUrl(): URL {
 
 export function getOAuthIssuer(): string {
   return (process.env.GHOST_OAUTH_ISSUER || getGhostBaseUrl().origin).replace(/\/$/, '')
+}
+
+export function getOAuthAuthorizationTtlSeconds(): number {
+  const configured = Number(process.env.GHOST_OAUTH_AUTHORIZATION_TTL_DAYS || '')
+  const days = Number.isInteger(configured) && configured > 0
+    ? Math.min(MAX_OAUTH_AUTHORIZATION_TTL_DAYS, Math.max(MIN_OAUTH_AUTHORIZATION_TTL_DAYS, configured))
+    : DEFAULT_OAUTH_AUTHORIZATION_TTL_DAYS
+  return days * 24 * 60 * 60
 }
 
 export function getAllowedMcpHosts(): string[] {

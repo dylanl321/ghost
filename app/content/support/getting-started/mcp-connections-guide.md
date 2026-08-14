@@ -51,12 +51,21 @@ Connecting Codex does not grant access to additional AWS accounts or roles. Cred
 
 ### Failed to reauthenticate or not logged in
 
-1. Close Codex completely.
-2. Run the login command shown on [MCP Connections](/chat/mcp) again.
-3. Complete the browser authorization.
-4. Reopen Codex and start a new task.
+**Codex desktop app**
 
-If the problem continues, sign out with <code>codex mcp logout ghost</code>, then sign in again.
+1. Open **Settings**, then **MCP servers**.
+2. Open the GHOST connection and select **Authenticate**.
+3. Complete the browser authorization.
+4. Restart Codex and open a new task.
+
+**Codex CLI**
+
+    codex mcp logout ghost
+    codex mcp login ghost
+
+Complete the browser authorization, then start a new Codex task.
+
+An authorization is valid for 90 days. Reconnecting replaces rejected or legacy credentials; GHOST cannot safely reactivate an invalid refresh token in place.
 
 ### GHOST does not appear in Codex
 

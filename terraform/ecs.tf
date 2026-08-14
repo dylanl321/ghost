@@ -272,6 +272,10 @@ resource "aws_ecs_task_definition" "main" {
           value = aws_dynamodb_table.oauth_artifacts.name
         },
         {
+          name  = "GHOST_OAUTH_AUTHORIZATION_TTL_DAYS"
+          value = "90"
+        },
+        {
           name  = "GHOST_MCP_AUDIT_TABLE_NAME"
           value = aws_dynamodb_table.mcp_audit.name
         },

@@ -4,7 +4,7 @@ import { isIP } from 'node:net'
 import { exportJWK, generateKeyPair, type JWK } from 'jose'
 import Provider from 'oidc-provider'
 import { logger } from '../../utils/logger'
-import { getGhostBaseUrl, getMcpResourceUrl, getOAuthCookieKeys, getOAuthIssuer, isProductionEnvironment, useDurableOAuthStore } from '../config'
+import { getGhostBaseUrl, getMcpResourceUrl, getOAuthAuthorizationTtlSeconds, getOAuthCookieKeys, getOAuthIssuer, isProductionEnvironment, useDurableOAuthStore } from '../config'
 import { GHOST_MCP_SCOPES } from '../types'
 import { DynamoOidcAdapter } from './adapter'
 import { deleteMcpGraphDelegation } from './delegated-graph'
@@ -12,6 +12,16 @@ import { getGhostMcpIdentity } from './identity'
 
 let providerPromise: Promise<Provider> | undefined
 export const GHOST_REFRESH_TOKEN_ROTATION = false
+
+export type GhostRefreshFailureReason =
+  | 'token_not_found'
+  | 'token_expired'
+  | 'token_reused'
+  | 'grant_not_found'
+  | 'grant_expired'
+  | 'client_mismatch'
+  | 'account_missing'
+  | 'other'
 
 interface RefreshTokenClient {
   applicationType?: string
@@ -23,6 +33,32 @@ export function shouldIssueGhostRefreshToken(client: RefreshTokenClient): boolea
   return client.applicationType === 'native' &&
     client.clientAuthMethod === 'none' &&
     client.grantTypeAllowed('refresh_token')
+}
+
+export function classifyGhostRefreshFailure(error: { error_detail?: unknown; message?: unknown }): GhostRefreshFailureReason {
+  const detail = String(error.error_detail || error.message || '').toLowerCase()
+  if (detail.includes('refresh token not found')) return 'token_not_found'
+  if (detail.includes('refresh token is expired')) return 'token_expired'
+  if (detail.includes('refresh token already used') || detail.includes('already consumed')) return 'token_reused'
+  if (detail.includes('grant not found')) return 'grant_not_found'
+  if (detail.includes('grant is expired')) return 'grant_expired'
+  if (detail.includes('client mismatch')) return 'client_mismatch'
+  if (detail.includes('referenced account not found')) return 'account_missing'
+  return 'other'
+}
+
+export function createGhostRefreshEvent(status: 'success' | 'failure', reason?: GhostRefreshFailureReason, timestamp = new Date().toISOString()) {
+  return {
+    type: 'mcp_oauth' as const,
+    event: 'refresh' as const,
+    timestamp,
+    status,
+    ...(reason ? { reason } : {})
+  }
+}
+
+function recordRefreshEvent(status: 'success' | 'failure', reason?: GhostRefreshFailureReason): void {
+  process.stdout.write(JSON.stringify(createGhostRefreshEvent(status, reason)) + '\n')
 }
 
 function isPrivateAddress(address: string): boolean {
@@ -59,13 +95,19 @@ async function loadJwks(): Promise<{ keys: JWK[] }> {
   return { keys: [jwk] }
 }
 
-async function createProvider(): Promise<Provider> {
-  const issuer = getOAuthIssuer()
-  const resource = getMcpResourceUrl().href
-  const jwks = await loadJwks()
-  const configuration: any = {
-    adapter: useDurableOAuthStore() ? DynamoOidcAdapter : undefined,
-    clients: [],
+export function createGhostOAuthConfiguration(input: {
+  resource: string
+  jwks: { keys: JWK[] }
+  adapter?: any
+  clients?: Array<Record<string, unknown>>
+  findAccount?: (ctx: unknown, subject: string) => Promise<any>
+  extraTokenClaims?: (ctx: unknown, token: { accountId?: string }) => Promise<Record<string, unknown>>
+}): any {
+  const { resource, jwks } = input
+  const authorizationTtl = getOAuthAuthorizationTtlSeconds()
+  return {
+    adapter: input.adapter,
+    clients: input.clients || [],
     jwks,
     cookies: {
       keys: getOAuthCookieKeys(),
@@ -79,20 +121,13 @@ async function createProvider(): Promise<Provider> {
     clientAuthMethods: ['none'],
     pkce: { required: () => true, methods: ['S256'] },
     scopes: ['openid', 'offline_access', ...GHOST_MCP_SCOPES],
-    // Codex uses the MCP consent screen without sending OIDC prompt=consent, which
-    // makes oidc-provider strip offline_access before its default refresh policy.
+    // Codex omits prompt=consent, so explicitly issue refresh tokens to native public clients.
     issueRefreshToken: async (_ctx: unknown, client: RefreshTokenClient) => shouldIssueGhostRefreshToken(client),
-    // Codex stores MCP credentials locally. A rotating token is consumed before
-    // the client has durably saved its replacement, making startup retries fail
-    // if that persistence step is interrupted. Keep the 30-day token stable.
+    // A stable token avoids consuming the credential before Codex persists a rotated replacement.
     rotateRefreshToken: GHOST_REFRESH_TOKEN_ROTATION,
     features: {
       devInteractions: { enabled: false },
-      registration: {
-        enabled: true,
-        initialAccessToken: false,
-        issueRegistrationAccessToken: true
-      },
+      registration: { enabled: true, initialAccessToken: false, issueRegistrationAccessToken: true },
       registrationManagement: { enabled: true, rotateRegistrationAccessToken: true },
       clientIdMetadataDocument: {
         enabled: true,
@@ -107,12 +142,7 @@ async function createProvider(): Promise<Provider> {
         useGrantedResource: async () => true,
         getResourceServerInfo: async (_ctx: unknown, requestedResource: string) => {
           if (requestedResource !== resource) throw new Error('Unknown OAuth resource')
-          return {
-            scope: GHOST_MCP_SCOPES.join(' '),
-            audience: resource,
-            accessTokenTTL: 3600,
-            accessTokenFormat: 'opaque'
-          }
+          return { scope: GHOST_MCP_SCOPES.join(' '), audience: resource, accessTokenTTL: 3600, accessTokenFormat: 'opaque' }
         }
       },
       userinfo: { enabled: false },
@@ -120,62 +150,60 @@ async function createProvider(): Promise<Provider> {
       revocation: { enabled: true }
     },
     routes: {
-      authorization: '/oauth/authorize',
-      token: '/oauth/token',
-      registration: '/oauth/register',
-      jwks: '/oauth/jwks',
-      revocation: '/oauth/revoke'
+      authorization: '/oauth/authorize', token: '/oauth/token', registration: '/oauth/register',
+      jwks: '/oauth/jwks', revocation: '/oauth/revoke'
     },
-    interactions: {
-      url: (_ctx: unknown, interaction: { uid: string }) => `/oauth/consent/${interaction.uid}`
-    },
+    interactions: { url: (_ctx: unknown, interaction: { uid: string }) => `/oauth/consent/${interaction.uid}` },
     ttl: {
       AccessToken: 3600,
       AuthorizationCode: 600,
-      Grant: 30 * 24 * 60 * 60,
+      Grant: authorizationTtl,
       Interaction: 600,
-      RefreshToken: 30 * 24 * 60 * 60,
+      RefreshToken: authorizationTtl,
       Session: 8 * 60 * 60
     },
-    findAccount: async (_ctx: unknown, subject: string) => {
+    findAccount: input.findAccount || (async (_ctx: unknown, subject: string) => {
       const identity = await getGhostMcpIdentity(subject)
       if (!identity) return undefined
-      return {
-        accountId: identity.subject,
-        claims: async () => ({ sub: identity.subject, name: identity.displayName, email: identity.email })
-      }
-    },
-    extraTokenClaims: async (_ctx: unknown, token: { accountId?: string }) => {
+      return { accountId: identity.subject, claims: async () => ({ sub: identity.subject, name: identity.displayName, email: identity.email }) }
+    }),
+    extraTokenClaims: input.extraTokenClaims || (async (_ctx: unknown, token: { accountId?: string }) => {
       if (!token.accountId) return {}
       const identity = await getGhostMcpIdentity(token.accountId)
       return identity ? { oid: identity.oid, email: identity.email, name: identity.displayName, tid: identity.tenantId } : {}
-    }
+    })
   }
+}
 
-  const provider = new Provider(issuer, configuration)
-  provider.proxy = true
+export function attachGhostOAuthEvents(provider: Provider): void {
   provider.on('server_error', (_ctx: unknown, error: Error) => logger.error('[MCP OAuth] Provider error', error))
   provider.on('grant.success', (ctx: any) => {
-    if (ctx.oidc?.params?.grant_type === 'refresh_token') {
-      logger.info('[MCP OAuth] Refresh grant succeeded', { clientId: ctx.oidc.client?.clientId })
-    }
+    if (ctx.oidc?.params?.grant_type === 'refresh_token') recordRefreshEvent('success')
   })
-  provider.on('grant.error', (ctx: any, error: Error) => {
-    logger.warn('[MCP OAuth] Refresh grant failed', {
-      grantType: ctx.oidc?.params?.grant_type,
-      clientId: ctx.oidc?.client?.clientId,
-      error: error.name,
-      message: error.message
-    })
+  provider.on('grant.error', (ctx: any, error: Error & { error_detail?: unknown }) => {
+    if (ctx.oidc?.params?.grant_type === 'refresh_token') recordRefreshEvent('failure', classifyGhostRefreshFailure(error))
   })
   provider.on('grant.destroyed', (grant: { accountId?: string }) => {
     if (grant.accountId) {
-      void deleteMcpGraphDelegation(grant.accountId).catch(error => {
-        logger.error('[MCP Graph] Failed to remove delegated token after grant revocation', error)
-      })
+      void deleteMcpGraphDelegation(grant.accountId).catch(error => logger.error('[MCP Graph] Failed to remove delegated token after grant revocation', error))
     }
   })
-  logger.info('[MCP OAuth] Provider initialized', { issuer, resource, baseUrl: getGhostBaseUrl().origin })
+}
+
+async function createProvider(): Promise<Provider> {
+  const issuer = getOAuthIssuer()
+  const resource = getMcpResourceUrl().href
+  const jwks = await loadJwks()
+  const configuration = createGhostOAuthConfiguration({
+    resource,
+    jwks,
+    adapter: useDurableOAuthStore() ? DynamoOidcAdapter : undefined,
+  })
+
+  const provider = new Provider(issuer, configuration)
+  provider.proxy = true
+  attachGhostOAuthEvents(provider)
+  logger.info('[MCP OAuth] Provider initialized', { issuer, resource, authorizationTtlSeconds: getOAuthAuthorizationTtlSeconds(), baseUrl: getGhostBaseUrl().origin })
   return provider
 }
 

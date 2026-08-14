@@ -1031,6 +1031,20 @@ resource "aws_cloudwatch_log_metric_filter" "mcp_error_count" {
   }
 }
 
+resource "aws_cloudwatch_log_metric_filter" "mcp_oauth_refresh_failure" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-mcp-oauth-refresh-failure"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "{ $.type = \"mcp_oauth\" && $.event = \"refresh\" && $.status = \"failure\" }"
+
+  metric_transformation {
+    name          = "MCPOAuthRefreshFailureCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
 resource "aws_cloudwatch_log_metric_filter" "mcp_latency" {
   provider       = aws.target_deployment_account
   name           = "${var.app_name}-mcp-latency"
@@ -1058,4 +1072,36 @@ resource "aws_cloudwatch_metric_alarm" "mcp_errors_high" {
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.alerts.arn]
   ok_actions          = [aws_sns_topic.alerts.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "mcp_oauth_refresh_failures" {
+  provider            = aws.target_deployment_account
+  alarm_name          = "${var.app_name}-mcp-oauth-refresh-failures"
+  alarm_description   = "GHOST MCP OAuth refresh failures exceeded 5 in 15 minutes"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "MCPOAuthRefreshFailureCount"
+  namespace           = "${var.app_name}/Application"
+  period              = 900
+  statistic           = "Sum"
+  threshold           = 5
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+}
+
+resource "aws_cloudwatch_query_definition" "mcp_oauth_refresh_failures" {
+  provider        = aws.target_deployment_account
+  name            = "${var.app_name}/MCP OAuth Refresh Failures"
+  log_group_names = [aws_cloudwatch_log_group.ecs.name]
+
+  query_string = <<-EOT
+    fields @timestamp, status, reason
+    | filter type = "mcp_oauth" and event = "refresh"
+    | stats count(*) as attempts,
+            sum(status = "success") as successes,
+            sum(status = "failure") as failures
+      by reason, bin(15m)
+    | sort @timestamp desc
+  EOT
 }
