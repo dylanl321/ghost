@@ -20,14 +20,42 @@
 
 import { createConsola, type LogObject } from 'consola'
 
-// Map Consola numeric levels to string names
+// Map Consola numeric levels to string names.
+//
+// IMPORTANT: In Consola v3 the numeric `level` is NOT a 1:1 identifier for the
+// log type. Several types collapse onto the same number:
+//   fatal & error -> 0
+//   warn          -> 1
+//   log           -> 2
+//   info/success/ready/start/box -> 3
+//   debug         -> 4
+//   trace         -> 5
+// The previous map assumed 0='fatal', 1='error', ... which shifted every level
+// by one, so ordinary `logger.error()` calls (level 0) were serialized as
+// "fatal" and `logger.warn()` (level 1) as "error" in production JSON. We now
+// use the unambiguous `logObj.type` string as the source of truth and only fall
+// back to this numeric map (with correct v3 semantics) if type is missing.
 const LEVEL_NAMES: Record<number, string> = {
-  0: 'fatal',
-  1: 'error',
-  2: 'warn',
+  0: 'error',
+  1: 'warn',
+  2: 'log',
   3: 'info',
   4: 'debug',
   5: 'trace',
+}
+
+/**
+ * Resolve a stable level name for a Consola log object.
+ *
+ * Prefers the unambiguous string `type` (e.g. 'error', 'fatal', 'warn') and
+ * falls back to the numeric-level map only when a type is absent. Exported for
+ * unit testing.
+ */
+export function resolveLevelName(logObj: Pick<LogObject, 'level' | 'type'>): string {
+  if (logObj.type && typeof logObj.type === 'string') {
+    return logObj.type
+  }
+  return LEVEL_NAMES[logObj.level] ?? 'info'
 }
 
 // Safely serialize a value, handling Error objects and circular references
@@ -46,7 +74,7 @@ function safeSerialize(value: unknown): unknown {
 // JSON reporter for production — writes one JSON line per log entry to stdout
 const jsonReporter = {
   log(logObj: LogObject) {
-    const level = LEVEL_NAMES[logObj.level] ?? 'info'
+    const level = resolveLevelName(logObj)
     const message = logObj.args
       .map(arg => (typeof arg === 'string' ? arg : JSON.stringify(safeSerialize(arg))))
       .join(' ')

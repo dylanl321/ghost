@@ -82,6 +82,12 @@ let cachedConfig: DynamoDBConfig | null = null
 let configLoadedAt: number | null = null
 const CONFIG_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
+// Track which distinct stale-secret signatures have already been warned about.
+// The config cache expires every few minutes, so without dedup this exact
+// warning fired hundreds of times/day. Keyed on the sorted missing-key set so
+// a *changed* set of missing keys still surfaces a fresh warning.
+const warnedMissingKeySignatures = new Set<string>()
+
 /**
  * Get DynamoDB configuration from Secrets Manager
  */
@@ -352,10 +358,17 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
     const missingKeys = (Object.keys(envConfig) as (keyof DynamoDBConfig)[])
       .filter(k => !(k in secretsConfig))
     if (missingKeys.length > 0) {
-      logger.warn(
-        `DynamoDB config from secret was missing ${missingKeys.length} table key(s); ` +
-        `using env defaults for: ${missingKeys.join(', ')}`
-      )
+      // Deduplicate: warn once per distinct missing-key set for the process
+      // lifetime. A different set of missing keys produces a new signature and
+      // will still be logged, so we never mask a changed gap.
+      const signature = [...missingKeys].sort().join(',')
+      if (!warnedMissingKeySignatures.has(signature)) {
+        warnedMissingKeySignatures.add(signature)
+        logger.warn(
+          `DynamoDB config from secret was missing ${missingKeys.length} table key(s); ` +
+          `using env defaults for: ${missingKeys.join(', ')}`
+        )
+      }
     }
 
     cachedConfig = mergedConfig
