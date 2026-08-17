@@ -295,13 +295,42 @@ export default defineNitroPlugin(async () => {
 
   mcpUsageAggregateJob = new Cron('25 0 * * *', async () => {
     const day = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
-    const locked = await claimExecutionLock('mcp-usage-aggregate', day)
-    if (!locked) return
+    const start = performance.now()
+    let locked = false
+    markJobRunning('mcp-usage-aggregate')
+
     try {
+      // Keep lock acquisition inside the error boundary so DynamoDB failures
+      // cannot surface as unhandled cron rejections.
+      locked = await claimExecutionLock('mcp-usage-aggregate', day)
+      if (!locked) {
+        logJobCompletion('mcp-usage-aggregate', 'success', performance.now() - start, { skipped: true })
+        return
+      }
+
       const { writeMcpDailyUsageAggregate } = await import('../mcp/usage')
       await writeMcpDailyUsageAggregate(day)
+      logJobCompletion('mcp-usage-aggregate', 'success', performance.now() - start)
+      writeSourceHeartbeat('mcp-usage-aggregate', {
+        lastRun: new Date().toISOString(),
+        status: 'success',
+        durationMs: Math.round(performance.now() - start)
+      })
+    } catch (error) {
+      logger.error('[MCP Usage] Daily aggregate failed:', error)
+      logJobCompletion('mcp-usage-aggregate', 'error', performance.now() - start)
+      writeSourceHeartbeat('mcp-usage-aggregate', {
+        lastRun: new Date().toISOString(),
+        status: 'error',
+        durationMs: Math.round(performance.now() - start),
+        error: String(error)
+      })
     } finally {
-      await releaseExecutionLock('mcp-usage-aggregate', day).catch(() => {})
+      if (locked) {
+        // Never let lock cleanup mask the aggregation result.
+        await releaseExecutionLock('mcp-usage-aggregate', day).catch(() => {})
+      }
+      markJobComplete('mcp-usage-aggregate')
     }
   })
 })
