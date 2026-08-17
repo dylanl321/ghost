@@ -75,7 +75,32 @@ export const BUDGET_ALERTS_INDEXES = {
  * This is the Commercial AWS monitoring account
  * Note: Terraform sets AWS_PROFORMA_ACCOUNT_ID (with AWS_ prefix)
  */
-export const PROFORMA_ACCOUNT_ID = process.env.AWS_PROFORMA_ACCOUNT_ID || process.env.PROFORMA_ACCOUNT_ID || ''
+export const PROFORMA_ACCOUNT_ID = process.env.AWS_PROFORMA_ACCOUNT_ID || process.env.PROFORMA_ACCOUNT_ID || '253821132832'
+
+const BUDGET_ALERT_CONFIG_KEYS = ['budgetAlerts', 'budgetAlertConfig'] as const
+
+/**
+ * Budget alert tables are owned by the monitoring account. A stale general
+ * DynamoDB secret may customize their names, but must not relocate them.
+ */
+export function mergeDynamoDBConfig(
+  defaults: DynamoDBConfig,
+  configured: Partial<DynamoDBConfig>
+): DynamoDBConfig {
+  const merged = { ...defaults, ...configured }
+
+  for (const key of BUDGET_ALERT_CONFIG_KEYS) {
+    merged[key] = {
+      ...defaults[key],
+      ...configured[key],
+      environment: defaults[key].environment,
+      region: defaults[key].region,
+      accountId: defaults[key].accountId
+    }
+  }
+
+  return merged
+}
 
 // Cache the configuration to avoid repeated Secrets Manager calls
 let cachedConfig: DynamoDBConfig | null = null
@@ -85,12 +110,12 @@ const CONFIG_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 /**
  * Get DynamoDB configuration from Secrets Manager
  */
-async function loadFromSecretsManager(): Promise<DynamoDBConfig | null> {
+async function loadFromSecretsManager(): Promise<Partial<DynamoDBConfig> | null> {
   try {
     // Check for direct config via environment variable first (skips Secrets Manager API call)
     if (process.env.DYNAMODB_CONFIG) {
       logger.info('Loading DynamoDB configuration from DYNAMODB_CONFIG env var')
-      return JSON.parse(process.env.DYNAMODB_CONFIG) as DynamoDBConfig
+      return JSON.parse(process.env.DYNAMODB_CONFIG) as Partial<DynamoDBConfig>
     }
 
     const secretName = process.env.DYNAMODB_CONFIG_SECRET_NAME || `ghost-dynamodb-config-${process.env.NODE_ENV || 'dev'}`
@@ -114,7 +139,7 @@ async function loadFromSecretsManager(): Promise<DynamoDBConfig | null> {
       return null
     }
 
-    const config = JSON.parse(response.SecretString) as DynamoDBConfig
+    const config = JSON.parse(response.SecretString) as Partial<DynamoDBConfig>
     logger.info('Successfully loaded DynamoDB configuration from Secrets Manager')
     return config
   } catch (error: any) {
@@ -345,7 +370,22 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
   const secretsConfig = await loadFromSecretsManager()
 
   if (secretsConfig) {
-    const mergedConfig = { ...envConfig, ...secretsConfig }
+    const mergedConfig = mergeDynamoDBConfig(envConfig, secretsConfig)
+
+    const relocatedBudgetTables = BUDGET_ALERT_CONFIG_KEYS.filter(key => {
+      const configured = secretsConfig[key]
+      return configured && (
+        configured.environment !== envConfig[key].environment ||
+        configured.region !== envConfig[key].region ||
+        configured.accountId !== envConfig[key].accountId
+      )
+    })
+    if (relocatedBudgetTables.length > 0) {
+      logger.warn(
+        `Ignoring stale DynamoDB secret locations for ${relocatedBudgetTables.join(', ')}; ` +
+        `budget alert tables are hosted in Commercial monitoring account ${PROFORMA_ACCOUNT_ID}`
+      )
+    }
 
     // Warn if the secret was missing keys the defaults supplied (signals a
     // stale secret that should be refreshed), so the gap is observable.

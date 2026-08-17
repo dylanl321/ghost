@@ -73,6 +73,13 @@ code_quality_check:
     - if: $CI_COMMIT_REF_NAME != "dev" && $CI_COMMIT_REF_NAME != "master"
   before_script:
     - echo "Installing dependencies for code quality checks..."
+    - |
+      if [ ! -s "${CI_SERVER_TLS_CA_FILE:-}" ]; then
+        echo "Runner did not provide CI_SERVER_TLS_CA_FILE; cannot securely access the internal npm registry."
+        exit 1
+      fi
+      export NODE_EXTRA_CA_CERTS="$CI_SERVER_TLS_CA_FILE"
+      npm config set cafile "$CI_SERVER_TLS_CA_FILE"
     - npm install -g npm@11.18.0
     - npm ci --legacy-peer-deps --no-audit --no-fund
   script:

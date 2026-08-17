@@ -1,6 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import { lookup } from 'node:dns/promises'
-import { isIP } from 'node:net'
 import { exportJWK, generateKeyPair, type JWK } from 'jose'
 import Provider from 'oidc-provider'
 import { logger } from '../../utils/logger'
@@ -61,26 +59,6 @@ function recordRefreshEvent(status: 'success' | 'failure', reason?: GhostRefresh
   process.stdout.write(JSON.stringify(createGhostRefreshEvent(status, reason)) + '\n')
 }
 
-function isPrivateAddress(address: string): boolean {
-  if (address === '::1' || address === '0:0:0:0:0:0:0:1') return true
-  if (address.startsWith('fc') || address.startsWith('fd') || address.startsWith('fe8') || address.startsWith('fe9') || address.startsWith('fea') || address.startsWith('feb')) return true
-  if (!isIP(address)) return true
-  const octets = address.split('.').map(Number)
-  if (octets.length !== 4) return false
-  return octets[0] === 10 || octets[0] === 127 || octets[0] === 0 ||
-    (octets[0] === 169 && octets[1] === 254) ||
-    (octets[0] === 172 && octets[1]! >= 16 && octets[1]! <= 31) ||
-    (octets[0] === 192 && octets[1] === 168)
-}
-
-async function isSafeClientMetadataUrl(clientId: string): Promise<boolean> {
-  const url = new URL(clientId)
-  if (url.protocol !== 'https:' || url.username || url.password || url.hash) return false
-  if (['localhost', 'localhost.localdomain'].includes(url.hostname.toLowerCase())) return false
-  const addresses = await lookup(url.hostname, { all: true, verbatim: true })
-  return addresses.length > 0 && addresses.every(result => !isPrivateAddress(result.address))
-}
-
 async function loadJwks(): Promise<{ keys: JWK[] }> {
   const configured = process.env.GHOST_OAUTH_JWKS_JSON
   if (configured) return JSON.parse(configured) as { keys: JWK[] }
@@ -129,13 +107,8 @@ export function createGhostOAuthConfiguration(input: {
       devInteractions: { enabled: false },
       registration: { enabled: true, initialAccessToken: false, issueRegistrationAccessToken: true },
       registrationManagement: { enabled: true, rotateRegistrationAccessToken: true },
-      clientIdMetadataDocument: {
-        enabled: true,
-        ack: 'draft-02',
-        allowFetch: async (_ctx: unknown, clientId: string) => isSafeClientMetadataUrl(clientId),
-        allowClient: async () => true,
-        cacheDuration: { min: 30, max: 3600 }
-      },
+      // GHOST supports registered clients only; this prevents URL-valued client IDs and outbound metadata fetches.
+      clientIdMetadataDocument: { enabled: false },
       resourceIndicators: {
         enabled: true,
         defaultResource: async () => resource,
