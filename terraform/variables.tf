@@ -79,5 +79,13 @@ variable "admin_notifications_enabled" {
 variable "ghost_support_knowledge_base_model_arn" {
   description = "Approved GovCloud Bedrock foundation model or inference-profile ARN used by ghost.docs.answer"
   type        = string
-  default     = ""
+  default     = "arn:aws-us-gov:bedrock:us-gov-west-1:926182194632:inference-profile/us-gov.anthropic.claude-sonnet-4-5-20250929-v1:0"
+
+  validation {
+    condition = can(regex(
+      "^arn:aws[^:]*:bedrock:[^:]+:[^:]*:(foundation-model|inference-profile|application-inference-profile)/.+$",
+      trimspace(var.ghost_support_knowledge_base_model_arn)
+    ))
+    error_message = "ghost_support_knowledge_base_model_arn must be a Bedrock foundation-model or inference-profile ARN."
+  }
 }

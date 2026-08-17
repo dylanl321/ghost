@@ -76,6 +76,13 @@ test('Ghost applies the same fixed lifetime to refresh tokens and grants', () =>
   }
 })
 
+test('Ghost uses dynamic registration instead of URL-valued client metadata documents', () => {
+  const configuration = createGhostOAuthConfiguration({ resource: 'https://ghost.example.test/mcp', jwks: { keys: [] } })
+
+  assert.equal(configuration.features.registration.enabled, true)
+  assert.equal(configuration.features.clientIdMetadataDocument.enabled, false)
+})
+
 test('Ghost categorizes refresh failures without token material', () => {
   assert.equal(classifyGhostRefreshFailure({ error_detail: 'refresh token not found' }), 'token_not_found')
   assert.equal(classifyGhostRefreshFailure({ error_detail: 'refresh token is expired' }), 'token_expired')

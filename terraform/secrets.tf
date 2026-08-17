@@ -105,6 +105,22 @@ resource "aws_secretsmanager_secret_version" "dynamodb_config" {
       accountId   = local.org_account_id
       readOnly    = true
     }
+
+    # External budget alert tables live in the Commercial monitoring account.
+    budgetAlerts = {
+      tableName   = "budget-alert-system-alert-history-prod"
+      environment = "commercial"
+      region      = "us-east-1"
+      accountId   = "253821132832"
+      readOnly    = true
+    }
+    budgetAlertConfig = {
+      tableName   = "budget-alert-system-config-prod"
+      environment = "commercial"
+      region      = "us-east-1"
+      accountId   = "253821132832"
+      readOnly    = false
+    }
   })
 
   lifecycle {
