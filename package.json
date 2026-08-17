@@ -1,6 +1,6 @@
 {
   "name": "ghost-dashboard",
-  "version": "1.20.0",
+  "version": "2.1.0",
   "type": "module",
   "private": true,
   "packageManager": "npm@11.18.0",

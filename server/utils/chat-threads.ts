@@ -4,6 +4,8 @@
  */
 
 import { v4 as uuidv4 } from 'uuid'
+import { TransactWriteItemsCommand } from '@aws-sdk/client-dynamodb'
+import { marshall } from '@aws-sdk/util-dynamodb'
 import { getItem, putItem, deleteItem, queryItems, updateItem } from './dynamodb'
 import type {
   ChatThread,
@@ -13,6 +15,7 @@ import type {
   ChatThreadSummary
 } from '#shared/types/chat-threads'
 import { logger } from './logger'
+import { getDynamoDBClient } from '../lib/aws-client-factory'
 import { getTableName, getTableEnvironment, getTableAccountId } from '../lib/dynamodb-config'
 import {
   appendThreadMessage,
@@ -102,6 +105,51 @@ export async function createThread(
 
   logger.info(`[Chat Threads] Created thread ${threadId} for user ${userId}`)
   return thread
+}
+
+export async function createThreadWithInitialMessage(
+  userId: string,
+  content: string,
+  options: { title?: string; messageKey: string }
+): Promise<ChatThread> {
+  const threadConfig = await getThreadsTableConfig()
+  const messageConfig = {
+    tableName: await getTableName('chatMessages'),
+    environment: await getTableEnvironment('chatMessages'),
+    accountId: await getTableAccountId('chatMessages')
+  }
+  if (threadConfig.environment !== messageConfig.environment || threadConfig.accountId !== messageConfig.accountId) {
+    throw new Error('Chat thread and message tables must share one DynamoDB transaction boundary.')
+  }
+  const client = await getDynamoDBClient(threadConfig.environment, undefined, threadConfig.accountId)
+  const threadId = uuidv4()
+  const now = new Date().toISOString()
+  const ttl = calculateTTL()
+  const message: ChatMessage = { messageId: uuidv4(), role: 'user', content, timestamp: now }
+  const thread: ChatThread = {
+    threadId,
+    createdAt: now,
+    userId,
+    title: options.title || generateTitleFromMessage(content),
+    messages: [],
+    messageCount: 1,
+    isPinned: false,
+    isArchived: false,
+    lastMessageAt: now,
+    lastModifiedAt: now,
+    lastMessagePreview: content.substring(0, 100),
+    messagesMigratedAt: now,
+    isShared: false,
+    ttl,
+    expiresAt: new Date(ttl * 1000).toISOString()
+  }
+  await client.send(new TransactWriteItemsCommand({
+    TransactItems: [
+      { Put: { TableName: threadConfig.tableName, Item: marshall(thread, { removeUndefinedValues: true }), ConditionExpression: 'attribute_not_exists(threadId)' } },
+      { Put: { TableName: messageConfig.tableName, Item: marshall({ ...message, threadId, messageKey: `${now}#${options.messageKey}`, ttl }, { removeUndefinedValues: true }), ConditionExpression: 'attribute_not_exists(threadId) AND attribute_not_exists(messageKey)' } }
+    ]
+  }))
+  return { ...thread, messages: [message] }
 }
 
 /**
@@ -255,23 +303,33 @@ export async function getUserThreads(
 
   // Query using UserIdIndex GSI (sorted by lastMessageAt descending)
   const config = await getThreadsTableConfig()
-  let result
-  let threads: ChatThread[] = []
+  const threads: ChatThread[] = []
+  let nextToken = filters.lastKey ? Buffer.from(JSON.stringify(filters.lastKey)).toString('base64') : undefined
 
   try {
-    result = await queryItems({
-      tableName: config.tableName,
-      indexName: 'UserIdIndex',
-      queryExpression: 'userId = :userId',
-      filterExpression: filterParts.length > 0 ? filterParts.join(' AND ') : undefined,
-      expressionAttributeNames: Object.keys(expressionAttributeNames).length > 0 ? expressionAttributeNames : undefined,
-      expressionAttributeValues,
-      limit: filters.limit || 50,
-      scanIndexForward: false, // Descending order (most recent first)
-      nextToken: filters.lastKey ? Buffer.from(JSON.stringify(filters.lastKey)).toString('base64') : undefined
-    }, config.environment, config.accountId)
-
-    threads = result.items as ChatThread[]
+    const limit = filters.limit || 50
+    do {
+      const result = await queryItems({
+        tableName: config.tableName,
+        indexName: 'UserIdIndex',
+        queryExpression: 'userId = :userId',
+        filterExpression: filterParts.length > 0 ? filterParts.join(' AND ') : undefined,
+        expressionAttributeNames: Object.keys(expressionAttributeNames).length > 0 ? expressionAttributeNames : undefined,
+        expressionAttributeValues,
+        limit: Math.max(1, limit - threads.length),
+        scanIndexForward: false,
+        nextToken
+      }, config.environment, config.accountId)
+      const page = result.items as ChatThread[]
+      const query = filters.searchQuery?.toLowerCase()
+      threads.push(...(query ? page.filter(thread =>
+        thread.title.toLowerCase().includes(query) ||
+        thread.description?.toLowerCase().includes(query) ||
+        thread.lastMessagePreview?.toLowerCase().includes(query) ||
+        (thread.messages || []).some(msg => msg.content.toLowerCase().includes(query))
+      ) : page))
+      nextToken = result.nextToken
+    } while (nextToken && threads.length < limit)
   } catch (error: any) {
     // If table doesn't exist yet, return empty list instead of throwing
     if (error.name === 'ResourceNotFoundException' || error.message?.includes('Requested resource not found')) {
@@ -285,20 +343,10 @@ export async function getUserThreads(
     throw error
   }
 
-  // Apply search filter if provided (client-side filtering)
-  let filteredThreads = threads
-  if (filters.searchQuery) {
-    const query = filters.searchQuery.toLowerCase()
-    filteredThreads = threads.filter(thread =>
-      thread.title.toLowerCase().includes(query) ||
-      (thread.messages || []).some(msg => msg.content.toLowerCase().includes(query))
-    )
-  }
-
   return {
-    threads: filteredThreads,
-    lastKey: result.nextToken ? JSON.parse(Buffer.from(result.nextToken, 'base64').toString()) : undefined,
-    hasMore: !!result.nextToken
+    threads: threads.slice(0, filters.limit || 50),
+    lastKey: nextToken ? JSON.parse(Buffer.from(nextToken, 'base64').toString()) : undefined,
+    hasMore: !!nextToken
   }
 }
 
@@ -349,7 +397,8 @@ export async function updateThread(
 export async function addMessageToThread(
   threadId: string,
   userId: string,
-  message: Omit<ChatMessage, 'messageId' | 'timestamp'>
+  message: Omit<ChatMessage, 'messageId' | 'timestamp'>,
+  options: { messageKey?: string } = {}
 ): Promise<ChatThread | null> {
   // Get the thread
   const thread = await getThreadById(threadId, userId)
@@ -361,7 +410,7 @@ export async function addMessageToThread(
     (thread.title === 'New Conversation' || thread.title.startsWith('Conversation from'))
     ? generateTitleFromMessage(message.content)
     : undefined
-  const { message: fullMessage, inserted } = await appendThreadMessage(thread, message, { title })
+  const { message: fullMessage, inserted } = await appendThreadMessage(thread, message, { title, messageKey: options.messageKey })
   const updated = inserted ? {
     ...thread,
     title: title || thread.title,

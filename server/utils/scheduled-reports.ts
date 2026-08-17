@@ -272,8 +272,9 @@ export async function getReport(reportId: string): Promise<ScheduledReport | nul
 export async function listUserReports(
   userId: string,
   status?: string,
-  limit: number = 50
-): Promise<{ reports: ScheduledReport[]; total: number }> {
+  limit: number = 50,
+  cursor?: string
+): Promise<{ reports: ScheduledReport[]; total: number; nextCursor?: string }> {
   try {
     if (!userId) {
       logger.warn('listUserReports called without userId')
@@ -298,7 +299,7 @@ export async function listUserReports(
       tableName,
       filterExpression,
       limit,
-      undefined,
+      cursor,
       environment,
       Object.keys(expressionAttributeNames).length > 0 ? expressionAttributeNames : undefined,
       expressionAttributeValues,
@@ -307,7 +308,8 @@ export async function listUserReports(
 
     return {
       reports: result.items as ScheduledReport[],
-      total: result.count
+      total: result.count,
+      nextCursor: result.nextToken
     }
   } catch (error) {
     logger.error('Error listing user reports:', error)

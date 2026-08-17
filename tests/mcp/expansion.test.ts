@@ -22,9 +22,9 @@ test('evidence hashes are stable across object key order', () => {
 
 test('remediation groups deduplicate matching CVE/package/workload findings', () => {
   const groups = deduplicateRemediationFindings([
-    { findingArn: 'one', accountId: '1', region: 'us-gov-west-1', severity: 'HIGH', title: 'CVE', type: 'PACKAGE_VULNERABILITY', status: 'ACTIVE', cveIds: ['CVE-2026-1'], packageName: 'openssl', instanceId: 'i-12345678' },
-    { findingArn: 'two', accountId: '1', region: 'us-gov-west-1', severity: 'HIGH', title: 'CVE', type: 'PACKAGE_VULNERABILITY', status: 'ACTIVE', cveIds: ['CVE-2026-1'], packageName: 'openssl', instanceId: 'i-12345678' }
-  ])
+    { findingArn: 'one', accountId: '1', region: 'us-gov-west-1', severity: 'HIGH', title: 'CVE', type: 'PACKAGE_VULNERABILITY', status: 'ACTIVE', cveIds: ['CVE-2026-1'], packageName: 'openssl', instanceId: 'i-12345678', updatedAt: '2026-08-10T00:00:00Z' },
+    { findingArn: 'two', accountId: '1', region: 'us-gov-west-1', severity: 'HIGH', title: 'CVE', type: 'PACKAGE_VULNERABILITY', status: 'ACTIVE', cveIds: ['CVE-2026-1'], packageName: 'openssl', instanceId: 'i-12345678', updatedAt: '2026-08-10T00:00:00Z' }
+  ], Date.parse('2026-08-17T00:00:00Z'))
   assert.equal(groups.length, 1)
   assert.equal(groups[0]?.affectedFindingCount, 2)
   assert.equal(groups[0]?.deploymentState, 'currently_deployed')

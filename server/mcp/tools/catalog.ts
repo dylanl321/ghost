@@ -8,12 +8,13 @@ import {
 import * as z from 'zod-v4'
 import { getPresignedDownloadUrl } from '../../utils/s3-storage'
 import { getAllAccountsUnified, getAccountStatistics } from '../../utils/accounts-consolidated'
-import { fuzzySearchAccounts } from '../../utils/fuzzy-search'
+import { calculateRelevanceScore, fuzzySearchAccounts } from '../../utils/fuzzy-search'
 import { findAccountByIdentifierOptimized } from '../../utils/account-lookup-optimized'
+import { parseAWSGroup } from '../../utils/entra/group-parser'
 import { getOrganizationInfo, getOrganizationalUnitTree, getAccountPolicies } from '../../utils/organizations'
 import { buildCostFilter } from '../../utils/cost-domain'
 import { getCostAllocationTags, getCostAndUsage, getCostAndUsageWithResources, getCostForecast, getProformaForecast } from '../../utils/cost-explorer'
-import { validateDateParams, type RelativePeriod } from '../../utils/date-helpers'
+import type { RelativePeriod } from '../../utils/date-helpers'
 import { getAlertsByAccount, getAlertsByMonth, getAlertsByType, getAllAlerts } from '../../utils/budget-alerts'
 import { queryEntraUsers } from '../../utils/entra-users-data'
 import { queryConfigResources } from '../../utils/aws-config-data'
@@ -26,8 +27,11 @@ import { analyzeBucketPolicy } from '../../utils/s3-policy-analyzer'
 import {
   getOrganizationSummary,
   getOrganizationTimeline,
+  getAccountDeploymentHealthData,
   getPipelineByIdWithDetails,
   getPipelineRunsForAccount,
+  getPlannedVsAppliedSummary,
+  getUnappliedResources,
   searchResourceAcrossAccounts
 } from '../../utils/athena-pipeline-queries'
 import { queryAIUsage } from '../../utils/ai-usage-query'
@@ -37,16 +41,18 @@ import { getUserPreferences, updateUserPreferences } from '../../utils/user-pref
 import {
   addMessageToThread,
   createThread,
+  createThreadWithInitialMessage,
   deleteThread,
   getThreadById,
   getUserThreads,
   updateThread
 } from '../../utils/chat-threads'
-import { createDatasetExportJob, getDatasetExportJob, listDatasetExportJobs } from '../../utils/dataset-export-jobs'
+import { cancelDatasetExportJob, createDatasetExportJob, getDatasetExportJob, queryDatasetExportJobs } from '../../utils/dataset-export-jobs'
+import { setNotificationMute, setNotificationStatus } from '../../utils/notification-service'
 import { getDatasetReportConfigErrors } from '../../utils/dataset-report-validation'
-import { getReport, listUserReports } from '../../utils/scheduled-reports'
-import { executeScheduledReport } from '../../utils/report-scheduler'
+import { listUserReports } from '../../utils/scheduled-reports'
 import { getLatestAnalysis, getInstanceClassifications } from '../../utils/utilization-persistence'
+import { buildInstanceHealth } from '../../utils/instance-health'
 import { getAnnualBudgetArray, getPeriodBudget } from '../../../shared/utils/budget-utils'
 import type { DatasetReportConfig } from '../../../shared/types/dataset-reports'
 import type { NotificationCategory, NotificationStatus } from '../../../shared/types/notifications'
@@ -65,9 +71,12 @@ import { getGoldenAmis } from '../golden-amis'
 import { createRemediationPlan } from '../remediation'
 import { buildAccountHealth } from '../account-health'
 import { EVIDENCE_DOMAINS, createEvidenceBundle, deleteEvidenceBundle, evidenceDownloadUrl, getEvidenceBundle, listEvidenceBundles } from '../evidence'
-import { normalizeLimit, toolError, toolRenderedOutput, toolSuccess } from '../results'
+import { decodeCursor, encodeCursor, normalizeLimit, toolError, toolRenderedOutput, toolSuccess } from '../results'
 import { runIdempotent } from '../idempotency'
 import { buildMcpCostDashboard } from '../cost-dashboard'
+import { costScopeMetadata, normalizeCostDateRange, normalizeCostForecastRange, resolveCostScope } from '../cost-scope'
+import { compareMcpCosts } from '../cost-comparison'
+import { queryCostAnomalies } from '../../utils/cost-anomalies'
 import { buildPersonalAccountContext } from '../personal-account-context'
 import { advancedQueryGuidance, isCentralAccount } from '../guidance'
 import {
@@ -131,11 +140,7 @@ function scopeMetadata(scope: ResolvedOperationalScope): Record<string, unknown>
 }
 
 function dateRange(args: { start_date?: string; end_date?: string; period?: string }) {
-  return validateDateParams({
-    startDate: args.start_date,
-    endDate: args.end_date,
-    period: args.period as RelativePeriod | undefined
-  })
+  return normalizeCostDateRange({ start_date: args.start_date, end_date: args.end_date, period: args.period as RelativePeriod | undefined })
 }
 
 function groupTotals(resultsByTime: any[]): Map<string, number> {
@@ -187,17 +192,88 @@ export function registerCatalogTools(
     scope: 'ghost.credentials.issue'
   }, requestClient)
 
+  const searchPipelines = async (args: any) => {
+    const days = boundedInteger(args.days, { name: 'days', minimum: 1, maximum: 90, fallback: 30 })
+    const limit = boundedInteger(args.limit, { name: 'limit', minimum: 1, maximum: 100, fallback: 25 })
+    const mode = args.mode || 'auto'
+    if (args.environment && String(args.environment).toLowerCase() !== 'auto' && operationalEnvironment(args.environment) !== 'govcloud') {
+      const error = new Error('Pipeline telemetry is stored in GovCloud; environment must be auto or govcloud.')
+      error.name = 'INVALID_ENVIRONMENT'
+      throw error
+    }
+    const scope = await resolveOperationalScope(args.account, 'govcloud')
+    if (mode === 'overview' && (scope.accounts.length || args.query)) {
+      const error = new Error('Pipeline overview mode does not accept account or query filters.')
+      error.name = 'CONFLICTING_FILTERS'
+      throw error
+    }
+    if (mode === 'health' || mode === 'drift') {
+      if (scope.accounts.length !== 1) {
+        const error = new Error(`Pipeline ${mode} mode requires exactly one account.`)
+        error.name = 'ACCOUNT_REQUIRED'
+        throw error
+      }
+      const account = scope.accounts[0]!
+      if (mode === 'health') {
+        const result = await getAccountDeploymentHealthData(account.selectedAccountId, days, 'govcloud')
+        return toolSuccess({ mode, account, result }, 'Pipeline deployment health loaded.', 'Athena pipeline telemetry', { resolvedScope: scopeMetadata(scope), appliedFilters: { days } })
+      }
+      const [summary, unappliedResources] = await Promise.all([
+        getPlannedVsAppliedSummary(account.selectedAccountId, days, 'govcloud'),
+        getUnappliedResources(account.selectedAccountId, days, 'govcloud')
+      ])
+      return toolSuccess({ mode, account, summary, unappliedResources: unappliedResources.slice(0, limit), truncated: unappliedResources.length > limit }, 'Pipeline drift evidence loaded.', 'Athena pipeline telemetry', {
+        resolvedScope: scopeMetadata(scope), appliedFilters: { days, limit }, warnings: unappliedResources.length > limit ? [`Only the first ${limit} unapplied resources are included.`] : undefined
+      })
+    }
+    if (mode === 'resource_search' || (mode === 'auto' && args.query)) {
+      if (!args.query) {
+        const error = new Error('Pipeline resource_search mode requires query.')
+        error.name = 'QUERY_REQUIRED'
+        throw error
+      }
+      if (scope.accounts.length > 1) {
+        const error = new Error('Pipeline resource search accepts one account at a time.')
+        error.name = 'TOO_MANY_ACCOUNTS'
+        throw error
+      }
+      const result = await searchResourceAcrossAccounts(args.query, days, scope.operationalAccountIds[0], 'govcloud')
+      return toolSuccess({ mode: 'resource_search', result }, 'Pipeline resource search complete.', 'Athena pipeline telemetry', { resolvedScope: scopeMetadata(scope), appliedFilters: { query: args.query, days } })
+    }
+    if (mode === 'account_runs' || (mode === 'auto' && scope.accounts.length)) {
+      if (!scope.accounts.length) {
+        const error = new Error('Pipeline account_runs mode requires at least one account.')
+        error.name = 'ACCOUNT_REQUIRED'
+        throw error
+      }
+      const accounts = await Promise.all(scope.accounts.map(async account => ({ account, runs: await getPipelineRunsForAccount(account.selectedAccountId, days, 'govcloud', limit) })))
+      return toolSuccess({ mode: 'account_runs', accounts }, 'Account pipeline runs loaded.', 'Athena pipeline telemetry', { resolvedScope: scopeMetadata(scope), appliedFilters: { days, limit } })
+    }
+    const [summary, timeline] = await Promise.all([getOrganizationSummary(days, 'govcloud'), getOrganizationTimeline(days, limit, 'govcloud')])
+    return toolSuccess({ mode: 'overview', summary, timeline }, 'Pipeline overview loaded.', 'Athena pipeline telemetry', { resolvedScope: scopeMetadata(scope), appliedFilters: { days, limit } })
+  }
+
   read({
     name: 'ghost.accounts.search', title: 'Search GHOST accounts',
     description: 'Search enriched GHOST AWS account metadata by name, alias, ID, email, request ID, project, department, or line of business.',
     inputSchema: z.object({ query: z.string().min(1), ...paginationSchema }),
     handler: async args => {
       const accounts = await getAllAccountsUnified(false)
-      const matches = (await fuzzySearchAccounts(args.query, accounts, normalizeLimit(args.limit))).map(result => result.item)
       const limit = normalizeLimit(args.limit)
-      return toolSuccess(matches.slice(0, limit), `Found ${matches.length} matching account(s).`, 'Organizations and GHOST account metadata', {
-        warnings: matches.length > limit ? [`Only the first ${limit} matches are included.`] : undefined
-      })
+      const cursor = decodeCursor<{ query: string; score: number; id: string }>(args.cursor)
+      if (cursor && cursor.query !== args.query.trim().toLowerCase()) throw new Error('Pagination cursor does not match the account query')
+      const key = (item: any) => item.accountId || item.awsStandardAccountID || item.govCloudAccountId || item.awsGovCloudAccountID || String(item.requestId || '')
+      let matches = await fuzzySearchAccounts(args.query, accounts, accounts.length)
+      matches.sort((left, right) => left.score - right.score || key(left.item).localeCompare(key(right.item)))
+      if (cursor) matches = matches.filter(match => match.score > cursor.score || (match.score === cursor.score && key(match.item) > cursor.id))
+      const page = matches.slice(0, limit)
+      const last = page.at(-1)
+      const nextCursor = matches.length > page.length && last ? encodeCursor({ query: args.query.trim().toLowerCase(), score: last.score, id: key(last.item) }) : undefined
+      const records = page.map(match => ({
+        ...match.item,
+        match: { relevance: calculateRelevanceScore(match.score), fields: [...new Set((match.matches || []).map(value => value.key).filter(Boolean))] }
+      }))
+      return toolSuccess(records, `Found ${records.length} matching account(s).`, 'Organizations and GHOST account metadata', { nextCursor })
     }
   })
 
@@ -228,9 +304,15 @@ export function registerCatalogTools(
       if (args.department) accounts = accounts.filter(account => account.departmentNumber === args.department)
       if (args.line_of_business) accounts = accounts.filter(account => account.linesOfBusiness?.includes(args.line_of_business))
       const limit = normalizeLimit(args.limit)
-      return toolSuccess(accounts.slice(0, limit), `Listed ${Math.min(accounts.length, limit)} of ${accounts.length} account(s).`, 'Organizations and GHOST account metadata', {
-        warnings: accounts.length > limit ? ['Narrow the filters or use a dataset export for the full result.'] : undefined
-      })
+      const sortKey = (account: any) => `${accountDisplayName(account).toLowerCase()}\0${account.accountId || account.awsStandardAccountID || account.govCloudAccountId || account.awsGovCloudAccountID || account.requestId || ''}`
+      accounts.sort((left, right) => sortKey(left).localeCompare(sortKey(right)))
+      const signature = JSON.stringify({ search: args.search || '', department: args.department || '', lineOfBusiness: args.line_of_business || '', includeDecommissioned: args.include_decommissioned })
+      const cursor = decodeCursor<{ key: string; signature: string }>(args.cursor)
+      if (cursor && cursor.signature !== signature) throw new Error('Pagination cursor does not match the account filters')
+      if (cursor) accounts = accounts.filter(account => sortKey(account) > cursor.key)
+      const page = accounts.slice(0, limit)
+      const nextCursor = accounts.length > page.length && page.length ? encodeCursor({ key: sortKey(page[page.length - 1]!), signature }) : undefined
+      return toolSuccess(page, `Listed ${page.length} account(s).`, 'Organizations and GHOST account metadata', { nextCursor })
     }
   })
 
@@ -287,31 +369,74 @@ export function registerCatalogTools(
 
   read({
     name: 'ghost.costs.query', title: 'Query AWS costs', description: 'Query GHOST canonical costs for a date range, account scope, and grouping. Defaults to proforma chargeback costs; use billable only when explicitly needed.',
+    auditSource: 'AWS Cost Explorer',
     inputSchema: costQuerySchema,
     handler: async args => {
       const range = dateRange(args)
-      const ids = await commercialIds(args.account_identifiers)
-      if (args.account_identifiers.length && !ids.length) return toolError('ACCOUNT_NOT_FOUND', 'No account identifiers could be resolved.')
-      if (args.mode === 'proforma' && args.environment !== 'commercial') return toolError('INVALID_COST_MODE', 'Proforma costs are available only in Commercial.')
-      const target = args.mode === 'proforma' ? process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832' : args.environment === 'commercial' ? process.env.AWS_MASTER_ACCOUNT_ID || '205950196477' : undefined
+      const scope = await resolveCostScope({ identifiers: args.account_identifiers, environment: args.environment, mode: args.mode })
       const response = await getCostAndUsage({
         startDate: range.startDate, endDate: range.endDate, granularity: args.granularity,
-        metrics: ['UnblendedCost'], filter: buildCostFilter({ accountIds: ids.length ? ids : undefined }),
+        metrics: ['UnblendedCost'], filter: buildCostFilter({ accountIds: scope.linkedAccountIds.length ? scope.linkedAccountIds : undefined }),
         groupBy: args.group_by === 'NONE' ? undefined : [{ type: 'DIMENSION', key: args.group_by }]
-      }, args.environment, target)
-      return toolSuccess(response.dataset, `Cost query returned ${response.dataset.reconciliation.authoritativeTotal.toFixed(2)} USD.`, 'AWS Cost Explorer')
+      }, args.environment, scope.payerAccountId)
+      return toolSuccess(response.dataset, `Cost query returned ${response.dataset.reconciliation.authoritativeTotal.toFixed(2)} USD.`, 'AWS Cost Explorer', { resolvedScope: costScopeMetadata(scope) })
+    }
+  })
+
+  read({
+    name: 'ghost.costs.compare', title: 'Compare AWS cost periods', description: 'Compare two validated cost periods with reconciled totals plus service and account deltas.',
+    inputSchema: z.object({
+      current_start_date: z.string(), current_end_date: z.string(),
+      comparison_start_date: z.string(), comparison_end_date: z.string(),
+      environment: costEnvironmentSchema,
+      mode: z.enum(['billable', 'proforma']).default('proforma'),
+      account_identifiers: accountIdentifiersSchema
+    }),
+    getAuditTargetIds: args => args.account_identifiers,
+    handler: async args => {
+      const scope = await resolveCostScope({ identifiers: args.account_identifiers, environment: args.environment, mode: args.mode })
+      const result = await compareMcpCosts({
+        scope,
+        current: { start_date: args.current_start_date, end_date: args.current_end_date },
+        comparison: { start_date: args.comparison_start_date, end_date: args.comparison_end_date }
+      })
+      return toolSuccess(result, `Cost changed by ${result.totalDelta.toFixed(2)} USD between the two periods.`, 'AWS Cost Explorer', {
+        resolvedScope: costScopeMetadata(scope),
+        warnings: result.warnings.length ? result.warnings : undefined
+      })
+    }
+  })
+
+  read({
+    name: 'ghost.costs.anomalies', title: 'List AWS cost anomalies', description: 'Return bounded AWS Cost Anomaly Detection results with observed-window and confidence metadata.',
+    inputSchema: z.object({
+      account_identifier: z.string().optional(),
+      environment: costEnvironmentSchema,
+      lookback_days: z.number().int().min(1).max(90).default(30),
+      limit: z.number().int().min(1).max(100).default(25),
+      cursor: z.string().optional()
+    }),
+    getAuditTargetIds: args => args.account_identifier ? [args.account_identifier] : undefined,
+    handler: async args => {
+      const scope = await resolveCostScope({ identifiers: args.account_identifier ? [args.account_identifier] : [], environment: args.environment, mode: 'billable' })
+      const result = await queryCostAnomalies({ environment: args.environment, accountId: scope.linkedAccountIds[0], daysBack: args.lookback_days, limit: args.limit, cursor: args.cursor })
+      return toolSuccess(result, `Returned ${result.anomalies.length} matching cost anomaly(ies).`, 'AWS Cost Anomaly Detection', {
+        nextCursor: result.nextCursor,
+        resolvedScope: costScopeMetadata(scope),
+        warnings: result.confidence.exhaustive ? undefined : ['More anomaly records are available.']
+      })
     }
   })
 
   read({
     name: 'ghost.costs.dashboard', title: 'Get cost dashboard', description: 'Return dashboard cost totals plus budget health, end-of-month and year-end projections, account estimates, and methodology. Defaults to proforma chargeback costs.',
+    auditSource: 'AWS Cost Explorer and GHOST account budgets',
     inputSchema: costQuerySchema.omit({ group_by: true, granularity: true }),
     handler: async args => {
       const range = dateRange(args)
-      const ids = await commercialIds(args.account_identifiers)
-      if (args.account_identifiers.length && !ids.length) return toolError('ACCOUNT_NOT_FOUND', 'No account identifiers could be resolved.')
-      if (args.mode === 'proforma' && args.environment !== 'commercial') return toolError('INVALID_COST_MODE', 'Proforma costs are available only in Commercial.')
-      const target = args.mode === 'proforma' ? process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832' : args.environment === 'commercial' ? process.env.AWS_MASTER_ACCOUNT_ID || '205950196477' : undefined
+      const scope = await resolveCostScope({ identifiers: args.account_identifiers, environment: args.environment, mode: args.mode })
+      const ids = scope.linkedAccountIds
+      const target = scope.payerAccountId
       const base = { startDate: range.startDate, endDate: range.endDate, granularity: 'MONTHLY' as const, metrics: ['UnblendedCost'], filter: buildCostFilter({ accountIds: ids.length ? ids : undefined }) }
       const [accounts, services, accountMetadata] = await Promise.all([
         getCostAndUsage({ ...base, groupBy: [{ type: 'DIMENSION', key: 'LINKED_ACCOUNT' }] }, args.environment, target),
@@ -411,6 +536,7 @@ export function registerCatalogTools(
         dayOfMonth: today.getUTCDate()
       })
       return toolSuccess({ accounts: accounts.dataset, services: services.dataset, dashboard }, 'Cost dashboard data loaded.', 'AWS Cost Explorer and GHOST account budgets', {
+        resolvedScope: costScopeMetadata(scope),
         warnings: projectionReason ? [projectionReason] : undefined
       })
     }
@@ -418,48 +544,56 @@ export function registerCatalogTools(
 
   read({
     name: 'ghost.costs.forecast', title: 'Forecast AWS costs', description: 'Return cost forecasts for an optional account scope. Defaults to proforma chargeback forecasts.',
+    auditSource: 'AWS Cost Explorer',
     inputSchema: z.object({ start_date: z.string(), end_date: z.string(), mode: z.enum(['billable', 'proforma']).default('proforma'), environment: costEnvironmentSchema, account_identifiers: accountIdentifiersSchema, granularity: z.enum(['DAILY', 'MONTHLY']).default('DAILY') }),
     handler: async args => {
-      const ids = await commercialIds(args.account_identifiers)
-      if (args.mode === 'proforma' && args.environment !== 'commercial') return toolError('INVALID_COST_MODE', 'Proforma forecasts are available only in Commercial.')
-      const filter = buildCostFilter({ accountIds: ids.length ? ids : undefined })
+      const range = normalizeCostForecastRange({ start_date: args.start_date, end_date: args.end_date, maximumDays: 365 })
+      const scope = await resolveCostScope({ identifiers: args.account_identifiers, environment: args.environment, mode: args.mode })
+      const filter = buildCostFilter({ accountIds: scope.linkedAccountIds.length ? scope.linkedAccountIds : undefined })
       const result = args.mode === 'proforma'
-        ? await getProformaForecast(args.start_date, args.end_date, 'UNBLENDED_COST', args.granularity, filter)
-        : await getCostForecast(args.start_date, args.end_date, 'UNBLENDED_COST', args.granularity, filter, args.environment, process.env.AWS_MASTER_ACCOUNT_ID || '205950196477')
-      return toolSuccess(result, 'Cost forecast loaded.', 'AWS Cost Explorer')
+        ? await getProformaForecast(range.startDate, range.endDate, 'UNBLENDED_COST', args.granularity, filter)
+        : await getCostForecast(range.startDate, range.endDate, 'UNBLENDED_COST', args.granularity, filter, args.environment, scope.payerAccountId)
+      return toolSuccess(result, 'Cost forecast loaded.', 'AWS Cost Explorer', { resolvedScope: costScopeMetadata(scope) })
     }
   })
 
   read({
     name: 'ghost.costs.resources', title: 'Get resource-level costs', description: 'Return billable resource-level Cost Explorer data for a required account and date range. Billing Conductor does not provide resource-level proforma allocation.',
+    auditSource: 'AWS Cost Explorer',
     inputSchema: z.object({ identifier: z.string(), start_date: z.string(), end_date: z.string(), environment: costEnvironmentSchema, granularity: z.enum(['DAILY', 'MONTHLY']).default('DAILY') }),
     handler: async args => {
-      const ids = await commercialIds([args.identifier])
-      if (!ids[0]) return toolError('ACCOUNT_NOT_FOUND', 'Account could not be resolved.')
-      const result = await getCostAndUsageWithResources({ startDate: args.start_date, endDate: args.end_date, granularity: args.granularity, metrics: ['UnblendedCost'], filter: buildCostFilter({ accountIds: ids })! }, args.environment)
-      return toolSuccess(result, 'Resource-level costs loaded.', 'AWS Cost Explorer')
+      const range = normalizeCostDateRange({ start_date: args.start_date, end_date: args.end_date, maximumDays: 14 })
+      const scope = await resolveCostScope({ identifiers: [args.identifier], environment: args.environment, mode: 'billable', requireAccount: true })
+      const result = await getCostAndUsageWithResources({ startDate: range.startDate, endDate: range.endDate, granularity: args.granularity, metrics: ['UnblendedCost'], filter: buildCostFilter({ accountIds: scope.linkedAccountIds })! }, args.environment, scope.payerAccountId)
+      return toolSuccess(result, 'Resource-level costs loaded.', 'AWS Cost Explorer', { resolvedScope: costScopeMetadata(scope) })
     }
   })
 
   read({
     name: 'ghost.costs.tags', title: 'Discover cost tags', description: 'List billable Cost Explorer allocation tag keys or values for a date range. Billing Conductor does not provide native tag-level proforma allocation.',
-    inputSchema: z.object({ start_date: z.string(), end_date: z.string(), tag_key: z.string().optional(), environment: costEnvironmentSchema }),
-    handler: async args => toolSuccess(await getCostAllocationTags({ Start: args.start_date, End: args.end_date }, args.tag_key, undefined, args.environment), 'Cost tags loaded.', 'AWS Cost Explorer')
+    auditSource: 'AWS Cost Explorer',
+    inputSchema: z.object({ start_date: z.string(), end_date: z.string(), tag_key: z.string().optional(), environment: costEnvironmentSchema, limit: z.number().int().min(1).max(100).default(50), cursor: z.string().optional() }),
+    handler: async args => {
+      const range = normalizeCostDateRange({ start_date: args.start_date, end_date: args.end_date, maximumDays: 365 })
+      const scope = await resolveCostScope({ environment: args.environment, mode: 'billable' })
+      const result = await getCostAllocationTags({ Start: range.startDate, End: range.endDate }, args.tag_key, undefined, args.environment, scope.payerAccountId, { limit: args.limit, nextToken: args.cursor })
+      return toolSuccess(result, 'Cost tags loaded.', 'AWS Cost Explorer', { nextCursor: result.nextToken, resolvedScope: costScopeMetadata(scope) })
+    }
   })
 
   read({
     name: 'ghost.costs.budget_vs_actual', title: 'Compare budget and actual cost', description: 'Compare account actuals with GHOST account budgets for a date range. Defaults to proforma chargeback actuals.',
+    auditSource: 'AWS Cost Explorer and GHOST account budgets',
     inputSchema: costQuerySchema.omit({ group_by: true, granularity: true }),
     handler: async args => {
       const range = dateRange(args)
-      const ids = await commercialIds(args.account_identifiers)
+      const scope = await resolveCostScope({ identifiers: args.account_identifiers, environment: args.environment, mode: args.mode })
+      const ids = scope.linkedAccountIds
       const response = await getCostAndUsage({
         startDate: range.startDate, endDate: range.endDate, granularity: 'MONTHLY', metrics: ['UnblendedCost'],
         filter: buildCostFilter({ accountIds: ids.length ? ids : undefined }),
         groupBy: [{ type: 'DIMENSION', key: 'LINKED_ACCOUNT' }]
-      }, args.environment, args.mode === 'proforma'
-        ? process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832'
-        : args.environment === 'commercial' ? process.env.AWS_MASTER_ACCOUNT_ID || '205950196477' : undefined)
+      }, args.environment, scope.payerAccountId)
       const actuals = new Map<string, number>()
       for (const period of response.resultsByTime) {
         for (const group of period.Groups || []) {
@@ -468,41 +602,39 @@ export function registerCatalogTools(
         }
       }
       const accounts = (await getAllAccountsUnified(true))
-        .filter(account => !ids.length || ids.includes(account.accountId || ''))
+        .filter(account => !ids.length || ids.includes(args.environment === 'govcloud' ? account.govCloudAccountId || account.awsGovCloudAccountID || '' : account.accountId || account.awsStandardAccountID || ''))
         .map(account => {
           const accountId = account.accountId || account.awsStandardAccountID || ''
+          const linkedAccountId = args.environment === 'govcloud' ? account.govCloudAccountId || account.awsGovCloudAccountID || '' : accountId
           const budget = getPeriodBudget({
             pepBudget2026Monthly: account.pepBudget2026Monthly,
             estimatedMonthlyCharge: account.estimatedMonthlyCharge
           }, range.startDate, range.endDate)
-          const actual = actuals.get(accountId) || 0
-          return { accountId, accountName: accountDisplayName(account), actual, budget: budget.periodBudget, variance: budget.periodBudget === null ? null : actual - budget.periodBudget, budgetSource: budget.source }
+          const actual = actuals.get(linkedAccountId) || 0
+          return { accountId, linkedAccountId, accountName: accountDisplayName(account), actual, budget: budget.periodBudget, variance: budget.periodBudget === null ? null : actual - budget.periodBudget, budgetSource: budget.source }
         })
-      return toolSuccess({ accounts, totalActual: response.dataset.reconciliation.authoritativeTotal }, 'Budget-versus-actual data loaded.', 'AWS Cost Explorer and GHOST account budgets')
-    }
-  })
-
-  read({
-    name: 'ghost.forecasts.get', title: 'Get cost forecast', description: 'Return a cost forecast for the requested account scope and future date range. Defaults to proforma chargeback forecasts.',
-    inputSchema: z.object({ start_date: z.string(), end_date: z.string(), mode: z.enum(['billable', 'proforma']).default('proforma'), environment: costEnvironmentSchema, account_identifiers: accountIdentifiersSchema, granularity: z.enum(['DAILY', 'MONTHLY']).default('MONTHLY') }),
-    handler: async args => {
-      const ids = await commercialIds(args.account_identifiers)
-      if (args.mode === 'proforma' && args.environment !== 'commercial') return toolError('INVALID_COST_MODE', 'Proforma forecasts are available only in Commercial.')
-      const filter = buildCostFilter({ accountIds: ids.length ? ids : undefined })
-      const result = args.mode === 'proforma'
-        ? await getProformaForecast(args.start_date, args.end_date, 'UNBLENDED_COST', args.granularity, filter)
-        : await getCostForecast(args.start_date, args.end_date, 'UNBLENDED_COST', args.granularity, filter, args.environment, process.env.AWS_MASTER_ACCOUNT_ID || '205950196477')
-      return toolSuccess(result, 'Forecast loaded.', 'AWS Cost Explorer')
+      return toolSuccess({ accounts, totalActual: response.dataset.reconciliation.authoritativeTotal }, 'Budget-versus-actual data loaded.', 'AWS Cost Explorer and GHOST account budgets', { resolvedScope: costScopeMetadata(scope) })
     }
   })
 
   read({
     name: 'ghost.alerts.list', title: 'List budget alerts', description: 'List budget alerts by account, month, or alert type with a bounded result size.',
-    inputSchema: z.object({ account_id: z.string().optional(), month: z.string().regex(/^\d{4}-\d{2}$/).optional(), alert_type: z.enum(['FORECAST', 'ACTUAL']).optional(), limit: z.number().int().min(1).max(100).default(25) }),
+    inputSchema: z.object({ account_id: z.string().optional(), month: z.string().regex(/^\d{4}-\d{2}$/).optional(), alert_type: z.enum(['FORECAST', 'ACTUAL']).optional(), limit: z.number().int().min(1).max(100).default(25), cursor: z.string().optional() }),
+    getAuditTargetIds: args => args.account_id ? [args.account_id] : undefined,
     handler: async args => {
-      const options = { limit: args.limit, sortOrder: 'desc' as const }
-      const result = args.month ? await getAlertsByMonth(args.month, options) : args.alert_type ? await getAlertsByType(args.alert_type, options) : args.account_id ? await getAlertsByAccount(args.account_id, options) : await getAllAlerts(options)
-      return toolSuccess(result, `Loaded ${result.count} budget alert(s).`, 'GHOST budget alerts')
+      const monthStart = args.month ? `${args.month}-01T00:00:00.000Z` : undefined
+      const monthEnd = args.month ? new Date(Date.UTC(Number(args.month.slice(0, 4)), Number(args.month.slice(5, 7)), 1)).toISOString() : undefined
+      const options = { limit: args.limit, nextToken: args.cursor, sortOrder: 'desc' as const, dateFrom: monthStart, dateTo: monthEnd, types: args.alert_type ? [args.alert_type] : undefined }
+      let result
+      if (args.account_id) {
+        const { account } = await resolveAccount(args.account_id)
+        const commercialId = account.accountId || account.awsStandardAccountID
+        if (!commercialId) return toolError('ACCOUNT_ENVIRONMENT_MISSING', 'The account has no Commercial identifier for budget alerts.')
+        result = await getAlertsByAccount(commercialId, options)
+      } else if (args.month) result = await getAlertsByMonth(args.month, options)
+      else if (args.alert_type) result = await getAlertsByType(args.alert_type, options)
+      else result = await getAllAlerts(options)
+      return toolSuccess(result, `Loaded ${result.count} budget alert(s).`, 'GHOST budget alerts', { nextCursor: result.nextToken })
     }
   })
 
@@ -512,13 +644,15 @@ export function registerCatalogTools(
     handler: async args => {
       const event = await createMcpDelegatedGraphEvent(principal)
       const result = await queryEntraUsers(event, [], { userSearch: args.query }, { mode: 'preview', limit: args.limit })
-      return toolSuccess(result, `Found ${result.records.length} user access record(s).`, 'Microsoft Graph')
+      return toolSuccess(result, `Found ${result.records.length} user access record(s).`, 'Microsoft Graph', {
+        warnings: result.truncated ? ['Microsoft Graph page limits prevented an exhaustive user search.'] : undefined
+      })
     }
   })
 
   read({
     name: 'ghost.access.for_account', title: 'Get account access', description: 'List effective IAM Identity Center user/group assignments for one GHOST account using management-account APIs.',
-    inputSchema: z.object({ identifier: z.string(), environment: z.enum(['commercial', 'govcloud', 'both']).default('both'), limit: z.number().int().min(1).max(100).default(50) }),
+    inputSchema: z.object({ identifier: z.string(), environment: z.enum(['commercial', 'govcloud', 'both']).default('both'), limit: z.number().int().min(1).max(100).default(50), cursor: z.string().optional() }),
     handler: async args => {
       const { account } = await resolveAccount(args.identifier)
       const commercialId = account.accountId || account.awsStandardAccountID
@@ -527,8 +661,8 @@ export function registerCatalogTools(
       if (args.environment !== 'govcloud' && commercialId) targets.push({ environment: 'commercial', accountId: commercialId })
       if (args.environment !== 'commercial' && govCloudId) targets.push({ environment: 'govcloud', accountId: govCloudId })
       if (!targets.length) return toolError('ACCOUNT_ENVIRONMENT_MISSING', 'The account has no identifier for the requested IDC environment.')
-      const result = await getMcpIdentityCenterAccountAccess(targets, args.limit)
-      return toolSuccess(result, `Loaded ${result.records.length} effective IDC assignment(s).`, 'AWS IAM Identity Center Admin')
+      const result = await getMcpIdentityCenterAccountAccess(targets, args.limit, args.cursor)
+      return toolSuccess(result, `Loaded ${result.records.length} effective IDC assignment(s).`, 'AWS IAM Identity Center Admin', { nextCursor: result.nextCursor })
     }
   })
 
@@ -547,9 +681,9 @@ export function registerCatalogTools(
     name: 'ghost.access.explain', title: 'Explain effective AWS access',
     description: 'Explain direct and group-derived IAM Identity Center assignments for the current user, another user, or an account. Entra directory metadata is shown only as non-authoritative comparison context.',
     inputSchema: z.discriminatedUnion('target_type', [
-      z.object({ target_type: z.literal('current_user'), environment: z.enum(['commercial', 'govcloud', 'both']).default('both') }),
-      z.object({ target_type: z.literal('user'), user: z.string().min(1), environment: z.enum(['commercial', 'govcloud', 'both']).default('both') }),
-      z.object({ target_type: z.literal('account'), account_identifier: z.string().min(1), environment: z.enum(['commercial', 'govcloud', 'both']).default('both'), limit: z.number().int().min(1).max(250).default(100) })
+      z.object({ target_type: z.literal('current_user'), environment: z.enum(['commercial', 'govcloud', 'both']).default('both'), include_directory_comparison: z.boolean().default(false) }),
+      z.object({ target_type: z.literal('user'), user: z.string().min(1), environment: z.enum(['commercial', 'govcloud', 'both']).default('both'), include_directory_comparison: z.boolean().default(false) }),
+      z.object({ target_type: z.literal('account'), account_identifier: z.string().min(1), environment: z.enum(['commercial', 'govcloud', 'both']).default('both'), limit: z.number().int().min(1).max(250).default(100), cursor: z.string().optional() })
     ]),
     getAuditTargetIds: args => args.target_type === 'account' ? [args.account_identifier] : undefined,
     handler: async args => {
@@ -561,13 +695,15 @@ export function registerCatalogTools(
           return accountId ? [{ environment, accountId }] : []
         })
         if (!targets.length) return toolError('ACCOUNT_ENVIRONMENT_MISSING', 'The account has no identifier for the requested IDC environment.')
-        const effective = await getMcpIdentityCenterAccountAccess(targets, args.limit)
+        const effective = await getMcpIdentityCenterAccountAccess(targets, args.limit, args.cursor)
         return toolSuccess({ account: { name: accountDisplayName(account), commercialAccountId: account.accountId || account.awsStandardAccountID, govCloudAccountId: account.govCloudAccountId || account.awsGovCloudAccountID }, effective, directoryMetadata: { authoritative: false, available: false, reason: 'Account access is derived from IDC assignments; directory groups are user-specific.' } }, 'Explained effective IDC access for the account.', 'AWS IAM Identity Center Admin and Identity Store')
       }
       const userName = args.target_type === 'current_user' ? principal.email : (args.user.includes('@') ? args.user : `${args.user}@${process.env.ENTRA_DEFAULT_DOMAIN || 'gd-ms.com'}`)
       const assignments = await explainMcpIdentityCenterUserAccess(userName, [...environments])
-      const directoryGroups = args.target_type === 'current_user' ? principal.groups : []
-      return toolSuccess({ user: userName, assignments, directoryMetadata: { authoritative: false, groups: directoryGroups, available: args.target_type === 'current_user', difference: 'IDC assignments are effective AWS access. Entra groups are directory metadata and may not map to an IDC assignment.' } }, 'Explained direct and group-derived IDC access.', 'AWS IAM Identity Center Admin and Identity Store')
+      const directoryGroups = args.target_type === 'current_user' && args.include_directory_comparison
+        ? principal.groups.filter((displayName, index) => Boolean(parseAWSGroup({ id: `mcp-${index}`, displayName })))
+        : []
+      return toolSuccess({ user: userName, assignments, directoryMetadata: { authoritative: false, groups: directoryGroups, available: args.target_type === 'current_user' && args.include_directory_comparison, difference: 'IDC assignments are effective AWS access. Entra groups are directory metadata and may not map to an IDC assignment.' } }, 'Explained direct and group-derived IDC access.', 'AWS IAM Identity Center Admin and Identity Store')
     }
   })
 
@@ -614,17 +750,6 @@ export function registerCatalogTools(
       const catalog = await getGoldenAmis(args.regions)
       return toolSuccess(catalog, `Loaded ${catalog.entries.length} live Golden AMI catalog entry(ies).`, 'ISGDDocs and GovCloud AMIBuilder')
     }
-  })
-
-  read({
-    name: 'ghost.support.search', title: 'Search GHOST support knowledge',
-    description: 'Compatibility alias for ghost.docs.search. Use ghost.docs.search as the first lookup for internal catalogs, policy, process, and team concepts.',
-    inputSchema: z.object({
-      query: z.string().min(2).max(2000),
-      max_results: z.number().int().min(1).max(10).default(5),
-      cursor: z.string().optional()
-    }),
-    handler: documentationSearch
   })
 
   read({
@@ -718,6 +843,9 @@ export function registerCatalogTools(
       query: z.string().optional(),
       resource_id: z.string().optional(),
       resource_name: z.string().optional(),
+      tags: z.record(z.string().min(1).max(128), z.string().max(256)).refine(value => Object.keys(value).length <= 20, 'At most 20 tag filters are allowed').optional(),
+      compliance_status: z.array(z.enum(['COMPLIANT', 'NON_COMPLIANT', 'NOT_APPLICABLE', 'INSUFFICIENT_DATA'])).max(4).optional(),
+      compliance_only: z.boolean().default(false),
       limit: flexibleIntegerSchema
     }),
     getAuditTargetIds: args => stringList(accountInput(args)),
@@ -728,7 +856,10 @@ export function registerCatalogTools(
         resourceTypes: resourceTypes(args.resource_type ?? args.resource_types),
         regions: stringList(args.region ?? args.regions),
         resourceId: args.resource_id,
-        resourceName: args.resource_name || args.query
+        resourceName: args.resource_name || args.query,
+        tags: args.tags,
+        complianceStatus: args.compliance_status,
+        complianceOnly: args.compliance_only
       }
       const result = await queryConfigResources(scope.operationalAccountIds, filters, { mode: 'preview', limit, environment: scope.environment })
       const guidance = scope.accounts.length === 1
@@ -758,14 +889,15 @@ export function registerCatalogTools(
   const searchInstances = async (args: any) => {
     const scope = await resolveOperationalScope(accountInput(args), args.environment, { requireAccount: true })
     const limit = boundedInteger(args.limit, { name: 'limit', minimum: 1, maximum: 100, fallback: 25 })
-    const states = stringList(args.state).map(value => value.toLowerCase())
+    const states = enumList(args.state, ['pending', 'running', 'shutting-down', 'terminated', 'stopping', 'stopped'] as const, 'state')
     const regions = stringList(args.region ?? args.regions)
     const result = await queryConfigResources(scope.operationalAccountIds, {
       resourceTypes: ['AWS::EC2::Instance'],
       regions,
       resourceId: args.instance_id,
-      resourceName: args.instance_id ? undefined : args.query
-    }, { mode: 'preview', limit: states.length ? 100 : limit, environment: scope.environment })
+      resourceName: args.instance_id ? undefined : args.query,
+      instanceStates: states
+    }, { mode: 'preview', limit, environment: scope.environment })
     const records = result.records.map(resource => {
       const configuration = resource.configuration || {}
       return {
@@ -780,7 +912,7 @@ export function registerCatalogTools(
         accountId: resource.accountId,
         accountName: resource.accountName
       }
-    }).filter(record => !states.length || states.includes(record.state.toLowerCase())).slice(0, limit)
+    })
     const guidance = await advancedQueryGuidance(principal, scope.accounts[0]!, `npm run ghost:aws -- ec2 describe-instances --region ${regions[0] || (scope.environment === 'govcloud' ? 'us-gov-west-1' : 'us-east-1')} --output json`)
     return toolSuccess({ records, hasMore: result.hasMore || records.length >= limit }, `Loaded ${records.length} EC2 instance(s).`, 'AWS Config', {
       warnings: result.hasMore ? ['Results are bounded. Narrow the account, region, state, or name filters for complete inventory.'] : undefined,
@@ -799,16 +931,14 @@ export function registerCatalogTools(
   })
 
   read({
-    name: 'ghost.instances.get', title: 'Legacy: Get an EC2 instance', description: 'Compatibility alias for ghost.instances.search. Prefer ghost.instances.search for exact lookup or listing.',
-    inputSchema: z.object({ instance_id: z.string().regex(/^i-[0-9a-f]{8,17}$/), account_identifiers: accountIdentifiersSchema }),
-    handler: async args => searchInstances({ instance_id: args.instance_id, account_identifiers: args.account_identifiers, limit: 10 })
-  })
-
-  read({
     name: 'ghost.instances.utilization', title: 'Get EC2 utilization analysis', description: 'Return the latest persisted GHOST utilization summary and bounded instance classifications for an account.',
-    inputSchema: z.object({ account_id: z.string(), environment: operationalEnvironmentSchema, classification: z.string().optional(), limit: z.number().int().min(1).max(100).default(25) }),
+    inputSchema: z.object({ account_id: z.string(), environment: operationalEnvironmentSchema, classification: z.enum(['over-provisioned', 'under-provisioned', 'optimized', 'no-data']).optional(), limit: z.number().int().min(1).max(100).default(25) }),
+    getAuditTargetIds: args => [args.account_id],
     handler: async args => {
-      const latest = await getLatestAnalysis(args.account_id, args.environment)
+      const { account } = await resolveAccount(args.account_id)
+      const accountId = args.environment === 'govcloud' ? account.govCloudAccountId || account.awsGovCloudAccountID : account.accountId || account.awsStandardAccountID
+      if (!accountId) return toolError('ACCOUNT_ENVIRONMENT_MISSING', `The account has no ${args.environment} identifier.`)
+      const latest = await getLatestAnalysis(accountId, args.environment)
       if (!latest) return toolError('UTILIZATION_NOT_FOUND', 'No completed utilization analysis is available for this account.')
       const classifications = await getInstanceClassifications(latest.jobId, { classification: args.classification, limit: args.limit })
       return toolSuccess({ latest, classifications }, 'Utilization analysis loaded.', 'GHOST utilization analysis')
@@ -816,12 +946,35 @@ export function registerCatalogTools(
   })
 
   read({
+    name: 'ghost.instances.health', title: 'Get EC2 instance health', description: 'Return bounded patch, security, vulnerability, alarm, and inventory evidence for one EC2 instance.',
+    inputSchema: z.object({
+      account_identifier: z.string().min(1),
+      instance_id: z.string().regex(/^i-[0-9a-f]{8,17}$/),
+      environment: operationalEnvironmentSchema,
+      region: z.string().regex(/^(?:[a-z]{2}(?:-gov)?-[a-z]+-\d)$/).optional(),
+      lookback_days: z.number().int().min(1).max(90).default(30),
+      limit: z.number().int().min(1).max(25).default(10)
+    }),
+    getAuditTargetIds: args => [args.account_identifier],
+    handler: async args => {
+      const { account } = await resolveAccount(args.account_identifier)
+      const result = await buildInstanceHealth({ instanceId: args.instance_id, account, environment: args.environment, region: args.region, lookbackDays: args.lookback_days, limit: args.limit })
+      return toolSuccess(result, `Instance health is ${result.healthStatus} with score ${result.healthScore}.`, 'AWS Config, Systems Manager, Security Hub, Inspector, and CloudWatch', {
+        warnings: result.partialData ? ['One or more instance health domains were unavailable.'] : undefined
+      })
+    }
+  })
+
+  read({
     name: 'ghost.security.summary', title: 'Get security summary', description: 'Return a 90-day Security Hub and Inspector posture summary, including vulnerability findings and Security Hub control results. This is distinct from AWS Config rule compliance and SSM patch compliance.',
-    inputSchema: z.object({ account_id: z.string().optional() }),
+    inputSchema: z.object({ account_id: z.string().optional(), environment: operationalEnvironmentSchema }),
+    getAuditTargetIds: args => args.account_id ? [args.account_id] : undefined,
     handler: async args => {
       const account = args.account_id ? (await resolveAccount(args.account_id)).account : undefined
+      const operationalId = account ? args.environment === 'govcloud' ? account.govCloudAccountId || account.awsGovCloudAccountID : account.accountId || account.awsStandardAccountID : undefined
+      if (account && !operationalId) return toolError('ACCOUNT_ENVIRONMENT_MISSING', `The account has no ${args.environment} identifier.`)
       const result = args.account_id
-        ? await buildAccountSecurityViaAthena(args.account_id, accountDisplayName(account))
+        ? await buildAccountSecurityViaAthena(operationalId!, accountDisplayName(account))
         : await loadSecuritySummary() || await buildSecuritySummaryViaAthena()
       return toolSuccess(result, args.account_id ? 'Account security summary loaded.' : 'Organization security summary loaded.', 'AWS Security Hub and Athena')
     }
@@ -842,7 +995,7 @@ export function registerCatalogTools(
         ? account.govCloudAccountId || account.awsGovCloudAccountID
         : account.accountId || account.awsStandardAccountID
       if (!operationalId) return toolError('ACCOUNT_ENVIRONMENT_MISSING', `The account has no ${args.environment} identifier.`)
-      const domains = await collectCompliance(operationalId, args.environment, account.accountId || account.awsStandardAccountID)
+      const domains = await collectCompliance(operationalId, args.environment, account.accountId || account.awsStandardAccountID, args.detail_level)
       const response = {
         account: { name: accountDisplayName(account), commercialAccountId: account.accountId || account.awsStandardAccountID, govCloudAccountId: account.govCloudAccountId || account.awsGovCloudAccountID },
         environment: args.environment,
@@ -857,6 +1010,7 @@ export function registerCatalogTools(
   read({
     name: 'ghost.security.findings', title: 'Query security findings', description: 'Query a bounded subset of current Security Hub findings across selected accounts. Do not treat the returned page count as the account-wide finding total; use ghost.security.summary for that.',
     inputSchema: z.object({ account_identifiers: accountIdentifiersSchema, severities: flexibleStringListSchema, statuses: flexibleStringListSchema, lookback_days: flexibleIntegerSchema, limit: flexibleIntegerSchema }),
+    getAuditTargetIds: args => args.account_identifiers,
     handler: async args => {
       const severities = enumList(args.severities, ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFORMATIONAL'] as const, 'severities')
       const statuses = enumList(args.statuses, ['NEW', 'NOTIFIED', 'RESOLVED', 'SUPPRESSED'] as const, 'statuses')
@@ -919,17 +1073,15 @@ export function registerCatalogTools(
   })
 
   read({
-    name: 'ghost.audit.cloudtrail', title: 'Legacy: Query CloudTrail activity',
-    description: 'Compatibility alias for ghost.audit.search. Queries the organization trail CloudWatch log group, not CloudTrail LookupEvents.',
-    inputSchema: auditSearchSchema,
-    getAuditTargetIds: args => stringList(accountInput(args)),
-    handler: searchAudit
-  })
-
-  read({
     name: 'ghost.support.patch_compliance', title: 'Get patch compliance', description: 'Get SSM patch compliance for an account or a specific EC2 instance. This measures managed-instance patch state only, not Security Hub or AWS Config control compliance.',
-    inputSchema: z.object({ account_id: z.string(), instance_id: z.string().optional(), environment: operationalEnvironmentSchema, region: z.string().optional() }),
-    handler: async args => toolSuccess(args.instance_id ? await getInstancePatchStatus(args.instance_id, args.account_id, args.environment, args.region) : await getAccountPatchCompliance(args.account_id, args.environment, args.region), 'Patch compliance loaded.', 'AWS Systems Manager')
+    inputSchema: z.object({ account_id: z.string(), instance_id: z.string().regex(/^i-[0-9a-f]{8,17}$/).optional(), environment: operationalEnvironmentSchema, region: z.string().regex(/^(?:[a-z]{2}(?:-gov)?-[a-z]+-\d)$/).optional() }),
+    getAuditTargetIds: args => [args.account_id],
+    handler: async args => {
+      const { account } = await resolveAccount(args.account_id)
+      const accountId = args.environment === 'govcloud' ? account.govCloudAccountId || account.awsGovCloudAccountID : account.accountId || account.awsStandardAccountID
+      if (!accountId) return toolError('ACCOUNT_ENVIRONMENT_MISSING', `The account has no ${args.environment} identifier.`)
+      return toolSuccess(args.instance_id ? await getInstancePatchStatus(args.instance_id, accountId, args.environment, args.region) : await getAccountPatchCompliance(accountId, args.environment, args.region), 'Patch compliance loaded.', 'AWS Systems Manager')
+    }
   })
 
   read({
@@ -961,13 +1113,15 @@ export function registerCatalogTools(
   read({
     name: 'ghost.s3.analyze_policy', title: 'Analyze an S3 policy', description: 'Analyze a supplied S3 bucket policy for public and cross-account access risks.',
     inputSchema: z.object({ bucket_name: z.string(), bucket_account_id: z.string().regex(/^\d{12}$/), policy: z.record(z.string(), z.unknown()).nullable() }),
-    handler: async args => toolSuccess(analyzeBucketPolicy(args.bucket_name, args.policy as any, args.bucket_account_id), 'Bucket policy analysis complete.', 'GHOST policy analyzer')
+    handler: async args => JSON.stringify(args.policy || {}).length > 100_000
+      ? toolError('POLICY_TOO_LARGE', 'S3 policy input is limited to 100 KB.')
+      : toolSuccess(analyzeBucketPolicy(args.bucket_name, args.policy as any, args.bucket_account_id), 'Bucket policy analysis complete.', 'GHOST policy analyzer')
   })
 
   read({
     name: 'ghost.pipelines.overview', title: 'Get pipeline overview', description: 'Return organization-wide GitLab/Terraform pipeline summary and recent timeline.',
     inputSchema: z.object({ days: z.number().int().min(1).max(90).default(30), limit: z.number().int().min(1).max(100).default(25) }),
-    handler: async args => toolSuccess({ summary: await getOrganizationSummary(args.days, 'govcloud'), timeline: await getOrganizationTimeline(args.days, args.limit, 'govcloud') }, 'Pipeline overview loaded.', 'Athena pipeline telemetry')
+    handler: args => searchPipelines({ ...args, environment: 'govcloud' })
   })
 
   read({
@@ -976,71 +1130,27 @@ export function registerCatalogTools(
     inputSchema: z.object({
       account: flexibleStringListSchema,
       environment: flexibleEnvironmentSchema,
+      mode: z.enum(['auto', 'overview', 'account_runs', 'resource_search', 'health', 'drift']).default('auto'),
       query: z.string().optional(),
       days: flexibleIntegerSchema,
       limit: flexibleIntegerSchema
     }),
     getAuditTargetIds: args => stringList(args.account),
-    handler: async args => {
-      const days = boundedInteger(args.days, { name: 'days', minimum: 1, maximum: 90, fallback: 30 })
-      const limit = boundedInteger(args.limit, { name: 'limit', minimum: 1, maximum: 100, fallback: 25 })
-      if (args.environment && String(args.environment).toLowerCase() !== 'auto' && operationalEnvironment(args.environment) !== 'govcloud') {
-        const error = new Error('Pipeline telemetry is stored in GovCloud; environment must be auto or govcloud.')
-        error.name = 'INVALID_ENVIRONMENT'
-        throw error
-      }
-      const scope = await resolveOperationalScope(args.account, 'govcloud')
-      if (args.query) {
-        if (scope.accounts.length > 1) {
-          const error = new Error('Pipeline resource search accepts one account at a time.')
-          error.name = 'TOO_MANY_ACCOUNTS'
-          throw error
-        }
-        const result = await searchResourceAcrossAccounts(args.query, days, scope.operationalAccountIds[0], 'govcloud')
-        return toolSuccess({ mode: 'resource_search', result }, 'Pipeline resource search complete.', 'Athena pipeline telemetry', {
-          resolvedScope: scopeMetadata(scope), appliedFilters: { query: args.query, days }
-        })
-      }
-      if (scope.accounts.length) {
-        const accounts = await Promise.all(scope.accounts.map(async account => ({
-          account,
-          runs: await getPipelineRunsForAccount(account.selectedAccountId, days, 'govcloud', limit)
-        })))
-        return toolSuccess({ mode: 'account_runs', accounts }, 'Account pipeline runs loaded.', 'Athena pipeline telemetry', {
-          resolvedScope: scopeMetadata(scope), appliedFilters: { days, limit }
-        })
-      }
-      const [summary, timeline] = await Promise.all([
-        getOrganizationSummary(days, 'govcloud'),
-        getOrganizationTimeline(days, limit, 'govcloud')
-      ])
-      return toolSuccess({ mode: 'overview', summary, timeline }, 'Pipeline overview loaded.', 'Athena pipeline telemetry', {
-        resolvedScope: scopeMetadata(scope), appliedFilters: { days, limit }
-      })
-    }
-  })
-
-  read({
-    name: 'ghost.pipelines.for_account', title: 'Legacy: Get account pipelines', description: 'Compatibility alias. Prefer ghost.pipelines.search with an account.',
-    inputSchema: z.object({ account_id: z.string(), days: z.number().int().min(1).max(90).default(30), limit: z.number().int().min(1).max(100).default(25) }),
-    handler: async args => toolSuccess(await getPipelineRunsForAccount(args.account_id, args.days, 'govcloud', args.limit), 'Account pipeline runs loaded.', 'Athena pipeline telemetry')
+    handler: searchPipelines
   })
 
   read({
     name: 'ghost.pipelines.get_run', title: 'Get pipeline run', description: 'Return a pipeline run with account plans, resource changes, and errors.',
     inputSchema: z.object({ pipeline_id: z.string().regex(/^\d+$/, 'Pipeline ID must contain only digits') }),
-    handler: async args => toolSuccess(await getPipelineByIdWithDetails(args.pipeline_id, 'govcloud'), 'Pipeline details loaded.', 'Athena pipeline telemetry')
-  })
-
-  read({
-    name: 'ghost.pipelines.search_resources', title: 'Legacy: Search pipeline resources', description: 'Compatibility alias. Prefer ghost.pipelines.search with a query.',
-    inputSchema: z.object({ query: z.string().min(1), account_id: z.string().optional(), days: z.number().int().min(1).max(90).default(30) }),
-    handler: async args => toolSuccess(await searchResourceAcrossAccounts(args.query, args.days, args.account_id, 'govcloud'), 'Pipeline resource search complete.', 'Athena pipeline telemetry')
+    handler: async args => {
+      const result = await getPipelineByIdWithDetails(args.pipeline_id, 'govcloud')
+      return result.pipeline ? toolSuccess(result, 'Pipeline details loaded.', 'Athena pipeline telemetry') : toolError('PIPELINE_NOT_FOUND', 'Pipeline run not found.')
+    }
   })
 
   read({
     name: 'ghost.ai.usage', title: 'Get organization AI usage', description: 'Return Bedrock and AWS AI adoption, invocation, token, latency, and cost metrics.',
-    inputSchema: z.object({ period: z.string().default('last30days'), environment: z.enum(['all', 'commercial', 'govcloud']).default('all'), account_identifiers: accountIdentifiersSchema, group_by: z.enum(['enclave', 'account', 'environment', 'provider', 'service', 'project', 'model', 'region', 'day']).default('enclave'), cost_basis: z.enum(['billable', 'proforma']).default('proforma') }),
+    inputSchema: z.object({ period: z.enum(['last7days', 'last30days', 'last90days', 'thisMonth', 'thisQuarter', 'ytd', 'last12months']).default('last30days'), environment: z.enum(['all', 'commercial', 'govcloud']).default('all'), account_identifiers: accountIdentifiersSchema, group_by: z.enum(['enclave', 'account', 'environment', 'provider', 'service', 'project', 'model', 'region', 'day']).default('enclave'), cost_basis: z.enum(['billable', 'proforma']).default('proforma') }),
     handler: async args => toolSuccess(await queryAIUsage({ period: args.period, environment: args.environment, accountIds: await commercialIds(args.account_identifiers), groupBy: args.group_by, costBasis: args.cost_basis }), 'AI usage metrics loaded.', 'GHOST AI usage facts')
   })
 
@@ -1049,6 +1159,7 @@ export function registerCatalogTools(
     inputSchema: z.object({ question: z.string().min(1).max(4000), context: z.record(z.string(), z.unknown()).default({}) }),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     handler: async args => {
+      if (Buffer.byteLength(JSON.stringify(args.context), 'utf8') > 64_000) return toolError('CONTEXT_TOO_LARGE', 'AI context is limited to 64 KB.')
       const response = await invokeBedrock({ prompt: args.question, context: args.context, model: 'claude-sonnet', maxTokens: 1500, temperature: 0.3, systemPrompt: 'You are a GHOST AWS analyst. Use only the provided context, clearly identify missing data, and return concise actionable findings.' })
       if (!response.success) return toolError(response.error?.code || 'AI_ERROR', response.error?.message || 'Insight generation failed', response.error?.retryable)
       return toolSuccess({ insight: response.content, model: response.model, inputTokens: response.inputTokens, outputTokens: response.outputTokens }, 'GHOST insight generated.', 'AWS Bedrock')
@@ -1060,9 +1171,10 @@ export function registerCatalogTools(
     inputSchema: z.object({ problem: z.string().min(1).max(2000), account_id: z.string().optional(), environment: operationalEnvironmentSchema, service: z.string().optional() }),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     handler: async args => {
-      const response = await invokeBedrock({ prompt: `Problem: ${args.problem}\nAccount: ${args.account_id || 'not specified'}\nEnvironment: ${args.environment}\nService: ${args.service || 'not specified'}\nReturn a prioritized diagnostic plan and do not claim that any action was executed.`, model: 'claude-sonnet', maxTokens: 1800, temperature: 0.3 })
+      const evidence = args.account_id ? await buildAccountHealth((await resolveAccount(args.account_id)).account, args.environment) : undefined
+      const response = await invokeBedrock({ prompt: `Problem: ${args.problem}\nAccount: ${args.account_id || 'not specified'}\nEnvironment: ${args.environment}\nService: ${args.service || 'not specified'}\nReturn a prioritized diagnostic plan and do not claim that any action was executed.`, context: evidence ? { accountHealth: evidence } : undefined, model: 'claude-sonnet', maxTokens: 1800, temperature: 0.3 })
       if (!response.success) return toolError(response.error?.code || 'AI_ERROR', response.error?.message || 'Troubleshooting generation failed')
-      return toolSuccess({ plan: response.content, model: response.model }, 'Troubleshooting plan generated.', 'AWS Bedrock')
+      return toolSuccess({ plan: response.content, model: response.model, grounded: Boolean(evidence), evidence: evidence ? { account: evidence.account, environment: evidence.environment } : undefined }, 'Troubleshooting plan generated.', evidence ? 'AWS Bedrock and GHOST account health' : 'AWS Bedrock')
     }
   })
 
@@ -1123,15 +1235,45 @@ export function registerCatalogTools(
   })
 
   collaborate({
+    name: 'ghost.notifications.action', title: 'Update my notifications', description: 'Mark one notification read, archive it, or mute/unmute personal notifications.',
+    inputSchema: z.discriminatedUnion('action', [
+      z.object({ action: z.literal('mark_read'), notification_id: z.string().min(1), idempotency_key: idempotencyKeySchema() }),
+      z.object({ action: z.literal('archive'), notification_id: z.string().min(1), idempotency_key: idempotencyKeySchema() }),
+      z.object({ action: z.literal('mute'), duration: z.enum(['1h', '4h', '24h']).default('1h'), idempotency_key: idempotencyKeySchema() }),
+      z.object({ action: z.literal('unmute'), idempotency_key: idempotencyKeySchema() })
+    ]),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    handler: async args => {
+      const request = { action: args.action, notificationId: 'notification_id' in args ? args.notification_id : undefined, duration: 'duration' in args ? args.duration : undefined }
+      const result = await runIdempotent(principal, 'ghost.notifications.action', args.idempotency_key, request, async () => {
+        if (args.action === 'mark_read' || args.action === 'archive') {
+          const updated = await setNotificationStatus(principal.email, args.notification_id, args.action === 'mark_read' ? 'read' : 'archived')
+          if (!updated) throw Object.assign(new Error('Notification not found.'), { code: 'NOTIFICATION_NOT_FOUND' })
+          return { action: args.action, notificationId: args.notification_id, status: args.action === 'mark_read' ? 'read' : 'archived' }
+        }
+        const mute = await setNotificationMute(principal.email, { duration: args.action === 'mute' ? args.duration : undefined, unmute: args.action === 'unmute' })
+        return { action: args.action, ...mute }
+      }, value => value, async reference => reference)
+      return toolSuccess(result.value, result.replayed ? 'Existing notification action returned.' : 'Notification action completed.', 'GHOST user notification inbox')
+    }
+  })
+
+  collaborate({
     name: 'ghost.evidence.create', title: 'Create evidence bundle',
     description: 'Explicitly rerun authoritative account-health queries and create a private 90-day JSON and Markdown evidence bundle. It never captures credentials or delegated tokens.',
-    inputSchema: z.object({ account_identifier: z.string().min(1), title: z.string().min(1).max(160), selected_domains: z.array(z.enum(EVIDENCE_DOMAINS)).min(1), lookback_days: z.number().int().min(1).max(90).default(30), environment: operationalEnvironmentSchema }),
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    inputSchema: z.object({ account_identifier: z.string().min(1), title: z.string().min(1).max(160), selected_domains: z.array(z.enum(EVIDENCE_DOMAINS)).min(1), lookback_days: z.number().int().min(1).max(90).default(30), environment: operationalEnvironmentSchema, idempotency_key: idempotencyKeySchema() }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     getAuditTargetIds: args => [args.account_identifier],
     handler: async args => {
       const { account } = await resolveAccount(args.account_identifier)
-      const bundle = await createEvidenceBundle({ ownerSubject: principal.subject, accountIdentifier: args.account_identifier, title: args.title, selectedDomains: args.selected_domains, lookbackDays: args.lookback_days, account, environment: args.environment })
-      return toolSuccess(bundle, 'Created a private evidence bundle with a 90-day retention period.', 'GHOST private evidence storage')
+      const input = { ownerSubject: principal.subject, accountIdentifier: args.account_identifier, title: args.title, selectedDomains: args.selected_domains, lookbackDays: args.lookback_days, account, environment: args.environment }
+      const result = await runIdempotent(principal, 'ghost.evidence.create', args.idempotency_key, { accountIdentifier: args.account_identifier, title: args.title, selectedDomains: args.selected_domains, lookbackDays: args.lookback_days, environment: args.environment },
+        () => createEvidenceBundle(input), value => ({ bundleId: value.bundleId }), async reference => {
+          const bundle = await getEvidenceBundle(reference.bundleId, principal.subject)
+          if (!bundle) throw new Error('Idempotent evidence bundle no longer exists.')
+          return bundle
+        })
+      return toolSuccess(result.value, result.replayed ? 'Existing evidence bundle returned for this idempotency key.' : 'Created a private evidence bundle with a 90-day retention period.', 'GHOST private evidence storage')
     }
   })
 
@@ -1175,17 +1317,44 @@ export function registerCatalogTools(
   })
 
   collaborate({
-    name: 'ghost.preferences.update', title: 'Update my preferences', description: 'Update the authenticated user’s timezone, favorites, or other GHOST preferences.',
-    inputSchema: z.object({ timezone: z.string().optional(), preferences: z.record(z.string(), z.unknown()).optional() }),
+    name: 'ghost.preferences.update', title: 'Update my preferences', description: 'Update the authenticated user’s timezone, favorite accounts, or recent accounts using validated values.',
+    inputSchema: z.object({
+      timezone: z.string().min(1).max(64).optional(),
+      favorite_accounts: z.array(z.string().min(1).max(256)).max(100).optional(),
+      recent_accounts: z.array(z.object({ account: z.string().min(1).max(256), viewed_at: z.string().datetime().optional() })).max(10).optional()
+    }).refine(value => value.timezone !== undefined || value.favorite_accounts !== undefined || value.recent_accounts !== undefined, 'Provide at least one preference update.'),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-    handler: async args => toolSuccess(await updateUserPreferences(principal.email, args), 'Preferences updated.', 'GHOST user preferences')
+    handler: async args => {
+      if (args.timezone) {
+        try {
+          new Intl.DateTimeFormat('en-US', { timeZone: args.timezone }).format()
+        } catch {
+          return toolError('INVALID_TIMEZONE', 'timezone must be a valid IANA timezone name.')
+        }
+      }
+      const preferences: Record<string, unknown> = {}
+      if (args.favorite_accounts) preferences.favoriteAccounts = await Promise.all(args.favorite_accounts.map(async identifier => {
+        const account = (await resolveAccount(identifier)).account
+        return account.accountId || account.awsStandardAccountID || account.govCloudAccountId || account.awsGovCloudAccountID
+      }))
+      if (args.recent_accounts) preferences.recentlyViewedAccounts = await Promise.all(args.recent_accounts.map(async item => {
+        const account = (await resolveAccount(item.account)).account
+        return { accountId: account.accountId || account.awsStandardAccountID || account.govCloudAccountId || account.awsGovCloudAccountID, viewedAt: item.viewed_at || new Date().toISOString() }
+      }))
+      const result = await updateUserPreferences(principal.email, { timezone: args.timezone, preferences })
+      return toolSuccess(result, 'Preferences updated.', 'GHOST user preferences')
+    }
   })
 
   collaborate({
     name: 'ghost.chat_threads.list', title: 'List my chat threads', description: 'List the authenticated user’s GHOST chat threads.',
-    inputSchema: z.object({ search: z.string().optional(), pinned: z.boolean().optional(), archived: z.boolean().optional(), limit: z.number().int().min(1).max(100).default(25) }),
+    inputSchema: z.object({ search: z.string().optional(), pinned: z.boolean().optional(), archived: z.boolean().optional(), limit: z.number().int().min(1).max(100).default(25), cursor: z.string().optional() }),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
-    handler: async args => toolSuccess(await getUserThreads(principal.email, { searchQuery: args.search, isPinned: args.pinned, isArchived: args.archived, limit: args.limit }), 'Chat threads loaded.', 'GHOST chat storage')
+    handler: async args => {
+      const cursor = decodeCursor<{ threadId: string; lastMessageAt: string }>(args.cursor)
+      const result = await getUserThreads(principal.email, { searchQuery: args.search, isPinned: args.pinned, isArchived: args.archived, limit: args.limit, lastKey: cursor })
+      return toolSuccess(result, 'Chat threads loaded.', 'GHOST chat storage', { nextCursor: result.lastKey ? encodeCursor(result.lastKey) : undefined })
+    }
   })
 
   collaborate({
@@ -1200,13 +1369,16 @@ export function registerCatalogTools(
   collaborate({
     name: 'ghost.chat_threads.create', title: 'Create a chat thread', description: 'Create a user-owned GHOST chat thread.',
     inputSchema: z.object({ title: z.string().max(120).optional(), initial_message: z.string().max(10000).optional(), idempotency_key: idempotencyKeySchema() }),
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     handler: async args => {
-      const result = await runIdempotent(principal, 'ghost.chat_threads.create', args.idempotency_key, async () => {
-        const thread = await createThread(principal.email, { title: args.title })
+      const result = await runIdempotent(principal, 'ghost.chat_threads.create', args.idempotency_key, { title: args.title, initialMessage: args.initial_message }, async () => {
         return args.initial_message
-          ? await addMessageToThread(thread.threadId, principal.email, { role: 'user', content: args.initial_message })
-          : thread
+          ? await createThreadWithInitialMessage(principal.email, args.initial_message, { title: args.title, messageKey: `mcp-${args.idempotency_key}` })
+          : await createThread(principal.email, { title: args.title })
+      }, value => ({ threadId: value.threadId }), async reference => {
+        const thread = await getThreadById(reference.threadId, principal.email)
+        if (!thread) throw new Error('Idempotent chat thread no longer exists.')
+        return thread
       })
       return toolSuccess(result.value, result.replayed ? 'Existing chat thread returned for this idempotency key.' : 'Chat thread created.', 'GHOST chat storage')
     }
@@ -1225,12 +1397,21 @@ export function registerCatalogTools(
   collaborate({
     name: 'ghost.chat_threads.add_message', title: 'Add a chat message', description: 'Append a user message to a user-owned GHOST chat thread.',
     inputSchema: z.object({ thread_id: z.string().uuid(), content: z.string().min(1).max(10000), idempotency_key: idempotencyKeySchema() }),
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     handler: async args => {
-      const result = await runIdempotent(principal, 'ghost.chat_threads.add_message', args.idempotency_key, () =>
-        addMessageToThread(args.thread_id, principal.email, { role: 'user', content: args.content }))
+      const result = await runIdempotent(principal, 'ghost.chat_threads.add_message', args.idempotency_key, { threadId: args.thread_id, content: args.content }, () =>
+        addMessageToThread(args.thread_id, principal.email, { role: 'user', content: args.content }, { messageKey: `mcp-${args.idempotency_key}` }),
+      value => ({ threadId: value?.threadId || args.thread_id }), async reference => getThreadById(reference.threadId, principal.email))
       const thread = result.value
-      return thread ? toolSuccess(thread, 'Message added.', 'GHOST chat storage') : toolError('THREAD_NOT_FOUND', 'Thread not found.')
+      return thread ? toolSuccess({
+        threadId: thread.threadId,
+        title: thread.title,
+        messageCount: thread.messageCount,
+        lastMessageAt: thread.lastMessageAt,
+        lastMessagePreview: thread.lastMessagePreview,
+        hasMoreMessages: thread.hasMoreMessages,
+        messagesNextToken: thread.messagesNextToken
+      }, 'Message added.', 'GHOST chat storage') : toolError('THREAD_NOT_FOUND', 'Thread not found.')
     }
   })
 
@@ -1261,23 +1442,37 @@ export function registerCatalogTools(
 
   collaborate({
     name: 'ghost.reports.list', title: 'List my reports and exports', description: 'List the authenticated user’s scheduled reports and recent asynchronous dataset exports.',
-    inputSchema: z.object({ status: z.string().optional(), limit: z.number().int().min(1).max(100).default(25) }),
+    inputSchema: z.object({
+      status: z.enum(['active', 'paused']).optional(),
+      export_status: z.enum(['queued', 'running', 'complete', 'error', 'canceled']).optional(),
+      limit: z.number().int().min(1).max(100).default(25),
+      report_cursor: z.string().optional(),
+      export_cursor: z.string().optional()
+    }),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
     handler: async args => {
-      const [reports, exports] = await Promise.all([listUserReports(principal.email, args.status, args.limit), listDatasetExportJobs(principal.email)])
-      return toolSuccess({ reports: reports.reports, exports: exports.slice(0, args.limit) }, 'Reports and exports loaded.', 'GHOST report storage')
+      const [reports, exports] = await Promise.all([
+        listUserReports(principal.email, args.status, args.limit, args.report_cursor),
+        queryDatasetExportJobs(principal.email, { status: args.export_status, limit: args.limit, cursor: args.export_cursor })
+      ])
+      return toolSuccess({ reports: reports.reports, exports: exports.jobs, nextReportCursor: reports.nextCursor, nextExportCursor: exports.nextCursor }, 'Reports and exports loaded.', 'GHOST report storage')
     }
   })
 
   collaborate({
     name: 'ghost.reports.start_export', title: 'Start a dataset export', description: 'Queue a user-owned Config, Security Hub, CloudTrail, or Entra dataset export.',
     inputSchema: z.object({ report_config: z.record(z.string(), z.unknown()), idempotency_key: idempotencyKeySchema() }),
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     handler: async args => {
       const config = args.report_config as unknown as DatasetReportConfig
       const errors = getDatasetReportConfigErrors(config)
       if (errors.length) return toolError('INVALID_REPORT_CONFIG', errors.join('; '))
-      const result = await runIdempotent(principal, 'ghost.reports.start_export', args.idempotency_key, () => createDatasetExportJob(principal.email, config))
+      const result = await runIdempotent(principal, 'ghost.reports.start_export', args.idempotency_key, args.report_config, () => createDatasetExportJob(principal.email, config),
+        value => ({ jobId: value.jobId }), async reference => {
+          const job = await getDatasetExportJob(reference.jobId, principal.email)
+          if (!job) throw new Error('Idempotent export job no longer exists.')
+          return job
+        })
       return toolSuccess(result.value, result.replayed ? 'Existing export returned for this idempotency key.' : 'Dataset export queued.', 'GHOST dataset export queue')
     }
   })
@@ -1292,6 +1487,21 @@ export function registerCatalogTools(
   })
 
   collaborate({
+    name: 'ghost.reports.cancel_export', title: 'Cancel a dataset export', description: 'Cancel an authenticated-user-owned queued or running dataset export.',
+    inputSchema: z.object({ job_id: z.string().uuid(), idempotency_key: idempotencyKeySchema() }),
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    handler: async args => {
+      const result = await runIdempotent(principal, 'ghost.reports.cancel_export', args.idempotency_key, { jobId: args.job_id }, async () => {
+        const job = await getDatasetExportJob(args.job_id, principal.email)
+        if (!job) throw Object.assign(new Error('Export job not found.'), { code: 'EXPORT_NOT_FOUND' })
+        if (!await cancelDatasetExportJob(args.job_id, principal.email)) throw Object.assign(new Error(`Export cannot be canceled from status ${job.status}.`), { code: 'EXPORT_NOT_CANCELABLE' })
+        return { jobId: args.job_id, canceled: true, previousStatus: job.status }
+      }, value => value, async reference => reference)
+      return toolSuccess(result.value, result.replayed ? 'Existing cancellation result returned.' : 'Dataset export canceled.', 'GHOST dataset export queue')
+    }
+  })
+
+  collaborate({
     name: 'ghost.reports.download_url', title: 'Get export download URL', description: 'Create a five-minute download URL for a completed authenticated-user-owned export.',
     inputSchema: z.object({ job_id: z.string().uuid() }), annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     handler: async args => {
@@ -1301,16 +1511,4 @@ export function registerCatalogTools(
     }
   })
 
-  collaborate({
-    name: 'ghost.reports.run', title: 'Run my report', description: 'Run an existing authenticated-user-owned dataset report immediately.',
-    inputSchema: z.object({ report_id: z.string().min(1), idempotency_key: idempotencyKeySchema() }),
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-    handler: async args => {
-      const report = await getReport(args.report_id)
-      if (!report || report.createdBy !== principal.email) return toolError('REPORT_NOT_FOUND', 'Report not found.')
-      const replay = await runIdempotent(principal, 'ghost.reports.run', args.idempotency_key, () => executeScheduledReport(report))
-      const result = replay.value
-      return result.success ? toolSuccess(result, 'Report execution completed.', 'GHOST report scheduler') : toolError('REPORT_RUN_FAILED', result.error || 'Report execution failed')
-    }
-  })
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { getMcpAuditTableConfig, getOAuthTableConfig } from '../../server/mcp/config'
-import { checkMcpRateLimit } from '../../server/mcp/rate-limit'
+import { checkMcpRateLimit, extractMcpToolNames } from '../../server/mcp/rate-limit'
 import { decodeCursor, encodeCursor, normalizeLimit, toolError, toolSuccess } from '../../server/mcp/results'
 
 test('MCP persistence targets the deployment account when configured', () => {
@@ -41,11 +41,16 @@ test('MCP tool results include structured content and explicit errors', () => {
   assert.equal((failure.structuredContent as any).error.code, 'TEST_ERROR')
 })
 
-test('MCP rate limiting returns a stable retry window', () => {
+test('MCP rate limiting returns a stable retry window', async () => {
   const key = `test-${Date.now()}-${Math.random()}`
-  assert.equal(checkMcpRateLimit(key, 2, 60).allowed, true)
-  assert.equal(checkMcpRateLimit(key, 2, 60).allowed, true)
-  const denied = checkMcpRateLimit(key, 2, 60)
+  assert.equal((await checkMcpRateLimit(key, 2, 60)).allowed, true)
+  assert.equal((await checkMcpRateLimit(key, 2, 60)).allowed, true)
+  const denied = await checkMcpRateLimit(key, 2, 60)
   assert.equal(denied.allowed, false)
   assert.ok(denied.retryAfterSeconds > 0)
+})
+
+test('MCP rate limiting derives tool names from JSON-RPC envelopes', () => {
+  assert.deepEqual(extractMcpToolNames({ method: 'tools/call', params: { name: 'ghost.ai.insight' } }), ['ghost.ai.insight'])
+  assert.deepEqual(extractMcpToolNames([{ method: 'tools/list' }, { method: 'tools/call', params: { name: 'ghost.reports.start_export' } }]), ['ghost.reports.start_export'])
 })

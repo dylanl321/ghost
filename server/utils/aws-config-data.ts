@@ -134,6 +134,11 @@ async function fetchResourcesViaQuery(
   }
   if (filters.resourceName) {
     queryParts.push(`${whereStarted ? 'AND' : 'WHERE'} ${buildConfigResourceNamePredicate(filters.resourceName)}`)
+    whereStarted = true
+  }
+  if (filters.instanceStates?.length) {
+    const states = filters.instanceStates.map(state => `'${state.replace(/'/g, "''")}'`).join(', ')
+    queryParts.push(`${whereStarted ? 'AND' : 'WHERE'} configuration.state.name IN (${states})`)
   }
 
   const expression = queryParts.join('\n')

@@ -13,6 +13,17 @@ interface InteractionBody {
   action: 'details' | 'login' | 'approve' | 'deny'
 }
 
+export function requestedGhostResourceScopes(
+  params: { scope?: unknown; resource?: unknown },
+  missingResourceScopes: Record<string, string[]> | undefined,
+  resource: string
+): Array<typeof GHOST_MCP_SCOPES[number]> {
+  const requested = new Set(String(params.scope || '').split(' ').filter(scope => GHOST_MCP_SCOPES.includes(scope as any)))
+  const missing = missingResourceScopes?.[resource]
+  const candidates = missing?.length ? missing : [...requested]
+  return [...new Set(candidates.filter(scope => requested.has(scope) && GHOST_MCP_SCOPES.includes(scope as any)))] as Array<typeof GHOST_MCP_SCOPES[number]>
+}
+
 function userValue(user: any, ...keys: string[]): string | undefined {
   for (const key of keys) {
     const value = user?.[key] ?? user?.claims?.[key]
@@ -145,14 +156,12 @@ export default defineEventHandler(async event => {
       hasGrant: Boolean(details.grantId)
     })
   }
-  // Use the provider's computed gaps for OIDC claims, then grant the normal GHOST
-  // capability set. Clients should not need to know or choose internal scope names.
+  // Grant only the supported resource scopes the client requested and the user saw.
   if (missing.missingOIDCScope?.length) grant.addOIDCScope(missing.missingOIDCScope)
   if (missing.missingOIDCClaims?.length) grant.addOIDCClaims(missing.missingOIDCClaims)
-  for (const [resource, scopes] of Object.entries(missing.missingResourceScopes || {})) {
-    grant.addResourceScope(resource, scopes)
-  }
-  grant.addResourceScope(getMcpResourceUrl().href, GHOST_MCP_SCOPES)
+  const resource = getMcpResourceUrl().href
+  const requestedScopes = requestedGhostResourceScopes(details.params, missing.missingResourceScopes, resource)
+  if (requestedScopes.length) grant.addResourceScope(resource, requestedScopes)
   const grantId = await grant.save()
   const consent = details.grantId ? {} : { grantId }
 
