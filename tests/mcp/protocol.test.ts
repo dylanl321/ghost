@@ -21,17 +21,17 @@ function listTools(scopes: GhostMcpPrincipal['scopes']) {
   const server = new McpServer({ name: 'ghost-test', version: '1.0.0' })
   const user = principal(scopes)
   registerGhostTool(server, user, {
-    name: 'ghost.read.test', title: 'Read test', description: 'Read test', scope: 'ghost.read',
+    name: 'ghost.accounts.get', title: 'Read test', description: 'Read test', scope: 'ghost.read',
     inputSchema: z.object({}), annotations: { readOnlyHint: true },
     handler: () => ({ content: [{ type: 'text', text: 'read' }] })
   })
   registerGhostTool(server, user, {
-    name: 'ghost.write.test', title: 'Write test', description: 'Write test', scope: 'ghost.collaborate',
+    name: 'ghost.preferences.get', title: 'Write test', description: 'Write test', scope: 'ghost.collaborate',
     inputSchema: z.object({}), annotations: { readOnlyHint: false },
     handler: () => ({ content: [{ type: 'text', text: 'write' }] })
   })
   registerGhostTool(server, user, {
-    name: 'ghost.credentials.test', title: 'Credential test', description: 'Credential test', scope: 'ghost.credentials.issue',
+    name: 'ghost.credentials.start', title: 'Credential test', description: 'Credential test', scope: 'ghost.credentials.issue',
     inputSchema: z.object({}), annotations: { readOnlyHint: false },
     handler: () => ({ content: [{ type: 'text', text: 'credential' }] })
   })
@@ -40,9 +40,9 @@ function listTools(scopes: GhostMcpPrincipal['scopes']) {
 }
 
 test('tool discovery only returns OAuth-scope-eligible tools', () => {
-  assert.deepEqual(listTools(['ghost.read']), ['ghost.read.test'])
-  assert.deepEqual(listTools(['ghost.read', 'ghost.collaborate']), ['ghost.read.test', 'ghost.write.test'])
-  assert.deepEqual(listTools(['ghost.read', 'ghost.credentials.issue']), ['ghost.read.test', 'ghost.credentials.test'])
+  assert.deepEqual(listTools(['ghost.read']), ['ghost.accounts.get'])
+  assert.deepEqual(listTools(['ghost.read', 'ghost.collaborate']), ['ghost.accounts.get', 'ghost.preferences.get'])
+  assert.deepEqual(listTools(['ghost.read', 'ghost.credentials.issue']), ['ghost.accounts.get', 'ghost.credentials.start'])
 })
 
 test('HTTP handler negotiates the protocol version used by Codex', async () => {

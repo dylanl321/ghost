@@ -16,6 +16,8 @@ import { getRequestStateKey } from './config'
 import { ghostEnvironmentContext, ghostMcpInstructions } from './environment-context'
 import { getMcpPrincipal } from './policy'
 import { registerCatalogTools } from './tools/catalog'
+import { prepareMcpDiagnosticFailure, recordMcpAudit } from './audit'
+import { ghostMcpCatalog } from '../../shared/mcp/catalog'
 
 const confirmationCodec = createRequestStateCodec<{ tool: string; targetId: string }>({
   key: getRequestStateKey(),
@@ -43,6 +45,34 @@ async function resolveResourceAccount(identifier: string) {
   return { account, identifierType: 'name', matchedValue: identifier, source: account.source }
 }
 
+async function auditedResourceRead<T>(
+  principal: ReturnType<typeof getMcpPrincipal>,
+  operation: string,
+  source: string,
+  targetIds: string[] | undefined,
+  execute: () => Promise<T> | T
+): Promise<T> {
+  const start = performance.now()
+  try {
+    const value = await execute()
+    await recordMcpAudit({ principal, tool: operation, status: 'success', durationMs: performance.now() - start, targetIds, source })
+    return value
+  } catch (error: any) {
+    await recordMcpAudit({
+      principal,
+      tool: operation,
+      status: 'error',
+      durationMs: performance.now() - start,
+      targetIds,
+      source,
+      errorCode: error?.code || error?.name,
+      errorExplanation: error?.message,
+      rawFailure: prepareMcpDiagnosticFailure({}, error)
+    })
+    throw error
+  }
+}
+
 function registerResources(server: McpServer, authInfo?: AuthInfo) {
   const principal = getMcpPrincipal(authInfo)
   server.registerResource('ghost-catalog', 'ghost://catalog', {
@@ -50,34 +80,56 @@ function registerResources(server: McpServer, authInfo?: AuthInfo) {
     description: 'Available GHOST data domains and safety boundaries.',
     mimeType: 'application/json',
     cacheHint: { ttlMs: 300_000, cacheScope: 'private' }
-  }, async (uri: URL) => jsonResource(uri, {
-    domains: ['accounts', 'organization', 'costs', 'users', 'access', 'credentials', 'resources', 'security', 'cloudtrail', 'support', 'pipelines', 'ai-usage', 'reports', 'preferences', 'chat', 'outputs'],
+  }, async (uri: URL) => auditedResourceRead(principal, 'resource.ghost.catalog', 'GHOST MCP catalog', undefined, () => jsonResource(uri, {
+    domains: [...new Set(ghostMcpCatalog.filter(tool => principal.scopes.includes(tool.scope)).map(tool => tool.domain))],
+    tools: ghostMcpCatalog.filter(tool => principal.scopes.includes(tool.scope)),
     environmentContext: ghostEnvironmentContext,
     scopes: principal.scopes,
     boundaries: ['organization-wide reads', 'user-owned collaboration writes', 'explicitly confirmed user-assigned Identity Center credentials', 'no administrative or AWS infrastructure mutations']
-  }))
+  })))
 
   server.registerResource('ghost-environment-context', 'ghost://context/environment', {
     title: 'GDMS AWS environment context',
     description: 'GovCloud-first operating rules, Commercial exceptions, management accounts, account pairing, and GHOST terminology.',
     mimeType: 'application/json',
     cacheHint: { ttlMs: 3_600_000, cacheScope: 'public' }
-  }, async (uri: URL) => jsonResource(uri, ghostEnvironmentContext))
+  }, async (uri: URL) => auditedResourceRead(principal, 'resource.ghost.environment', 'GHOST environment context', undefined, () => jsonResource(uri, ghostEnvironmentContext)))
 
-  server.registerResource('ghost-user', 'ghost://users/me', {
+  if (principal.scopes.includes('ghost.collaborate')) server.registerResource('ghost-user', 'ghost://users/me', {
     title: 'Current GHOST MCP user', mimeType: 'application/json', cacheHint: { ttlMs: 60_000, cacheScope: 'private' }
-  }, async (uri: URL) => jsonResource(uri, { principal, preferences: await getUserPreferences(principal.email) }))
+  }, async (uri: URL) => auditedResourceRead(principal, 'resource.ghost.user', 'GHOST user preferences', undefined, async () => {
+    const preferences = await getUserPreferences(principal.email)
+    return jsonResource(uri, {
+      user: { subject: principal.subject, email: principal.email, displayName: principal.displayName },
+      scopes: principal.scopes,
+      preferences: {
+        timezone: preferences.timezone,
+        favoriteAccountCount: Array.isArray(preferences.preferences?.favoriteAccounts) ? preferences.preferences.favoriteAccounts.length : 0,
+        recentAccountCount: Array.isArray(preferences.preferences?.recentlyViewedAccounts) ? preferences.preferences.recentlyViewedAccounts.length : 0
+      }
+    })
+  }))
 
-  server.registerResource('ghost-account', new ResourceTemplate('ghost://accounts/{identifier}', { list: undefined }), {
+  if (principal.scopes.includes('ghost.read')) server.registerResource('ghost-account', new ResourceTemplate('ghost://accounts/{identifier}', { list: undefined }), {
     title: 'GHOST account metadata', description: 'One account resolved by any GHOST identifier.', mimeType: 'application/json'
-  }, async (uri, variables) => jsonResource(uri, await resolveResourceAccount(String(variables.identifier))))
+  }, async (uri, variables) => {
+    const identifier = String(variables.identifier)
+    return auditedResourceRead(principal, 'resource.ghost.account', 'Organizations and GHOST account metadata', [identifier], async () => jsonResource(uri, await resolveResourceAccount(identifier)))
+  })
 
-  server.registerResource('ghost-export', new ResourceTemplate('ghost://exports/{jobId}', { list: undefined }), {
+  if (principal.scopes.includes('ghost.collaborate')) server.registerResource('ghost-export', new ResourceTemplate('ghost://exports/{jobId}', { list: undefined }), {
     title: 'GHOST dataset export status', mimeType: 'application/json'
   }, async (uri, variables) => {
-    const job = await getDatasetExportJob(String(variables.jobId), principal.email)
-    if (!job) throw new Error('Export job not found')
-    return jsonResource(uri, job)
+    const jobId = String(variables.jobId)
+    return auditedResourceRead(principal, 'resource.ghost.export', 'GHOST dataset export queue', undefined, async () => {
+      const job = await getDatasetExportJob(jobId, principal.email)
+      if (!job) {
+        const error = new Error('Export job not found')
+        error.name = 'EXPORT_NOT_FOUND'
+        throw error
+      }
+      return jsonResource(uri, job)
+    })
   })
 }
 
@@ -94,11 +146,11 @@ function registerPrompts(server: McpServer) {
 
   server.registerPrompt('review-security-posture', {
     title: 'Review security posture', description: 'Review account security findings and recent audit activity.', argsSchema: accountArgs
-  }, ({ account }) => ({ messages: [{ role: 'user', content: { type: 'text', text: `Review the security posture of ${account}. Prioritize critical and high findings, patch compliance, policy exposure, and suspicious CloudTrail changes. Provide evidence and remediation priorities without changing AWS resources.` } }] }))
+  }, ({ account }) => ({ messages: [{ role: 'user', content: { type: 'text', text: `Review the security posture of ${account}. Prioritize critical and high findings, patch compliance, and suspicious CloudTrail changes. Query account governance before discussing policy exposure. Provide evidence and remediation priorities without changing AWS resources.` } }] }))
 
   server.registerPrompt('audit-user-access', {
     title: 'Audit user access', description: 'Review a user’s account and role mappings.', argsSchema: z.object({ user: z.string() })
-  }, ({ user }) => ({ messages: [{ role: 'user', content: { type: 'text', text: `Audit GHOST and Entra AWS account access for ${user}. List accounts, roles, duplicate or broad mappings, and recent activity where available. Do not infer access that the tools cannot verify.` } }] }))
+  }, ({ user }) => ({ messages: [{ role: 'user', content: { type: 'text', text: `Audit effective IAM Identity Center access for ${user}. List direct and group-derived account permission sets, duplicate or broad mappings, and recent activity where available. Treat Entra directory groups only as optional non-authoritative comparison data.` } }] }))
 
   server.registerPrompt('triage-pipeline-failure', {
     title: 'Triage pipeline failure', description: 'Investigate one failed pipeline and related account impact.', argsSchema: z.object({ pipeline_id: z.string() })
@@ -107,7 +159,7 @@ function registerPrompts(server: McpServer) {
 
 export async function createGhostMcpServer(context: McpRequestContext): Promise<McpServer> {
   const principal = getMcpPrincipal(context.authInfo)
-  const server = new McpServer({ name: 'ghost-aws', version: '1.0.0' }, {
+  const server = new McpServer({ name: 'ghost-aws', version: '2.0.0' }, {
     instructions: ghostMcpInstructions,
     cacheHints: {
       'server/discover': { ttlMs: 300_000, cacheScope: 'private' },
@@ -123,7 +175,7 @@ export async function createGhostMcpServer(context: McpRequestContext): Promise<
     userAgent: context.requestInfo?.headers.get('user-agent') || undefined
   })
   registerResources(server, context.authInfo)
-  registerPrompts(server)
+  if (principal.scopes.includes('ghost.read')) registerPrompts(server)
   return server
 }
 

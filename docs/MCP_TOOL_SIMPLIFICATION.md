@@ -1,6 +1,6 @@
 # MCP Tool Simplification
 
-Operational MCP tools resolve friendly account references through one shared scope service. A supplied account that cannot be resolved must fail closed and must never become an organization-wide query. Canonical tools accept scalar or list inputs while compatibility aliases preserve older contracts.
+Operational MCP tools resolve friendly account references through one shared scope service. A supplied account that cannot be resolved must fail closed and must never become an organization-wide query. Canonical tools accept scalar or list inputs. GHOST MCP 2.0 removes the retired compatibility aliases so discovery and execution share one canonical catalog.
 
 CloudTrail audit searches use the organization trail CloudWatch log group in each partition's management account. Queries are narrowed with the organization/account log-stream prefix before event filters are applied. They do not use CloudTrail `LookupEvents` or Security Lake.
 

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { getOAuthAuthorizationTtlSeconds } from '../../server/mcp/config'
 import { classifyGhostRefreshFailure, createGhostOAuthConfiguration, createGhostRefreshEvent, GHOST_REFRESH_TOKEN_ROTATION, shouldIssueGhostRefreshToken } from '../../server/mcp/oauth/provider'
+import { requestedGhostResourceScopes } from '../../server/routes/oauth/consent/[uid].post'
 
 function client(options: {
   applicationType?: string
@@ -106,4 +107,13 @@ test('Ghost refresh telemetry excludes credentials and identity', () => {
   assert.equal(JSON.stringify(event).includes('tokenValue'), false)
   assert.equal(JSON.stringify(event).includes('subject'), false)
   assert.equal(JSON.stringify(event).includes('clientId'), false)
+})
+
+test('Ghost consent grants only requested supported resource scopes', () => {
+  const resource = 'https://ghost.example.test/mcp'
+  assert.deepEqual(requestedGhostResourceScopes(
+    { scope: 'openid offline_access ghost.read', resource },
+    { [resource]: ['ghost.read'] },
+    resource
+  ), ['ghost.read'])
 })

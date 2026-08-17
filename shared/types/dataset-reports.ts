@@ -60,6 +60,9 @@ export interface ConfigDatasetFilters {
    */
   complianceOnly?: boolean
 
+  /** EC2 instance states; used only with AWS::EC2::Instance queries. */
+  instanceStates?: string[]
+
   /**
    * Filter by specific regions
    * Empty array = all regions

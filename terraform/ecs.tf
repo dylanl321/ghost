@@ -122,6 +122,10 @@ resource "aws_ecs_task_definition" "main" {
           value = "205950196477"
         },
         {
+          name  = "AWS_GOVCLOUD_MASTER_ACCOUNT_ID"
+          value = "374673712317"
+        },
+        {
           name  = "AWS_PROFORMA_ACCOUNT_ID"
           value = "253821132832"
         },

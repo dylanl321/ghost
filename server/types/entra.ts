@@ -97,6 +97,7 @@ export interface GroupMembersResponse {
   members: EntraUser[]
   totalCount: number
   nextLink?: string
+  truncated?: boolean
 }
 
 /**

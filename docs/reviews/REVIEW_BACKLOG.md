@@ -12,6 +12,7 @@ This document tracks the major feature areas that need in-depth code review, ord
 | 4 | [Support Tools](./reviews/support-tools-review.md) | Pending | ~2,500 | Single monolithic page; security tooling |
 | 5 | [Admin Dashboard](./reviews/admin-review.md) | Pending | ~6,000 | Many oversized panels; configuration management |
 | 6 | Account Details Page | **Completed** | ~8,600 | Reviewed and refactored |
+| 7 | [MCP Tools and Protocol Surface](./mcp-tools-review.md) | **Completed** | 69 reviewed; 62 canonical + 10 resources/prompts | Scope, environment mapping, privacy, and catalog sprawl |
 
 ## Completed Reviews
 

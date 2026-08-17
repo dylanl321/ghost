@@ -48,7 +48,7 @@ export async function queryEntraUsers(
       : allAccounts.map(acc => acc.accountId)
 
     // 3. Get AWS groups from Entra (server-side, uses session)
-    const { data: groupsByAccount } = await getAWSGroups(event, {
+    const { data: groupsByAccount, truncated: groupsTruncated } = await getAWSGroups(event, {
       accountId: undefined, // Get all groups
       includeDistribution: false // Only role groups for access reports
     }, options.mode === 'preview' ? { maxPages: 2, signal: options.signal } : { signal: options.signal })
@@ -83,8 +83,10 @@ export async function queryEntraUsers(
         try {
           // Get members of this group
           const membersResponse = await getGroupMembers(event, group.id, true, options.mode === 'preview'
-            ? { limit: Math.max(1, (options.limit || 25) - userRecords.length), maxPages: 2, signal: options.signal }
+            ? { maxPages: 2, signal: options.signal }
             : { signal: options.signal })
+
+          if (membersResponse.truncated) hasMore = true
 
           for (const member of membersResponse.members || []) {
             const graphMember = member as any
@@ -93,7 +95,7 @@ export async function queryEntraUsers(
               continue
             }
 
-            userRecords.push({
+            const record: EntraUserRecord = {
               userId: member.id,
               userPrincipalName: member.userPrincipalName || '',
               displayName: member.displayName || 'Unknown User',
@@ -107,7 +109,9 @@ export async function queryEntraUsers(
               jobTitle: member.jobTitle,
               department: member.department,
               manager: graphMember.manager?.displayName
-            })
+            }
+            if (!matchesEntraFilters(record, filters)) continue
+            userRecords.push(record)
             if (options.limit && userRecords.length >= options.limit) {
               hasMore = true
               break
@@ -125,37 +129,8 @@ export async function queryEntraUsers(
       }
     }
 
-    // 5. Apply additional filters
-    let filteredRecords = userRecords
-
-    // User search filter
-    if (filters.userSearch) {
-      const search = filters.userSearch.toLowerCase()
-      filteredRecords = filteredRecords.filter(r =>
-        r.displayName.toLowerCase().includes(search) ||
-        r.email.toLowerCase().includes(search) ||
-        r.userPrincipalName.toLowerCase().includes(search)
-      )
-    }
-
-    // Apply activity state against the requested lookback window.
-    const activityStatus = filters.activityStatus || (filters.activeOnly ? 'active' : 'all')
-    if (activityStatus !== 'all') {
-      const cutoffDate = new Date()
-      cutoffDate.setDate(cutoffDate.getDate() - (filters.lookbackDays || 30))
-      filteredRecords = filteredRecords.filter(record => {
-        const lastSignIn = record.lastSignIn ? new Date(record.lastSignIn) : null
-        if (activityStatus === 'active') return !!lastSignIn && lastSignIn >= cutoffDate
-        return !lastSignIn || lastSignIn < cutoffDate
-      })
-    }
-
-    // Department filter
-    if (filters.departments && filters.departments.length > 0) {
-      filteredRecords = filteredRecords.filter(r =>
-        r.department && filters.departments!.includes(r.department)
-      )
-    }
+    const filteredRecords = userRecords
+    if (groupsTruncated) hasMore = true
 
     const duration = Date.now() - startTime
     logger.info('[EntraUsers] Fetch complete', {
@@ -175,8 +150,24 @@ export async function queryEntraUsers(
 
   } catch (error: any) {
     logger.error('[EntraUsers] Failed to fetch user data', { error: error.message, stack: error.stack })
-    throw new Error(`Failed to fetch Entra user data: ${error.message}`)
+    throw new Error(`Failed to fetch Entra user data: ${error.message}`, { cause: error })
   }
+}
+
+function matchesEntraFilters(record: EntraUserRecord, filters: EntraUsersDatasetFilters): boolean {
+  if (filters.userSearch) {
+    const search = filters.userSearch.toLowerCase()
+    if (![record.displayName, record.email, record.userPrincipalName].some(value => value.toLowerCase().includes(search))) return false
+  }
+  if (filters.departments?.length && (!record.department || !filters.departments.includes(record.department))) return false
+  const activityStatus = filters.activityStatus || (filters.activeOnly ? 'active' : 'all')
+  if (activityStatus !== 'all') {
+    const cutoff = Date.now() - (filters.lookbackDays || 30) * 86_400_000
+    const lastSignIn = record.lastSignIn ? Date.parse(record.lastSignIn) : Number.NaN
+    if (activityStatus === 'active' && (!Number.isFinite(lastSignIn) || lastSignIn < cutoff)) return false
+    if (activityStatus === 'inactive' && Number.isFinite(lastSignIn) && lastSignIn >= cutoff) return false
+  }
+  return true
 }
 
 /**

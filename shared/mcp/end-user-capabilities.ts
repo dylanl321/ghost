@@ -1,3 +1,5 @@
+import { ghostMcpCatalog } from './catalog'
+
 export type McpCapabilityMode = 'Read' | 'Create' | 'Confirm'
 
 export interface McpCapabilityGroup {
@@ -95,4 +97,4 @@ export const endUserMcpCapabilityGroups: McpCapabilityGroup[] = [
   }
 ]
 
-export const endUserMcpToolNames = endUserMcpCapabilityGroups.flatMap(group => group.tools.map(tool => tool.name))
+export const endUserMcpToolNames = ghostMcpCatalog.filter(tool => tool.visibility === 'advertised').map(tool => tool.name)
