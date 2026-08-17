@@ -43,7 +43,9 @@ export default defineEventHandler(async (event) => {
     const { reports } = await listUserReports(userEmail, status)
 
     // Filter to only dataset reports
-    const datasetReports = reports.filter(r => r.reportType === 'dataset')
+    const datasetReports = reports.filter(r =>
+      r.reportType === 'dataset' || (!r.reportType && Boolean((r.reportConfig as any)?.datasets))
+    )
 
     return {
       success: true,

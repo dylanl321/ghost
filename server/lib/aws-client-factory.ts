@@ -24,6 +24,8 @@ import { SecurityLakeClient } from '@aws-sdk/client-securitylake'
 import { AthenaClient } from '@aws-sdk/client-athena'
 import { RAMClient } from '@aws-sdk/client-ram'
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime'
+import { BedrockClient } from '@aws-sdk/client-bedrock'
+import { BedrockAgentRuntimeClient } from '@aws-sdk/client-bedrock-agent-runtime'
 import { ComputeOptimizerClient } from '@aws-sdk/client-compute-optimizer'
 import { PricingClient } from '@aws-sdk/client-pricing'
 import { SESClient } from '@aws-sdk/client-ses'
@@ -80,7 +82,9 @@ const SERVICE_CLIENT_MAP = {
   'securitylake': SecurityLakeClient,
   'athena': AthenaClient,
   'ram': RAMClient,
+  'bedrock': BedrockClient,
   'bedrock-runtime': BedrockRuntimeClient,
+  'bedrock-agent-runtime': BedrockAgentRuntimeClient,
   'compute-optimizer': ComputeOptimizerClient,
   'pricing': PricingClient,
   'ses': SESClient,
@@ -158,28 +162,44 @@ function getPartitionFromRegion(region: string): AWSEnvironmentType | null {
  * Get base credentials for an environment
  */
 function getBaseCredentials(environment: AWSEnvironmentType): AWSCredentials {
-  const prefix = environment === 'commercial' ? 'AWS_COMMERCIAL' : 'AWS_GOVCLOUD'
-  
-  const accessKeyId = process.env[`${prefix}_ACCESS_KEY_ID`]
-  const secretAccessKey = process.env[`${prefix}_SECRET_ACCESS_KEY`]
-  
+  let accessKeyId: string | undefined
+  let secretAccessKey: string | undefined
+  let sessionToken: string | undefined
+
+  if (environment === 'commercial') {
+    // Support both naming conventions for commercial credentials
+    accessKeyId = process.env.COMMERCIAL_AWS_ACCESS_KEY_ID || process.env.AWS_COMMERCIAL_ACCESS_KEY_ID
+    secretAccessKey = process.env.COMMERCIAL_AWS_SECRET_ACCESS_KEY || process.env.AWS_COMMERCIAL_SECRET_ACCESS_KEY
+    sessionToken = process.env.COMMERCIAL_AWS_SESSION_TOKEN || process.env.AWS_COMMERCIAL_SESSION_TOKEN
+  } else {
+    accessKeyId = process.env.AWS_GOVCLOUD_ACCESS_KEY_ID
+    secretAccessKey = process.env.AWS_GOVCLOUD_SECRET_ACCESS_KEY
+    sessionToken = process.env.AWS_GOVCLOUD_SESSION_TOKEN
+  }
+
   if (!accessKeyId || !secretAccessKey) {
-    throw new Error(`Missing AWS credentials for ${environment} environment. Please set ${prefix}_ACCESS_KEY_ID and ${prefix}_SECRET_ACCESS_KEY`)
+    throw new Error(
+      `Missing AWS credentials for ${environment} environment. ` +
+      (environment === 'commercial'
+        ? 'Please set COMMERCIAL_AWS_ACCESS_KEY_ID and COMMERCIAL_AWS_SECRET_ACCESS_KEY'
+        : 'Please set AWS_GOVCLOUD_ACCESS_KEY_ID and AWS_GOVCLOUD_SECRET_ACCESS_KEY')
+    )
   }
-  
-  return {
-    accessKeyId,
-    secretAccessKey,
-    sessionToken: process.env[`${prefix}_SESSION_TOKEN`]
-  }
+
+  return { accessKeyId, secretAccessKey, sessionToken }
 }
 
 /**
  * Check if credentials are available for an environment
  */
 export function hasCredentials(environment: AWSEnvironmentType): boolean {
-  const prefix = environment === 'commercial' ? 'AWS_COMMERCIAL' : 'AWS_GOVCLOUD'
-  return !!(process.env[`${prefix}_ACCESS_KEY_ID`] && process.env[`${prefix}_SECRET_ACCESS_KEY`])
+  if (environment === 'commercial') {
+    return !!(
+      (process.env.COMMERCIAL_AWS_ACCESS_KEY_ID || process.env.AWS_COMMERCIAL_ACCESS_KEY_ID) &&
+      (process.env.COMMERCIAL_AWS_SECRET_ACCESS_KEY || process.env.AWS_COMMERCIAL_SECRET_ACCESS_KEY)
+    )
+  }
+  return !!(process.env.AWS_GOVCLOUD_ACCESS_KEY_ID && process.env.AWS_GOVCLOUD_SECRET_ACCESS_KEY)
 }
 
 
@@ -189,7 +209,7 @@ export function hasCredentials(environment: AWSEnvironmentType): boolean {
  */
 async function getDefaultRegion(environment: AWSEnvironmentType): Promise<string> {
   const configKey = environment === 'commercial' ? 'aws.commercial.region' : 'aws.govcloud.region'
-  const envVar = environment === 'commercial' ? 'AWS_COMMERCIAL_REGION' : 'AWS_GOVCLOUD_REGION'
+  const envVar = environment === 'commercial' ? 'COMMERCIAL_REGION' : 'AWS_GOVCLOUD_REGION'
   const fallbackDefault = environment === 'commercial' ? 'us-east-1' : 'us-gov-west-1'
 
   const defaultRegion = getConfigValue<string>(configKey, envVar, fallbackDefault)
@@ -211,6 +231,35 @@ async function getDefaultRegion(environment: AWSEnvironmentType): Promise<string
  */
 async function getAssumeRoleName(): Promise<string> {
   return getConfigValue<string>('aws.roleAssumption.roleName', 'AWS_ASSUME_ROLE_NAME', 'GDMSOrganizationsRole')
+}
+
+function normalizeRolePath(path: string | undefined): string {
+  return path?.replace(/^\/+|\/+$/g, '') || ''
+}
+
+/**
+ * Organization master roles can live under a path while member-account roles
+ * remain at the IAM root. GovCloud uses /GD/ for the organizations master.
+ */
+export function buildAssumeRoleArn(
+  environment: AWSEnvironmentType,
+  targetAccountId: string,
+  roleName: string,
+): string {
+  const partition = environment === 'commercial' ? 'aws' : 'aws-us-gov'
+  const organizationsAccountId = environment === 'commercial'
+    ? process.env.AWS_COMMERCIAL_ORGANIZATIONS_ACCOUNT_ID
+    : process.env.AWS_GOVCLOUD_ORGANIZATIONS_ACCOUNT_ID
+  const configuredPath = environment === 'commercial'
+    ? process.env.AWS_COMMERCIAL_ORGANIZATIONS_ROLE_PATH
+    : process.env.AWS_GOVCLOUD_ORGANIZATIONS_ROLE_PATH
+  const defaultPath = environment === 'govcloud' ? 'GD' : ''
+  const rolePath = targetAccountId === organizationsAccountId
+    ? normalizeRolePath(configuredPath ?? defaultPath)
+    : ''
+  const qualifiedRoleName = rolePath ? `${rolePath}/${roleName}` : roleName
+
+  return `arn:${partition}:iam::${targetAccountId}:role/${qualifiedRoleName}`
 }
 
 /**
@@ -252,10 +301,8 @@ async function assumeRole(
     credentials: baseCredentials
   })
 
-  // Determine role ARN based on environment
-  const partition = environment === 'commercial' ? 'aws' : 'aws-us-gov'
   const roleName = await getAssumeRoleName()
-  const roleArn = `arn:${partition}:iam::${targetAccountId}:role/${roleName}`
+  const roleArn = buildAssumeRoleArn(environment, targetAccountId, roleName)
 
   logger.info('[AWS Client Factory] Assuming role:', { roleArn })
 
@@ -399,8 +446,8 @@ export async function getClient<T = any>(
     credentials
   }
 
-  // GovCloud requires FIPS endpoints for most services
-  if (environment === 'govcloud') {
+  // Cost Explorer has no GovCloud FIPS endpoint; using one fails DNS resolution.
+  if (environment === 'govcloud' && service !== 'cost-explorer') {
     clientConfig.useFipsEndpoint = true
   }
 
@@ -537,6 +584,14 @@ export async function getBedrockRuntimeClient(
   accountId?: string
 ): Promise<BedrockRuntimeClient> {
   return getClient(environment, 'bedrock-runtime', region, accountId)
+}
+
+export async function getBedrockClient(
+  environment: AWSEnvironmentType = 'govcloud',
+  region?: string,
+  accountId?: string
+): Promise<BedrockClient> {
+  return getClient(environment, 'bedrock', region, accountId)
 }
 
 export async function getConfigServiceClient(

@@ -284,9 +284,12 @@ function buildFeedbackEmail(data: Record<string, any>): { html: string; text: st
     description,
     reporter_email,
     environment,
+    source,
     id,
     timestamp
   } = data
+
+  const sourceLabel = source === 'mcp-connections' ? 'MCP Connections' : undefined
 
   const dashboardUrl = `${SITE_URL}/admin/feedback?id=${id}`
 
@@ -321,6 +324,7 @@ function buildFeedbackEmail(data: Record<string, any>): { html: string; text: st
               <span style="display:inline-block; margin-left:8px; padding:6px 12px; background-color:#f3f4f6; color:#374151; border-radius:4px; font-size:13px; font-weight:500;">
                 ${environment}
               </span>
+              ${sourceLabel ? `<span style="display:inline-block; margin-left:8px; padding:6px 12px; background-color:#fef3c7; color:#92400e; border-radius:4px; font-size:13px; font-weight:500;">${sourceLabel}</span>` : ''}
             </td>
           </tr>
 
@@ -390,6 +394,7 @@ New Feedback Received - GHOST Dashboard
 
 Type: ${type}
 Environment: ${environment}
+${sourceLabel ? `Source: ${sourceLabel}` : ''}
 
 Description:
 ${description}

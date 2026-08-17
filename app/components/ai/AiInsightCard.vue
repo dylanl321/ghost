@@ -70,6 +70,7 @@
 <script setup lang="ts">
 import { marked } from 'marked'
 import { useSiteConfigStore } from '~/stores/useSiteConfigStore'
+import { escapeHtml, sanitizeChatHtml } from '~/utils/sanitizeHtml'
 
 const props = withDefaults(defineProps<{
   type: string
@@ -112,9 +113,9 @@ const timeAgo = computed(() => {
 const renderedInsight = computed(() => {
   if (!insight.value) return ''
   try {
-    return marked.parse(insight.value, { gfm: true, breaks: true }) as string
+    return sanitizeChatHtml(marked.parse(insight.value, { gfm: true, breaks: true }) as string)
   } catch {
-    return insight.value
+    return sanitizeChatHtml(escapeHtml(insight.value))
   }
 })
 

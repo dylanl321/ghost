@@ -31,7 +31,7 @@ export function buildServiceCostVarianceOptions(data: any, _context: ChartBuilde
         return wrapTooltip([
           tooltipHeader(d.service),
           tooltipLine(direction, `${formatCurrency(Math.abs(d.change))}${pct}`),
-          tooltipCurrencyLine('Projected EOM', d.projected),
+          tooltipCurrencyLine('Estimated EOM allocation', d.projected),
           tooltipCurrencyLine('Last Month', d.previous),
         ])
       }

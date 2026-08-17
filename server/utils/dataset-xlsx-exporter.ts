@@ -18,6 +18,7 @@ import type {
   CloudTrailEventRecord,
   DatasetColumnConfig
 } from '../../shared/types/dataset-reports'
+import { flattenNestedData } from './dataset-schema-builder'
 
 import {
   CONFIG_COLUMNS,
@@ -53,9 +54,10 @@ export async function generateXLSXDatasetReport(
 
     // Sheet 1: AWS Config Resources
     if (reportData.config?.records && reportData.config.records.length > 0) {
+      const records = reportData.config.records.map(flattenConfigRecord)
       const configSheet = createDatasetSheet(
-        reportData.config.records.map(flattenConfigRecord),
-        CONFIG_COLUMNS
+        records,
+        resolveExportColumns(CONFIG_COLUMNS, records, config.columns)
       )
       XLSX.utils.book_append_sheet(workbook, configSheet, 'AWS Config')
       sheetsAdded++
@@ -63,9 +65,10 @@ export async function generateXLSXDatasetReport(
 
     // Sheet 2: Security Hub Findings
     if (reportData.securityHub?.records && reportData.securityHub.records.length > 0) {
+      const records = reportData.securityHub.records.map(flattenSecurityHubRecord)
       const securitySheet = createDatasetSheet(
-        reportData.securityHub.records.map(flattenSecurityHubRecord),
-        SECURITY_HUB_COLUMNS
+        records,
+        resolveExportColumns(SECURITY_HUB_COLUMNS, records, config.columns)
       )
       XLSX.utils.book_append_sheet(workbook, securitySheet, 'Security Hub')
       sheetsAdded++
@@ -73,9 +76,10 @@ export async function generateXLSXDatasetReport(
 
     // Sheet 3: CloudTrail Events
     if (reportData.cloudtrail?.records && reportData.cloudtrail.records.length > 0) {
+      const records = reportData.cloudtrail.records.map(flattenCloudTrailRecord)
       const cloudtrailSheet = createDatasetSheet(
-        reportData.cloudtrail.records.map(flattenCloudTrailRecord),
-        CLOUDTRAIL_COLUMNS
+        records,
+        resolveExportColumns(CLOUDTRAIL_COLUMNS, records, config.columns)
       )
       XLSX.utils.book_append_sheet(workbook, cloudtrailSheet, 'CloudTrail')
       sheetsAdded++
@@ -83,9 +87,10 @@ export async function generateXLSXDatasetReport(
 
     // Sheet 4: Entra Users
     if (reportData.entraUsers?.enabled && reportData.entraUsers.records.length > 0) {
+      const records = reportData.entraUsers.records.map(flattenEntraUserRecord)
       const entraUsersSheet = createDatasetSheet(
-        reportData.entraUsers.records.map(flattenEntraUserRecord),
-        ENTRA_USERS_COLUMNS
+        records,
+        resolveExportColumns(ENTRA_USERS_COLUMNS, records, config.columns)
       )
       XLSX.utils.book_append_sheet(workbook, entraUsersSheet, 'Entra Users')
       sheetsAdded++
@@ -120,6 +125,23 @@ export async function generateXLSXDatasetReport(
       error: error.message || 'Failed to generate XLSX report'
     }
   }
+}
+
+function resolveExportColumns(
+  defaults: readonly DatasetColumnConfig[],
+  records: Record<string, any>[],
+  selected?: string[]
+): DatasetColumnConfig[] {
+  if (!selected?.length) return [...defaults]
+  const defaultsByKey = new Map(defaults.map(column => [column.key, column]))
+  return selected
+    .filter(key => records.some(record => record[key] !== undefined))
+    .map(key => defaultsByKey.get(key) || { key, label: formatColumnLabel(key) })
+}
+
+function formatColumnLabel(key: string): string {
+  const segment = key.split('.').pop() || key
+  return segment.replace(/([A-Z])/g, ' $1').replace(/^./, letter => letter.toUpperCase()).trim()
 }
 
 /**
@@ -287,6 +309,8 @@ function flattenConfigRecord(record: ConfigResourceRecord): Record<string, any> 
     configurationItemCaptureTime: record.configurationItemCaptureTime,
     arn: record.arn || ''
   }
+
+  Object.assign(flat, flattenNestedData({ configuration: record.configuration || {} }))
 
   // Flatten tags if present (common use case)
   if (record.tags && typeof record.tags === 'object') {

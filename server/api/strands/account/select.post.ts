@@ -7,7 +7,12 @@ import { defineEventHandler, readBody } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../../utils/api-response'
 import { registerEndpoint } from '../../../plugins/swagger'
 import { logger } from '../../../utils/logger'
-import type { AccountSelectionRequest, AccountSelectionResponse } from '../../../types/strands'
+import type { AccountSelectionResponse } from '../../../types/strands'
+import {
+  getAccountSelectionPayloads,
+  normalizeAccountSelectionRequest,
+  normalizeAccountSelectionResponse
+} from '../../../utils/strands-disambiguation'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/strands/account/select', 'POST', {
@@ -86,22 +91,18 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
 
   // Parse request body (camelCase from GHOST UI)
-  const body = await readBody(event) as AccountSelectionRequest
+  const body = await readBody(event)
+  const selection = normalizeAccountSelectionRequest(body)
 
   logger.info('[Strands Account Select API] Request received', {
-    sessionId: body.sessionId,
-    requestId: body.requestId
+    sessionId: selection?.sessionId,
+    requestId: selection?.requestId
   })
 
   // Validate input
-  if (!body.sessionId || typeof body.sessionId !== 'string' || body.sessionId.trim().length === 0) {
-    logger.error('[Strands Account Select API] Invalid sessionId:', body.sessionId)
-    return errors.badRequest(event, 'sessionId is required and must be a non-empty string')
-  }
-
-  if (!body.requestId || typeof body.requestId !== 'string' || body.requestId.trim().length === 0) {
-    logger.error('[Strands Account Select API] Invalid requestId:', body.requestId)
-    return errors.badRequest(event, 'requestId is required and must be a non-empty string')
+  if (!selection) {
+    logger.error('[Strands Account Select API] Invalid selection request')
+    return errors.badRequest(event, 'sessionId and requestId are required')
   }
 
   // Get Strands server configuration
@@ -117,25 +118,32 @@ export default defineEventHandler(handleAsync(async (event) => {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), config.timeout)
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        sessionId: body.sessionId,
-        requestId: body.requestId
-      }),
-      signal: controller.signal
-    })
+    let response: Response | undefined
+    let errorMessage = ''
+    for (const payload of getAccountSelectionPayloads(selection)) {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      })
+
+      if (response.ok || ![400, 422].includes(response.status)) break
+      try {
+        const errorData = await response.clone().json()
+        errorMessage = errorData.error?.message || errorData.detail || errorData.message || ''
+      } catch {
+        // Try the alternate field naming contract.
+      }
+    }
 
     clearTimeout(timeoutId)
 
-    if (!response.ok) {
-      let errorMessage = `HTTP ${response.status}: ${response.statusText}`
+    if (!response?.ok) {
+      errorMessage ||= response ? `HTTP ${response.status}: ${response.statusText}` : 'No response from Strands'
       try {
-        const errorData = await response.json()
-        errorMessage = errorData.error?.message || errorMessage
+        const errorData = await response?.json()
+        errorMessage = errorData?.error?.message || errorData?.detail || errorData?.message || errorMessage
       } catch {
         // Ignore JSON parse errors
       }
@@ -143,7 +151,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       logger.error('[Strands Account Select API] Server error:', errorMessage)
 
       // Service unavailable for 5xx errors
-      if (response.status >= 500) {
+      if (response && response.status >= 500) {
         return errors.serverError(
           event,
           'Strands server is temporarily unavailable. Please try again later.',
@@ -155,10 +163,10 @@ export default defineEventHandler(handleAsync(async (event) => {
       return errors.badRequest(event, errorMessage)
     }
 
-    const data = await response.json() as AccountSelectionResponse
+    const data = normalizeAccountSelectionResponse(await response.json()) as AccountSelectionResponse
 
     logger.info('[Strands Account Select API] Account selected successfully', {
-      sessionId: body.sessionId,
+      sessionId: selection.sessionId,
       accountAlias: data.account?.account_alias
     })
 

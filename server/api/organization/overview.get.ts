@@ -24,6 +24,7 @@ import { defineEventHandler, getQuery } from 'h3'
 import { sendSuccess, sendApiError, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { logger } from '../../utils/logger'
+import { getPeriodBudget } from '../../../shared/utils/budget-utils'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/organization/overview', 'GET', {
@@ -700,14 +701,12 @@ async function generateOrganizationOverview(options: {
   const accountStats = generateAccountStatistics(accounts, options.lob)
   
   // Step 3: Get cost data with caching using calendar-based analysis and rolling time series
-  const { getAnalysisDateRange, dateRangeToISO, dateRangeToISOForAWS } = await import('../../utils/date-periods')
+  const { getAnalysisDateRange, dateRangeToISOForAWS } = await import('../../utils/date-periods')
   
-  // Time series data uses rolling days for display
-  // For AWS Cost Explorer, we need tomorrow as end date (exclusive) to include today
-  const timeSeriesEndDate = new Date()
-  timeSeriesEndDate.setDate(timeSeriesEndDate.getDate() + 1) // Tomorrow for exclusive end date
-  const timeSeriesStartDate = new Date()
-  timeSeriesStartDate.setDate(timeSeriesStartDate.getDate() - options.timeRange)
+  // AWS end dates are exclusive; today yields data through yesterday without a future date.
+  const now = new Date()
+  const timeSeriesEndDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  const timeSeriesStartDate = new Date(timeSeriesEndDate.getTime() - options.timeRange * 86400000)
   
   // Budget analysis uses calendar periods
   const analysisRange = getAnalysisDateRange(options.analysisTimeframe as any)
@@ -1000,8 +999,7 @@ async function fetchRealCostData(
     if (dataType === 'proforma') {
       effectiveAccountId = proformaAccountId
     } else if (dataType === 'billable') {
-      // For billable, we want raw costs from master account, so use default (no target account)
-      effectiveAccountId = undefined
+      effectiveAccountId = masterAccountId
     } else {
       // For 'both', we'll need to fetch both separately (handled below)
       effectiveAccountId = undefined
@@ -1043,7 +1041,7 @@ async function fetchRealCostData(
               granularity: 'DAILY',
               metrics: ['UnblendedCost', 'BlendedCost'],
               groupBy: [{ type: 'DIMENSION', key: 'LINKED_ACCOUNT' }]
-            }, 'commercial').catch(error => {
+            }, 'commercial', masterAccountId).catch(error => {
               logger.warn('Failed to fetch billable costs:', error)
               return null
             })
@@ -1136,7 +1134,7 @@ async function fetchRealCostData(
     )
     
     // Calculate budget analysis costs based on calendar period, not time series period
-    const budgetAnalysisCost = calculateBudgetAnalysisCost(combinedTimeSeries, analysisRange, timeSeriesStartDate, timeSeriesEndDate)
+    const budgetAnalysisCost = calculateBudgetAnalysisCost(combinedTimeSeries, analysisRange)
     
     return {
       timeSeries: combinedTimeSeries,
@@ -1855,9 +1853,7 @@ function generateTrendsAnalysis(costData: any, accounts: any[], lobAnalysis: any
  */
 function calculateBudgetAnalysisCost(
   timeSeries: any[], 
-  analysisRange: any, 
-  timeSeriesStartDate: Date, 
-  timeSeriesEndDate: Date
+  analysisRange: any
 ): number {
   if (!timeSeries || timeSeries.length === 0) return 0
   
@@ -1867,7 +1863,7 @@ function calculateBudgetAnalysisCost(
   
   const filteredCosts = timeSeries.filter(day => {
     const dayDate = new Date(day.date)
-    return dayDate >= analysisStartDate && dayDate <= analysisEndDate
+    return dayDate >= analysisStartDate && dayDate < analysisEndDate
   })
   
   const totalCost = filteredCosts.reduce((sum, day) => sum + (day.cost || 0), 0)
@@ -1893,48 +1889,40 @@ function calculateBudgetAnalysisCost(
  * Generate calendar-based budget analysis using the specific analysis period
  */
 function generateCalendarBasedBudgetAnalysis(analysisCost: number, accounts: any[], analysisRange: any) {
-  // Calculate estimated budget for the analysis period
-  const estimatedPeriodBudget = calculatePeriodBudget(accounts, analysisRange)
+  const budgetMetrics = calculatePeriodBudget(accounts, analysisRange)
+  const estimatedPeriodBudget = budgetMetrics.periodBudget
   
   // Calculate actual days elapsed and remaining
-  const now = new Date()
   const startDate = new Date(analysisRange.startDate)
   
   // For current periods, we need the actual month/quarter/year end for remaining days calculation
   // analysisRange.endDate might be "today" for current periods, so we calculate the actual period end
   let fullPeriodEndDate: Date
   if (analysisRange.label.includes('Current Month')) {
-    // Last day of current month
-    fullPeriodEndDate = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0)
+    fullPeriodEndDate = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth() + 1, 1))
   } else if (analysisRange.label.includes('Current Quarter')) {
     // Last day of current quarter
-    const quarter = Math.floor(startDate.getMonth() / 3)
-    const lastMonthOfQuarter = (quarter + 1) * 3 - 1
-    fullPeriodEndDate = new Date(startDate.getFullYear(), lastMonthOfQuarter + 1, 0)
+    const quarter = Math.floor(startDate.getUTCMonth() / 3)
+    fullPeriodEndDate = new Date(Date.UTC(startDate.getUTCFullYear(), (quarter + 1) * 3, 1))
   } else if (analysisRange.label.includes('Year to Date')) {
-    // Last day of current year
-    fullPeriodEndDate = new Date(startDate.getFullYear(), 11, 31)
+    fullPeriodEndDate = new Date(Date.UTC(startDate.getUTCFullYear() + 1, 0, 1))
   } else {
     // For completed periods, use the provided end date
     fullPeriodEndDate = new Date(analysisRange.endDate)
   }
   
   // Total days in the full period
-  const totalDaysInPeriod = Math.ceil((fullPeriodEndDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1
+  const totalDaysInPeriod = Math.ceil((fullPeriodEndDate.getTime() - startDate.getTime()) / 86400000)
   
-  // Days elapsed includes today
   const daysElapsed = analysisRange.isComplete 
     ? totalDaysInPeriod
-    : Math.min(
-        totalDaysInPeriod,
-        Math.ceil((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1
-      )
+    : Math.min(totalDaysInPeriod, analysisRange.daysInPeriod)
   
   // Days remaining in the full period
   const daysRemaining = analysisRange.isComplete ? 0 : Math.max(0, totalDaysInPeriod - daysElapsed)
   
   // Calculate budget utilization - always compare actual spend to date vs expected spend to date
-  const expectedCostToDate = estimatedPeriodBudget * (daysElapsed / totalDaysInPeriod)
+  const expectedCostToDate = budgetMetrics.paceToDateBudget
   const budgetUtilization = expectedCostToDate > 0 ? (analysisCost / expectedCostToDate) * 100 : 0
   
   // Project full period spend if period is incomplete
@@ -1981,73 +1969,29 @@ function generateCalendarBasedBudgetAnalysis(analysisCost: number, accounts: any
  * Calculate estimated budget for a specific calendar period
  * Uses the actual estimatedMonthlyCharge data from accounts
  */
-function calculatePeriodBudget(accounts: any[], analysisRange: any): number {
-  // Filter out decommissioned accounts for budget calculation
-  const activeAccounts = accounts.filter(a => 
-    a.status !== 'SUSPENDED' && 
-    a.enclaveStatus !== 'Decommissioned' &&
-    a.enclaveStatus !== 'DECOMMISSIONED'
+function calculatePeriodBudget(accounts: any[], analysisRange: any): { periodBudget: number; paceToDateBudget: number } {
+  const activeAccounts = accounts.filter(account =>
+    account.status !== 'SUSPENDED' &&
+    account.enclaveStatus !== 'Decommissioned' &&
+    account.enclaveStatus !== 'DECOMMISSIONED'
   )
-  
-  logger.info(`Budget calculation: ${accounts.length} total accounts, ${activeAccounts.length} active (excluding decommissioned)`)
-  
-  // Sum up the monthly budget from estimatedMonthlyCharge field
+  const startDate = analysisRange.startDate.toISOString().slice(0, 10)
+  const endDate = analysisRange.endDate.toISOString().slice(0, 10)
   let accountsWithBudget = 0
-  let skippedAccounts = 0
-  const accountBudgets: Array<{name: string, amount: number}> = []
-  
-  const monthlyBudget = activeAccounts.reduce((sum, account) => {
-    const budgetStr = account?.estimatedMonthlyCharge || '0'
-    const monthlyAmount = typeof budgetStr === 'string' 
-      ? parseFloat(budgetStr.replace(/[^0-9.-]/g, '')) || 0
-      : parseFloat(budgetStr) || 0
-    
-    if (monthlyAmount > 0) {
-      accountsWithBudget++
-      accountBudgets.push({
-        name: account.name || account.accountId || 'Unknown',
-        amount: monthlyAmount
-      })
-      return sum + monthlyAmount
-    } else {
-      skippedAccounts++
-      return sum
-    }
-  }, 0)
-  
-  // Log top budget accounts for debugging
-  const topBudgets = accountBudgets.sort((a, b) => b.amount - a.amount).slice(0, 5)
-  logger.info(`Top 5 account budgets:`)
-  topBudgets.forEach(item => {
-    logger.info(`  ${item.name}: $${item.amount.toFixed(2)}/month`)
-  })
-  
-  logger.info(`Budget totals: ${accountsWithBudget} accounts with budgets, ${skippedAccounts} without, total monthly budget: $${monthlyBudget.toFixed(2)}`)
-  
-  // Validate the budget is reasonable
-  if (monthlyBudget === 0) {
-    logger.warn('WARNING: No budget data found in estimatedMonthlyCharge fields')
-    // Use a fallback estimate based on active accounts
-    const fallbackMonthlyBudget = activeAccounts.length * 2000 // $2k/month per account as fallback
-    logger.info(`Using fallback budget: $${fallbackMonthlyBudget.toFixed(2)}/month`)
-    return fallbackMonthlyBudget * (analysisRange.daysInPeriod / 30)
+  let periodBudget = 0
+  let paceToDateBudget = 0
+  for (const account of activeAccounts) {
+    const budget = getPeriodBudget(account, startDate, endDate, {
+      includeFullCurrentMonth: !analysisRange.isComplete
+    })
+    if (budget.periodBudget === null) continue
+    accountsWithBudget += 1
+    periodBudget += budget.periodBudget
+    paceToDateBudget += budget.paceToDateBudget || 0
   }
-  
-  // Calculate the actual days in the period for accurate scaling
-  const startDate = new Date(analysisRange.startDate)
-  const endDate = new Date(analysisRange.endDate)
-  const actualDaysInPeriod = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1
-  
-  // Scale monthly budget to the analysis period
-  const currentMonth = startDate.getMonth()
-  const currentYear = startDate.getFullYear()
-  const daysInCurrentMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
-  
-  const scaledBudget = monthlyBudget * (actualDaysInPeriod / daysInCurrentMonth)
-  
-  logger.info(`Scaled budget from monthly $${monthlyBudget.toFixed(2)} to ${actualDaysInPeriod}-day period: $${scaledBudget.toFixed(2)}`)
-  
-  return scaledBudget
+
+  logger.info(`Period budget: ${accountsWithBudget}/${activeAccounts.length} active accounts, $${periodBudget.toFixed(2)} total and $${paceToDateBudget.toFixed(2)} pace-to-date`)
+  return { periodBudget, paceToDateBudget }
 }
 
 // Helper functions for cost data processing

@@ -87,7 +87,24 @@
     <!-- Navigation Menu -->
     <div class="flex-1 overflow-y-auto py-6 overflow-x-hidden flex flex-col">
       <nav class="space-y-1 px-3 min-w-0 flex-shrink-0">
-        <template v-for="item in navigationItems" :key="item.label">
+        <template v-for="(item, index) in navigationItems" :key="item.label">
+          <div
+            v-if="item.section && (index === 0 || navigationItems[index - 1]?.section !== item.section) && (item.section !== 'Admin' || isAdmin)"
+            class="relative h-4 overflow-hidden"
+            :class="index === 0 ? 'mb-1' : 'mb-1 mt-5'"
+          >
+            <span
+              class="absolute inset-0 block px-3 text-[11px] leading-4 font-semibold uppercase text-slate-400 dark:text-slate-500 whitespace-nowrap transition-opacity duration-200"
+              :class="isSidebarExpanded ? 'opacity-100 delay-100' : 'opacity-0'"
+            >
+              {{ item.section }}
+            </span>
+            <div
+              class="absolute inset-x-2 top-1/2 border-t border-slate-200 dark:border-slate-700 transition-opacity duration-150"
+              :class="isSidebarExpanded ? 'opacity-0' : 'opacity-100 delay-100'"
+            />
+          </div>
+
           <!-- Menu Item -->
           <!-- AI Assistant - Controlled by feature flag -->
           <ClientOnly v-if="item.label === 'AI Assistant'">
@@ -199,7 +216,13 @@
             :to="item.to"
             prefetch
             class="flex items-center px-3 py-2 rounded-md text-sm text-slate-700 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors relative group overflow-hidden"
-            :class="{ 'text-slate-900 bg-slate-100 dark:text-white dark:bg-slate-800': isActive(item) }"
+            :class="[
+              { 'text-slate-900 bg-slate-100 dark:text-white dark:bg-slate-800': isActive(item) },
+              {
+                'mcp-nav-accent': item.accent === 'mcp',
+                'mcp-nav-accent--intro': item.accent === 'mcp' && mcpIntroActive,
+              },
+            ]"
           >
             <UIcon :name="item.icon" class="flex-shrink-0 w-5 h-5" />
             <span
@@ -304,14 +327,18 @@ const route = useRoute();
 const navigationStore = useNavigationStore();
 const { isAdmin } = useUserRoles();
 const siteConfigStore = useSiteConfigStore();
+const { isIntroActive: mcpIntroActive } = useMcpOfferingDiscovery();
 
 // Check if Strands chat is enabled
 const strandsEnabled = computed(() => siteConfigStore.isStrandsChatEnabled);
+const isSidebarExpanded = computed(
+  () => !navigationStore.isCollapsed || navigationStore.isHovered
+);
 
 // Mobile detection - SSR safe
 const isMobile = computed(() => {
   // During SSR, assume desktop to avoid hydration mismatches
-  if (process.server) return false;
+  if (import.meta.server) return false;
   // On client, use the store value or fallback to window check
   return (
     navigationStore.isMobile ??
@@ -360,7 +387,7 @@ const toggleSidebar = () => {
     );
 
     // Add a subtle shake animation to indicate it's not allowed
-    if (process.client) {
+    if (import.meta.client) {
       const button = document.querySelector(".animate-pulse");
       if (button) {
         button.classList.add("animate-bounce");
@@ -463,7 +490,7 @@ defineExpose({
 });
 
 // Cleanup on unmount
-if (process.client) {
+if (import.meta.client) {
   onBeforeUnmount(() => {
     window.removeEventListener("resize", updateMobileState);
   });
@@ -475,52 +502,81 @@ const navigationItems = computed(() => {
       label: "Overview",
       to: "/",
       icon: "i-heroicons-home",
+      section: "Workspace",
+    },
+    {
+      label: "AI Assistant",
+      to: "/chat",
+      icon: "i-heroicons-sparkles",
+      section: "Workspace",
+    },
+    {
+      label: "MCP Connections",
+      to: "/chat/mcp",
+      icon: "i-heroicons-link",
+      section: "Workspace",
+      accent: "mcp",
     },
     {
       label: "Account Explorer",
       to: "/account/explorer",
       icon: "i-heroicons-magnifying-glass",
+      section: "Accounts",
     },
     {
       label: "Organization Chart",
       to: "/account/org-chart",
       icon: "i-heroicons-building-library",
+      section: "Accounts",
+    },
+    {
+      label: "Users & Access",
+      to: "/account/user",
+      icon: "i-heroicons-users",
+      section: "Accounts",
     },
     {
       label: "Cost Dashboard",
       to: "/account/costs",
       icon: "i-heroicons-currency-dollar",
       collapseRule: "default-collapsed",
+      section: "FinOps",
+    },
+    {
+      label: "AI Usage",
+      to: "/account/ai-usage",
+      icon: "i-heroicons-sparkles",
+      section: "FinOps",
+    },
+    {
+      label: "VMaaS Costs",
+      to: "/account/vmaas-costs",
+      icon: "i-heroicons-server-stack",
+      section: "FinOps",
     },
     {
       label: "GDMS Finance",
       to: "/gdms-finance",
       icon: "i-heroicons-chart-bar",
-    },
-    {
-      label: "Users & Access",
-      to: "/account/user",
-      icon: "i-heroicons-users",
+      section: "FinOps",
     },
     {
       label: "Dataset Reports",
       to: "/reports/datasets",
       icon: "i-heroicons-server-stack",
+      section: "Insights",
     },
     {
       label: "Security Health",
       to: "/security",
       icon: "i-heroicons-shield-exclamation",
-    },
-    {
-      label: "AI Assistant",
-      to: "/chat",
-      icon: "i-heroicons-sparkles",
+      section: "Insights",
     },
     {
       label: "Settings",
       to: "/settings",
       icon: "i-heroicons-cog-6-tooth",
+      section: "Manage",
     },
     // Always include Pipeline Analytics in structure to avoid hydration mismatch
     // Visibility controlled by ClientOnly in template
@@ -528,13 +584,23 @@ const navigationItems = computed(() => {
       label: "Pipeline Analytics",
       to: "/admin/pipelines",
       icon: "i-heroicons-arrow-path",
+      section: "Admin",
     },
     // Support Tools - Admin only, visibility controlled by ClientOnly in template
     {
       label: "Support Tools",
       to: "/support-tools",
       icon: "i-heroicons-wrench-screwdriver",
+      section: "Admin",
     }
   ];
 });
 </script>
+
+<style scoped>
+@property --mcp-nav-angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+.mcp-nav-accent::before { position: absolute; inset: 0; padding: 1px; pointer-events: none; content: ''; background: conic-gradient(from var(--mcp-nav-angle), rgb(132 101 238), rgb(74 168 244), rgb(242 167 87), rgb(216 110 234), rgb(132 101 238)); border-radius: inherit; opacity: 0; transition: opacity 180ms ease; -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+.mcp-nav-accent:hover::before, .mcp-nav-accent:focus-visible::before, .mcp-nav-accent--intro::before { opacity: .82; animation: mcp-nav-trace 7s linear infinite; }
+@keyframes mcp-nav-trace { to { --mcp-nav-angle: 360deg; } }
+@media (prefers-reduced-motion: reduce) { .mcp-nav-accent:hover::before, .mcp-nav-accent:focus-visible::before, .mcp-nav-accent--intro::before { animation: none; } }
+</style>

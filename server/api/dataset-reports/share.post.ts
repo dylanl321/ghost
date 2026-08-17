@@ -11,6 +11,7 @@ import { generateDatasetReport } from '../../utils/dataset-report-generator'
 import { v4 as uuidv4 } from 'uuid'
 import { logger } from '../../utils/logger'
 import { requireUserSession } from '../../utils/entra/session'
+import { getDatasetReportConfigErrors } from '../../utils/dataset-report-validation'
 
 interface CreateDatasetShareRequest {
   reportName: string
@@ -41,11 +42,16 @@ export default defineEventHandler(async (event): Promise<CreateDatasetShareRespo
     // Parse request body
     const body = await readBody<CreateDatasetShareRequest>(event)
 
-    if (!body.reportName || !body.config) {
+    if (!body || typeof body !== 'object' || !body.reportName || !body.config) {
       return {
         success: false,
         error: 'Missing required fields: reportName and config'
       }
+    }
+
+    const validationErrors = getDatasetReportConfigErrors(body.config)
+    if (validationErrors.length > 0) {
+      return { success: false, error: validationErrors.join('; ') }
     }
 
     logger.info(`[Dataset Share] Creating shareable report: ${body.reportName} for user ${userEmail}`)

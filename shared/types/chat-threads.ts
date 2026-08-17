@@ -45,6 +45,10 @@ export interface ChatMessage {
   links?: string[] // External reference links
   suggestedLinks?: SuggestedLink[] // GHOST page links
   suggestedPrompts?: SuggestedPrompt[] // Follow-up prompts for user
+  jobId?: string // Async job that produced this message (idempotency)
+  reasoning?: string | null
+  status?: MessageStatus
+  streamBuffer?: string
 }
 
 /**
@@ -74,6 +78,7 @@ export interface ChatThread {
   isArchived: boolean
   lastMessageAt: string // ISO timestamp (for sorting)
   lastModifiedAt: string // ISO timestamp
+  lastMessagePreview?: string
 
   // Sharing (if shared)
   isShared: boolean
@@ -86,6 +91,9 @@ export interface ChatThread {
   // TTL & Cleanup
   ttl?: number // Unix timestamp (auto-delete after X days)
   expiresAt?: string // ISO timestamp
+  messagesMigratedAt?: string // Set after embedded messages move to ChatMessages
+  hasMoreMessages?: boolean // More messages are available before the current page
+  messagesNextToken?: string // Opaque token for loading earlier messages
 }
 
 /**
@@ -154,7 +162,7 @@ export interface ListThreadsResponse {
  * Request to share a thread
  */
 export interface ShareThreadRequest {
-  expiresInDays?: number // Default: 90 days
+  expiresInDays?: 1 | 7 | 30 | 90 // Default: 30 days
 }
 
 /**
@@ -305,7 +313,7 @@ export interface AdminAsyncJobSummary {
   jobId: string
   userId: string
   threadId?: string
-  status: 'queued' | 'running' | 'complete' | 'error'
+  status: 'queued' | 'running' | 'waiting_for_input' | 'complete' | 'error' | 'canceled'
   progress?: string
   progressPercent?: number
   currentStep?: string
@@ -417,12 +425,10 @@ export interface MessageStatus {
   statusHistory?: Array<{ text: string; timestamp: number }> // Recent step history (optional)
   error?: string             // Error message if failed
   errorType?: ErrorType      // Classified error type for enhanced display
+  recoverable?: boolean      // Polling can be explicitly reconnected
 }
 
 /**
  * Enhanced chat message for streaming support
  */
-export interface StreamingChatMessage extends ChatMessage {
-  status?: MessageStatus
-  streamBuffer?: string     // Partial content being streamed
-}
+export type StreamingChatMessage = ChatMessage

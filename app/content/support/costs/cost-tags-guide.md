@@ -8,7 +8,7 @@ icon: i-heroicons-tag
 
 ## Overview
 
-Tag Analysis lets you break down an account's AWS costs by tag key. For any given tag, you can see what percentage of spend is covered, identify untagged costs, and drill into service-level and resource-level detail for each tag value. Use it to answer questions like:
+Tag Analysis lets you break down AWS costs by tag key across one account, a selected group of accounts, or the entire organization. For any given tag, you can see what percentage of spend is covered, identify untagged costs, and drill from a tag value into its contributing accounts, services, and resources. Use it to answer questions like:
 
 - "How much is the Phoenix project costing us?"
 - "What percentage of our spend is properly tagged?"
@@ -58,16 +58,23 @@ The `aws:createdBy` tag produces several value formats depending on how the reso
 | `arn:aws:iam::123456:user/username` | An IAM user directly created the resource | `username` |
 | `arn:aws:iam::123456:role/rolename` | An IAM role created the resource | `rolename` |
 
+When `aws:createdBy` is selected, GHOST opens in **People** view. Email-backed assumed-role sessions are combined case-insensitively across role IDs and accounts. Explicit IAM user ARNs are combined by their user path across accounts. The **All creators** option adds automation sessions, AWS services, IAM roles, Root, instance sessions, and untagged costs back to the table.
+
+People view keeps the complete account scope as its percentage denominator, so each person's percentage remains their share of all spend even though non-user rows are hidden. Coverage cards are also unchanged by the People filter.
+
 ## Using the Tag Analysis Tab
 
-1. Navigate to the **Cost Dashboard** and select a **single account** from the sidebar (tag analysis requires exactly one account)
+1. Navigate to the **Cost Dashboard** and choose the account scope in the sidebar:
+   - Leave the selection empty to analyze all accounts
+   - Select several accounts to analyze only that group
+   - Select one account for account-specific tag settings and aliases
 2. Switch to the **Tag Analysis** tab
 3. Use the **tag dropdown** to select a tag key — favorite/important tags appear at the top with a separator for easy access
 4. Three **coverage stat cards** appear showing:
    - **Coverage %** — percentage of total cost that has this tag applied (color-coded: green 80%+, amber 50-79%, red below 50%)
    - **Tagged Cost** — total dollar amount from resources with this tag
    - **Untagged Cost** — total dollar amount from resources without this tag (highlighted with amber border when coverage is low)
-5. Tags with $0 cost are automatically hidden from the dropdown — a count is shown next to the selector (e.g., "3 tags with $0 cost hidden")
+5. The tag list is scoped to cost data for the selected accounts and timeframe
 
 ## Cost Breakdown Table
 
@@ -76,28 +83,26 @@ Below the coverage cards, a table shows every value for the selected tag, sorted
 | Column | Description |
 |---|---|
 | **Display Name** | Friendly name for the tag value. Click to edit (set an alias). A pencil icon appears on hover. |
-| **Raw Value** | The original value from AWS Cost Explorer. Hover to see the full value in a tooltip. |
+| **Raw Value** | The original value from AWS Cost Explorer. Combined people show a source-value count; hover to see every underlying value. |
 | **Cost Distribution** | Visual bar showing relative cost (blue for tagged values, amber for untagged). |
 | **Total Cost** | Dollar amount for this tag value. |
 | **%** | Percentage of total cost. |
 
 ### Interacting with the Table
 
-- **Click a row** to expand a detail panel below the table showing:
-  - Service-level cost breakdown for that tag value
-  - A trend chart showing cost over time for that value
-  - Copy buttons for the raw and parsed values
-- **Edit display names** — click any display name or the pencil icon to set a custom alias. When you've made changes, a **Save Aliases** button appears above the table. Click it to persist all pending alias changes at once.
+- **Filter values** — use the search field to find a project, username, email address, or raw tag value.
+- **Click a row** to expand its detail panel. In a multi-account view, the panel first shows each contributing account and its share of that tag value. Expand an account to see its service-level costs, trend, and resource detail. A single-account view opens the existing service and trend detail directly.
+- **Edit display names** — in a single-account view, click any display name or the pencil icon to set a custom alias. When you've made changes, a **Save Aliases** button appears above the table. Click it to persist all pending alias changes at once.
 - **$0-cost values** — a toggle at the bottom of the table lets you show or hide tag values with zero cost
-- **Export** — use the download button in the toolbar to export the breakdown as CSV
+- **Export** — use the download button in the toolbar to export the breakdown as CSV. People view exports one combined row per person with contributing accounts and source-value count. Other multi-account views contain one row per tag value and contributing account.
 
 ## Historical Trend
 
-Below the breakdown table, a line chart shows cost over time for the top tag values. Less common values are grouped into an "Other" category to keep the chart readable.
+Below the breakdown table, a line chart shows cost over time for the top tag values across the active account scope. Less common values are grouped into an "Other" category to keep the chart readable.
 
 ## Tag Settings
 
-Click the **settings icon** (adjustments/gear) in the toolbar to open the Tag Settings slideover panel. It contains three sections:
+Tag settings are account-specific. Select exactly one account, then click the **settings icon** (adjustments/gear) in the toolbar to open the Tag Settings slideover panel. It contains three sections:
 
 1. **Favorite Tags** — toggle which tags appear at the top of the tag dropdown for quick access. You can also add custom tag names manually, or click **Discover** to scan your AWS account for tags that are actually in use on your resources.
 2. **Default Tag** — choose a tag to auto-select when you open the Tag Analysis tab, so you don't have to pick one each time.
@@ -109,14 +114,15 @@ Click **Save Settings** at the bottom to persist your changes.
 
 By default, the Cost Dashboard shows **proforma costs** (what your account is actually charged via AWS Billing Conductor). However, AWS Billing Conductor **does not support cost allocation tags** — tag-level cost breakdowns are only available from billable (master account) data via Cost Explorer.
 
-To bridge this gap, GHOST **extrapolates proforma costs** by applying the percentage distribution from your billable tag data to your account's proforma total. For example, if tag value "Phoenix" accounts for 40% of your billable costs and your proforma total is $10,000, GHOST estimates the proforma cost for "Phoenix" at $4,000.
+To bridge this gap, GHOST **extrapolates proforma costs per account and AWS time bucket** by applying each account's billable Net Unblended tag distribution to that account's proforma total for the same month. GHOST publishes the estimate only when every account/month bucket is available, then combines the results for multi-account views.
 
 **What this means for you:**
 
-- **Percentages are accurate** — the relative distribution between tag values is exact (it comes directly from billable data)
+- **Billable percentages are exact** — the relative distribution comes directly from the same Net Unblended metric used by the Cost Explorer console
 - **Dollar amounts are estimates** — indicated by "(est.)" labels throughout the interface
-- **Coverage % is unaffected** — the tagged vs. untagged ratio is the same regardless of proforma vs. billable
+- **Coverage % remains billable** — coverage measures the exact tagged vs. untagged billable ratio
 - **Switch to billable mode** on the Cost Dashboard toggle to see exact billable costs per tag (without estimation)
+- **Fallback is explicit** — if GHOST cannot calculate every contributing account's proforma ratio, the tab reports that the estimate is unavailable and shows exact billable costs instead
 
 > **Important:** Tag-level proforma cost estimates are for directional insight only. They are extrapolated from billable percentages, not calculated by AWS Billing Conductor, and should **not** be used for chargeback or financial reconciliation. For chargeback, use proforma account-level totals, which are calculated directly by AWS Billing Conductor.
 
@@ -130,19 +136,19 @@ Resources without a value for the selected tag are grouped as **Untagged**. This
 
 ### Why do some `aws:createdBy` values show emails and others show role names?
 
-The format depends on how the resource was created. Users signing in through SSO typically show up as `AssumedRole:...:email@example.com`, which GHOST parses to show the email. Resources created by AWS services or IAM roles without an email session will show the service or role name instead. See the parsing table above for all formats.
+The format depends on how the resource was created. Users signing in through SSO typically show up as `AssumedRole:...:email@example.com`. GHOST combines those values by email even when the role ID or account differs. Explicit IAM user ARNs are combined by user path. Resources created by AWS services or assumed roles without an email session remain non-user creators and appear under **All creators**.
 
 ### Can I rename tag values?
 
-Yes. Click any display name in the breakdown table to set a custom alias. This doesn't change anything in AWS — it only changes how the value appears in GHOST. Use this to turn cryptic values like `AssumedRole:AROAXXXX:j.smith@company.com` into friendly names like "Jane Smith". Click **Save Aliases** to persist your changes.
+Yes, while viewing a single account. Click any display name in the breakdown table to set a custom alias. This doesn't change anything in AWS — it only changes how the value appears in GHOST. Use this to turn cryptic values like `AssumedRole:AROAXXXX:j.smith@company.com` into friendly names like "Jane Smith". Click **Save Aliases** to persist your changes.
 
 ### Who can configure tag settings?
 
-Any user with access to the account can open the Tag Settings panel and configure favorite tags, default tag, and tag notes. Alias edits in the breakdown table are also saved per-account and visible to all users.
+Any user with access to an account can configure its favorite tags, default tag, tag notes, and aliases while viewing that single account. Settings and alias editing are hidden in multi-account and all-account views because configurations may differ between accounts.
 
 ### Why do tag costs show as estimated?
 
-AWS Billing Conductor (which calculates proforma costs) does not support cost allocation tags. GHOST works around this by taking the tag percentage breakdown from billable costs and applying it to your proforma total. The resulting dollar amounts are estimates — marked with "(est.)" — while the percentages remain exact. To see exact costs per tag, switch the Cost Dashboard to billable mode. These tag-level estimates should not be used for chargeback; use proforma account-level totals for that purpose.
+AWS Billing Conductor (which calculates proforma costs) does not support cost allocation tags. GHOST applies each account's billable Net Unblended tag distribution to that account's proforma total in the same monthly bucket, then combines complete results. The resulting dollar amounts are estimates and are marked with "(est.)". To see exact costs per tag, switch the Cost Dashboard to billable mode. These tag-level estimates should not be used for chargeback; use proforma account-level totals for that purpose.
 
 ### Do tags affect my actual AWS bill?
 

@@ -103,7 +103,7 @@
               <!-- Accounts -->
               <td class="px-4 py-3">
                 <div class="text-gray-400 text-xs">
-                  {{ report.accounts.length }} accounts
+                  {{ report.reportConfig.accounts?.length || 'All' }} accounts
                 </div>
               </td>
 
@@ -127,7 +127,7 @@
                       color="gray"
                       variant="ghost"
                       size="xs"
-                      @click="$emit('edit', report)"
+                      @click="emit('edit', report)"
                     />
                   </UTooltip>
 
@@ -137,7 +137,7 @@
                       color="gray"
                       variant="ghost"
                       size="xs"
-                      @click="$emit('toggle-pause', report)"
+                      @click="emit('toggle-pause', report)"
                     />
                   </UTooltip>
 
@@ -147,7 +147,7 @@
                       color="gray"
                       variant="ghost"
                       size="xs"
-                      @click="$emit('test', report)"
+                      @click="emit('test', report)"
                     />
                   </UTooltip>
 
@@ -182,6 +182,7 @@
 
 <script setup lang="ts">
 import type { ScheduledReport } from '#shared/types/scheduled-reports'
+import type { DatasetReportConfig } from '#shared/types/dataset-reports'
 
 // Events
 const emit = defineEmits<{
@@ -232,10 +233,12 @@ function handleRowClick(report: ScheduledReport) {
 }
 
 function getEnabledDatasets(report: ScheduledReport): string[] {
+  const config = report.reportConfig as unknown as DatasetReportConfig
   const datasets: string[] = []
-  if (report.reportConfig?.datasets?.config?.enabled) datasets.push('Config')
-  if (report.reportConfig?.datasets?.securityHub?.enabled) datasets.push('SecHub')
-  if (report.reportConfig?.datasets?.cloudtrail?.enabled) datasets.push('CloudTrail')
+  if (config.datasets?.config?.enabled) datasets.push('Config')
+  if (config.datasets?.securityHub?.enabled) datasets.push('SecHub')
+  if (config.datasets?.cloudtrail?.enabled) datasets.push('CloudTrail')
+  if (config.datasets?.entraUsers?.enabled) datasets.push('Entra')
   return datasets
 }
 
@@ -292,4 +295,3 @@ function getDropdownItems(report: ScheduledReport) {
   ]
 }
 </script>
-

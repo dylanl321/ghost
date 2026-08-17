@@ -102,13 +102,14 @@ export const applyAccountFilters = (
   return accounts
     .filter(account => {
       // Filter decommissioned accounts if setting is disabled
-      if (!settings.showDecommissioned && account.status === 'decommissioned') {
+      const status = String(account.status || account.enclaveStatus || '').toLowerCase()
+      if (!settings.showDecommissioned && status === 'decommissioned') {
         return false
       }
       
       // Filter dev accounts if setting is enabled (requestId 9100 or higher)
       if (settings.hideDevAccounts) {
-        const requestId = parseInt(account.requestId || '0')
+        const requestId = parseInt(account.requestId || account.requestID || '0')
         if (requestId >= 9100) {
           return false
         }

@@ -146,6 +146,13 @@
                   </h4>
                   <CloudTrailFilters v-model="form.reportConfig.datasets.cloudtrail.filters" />
                 </div>
+
+                <div v-if="form.reportConfig.datasets.entraUsers?.enabled" class="mb-6 p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                  <h4 class="font-medium text-sm text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                    <UIcon name="i-heroicons-users" class="w-4 h-4" /> Entra ID User Filters
+                  </h4>
+                  <EntraUsersFilters v-model="form.reportConfig.datasets.entraUsers.filters" />
+                </div>
               </div>
             </div>
 
@@ -155,6 +162,7 @@
               <p class="text-sm text-gray-500 mb-4">Select the AWS accounts to pull data from.</p>
               <DatasetAccountSelector
                 v-model="form.reportConfig.accounts"
+                v-model:scope="form.reportConfig.accountScope"
                 :disabled="saving"
               />
             </div>
@@ -186,12 +194,13 @@
                            <UBadge v-if="form.reportConfig.datasets.config.enabled" color="blue" variant="subtle">Config</UBadge>
                            <UBadge v-if="form.reportConfig.datasets.securityHub.enabled" color="red" variant="subtle">Security Hub</UBadge>
                            <UBadge v-if="form.reportConfig.datasets.cloudtrail.enabled" color="purple" variant="subtle">CloudTrail</UBadge>
+                           <UBadge v-if="form.reportConfig.datasets.entraUsers?.enabled" color="green" variant="subtle">Entra Users</UBadge>
                            <span v-if="!hasAnyDatasetSelected" class="text-gray-400 text-sm italic">None selected</span>
                         </div>
                       </div>
                       <div>
                         <label class="text-xs text-gray-500 block mb-1">Accounts</label>
-                        <p class="font-medium">{{ form.reportConfig.accounts.length > 0 ? `${form.reportConfig.accounts.length} selected` : 'All Accounts' }}</p>
+                        <p class="font-medium">{{ form.reportConfig.accountScope === 'all' ? 'All Accounts' : `${form.reportConfig.accounts.length} selected` }}</p>
                       </div>
                     </div>
 
@@ -251,7 +260,7 @@
                    
                    <div v-if="deliveryMode === 'schedule'" class="ml-6 space-y-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
                       <UFormGroup label="Frequency">
-                        <USelectMenu v-model="form.schedule.frequency" :options="frequencyOptions" size="sm" />
+                        <USelectMenu v-model="form.schedule.frequency" :options="frequencyOptions" value-attribute="value" option-attribute="label" size="sm" />
                       </UFormGroup>
                       <UFormGroup label="Recipients">
                          <UInput v-model="recipientsText" placeholder="email@example.com" size="sm" />
@@ -279,7 +288,7 @@
               variant="solid" 
               @click="currentSection++"
             >
-              Next: {{ sections[currentSection + 1].label }}
+              Next: {{ sections[currentSection + 1]?.label || '' }}
             </UButton>
 
             <UButton 
@@ -300,7 +309,12 @@
 
 <script setup lang="ts">
 import type { ScheduledReport } from '#shared/types/scheduled-reports'
-import type { DatasetReportConfig } from '#shared/types/dataset-reports'
+import type { DatasetReportConfig, DatasetSelection } from '#shared/types/dataset-reports'
+
+type CompleteDatasetSelection = {
+  [K in keyof Required<DatasetSelection>]: NonNullable<DatasetSelection[K]>
+}
+type CompleteDatasetReportConfig = Omit<DatasetReportConfig, 'datasets'> & { datasets: CompleteDatasetSelection }
 
 const logger = createLogger('DatasetReportFormModal')
 
@@ -327,7 +341,7 @@ const deliveryMode = ref<'run_now' | 'schedule'>('run_now')
 const form = reactive<{
   reportName: string
   description: string
-  reportConfig: DatasetReportConfig
+  reportConfig: CompleteDatasetReportConfig
   schedule: {
     frequency: 'daily' | 'weekly' | 'monthly' | 'quarterly'
     dayOfWeek?: number
@@ -347,10 +361,12 @@ const form = reactive<{
   description: '',
   reportConfig: {
     accounts: [],
+    accountScope: 'all',
     datasets: {
       config: { enabled: false, filters: {} },
       securityHub: { enabled: false, filters: {} },
-      cloudtrail: { enabled: false, filters: {} }
+      cloudtrail: { enabled: false, filters: {} },
+      entraUsers: { enabled: false, filters: {} }
     },
     format: 'pdf',
     enableAI: true
@@ -370,12 +386,13 @@ const form = reactive<{
 })
 
 // Computed
-const isEdit = computed(() => !!props.report)
+const isEdit = computed(() => !!props.report?.reportId)
 
 const hasAnyDatasetSelected = computed(() => {
   return form.reportConfig.datasets.config?.enabled ||
          form.reportConfig.datasets.securityHub?.enabled ||
-         form.reportConfig.datasets.cloudtrail?.enabled
+         form.reportConfig.datasets.cloudtrail?.enabled ||
+         form.reportConfig.datasets.entraUsers?.enabled
 })
 
 const recipientsText = computed({
@@ -415,7 +432,8 @@ const sections = computed(() => [
 const datasetOptions = [
   { key: 'config', label: 'AWS Config', description: 'Resources & Compliance', icon: 'i-heroicons-cog-6-tooth' },
   { key: 'securityHub', label: 'Security Hub', description: 'Findings & Vulnerabilities', icon: 'i-heroicons-shield-check' },
-  { key: 'cloudtrail', label: 'CloudTrail', description: 'Audit Logs & Activity', icon: 'i-heroicons-document-text' }
+  { key: 'cloudtrail', label: 'CloudTrail', description: 'Audit Logs & Activity', icon: 'i-heroicons-document-text' },
+  { key: 'entraUsers', label: 'Entra Users', description: 'User Access & Roles', icon: 'i-heroicons-users' }
 ] as const
 
 const formats = [
@@ -423,7 +441,7 @@ const formats = [
   { value: 'csv', label: 'CSV', icon: 'i-heroicons-table-cells' },
   { value: 'json', label: 'JSON', icon: 'i-heroicons-code-bracket' },
   { value: 'xlsx', label: 'Excel', icon: 'i-heroicons-document-chart-bar' }
-]
+] as const
 
 const frequencyOptions = [
   { value: 'daily', label: 'Daily' },
@@ -433,8 +451,9 @@ const frequencyOptions = [
 ]
 
 // Methods
-function toggleDataset(key: keyof DatasetReportConfig['datasets']) {
-  form.reportConfig.datasets[key].enabled = !form.reportConfig.datasets[key].enabled
+function toggleDataset(key: keyof CompleteDatasetSelection) {
+  const dataset = form.reportConfig.datasets[key]
+  dataset.enabled = !dataset.enabled
 }
 
 function close() {
@@ -448,24 +467,34 @@ function close() {
 }
 
 async function handleExecute() {
+  if (!form.reportName.trim() || !hasAnyDatasetSelected.value) {
+    useToast().add({ title: 'Incomplete report', description: 'Add a report name and select at least one dataset', color: 'red' })
+    return
+  }
+
+  if (deliveryMode.value === 'schedule' && form.recipients.length === 0) {
+    useToast().add({ title: 'Recipient required', description: 'Add at least one delivery email address', color: 'red' })
+    return
+  }
+
+  if (deliveryMode.value === 'schedule' && form.reportConfig.datasets.entraUsers.enabled) {
+    useToast().add({
+      title: 'Interactive dataset',
+      description: 'Entra Users currently requires an interactive session and cannot be scheduled',
+      color: 'orange'
+    })
+    return
+  }
+
   saving.value = true
   try {
     const { createReport, updateReport } = useDatasetReports()
 
     if (deliveryMode.value === 'run_now') {
-       // Logic for running immediately - creates a one-time schedule or similar logic
-       // For now, we'll create it as a report but disabled/one-off, or trigger a separate endpoint
-       // Assuming we just create it and then trigger a test run for immediate results
-       const report = await createReport({
-          ...form,
-          schedule: { ...form.schedule, frequency: 'daily' } // Dummy schedule
-       })
-       // Trigger run
-       await useDatasetReports().sendTestReport(report.reportId)
-       // We might want to disable it if it was meant to be one-off, but for now let's keep it simple
+      await downloadReportNow()
     } else {
-       // Standard Schedule Logic
-       if (isEdit.value && props.report) {
+      // Standard Schedule Logic
+      if (isEdit.value && props.report) {
         await updateReport(props.report.reportId, form)
       } else {
         await createReport(form)
@@ -476,6 +505,11 @@ async function handleExecute() {
     close()
   } catch (error: any) {
     logger.error('Failed to save report:', error)
+    useToast().add({
+      title: 'Report failed',
+      description: error?.data?.message || error.message || 'Unable to process report',
+      color: 'red'
+    })
   } finally {
     saving.value = false
   }
@@ -484,7 +518,19 @@ async function handleExecute() {
 function resetForm() {
   form.reportName = ''
   form.description = ''
-  // Reset other fields...
+  form.reportConfig = {
+    accounts: [],
+    accountScope: 'all',
+    datasets: {
+      config: { enabled: false, filters: {} },
+      securityHub: { enabled: false, filters: {} },
+      cloudtrail: { enabled: false, filters: {} },
+      entraUsers: { enabled: false, filters: {} }
+    },
+    format: 'pdf',
+    enableAI: true
+  }
+  form.recipients = []
   currentSection.value = 0
   deliveryMode.value = 'run_now'
 }
@@ -493,11 +539,21 @@ watch(() => props.report, (report) => {
   if (report) {
     form.reportName = report.reportName
     form.description = report.description || ''
-    form.reportConfig = report.reportConfig as any
-    form.schedule = report.schedule
-    form.recipients = report.recipients
-    form.emailTemplate = report.emailTemplate
-    deliveryMode.value = 'schedule' // Default to schedule mode when editing
+    form.reportConfig = structuredClone(report.reportConfig) as unknown as CompleteDatasetReportConfig
+    form.schedule = structuredClone(report.schedule)
+    form.recipients = [...(report.recipients || [])]
+    form.emailTemplate = structuredClone(report.emailTemplate || form.emailTemplate)
+    deliveryMode.value = 'schedule'
   }
 }, { immediate: true })
+
+async function downloadReportNow() {
+  await $fetch('/api/dataset-reports/export', {
+    method: 'POST',
+    body: {
+      reportConfig: form.reportConfig
+    }
+  })
+  useToast().add({ title: 'Export queued', description: 'Track and download it from Dataset Reports.', color: 'blue' })
+}
 </script>

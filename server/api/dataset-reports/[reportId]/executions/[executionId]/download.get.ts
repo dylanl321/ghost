@@ -7,6 +7,8 @@
 import { getTableConfig } from '../../../../../lib/dynamodb-config'
 import type { ReportExecution } from '../../../../../../shared/types/scheduled-reports'
 import { logger } from '../../../../../utils/logger'
+import { requireDatasetReportAccess } from '../../../../../utils/dataset-report-access'
+import { getReportDownloadUrl } from '../../../../../utils/s3-reports-storage'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -21,6 +23,7 @@ export default defineEventHandler(async (event) => {
     }
 
     logger.info(`Downloading report execution: ${reportId} / ${executionId}`)
+    await requireDatasetReportAccess(event, reportId)
 
     const tableConfig = await getTableConfig('reportExecutions')
 

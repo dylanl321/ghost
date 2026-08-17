@@ -4,15 +4,16 @@
  */
 
 import { defineEventHandler, getQuery } from 'h3'
-import { getCostAndUsage } from '../../utils/cost-explorer'
+import { getCostAndUsage, getProformaCosts } from '../../utils/cost-explorer'
 import { sendSuccess, parseQueryParams, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { parseAndValidateAccountFilters, getAccountIdsFromCriteria } from '../../utils/account-filters'
+import { getAccountScopeCacheKey } from '../../utils/cache-keys'
 import { costCache, CacheTags } from '../../utils/cache-manager'
 import { validateDateParams, type RelativePeriod } from '../../utils/date-helpers'
 import { logger } from '../../utils/logger'
 import { getAllAccountsUnified } from '../../utils/accounts-consolidated'
-import type { TagCoverageData, TagCoverageAccount } from '../../../shared/types/cost-tags'
+import { buildTagCoverageData, extractProformaAccountPeriodTotals, extractProformaAccountTotals, shapeTagCoverageData } from '../../utils/cost-tag-analysis'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/costs/tag-coverage', 'GET', {
@@ -72,6 +73,34 @@ registerEndpoint('/api/costs/tag-coverage', 'GET', {
       required: false,
       schema: { type: 'string' },
       description: 'Comma-separated list of department numbers to filter accounts'
+    },
+    {
+      name: 'includeValues',
+      in: 'query',
+      required: false,
+      schema: { type: 'boolean', default: false },
+      description: 'Include tag-value totals'
+    },
+    {
+      name: 'includeAccounts',
+      in: 'query',
+      required: false,
+      schema: { type: 'boolean', default: true },
+      description: 'Include per-account contributions for returned tag values'
+    },
+    {
+      name: 'valueGroupKey',
+      in: 'query',
+      required: false,
+      schema: { type: 'string' },
+      description: 'Return one normalized tag value, typically for a lazy account drill-down'
+    },
+    {
+      name: 'proforma',
+      in: 'query',
+      required: false,
+      schema: { type: 'boolean', default: false },
+      description: 'Include account-weighted estimated proforma costs'
     }
   ],
   responses: {
@@ -87,6 +116,7 @@ registerEndpoint('/api/costs/tag-coverage', 'GET', {
                 type: 'object',
                 properties: {
                   tagKey: { type: 'string' },
+                  costMetric: { type: 'string', enum: ['NetUnblendedCost'] },
                   accounts: {
                     type: 'array',
                     items: {
@@ -101,7 +131,37 @@ registerEndpoint('/api/costs/tag-coverage', 'GET', {
                   },
                   totalTaggedCost: { type: 'number' },
                   totalUntaggedCost: { type: 'number' },
-                  overallCoverage: { type: 'number' }
+                  overallCoverage: { type: 'number' },
+                  estimatedProformaTaggedCost: { type: 'number' },
+                  estimatedProformaUntaggedCost: { type: 'number' },
+                  values: {
+                    type: 'array',
+                    description: 'Included when includeValues=true',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        groupKey: { type: 'string' },
+                        tagValue: { type: 'string' },
+                        displayName: { type: 'string' },
+                        isUntagged: { type: 'boolean' },
+                        isPerson: { type: 'boolean' },
+                        creatorType: { type: 'string', enum: ['email', 'iam-user', 'automation', 'service', 'root', 'untagged'] },
+                        rawValues: { type: 'array', items: { type: 'string' } },
+                        billableCost: { type: 'number' },
+                        estimatedProformaCost: { type: 'number' },
+                        accounts: { type: 'array', items: { type: 'object' } }
+                      }
+                    }
+                  },
+                  proformaEstimation: {
+                    type: 'object',
+                    properties: {
+                      requested: { type: 'boolean' },
+                      available: { type: 'boolean' },
+                      method: { type: 'string' },
+                      unavailableAccountIds: { type: 'array', items: { type: 'string' } }
+                    }
+                  }
                 }
               }
             }
@@ -139,6 +199,25 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
 
   const { startDate, endDate } = dateRange
+  // Match the Cost Explorer console's default net metric so discounts and
+  // credits stay attached to the same tag distribution users validate there.
+  const costMetric = 'NetUnblendedCost' as const
+  const includeValues = query.includeValues === 'true' || query.includeValues === true
+  const includeAccounts = query.includeAccounts !== 'false' && query.includeAccounts !== false
+  const valueGroupKey = typeof query.valueGroupKey === 'string' ? query.valueGroupKey : undefined
+  const proforma = query.proforma === 'true' || query.proforma === true
+  const proformaAccountId = (query.proformaAccountId as string) || process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832'
+  const masterAccountId = (query.masterAccountId as string) || process.env.AWS_MASTER_ACCOUNT_ID || '205950196477'
+
+  if (proforma && environment !== 'commercial') {
+    return errors.badRequest(event, 'Proforma data analysis is only available for commercial environment')
+  }
+  if (proforma && (!/^\d{12}$/.test(proformaAccountId) || !/^\d{12}$/.test(masterAccountId))) {
+    return errors.badRequest(event, 'Proforma and master account IDs must be 12 digits')
+  }
+  if (proforma && proformaAccountId === masterAccountId) {
+    return errors.badRequest(event, 'Proforma and master account IDs cannot be the same')
+  }
 
   // Parse and validate account filters
   const { criteria: accountFilters, errors: filterErrors } = parseAndValidateAccountFilters(query)
@@ -159,10 +238,16 @@ export default defineEventHandler(handleAsync(async (event) => {
     : undefined
 
   const cacheKey = `costs:tag-coverage:${JSON.stringify({
-    tagKey, startDate, endDate, environment,
-    filteredAccountIds: filteredAccountIds
-      ? `${filteredAccountIds.length}:${filteredAccountIds.sort().join(',').substring(0, 100)}`
-      : null
+    tagKey,
+    costMetric,
+    startDate,
+    endDate,
+    environment,
+    includeValues,
+    proforma,
+    proformaAccountId: proforma ? proformaAccountId : null,
+    masterAccountId: proforma ? masterAccountId : null,
+    accountScope: getAccountScopeCacheKey(filteredAccountIds)
   })}`
 
   const result = await costCache.getOrSet(
@@ -172,11 +257,11 @@ export default defineEventHandler(handleAsync(async (event) => {
 
       // Single query with 2 GroupBy dimensions: LINKED_ACCOUNT + TAG
       // AWS returns ALL costs — untagged resources appear with empty-string tag value
-      const taggedData = await getCostAndUsage({
+      const taggedDataPromise = getCostAndUsage({
         startDate,
         endDate,
         granularity: 'MONTHLY',
-        metrics: ['UnblendedCost'],
+        metrics: ['UnblendedCost', costMetric],
         groupBy: [
           { type: 'DIMENSION', key: 'LINKED_ACCOUNT' },
           { type: 'TAG', key: tagKey }
@@ -184,88 +269,55 @@ export default defineEventHandler(handleAsync(async (event) => {
         filter: accountFilter
       }, environment)
 
-      // Parse the 2-key groups to compute tagged vs total per account
-      const accountTotals = new Map<string, number>()
-      const accountTaggedCosts = new Map<string, number>()
+      const proformaDataPromise = proforma
+        ? getProformaCosts({
+            startDate,
+            endDate,
+            granularity: 'MONTHLY',
+            metrics: ['UnblendedCost', costMetric],
+            groupBy: [{ type: 'DIMENSION', key: 'LINKED_ACCOUNT' }],
+            filter: accountFilter
+          }, proformaAccountId, masterAccountId, costMetric)
+        : Promise.resolve(null)
 
-      for (const period of (taggedData.resultsByTime || [])) {
-        for (const group of (period.Groups || [])) {
-          const keys = group.Keys || []
-          const cost = parseFloat(group.Metrics?.UnblendedCost?.Amount || '0')
+      const [taggedResult, proformaResult] = await Promise.allSettled([
+        taggedDataPromise,
+        proformaDataPromise
+      ] as const)
 
-          // With 2 GroupBy dimensions, Keys = [accountId, "tagKey$tagValue"]
-          // AWS Cost Explorer TAG GroupBy returns keys formatted as "tagKey$tagValue"
-          // Untagged resources have an empty value after the $, e.g. "Name$"
-          const accountId = keys[0]
-          const rawTagValue = keys.length > 1 ? keys[1] : ''
-          const tagValue = rawTagValue.includes('$') ? rawTagValue.split('$').slice(1).join('$') : rawTagValue
-
-          if (!accountId) continue
-
-          // Add to account total (every group contributes to total)
-          accountTotals.set(accountId, (accountTotals.get(accountId) || 0) + cost)
-
-          // Determine if this group represents tagged resources
-          // Untagged resources have empty-string tag value after the $ separator
-          const isUntagged = !tagValue || tagValue.trim() === ''
-          if (!isUntagged) {
-            accountTaggedCosts.set(accountId, (accountTaggedCosts.get(accountId) || 0) + cost)
-          }
-        }
+      if (taggedResult.status === 'rejected') throw taggedResult.reason
+      if (proformaResult.status === 'rejected') {
+        logger.warn(`Could not calculate proforma estimates for tag "${tagKey}"; returning billable data`, proformaResult.reason)
       }
 
-      logger.info(`Tag coverage for "${tagKey}": ${accountTotals.size} accounts, sample totals vs tagged:`,
-        Array.from(accountTotals.entries()).slice(0, 3).map(([id, total]) => ({
-          accountId: id,
-          total: total.toFixed(2),
-          tagged: (accountTaggedCosts.get(id) || 0).toFixed(2)
-        }))
-      )
-
       // Resolve account names
-      let accountNameMap = new Map<string, string>()
+      const accountNameMap = new Map<string, string>()
       try {
         const allAccounts = await getAllAccountsUnified(true)
         for (const acc of allAccounts) {
-          if (acc.accountId && acc.name) {
-            accountNameMap.set(acc.accountId, acc.name)
-          }
+          if (!acc.name) continue
+          if (acc.accountId) accountNameMap.set(acc.accountId, acc.name)
+          if (acc.awsStandardAccountID) accountNameMap.set(acc.awsStandardAccountID, acc.name)
         }
       } catch (err) {
         logger.warn('Could not resolve account names for tag coverage:', err)
       }
 
-      // Build per-account coverage data
-      const accounts: TagCoverageAccount[] = []
-      for (const [accountId, totalCost] of accountTotals) {
-        const taggedCost = accountTaggedCosts.get(accountId) || 0
-        const untaggedCost = Math.max(0, totalCost - taggedCost)
-        const coveragePercent = totalCost > 0 ? (taggedCost / totalCost) * 100 : 0
+      const proformaAccountTotals = proformaResult.status === 'fulfilled' && proformaResult.value
+        ? extractProformaAccountTotals(proformaResult.value)
+        : undefined
+      const proformaAccountPeriodTotals = proformaResult.status === 'fulfilled' && proformaResult.value
+        ? extractProformaAccountPeriodTotals(proformaResult.value)
+        : undefined
 
-        accounts.push({
-          accountId,
-          accountName: accountNameMap.get(accountId),
-          taggedCost,
-          untaggedCost,
-          coveragePercent
-        })
-      }
-
-      // Sort by untagged cost descending (highest opportunity first)
-      accounts.sort((a, b) => b.untaggedCost - a.untaggedCost)
-
-      const totalTaggedCost = accounts.reduce((sum, a) => sum + a.taggedCost, 0)
-      const totalUntaggedCost = accounts.reduce((sum, a) => sum + a.untaggedCost, 0)
-      const grandTotal = totalTaggedCost + totalUntaggedCost
-      const overallCoverage = grandTotal > 0 ? (totalTaggedCost / grandTotal) * 100 : 0
-
-      return {
-        tagKey,
-        accounts,
-        totalTaggedCost,
-        totalUntaggedCost,
-        overallCoverage
-      } satisfies TagCoverageData
+      return buildTagCoverageData(tagKey, taggedResult.value.resultsByTime || [], {
+        includeValues,
+        accountNames: accountNameMap,
+        costMetric,
+        proformaRequested: proforma,
+        proformaAccountTotals,
+        proformaAccountPeriodTotals
+      })
     },
     {
       ttl: 1800, // 30 minutes — coverage data is relatively stable
@@ -276,7 +328,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   const cacheInfo = costCache.getEntryInfo(cacheKey)
   const cacheStats = costCache.getStats()
 
-  return sendSuccess(event, result, {
+  return sendSuccess(event, shapeTagCoverageData(result, { includeAccounts, valueGroupKey }), {
     cache: {
       hit: !!cacheInfo,
       age: cacheInfo?.age || null,

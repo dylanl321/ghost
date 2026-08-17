@@ -18,6 +18,7 @@ export interface UploadOptions {
   contentType: string                 // MIME type (e.g., "application/pdf")
   metadata?: Record<string, string>   // Custom metadata
   expiresInDays?: number             // Optional: for lifecycle policies
+  signal?: AbortSignal
 }
 
 /**
@@ -62,6 +63,14 @@ export interface S3ListResult {
     lastModified: Date
   }>
   nextToken?: string
+}
+
+export async function getObjectBuffer(key: string): Promise<Buffer> {
+  const bucket = getBucketName()
+  const s3Client = await getS3Client('govcloud', getRegion(), deploymentAccountId)
+  const response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }))
+  if (!response.Body) throw new Error(`S3 object ${key} has no body`)
+  return Buffer.from(await response.Body.transformToByteArray())
 }
 
 /**
@@ -118,7 +127,7 @@ export async function uploadToS3(options: UploadOptions): Promise<S3UploadResult
       ServerSideEncryption: 'AES256'
     })
 
-    const response = await s3Client.send(command)
+    const response = await s3Client.send(command, { abortSignal: options.signal })
 
     logger.info(`Successfully uploaded to S3: ${options.key}`)
 

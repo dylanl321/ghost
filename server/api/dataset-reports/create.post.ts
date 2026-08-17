@@ -4,10 +4,12 @@
  */
 
 import type { DatasetReportConfig } from '../../../shared/types/dataset-reports'
+import type { CreateReportRequest } from '../../../shared/types/scheduled-reports'
 import { createReport } from '../../utils/scheduled-reports'
 import { validateEmails } from '../../utils/email-service'
 import { getUserEmail, isUserAdmin } from '../../utils/user-roles'
 import { logger } from '../../utils/logger'
+import { getDatasetReportConfigErrors, getScheduleErrors } from '../../utils/dataset-report-validation'
 
 interface CreateDatasetReportRequest {
   reportName: string
@@ -50,6 +52,9 @@ export default defineEventHandler(async (event) => {
 
     // Parse request body
     const body = await readBody<CreateDatasetReportRequest>(event)
+    if (!body || typeof body !== 'object') {
+      throw createError({ statusCode: 400, message: 'Request body is required' })
+    }
 
     // Validation
     if (!body.reportName || body.reportName.trim() === '') {
@@ -66,14 +71,14 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Validate at least one dataset is selected
-    const datasetsSelected = Object.values(body.reportConfig.datasets).some(
-      ds => ds && ds.enabled
-    )
-    if (!datasetsSelected) {
+    const validationErrors = [
+      ...getDatasetReportConfigErrors(body.reportConfig),
+      ...getScheduleErrors(body.schedule)
+    ]
+    if (validationErrors.length > 0) {
       throw createError({
         statusCode: 400,
-        message: 'At least one dataset must be selected'
+        message: validationErrors.join('; ')
       })
     }
 
@@ -99,11 +104,11 @@ export default defineEventHandler(async (event) => {
     const isAdmin = await isUserAdmin(event)
 
     // Convert to ReportConfig format (compatible with existing infrastructure)
-    const reportRequest = {
+    const reportRequest: CreateReportRequest = {
       reportName: body.reportName,
       description: body.description,
       reportType: 'dataset' as const,
-      reportConfig: body.reportConfig as any, // Dataset config stored in reportConfig field
+      reportConfig: body.reportConfig as any, // Shared scheduler supports both report config shapes
       schedule: body.schedule,
       recipients: body.recipients,
       emailTemplate: body.emailTemplate

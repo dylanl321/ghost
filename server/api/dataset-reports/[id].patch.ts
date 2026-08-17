@@ -3,10 +3,11 @@
  * PATCH /api/dataset-reports/:id
  */
 
-import { updateReport, getReport } from '../../utils/scheduled-reports'
+import { updateReport } from '../../utils/scheduled-reports'
 import { validateEmails } from '../../utils/email-service'
-import { getUserEmail } from '../../utils/user-roles'
+import { requireDatasetReportAccess } from '../../utils/dataset-report-access'
 import { logger } from '../../utils/logger'
+import { getDatasetReportConfigErrors, getScheduleErrors } from '../../utils/dataset-report-validation'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -36,39 +37,31 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Get user email
-    const userEmail = getUserEmail(event)
-    if (!userEmail) {
-      throw createError({
-        statusCode: 400,
-        message: 'User email not available'
-      })
-    }
-
-    // Get existing report
-    const existingReport = await getReport(reportId)
-
-    // Verify ownership
-    if (existingReport.createdBy !== userEmail) {
-      throw createError({
-        statusCode: 403,
-        message: 'Access denied'
-      })
-    }
-
-    // Verify it's a dataset report
-    if (existingReport.reportType !== 'dataset') {
-      throw createError({
-        statusCode: 404,
-        message: 'Dataset report not found'
-      })
-    }
+    await requireDatasetReportAccess(event, reportId)
 
     // Parse request body
-    const updates = await readBody(event)
+    const body = await readBody(event)
+    if (!body || typeof body !== 'object') {
+      throw createError({ statusCode: 400, message: 'Request body is required' })
+    }
+    const updates = {
+      ...(body.reportName !== undefined && { reportName: body.reportName }),
+      ...(body.description !== undefined && { description: body.description }),
+      ...(body.reportConfig !== undefined && { reportConfig: body.reportConfig }),
+      ...(body.schedule !== undefined && { schedule: body.schedule }),
+      ...(body.recipients !== undefined && { recipients: body.recipients }),
+      ...(body.emailTemplate !== undefined && { emailTemplate: body.emailTemplate })
+    }
+
+    if (updates.reportName !== undefined && (typeof updates.reportName !== 'string' || !updates.reportName.trim())) {
+      throw createError({ statusCode: 400, message: 'Report name cannot be empty' })
+    }
 
     // Validate emails if they're being updated
-    if (updates.recipients) {
+    if (updates.recipients !== undefined) {
+      if (!Array.isArray(updates.recipients) || updates.recipients.length === 0) {
+        throw createError({ statusCode: 400, message: 'At least one recipient is required' })
+      }
       const emailValidation = validateEmails(updates.recipients)
       if (!emailValidation.valid) {
         throw createError({
@@ -80,14 +73,19 @@ export default defineEventHandler(async (event) => {
 
     // Validate datasets if reportConfig is being updated
     if (updates.reportConfig) {
-      const datasetsSelected = Object.values(updates.reportConfig.datasets || {}).some(
-        (ds: any) => ds && ds.enabled
-      )
-      if (!datasetsSelected) {
+      const configErrors = getDatasetReportConfigErrors(updates.reportConfig)
+      if (configErrors.length > 0) {
         throw createError({
           statusCode: 400,
-          message: 'At least one dataset must be selected'
+          message: configErrors.join('; ')
         })
+      }
+    }
+
+    if (updates.schedule) {
+      const scheduleErrors = getScheduleErrors(updates.schedule)
+      if (scheduleErrors.length > 0) {
+        throw createError({ statusCode: 400, message: scheduleErrors.join('; ') })
       }
     }
 

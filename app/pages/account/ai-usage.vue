@@ -1,0 +1,332 @@
+<template>
+  <div class="mx-auto max-w-[1600px] space-y-5 px-4 py-5 sm:px-6">
+    <header class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+      <div class="min-w-0">
+        <div class="mb-1 flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+          <UIcon name="i-heroicons-sparkles" class="h-4 w-4" />
+          Organization adoption
+        </div>
+        <h1 class="text-2xl font-semibold text-gray-950 dark:text-white">AI Usage</h1>
+        <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">{{ scopeLabel }} · {{ periodLabel }}</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <UTooltip text="Export current tab">
+          <UButton color="gray" variant="soft" icon="i-heroicons-arrow-down-tray" @click="exportCsv" />
+        </UTooltip>
+        <UTooltip text="Refresh snapshot">
+          <UButton color="gray" variant="soft" icon="i-heroicons-arrow-path" :loading="loading" @click="loadData" />
+        </UTooltip>
+      </div>
+    </header>
+
+    <section class="border-y border-gray-200 py-3 dark:border-gray-800">
+      <div class="flex flex-wrap items-end gap-3">
+        <div>
+          <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Environment</label>
+          <div class="flex h-8 overflow-hidden rounded-md border border-gray-300 dark:border-gray-700">
+            <button
+              v-for="option in environmentOptions"
+              :key="option.value"
+              class="px-3 text-xs font-medium transition-colors"
+              :class="environment === option.value ? 'bg-emerald-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800'"
+              @click="environment = option.value"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+        </div>
+        <div class="w-40">
+          <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Period</label>
+          <USelect v-model="period" :options="periodOptions" size="sm" />
+        </div>
+        <div class="w-40">
+          <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Cost basis</label>
+          <USelect v-model="costBasis" :options="costBasisOptions" size="sm" />
+        </div>
+        <div class="min-w-[250px] flex-1 xl:max-w-md">
+          <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Accounts</label>
+          <USelectMenu
+            v-model="selectedAccounts"
+            :options="accountOptions"
+            value-attribute="value"
+            option-attribute="label"
+            searchable
+            multiple
+            size="sm"
+            placeholder="All enclaves"
+          />
+        </div>
+        <UPopover>
+          <UButton color="gray" variant="soft" icon="i-heroicons-adjustments-horizontal" size="sm">
+            Filters
+            <UBadge v-if="activeFilterCount" color="emerald" variant="solid" size="xs">{{ activeFilterCount }}</UBadge>
+          </UButton>
+          <template #panel>
+            <div class="grid w-[min(92vw,720px)] gap-4 p-4 sm:grid-cols-2">
+              <FilterSelect v-model="providers" label="Telemetry source" :options="providerOptions" />
+              <FilterSelect v-model="services" label="Service" :options="stringOptions(data?.options.services)" />
+              <FilterSelect v-model="projects" label="Mantle project" :options="stringOptions(data?.options.projects)" />
+              <FilterSelect v-model="models" label="Model" :options="stringOptions(data?.options.models)" />
+              <FilterSelect v-model="regions" label="Region" :options="stringOptions(data?.options.regions)" />
+              <FilterSelect v-model="linesOfBusiness" label="Line of business" :options="stringOptions(data?.options.linesOfBusiness)" />
+              <FilterSelect v-model="departments" label="Department" :options="stringOptions(data?.options.departments)" />
+              <div class="flex items-end justify-end">
+                <UButton color="gray" variant="ghost" size="sm" @click="clearFilters">Clear filters</UButton>
+              </div>
+            </div>
+          </template>
+        </UPopover>
+      </div>
+    </section>
+
+    <UAlert
+      v-if="error"
+      color="red"
+      variant="soft"
+      icon="i-heroicons-exclamation-triangle"
+      title="AI usage is unavailable"
+      :description="error"
+    />
+    <template v-if="loading && !data">
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+        <USkeleton v-for="index in 6" :key="index" class="h-28" />
+      </div>
+      <USkeleton class="h-72" />
+      <USkeleton class="h-96" />
+    </template>
+
+    <template v-else-if="data">
+      <section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6" aria-label="AI adoption summary">
+        <UCard v-for="metric in summaryMetrics" :key="metric.label" :ui="{ body: { padding: 'p-4 sm:p-4' } }">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <p class="text-xs font-medium uppercase text-gray-500 dark:text-gray-400">{{ metric.label }}</p>
+              <p class="mt-2 text-xl font-semibold tabular-nums text-gray-950 dark:text-white">{{ metric.value }}</p>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ metric.note }}</p>
+            </div>
+            <UIcon :name="metric.icon" class="h-5 w-5 flex-none" :class="metric.color" />
+          </div>
+        </UCard>
+      </section>
+
+      <section class="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+        <header class="flex flex-col gap-2 border-b border-gray-200 p-4 dark:border-gray-800 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 class="font-semibold text-gray-950 dark:text-white">Adoption trend</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400">Daily active enclaves and inference volume</p>
+          </div>
+          <p v-if="data.dataQuality.collectedAt" class="text-xs text-gray-500 dark:text-gray-400">Snapshot {{ relativeTime(data.dataQuality.collectedAt) }}</p>
+        </header>
+        <VChart v-if="data.trend.length" :option="trendOption" class="h-72" autoresize />
+        <div v-else class="py-20 text-center text-sm text-gray-500 dark:text-gray-400">No AI activity was found for this scope.</div>
+      </section>
+
+      <UsageAnalysisTable :analysis="data.analysis" :query="apiParams(false)" @view-change="exportGroupBy = $event" />
+    </template>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { $fetch } from 'ofetch'
+import * as echarts from 'echarts/core'
+import { LineChart, BarChart } from 'echarts/charts'
+import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
+import VChart from 'vue-echarts'
+import { definePageMeta, useRoute, useRouter } from '#imports'
+import FilterSelect from '~/components/ai-usage/FilterSelect.vue'
+import type {
+  AIUsageCostBasis,
+  AIUsageEnvironmentFilter,
+  AIUsageGroupBy,
+  AIUsageOverviewResponse,
+  AIUsageProvider
+} from '#shared/types/ai-usage'
+
+echarts.use([LineChart, BarChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
+definePageMeta({ middleware: 'auth', title: 'AI Usage' })
+
+const route = useRoute()
+const router = useRouter()
+const environment = ref<AIUsageEnvironmentFilter>((route.query.environment as AIUsageEnvironmentFilter) || 'all')
+const period = ref((route.query.period as string) || 'last30days')
+const costBasis = ref<AIUsageCostBasis>((route.query.costBasis as AIUsageCostBasis) || 'proforma')
+const selectedAccounts = ref(queryList('accountIds'))
+const providers = ref<AIUsageProvider[]>(queryList('providers') as AIUsageProvider[])
+const services = ref(queryList('services'))
+const projects = ref(queryList('projects'))
+const models = ref(queryList('models'))
+const regions = ref(queryList('regions'))
+const linesOfBusiness = ref(queryList('linesOfBusiness'))
+const departments = ref(queryList('departments'))
+const loading = ref(true)
+const error = ref<string | null>(null)
+const data = ref<AIUsageOverviewResponse | null>(null)
+const exportGroupBy = ref<AIUsageGroupBy>('enclave')
+const accountsResponse = ref<any>(null)
+let timer: ReturnType<typeof setTimeout> | null = null
+
+const accounts = computed<any[]>(() => {
+  const raw = accountsResponse.value?.data || accountsResponse.value
+  return Array.isArray(raw) ? raw : raw?.items || []
+})
+const accountOptions = computed(() => accounts.value.map(account => {
+  const value = account.accountId || account.awsStandardAccountID || account.id
+  const name = account.accountName || account.projectName || account.name || account.pepCloudRecordName || value
+  const gov = account.govCloudAccountId || account.awsGovCloudAccountID
+  return { label: `${name} · ${value}${gov ? ` · ${gov}` : ''}`, value }
+}).filter(option => option.value))
+
+const environmentOptions = [
+  { label: 'All', value: 'all' as const },
+  { label: 'Commercial', value: 'commercial' as const },
+  { label: 'GovCloud', value: 'govcloud' as const }
+]
+const periodOptions = [
+  { label: 'Last 7 days', value: 'last7days' },
+  { label: 'Last 30 days', value: 'last30days' },
+  { label: 'Last 90 days', value: 'last90days' },
+  { label: 'This month', value: 'thisMonth' },
+  { label: 'This quarter', value: 'thisQuarter' },
+  { label: 'Year-to-date', value: 'ytd' },
+  { label: 'Last 12 months', value: 'last12months' }
+]
+const costBasisOptions = [
+  { label: 'Proforma + Gov billable', value: 'proforma' },
+  { label: 'Billable', value: 'billable' }
+]
+const providerOptions = [
+  { label: 'Bedrock Runtime', value: 'bedrock-runtime' },
+  { label: 'Bedrock Mantle', value: 'bedrock-mantle' }
+]
+
+const activeFilterCount = computed(() => [providers, services, projects, models, regions, linesOfBusiness, departments]
+  .reduce((sum, filter) => sum + filter.value.length, 0))
+const scopeLabel = computed(() => selectedAccounts.value.length
+  ? `${selectedAccounts.value.length} enclave${selectedAccounts.value.length === 1 ? '' : 's'}`
+  : environment.value === 'all' ? 'All environments' : environment.value === 'commercial' ? 'Commercial' : 'GovCloud')
+const periodLabel = computed(() => data.value?.filters.periodLabel || periodOptions.find(option => option.value === period.value)?.label || 'Custom')
+const telemetrySummaryAvailable = computed(() => Boolean(data.value?.dataQuality.accountRegionTargetsCollected))
+const actualSummaryAvailable = computed(() => Boolean(data.value?.dataQuality.actualCostThrough) &&
+  providers.value.length === 0 && projects.value.length === 0 && models.value.length === 0 && regions.value.length === 0)
+const summaryMetrics = computed(() => {
+  const summary = data.value!.summary
+  const tokenTotal = summary.metrics.inputTokens + summary.metrics.outputTokens
+  const telemetry = telemetrySummaryAvailable.value
+  const estimateCapable = services.value.length === 0 || services.value.some(service => service === 'Amazon Bedrock')
+  const estimateAvailable = telemetry && estimateCapable && (tokenTotal === 0 || (summary.cost.estimateCoveragePercent || 0) > 0)
+  return [
+    { label: 'Active enclaves', value: number(summary.activeEnclaves), note: growth(summary.growthPercent), icon: 'i-heroicons-building-office-2', color: 'text-emerald-600' },
+    { label: 'Mantle projects', value: telemetry ? number(summary.activeProjects) : '—', note: telemetry ? `${number(summary.activeModels)} active models` : 'Telemetry unavailable', icon: 'i-heroicons-folder-open', color: 'text-blue-600' },
+    { label: 'Invocations', value: telemetry ? compact(summary.metrics.invocations) : '—', note: telemetry ? `${compact(summary.metrics.clientErrors + summary.metrics.serverErrors + summary.metrics.throttles)} errors or throttles` : 'Telemetry unavailable', icon: 'i-heroicons-bolt', color: 'text-red-600' },
+    { label: 'Tokens', value: telemetry ? compact(tokenTotal) : '—', note: telemetry ? `${compact(summary.metrics.inputTokens)} in · ${compact(summary.metrics.outputTokens)} out` : 'Telemetry unavailable', icon: 'i-heroicons-circle-stack', color: 'text-cyan-600' },
+    { label: 'Actual spend', value: actualSummaryAvailable.value ? money(summary.cost.actual) : '—', note: actualSummaryAvailable.value ? (costBasis.value === 'proforma' ? 'Commercial proforma actual' : 'Commercial billable actual') : 'Not allocatable to active telemetry filters', icon: 'i-heroicons-banknotes', color: 'text-green-600' },
+    { label: 'Unbilled estimate', value: estimateAvailable ? money(summary.cost.estimated) : '—', note: estimateAvailable ? coverage(summary.cost.estimateCoveragePercent) : 'Estimate unavailable for this scope', icon: 'i-heroicons-calculator', color: 'text-amber-600' }
+  ]
+})
+const trendOption = computed(() => ({
+  tooltip: { trigger: 'axis' },
+  legend: { top: 8, data: ['Active enclaves', 'Invocations'], textStyle: { color: '#9ca3af' } },
+  grid: { left: 52, right: 52, top: 54, bottom: 58, containLabel: true },
+  xAxis: {
+    type: 'category',
+    data: data.value?.trend.map(point => point.date) || [],
+    axisLabel: { color: '#9ca3af', margin: 14, hideOverlap: true },
+    axisLine: { lineStyle: { color: '#6b7280' } }
+  },
+  yAxis: [
+    { type: 'value', minInterval: 1, axisLabel: { color: '#9ca3af' }, splitLine: { lineStyle: { color: '#d1d5db' } } },
+    { type: 'value', axisLabel: { color: '#9ca3af', formatter: (value: number) => compact(value) }, splitLine: { show: false } }
+  ],
+  series: [
+    { name: 'Active enclaves', type: 'line', smooth: true, symbolSize: 5, data: data.value?.trend.map(point => point.activeEnclaves) || [], lineStyle: { color: '#059669', width: 2 }, itemStyle: { color: '#059669' }, areaStyle: { color: 'rgba(5,150,105,0.10)' } },
+    { name: 'Invocations', type: 'bar', yAxisIndex: 1, barMaxWidth: 18, data: data.value?.trend.map(point => point.invocations) || [], itemStyle: { color: '#2563eb' } }
+  ]
+}))
+
+function queryList(key: string): string[] {
+  const value = route.query[key]
+  if (!value) return []
+  return (Array.isArray(value) ? value : String(value).split(',')).map(String).map(item => item.trim()).filter(Boolean)
+}
+
+function apiParams(includeGroupBy = true): Record<string, string> {
+  const params: Record<string, string> = { environment: environment.value, period: period.value, costBasis: costBasis.value }
+  if (includeGroupBy) params.groupBy = 'enclave'
+  const lists: Record<string, string[]> = {
+    accountIds: selectedAccounts.value,
+    providers: providers.value,
+    services: services.value,
+    projects: projects.value,
+    models: models.value,
+    regions: regions.value,
+    linesOfBusiness: linesOfBusiness.value,
+    departments: departments.value
+  }
+  for (const [key, values] of Object.entries(lists)) if (values.length) params[key] = values.join(',')
+  return params
+}
+
+async function loadData() {
+  loading.value = true
+  error.value = null
+  try {
+    const response = await $fetch<{ success: boolean; data: AIUsageOverviewResponse }>('/api/ai-usage/overview', { query: apiParams() })
+    data.value = response.data
+  } catch (err: any) {
+    error.value = err.data?.error?.message || err.message || 'Failed to load AI usage'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadAccounts() {
+  try {
+    accountsResponse.value = await $fetch('/api/accounts/list', { query: { source: 'full', enrichment: 'basic', includeLZAccounts: true } })
+  } catch {
+    accountsResponse.value = []
+  }
+}
+
+function clearFilters() {
+  providers.value = []
+  services.value = []
+  projects.value = []
+  models.value = []
+  regions.value = []
+  linesOfBusiness.value = []
+  departments.value = []
+}
+
+function stringOptions(values?: string[]) {
+  return (values || []).map(value => ({ label: value, value }))
+}
+
+function exportCsv() {
+  const params = apiParams(false)
+  params.groupBy = exportGroupBy.value
+  window.location.assign(`/api/ai-usage/export?${new URLSearchParams(params).toString()}`)
+}
+
+function number(value: number) { return new Intl.NumberFormat('en-US').format(value) }
+function compact(value: number) { return new Intl.NumberFormat('en-US', { notation: value >= 1000 ? 'compact' : 'standard', maximumFractionDigits: 1 }).format(value) }
+function money(value: number) { return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: value < 10 ? 2 : 0 }).format(value) }
+function coverage(value: number | null) { return value === null ? 'No token estimate' : `${value.toFixed(0)}% of tokens priced` }
+function growth(value: number | null) { return value === null ? 'New adoption in this period' : `${value >= 0 ? '+' : ''}${value.toFixed(1)}% vs prior period` }
+function relativeTime(value: string) {
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60000))
+  return minutes < 60 ? `${minutes}m ago` : `${Math.round(minutes / 60)}h ago`
+}
+
+watch([environment, period, costBasis, selectedAccounts, providers, services, projects, models, regions, linesOfBusiness, departments], () => {
+  if (timer) clearTimeout(timer)
+  timer = setTimeout(() => {
+    router.replace({ query: apiParams(false) })
+    void loadData()
+  }, 300)
+}, { deep: true })
+
+onMounted(() => { void Promise.all([loadAccounts(), loadData()]) })
+onUnmounted(() => { if (timer) clearTimeout(timer) })
+</script>

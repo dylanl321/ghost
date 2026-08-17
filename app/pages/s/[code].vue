@@ -49,6 +49,7 @@ interface ReportShareLinkState {
   shareId: string
   reportName: string
   format: string
+  reportType?: 'cost' | 'dataset'
 }
 
 interface ChatThreadShareLinkState {
@@ -61,7 +62,6 @@ type ShareLinkState = CostShareLinkState | AccountShareLinkState | UserShareLink
 
 // Get the shortlink code from the route
 const route = useRoute()
-const router = useRouter()
 const code = route.params.code as string
 
 const isLoading = ref(true)

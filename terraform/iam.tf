@@ -290,11 +290,14 @@ resource "aws_iam_role_policy" "ecs_chat_threads_dynamodb" {
           "dynamodb:Query",
           "dynamodb:Scan",
           "dynamodb:BatchGetItem",
-          "dynamodb:BatchWriteItem"
+          "dynamodb:BatchWriteItem",
+          "dynamodb:TransactWriteItems"
         ]
         Resource = [
-          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-chat-threads",
-          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-chat-threads/index/*"
+          aws_dynamodb_table.chat_threads.arn,
+          "${aws_dynamodb_table.chat_threads.arn}/index/*",
+          aws_dynamodb_table.chat_messages.arn,
+          "${aws_dynamodb_table.chat_messages.arn}/index/*"
         ]
       }
     ]
@@ -464,15 +467,68 @@ resource "aws_iam_role_policy" "ecs_async_chat_jobs_dynamodb" {
           "dynamodb:UpdateItem",
           "dynamodb:DeleteItem",
           "dynamodb:Query",
-          "dynamodb:Scan"
+          "dynamodb:Scan",
+          "dynamodb:TransactWriteItems"
         ]
         Resource = [
-          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-async-chat-jobs",
-          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-async-chat-jobs/index/*"
+          aws_dynamodb_table.async_chat_jobs.arn,
+          "${aws_dynamodb_table.async_chat_jobs.arn}/index/*"
         ]
       }
     ]
   })
+}
+
+resource "aws_iam_role_policy" "ecs_chat_jobs_sqs" {
+  provider = aws.target_deployment_account
+  name     = "${var.app_name}_chat_jobs_sqs"
+  role     = aws_iam_role.ecs_task_execution_role.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "sqs:SendMessage",
+        "sqs:ReceiveMessage",
+        "sqs:DeleteMessage",
+        "sqs:ChangeMessageVisibility",
+        "sqs:GetQueueAttributes"
+      ]
+      Resource = [aws_sqs_queue.chat_jobs.arn, aws_sqs_queue.chat_jobs_dlq.arn]
+    }]
+  })
+}
+
+resource "aws_iam_policy" "ecs_dataset_export_jobs" {
+  provider = aws.target_deployment_account
+  name     = "${var.app_name}_dataset_export_jobs"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query", "dynamodb:Scan"]
+        Resource = [aws_dynamodb_table.dataset_export_jobs.arn, "${aws_dynamodb_table.dataset_export_jobs.arn}/index/*"]
+      },
+      {
+        Effect = "Allow"
+        Action = ["sqs:SendMessage", "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:ChangeMessageVisibility", "sqs:GetQueueAttributes"]
+        Resource = [aws_sqs_queue.dataset_export_jobs.arn, aws_sqs_queue.dataset_export_jobs_dlq.arn]
+      },
+      {
+        Effect = "Allow"
+        Action = ["athena:StopQueryExecution"]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_dataset_export_jobs" {
+  provider   = aws.target_deployment_account
+  role       = aws_iam_role.ecs_task_execution_role.name
+  policy_arn = aws_iam_policy.ecs_dataset_export_jobs.arn
 }
 
 # DynamoDB permissions for async metrics (read/write)
@@ -502,6 +558,32 @@ resource "aws_iam_role_policy" "ecs_async_metrics_dynamodb" {
       }
     ]
   })
+}
+
+resource "aws_iam_policy" "ecs_ai_usage_dynamodb" {
+  provider = aws.target_deployment_account
+  name     = "${var.app_name}_ai_usage_dynamodb"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid    = "AIUsageDynamoDB"
+      Effect = "Allow"
+      Action = [
+        "dynamodb:BatchWriteItem",
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:Query"
+      ]
+      Resource = [aws_dynamodb_table.ai_usage.arn]
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_ai_usage_dynamodb" {
+  provider   = aws.target_deployment_account
+  role       = aws_iam_role.ecs_task_execution_role.name
+  policy_arn = aws_iam_policy.ecs_ai_usage_dynamodb.arn
 }
 
 # DynamoDB permissions for cost tag config (read/write)

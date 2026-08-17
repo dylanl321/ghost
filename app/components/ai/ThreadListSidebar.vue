@@ -207,6 +207,12 @@
           </div>
         </div>
       </template>
+
+      <div v-if="threadsStore.hasMoreThreads" class="flex justify-center pt-3">
+        <UButton size="xs" color="gray" variant="soft" :loading="threadsStore.loading" @click="threadsStore.loadMoreThreads()">
+          Load more
+        </UButton>
+      </div>
     </div>
 
     <!-- Rename Modal -->
@@ -308,15 +314,16 @@ type ChatThreadsStoreView = {
   threads: ChatThread[]
   activeThreadId: string | null
   loading: boolean
+  hasMoreThreads: boolean
   pinnedThreads: ChatThread[]
   unpinnedThreads: ChatThread[]
   archivedThreads: ChatThread[]
   fetchThreads: (filters?: unknown) => Promise<void>
+  loadMoreThreads: () => Promise<void>
   updateThread: (
     threadId: string,
     updates: { title?: string; description?: string; isPinned?: boolean; isArchived?: boolean }
   ) => Promise<boolean>
-  deleteThreadAndCreateNew: (threadId: string) => Promise<ChatThread | null>
   deleteThread: (threadId: string) => Promise<boolean>
 }
 
@@ -395,35 +402,34 @@ const emptyStateMessage = computed(() => {
   return 'Start a new conversation to get started'
 })
 
-// Initialize
-onMounted(async () => {
-  await threadsStore.fetchThreads()
-
-  // Prefetch first 10 threads for faster switching
-  onNuxtReady(async () => {
-    const first10 = threadsStore.threads.slice(0, 10)
-    for (const thread of first10) {
-      try {
-        await $fetch(`/api/chat/threads/${thread.threadId}`)
-      } catch {
-        // Silently fail - this is just prefetching for cache
-      }
-    }
-  })
-})
-
 // Handle search
+let searchTimer: ReturnType<typeof setTimeout> | undefined
 function handleSearch() {
-  // Search is reactive via computed properties
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    threadsStore.fetchThreads({
+      searchQuery: searchQuery.value.trim() || undefined,
+      isArchived: activeFilter.value === 'archived' ? true : false,
+      isPinned: activeFilter.value === 'pinned' ? true : undefined
+    })
+  }, 300)
 }
+
+onUnmounted(() => {
+  if (searchTimer) clearTimeout(searchTimer)
+})
 
 // Set filter
 function setFilter(filter: 'all' | 'pinned' | 'archived') {
   activeFilter.value = filter
   if (filter === 'archived') {
-    threadsStore.fetchThreads({ isArchived: true })
+    threadsStore.fetchThreads({ isArchived: true, searchQuery: searchQuery.value || undefined })
   } else {
-    threadsStore.fetchThreads({ isArchived: false })
+    threadsStore.fetchThreads({
+      isArchived: false,
+      isPinned: filter === 'pinned' ? true : undefined,
+      searchQuery: searchQuery.value || undefined
+    })
   }
 }
 
@@ -443,7 +449,11 @@ async function handlePin(threadId: string, pin: boolean) {
   if (success) {
     toast.add({
       title: pin ? 'Thread pinned' : 'Thread unpinned',
-      color: 'green'
+      color: 'green',
+      actions: [{
+        label: 'Undo',
+        click: () => threadsStore.updateThread(threadId, { isPinned: !pin })
+      }]
     })
   } else {
     toast.add({
@@ -460,7 +470,11 @@ async function handleArchive(threadId: string, archive: boolean) {
   if (success) {
     toast.add({
       title: archive ? 'Thread archived' : 'Thread unarchived',
-      color: 'green'
+      color: 'green',
+      actions: [{
+        label: 'Undo',
+        click: () => threadsStore.updateThread(threadId, { isArchived: !archive })
+      }]
     })
     // Refresh list based on current filter
     if (activeFilter.value === 'archived') {
@@ -529,15 +543,16 @@ function handleDelete(threadId: string) {
 async function confirmDelete() {
   if (!activeThreadIdForAction.value) return
 
-  // Use deleteThreadAndCreateNew to ensure user always has an active thread
-  const newThread = await threadsStore.deleteThreadAndCreateNew(activeThreadIdForAction.value)
+  const deletedThreadId = activeThreadIdForAction.value
+  const wasActive = threadsStore.activeThreadId === deletedThreadId
+  const success = await threadsStore.deleteThread(deletedThreadId)
 
-  if (newThread) {
+  if (success) {
     toast.add({
       title: 'Thread deleted',
-      description: 'New conversation started',
       color: 'green'
     })
+    if (wasActive && threadsStore.threads[0]) emit('thread-selected', threadsStore.threads[0].threadId)
   } else {
     toast.add({
       title: 'Failed to delete thread',

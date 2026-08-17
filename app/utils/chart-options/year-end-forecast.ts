@@ -1,6 +1,7 @@
 import { createBaseChartOptions, CHART_THEME, SEMANTIC_COLORS } from '~/utils/chart-theme'
 import { formatCurrency } from '~/utils/formatters'
 import type { ChartBuilderContext } from './types'
+import { getCurrentMonthForecastRemainder } from '~/utils/year-end-projection'
 
 /**
  * Year-End Forecast with Actuals – the most complex chart.
@@ -88,7 +89,7 @@ export function buildYearEndForecastOptions(data: any, context: ChartBuilderCont
     const forecastBars = yearData.series[1].data.map((val: number | null, idx: number) => {
       // For current month, show forecast remainder
       if (idx === currentMonthIndex && val !== null && actualBars[idx] !== null) {
-        return val - actualBars[idx]
+        return getCurrentMonthForecastRemainder(val, actualBars[idx])
       }
       return val
     })

@@ -217,14 +217,7 @@
                   <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Monthly Plan vs Actual — {{ activeDept.department }}</h2>
                   <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Plan and actual spend by invoicing month. Cumulative actual stops at the last month with data.</p>
                 </div>
-                <div class="flex items-center gap-2">
-                  <UButton
-                    size="xs"
-                    :color="deptFullYear ? 'purple' : 'gray'"
-                    :variant="deptFullYear ? 'soft' : 'ghost'"
-                    icon="i-heroicons-calendar"
-                    @click="deptFullYear = !deptFullYear"
-                  >Full Year</UButton>
+                <div class="flex flex-col items-end gap-1">
                   <UButton color="gray" variant="ghost" icon="i-heroicons-arrow-down-tray" size="xs" :loading="excelExporting" :disabled="excelExporting" @click="exportExcel">
                     {{ excelExporting ? 'Generating…' : 'Export Excel' }}
                   </UButton>
@@ -238,7 +231,7 @@
                   <tr class="border-b border-gray-200 dark:border-gray-700">
                     <th class="py-2 pr-4 text-left font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap"></th>
                     <th
-                      v-for="m in deptVisibleMonthly"
+                      v-for="m in activeDept.monthly"
                       :key="m.month"
                       class="py-2 px-3 text-right font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap"
                     >{{ formatMonthShort(m.month) }}</th>
@@ -248,7 +241,7 @@
                   <tr>
                     <td class="py-2 pr-4 font-semibold text-blue-600 dark:text-blue-400 whitespace-nowrap">Plan By Month</td>
                     <td
-                      v-for="m in deptVisibleMonthly"
+                      v-for="m in activeDept.monthly"
                       :key="m.month"
                       class="py-2 px-3 text-right text-blue-600 dark:text-blue-400"
                     >{{ formatCurrency(resolvedMonthlyPlan[m.month] ?? m.budget, 0) }}</td>
@@ -256,7 +249,7 @@
                   <tr>
                     <td class="py-2 pr-4 font-semibold text-orange-500 dark:text-orange-400 whitespace-nowrap">Actual By Month</td>
                     <td
-                      v-for="m in deptVisibleMonthly"
+                      v-for="m in activeDept.monthly"
                       :key="m.month"
                       class="py-2 px-3 text-right"
                       :class="visibleActual(m) > 0 ? 'text-orange-500 dark:text-orange-400' : 'text-gray-300 dark:text-gray-600'"
@@ -265,19 +258,19 @@
                   <tr class="border-t border-gray-200 dark:border-gray-600">
                     <td class="py-2 pr-4 font-semibold text-blue-400 dark:text-blue-500 whitespace-nowrap">Plan (Cumulative)</td>
                     <td
-                      v-for="(m, i) in deptVisibleMonthly"
+                      v-for="(m, i) in activeDept.monthly"
                       :key="m.month"
                       class="py-2 px-3 text-right text-blue-400 dark:text-blue-500"
-                    >{{ formatCurrency(deptVisibleMonthly.slice(0, i + 1).reduce((s, p) => s + (resolvedMonthlyPlan[p.month] ?? p.budget), 0), 0) }}</td>
+                    >{{ formatCurrency(activeDept.monthly.slice(0, i + 1).reduce((s, p) => s + (resolvedMonthlyPlan[p.month] ?? p.budget), 0), 0) }}</td>
                   </tr>
                   <tr>
                     <td class="py-2 pr-4 font-semibold text-orange-400 dark:text-orange-500 whitespace-nowrap">Actual (Cumulative)</td>
                     <td
-                      v-for="(m, i) in deptVisibleMonthly"
+                      v-for="(m, i) in activeDept.monthly"
                       :key="m.month"
                       class="py-2 px-3 text-right"
-                      :class="deptVisibleMonthly.slice(0, i + 1).every(p => visibleActual(p) > 0) ? 'text-orange-400 dark:text-orange-500' : 'text-gray-300 dark:text-gray-600'"
-                    >{{ deptVisibleMonthly.slice(0, i + 1).every(p => visibleActual(p) > 0) ? formatCurrency(deptVisibleMonthly.slice(0, i + 1).reduce((s, p) => s + visibleActual(p), 0), 0) : '—' }}</td>
+                      :class="activeDept.monthly.slice(0, i + 1).every(p => visibleActual(p) > 0) ? 'text-orange-400 dark:text-orange-500' : 'text-gray-300 dark:text-gray-600'"
+                    >{{ activeDept.monthly.slice(0, i + 1).every(p => visibleActual(p) > 0) ? formatCurrency(activeDept.monthly.slice(0, i + 1).reduce((s, p) => s + visibleActual(p), 0), 0) : '—' }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -289,16 +282,7 @@
             <!-- Monthly bar chart -->
             <UCard>
               <template #header>
-                <div class="flex items-center justify-between">
-                  <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Plan vs Actual by Month</h2>
-                  <UButton
-                    size="xs"
-                    :color="deptFullYear ? 'purple' : 'gray'"
-                    :variant="deptFullYear ? 'soft' : 'ghost'"
-                    icon="i-heroicons-calendar"
-                    @click="deptFullYear = !deptFullYear"
-                  >Full Year</UButton>
-                </div>
+                <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Plan vs Actual by Month</h2>
               </template>
 
               <VChart :option="deptBarChartOption" class="h-64" autoresize @click="onBarClick" />
@@ -337,16 +321,7 @@
             <!-- Cumulative YTD chart -->
             <UCard>
               <template #header>
-                <div class="flex items-center justify-between">
-                  <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Cumulative YTD Plan vs Actual</h2>
-                  <UButton
-                    size="xs"
-                    :color="deptFullYear ? 'purple' : 'gray'"
-                    :variant="deptFullYear ? 'soft' : 'ghost'"
-                    icon="i-heroicons-calendar"
-                    @click="deptFullYear = !deptFullYear"
-                  >Full Year</UButton>
-                </div>
+                <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Cumulative YTD Plan vs Actual</h2>
               </template>
               <VChart :option="deptYtdChartOption" class="h-64" autoresize />
             </UCard>
@@ -421,12 +396,7 @@
                     <td class="py-3 pl-4"></td>
                   </tr>
                   <!-- Category rows -->
-                  <tr v-for="cat in activeDept.categories.filter(c => c.name !== 'Secret Cloud').slice().sort((a, b) => {
-                    const aOver = a.ytdActual > a.ytdBudget && a.ytdBudget > 0
-                    const bOver = b.ytdActual > b.ytdBudget && b.ytdBudget > 0
-                    if (aOver !== bOver) return aOver ? -1 : 1
-                    return Math.abs(b.ytdVariance) - Math.abs(a.ytdVariance)
-                  })" :key="cat.name">
+                  <tr v-for="cat in sortedCategories" :key="cat.name">
                     <td class="py-3 pr-4">
                       <div class="flex items-center gap-2">
                         <div class="w-1 h-4 rounded-full flex-shrink-0"
@@ -626,8 +596,6 @@ const selectedMonth = ref<string | null>(null)
 
 // Overview chart view toggle: false = truncated to last month with data, true = full year
 const overviewFullYear = ref(false)
-// Department chart/table view toggle
-const deptFullYear = ref(false)
 
 function toggleAccount(key: string) {
   if (expandedAccounts.value.has(key)) {
@@ -781,7 +749,6 @@ const activeDept = computed<DepartmentResult | null>(() => {
 if (import.meta.client) {
   watch(activeDept, async (dept) => {
     selectedMonth.value = null
-    deptFullYear.value = false
     if (dept) await loadPlanOverrides(dept.department, selectedYear.value)
   }, { immediate: true })
 
@@ -847,26 +814,6 @@ const overviewLastDataMonth = computed(() => {
 })
 
 // ── Department metrics ──
-
-// Last month with actual data for the active dept
-const deptLastDataMonth = computed(() => {
-  const dept = activeDept.value
-  if (!dept) return ''
-  let last = ''
-  for (const m of dept.monthly) {
-    if (visibleActual(m) > 0 && m.month > last) last = m.month
-  }
-  return last
-})
-
-// Monthly data for charts/table — truncated to last data month unless full year toggled
-const deptVisibleMonthly = computed(() => {
-  const dept = activeDept.value
-  if (!dept) return []
-  const cutoff = deptLastDataMonth.value
-  if (deptFullYear.value || !cutoff) return dept.monthly
-  return dept.monthly.filter(m => m.month <= cutoff)
-})
 
 // Months with actual data for active dept (capped to ytdCutoff)
 const deptMonthsWithData = computed(() => {
@@ -1290,7 +1237,7 @@ function sparklineOption(d: DepartmentResult) {
 // Department: grouped bar chart (Plan vs Actual per month)
 const deptBarChartOption = computed(() => {
   if (!activeDept.value) return {}
-  const monthly = deptVisibleMonthly.value
+  const monthly = activeDept.value.monthly
   const labels = monthly.map(m => formatMonthShort(m.month))
 
   return {
@@ -1336,7 +1283,7 @@ const deptBarChartOption = computed(() => {
 // Department: cumulative YTD area chart (Plan vs Actual)
 const deptYtdChartOption = computed(() => {
   if (!activeDept.value) return {}
-  const monthly = deptVisibleMonthly.value
+  const monthly = activeDept.value.monthly
   const labels = monthly.map(m => formatMonthShort(m.month))
   const color = ACTUAL_COLOR
 

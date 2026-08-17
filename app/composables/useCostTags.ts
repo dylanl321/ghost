@@ -25,16 +25,21 @@ export const useCostTags = () => {
   // Cache tag keys since they rarely change — keyed by account selection
   const tagKeyCache = ref<{ tags: string[]; fetchedAt: number; accountKey?: string } | null>(null)
   const TAG_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+  let tagsRequestId = 0
+  let coverageRequestId = 0
+  let configRequestId = 0
 
   /**
    * Fetch available cost allocation tag keys
    */
-  const fetchAvailableTags = async (accountIds?: string[]) => {
-    const accountKey = accountIds?.sort().join(',') || ''
+  const fetchAvailableTags = async (accountIds?: string[], period?: string) => {
+    const requestId = ++tagsRequestId
+    const accountKey = `${[...(accountIds || [])].sort().join(',')}|${period || 'last90days'}`
 
     // Return cached value if still fresh and for the same accounts
     if (tagKeyCache.value && Date.now() - tagKeyCache.value.fetchedAt < TAG_CACHE_TTL_MS && tagKeyCache.value.accountKey === accountKey) {
       availableTags.value = tagKeyCache.value.tags
+      isLoadingTags.value = false
       return tagKeyCache.value.tags
     }
 
@@ -44,26 +49,35 @@ export const useCostTags = () => {
     try {
       const query: Record<string, any> = {}
       if (accountIds?.length) query.accountIds = accountIds.join(',')
+      if (period) query.period = period
 
       const data = await $fetch('/api/costs/tags', { query }) as any
       const tags: string[] = data?.data?.tags ?? data?.tags ?? []
+
+      if (requestId !== tagsRequestId) return tags
 
       availableTags.value = tags
       tagKeyCache.value = { tags, fetchedAt: Date.now(), accountKey }
       return tags
     } catch (err: any) {
-      tagsError.value = err.message || 'Failed to fetch tags'
+      if (requestId === tagsRequestId) tagsError.value = err.message || 'Failed to fetch tags'
       logger.error('Error fetching available tags:', err)
       return []
     } finally {
-      isLoadingTags.value = false
+      if (requestId === tagsRequestId) isLoadingTags.value = false
     }
   }
 
   /**
    * Fetch tag coverage data for a specific tag key
    */
-  const fetchTagCoverage = async (tagKey: string, accountIds?: string[], period?: string) => {
+  const fetchTagCoverage = async (
+    tagKey: string,
+    accountIds?: string[],
+    period?: string,
+    options?: { includeValues?: boolean; includeAccounts?: boolean; proforma?: boolean }
+  ) => {
+    const requestId = ++coverageRequestId
     isLoadingCoverage.value = true
     coverageError.value = null
 
@@ -71,17 +85,48 @@ export const useCostTags = () => {
       const query: Record<string, any> = { tagKey }
       if (accountIds?.length) query.accountIds = accountIds.join(',')
       if (period) query.period = period
+      if (options?.includeValues) query.includeValues = true
+      if (options?.includeAccounts !== undefined) query.includeAccounts = options.includeAccounts
+      if (options?.proforma) query.proforma = true
 
       const response = await $fetch('/api/costs/tag-coverage', { query }) as any
       const coverage: TagCoverageData = response?.data ?? response
+      if (requestId !== coverageRequestId) return coverage
       tagCoverage.value = coverage
       return coverage
     } catch (err: any) {
-      coverageError.value = err.message || 'Failed to fetch tag coverage'
+      if (requestId === coverageRequestId) {
+        tagCoverage.value = null
+        coverageError.value = err.message || 'Failed to fetch tag coverage'
+      }
       logger.error(`Error fetching coverage for tag "${tagKey}":`, err)
       return null
     } finally {
-      isLoadingCoverage.value = false
+      if (requestId === coverageRequestId) isLoadingCoverage.value = false
+    }
+  }
+
+  /**
+   * Read tag-value details without replacing the active coverage snapshot.
+   * The server reuses the cached aggregate and only serializes the requested values.
+   */
+  const fetchTagCoverageDetails = async (
+    tagKey: string,
+    accountIds?: string[],
+    period?: string,
+    options?: { valueGroupKey?: string; proforma?: boolean }
+  ): Promise<TagCoverageData | null> => {
+    try {
+      const query: Record<string, any> = { tagKey, includeValues: true, includeAccounts: true }
+      if (accountIds?.length) query.accountIds = accountIds.join(',')
+      if (period) query.period = period
+      if (options?.valueGroupKey) query.valueGroupKey = options.valueGroupKey
+      if (options?.proforma) query.proforma = true
+      const response = await $fetch('/api/costs/tag-coverage', { query }) as any
+      return response?.data ?? response
+    } catch (err: any) {
+      logger.error(`Error fetching tag-value details for "${tagKey}":`, err)
+      return null
     }
   }
 
@@ -89,20 +134,22 @@ export const useCostTags = () => {
    * Fetch tag configuration for a specific account
    */
   const fetchAccountTagConfig = async (accountId: string) => {
+    const requestId = ++configRequestId
     isLoadingConfig.value = true
     configError.value = null
 
     try {
       const response = await $fetch(`/api/accounts/${accountId}/tag-config`) as any
       const config: AccountCostTagConfig = response?.data ?? response
+      if (requestId !== configRequestId) return config
       tagConfig.value = config
       return config
     } catch (err: any) {
-      configError.value = err.message || 'Failed to fetch tag config'
+      if (requestId === configRequestId) configError.value = err.message || 'Failed to fetch tag config'
       logger.error(`Error fetching tag config for account "${accountId}":`, err)
       return null
     } finally {
-      isLoadingConfig.value = false
+      if (requestId === configRequestId) isLoadingConfig.value = false
     }
   }
 
@@ -189,6 +236,7 @@ export const useCostTags = () => {
     fetchAvailableTags,
     fetchResourceTags,
     fetchTagCoverage,
+    fetchTagCoverageDetails,
     fetchAccountTagConfig,
     saveAccountTagConfig,
     clearTagCache

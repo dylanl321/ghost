@@ -36,17 +36,12 @@
     <!-- Activity Filter -->
     <div class="space-y-2">
       <label class="text-xs font-medium text-gray-400">Activity Filter</label>
-
-      <div class="flex items-center justify-between p-2 bg-gray-900/50 rounded-lg border border-gray-700">
-        <div class="flex items-center gap-2">
-          <UIcon name="i-heroicons-user-circle" class="w-4 h-4 text-gray-400" />
-          <span class="text-xs text-gray-300">Active Users Only</span>
-        </div>
-        <UToggle v-model="filters.activeOnly" size="xs" />
+      <div class="grid grid-cols-3 gap-1">
+        <UButton v-for="state in activityStates" :key="state.value" size="xs" :color="activityStatusModel === state.value ? 'primary' : 'gray'" :variant="activityStatusModel === state.value ? 'solid' : 'outline'" @click="activityStatusModel = state.value">{{ state.label }}</UButton>
       </div>
 
       <!-- Lookback Period (only shown when active filter is on) -->
-      <div v-if="filters.activeOnly" class="pl-6 space-y-2">
+      <div v-if="activityStatusModel !== 'all'" class="pl-6 space-y-2">
         <label class="text-xs text-gray-500">Signed in within</label>
         <USelectMenu
           v-model="selectedLookbackDays"
@@ -124,22 +119,36 @@ const filters = defineModel<EntraUsersDatasetFilters>({
     roles: [],
     userSearch: '',
     activeOnly: false,
+    activityStatus: 'all',
     departments: [],
     lookbackDays: 30
   })
 })
 
+const activityStates = [
+  { label: 'All', value: 'all' as const },
+  { label: 'Active', value: 'active' as const },
+  { label: 'Inactive', value: 'inactive' as const }
+]
+const activityStatusModel = computed({
+  get: () => filters.value.activityStatus || (filters.value.activeOnly ? 'active' : 'all'),
+  set: (value: 'all' | 'active' | 'inactive') => {
+    filters.value.activityStatus = value
+    filters.value.activeOnly = value === 'active'
+  }
+})
+
 // Computed for two-way binding with USelectMenu
 const selectedRoles = computed({
   get: () => filters.value.roles || [],
-  set: (val) => {
+  set: (val: Array<string | { value: string }>) => {
     filters.value.roles = val.map(v => typeof v === 'object' ? v.value : v)
   }
 })
 
 const selectedDepartments = computed({
   get: () => filters.value.departments || [],
-  set: (val) => {
+  set: (val: Array<string | { value: string }>) => {
     filters.value.departments = val.map(v => typeof v === 'object' ? v.value : v)
   }
 })
@@ -209,7 +218,8 @@ function setAdminUsers() {
 }
 
 function setInactiveUsers() {
-  filters.value.activeOnly = true
+  filters.value.activeOnly = false
+  filters.value.activityStatus = 'inactive'
   filters.value.lookbackDays = 90
   filters.value.roles = []
   filters.value.userSearch = ''
@@ -221,6 +231,7 @@ function clearFilters() {
     roles: [],
     userSearch: '',
     activeOnly: false,
+    activityStatus: 'all',
     departments: [],
     lookbackDays: 30
   }

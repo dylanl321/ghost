@@ -14,6 +14,8 @@
 
 import { marked } from 'marked'
 import { convertToUsernameSlug } from '~/utils/userUtils'
+import { escapeHtml, normalizeSafeHref, sanitizeChatHtml } from '~/utils/sanitizeHtml'
+import { STANDALONE_AWS_ACCOUNT_ID_REGEX } from '#shared/utils/chat-entities'
 
 const logger = createLogger('Response Enricher')
 
@@ -102,7 +104,9 @@ export function useStrandsResponseEnricher() {
     // AWS Account ID (12 digits)
     {
       type: 'account-id',
-      regex: /\b(\d{12})\b/g,
+      // A 12-digit sequence inside a resource name (for example an S3 bucket)
+      // is part of that resource identifier, not a standalone account entity.
+      regex: STANDALONE_AWS_ACCOUNT_ID_REGEX,
       label: 'AWS Account',
       icon: 'i-heroicons-building-office',
       popoverEnabled: true,
@@ -141,7 +145,6 @@ export function useStrandsResponseEnricher() {
       label: 'EC2 Instance',
       icon: 'i-heroicons-server',
       popoverEnabled: true,
-      linkBuilder: (instanceId: string) => `/account/explorer?resourceId=${instanceId}&type=ec2`,
       popoverDataFetcher: async (instanceId: string) => {
         try {
           // Use the existing instances API endpoint
@@ -171,10 +174,6 @@ export function useStrandsResponseEnricher() {
       label: 'S3 Bucket',
       icon: 'i-heroicons-archive-box',
       popoverEnabled: true,
-      linkBuilder: (bucketName: string) => {
-        const name = bucketName.replace('s3://', '')
-        return `/account/explorer?resourceId=${name}&type=s3`
-      }
     },
 
     // Lambda Function Name
@@ -184,10 +183,6 @@ export function useStrandsResponseEnricher() {
       label: 'Lambda Function',
       icon: 'i-heroicons-bolt',
       popoverEnabled: true,
-      linkBuilder: (functionName: string) => {
-        const name = functionName.replace('function:', '')
-        return `/account/explorer?resourceId=${name}&type=lambda`
-      }
     },
 
     // Security Group ID
@@ -197,7 +192,6 @@ export function useStrandsResponseEnricher() {
       label: 'Security Group',
       icon: 'i-heroicons-shield-check',
       popoverEnabled: false,
-      linkBuilder: (sgId: string) => `/account/explorer?resourceId=${sgId}&type=security-group`
     },
 
     // VPC ID
@@ -207,7 +201,6 @@ export function useStrandsResponseEnricher() {
       label: 'VPC',
       icon: 'i-heroicons-globe-alt',
       popoverEnabled: false,
-      linkBuilder: (vpcId: string) => `/account/explorer?resourceId=${vpcId}&type=vpc`
     },
 
     // RDS Instance ID
@@ -217,10 +210,6 @@ export function useStrandsResponseEnricher() {
       label: 'RDS Database',
       icon: 'i-heroicons-circle-stack',
       popoverEnabled: true,
-      linkBuilder: (rdsId: string) => {
-        const id = rdsId.replace('db:', '')
-        return `/account/explorer?resourceId=${id}&type=rds`
-      }
     }
   ]
 
@@ -260,8 +249,11 @@ export function useStrandsResponseEnricher() {
       // match[2] is the URL content
 
       // Find where the URL starts: after ']('
-      const urlStart = match.index + match[1].length + 2 // +2 for ']('
-      const urlEnd = urlStart + match[2].length
+      const linkText = match[1]
+      const linkUrl = match[2]
+      if (!linkText || !linkUrl) continue
+      const urlStart = match.index + linkText.length + 2 // +2 for ']('
+      const urlEnd = urlStart + linkUrl.length
 
       ranges.push({ start: urlStart, end: urlEnd })
     }
@@ -326,6 +318,8 @@ export function useStrandsResponseEnricher() {
    * Enrich entity with interactive HTML
    */
   function enrichEntity(entity: DetectedEntity, pattern: EntityPattern, config: EnricherConfig): string {
+    if (!entity.link) return escapeHtml(entity.displayText)
+
     // Use inline and inline-flex to prevent layout issues
     const classes = [
       'entity-link',
@@ -337,8 +331,8 @@ export function useStrandsResponseEnricher() {
       'whitespace-nowrap' // Prevent entity from wrapping mid-way
     ]
     const dataAttrs: string[] = [
-      `data-entity-type="${entity.type}"`,
-      `data-entity-value="${entity.value}"`
+      `data-entity-type="${escapeHtml(entity.type)}"`,
+      `data-entity-value="${escapeHtml(entity.value)}"`
     ]
 
     // Icons disabled - cannot render Vue components in raw HTML strings
@@ -347,7 +341,7 @@ export function useStrandsResponseEnricher() {
 
     // Add link if enabled
     const href = config.enableDeepLinks && entity.link
-      ? entity.link
+      ? normalizeSafeHref(entity.link) || '#'
       : '#'
 
     // Add popover attributes if enabled
@@ -359,10 +353,7 @@ export function useStrandsResponseEnricher() {
     // Add link marker for Vue click handler
     dataAttrs.push('data-nuxt-link')
 
-    // Add inline style to ensure proper text flow (critical fix for overlap issue)
-    const inlineStyle = 'style="display: inline; vertical-align: baseline;"'
-
-    return `<a href="${href}" class="${classes.join(' ')}" ${dataAttrs.join(' ')} ${inlineStyle} title="${pattern.label}: ${entity.value}">${icon}${entity.displayText}</a>`
+    return `<a href="${escapeHtml(href)}" class="${classes.join(' ')}" ${dataAttrs.join(' ')} title="${escapeHtml(`${pattern.label}: ${entity.value}`)}">${icon}${escapeHtml(entity.displayText)}</a>`
   }
 
   /**
@@ -495,10 +486,13 @@ export function useStrandsResponseEnricher() {
     let contentWithPlaceholders = content
     for (let i = detectedEntities.length - 1; i >= 0; i--) {
       const entity = detectedEntities[i]
+      if (!entity) continue
       const pattern = entityPatterns.find(p => p.type === entity.type)
       if (pattern) {
-        // Use HTML comment format to prevent markdown interpretation
-        const placeholder = `<!--ENTITY${placeholderIndex}-->`
+        // Plain alphanumeric tokens survive Markdown even when adjacent to a
+        // hyphenated resource name. HTML comments can be reinterpreted or
+        // stripped before substitution and must never reach the rendered text.
+        const placeholder = `GHOSTENTITYTOKEN${placeholderIndex}END`
         entityPlaceholders.set(placeholder, { entity, pattern })
         placeholderIndex++
 
@@ -519,15 +513,17 @@ export function useStrandsResponseEnricher() {
         return text // Just return the text without the link
       }
 
-      const isInternal = isGhostUrl(href)
+      const safeHref = normalizeSafeHref(href)
+      if (!safeHref) return text
+      const isInternal = isGhostUrl(safeHref)
 
       if (isInternal) {
-        const path = extractPath(href)
-        const titleAttr = title ? ` title="${title}"` : ''
-        return `<a href="${path}" data-nuxt-link class="text-blue-600 dark:text-blue-400 hover:underline"${titleAttr}>${text}</a>`
+        const path = extractPath(safeHref)
+        const titleAttr = title ? ` title="${escapeHtml(title)}"` : ''
+        return `<a href="${escapeHtml(path)}" data-nuxt-link class="text-blue-600 dark:text-blue-400 hover:underline"${titleAttr}>${text}</a>`
       } else {
-        const titleAttr = title ? ` title="${title}"` : ''
-        return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1"${titleAttr}>${text}<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg></a>`
+        const titleAttr = title ? ` title="${escapeHtml(title)}"` : ''
+        return `<a href="${escapeHtml(safeHref)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:underline"${titleAttr}>${text}</a>`
       }
     }
 
@@ -537,18 +533,16 @@ export function useStrandsResponseEnricher() {
         // Generate unique ID for this mermaid chart
         const mermaidId = `mermaid-chat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
         // Return placeholder that will be rendered by mermaid on the client
-        return `<div class="mermaid-chart" id="${mermaidId}" data-rendered="false">${text}</div>`
+        return `<div class="mermaid-chart" id="${mermaidId}" data-rendered="false">${escapeHtml(text)}</div>`
       }
       // Default code rendering for other languages
-      return `<pre class="code-block"><code>${text}</code></pre>`
+      return `<pre class="code-block"><code>${escapeHtml(text)}</code></pre>`
     }
 
     marked.setOptions({
       gfm: true,
       breaks: true,
-      renderer,
-      mangle: false, // Don't mangle email addresses (prevents auto mailto: conversion)
-      headerIds: false // Disable header IDs for cleaner output
+      renderer
     })
 
     try {
@@ -562,10 +556,10 @@ export function useStrandsResponseEnricher() {
         result = result.replaceAll(placeholder, enrichedEntity)
       })
 
-      return result
+      return sanitizeChatHtml(result)
     } catch (error) {
       logger.error('Error parsing content:', error)
-      return content.replace(/\n/g, '<br>')
+      return sanitizeChatHtml(escapeHtml(content).replace(/\n/g, '<br>'))
     }
   }
 
@@ -640,6 +634,9 @@ export function useStrandsResponseEnricher() {
 
     return null
   }
+
+  // Keep the DOM-node-safe helper available for future non-placeholder enrichment.
+  void replaceEntitiesInHTML
 
   return {
     // Main enrichment function

@@ -19,6 +19,40 @@ interface PricingCacheEntry {
 const pricingCache = new Map<string, PricingCacheEntry>()
 const PRICING_CACHE_TTL = 24 * 60 * 60 * 1000 // 24 hours
 
+export type EC2OperatingSystem = 'linux' | 'rhel' | 'windows'
+
+export function getEC2PricingCacheKey(
+  environment: AWSEnvironmentType,
+  region: string,
+  instanceType: string,
+  operatingSystem: EC2OperatingSystem = 'linux'
+): string {
+  return `${environment}-${region}-${instanceType}-${operatingSystem}`
+}
+
+export function getEC2PricingFilters(
+  instanceType: string,
+  pricingRegionName: string,
+  operatingSystem: EC2OperatingSystem = 'linux'
+) {
+  return [
+    { Type: 'TERM_MATCH' as const, Field: 'instanceType', Value: instanceType },
+    { Type: 'TERM_MATCH' as const, Field: 'location', Value: pricingRegionName },
+    {
+      Type: 'TERM_MATCH' as const,
+      Field: 'operatingSystem',
+      Value: operatingSystem === 'windows' ? 'Windows' : 'Linux'
+    },
+    { Type: 'TERM_MATCH' as const, Field: 'tenancy', Value: 'Shared' },
+    { Type: 'TERM_MATCH' as const, Field: 'capacitystatus', Value: 'Used' },
+    {
+      Type: 'TERM_MATCH' as const,
+      Field: 'preInstalledSw',
+      Value: operatingSystem === 'rhel' ? 'RHEL' : 'NA'
+    }
+  ]
+}
+
 // Region mapping for AWS Pricing API
 // Pricing API uses different region names than the actual AWS regions
 const REGION_NAME_MAP: Record<string, string> = {
@@ -51,11 +85,12 @@ const REGION_NAME_MAP: Record<string, string> = {
 export async function getEC2InstancePricing(
   instanceType: string,
   region: string,
-  environment: AWSEnvironmentType = 'commercial'
+  environment: AWSEnvironmentType = 'commercial',
+  operatingSystem: EC2OperatingSystem = 'linux'
 ): Promise<{ hourlyRate: number; monthlyEstimate: number; currency: string; pricingRegion: string } | null> {
   try {
     // Check cache first
-    const cacheKey = `${environment}-${region}-${instanceType}`
+    const cacheKey = getEC2PricingCacheKey(environment, region, instanceType, operatingSystem)
     const cached = pricingCache.get(cacheKey)
 
     if (cached && Date.now() - cached.timestamp < PRICING_CACHE_TTL) {
@@ -79,14 +114,7 @@ export async function getEC2InstancePricing(
     const pricingClient = await getPricingClient(environment === 'govcloud' ? 'commercial' : environment)
 
     // Build filter for the pricing query
-    const filters = [
-      { Type: 'TERM_MATCH', Field: 'instanceType', Value: instanceType },
-      { Type: 'TERM_MATCH', Field: 'location', Value: pricingRegionName },
-      { Type: 'TERM_MATCH', Field: 'operatingSystem', Value: 'Linux' }, // Default to Linux pricing
-      { Type: 'TERM_MATCH', Field: 'tenancy', Value: 'Shared' },
-      { Type: 'TERM_MATCH', Field: 'capacitystatus', Value: 'Used' },
-      { Type: 'TERM_MATCH', Field: 'preInstalledSw', Value: 'NA' }
-    ]
+    const filters = getEC2PricingFilters(instanceType, pricingRegionName, operatingSystem)
 
     const command = new GetProductsCommand({
       ServiceCode: 'AmazonEC2',
@@ -97,7 +125,7 @@ export async function getEC2InstancePricing(
     const response = await pricingClient.send(command)
 
     if (!response.PriceList || response.PriceList.length === 0) {
-      logger.warn(`[AWS Pricing] No pricing found for ${instanceType} in ${region}`)
+      logger.warn(`[AWS Pricing] No ${operatingSystem} pricing found for ${instanceType} in ${region}`)
       return null
     }
 
@@ -112,6 +140,7 @@ export async function getEC2InstancePricing(
 
     // Extract the hourly rate from the nested pricing structure
     const termKey = Object.keys(terms)[0]
+    if (!termKey) return null
     const priceDimensions = terms[termKey]?.priceDimensions
 
     if (!priceDimensions) {
@@ -120,8 +149,11 @@ export async function getEC2InstancePricing(
     }
 
     const dimensionKey = Object.keys(priceDimensions)[0]
+    if (!dimensionKey) return null
     const pricePerUnit = priceDimensions[dimensionKey]?.pricePerUnit
+    if (!pricePerUnit) return null
     const currency = Object.keys(pricePerUnit)[0]
+    if (!currency) return null
     const hourlyRate = parseFloat(pricePerUnit[currency])
 
     // Cache the result
@@ -148,16 +180,18 @@ export async function getEC2InstancePricing(
  * This is optimized to reduce API calls by deduplicating instance types
  */
 export async function batchGetEC2InstancePricing(
-  instances: Array<{ instanceType: string; region: string }>,
+  instances: Array<{ instanceType: string; region: string; operatingSystem?: EC2OperatingSystem }>,
   environment: AWSEnvironmentType = 'commercial'
 ): Promise<Map<string, { hourlyRate: number; monthlyEstimate: number; currency: string; pricingRegion: string }>> {
   const pricingMap = new Map<string, { hourlyRate: number; monthlyEstimate: number; currency: string; pricingRegion: string }>()
 
   // Deduplicate by instanceType + region combination
-  const uniqueCombinations = new Map<string, { instanceType: string; region: string }>()
+  const uniqueCombinations = new Map<string, { instanceType: string; region: string; operatingSystem?: EC2OperatingSystem }>()
 
   instances.forEach(instance => {
-    const key = `${instance.region}-${instance.instanceType}`
+    const key = instance.operatingSystem
+      ? `${instance.region}-${instance.instanceType}-${instance.operatingSystem}`
+      : `${instance.region}-${instance.instanceType}`
     if (!uniqueCombinations.has(key)) {
       uniqueCombinations.set(key, instance)
     }
@@ -168,18 +202,21 @@ export async function batchGetEC2InstancePricing(
   // Fetch pricing for each unique combination (with rate limiting to avoid API throttling)
   const entries = Array.from(uniqueCombinations.entries())
 
-  for (let i = 0; i < entries.length; i++) {
-    const [key, instance] = entries[i]
-
+  for (const [index, [key, instance]] of entries.entries()) {
     try {
-      const pricing = await getEC2InstancePricing(instance.instanceType, instance.region, environment)
+      const pricing = await getEC2InstancePricing(
+        instance.instanceType,
+        instance.region,
+        environment,
+        instance.operatingSystem || 'linux'
+      )
 
       if (pricing) {
         pricingMap.set(key, pricing)
       }
 
       // Rate limit: Wait 100ms between API calls to avoid throttling
-      if (i < entries.length - 1) {
+      if (index < entries.length - 1) {
         await new Promise(resolve => setTimeout(resolve, 100))
       }
     } catch (error) {

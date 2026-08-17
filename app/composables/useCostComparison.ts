@@ -1,4 +1,5 @@
-import { ref, computed } from 'vue'
+import { ref, computed, type Ref } from 'vue'
+import type { DataMode } from '~/types/costs'
 
 export type ComparisonPeriod = 'lastYear' | 'ytd' | 'thisMonth' | 'lastMonth' | 'last12months'
 
@@ -9,6 +10,8 @@ export interface PeriodData {
   accountCount: number
   monthlyBreakdown: { month: string; cost: number; costFormatted: string }[]
   topServices?: { service: string; cost: number }[]
+  dateRange: { start: string; end: string }
+  billingDomain: DataMode
 }
 
 export interface PeriodDeltas {
@@ -25,7 +28,7 @@ const PERIOD_OPTIONS = [
   { label: 'Last Year', value: 'lastYear' as ComparisonPeriod },
 ]
 
-export function useCostComparison() {
+export function useCostComparison(selectedAccounts?: Ref<string[]>, mode?: Ref<DataMode>) {
   const selectedPeriodA = ref<ComparisonPeriod>('lastMonth')
   const selectedPeriodB = ref<ComparisonPeriod>('thisMonth')
 
@@ -40,32 +43,32 @@ export function useCostComparison() {
   const loading = computed(() => loadingA.value || loadingB.value)
   const error = computed(() => errorA.value || errorB.value)
 
-  // Map 'thisMonth' -> nearest supported historical period for the endpoint
-  const toHistoricalPeriod = (period: ComparisonPeriod): string => {
-    if (period === 'thisMonth') return 'last30days'
-    return period
-  }
-
   const fetchPeriod = async (period: ComparisonPeriod): Promise<PeriodData | null> => {
-    const historicalPeriod = toHistoricalPeriod(period)
+    const query = {
+      period,
+      proforma: mode?.value === 'proforma',
+      ...(selectedAccounts?.value.length ? { accountIds: selectedAccounts.value.join(',') } : {})
+    }
 
     // Fetch account totals and service breakdown concurrently
     const [accountRes, serviceRes] = await Promise.allSettled([
       $fetch<{ success: boolean; data: any }>('/api/costs/historical', {
-        query: { period: historicalPeriod }
+        query
       }),
       $fetch<{ success: boolean; data: any }>('/api/costs/historical', {
-        query: { period: historicalPeriod, groupBy: 'SERVICE' }
+        query: { ...query, groupBy: 'SERVICE' }
       })
     ])
 
     if (accountRes.status === 'rejected' || !accountRes.value.success || !accountRes.value.data) return null
-    const raw = accountRes.value.data
+    const payload = accountRes.value.data
+    const raw = payload?.[mode?.value || 'billable'] || payload?.billable || payload
 
     // Build top 5 services from the service-grouped response
     let topServices: { service: string; cost: number }[] = []
     if (serviceRes.status === 'fulfilled' && serviceRes.value.success && serviceRes.value.data) {
-      const serviceRaw = serviceRes.value.data
+      const servicePayload = serviceRes.value.data
+      const serviceRaw = servicePayload?.[mode?.value || 'billable'] || servicePayload?.billable || servicePayload
       // monthlyBreakdown accountBreakdown contains per-group costs; sum across all months
       const serviceTotals = new Map<string, number>()
       for (const month of (serviceRaw.monthlyBreakdown ?? [])) {
@@ -86,7 +89,9 @@ export function useCostComparison() {
       totalCostFormatted: raw.totalCostFormatted ?? '$0.00',
       accountCount: raw.accountCount ?? 0,
       monthlyBreakdown: raw.monthlyBreakdown ?? [],
-      topServices
+      topServices,
+      dateRange: raw.dateRange || { start: '', end: '' },
+      billingDomain: mode?.value || 'billable'
     }
   }
 

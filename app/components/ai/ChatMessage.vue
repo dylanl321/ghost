@@ -10,7 +10,7 @@
         leave-from-class="opacity-100"
         leave-to-class="opacity-0"
       >
-        <div v-if="message.status?.status === 'pending' || message.status?.status === 'streaming'" class="streaming-status mb-3">
+        <div v-if="message.status?.status === 'pending' || message.status?.status === 'streaming'" class="streaming-status mb-3" role="status" aria-live="polite">
         <div class="flex items-center gap-3 mb-2">
           <div class="ghost-loading">
             <UIcon name="i-fa6-solid-ghost" class="ghost-icon text-emerald-400" style="width: 24px; height: 24px;" />
@@ -225,7 +225,14 @@
  * - Suggested links and prompts
  */
 
-import type { StreamingChatMessage as ChatMessageType, ErrorType } from '#shared/types/chat-threads'
+import type { StreamingChatMessage as ChatMessageType } from '#shared/types/chat-threads'
+import {
+  classifyError,
+  getErrorActionText,
+  getErrorDescription,
+  getErrorIcon,
+  getErrorTitle
+} from '~/composables/useChatUI'
 
 const logger = createLogger('ChatMessage')
 
@@ -237,22 +244,11 @@ const props = defineProps<{
   readOnly?: boolean  // For shared/public views - disables interactive elements
 }>()
 
-const emit = defineEmits<{
-  (e: 'retry'): void
-  (e: 'cancel'): void
+defineEmits<{
+  (e: 'retry' | 'cancel' | 'disambiguate'): void
   (e: 'prompt-click', text: string): void
   (e: 'enriched-click', event: MouseEvent): void
-  (e: 'disambiguate'): void
 }>()
-
-// Import error handling utilities from useChatUI
-const { 
-  classifyError, 
-  getErrorIcon, 
-  getErrorTitle, 
-  getErrorDescription, 
-  getErrorActionText 
-} = useChatUI()
 
 // Entity enrichment for message rendering
 const { enrichStrandsResponse } = useStrandsResponseEnricher()
@@ -321,9 +317,10 @@ const statusHistoryDisplay = computed(() => {
   const result = []
   for (let i = 0; i < 3; i++) {
     if (i < recent.length && recent[i]) {
+      const item = recent[i]!
       result.push({
-        text: recent[i].text || '',
-        timestamp: recent[i].timestamp || Date.now() + i
+        text: item.text || '',
+        timestamp: item.timestamp || Date.now() + i
       })
     } else {
       // Add empty placeholder to maintain structure

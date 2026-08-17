@@ -11,16 +11,16 @@ import { getCostAndUsage, getProformaCosts } from '../../utils/cost-explorer'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { parseAndValidateAccountFilters, getAccountIdsFromCriteria } from '../../utils/account-filters'
+import { getAccountScopeCacheKey } from '../../utils/cache-keys'
+import { buildCostExplorerTagFilter, getCostTagFilterCacheKey, parseCostTagFilter } from '../../utils/cost-tag-filters'
 import { costCache, CacheTags } from '../../utils/cache-manager'
 import { validateDateParams, type RelativePeriod } from '../../utils/date-helpers'
 import { logger } from '../../utils/logger'
+import { mergeCostExplorerPeriods } from '../../utils/cost-domain'
 
 // Helper function to format date as YYYY-MM-DD
 function formatDate(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+  return date.toISOString().slice(0, 10)
 }
 
 // Register OpenAPI documentation
@@ -36,7 +36,7 @@ registerEndpoint('/api/costs/historical', 'GET', {
       required: true,
       schema: {
         type: 'string',
-        enum: ['last7days', 'last30days', 'last90days', 'lastMonth', 'lastQuarter', 'lastYear', 'ytd', 'last12months', 'last24months']
+        enum: ['last7days', 'last30days', 'last90days', 'thisMonth', 'lastMonth', 'lastQuarter', 'lastYear', 'ytd', 'last12months', 'last24months']
       },
       description: 'Historical period to retrieve data for'
     },
@@ -119,11 +119,38 @@ registerEndpoint('/api/costs/historical', 'GET', {
       description: 'Time granularity for results. DAILY gives day-level data points, MONTHLY gives month-level. Defaults to MONTHLY.'
     },
     {
+      name: 'metric',
+      in: 'query',
+      required: false,
+      schema: {
+        type: 'string',
+        enum: ['UnblendedCost', 'NetUnblendedCost'],
+        default: 'UnblendedCost'
+      },
+      description: 'Cost metric used for totals and grouped values.'
+    },
+    {
       name: 'tagFilter',
       in: 'query',
       required: false,
       schema: { type: 'string' },
       description: 'Filter by a specific tag value before grouping. Format: "tagKey||tagValue" (split on "||" delimiter to support colons in tag keys)'
+    },
+    {
+      name: 'tagFilterKey',
+      in: 'query',
+      required: false,
+      schema: { type: 'string' },
+      description: 'Tag key used with tagFilterValues. Preferred for multi-value filtering.'
+    },
+    {
+      name: 'tagFilterValues',
+      in: 'query',
+      required: false,
+      schema: { type: 'array', items: { type: 'string' } },
+      style: 'form',
+      explode: true,
+      description: 'One or more tag values matched with OR semantics.'
     }
   ],
   responses: {
@@ -194,7 +221,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
 
   // Validate date parameters for the historical period
-  let dateRange: { startDate: string; endDate: string; description?: string }
+  let dateRange: { startDate: string; endDate: string; description?: string; empty: boolean }
   try {
     dateRange = validateDateParams({
       period: period
@@ -251,27 +278,33 @@ export default defineEventHandler(handleAsync(async (event) => {
   if (granularity !== 'DAILY' && granularity !== 'MONTHLY') {
     return errors.badRequest(event, 'Granularity must be DAILY or MONTHLY')
   }
+  const costMetric = (query.metric as string) || 'UnblendedCost'
+  if (!['UnblendedCost', 'NetUnblendedCost'].includes(costMetric)) {
+    return errors.badRequest(event, 'Metric must be UnblendedCost or NetUnblendedCost')
+  }
 
   // Parse groupBy param — supports TAG: prefix for tag-based grouping
   const groupByParam = (query.groupBy as string) || 'LINKED_ACCOUNT'
   const isTagGroupBy = groupByParam.startsWith('TAG:')
   const groupByKey = isTagGroupBy ? groupByParam.slice(4) : groupByParam
+  const costTagFilter = parseCostTagFilter(query)
 
   // Build cost parameters for historical data
   const costParams = {
     startDate,
     endDate,
     granularity,
-    metrics: ['UnblendedCost'],
+    metrics: costMetric === 'UnblendedCost'
+      ? ['UnblendedCost']
+      : ['UnblendedCost', costMetric],
     groupBy: [{
       type: isTagGroupBy ? 'TAG' as const : 'DIMENSION' as const,
       key: groupByKey
     }],
     // Build filter: combine account filter and tag filter if both present
     filter: (() => {
-      const tagFilterParam = query.tagFilter as string | undefined
       let accountFilter: any = undefined
-      let tagFilter: any = undefined
+      const tagFilter = buildCostExplorerTagFilter(costTagFilter)
 
       if (filteredAccountIds && filteredAccountIds.length > 0) {
         accountFilter = {
@@ -279,19 +312,6 @@ export default defineEventHandler(handleAsync(async (event) => {
             Key: 'LINKED_ACCOUNT',
             Values: filteredAccountIds,
             MatchOptions: ['EQUALS']
-          }
-        }
-      }
-
-      if (tagFilterParam) {
-        const idx = tagFilterParam.indexOf('||')
-        if (idx > 0) {
-          tagFilter = {
-            Tags: {
-              Key: tagFilterParam.substring(0, idx),
-              Values: [tagFilterParam.substring(idx + 2)],
-              MatchOptions: ['EQUALS']
-            }
           }
         }
       }
@@ -309,11 +329,12 @@ export default defineEventHandler(handleAsync(async (event) => {
     granularity,
     environment,
     groupByParam,
-    tagFilter: query.tagFilter || null,
+    costMetric,
+    tagFilter: getCostTagFilterCacheKey(costTagFilter),
     proforma,
     proformaAccountId: proforma ? proformaAccountId : null,
     masterAccountId: proforma ? masterAccountId : null,
-    filteredAccountIds: filteredAccountIds ? `${filteredAccountIds.length}:${filteredAccountIds.sort().join(',').substring(0, 100)}` : null // Hash for uniqueness
+    accountScope: getAccountScopeCacheKey(filteredAccountIds)
   })}`
 
   // Helper function to process results into historical format
@@ -325,19 +346,19 @@ export default defineEventHandler(handleAsync(async (event) => {
 
     resultsByTime.forEach((result: any) => {
       const monthKey = result.TimePeriod?.Start?.substring(0, 7) // YYYY-MM format
+      const authoritativePeriodCost = parseFloat(result.Total?.[costMetric]?.Amount || '0')
+      totalCost += authoritativePeriodCost
+      if (monthKey) monthlyData[monthKey] = (monthlyData[monthKey] || 0) + authoritativePeriodCost
 
       if (result.Groups) {
         result.Groups.forEach((group: any) => {
           const accountId = group.Keys?.[0]
-          const cost = parseFloat(group.Metrics?.UnblendedCost?.Amount || '0')
+          const cost = parseFloat(group.Metrics?.[costMetric]?.Amount || '0')
 
           if (accountId) {
-            totalCost += cost
             accountSet.add(accountId)
 
             if (monthKey) {
-              monthlyData[monthKey] = (monthlyData[monthKey] || 0) + cost
-
               // Track per-account breakdown for each month
               if (!monthlyAccountBreakdown[monthKey]) {
                 monthlyAccountBreakdown[monthKey] = []
@@ -364,6 +385,7 @@ export default defineEventHandler(handleAsync(async (event) => {
 
     return {
       period: periodLabel,
+      costMetric,
       totalCost,
       totalCostFormatted: `$${totalCost.toFixed(2)}`,
       accountCount,
@@ -393,8 +415,8 @@ export default defineEventHandler(handleAsync(async (event) => {
 
         // For last24months, we need to make two separate calls due to AWS 365-day limit
         if (period === 'last24months') {
-          const now = new Date()
-          const midpoint = new Date(now.getFullYear(), now.getMonth() - 12, 1)
+          const [startYear, startMonth] = startDate.split('-').map(Number)
+          const midpoint = new Date(Date.UTC(startYear, startMonth - 1 + 12, 1))
 
           // First 12 months (older data)
           const firstPeriodParams = {
@@ -411,28 +433,28 @@ export default defineEventHandler(handleAsync(async (event) => {
           }
 
           logger.info('Fetching first 12 months of 24-month period (proforma)...')
-          const firstPeriodData = await getProformaCosts(firstPeriodParams, proformaAccountId, masterAccountId)
+          const firstPeriodData = await getProformaCosts(firstPeriodParams, proformaAccountId, masterAccountId, costMetric)
 
           logger.info('Fetching second 12 months of 24-month period (proforma)...')
-          const secondPeriodData = await getProformaCosts(secondPeriodParams, proformaAccountId, masterAccountId)
+          const secondPeriodData = await getProformaCosts(secondPeriodParams, proformaAccountId, masterAccountId, costMetric)
 
           // Combine results
-          billableResultsByTime = [
+          billableResultsByTime = mergeCostExplorerPeriods([[
             ...(firstPeriodData?.billable?.costs?.resultsByTime || []),
             ...(secondPeriodData?.billable?.costs?.resultsByTime || [])
-          ]
-          proformaResultsByTime = [
+          ]])
+          proformaResultsByTime = mergeCostExplorerPeriods([[
             ...(firstPeriodData?.proforma?.costs?.resultsByTime || []),
             ...(secondPeriodData?.proforma?.costs?.resultsByTime || [])
-          ]
+          ]])
         } else {
           // Single call for periods <= 12 months
-          const proformaData = await getProformaCosts(costParams, proformaAccountId, masterAccountId)
+          const proformaData = await getProformaCosts(costParams, proformaAccountId, masterAccountId, costMetric)
           billableResultsByTime = proformaData?.billable?.costs?.resultsByTime || []
           proformaResultsByTime = proformaData?.proforma?.costs?.resultsByTime || []
         }
 
-        if ((!billableResultsByTime || billableResultsByTime.length === 0) &&
+        if (!dateRange.empty && (!billableResultsByTime || billableResultsByTime.length === 0) &&
             (!proformaResultsByTime || proformaResultsByTime.length === 0)) {
           throw new Error('No historical data found')
         }
@@ -453,8 +475,8 @@ export default defineEventHandler(handleAsync(async (event) => {
 
         // For last24months, we need to make two separate calls due to AWS 365-day limit
         if (period === 'last24months') {
-          const now = new Date()
-          const midpoint = new Date(now.getFullYear(), now.getMonth() - 12, 1)
+          const [startYear, startMonth] = startDate.split('-').map(Number)
+          const midpoint = new Date(Date.UTC(startYear, startMonth - 1 + 12, 1))
 
           // First 12 months (older data)
           const firstPeriodParams = {
@@ -477,17 +499,17 @@ export default defineEventHandler(handleAsync(async (event) => {
           const secondPeriodData = await getCostAndUsage(secondPeriodParams, environment)
 
           // Combine results
-          allResultsByTime = [
+          allResultsByTime = mergeCostExplorerPeriods([[
             ...(firstPeriodData?.resultsByTime || []),
             ...(secondPeriodData?.resultsByTime || [])
-          ]
+          ]])
         } else {
           // Single call for periods <= 12 months
           const costData = await getCostAndUsage(costParams, environment)
           allResultsByTime = costData?.resultsByTime || []
         }
 
-        if (!allResultsByTime || allResultsByTime.length === 0) {
+        if (!dateRange.empty && (!allResultsByTime || allResultsByTime.length === 0)) {
           throw new Error('No historical data found')
         }
 
@@ -527,7 +549,8 @@ export default defineEventHandler(handleAsync(async (event) => {
       startDate,
       endDate,
       description: dateRange.description || null,
-      isHistorical: true
+      isHistorical: true,
+      empty: dateRange.empty
     },
     mode: proforma ? 'proforma' : 'billable'
   }

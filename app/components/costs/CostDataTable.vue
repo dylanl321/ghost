@@ -274,8 +274,8 @@ const availableColumns = computed(() => [
   { key: 'riskLevel', label: 'Risk Level', default: true, helpLink: '/support/docs?topic=budget-risk-scoring', helpTooltip: 'Learn about Risk Levels' },
   { key: 'variance', label: 'GDMS Variance', default: true, format: (v: number) => formatCurrency(v, 2), class: 'text-right' },
   { key: 'status', label: 'GDMS Status', default: false },
-  { key: 'endOfMonthForecast', label: 'End of Month AWS Projection', default: true, format: (v: number) => formatCurrency(v, 2), class: 'text-right', helpTooltip: 'AWS ML projection for end of current month' },
-  { key: 'projectedVsBudget', label: 'Projected vs Budget', default: true, format: (v: number) => formatCurrencyWithSign(v), class: 'text-right', helpTooltip: 'End of Month AWS Projection minus GDMS Forecast (positive = over, negative = under)' },
+  { key: 'endOfMonthForecast', label: 'Estimated EOM Allocation', default: true, format: (v: number) => formatCurrency(v, 2), class: 'text-right', helpTooltip: 'Aggregate AWS remainder forecast allocated in proportion to current account spend' },
+  { key: 'projectedVsBudget', label: 'Estimate vs Budget', default: true, format: (v: number) => formatCurrencyWithSign(v), class: 'text-right', helpTooltip: 'Estimated end-of-month allocation minus GDMS Forecast (positive = over, negative = under)' },
   { key: 'lastMonthTotal', label: 'Last Month Total', default: true, format: (v: number) => formatCurrency(v, 2), class: 'text-right', helpTooltip: 'Total cost from the previous month' },
   { key: 'ytdTotal', label: 'YTD Total', default: true, format: (v: number) => formatCurrency(v, 2), class: 'text-right', helpTooltip: 'Year-to-date total (Jan 1 - today)' },
   { key: 'fullYearEstimate', label: 'Full Year Estimate', default: true, format: (v: number) => formatCurrency(v, 2), class: 'text-right', helpTooltip: 'Projected full year total (YTD actuals + remaining months forecast)' },
@@ -380,6 +380,7 @@ const tableData = computed(() => {
 
   // Extract forecast totals per account (if available)
   const endOfMonthForecastByAccount = new Map<string, number>()
+  const hasRemainderForecast = Boolean(forecastData?.forecast?.total?.Amount && parseFloat(forecastData.forecast.total.Amount) > 0)
 
   // Get end of month forecast per account (actual + remainder)
   if (forecastData?.forecast?.total?.Amount) {
@@ -474,7 +475,10 @@ const tableData = computed(() => {
         overagePercent,
         overageAmount,
         variance: item.actualCost - item.budgetedCost,
-        status: getStatus(item),
+        status: hasRemainderForecast
+          ? getStatus({ ...item, projectedSpend: endOfMonthForecast })
+          : item.status || getStatus(item),
+        healthBasis: hasRemainderForecast ? 'aws-forecast' : item.healthBasis || 'pace',
         endOfMonthForecast,
         projectedVsBudget,
         lastMonthTotal: lastMonthByAccount.get(item.accountId) || 0,
@@ -510,7 +514,7 @@ const tableData = computed(() => {
         overageAmount,
         variance: totalCost - budget,
         status: budget > 0
-          ? (totalCost > budget ? 'over' : totalCost > budget * 0.9 ? 'warning' : 'under')
+          ? getStatus({ budgetedCost: budget, actualCost: totalCost, projectedSpend: hasRemainderForecast ? endOfMonthForecast : undefined })
           : 'no-budget',
         departmentNumber: item.departmentNumber,
         linesOfBusiness: item.linesOfBusiness,
@@ -639,7 +643,8 @@ const formatCurrencyWithSign = (value: number) => {
 
 const getStatus = (item: any) => {
   if (!item.budgetedCost || item.budgetedCost === 0) return 'no-budget'
-  const utilization = (item.actualCost / item.budgetedCost) * 100
+  const spend = typeof item.projectedSpend === 'number' ? item.projectedSpend : item.actualCost
+  const utilization = (spend / item.budgetedCost) * 100
   if (utilization > 100) return 'over'
   if (utilization > 90) return 'warning'
   return 'under'
@@ -697,14 +702,14 @@ const generateDetailedReport = () => {
   csvContent += 'Under GDMS Forecast Accounts,' + selectedAccountsData.filter(acc => acc.status === 'under').length + '\n'
   csvContent += '\n'
   csvContent += '=== FORECAST DATA ===\n\n'
-  csvContent += 'Total End of Month AWS Projection,' + formatCurrency(selectedAccountsData.reduce((sum, acc) => sum + (acc.endOfMonthForecast || 0), 0), 2) + '\n'
+  csvContent += 'Total Estimated EOM Allocation,' + formatCurrency(selectedAccountsData.reduce((sum, acc) => sum + (acc.endOfMonthForecast || 0), 0), 2) + '\n'
   csvContent += 'Total YTD,' + formatCurrency(selectedAccountsData.reduce((sum, acc) => sum + (acc.ytdTotal || 0), 0), 2) + '\n'
   csvContent += 'Total Full Year Estimate,' + formatCurrency(selectedAccountsData.reduce((sum, acc) => sum + (acc.fullYearEstimate || 0), 0), 2) + '\n'
   csvContent += '\n\n'
   
   // Sheet 2: Account Details
   csvContent += '=== ACCOUNT DETAILS ===\n\n'
-  const accountHeaders = ['Account ID', 'Account Name', 'Account Status', 'Department', 'Line of Business', 'Actual Cost', 'GDMS Forecast', 'Utilization %', 'GDMS Variance', 'GDMS Status', 'End of Month AWS Projection', 'YTD Total', 'Full Year Estimate']
+  const accountHeaders = ['Account ID', 'Account Name', 'Account Status', 'Department', 'Line of Business', 'Actual Cost', 'GDMS Forecast', 'Utilization %', 'GDMS Variance', 'GDMS Status', 'Estimated EOM Allocation', 'YTD Total', 'Full Year Estimate']
   csvContent += accountHeaders.map(escapeCSV).join(',') + '\n'
 
   selectedAccountsData.forEach(acc => {
@@ -872,7 +877,7 @@ const exportToPDFHandler = async () => {
     'Under GDMS Forecast Accounts': dataToExport.filter(acc => acc.status === 'under').length,
     'Warning Accounts': dataToExport.filter(acc => acc.status === 'warning').length,
     '': '', // Spacer
-    'Total End of Month AWS Projection': formatCurrency(dataToExport.reduce((sum, acc) => sum + (acc.endOfMonthForecast || 0), 0), 2),
+    'Total Estimated EOM Allocation': formatCurrency(dataToExport.reduce((sum, acc) => sum + (acc.endOfMonthForecast || 0), 0), 2),
     'Total YTD': formatCurrency(dataToExport.reduce((sum, acc) => sum + (acc.ytdTotal || 0), 0), 2),
     'Total Full Year Estimate': formatCurrency(dataToExport.reduce((sum, acc) => sum + (acc.fullYearEstimate || 0), 0), 2)
   }
@@ -986,7 +991,7 @@ const exportToCSV = () => {
   csvContent += '\n'
   csvContent += 'Total ' + getTimeframeLabel() + ' Cost,' + formatCurrency(totalCost, 2) + '\n'
   csvContent += 'Total GDMS Forecast,' + formatCurrency(totalBudget, 2) + '\n'
-  csvContent += 'Total End of Month AWS Projection,' + formatCurrency(totalEndOfMonth, 2) + '\n'
+  csvContent += 'Total Estimated EOM Allocation,' + formatCurrency(totalEndOfMonth, 2) + '\n'
   csvContent += 'Total YTD,' + formatCurrency(totalYtd, 2) + '\n'
   csvContent += 'Total Full Year Estimate,' + formatCurrency(totalFullYear, 2) + '\n'
   csvContent += '\n\n'

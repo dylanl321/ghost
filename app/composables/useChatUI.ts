@@ -11,25 +11,35 @@
  *   to prevent state leakage between components
  */
 
-import { ref, computed, nextTick, readonly, onUnmounted, reactive } from 'vue'
+import { ref, computed, readonly, onUnmounted, reactive } from 'vue'
 import { useChatThreadsStore } from '~/stores/useChatThreadsStore'
-import { useBackgroundPolling, type PollingCallbacks } from './useBackgroundPolling'
-import type { ChatMessage, StreamingChatMessage, SuggestedPrompt, MessageStatus } from '#shared/types/chat-threads'
+import {
+  useBackgroundPolling,
+  type PollingCompleteEvent,
+  type PollingDisambiguationEvent,
+  type PollingErrorEvent,
+  type PollingProgressEvent
+} from './useBackgroundPolling'
+import type { StreamingChatMessage, ErrorType } from '#shared/types/chat-threads'
 import type { AWSEnclaveData } from '#shared/types/accounts'
+import type { ChatPageContext } from '#shared/types/chat-context'
+import { validateChatPageContext } from '#shared/types/chat-context'
 
 // Chat state enum
 export type ChatState = 'idle' | 'sending' | 'polling' | 'error' | 'canceled'
 
-// Import error type from shared types
-import type { ErrorType } from '#shared/types/chat-threads'
-
 const logger = createLogger('useChatUI')
+const newThreadDraft = ref('')
+const newThreadError = ref('')
+let sendWithoutThreadInFlight = false
+let chatUiInstanceCounter = 0
+let chatThreadsInitializationPromise: Promise<void> | null = null
 
 /**
  * Enhanced error classification system
  * Categorizes errors by type to provide appropriate user messaging and recovery actions
  */
-function classifyError(error: string): ErrorType {
+export function classifyError(error: string): ErrorType {
   const lowerError = error.toLowerCase()
 
   // Timeout errors
@@ -79,7 +89,7 @@ function classifyError(error: string): ErrorType {
 /**
  * Get user-friendly error icon for display
  */
-function getErrorIcon(errorType: ErrorType): string {
+export function getErrorIcon(errorType: ErrorType): string {
   const iconMap = {
     timeout: 'i-heroicons-clock',
     network: 'i-heroicons-wifi',
@@ -93,7 +103,7 @@ function getErrorIcon(errorType: ErrorType): string {
 /**
  * Get user-friendly error title for display
  */
-function getErrorTitle(error: string, errorType?: ErrorType): string {
+export function getErrorTitle(error: string, errorType?: ErrorType): string {
   const type = errorType || classifyError(error)
   const titleMap = {
     timeout: 'Request Timed Out',
@@ -108,7 +118,7 @@ function getErrorTitle(error: string, errorType?: ErrorType): string {
 /**
  * Get user-friendly error description with actionable guidance
  */
-function getErrorDescription(error: string, errorType?: ErrorType): string {
+export function getErrorDescription(error: string, errorType?: ErrorType): string {
   const type = errorType || classifyError(error)
   const descriptionMap = {
     timeout: 'The query took too long to complete. Please try again or simplify your request.',
@@ -123,7 +133,7 @@ function getErrorDescription(error: string, errorType?: ErrorType): string {
 /**
  * Get appropriate action text for error type
  */
-function getErrorActionText(errorType: ErrorType): string {
+export function getErrorActionText(errorType: ErrorType): string {
   const actionMap = {
     timeout: 'Retry',
     network: 'Retry',
@@ -242,6 +252,8 @@ export interface UseChatUIOptions {
 
 // Disambiguation data type
 export interface DisambiguationData {
+  sessionId: string
+  originalQuery: string
   search_term: string
   message: string
   matches: Array<{
@@ -256,15 +268,59 @@ export interface DisambiguationData {
 }
 
 export function useChatUI(options: UseChatUIOptions = {}) {
-  const {
-    viewMode = 'fullpage',
-    initialGreeting = "Hello! I'm GHOST Chat, your AI assistant for AWS operations. I can help you with:\n\n• **Cost Analysis** - Query spending and forecasts\n• **Configuration** - Look up resource configurations\n• **Security** - Check security findings and compliance\n• **Resources** - List and analyze AWS resources\n\nClick any example below to get started, or ask your own question. For best results, be explicit about AWS account IDs."
-  } = options
+  void options
 
   // Get stores and services
   const threadsStore = useChatThreadsStore()
   const enclaveStore = useEnclaveStore()
   const backgroundPolling = useBackgroundPolling()
+  const callbackOwner = `chat-ui-${++chatUiInstanceCounter}`
+  let listenersRegistered = false
+  const route = useRoute()
+
+  function contextFromRoute(): ChatPageContext | null {
+    if (typeof route.query.context === 'string') {
+      try {
+        return validateChatPageContext(JSON.parse(route.query.context))
+      } catch {
+        return null
+      }
+    }
+    if (route.path === '/chat') return null
+    return validateChatPageContext({
+      sourcePage: route.path,
+      accountIds: route.query.accounts || route.query.account,
+      resourceIds: route.query.resources || route.query.resourceId,
+      timeframe: route.query.timeframe,
+      dataMode: route.query.mode,
+      services: route.query.services,
+      severities: route.query.severity
+    })
+  }
+
+  const pageContext = ref<ChatPageContext | null>(contextFromRoute())
+  const contextChips = computed(() => {
+    const context = pageContext.value
+    if (!context) return []
+    return [
+      ...((context.accountIds || []).map(value => ({ key: 'accountIds' as const, value, label: `Account ${value}` }))),
+      ...((context.resourceIds || []).map(value => ({ key: 'resourceIds' as const, value, label: value }))),
+      ...(context.timeframe ? [{ key: 'timeframe' as const, value: context.timeframe, label: context.timeframe }] : []),
+      ...(context.dataMode ? [{ key: 'dataMode' as const, value: context.dataMode, label: context.dataMode }] : []),
+      ...((context.services || []).map(value => ({ key: 'services' as const, value, label: value }))),
+      ...((context.severities || []).map(value => ({ key: 'severities' as const, value, label: value })))
+    ]
+  })
+
+  function removeContextChip(key: keyof ChatPageContext, value: string) {
+    if (!pageContext.value) return
+    const current = pageContext.value[key]
+    if (Array.isArray(current)) {
+      ;(pageContext.value as any)[key] = current.filter(item => item !== value)
+    } else {
+      Reflect.deleteProperty(pageContext.value, key)
+    }
+  }
 
   // ============================================================================
   // CORE STATE (thread-aware; shared across instances via module-scope registry)
@@ -285,7 +341,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
       getThreadUiState(id).chatState = value
 
       // Emit state change event for cross-view synchronization
-      if (process.client) {
+      if (import.meta.client) {
         window.dispatchEvent(new CustomEvent('chat-state-changed', {
           detail: { threadId: id, chatState: value }
         }))
@@ -296,12 +352,15 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   const errorMessage = computed<string>({
     get: () => {
       const id = threadsStore.activeThreadId
-      if (!id) return ''
+      if (!id) return newThreadError.value
       return getThreadUiState(id).errorMessage
     },
     set: (value) => {
       const id = threadsStore.activeThreadId
-      if (!id) return
+      if (!id) {
+        newThreadError.value = value
+        return
+      }
       getThreadUiState(id).errorMessage = value
     }
   })
@@ -388,16 +447,19 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   const inputValue = computed<string>({
     get: () => {
       const id = threadsStore.activeThreadId
-      if (!id) return ''
+      if (!id) return newThreadDraft.value
       return getThreadUiState(id).inputValue
     },
     set: (value) => {
       const id = threadsStore.activeThreadId
-      if (!id) return
+      if (!id) {
+        newThreadDraft.value = value
+        return
+      }
       getThreadUiState(id).inputValue = value
 
       // Emit input change event for cross-view synchronization
-      if (process.client) {
+      if (import.meta.client) {
         window.dispatchEvent(new CustomEvent('chat-input-changed', {
           detail: { threadId: id, inputValue: value }
         }))
@@ -605,7 +667,15 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     const threadId = threadsStore.activeThreadId
     if (!threadId) return false
 
-    const jobs = backgroundPolling.getJobsForThread(threadId).filter(j => j.status === 'polling')
+    const threadJobs = backgroundPolling.getJobsForThread(threadId)
+    const waitingJob = threadJobs.find(job => job.status === 'waiting_for_input' && job.disambiguation)
+    if (waitingJob?.disambiguation) {
+      const presented = presentDisambiguation(waitingJob.jobId, threadId, waitingJob.disambiguation)
+      if (presented) backgroundPolling.unregisterJob(waitingJob.jobId)
+      return presented
+    }
+
+    const jobs = threadJobs.filter(j => j.status === 'polling')
     if (jobs.length === 0) {
       // Ensure UI state is not stuck if we have no active jobs
       // Also remove any stale placeholders for this thread.
@@ -650,10 +720,11 @@ export function useChatUI(options: UseChatUIOptions = {}) {
       }
 
       // Register callbacks for live UI updates while this thread is being viewed
-      backgroundPolling.registerJobCallbacks(job.jobId, {
+      backgroundPolling.registerJobCallbacks(job.jobId, callbackOwner, {
         onProgress: handlePollingProgress,
         onComplete: handlePollingComplete,
-        onError: handlePollingError
+        onError: handlePollingError,
+        onDisambiguation: handlePollingDisambiguation
       })
     }
 
@@ -675,13 +746,12 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   /**
    * Handle progress updates from background polling
    */
-  function handlePollingProgress(jobId: string, progress: string, percent: number, tools: string[]) {
+  function handlePollingProgress(event: PollingProgressEvent) {
+    const { jobId, threadId, progress, percent, tools } = event
     logger.info('Progress update:', jobId, progress, percent)
-    const threadId = threadsStore.activeThreadId
-    if (!threadId) return
 
-    // Update the placeholder for this job regardless of which job is "current"
-    updatePendingMessageStatus(jobId, progress, tools)
+    updatePendingMessageStatus(threadId, jobId, progress, tools)
+    if (threadsStore.activeThreadId !== threadId) return
 
     // Only the most-recent/active job drives the shared polling UI
     if (currentJobId.value === jobId) {
@@ -701,7 +771,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     }
 
     // Emit progress update event for cross-view synchronization
-    if (process.client) {
+    if (import.meta.client) {
       window.dispatchEvent(new CustomEvent('chat-progress-update', {
         detail: { threadId, jobId, progress, percent, tools }
       }))
@@ -713,14 +783,12 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   /**
    * Handle job completion from background polling
    */
-  function handlePollingComplete(
-    jobId: string,
-    response: string,
-    metadata: any,
-    suggestedLinks?: any[],
-    suggestedPrompts?: any[]
-  ) {
+  function handlePollingComplete(event: PollingCompleteEvent) {
+    const { jobId, threadId, response, metadata, suggestedLinks, suggestedPrompts } = event
     logger.info('Job complete:', jobId)
+
+    removePlaceholder(threadId, jobId)
+    if (threadsStore.activeThreadId !== threadId) return
 
     // Find and update the pending message
     const threadMessages = threadsStore.currentThread?.messages || []
@@ -741,7 +809,10 @@ export function useChatUI(options: UseChatUIOptions = {}) {
       // No pending message found - add the response directly
       // This can happen if the thread was reloaded during polling
       logger.info('No pending message found, adding response directly')
-      if (threadsStore.currentThread?.messages) {
+      const alreadyPresent = threadMessages.some(message =>
+        (message as any).jobId === jobId || (message as any).status?.jobId === jobId
+      )
+      if (!alreadyPresent && threadsStore.currentThread?.messages) {
         threadsStore.currentThread.messages.push({
           messageId: `response-${Date.now()}`,
           role: 'assistant',
@@ -749,24 +820,20 @@ export function useChatUI(options: UseChatUIOptions = {}) {
           timestamp: new Date().toISOString(),
           metadata,
           suggestedLinks: suggestedLinks || [],
-          suggestedPrompts: suggestedPrompts || []
+          suggestedPrompts: suggestedPrompts || [],
+          jobId
         } as any)
       }
     }
 
     // Cleanup placeholder registry for this job
-    const threadId = threadsStore.activeThreadId
-    if (threadId) {
-      removePlaceholder(threadId, jobId)
-    }
-
     // If this was the active job for the viewed thread, reset thread UI state.
     if (currentJobId.value === jobId && threadId) {
       resetThreadUiState(threadId)
     }
 
     // Emit completion event for cross-view synchronization
-    if (process.client && threadId) {
+    if (import.meta.client && threadId) {
       window.dispatchEvent(new CustomEvent('chat-job-complete', {
         detail: { threadId, jobId, response, metadata, suggestedLinks, suggestedPrompts }
       }))
@@ -775,26 +842,56 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     // Trigger scroll
     scrollTrigger.value++
 
-    // NOTE: Don't reload thread here - the message is being saved by useBackgroundPolling
-    // and there's a race condition. The local update above is sufficient for UI display.
-    // The message will be persisted by useBackgroundPolling.handleJobComplete() via API.
+    // The worker has already persisted this message. Local replacement avoids a reload flicker.
   }
 
   /**
    * Handle job error from background polling
    */
-  function handlePollingError(jobId: string, error: string) {
+  function presentDisambiguation(jobId: string, threadId: string, disambiguation: any): boolean {
+    if (threadsStore.activeThreadId !== threadId) {
+      removePlaceholder(threadId, jobId)
+      return false
+    }
+
+    const job = backgroundPolling.getJob(jobId)
+    const disambig = {
+      ...disambiguation,
+      sessionId: disambiguation.sessionId || disambiguation.session_id || jobId,
+      originalQuery: job?.userMessage || pendingMessage.value
+    }
+    if (!Array.isArray(disambig.matches) || disambig.matches.length === 0) return false
+
+    showDisambiguation.value = true
+    disambiguationData.value = disambig
+    removePlaceholder(threadId, jobId)
+    const threadMessages = threadsStore.currentThread?.messages || []
+    const placeholderIndex = threadMessages.findIndex(message => (message as any).status?.jobId === jobId)
+    if (placeholderIndex !== -1) threadMessages.splice(placeholderIndex, 1)
+    resetThreadUiState(threadId)
+    return true
+  }
+
+  function handlePollingDisambiguation(event: PollingDisambiguationEvent) {
+    if (presentDisambiguation(event.jobId, event.threadId, event.disambiguation)) {
+      backgroundPolling.unregisterJob(event.jobId)
+    }
+  }
+
+  function handlePollingError(event: PollingErrorEvent) {
+    const { jobId, threadId, error, recoverable, disambiguation } = event
     logger.error('Job error:', jobId, error)
 
+    if (threadsStore.activeThreadId !== threadId) {
+      if (!recoverable) removePlaceholder(threadId, jobId)
+      return
+    }
+
     // Check for disambiguation
-    if (error.includes('Multiple accounts found matching')) {
-      const disambig = parseDisambiguationError(error)
-      if (disambig) {
-        showDisambiguation.value = true
-        disambiguationData.value = disambig
-        // Keep polling state, waiting for user selection
-        return
-      }
+    if (disambiguation || error.includes('Multiple accounts found matching')) {
+      const job = backgroundPolling.getJob(jobId)
+      const disambig = disambiguation || parseDisambiguationError(error, jobId, job?.userMessage || pendingMessage.value)
+      if (disambig && presentDisambiguation(jobId, threadId, disambig)) return
     }
 
     // Find and update the pending message
@@ -813,13 +910,13 @@ export function useChatUI(options: UseChatUIOptions = {}) {
           error,
           errorType,
           jobId,
+          recoverable,
           // Preserve any existing status history
           statusHistory: (threadMessages[pendingIndex] as any)?.status?.statusHistory || []
         }
     }
 
-    const threadId = threadsStore.activeThreadId
-    if (threadId) {
+    if (!recoverable) {
       removePlaceholder(threadId, jobId)
     }
 
@@ -827,7 +924,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     if (currentJobId.value === jobId) {
       chatState.value = 'error'
       errorMessage.value = error
-      currentJobId.value = null
+      currentJobId.value = recoverable ? jobId : null
       pendingBotMessageId.value = null
       pollingProgress.value = 'Starting...'
       pollingPercent.value = 0
@@ -836,9 +933,9 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     }
 
     // Emit error event for cross-view synchronization
-    if (process.client && threadId) {
+    if (import.meta.client && threadId) {
       window.dispatchEvent(new CustomEvent('chat-job-error', {
-        detail: { threadId, jobId, error }
+        detail: { threadId, jobId, error, recoverable }
       }))
     }
 
@@ -848,7 +945,13 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   /**
    * Update the pending message status for UI display
    */
-  function updatePendingMessageStatus(jobId: string, progress: string, tools: string[]) {
+  function updatePendingMessageStatus(threadId: string, jobId: string, progress: string, tools: string[]) {
+    const registeredPlaceholder = pendingPlaceholdersByThread.get(threadId)?.get(jobId)
+    if (registeredPlaceholder?.status) {
+      registeredPlaceholder.status.progress = progress
+      registeredPlaceholder.status.toolsCalled = tools
+    }
+    if (threadsStore.activeThreadId !== threadId) return
     const threadMessages = threadsStore.currentThread?.messages || []
     const pendingMsg = threadMessages.find(m =>
       (m as any)?.status?.jobId === jobId &&
@@ -882,16 +985,18 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   /**
    * Parse disambiguation error to extract account matches
    */
-  function parseDisambiguationError(errorMsg: string): DisambiguationData | null {
+  function parseDisambiguationError(errorMsg: string, activeSessionId: string, originalQuery: string): DisambiguationData | null {
     try {
       const match = errorMsg.match(/\[(.*?)\]/)
-      if (match) {
+      if (match?.[1]) {
         const accountsStr = match[1]
         const accountNames = accountsStr.split(',').map((a: string) =>
           a.trim().replace(/'/g, '').replace(/"/g, '')
         )
 
         return {
+          sessionId: activeSessionId,
+          originalQuery,
           search_term: 'account',
           message: errorMsg,
           matches: accountNames.map((name: string, idx: number) => ({
@@ -913,7 +1018,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   // CORE ACTIONS
   // ============================================================================
 
-  async function sendMessage(text?: string): Promise<void> {
+  async function sendMessage(text?: string, accountIdentifier?: string): Promise<void> {
     const messageText = text || inputValue.value
     if (!messageText.trim() || isLoading.value) return
 
@@ -922,35 +1027,53 @@ export function useChatUI(options: UseChatUIOptions = {}) {
 
     logger.info('Sending message:', userInput.substring(0, 50))
 
-    // Ensure we have a thread BEFORE we set any per-thread UI state
+    // Guard first-send thread creation, since no per-thread sending state exists yet.
     if (!threadsStore.activeThreadId) {
+      if (sendWithoutThreadInFlight) return
+      sendWithoutThreadInFlight = true
+      newThreadError.value = ''
       logger.info('Creating new thread')
-      await threadsStore.createThread()
+      try {
+        const thread = await threadsStore.createThread()
+        if (!thread) {
+          newThreadDraft.value = userInput
+          newThreadError.value = threadsStore.error || 'Unable to start a new conversation. Please try again.'
+          return
+        }
+      } finally {
+        sendWithoutThreadInFlight = false
+      }
     }
 
     // Reset input immediately
     inputValue.value = ''
+    newThreadDraft.value = ''
+    newThreadError.value = ''
     clearSelectedAccount()
     closeMentionDropdown()
     errorMessage.value = ''
     chatState.value = 'sending'
 
-    try {
-      const currentThreadId = threadsStore.activeThreadId!
+    const currentThreadId = threadsStore.activeThreadId!
+    const localUserMessageId = `user-local-${Date.now()}`
+    const pendingMsgId = `pending-local-${Date.now()}`
 
-      // Add user message to store immediately
-      await threadsStore.addMessage({
+    try {
+
+      // Optimistically render; the submission endpoint persists this message.
+      threadsStore.currentThread?.messages.push({
+        messageId: localUserMessageId,
         role: 'user',
         content: userInput,
-        metadata: mentionedAccount ? {
-          accountId: mentionedAccount.accountId,
-          accountName: getAccountDisplay(mentionedAccount)
+        timestamp: new Date().toISOString(),
+        metadata: mentionedAccount || accountIdentifier ? {
+          accountId: accountIdentifier || mentionedAccount?.accountId,
+          accountName: mentionedAccount ? getAccountDisplay(mentionedAccount) : undefined
         } : undefined
-      })
+      } as any)
       scrollTrigger.value++
 
       // Create a local pending placeholder immediately; we will attach jobId once we have it.
-      const pendingMsgId = `pending-local-${Date.now()}`
       pendingBotMessageId.value = pendingMsgId
       const localPlaceholder: StreamingChatMessage = {
         messageId: pendingMsgId,
@@ -975,6 +1098,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
       // Get conversation history (exclude pending messages)
       const conversationHistory = ((threadsStore.currentThread?.messages || []) as StreamingChatMessage[])
         .filter((m: StreamingChatMessage) => !m.status || m.status.status === 'complete')
+        .filter((m: StreamingChatMessage) => !m.messageId.startsWith('user-local-'))
         .slice(-10)
         .map((m: StreamingChatMessage) => ({
           role: m.role === 'user' ? 'user' as const : 'assistant' as const,
@@ -988,9 +1112,11 @@ export function useChatUI(options: UseChatUIOptions = {}) {
         method: 'POST',
         body: {
           message: userInput,
-          accountIdentifier: mentionedAccount?.accountId || undefined,
+          threadId: currentThreadId,
+          accountIdentifier: accountIdentifier || mentionedAccount?.accountId || undefined,
           conversationHistory,
-          timezone: userTimezone.value
+          timezone: userTimezone.value,
+          pageContext: pageContext.value
         }
       }) as any
 
@@ -1000,9 +1126,17 @@ export function useChatUI(options: UseChatUIOptions = {}) {
         throw new Error(response.error || 'Failed to submit query')
       }
 
+      const localUserIndex = threadsStore.currentThread?.messages.findIndex(
+        message => message.messageId === localUserMessageId
+      ) ?? -1
+      if (localUserIndex !== -1 && response.userMessage && threadsStore.currentThread) {
+        threadsStore.currentThread.messages.splice(localUserIndex, 1, response.userMessage)
+      }
+
       // Attach real jobId to the placeholder and register it in the per-thread registry
       const jobId = response.jobId as string
-      const threadMessages = threadsStore.currentThread?.messages || []
+      const isOriginThreadActive = threadsStore.currentThread?.threadId === currentThreadId
+      const threadMessages = isOriginThreadActive ? threadsStore.currentThread?.messages || [] : []
       const placeholderIndex = threadMessages.findIndex(m => (m as any)?.messageId === pendingMsgId)
       if (placeholderIndex !== -1) {
         ; (threadMessages[placeholderIndex] as any).status = {
@@ -1019,15 +1153,15 @@ export function useChatUI(options: UseChatUIOptions = {}) {
         ensurePlaceholderForJob(currentThreadId, jobId)
       }
 
-      currentJobId.value = jobId
+      const originState = getThreadUiState(currentThreadId)
+      originState.currentJobId = jobId
+      originState.pendingBotMessageId = pendingMsgId
+      originState.chatState = 'polling'
+      originState.pollingProgress = 'Starting...'
+      originState.pollingPercent = 0
+      originState.pollingToolsCalled = []
+      originState.pollingStatusHistory = []
       pendingMessage.value = userInput
-      chatState.value = 'polling'
-
-      // Reset polling UI state
-      pollingProgress.value = 'Starting...'
-      pollingPercent.value = 0
-      pollingToolsCalled.value = []
-      pollingStatusHistory.value = []
 
       useEventBus().emit('ai.chat.sent', { message: userInput })
 
@@ -1035,11 +1169,14 @@ export function useChatUI(options: UseChatUIOptions = {}) {
       backgroundPolling.registerJob(jobId, currentThreadId, userInput)
 
       // Register callbacks for live UI updates
-      backgroundPolling.registerJobCallbacks(jobId, {
-        onProgress: handlePollingProgress,
-        onComplete: handlePollingComplete,
-        onError: handlePollingError
-      })
+      if (threadsStore.activeThreadId === currentThreadId) {
+        backgroundPolling.registerJobCallbacks(jobId, callbackOwner, {
+          onProgress: handlePollingProgress,
+          onComplete: handlePollingComplete,
+          onError: handlePollingError,
+          onDisambiguation: handlePollingDisambiguation
+        })
+      }
 
       logger.info('Registered callbacks for job:', jobId)
 
@@ -1048,35 +1185,27 @@ export function useChatUI(options: UseChatUIOptions = {}) {
       // Handle local error (not from polling)
       const errorMsg = error.message || 'Failed to send message'
 
-      // Find and update the pending message if it exists
-      const threadMessages = threadsStore.currentThread?.messages || []
-      const pendingIndex = threadMessages.findIndex(m =>
-        ((m as any)?.status?.status === 'pending') || ((m as any)?.status?.status === 'streaming')
-      )
-
-      if (pendingIndex !== -1) {
-        const errorType = classifyError(errorMsg)
-        // Update message content to show user-friendly error message
-        threadMessages[pendingIndex].content = `Error: ${getErrorTitle(errorMsg, errorType)}`
-          ; (threadMessages[pendingIndex] as any).status = {
-            status: 'error',
-            error: errorMsg,
-            errorType,
-            jobId: (threadMessages[pendingIndex] as any)?.status?.jobId,
-            // Preserve any existing status history
-            statusHistory: (threadMessages[pendingIndex] as any)?.status?.statusHistory || []
-          }
+      const originState = getThreadUiState(currentThreadId)
+      if (threadsStore.currentThread?.threadId === currentThreadId) {
+        const threadMessages = threadsStore.currentThread.messages || []
+        const failedIds = new Set([localUserMessageId, pendingMsgId])
+        threadsStore.currentThread.messages = threadMessages.filter(message => !failedIds.has(message.messageId))
+        inputValue.value = userInput
+      } else {
+        originState.inputValue = userInput
       }
 
       // Reset state
-      chatState.value = 'error'
-      errorMessage.value = errorMsg
-      currentJobId.value = null
-      pendingBotMessageId.value = null
-      pollingProgress.value = 'Starting...'
-      pollingPercent.value = 0
-      pollingToolsCalled.value = []
-      pollingStatusHistory.value = []
+      Object.assign(originState, {
+        chatState: 'error',
+        errorMessage: errorMsg,
+        currentJobId: null,
+        pendingBotMessageId: null,
+        pollingProgress: 'Starting...',
+        pollingPercent: 0,
+        pollingToolsCalled: [],
+        pollingStatusHistory: []
+      })
 
       scrollTrigger.value++
     }
@@ -1106,40 +1235,67 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     await sendMessage(lastUserMsg.content)
   }
 
-  async function cancelQuery(): Promise<void> {
-    logger.info('Canceling query')
+  async function retryMessage(messageId: string, jobId?: string): Promise<void> {
+    const threadMessages = (threadsStore.currentThread?.messages || []) as StreamingChatMessage[]
+    const messageIndex = threadMessages.findIndex(message => message.messageId === messageId)
+    if (messageIndex === -1) return
 
-    // Unregister callbacks and job from background polling
-    if (currentJobId.value) {
-      backgroundPolling.unregisterJobCallbacks(currentJobId.value)
-      backgroundPolling.unregisterJob(currentJobId.value)
-
-      // Cancel on server
-      try {
-        await $fetch(`/api/strands/chat/async/${currentJobId.value}/cancel`, {
-          method: 'POST'
-        })
-      } catch (err) {
-        logger.warn('Failed to cancel on server:', err)
+    if (jobId && threadMessages[messageIndex]?.status?.recoverable && backgroundPolling.reconnectJob(jobId)) {
+      threadMessages[messageIndex]!.content = ''
+      threadMessages[messageIndex]!.status = {
+        status: 'pending',
+        jobId,
+        progress: 'Reconnecting...',
+        toolsCalled: [],
+        statusHistory: []
       }
+      currentJobId.value = jobId
+      chatState.value = 'polling'
+      return
+    }
+
+    const original = [...threadMessages.slice(0, messageIndex)].reverse().find(message => message.role === 'user')
+    if (!original) return
+    threadMessages.splice(messageIndex, 1)
+    chatState.value = 'idle'
+    errorMessage.value = ''
+    await sendMessage(original.content)
+  }
+
+  async function cancelQuery(jobId?: string): Promise<void> {
+    logger.info('Canceling query')
+    const targetJobId = jobId || currentJobId.value
+    if (!targetJobId) return
+
+    try {
+      const response = await $fetch<{ success: boolean; error?: string }>(`/api/strands/chat/async/${targetJobId}/cancel`, {
+        method: 'POST'
+      })
+      if (!response.success) throw new Error(response.error || 'Cancellation was not confirmed')
+    } catch (err: any) {
+      logger.warn('Failed to cancel on server:', err)
+      errorMessage.value = err?.message || 'Unable to cancel this query. Monitoring will continue.'
+      return
     }
 
     // Find pending message and update to canceled
     const threadMessages = threadsStore.currentThread?.messages || []
     const pendingIndex = threadMessages.findIndex(m =>
-      (m as any)?.status?.jobId === currentJobId.value &&
+      (m as any)?.status?.jobId === targetJobId &&
       (((m as any)?.status?.status === 'pending') || ((m as any)?.status?.status === 'streaming'))
     )
     if (pendingIndex !== -1) {
-      threadMessages[pendingIndex].content = '⚠️ Query canceled by user'
-        ; (threadMessages[pendingIndex] as any).status = { status: 'canceled', jobId: currentJobId.value || undefined }
+      threadMessages[pendingIndex].content = 'Query canceled by user'
+        ; (threadMessages[pendingIndex] as any).status = { status: 'canceled', jobId: targetJobId }
     }
 
     // Reset state
     const threadId = threadsStore.activeThreadId
-    if (threadId && currentJobId.value) {
-      removePlaceholder(threadId, currentJobId.value)
+    if (threadId) {
+      removePlaceholder(threadId, targetJobId)
     }
+    backgroundPolling.unregisterJobCallbacks(targetJobId, callbackOwner)
+    backgroundPolling.unregisterJob(targetJobId)
     if (threadId) {
       resetThreadUiState(threadId)
     } else {
@@ -1155,13 +1311,20 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     scrollTrigger.value++
   }
 
-  async function clearConversation(): Promise<void> {
+  async function clearConversation(): Promise<boolean> {
+    let success = true
     if (threadsStore.activeThreadId) {
-      await threadsStore.clearThread(threadsStore.activeThreadId)
+      success = await threadsStore.clearThread(threadsStore.activeThreadId)
     }
     chatState.value = 'idle'
     errorMessage.value = ''
     scrollTrigger.value++
+    return success
+  }
+
+  async function loadEarlierMessages(): Promise<void> {
+    const loaded = await threadsStore.loadEarlierMessages()
+    if (loaded) scrollTrigger.value++
   }
 
   // ============================================================================
@@ -1169,13 +1332,38 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   // ============================================================================
 
   async function handleAccountSelected(accountId: string): Promise<void> {
+    const current = disambiguationData.value
+    if (!current) return
+
+    const matchedAccount = current.matches.find(match => match.request_id === accountId)
+    let selectedAccount = matchedAccount
+    const matchedAccountId = matchedAccount?.govcloud_account_id || matchedAccount?.commercial_account_id
+
+    // Structured disambiguation matches already contain the account ID needed
+    // to rerun the query. Only ask Strands to resolve legacy matches that do not.
+    if (!matchedAccountId) {
+      try {
+        const response = await $fetch<{ data: { account: DisambiguationData['matches'][number] } }>('/api/strands/account/select', {
+          method: 'POST',
+          body: { sessionId: current.sessionId, requestId: accountId }
+        })
+        selectedAccount = response.data.account || matchedAccount
+      } catch (error: any) {
+        logger.warn('Upstream account selection failed; using selected match metadata', error)
+      }
+    }
+
+    const selectedAccountId = selectedAccount?.govcloud_account_id || selectedAccount?.commercial_account_id ||
+      matchedAccount?.govcloud_account_id || matchedAccount?.commercial_account_id
+    if (!selectedAccountId) {
+      errorMessage.value = 'The selected account did not include an account ID. Please choose another account.'
+      return
+    }
+
     showDisambiguation.value = false
-    const messageToSend = pendingMessage.value
     disambiguationData.value = null
     pendingMessage.value = ''
-
-    // Resend with account context
-    await sendMessage(`[Account: ${accountId}] ${messageToSend}`)
+    await sendMessage(current.originalQuery, selectedAccountId)
   }
 
   function cancelDisambiguation(): void {
@@ -1206,7 +1394,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
       // Unregister callbacks for ALL jobs in the old thread (polling continues in background)
       const oldJobs = backgroundPolling.getJobsForThread(oldThreadId).filter(j => j.status === 'polling')
       for (const job of oldJobs) {
-        backgroundPolling.unregisterJobCallbacks(job.jobId)
+        backgroundPolling.unregisterJobCallbacks(job.jobId, callbackOwner)
       }
     }
 
@@ -1218,7 +1406,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     await checkAndRecoverPendingJob()
 
     // Emit thread switch event for cross-view synchronization
-    if (process.client) {
+    if (import.meta.client) {
       window.dispatchEvent(new CustomEvent('chat-thread-switched', {
         detail: { oldThreadId, newThreadId: threadId }
       }))
@@ -1231,7 +1419,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
       // Unregister callbacks for jobs in current thread; polling continues in background
       const oldJobs = backgroundPolling.getJobsForThread(oldThreadId).filter(j => j.status === 'polling')
       for (const job of oldJobs) {
-        backgroundPolling.unregisterJobCallbacks(job.jobId)
+        backgroundPolling.unregisterJobCallbacks(job.jobId, callbackOwner)
       }
     }
 
@@ -1244,7 +1432,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   // ============================================================================
 
   function handleCrossViewSync(event: CustomEvent) {
-    const { threadId, chatState: newState } = event.detail
+    const { threadId } = event.detail
     const currentThreadId = threadsStore.activeThreadId
 
     // Only sync if we're viewing the same thread
@@ -1255,7 +1443,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   }
 
   function handleInputSync(event: CustomEvent) {
-    const { threadId, inputValue: newInputValue } = event.detail
+    const { threadId } = event.detail
     const currentThreadId = threadsStore.activeThreadId
 
     // Only sync if we're viewing the same thread
@@ -1272,7 +1460,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     // Only sync if we're viewing the same thread
     if (currentThreadId === threadId) {
       // Update the placeholder for this job
-      updatePendingMessageStatus(jobId, progress, tools)
+      updatePendingMessageStatus(threadId, jobId, progress, tools)
 
       // Update shared polling UI if this is the current job
       if (currentJobId.value === jobId) {
@@ -1333,7 +1521,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   }
 
   function handleJobError(event: CustomEvent) {
-    const { threadId, jobId, error } = event.detail
+    const { threadId, jobId, error, recoverable = false } = event.detail
     const currentThreadId = threadsStore.activeThreadId
 
     // Only sync if we're viewing the same thread
@@ -1354,19 +1542,20 @@ export function useChatUI(options: UseChatUIOptions = {}) {
             error,
             errorType,
             jobId,
+            recoverable,
             // Preserve any existing status history
             statusHistory: (threadMessages[pendingIndex] as any)?.status?.statusHistory || []
           }
       }
 
       // Cleanup placeholder registry for this job
-      removePlaceholder(threadId, jobId)
+      if (!recoverable) removePlaceholder(threadId, jobId)
 
       // Only set global error UI if this was the active job for the viewed thread
       if (currentJobId.value === jobId) {
         chatState.value = 'error'
         errorMessage.value = error
-        currentJobId.value = null
+        currentJobId.value = recoverable ? jobId : null
         pendingBotMessageId.value = null
         pollingProgress.value = 'Starting...'
         pollingPercent.value = 0
@@ -1380,7 +1569,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   }
 
   function handleThreadSwitch(event: CustomEvent) {
-    const { oldThreadId, newThreadId } = event.detail
+    const { newThreadId } = event.detail
     const currentThreadId = threadsStore.activeThreadId
 
     // If we're not already on the new thread, switch to it
@@ -1401,38 +1590,38 @@ export function useChatUI(options: UseChatUIOptions = {}) {
 
   async function initialize(): Promise<void> {
     logger.info('Initializing...')
-    await threadsStore.fetchThreads()
+    if (!chatThreadsInitializationPromise) {
+      chatThreadsInitializationPromise = (async () => {
+        await threadsStore.fetchThreads()
 
-    if (threadsStore.activeThreadId) {
-      // Try to load the persisted active thread
-      const loaded = await threadsStore.loadThread(threadsStore.activeThreadId)
-      if (!loaded) {
-        // Thread no longer exists - clear the stale reference
-        // Don't auto-create, let user send first message to create thread
-        logger.info('Persisted thread not found, clearing stale reference')
-        threadsStore.setActiveThread(null)
+        if (threadsStore.activeThreadId) {
+          const loaded = await threadsStore.loadThread(threadsStore.activeThreadId)
+          if (!loaded) {
+            logger.info('Persisted thread not found, clearing stale reference')
+            threadsStore.setActiveThread(null)
 
-        // Select most recent existing thread if available
-        if (threadsStore.threads.length > 0) {
+            if (threadsStore.threads.length > 0) {
+              const mostRecent = threadsStore.threads[0]
+              await threadsStore.loadThread(mostRecent.threadId)
+            }
+          }
+        } else if (threadsStore.threads.length > 0) {
           const mostRecent = threadsStore.threads[0]
-          logger.info('Selecting most recent thread:', mostRecent.threadId)
           await threadsStore.loadThread(mostRecent.threadId)
         }
-      }
-    } else if (threadsStore.threads.length > 0) {
-      // No active thread but threads exist - select the most recent one
-      const mostRecent = threadsStore.threads[0]
-      logger.info('No active thread, selecting most recent:', mostRecent.threadId)
-      await threadsStore.loadThread(mostRecent.threadId)
+      })().catch((error) => {
+        chatThreadsInitializationPromise = null
+        throw error
+      })
     }
-    // If no active thread and no existing threads, don't create one
-    // A thread will be created when the user sends their first message
+    await chatThreadsInitializationPromise
 
     // Check for pending job recovery on initialization
     await checkAndRecoverPendingJob()
 
     // Set up cross-view synchronization listeners
-    if (process.client) {
+    if (import.meta.client && !listenersRegistered) {
+      listenersRegistered = true
       window.addEventListener('chat-state-changed', handleCrossViewSync as EventListener)
       window.addEventListener('chat-input-changed', handleInputSync as EventListener)
       window.addEventListener('chat-progress-update', handleProgressUpdate as EventListener)
@@ -1451,14 +1640,16 @@ export function useChatUI(options: UseChatUIOptions = {}) {
   onUnmounted(() => {
     // Unregister callbacks but don't stop polling (background continues)
     const threadId = threadsStore.activeThreadId
-    if (!threadId) return
-    const jobs = backgroundPolling.getJobsForThread(threadId).filter(j => j.status === 'polling')
-    for (const job of jobs) {
-      backgroundPolling.unregisterJobCallbacks(job.jobId)
+    if (threadId) {
+      const jobs = backgroundPolling.getJobsForThread(threadId).filter(j => j.status === 'polling' || j.status === 'paused')
+      for (const job of jobs) {
+        backgroundPolling.unregisterJobCallbacks(job.jobId, callbackOwner)
+      }
     }
 
     // Remove cross-view synchronization listeners
-    if (process.client) {
+    if (import.meta.client && listenersRegistered) {
+      listenersRegistered = false
       window.removeEventListener('chat-state-changed', handleCrossViewSync as EventListener)
       window.removeEventListener('chat-input-changed', handleInputSync as EventListener)
       window.removeEventListener('chat-progress-update', handleProgressUpdate as EventListener)
@@ -1474,7 +1665,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
 
   return {
     // Core state
-    messages: readonly(messages),
+    messages,
     chatState: readonly(chatState),
     inputValue,
     showWelcome: readonly(showWelcome),
@@ -1489,12 +1680,18 @@ export function useChatUI(options: UseChatUIOptions = {}) {
     pollingProgress: readonly(pollingProgress),
     pollingPercent: readonly(pollingPercent),
     pollingToolsCalled: readonly(pollingToolsCalled),
+    pageContext: readonly(pageContext),
+    contextChips: readonly(contextChips),
+    removeContextChip,
 
     // Core actions
     sendMessage,
     retryLastMessage,
+    retryMessage,
     cancelQuery,
     clearConversation,
+    loadEarlierMessages,
+    hasMoreMessages: computed(() => !!threadsStore.currentThread?.hasMoreMessages),
 
     // Mention system
     showMentionDropdown: readonly(showMentionDropdown),
@@ -1514,7 +1711,7 @@ export function useChatUI(options: UseChatUIOptions = {}) {
 
     // Disambiguation
     showDisambiguation: readonly(showDisambiguation),
-    disambiguationData: readonly(disambiguationData),
+    disambiguationData: computed(() => disambiguationData.value),
     openDisambiguationModal,
     handleAccountSelected,
     cancelDisambiguation,
