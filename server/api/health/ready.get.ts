@@ -334,7 +334,7 @@ function evaluateDependencyHealth(
   }
 
   const organizations = envResult.services.organizations
-  if (!organizations.accessible && organizations.error !== 'Organizations account ID not configured') {
+  if (!organizations.accessible) {
     warnings.push(`${label} Organizations inaccessible`)
   }
 
