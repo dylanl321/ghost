@@ -36,7 +36,7 @@ function registeredTools(scopes: GhostMcpPrincipal['scopes']): Set<string> {
 test('registers every tool in the end-user MCP coverage contract', () => {
   const registered = registeredTools(['ghost.read', 'ghost.ai.invoke', 'ghost.collaborate', 'ghost.credentials.issue'])
   assert.deepEqual([...registered].sort(), [...ghostMcpToolNames].sort())
-  assert.equal(registered.size, 62)
+  assert.equal(registered.size, 67)
   assert.deepEqual([...endUserMcpToolNames].sort(), ghostMcpCatalog.filter(tool => tool.visibility === 'advertised').map(tool => tool.name).sort())
   assert.deepEqual(endUserMcpCapabilityGroups.flatMap(group => group.tools.map(tool => tool.name)).sort(), [...endUserMcpToolNames].sort())
   assert.equal(ghostMcpCatalog.every(tool => Boolean(tool.scope && tool.domain && tool.source && tool.annotations)), true)

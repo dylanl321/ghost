@@ -5,6 +5,18 @@ All notable changes to GHOST are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-08-17
+<!-- highlights: MCP Cost Comparison, Operational Health -->
+
+### New Features
+- MCP clients can compare reconciled AWS cost periods and review bounded AWS cost anomalies
+- You can now mark, archive, mute, or unmute personal notifications and cancel your queued or running exports
+- Pipeline searches now include deployment health and drift modes, and EC2 instance health combines patch, security, vulnerability, alarm, and inventory evidence
+
+### Improvements
+- Cost anomaly searches scan until matching account results are collected and clearly report whether more AWS records remain
+- The cost variance prompt now uses the canonical comparison workflow
+
 ## [2.0.0] - 2026-08-17
 <!-- highlights: Safer MCP Access, Reliable AWS Results -->
 

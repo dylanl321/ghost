@@ -9,6 +9,7 @@ Reviewed: 2026-08-17
 - Cost Explorer already intercepts some empty `GetCostAndUsage` ranges; shared normalization remains necessary for forecast, resource, tag, and dashboard paths.
 - Resource registration must enforce OAuth scopes in addition to tool registration. Account resources require read scope, while user and export resources require collaboration scope.
 - Evidence lookback applies to time-bounded sources. Config, Inspector, patch, and ownership evidence are labeled as snapshots with observed timestamps.
+- The focused Phase 4 roadmap shipped in MCP 2.1: cost comparison, cost anomalies, notification lifecycle actions, export cancellation, pipeline health/drift modes, and instance health.
 
 ## Executive Summary
 

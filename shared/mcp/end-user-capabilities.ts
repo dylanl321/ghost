@@ -33,6 +33,8 @@ export const endUserMcpCapabilityGroups: McpCapabilityGroup[] = [
     tools: [
       { name: 'ghost.costs.dashboard', description: 'Return dashboard metrics, account estimates, and end-of-month and year-end projections.', mode: 'Read' },
       { name: 'ghost.costs.query', description: 'Query cost by account, service, date range, and grouping.', mode: 'Read' },
+      { name: 'ghost.costs.compare', description: 'Compare reconciled cost periods by service and account.', mode: 'Read' },
+      { name: 'ghost.costs.anomalies', description: 'Review bounded AWS cost anomalies and impact.', mode: 'Read' },
       { name: 'ghost.costs.budget_vs_actual', description: 'Compare budgets with actual account cost.', mode: 'Read' },
       { name: 'ghost.alerts.list', description: 'List budget alerts by account, month, or alert type.', mode: 'Read' }
     ]
@@ -63,6 +65,7 @@ export const endUserMcpCapabilityGroups: McpCapabilityGroup[] = [
       { name: 'ghost.resources.search', description: 'Search live AWS resource inventory across GHOST accounts.', mode: 'Read' },
       { name: 'ghost.instances.search', description: 'List or find EC2 instances using a friendly account reference.', mode: 'Read' },
       { name: 'ghost.instances.utilization', description: 'Review persisted EC2 utilization and optimization findings.', mode: 'Read' },
+      { name: 'ghost.instances.health', description: 'Review bounded patch, security, vulnerability, and alarm evidence for an instance.', mode: 'Read' },
       { name: 'ghost.audit.search', description: 'Search account-scoped organization CloudTrail logs.', mode: 'Read' },
       { name: 'ghost.pipelines.search', description: 'Search pipeline runs and Terraform resource activity.', mode: 'Read' }
     ]
@@ -73,7 +76,9 @@ export const endUserMcpCapabilityGroups: McpCapabilityGroup[] = [
     tools: [
       { name: 'ghost.accounts.personal_context', description: 'Resolve your favorite and recently viewed accounts to current GHOST metadata.', mode: 'Read' },
       { name: 'ghost.notifications.list', description: 'Read your GHOST notification inbox.', mode: 'Read' },
+      { name: 'ghost.notifications.action', description: 'Mark, archive, mute, or unmute your notifications.', mode: 'Create' },
       { name: 'ghost.reports.list', description: 'List your reports and recent exports.', mode: 'Read' },
+      { name: 'ghost.reports.cancel_export', description: 'Cancel one of your queued or running exports.', mode: 'Create' },
       { name: 'ghost.chat_threads.list', description: 'List your GHOST chat threads.', mode: 'Read' },
       { name: 'ghost.evidence.create', description: 'Create a private evidence bundle with a 90-day retention period.', mode: 'Create' }
     ]

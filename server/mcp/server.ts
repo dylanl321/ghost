@@ -142,7 +142,7 @@ function registerPrompts(server: McpServer) {
   server.registerPrompt('analyze-cost-variance', {
     title: 'Analyze cost variance', description: 'Compare account cost periods and explain material changes.',
     argsSchema: z.object({ account: z.string(), current_period: z.string(), comparison_period: z.string() })
-  }, args => ({ messages: [{ role: 'user', content: { type: 'text', text: `Analyze AWS cost variance for ${args.account}. Compare ${args.current_period} with ${args.comparison_period}, reconcile authoritative totals, break changes down by service and resource where available, and identify uncertainty.` } }] }))
+  }, args => ({ messages: [{ role: 'user', content: { type: 'text', text: `Analyze AWS cost variance for ${args.account}. Use ghost.costs.compare for ${args.current_period} versus ${args.comparison_period}, reconcile authoritative totals, break changes down by service and account, and identify uncertainty.` } }] }))
 
   server.registerPrompt('review-security-posture', {
     title: 'Review security posture', description: 'Review account security findings and recent audit activity.', argsSchema: accountArgs
@@ -159,7 +159,7 @@ function registerPrompts(server: McpServer) {
 
 export async function createGhostMcpServer(context: McpRequestContext): Promise<McpServer> {
   const principal = getMcpPrincipal(context.authInfo)
-  const server = new McpServer({ name: 'ghost-aws', version: '2.0.0' }, {
+  const server = new McpServer({ name: 'ghost-aws', version: '2.1.0' }, {
     instructions: ghostMcpInstructions,
     cacheHints: {
       'server/discover': { ttlMs: 300_000, cacheScope: 'private' },

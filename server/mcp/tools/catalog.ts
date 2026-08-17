@@ -27,8 +27,11 @@ import { analyzeBucketPolicy } from '../../utils/s3-policy-analyzer'
 import {
   getOrganizationSummary,
   getOrganizationTimeline,
+  getAccountDeploymentHealthData,
   getPipelineByIdWithDetails,
   getPipelineRunsForAccount,
+  getPlannedVsAppliedSummary,
+  getUnappliedResources,
   searchResourceAcrossAccounts
 } from '../../utils/athena-pipeline-queries'
 import { queryAIUsage } from '../../utils/ai-usage-query'
@@ -44,10 +47,12 @@ import {
   getUserThreads,
   updateThread
 } from '../../utils/chat-threads'
-import { createDatasetExportJob, getDatasetExportJob, queryDatasetExportJobs } from '../../utils/dataset-export-jobs'
+import { cancelDatasetExportJob, createDatasetExportJob, getDatasetExportJob, queryDatasetExportJobs } from '../../utils/dataset-export-jobs'
+import { setNotificationMute, setNotificationStatus } from '../../utils/notification-service'
 import { getDatasetReportConfigErrors } from '../../utils/dataset-report-validation'
 import { listUserReports } from '../../utils/scheduled-reports'
 import { getLatestAnalysis, getInstanceClassifications } from '../../utils/utilization-persistence'
+import { buildInstanceHealth } from '../../utils/instance-health'
 import { getAnnualBudgetArray, getPeriodBudget } from '../../../shared/utils/budget-utils'
 import type { DatasetReportConfig } from '../../../shared/types/dataset-reports'
 import type { NotificationCategory, NotificationStatus } from '../../../shared/types/notifications'
@@ -70,6 +75,8 @@ import { decodeCursor, encodeCursor, normalizeLimit, toolError, toolRenderedOutp
 import { runIdempotent } from '../idempotency'
 import { buildMcpCostDashboard } from '../cost-dashboard'
 import { costScopeMetadata, normalizeCostDateRange, normalizeCostForecastRange, resolveCostScope } from '../cost-scope'
+import { compareMcpCosts } from '../cost-comparison'
+import { queryCostAnomalies } from '../../utils/cost-anomalies'
 import { buildPersonalAccountContext } from '../personal-account-context'
 import { advancedQueryGuidance, isCentralAccount } from '../guidance'
 import {
@@ -188,13 +195,43 @@ export function registerCatalogTools(
   const searchPipelines = async (args: any) => {
     const days = boundedInteger(args.days, { name: 'days', minimum: 1, maximum: 90, fallback: 30 })
     const limit = boundedInteger(args.limit, { name: 'limit', minimum: 1, maximum: 100, fallback: 25 })
+    const mode = args.mode || 'auto'
     if (args.environment && String(args.environment).toLowerCase() !== 'auto' && operationalEnvironment(args.environment) !== 'govcloud') {
       const error = new Error('Pipeline telemetry is stored in GovCloud; environment must be auto or govcloud.')
       error.name = 'INVALID_ENVIRONMENT'
       throw error
     }
     const scope = await resolveOperationalScope(args.account, 'govcloud')
-    if (args.query) {
+    if (mode === 'overview' && (scope.accounts.length || args.query)) {
+      const error = new Error('Pipeline overview mode does not accept account or query filters.')
+      error.name = 'CONFLICTING_FILTERS'
+      throw error
+    }
+    if (mode === 'health' || mode === 'drift') {
+      if (scope.accounts.length !== 1) {
+        const error = new Error(`Pipeline ${mode} mode requires exactly one account.`)
+        error.name = 'ACCOUNT_REQUIRED'
+        throw error
+      }
+      const account = scope.accounts[0]!
+      if (mode === 'health') {
+        const result = await getAccountDeploymentHealthData(account.selectedAccountId, days, 'govcloud')
+        return toolSuccess({ mode, account, result }, 'Pipeline deployment health loaded.', 'Athena pipeline telemetry', { resolvedScope: scopeMetadata(scope), appliedFilters: { days } })
+      }
+      const [summary, unappliedResources] = await Promise.all([
+        getPlannedVsAppliedSummary(account.selectedAccountId, days, 'govcloud'),
+        getUnappliedResources(account.selectedAccountId, days, 'govcloud')
+      ])
+      return toolSuccess({ mode, account, summary, unappliedResources: unappliedResources.slice(0, limit), truncated: unappliedResources.length > limit }, 'Pipeline drift evidence loaded.', 'Athena pipeline telemetry', {
+        resolvedScope: scopeMetadata(scope), appliedFilters: { days, limit }, warnings: unappliedResources.length > limit ? [`Only the first ${limit} unapplied resources are included.`] : undefined
+      })
+    }
+    if (mode === 'resource_search' || (mode === 'auto' && args.query)) {
+      if (!args.query) {
+        const error = new Error('Pipeline resource_search mode requires query.')
+        error.name = 'QUERY_REQUIRED'
+        throw error
+      }
       if (scope.accounts.length > 1) {
         const error = new Error('Pipeline resource search accepts one account at a time.')
         error.name = 'TOO_MANY_ACCOUNTS'
@@ -203,7 +240,12 @@ export function registerCatalogTools(
       const result = await searchResourceAcrossAccounts(args.query, days, scope.operationalAccountIds[0], 'govcloud')
       return toolSuccess({ mode: 'resource_search', result }, 'Pipeline resource search complete.', 'Athena pipeline telemetry', { resolvedScope: scopeMetadata(scope), appliedFilters: { query: args.query, days } })
     }
-    if (scope.accounts.length) {
+    if (mode === 'account_runs' || (mode === 'auto' && scope.accounts.length)) {
+      if (!scope.accounts.length) {
+        const error = new Error('Pipeline account_runs mode requires at least one account.')
+        error.name = 'ACCOUNT_REQUIRED'
+        throw error
+      }
       const accounts = await Promise.all(scope.accounts.map(async account => ({ account, runs: await getPipelineRunsForAccount(account.selectedAccountId, days, 'govcloud', limit) })))
       return toolSuccess({ mode: 'account_runs', accounts }, 'Account pipeline runs loaded.', 'Athena pipeline telemetry', { resolvedScope: scopeMetadata(scope), appliedFilters: { days, limit } })
     }
@@ -338,6 +380,51 @@ export function registerCatalogTools(
         groupBy: args.group_by === 'NONE' ? undefined : [{ type: 'DIMENSION', key: args.group_by }]
       }, args.environment, scope.payerAccountId)
       return toolSuccess(response.dataset, `Cost query returned ${response.dataset.reconciliation.authoritativeTotal.toFixed(2)} USD.`, 'AWS Cost Explorer', { resolvedScope: costScopeMetadata(scope) })
+    }
+  })
+
+  read({
+    name: 'ghost.costs.compare', title: 'Compare AWS cost periods', description: 'Compare two validated cost periods with reconciled totals plus service and account deltas.',
+    inputSchema: z.object({
+      current_start_date: z.string(), current_end_date: z.string(),
+      comparison_start_date: z.string(), comparison_end_date: z.string(),
+      environment: costEnvironmentSchema,
+      mode: z.enum(['billable', 'proforma']).default('proforma'),
+      account_identifiers: accountIdentifiersSchema
+    }),
+    getAuditTargetIds: args => args.account_identifiers,
+    handler: async args => {
+      const scope = await resolveCostScope({ identifiers: args.account_identifiers, environment: args.environment, mode: args.mode })
+      const result = await compareMcpCosts({
+        scope,
+        current: { start_date: args.current_start_date, end_date: args.current_end_date },
+        comparison: { start_date: args.comparison_start_date, end_date: args.comparison_end_date }
+      })
+      return toolSuccess(result, `Cost changed by ${result.totalDelta.toFixed(2)} USD between the two periods.`, 'AWS Cost Explorer', {
+        resolvedScope: costScopeMetadata(scope),
+        warnings: result.warnings.length ? result.warnings : undefined
+      })
+    }
+  })
+
+  read({
+    name: 'ghost.costs.anomalies', title: 'List AWS cost anomalies', description: 'Return bounded AWS Cost Anomaly Detection results with observed-window and confidence metadata.',
+    inputSchema: z.object({
+      account_identifier: z.string().optional(),
+      environment: costEnvironmentSchema,
+      lookback_days: z.number().int().min(1).max(90).default(30),
+      limit: z.number().int().min(1).max(100).default(25),
+      cursor: z.string().optional()
+    }),
+    getAuditTargetIds: args => args.account_identifier ? [args.account_identifier] : undefined,
+    handler: async args => {
+      const scope = await resolveCostScope({ identifiers: args.account_identifier ? [args.account_identifier] : [], environment: args.environment, mode: 'billable' })
+      const result = await queryCostAnomalies({ environment: args.environment, accountId: scope.linkedAccountIds[0], daysBack: args.lookback_days, limit: args.limit, cursor: args.cursor })
+      return toolSuccess(result, `Returned ${result.anomalies.length} matching cost anomaly(ies).`, 'AWS Cost Anomaly Detection', {
+        nextCursor: result.nextCursor,
+        resolvedScope: costScopeMetadata(scope),
+        warnings: result.confidence.exhaustive ? undefined : ['More anomaly records are available.']
+      })
     }
   })
 
@@ -859,6 +946,26 @@ export function registerCatalogTools(
   })
 
   read({
+    name: 'ghost.instances.health', title: 'Get EC2 instance health', description: 'Return bounded patch, security, vulnerability, alarm, and inventory evidence for one EC2 instance.',
+    inputSchema: z.object({
+      account_identifier: z.string().min(1),
+      instance_id: z.string().regex(/^i-[0-9a-f]{8,17}$/),
+      environment: operationalEnvironmentSchema,
+      region: z.string().regex(/^(?:[a-z]{2}(?:-gov)?-[a-z]+-\d)$/).optional(),
+      lookback_days: z.number().int().min(1).max(90).default(30),
+      limit: z.number().int().min(1).max(25).default(10)
+    }),
+    getAuditTargetIds: args => [args.account_identifier],
+    handler: async args => {
+      const { account } = await resolveAccount(args.account_identifier)
+      const result = await buildInstanceHealth({ instanceId: args.instance_id, account, environment: args.environment, region: args.region, lookbackDays: args.lookback_days, limit: args.limit })
+      return toolSuccess(result, `Instance health is ${result.healthStatus} with score ${result.healthScore}.`, 'AWS Config, Systems Manager, Security Hub, Inspector, and CloudWatch', {
+        warnings: result.partialData ? ['One or more instance health domains were unavailable.'] : undefined
+      })
+    }
+  })
+
+  read({
     name: 'ghost.security.summary', title: 'Get security summary', description: 'Return a 90-day Security Hub and Inspector posture summary, including vulnerability findings and Security Hub control results. This is distinct from AWS Config rule compliance and SSM patch compliance.',
     inputSchema: z.object({ account_id: z.string().optional(), environment: operationalEnvironmentSchema }),
     getAuditTargetIds: args => args.account_id ? [args.account_id] : undefined,
@@ -1023,6 +1130,7 @@ export function registerCatalogTools(
     inputSchema: z.object({
       account: flexibleStringListSchema,
       environment: flexibleEnvironmentSchema,
+      mode: z.enum(['auto', 'overview', 'account_runs', 'resource_search', 'health', 'drift']).default('auto'),
       query: z.string().optional(),
       days: flexibleIntegerSchema,
       limit: flexibleIntegerSchema
@@ -1123,6 +1231,30 @@ export function registerCatalogTools(
       return toolSuccess(notifications, `Loaded ${notifications.notifications.length} notification(s).`, 'GHOST user notification inbox', {
         nextCursor: notifications.nextKey || undefined
       })
+    }
+  })
+
+  collaborate({
+    name: 'ghost.notifications.action', title: 'Update my notifications', description: 'Mark one notification read, archive it, or mute/unmute personal notifications.',
+    inputSchema: z.discriminatedUnion('action', [
+      z.object({ action: z.literal('mark_read'), notification_id: z.string().min(1), idempotency_key: idempotencyKeySchema() }),
+      z.object({ action: z.literal('archive'), notification_id: z.string().min(1), idempotency_key: idempotencyKeySchema() }),
+      z.object({ action: z.literal('mute'), duration: z.enum(['1h', '4h', '24h']).default('1h'), idempotency_key: idempotencyKeySchema() }),
+      z.object({ action: z.literal('unmute'), idempotency_key: idempotencyKeySchema() })
+    ]),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    handler: async args => {
+      const request = { action: args.action, notificationId: 'notification_id' in args ? args.notification_id : undefined, duration: 'duration' in args ? args.duration : undefined }
+      const result = await runIdempotent(principal, 'ghost.notifications.action', args.idempotency_key, request, async () => {
+        if (args.action === 'mark_read' || args.action === 'archive') {
+          const updated = await setNotificationStatus(principal.email, args.notification_id, args.action === 'mark_read' ? 'read' : 'archived')
+          if (!updated) throw Object.assign(new Error('Notification not found.'), { code: 'NOTIFICATION_NOT_FOUND' })
+          return { action: args.action, notificationId: args.notification_id, status: args.action === 'mark_read' ? 'read' : 'archived' }
+        }
+        const mute = await setNotificationMute(principal.email, { duration: args.action === 'mute' ? args.duration : undefined, unmute: args.action === 'unmute' })
+        return { action: args.action, ...mute }
+      }, value => value, async reference => reference)
+      return toolSuccess(result.value, result.replayed ? 'Existing notification action returned.' : 'Notification action completed.', 'GHOST user notification inbox')
     }
   })
 
@@ -1351,6 +1483,21 @@ export function registerCatalogTools(
     handler: async args => {
       const job = await getDatasetExportJob(args.job_id, principal.email)
       return job ? toolSuccess(job, 'Dataset export status loaded.', 'GHOST dataset export queue') : toolError('EXPORT_NOT_FOUND', 'Export job not found.')
+    }
+  })
+
+  collaborate({
+    name: 'ghost.reports.cancel_export', title: 'Cancel a dataset export', description: 'Cancel an authenticated-user-owned queued or running dataset export.',
+    inputSchema: z.object({ job_id: z.string().uuid(), idempotency_key: idempotencyKeySchema() }),
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    handler: async args => {
+      const result = await runIdempotent(principal, 'ghost.reports.cancel_export', args.idempotency_key, { jobId: args.job_id }, async () => {
+        const job = await getDatasetExportJob(args.job_id, principal.email)
+        if (!job) throw Object.assign(new Error('Export job not found.'), { code: 'EXPORT_NOT_FOUND' })
+        if (!await cancelDatasetExportJob(args.job_id, principal.email)) throw Object.assign(new Error(`Export cannot be canceled from status ${job.status}.`), { code: 'EXPORT_NOT_CANCELABLE' })
+        return { jobId: args.job_id, canceled: true, previousStatus: job.status }
+      }, value => value, async reference => reference)
+      return toolSuccess(result.value, result.replayed ? 'Existing cancellation result returned.' : 'Dataset export canceled.', 'GHOST dataset export queue')
     }
   })
 
