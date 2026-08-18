@@ -9,9 +9,12 @@
         <h1 class="text-2xl font-semibold text-gray-950 dark:text-white">Operations cost view</h1>
         <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">GovCloud account 650505514334</p>
       </div>
-      <UButton icon="i-heroicons-arrow-path" color="gray" variant="soft" :loading="pending" @click="refresh()">
-        Refresh
-      </UButton>
+      <div class="flex flex-wrap items-end gap-2">
+        <label class="text-xs font-medium text-gray-600 dark:text-gray-400">Allocated month
+          <input v-model="allocationMonth" type="month" class="mt-1 block rounded border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900">
+        </label>
+        <UButton icon="i-heroicons-arrow-path" color="gray" variant="soft" :loading="pending" @click="refresh()">Refresh</UButton>
+      </div>
     </header>
 
     <UAlert
@@ -51,6 +54,52 @@
         title="Actuals and projections use different clocks"
         :description="actualsNote"
       />
+
+      <section class="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+        <header class="flex flex-col gap-3 border-b border-gray-200 p-4 dark:border-gray-800 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 class="font-semibold text-gray-950 dark:text-white">Allocated usage</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400">Closed-month direct usage allocated from the account pro forma total</p>
+          </div>
+          <div v-if="report.allocation.status === 'available'" class="flex gap-2">
+            <UButton :to="exportUrl('csv')" icon="i-heroicons-arrow-down-tray" color="gray" variant="soft">CSV</UButton>
+            <UButton :to="exportUrl('xlsx')" icon="i-heroicons-table-cells" color="gray" variant="soft">XLSX</UButton>
+          </div>
+        </header>
+        <UAlert
+          v-if="report.allocation.status !== 'available'"
+          class="m-4"
+          :color="report.allocation.status === 'pending' ? 'yellow' : 'red'"
+          variant="soft"
+          :title="report.allocation.status === 'pending' ? 'Allocation is not finalized' : 'Allocation is unavailable'"
+          :description="report.allocation.issues.join(' ') || 'Cost data is incomplete.'"
+        />
+        <template v-else>
+          <div class="grid gap-3 border-b border-gray-200 p-4 dark:border-gray-800 sm:grid-cols-3">
+            <div><p class="text-xs uppercase text-gray-500">Tenant direct usage</p><p class="text-lg font-semibold">{{ money(report.allocation.allocated_direct_usd) }}</p></div>
+            <div><p class="text-xs uppercase text-gray-500">GDMS IT residual</p><p class="text-lg font-semibold">{{ money(report.allocation.shared_residual_usd) }}</p></div>
+            <div><p class="text-xs uppercase text-gray-500">Pro forma account total</p><p class="text-lg font-semibold">{{ money(report.allocation.proforma_total_usd) }}</p></div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full min-w-[1080px] text-left text-sm">
+              <thead class="border-b border-gray-200 text-xs text-gray-500 dark:border-gray-800"><tr>
+                <th class="px-4 py-2">Department / CostCenter</th><th class="px-3 py-2">Team / TenantID</th><th class="px-3 py-2">Project</th><th class="px-3 py-2">Cost managers</th><th class="px-3 py-2 text-right">Billable direct</th><th class="px-4 py-2 text-right">Allocated pro forma</th>
+              </tr></thead>
+              <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                <tr v-for="row in report.allocation.rows" :key="`${row.tenant_id}:${row.cost_center}`">
+                  <td class="px-4 py-3"><p>{{ row.department || 'Department not recorded' }}</p><p class="font-mono text-xs text-gray-500">{{ row.cost_center }}</p></td>
+                  <td class="px-3 py-3"><p>{{ row.team_id || 'Team not mapped' }}</p><p class="font-mono text-xs text-gray-500">{{ row.tenant_id }}</p></td>
+                  <td class="px-3 py-3">{{ row.project || 'Not recorded' }}</td>
+                  <td class="px-3 py-3 text-xs">{{ row.cost_manager_emails.join(', ') || 'Not recorded' }}</td>
+                  <td class="px-3 py-3 text-right tabular-nums">{{ money(row.billable_direct_usd) }}</td>
+                  <td class="px-4 py-3 text-right font-medium tabular-nums">{{ money(row.allocated_proforma_usd) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p v-if="report.allocation.issues.length" class="border-t border-gray-200 px-4 py-3 text-xs text-amber-700 dark:border-gray-800 dark:text-amber-400">{{ report.allocation.issues.join(' ') }}</p>
+        </template>
+      </section>
 
       <section class="overflow-hidden rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
         <header class="flex flex-col gap-3 border-b border-gray-200 p-4 dark:border-gray-800 sm:flex-row sm:items-center sm:justify-between">
@@ -142,10 +191,26 @@ interface CostReport {
   actuals: { billable_mtd_usd: number | null; proforma_mtd_usd: number | null }
   projections: { scheduled_monthly_usd: number; always_on_monthly_usd: number; schedule_savings_usd: number; unavailable_server_count: number }
   servers: ServerCost[]
+  allocation: {
+    status: 'available' | 'pending' | 'unavailable'
+    month: { start: string; end: string; data_through: string | null }
+    billable_total_usd: number | null
+    proforma_total_usd: number | null
+    allocated_direct_usd: number | null
+    shared_residual_usd: number | null
+    reconciled: boolean
+    issues: string[]
+    rows: Array<{ tenant_id: string; team_id: string; department: string; cost_center: string; project: string; owner: string; cost_manager_emails: string[]; billable_direct_usd: number; allocation_share: number; allocated_proforma_usd: number }>
+  }
 }
 
 const requestHeaders = useRequestHeaders(['cookie', 'authorization'])
-const { data, pending, error, refresh } = await useFetch<{ data: CostReport }>('/api/integrations/vmaas/costs', { headers: requestHeaders })
+const now = new Date()
+const allocationMonth = ref(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)).toISOString().slice(0, 7))
+const { data, pending, error, refresh } = await useFetch<{ data: CostReport }>('/api/integrations/vmaas/costs', {
+  headers: requestHeaders,
+  query: computed(() => ({ month: allocationMonth.value }))
+})
 const report = computed(() => data.value?.data || null)
 const search = ref('')
 const osFilter = ref('all')
@@ -196,5 +261,9 @@ function hourly(value: number | null): string {
 
 function number(value: number): string {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 }).format(value)
+}
+
+function exportUrl(format: 'csv' | 'xlsx'): string {
+  return `/api/integrations/vmaas/allocation-export?month=${encodeURIComponent(allocationMonth.value)}&format=${format}`
 }
 </script>

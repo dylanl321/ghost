@@ -19,6 +19,7 @@ export const VMAAS_ACCOUNT_ID = '650505514334'
 export const VMAAS_BILLING_ACCOUNT_ID = '871049984747'
 export const VMAAS_REGION = 'us-gov-west-1'
 const TEAM_TABLE = 'vmaas-team-registry'
+const TENANT_TABLE = 'vmaas-tenant-registry'
 const SCHEDULER_TABLE = 'SchedulerConfig'
 const HOUR_MS = 60 * 60 * 1000
 
@@ -83,6 +84,38 @@ export interface VmaasCostReport {
     unavailable_server_count: number
   }
   servers: VmaasServerCost[]
+  allocation: VmaasMonthlyAllocation
+}
+
+export interface VmaasAllocationRow {
+  tenant_id: string
+  team_id: string
+  department: string
+  cost_center: string
+  project: string
+  owner: string
+  cost_manager_emails: string[]
+  billable_direct_usd: number
+  allocation_share: number
+  allocated_proforma_usd: number
+}
+
+export interface VmaasMonthlyAllocation {
+  status: 'available' | 'pending' | 'unavailable'
+  month: { start: string; end: string; data_through: string | null }
+  billable_total_usd: number | null
+  proforma_total_usd: number | null
+  allocated_direct_usd: number | null
+  shared_residual_usd: number | null
+  reconciled: boolean
+  issues: string[]
+  rows: VmaasAllocationRow[]
+}
+
+export interface VmaasBillableGroup {
+  tenant_id: string
+  cost_center: string
+  billable_direct_usd: number
 }
 
 interface LocalParts {
@@ -186,6 +219,59 @@ function parseWeekdays(value: SchedulerPeriod['weekdays']): Set<number> | null {
 function round(value: number, digits = 2): number {
   const factor = 10 ** digits
   return Math.round((value + Number.EPSILON) * factor) / factor
+}
+
+function closedMonthRange(month?: string, referenceDate = new Date()): { start: string; end: string } {
+  const match = month ? /^(\d{4})-(\d{2})$/.exec(month) : null
+  let year: number
+  let monthIndex: number
+  if (month) {
+    if (!match) throw new Error('VMaaS allocation month must use YYYY-MM')
+    year = Number(match[1])
+    monthIndex = Number(match[2]) - 1
+    if (monthIndex < 0 || monthIndex > 11) throw new Error('VMaaS allocation month is invalid')
+  } else {
+    year = referenceDate.getUTCFullYear()
+    monthIndex = referenceDate.getUTCMonth() - 1
+  }
+  const start = new Date(Date.UTC(year, monthIndex, 1))
+  const end = new Date(Date.UTC(year, monthIndex + 1, 1))
+  if (end > new Date(Date.UTC(referenceDate.getUTCFullYear(), referenceDate.getUTCMonth(), 1))) {
+    throw new Error('VMaaS allocation reports are available only for closed months')
+  }
+  return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) }
+}
+
+function tagValue(key: string, value: string | undefined): string {
+  const raw = String(value || '')
+  const prefix = `${key}$`
+  return raw.startsWith(prefix) ? raw.slice(prefix.length) : raw
+}
+
+export function allocateVmaasActuals(input: {
+  billableTotal: number
+  proformaTotal: number
+  groups: VmaasBillableGroup[]
+}): { rows: Array<VmaasBillableGroup & { allocation_share: number; allocated_proforma_usd: number }>; allocatedDirect: number; sharedResidual: number; reconciled: boolean } {
+  if (!Number.isFinite(input.billableTotal) || input.billableTotal <= 0) throw new Error('billable total must be positive')
+  if (!Number.isFinite(input.proformaTotal)) throw new Error('pro forma total is unavailable')
+  if (!input.groups.length) throw new Error('no tenant-tagged direct usage was found')
+  const rows = input.groups.map(group => {
+    const share = group.billable_direct_usd / input.billableTotal
+    return {
+      ...group,
+      allocation_share: share,
+      allocated_proforma_usd: round(input.proformaTotal * share)
+    }
+  })
+  const allocatedDirect = round(rows.reduce((total, row) => total + row.allocated_proforma_usd, 0))
+  const sharedResidual = round(input.proformaTotal - allocatedDirect)
+  return {
+    rows,
+    allocatedDirect,
+    sharedResidual,
+    reconciled: Math.abs(round(allocatedDirect + sharedResidual - input.proformaTotal)) <= 0.01
+  }
 }
 
 /** Calculate a full calendar month's elapsed runtime from the union of scheduler periods. */
@@ -363,6 +449,82 @@ async function loadActual(source: 'billable' | 'proforma', billingAccountId: str
   }
 }
 
+async function loadAllocationInputs(month: string | undefined, referenceDate: Date) {
+  const range = closedMonthRange(month, referenceDate)
+  const accountFilter = { Dimensions: { Key: 'LINKED_ACCOUNT', Values: [VMAAS_BILLING_ACCOUNT_ID], MatchOptions: ['EQUALS'] } }
+  const tenantFilter = {
+    And: [
+      accountFilter,
+      { Tags: { Key: 'Module', Values: ['shared-vpc-tenant'], MatchOptions: ['EQUALS'] } }
+    ]
+  }
+  const [taggedBillable, accountBillable, proforma] = await Promise.all([
+    queryCostDataset({
+      startDate: range.start,
+      endDate: range.end,
+      granularity: 'MONTHLY',
+      metrics: ['UnblendedCost', 'NetUnblendedCost'],
+      groupBy: [{ type: 'TAG', key: 'TenantID' }, { type: 'TAG', key: 'CostCenter' }],
+      filter: tenantFilter
+    }, {
+      environment: 'commercial',
+      source: 'billable',
+      accountId: process.env.AWS_MASTER_ACCOUNT_ID || '205950196477'
+    }),
+    queryCostDataset({
+      startDate: range.start,
+      endDate: range.end,
+      granularity: 'MONTHLY',
+      metrics: ['UnblendedCost', 'NetUnblendedCost'],
+      filter: accountFilter
+    }, {
+      environment: 'commercial',
+      source: 'billable',
+      accountId: process.env.AWS_MASTER_ACCOUNT_ID || '205950196477'
+    }),
+    queryCostDataset({
+      startDate: range.start,
+      endDate: range.end,
+      granularity: 'MONTHLY',
+      metrics: ['UnblendedCost'],
+      filter: accountFilter
+    }, {
+      environment: 'commercial',
+      source: 'proforma',
+      accountId: process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832'
+    })
+  ])
+  const groups = new Map<string, VmaasBillableGroup>()
+  const issues: string[] = []
+  for (const period of taggedBillable.resultsByTime) {
+    for (const group of period.Groups || []) {
+      const tenantId = tagValue('TenantID', group.Keys?.[0])
+      const costCenter = tagValue('CostCenter', group.Keys?.[1])
+      const amount = Number(group.Metrics?.NetUnblendedCost?.Amount || 0)
+      if (!tenantId || !costCenter) {
+        if (amount) issues.push('Tenant Module usage is missing TenantID or CostCenter.')
+        continue
+      }
+      const key = `${tenantId}\0${costCenter}`
+      const current = groups.get(key)
+      groups.set(key, {
+        tenant_id: tenantId,
+        cost_center: costCenter,
+        billable_direct_usd: (current?.billable_direct_usd || 0) + amount
+      })
+    }
+  }
+  return {
+    range,
+    groups: [...groups.values()],
+    billableTotal: Number(accountBillable.total.NetUnblendedCost?.Amount || 0),
+    proformaTotal: Number(proforma.total.UnblendedCost?.Amount || 0),
+    estimated: taggedBillable.dataset.estimated || accountBillable.dataset.estimated || proforma.dataset.estimated,
+    dataThrough: proforma.dataset.dataThroughDate || accountBillable.dataset.dataThroughDate,
+    issues
+  }
+}
+
 function sum(values: Array<number | null>): number {
   return values.reduce<number>((total, value) => total + (value || 0), 0)
 }
@@ -376,16 +538,19 @@ export function aggregateVmaasProjections(servers: VmaasServerCost[]) {
   }
 }
 
-async function buildReport(referenceDate = new Date()): Promise<VmaasCostReport> {
-  const [instances, teams, schedulerRows, billable, proforma] = await Promise.all([
+async function buildReport(referenceDate = new Date(), allocationMonth?: string): Promise<VmaasCostReport> {
+  const [instances, teams, tenants, schedulerRows, billable, proforma, allocationInput] = await Promise.all([
     loadInstances(),
     scanTable(TEAM_TABLE),
+    scanTable(TENANT_TABLE),
     scanTable(SCHEDULER_TABLE),
     loadActual('billable', process.env.AWS_MASTER_ACCOUNT_ID || '205950196477', referenceDate),
-    loadActual('proforma', process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832', referenceDate)
+    loadActual('proforma', process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832', referenceDate),
+    loadAllocationInputs(allocationMonth, referenceDate)
   ])
   const volumes = await loadVolumes(instances)
   const teamMap = new Map(teams.map(team => [String(team.team_id || ''), team]))
+  const tenantMap = new Map(tenants.map(tenant => [String(tenant.tenant_id || ''), tenant]))
   const scheduleMap = new Map(schedulerRows.filter(row => row.type === 'schedule').map(row => [String(row.name), row as SchedulerSchedule]))
   const periods = schedulerRows.filter(row => row.type === 'period') as SchedulerPeriod[]
 
@@ -448,6 +613,68 @@ async function buildReport(referenceDate = new Date()): Promise<VmaasCostReport>
   }))
 
   servers.sort((a, b) => a.team_id.localeCompare(b.team_id) || a.name.localeCompare(b.name))
+  const allocationIssues = [...allocationInput.issues]
+  const costCentersByTenant = new Map<string, Set<string>>()
+  for (const group of allocationInput.groups) {
+    if (!costCentersByTenant.has(group.tenant_id)) costCentersByTenant.set(group.tenant_id, new Set())
+    costCentersByTenant.get(group.tenant_id)!.add(group.cost_center)
+  }
+  for (const [tenantId, values] of costCentersByTenant) {
+    if (values.size > 1) allocationIssues.push(`TenantID ${tenantId} appears under multiple CostCenter values.`)
+  }
+  let allocation: VmaasMonthlyAllocation
+  try {
+    if (allocationInput.estimated) throw new Error('AWS still marks the selected month as estimated')
+    const calculated = allocateVmaasActuals({
+      billableTotal: allocationInput.billableTotal,
+      proformaTotal: allocationInput.proformaTotal,
+      groups: allocationInput.groups
+    })
+    const allocationRows: VmaasAllocationRow[] = calculated.rows.map(row => {
+      const tenant = tenantMap.get(row.tenant_id) || {}
+      const config = typeof tenant.config === 'string' ? JSON.parse(tenant.config) : (tenant.config || {})
+      const teamId = String(tenant.team_id || '')
+      const team = teamMap.get(teamId) || {}
+      if (!teamId) allocationIssues.push(`TenantID ${row.tenant_id} has no team registry mapping.`)
+      if (team.cost_center && String(team.cost_center) !== row.cost_center) {
+        allocationIssues.push(`TenantID ${row.tenant_id} CostCenter does not match its team record.`)
+      }
+      if (!Array.isArray(team.cost_manager_emails) || team.cost_manager_emails.length === 0) {
+        allocationIssues.push(`Team ${teamId || '(unmapped)'} has no registered cost manager.`)
+      }
+      return {
+        ...row,
+        team_id: teamId,
+        department: String(team.department || ''),
+        project: String(config.project_name || ''),
+        owner: String(config.owner || tenant.requested_by || ''),
+        cost_manager_emails: Array.isArray(team.cost_manager_emails) ? team.cost_manager_emails.map(String) : []
+      }
+    })
+    allocation = {
+      status: allocationIssues.some(issue => /missing TenantID|no team|does not match|multiple CostCenter|no registered cost manager/.test(issue)) ? 'unavailable' : 'available',
+      month: { start: allocationInput.range.start, end: allocationInput.range.end, data_through: allocationInput.dataThrough },
+      billable_total_usd: round(allocationInput.billableTotal),
+      proforma_total_usd: round(allocationInput.proformaTotal),
+      allocated_direct_usd: calculated.allocatedDirect,
+      shared_residual_usd: calculated.sharedResidual,
+      reconciled: calculated.reconciled,
+      issues: allocationIssues,
+      rows: allocationRows.sort((a, b) => a.department.localeCompare(b.department) || a.team_id.localeCompare(b.team_id) || a.tenant_id.localeCompare(b.tenant_id))
+    }
+  } catch (error) {
+    allocation = {
+      status: allocationInput.estimated ? 'pending' : 'unavailable',
+      month: { start: allocationInput.range.start, end: allocationInput.range.end, data_through: allocationInput.dataThrough },
+      billable_total_usd: Number.isFinite(allocationInput.billableTotal) ? round(allocationInput.billableTotal) : null,
+      proforma_total_usd: Number.isFinite(allocationInput.proformaTotal) ? round(allocationInput.proformaTotal) : null,
+      allocated_direct_usd: null,
+      shared_residual_usd: null,
+      reconciled: false,
+      issues: [...allocationIssues, error instanceof Error ? error.message : String(error)],
+      rows: []
+    }
+  }
   const nextMonth = new Date(Date.UTC(referenceDate.getUTCFullYear(), referenceDate.getUTCMonth() + 1, 1))
   return {
     account_id: VMAAS_ACCOUNT_ID,
@@ -465,12 +692,14 @@ async function buildReport(referenceDate = new Date()): Promise<VmaasCostReport>
       available: Boolean(billable || proforma)
     },
     projections: aggregateVmaasProjections(servers),
-    servers
+    servers,
+    allocation
   }
 }
 
-export async function getVmaasCostReport(): Promise<VmaasCostReport> {
-  return costCache.getOrSet('vmaas:costs:650505514334', () => buildReport(), {
+export async function getVmaasCostReport(month?: string): Promise<VmaasCostReport> {
+  const cacheMonth = month || closedMonthRange().start.slice(0, 7)
+  return costCache.getOrSet(`vmaas:costs:650505514334:${cacheMonth}`, () => buildReport(new Date(), month), {
     ttl: 300,
     tags: [CacheTags.COSTS, 'vmaas']
   })
