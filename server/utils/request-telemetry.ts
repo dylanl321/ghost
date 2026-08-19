@@ -27,6 +27,9 @@ export function normalizePath(path: string): string {
   return pathname
     // Replace UUIDs (8-4-4-4-12 hex)
     .replace(/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '/:id')
+    // Replace common AWS resource IDs to avoid per-resource metric cardinality
+    // and leaking infrastructure identifiers into route/error telemetry.
+    .replace(/\/(?:i|vol|snap|eni|subnet|sg)-[0-9a-f]{8,17}/gi, '/:awsResourceId')
     // Replace long hex strings (8+ chars)
     .replace(/\/[0-9a-f]{8,}/gi, '/:id')
     // Replace pure numeric segments

@@ -33,6 +33,11 @@ test('normalizePath strips query strings and collapses dynamic segments', () => 
     '/api/accounts/:id/detail',
   )
   assert.equal(normalizePath('/api/items/12345'), '/api/items/:num')
+  assert.equal(
+    normalizePath('/api/integrations/vmaas/instances/i-05cd04ddf94b4c099/cost'),
+    '/api/integrations/vmaas/instances/:awsResourceId/cost',
+  )
+  assert.equal(normalizePath('/api/volumes/vol-0a2dad43f0de284a8'), '/api/volumes/:awsResourceId')
 })
 
 test('sanitizeErrorText collapses control characters and bounds length', () => {
