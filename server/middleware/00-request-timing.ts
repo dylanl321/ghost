@@ -8,21 +8,10 @@
  * metric filters can extract APILatencyMs and backgroundJobActive.
  */
 
-import { defineEventHandler, getRequestURL } from 'h3'
+import { defineEventHandler, getRequestURL, getRequestHeader, setResponseHeader } from 'h3'
+import { randomUUID } from 'node:crypto'
 import { isAnyJobRunning, getActiveJobs } from '../utils/job-tracker'
-
-// Normalize dynamic path segments for Log Insights grouping
-function normalizePath(path: string): string {
-  return path
-    // Strip query string
-    .split('?')[0]
-    // Replace UUIDs (8-4-4-4-12 hex)
-    .replace(/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '/:id')
-    // Replace long hex strings (8+ chars)
-    .replace(/\/[0-9a-f]{8,}/gi, '/:id')
-    // Replace pure numeric segments
-    .replace(/\/\d+/g, '/:num')
-}
+import { normalizePath, isSafeRequestId } from '../utils/request-telemetry'
 
 export default defineEventHandler((event) => {
   const url = getRequestURL(event)
@@ -33,6 +22,13 @@ export default defineEventHandler((event) => {
     return
   }
 
+  // Establish a request id for end-to-end correlation. Accept an incoming
+  // x-request-id only if it is a safe bounded token; otherwise generate one.
+  const incoming = getRequestHeader(event, 'x-request-id')
+  const requestId = isSafeRequestId(incoming) ? incoming : randomUUID()
+  event.context.requestId = requestId
+  setResponseHeader(event, 'x-request-id', requestId)
+
   const start = performance.now()
 
   event.node.res.on('finish', () => {
@@ -41,6 +37,7 @@ export default defineEventHandler((event) => {
 
     const entry: Record<string, unknown> = {
       type: 'request',
+      requestId,
       method: event.method,
       path: normalizePath(pathname),
       statusCode: event.node.res.statusCode,
