@@ -18,6 +18,17 @@ import {
 const adminCache = new Map<string, { isAdmin: boolean, expiresAt: number }>()
 const ADMIN_CACHE_TTL = 10 * 60 * 1000 // 10 minutes
 
+// ADMIN_BYPASS is a deliberate, human-owned security decision for non-production
+// deployments and its behavior must not change. The warning is identical on every
+// admin/permission check, so emit it only once per process to avoid log noise
+// while still recording the posture.
+let adminBypassWarned = false
+function warnAdminBypassOnce(): void {
+  if (adminBypassWarned) return
+  adminBypassWarned = true
+  logger.warn('⚠️  ADMIN_BYPASS enabled - all authenticated users receive admin/all permissions')
+}
+
 // Periodic cleanup of expired cache entries (every 5 minutes)
 setInterval(() => {
   const now = Date.now()
@@ -41,7 +52,7 @@ export async function isUserAdmin(event: H3Event): Promise<boolean> {
 
   // Allow admin bypass via environment variable for non-production deployments
   if (process.env.ADMIN_BYPASS === 'true') {
-    logger.warn('⚠️  ADMIN_BYPASS enabled - all authenticated users have admin access')
+    warnAdminBypassOnce()
     return true
   }
 
@@ -146,7 +157,7 @@ export async function getUserPermissions(event: H3Event): Promise<Set<string>> {
 
   // Non-production bypass: same env flag isUserAdmin honours.
   if (process.env.ADMIN_BYPASS === 'true') {
-    logger.warn('⚠️  ADMIN_BYPASS enabled - granting all permissions')
+    warnAdminBypassOnce()
     const everything = ROLES.flatMap(r => r.permissions)
     return new Set<string>(everything)
   }
