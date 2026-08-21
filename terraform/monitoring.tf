@@ -399,6 +399,29 @@ resource "aws_cloudwatch_query_definition" "error_frequency" {
   EOT
 }
 
+resource "aws_cloudwatch_query_definition" "top_error_signatures" {
+  provider        = aws.target_deployment_account
+  name            = "${var.app_name}/Top Error Signatures"
+  log_group_names = [aws_cloudwatch_log_group.ecs.name]
+
+  # Structured-field query: matches lowercase logger severities (level = "error"
+  # or "fatal") and structured API error events (type = "api_error"), since raw
+  # @message never contains uppercase "ERROR". Grouping keys are bounded,
+  # low-cardinality signature fields — requestId is surfaced in detail via an
+  # example only, so recurring signatures collapse into one row instead of
+  # exploding into per-request cardinality.
+  query_string = <<-EOT
+    filter level = "error" or level = "fatal" or type = "api_error"
+    | stats count(*) as occurrences,
+            earliest(@timestamp) as first_seen,
+            latest(@timestamp) as last_seen,
+            max(requestId) as example_requestId
+      by level, type, errorName, statusCode, path, message
+    | sort occurrences desc
+    | limit 50
+  EOT
+}
+
 resource "aws_cloudwatch_query_definition" "errors_by_endpoint" {
   provider        = aws.target_deployment_account
   name            = "${var.app_name}/5XX Errors by Endpoint"
