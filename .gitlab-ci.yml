@@ -78,8 +78,14 @@ code_quality_check:
         echo "Runner did not provide CI_SERVER_TLS_CA_FILE; cannot securely access the internal npm registry."
         exit 1
       fi
+      # Trust the internal CA by APPENDING it to Node's built-in root store via
+      # NODE_EXTRA_CA_CERTS (honored by Node and npm >=7). Do NOT use
+      # `npm config set cafile`: that mechanism REPLACES the default public CA
+      # bundle with only this file, so the public registry (registry.npmjs.org,
+      # reached by `npm install -g npm@...`) fails cert validation with
+      # UNABLE_TO_GET_ISSUER_CERT_LOCALLY. Appending keeps both public and
+      # internal roots trusted without ever disabling TLS validation.
       export NODE_EXTRA_CA_CERTS="$CI_SERVER_TLS_CA_FILE"
-      npm config set cafile "$CI_SERVER_TLS_CA_FILE"
     - npm install -g npm@11.18.0
     - npm ci --legacy-peer-deps --no-audit --no-fund
   script:
