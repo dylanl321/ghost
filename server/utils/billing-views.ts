@@ -2,7 +2,6 @@ import { ListBillingViewsCommand } from '@aws-sdk/client-billing'
 import { getBillingClient } from '../lib/aws-client-factory'
 import { logger } from './logger'
 
-const PAYER_ACCOUNT_ID = process.env.AWS_MASTER_ACCOUNT_ID || '205950196477'
 const viewArnCache = new Map<string, string | null>()
 
 export interface BillingViewResolution {
@@ -18,7 +17,10 @@ export async function resolveBillingView(nameFragment: string): Promise<BillingV
   }
 
   try {
-    const client = await getBillingClient('commercial', 'us-east-1', PAYER_ACCOUNT_ID)
+    // Billing Conductor views are owned by the GDMS Cloud billing session.
+    // Do not assume a member/payer role here: it can list no views even though
+    // the direct Commercial session owns the Billing Conductor configuration.
+    const client = await getBillingClient('commercial', 'us-east-1')
     const response = await client.send(new ListBillingViewsCommand({}))
     const views = response.billingViews || []
     const availableNames = views.map(view => view.name).filter((name): name is string => Boolean(name))
