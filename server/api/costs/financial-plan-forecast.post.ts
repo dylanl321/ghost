@@ -15,6 +15,7 @@ const CHARGEBACK_VIEW_NAME = process.env.AWS_GDMS_CHARGEBACK_BILLING_VIEW_NAME |
 const DEV_ORG_VIEW_NAME = process.env.AWS_DEV_ORG_BILLING_VIEW_NAME || 'GDMS-DevOrg'
 const SAVINGS_PLAN_SERVICE = 'Savings Plans for AWS Compute usage'
 const EXCLUDED_RECORD_TYPES = ['SavingsPlanRecurringFee', 'SavingsPlanPurchase']
+const EXCLUDED_ACCOUNT_IDS = new Set(['110317593805'])
 
 interface ForecastComponent {
   id: string
@@ -37,7 +38,7 @@ function addForecast(data: Record<string, number>, forecast: any) {
 
 async function forecastComponents(components: ForecastComponent[], startDate: string, endDate: string, granularity: 'DAILY' | 'MONTHLY') {
   const byMonth: Record<string, number> = {}
-  const failures: string[] = []
+  const failures: Array<{ id: string; message: string }> = []
   const batchSize = 5
   for (let start = 0; start < components.length; start += batchSize) {
     const batch = components.slice(start, start + batchSize)
@@ -59,7 +60,10 @@ async function forecastComponents(components: ForecastComponent[], startDate: st
       else {
         const component = batch[index]
         logger.warn(`[FinancialPlanForecast] ${component.id} forecast failed:`, result.reason)
-        failures.push(component.id)
+        failures.push({
+          id: component.id,
+          message: result.reason instanceof Error ? result.reason.message : 'Unknown Cost Explorer error'
+        })
       }
     })
   }
@@ -91,7 +95,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   const components: ForecastComponent[] = accounts
     .filter(account => accountDepartment(account) === department)
     .map(account => account.accountId || account.awsStandardAccountID)
-    .filter((id): id is string => Boolean(id) && id !== PAYER_ACCOUNT_ID && id !== DEV_ORG_ACCOUNT_ID)
+    .filter((id): id is string => Boolean(id) && id !== PAYER_ACCOUNT_ID && id !== DEV_ORG_ACCOUNT_ID && !EXCLUDED_ACCOUNT_IDS.has(id))
     .map(accountId => ({
       id: accountId,
       filter: { Dimensions: { Key: 'LINKED_ACCOUNT', Values: [accountId] } },
@@ -124,10 +128,21 @@ export default defineEventHandler(handleAsync(async (event) => {
   const futureEnd = `${year + 1}-01-01`
   const [current, future] = await Promise.all([
     forecastComponents(components, today.toISOString().slice(0, 10), currentEnd, 'DAILY'),
-    futureStart < futureEnd ? forecastComponents(components, futureStart, futureEnd, 'MONTHLY') : Promise.resolve({ byMonth: {}, failures: [] as string[] })
+    futureStart < futureEnd ? forecastComponents(components, futureStart, futureEnd, 'MONTHLY') : Promise.resolve({ byMonth: {}, failures: [] as Array<{ id: string; message: string }> })
   ])
-  const failures = [...new Set([...current.failures, ...future.failures])]
-  if (failures.length) return errors.badRequest(event, `AWS could not forecast: ${failures.join(', ')}`)
+  const failures = [...current.failures, ...future.failures]
+  if (failures.length) {
+    const byMessage = new Map<string, string[]>()
+    for (const failure of failures) {
+      const ids = byMessage.get(failure.message) || []
+      if (!ids.includes(failure.id)) ids.push(failure.id)
+      byMessage.set(failure.message, ids)
+    }
+    const details = [...byMessage.entries()]
+      .map(([message, ids]) => `${ids.join(', ')}: ${message}`)
+      .join(' | ')
+    return errors.badRequest(event, `AWS could not forecast required components. ${details}`)
+  }
 
   const monthlyValues: Record<string, number> = {}
   for (let month = 1; month <= 12; month++) {
