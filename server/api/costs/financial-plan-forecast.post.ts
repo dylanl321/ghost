@@ -4,7 +4,7 @@ import { handleAsync, sendSuccess, errors } from '../../utils/api-response'
 import { getUserEmail, requirePermission } from '../../utils/user-roles'
 import { getAllAccountsUnified } from '../../utils/accounts-consolidated'
 import { resolveBillingView } from '../../utils/billing-views'
-import { getCostAndUsage, getCostForecast, getProformaForecast } from '../../utils/cost-explorer'
+import { getCostForecast, getProformaCosts, getProformaForecast } from '../../utils/cost-explorer'
 import { saveFinancialPlan } from '../../utils/financial-plan-history'
 import { logger } from '../../utils/logger'
 
@@ -41,15 +41,15 @@ async function getAccountShares(accountIds: string[], today: Date) {
   const end = new Date(today.getFullYear(), today.getMonth(), 1)
   const start = new Date(end)
   start.setMonth(start.getMonth() - 3)
-  const costs = await getCostAndUsage({
+  const costs = await getProformaCosts({
     startDate: start.toISOString().slice(0, 10),
     endDate: end.toISOString().slice(0, 10),
     granularity: 'MONTHLY',
     metrics: ['UnblendedCost'],
     groupBy: [{ type: 'DIMENSION', key: 'LINKED_ACCOUNT' }]
-  }, 'commercial', PROFORMA_ACCOUNT_ID)
+  }, PROFORMA_ACCOUNT_ID, PAYER_ACCOUNT_ID)
   const totals = new Map(accountIds.map(id => [id, 0]))
-  for (const period of costs.resultsByTime || []) {
+  for (const period of costs.proforma?.costs?.resultsByTime || []) {
     for (const group of period.Groups || []) {
       const id = group.Keys?.[0]
       if (id && totals.has(id)) totals.set(id, (totals.get(id) || 0) + Number(group.Metrics?.UnblendedCost?.Amount || 0))
