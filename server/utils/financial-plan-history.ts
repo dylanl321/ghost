@@ -1,0 +1,91 @@
+import { TransactWriteItemsCommand } from '@aws-sdk/client-dynamodb'
+import { marshall } from '@aws-sdk/util-dynamodb'
+import { getDynamoDBClient } from '../lib/aws-client-factory'
+import { getDynamoDBConfig } from '../lib/dynamodb-config'
+import { getItem, queryItems } from './dynamodb'
+
+export type FinancialPlanChangeType = 'manual-save' | 'forecast-generated' | 'reverted'
+
+export interface FinancialPlanHistoryEntry {
+  pk: string
+  sk: string
+  department: string
+  year: number
+  action: FinancialPlanChangeType
+  actor: string
+  createdAt: string
+  monthlyValues: Record<string, number>
+  previousMonthlyValues: Record<string, number>
+  sourceHistoryKey?: string
+}
+
+export function financialPlanKey(department: string, year: number) {
+  return `PLAN#${department}#${year}`
+}
+
+function monthlyValueAttributes(monthlyValues: Record<string, number>) {
+  const attributes: Record<string, number> = {}
+  for (const [isoMonth, value] of Object.entries(monthlyValues)) {
+    const match = isoMonth.match(/^(\d{4})-(\d{2})-01$/)
+    if (match) attributes[`${match[2]}/${match[1]}`] = Math.round(value * 100) / 100
+  }
+  return attributes
+}
+
+function readMonthlyValues(item: Record<string, any> | null, year: number) {
+  const monthlyValues: Record<string, number> = {}
+  for (const [key, value] of Object.entries(item || {})) {
+    const match = key.match(/^(\d{2})\/(\d{4})$/)
+    if (match && Number(match[2]) === year) monthlyValues[`${match[2]}-${match[1]}-01`] = Number(value)
+  }
+  return monthlyValues
+}
+
+export async function saveFinancialPlan(input: {
+  department: string
+  year: number
+  monthlyValues: Record<string, number>
+  action: FinancialPlanChangeType
+  actor: string
+  sourceHistoryKey?: string
+}) {
+  const config = await getDynamoDBConfig()
+  const plan = config.financialPlanOverrides
+  const history = config.financialPlanHistory
+  const current = await getItem(plan.tableName, { pk: input.department }, plan.environment, plan.accountId)
+  const previousMonthlyValues = readMonthlyValues(current, input.year)
+  const createdAt = new Date().toISOString()
+  const entry: FinancialPlanHistoryEntry = {
+    pk: financialPlanKey(input.department, input.year),
+    sk: `${createdAt}#${crypto.randomUUID()}`,
+    department: input.department,
+    year: input.year,
+    action: input.action,
+    actor: input.actor || 'Unknown user',
+    createdAt,
+    monthlyValues: input.monthlyValues,
+    previousMonthlyValues,
+    sourceHistoryKey: input.sourceHistoryKey
+  }
+  const planItem = { ...(current || {}), pk: input.department, ...monthlyValueAttributes(input.monthlyValues) }
+  const client = await getDynamoDBClient(plan.environment, undefined, plan.accountId)
+  await client.send(new TransactWriteItemsCommand({
+    TransactItems: [
+      { Put: { TableName: plan.tableName, Item: marshall(planItem, { removeUndefinedValues: true }) } },
+      { Put: { TableName: history.tableName, Item: marshall(entry, { removeUndefinedValues: true }) } }
+    ]
+  }))
+  return entry
+}
+
+export async function getFinancialPlanHistory(department: string, year: number) {
+  const config = await getDynamoDBConfig()
+  const table = config.financialPlanHistory
+  const response = await queryItems({
+    tableName: table.tableName,
+    queryExpression: 'pk = :pk',
+    expressionAttributeValues: { ':pk': financialPlanKey(department, year) },
+    scanIndexForward: false
+  }, table.environment, table.accountId)
+  return response.items as FinancialPlanHistoryEntry[]
+}

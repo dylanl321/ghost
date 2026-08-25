@@ -380,7 +380,8 @@ resource "aws_iam_role_policy" "ecs_user_preferences_dynamodb" {
           "dynamodb:UpdateItem",
           "dynamodb:DeleteItem",
           "dynamodb:Query",
-          "dynamodb:Scan"
+          "dynamodb:Scan",
+          "dynamodb:TransactWriteItems"
         ]
         Resource = [
           "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-user-preferences",
@@ -441,8 +442,10 @@ resource "aws_iam_role_policy" "ecs_manual_plan_values_dynamodb" {
           "dynamodb:Scan"
         ]
         Resource = [
-          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-manual-plan-values",
-          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-manual-plan-values/index/*"
+          aws_dynamodb_table.manual_plan_values.arn,
+          "${aws_dynamodb_table.manual_plan_values.arn}/index/*",
+          aws_dynamodb_table.financial_plan_history.arn,
+          "${aws_dynamodb_table.financial_plan_history.arn}/index/*"
         ]
       }
     ]
@@ -507,18 +510,18 @@ resource "aws_iam_policy" "ecs_dataset_export_jobs" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
-        Action = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query", "dynamodb:Scan"]
+        Effect   = "Allow"
+        Action   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query", "dynamodb:Scan"]
         Resource = [aws_dynamodb_table.dataset_export_jobs.arn, "${aws_dynamodb_table.dataset_export_jobs.arn}/index/*"]
       },
       {
-        Effect = "Allow"
-        Action = ["sqs:SendMessage", "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:ChangeMessageVisibility", "sqs:GetQueueAttributes"]
+        Effect   = "Allow"
+        Action   = ["sqs:SendMessage", "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:ChangeMessageVisibility", "sqs:GetQueueAttributes"]
         Resource = [aws_sqs_queue.dataset_export_jobs.arn, aws_sqs_queue.dataset_export_jobs_dlq.arn]
       },
       {
-        Effect = "Allow"
-        Action = ["athena:StopQueryExecution"]
+        Effect   = "Allow"
+        Action   = ["athena:StopQueryExecution"]
         Resource = "*"
       }
     ]

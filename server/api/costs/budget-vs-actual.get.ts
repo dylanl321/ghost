@@ -14,7 +14,7 @@
  * - environment: 'commercial' | 'govcloud' (default: 'commercial')
  *
  * Department scope (intentionally fixed for this report):
- *   DE158, DT509
+ *   DE158, DT509, DT328
  *
  * Special handling:
  * - GDMS Cloud (205950196477) is the catch-all for non-allocated charges. Its actual
@@ -42,7 +42,7 @@ import { CLASSIFIED_CLOUD_CHARGES_2026 } from '../../utils/classified-cloud-char
 import { getAnnualBudgetArray } from '../../../shared/utils/budget-utils'
 
 // Departments this report is scoped to. Kept explicit per Finance's request.
-const ALLOWED_DEPARTMENTS = ['DE158', 'DT509'] as const
+const ALLOWED_DEPARTMENTS = ['DE158', 'DT509', 'DT328'] as const
 type AllowedDepartment = typeof ALLOWED_DEPARTMENTS[number]
 
 // Org payer / master account. Its actuals roll into DE158 (special case).
@@ -70,7 +70,8 @@ const DEPT_NAMED_CATEGORIES: Record<AllowedDepartment, { name: string; note?: st
   DT509: [
     { name: 'Software Engineering Solutions' },
     { name: 'GDMS ITS SOC' },
-  ]
+  ],
+  DT328: []
 }
 
 interface MonthlyPoint {
@@ -238,8 +239,10 @@ export default defineEventHandler(handleAsync(async (event) => {
   logger.info('[BudgetVsActual] Account mapping', {
     DE158: deptAccounts.get('DE158')?.length ?? 0,
     DT509: deptAccounts.get('DT509')?.length ?? 0,
+    DT328: deptAccounts.get('DT328')?.length ?? 0,
     DE158accounts: deptAccounts.get('DE158'),
     DT509accounts: deptAccounts.get('DT509')
+    ,DT328accounts: deptAccounts.get('DT328')
   })
 
   // ── 2. Fetch proforma (budget) + billable (actual) grouped by linked account ──

@@ -48,6 +48,7 @@ export interface DynamoDBConfig {
   achievementProgress: DynamoDBTableConfig
   utilizationAnalysis: DynamoDBTableConfig
   financialPlanOverrides: DynamoDBTableConfig
+  financialPlanHistory: DynamoDBTableConfig
 }
 
 // -----------------------------------------------------------------------------
@@ -334,6 +335,12 @@ function loadFromEnvironment(): DynamoDBConfig {
     },
     financialPlanOverrides: {
       tableName: process.env.FINANCIAL_PLAN_OVERRIDES_TABLE || 'ghost-manual-plan-values',
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
+    },
+    financialPlanHistory: {
+      tableName: process.env.FINANCIAL_PLAN_HISTORY_TABLE || 'ghost-financial-plan-history',
       environment: 'govcloud',
       region: govCloudRegion,
       accountId: deploymentAccountId
