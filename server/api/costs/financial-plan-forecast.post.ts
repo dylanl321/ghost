@@ -46,18 +46,24 @@ async function loadHistoryDiagnostics(accountIds: string[], billingViewArn: stri
     Granularity: 'MONTHLY',
     Metrics: ['UnblendedCost'],
     GroupBy: [{ Type: 'DIMENSION', Key: 'LINKED_ACCOUNT' }],
-    Filter: { Dimensions: { Key: 'LINKED_ACCOUNT', Values: accountIds } },
     BillingViewArn: billingViewArn
   }))
   const monthsByAccount = new Map<string, number>()
+  const exposedAccountIds = new Set<string>()
   for (const period of result.ResultsByTime || []) {
     for (const group of period.Groups || []) {
       const accountId = group.Keys?.[0]
       const amount = Number(group.Metrics?.UnblendedCost?.Amount || 0)
-      if (accountId && amount !== 0) monthsByAccount.set(accountId, (monthsByAccount.get(accountId) || 0) + 1)
+      if (!accountId) continue
+      exposedAccountIds.add(accountId)
+      if (amount !== 0) monthsByAccount.set(accountId, (monthsByAccount.get(accountId) || 0) + 1)
     }
   }
-  return accountIds.map(accountId => ({ accountId, nonZeroMonthlyPeriods: monthsByAccount.get(accountId) || 0 }))
+  return {
+    requested: accountIds.map(accountId => ({ accountId, nonZeroMonthlyPeriods: monthsByAccount.get(accountId) || 0 })),
+    exposedLinkedAccountIds: [...exposedAccountIds].sort(),
+    returnedPeriods: result.ResultsByTime?.length || 0
+  }
 }
 
 async function forecastComponents(components: ForecastComponent[], startDate: string, endDate: string, granularity: 'DAILY' | 'MONTHLY') {
@@ -183,7 +189,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       failures
     })
     const failedAccountIds = [...new Set(failures.map(failure => failure.id).filter(id => /^\d{12}$/.test(id)))]
-    let historyDiagnostics: Array<{ accountId: string; nonZeroMonthlyPeriods: number }> | undefined
+    let historyDiagnostics: Awaited<ReturnType<typeof loadHistoryDiagnostics>> | undefined
     let historyDiagnosticError: string | undefined
     try {
       historyDiagnostics = await loadHistoryDiagnostics(failedAccountIds, chargebackViewArn, today)
