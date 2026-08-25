@@ -11,7 +11,7 @@ import { logger } from '../../utils/logger'
 const DEPARTMENTS = new Set(['DE158', 'DT509', 'DT328'])
 const PAYER_ACCOUNT_ID = process.env.AWS_MASTER_ACCOUNT_ID || '205950196477'
 const DEV_ORG_ACCOUNT_ID = process.env.AWS_DEV_ORG_ACCOUNT_ID || '266632029214'
-const CHARGEBACK_VIEW_NAME = process.env.AWS_GDMS_CHARGEBACK_BILLING_VIEW_NAME || 'GDMS Chargeback'
+const CHARGEBACK_VIEW_NAME = process.env.AWS_GDMS_CHARGEBACK_BILLING_VIEW_NAME || 'GDMS_Chargeback'
 const DEV_ORG_VIEW_NAME = process.env.AWS_DEV_ORG_BILLING_VIEW_NAME || 'GDMS-DevOrg'
 const SAVINGS_PLAN_SERVICE = 'Savings Plans for AWS Compute usage'
 const EXCLUDED_RECORD_TYPES = ['SavingsPlanRecurringFee', 'SavingsPlanPurchase']
