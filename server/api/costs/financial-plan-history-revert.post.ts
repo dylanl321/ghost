@@ -9,13 +9,17 @@ export default defineEventHandler(handleAsync(async (event) => {
   const department = String(body?.department || '').trim().toUpperCase()
   const year = Number(body?.year)
   const historyKey = String(body?.historyKey || '')
+  const restorePrevious = body?.restorePrevious === true
   if (!department || !Number.isInteger(year) || !historyKey) return errors.badRequest(event, 'department, year, and historyKey are required')
   const entry = (await getFinancialPlanHistory(department, year)).find(item => item.sk === historyKey)
   if (!entry) return errors.notFound(event, 'Historical plan version was not found')
+  const monthlyValues = restorePrevious && Object.keys(entry.previousMonthlyValues).length > 0
+    ? entry.previousMonthlyValues
+    : entry.monthlyValues
   const saved = await saveFinancialPlan({
     department,
     year,
-    monthlyValues: entry.monthlyValues,
+    monthlyValues,
     action: 'reverted',
     actor: getUserEmail(event) || 'Unknown user',
     sourceHistoryKey: entry.sk
