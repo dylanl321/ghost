@@ -4,7 +4,7 @@ import { handleAsync, sendSuccess, errors } from '../../utils/api-response'
 import { getUserEmail, requirePermission } from '../../utils/user-roles'
 import { getAllAccountsUnified } from '../../utils/accounts-consolidated'
 import { resolveBillingView } from '../../utils/billing-views'
-import { getCostForecast, getProformaCosts, getProformaForecast } from '../../utils/cost-explorer'
+import { getCostAndUsage, getCostForecast, getProformaForecast } from '../../utils/cost-explorer'
 import { saveFinancialPlan } from '../../utils/financial-plan-history'
 import { logger } from '../../utils/logger'
 
@@ -41,15 +41,15 @@ async function getAccountShares(accountIds: string[], today: Date) {
   const end = new Date(today.getFullYear(), today.getMonth(), 1)
   const start = new Date(end)
   start.setMonth(start.getMonth() - 3)
-  const costs = await getProformaCosts({
+  const costs = await getCostAndUsage({
     startDate: start.toISOString().slice(0, 10),
     endDate: end.toISOString().slice(0, 10),
     granularity: 'MONTHLY',
     metrics: ['UnblendedCost'],
     groupBy: [{ type: 'DIMENSION', key: 'LINKED_ACCOUNT' }]
-  }, PROFORMA_ACCOUNT_ID, PAYER_ACCOUNT_ID)
+  }, 'commercial', PAYER_ACCOUNT_ID)
   const totals = new Map(accountIds.map(id => [id, 0]))
-  for (const period of costs.proforma?.costs?.resultsByTime || []) {
+  for (const period of costs.resultsByTime || []) {
     for (const group of period.Groups || []) {
       const id = group.Keys?.[0]
       if (id && totals.has(id)) totals.set(id, (totals.get(id) || 0) + Number(group.Metrics?.UnblendedCost?.Amount || 0))
@@ -161,11 +161,24 @@ export default defineEventHandler(handleAsync(async (event) => {
     for (const [month, value] of Object.entries(specialCurrent.byMonth)) currentByMonth[month] = (currentByMonth[month] || 0) + value
     for (const [month, value] of Object.entries(specialFuture.byMonth)) futureByMonth[month] = (futureByMonth[month] || 0) + value
 
-    const accountShares = await getAccountShares(accountIds, today)
-    const accountMonthlyValues: Record<string, Record<string, number>> = {}
-    for (const month of Object.keys({ ...futureByMonth, ...currentByMonth })) {
-      const normalValue = (futureByMonth[month] || currentByMonth[month] || 0) - (specialFuture.byMonth[month] || specialCurrent.byMonth[month] || 0)
-      accountMonthlyValues[month] = Object.fromEntries(Object.entries(accountShares).map(([accountId, share]) => [accountId, normalValue * share]))
+    let forecastComposition: Record<string, unknown>
+    try {
+      const accountShares = await getAccountShares(accountIds, today)
+      const accountMonthlyValues: Record<string, Record<string, number>> = {}
+      for (const month of Object.keys({ ...futureByMonth, ...currentByMonth })) {
+        const normalValue = (futureByMonth[month] || currentByMonth[month] || 0) - (specialFuture.byMonth[month] || specialCurrent.byMonth[month] || 0)
+        accountMonthlyValues[month] = Object.fromEntries(Object.entries(accountShares).map(([accountId, share]) => [accountId, normalValue * share]))
+      }
+      forecastComposition = {
+        allocationMethod: 'trailing-three-complete-month-billable-spend-share',
+        accountShares,
+        accountMonthlyValues,
+        specialMonthlyValues: { current: specialCurrent.byMonth, future: specialFuture.byMonth }
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'Unknown cost-history error'
+      logger.warn('[FinancialPlanForecast] Composition unavailable; saving department forecast', { department, reason })
+      forecastComposition = { allocationMethod: 'unavailable', reason }
     }
 
     const monthlyValues: Record<string, number> = {}
@@ -174,12 +187,6 @@ export default defineEventHandler(handleAsync(async (event) => {
       if (key < currentMonth) monthlyValues[key] = Number(monthlyActuals[key] || 0)
       else if (key === currentMonth) monthlyValues[key] = Number(monthlyActuals[key] || 0) + (currentByMonth[key] || 0)
       else monthlyValues[key] = futureByMonth[key] || 0
-    }
-    const forecastComposition = {
-      allocationMethod: 'trailing-three-complete-month-proforma-spend-share',
-      accountShares,
-      accountMonthlyValues,
-      specialMonthlyValues: { current: specialCurrent.byMonth, future: specialFuture.byMonth }
     }
     const entry = await saveFinancialPlan({ department, year, monthlyValues, action: 'forecast-generated', actor: getUserEmail(event) || 'Unknown user', forecastComposition })
     return sendSuccess(event, { monthlyValues, entry, forecastComposition, components: { normalAccountCount: accountIds.length, special: specialComponents.map(component => component.id) } })
