@@ -300,7 +300,7 @@
                 <span class="flex-1 text-gray-700 dark:text-gray-300">{{ formatPlanAction(entry.action) }}</span>
                 <span class="text-xs text-gray-500 dark:text-gray-400">{{ entry.actor }}</span>
                 <span class="text-xs text-gray-500 dark:text-gray-400">{{ new Date(entry.createdAt).toLocaleString() }}</span>
-                <UButton color="gray" variant="ghost" size="xs" icon="i-heroicons-arrow-uturn-left" @click="revertPlan(entry)">Revert</UButton>
+                <UButton color="gray" variant="ghost" size="xs" icon="i-heroicons-arrow-uturn-left" @click="revertPlan(entry)">Revert Change</UButton>
               </div>
             </div>
           </UCard>
@@ -685,7 +685,7 @@ async function revertPlan(entry: PlanHistoryEntry) {
   const dept = activeDept.value
   if (!dept) return
   const response = await $fetch<{ data: { monthlyValues: Record<string, number> } }>('/api/costs/financial-plan-history-revert', {
-    method: 'POST', body: { department: dept.department, year: selectedYear.value, historyKey: entry.sk }
+    method: 'POST', body: { department: dept.department, year: selectedYear.value, historyKey: entry.sk, restorePrevious: true }
   })
   planOverrides.value = { ...planOverrides.value, [dept.department]: response.data.monthlyValues }
   await loadPlanHistory()
