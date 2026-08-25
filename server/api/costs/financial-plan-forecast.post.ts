@@ -3,7 +3,7 @@ import type { Expression } from '@aws-sdk/client-cost-explorer'
 import { handleAsync, sendSuccess, errors } from '../../utils/api-response'
 import { getUserEmail, requirePermission } from '../../utils/user-roles'
 import { getAllAccountsUnified } from '../../utils/accounts-consolidated'
-import { getBillingViewArn } from '../../utils/billing-views'
+import { resolveBillingView } from '../../utils/billing-views'
 import { getCostForecast } from '../../utils/cost-explorer'
 import { saveFinancialPlan } from '../../utils/financial-plan-history'
 import { logger } from '../../utils/logger'
@@ -78,8 +78,14 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   const today = new Date()
   if (year !== today.getFullYear()) return errors.badRequest(event, 'AWS forecasts can only be generated for the current year')
-  const chargebackViewArn = await getBillingViewArn(CHARGEBACK_VIEW_NAME)
-  if (!chargebackViewArn) return errors.badRequest(event, `Could not resolve the ${CHARGEBACK_VIEW_NAME} billing view`)
+  const chargebackResolution = await resolveBillingView(CHARGEBACK_VIEW_NAME)
+  const chargebackViewArn = process.env.AWS_GDMS_CHARGEBACK_BILLING_VIEW_ARN || chargebackResolution.arn
+  if (!chargebackViewArn) {
+    const detail = chargebackResolution.error
+      ? `ListBillingViews failed: ${chargebackResolution.error}`
+      : `Available views: ${chargebackResolution.availableNames.join(', ') || 'none'}`
+    return errors.badRequest(event, `Could not resolve the ${CHARGEBACK_VIEW_NAME} billing view. ${detail}`)
+  }
 
   const accounts = await getAllAccountsUnified(false)
   const components: ForecastComponent[] = accounts
@@ -93,7 +99,8 @@ export default defineEventHandler(handleAsync(async (event) => {
     }))
 
   if (department === 'DE158') {
-    const devOrgViewArn = await getBillingViewArn(DEV_ORG_VIEW_NAME)
+    const devOrgResolution = await resolveBillingView(DEV_ORG_VIEW_NAME)
+    const devOrgViewArn = process.env.AWS_DEV_ORG_BILLING_VIEW_ARN || devOrgResolution.arn
     if (!devOrgViewArn) return errors.badRequest(event, `Could not resolve the ${DEV_ORG_VIEW_NAME} billing view`)
     components.push({
       id: 'GDMS Cloud',
