@@ -133,11 +133,20 @@ export default defineEventHandler(handleAsync(async (event) => {
   nextMonth.setMonth(nextMonth.getMonth() + 1, 1)
   const currentEnd = nextMonth.toISOString().slice(0, 10)
   const futureEnd = `${year + 1}-01-01`
+  let normalCurrent: any
+  let normalFuture: any
   try {
-    const normalCurrent = await forecastNormalAccounts(accountIds, today.toISOString().slice(0, 10), currentEnd, 'DAILY')
-    const normalFuture = currentEnd < futureEnd
+    normalCurrent = await forecastNormalAccounts(accountIds, today.toISOString().slice(0, 10), currentEnd, 'DAILY')
+    normalFuture = currentEnd < futureEnd
       ? await forecastNormalAccounts(accountIds, currentEnd, futureEnd, 'MONTHLY')
       : { forecastResultsByTime: [] }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown Cost Explorer error'
+    logger.warn('[FinancialPlanForecast] Normal proforma aggregate failed', { department, accountIds, error })
+    return errors.badRequest(event, `AWS could not forecast the ${department} normal-account proforma aggregate: ${message}`)
+  }
+
+  try {
     const specialCurrent = await forecastSpecialComponents(specialComponents, today.toISOString().slice(0, 10), currentEnd, 'DAILY')
     const specialFuture = currentEnd < futureEnd
       ? await forecastSpecialComponents(specialComponents, currentEnd, futureEnd, 'MONTHLY')
@@ -175,7 +184,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     const entry = await saveFinancialPlan({ department, year, monthlyValues, action: 'forecast-generated', actor: getUserEmail(event) || 'Unknown user', forecastComposition })
     return sendSuccess(event, { monthlyValues, entry, forecastComposition, components: { normalAccountCount: accountIds.length, special: specialComponents.map(component => component.id) } })
   } catch (error) {
-    logger.warn('[FinancialPlanForecast] Department aggregate forecast failed', { department, accountIds, error })
-    return errors.badRequest(event, `AWS could not forecast ${department}: ${error instanceof Error ? error.message : 'Unknown Cost Explorer error'}`)
+    logger.warn('[FinancialPlanForecast] Forecast composition failed', { department, accountIds, error })
+    return errors.badRequest(event, `AWS forecast composition failed for ${department}: ${error instanceof Error ? error.message : 'Unknown error'}`)
   }
 }))
