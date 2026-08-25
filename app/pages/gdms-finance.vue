@@ -684,13 +684,13 @@ const forecastNotice = ref<string | null>(null)
 const forecastComposition = ref<any>(null)
 const forecastCompositionRows = computed(() => {
   if (!forecastComposition.value) return []
-  const shares = forecastComposition.value.accountShares || {}
   const monthly = forecastComposition.value.accountMonthlyValues || {}
-  return Object.entries(shares).map(([accountId, share]) => ({
-    accountId,
-    share: Number(share),
-    total: Object.values(monthly).reduce((sum: number, values: any) => sum + Number(values?.[accountId] || 0), 0)
-  })).sort((a, b) => b.total - a.total)
+  const totals: Record<string, number> = {}
+  for (const values of Object.values(monthly) as any[]) {
+    for (const [accountId, value] of Object.entries(values || {})) totals[accountId] = (totals[accountId] || 0) + Number(value || 0)
+  }
+  const grandTotal = Object.values(totals).reduce((sum, value) => sum + value, 0)
+  return Object.entries(totals).map(([accountId, total]) => ({ accountId, total, share: grandTotal ? total / grandTotal : 0 })).sort((a, b) => b.total - a.total)
 })
 interface PlanHistoryEntry { sk: string; action: string; actor: string; createdAt: string; monthlyValues: Record<string, number>; forecastComposition?: Record<string, unknown> }
 const planHistory = ref<PlanHistoryEntry[]>([])
