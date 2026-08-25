@@ -1,10 +1,11 @@
 import { defineEventHandler, readBody } from 'h3'
-import type { Expression } from '@aws-sdk/client-cost-explorer'
+import { GetCostAndUsageCommand, type Expression } from '@aws-sdk/client-cost-explorer'
 import { handleAsync, sendSuccess, errors } from '../../utils/api-response'
 import { getUserEmail, requirePermission } from '../../utils/user-roles'
 import { getAllAccountsUnified } from '../../utils/accounts-consolidated'
 import { resolveBillingView } from '../../utils/billing-views'
 import { getCostForecast } from '../../utils/cost-explorer'
+import { getCostExplorerClient } from '../../lib/aws-client-factory'
 import { saveFinancialPlan } from '../../utils/financial-plan-history'
 import { logger } from '../../utils/logger'
 
@@ -36,12 +37,41 @@ function addForecast(data: Record<string, number>, forecast: any) {
   }
 }
 
+async function loadHistoryDiagnostics(accountIds: string[], billingViewArn: string, today: Date) {
+  const start = new Date(today)
+  start.setMonth(start.getMonth() - 18, 1)
+  const client = await getCostExplorerClient('commercial', 'us-east-1')
+  const result = await client.send(new GetCostAndUsageCommand({
+    TimePeriod: { Start: start.toISOString().slice(0, 10), End: today.toISOString().slice(0, 10) },
+    Granularity: 'MONTHLY',
+    Metrics: ['UnblendedCost'],
+    GroupBy: [{ Type: 'DIMENSION', Key: 'LINKED_ACCOUNT' }],
+    Filter: { Dimensions: { Key: 'LINKED_ACCOUNT', Values: accountIds } },
+    BillingViewArn: billingViewArn
+  }))
+  const monthsByAccount = new Map<string, number>()
+  for (const period of result.ResultsByTime || []) {
+    for (const group of period.Groups || []) {
+      const accountId = group.Keys?.[0]
+      const amount = Number(group.Metrics?.UnblendedCost?.Amount || 0)
+      if (accountId && amount !== 0) monthsByAccount.set(accountId, (monthsByAccount.get(accountId) || 0) + 1)
+    }
+  }
+  return accountIds.map(accountId => ({ accountId, nonZeroMonthlyPeriods: monthsByAccount.get(accountId) || 0 }))
+}
+
 async function forecastComponents(components: ForecastComponent[], startDate: string, endDate: string, granularity: 'DAILY' | 'MONTHLY') {
   const byMonth: Record<string, number> = {}
   const failures: Array<{ id: string; message: string }> = []
   const batchSize = 5
   for (let start = 0; start < components.length; start += batchSize) {
     const batch = components.slice(start, start + batchSize)
+    logger.info('[FinancialPlanForecast] Starting component batch', {
+      granularity,
+      startDate,
+      endDate,
+      components: batch.map(component => ({ id: component.id, billingViewArn: component.billingViewArn, filter: component.filter }))
+    })
     const settled = await Promise.allSettled(batch.map(async component => ({
       component,
       forecast: await getCostForecast(
@@ -90,6 +120,11 @@ export default defineEventHandler(handleAsync(async (event) => {
       : `Available views: ${chargebackResolution.availableNames.join(', ') || 'none'}`
     return errors.badRequest(event, `Could not resolve the ${CHARGEBACK_VIEW_NAME} billing view. ${detail}`)
   }
+  logger.info('[FinancialPlanForecast] Resolved chargeback view', {
+    department,
+    viewName: CHARGEBACK_VIEW_NAME,
+    billingViewArn: chargebackViewArn
+  })
 
   const accounts = await getAllAccountsUnified(false)
   const components: ForecastComponent[] = accounts
@@ -141,7 +176,27 @@ export default defineEventHandler(handleAsync(async (event) => {
     const details = [...byMessage.entries()]
       .map(([message, ids]) => `${ids.join(', ')}: ${message}`)
       .join(' | ')
-    return errors.badRequest(event, `AWS could not forecast required components. ${details}`)
+    logger.warn('[FinancialPlanForecast] Component forecasts failed', {
+      department,
+      currentRange: { start: today.toISOString().slice(0, 10), end: currentEnd },
+      futureRange: { start: futureStart, end: futureEnd },
+      failures
+    })
+    const failedAccountIds = [...new Set(failures.map(failure => failure.id).filter(id => /^\d{12}$/.test(id)))]
+    let historyDiagnostics: Array<{ accountId: string; nonZeroMonthlyPeriods: number }> | undefined
+    let historyDiagnosticError: string | undefined
+    try {
+      historyDiagnostics = await loadHistoryDiagnostics(failedAccountIds, chargebackViewArn, today)
+    } catch (error) {
+      historyDiagnosticError = error instanceof Error ? error.message : 'Unknown Cost Explorer error'
+    }
+    return errors.badRequest(event, `AWS could not forecast required components. ${details}`, {
+      billingView: { name: CHARGEBACK_VIEW_NAME, arn: chargebackViewArn },
+      currentRange: { start: today.toISOString().slice(0, 10), end: currentEnd },
+      futureRange: { start: futureStart, end: futureEnd },
+      historyDiagnostics,
+      historyDiagnosticError
+    })
   }
 
   const monthlyValues: Record<string, number> = {}
