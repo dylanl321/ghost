@@ -225,9 +225,16 @@
                     icon="i-heroicons-calendar"
                     @click="deptFullYear = !deptFullYear"
                   >Full Year</UButton>
-                  <UButton color="gray" variant="ghost" icon="i-heroicons-arrow-down-tray" size="xs" :loading="excelExporting" :disabled="excelExporting" @click="exportExcel">
-                    {{ excelExporting ? 'Generating…' : 'Export Excel' }}
-                  </UButton>
+                  <div class="flex items-center gap-1">
+                    <UButton color="purple" variant="soft" icon="i-heroicons-chart-bar-square" size="xs" :loading="forecastGenerating" @click="generateForecast">
+                      Generate Forecast
+                    </UButton>
+                    <UButton color="gray" variant="ghost" icon="i-heroicons-arrow-down-tray" size="xs" :loading="excelExporting" :disabled="excelExporting" @click="exportExcel">
+                      {{ excelExporting ? 'Generating…' : 'Export Excel' }}
+                    </UButton>
+                  </div>
+                  <span v-if="forecastError" class="text-xs text-red-500">{{ forecastError }}</span>
+                  <span v-else-if="forecastNotice" class="text-xs text-amber-600 dark:text-amber-400">{{ forecastNotice }}</span>
                   <span v-if="excelExportError" class="text-xs text-red-500">{{ excelExportError }}</span>
                 </div>
               </div>
@@ -281,6 +288,20 @@
                   </tr>
                 </tbody>
               </table>
+            </div>
+          </UCard>
+
+          <UCard v-if="planHistory.length" class="mb-4">
+            <template #header>
+              <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Plan Change History</h2>
+            </template>
+            <div class="divide-y divide-gray-100 dark:divide-gray-700 text-sm">
+              <div v-for="entry in planHistory" :key="entry.sk" class="flex items-center gap-3 py-2">
+                <span class="flex-1 text-gray-700 dark:text-gray-300">{{ formatPlanAction(entry.action) }}</span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">{{ entry.actor }}</span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">{{ new Date(entry.createdAt).toLocaleString() }}</span>
+                <UButton color="gray" variant="ghost" size="xs" icon="i-heroicons-arrow-uturn-left" @click="revertPlan(entry)">Revert</UButton>
+              </div>
             </div>
           </UCard>
 
@@ -643,6 +664,32 @@ const planOverridesLoading = ref(false)
 const planSaveError = ref<string | null>(null)
 const editingPlan = ref(false)
 const planDraft = ref<Record<string, string>>({})
+const forecastGenerating = ref(false)
+const forecastError = ref<string | null>(null)
+const forecastNotice = ref<string | null>(null)
+interface PlanHistoryEntry { sk: string; action: string; actor: string; createdAt: string; monthlyValues: Record<string, number> }
+const planHistory = ref<PlanHistoryEntry[]>([])
+
+async function loadPlanHistory() {
+  const dept = activeDept.value
+  if (!dept) return
+  const response = await $fetch<{ data: { entries: PlanHistoryEntry[] } }>(`/api/costs/financial-plan-history?department=${dept.department}&year=${selectedYear.value}`)
+  planHistory.value = response.data.entries
+}
+
+function formatPlanAction(action: string) {
+  return ({ 'manual-save': 'Manual plan update', 'forecast-generated': 'AWS forecast generated', reverted: 'Historical plan restored' } as Record<string, string>)[action] || action
+}
+
+async function revertPlan(entry: PlanHistoryEntry) {
+  const dept = activeDept.value
+  if (!dept) return
+  const response = await $fetch<{ data: { monthlyValues: Record<string, number> } }>('/api/costs/financial-plan-history-revert', {
+    method: 'POST', body: { department: dept.department, year: selectedYear.value, historyKey: entry.sk }
+  })
+  planOverrides.value = { ...planOverrides.value, [dept.department]: response.data.monthlyValues }
+  await loadPlanHistory()
+}
 
 async function loadPlanOverrides(dept: string, year: number) {
   if (planOverrides.value[dept] !== undefined) return
@@ -689,10 +736,33 @@ async function savePlan() {
     })
     planOverrides.value = { ...planOverrides.value, [dept.department]: overrides }
     editingPlan.value = false
+    await loadPlanHistory()
   } catch (err: any) {
     planSaveError.value = err?.data?.message || err?.message || 'Failed to save plan values.'
   } finally {
     planOverridesLoading.value = false
+  }
+}
+
+async function generateForecast() {
+  const dept = activeDept.value
+  if (!dept || forecastGenerating.value) return
+  forecastGenerating.value = true
+  forecastError.value = null
+  forecastNotice.value = null
+  try {
+    const monthlyActuals = Object.fromEntries(dept.monthly.map(month => [month.month, visibleActual(month)]))
+    const response = await $fetch<{ data: { monthlyValues: Record<string, number>; forecastWarning?: string } }>('/api/costs/financial-plan-forecast', {
+      method: 'POST',
+      body: { department: dept.department, year: selectedYear.value, monthlyActuals }
+    })
+    planOverrides.value = { ...planOverrides.value, [dept.department]: response.data.monthlyValues }
+    forecastNotice.value = response.data.forecastWarning || 'Forecast generated from AWS Cost Explorer data.'
+    await loadPlanHistory()
+  } catch (err: any) {
+    forecastError.value = err?.data?.message || err?.message || 'Failed to generate forecast.'
+  } finally {
+    forecastGenerating.value = false
   }
 }
 
@@ -783,6 +853,7 @@ if (import.meta.client) {
     selectedMonth.value = null
     deptFullYear.value = false
     if (dept) await loadPlanOverrides(dept.department, selectedYear.value)
+    if (dept) await loadPlanHistory()
   }, { immediate: true })
 
   watch([departments, selectedYear], async ([depts]) => {
@@ -1057,6 +1128,7 @@ const ACTUAL_COLOR = '#f28e2b' // orange
 const DEPT_COLORS: Record<string, string> = {
   DE158: '#f28e2b',
   DT509: '#4a7ca8',
+  DT328: '#4f8a6b',
 }
 
 // Overview: grouped bars — one plan + one actual bar per department per month
@@ -1172,7 +1244,7 @@ const overviewYtdChartOption = computed(() => {
     : allMonthsFull.filter(m => m <= cutoff)
   const labels = allMonths.map(formatMonthShort)
 
-  const PLAN_TINTS: Record<string, string> = { DE158: '#f9c88a', DT509: '#93b8d6' }
+  const PLAN_TINTS: Record<string, string> = { DE158: '#f9c88a', DT509: '#93b8d6', DT328: '#9dccb3' }
   const legendNames: string[] = []
   const series: any[] = []
 
