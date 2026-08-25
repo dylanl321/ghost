@@ -126,6 +126,16 @@ To bridge this gap, GHOST **extrapolates proforma costs per account and AWS time
 
 > **Important:** Tag-level proforma cost estimates are for directional insight only. They are extrapolated from billable percentages, not calculated by AWS Billing Conductor, and should **not** be used for chargeback or financial reconciliation. For chargeback, use proforma account-level totals, which are calculated directly by AWS Billing Conductor.
 
+### Compute Foundry VMaaS exception
+
+The dedicated **VMaaS Costs → Allocated usage** report is not the generic Tag
+Analysis estimate. It uses a fixed shared account, a locked `TenantID` and
+`CostCenter` contract, registered team cost managers, a closed month, and an
+explicit reconciliation to the authoritative account-level pro forma total.
+Only this dedicated, Finance-approved VMaaS report may be used to allocate
+Compute Foundry tenant usage. Shared and untagged residual costs remain owned by
+GDMS IT.
+
 When estimated proforma costs are shown, a note appears above the breakdown table explaining the extrapolation.
 
 ## Common Questions
