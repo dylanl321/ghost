@@ -17,6 +17,7 @@ export interface FinancialPlanHistoryEntry {
   monthlyValues: Record<string, number>
   previousMonthlyValues: Record<string, number>
   sourceHistoryKey?: string
+  forecastComposition?: Record<string, unknown>
 }
 
 export function financialPlanKey(department: string, year: number) {
@@ -48,6 +49,7 @@ export async function saveFinancialPlan(input: {
   action: FinancialPlanChangeType
   actor: string
   sourceHistoryKey?: string
+  forecastComposition?: Record<string, unknown>
 }) {
   const config = await getDynamoDBConfig()
   const plan = config.financialPlanOverrides
@@ -65,7 +67,8 @@ export async function saveFinancialPlan(input: {
     createdAt,
     monthlyValues: input.monthlyValues,
     previousMonthlyValues,
-    sourceHistoryKey: input.sourceHistoryKey
+    sourceHistoryKey: input.sourceHistoryKey,
+    forecastComposition: input.forecastComposition
   }
   const planItem = { ...(current || {}), pk: input.department, ...monthlyValueAttributes(input.monthlyValues) }
   const client = await getDynamoDBClient(plan.environment, undefined, plan.accountId)

@@ -305,6 +305,20 @@
             </div>
           </UCard>
 
+          <UCard v-if="forecastComposition" class="mb-4">
+            <template #header>
+              <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Forecast Account Composition</h2>
+            </template>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead><tr class="border-b border-gray-200 dark:border-gray-700 text-left text-xs text-gray-500 dark:text-gray-400"><th class="py-2">Account</th><th class="py-2 text-right">Allocation</th><th class="py-2 text-right">Forecast Remainder</th></tr></thead>
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                  <tr v-for="row in forecastCompositionRows" :key="row.accountId"><td class="py-2 font-mono text-xs">{{ row.accountId }}</td><td class="py-2 text-right tabular-nums">{{ (row.share * 100).toFixed(1) }}%</td><td class="py-2 text-right tabular-nums">{{ formatCurrency(row.total, 0) }}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </UCard>
+
           <!-- Charts: side-by-side -->
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
             <!-- Monthly bar chart -->
@@ -667,7 +681,18 @@ const planDraft = ref<Record<string, string>>({})
 const forecastGenerating = ref(false)
 const forecastError = ref<string | null>(null)
 const forecastNotice = ref<string | null>(null)
-interface PlanHistoryEntry { sk: string; action: string; actor: string; createdAt: string; monthlyValues: Record<string, number> }
+const forecastComposition = ref<any>(null)
+const forecastCompositionRows = computed(() => {
+  if (!forecastComposition.value) return []
+  const shares = forecastComposition.value.accountShares || {}
+  const monthly = forecastComposition.value.accountMonthlyValues || {}
+  return Object.entries(shares).map(([accountId, share]) => ({
+    accountId,
+    share: Number(share),
+    total: Object.values(monthly).reduce((sum: number, values: any) => sum + Number(values?.[accountId] || 0), 0)
+  })).sort((a, b) => b.total - a.total)
+})
+interface PlanHistoryEntry { sk: string; action: string; actor: string; createdAt: string; monthlyValues: Record<string, number>; forecastComposition?: Record<string, unknown> }
 const planHistory = ref<PlanHistoryEntry[]>([])
 
 async function loadPlanHistory() {
@@ -675,6 +700,7 @@ async function loadPlanHistory() {
   if (!dept) return
   const response = await $fetch<{ data: { entries: PlanHistoryEntry[] } }>(`/api/costs/financial-plan-history?department=${dept.department}&year=${selectedYear.value}`)
   planHistory.value = response.data.entries
+  forecastComposition.value = response.data.entries.find(entry => entry.forecastComposition)?.forecastComposition || null
 }
 
 function formatPlanAction(action: string) {
@@ -757,6 +783,7 @@ async function generateForecast() {
       body: { department: dept.department, year: selectedYear.value, monthlyActuals }
     })
     planOverrides.value = { ...planOverrides.value, [dept.department]: response.data.monthlyValues }
+    forecastComposition.value = (response.data as any).forecastComposition || null
     forecastNotice.value = response.data.forecastWarning || 'Forecast generated from AWS Cost Explorer data.'
     await loadPlanHistory()
   } catch (err: any) {

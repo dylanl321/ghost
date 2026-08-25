@@ -4,7 +4,7 @@ import { handleAsync, sendSuccess, errors } from '../../utils/api-response'
 import { getUserEmail, requirePermission } from '../../utils/user-roles'
 import { getAllAccountsUnified } from '../../utils/accounts-consolidated'
 import { resolveBillingView } from '../../utils/billing-views'
-import { getCostForecast } from '../../utils/cost-explorer'
+import { getCostAndUsage, getCostForecast, getProformaForecast } from '../../utils/cost-explorer'
 import { saveFinancialPlan } from '../../utils/financial-plan-history'
 import { logger } from '../../utils/logger'
 
@@ -17,7 +17,7 @@ const SAVINGS_PLAN_SERVICE = 'Savings Plans for AWS Compute usage'
 const EXCLUDED_RECORD_TYPES = ['SavingsPlanRecurringFee', 'SavingsPlanPurchase']
 const EXCLUDED_ACCOUNT_IDS = new Set(['110317593805'])
 
-interface ForecastComponent {
+interface SpecialForecastComponent {
   id: string
   filter?: Expression
   accountId?: string
@@ -37,15 +37,43 @@ function addForecast(data: Record<string, number>, forecast: any) {
   }
 }
 
-async function forecastComponents(components: ForecastComponent[], startDate: string, endDate: string, granularity: 'DAILY' | 'MONTHLY') {
+async function getAccountShares(accountIds: string[], today: Date) {
+  const end = new Date(today.getFullYear(), today.getMonth(), 1)
+  const start = new Date(end)
+  start.setMonth(start.getMonth() - 3)
+  const costs = await getCostAndUsage({
+    startDate: start.toISOString().slice(0, 10),
+    endDate: end.toISOString().slice(0, 10),
+    granularity: 'MONTHLY',
+    metrics: ['UnblendedCost'],
+    groupBy: [{ type: 'DIMENSION', key: 'LINKED_ACCOUNT' }]
+  }, 'commercial', PROFORMA_ACCOUNT_ID)
+  const totals = new Map(accountIds.map(id => [id, 0]))
+  for (const period of costs.resultsByTime || []) {
+    for (const group of period.Groups || []) {
+      const id = group.Keys?.[0]
+      if (id && totals.has(id)) totals.set(id, (totals.get(id) || 0) + Number(group.Metrics?.UnblendedCost?.Amount || 0))
+    }
+  }
+  const total = [...totals.values()].reduce((sum, value) => sum + value, 0)
+  if (!total) throw new Error('No trailing three-month proforma history is available to allocate the department forecast')
+  return Object.fromEntries([...totals.entries()].map(([id, value]) => [id, value / total]))
+}
+
+async function forecastNormalAccounts(accountIds: string[], startDate: string, endDate: string, granularity: 'DAILY' | 'MONTHLY') {
+  const filter: Expression = { Dimensions: { Key: 'LINKED_ACCOUNT', Values: accountIds } }
+  // This is the Cost Dashboard proforma path: the proforma account returns
+  // the Billing Conductor allocation for the full selected account set.
+  const result = await getProformaForecast(startDate, endDate, 'UNBLENDED_COST', granularity, filter, PROFORMA_ACCOUNT_ID, PAYER_ACCOUNT_ID)
+  return result.proformaAccount.forecast
+}
+
+async function forecastSpecialComponents(components: SpecialForecastComponent[], startDate: string, endDate: string, granularity: 'DAILY' | 'MONTHLY') {
   const byMonth: Record<string, number> = {}
   const failures: Array<{ id: string; message: string }> = []
-  const batchSize = 5
-  for (let start = 0; start < components.length; start += batchSize) {
-    const batch = components.slice(start, start + batchSize)
-    const settled = await Promise.allSettled(batch.map(async component => ({
-      component,
-      forecast: await getCostForecast(
+  for (const component of components) {
+    try {
+      const forecast = await getCostForecast(
         startDate,
         endDate,
         'UNBLENDED_COST',
@@ -55,14 +83,10 @@ async function forecastComponents(components: ForecastComponent[], startDate: st
         component.accountId,
         { billingViewArn: component.billingViewArn }
       )
-    })))
-    settled.forEach((result, index) => {
-      if (result.status === 'fulfilled') addForecast(byMonth, result.value.forecast)
-      else failures.push({
-        id: batch[index].id,
-        message: result.reason instanceof Error ? result.reason.message : 'Unknown Cost Explorer error'
-      })
-    })
+      addForecast(byMonth, forecast)
+    } catch (error) {
+      failures.push({ id: component.id, message: error instanceof Error ? error.message : 'Unknown Cost Explorer error' })
+    }
   }
   return { byMonth, failures }
 }
@@ -80,21 +104,17 @@ export default defineEventHandler(handleAsync(async (event) => {
   const today = new Date()
   if (year !== today.getFullYear()) return errors.badRequest(event, 'AWS forecasts can only be generated for the current year')
 
-  const accounts = await getAllAccountsUnified(false)
-  const components: ForecastComponent[] = accounts
+  const accountIds = (await getAllAccountsUnified(false))
     .filter(account => accountDepartment(account) === department)
     .map(account => account.awsStandardAccountID || account.accountId)
     .filter((id): id is string => Boolean(id) && id !== PAYER_ACCOUNT_ID && id !== DEV_ORG_ACCOUNT_ID && !EXCLUDED_ACCOUNT_IDS.has(id))
-    .map(accountId => ({
-      id: accountId,
-      accountId: PROFORMA_ACCOUNT_ID,
-      filter: { Dimensions: { Key: 'LINKED_ACCOUNT', Values: [accountId] } }
-    }))
+  if (!accountIds.length) return errors.badRequest(event, `No forecastable accounts are mapped to ${department}`)
 
+  const specialComponents: SpecialForecastComponent[] = []
   if (department === 'DE158') {
     const devOrgResolution = await resolveBillingView(DEV_ORG_VIEW_NAME)
     if (!devOrgResolution.arn) return errors.badRequest(event, `Could not resolve the ${DEV_ORG_VIEW_NAME} billing view`)
-    components.push({
+    specialComponents.push({
       id: 'GDMS Cloud',
       accountId: PAYER_ACCOUNT_ID,
       filter: {
@@ -105,33 +125,57 @@ export default defineEventHandler(handleAsync(async (event) => {
         ]
       }
     })
-    components.push({ id: 'GDMS-DevOrg', billingViewArn: devOrgResolution.arn })
+    specialComponents.push({ id: 'GDMS-DevOrg', billingViewArn: devOrgResolution.arn })
   }
-  if (!components.length) return errors.badRequest(event, `No forecastable components are mapped to ${department}`)
 
   const currentMonth = `${year}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
   const nextMonth = new Date(today)
   nextMonth.setMonth(nextMonth.getMonth() + 1, 1)
   const currentEnd = nextMonth.toISOString().slice(0, 10)
   const futureEnd = `${year + 1}-01-01`
-  const [current, future] = await Promise.all([
-    forecastComponents(components, today.toISOString().slice(0, 10), currentEnd, 'DAILY'),
-    currentEnd < futureEnd ? forecastComponents(components, currentEnd, futureEnd, 'MONTHLY') : Promise.resolve({ byMonth: {}, failures: [] as Array<{ id: string; message: string }> })
-  ])
-  const failures = [...current.failures, ...future.failures]
-  if (failures.length) {
-    const details = failures.map(failure => `${failure.id}: ${failure.message}`).join(' | ')
-    logger.warn('[FinancialPlanForecast] Component forecasts failed', { department, failures })
-    return errors.badRequest(event, `AWS could not forecast required components. ${details}`)
-  }
+  try {
+    const normalCurrent = await forecastNormalAccounts(accountIds, today.toISOString().slice(0, 10), currentEnd, 'DAILY')
+    const normalFuture = currentEnd < futureEnd
+      ? await forecastNormalAccounts(accountIds, currentEnd, futureEnd, 'MONTHLY')
+      : { forecastResultsByTime: [] }
+    const specialCurrent = await forecastSpecialComponents(specialComponents, today.toISOString().slice(0, 10), currentEnd, 'DAILY')
+    const specialFuture = currentEnd < futureEnd
+      ? await forecastSpecialComponents(specialComponents, currentEnd, futureEnd, 'MONTHLY')
+      : { byMonth: {}, failures: [] as Array<{ id: string; message: string }> }
+    const failures = [...specialCurrent.failures, ...specialFuture.failures]
+    if (failures.length) return errors.badRequest(event, `AWS could not forecast: ${failures.map(failure => `${failure.id}: ${failure.message}`).join(' | ')}`)
 
-  const monthlyValues: Record<string, number> = {}
-  for (let month = 1; month <= 12; month++) {
-    const key = `${year}-${String(month).padStart(2, '0')}-01`
-    if (key < currentMonth) monthlyValues[key] = Number(monthlyActuals[key] || 0)
-    else if (key === currentMonth) monthlyValues[key] = Number(monthlyActuals[key] || 0) + (current.byMonth[key] || 0)
-    else monthlyValues[key] = future.byMonth[key] || 0
+    const currentByMonth: Record<string, number> = {}
+    const futureByMonth: Record<string, number> = {}
+    addForecast(currentByMonth, normalCurrent)
+    addForecast(futureByMonth, normalFuture)
+    for (const [month, value] of Object.entries(specialCurrent.byMonth)) currentByMonth[month] = (currentByMonth[month] || 0) + value
+    for (const [month, value] of Object.entries(specialFuture.byMonth)) futureByMonth[month] = (futureByMonth[month] || 0) + value
+
+    const accountShares = await getAccountShares(accountIds, today)
+    const accountMonthlyValues: Record<string, Record<string, number>> = {}
+    for (const month of Object.keys({ ...futureByMonth, ...currentByMonth })) {
+      const normalValue = (futureByMonth[month] || currentByMonth[month] || 0) - (specialFuture.byMonth[month] || specialCurrent.byMonth[month] || 0)
+      accountMonthlyValues[month] = Object.fromEntries(Object.entries(accountShares).map(([accountId, share]) => [accountId, normalValue * share]))
+    }
+
+    const monthlyValues: Record<string, number> = {}
+    for (let month = 1; month <= 12; month++) {
+      const key = `${year}-${String(month).padStart(2, '0')}-01`
+      if (key < currentMonth) monthlyValues[key] = Number(monthlyActuals[key] || 0)
+      else if (key === currentMonth) monthlyValues[key] = Number(monthlyActuals[key] || 0) + (currentByMonth[key] || 0)
+      else monthlyValues[key] = futureByMonth[key] || 0
+    }
+    const forecastComposition = {
+      allocationMethod: 'trailing-three-complete-month-proforma-spend-share',
+      accountShares,
+      accountMonthlyValues,
+      specialMonthlyValues: { current: specialCurrent.byMonth, future: specialFuture.byMonth }
+    }
+    const entry = await saveFinancialPlan({ department, year, monthlyValues, action: 'forecast-generated', actor: getUserEmail(event) || 'Unknown user', forecastComposition })
+    return sendSuccess(event, { monthlyValues, entry, forecastComposition, components: { normalAccountCount: accountIds.length, special: specialComponents.map(component => component.id) } })
+  } catch (error) {
+    logger.warn('[FinancialPlanForecast] Department aggregate forecast failed', { department, accountIds, error })
+    return errors.badRequest(event, `AWS could not forecast ${department}: ${error instanceof Error ? error.message : 'Unknown Cost Explorer error'}`)
   }
-  const entry = await saveFinancialPlan({ department, year, monthlyValues, action: 'forecast-generated', actor: getUserEmail(event) || 'Unknown user' })
-  return sendSuccess(event, { monthlyValues, entry, components: components.map(component => component.id) })
 }))
