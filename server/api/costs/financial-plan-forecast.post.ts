@@ -50,7 +50,7 @@ async function forecastComponents(components: ForecastComponent[], startDate: st
         granularity,
         component.filter,
         'commercial',
-        PAYER_ACCOUNT_ID,
+        component.billingViewArn ? undefined : PAYER_ACCOUNT_ID,
         { billingViewArn: component.billingViewArn }
       )
     })))
