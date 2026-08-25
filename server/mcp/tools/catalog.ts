@@ -95,6 +95,7 @@ import {
   type ResolvedOperationalScope
 } from '../tool-input'
 import { registerGhostTool } from './register'
+import { buildAccountResolution } from '../account-resolver'
 
 const operationalEnvironmentSchema = z.string().default('govcloud').transform(value => operationalEnvironment(value))
 const costEnvironmentSchema = z.enum(['commercial', 'govcloud']).default('commercial')
@@ -252,6 +253,27 @@ export function registerCatalogTools(
     const [summary, timeline] = await Promise.all([getOrganizationSummary(days, 'govcloud'), getOrganizationTimeline(days, limit, 'govcloud')])
     return toolSuccess({ mode: 'overview', summary, timeline }, 'Pipeline overview loaded.', 'Athena pipeline telemetry', { resolvedScope: scopeMetadata(scope), appliedFilters: { days, limit } })
   }
+
+  read({
+    name: 'ghost.accounts.resolve', title: 'Resolve an AWS access target',
+    description: 'Return canonical account metadata, direct IDC choices, and approved master-account hub recipes without returning credentials.',
+    inputSchema: z.object({ identifier: z.string().min(1) }),
+    handler: async args => {
+      const resolved = await resolveAccount(args.identifier)
+      const environment = (
+        resolved.identifierType === 'govId' ||
+        args.identifier === resolved.account.govCloudAccountId ||
+        args.identifier === resolved.account.awsGovCloudAccountID ||
+        (!['accountId'].includes(resolved.identifierType) && Boolean(resolved.account.govCloudAccountId || resolved.account.awsGovCloudAccountID))
+      ) ? 'govcloud' : 'commercial'
+      const userAccess = await getMcpIdentityCenterUserAccess(principal.email, [environment])
+      const result = buildAccountResolution(
+        { account: resolved.account, identifierType: resolved.identifierType, matchedValue: resolved.matchedValue },
+        userAccess.accounts
+      )
+      return toolSuccess(result, `Resolved AWS access target ${result.canonical_account_id}.`, 'GHOST account metadata and AWS IAM Identity Center Admin')
+    }
+  })
 
   read({
     name: 'ghost.accounts.search', title: 'Search GHOST accounts',
