@@ -25,6 +25,10 @@ function accountDepartment(account: any) {
   return String(account.pepDepartment || account.departmentNumber || account.department || '').trim().toUpperCase()
 }
 
+function isActiveFinanceAccount(account: any) {
+  return String(account.enclaveStatus || '').trim().toLowerCase() === 'active'
+}
+
 function addForecast(target: Record<string, number>, forecast: any) {
   for (const point of forecast?.forecastResultsByTime || []) {
     const start = point.TimePeriod?.Start
@@ -102,14 +106,19 @@ export default defineEventHandler(handleAsync(async (event) => {
     const message = error instanceof Error ? error.message : 'Unknown account catalog error'
     return errors.badRequest(event, 'Could not load the GHOST account catalog for this forecast.', { source: 'GHOST account catalog', message })
   }
-  const financeAccounts = allAccounts
+  const departmentAccounts = allAccounts
     .filter(account => accountDepartment(account) === department)
     .map(account => ({
       accountId: account.awsStandardAccountID || account.accountId,
       name: account.projectName || account.name || account.accountName || 'Unnamed account',
-      source: account.source || 'unknown'
+      source: account.source || 'unknown',
+      enclaveStatus: account.enclaveStatus || 'missing'
     }))
-    .filter((account): account is { accountId: string; name: string; source: string } => Boolean(account.accountId) && account.accountId !== PAYER_ACCOUNT_ID && account.accountId !== DEV_ORG_ACCOUNT_ID && !EXCLUDED_ACCOUNT_IDS.has(account.accountId))
+    .filter((account): account is { accountId: string; name: string; source: string; enclaveStatus: string } => Boolean(account.accountId) && account.accountId !== PAYER_ACCOUNT_ID && account.accountId !== DEV_ORG_ACCOUNT_ID && !EXCLUDED_ACCOUNT_IDS.has(account.accountId))
+  const excludedCatalogAccounts = departmentAccounts
+    .filter(account => !isActiveFinanceAccount(account))
+    .map(account => ({ ...account, reason: `GDMS account record is not active (enclaveStatus: ${account.enclaveStatus})` }))
+  const financeAccounts = departmentAccounts.filter(isActiveFinanceAccount)
   if (!financeAccounts.length) return errors.badRequest(event, `No forecastable accounts are mapped to ${department}`)
   const accountMetadata = new Map(financeAccounts.map(account => [account.accountId, account]))
   const accountIds = financeAccounts.map(account => account.accountId)
@@ -117,7 +126,6 @@ export default defineEventHandler(handleAsync(async (event) => {
   const special: SpecialComponent[] = []
   let normalAccountIds = accountIds
   let devOrgMembers: string[] = []
-  const excludedCatalogAccounts: Array<{ accountId: string; name: string; source: string; reason: string }> = []
   let devOrgViewArn: string | undefined
   if (department === 'DE158') {
     const devOrg = await resolveBillingView(DEV_ORG_VIEW_NAME)
