@@ -300,7 +300,12 @@
             :description="forecastError"
             class="mb-4"
           />
-          <pre v-if="forecastErrorDetails" class="mb-4 max-h-48 overflow-auto border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">{{ JSON.stringify(forecastErrorDetails, null, 2) }}</pre>
+          <div v-if="forecastFailures.length" class="mb-4 border border-red-200 dark:border-red-900">
+            <div v-for="failure in forecastFailures" :key="failure.message" class="border-b border-red-100 p-3 last:border-b-0 dark:border-red-900/60">
+              <div class="text-sm font-medium text-red-700 dark:text-red-300">{{ failure.message }}</div>
+              <div class="mt-1 break-all font-mono text-xs text-red-600 dark:text-red-400">{{ failure.accountIds.join(', ') }}</div>
+            </div>
+          </div>
 
           <UCard v-if="planHistory.length" class="mb-4">
             <template #header>
@@ -694,6 +699,7 @@ const forecastError = ref<string | null>(null)
 const forecastErrorDetails = ref<Record<string, unknown> | null>(null)
 const forecastNotice = ref<string | null>(null)
 const forecastComposition = ref<any>(null)
+const forecastFailures = computed(() => Array.isArray((forecastErrorDetails.value as any)?.failures) ? (forecastErrorDetails.value as any).failures : [])
 const forecastCompositionRows = computed(() => {
   if (!forecastComposition.value) return []
   const monthly = forecastComposition.value.accountMonthlyValues || {}

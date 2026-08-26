@@ -138,7 +138,22 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.badRequest(event, `AWS could not forecast GDMS-DevOrg: ${message}`, { source: 'GDMS-DevOrg', billingViewArn: devOrgViewArn, fallbackAccountId: DEV_ORG_MASTER_ACCOUNT_ID })
   }
   const failures = [...normalCurrent.failures, ...normalFuture.failures, ...specialCurrent.failures, ...specialFuture.failures]
-  if (failures.length) return errors.badRequest(event, `AWS could not forecast: ${failures.map(failure => `${failure.id}: ${failure.message}`).join(' | ')}`)
+  if (failures.length) {
+    const grouped = new Map<string, string[]>()
+    for (const failure of failures) {
+      const ids = grouped.get(failure.message) || []
+      if (!ids.includes(failure.id)) ids.push(failure.id)
+      grouped.set(failure.message, ids)
+    }
+    return errors.badRequest(event, 'AWS could not forecast one or more Finance components.', {
+      department,
+      normalAccountIds,
+      devOrgMemberIds: devOrgMembers,
+      currentRange: { start: today.toISOString().slice(0, 10), end: currentEnd },
+      futureRange: { start: currentEnd, end: futureEnd },
+      failures: [...grouped.entries()].map(([message, accountIds]) => ({ message, accountIds }))
+    })
+  }
 
   const currentByMonth = { ...normalCurrent.byMonth }
   const futureByMonth = { ...normalFuture.byMonth }
