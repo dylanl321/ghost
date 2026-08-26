@@ -291,6 +291,17 @@
             </div>
           </UCard>
 
+          <UAlert
+            v-if="forecastError"
+            color="red"
+            variant="subtle"
+            icon="i-heroicons-exclamation-triangle"
+            title="Forecast generation failed"
+            :description="forecastError"
+            class="mb-4"
+          />
+          <pre v-if="forecastErrorDetails" class="mb-4 max-h-48 overflow-auto border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">{{ JSON.stringify(forecastErrorDetails, null, 2) }}</pre>
+
           <UCard v-if="planHistory.length" class="mb-4">
             <template #header>
               <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Plan Change History</h2>
@@ -680,6 +691,7 @@ const editingPlan = ref(false)
 const planDraft = ref<Record<string, string>>({})
 const forecastGenerating = ref(false)
 const forecastError = ref<string | null>(null)
+const forecastErrorDetails = ref<Record<string, unknown> | null>(null)
 const forecastNotice = ref<string | null>(null)
 const forecastComposition = ref<any>(null)
 const forecastCompositionRows = computed(() => {
@@ -775,6 +787,7 @@ async function generateForecast() {
   if (!dept || forecastGenerating.value) return
   forecastGenerating.value = true
   forecastError.value = null
+  forecastErrorDetails.value = null
   forecastNotice.value = null
   try {
     const monthlyActuals = Object.fromEntries(dept.monthly.map(month => [month.month, visibleActual(month)]))
@@ -787,7 +800,8 @@ async function generateForecast() {
     forecastNotice.value = response.data.forecastWarning || 'Forecast generated from AWS Cost Explorer data.'
     await loadPlanHistory()
   } catch (err: any) {
-    forecastError.value = err?.data?.message || err?.message || 'Failed to generate forecast.'
+    forecastError.value = err?.data?.error?.message || err?.data?.message || err?.message || 'Failed to generate forecast.'
+    forecastErrorDetails.value = err?.data?.error?.details || null
   } finally {
     forecastGenerating.value = false
   }

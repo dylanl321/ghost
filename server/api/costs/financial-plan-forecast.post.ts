@@ -1,17 +1,20 @@
 import { defineEventHandler, readBody } from 'h3'
-import type { Expression } from '@aws-sdk/client-cost-explorer'
+import { GetCostAndUsageCommand, type Expression } from '@aws-sdk/client-cost-explorer'
 import { handleAsync, sendSuccess, errors } from '../../utils/api-response'
 import { getUserEmail, requirePermission } from '../../utils/user-roles'
 import { getAllAccountsUnified } from '../../utils/accounts-consolidated'
 import { resolveBillingView } from '../../utils/billing-views'
 import { getCostForecast } from '../../utils/cost-explorer'
 import { batchForecastCalls } from '../../utils/forecast-batcher'
+import { getCostExplorerClient } from '../../lib/aws-client-factory'
 import { saveFinancialPlan } from '../../utils/financial-plan-history'
+import { logger } from '../../utils/logger'
 
 const DEPARTMENTS = new Set(['DE158', 'DT509', 'DT328'])
 const PAYER_ACCOUNT_ID = process.env.AWS_MASTER_ACCOUNT_ID || '205950196477'
 const DEV_ORG_ACCOUNT_ID = process.env.AWS_DEV_ORG_ACCOUNT_ID || '266632029214'
 const DEV_ORG_VIEW_NAME = process.env.AWS_DEV_ORG_BILLING_VIEW_NAME || 'GDMS-DevOrg'
+const DEV_ORG_MASTER_ACCOUNT_ID = process.env.AWS_DEV_ORG_MASTER_ACCOUNT_ID
 const SAVINGS_PLAN_SERVICE = 'Savings Plans for AWS Compute usage'
 const EXCLUDED_RECORD_TYPES = ['SavingsPlanRecurringFee', 'SavingsPlanPurchase']
 const EXCLUDED_ACCOUNT_IDS = new Set(['110317593805'])
@@ -26,6 +29,30 @@ function addForecast(target: Record<string, number>, forecast: any) {
   for (const point of forecast?.forecastResultsByTime || []) {
     const start = point.TimePeriod?.Start
     if (start) target[`${start.slice(0, 7)}-01`] = (target[`${start.slice(0, 7)}-01`] || 0) + Number(point.MeanValue || 0)
+  }
+}
+
+async function getBillingViewMembers(billingViewArn: string, today: Date): Promise<Set<string>> {
+  const start = new Date(today)
+  start.setMonth(start.getMonth() - 18, 1)
+  const client = await getCostExplorerClient('commercial', 'us-east-1')
+  const response = await client.send(new GetCostAndUsageCommand({
+    TimePeriod: { Start: start.toISOString().slice(0, 10), End: today.toISOString().slice(0, 10) },
+    Granularity: 'MONTHLY',
+    Metrics: ['UnblendedCost'],
+    GroupBy: [{ Type: 'DIMENSION', Key: 'LINKED_ACCOUNT' }],
+    BillingViewArn: billingViewArn
+  }))
+  return new Set((response.ResultsByTime || []).flatMap(period => period.Groups || []).map(group => group.Keys?.[0]).filter(Boolean) as string[])
+}
+
+async function forecastDevOrg(billingViewArn: string, startDate: string, endDate: string, granularity: 'DAILY' | 'MONTHLY') {
+  try {
+    return await getCostForecast(startDate, endDate, 'UNBLENDED_COST', granularity, undefined, 'commercial', undefined, { billingViewArn })
+  } catch (viewError) {
+    if (!DEV_ORG_MASTER_ACCOUNT_ID) throw viewError
+    logger.warn('[FinancialPlanForecast] DevOrg billing-view forecast failed; trying DevOrg master', { error: viewError })
+    return getCostForecast(startDate, endDate, 'UNBLENDED_COST', granularity, undefined, 'commercial', DEV_ORG_MASTER_ACCOUNT_ID)
   }
 }
 
@@ -75,15 +102,21 @@ export default defineEventHandler(handleAsync(async (event) => {
   if (!accountIds.length) return errors.badRequest(event, `No forecastable accounts are mapped to ${department}`)
 
   const special: SpecialComponent[] = []
+  let normalAccountIds = accountIds
+  let devOrgMembers: string[] = []
+  let devOrgViewArn: string | undefined
   if (department === 'DE158') {
     const devOrg = await resolveBillingView(DEV_ORG_VIEW_NAME)
     if (!devOrg.arn) return errors.badRequest(event, `Could not resolve the ${DEV_ORG_VIEW_NAME} billing view`)
+    devOrgViewArn = devOrg.arn
+    const memberIds = await getBillingViewMembers(devOrg.arn, today)
+    devOrgMembers = accountIds.filter(accountId => memberIds.has(accountId))
+    normalAccountIds = accountIds.filter(accountId => !memberIds.has(accountId))
     special.push({ id: 'GDMS Cloud', accountId: PAYER_ACCOUNT_ID, filter: { And: [
       { Dimensions: { Key: 'LINKED_ACCOUNT', Values: [PAYER_ACCOUNT_ID] } },
       { Not: { Dimensions: { Key: 'SERVICE', Values: [SAVINGS_PLAN_SERVICE] } } },
       { Not: { Dimensions: { Key: 'RECORD_TYPE', Values: EXCLUDED_RECORD_TYPES } } }
     ] } })
-    special.push({ id: 'GDMS-DevOrg', billingViewArn: devOrg.arn })
   }
 
   const currentMonth = `${year}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
@@ -91,10 +124,19 @@ export default defineEventHandler(handleAsync(async (event) => {
   nextMonth.setMonth(nextMonth.getMonth() + 1, 1)
   const currentEnd = nextMonth.toISOString().slice(0, 10)
   const futureEnd = `${year + 1}-01-01`
-  const normalCurrent = await forecastAccounts(accountIds, today.toISOString().slice(0, 10), currentEnd, 'DAILY')
-  const normalFuture = currentEnd < futureEnd ? await forecastAccounts(accountIds, currentEnd, futureEnd, 'MONTHLY') : { byMonth: {}, byAccountMonth: {}, failures: [] as Array<{ id: string; message: string }> }
+  const normalCurrent = normalAccountIds.length ? await forecastAccounts(normalAccountIds, today.toISOString().slice(0, 10), currentEnd, 'DAILY') : { byMonth: {}, byAccountMonth: {}, failures: [] as Array<{ id: string; message: string }> }
+  const normalFuture = normalAccountIds.length && currentEnd < futureEnd ? await forecastAccounts(normalAccountIds, currentEnd, futureEnd, 'MONTHLY') : { byMonth: {}, byAccountMonth: {}, failures: [] as Array<{ id: string; message: string }> }
   const specialCurrent = await forecastSpecial(special, today.toISOString().slice(0, 10), currentEnd, 'DAILY')
   const specialFuture = currentEnd < futureEnd ? await forecastSpecial(special, currentEnd, futureEnd, 'MONTHLY') : { byMonth: {}, failures: [] as Array<{ id: string; message: string }> }
+  let devOrgCurrent: any
+  let devOrgFuture: any
+  try {
+    devOrgCurrent = devOrgViewArn ? await forecastDevOrg(devOrgViewArn, today.toISOString().slice(0, 10), currentEnd, 'DAILY') : undefined
+    devOrgFuture = devOrgViewArn && currentEnd < futureEnd ? await forecastDevOrg(devOrgViewArn, currentEnd, futureEnd, 'MONTHLY') : undefined
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown Cost Explorer error'
+    return errors.badRequest(event, `AWS could not forecast GDMS-DevOrg: ${message}`, { source: 'GDMS-DevOrg', billingViewArn: devOrgViewArn, fallbackAccountId: DEV_ORG_MASTER_ACCOUNT_ID })
+  }
   const failures = [...normalCurrent.failures, ...normalFuture.failures, ...specialCurrent.failures, ...specialFuture.failures]
   if (failures.length) return errors.badRequest(event, `AWS could not forecast: ${failures.map(failure => `${failure.id}: ${failure.message}`).join(' | ')}`)
 
@@ -102,6 +144,8 @@ export default defineEventHandler(handleAsync(async (event) => {
   const futureByMonth = { ...normalFuture.byMonth }
   for (const [month, value] of Object.entries(specialCurrent.byMonth)) currentByMonth[month] = (currentByMonth[month] || 0) + value
   for (const [month, value] of Object.entries(specialFuture.byMonth)) futureByMonth[month] = (futureByMonth[month] || 0) + value
+  addForecast(currentByMonth, devOrgCurrent)
+  addForecast(futureByMonth, devOrgFuture)
   const monthlyValues: Record<string, number> = {}
   for (let month = 1; month <= 12; month++) {
     const key = `${year}-${String(month).padStart(2, '0')}-01`
@@ -110,8 +154,8 @@ export default defineEventHandler(handleAsync(async (event) => {
   const forecastComposition = {
     allocationMethod: 'individual-cost-dashboard-forecast-requests',
     accountMonthlyValues: { ...normalCurrent.byAccountMonth, ...normalFuture.byAccountMonth },
-    specialMonthlyValues: { current: specialCurrent.byMonth, future: specialFuture.byMonth }
+    specialMonthlyValues: { current: specialCurrent.byMonth, future: specialFuture.byMonth, devOrgMembers }
   }
   const entry = await saveFinancialPlan({ department, year, monthlyValues, action: 'forecast-generated', actor: getUserEmail(event) || 'Unknown user', forecastComposition })
-  return sendSuccess(event, { monthlyValues, entry, forecastComposition, components: { normalAccountCount: accountIds.length, special: special.map(component => component.id) } })
+  return sendSuccess(event, { monthlyValues, entry, forecastComposition, components: { normalAccountCount: normalAccountIds.length, devOrgMemberCount: devOrgMembers.length, special: [...special.map(component => component.id), ...(devOrgViewArn ? ['GDMS-DevOrg'] : [])] } })
 }))
