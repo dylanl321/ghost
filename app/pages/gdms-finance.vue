@@ -341,13 +341,25 @@
             </div>
           </UCard>
 
-          <UModal v-model="showForecastPreview" :ui="{ width: 'sm:max-w-4xl' }">
+          <UModal v-model="showForecastPreview" :ui="{ width: 'sm:max-w-5xl' }">
             <UCard>
-              <template #header><div class="flex items-center justify-between"><div><h2 class="text-base font-semibold">Forecast Preview</h2><p class="text-xs text-gray-500 mt-1">{{ activeDept?.department }} plan changes require confirmation before saving.</p></div><UButton color="gray" variant="ghost" icon="i-heroicons-x-mark" @click="showForecastPreview = false" /></div></template>
+              <template #header>
+                <div class="flex items-center justify-between gap-4">
+                  <div><h2 class="text-base font-semibold">Forecast Preview</h2><p class="text-xs text-gray-500 mt-1">{{ activeDept?.department }} plan changes require confirmation before saving.</p></div>
+                  <UButton color="gray" variant="ghost" icon="i-heroicons-x-mark" @click="showForecastPreview = false" />
+                </div>
+              </template>
               <div class="max-h-[60vh] overflow-auto space-y-5">
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  <div class="border border-gray-200 dark:border-gray-700 p-3"><div class="text-xs text-gray-500">Plan Change</div><div class="mt-1 text-lg font-semibold" :class="forecastPreviewMetrics.delta >= 0 ? 'text-red-600' : 'text-emerald-600'">{{ forecastPreviewMetrics.delta >= 0 ? '+' : '' }}{{ formatCurrency(forecastPreviewMetrics.delta, 0) }}</div></div>
+                  <div class="border border-gray-200 dark:border-gray-700 p-3"><div class="text-xs text-gray-500">Proposed Year Plan</div><div class="mt-1 text-lg font-semibold">{{ formatCurrency(forecastPreviewMetrics.proposed, 0) }}</div></div>
+                  <div class="border border-gray-200 dark:border-gray-700 p-3"><div class="text-xs text-gray-500">Forecast Components</div><div class="mt-1 text-lg font-semibold">{{ forecastPreviewRows.length }}</div><div class="text-xs text-gray-500">active account forecasts</div></div>
+                  <div class="border border-gray-200 dark:border-gray-700 p-3"><div class="text-xs text-gray-500">Past Months Rebased</div><div class="mt-1 text-lg font-semibold">{{ forecastPreviewMetrics.rebasedMonths }}</div><div class="text-xs text-gray-500">plan values set to actual charges</div></div>
+                </div>
+                <div><h3 class="text-sm font-medium mb-2">Monthly plan change</h3><VChart :option="forecastPreviewChartOption" class="h-56" autoresize /></div>
                 <div><h3 class="text-sm font-medium mb-2">Monthly plan changes</h3><table class="w-full text-sm"><thead><tr class="text-left text-xs text-gray-500"><th class="pb-2">Month</th><th class="pb-2 text-right">Current</th><th class="pb-2 text-right">Proposed</th><th class="pb-2 text-right">Change</th></tr></thead><tbody><tr v-for="change in forecastPreview?.changes" :key="change.month" class="border-t border-gray-100 dark:border-gray-700"><td class="py-2">{{ formatMonthShort(change.month) }}</td><td class="py-2 text-right">{{ formatCurrency(change.previous, 0) }}</td><td class="py-2 text-right">{{ formatCurrency(change.next, 0) }}</td><td class="py-2 text-right" :class="change.delta >= 0 ? 'text-red-600' : 'text-emerald-600'">{{ change.delta >= 0 ? '+' : '' }}{{ formatCurrency(change.delta, 0) }}</td></tr></tbody></table></div>
-                <div><h3 class="text-sm font-medium mb-2">Forecast basis</h3><div v-for="reason in forecastPreview?.reasons" :key="reason.component" class="py-1 text-sm"><span class="font-medium">{{ reason.component }}:</span> {{ reason.reason }}</div></div>
-                <div><h3 class="text-sm font-medium mb-2">Account forecast composition</h3><table class="w-full text-sm"><thead><tr class="text-left text-xs text-gray-500"><th class="pb-2">Account</th><th class="pb-2 text-right">Forecast</th></tr></thead><tbody><tr v-for="row in forecastPreviewRows" :key="row.accountId" class="border-t border-gray-100 dark:border-gray-700"><td class="py-2 font-mono text-xs">{{ row.accountId }}</td><td class="py-2 text-right">{{ formatCurrency(row.total, 0) }}</td></tr></tbody></table></div>
+                <div><h3 class="text-sm font-medium mb-2">Forecast basis</h3><div v-for="reason in forecastPreview?.reasons" :key="reason.component" class="border-t border-gray-100 py-2 text-sm dark:border-gray-700"><span class="font-medium">{{ reason.component }}:</span> {{ reason.reason }}</div></div>
+                <div><h3 class="text-sm font-medium mb-2">Account forecast composition</h3><div class="border border-gray-200 dark:border-gray-700"><div v-for="row in forecastPreviewRows" :key="row.accountId" class="border-b border-gray-100 last:border-b-0 dark:border-gray-700"><button class="flex w-full items-center gap-3 p-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800/40" @click="togglePreviewAccount(row.accountId)"><UIcon :name="expandedPreviewAccounts.has(row.accountId) ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'" class="w-4 h-4 text-gray-400"/><div class="min-w-0 flex-1"><div class="truncate text-sm font-medium">{{ row.name }}</div><div class="font-mono text-xs text-gray-500">{{ row.accountId }} · {{ row.lifecycle }}</div></div><div class="text-right"><div class="text-sm font-medium">{{ formatCurrency(row.total, 0) }}</div><div class="text-xs text-gray-500">{{ row.share.toFixed(1) }}% of account forecast</div></div></button><div v-if="expandedPreviewAccounts.has(row.accountId)" class="border-t border-gray-100 px-10 py-3 dark:border-gray-700"><div class="grid grid-cols-3 gap-2 text-xs"><div v-for="month in row.months" :key="month.month" class="border border-gray-100 p-2 dark:border-gray-700"><div class="text-gray-500">{{ formatMonthShort(month.month) }}</div><div class="mt-1 font-medium">{{ formatCurrency(month.value, 0) }}</div></div></div></div></div></div></div>
               </div>
               <template #footer><div class="flex justify-end gap-2"><UButton color="gray" variant="ghost" @click="showForecastPreview = false">Cancel</UButton><UButton color="purple" :loading="forecastApplying" @click="applyForecast">Apply Forecast</UButton></div></template>
             </UCard>
@@ -744,8 +756,27 @@ const forecastCompositionRows = computed(() => {
 })
 const forecastPreviewRows = computed(() => {
   const monthly = forecastPreview.value?.forecastComposition?.accountMonthlyValues || {}
-  return Object.entries(monthly).map(([accountId, values]: [string, any]) => ({ accountId, total: Object.values(values || {}).reduce((sum: number, value) => sum + Number(value || 0), 0) })).sort((a, b) => b.total - a.total)
+  const details = new Map((forecastPreview.value?.forecastComposition?.normalAccounts || []).map((account: any) => [account.accountId, account]))
+  const total = Object.values(monthly).reduce((sum: number, values: any) => sum + Object.values(values || {}).reduce((inner: number, value) => inner + Number(value || 0), 0), 0)
+  return Object.entries(monthly).map(([accountId, values]: [string, any]) => {
+    const account = details.get(accountId) || {}
+    const accountTotal = Object.values(values || {}).reduce((sum: number, value) => sum + Number(value || 0), 0)
+    return { accountId, name: account.name || 'Unknown account', lifecycle: account.pepEnvironmentStatus || account.enclaveStatus || 'Unknown lifecycle', total: accountTotal, share: total ? accountTotal / total * 100 : 0, months: Object.entries(values || {}).map(([month, value]) => ({ month, value: Number(value || 0) })).sort((a, b) => a.month.localeCompare(b.month)) }
+  }).sort((a, b) => b.total - a.total)
 })
+const forecastPreviewMetrics = computed(() => {
+  const changes = forecastPreview.value?.changes || []
+  return { delta: changes.reduce((sum: number, change: any) => sum + Number(change.delta || 0), 0), proposed: changes.reduce((sum: number, change: any) => sum + Number(change.next || 0), 0), rebasedMonths: changes.filter((change: any) => change.month < ytdCutoff && Math.abs(Number(change.delta || 0)) >= 0.01).length }
+})
+const forecastPreviewChartOption = computed(() => {
+  const changes = forecastPreview.value?.changes || []
+  return { tooltip: { trigger: 'axis', valueFormatter: (value: number) => formatCurrency(value, 0) }, legend: { data: ['Current Plan', 'Proposed Plan'] }, grid: { left: 68, right: 18, top: 36, bottom: 30 }, xAxis: { type: 'category', data: changes.map((change: any) => formatMonthShort(change.month)) }, yAxis: { type: 'value', axisLabel: { formatter: (value: number) => formatCurrency(value, 0) } }, series: [{ name: 'Current Plan', type: 'bar', data: changes.map((change: any) => change.previous), itemStyle: { color: '#94a3b8' } }, { name: 'Proposed Plan', type: 'bar', data: changes.map((change: any) => change.next), itemStyle: { color: '#4a7ca8' } }] }
+})
+const expandedPreviewAccounts = ref(new Set<string>())
+function togglePreviewAccount(accountId: string) {
+  if (expandedPreviewAccounts.value.has(accountId)) expandedPreviewAccounts.value.delete(accountId)
+  else expandedPreviewAccounts.value.add(accountId)
+}
 interface PlanHistoryEntry { sk: string; action: string; actor: string; createdAt: string; monthlyValues: Record<string, number>; forecastComposition?: Record<string, unknown> }
 const planHistory = ref<PlanHistoryEntry[]>([])
 
@@ -839,6 +870,7 @@ async function generateForecast() {
       body: { department: dept.department, year: selectedYear.value, monthlyActuals, currentPlanValues: resolvedMonthlyPlan.value, preview: true }
     })
     forecastPreview.value = response.data.preview
+    expandedPreviewAccounts.value = new Set()
     forecastExcludedAccounts.value = response.data.components?.excludedCatalogAccounts || []
     showForecastPreview.value = true
   } catch (err: any) {
