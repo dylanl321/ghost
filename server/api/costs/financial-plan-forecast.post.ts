@@ -40,7 +40,7 @@ function accountDepartment(account: any) {
 
 function isForecastEligibleAccount(account: { pepEnvironmentStatus: string; enclaveStatus: string }) {
   const pepStatus = account.pepEnvironmentStatus.trim().toLowerCase()
-  if (pepStatus) return pepStatus === 'sustainment' || pepStatus === 'provisional sustainment'
+  if (pepStatus) return ['sustainment', 'provisional sustainment', 'active', 'reassessment'].includes(pepStatus)
   return account.enclaveStatus.trim().toLowerCase() === 'active'
 }
 
@@ -193,7 +193,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     .map(account => ({
       ...account,
       reason: account.pepEnvironmentStatus
-        ? `PEP environment status is "${account.pepEnvironmentStatus}", not Sustainment or Provisional Sustainment`
+        ? `PEP environment status is "${account.pepEnvironmentStatus}", not an eligible Finance forecasting state`
         : `PEP environment status is missing and enclaveStatus is "${account.enclaveStatus}", not Active`
     }))
   const financeAccounts = departmentAccounts.filter(isForecastEligibleAccount)
