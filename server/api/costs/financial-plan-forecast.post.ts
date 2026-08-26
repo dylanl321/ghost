@@ -15,7 +15,9 @@ const PAYER_ACCOUNT_ID = process.env.AWS_MASTER_ACCOUNT_ID || '205950196477'
 const DEV_ORG_ACCOUNT_ID = process.env.AWS_DEV_ORG_ACCOUNT_ID || '266632029214'
 const DEV_ORG_VIEW_NAME = process.env.AWS_DEV_ORG_BILLING_VIEW_NAME || 'GDMS-DevOrg'
 const DEV_ORG_MASTER_ACCOUNT_ID = process.env.AWS_DEV_ORG_MASTER_ACCOUNT_ID
-const SAVINGS_PLAN_SERVICE = 'Savings Plans'
+// SERVICE filters require the exact Cost Explorer dimension value. This is the
+// canonical value returned by the Finance payer's Cost Explorer console.
+const SAVINGS_PLAN_SERVICE = 'Savings Plans for Compute usage'
 const EXCLUDED_ACCOUNT_IDS = new Set(['110317593805'])
 
 interface SpecialComponent { id: string; filter?: Expression; accountId?: string; billingViewArn?: string }
