@@ -25,9 +25,10 @@ function accountDepartment(account: any) {
   return String(account.pepDepartment || account.departmentNumber || account.department || '').trim().toUpperCase()
 }
 
-function isExplicitlyInactiveFinanceAccount(account: any) {
-  const status = String(account.enclaveStatus || '').trim().toLowerCase()
-  return /decommission|inactive|closed|retired/.test(status)
+function isForecastEligibleAccount(account: { pepEnvironmentStatus: string; enclaveStatus: string }) {
+  const pepStatus = account.pepEnvironmentStatus.trim().toLowerCase()
+  if (pepStatus) return pepStatus === 'sustainment' || pepStatus === 'provisional sustainment'
+  return account.enclaveStatus.trim().toLowerCase() === 'active'
 }
 
 function addForecast(target: Record<string, number>, forecast: any) {
@@ -96,6 +97,8 @@ export default defineEventHandler(handleAsync(async (event) => {
   const department = String(body?.department || '').trim().toUpperCase()
   const year = Number(body?.year)
   const monthlyActuals = body?.monthlyActuals as Record<string, number>
+  const currentPlanValues = body?.currentPlanValues as Record<string, number> | undefined
+  const previewOnly = body?.preview === true
   if (!DEPARTMENTS.has(department) || !Number.isInteger(year) || !monthlyActuals || typeof monthlyActuals !== 'object') return errors.badRequest(event, 'department, year, and monthlyActuals are required')
 
   const today = new Date()
@@ -113,15 +116,19 @@ export default defineEventHandler(handleAsync(async (event) => {
       accountId: account.awsStandardAccountID || account.accountId,
       name: account.projectName || account.name || account.accountName || 'Unnamed account',
       source: account.source || 'unknown',
+      pepEnvironmentStatus: account.pepEnvironmentStatus || '',
       enclaveStatus: account.enclaveStatus || 'missing'
     }))
-    .filter((account): account is { accountId: string; name: string; source: string; enclaveStatus: string } => Boolean(account.accountId) && account.accountId !== PAYER_ACCOUNT_ID && account.accountId !== DEV_ORG_ACCOUNT_ID && !EXCLUDED_ACCOUNT_IDS.has(account.accountId))
-  // The catalog has historical records with missing/nonstandard lifecycle
-  // values. Exclude only an explicit terminal status, not an absent flag.
+    .filter((account): account is { accountId: string; name: string; source: string; pepEnvironmentStatus: string; enclaveStatus: string } => Boolean(account.accountId) && account.accountId !== PAYER_ACCOUNT_ID && account.accountId !== DEV_ORG_ACCOUNT_ID && !EXCLUDED_ACCOUNT_IDS.has(account.accountId))
   const excludedCatalogAccounts = departmentAccounts
-    .filter(isExplicitlyInactiveFinanceAccount)
-    .map(account => ({ ...account, reason: `GDMS account record is inactive (enclaveStatus: ${account.enclaveStatus})` }))
-  const financeAccounts = departmentAccounts.filter(account => !isExplicitlyInactiveFinanceAccount(account))
+    .filter(account => !isForecastEligibleAccount(account))
+    .map(account => ({
+      ...account,
+      reason: account.pepEnvironmentStatus
+        ? `PEP environment status is "${account.pepEnvironmentStatus}", not Sustainment or Provisional Sustainment`
+        : `PEP environment status is missing and enclaveStatus is "${account.enclaveStatus}", not Active`
+    }))
+  const financeAccounts = departmentAccounts.filter(isForecastEligibleAccount)
   if (!financeAccounts.length) return errors.badRequest(event, `No forecastable accounts are mapped to ${department}`)
   const accountMetadata = new Map(financeAccounts.map(account => [account.accountId, account]))
   const accountIds = financeAccounts.map(account => account.accountId)
@@ -208,9 +215,29 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
   const forecastComposition = {
     allocationMethod: 'individual-cost-dashboard-forecast-requests',
-    accountMonthlyValues: { ...normalCurrent.byAccountMonth, ...normalFuture.byAccountMonth },
+    accountMonthlyValues: Object.fromEntries(accountIds.map(accountId => [accountId, {
+      ...normalCurrent.byAccountMonth[accountId],
+      ...normalFuture.byAccountMonth[accountId]
+    }])),
     specialMonthlyValues: { current: specialCurrent.byMonth, future: specialFuture.byMonth, devOrgMembers, excludedCatalogAccounts }
   }
+  const changes = Object.entries(monthlyValues)
+    .map(([month, value]) => ({ month, previous: Number(currentPlanValues?.[month] || 0), next: value, delta: value - Number(currentPlanValues?.[month] || 0) }))
+    .filter(change => Math.abs(change.delta) >= 0.01)
+  const preview = {
+    department,
+    changes,
+    reasons: [
+      { component: 'Completed months', reason: 'Plan is reset to actual charged values.' },
+      { component: 'Normal accounts', reason: 'Individual Cost Dashboard-style AWS forecasts.' },
+      ...(department === 'DE158' ? [
+        { component: 'GDMS Cloud', reason: 'Separate payer forecast excluding Savings Plan charges.' },
+        { component: 'GDMS-DevOrg', reason: 'Whole Billing View forecast, matching the AWS console.' }
+      ] : [])
+    ],
+    forecastComposition
+  }
+  if (previewOnly) return sendSuccess(event, { monthlyValues, preview, components: { normalAccountCount: normalAccountIds.length, devOrgMemberCount: devOrgMembers.length, excludedCatalogAccounts } })
   const entry = await saveFinancialPlan({ department, year, monthlyValues, action: 'forecast-generated', actor: getUserEmail(event) || 'Unknown user', forecastComposition })
   return sendSuccess(event, { monthlyValues, entry, forecastComposition, components: { normalAccountCount: normalAccountIds.length, devOrgMemberCount: devOrgMembers.length, excludedCatalogAccounts, special: [...special.map(component => component.id), ...(devOrgViewArn ? ['GDMS-DevOrg'] : [])] } })
 }))
