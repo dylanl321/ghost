@@ -15,7 +15,11 @@ const PAYER_ACCOUNT_ID = process.env.AWS_MASTER_ACCOUNT_ID || '205950196477'
 const DEV_ORG_ACCOUNT_ID = process.env.AWS_DEV_ORG_ACCOUNT_ID || '266632029214'
 const DEV_ORG_VIEW_NAME = process.env.AWS_DEV_ORG_BILLING_VIEW_NAME || 'GDMS-DevOrg'
 const DEV_ORG_MASTER_ACCOUNT_ID = process.env.AWS_DEV_ORG_MASTER_ACCOUNT_ID
-const SAVINGS_PLAN_SERVICE = 'Savings Plans for AWS Compute usage'
+const SAVINGS_PLAN_SERVICES = [
+  'Savings Plans for AWS Compute usage',
+  'Savings Plans for AWS Compute',
+  'Savings Plans'
+]
 const EXCLUDED_RECORD_TYPES = ['SavingsPlanRecurringFee', 'SavingsPlanPurchase']
 const EXCLUDED_ACCOUNT_IDS = new Set(['110317593805'])
 
@@ -165,7 +169,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     normalAccountIds = nonDevOrgAccounts.map(account => account.accountId)
     special.push({ id: 'GDMS Cloud', accountId: PAYER_ACCOUNT_ID, filter: { And: [
       { Dimensions: { Key: 'LINKED_ACCOUNT', Values: [PAYER_ACCOUNT_ID] } },
-      { Not: { Dimensions: { Key: 'SERVICE', Values: [SAVINGS_PLAN_SERVICE] } } },
+      { Not: { Dimensions: { Key: 'SERVICE', Values: SAVINGS_PLAN_SERVICES } } },
       { Not: { Dimensions: { Key: 'RECORD_TYPE', Values: EXCLUDED_RECORD_TYPES } } }
     ] } })
   }
@@ -258,8 +262,9 @@ export default defineEventHandler(handleAsync(async (event) => {
     specialMonthlyValues: {
       components: specialComponentMonths,
       definitions: {
-        'GDMS Cloud': 'Separate payer forecast excluding Savings Plan charges.',
-        'GDMS-DevOrg': 'Whole Billing View forecast, matching the AWS console.'
+        'GDMS Cloud': 'Separate payer forecast excluding Savings Plan services and recurring/purchase charge types.',
+        'GDMS-DevOrg': 'Whole Billing View forecast, matching the AWS console.',
+        'Secret Cloud': 'Historical Finance-supplied actuals only; no future forecast is added without Finance-provided values.'
       },
       devOrgMembers,
       excludedCatalogAccounts
@@ -275,8 +280,9 @@ export default defineEventHandler(handleAsync(async (event) => {
       { component: 'Completed months', reason: 'Plan is reset to actual charged values.' },
       { component: 'Normal accounts', reason: 'Individual Cost Dashboard-style AWS forecasts.' },
       ...(department === 'DE158' ? [
-        { component: 'GDMS Cloud', reason: 'Separate payer forecast excluding Savings Plan charges.' },
-        { component: 'GDMS-DevOrg', reason: 'Whole Billing View forecast, matching the AWS console.' }
+        { component: 'GDMS Cloud', reason: 'Separate payer forecast excluding Savings Plan services and recurring/purchase charge types.' },
+        { component: 'GDMS-DevOrg', reason: 'Whole Billing View forecast, matching the AWS console.' },
+        { component: 'Secret Cloud', reason: 'Finance-supplied historical actuals are included when rebasing completed months; no future Secret Cloud forecast is added without Finance-provided values.' }
       ] : [])
     ],
     forecastComposition,
