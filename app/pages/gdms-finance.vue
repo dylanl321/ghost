@@ -815,8 +815,8 @@ const historicalActualMonths = computed(() => {
   }
   return [...months.entries()].map(([month, monthEntries]) => ({ month, entries: monthEntries.sort((a, b) => b.value - a.value), total: monthEntries.reduce((sum, entry) => sum + entry.value, 0) })).sort((a, b) => a.month.localeCompare(b.month))
 })
-const previewMonthOptions = computed(() => (forecastPreview.value?.changes || []).map((change: any) => ({ label: formatMonthShort(change.month), value: change.month })))
-const selectedPreviewMonthIsHistorical = computed(() => Boolean(selectedPreviewMonth.value && selectedPreviewMonth.value < ytdCutoff))
+const previewMonthOptions = computed(() => (forecastPreview.value?.months || forecastPreview.value?.changes?.map((change: any) => change.month) || []).map((month: string) => ({ label: formatMonthShort(month), value: month })))
+const selectedPreviewMonthIsHistorical = computed(() => Boolean(selectedPreviewMonth.value && selectedPreviewMonth.value <= ytdCutoff))
 const selectedPreviewMonthLedger = computed(() => {
   const month = selectedPreviewMonth.value
   if (!month) return []
@@ -824,7 +824,7 @@ const selectedPreviewMonthLedger = computed(() => {
   if (selectedPreviewMonthIsHistorical.value) {
     for (const entry of Object.values(forecastPreview.value?.historicalActualBreakdown || {}) as any[]) {
       const value = Number(entry.monthlyActuals?.[month] || 0)
-      if (value) rows.push({ key: `actual:${entry.accountId}`, name: entry.name, label: 'Actual charge', value, kind: 'actual' })
+      if (value) rows.push({ key: `actual:${entry.accountId}`, name: entry.name, label: 'Pro forma chargeback', value, kind: 'actual' })
     }
   } else {
     for (const row of forecastPreviewRows.value) {
@@ -938,7 +938,7 @@ async function generateForecast() {
     forecastPreview.value = response.data.preview
     expandedPreviewAccounts.value = new Set()
     expandedHistoricalMonths.value = new Set()
-    selectedPreviewMonth.value = response.data.preview.changes?.[0]?.month || null
+    selectedPreviewMonth.value = response.data.preview.months?.find((month: string) => month === ytdCutoff) || response.data.preview.months?.[0] || null
     forecastExcludedAccounts.value = response.data.components?.excludedCatalogAccounts || []
     showForecastPreview.value = true
   } catch (err: any) {

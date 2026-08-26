@@ -127,7 +127,11 @@ function accountDepartment(acc: any): string {
 // e.g. End="2026-02-01" = December AWS charges invoiced in February.
 // formatMonth displays the End month directly (no offset needed).
 function periodToMonthKey(period: any): string {
-  return period.TimePeriod?.End || period.TimePeriod?.Start || ''
+  const start = period.TimePeriod?.Start
+  if (!start) return ''
+  const postingMonth = new Date(`${start}T00:00:00Z`)
+  postingMonth.setUTCMonth(postingMonth.getUTCMonth() + 1)
+  return postingMonth.toISOString().slice(0, 10)
 }
 
 function indexByAccountMonth(resultsByTime: any[] | undefined): Map<string, Map<string, number>> {
@@ -267,7 +271,9 @@ export default defineEventHandler(handleAsync(async (event) => {
   // becomes key "2026-07-01", which formatMonth then displays correctly as June...
   // Actually: shift so the End key advances by one, aligning with the other data sources.
   const budgetByAcct = indexByAccountMonth(proformaResult.proforma?.costs?.resultsByTime)
-  const actualByAcct = indexByAccountMonth(proformaResult.billable?.costs?.resultsByTime)
+  // Finance chargeback actuals must use Billing Conductor proforma values,
+  // matching the Cost Dashboard's proforma mode.
+  const actualByAcct = indexByAccountMonth(proformaResult.proforma?.costs?.resultsByTime)
 
   // Sum all linked account proforma budgets per month (before stripping exclusions).
   // Pending-PEP accounts are intentionally excluded: their proforma allocation stays in
@@ -367,14 +373,14 @@ export default defineEventHandler(handleAsync(async (event) => {
     // Step 3: GDMS Cloud actual per month = billable total − proforma total
     const billableByMonth = new Map<string, number>()
     for (const period of masterBillable.resultsByTime || []) {
-      const month = period.TimePeriod?.End || period.TimePeriod?.Start || ''
+      const month = periodToMonthKey(period)
       if (!month) continue
       billableByMonth.set(month, parseFloat(period.Total?.UnblendedCost?.Amount || '0'))
     }
 
     const proformaOrgByMonth = new Map<string, number>()
     for (const period of proformaOrgTotals.resultsByTime || []) {
-      const month = period.TimePeriod?.End || period.TimePeriod?.Start || ''
+      const month = periodToMonthKey(period)
       if (!month) continue
       proformaOrgByMonth.set(month, parseFloat(period.Total?.UnblendedCost?.Amount || '0'))
     }
@@ -382,7 +388,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     // Build Enterprise Support by month from the grouped CE response
     const enterpriseSupportByMonth = enterpriseSupportActualByMonth
     for (const period of enterpriseSupportRaw.resultsByTime || []) {
-      const month = period.TimePeriod?.End || period.TimePeriod?.Start || ''
+      const month = periodToMonthKey(period)
       if (!month) continue
       const cost = (period.Groups || []).reduce((s: number, g: any) =>
         s + parseFloat(g.Metrics?.UnblendedCost?.Amount || '0'), 0)

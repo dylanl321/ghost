@@ -15,12 +15,7 @@ const PAYER_ACCOUNT_ID = process.env.AWS_MASTER_ACCOUNT_ID || '205950196477'
 const DEV_ORG_ACCOUNT_ID = process.env.AWS_DEV_ORG_ACCOUNT_ID || '266632029214'
 const DEV_ORG_VIEW_NAME = process.env.AWS_DEV_ORG_BILLING_VIEW_NAME || 'GDMS-DevOrg'
 const DEV_ORG_MASTER_ACCOUNT_ID = process.env.AWS_DEV_ORG_MASTER_ACCOUNT_ID
-const SAVINGS_PLAN_SERVICES = [
-  'Savings Plans for AWS Compute usage',
-  'Savings Plans for AWS Compute',
-  'Savings Plans'
-]
-const EXCLUDED_RECORD_TYPES = ['SavingsPlanRecurringFee', 'SavingsPlanPurchase']
+const SAVINGS_PLAN_SERVICE = 'Savings Plans'
 const EXCLUDED_ACCOUNT_IDS = new Set(['110317593805'])
 
 interface SpecialComponent { id: string; filter?: Expression; accountId?: string; billingViewArn?: string }
@@ -35,10 +30,14 @@ function isForecastEligibleAccount(account: { pepEnvironmentStatus: string; encl
   return account.enclaveStatus.trim().toLowerCase() === 'active'
 }
 
-function addForecast(target: Record<string, number>, forecast: any) {
+function addForecast(target: Record<string, number>, forecast: any, postingMonthOffset = 0) {
   for (const point of forecast?.forecastResultsByTime || []) {
     const start = point.TimePeriod?.Start
-    if (start) target[`${start.slice(0, 7)}-01`] = (target[`${start.slice(0, 7)}-01`] || 0) + Number(point.MeanValue || 0)
+    if (!start) continue
+    const postingMonth = new Date(`${start}T00:00:00Z`)
+    postingMonth.setUTCMonth(postingMonth.getUTCMonth() + postingMonthOffset)
+    const key = postingMonth.toISOString().slice(0, 10)
+    target[key] = (target[key] || 0) + Number(point.MeanValue || 0)
   }
 }
 
@@ -75,7 +74,7 @@ async function forecastAccounts(accountIds: string[], startDate: string, endDate
   const failures = results.filter(result => !result.success).map(result => ({ id: result.accountId, message: result.error || 'Unknown Cost Explorer error' }))
   for (const result of results.filter(result => result.success)) {
     const monthly: Record<string, number> = {}
-    addForecast(monthly, result.data)
+    addForecast(monthly, result.data, 1)
     byAccountMonth[result.accountId] = monthly
     for (const [month, value] of Object.entries(monthly)) byMonth[month] = (byMonth[month] || 0) + value
   }
@@ -90,7 +89,7 @@ async function forecastSpecial(components: SpecialComponent[], startDate: string
     try {
       const forecast = await getCostForecast(startDate, endDate, 'UNBLENDED_COST', granularity, component.filter, 'commercial', component.accountId, { billingViewArn: component.billingViewArn })
       const componentMonths: Record<string, number> = {}
-      addForecast(componentMonths, forecast)
+      addForecast(componentMonths, forecast, 1)
       byComponentMonth[component.id] = componentMonths
       for (const [month, value] of Object.entries(componentMonths)) byMonth[month] = (byMonth[month] || 0) + value
     } catch (error) {
@@ -169,24 +168,25 @@ export default defineEventHandler(handleAsync(async (event) => {
     normalAccountIds = nonDevOrgAccounts.map(account => account.accountId)
     special.push({ id: 'GDMS Cloud', accountId: PAYER_ACCOUNT_ID, filter: { And: [
       { Dimensions: { Key: 'LINKED_ACCOUNT', Values: [PAYER_ACCOUNT_ID] } },
-      { Not: { Dimensions: { Key: 'SERVICE', Values: SAVINGS_PLAN_SERVICES } } },
-      { Not: { Dimensions: { Key: 'RECORD_TYPE', Values: EXCLUDED_RECORD_TYPES } } }
+      { Not: { Dimensions: { Key: 'SERVICE', Values: [SAVINGS_PLAN_SERVICE] } } }
     ] } })
   }
 
+  // Finance posts the preceding usage month in the current month. The Finance
+  // page supplies that posted proforma chargeback as an actual, so it must not
+  // also receive a forecast remainder.
   const currentMonth = `${year}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+  const usageMonthStart = `${year}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
   const nextMonth = new Date(today)
   nextMonth.setMonth(nextMonth.getMonth() + 1, 1)
   const currentEnd = nextMonth.toISOString().slice(0, 10)
   const futureEnd = `${year + 1}-01-01`
-  const normalCurrent = normalAccountIds.length ? await forecastAccounts(normalAccountIds, today.toISOString().slice(0, 10), currentEnd, 'DAILY') : { byMonth: {}, byAccountMonth: {}, failures: [] as Array<{ id: string; message: string }> }
+  const normalCurrent = normalAccountIds.length ? await forecastAccounts(normalAccountIds, usageMonthStart, currentEnd, 'MONTHLY') : { byMonth: {}, byAccountMonth: {}, failures: [] as Array<{ id: string; message: string }> }
   const normalFuture = normalAccountIds.length && currentEnd < futureEnd ? await forecastAccounts(normalAccountIds, currentEnd, futureEnd, 'MONTHLY') : { byMonth: {}, byAccountMonth: {}, failures: [] as Array<{ id: string; message: string }> }
-  const specialCurrent = await forecastSpecial(special, today.toISOString().slice(0, 10), currentEnd, 'DAILY')
+  const specialCurrent = await forecastSpecial(special, usageMonthStart, currentEnd, 'MONTHLY')
   const specialFuture = currentEnd < futureEnd ? await forecastSpecial(special, currentEnd, futureEnd, 'MONTHLY') : { byMonth: {}, byComponentMonth: {}, failures: [] as Array<{ id: string; message: string }> }
-  let devOrgCurrent: any
   let devOrgFuture: any
   try {
-    devOrgCurrent = devOrgViewArn ? await forecastDevOrg(devOrgViewArn, today.toISOString().slice(0, 10), currentEnd, 'DAILY') : undefined
     devOrgFuture = devOrgViewArn && currentEnd < futureEnd ? await forecastDevOrg(devOrgViewArn, currentEnd, futureEnd, 'MONTHLY') : undefined
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown Cost Explorer error'
@@ -214,40 +214,37 @@ export default defineEventHandler(handleAsync(async (event) => {
     })
   }
 
-  const currentByMonth = { ...normalCurrent.byMonth }
-  const futureByMonth = { ...normalFuture.byMonth }
-  for (const [month, value] of Object.entries(specialCurrent.byMonth)) currentByMonth[month] = (currentByMonth[month] || 0) + value
+  const futureByMonth = { ...normalCurrent.byMonth, ...normalFuture.byMonth }
+  for (const [month, value] of Object.entries(specialCurrent.byMonth)) futureByMonth[month] = (futureByMonth[month] || 0) + value
   for (const [month, value] of Object.entries(specialFuture.byMonth)) futureByMonth[month] = (futureByMonth[month] || 0) + value
-  addForecast(currentByMonth, devOrgCurrent)
-  addForecast(futureByMonth, devOrgFuture)
+  addForecast(futureByMonth, devOrgFuture, 1)
   const monthlyValues: Record<string, number> = {}
   for (let month = 1; month <= 12; month++) {
     const key = `${year}-${String(month).padStart(2, '0')}-01`
-    monthlyValues[key] = key < currentMonth ? Number(monthlyActuals[key] || 0) : key === currentMonth ? Number(monthlyActuals[key] || 0) + (currentByMonth[key] || 0) : futureByMonth[key] || 0
+    monthlyValues[key] = key <= currentMonth ? Number(monthlyActuals[key] || 0) : futureByMonth[key] || 0
   }
   const specialComponentMonths: Record<string, Record<string, number>> = Object.fromEntries(
     special.map(component => [component.id, { ...specialCurrent.byComponentMonth[component.id], ...specialFuture.byComponentMonth[component.id] }])
   )
   if (devOrgViewArn) {
     specialComponentMonths['GDMS-DevOrg'] = {}
-    addForecast(specialComponentMonths['GDMS-DevOrg'], devOrgCurrent)
-    addForecast(specialComponentMonths['GDMS-DevOrg'], devOrgFuture)
+    addForecast(specialComponentMonths['GDMS-DevOrg'], devOrgFuture, 1)
   }
   for (const accountId of accountIds) {
     const actual = Number(accountMonthlyActuals?.[accountId] || 0)
     if (!actual) continue
-    normalCurrent.byAccountMonth[accountId] = normalCurrent.byAccountMonth[accountId] || {}
-    normalCurrent.byAccountMonth[accountId][currentMonth] = (normalCurrent.byAccountMonth[accountId][currentMonth] || 0) + actual
+    normalFuture.byAccountMonth[accountId] = normalFuture.byAccountMonth[accountId] || {}
+    normalFuture.byAccountMonth[accountId][currentMonth] = actual
   }
   for (const [component, value] of Object.entries(specialMonthlyActuals || {})) {
     const actual = Number(value || 0)
     if (actual) {
       specialComponentMonths[component] = specialComponentMonths[component] || {}
-      specialComponentMonths[component][currentMonth] = (specialComponentMonths[component][currentMonth] || 0) + actual
+      specialComponentMonths[component][currentMonth] = actual
     }
   }
   const forecastComposition = {
-    allocationMethod: 'current-month-actuals-plus-individual-cost-dashboard-forecast-requests',
+    allocationMethod: 'posted-proforma-chargeback-actuals-plus-individual-cost-dashboard-forecast-requests',
     accountMonthlyValues: Object.fromEntries(accountIds.map(accountId => [accountId, {
       ...normalCurrent.byAccountMonth[accountId],
       ...normalFuture.byAccountMonth[accountId]
@@ -262,7 +259,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     specialMonthlyValues: {
       components: specialComponentMonths,
       definitions: {
-        'GDMS Cloud': 'Separate payer forecast excluding Savings Plan services and recurring/purchase charge types.',
+        'GDMS Cloud': 'Payer-account forecast with the Savings Plans service excluded, matching the Cost Explorer console filter.',
         'GDMS-DevOrg': 'Whole Billing View forecast, matching the AWS console.',
         'Secret Cloud': 'Historical Finance-supplied actuals only; no future forecast is added without Finance-provided values.'
       },
@@ -275,12 +272,13 @@ export default defineEventHandler(handleAsync(async (event) => {
     .filter(change => Math.abs(change.delta) >= 0.01)
   const preview = {
     department,
+    months: Object.keys(monthlyValues).sort(),
     changes,
     reasons: [
-      { component: 'Completed months', reason: 'Plan is reset to actual charged values.' },
+      { component: 'Posted chargeback months', reason: 'Plan is reset to the posted proforma chargeback values.' },
       { component: 'Normal accounts', reason: 'Individual Cost Dashboard-style AWS forecasts.' },
       ...(department === 'DE158' ? [
-        { component: 'GDMS Cloud', reason: 'Separate payer forecast excluding Savings Plan services and recurring/purchase charge types.' },
+        { component: 'GDMS Cloud', reason: 'Payer-account forecast with the Savings Plans service excluded, matching the Cost Explorer console filter.' },
         { component: 'GDMS-DevOrg', reason: 'Whole Billing View forecast, matching the AWS console.' },
         { component: 'Secret Cloud', reason: 'Finance-supplied historical actuals are included when rebasing completed months; no future Secret Cloud forecast is added without Finance-provided values.' }
       ] : [])

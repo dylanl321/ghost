@@ -41,11 +41,19 @@ const DEPT_NAMED_CATEGORIES: Record<AllowedDepartment, { name: string; note?: st
 
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
+function periodToMonthKey(period: any): string {
+  const start = period.TimePeriod?.Start
+  if (!start) return ''
+  const postingMonth = new Date(`${start}T00:00:00Z`)
+  postingMonth.setUTCMonth(postingMonth.getUTCMonth() + 1)
+  return postingMonth.toISOString().slice(0, 10)
+}
+
 function indexByAccountMonth(resultsByTime: any[] | undefined): Map<string, Map<string, number>> {
   const out = new Map<string, Map<string, number>>()
   if (!resultsByTime) return out
   for (const period of resultsByTime) {
-    const month = period.TimePeriod?.End || period.TimePeriod?.Start || ''
+    const month = periodToMonthKey(period)
     if (!month) continue
     for (const group of period.Groups || []) {
       const accountId = group.Keys?.[0]
@@ -305,7 +313,7 @@ export default defineEventHandler(async (event) => {
     })
 
     const budgetByAcct = indexByAccountMonth(proformaResult.proforma?.costs?.resultsByTime)
-    const actualByAcct = indexByAccountMonth(proformaResult.billable?.costs?.resultsByTime)
+    const actualByAcct = indexByAccountMonth(proformaResult.proforma?.costs?.resultsByTime)
 
     const payerBudgetFromProforma = budgetByAcct.get(PAYER_ACCOUNT_ID)
     budgetByAcct.delete(PAYER_ACCOUNT_ID)
@@ -327,12 +335,12 @@ export default defineEventHandler(async (event) => {
 
     const billableByMonth = new Map<string, number>()
     for (const period of masterBillable.resultsByTime || []) {
-      const month = period.TimePeriod?.End || period.TimePeriod?.Start || ''
+      const month = periodToMonthKey(period)
       if (month) billableByMonth.set(month, parseFloat(period.Total?.UnblendedCost?.Amount || '0'))
     }
     const proformaOrgByMonth = new Map<string, number>()
     for (const period of proformaOrgTotals.resultsByTime || []) {
-      const month = period.TimePeriod?.End || period.TimePeriod?.Start || ''
+      const month = periodToMonthKey(period)
       if (month) proformaOrgByMonth.set(month, parseFloat(period.Total?.UnblendedCost?.Amount || '0'))
     }
 
