@@ -18,7 +18,13 @@ const DEV_ORG_MASTER_ACCOUNT_ID = process.env.AWS_DEV_ORG_MASTER_ACCOUNT_ID
 // SERVICE filters require the exact Cost Explorer dimension value. This is the
 // canonical value returned by the Finance payer's Cost Explorer console.
 const SAVINGS_PLAN_SERVICE = 'Savings Plans for Compute usage'
-const EXCLUDED_ACCOUNT_IDS = new Set(['110317593805'])
+// Finance excludes pre-chargeback and LAS-APNT-CLD accounts from both actuals
+// and forecasts. Keep this list aligned with budget-vs-actual reporting.
+const EXCLUDED_ACCOUNT_IDS = new Set([
+  '110317593805',
+  '767397758347',
+  '105013955011'
+])
 
 interface SpecialComponent { id: string; filter?: Expression; accountId?: string; billingViewArn?: string }
 
