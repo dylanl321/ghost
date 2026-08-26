@@ -790,7 +790,7 @@ const forecastPreviewChartOption = computed(() => {
 })
 const expandedPreviewAccounts = ref(new Set<string>())
 const expandedHistoricalMonths = ref(new Set<string>())
-const selectedPreviewMonth = ref<string | null>(null)
+const selectedPreviewMonth = ref<string | { label: string; value: string } | null>(null)
 function togglePreviewAccount(accountId: string) {
   if (expandedPreviewAccounts.value.has(accountId)) expandedPreviewAccounts.value.delete(accountId)
   else expandedPreviewAccounts.value.add(accountId)
@@ -816,9 +816,13 @@ const historicalActualMonths = computed(() => {
   return [...months.entries()].map(([month, monthEntries]) => ({ month, entries: monthEntries.sort((a, b) => b.value - a.value), total: monthEntries.reduce((sum, entry) => sum + entry.value, 0) })).sort((a, b) => a.month.localeCompare(b.month))
 })
 const previewMonthOptions = computed(() => (forecastPreview.value?.months || forecastPreview.value?.changes?.map((change: any) => change.month) || []).map((month: string) => ({ label: formatMonthShort(month), value: month })))
-const selectedPreviewMonthIsHistorical = computed(() => Boolean(selectedPreviewMonth.value && selectedPreviewMonth.value <= ytdCutoff))
+const selectedPreviewMonthKey = computed(() => {
+  const selected = selectedPreviewMonth.value
+  return typeof selected === 'string' ? selected : selected?.value || null
+})
+const selectedPreviewMonthIsHistorical = computed(() => Boolean(selectedPreviewMonthKey.value && selectedPreviewMonthKey.value <= ytdCutoff))
 const selectedPreviewMonthLedger = computed(() => {
-  const month = selectedPreviewMonth.value
+  const month = selectedPreviewMonthKey.value
   if (!month) return []
   const rows: Array<{ key: string; name: string; label: string; value: number; kind: 'actual' | 'forecast' | 'special' }> = []
   if (selectedPreviewMonthIsHistorical.value) {
