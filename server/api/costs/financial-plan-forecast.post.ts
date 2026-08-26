@@ -178,14 +178,16 @@ export default defineEventHandler(handleAsync(async (event) => {
   // page supplies that posted proforma chargeback as an actual, so it must not
   // also receive a forecast remainder.
   const currentMonth = `${year}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
-  const usageMonthStart = `${year}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+  // GetCostForecast cannot start before today. The daily forecast covers the
+  // remainder of the current usage month and is posted to the next Finance month.
+  const currentForecastStart = today.toISOString().slice(0, 10)
   const nextMonth = new Date(today)
   nextMonth.setMonth(nextMonth.getMonth() + 1, 1)
   const currentEnd = nextMonth.toISOString().slice(0, 10)
   const futureEnd = `${year + 1}-01-01`
-  const normalCurrent = normalAccountIds.length ? await forecastAccounts(normalAccountIds, usageMonthStart, currentEnd, 'MONTHLY') : { byMonth: {}, byAccountMonth: {}, failures: [] as Array<{ id: string; message: string }> }
+  const normalCurrent = normalAccountIds.length ? await forecastAccounts(normalAccountIds, currentForecastStart, currentEnd, 'DAILY') : { byMonth: {}, byAccountMonth: {}, failures: [] as Array<{ id: string; message: string }> }
   const normalFuture = normalAccountIds.length && currentEnd < futureEnd ? await forecastAccounts(normalAccountIds, currentEnd, futureEnd, 'MONTHLY') : { byMonth: {}, byAccountMonth: {}, failures: [] as Array<{ id: string; message: string }> }
-  const specialCurrent = await forecastSpecial(special, usageMonthStart, currentEnd, 'MONTHLY')
+  const specialCurrent = await forecastSpecial(special, currentForecastStart, currentEnd, 'DAILY')
   const specialFuture = currentEnd < futureEnd ? await forecastSpecial(special, currentEnd, futureEnd, 'MONTHLY') : { byMonth: {}, byComponentMonth: {}, failures: [] as Array<{ id: string; message: string }> }
   let devOrgFuture: any
   try {
