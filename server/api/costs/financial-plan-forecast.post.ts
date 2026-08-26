@@ -219,6 +219,13 @@ export default defineEventHandler(handleAsync(async (event) => {
       ...normalCurrent.byAccountMonth[accountId],
       ...normalFuture.byAccountMonth[accountId]
     }])),
+    normalAccounts: accountIds.map(accountId => ({
+      accountId,
+      name: accountMetadata.get(accountId)?.name || 'Unknown account',
+      source: accountMetadata.get(accountId)?.source || 'unknown',
+      pepEnvironmentStatus: accountMetadata.get(accountId)?.pepEnvironmentStatus || '',
+      enclaveStatus: accountMetadata.get(accountId)?.enclaveStatus || ''
+    })),
     specialMonthlyValues: { current: specialCurrent.byMonth, future: specialFuture.byMonth, devOrgMembers, excludedCatalogAccounts }
   }
   const changes = Object.entries(monthlyValues)
