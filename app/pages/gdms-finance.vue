@@ -303,9 +303,12 @@
           <div v-if="forecastFailures.length" class="mb-4 border border-red-200 dark:border-red-900">
             <div v-for="failure in forecastFailures" :key="failure.message" class="border-b border-red-100 p-3 last:border-b-0 dark:border-red-900/60">
               <div class="text-sm font-medium text-red-700 dark:text-red-300">{{ failure.message }}</div>
-              <div class="mt-1 break-all font-mono text-xs text-red-600 dark:text-red-400">{{ failure.accountIds.join(', ') }}</div>
+              <div v-for="account in failure.accounts" :key="account.accountId" class="mt-1 flex flex-wrap gap-x-2 text-xs text-red-600 dark:text-red-400"><span class="font-mono">{{ account.accountId }}</span><span>{{ account.name }}</span><span class="text-red-400 dark:text-red-500">{{ account.source }}</span></div>
             </div>
           </div>
+          <UAlert v-if="forecastExcludedAccounts.length" color="amber" variant="subtle" icon="i-heroicons-information-circle" title="Catalog records excluded from forecast" class="mb-4">
+            <template #description><div v-for="account in forecastExcludedAccounts" :key="account.accountId" class="mt-1"><span class="font-mono">{{ account.accountId }}</span> {{ account.name }}: {{ account.reason }}</div></template>
+          </UAlert>
 
           <UCard v-if="planHistory.length" class="mb-4">
             <template #header>
@@ -700,6 +703,7 @@ const forecastErrorDetails = ref<Record<string, unknown> | null>(null)
 const forecastNotice = ref<string | null>(null)
 const forecastComposition = ref<any>(null)
 const forecastFailures = computed(() => Array.isArray((forecastErrorDetails.value as any)?.failures) ? (forecastErrorDetails.value as any).failures : [])
+const forecastExcludedAccounts = ref<Array<{ accountId: string; name: string; source: string; reason: string }>>([])
 const forecastCompositionRows = computed(() => {
   if (!forecastComposition.value) return []
   const monthly = forecastComposition.value.accountMonthlyValues || {}
@@ -794,20 +798,23 @@ async function generateForecast() {
   forecastGenerating.value = true
   forecastError.value = null
   forecastErrorDetails.value = null
+  forecastExcludedAccounts.value = []
   forecastNotice.value = null
   try {
     const monthlyActuals = Object.fromEntries(dept.monthly.map(month => [month.month, visibleActual(month)]))
-    const response = await $fetch<{ data: { monthlyValues: Record<string, number>; forecastWarning?: string } }>('/api/costs/financial-plan-forecast', {
+    const response = await $fetch<{ data: { monthlyValues: Record<string, number>; forecastWarning?: string; components?: { excludedCatalogAccounts?: Array<{ accountId: string; name: string; source: string; reason: string }> } } }>('/api/costs/financial-plan-forecast', {
       method: 'POST',
       body: { department: dept.department, year: selectedYear.value, monthlyActuals }
     })
     planOverrides.value = { ...planOverrides.value, [dept.department]: response.data.monthlyValues }
     forecastComposition.value = (response.data as any).forecastComposition || null
+    forecastExcludedAccounts.value = response.data.components?.excludedCatalogAccounts || []
     forecastNotice.value = response.data.forecastWarning || 'Forecast generated from AWS Cost Explorer data.'
     await loadPlanHistory()
   } catch (err: any) {
     forecastError.value = err?.data?.error?.message || err?.data?.message || err?.message || 'Failed to generate forecast.'
     forecastErrorDetails.value = err?.data?.error?.details || null
+    forecastExcludedAccounts.value = err?.data?.error?.details?.excludedCatalogAccounts || []
   } finally {
     forecastGenerating.value = false
   }

@@ -95,15 +95,22 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   const today = new Date()
   if (year !== today.getFullYear()) return errors.badRequest(event, 'AWS forecasts can only be generated for the current year')
-  const accountIds = (await getAllAccountsUnified(false))
+  const financeAccounts = (await getAllAccountsUnified(false))
     .filter(account => accountDepartment(account) === department)
-    .map(account => account.awsStandardAccountID || account.accountId)
-    .filter((id): id is string => Boolean(id) && id !== PAYER_ACCOUNT_ID && id !== DEV_ORG_ACCOUNT_ID && !EXCLUDED_ACCOUNT_IDS.has(id))
-  if (!accountIds.length) return errors.badRequest(event, `No forecastable accounts are mapped to ${department}`)
+    .map(account => ({
+      accountId: account.awsStandardAccountID || account.accountId,
+      name: account.projectName || account.name || account.accountName || 'Unnamed account',
+      source: account.source || 'unknown'
+    }))
+    .filter((account): account is { accountId: string; name: string; source: string } => Boolean(account.accountId) && account.accountId !== PAYER_ACCOUNT_ID && account.accountId !== DEV_ORG_ACCOUNT_ID && !EXCLUDED_ACCOUNT_IDS.has(account.accountId))
+  if (!financeAccounts.length) return errors.badRequest(event, `No forecastable accounts are mapped to ${department}`)
+  const accountMetadata = new Map(financeAccounts.map(account => [account.accountId, account]))
+  const accountIds = financeAccounts.map(account => account.accountId)
 
   const special: SpecialComponent[] = []
   let normalAccountIds = accountIds
   let devOrgMembers: string[] = []
+  let excludedCatalogAccounts: Array<{ accountId: string; name: string; source: string; reason: string }> = []
   let devOrgViewArn: string | undefined
   if (department === 'DE158') {
     const devOrg = await resolveBillingView(DEV_ORG_VIEW_NAME)
@@ -111,7 +118,15 @@ export default defineEventHandler(handleAsync(async (event) => {
     devOrgViewArn = devOrg.arn
     const memberIds = await getBillingViewMembers(devOrg.arn, today)
     devOrgMembers = accountIds.filter(accountId => memberIds.has(accountId))
-    normalAccountIds = accountIds.filter(accountId => !memberIds.has(accountId))
+    const nonDevOrgAccounts = financeAccounts.filter(account => !memberIds.has(account.accountId))
+    // DynamoDB-only records are not present in the active Commercial Organization.
+    // They must not be sent to Cost Explorer as normal linked-account forecasts.
+    excludedCatalogAccounts = nonDevOrgAccounts
+      .filter(account => account.source === 'dynamodb')
+      .map(account => ({ ...account, reason: 'Not present in the active Commercial Organization or GDMS-DevOrg billing view' }))
+    normalAccountIds = nonDevOrgAccounts
+      .filter(account => account.source !== 'dynamodb')
+      .map(account => account.accountId)
     special.push({ id: 'GDMS Cloud', accountId: PAYER_ACCOUNT_ID, filter: { And: [
       { Dimensions: { Key: 'LINKED_ACCOUNT', Values: [PAYER_ACCOUNT_ID] } },
       { Not: { Dimensions: { Key: 'SERVICE', Values: [SAVINGS_PLAN_SERVICE] } } },
@@ -151,7 +166,11 @@ export default defineEventHandler(handleAsync(async (event) => {
       devOrgMemberIds: devOrgMembers,
       currentRange: { start: today.toISOString().slice(0, 10), end: currentEnd },
       futureRange: { start: currentEnd, end: futureEnd },
-      failures: [...grouped.entries()].map(([message, accountIds]) => ({ message, accountIds }))
+      failures: [...grouped.entries()].map(([message, accountIds]) => ({
+        message,
+        accounts: accountIds.map(accountId => accountMetadata.get(accountId) || { accountId, name: 'Unknown GHOST record', source: 'unknown' })
+      })),
+      excludedCatalogAccounts
     })
   }
 
@@ -169,8 +188,8 @@ export default defineEventHandler(handleAsync(async (event) => {
   const forecastComposition = {
     allocationMethod: 'individual-cost-dashboard-forecast-requests',
     accountMonthlyValues: { ...normalCurrent.byAccountMonth, ...normalFuture.byAccountMonth },
-    specialMonthlyValues: { current: specialCurrent.byMonth, future: specialFuture.byMonth, devOrgMembers }
+    specialMonthlyValues: { current: specialCurrent.byMonth, future: specialFuture.byMonth, devOrgMembers, excludedCatalogAccounts }
   }
   const entry = await saveFinancialPlan({ department, year, monthlyValues, action: 'forecast-generated', actor: getUserEmail(event) || 'Unknown user', forecastComposition })
-  return sendSuccess(event, { monthlyValues, entry, forecastComposition, components: { normalAccountCount: normalAccountIds.length, devOrgMemberCount: devOrgMembers.length, special: [...special.map(component => component.id), ...(devOrgViewArn ? ['GDMS-DevOrg'] : [])] } })
+  return sendSuccess(event, { monthlyValues, entry, forecastComposition, components: { normalAccountCount: normalAccountIds.length, devOrgMemberCount: devOrgMembers.length, excludedCatalogAccounts, special: [...special.map(component => component.id), ...(devOrgViewArn ? ['GDMS-DevOrg'] : [])] } })
 }))
