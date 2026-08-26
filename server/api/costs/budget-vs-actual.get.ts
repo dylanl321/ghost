@@ -327,9 +327,9 @@ export default defineEventHandler(handleAsync(async (event) => {
   // DevOrg (266632029214): own billing transfer group (GDMS-DevOrg). We look up
   // its billing view ARN via ListBillingViews, then pass BillingViewArn to CE so
   // the query is scoped to that group with a full per-account breakdown.
-  let payerActualByMonth = new Map<string, number>()
-  let payerBudgetByMonth = new Map<string, number>()
-  let enterpriseSupportActualByMonth = new Map<string, number>()
+  const payerActualByMonth = new Map<string, number>()
+  const payerBudgetByMonth = new Map<string, number>()
+  const enterpriseSupportActualByMonth = new Map<string, number>()
   let devOrgResult: Awaited<ReturnType<typeof queryDevOrgChargesByMonth>> = {
     byMonth: new Map(),
     byAccountMonth: new Map(),
@@ -510,7 +510,6 @@ export default defineEventHandler(handleAsync(async (event) => {
       .filter(([m]) => m >= yearMonthMin && m <= yearMonthMax)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([month, v]) => ({ month, budget: v.budget, actual: v.actual }))
-
 
     const budgetTotal = monthly.reduce((s, p) => s + p.budget, 0)
     const actualTotal = monthly.reduce((s, p) => s + p.actual, 0)

@@ -358,6 +358,7 @@
                 </div>
                 <div><h3 class="text-sm font-medium mb-2">Monthly plan change</h3><VChart :option="forecastPreviewChartOption" class="h-56" autoresize /></div>
                 <div><h3 class="text-sm font-medium mb-2">Monthly plan changes</h3><table class="w-full text-sm"><thead><tr class="text-left text-xs text-gray-500"><th class="pb-2">Month</th><th class="pb-2 text-right">Current</th><th class="pb-2 text-right">Proposed</th><th class="pb-2 text-right">Change</th></tr></thead><tbody><tr v-for="change in forecastPreview?.changes" :key="change.month" class="border-t border-gray-100 dark:border-gray-700"><td class="py-2">{{ formatMonthShort(change.month) }}</td><td class="py-2 text-right">{{ formatCurrency(change.previous, 0) }}</td><td class="py-2 text-right">{{ formatCurrency(change.next, 0) }}</td><td class="py-2 text-right" :class="change.delta >= 0 ? 'text-red-600' : 'text-emerald-600'">{{ change.delta >= 0 ? '+' : '' }}{{ formatCurrency(change.delta, 0) }}</td></tr></tbody></table></div>
+                <div><h3 class="text-sm font-medium mb-2">Completed-month actual basis</h3><p class="mb-2 text-xs text-gray-500">These charged values replace past plan months before the forecast is applied.</p><div class="border border-gray-200 dark:border-gray-700"><div v-for="month in historicalActualMonths" :key="month.month" class="border-b border-gray-100 last:border-b-0 dark:border-gray-700"><button class="flex w-full items-center gap-3 p-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800/40" @click="toggleHistoricalMonth(month.month)"><UIcon :name="expandedHistoricalMonths.has(month.month) ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'" class="w-4 h-4 text-gray-400"/><span class="flex-1 text-sm font-medium">{{ formatMonthShort(month.month) }}</span><span class="text-sm font-medium">{{ formatCurrency(month.total, 0) }}</span></button><div v-if="expandedHistoricalMonths.has(month.month)" class="border-t border-gray-100 px-10 py-3 dark:border-gray-700"><div v-for="entry in month.entries" :key="entry.key" class="flex items-center gap-3 py-1.5 text-sm"><span class="flex-1"><span class="font-medium">{{ entry.name }}</span><span class="ml-2 font-mono text-xs text-gray-500">{{ entry.accountId }}</span></span><span>{{ formatCurrency(entry.value, 0) }}</span></div></div></div></div></div>
                 <div><h3 class="text-sm font-medium mb-2">Forecast basis</h3><div v-for="reason in forecastPreview?.reasons" :key="reason.component" class="border-t border-gray-100 py-2 text-sm dark:border-gray-700"><span class="font-medium">{{ reason.component }}:</span> {{ reason.reason }}</div></div>
                 <div><h3 class="text-sm font-medium mb-2">Forecast composition</h3><div class="border border-gray-200 dark:border-gray-700"><div v-for="row in forecastPreviewRows" :key="row.accountId" class="border-b border-gray-100 last:border-b-0 dark:border-gray-700"><button class="flex w-full items-center gap-3 p-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800/40" @click="togglePreviewAccount(row.accountId)"><UIcon :name="expandedPreviewAccounts.has(row.accountId) ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'" class="w-4 h-4 text-gray-400"/><div class="min-w-0 flex-1"><div class="truncate text-sm font-medium">{{ row.name }}</div><div class="font-mono text-xs text-gray-500">{{ row.special ? 'Special component' : row.accountId }} · {{ row.lifecycle }}</div></div><div class="text-right"><div class="text-sm font-medium">{{ formatCurrency(row.total, 0) }}</div><div class="text-xs text-gray-500">{{ row.share.toFixed(1) }}% of forecast total</div></div></button><div v-if="expandedPreviewAccounts.has(row.accountId)" class="border-t border-gray-100 px-10 py-3 dark:border-gray-700"><div class="grid grid-cols-3 gap-2 text-xs"><div v-for="month in row.months" :key="month.month" class="border border-gray-100 p-2 dark:border-gray-700"><div class="text-gray-500">{{ formatMonthShort(month.month) }}</div><div class="mt-1 font-medium">{{ formatCurrency(month.value, 0) }}</div></div></div></div></div></div></div>
               </div>
@@ -786,10 +787,31 @@ const forecastPreviewChartOption = computed(() => {
   return { tooltip: { trigger: 'axis', valueFormatter: (value: number) => formatCurrency(value, 0) }, legend: { data: ['Current Plan', 'Proposed Plan'], bottom: 0 }, grid: { left: 82, right: 24, top: 22, bottom: 52, containLabel: false }, xAxis: { type: 'category', axisTick: { alignWithLabel: true }, axisLabel: { interval: 0, fontSize: 11 }, data: changes.map((change: any) => formatMonthShort(change.month)) }, yAxis: { type: 'value', axisLabel: { formatter: (value: number) => formatCurrency(value, 0), fontSize: 10 }, splitLine: { lineStyle: { color: '#334155' } } }, series: [{ name: 'Current Plan', type: 'bar', barMaxWidth: 22, data: changes.map((change: any) => change.previous), itemStyle: { color: '#94a3b8' } }, { name: 'Proposed Plan', type: 'bar', barMaxWidth: 22, data: changes.map((change: any) => change.next), itemStyle: { color: '#4a7ca8' } }] }
 })
 const expandedPreviewAccounts = ref(new Set<string>())
+const expandedHistoricalMonths = ref(new Set<string>())
 function togglePreviewAccount(accountId: string) {
   if (expandedPreviewAccounts.value.has(accountId)) expandedPreviewAccounts.value.delete(accountId)
   else expandedPreviewAccounts.value.add(accountId)
 }
+function toggleHistoricalMonth(month: string) {
+  if (expandedHistoricalMonths.value.has(month)) expandedHistoricalMonths.value.delete(month)
+  else expandedHistoricalMonths.value.add(month)
+}
+const historicalActualMonths = computed(() => {
+  const breakdown = forecastPreview.value?.historicalActualBreakdown || {}
+  const entries = Object.values(breakdown) as any[]
+  const months = new Map<string, any[]>()
+  for (const entry of entries) {
+    for (const [month, rawValue] of Object.entries(entry.monthlyActuals || {})) {
+      if (month > ytdCutoff) continue
+      const value = Number(rawValue || 0)
+      if (!value) continue
+      const values = months.get(month) || []
+      values.push({ key: `${entry.accountId}:${month}`, accountId: entry.accountId, name: entry.name, value })
+      months.set(month, values)
+    }
+  }
+  return [...months.entries()].map(([month, monthEntries]) => ({ month, entries: monthEntries.sort((a, b) => b.value - a.value), total: monthEntries.reduce((sum, entry) => sum + entry.value, 0) })).sort((a, b) => a.month.localeCompare(b.month))
+})
 interface PlanHistoryEntry { sk: string; action: string; actor: string; createdAt: string; monthlyValues: Record<string, number>; forecastComposition?: Record<string, unknown> }
 const planHistory = ref<PlanHistoryEntry[]>([])
 
@@ -878,12 +900,22 @@ async function generateForecast() {
   forecastNotice.value = null
   try {
     const monthlyActuals = Object.fromEntries(dept.monthly.map(month => [month.month, visibleActual(month)]))
+    const historicalActualBreakdown: Record<string, { accountId: string; name: string; monthlyActuals: Record<string, number> }> = {}
+    const accountMonthlyActuals: Record<string, number> = {}
+    const specialMonthlyActuals: Record<string, number> = {}
+    for (const category of dept.categories) {
+      const categoryActual = category.accounts.reduce((sum, account) => sum + Number(account.monthlyActuals?.[ytdCutoff] || 0), 0)
+      if (category.name === 'GDMS Cloud' || category.name === 'GDMS-DevOrg') specialMonthlyActuals[category.name] = categoryActual
+      for (const account of category.accounts) historicalActualBreakdown[`${category.name}:${account.accountId}`] = { accountId: account.accountId, name: account.name || category.name, monthlyActuals: account.monthlyActuals || {} }
+      if (category.name !== 'GDMS Cloud' && category.name !== 'GDMS-DevOrg') for (const account of category.accounts) accountMonthlyActuals[account.accountId] = Number(account.monthlyActuals?.[ytdCutoff] || 0)
+    }
     const response = await $fetch<{ data: { preview: any; components?: { excludedCatalogAccounts?: Array<{ accountId: string; name: string; source: string; pepEnvironmentStatus?: string; enclaveStatus?: string; reason: string }> } } }>('/api/costs/financial-plan-forecast', {
       method: 'POST',
-      body: { department: dept.department, year: selectedYear.value, monthlyActuals, currentPlanValues: resolvedMonthlyPlan.value, preview: true }
+      body: { department: dept.department, year: selectedYear.value, monthlyActuals, accountMonthlyActuals, specialMonthlyActuals, historicalActualBreakdown, currentPlanValues: resolvedMonthlyPlan.value, preview: true }
     })
     forecastPreview.value = response.data.preview
     expandedPreviewAccounts.value = new Set()
+    expandedHistoricalMonths.value = new Set()
     forecastExcludedAccounts.value = response.data.components?.excludedCatalogAccounts || []
     showForecastPreview.value = true
   } catch (err: any) {
@@ -901,8 +933,17 @@ async function applyForecast() {
   forecastApplying.value = true
   try {
     const monthlyActuals = Object.fromEntries(dept.monthly.map(month => [month.month, visibleActual(month)]))
+    const historicalActualBreakdown: Record<string, { accountId: string; name: string; monthlyActuals: Record<string, number> }> = {}
+    const accountMonthlyActuals: Record<string, number> = {}
+    const specialMonthlyActuals: Record<string, number> = {}
+    for (const category of dept.categories) {
+      const categoryActual = category.accounts.reduce((sum, account) => sum + Number(account.monthlyActuals?.[ytdCutoff] || 0), 0)
+      if (category.name === 'GDMS Cloud' || category.name === 'GDMS-DevOrg') specialMonthlyActuals[category.name] = categoryActual
+      for (const account of category.accounts) historicalActualBreakdown[`${category.name}:${account.accountId}`] = { accountId: account.accountId, name: account.name || category.name, monthlyActuals: account.monthlyActuals || {} }
+      if (category.name !== 'GDMS Cloud' && category.name !== 'GDMS-DevOrg') for (const account of category.accounts) accountMonthlyActuals[account.accountId] = Number(account.monthlyActuals?.[ytdCutoff] || 0)
+    }
     const response = await $fetch<{ data: { monthlyValues: Record<string, number>; forecastComposition: any } }>('/api/costs/financial-plan-forecast', {
-      method: 'POST', body: { department: dept.department, year: selectedYear.value, monthlyActuals, currentPlanValues: resolvedMonthlyPlan.value }
+      method: 'POST', body: { department: dept.department, year: selectedYear.value, monthlyActuals, accountMonthlyActuals, specialMonthlyActuals, historicalActualBreakdown, currentPlanValues: resolvedMonthlyPlan.value }
     })
     planOverrides.value = { ...planOverrides.value, [dept.department]: response.data.monthlyValues }
     forecastComposition.value = response.data.forecastComposition

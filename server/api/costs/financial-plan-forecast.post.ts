@@ -103,6 +103,9 @@ export default defineEventHandler(handleAsync(async (event) => {
   const year = Number(body?.year)
   const monthlyActuals = body?.monthlyActuals as Record<string, number>
   const currentPlanValues = body?.currentPlanValues as Record<string, number> | undefined
+  const accountMonthlyActuals = body?.accountMonthlyActuals as Record<string, number> | undefined
+  const specialMonthlyActuals = body?.specialMonthlyActuals as Record<string, number> | undefined
+  const historicalActualBreakdown = body?.historicalActualBreakdown as Record<string, unknown> | undefined
   const previewOnly = body?.preview === true
   if (!DEPARTMENTS.has(department) || !Number.isInteger(year) || !monthlyActuals || typeof monthlyActuals !== 'object') return errors.badRequest(event, 'department, year, and monthlyActuals are required')
 
@@ -226,8 +229,21 @@ export default defineEventHandler(handleAsync(async (event) => {
     addForecast(specialComponentMonths['GDMS-DevOrg'], devOrgCurrent)
     addForecast(specialComponentMonths['GDMS-DevOrg'], devOrgFuture)
   }
+  for (const accountId of accountIds) {
+    const actual = Number(accountMonthlyActuals?.[accountId] || 0)
+    if (!actual) continue
+    normalCurrent.byAccountMonth[accountId] = normalCurrent.byAccountMonth[accountId] || {}
+    normalCurrent.byAccountMonth[accountId][currentMonth] = (normalCurrent.byAccountMonth[accountId][currentMonth] || 0) + actual
+  }
+  for (const [component, value] of Object.entries(specialMonthlyActuals || {})) {
+    const actual = Number(value || 0)
+    if (actual) {
+      specialComponentMonths[component] = specialComponentMonths[component] || {}
+      specialComponentMonths[component][currentMonth] = (specialComponentMonths[component][currentMonth] || 0) + actual
+    }
+  }
   const forecastComposition = {
-    allocationMethod: 'individual-cost-dashboard-forecast-requests',
+    allocationMethod: 'current-month-actuals-plus-individual-cost-dashboard-forecast-requests',
     accountMonthlyValues: Object.fromEntries(accountIds.map(accountId => [accountId, {
       ...normalCurrent.byAccountMonth[accountId],
       ...normalFuture.byAccountMonth[accountId]
@@ -263,7 +279,8 @@ export default defineEventHandler(handleAsync(async (event) => {
         { component: 'GDMS-DevOrg', reason: 'Whole Billing View forecast, matching the AWS console.' }
       ] : [])
     ],
-    forecastComposition
+    forecastComposition,
+    historicalActualBreakdown
   }
   if (previewOnly) return sendSuccess(event, { monthlyValues, preview, components: { normalAccountCount: normalAccountIds.length, devOrgMemberCount: devOrgMembers.length, excludedCatalogAccounts } })
   const entry = await saveFinancialPlan({ department, year, monthlyValues, action: 'forecast-generated', actor: getUserEmail(event) || 'Unknown user', forecastComposition })
