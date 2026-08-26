@@ -4,7 +4,7 @@ import { handleAsync, sendSuccess, errors } from '../../utils/api-response'
 import { getUserEmail, requirePermission } from '../../utils/user-roles'
 import { getAllAccountsUnified } from '../../utils/accounts-consolidated'
 import { resolveBillingView } from '../../utils/billing-views'
-import { getCostForecast } from '../../utils/cost-explorer'
+import { getCostAndUsage, getCostForecast } from '../../utils/cost-explorer'
 import { batchForecastCalls } from '../../utils/forecast-batcher'
 import { getCostExplorerClient } from '../../lib/aws-client-factory'
 import { saveFinancialPlan } from '../../utils/financial-plan-history'
@@ -15,9 +15,15 @@ const PAYER_ACCOUNT_ID = process.env.AWS_MASTER_ACCOUNT_ID || '205950196477'
 const DEV_ORG_ACCOUNT_ID = process.env.AWS_DEV_ORG_ACCOUNT_ID || '266632029214'
 const DEV_ORG_VIEW_NAME = process.env.AWS_DEV_ORG_BILLING_VIEW_NAME || 'GDMS-DevOrg'
 const DEV_ORG_MASTER_ACCOUNT_ID = process.env.AWS_DEV_ORG_MASTER_ACCOUNT_ID
-// SERVICE filters require the exact Cost Explorer dimension value. This is the
-// canonical value returned by the Finance payer's Cost Explorer console.
-const SAVINGS_PLAN_SERVICE = 'Savings Plans for Compute usage'
+// Cost Explorer has used more than one SERVICE dimension value for Savings
+// Plans. Exclude every canonical variant so the payer forecast matches the
+// console's Savings Plans exclusion across historical and forecast periods.
+const SAVINGS_PLAN_SERVICES = [
+  'Savings Plans for Compute usage',
+  'Savings Plans for AWS Compute usage',
+  'EC2 Instance Savings Plans',
+  'Savings Plans'
+]
 // Finance excludes pre-chargeback and LAS-APNT-CLD accounts from both actuals
 // and forecasts. Keep this list aligned with budget-vs-actual reporting.
 const EXCLUDED_ACCOUNT_IDS = new Set([
@@ -44,6 +50,7 @@ function addForecast(target: Record<string, number>, forecast: any, postingMonth
     if (!start) continue
     const postingMonth = new Date(`${start}T00:00:00Z`)
     postingMonth.setUTCMonth(postingMonth.getUTCMonth() + postingMonthOffset)
+    postingMonth.setUTCDate(1)
     const key = postingMonth.toISOString().slice(0, 10)
     target[key] = (target[key] || 0) + Number(point.MeanValue || 0)
   }
@@ -105,6 +112,44 @@ async function forecastSpecial(components: SpecialComponent[], startDate: string
     }
   }
   return { byMonth, byComponentMonth, failures }
+}
+
+async function loadCurrentAccountActuals(accountIds: string[], startDate: string, endDate: string) {
+  if (!accountIds.length) return {} as Record<string, number>
+  const response = await getCostAndUsage({
+    startDate,
+    endDate,
+    granularity: 'MONTHLY',
+    metrics: ['UnblendedCost'],
+    groupBy: [{ type: 'DIMENSION', key: 'LINKED_ACCOUNT' }],
+    filter: { Dimensions: { Key: 'LINKED_ACCOUNT', Values: accountIds } }
+  }, 'commercial', process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832')
+  const totals: Record<string, number> = {}
+  for (const period of response.resultsByTime || []) {
+    for (const group of period.Groups || []) {
+      const accountId = group.Keys?.[0]
+      if (accountId) totals[accountId] = (totals[accountId] || 0) + Number(group.Metrics?.UnblendedCost?.Amount || 0)
+    }
+  }
+  return totals
+}
+
+async function loadCurrentSpecialActuals(components: SpecialComponent[], startDate: string, endDate: string) {
+  const totals: Record<string, number> = {}
+  for (const component of components) {
+    const response = await getCostAndUsage({
+      startDate,
+      endDate,
+      granularity: 'MONTHLY',
+      metrics: ['UnblendedCost'],
+      filter: component.filter
+    }, 'commercial', component.accountId)
+    totals[component.id] = (response.resultsByTime || []).reduce(
+      (sum, period) => sum + Number(period.Total?.UnblendedCost?.Amount || 0),
+      0
+    )
+  }
+  return totals
 }
 
 export default defineEventHandler(handleAsync(async (event) => {
@@ -176,7 +221,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     normalAccountIds = nonDevOrgAccounts.map(account => account.accountId)
     special.push({ id: 'GDMS Cloud', accountId: PAYER_ACCOUNT_ID, filter: { And: [
       { Dimensions: { Key: 'LINKED_ACCOUNT', Values: [PAYER_ACCOUNT_ID] } },
-      { Not: { Dimensions: { Key: 'SERVICE', Values: [SAVINGS_PLAN_SERVICE] } } }
+      { Not: { Dimensions: { Key: 'SERVICE', Values: SAVINGS_PLAN_SERVICES } } }
     ] } })
   }
 
@@ -187,6 +232,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   // GetCostForecast cannot start before today. The daily forecast covers the
   // remainder of the current usage month and is posted to the next Finance month.
   const currentForecastStart = today.toISOString().slice(0, 10)
+  const currentUsageStart = `${year}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
   const nextMonth = new Date(today)
   nextMonth.setMonth(nextMonth.getMonth() + 1, 1)
   const currentEnd = nextMonth.toISOString().slice(0, 10)
@@ -222,6 +268,24 @@ export default defineEventHandler(handleAsync(async (event) => {
       })),
       excludedCatalogAccounts
     })
+  }
+
+  // The next Finance posting month is the current calendar month's accrued
+  // chargeback plus its remaining-days forecast. Store one combined value so
+  // the ledger cannot double-count or show one row per forecast day.
+  const [currentAccountActuals, currentSpecialActuals] = await Promise.all([
+    loadCurrentAccountActuals(normalAccountIds, currentUsageStart, currentForecastStart),
+    loadCurrentSpecialActuals(special, currentUsageStart, currentForecastStart)
+  ])
+  for (const [accountId, actual] of Object.entries(currentAccountActuals)) {
+    normalCurrent.byAccountMonth[accountId] = normalCurrent.byAccountMonth[accountId] || {}
+    normalCurrent.byAccountMonth[accountId][currentEnd] = (normalCurrent.byAccountMonth[accountId][currentEnd] || 0) + actual
+    normalCurrent.byMonth[currentEnd] = (normalCurrent.byMonth[currentEnd] || 0) + actual
+  }
+  for (const [component, actual] of Object.entries(currentSpecialActuals)) {
+    specialCurrent.byComponentMonth[component] = specialCurrent.byComponentMonth[component] || {}
+    specialCurrent.byComponentMonth[component][currentEnd] = (specialCurrent.byComponentMonth[component][currentEnd] || 0) + actual
+    specialCurrent.byMonth[currentEnd] = (specialCurrent.byMonth[currentEnd] || 0) + actual
   }
 
   const futureByMonth = { ...normalCurrent.byMonth, ...normalFuture.byMonth }
