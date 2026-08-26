@@ -300,6 +300,9 @@
             :description="forecastError"
             class="mb-4"
           />
+          <div v-if="forecastErrorContext.length" class="mb-4 border border-red-200 p-3 text-sm text-red-700 dark:border-red-900 dark:text-red-300">
+            <div v-for="item in forecastErrorContext" :key="item.label" class="mt-1 first:mt-0"><span class="font-medium">{{ item.label }}:</span> {{ item.value }}</div>
+          </div>
           <div v-if="forecastFailures.length" class="mb-4 border border-red-200 dark:border-red-900">
             <div v-for="failure in forecastFailures" :key="failure.message" class="border-b border-red-100 p-3 last:border-b-0 dark:border-red-900/60">
               <div class="text-sm font-medium text-red-700 dark:text-red-300">{{ failure.message }}</div>
@@ -704,6 +707,16 @@ const forecastNotice = ref<string | null>(null)
 const forecastComposition = ref<any>(null)
 const forecastFailures = computed(() => Array.isArray((forecastErrorDetails.value as any)?.failures) ? (forecastErrorDetails.value as any).failures : [])
 const forecastExcludedAccounts = ref<Array<{ accountId: string; name: string; source: string; reason: string }>>([])
+const forecastErrorContext = computed(() => {
+  const details = forecastErrorDetails.value as any
+  if (!details) return []
+  return [
+    details.source ? { label: 'Source', value: details.source } : null,
+    details.message ? { label: 'AWS response', value: details.message } : null,
+    details.billingViewArn ? { label: 'Billing view', value: details.billingViewArn } : null,
+    details.fallbackAccountId ? { label: 'Fallback account', value: details.fallbackAccountId } : null
+  ].filter(Boolean) as Array<{ label: string; value: string }>
+})
 const forecastCompositionRows = computed(() => {
   if (!forecastComposition.value) return []
   const monthly = forecastComposition.value.accountMonthlyValues || {}
