@@ -25,8 +25,9 @@ function accountDepartment(account: any) {
   return String(account.pepDepartment || account.departmentNumber || account.department || '').trim().toUpperCase()
 }
 
-function isActiveFinanceAccount(account: any) {
-  return String(account.enclaveStatus || '').trim().toLowerCase() === 'active'
+function isExplicitlyInactiveFinanceAccount(account: any) {
+  const status = String(account.enclaveStatus || '').trim().toLowerCase()
+  return /decommission|inactive|closed|retired/.test(status)
 }
 
 function addForecast(target: Record<string, number>, forecast: any) {
@@ -115,10 +116,12 @@ export default defineEventHandler(handleAsync(async (event) => {
       enclaveStatus: account.enclaveStatus || 'missing'
     }))
     .filter((account): account is { accountId: string; name: string; source: string; enclaveStatus: string } => Boolean(account.accountId) && account.accountId !== PAYER_ACCOUNT_ID && account.accountId !== DEV_ORG_ACCOUNT_ID && !EXCLUDED_ACCOUNT_IDS.has(account.accountId))
+  // The catalog has historical records with missing/nonstandard lifecycle
+  // values. Exclude only an explicit terminal status, not an absent flag.
   const excludedCatalogAccounts = departmentAccounts
-    .filter(account => !isActiveFinanceAccount(account))
-    .map(account => ({ ...account, reason: `GDMS account record is not active (enclaveStatus: ${account.enclaveStatus})` }))
-  const financeAccounts = departmentAccounts.filter(isActiveFinanceAccount)
+    .filter(isExplicitlyInactiveFinanceAccount)
+    .map(account => ({ ...account, reason: `GDMS account record is inactive (enclaveStatus: ${account.enclaveStatus})` }))
+  const financeAccounts = departmentAccounts.filter(account => !isExplicitlyInactiveFinanceAccount(account))
   if (!financeAccounts.length) return errors.badRequest(event, `No forecastable accounts are mapped to ${department}`)
   const accountMetadata = new Map(financeAccounts.map(account => [account.accountId, account]))
   const accountIds = financeAccounts.map(account => account.accountId)
