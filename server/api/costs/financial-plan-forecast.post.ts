@@ -95,7 +95,14 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   const today = new Date()
   if (year !== today.getFullYear()) return errors.badRequest(event, 'AWS forecasts can only be generated for the current year')
-  const financeAccounts = (await getAllAccountsUnified(false))
+  let allAccounts: Awaited<ReturnType<typeof getAllAccountsUnified>>
+  try {
+    allAccounts = await getAllAccountsUnified(false)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown account catalog error'
+    return errors.badRequest(event, 'Could not load the GHOST account catalog for this forecast.', { source: 'GHOST account catalog', message })
+  }
+  const financeAccounts = allAccounts
     .filter(account => accountDepartment(account) === department)
     .map(account => ({
       accountId: account.awsStandardAccountID || account.accountId,
@@ -110,23 +117,26 @@ export default defineEventHandler(handleAsync(async (event) => {
   const special: SpecialComponent[] = []
   let normalAccountIds = accountIds
   let devOrgMembers: string[] = []
-  let excludedCatalogAccounts: Array<{ accountId: string; name: string; source: string; reason: string }> = []
+  const excludedCatalogAccounts: Array<{ accountId: string; name: string; source: string; reason: string }> = []
   let devOrgViewArn: string | undefined
   if (department === 'DE158') {
     const devOrg = await resolveBillingView(DEV_ORG_VIEW_NAME)
     if (!devOrg.arn) return errors.badRequest(event, `Could not resolve the ${DEV_ORG_VIEW_NAME} billing view`)
     devOrgViewArn = devOrg.arn
-    const memberIds = await getBillingViewMembers(devOrg.arn, today)
+    let memberIds: Set<string>
+    try {
+      memberIds = await getBillingViewMembers(devOrg.arn, today)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown Cost Explorer error'
+      return errors.badRequest(event, 'Could not read GDMS-DevOrg Billing View membership.', {
+        source: 'GDMS-DevOrg membership lookup',
+        billingViewArn: devOrg.arn,
+        message
+      })
+    }
     devOrgMembers = accountIds.filter(accountId => memberIds.has(accountId))
     const nonDevOrgAccounts = financeAccounts.filter(account => !memberIds.has(account.accountId))
-    // DynamoDB-only records are not present in the active Commercial Organization.
-    // They must not be sent to Cost Explorer as normal linked-account forecasts.
-    excludedCatalogAccounts = nonDevOrgAccounts
-      .filter(account => account.source === 'dynamodb')
-      .map(account => ({ ...account, reason: 'Not present in the active Commercial Organization or GDMS-DevOrg billing view' }))
-    normalAccountIds = nonDevOrgAccounts
-      .filter(account => account.source !== 'dynamodb')
-      .map(account => account.accountId)
+    normalAccountIds = nonDevOrgAccounts.map(account => account.accountId)
     special.push({ id: 'GDMS Cloud', accountId: PAYER_ACCOUNT_ID, filter: { And: [
       { Dimensions: { Key: 'LINKED_ACCOUNT', Values: [PAYER_ACCOUNT_ID] } },
       { Not: { Dimensions: { Key: 'SERVICE', Values: [SAVINGS_PLAN_SERVICE] } } },
