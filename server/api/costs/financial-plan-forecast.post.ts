@@ -142,10 +142,14 @@ async function loadCurrentSpecialActuals(components: SpecialComponent[], startDa
       endDate,
       granularity: 'MONTHLY',
       metrics: ['UnblendedCost'],
+      groupBy: [{ type: 'DIMENSION', key: 'SERVICE' }],
       filter: component.filter
     }, 'commercial', component.accountId)
     totals[component.id] = (response.resultsByTime || []).reduce(
-      (sum, period) => sum + Number(period.Total?.UnblendedCost?.Amount || 0),
+      (sum, period) => sum + (period.Groups || []).reduce(
+        (periodSum, group) => periodSum + Number(group.Metrics?.UnblendedCost?.Amount || 0),
+        0
+      ),
       0
     )
   }
