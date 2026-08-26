@@ -341,6 +341,18 @@
             </div>
           </UCard>
 
+          <UModal v-model="showForecastPreview" :ui="{ width: 'sm:max-w-4xl' }">
+            <UCard>
+              <template #header><div class="flex items-center justify-between"><div><h2 class="text-base font-semibold">Forecast Preview</h2><p class="text-xs text-gray-500 mt-1">{{ activeDept?.department }} plan changes require confirmation before saving.</p></div><UButton color="gray" variant="ghost" icon="i-heroicons-x-mark" @click="showForecastPreview = false" /></div></template>
+              <div class="max-h-[60vh] overflow-auto space-y-5">
+                <div><h3 class="text-sm font-medium mb-2">Monthly plan changes</h3><table class="w-full text-sm"><thead><tr class="text-left text-xs text-gray-500"><th class="pb-2">Month</th><th class="pb-2 text-right">Current</th><th class="pb-2 text-right">Proposed</th><th class="pb-2 text-right">Change</th></tr></thead><tbody><tr v-for="change in forecastPreview?.changes" :key="change.month" class="border-t border-gray-100 dark:border-gray-700"><td class="py-2">{{ formatMonthShort(change.month) }}</td><td class="py-2 text-right">{{ formatCurrency(change.previous, 0) }}</td><td class="py-2 text-right">{{ formatCurrency(change.next, 0) }}</td><td class="py-2 text-right" :class="change.delta >= 0 ? 'text-red-600' : 'text-emerald-600'">{{ change.delta >= 0 ? '+' : '' }}{{ formatCurrency(change.delta, 0) }}</td></tr></tbody></table></div>
+                <div><h3 class="text-sm font-medium mb-2">Forecast basis</h3><div v-for="reason in forecastPreview?.reasons" :key="reason.component" class="py-1 text-sm"><span class="font-medium">{{ reason.component }}:</span> {{ reason.reason }}</div></div>
+                <div><h3 class="text-sm font-medium mb-2">Account forecast composition</h3><table class="w-full text-sm"><thead><tr class="text-left text-xs text-gray-500"><th class="pb-2">Account</th><th class="pb-2 text-right">Forecast</th></tr></thead><tbody><tr v-for="row in forecastPreviewRows" :key="row.accountId" class="border-t border-gray-100 dark:border-gray-700"><td class="py-2 font-mono text-xs">{{ row.accountId }}</td><td class="py-2 text-right">{{ formatCurrency(row.total, 0) }}</td></tr></tbody></table></div>
+              </div>
+              <template #footer><div class="flex justify-end gap-2"><UButton color="gray" variant="ghost" @click="showForecastPreview = false">Cancel</UButton><UButton color="purple" :loading="forecastApplying" @click="applyForecast">Apply Forecast</UButton></div></template>
+            </UCard>
+          </UModal>
+
           <!-- Charts: side-by-side -->
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
             <!-- Monthly bar chart -->
@@ -701,12 +713,15 @@ const planSaveError = ref<string | null>(null)
 const editingPlan = ref(false)
 const planDraft = ref<Record<string, string>>({})
 const forecastGenerating = ref(false)
+const forecastApplying = ref(false)
+const showForecastPreview = ref(false)
+const forecastPreview = ref<any>(null)
 const forecastError = ref<string | null>(null)
 const forecastErrorDetails = ref<Record<string, unknown> | null>(null)
 const forecastNotice = ref<string | null>(null)
 const forecastComposition = ref<any>(null)
 const forecastFailures = computed(() => Array.isArray((forecastErrorDetails.value as any)?.failures) ? (forecastErrorDetails.value as any).failures : [])
-const forecastExcludedAccounts = ref<Array<{ accountId: string; name: string; source: string; reason: string }>>([])
+const forecastExcludedAccounts = ref<Array<{ accountId: string; name: string; source: string; pepEnvironmentStatus?: string; enclaveStatus?: string; reason: string }>>([])
 const forecastErrorContext = computed(() => {
   const details = forecastErrorDetails.value as any
   if (!details) return []
@@ -726,6 +741,10 @@ const forecastCompositionRows = computed(() => {
   }
   const grandTotal = Object.values(totals).reduce((sum, value) => sum + value, 0)
   return Object.entries(totals).map(([accountId, total]) => ({ accountId, total, share: grandTotal ? total / grandTotal : 0 })).sort((a, b) => b.total - a.total)
+})
+const forecastPreviewRows = computed(() => {
+  const monthly = forecastPreview.value?.forecastComposition?.accountMonthlyValues || {}
+  return Object.entries(monthly).map(([accountId, values]: [string, any]) => ({ accountId, total: Object.values(values || {}).reduce((sum: number, value) => sum + Number(value || 0), 0) })).sort((a, b) => b.total - a.total)
 })
 interface PlanHistoryEntry { sk: string; action: string; actor: string; createdAt: string; monthlyValues: Record<string, number>; forecastComposition?: Record<string, unknown> }
 const planHistory = ref<PlanHistoryEntry[]>([])
@@ -815,21 +834,40 @@ async function generateForecast() {
   forecastNotice.value = null
   try {
     const monthlyActuals = Object.fromEntries(dept.monthly.map(month => [month.month, visibleActual(month)]))
-    const response = await $fetch<{ data: { monthlyValues: Record<string, number>; forecastWarning?: string; components?: { excludedCatalogAccounts?: Array<{ accountId: string; name: string; source: string; reason: string }> } } }>('/api/costs/financial-plan-forecast', {
+    const response = await $fetch<{ data: { preview: any; components?: { excludedCatalogAccounts?: Array<{ accountId: string; name: string; source: string; pepEnvironmentStatus?: string; enclaveStatus?: string; reason: string }> } } }>('/api/costs/financial-plan-forecast', {
       method: 'POST',
-      body: { department: dept.department, year: selectedYear.value, monthlyActuals }
+      body: { department: dept.department, year: selectedYear.value, monthlyActuals, currentPlanValues: resolvedMonthlyPlan.value, preview: true }
     })
-    planOverrides.value = { ...planOverrides.value, [dept.department]: response.data.monthlyValues }
-    forecastComposition.value = (response.data as any).forecastComposition || null
+    forecastPreview.value = response.data.preview
     forecastExcludedAccounts.value = response.data.components?.excludedCatalogAccounts || []
-    forecastNotice.value = response.data.forecastWarning || 'Forecast generated from AWS Cost Explorer data.'
-    await loadPlanHistory()
+    showForecastPreview.value = true
   } catch (err: any) {
     forecastError.value = err?.data?.error?.message || err?.data?.message || err?.message || 'Failed to generate forecast.'
     forecastErrorDetails.value = err?.data?.error?.details || null
     forecastExcludedAccounts.value = err?.data?.error?.details?.excludedCatalogAccounts || []
   } finally {
     forecastGenerating.value = false
+  }
+}
+
+async function applyForecast() {
+  const dept = activeDept.value
+  if (!dept || !forecastPreview.value) return
+  forecastApplying.value = true
+  try {
+    const monthlyActuals = Object.fromEntries(dept.monthly.map(month => [month.month, visibleActual(month)]))
+    const response = await $fetch<{ data: { monthlyValues: Record<string, number>; forecastComposition: any } }>('/api/costs/financial-plan-forecast', {
+      method: 'POST', body: { department: dept.department, year: selectedYear.value, monthlyActuals, currentPlanValues: resolvedMonthlyPlan.value }
+    })
+    planOverrides.value = { ...planOverrides.value, [dept.department]: response.data.monthlyValues }
+    forecastComposition.value = response.data.forecastComposition
+    forecastNotice.value = 'Forecast applied and recorded.'
+    showForecastPreview.value = false
+    await loadPlanHistory()
+  } catch (err: any) {
+    forecastError.value = err?.data?.error?.message || err?.message || 'Failed to apply forecast.'
+  } finally {
+    forecastApplying.value = false
   }
 }
 
