@@ -7,6 +7,8 @@ import { resolveBillingView } from '../../utils/billing-views'
 import { getCostAndUsage, getCostForecast } from '../../utils/cost-explorer'
 import { batchForecastCalls } from '../../utils/forecast-batcher'
 import { getCostExplorerClient } from '../../lib/aws-client-factory'
+import { getDynamoDBConfig } from '../../lib/dynamodb-config'
+import { getItem } from '../../utils/dynamodb'
 import { saveFinancialPlan } from '../../utils/financial-plan-history'
 import { logger } from '../../utils/logger'
 
@@ -99,6 +101,18 @@ function mergeSpecialForecastResults(results: Awaited<ReturnType<typeof forecast
     failures.push(...result.failures)
   }
   return { byMonth, byComponentMonth, failures }
+}
+
+async function loadExistingPlanValues(department: string, years: Set<number>) {
+  const config = await getDynamoDBConfig()
+  const table = config.financialPlanOverrides
+  const item = await getItem(table.tableName, { pk: department }, table.environment, table.accountId)
+  const values: Record<string, number> = {}
+  for (const [key, value] of Object.entries(item || {})) {
+    const match = key.match(/^(\d{2})\/(\d{4})$/)
+    if (match && years.has(Number(match[2]))) values[`${match[2]}-${match[1]}-01`] = Number(value)
+  }
+  return values
 }
 
 async function getBillingViewMembers(billingViewArn: string, today: Date): Promise<Set<string>> {
@@ -438,12 +452,24 @@ export default defineEventHandler(handleAsync(async (event) => {
       excludedCatalogAccounts
     }
   }
+  const affectedYears = new Set(Object.keys(monthlyValues).map(month => Number(month.slice(0, 4))))
+  const persistedPlanValues = await loadExistingPlanValues(department, affectedYears)
+  const comparisonPlanValues = { ...persistedPlanValues, ...(currentPlanValues || {}) }
   const changes = Object.entries(monthlyValues)
-    .map(([month, value]) => ({ month, previous: Number(currentPlanValues?.[month] || 0), next: value, delta: value - Number(currentPlanValues?.[month] || 0) }))
+    .map(([month, value]) => ({ month, previous: Number(comparisonPlanValues[month] || 0), next: value, delta: value - Number(comparisonPlanValues[month] || 0) }))
     .filter(change => Math.abs(change.delta) >= 0.01)
+  const annualSummaries = Array.from(new Set(Object.keys(monthlyValues).map(month => month.slice(0, 4))))
+    .sort()
+    .map(planYear => {
+      const months = Object.keys(monthlyValues).filter(month => month.startsWith(`${planYear}-`))
+      const current = months.reduce((sum, month) => sum + Number(comparisonPlanValues[month] || 0), 0)
+      const proposed = months.reduce((sum, month) => sum + Number(monthlyValues[month] || 0), 0)
+      return { year: Number(planYear), current, proposed, delta: proposed - current, months }
+    })
   const preview = {
     department,
     months: Object.keys(monthlyValues).sort(),
+    annualSummaries,
     changes,
     reasons: [
       { component: 'Posted chargeback months', reason: 'Plan is reset to the posted proforma chargeback values.' },
