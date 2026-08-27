@@ -31,6 +31,7 @@ const EXCLUDED_ACCOUNT_IDS = new Set([
   '767397758347',
   '105013955011'
 ])
+const MAX_AWS_FORECAST_MONTHS = 12
 
 interface SpecialComponent { id: string; filter?: Expression; accountId?: string; billingViewArn?: string }
 
@@ -54,6 +55,50 @@ function addForecast(target: Record<string, number>, forecast: any, postingMonth
     const key = postingMonth.toISOString().slice(0, 10)
     target[key] = (target[key] || 0) + Number(point.MeanValue || 0)
   }
+}
+
+function buildForecastWindows(startDate: string, endDate: string) {
+  const windows: Array<{ startDate: string; endDate: string }> = []
+  let start = new Date(`${startDate}T00:00:00Z`)
+  const finalEnd = new Date(`${endDate}T00:00:00Z`)
+  while (start < finalEnd) {
+    const end = new Date(start)
+    end.setUTCMonth(end.getUTCMonth() + MAX_AWS_FORECAST_MONTHS)
+    const windowEnd = end < finalEnd ? end : finalEnd
+    windows.push({ startDate: start.toISOString().slice(0, 10), endDate: windowEnd.toISOString().slice(0, 10) })
+    start = windowEnd
+  }
+  return windows
+}
+
+function mergeAccountForecastResults(results: Awaited<ReturnType<typeof forecastAccounts>>[]) {
+  const byMonth: Record<string, number> = {}
+  const byAccountMonth: Record<string, Record<string, number>> = {}
+  const failures: Array<{ id: string; message: string }> = []
+  for (const result of results) {
+    for (const [month, value] of Object.entries(result.byMonth)) byMonth[month] = (byMonth[month] || 0) + value
+    for (const [accountId, months] of Object.entries(result.byAccountMonth)) {
+      byAccountMonth[accountId] = byAccountMonth[accountId] || {}
+      for (const [month, value] of Object.entries(months)) byAccountMonth[accountId][month] = (byAccountMonth[accountId][month] || 0) + value
+    }
+    failures.push(...result.failures)
+  }
+  return { byMonth, byAccountMonth, failures }
+}
+
+function mergeSpecialForecastResults(results: Awaited<ReturnType<typeof forecastSpecial>>[]) {
+  const byMonth: Record<string, number> = {}
+  const byComponentMonth: Record<string, Record<string, number>> = {}
+  const failures: Array<{ id: string; message: string }> = []
+  for (const result of results) {
+    for (const [month, value] of Object.entries(result.byMonth)) byMonth[month] = (byMonth[month] || 0) + value
+    for (const [component, months] of Object.entries(result.byComponentMonth)) {
+      byComponentMonth[component] = byComponentMonth[component] || {}
+      for (const [month, value] of Object.entries(months)) byComponentMonth[component][month] = (byComponentMonth[component][month] || 0) + value
+    }
+    failures.push(...result.failures)
+  }
+  return { byMonth, byComponentMonth, failures }
 }
 
 async function getBillingViewMembers(billingViewArn: string, today: Date): Promise<Set<string>> {
@@ -240,14 +285,25 @@ export default defineEventHandler(handleAsync(async (event) => {
   const nextMonth = new Date(today)
   nextMonth.setMonth(nextMonth.getMonth() + 1, 1)
   const currentEnd = nextMonth.toISOString().slice(0, 10)
-  const futureEnd = `${year + 1}-01-01`
+  // Finance posts November usage in December. Forecast usage through Nov of
+  // the next calendar year so the last chargeback month is Dec ${year + 1}.
+  const futureEnd = `${year + 1}-12-01`
+  const forecastWindows = buildForecastWindows(currentEnd, futureEnd)
   const normalCurrent = normalAccountIds.length ? await forecastAccounts(normalAccountIds, currentForecastStart, currentEnd, 'DAILY') : { byMonth: {}, byAccountMonth: {}, failures: [] as Array<{ id: string; message: string }> }
-  const normalFuture = normalAccountIds.length && currentEnd < futureEnd ? await forecastAccounts(normalAccountIds, currentEnd, futureEnd, 'MONTHLY') : { byMonth: {}, byAccountMonth: {}, failures: [] as Array<{ id: string; message: string }> }
+  const normalFutureResults: Awaited<ReturnType<typeof forecastAccounts>>[] = []
+  const specialFutureResults: Awaited<ReturnType<typeof forecastSpecial>>[] = []
+  for (const window of forecastWindows) {
+    if (normalAccountIds.length) normalFutureResults.push(await forecastAccounts(normalAccountIds, window.startDate, window.endDate, 'MONTHLY'))
+    specialFutureResults.push(await forecastSpecial(special, window.startDate, window.endDate, 'MONTHLY'))
+  }
+  const normalFuture = normalAccountIds.length ? mergeAccountForecastResults(normalFutureResults) : { byMonth: {}, byAccountMonth: {}, failures: [] as Array<{ id: string; message: string }> }
   const specialCurrent = await forecastSpecial(special, currentForecastStart, currentEnd, 'DAILY')
-  const specialFuture = currentEnd < futureEnd ? await forecastSpecial(special, currentEnd, futureEnd, 'MONTHLY') : { byMonth: {}, byComponentMonth: {}, failures: [] as Array<{ id: string; message: string }> }
-  let devOrgFuture: any
+  const specialFuture = mergeSpecialForecastResults(specialFutureResults)
+  const devOrgFutureByMonth: Record<string, number> = {}
   try {
-    devOrgFuture = devOrgViewArn && currentEnd < futureEnd ? await forecastDevOrg(devOrgViewArn, currentEnd, futureEnd, 'MONTHLY') : undefined
+    if (devOrgViewArn) {
+      for (const window of forecastWindows) addForecast(devOrgFutureByMonth, await forecastDevOrg(devOrgViewArn, window.startDate, window.endDate, 'MONTHLY'), 1)
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown Cost Explorer error'
     return errors.badRequest(event, `AWS could not forecast GDMS-DevOrg: ${message}`, { source: 'GDMS-DevOrg', billingViewArn: devOrgViewArn, fallbackAccountId: DEV_ORG_MASTER_ACCOUNT_ID })
@@ -295,10 +351,13 @@ export default defineEventHandler(handleAsync(async (event) => {
   const futureByMonth = { ...normalCurrent.byMonth, ...normalFuture.byMonth }
   for (const [month, value] of Object.entries(specialCurrent.byMonth)) futureByMonth[month] = (futureByMonth[month] || 0) + value
   for (const [month, value] of Object.entries(specialFuture.byMonth)) futureByMonth[month] = (futureByMonth[month] || 0) + value
-  addForecast(futureByMonth, devOrgFuture, 1)
+  for (const [month, value] of Object.entries(devOrgFutureByMonth)) futureByMonth[month] = (futureByMonth[month] || 0) + value
   const monthlyValues: Record<string, number> = {}
-  for (let month = 1; month <= 12; month++) {
-    const key = `${year}-${String(month).padStart(2, '0')}-01`
+  const financeMonths = Array.from({ length: 24 }, (_, index) => {
+    const date = new Date(Date.UTC(year, index, 1))
+    return date.toISOString().slice(0, 10)
+  })
+  for (const key of financeMonths) {
     monthlyValues[key] = key <= currentMonth ? Number(monthlyActuals[key] || 0) : futureByMonth[key] || 0
   }
   const specialComponentMonths: Record<string, Record<string, number>> = Object.fromEntries(
@@ -306,7 +365,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   )
   if (devOrgViewArn) {
     specialComponentMonths['GDMS-DevOrg'] = {}
-    addForecast(specialComponentMonths['GDMS-DevOrg'], devOrgFuture, 1)
+    Object.assign(specialComponentMonths['GDMS-DevOrg'], devOrgFutureByMonth)
   }
   for (const accountId of accountIds) {
     const actual = Number(accountMonthlyActuals?.[accountId] || 0)
@@ -331,10 +390,10 @@ export default defineEventHandler(handleAsync(async (event) => {
         valuation: 'Plan is replaced with posted actual charges; no forecast calculation is used.'
       },
       {
-        component: 'Normal accounts',
+          component: 'Normal accounts',
         source: 'AWS Cost Explorer',
         operation: 'GetCostForecast per eligible account through the Cost Dashboard batcher',
-        valuation: 'AWS returns the current-month remainder and future monthly forecast values; GHOST only sums them.'
+          valuation: 'AWS returns the current-month remainder and future monthly forecast values; GHOST only sums them.'
       },
       ...(department === 'DE158' ? [
         {
@@ -388,7 +447,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     changes,
     reasons: [
       { component: 'Posted chargeback months', reason: 'Plan is reset to the posted proforma chargeback values.' },
-      { component: 'Normal accounts', reason: 'Individual Cost Dashboard-style AWS forecasts.' },
+      { component: 'Normal accounts', reason: `Individual Cost Dashboard-style AWS forecasts through November ${year + 1}; AWS requests are split into ${forecastWindows.length} contiguous windows when needed.` },
       ...(department === 'DE158' ? [
         { component: 'GDMS Cloud', reason: 'Payer-account forecast with the Savings Plans service excluded, matching the Cost Explorer console filter.' },
         { component: 'GDMS-DevOrg', reason: 'Whole Billing View forecast, matching the AWS console.' },
