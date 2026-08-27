@@ -323,6 +323,40 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
   const forecastComposition = {
     allocationMethod: 'posted-proforma-chargeback-actuals-plus-individual-cost-dashboard-forecast-requests',
+    methodology: [
+      {
+        component: 'Completed months',
+        source: 'GHOST Finance actuals',
+        operation: 'Posted proforma chargeback values from /api/costs/budget-vs-actual',
+        valuation: 'Plan is replaced with posted actual charges; no forecast calculation is used.'
+      },
+      {
+        component: 'Normal accounts',
+        source: 'AWS Cost Explorer',
+        operation: 'GetCostForecast per eligible account through the Cost Dashboard batcher',
+        valuation: 'AWS returns the current-month remainder and future monthly forecast values; GHOST only sums them.'
+      },
+      ...(department === 'DE158' ? [
+        {
+          component: 'GDMS Cloud',
+          source: 'AWS Cost Explorer payer scope',
+          operation: 'GetCostForecast with Savings Plan services and recurring/purchase record types excluded',
+          valuation: 'AWS forecast for the unallocated payer component after the documented exclusions.'
+        },
+        {
+          component: 'GDMS-DevOrg',
+          source: 'AWS Cost Explorer Billing View',
+          operation: `GetCostForecast for ${DEV_ORG_VIEW_NAME}${DEV_ORG_MASTER_ACCOUNT_ID ? ', with DevOrg master fallback' : ''}`,
+          valuation: 'Whole-view AWS forecast matching the AWS console scope.'
+        },
+        {
+          component: 'Secret Cloud',
+          source: 'Finance-maintained classified-cloud-charges.ts',
+          operation: 'Manual historical actuals only',
+          valuation: 'Included in completed-month actuals; no future forecast is invented.'
+        }
+      ] : [])
+    ],
     accountMonthlyValues: Object.fromEntries(accountIds.map(accountId => [accountId, {
       ...normalCurrent.byAccountMonth[accountId],
       ...normalFuture.byAccountMonth[accountId]
