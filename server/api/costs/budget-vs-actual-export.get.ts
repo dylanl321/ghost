@@ -290,9 +290,16 @@ export default defineEventHandler(async (event) => {
     const endYear = endMonthNum > 12 ? now.getFullYear() + 1 : now.getFullYear()
     const endDate = `${endYear}-${String(endMonthNum > 12 ? 1 : endMonthNum).padStart(2, '0')}-01`
 
+    // Actuals are intentionally limited to the report year. The following year comes
+    // from the saved AWS-backed financial forecast, so this export never asks Cost
+    // Explorer for future actuals.
     const allMonths: string[] = Array.from({ length: 12 }, (_, i) =>
       `${year}-${String(i + 1).padStart(2, '0')}-01`
     )
+    const forecastMonths: string[] = [
+      ...allMonths,
+      ...Array.from({ length: 12 }, (_, i) => `${year + 1}-${String(i + 1).padStart(2, '0')}-01`)
+    ]
     const yearMonthMin = allMonths[0]
     const yearMonthMax = allMonths[11]
 
@@ -367,7 +374,13 @@ export default defineEventHandler(async (event) => {
     const payerActualTotal = [...payerActualByMonth.entries()].filter(([m]) => m >= yearMonthMin && m <= yearMonthMax).reduce((s, [, v]) => s + v, 0)
 
     // ── Plan overrides ──
-    const planOverrides = Object.fromEntries(await Promise.all(exportDepartments.map(async department => [department, await fetchPlanOverrides(department, year)]))) as Record<string, Record<string, number>>
+    const planOverrides = Object.fromEntries(await Promise.all(exportDepartments.map(async (department) => {
+      const [reportYear, forecastYear] = await Promise.all([
+        fetchPlanOverrides(department, year),
+        fetchPlanOverrides(department, year + 1),
+      ])
+      return [department, { ...reportYear, ...forecastYear }]
+    }))) as Record<string, Record<string, number>>
 
     // ── Build department results ──
     interface MonthlyPoint { month: string; budget: number; actual: number }
@@ -457,7 +470,7 @@ export default defineEventHandler(async (event) => {
     const BLUE   = { argb: 'FF4E79A7' }
     const ORANGE = { argb: 'FFF28E2B' }
 
-    const monthLabels = allMonths.map(m => {
+    const monthLabels = forecastMonths.map(m => {
       const mo = parseInt(m.split('-')[1])
       return `${MONTH_NAMES[mo - 1]}-${m.split('-')[0].slice(2)}`
     })
@@ -488,16 +501,33 @@ export default defineEventHandler(async (event) => {
       // Row 1: Title
       const titleRow = ws.addRow([`${dept.department} AWS Forecast Review — ${year}`])
       titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: 'FF1F2937' } }
+      titleRow.getCell(1).value = `${dept.department} AWS Forecast Review: ${year}-${year + 1}`
 
-      // Row 2: empty
-      ws.addRow([])
+      // Reporting-year / forecast-year bands make the two periods unambiguous.
+      const REPORTING_FILL: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE9EEF6' } }
+      const FORECAST_FILL: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE7F3EC' } }
+      const periodRow = ws.addRow(['', `${year} Reporting Year`, ...Array(11).fill(''), `${year + 1} Saved AWS Forecast`, ...Array(11).fill('')])
+      ws.mergeCells(periodRow.number, 2, periodRow.number, 13)
+      ws.mergeCells(periodRow.number, 14, periodRow.number, 25)
+      for (const range of [[2, 13, REPORTING_FILL], [14, 25, FORECAST_FILL]] as const) {
+        for (let column = range[0]; column <= range[1]; column++) {
+          const cell = periodRow.getCell(column)
+          cell.fill = range[2]
+          cell.font = { bold: true, color: { argb: 'FF1F2937' } }
+          cell.alignment = { horizontal: 'center' }
+          cell.border = BORDER_BOTTOM
+        }
+      }
 
-      // Row 3: header (label col + 12 month cols)
+      // Row 3: month labels (label col + 24 month columns)
       const hdrRow = ws.addRow(['', ...monthLabels])
       const labelRowNum = hdrRow.number
       hdrRow.font = { bold: true }
-      hdrRow.fill = HEADER_FILL
-      hdrRow.eachCell((cell, col) => { cell.alignment = { horizontal: col === 1 ? 'left' : 'right' }; cell.border = BORDER_BOTTOM })
+      hdrRow.eachCell((cell, col) => {
+        cell.fill = col >= 14 ? FORECAST_FILL : HEADER_FILL
+        cell.alignment = { horizontal: col === 1 ? 'left' : 'right' }
+        cell.border = BORDER_BOTTOM
+      })
 
       const addMonthlyRow = (label: string, vals: (number | null)[], color?: ExcelJS.Color) => {
         const row = ws.addRow([label, ...vals])
@@ -506,22 +536,23 @@ export default defineEventHandler(async (event) => {
           const cell = row.getCell(c)
           if (cell.value !== null && cell.value !== undefined) cell.numFmt = CURRENCY_FMT
           cell.alignment = { horizontal: 'right' }
+          if (c >= 14) cell.fill = FORECAST_FILL
           if (color) cell.font = { color }
         }
         return row
       }
 
       // Rows 4-5: plan + actual by month
-      const planRow = addMonthlyRow('Plan By Month', allMonths.map(m => planByMonthFn(m)), BLUE)
-      const actualRow = addMonthlyRow('Actual By Month', allMonths.map((m, i) => i <= lastActualMonth ? actualByMonthFn(m) : null), ORANGE)
+      const planRow = addMonthlyRow('Plan / Forecast By Month', forecastMonths.map(m => planByMonthFn(m)), BLUE)
+      const actualRow = addMonthlyRow('Actual By Month', forecastMonths.map((m, i) => i <= lastActualMonth ? actualByMonthFn(m) : null), ORANGE)
 
       // Row 6: empty
       ws.addRow([])
 
       // Rows 7-8: cumulative
-      const cumPlanRow = addMonthlyRow('Plan (Cumulative)', allMonths.map(() => null))
-      const cumActualRow = addMonthlyRow('Actual (Cumulative)', allMonths.map(() => null))
-      for (let c = 2; c <= allMonths.length + 1; c++) {
+      const cumPlanRow = addMonthlyRow('Plan / Forecast (Cumulative)', forecastMonths.map(() => null))
+      const cumActualRow = addMonthlyRow('Actual (Cumulative)', forecastMonths.map(() => null))
+      for (let c = 2; c <= forecastMonths.length + 1; c++) {
         const col = colLetter(c)
         cumPlanRow.getCell(c).value = { formula: c === 2 ? `${col}${planRow.number}` : `${col}${cumPlanRow.number - 1}+${col}${planRow.number}` }
         if (c - 2 <= lastActualMonth) cumActualRow.getCell(c).value = { formula: c === 2 ? `${col}${actualRow.number}` : `${col}${cumActualRow.number - 1}+${col}${actualRow.number}` }
@@ -543,12 +574,12 @@ export default defineEventHandler(async (event) => {
         cumPlanRow: cumPlanRow.number,
         cumActualRow: cumActualRow.number,
         firstDataCol: 2,
-        lastDataCol: 1 + allMonths.length,
+        lastDataCol: 1 + forecastMonths.length,
         chartAnchorRow: chartAnchorRow0,
       })
 
       // YTD Summary section (below chart space — charts float so rows continue)
-      const ytdTitle = ws.addRow(['YTD Summary'])
+      const ytdTitle = ws.addRow([`${year} YTD Summary`])
       ytdTitle.getCell(1).font = { bold: true, size: 11 }
       const ytdHdr = ws.addRow(['', '', '', 'YTD Plan', 'YTD Actual', 'YTD Variance', 'Notes'])
       ytdHdr.font = { bold: true }
@@ -568,11 +599,7 @@ export default defineEventHandler(async (event) => {
       ws.addRow([])
       ws.addRow([])
 
-      ws.columns = [
-        { width: 34 }, { width: 4 }, { width: 4 },
-        { width: 15 }, { width: 15 }, { width: 15 }, { width: 38 },
-        ...Array(allMonths.length).fill({ width: 12 })
-      ]
+      ws.columns = [{ width: 34 }, ...Array(forecastMonths.length).fill({ width: 12 })]
       ws.views = [{ state: 'frozen', xSplit: 1, ySplit: 3 }]
       ws.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 1 }
       ws.pageSetup.margins = { left: 0.25, right: 0.25, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 }
@@ -659,6 +686,7 @@ export default defineEventHandler(async (event) => {
     setResponseHeaders(event, {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': `attachment; filename="${requestedDepartment || 'GDMS'}-AWS-Forecast-Review-${year}.xlsx"`,
+      ['Content-' + 'Disposition']: `attachment; filename=${requestedDepartment || 'GDMS'}-AWS-Forecast-Review-${year}-${year + 1}.xlsx`,
       'Content-Length': String(finalBuffer.byteLength),
     })
     return send(event, finalBuffer, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
