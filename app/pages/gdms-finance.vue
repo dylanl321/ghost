@@ -357,25 +357,25 @@
               <template #header>
                 <div class="flex items-center justify-between gap-4">
                   <div><div class="flex items-center gap-2"><UIcon name="i-heroicons-chart-bar-square" class="h-5 w-5 text-blue-400" /><h2 class="text-lg font-semibold text-white">Forecast Decision Review</h2></div><p class="mt-1 text-sm text-gray-400">{{ activeDept?.department }} plan changes are calculated but not saved until confirmed.</p></div>
-                  <UButton color="gray" variant="ghost" icon="i-heroicons-x-mark-20-solid" size="sm" @click="showForecastPreview = false" />
+                  <div class="flex items-center gap-2"><UButton color="gray" :variant="showNextForecastYear ? 'soft' : 'ghost'" icon="i-heroicons-calendar-days" size="sm" @click="showNextForecastYear = !showNextForecastYear">{{ showNextForecastYear ? `${selectedYear} + ${selectedYear + 1}` : selectedYear }}</UButton><UButton color="gray" variant="ghost" icon="i-heroicons-x-mark-20-solid" size="sm" @click="showForecastPreview = false" /></div>
                 </div>
               </template>
               <div class="max-h-[58vh] overflow-y-auto space-y-5">
                 <div v-if="previewView === 'overview'" class="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                  <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Plan Change</div><div class="mt-1 text-xl font-semibold" :class="forecastPreviewMetrics.delta >= 0 ? 'text-red-500' : 'text-emerald-500'">{{ forecastPreviewMetrics.delta >= 0 ? '+' : '' }}{{ formatCurrency(forecastPreviewMetrics.delta, 0) }}</div><div class="mt-1 text-xs text-gray-500">vs current annual plan</div></div>
-                  <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Proposed Plan</div><div class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ formatCurrency(forecastPreviewMetrics.proposed, 0) }}</div><div class="mt-1 text-xs text-gray-500">full-year plan value</div></div>
+                  <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Plan Change</div><div class="mt-1 text-xl font-semibold" :class="forecastPreviewMetrics.delta >= 0 ? 'text-red-500' : 'text-emerald-500'">{{ forecastPreviewMetrics.delta >= 0 ? '+' : '' }}{{ formatCurrency(forecastPreviewMetrics.delta, 0) }}</div><div class="mt-1 text-xs text-gray-500">{{ forecastYearLabel }}</div></div>
+                  <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Proposed Plan</div><div class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ formatCurrency(forecastPreviewMetrics.proposed, 0) }}</div><div class="mt-1 text-xs text-gray-500">{{ forecastYearLabel }}</div></div>
                   <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Forecast Components</div><div class="mt-1 text-xl font-semibold text-blue-500">{{ forecastPreviewRows.length }}</div><div class="mt-1 text-xs text-gray-500">AWS account and special scopes</div></div>
                   <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Past Months Rebased</div><div class="mt-1 text-xl font-semibold text-orange-500">{{ forecastPreviewMetrics.rebasedMonths }}</div><div class="mt-1 text-xs text-gray-500">set to posted actuals</div></div>
                 </div>
                 <div v-if="previewView === 'overview'" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div v-for="annual in forecastPreview?.annualSummaries" :key="annual.year" class="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+                  <div v-for="annual in forecastPreviewAnnualSummaries" :key="annual.year" class="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
                     <div class="flex items-center justify-between"><h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ annual.year }} Plan</h3><span class="text-xs" :class="annual.delta >= 0 ? 'text-red-500' : 'text-emerald-500'">{{ annual.delta >= 0 ? '+' : '' }}{{ formatCurrency(annual.delta, 0) }}</span></div>
                     <div class="mt-2 grid grid-cols-2 gap-3 text-sm"><div><div class="text-xs text-gray-500">Current</div><div class="font-medium">{{ formatCurrency(annual.current, 0) }}</div></div><div><div class="text-xs text-gray-500">Proposed</div><div class="font-medium text-blue-500">{{ formatCurrency(annual.proposed, 0) }}</div></div></div>
                   </div>
                 </div>
                 <div v-if="previewView === 'overview'"><h3 class="text-sm font-medium mb-2">Largest forecast drivers</h3><div class="grid grid-cols-1 sm:grid-cols-3 gap-3"><div v-for="row in forecastPreviewRows.slice(0, 3)" :key="row.accountId" class="border border-gray-200 p-3 dark:border-gray-700"><div class="truncate text-sm font-medium">{{ row.name }}</div><div class="mt-1 text-lg font-semibold">{{ formatCurrency(row.total, 0) }}</div><div class="text-xs text-gray-500">{{ row.share.toFixed(1) }}% of proposed forecast</div><div class="mt-2 h-1.5 bg-gray-100 dark:bg-gray-700"><div class="h-full bg-blue-500" :style="{ width: row.share + '%' }" /></div></div></div></div>
                 <div v-if="previewView === 'overview'"><h3 class="text-sm font-medium mb-2">Monthly plan change</h3><VChart :option="forecastPreviewChartOption" class="h-56" autoresize /></div>
-                <div v-if="previewView === 'overview'"><h3 class="text-sm font-medium mb-2">Monthly plan changes</h3><table class="w-full text-sm"><thead><tr class="text-left text-xs text-gray-500"><th class="pb-2">Month</th><th class="pb-2 text-right">Current</th><th class="pb-2 text-right">Proposed</th><th class="pb-2 text-right">Change</th></tr></thead><tbody><tr v-for="change in forecastPreview?.changes" :key="change.month" class="border-t border-gray-100 dark:border-gray-700"><td class="py-2">{{ formatMonthShort(change.month) }}</td><td class="py-2 text-right">{{ formatCurrency(change.previous, 0) }}</td><td class="py-2 text-right">{{ formatCurrency(change.next, 0) }}</td><td class="py-2 text-right" :class="change.delta >= 0 ? 'text-red-600' : 'text-emerald-600'">{{ change.delta >= 0 ? '+' : '' }}{{ formatCurrency(change.delta, 0) }}</td></tr></tbody></table></div>
+                <div v-if="previewView === 'overview'"><h3 class="text-sm font-medium mb-2">Monthly plan changes</h3><table class="w-full text-sm"><thead><tr class="text-left text-xs text-gray-500"><th class="pb-2">Month</th><th class="pb-2 text-right">Current</th><th class="pb-2 text-right">Proposed</th><th class="pb-2 text-right">Change</th></tr></thead><tbody><tr v-for="change in forecastPreviewVisibleChanges" :key="change.month" class="border-t border-gray-100 dark:border-gray-700"><td class="py-2">{{ formatMonthShort(change.month) }}</td><td class="py-2 text-right">{{ formatCurrency(change.previous, 0) }}</td><td class="py-2 text-right">{{ formatCurrency(change.next, 0) }}</td><td class="py-2 text-right" :class="change.delta >= 0 ? 'text-red-600' : 'text-emerald-600'">{{ change.delta >= 0 ? '+' : '' }}{{ formatCurrency(change.delta, 0) }}</td></tr></tbody></table></div>
                 <div v-if="previewView === 'actuals'"><div class="flex items-center justify-between mb-2"><h3 class="text-sm font-medium">Month calculation ledger</h3><USelectMenu v-model="selectedPreviewMonth" :options="previewMonthOptions" size="xs" class="w-28" /></div><p class="mb-2 text-xs text-gray-500">{{ selectedPreviewMonthIsHistorical ? 'Completed month: proposed plan equals approved actual charges.' : 'Open month: proposed plan combines charges to date with the forecast remainder.' }}</p><div class="border border-gray-200 dark:border-gray-700"><div v-for="entry in selectedPreviewMonthLedger" :key="entry.key" class="flex items-center gap-3 border-b border-gray-100 p-2 text-sm last:border-b-0 dark:border-gray-700"><span class="w-2 h-2" :class="entry.kind === 'actual' ? 'bg-orange-500' : entry.kind === 'special' ? 'bg-violet-500' : 'bg-blue-500'"/><span class="flex-1 truncate">{{ entry.name }}</span><span class="text-xs text-gray-500">{{ entry.label }}</span><span class="font-medium">{{ formatCurrency(entry.value, 0) }}</span></div><div v-if="!selectedPreviewMonthLedger.length" class="p-3 text-sm text-gray-500">No component detail is available for this month.</div></div></div>
                 <div v-if="previewView === 'actuals'"><h3 class="text-sm font-medium mb-2">Completed-month actual basis</h3><p class="mb-2 text-xs text-gray-500">These charged values replace past plan months before the forecast is applied.</p><div class="border border-gray-200 dark:border-gray-700"><div v-for="month in historicalActualMonths" :key="month.month" class="border-b border-gray-100 last:border-b-0 dark:border-gray-700"><button class="flex w-full items-center gap-3 p-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800/40" @click="toggleHistoricalMonth(month.month)"><UIcon :name="expandedHistoricalMonths.has(month.month) ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'" class="w-4 h-4 text-gray-400"/><span class="flex-1 text-sm font-medium">{{ formatMonthShort(month.month) }}</span><span class="text-sm font-medium">{{ formatCurrency(month.total, 0) }}</span></button><div v-if="expandedHistoricalMonths.has(month.month)" class="border-t border-gray-100 px-10 py-3 dark:border-gray-700"><div v-for="entry in month.entries" :key="entry.key" class="flex items-center gap-3 py-1.5 text-sm"><span class="flex-1"><span class="font-medium">{{ entry.name }}</span><span class="ml-2 font-mono text-xs text-gray-500">{{ entry.accountId }}</span></span><span>{{ formatCurrency(entry.value, 0) }}</span></div></div></div></div></div>
                 <div v-if="previewView === 'overview'"><h3 class="text-sm font-medium mb-2">Forecast basis</h3><div v-for="reason in forecastPreview?.reasons" :key="reason.component" class="border-t border-gray-100 py-2 text-sm dark:border-gray-700"><span class="font-medium">{{ reason.component }}:</span> {{ reason.reason }}</div></div>
@@ -719,7 +719,7 @@ function visibleActual(m: MonthlyPoint): number {
 function visibleMonthActual(month: string, actual: number): number {
   return month <= displayCutoff ? actual : 0
 }
-const yearOptions = [currentYear + 1, currentYear, currentYear - 1, currentYear - 2]
+const yearOptions = [currentYear, currentYear - 1, currentYear - 2]
 
 const activeTab = ref(0)
 const expandedAccountLists = ref(new Set<string>())
@@ -749,6 +749,7 @@ const forecastGenerating = ref(false)
 const forecastApplying = ref(false)
 const showForecastPreview = ref(false)
 const forecastPreview = ref<any>(null)
+const showNextForecastYear = ref(false)
 const previewView = ref<'overview' | 'actuals' | 'accounts'>('overview')
 const forecastPreviewViews = [
   { id: 'overview', label: 'Overview' },
@@ -805,11 +806,20 @@ const forecastPreviewRows = computed(() => {
   return combined.map(row => ({ ...row, share: combinedTotal ? row.total / combinedTotal * 100 : 0 })).sort((a, b) => b.total - a.total)
 })
 const forecastPreviewMetrics = computed(() => {
-  const changes = forecastPreview.value?.changes || []
+  const changes = forecastPreviewVisibleChanges.value
   return { delta: changes.reduce((sum: number, change: any) => sum + Number(change.delta || 0), 0), proposed: changes.reduce((sum: number, change: any) => sum + Number(change.next || 0), 0), rebasedMonths: changes.filter((change: any) => change.month < ytdCutoff && Math.abs(Number(change.delta || 0)) >= 0.01).length }
 })
+const forecastYearLabel = computed(() => showNextForecastYear.value ? `${selectedYear.value} + ${selectedYear.value + 1}` : String(selectedYear.value))
+const forecastPreviewVisibleChanges = computed(() => {
+  const lastYear = selectedYear.value + (showNextForecastYear.value ? 1 : 0)
+  return (forecastPreview.value?.changes || []).filter((change: any) => Number(change.month.slice(0, 4)) <= lastYear)
+})
+const forecastPreviewAnnualSummaries = computed(() => {
+  const lastYear = selectedYear.value + (showNextForecastYear.value ? 1 : 0)
+  return (forecastPreview.value?.annualSummaries || []).filter((summary: any) => Number(summary.year) <= lastYear)
+})
 const forecastPreviewChartOption = computed(() => {
-  const changes = forecastPreview.value?.changes || []
+  const changes = forecastPreviewVisibleChanges.value
   return { tooltip: { trigger: 'axis', valueFormatter: (value: number) => formatCurrency(value, 0) }, legend: { data: ['Current Plan', 'Proposed Plan'], bottom: 0 }, grid: { left: 82, right: 24, top: 22, bottom: 52, containLabel: false }, xAxis: { type: 'category', axisTick: { alignWithLabel: true }, axisLabel: { interval: 0, fontSize: 11 }, data: changes.map((change: any) => formatMonthShort(change.month)) }, yAxis: { type: 'value', axisLabel: { formatter: (value: number) => formatCurrency(value, 0), fontSize: 10 }, splitLine: { lineStyle: { color: '#334155' } } }, series: [{ name: 'Current Plan', type: 'bar', barMaxWidth: 22, data: changes.map((change: any) => change.previous), itemStyle: { color: '#94a3b8' } }, { name: 'Proposed Plan', type: 'bar', barMaxWidth: 22, data: changes.map((change: any) => change.next), itemStyle: { color: '#4a7ca8' } }] }
 })
 const expandedPreviewAccounts = ref(new Set<string>())
@@ -964,6 +974,7 @@ async function generateForecast() {
       body: { department: dept.department, year: selectedYear.value, monthlyActuals, accountMonthlyActuals, specialMonthlyActuals, historicalActualBreakdown, currentPlanValues: resolvedMonthlyPlan.value, preview: true }
     })
     forecastPreview.value = response.data.preview
+    showNextForecastYear.value = false
     previewView.value = 'overview'
     expandedPreviewAccounts.value = new Set()
     expandedHistoricalMonths.value = new Set()
