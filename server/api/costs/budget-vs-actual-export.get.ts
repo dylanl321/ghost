@@ -1,9 +1,7 @@
 /**
  * GET /api/costs/budget-vs-actual-export
  *
- * Generates an Excel workbook (.xlsx) with one sheet per department.
- * Each sheet: monthly summary table, YTD summary, account detail, plus
- * two native OOXML charts (bar + line) injected via JSZip.
+ * Generates a department-specific executive Excel workbook (.xlsx).
  *
  * Query params:
  *   year: number (default: current year)
@@ -11,6 +9,7 @@
 
 import { defineEventHandler, getQuery, setResponseHeaders, send } from 'h3'
 import { requirePermission } from '../../utils/user-roles'
+import { errors } from '../../utils/api-response'
 import { getItem } from '../../utils/dynamodb'
 import { getDynamoDBConfig } from '../../lib/dynamodb-config'
 import { getCostAndUsage, getProformaCosts } from '../../utils/cost-explorer'
@@ -20,7 +19,7 @@ import { logger } from '../../utils/logger'
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 
-const ALLOWED_DEPARTMENTS = ['DE158', 'DT509'] as const
+const ALLOWED_DEPARTMENTS = ['DE158', 'DT509', 'DT328'] as const
 type AllowedDepartment = typeof ALLOWED_DEPARTMENTS[number]
 
 const PAYER_ACCOUNT_ID    = process.env.AWS_MASTER_ACCOUNT_ID    || '205950196477'
@@ -36,7 +35,8 @@ const DEPT_NAMED_CATEGORIES: Record<AllowedDepartment, { name: string; note?: st
   DT509: [
     { name: 'Software Engineering Solutions' },
     { name: 'GDMS ITS SOC' },
-  ]
+  ],
+  DT328: []
 }
 
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
@@ -278,6 +278,11 @@ export default defineEventHandler(async (event) => {
 
     const query = getQuery(event)
     const year = parseInt(query.year as string) || new Date().getFullYear()
+    const requestedDepartment = String(query.department || '').trim().toUpperCase()
+    if (requestedDepartment && !ALLOWED_DEPARTMENTS.includes(requestedDepartment as AllowedDepartment)) {
+      return errors.badRequest(event, `Department must be one of: ${ALLOWED_DEPARTMENTS.join(', ')}`)
+    }
+    const exportDepartments: AllowedDepartment[] = requestedDepartment ? [requestedDepartment as AllowedDepartment] : [...ALLOWED_DEPARTMENTS]
 
     const startDate = `${year - 1}-12-01`
     const now = new Date()
@@ -294,10 +299,10 @@ export default defineEventHandler(async (event) => {
     // ── Fetch accounts ──
     const accounts = await getAllAccountsUnified()
     const deptAccounts = new Map<AllowedDepartment, string[]>()
-    for (const dept of ALLOWED_DEPARTMENTS) deptAccounts.set(dept, [])
+    for (const dept of exportDepartments) deptAccounts.set(dept, [])
     for (const acc of accounts) {
       const dept = accountDepartment(acc)
-      if (!ALLOWED_DEPARTMENTS.includes(dept as AllowedDepartment)) continue
+      if (!exportDepartments.includes(dept as AllowedDepartment)) continue
       const id = acc.accountId || acc.id
       if (!id || LAS_APNT_CLD_IDS.includes(id)) continue
       deptAccounts.get(dept as AllowedDepartment)!.push(id)
@@ -362,14 +367,7 @@ export default defineEventHandler(async (event) => {
     const payerActualTotal = [...payerActualByMonth.entries()].filter(([m]) => m >= yearMonthMin && m <= yearMonthMax).reduce((s, [, v]) => s + v, 0)
 
     // ── Plan overrides ──
-    const [planOverridesDE158, planOverridesDT509] = await Promise.all([
-      fetchPlanOverrides('DE158', year),
-      fetchPlanOverrides('DT509', year),
-    ])
-    const planOverrides: Record<string, Record<string, number>> = {
-      DE158: planOverridesDE158,
-      DT509: planOverridesDT509,
-    }
+    const planOverrides = Object.fromEntries(await Promise.all(exportDepartments.map(async department => [department, await fetchPlanOverrides(department, year)]))) as Record<string, Record<string, number>>
 
     // ── Build department results ──
     interface MonthlyPoint { month: string; budget: number; actual: number }
@@ -379,7 +377,7 @@ export default defineEventHandler(async (event) => {
 
     const deptResults: DeptResult[] = []
 
-    for (const dept of ALLOWED_DEPARTMENTS) {
+    for (const dept of exportDepartments) {
       const monthMap = new Map<string, { budget: number; actual: number }>()
       for (const m of allMonths) monthMap.set(m, { budget: 0, actual: 0 })
       const ensure = (m: string) => { if (!monthMap.has(m)) monthMap.set(m, { budget: 0, actual: 0 }); return monthMap.get(m)! }
@@ -453,7 +451,6 @@ export default defineEventHandler(async (event) => {
 
     const CURRENCY_FMT = '$#,##0'
     const HEADER_FILL: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE9EEF6' } }
-    const SECTION_FILL: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } }
     const BORDER_BOTTOM: Partial<ExcelJS.Borders> = { bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } } }
     const RED    = { argb: 'FFDC2626' }
     const GREEN  = { argb: 'FF059669' }
@@ -489,8 +486,8 @@ export default defineEventHandler(async (event) => {
       const lastActualMonth = lastActualIdx === -1 ? -1 : allMonths.length - 1 - lastActualIdx
 
       // Row 1: Title
-      const titleRow = ws.addRow([`${dept.department} — IT AWS Cost Tracking ${year}`])
-      titleRow.getCell(1).font = { bold: true, size: 13 }
+      const titleRow = ws.addRow([`${dept.department} AWS Forecast Review — ${year}`])
+      titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: 'FF1F2937' } }
 
       // Row 2: empty
       ws.addRow([])
@@ -522,10 +519,13 @@ export default defineEventHandler(async (event) => {
       ws.addRow([])
 
       // Rows 7-8: cumulative
-      let runPlan = 0
-      const cumPlanRow = addMonthlyRow('Plan (Cumulative)', allMonths.map(m => { runPlan += planByMonthFn(m); return runPlan }))
-      let runActual = 0
-      const cumActualRow = addMonthlyRow('Actual (Cumulative)', allMonths.map((m, i) => { if (i > lastActualMonth) return null; runActual += actualByMonthFn(m); return runActual }))
+      const cumPlanRow = addMonthlyRow('Plan (Cumulative)', allMonths.map(() => null))
+      const cumActualRow = addMonthlyRow('Actual (Cumulative)', allMonths.map(() => null))
+      for (let c = 2; c <= allMonths.length + 1; c++) {
+        const col = colLetter(c)
+        cumPlanRow.getCell(c).value = { formula: c === 2 ? `${col}${planRow.number}` : `${col}${cumPlanRow.number - 1}+${col}${planRow.number}` }
+        if (c - 2 <= lastActualMonth) cumActualRow.getCell(c).value = { formula: c === 2 ? `${col}${actualRow.number}` : `${col}${cumActualRow.number - 1}+${col}${actualRow.number}` }
+      }
 
       // 16 empty rows so the two charts (15 rows tall each) don't cover YTD/detail sections
       const CHART_ROW_HEIGHT = 16
@@ -568,34 +568,14 @@ export default defineEventHandler(async (event) => {
       ws.addRow([])
       ws.addRow([])
 
-      // Account detail section
-      const detailTitle = ws.addRow(['Account Detail'])
-      detailTitle.getCell(1).font = { bold: true, size: 11 }
-      const detailHdr = ws.addRow(['Category', 'Account ID', 'Account Name', 'YTD Plan', 'YTD Actual', 'YTD Variance', ...monthLabels])
-      detailHdr.font = { bold: true }
-      detailHdr.fill = HEADER_FILL
-      detailHdr.eachCell(cell => { cell.border = BORDER_BOTTOM })
-      ;[4, 5, 6].forEach(c => { detailHdr.getCell(c).alignment = { horizontal: 'right' } })
-
-      for (const cat of dept.categories) {
-        const catRow = ws.addRow([cat.name, '', '', cat.ytdBudget, cat.ytdActual, cat.ytdVariance, ...allMonths.map(() => '')])
-        catRow.font = { bold: true }
-        catRow.fill = SECTION_FILL
-        ;[4, 5, 6].forEach(c => { catRow.getCell(c).numFmt = CURRENCY_FMT; catRow.getCell(c).alignment = { horizontal: 'right' } })
-        catRow.getCell(6).font = { bold: true, color: cat.ytdVariance > 0 ? RED : GREEN }
-        for (const acct of cat.accounts || []) {
-          const acctRow = ws.addRow([cat.name, acct.accountId, acct.name, acct.ytdBudget, acct.ytdActual, acct.ytdVariance,
-            ...allMonths.map(m => acct.monthlyActuals[m] || null)])
-          ;[4, 5, 6].forEach(c => { acctRow.getCell(c).numFmt = CURRENCY_FMT; acctRow.getCell(c).alignment = { horizontal: 'right' } })
-          for (let c = 7; c <= 6 + allMonths.length; c++) { acctRow.getCell(c).numFmt = CURRENCY_FMT; acctRow.getCell(c).alignment = { horizontal: 'right' } }
-        }
-      }
-
       ws.columns = [
-        { width: 32 }, { width: 16 }, { width: 34 },
-        { width: 14 }, { width: 14 }, { width: 14 }, { width: 36 },
+        { width: 34 }, { width: 4 }, { width: 4 },
+        { width: 15 }, { width: 15 }, { width: 15 }, { width: 38 },
         ...Array(allMonths.length).fill({ width: 12 })
       ]
+      ws.views = [{ state: 'frozen', xSplit: 1, ySplit: 3 }]
+      ws.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 1 }
+      ws.pageSetup.margins = { left: 0.25, right: 0.25, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 }
     }
 
     // ── Write base workbook to buffer, then inject charts via JSZip ──
@@ -678,7 +658,7 @@ export default defineEventHandler(async (event) => {
 
     setResponseHeaders(event, {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'Content-Disposition': `attachment; filename="IT-AWS-Cost-Tracking-${year}.xlsx"`,
+      'Content-Disposition': `attachment; filename="${requestedDepartment || 'GDMS'}-AWS-Forecast-Review-${year}.xlsx"`,
       'Content-Length': String(finalBuffer.byteLength),
     })
     return send(event, finalBuffer, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')

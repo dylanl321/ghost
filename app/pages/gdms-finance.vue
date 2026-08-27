@@ -345,22 +345,27 @@
           </UCard>
 
           <UModal v-model="showForecastPreview" :ui="{ width: 'sm:max-w-5xl' }">
-            <UCard>
+            <UCard
+              :ui="{
+                ring: '',
+                divide: 'divide-y divide-gray-700',
+                body: { base: 'p-6', padding: '' },
+                header: { base: 'px-6 py-4 bg-gray-900' },
+                footer: { base: 'px-6 py-4 bg-gray-900' }
+              }"
+            >
               <template #header>
                 <div class="flex items-center justify-between gap-4">
-                  <div><h2 class="text-base font-semibold">Forecast Preview</h2><p class="text-xs text-gray-500 mt-1">{{ activeDept?.department }} plan changes require confirmation before saving.</p></div>
-                  <UButton color="gray" variant="ghost" icon="i-heroicons-x-mark" @click="showForecastPreview = false" />
+                  <div><div class="flex items-center gap-2"><UIcon name="i-heroicons-chart-bar-square" class="h-5 w-5 text-blue-400" /><h2 class="text-lg font-semibold text-white">Forecast Decision Review</h2></div><p class="mt-1 text-sm text-gray-400">{{ activeDept?.department }} plan changes are calculated but not saved until confirmed.</p></div>
+                  <UButton color="gray" variant="ghost" icon="i-heroicons-x-mark-20-solid" size="sm" @click="showForecastPreview = false" />
                 </div>
               </template>
-              <div class="flex gap-1 border-b border-gray-200 dark:border-gray-700">
-                <button v-for="view in forecastPreviewViews" :key="view.id" class="px-3 py-2 text-sm border-b-2 -mb-px" :class="previewView === view.id ? 'border-purple-500 text-purple-600 dark:text-purple-300' : 'border-transparent text-gray-500'" @click="previewView = view.id">{{ view.label }}</button>
-              </div>
-              <div class="max-h-[52vh] overflow-auto pt-4 space-y-5">
+              <div class="max-h-[58vh] overflow-y-auto space-y-5">
                 <div v-if="previewView === 'overview'" class="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                  <div class="border border-gray-200 dark:border-gray-700 p-3"><div class="text-xs text-gray-500">Plan Change</div><div class="mt-1 text-lg font-semibold" :class="forecastPreviewMetrics.delta >= 0 ? 'text-red-600' : 'text-emerald-600'">{{ forecastPreviewMetrics.delta >= 0 ? '+' : '' }}{{ formatCurrency(forecastPreviewMetrics.delta, 0) }}</div></div>
-                  <div class="border border-gray-200 dark:border-gray-700 p-3"><div class="text-xs text-gray-500">Proposed Year Plan</div><div class="mt-1 text-lg font-semibold">{{ formatCurrency(forecastPreviewMetrics.proposed, 0) }}</div></div>
-                  <div class="border border-gray-200 dark:border-gray-700 p-3"><div class="text-xs text-gray-500">Forecast Components</div><div class="mt-1 text-lg font-semibold">{{ forecastPreviewRows.length }}</div><div class="text-xs text-gray-500">active account forecasts</div></div>
-                  <div class="border border-gray-200 dark:border-gray-700 p-3"><div class="text-xs text-gray-500">Past Months Rebased</div><div class="mt-1 text-lg font-semibold">{{ forecastPreviewMetrics.rebasedMonths }}</div><div class="text-xs text-gray-500">plan values set to actual charges</div></div>
+                  <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Plan Change</div><div class="mt-1 text-xl font-semibold" :class="forecastPreviewMetrics.delta >= 0 ? 'text-red-500' : 'text-emerald-500'">{{ forecastPreviewMetrics.delta >= 0 ? '+' : '' }}{{ formatCurrency(forecastPreviewMetrics.delta, 0) }}</div><div class="mt-1 text-xs text-gray-500">vs current annual plan</div></div>
+                  <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Proposed Plan</div><div class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ formatCurrency(forecastPreviewMetrics.proposed, 0) }}</div><div class="mt-1 text-xs text-gray-500">full-year plan value</div></div>
+                  <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Forecast Components</div><div class="mt-1 text-xl font-semibold text-blue-500">{{ forecastPreviewRows.length }}</div><div class="mt-1 text-xs text-gray-500">AWS account and special scopes</div></div>
+                  <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Past Months Rebased</div><div class="mt-1 text-xl font-semibold text-orange-500">{{ forecastPreviewMetrics.rebasedMonths }}</div><div class="mt-1 text-xs text-gray-500">set to posted actuals</div></div>
                 </div>
                 <div v-if="previewView === 'overview'"><h3 class="text-sm font-medium mb-2">Largest forecast drivers</h3><div class="grid grid-cols-1 sm:grid-cols-3 gap-3"><div v-for="row in forecastPreviewRows.slice(0, 3)" :key="row.accountId" class="border border-gray-200 p-3 dark:border-gray-700"><div class="truncate text-sm font-medium">{{ row.name }}</div><div class="mt-1 text-lg font-semibold">{{ formatCurrency(row.total, 0) }}</div><div class="text-xs text-gray-500">{{ row.share.toFixed(1) }}% of proposed forecast</div><div class="mt-2 h-1.5 bg-gray-100 dark:bg-gray-700"><div class="h-full bg-blue-500" :style="{ width: row.share + '%' }" /></div></div></div></div>
                 <div v-if="previewView === 'overview'"><h3 class="text-sm font-medium mb-2">Monthly plan change</h3><VChart :option="forecastPreviewChartOption" class="h-56" autoresize /></div>
@@ -1768,14 +1773,16 @@ async function exportExcel() {
   excelExporting.value = true
   excelExportError.value = null
   try {
-    const buf = await $fetch<ArrayBuffer>(`/api/costs/budget-vs-actual-export?year=${selectedYear.value}`, {
+    const department = activeDept.value?.department
+    if (!department) return
+    const buf = await $fetch<ArrayBuffer>(`/api/costs/budget-vs-actual-export?year=${selectedYear.value}&department=${department}`, {
       responseType: 'arrayBuffer'
     })
     const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `IT-AWS-Cost-Tracking-${selectedYear.value}.xlsx`
+    a.download = `${department}-AWS-Forecast-Review-${selectedYear.value}.xlsx`
     a.click()
     URL.revokeObjectURL(url)
   } catch (err: any) {
