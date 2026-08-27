@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  isProductionDeployment,
   mergeDynamoDBConfig,
   type DynamoDBConfig,
   type DynamoDBTableConfig
@@ -42,4 +43,27 @@ test('stale secrets cannot relocate budget alert tables from the monitoring acco
 
   assert.deepEqual(merged.budgetAlerts, budgetConfig('custom-alert-history', true))
   assert.deepEqual(merged.budgetAlertConfig, budgetConfig('custom-alert-config', false))
+})
+
+test('dev deployment remains non-production when Nitro build mode is production', () => {
+  assert.equal(isProductionDeployment({
+    NODE_ENV: 'production',
+    GHOST_ENV: 'dev',
+    DYNAMODB_CONFIG_SECRET_NAME: 'ghost-dynamodb-config-dev'
+  }), false)
+})
+
+test('legacy dev deployment is inferred from its DynamoDB secret name', () => {
+  assert.equal(isProductionDeployment({
+    NODE_ENV: 'production',
+    DYNAMODB_CONFIG_SECRET_NAME: 'ghost-dynamodb-config-dev'
+  }), false)
+})
+
+test('prod deployment remains production', () => {
+  assert.equal(isProductionDeployment({
+    NODE_ENV: 'production',
+    GHOST_ENV: 'prod',
+    DYNAMODB_CONFIG_SECRET_NAME: 'ghost-dynamodb-config-prod'
+  }), true)
 })

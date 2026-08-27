@@ -152,11 +152,26 @@ async function loadFromSecretsManager(): Promise<Partial<DynamoDBConfig> | null>
   }
 }
 
+export function isProductionDeployment(env: NodeJS.ProcessEnv = process.env): boolean {
+  const explicitEnvironment = env.GHOST_ENV?.trim().toLowerCase()
+  if (explicitEnvironment) return explicitEnvironment === 'prod' || explicitEnvironment === 'production'
+
+  // Nitro production builds can inline NODE_ENV="production" even when the
+  // running ECS service is dev. The environment-specific secret name remains
+  // runtime configuration, so use it as the compatibility signal.
+  const secretName = env.DYNAMODB_CONFIG_SECRET_NAME?.trim().toLowerCase()
+  if (secretName?.endsWith('-dev')) return false
+  if (secretName?.endsWith('-prod')) return true
+
+  const nodeEnv = env.NODE_ENV?.trim().toLowerCase()
+  return nodeEnv === 'production' || nodeEnv === 'prod'
+}
+
 /**
  * Get DynamoDB configuration from environment variables (fallback)
  */
 function loadFromEnvironment(): DynamoDBConfig {
-  const isProduction = process.env.NODE_ENV?.toLowerCase() === 'production' || process.env.NODE_ENV?.toLowerCase() === 'prod'
+  const isProduction = isProductionDeployment()
   const govCloudRegion = process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1'
   const commercialRegion = process.env.AWS_COMMERCIAL_REGION || 'us-east-1'
   const govCloudAccountId = process.env.AWS_GOVCLOUD_ORGANIZATIONS_ACCOUNT_ID || ''
