@@ -713,7 +713,7 @@ function visibleActual(m: MonthlyPoint): number {
 function visibleMonthActual(month: string, actual: number): number {
   return month <= displayCutoff ? actual : 0
 }
-const yearOptions = [currentYear, currentYear - 1, currentYear - 2]
+const yearOptions = [currentYear + 1, currentYear, currentYear - 1, currentYear - 2]
 
 const activeTab = ref(0)
 const expandedAccountLists = ref(new Set<string>())
