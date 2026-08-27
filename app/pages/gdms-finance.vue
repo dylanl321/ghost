@@ -61,6 +61,14 @@
           </UBadge>
           <USelectMenu v-model="selectedYear" :options="yearOptions" class="w-24" size="sm" />
           <UButton
+            v-if="activeDept && selectedYear === currentYear"
+            color="purple"
+            :variant="showForecastYear ? 'soft' : 'ghost'"
+            icon="i-heroicons-calendar-days"
+            size="sm"
+            @click="showForecastYear = !showForecastYear"
+          >{{ showForecastYear ? `${currentYear} + ${currentYear + 1}` : `Show ${currentYear + 1}` }}</UButton>
+          <UButton
             color="gray"
             variant="ghost"
             icon="i-heroicons-arrow-path"
@@ -209,6 +217,13 @@
       <!-- ── DEPARTMENT TAB ── -->
       <template v-else>
         <div v-if="activeDept">
+          <template v-if="showForecastYear && selectedYear === currentYear">
+            <UCard class="mb-4">
+              <template #header><div><h2 class="text-sm font-semibold text-gray-900 dark:text-white">{{ currentYear + 1 }} Forecast Plan — {{ activeDept.department }}</h2><p class="mt-0.5 text-xs text-gray-400 dark:text-gray-500">AWS Cost Explorer forecast values saved with the current Finance forecast version.</p></div></template>
+              <div class="overflow-x-auto"><table class="w-full text-sm tabular-nums"><thead><tr class="border-b border-gray-200 dark:border-gray-700"><th class="py-2 pr-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">Plan</th><th v-for="month in nextYearForecastMonths" :key="month" class="px-3 py-2 text-right text-xs font-semibold text-gray-500 dark:text-gray-400">{{ formatMonthShort(month) }}</th></tr></thead><tbody><tr><td class="py-3 pr-4 font-semibold text-blue-600 dark:text-blue-400">Forecast Plan</td><td v-for="month in nextYearForecastMonths" :key="month" class="px-3 py-3 text-right text-blue-600 dark:text-blue-400">{{ formatCurrency(nextYearForecastValues[month] || 0, 0) }}</td></tr></tbody></table></div>
+            </UCard>
+          </template>
+          <template v-else>
           <!-- Monthly summary table (spreadsheet-style) -->
           <UCard class="mb-4">
             <template #header>
@@ -453,6 +468,7 @@
               <VChart :option="deptYtdChartOption" class="h-64" autoresize />
             </UCard>
           </div>
+          </template>
 
           <!-- Metrics strip -->
           <div class="grid grid-cols-3 gap-3 mb-6">
@@ -725,6 +741,7 @@ const activeTab = ref(0)
 const expandedAccountLists = ref(new Set<string>())
 const expandedAccounts = ref(new Set<string>())
 const selectedMonth = ref<string | null>(null)
+const showForecastYear = ref(false)
 
 // Overview chart view toggle: false = truncated to last month with data, true = full year
 const overviewFullYear = ref(false)
@@ -751,11 +768,6 @@ const showForecastPreview = ref(false)
 const forecastPreview = ref<any>(null)
 const showNextForecastYear = ref(false)
 const previewView = ref<'overview' | 'actuals' | 'accounts'>('overview')
-const forecastPreviewViews = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'actuals', label: 'Actuals' },
-  { id: 'accounts', label: 'Accounts' }
-]
 const forecastError = ref<string | null>(null)
 const forecastErrorDetails = ref<Record<string, unknown> | null>(null)
 const forecastNotice = ref<string | null>(null)
@@ -874,6 +886,12 @@ const selectedPreviewMonthLedger = computed(() => {
 })
 interface PlanHistoryEntry { sk: string; action: string; actor: string; createdAt: string; monthlyValues: Record<string, number>; forecastComposition?: Record<string, unknown> }
 const planHistory = ref<PlanHistoryEntry[]>([])
+const nextYearForecastMonths = computed(() => Array.from({ length: 12 }, (_, index) => `${currentYear + 1}-${String(index + 1).padStart(2, '0')}-01`))
+const nextYearForecastValues = computed<Record<string, number>>(() => {
+  const latestForecast = planHistory.value.find(entry => entry.action === 'forecast-generated')
+  if (!latestForecast) return {}
+  return Object.fromEntries(nextYearForecastMonths.value.map(month => [month, Number(latestForecast.monthlyValues?.[month] || 0)]))
+})
 
 async function loadPlanHistory() {
   const dept = activeDept.value
@@ -1106,6 +1124,7 @@ if (import.meta.client) {
   watch(activeDept, async (dept) => {
     selectedMonth.value = null
     deptFullYear.value = false
+    showForecastYear.value = false
     if (dept) await loadPlanOverrides(dept.department, selectedYear.value)
     if (dept) await loadPlanHistory()
   }, { immediate: true })
@@ -1799,7 +1818,7 @@ async function exportExcel() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${department}-AWS-Forecast-Review-${selectedYear.value}.xlsx`
+    a.download = `${department}-AWS-Forecast-Review-${selectedYear.value}-${selectedYear.value + 1}.xlsx`
     a.click()
     URL.revokeObjectURL(url)
   } catch (err: any) {
