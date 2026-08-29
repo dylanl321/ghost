@@ -30,6 +30,7 @@
     "test:mcp": "tsx --test tests/mcp/*.test.ts",
     "test:vmaas": "tsx --test tests/vmaas/*.test.ts",
     "test:budget-recipients": "tsx --test server/utils/__tests__/manual-budget-alert-recipients.test.ts",
+    "test:budget-alert-retry": "tsx --test server/utils/__tests__/budget-alert-retry.test.ts",
     "changelog:generate": "tsx scripts/generate-changelog.ts"
   },
   "dependencies": {
