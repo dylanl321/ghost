@@ -3,6 +3,8 @@ import test from 'node:test'
 import {
   isProductionDeployment,
   mergeDynamoDBConfig,
+  warnPartialSecretFallback,
+  resetPartialSecretFallbackWarning,
   type DynamoDBConfig,
   type DynamoDBTableConfig
 } from '../../server/lib/dynamodb-config'
@@ -66,4 +68,21 @@ test('prod deployment remains production', () => {
     GHOST_ENV: 'prod',
     DYNAMODB_CONFIG_SECRET_NAME: 'ghost-dynamodb-config-prod'
   }), true)
+})
+
+test('partial-secret fallback warns once per unchanged missing-key signature', () => {
+  resetPartialSecretFallbackWarning()
+  const missing = ['userNotifications', 'aiUsage']
+
+  // First occurrence warns; the 5-minute cache reload with the same gap does not.
+  assert.equal(warnPartialSecretFallback(missing), true)
+  assert.equal(warnPartialSecretFallback(missing), false)
+  assert.equal(warnPartialSecretFallback([...missing].reverse()), false)
+
+  // A changed signature warns again exactly once.
+  assert.equal(warnPartialSecretFallback([...missing, 'costTagConfig']), true)
+  assert.equal(warnPartialSecretFallback([...missing, 'costTagConfig']), false)
+
+  // No missing keys never warns.
+  assert.equal(warnPartialSecretFallback([]), false)
 })

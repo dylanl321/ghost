@@ -108,6 +108,45 @@ let cachedConfig: DynamoDBConfig | null = null
 let configLoadedAt: number | null = null
 const CONFIG_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
+// The config cache reloads every 5 minutes; without this, a stale partial
+// secret re-emits the same fallback warning on every reload. Track the last
+// warned missing-key signature so we warn at most once per process for an
+// unchanged set of missing keys (and again only if the signature changes).
+let lastMissingKeysSignature: string | null = null
+
+/**
+ * Emit the partial-secret fallback warning at most once per process for an
+ * unchanged missing-key signature. Returns true when a warning was emitted.
+ * This is a warning (an intentional, functional fallback), never an error.
+ */
+export function warnPartialSecretFallback(missingKeys: string[]): boolean {
+  if (missingKeys.length === 0) return false
+
+  const signature = [...missingKeys].sort().join(',')
+  if (signature === lastMissingKeysSignature) return false
+  lastMissingKeysSignature = signature
+
+  logger.warn(
+    `DynamoDB config from secret was missing ${missingKeys.length} table key(s); ` +
+    `using env defaults for: ${missingKeys.join(', ')}`,
+    {
+      event: 'dynamodb_config_fallback',
+      missingKeyCount: missingKeys.length,
+      missingKeys,
+      configSource: 'secrets-manager',
+      fallbackSource: 'env-defaults'
+    }
+  )
+  return true
+}
+
+/**
+ * Reset the fallback-warning dedupe state (useful for testing).
+ */
+export function resetPartialSecretFallbackWarning(): void {
+  lastMissingKeysSignature = null
+}
+
 /**
  * Get DynamoDB configuration from Secrets Manager
  */
@@ -425,12 +464,7 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
     // stale secret that should be refreshed), so the gap is observable.
     const missingKeys = (Object.keys(envConfig) as (keyof DynamoDBConfig)[])
       .filter(k => !(k in secretsConfig))
-    if (missingKeys.length > 0) {
-      logger.warn(
-        `DynamoDB config from secret was missing ${missingKeys.length} table key(s); ` +
-        `using env defaults for: ${missingKeys.join(', ')}`
-      )
-    }
+    warnPartialSecretFallback(missingKeys as string[])
 
     cachedConfig = mergedConfig
     configLoadedAt = Date.now()
