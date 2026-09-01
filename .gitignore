@@ -24,6 +24,7 @@ logs
 !.env.example
 
 # Other
+/.aidlc
 dev-notes.md
 SHARED_SERVICES_ACCESS.md
 *.sh

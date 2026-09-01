@@ -24,7 +24,7 @@ const advertised = new Set([
 const readTools: Record<string, { source: string; names: string[] }> = {
   accounts: {
     source: 'Organizations and GHOST account metadata',
-    names: ['ghost.accounts.search', 'ghost.accounts.get', 'ghost.accounts.list', 'ghost.accounts.statistics']
+    names: ['ghost.accounts.resolve', 'ghost.accounts.search', 'ghost.accounts.get', 'ghost.accounts.list', 'ghost.accounts.statistics']
   },
   access: {
     source: 'AWS IAM Identity Center Admin and GHOST account metadata',

@@ -1134,6 +1134,39 @@ output "manual_plan_values_table_arn" {
   value       = aws_dynamodb_table.manual_plan_values.arn
 }
 
+resource "aws_dynamodb_table" "financial_plan_history" {
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-financial-plan-history-prod" : "ghost-financial-plan-history"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+  server_side_encryption { enabled = true }
+  point_in_time_recovery { enabled = true }
+
+  tags = {
+    Name        = "GHOST Financial Plan History"
+    Environment = local.environment
+    ManagedBy   = "Terraform"
+    Service     = "GHOST"
+    Component   = "FinancialMetrics"
+  }
+}
+
+output "financial_plan_history_table_name" {
+  description = "Name of the DynamoDB table for financial plan history"
+  value       = aws_dynamodb_table.financial_plan_history.name
+}
+
 output "async_chat_jobs_table_name" {
   description = "Name of the DynamoDB table for async chat jobs"
   value       = aws_dynamodb_table.async_chat_jobs.name

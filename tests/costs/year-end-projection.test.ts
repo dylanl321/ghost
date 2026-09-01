@@ -46,11 +46,12 @@ test('year-end projection can derive scoped actuals when displayed spend is unav
   assert.deepEqual(projection, { actual: 125, remainder: 25, projectedTotal: 150 })
 })
 
-test('default account filters recognize requestID and enclaveStatus aliases', () => {
+test('default account filters use explicit environment metadata, not request ID', () => {
   const filtered = applyAccountFilters([
-    { accountId: 'prod', requestID: '100', enclaveStatus: 'Active' },
-    { accountId: 'dev', requestID: '9100', enclaveStatus: 'Active' },
-    { accountId: 'closed', requestID: '200', enclaveStatus: 'Decommissioned' }
+    { accountId: 'prod', requestID: '100', enclaveStatus: 'Sustainment', environment: 'production' },
+    { accountId: 'api-west', requestID: '10274', enclaveStatus: 'Sustainment', environment: 'production' },
+    { accountId: 'dev', requestID: '100', enclaveStatus: 'Sustainment', environment: 'development' },
+    { accountId: 'closed', requestID: '200', enclaveStatus: 'Decommissioned', environment: 'production' }
   ], {
     hideSavingsPlans: false,
     hideEnterpriseSupport: false,
@@ -62,5 +63,5 @@ test('default account filters recognize requestID and enclaveStatus aliases', ()
     selectedTableColumns: null
   })
 
-  assert.deepEqual(filtered.map(account => account.accountId), ['prod'])
+  assert.deepEqual(filtered.map(account => account.accountId), ['prod', 'api-west'])
 })

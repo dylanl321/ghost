@@ -48,6 +48,7 @@ export interface DynamoDBConfig {
   achievementProgress: DynamoDBTableConfig
   utilizationAnalysis: DynamoDBTableConfig
   financialPlanOverrides: DynamoDBTableConfig
+  financialPlanHistory: DynamoDBTableConfig
 }
 
 // -----------------------------------------------------------------------------
@@ -151,10 +152,26 @@ async function loadFromSecretsManager(): Promise<Partial<DynamoDBConfig> | null>
   }
 }
 
+export function isProductionDeployment(env: NodeJS.ProcessEnv = process.env): boolean {
+  const explicitEnvironment = env.GHOST_ENV?.trim().toLowerCase()
+  if (explicitEnvironment) return explicitEnvironment === 'prod' || explicitEnvironment === 'production'
+
+  // Nitro production builds can inline NODE_ENV="production" even when the
+  // running ECS service is dev. The environment-specific secret name remains
+  // runtime configuration, so use it as the compatibility signal.
+  const secretName = env.DYNAMODB_CONFIG_SECRET_NAME?.trim().toLowerCase()
+  if (secretName?.endsWith('-dev')) return false
+  if (secretName?.endsWith('-prod')) return true
+
+  const nodeEnv = env.NODE_ENV?.trim().toLowerCase()
+  return nodeEnv === 'production' || nodeEnv === 'prod'
+}
+
 /**
  * Get DynamoDB configuration from environment variables (fallback)
  */
 function loadFromEnvironment(): DynamoDBConfig {
+  const isProduction = isProductionDeployment()
   const govCloudRegion = process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1'
   const commercialRegion = process.env.AWS_COMMERCIAL_REGION || 'us-east-1'
   const govCloudAccountId = process.env.AWS_GOVCLOUD_ORGANIZATIONS_ACCOUNT_ID || ''
@@ -333,7 +350,13 @@ function loadFromEnvironment(): DynamoDBConfig {
       accountId: deploymentAccountId
     },
     financialPlanOverrides: {
-      tableName: process.env.FINANCIAL_PLAN_OVERRIDES_TABLE || 'ghost-manual-plan-values',
+      tableName: process.env.FINANCIAL_PLAN_OVERRIDES_TABLE || (isProduction ? 'ghost-manual-plan-values-prod' : 'ghost-manual-plan-values'),
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
+    },
+    financialPlanHistory: {
+      tableName: process.env.FINANCIAL_PLAN_HISTORY_TABLE || (isProduction ? 'ghost-financial-plan-history-prod' : 'ghost-financial-plan-history'),
       environment: 'govcloud',
       region: govCloudRegion,
       accountId: deploymentAccountId
@@ -364,6 +387,17 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
 
   // Env-variable config is the complete set of defaults for every table.
   const envConfig = loadFromEnvironment()
+
+  // Local development must never inherit table locations from a shared secret.
+  // In particular, Finance plan changes are user edits and must not be capable
+  // of writing to production simply because a developer can read its config.
+  const nodeEnv = process.env.NODE_ENV?.toLowerCase()
+  if (nodeEnv === 'development' || nodeEnv === 'dev') {
+    cachedConfig = envConfig
+    configLoadedAt = Date.now()
+    logger.info('Using DynamoDB configuration from environment variables (development mode)')
+    return envConfig
+  }
 
   // Try loading from Secrets Manager first; merge over defaults so a stale or
   // partial secret can never drop a table key.
@@ -406,11 +440,6 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
   // No secret available — use env defaults directly.
   cachedConfig = envConfig
   configLoadedAt = Date.now()
-
-  const nodeEnv = process.env.NODE_ENV?.toLowerCase()
-  if (nodeEnv === 'development' || nodeEnv === 'dev') {
-    logger.info('Using DynamoDB configuration from environment variables (development mode)')
-  }
 
   return envConfig
 }

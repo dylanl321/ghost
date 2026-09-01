@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   aggregateVmaasProjections,
+  allocateVmaasActuals,
   isVmaasOwned,
   normalizeVmaasOperatingSystem,
   scheduledHoursForMonth,
@@ -92,4 +93,37 @@ test('fleet projection aggregation preserves unavailable server count', () => {
     schedule_savings_usd: 644,
     unavailable_server_count: 1
   })
+})
+
+test('allocated actuals reconcile tenant usage and the GDMS IT residual', () => {
+  const result = allocateVmaasActuals({
+    billableTotal: 100,
+    proformaTotal: 80,
+    groups: [
+      { tenant_id: 'alpha-app', cost_center: 'DE100', billable_direct_usd: 30 },
+      { tenant_id: 'beta-app', cost_center: 'DE200', billable_direct_usd: 20 }
+    ]
+  })
+  assert.deepEqual(result.rows.map(row => row.allocated_proforma_usd), [24, 16])
+  assert.equal(result.allocatedDirect, 40)
+  assert.equal(result.sharedResidual, 40)
+  assert.equal(result.reconciled, true)
+})
+
+test('allocated actuals retain signed credits', () => {
+  const result = allocateVmaasActuals({
+    billableTotal: 100,
+    proformaTotal: 90,
+    groups: [
+      { tenant_id: 'alpha-app', cost_center: 'DE100', billable_direct_usd: 50 },
+      { tenant_id: 'alpha-credit', cost_center: 'DE100', billable_direct_usd: -10 }
+    ]
+  })
+  assert.deepEqual(result.rows.map(row => row.allocated_proforma_usd), [45, -9])
+  assert.equal(result.sharedResidual, 54)
+})
+
+test('allocated actuals fail closed without a usable denominator or tagged usage', () => {
+  assert.throws(() => allocateVmaasActuals({ billableTotal: 0, proformaTotal: 10, groups: [] }), /positive/)
+  assert.throws(() => allocateVmaasActuals({ billableTotal: 10, proformaTotal: 10, groups: [] }), /no tenant-tagged/)
 })
