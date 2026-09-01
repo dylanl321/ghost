@@ -21,6 +21,7 @@ export function sendSuccess<T>(
     data,
     metadata: {
       timestamp: new Date().toISOString(),
+      ...(event.context.requestId ? { requestId: event.context.requestId } : {}),
       ...metadata
     }
   }
@@ -51,6 +52,7 @@ export function sendPaginated<T>(
     },
     metadata: {
       timestamp: new Date().toISOString(),
+      ...(event.context.requestId ? { requestId: event.context.requestId } : {}),
       ...metadata
     }
   }
@@ -77,7 +79,8 @@ export function sendApiError(
       details
     },
     metadata: {
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      ...(event.context.requestId ? { requestId: event.context.requestId } : {})
     }
   }
   
@@ -159,8 +162,12 @@ export function handleAsync<T extends (...args: any[]) => Promise<any>>(fn: T): 
         return errors.awsError(event, error)
       }
       
-      // Generic error handling
-      logger.error('API Error:', error)
+      // Generic error handling — attach request correlation for log tracing
+      logger.error('API Error:', error, {
+        requestId: event.context.requestId,
+        route: event.path,
+        method: event.method
+      })
       return errors.serverError(event, error.message || 'An unexpected error occurred')
     }
   }) as T

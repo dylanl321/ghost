@@ -8,8 +8,9 @@
  * metric filters can extract APILatencyMs and backgroundJobActive.
  */
 
-import { defineEventHandler, getRequestURL } from 'h3'
+import { defineEventHandler, getRequestURL, getHeader, setHeader } from 'h3'
 import { isAnyJobRunning, getActiveJobs } from '../utils/job-tracker'
+import { resolveRequestId, extractAuthActor } from '../utils/request-context'
 
 // Normalize dynamic path segments for Log Insights grouping
 function normalizePath(path: string): string {
@@ -35,17 +36,33 @@ export default defineEventHandler((event) => {
 
   const start = performance.now()
 
+  // Establish a request ID for correlation across the request log and API
+  // responses. Trust an inbound x-request-id only if bounded and safe.
+  const requestId = resolveRequestId(getHeader(event, 'x-request-id'))
+  event.context.requestId = requestId
+  setHeader(event, 'x-request-id', requestId)
+
   event.node.res.on('finish', () => {
     const durationMs = Math.round((performance.now() - start) * 100) / 100
     const backgroundJobActive = isAnyJobRunning()
 
     const entry: Record<string, unknown> = {
       type: 'request',
+      requestId,
       method: event.method,
       path: normalizePath(pathname),
       statusCode: event.node.res.statusCode,
       durationMs,
       backgroundJobActive,
+    }
+
+    // Low-risk auth correlation (populated by entra-auth middleware).
+    const authCorrelation = extractAuthActor(event.context.auth)
+    if (authCorrelation) {
+      entry.authType = authCorrelation.authType
+      if (authCorrelation.actor) {
+        entry.actor = authCorrelation.actor
+      }
     }
 
     if (backgroundJobActive) {
