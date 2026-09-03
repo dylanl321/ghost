@@ -9,13 +9,14 @@
     "npm": ">=11.0.0 <12"
   },
   "scripts": {
-    "build": "npm run bundle:support && nuxt build",
-    "dev": "cross-env NODE_OPTIONS='--max-old-space-size=12288' nuxt dev",
+    "build": "npm run swagger:assets && npm run bundle:support && nuxt build",
+    "dev": "npm run swagger:assets && cross-env NODE_OPTIONS='--max-old-space-size=12288' nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "start": "nuxt start",
     "bundle:support": "tsx scripts/bundle-support-articles.ts",
+    "swagger:assets": "tsx scripts/copy-swagger-assets.ts",
     "seed:email-templates": "tsx scripts/seed-email-templates.ts",
     "mcp:secrets": "tsx scripts/generate-mcp-oauth-secrets.ts",
     "ghost:aws": "tsx scripts/ghost-aws.ts",
