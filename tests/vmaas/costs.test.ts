@@ -3,6 +3,8 @@ import test from 'node:test'
 import {
   aggregateVmaasProjections,
   allocateVmaasActuals,
+  mergeVmaasInstanceActuals,
+  reportingMonthRange,
   isVmaasOwned,
   normalizeVmaasOperatingSystem,
   scheduledHoursForMonth,
@@ -81,7 +83,8 @@ test('fleet projection aggregation preserves unavailable server count', () => {
     operating_system: 'Linux', instance_type: 'm6i.large', region: 'us-gov-west-1', state: 'running', schedule: 'workweek',
     compute_hourly_usd: 1, storage_monthly_usd: 10, scheduled_hours: 100,
     scheduled_monthly_usd: 110, always_on_hours: 744, always_on_monthly_usd: 754,
-    schedule_savings_usd: 644, scheduled_estimate_available: true
+    schedule_savings_usd: 644, scheduled_estimate_available: true,
+    actual_month_usd: 40, in_fleet: true
   }
   const result = aggregateVmaasProjections([
     base,
@@ -91,8 +94,34 @@ test('fleet projection aggregation preserves unavailable server count', () => {
     scheduled_monthly_usd: 110,
     always_on_monthly_usd: 854,
     schedule_savings_usd: 644,
+    actual_month_usd: 80,
     unavailable_server_count: 1
   })
+})
+
+test('reporting month uses MTD for the current month and full closed months otherwise', () => {
+  const now = new Date('2026-08-15T12:00:00Z')
+  assert.deepEqual(reportingMonthRange(undefined, now), { start: '2026-08-01', end: '2026-08-15', closed: false })
+  assert.deepEqual(reportingMonthRange('2026-07', now), { start: '2026-07-01', end: '2026-08-01', closed: true })
+})
+
+test('instance actuals keep terminated servers that billed during the month', () => {
+  const live: VmaasServerCost = {
+    instance_id: 'i-12345678', name: 'live', team_id: 'alpha', department: 'Engineering',
+    operating_system: 'Linux', instance_type: 'm6i.large', region: 'us-gov-west-1', state: 'running', schedule: 'workweek',
+    compute_hourly_usd: 1, storage_monthly_usd: 10, scheduled_hours: 100,
+    scheduled_monthly_usd: 110, always_on_hours: 744, always_on_monthly_usd: 754,
+    schedule_savings_usd: 644, scheduled_estimate_available: true, actual_month_usd: 0, in_fleet: true
+  }
+  const merged = mergeVmaasInstanceActuals([live], [
+    { instance_id: 'i-12345678', tenant_id: 'alpha-web', actual_month_usd: 22.5 },
+    { instance_id: 'i-deadbeef12', tenant_id: 'beta-web', actual_month_usd: 18.25 }
+  ])
+  assert.equal(merged.find(server => server.instance_id === 'i-12345678')?.actual_month_usd, 22.5)
+  const gone = merged.find(server => server.instance_id === 'i-deadbeef12')
+  assert.equal(gone?.in_fleet, false)
+  assert.equal(gone?.state, 'terminated')
+  assert.equal(gone?.actual_month_usd, 18.25)
 })
 
 test('allocated actuals reconcile tenant usage and the GDMS IT residual', () => {
