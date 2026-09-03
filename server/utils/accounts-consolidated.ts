@@ -70,6 +70,46 @@ export async function getAccountFromOrganizations(
 }
 
 /**
+ * Organizations throttling error names that are safe to retry with backoff.
+ * The AWS SDK exhausts its own retries before surfacing these to us.
+ */
+const RETRYABLE_ORG_THROTTLE_ERRORS = new Set([
+  'TooManyRequestsException',
+  'ThrottlingException',
+  'Throttling',
+])
+
+/**
+ * Total attempts (initial + retries) for a single Organizations page request.
+ */
+const ORG_LIST_ACCOUNTS_MAX_ATTEMPTS = 5
+
+/**
+ * Classify whether an Organizations error is a retryable throttling error.
+ * Pure helper — safe to unit test.
+ */
+export function isRetryableOrgThrottle(error: unknown): boolean {
+  const name = (error as { name?: string } | null | undefined)?.name
+  return typeof name === 'string' && RETRYABLE_ORG_THROTTLE_ERRORS.has(name)
+}
+
+/**
+ * Compute a bounded, full-jitter exponential backoff delay (ms) for a
+ * zero-indexed attempt number. Pure helper — inject `random` for deterministic
+ * tests so there are no real waits.
+ */
+export function computeOrgBackoffMs(
+  attempt: number,
+  options: { baseMs?: number; maxMs?: number; random?: () => number } = {}
+): number {
+  const baseMs = options.baseMs ?? 200
+  const maxMs = options.maxMs ?? 5000
+  const random = options.random ?? Math.random
+  const ceiling = Math.min(baseMs * Math.pow(2, attempt), maxMs)
+  return Math.floor(random() * ceiling)
+}
+
+/**
  * Get all accounts from Organizations API
  * Used by: bulk operations in accounts-v2.ts
  */
@@ -84,14 +124,38 @@ export async function getAllAccountsFromOrganizations(
   try {
     const orgAccountId = getOrganizationsAccountId(environment)
     const client = await getOrganizationsClient(environment, undefined, orgAccountId)
-    
+
     const { ListAccountsCommand } = await import('@aws-sdk/client-organizations')
     const accounts: AccountInfo[] = []
     let nextToken: string | undefined
-    
+
+    // Fetch a single page, retrying the SAME NextToken on Organizations
+    // throttling with bounded jittered backoff. Already-completed pages are
+    // never restarted because accounts are only appended after a page succeeds.
+    const fetchAccountsPage = async (token: string | undefined) => {
+      for (let attempt = 0; attempt < ORG_LIST_ACCOUNTS_MAX_ATTEMPTS; attempt++) {
+        try {
+          return await client.send(new ListAccountsCommand({ NextToken: token }))
+        } catch (error: any) {
+          const isLastAttempt = attempt === ORG_LIST_ACCOUNTS_MAX_ATTEMPTS - 1
+          if (!isRetryableOrgThrottle(error) || isLastAttempt) {
+            throw error
+          }
+          const delayMs = computeOrgBackoffMs(attempt)
+          logger.warn(
+            `Organizations ListAccounts throttled (${error?.name}) [${environment}], ` +
+            `attempt ${attempt + 1}/${ORG_LIST_ACCOUNTS_MAX_ATTEMPTS}. Retrying in ${delayMs}ms...`
+          )
+          await _sleep(delayMs)
+        }
+      }
+      // Unreachable: the loop either returns a response or throws.
+      throw new Error('Organizations ListAccounts retry loop exited unexpectedly')
+    }
+
     do {
-      const response = await client.send(new ListAccountsCommand({ NextToken: nextToken }))
-      
+      const response = await fetchAccountsPage(nextToken)
+
       if (response.Accounts) {
         for (const account of response.Accounts) {
           if (account.Id && account.Name) {
