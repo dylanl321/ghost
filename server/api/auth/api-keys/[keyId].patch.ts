@@ -3,17 +3,13 @@
  * Update API key metadata (notes, description, etc.)
  */
 
-import { defineEventHandler, readBody, getRouterParam } from 'h3'
-import { createError } from 'h3'
-import { getAuthContext, requireScope } from '../../../middleware/entra-auth'
+import { createError, defineEventHandler, readBody, getRouterParam } from 'h3'
+import { getAuthContext, requireOIDCAuth } from '../../../middleware/entra-auth'
 import { registerEndpoint } from '../../../plugins/swagger'
 import type { EntraAPIResponse } from '../../../types/entra'
 import { updateItem, getItem } from '../../../utils/dynamodb'
+import { getTableEnvironment, getTableName } from '../../../lib/dynamodb-config'
 import { logger } from '../../../utils/logger'
-
-const API_KEYS_TABLE = process.env.DYNAMODB_API_KEYS_TABLE || 'ghost-api-keys'
-const API_KEYS_ENVIRONMENT: 'commercial' | 'govcloud' =
-  (process.env.API_KEYS_STORAGE_ENV as 'commercial' | 'govcloud') || 'commercial'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/auth/api-keys/{keyId}', 'PATCH', {
@@ -21,7 +17,6 @@ registerEndpoint('/api/auth/api-keys/{keyId}', 'PATCH', {
   description: 'Update metadata (notes, description) for an API key',
   tags: ['Authentication'],
   security: [
-    { BearerAuth: [] },
     { OIDCAuth: [] }
   ],
   parameters: [
@@ -77,12 +72,14 @@ registerEndpoint('/api/auth/api-keys/{keyId}', 'PATCH', {
 
 export default defineEventHandler(async (event): Promise<EntraAPIResponse<any>> => {
   try {
-    // Require admin scope
-    await requireScope(event, 'admin')
+    requireOIDCAuth(event)
 
     // Get authenticated user
     const authContext = getAuthContext(event)
-    const userId = authContext.user?.email || authContext.user?.displayName || 'unknown'
+    const userIdValue = authContext.user?.email || authContext.user?.preferred_username ||
+      authContext.user?.claims?.email || authContext.user?.claims?.preferred_username
+    if (!userIdValue) throw createError({ statusCode: 403, statusMessage: 'A verified user identity is required' })
+    const userId = String(userIdValue).toLowerCase()
 
     // Get key ID from route params
     const keyId = getRouterParam(event, 'keyId')
@@ -104,7 +101,9 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<any>> 
     }
 
     // Get existing key to verify it exists and check permissions
-    const existingKey = await getItem(API_KEYS_TABLE, { id: keyId }, API_KEYS_ENVIRONMENT)
+    const tableName = await getTableName('apiKeys')
+    const environment = await getTableEnvironment('apiKeys')
+    const existingKey = await getItem(tableName, { id: keyId }, environment)
 
     if (!existingKey) {
       throw createError({
@@ -112,20 +111,23 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<any>> 
         statusMessage: 'API key not found'
       })
     }
+    if (String(existingKey.createdBy).toLowerCase() !== userId) {
+      throw createError({ statusCode: 404, statusMessage: 'API key not found' })
+    }
 
     // Update metadata
     await updateItem(
-      API_KEYS_TABLE,
+      tableName,
       { id: keyId },
-      { metadata: body.metadata },
-      API_KEYS_ENVIRONMENT
+      { metadata: { ...existingKey.metadata, ...body.metadata } },
+      environment
     )
 
     logger.info(`Updated API key ${keyId} metadata by ${userId}`)
 
     return {
       success: true,
-      message: 'API key updated successfully'
+      data: { message: 'API key updated successfully' }
     }
   } catch (error: any) {
     logger.error('Error updating API key:', error)

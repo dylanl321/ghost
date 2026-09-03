@@ -27,7 +27,7 @@
       icon="i-heroicons-information-circle"
       class="mb-6"
       title="About API Keys"
-      description="API keys allow external systems to access GHOST APIs. They work for all endpoints except Entra ID APIs, which require user authentication."
+      description="API keys provide organization-wide, read-only access to supported /api/v1 endpoints. Send them only in the x-api-key header."
     />
 
     <!-- API Keys List -->
@@ -157,12 +157,8 @@
                 </summary>
                 <div class="mt-3 space-y-2">
                   <div class="bg-gray-50 dark:bg-gray-800 rounded p-2 text-xs font-mono overflow-x-auto">
-                    <span class="text-gray-500"># Using x-api-key header</span><br />
-                    curl -H "x-api-key: YOUR_API_KEY" {{ currentDomain }}/api/accounts/list
-                  </div>
-                  <div class="bg-gray-50 dark:bg-gray-800 rounded p-2 text-xs font-mono overflow-x-auto">
-                    <span class="text-gray-500"># Using Bearer token</span><br />
-                    curl -H "Authorization: Bearer YOUR_API_KEY" {{ currentDomain }}/api/costs/summary
+                    <span class="text-gray-500"># Using x-api-key header</span><br>
+                    curl -H "x-api-key: YOUR_API_KEY" {{ currentDomain }}/api/v1/accounts
                   </div>
                 </div>
               </details>
@@ -182,6 +178,21 @@
         </template>
 
         <div v-if="!createdKey" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Permissions
+            </label>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <UCheckbox
+                v-for="scope in scopeOptions"
+                :key="scope.value"
+                v-model="newKeyScopes"
+                :value="scope.value"
+                :label="scope.label"
+              />
+            </div>
+          </div>
+
           <div>
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Key Name
@@ -264,16 +275,12 @@
               How to Use This Key
             </h4>
             <p class="text-xs text-gray-600 dark:text-gray-400 mb-3">
-              Include this key in your API requests using one of these methods:
+              Include this key in the x-api-key header:
             </p>
             <div class="space-y-2">
               <div class="bg-white dark:bg-gray-900 rounded p-2 text-xs font-mono">
-                <span class="text-gray-500"># Header method</span><br />
-                curl -H "x-api-key: {{ createdKey }}" {{ currentDomain }}/api/accounts/list
-              </div>
-              <div class="bg-white dark:bg-gray-900 rounded p-2 text-xs font-mono">
-                <span class="text-gray-500"># Bearer token method</span><br />
-                curl -H "Authorization: Bearer {{ createdKey }}" {{ currentDomain }}/api/costs/summary
+                <span class="text-gray-500"># Header method</span><br>
+                curl -H "x-api-key: {{ createdKey }}" {{ currentDomain }}/api/v1/accounts
               </div>
             </div>
           </div>
@@ -483,7 +490,8 @@ const usageHistory = ref<any[]>([])
 const loadingUsage = ref(false)
 const newKeyName = ref('')
 const newKeyDescription = ref('')
-const newKeyExpiration = ref('never')
+const newKeyExpiration = ref('90')
+const newKeyScopes = ref<string[]>(['accounts:read'])
 const editKeyDescription = ref('')
 const creating = ref(false)
 const deleting = ref(false)
@@ -501,11 +509,17 @@ const currentDomain = computed(() => {
 
 // Expiration options
 const expirationOptions = [
-  { label: 'Never expires', value: 'never' },
-  { label: '30 days', value: '30' },
   { label: '90 days', value: '90' },
+  { label: '30 days', value: '30' },
   { label: '180 days', value: '180' },
-  { label: '1 year', value: '365' }
+  { label: '1 year', value: '365' },
+  { label: 'Never expires', value: 'never' }
+]
+const scopeOptions = [
+  { label: 'Accounts', value: 'accounts:read' },
+  { label: 'Costs', value: 'costs:read' },
+  { label: 'Forecasts', value: 'forecast:read' },
+  { label: 'Security', value: 'security:read' }
 ]
 
 // Load API keys
@@ -544,24 +558,9 @@ const createKey = async () => {
       method: 'POST',
       body: {
         name: newKeyName.value,
-        scopes: [
-          'entra:read',
-          'entra:write',
-          'entra:admin',
-          'accounts:read',
-          'accounts:write',
-          'costs:read',
-          'costs:write',
-          'forecast:read',
-          'forecast:write',
-          'security-lake:read',
-          'security-lake:write',
-          'groups:read',
-          'users:read',
-          'cache:manage',
-          'admin:all'
-        ],
+        scopes: newKeyScopes.value,
         expiresInDays,
+        neverExpires: newKeyExpiration.value === 'never',
         metadata
       }
     })
@@ -594,7 +593,8 @@ const closeCreateModal = () => {
   createdKey.value = ''
   newKeyName.value = ''
   newKeyDescription.value = ''
-  newKeyExpiration.value = 'never'
+  newKeyExpiration.value = '90'
+  newKeyScopes.value = ['accounts:read']
   loadKeys()
 }
 

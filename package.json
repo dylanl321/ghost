@@ -29,6 +29,7 @@
     "test:chat": "tsx --test tests/chat/*.test.ts",
     "test:mcp": "tsx --test tests/mcp/*.test.ts",
     "test:vmaas": "tsx --test tests/vmaas/*.test.ts",
+    "test:api": "tsx --test tests/api/*.test.ts",
     "test:budget-recipients": "tsx --test server/utils/__tests__/manual-budget-alert-recipients.test.ts",
     "changelog:generate": "tsx scripts/generate-changelog.ts"
   },
@@ -110,6 +111,7 @@
     "pinia": "^3.0.3",
     "pinia-plugin-persistedstate": "^4.7.1",
     "sortablejs": "^1.15.7",
+    "swagger-ui-dist": "5.32.14",
     "tsx": "^4.23.9",
     "typescript": "^5.9.2",
     "uuid": "^13.0.2",

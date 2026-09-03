@@ -3,10 +3,9 @@
  * Create a new API key for non-interactive access
  */
 
-import { defineEventHandler, readBody } from 'h3'
-import { createError } from 'h3'
-import { createApiKey, API_KEY_SCOPES } from '../../../utils/api-keys'
-import { getAuthContext, requireScope } from '../../../middleware/entra-auth'
+import { createError, defineEventHandler, readBody } from 'h3'
+import { createApiKey, INTEGRATION_API_KEY_SCOPES } from '../../../utils/api-keys'
+import { getAuthContext, requireOIDCAuth } from '../../../middleware/entra-auth'
 import { registerEndpoint } from '../../../plugins/swagger'
 import type { CreateApiKeyRequest, CreateApiKeyResponse, EntraAPIResponse } from '../../../types/entra'
 import { logger } from '../../../utils/logger'
@@ -14,10 +13,9 @@ import { logger } from '../../../utils/logger'
 // Register OpenAPI documentation
 registerEndpoint('/api/auth/api-keys/create', 'POST', {
   summary: 'Create new API key',
-  description: 'Create a new API key for non-interactive access to Entra ID APIs',
+  description: 'Create a read-only API key for the supported /api/v1 integration contract.',
   tags: ['Authentication'],
   security: [
-    { BearerAuth: [] },
     { OIDCAuth: [] }
   ],
   requestBody: {
@@ -36,10 +34,10 @@ registerEndpoint('/api/auth/api-keys/create', 'POST', {
               type: 'array',
               items: { 
                 type: 'string',
-                enum: Object.keys(API_KEY_SCOPES)
+                enum: INTEGRATION_API_KEY_SCOPES
               },
               description: 'Required permissions for the API key',
-              example: ['entra:read', 'groups:read']
+              example: ['accounts:read', 'costs:read']
             },
             expiresInDays: {
               type: 'integer',
@@ -95,12 +93,14 @@ registerEndpoint('/api/auth/api-keys/create', 'POST', {
 
 export default defineEventHandler(async (event): Promise<EntraAPIResponse<CreateApiKeyResponse>> => {
   try {
-    // Require admin scope to create API keys
-    await requireScope(event, 'admin')
+    requireOIDCAuth(event)
     
     // Get authenticated user context
     const authContext = getAuthContext(event)
-    const createdBy = authContext.user?.email || authContext.user?.displayName || 'unknown'
+    const createdByValue = authContext.user?.email || authContext.user?.preferred_username ||
+      authContext.user?.claims?.email || authContext.user?.claims?.preferred_username
+    if (!createdByValue) throw createError({ statusCode: 403, statusMessage: 'A verified user identity is required' })
+    const createdBy = String(createdByValue).toLowerCase()
     
     // Parse request body
     const body = await readBody<CreateApiKeyRequest>(event)
@@ -121,7 +121,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Create
     }
     
     // Validate scopes
-    const validScopes = Object.keys(API_KEY_SCOPES)
+    const validScopes: readonly string[] = INTEGRATION_API_KEY_SCOPES
     const invalidScopes = body.scopes.filter(scope => !validScopes.includes(scope))
     
     if (invalidScopes.length > 0) {
@@ -131,13 +131,6 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Create
       })
     }
 
-    if (body.scopes.includes('vmaas:costs:read') && body.scopes.length !== 1) {
-      throw createError({
-        statusCode: 400,
-        statusMessage: 'vmaas:costs:read must be the only scope on a dedicated VMaaS key'
-      })
-    }
-    
     // Validate expiration
     if (body.expiresInDays !== undefined) {
       if (body.expiresInDays < 1 || body.expiresInDays > 365) {
@@ -147,11 +140,17 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Create
         })
       }
     }
+    if (body.neverExpires && body.expiresInDays !== undefined) {
+      throw createError({ statusCode: 400, statusMessage: 'Choose either an expiration or Never expires' })
+    }
     
     logger.info(`Creating API key "${body.name}" for ${createdBy}`)
     
     // Create the API key
-    const newApiKey = await createApiKey(body, createdBy)
+    const newApiKey = await createApiKey({
+      ...body,
+      metadata: { ...body.metadata, integrationContract: 'v1' }
+    }, createdBy)
     
     logger.info(`Successfully created API key ${newApiKey.id}`)
     

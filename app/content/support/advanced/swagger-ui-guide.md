@@ -1,6 +1,6 @@
 ---
 title: Using Swagger UI for API Testing
-lastUpdated: 2025-01-15
+lastUpdated: 2026-09-03
 icon: i-heroicons-code-bracket
 ---
 
@@ -35,7 +35,7 @@ That's it. No setup required.
 
 Let's grab this month's costs:
 
-1. Find `GET /api/costs/summary` under Costs
+1. Find `GET /api/v1/costs/summary` under Integrations v1
 2. Click "Try it out"
 3. Set parameters:
    ```
@@ -51,26 +51,24 @@ You'll see the full response with all the cost data.
 
 **All accounts:**
 ```
-GET /api/accounts/list?source=full&enrichment=full
+GET /api/v1/accounts?source=full&enrichment=full
 ```
 
 **Cost analysis:**
 ```
-GET /api/costs/analysis?period=thisMonth&groupBy=LINKED_ACCOUNT&includeBudget=true
+GET /api/v1/costs/summary?period=thisMonth&groupBy=LINKED_ACCOUNT
 ```
 
 **Forecast:**
 ```
-GET /api/costs/forecast?period=current-month-remainder&granularity=DAILY
+GET /api/v1/forecasts/aws?period=current-month-remainder&granularity=DAILY
 ```
 
 ## Using API Keys
 
 If you have an API key, click the **Authorize** button at the top and paste it in. Then all your requests will use that key instead of your browser session.
 
-Two ways to authenticate:
-- `x-api-key` header (recommended)
-- `Bearer` token
+API keys use only the `x-api-key` header and work only with `/api/v1` endpoints.
 
 ## Tips
 
@@ -86,4 +84,3 @@ Two ways to authenticate:
 **400 Bad Request** - Missing or invalid parameters, check what's required
 
 **500 Server Error** - Something went wrong on our end, try again or contact support
-

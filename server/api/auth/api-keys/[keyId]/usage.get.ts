@@ -3,10 +3,9 @@
  * Get usage history and statistics for an API key
  */
 
-import { defineEventHandler, getRouterParam } from 'h3'
-import { createError } from 'h3'
-import { getApiKeyUsageHistory, getApiKeyUsageStats } from '../../../../utils/api-keys'
-import { getAuthContext, requireScope } from '../../../../middleware/entra-auth'
+import { createError, defineEventHandler, getRouterParam } from 'h3'
+import { getApiKeyUsageHistory, getApiKeyUsageStats, isApiKeyOwnedBy } from '../../../../utils/api-keys'
+import { getAuthContext, requireOIDCAuth } from '../../../../middleware/entra-auth'
 import { registerEndpoint } from '../../../../plugins/swagger'
 import type { EntraAPIResponse } from '../../../../types/entra'
 import { logger } from '../../../../utils/logger'
@@ -17,7 +16,6 @@ registerEndpoint('/api/auth/api-keys/{keyId}/usage', 'GET', {
   description: 'Get usage history and statistics for a specific API key',
   tags: ['Authentication'],
   security: [
-    { BearerAuth: [] },
     { OIDCAuth: [] }
   ],
   parameters: [
@@ -90,8 +88,7 @@ registerEndpoint('/api/auth/api-keys/{keyId}/usage', 'GET', {
 
 export default defineEventHandler(async (event): Promise<EntraAPIResponse<any>> => {
   try {
-    // Require admin scope
-    await requireScope(event, 'admin')
+    requireOIDCAuth(event)
 
     // Get key ID from route params
     const keyId = getRouterParam(event, 'keyId')
@@ -100,6 +97,13 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<any>> 
         statusCode: 400,
         statusMessage: 'API key ID is required'
       })
+    }
+    const authContext = getAuthContext(event)
+    const userIdValue = authContext.user?.email || authContext.user?.preferred_username ||
+      authContext.user?.claims?.email || authContext.user?.claims?.preferred_username
+    const userId = userIdValue ? String(userIdValue).toLowerCase() : ''
+    if (!userId || !(await isApiKeyOwnedBy(keyId, userId))) {
+      throw createError({ statusCode: 404, statusMessage: 'API key not found' })
     }
 
     // Get limit from query params

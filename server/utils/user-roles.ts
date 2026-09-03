@@ -39,8 +39,8 @@ export async function isUserAdmin(event: H3Event): Promise<boolean> {
     return false
   }
 
-  // Allow admin bypass via environment variable for non-production deployments
-  if (process.env.ADMIN_BYPASS === 'true') {
+  // The local bypass is never honored in a production deployment.
+  if (process.env.ADMIN_BYPASS === 'true' && !['prod', 'production'].includes((process.env.NODE_ENV || '').toLowerCase())) {
     logger.warn('⚠️  ADMIN_BYPASS enabled - all authenticated users have admin access')
     return true
   }
@@ -145,7 +145,7 @@ export async function getUserPermissions(event: H3Event): Promise<Set<string>> {
   }
 
   // Non-production bypass: same env flag isUserAdmin honours.
-  if (process.env.ADMIN_BYPASS === 'true') {
+  if (process.env.ADMIN_BYPASS === 'true' && !['prod', 'production'].includes((process.env.NODE_ENV || '').toLowerCase())) {
     logger.warn('⚠️  ADMIN_BYPASS enabled - granting all permissions')
     const everything = ROLES.flatMap(r => r.permissions)
     return new Set<string>(everything)

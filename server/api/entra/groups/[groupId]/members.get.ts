@@ -27,10 +27,7 @@ registerEndpoint('/api/entra/groups/{groupId}/members', 'GET', {
     }
   ],
   security: [
-    { ApiKeyAuth: [] },
-    { BearerAuth: [] },
-    { OIDCAuth: [] },
-    { DevBypass: [] }
+    { OIDCAuth: [] }
   ],
   responses: {
     200: {

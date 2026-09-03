@@ -78,8 +78,8 @@
             size="sm"
             icon="i-heroicons-chat-bubble-left-right"
             :title="chatSidebar.isOpen.value ? 'Close AI Assistant' : 'Open AI Assistant'"
-            @click="chatSidebar.toggle()"
             class="transition-all duration-200 opacity-70 hover:opacity-100"
+            @click="chatSidebar.toggle()"
           />
 
           <!-- Notification Bell -->
@@ -192,8 +192,6 @@ const isMobile = computed(() => {
 })
 
 // Mobile menu handling
-const showMobileMenu = ref(false)
-
 const toggleMobileMenu = () => {
   emit('toggle-mobile-menu')
 }
@@ -251,6 +249,11 @@ const userMenuItems = computed<UserMenuItem[][]>(() => {
       label: 'My Access',
       icon: 'i-heroicons-key',
       to: myAccessLink.value
+    },
+    {
+      label: 'API Documentation',
+      icon: 'i-heroicons-code-bracket-square',
+      href: '/api/swagger-ui'
     }
   ]
 

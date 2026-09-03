@@ -45,8 +45,8 @@
           <span>View Profile</span>
         </NuxtLink>
         <button
-          @click="resetPreferences"
           class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"
+          @click="resetPreferences"
         >
           <UIcon name="i-heroicons-arrow-path" class="w-4 h-4" />
           <span>Reset to Defaults</span>
@@ -61,6 +61,12 @@ const route = useRoute()
 const toast = useToast()
 
 const settingsItems = [
+  {
+    label: 'API Access',
+    to: '/settings/api-access',
+    icon: 'i-heroicons-key',
+    description: 'Integration API keys'
+  },
   {
     label: 'Overview',
     to: '/settings',

@@ -3,18 +3,28 @@
  * Provides automatic API documentation
  */
 
+/// <reference types="vite/client" />
+
 import { defineNitroPlugin } from 'nitropack/runtime/plugin'
+import { version } from '../../package.json'
+import { standardParameters } from '../utils/swagger-parameters'
+
+// Nitro expands this at bundle time. Loading the modules during startup avoids
+// circular initialization while still registering routes before requests.
+const documentedRouteModules = typeof import.meta.glob === 'function'
+  ? import.meta.glob('../api/**/*.{ts,js}')
+  : {}
 
 // OpenAPI specification base
 const openApiSpec = {
   openapi: '3.0.0',
   info: {
-    title: 'AWS Dashboard API',
-    description: 'API for managing AWS resources across Commercial and GovCloud environments. Authentication can be done via API keys (x-api-key header or Bearer token) or Entra ID (for web browser access).',
-    version: '1.0.0',
+    title: 'GHOST API',
+    description: 'GHOST APIs for AWS account data across Commercial and GovCloud. The supported integration contract is under /api/v1 and accepts API keys only through the x-api-key header. Other documented routes are internal and use an authenticated Entra ID browser session.',
+    version,
     contact: {
       name: 'GHOST Dashboard',
-      url: '/admin/api-keys'
+      url: '/settings/api-access'
     }
   },
   servers: [
@@ -24,8 +34,6 @@ const openApiSpec = {
     }
   ],
   security: [
-    { ApiKeyAuth: [] },
-    { BearerAuth: [] },
     { OIDCAuth: [] }
   ],
   components: {
@@ -35,12 +43,6 @@ const openApiSpec = {
         in: 'header',
         name: 'x-api-key',
         description: 'API key for programmatic access'
-      },
-      BearerAuth: {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        description: 'Bearer token authentication (can use API key as bearer token)'
       },
       OIDCAuth: {
         type: 'openIdConnect',
@@ -108,9 +110,14 @@ const openApiSpec = {
           }
         },
         required: ['id', 'name', 'type', 'source']
-      }
+      },
+      ParsedAWSGroup: { type: 'object', additionalProperties: true },
+      AccountGroups: { type: 'object', additionalProperties: true },
+      GroupOwner: { type: 'object', additionalProperties: true },
+      EntraUser: { type: 'object', additionalProperties: true }
     },
     parameters: {
+      ...standardParameters,
       Environment: {
         name: 'environment',
         in: 'query',
@@ -140,7 +147,14 @@ const openApiSpec = {
         schema: {
           type: 'string'
         }
-      }
+      },
+      AccountId: { name: 'accountId', in: 'path', required: true, schema: { type: 'string' } },
+      GroupId: { name: 'groupId', in: 'path', required: true, schema: { type: 'string' } },
+      IncludeMembers: { name: 'includeMembers', in: 'query', required: false, schema: { type: 'boolean' } },
+      SortByRole: { name: 'sortByRole', in: 'query', required: false, schema: { type: 'boolean' } },
+      EntraEnvironment: { name: 'environment', in: 'query', required: false, schema: { type: 'string' } },
+      Role: { name: 'role', in: 'query', required: false, schema: { type: 'string' } },
+      Search: { name: 'search', in: 'query', required: false, schema: { type: 'string' } }
     }
   },
   paths: {} as Record<string, any>
@@ -163,15 +177,38 @@ export function registerEndpoint(
     requestBody?: any
     responses: Record<string, any>
     security?: any[]
+    operationId?: string
   }
 ) {
   const normalizedPath = path.replace(/\[([^\]]+)\]/g, '{$1}') // Convert [id] to {id}
+  const normalizedMethod = method.toLowerCase()
+  const operationId = spec.operationId || `${normalizedMethod}_${normalizedPath
+    .replace(/^\/api\//, '')
+    .replace(/[{}]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_|_$/g, '')}`
+  const parameters = [...(spec.parameters || [])]
+
+  for (const name of normalizedPath.matchAll(/\{([^}]+)\}/g)) {
+    if (!parameters.some(parameter => parameter?.in === 'path' && parameter?.name === name[1])) {
+      parameters.push({
+        name: name[1],
+        in: 'path',
+        required: true,
+        schema: { type: 'string' }
+      })
+    }
+  }
   
   if (!openApiSpec.paths[normalizedPath]) {
     openApiSpec.paths[normalizedPath] = {}
   }
   
-  openApiSpec.paths[normalizedPath][method.toLowerCase()] = spec
+  openApiSpec.paths[normalizedPath][normalizedMethod] = {
+    ...spec,
+    operationId,
+    ...(parameters.length > 0 ? { parameters } : {})
+  }
   apiRegistry.set(`${method.toUpperCase()} ${path}`, spec)
 }
 
@@ -179,7 +216,15 @@ export function registerEndpoint(
  * Get the current OpenAPI specification
  */
 export function getOpenApiSpec() {
-  return openApiSpec
+  const paths = Object.fromEntries(
+    Object.entries(openApiSpec.paths)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([path, operations]) => [
+        path,
+        Object.fromEntries(Object.entries(operations).sort(([left], [right]) => left.localeCompare(right)))
+      ])
+  )
+  return { ...openApiSpec, paths }
 }
 
 /**
@@ -189,6 +234,6 @@ export function getOpenApiSpec() {
  * 
  * This plugin is kept for the OpenAPI spec management functions
  */
-export default defineNitroPlugin(() => {
-  // Plugin initialization (no routes needed since we use API endpoints)
+export default defineNitroPlugin(async () => {
+  await Promise.all(Object.values(documentedRouteModules).map(loadModule => loadModule()))
 })

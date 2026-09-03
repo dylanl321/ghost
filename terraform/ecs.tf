@@ -52,12 +52,6 @@ resource "aws_ecs_task_definition" "main" {
           name  = "NODE_ENV"
           value = var.env
         },
-        # Admin Access Bypass - allows all authenticated users to have admin access
-        # Required in ECS because Microsoft Graph API integration for group checking is not available
-        {
-          name  = "ADMIN_BYPASS"
-          value = "true"
-        },
         {
           name  = "DYNAMODB_CONFIG_SECRET_NAME"
           value = aws_secretsmanager_secret.dynamodb_config.name

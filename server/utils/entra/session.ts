@@ -33,7 +33,7 @@ function isTokenExpired(token: string): boolean {
     const parts = token.split('.')
     if (parts.length !== 3) return true
     
-    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString())
+    const payload = JSON.parse(Buffer.from(parts[1]!, 'base64').toString())
     if (!payload.exp) return false // No expiration claim, assume valid
     
     const now = Math.floor(Date.now() / 1000)
@@ -57,27 +57,6 @@ export async function getUserSession(event: H3Event): Promise<{
   refreshToken?: string
   user?: any
 } | null> {
-  // Always check Authorization header first (works for both dev and prod)
-  const authHeader = event.node.req.headers.authorization
-  if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.substring(7)
-    
-    // Validate token expiration
-    if (isTokenExpired(token)) {
-      logger.debug('Bearer token is expired')
-      return null
-    }
-    
-    return {
-      accessToken: token,
-      user: {
-        id: 'bearer-user',
-        displayName: 'Bearer Token User',
-        email: 'bearer@auth'
-      }
-    }
-  }
-
   // Development mode - use test token ONLY if explicitly set
   const nodeEnv = process.env.NODE_ENV?.toLowerCase()
   if ((nodeEnv === 'development' || nodeEnv === 'dev') && process.env.ENTRA_TEST_ACCESS_TOKEN) {
@@ -100,14 +79,14 @@ export async function getUserSession(event: H3Event): Promise<{
       // Import getUserSession from nuxt-oidc-auth
       const { getUserSession: getOIDCUserSession } = await import('nuxt-oidc-auth/runtime/server/utils/session.js')
       oidcSession = await getOIDCUserSession(event)
-    } catch (e) {
+    } catch {
       // Fallback to h3 session silently (this is expected for unauthenticated requests)
       try {
         const { getSession } = await import('h3')
         oidcSession = await getSession(event, {
           password: process.env.NUXT_OIDC_SESSION_SECRET || process.env.NUXT_SESSION_PASSWORD || 'secret-must-be-at-least-32-characters-long'
         })
-      } catch (e2) {
+      } catch {
         // Silently handle - this is expected for unauthenticated requests
       }
     }

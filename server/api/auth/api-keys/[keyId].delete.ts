@@ -3,10 +3,9 @@
  * Deactivate an API key
  */
 
-import { defineEventHandler, getRouterParam } from 'h3'
-import { createError } from 'h3'
+import { createError, defineEventHandler, getRouterParam } from 'h3'
 import { deactivateApiKey } from '../../../utils/api-keys'
-import { getAuthContext, requireScope } from '../../../middleware/entra-auth'
+import { getAuthContext, requireOIDCAuth } from '../../../middleware/entra-auth'
 import type { EntraAPIResponse } from '../../../types/entra'
 import { logger } from '../../../utils/logger'
 
@@ -18,8 +17,7 @@ interface DeactivateResponse {
 
 export default defineEventHandler(async (event): Promise<EntraAPIResponse<DeactivateResponse>> => {
   try {
-    // Require write access to deactivate API keys
-    await requireScope(event, 'write')
+    requireOIDCAuth(event)
     
     // Get key ID from route
     const keyId = getRouterParam(event, 'keyId')
@@ -32,7 +30,10 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Deacti
     
     // Get authenticated user context
     const authContext = getAuthContext(event)
-    const userId = authContext.user?.email || authContext.user?.displayName || 'unknown'
+    const userIdValue = authContext.user?.email || authContext.user?.preferred_username ||
+      authContext.user?.claims?.email || authContext.user?.claims?.preferred_username
+    if (!userIdValue) throw createError({ statusCode: 403, statusMessage: 'A verified user identity is required' })
+    const userId = String(userIdValue).toLowerCase()
     
     logger.info(`Deactivating API key ${keyId} for user ${userId}`)
     
