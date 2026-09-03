@@ -253,7 +253,9 @@ const userMenuItems = computed<UserMenuItem[][]>(() => {
     {
       label: 'API Documentation',
       icon: 'i-heroicons-code-bracket-square',
-      href: '/api/swagger-ui'
+      click: () => {
+        if (import.meta.client) window.location.assign('/api/swagger-ui')
+      }
     }
   ]
 
