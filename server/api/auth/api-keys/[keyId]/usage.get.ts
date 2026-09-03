@@ -80,7 +80,7 @@ registerEndpoint('/api/auth/api-keys/{keyId}/usage', 'GET', {
       }
     },
     401: { description: 'Authentication required' },
-    403: { description: 'Admin permissions required' },
+    403: { description: 'Verified user identity required' },
     404: { description: 'API key not found' },
     500: { description: 'Server error' }
   }
@@ -108,7 +108,8 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<any>> 
 
     // Get limit from query params
     const url = new URL(event.node.req.url || '', 'http://localhost')
-    const limit = parseInt(url.searchParams.get('limit') || '100')
+    const requestedLimit = Number.parseInt(url.searchParams.get('limit') || '100', 10)
+    const limit = Number.isFinite(requestedLimit) ? Math.min(500, Math.max(1, requestedLimit)) : 100
 
     // Get usage history and stats
     const [history, stats] = await Promise.all([

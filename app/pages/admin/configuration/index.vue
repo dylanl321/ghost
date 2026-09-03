@@ -1,7 +1,7 @@
 <template>
   <div class="container mx-auto px-6 py-8 max-w-7xl">
     <div class="mb-6">
-      <UButton color="gray" variant="ghost" icon="i-heroicons-arrow-left" @click="navigateTo('/admin')" class="mb-4">
+      <UButton color="gray" variant="ghost" icon="i-heroicons-arrow-left" class="mb-4" @click="navigateTo('/admin')">
         Back to Dashboard
       </UButton>
       <div class="flex items-center gap-3 mb-2">
@@ -10,13 +10,21 @@
         </div>
         <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Configuration</h1>
       </div>
-      <p class="text-gray-600 dark:text-gray-400">Manage API keys, site-wide configuration, and dashboard defaults</p>
+      <p class="text-gray-600 dark:text-gray-400">Manage site-wide configuration and dashboard defaults</p>
     </div>
     <UTabs v-model="activeTab" :items="tabs" class="mb-6" />
+    <UAlert
+      color="blue"
+      variant="soft"
+      icon="i-heroicons-key"
+      title="Personal API keys have moved"
+      description="Every signed-in user manages their own keys from Settings → API Access."
+      class="mb-6"
+      :actions="[{ label: 'Open API Access', to: '/settings/api-access' }]"
+    />
     <div class="mt-6">
-      <ApiKeysPanel v-if="activeTab === 0" />
-      <SiteConfigPanel v-else-if="activeTab === 1" />
-      <DashboardDefaultPanel v-else-if="activeTab === 2" />
+      <SiteConfigPanel v-if="activeTab === 0" />
+      <DashboardDefaultPanel v-else-if="activeTab === 1" />
     </div>
   </div>
 </template>
@@ -27,21 +35,24 @@ definePageMeta({
   middleware: 'auth-permission',
   permission: 'admin',
   title: 'Configuration',
-  description: 'Manage API keys and site-wide configuration'
+  description: 'Manage site-wide configuration'
 })
 
 const route = useRoute()
 const activeTab = ref(0)
-const tabNames = ['api-keys', 'site-config', 'dashboard-default']
+const tabNames = ['site-config', 'dashboard-default']
 
 const tabs = [
-  { label: 'API Keys', icon: 'i-heroicons-key' },
   { label: 'Site Config', icon: 'i-heroicons-cog-6-tooth' },
   { label: 'Dashboard Default', icon: 'i-heroicons-rectangle-group' },
 ]
 
 onMounted(() => {
   const tabParam = route.query.tab as string | undefined
+  if (tabParam === 'api-keys') {
+    navigateTo('/settings/api-access')
+    return
+  }
   if (tabParam) {
     const idx = tabNames.indexOf(tabParam)
     if (idx !== -1) activeTab.value = idx

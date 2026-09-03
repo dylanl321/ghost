@@ -90,6 +90,12 @@ const settingsItems = [
     to: '/settings/accounts',
     icon: 'i-heroicons-star',
     description: 'Favorites and recent'
+  },
+  {
+    label: 'Notifications',
+    to: '/settings/notifications',
+    icon: 'i-heroicons-bell',
+    description: 'Delivery and history'
   }
 ]
 

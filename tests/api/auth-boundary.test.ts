@@ -24,6 +24,8 @@ test('Swagger GET, HEAD, specification, and assets require an authenticated sess
   assert.equal(requiresAuthentication('/api/swagger-ui'), true)
   assert.equal(requiresAuthentication('/api/swagger-ui?download=false'), true)
   assert.equal(requiresAuthentication('/api/swagger.json'), true)
+  assert.equal(requiresAuthentication('/api/swagger-internal-ui'), true)
+  assert.equal(requiresAuthentication('/api/swagger-internal.json'), true)
   assert.equal(requiresAuthentication('/api/swagger-assets/swagger-ui.css'), true)
   assert.equal(requiresAuthentication('/api/health'), false)
 })

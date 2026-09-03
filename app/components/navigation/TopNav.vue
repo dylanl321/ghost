@@ -251,11 +251,9 @@ const userMenuItems = computed<UserMenuItem[][]>(() => {
       to: myAccessLink.value
     },
     {
-      label: 'API Documentation',
+      label: 'API Access',
       icon: 'i-heroicons-code-bracket-square',
-      click: () => {
-        if (import.meta.client) window.location.assign('/api/swagger-ui')
-      }
+      to: '/settings/api-access'
     }
   ]
 

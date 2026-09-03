@@ -66,6 +66,31 @@ export const INTEGRATION_API_KEY_SCOPES = [
   'security:read'
 ] as const
 
+export function validateIntegrationApiKeyRequest(request: CreateApiKeyRequest): string | null {
+  if (!request.name || request.name.trim().length === 0) return 'API key name is required'
+  if (request.name.trim().length > 100) return 'API key name must be 100 characters or fewer'
+  if (!Array.isArray(request.scopes) || request.scopes.length === 0) return 'At least one scope is required'
+
+  const invalidScopes = request.scopes.filter(scope =>
+    !(INTEGRATION_API_KEY_SCOPES as readonly string[]).includes(scope)
+  )
+  if (invalidScopes.length > 0) {
+    return `Invalid scopes: ${invalidScopes.join(', ')}. Valid scopes: ${INTEGRATION_API_KEY_SCOPES.join(', ')}`
+  }
+  if (request.neverExpires && request.expiresInDays !== undefined) {
+    return 'Choose either an expiration or Never expires'
+  }
+  if (request.expiresInDays !== undefined &&
+    (!Number.isInteger(request.expiresInDays) || request.expiresInDays < 1 || request.expiresInDays > 365)) {
+    return 'Expiration must be a whole number between 1 and 365 days'
+  }
+  return null
+}
+
+export function isApiKeyOwner(apiKey: Pick<ApiKey, 'createdBy'> | null | undefined, userId: string): boolean {
+  return Boolean(apiKey && userId && apiKey.createdBy.toLowerCase() === userId.toLowerCase())
+}
+
 /**
  * Generate a secure API key
  */
@@ -335,7 +360,7 @@ export async function listApiKeys(createdBy?: string): Promise<Omit<ApiKey, 'key
     const apiKeys = await loadApiKeys()
     
     return apiKeys
-      .filter(key => !createdBy || key.createdBy.toLowerCase() === createdBy.toLowerCase())
+      .filter(key => !createdBy || isApiKeyOwner(key, createdBy))
       .map(({ keyHash, salt, ...key }) => key)
   } catch (error) {
     logger.error('Failed to list API keys:', error)
@@ -358,7 +383,7 @@ export async function deactivateApiKey(keyId: string, userId: string): Promise<b
     }
     
     // Check if user has permission to deactivate this key
-    if (String(apiKey.createdBy).toLowerCase() !== userId.toLowerCase()) {
+    if (!isApiKeyOwner(apiKey as ApiKey, userId)) {
       return false
     }
     
@@ -377,7 +402,7 @@ export async function isApiKeyOwnedBy(keyId: string, userId: string): Promise<bo
   const tableName = await getTableName('apiKeys')
   const environment = await getTableEnvironment('apiKeys')
   const apiKey = await getItem(tableName, { id: keyId }, environment)
-  return Boolean(apiKey && String(apiKey.createdBy).toLowerCase() === userId.toLowerCase())
+  return isApiKeyOwner(apiKey as ApiKey | undefined, userId)
 }
 
 /**

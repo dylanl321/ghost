@@ -12,10 +12,17 @@ export function defineV1Alias(
   parameters: any[] = [],
   accountScoped = false
 ) {
+  const tag = path.includes('/costs/')
+    ? 'Costs'
+    : path.includes('/forecasts/')
+      ? 'Forecasts'
+      : path.includes('/security/')
+        ? 'Security'
+        : 'Accounts'
   registerEndpoint(path, 'GET', {
     summary,
     description: 'Supported GHOST integration API.',
-    tags: ['Integrations v1'],
+    tags: [tag],
     security: [{ ApiKeyAuth: [] }, { OIDCAuth: [] }],
     parameters: accountScoped ? [...integrationAccountParameters, ...parameters] : parameters,
     responses: {

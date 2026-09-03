@@ -1,13 +1,16 @@
 <template>
   <div>
     <!-- Header -->
-    <div class="mb-6 flex items-center justify-between">
-      <div>
+    <div
+      class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+      :class="{ 'sm:justify-end': !showHeading }"
+    >
+      <div v-if="showHeading">
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-1">
-          API Keys
+          Personal API Keys
         </h1>
         <p class="text-sm text-gray-600 dark:text-gray-400">
-          Manage API keys for programmatic access to GHOST APIs
+          Manage your own keys for programmatic access to GHOST APIs
         </p>
       </div>
       <UButton
@@ -69,7 +72,7 @@
         >
           <div class="space-y-4">
             <!-- Header -->
-            <div class="flex items-start justify-between">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div class="flex-1">
                 <div class="flex items-center gap-3 mb-2">
                   <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
@@ -105,6 +108,10 @@
                     <Icon name="i-heroicons-clock" class="w-4 h-4" />
                     <span>Expires {{ formatDate(key.expiresAt) }}</span>
                   </div>
+                  <div v-else class="flex items-center gap-2">
+                    <Icon name="i-heroicons-clock" class="w-4 h-4" />
+                    <span>Never expires</span>
+                  </div>
                   <div v-if="key.lastUsedAt" class="flex items-center gap-2">
                     <Icon name="i-heroicons-arrow-path" class="w-4 h-4" />
                     <span>Last used {{ formatDate(key.lastUsedAt) }}</span>
@@ -113,7 +120,7 @@
               </div>
 
               <!-- Actions -->
-              <div class="flex items-center gap-2">
+              <div class="flex flex-wrap items-center gap-2">
                 <UButton
                   v-if="key.isActive"
                   color="blue"
@@ -300,7 +307,7 @@
               v-if="!createdKey"
               color="blue"
               :loading="creating"
-              :disabled="!newKeyName"
+              :disabled="!newKeyName.trim() || newKeyScopes.length === 0"
               @click="createKey"
             >
               Create API Key
@@ -376,7 +383,7 @@
 
         <div v-else class="space-y-6">
           <!-- Statistics -->
-          <div v-if="usageStats" class="grid grid-cols-3 gap-4">
+          <div v-if="usageStats" class="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
               <div class="text-2xl font-bold text-gray-900 dark:text-white">
                 {{ usageStats.totalCalls.toLocaleString() }}
@@ -418,7 +425,35 @@
             </div>
           </div>
 
-          <div v-else class="text-center py-8 text-gray-500 dark:text-gray-400">
+          <div v-if="usageStats && Object.keys(usageStats.callsByStatus).length > 0">
+            <h4 class="mb-2 text-sm font-semibold text-gray-900 dark:text-white">Response statuses</h4>
+            <div class="flex flex-wrap gap-2">
+              <UBadge v-for="(count, status) in usageStats.callsByStatus" :key="status" color="gray" variant="soft">
+                {{ status }} · {{ count }}
+              </UBadge>
+            </div>
+          </div>
+
+          <div v-if="usageHistory.length > 0">
+            <h4 class="mb-2 text-sm font-semibold text-gray-900 dark:text-white">Recent calls</h4>
+            <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+              <table class="min-w-full divide-y divide-gray-200 text-left text-xs dark:divide-gray-700">
+                <thead class="bg-gray-50 dark:bg-gray-800">
+                  <tr><th class="px-3 py-2">Time</th><th class="px-3 py-2">Method</th><th class="px-3 py-2">Endpoint</th><th class="px-3 py-2">Status</th></tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                  <tr v-for="call in usageHistory.slice(0, 20)" :key="`${call.timestamp}-${call.endpoint}`">
+                    <td class="whitespace-nowrap px-3 py-2">{{ formatDate(call.timestamp) }}</td>
+                    <td class="px-3 py-2 font-mono">{{ call.method }}</td>
+                    <td class="px-3 py-2 font-mono">{{ call.endpoint }}</td>
+                    <td class="px-3 py-2">{{ call.statusCode }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div v-if="!usageStats?.totalCalls" class="text-center py-8 text-gray-500 dark:text-gray-400">
             No usage history available yet
           </div>
         </div>
@@ -472,6 +507,10 @@
 </template>
 
 <script setup lang="ts">
+withDefaults(defineProps<{ showHeading?: boolean }>(), {
+  showHeading: true
+})
+
 const logger = createLogger('ApiKeysPanel')
 
 const toast = useToast()

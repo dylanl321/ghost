@@ -4,7 +4,11 @@
  */
 
 import { createError, defineEventHandler, readBody } from 'h3'
-import { createApiKey, INTEGRATION_API_KEY_SCOPES } from '../../../utils/api-keys'
+import {
+  createApiKey,
+  INTEGRATION_API_KEY_SCOPES,
+  validateIntegrationApiKeyRequest
+} from '../../../utils/api-keys'
 import { getAuthContext, requireOIDCAuth } from '../../../middleware/entra-auth'
 import { registerEndpoint } from '../../../plugins/swagger'
 import type { CreateApiKeyRequest, CreateApiKeyResponse, EntraAPIResponse } from '../../../types/entra'
@@ -27,6 +31,7 @@ registerEndpoint('/api/auth/api-keys/create', 'POST', {
           properties: {
             name: { 
               type: 'string', 
+              maxLength: 100,
               description: 'Human-readable name for the API key',
               example: 'Production Scripts'
             },
@@ -43,8 +48,14 @@ registerEndpoint('/api/auth/api-keys/create', 'POST', {
               type: 'integer',
               minimum: 1,
               maximum: 365,
-              description: 'Expiration in days (optional)',
+              default: 90,
+              description: 'Expiration in days. Defaults to 90 when omitted.',
               example: 90
+            },
+            neverExpires: {
+              type: 'boolean',
+              default: false,
+              description: 'Explicitly create a key without an expiration. Cannot be combined with expiresInDays.'
             },
             metadata: {
               type: 'object',
@@ -86,7 +97,7 @@ registerEndpoint('/api/auth/api-keys/create', 'POST', {
     },
     400: { description: 'Invalid request parameters' },
     401: { description: 'Authentication required' },
-    403: { description: 'Admin permissions required' },
+    403: { description: 'Verified user identity required' },
     500: { description: 'Server error' }
   }
 })
@@ -105,44 +116,8 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Create
     // Parse request body
     const body = await readBody<CreateApiKeyRequest>(event)
     
-    // Validate request
-    if (!body.name || body.name.trim().length === 0) {
-      throw createError({
-        statusCode: 400,
-        statusMessage: 'API key name is required'
-      })
-    }
-    
-    if (!body.scopes || body.scopes.length === 0) {
-      throw createError({
-        statusCode: 400,
-        statusMessage: 'At least one scope is required'
-      })
-    }
-    
-    // Validate scopes
-    const validScopes: readonly string[] = INTEGRATION_API_KEY_SCOPES
-    const invalidScopes = body.scopes.filter(scope => !validScopes.includes(scope))
-    
-    if (invalidScopes.length > 0) {
-      throw createError({
-        statusCode: 400,
-        statusMessage: `Invalid scopes: ${invalidScopes.join(', ')}. Valid scopes: ${validScopes.join(', ')}`
-      })
-    }
-
-    // Validate expiration
-    if (body.expiresInDays !== undefined) {
-      if (body.expiresInDays < 1 || body.expiresInDays > 365) {
-        throw createError({
-          statusCode: 400,
-          statusMessage: 'Expiration must be between 1 and 365 days'
-        })
-      }
-    }
-    if (body.neverExpires && body.expiresInDays !== undefined) {
-      throw createError({ statusCode: 400, statusMessage: 'Choose either an expiration or Never expires' })
-    }
+    const validationError = validateIntegrationApiKeyRequest(body)
+    if (validationError) throw createError({ statusCode: 400, statusMessage: validationError })
     
     logger.info(`Creating API key "${body.name}" for ${createdBy}`)
     

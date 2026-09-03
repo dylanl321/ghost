@@ -17,7 +17,7 @@ const split = (value: unknown): string[] =>
 registerEndpoint('/api/v1/security/inspector/findings', 'GET', {
   summary: 'List Amazon Inspector vulnerability findings',
   description: 'Inspector-specific findings filtered by canonical account selectors, EC2 instance IDs, CVEs, finding ARNs, packages, severity, environment, and region.',
-  tags: ['Integrations v1'],
+  tags: ['Security'],
   security: [{ ApiKeyAuth: [] }, { OIDCAuth: [] }],
   parameters: [
     ...integrationAccountParameters,

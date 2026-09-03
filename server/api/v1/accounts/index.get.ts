@@ -7,7 +7,7 @@ import { integrationAccountParameters, resolveIntegrationAccountScope } from '..
 registerEndpoint('/api/v1/accounts', 'GET', {
   summary: 'List AWS accounts',
   description: 'Supported GHOST integration API with canonical account and person-based selectors.',
-  tags: ['Integrations v1'],
+  tags: ['Accounts'],
   security: [{ ApiKeyAuth: [] }, { OIDCAuth: [] }],
   parameters: integrationAccountParameters,
   responses: { 200: { description: 'AWS accounts' }, 403: { $ref: '#/components/schemas/Error' } }

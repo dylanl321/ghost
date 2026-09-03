@@ -25,14 +25,13 @@ export function useAdminSearch() {
   const allPanels = computed<AdminPanelItem[]>(() => [
     // Configuration (2 tabs)
     {
-      id: 'config-api-keys',
-      label: 'API Keys',
-      description: 'Manage API keys and secrets',
+      id: 'personal-api-access',
+      label: 'Personal API Access',
+      description: 'Manage your integration keys and API documentation',
       icon: 'i-heroicons-key',
-      category: 'configuration',
-      categoryLabel: 'Configuration',
-      to: '/admin/configuration',
-      tab: 'api-keys',
+      category: 'personal',
+      categoryLabel: 'Settings',
+      to: '/settings/api-access',
       keywords: ['api', 'keys', 'secrets', 'credentials', 'tokens']
     },
     {

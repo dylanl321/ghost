@@ -3,17 +3,10 @@
  * Provides automatic API documentation
  */
 
-/// <reference types="vite/client" />
-
 import { defineNitroPlugin } from 'nitropack/runtime/plugin'
 import { version } from '../../package.json'
 import { standardParameters } from '../utils/swagger-parameters'
-
-// Nitro expands this at bundle time. Loading the modules during startup avoids
-// circular initialization while still registering routes before requests.
-const documentedRouteModules = typeof import.meta.glob === 'function'
-  ? import.meta.glob('../api/**/*.{ts,js}')
-  : {}
+import { loadDocumentedRoutes } from '../generated/swagger-routes'
 
 // OpenAPI specification base
 const openApiSpec = {
@@ -160,6 +153,26 @@ const openApiSpec = {
   paths: {} as Record<string, any>
 }
 
+export const supportedV1Paths = [
+  '/api/v1/accounts',
+  '/api/v1/accounts/{identifier}',
+  '/api/v1/organization',
+  '/api/v1/costs/summary',
+  '/api/v1/forecasts/aws',
+  '/api/v1/forecasts/financial',
+  '/api/v1/security/summary',
+  '/api/v1/security/findings',
+  '/api/v1/security/inspector/findings'
+] as const
+
+const supportedV1PathSet = new Set<string>(supportedV1Paths)
+const v1Tags = [
+  { name: 'Accounts', description: 'AWS account and organization data' },
+  { name: 'Costs', description: 'AWS cost reporting' },
+  { name: 'Forecasts', description: 'AWS and GHOST financial forecasts' },
+  { name: 'Security', description: 'Security summaries and findings' }
+]
+
 // Registry for API endpoints
 export const apiRegistry = new Map<string, any>()
 
@@ -215,16 +228,39 @@ export function registerEndpoint(
 /**
  * Get the current OpenAPI specification
  */
-export function getOpenApiSpec() {
+function createOpenApiSpec(includePath: (path: string) => boolean, internal = false) {
   const paths = Object.fromEntries(
     Object.entries(openApiSpec.paths)
+      .filter(([path]) => includePath(path))
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([path, operations]) => [
         path,
         Object.fromEntries(Object.entries(operations).sort(([left], [right]) => left.localeCompare(right)))
       ])
   )
-  return { ...openApiSpec, paths }
+  return {
+    ...openApiSpec,
+    info: {
+      ...openApiSpec.info,
+      title: internal ? 'GHOST Internal API' : 'GHOST Integration API',
+      description: internal
+        ? 'Authenticated browser-session APIs used by the GHOST application.'
+        : 'The supported GHOST integration contract. API keys are accepted only through the x-api-key header on these /api/v1 endpoints.'
+    },
+    ...(internal ? {} : { tags: v1Tags }),
+    security: internal ? [{ OIDCAuth: [] }] : [{ ApiKeyAuth: [] }, { OIDCAuth: [] }],
+    paths
+  }
+}
+
+/** Return only the supported public integration contract. */
+export function getOpenApiSpec() {
+  return createOpenApiSpec(path => supportedV1PathSet.has(path))
+}
+
+/** Return authenticated application APIs, excluding the public v1 contract. */
+export function getInternalOpenApiSpec() {
+  return createOpenApiSpec(path => !path.startsWith('/api/v1/'), true)
 }
 
 /**
@@ -235,5 +271,5 @@ export function getOpenApiSpec() {
  * This plugin is kept for the OpenAPI spec management functions
  */
 export default defineNitroPlugin(async () => {
-  await Promise.all(Object.values(documentedRouteModules).map(loadModule => loadModule()))
+  await loadDocumentedRoutes()
 })

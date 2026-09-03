@@ -10,6 +10,7 @@ import type { EntraAPIResponse } from '../../../types/entra'
 import { updateItem, getItem } from '../../../utils/dynamodb'
 import { getTableEnvironment, getTableName } from '../../../lib/dynamodb-config'
 import { logger } from '../../../utils/logger'
+import { isApiKeyOwner } from '../../../utils/api-keys'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/auth/api-keys/{keyId}', 'PATCH', {
@@ -111,7 +112,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<any>> 
         statusMessage: 'API key not found'
       })
     }
-    if (String(existingKey.createdBy).toLowerCase() !== userId) {
+    if (!isApiKeyOwner({ createdBy: String(existingKey.createdBy || '') }, userId)) {
       throw createError({ statusCode: 404, statusMessage: 'API key not found' })
     }
 

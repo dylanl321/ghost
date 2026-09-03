@@ -9,7 +9,7 @@ import { getSecurityHubFindingsSummary } from '../../../utils/security-hub-data'
 registerEndpoint('/api/v1/security/summary', 'GET', {
   summary: 'Get organization or selected-account security summary',
   description: 'Returns the organization summary by default, or a Security Hub aggregate for accounts resolved through canonical account selectors.',
-  tags: ['Integrations v1'],
+  tags: ['Security'],
   security: [{ ApiKeyAuth: [] }, { OIDCAuth: [] }],
   parameters: integrationAccountParameters,
   responses: {

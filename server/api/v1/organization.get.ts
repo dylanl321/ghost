@@ -7,7 +7,7 @@ import { integrationAccountParameters, resolveIntegrationAccountScope } from '..
 registerEndpoint('/api/v1/organization', 'GET', {
   summary: 'Get organization structure',
   description: 'Returns the full organization or the branches containing accounts resolved by canonical selectors.',
-  tags: ['Integrations v1'],
+  tags: ['Accounts'],
   security: [{ ApiKeyAuth: [] }, { OIDCAuth: [] }],
   parameters: integrationAccountParameters,
   responses: { 200: { description: 'Organization structure' }, 403: { $ref: '#/components/schemas/Error' } }

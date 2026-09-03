@@ -9,7 +9,7 @@ import { integrationAccountParameters, resolveIntegrationAccountScope } from '..
 registerEndpoint('/api/v1/security/findings', 'GET', {
   summary: 'List Security Hub findings',
   description: 'Returns bounded pages of normalized findings or raw AWS Security Finding Format (ASFF).',
-  tags: ['Integrations v1'],
+  tags: ['Security'],
   security: [{ ApiKeyAuth: [] }, { OIDCAuth: [] }],
   parameters: [
     ...integrationAccountParameters,

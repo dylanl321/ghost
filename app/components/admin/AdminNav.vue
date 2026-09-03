@@ -320,7 +320,7 @@ const categories = [
     icon: 'i-heroicons-cog-6-tooth',
     to: '/admin/configuration',
     children: [
-      { label: 'API Keys', icon: 'i-heroicons-key', to: '/admin/configuration?tab=api-keys' },
+      { label: 'Personal API Access', icon: 'i-heroicons-key', to: '/settings/api-access' },
       { label: 'Site Config', icon: 'i-heroicons-cog', to: '/admin/configuration?tab=site-config' }
     ]
   },
