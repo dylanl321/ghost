@@ -105,3 +105,36 @@ test('every account-scoped v1 operation documents canonical account selectors', 
     assert.ok(names.has('ownedBy'), `${path} must support ownedBy`)
   }
 })
+
+test('security v1 operations expose complete cursor metadata, filters, defaults, and examples', () => {
+  const spec: any = getOpenApiSpec()
+  const hub = spec.paths['/api/v1/security/findings'].get
+  const inspector = spec.paths['/api/v1/security/inspector/findings'].get
+  const summary = spec.paths['/api/v1/security/summary'].get
+  const names = (operation: any): Map<string, any> =>
+    new Map(operation.parameters.map((item: any) => [item.name, item]))
+
+  const hubParameters = names(hub)
+  for (const name of ['cursor', 'page', 'limit', 'sortBy', 'sortOrder', 'startDate', 'endDate', 'lookbackDays', 'recordState', 'workflowStatus', 'resourceTypes', 'findingTypes', 'controls', 'complianceStandards', 'complianceStatus', 'format']) {
+    assert.ok(hubParameters.has(name), `Security Hub must document ${name}`)
+  }
+  assert.equal(hubParameters.get('page').deprecated, true)
+  assert.equal(hubParameters.get('limit').schema.default, 100)
+  assert.equal(hubParameters.get('format').schema.default, 'normalized')
+  assert.ok(hub.responses[200].content['application/json'].examples.rawAsff)
+  assert.ok(hub.responses[200].content['application/json'].examples.nextCursor)
+
+  const inspectorParameters = names(inspector)
+  for (const name of ['status', 'findingTypes', 'resourceTypes', 'vulnerabilityIds', 'relatedVulnerabilityIds', 'packageNames', 'repositoryNames', 'imageDigests', 'fixAvailable', 'exploitAvailable', 'minInspectorScore', 'maxInspectorScore', 'title']) {
+    assert.ok(inspectorParameters.has(name), `Inspector must document ${name}`)
+  }
+  assert.match(inspector.description, /At least one of accountIdentifiers, adminOf, or ownedBy is required/)
+  assert.ok(inspector.responses[200].content['application/json'].examples.historicalClosed)
+  assert.match(summary.responses[200].description, /source, asOf, totalIsExact, and truncated/)
+
+  const pagination = spec.components.schemas.PaginationInfo
+  assert.deepEqual(pagination.required, ['limit', 'returned', 'hasMore', 'nextCursor', 'total', 'totalIsExact'])
+  assert.equal(pagination.properties.total.nullable, true)
+  assert.ok(spec.components.schemas.NormalizedSecurityHubFinding)
+  assert.ok(spec.components.schemas.NormalizedInspectorFinding)
+})

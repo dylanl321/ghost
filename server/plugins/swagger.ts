@@ -61,11 +61,62 @@ const openApiSpec = {
       PaginationInfo: {
         type: 'object',
         properties: {
-          page: { type: 'integer' },
           limit: { type: 'integer' },
-          total: { type: 'integer' },
-          hasMore: { type: 'boolean' }
-        }
+          returned: { type: 'integer' },
+          hasMore: { type: 'boolean' },
+          nextCursor: { type: 'string', nullable: true },
+          total: { type: 'integer', nullable: true },
+          totalIsExact: { type: 'boolean' }
+        },
+        required: ['limit', 'returned', 'hasMore', 'nextCursor', 'total', 'totalIsExact']
+      },
+      NormalizedSecurityHubFinding: {
+        type: 'object',
+        properties: {
+          accountId: { type: 'string' },
+          accountName: { type: 'string' },
+          region: { type: 'string' },
+          findingId: { type: 'string' },
+          title: { type: 'string' },
+          description: { type: 'string' },
+          severity: { type: 'string', enum: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFORMATIONAL'] },
+          severityScore: { type: 'number' },
+          workflowStatus: { type: 'string', enum: ['NEW', 'NOTIFIED', 'RESOLVED', 'SUPPRESSED'] },
+          productName: { type: 'string' },
+          resourceType: { type: 'string' },
+          resourceId: { type: 'string' },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+          firstObservedAt: { type: 'string', format: 'date-time' },
+          lastObservedAt: { type: 'string', format: 'date-time' }
+        },
+        required: ['accountId', 'accountName', 'region', 'findingId', 'title', 'severity', 'workflowStatus', 'productName', 'resourceType', 'resourceId']
+      },
+      NormalizedInspectorFinding: {
+        type: 'object',
+        properties: {
+          findingArn: { type: 'string' },
+          accountId: { type: 'string' },
+          region: { type: 'string' },
+          severity: { type: 'string', enum: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFORMATIONAL', 'UNTRIAGED'] },
+          title: { type: 'string' },
+          type: { type: 'string' },
+          status: { type: 'string', enum: ['ACTIVE', 'SUPPRESSED', 'CLOSED'] },
+          vulnerabilityId: { type: 'string' },
+          cveIds: { type: 'array', items: { type: 'string' } },
+          inspectorScore: { type: 'number' },
+          resourceType: { type: 'string' },
+          resourceArn: { type: 'string' },
+          packageName: { type: 'string' },
+          packageVersion: { type: 'string' },
+          fixedVersion: { type: 'string' },
+          fixAvailable: { type: 'string', enum: ['YES', 'NO', 'PARTIAL'] },
+          exploitAvailable: { type: 'string', enum: ['YES', 'NO'] },
+          firstObservedAt: { type: 'string', format: 'date-time' },
+          lastObservedAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' }
+        },
+        required: ['findingArn', 'accountId', 'region', 'severity', 'title', 'type', 'status', 'cveIds']
       },
       AWSEnvironment: {
         type: 'string',

@@ -24,6 +24,10 @@ const split = (value: unknown): string[] => {
     : []
 }
 
+export const hasIntegrationAccountSelector = (query: Record<string, unknown>): boolean =>
+  ['accountIdentifiers', 'accountIds', 'accountId', 'adminOf', 'ownedBy']
+    .some(name => split(query[name]).length > 0)
+
 const personMatches = (value: unknown, person: string): boolean => {
   if (typeof value !== 'string') return false
   const normalizedValue = value.trim().toLowerCase()

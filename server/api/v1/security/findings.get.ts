@@ -1,70 +1,82 @@
 import { defineEventHandler, getQuery } from 'h3'
-import type { SecurityHubDatasetFilters } from '../../../../shared/types/dataset-reports'
 import { requireScope } from '../../../middleware/entra-auth'
 import { registerEndpoint } from '../../../plugins/swagger'
 import { sendSuccess } from '../../../utils/api-response'
-import { querySecurityHubFindings } from '../../../utils/security-hub-data'
-import { integrationAccountParameters, resolveIntegrationAccountScope } from '../../../utils/integration-account-scope'
+import { querySecurityHubApi } from '../../../utils/security-hub-api'
+import { parseSecurityHubQuery, securityHubParameters } from '../../../utils/security-api-parameters'
+import { hasIntegrationAccountSelector, resolveIntegrationAccountScope } from '../../../utils/integration-account-scope'
 
 registerEndpoint('/api/v1/security/findings', 'GET', {
   summary: 'List Security Hub findings',
-  description: 'Returns bounded pages of normalized findings or raw AWS Security Finding Format (ASFF).',
+  description: 'Lists current or historical Security Hub findings across an optional organization-wide or selected-account scope. Results are globally sorted across account/region streams. Cursors are forward-only and do not provide snapshot isolation while AWS findings change. Security Hub does not expose an exact GetFindings total, so total is null. The default date range is the last 30 days by firstObservedAt.',
   tags: ['Security'],
   security: [{ ApiKeyAuth: [] }, { OIDCAuth: [] }],
-  parameters: [
-    ...integrationAccountParameters,
-    { name: 'severity', in: 'query', schema: { type: 'string' }, description: 'Comma-separated severity labels' },
-    { name: 'status', in: 'query', schema: { type: 'string' }, description: 'Comma-separated workflow statuses' },
-    { name: 'product', in: 'query', schema: { type: 'string' }, description: 'Comma-separated product names' },
-    { name: 'region', in: 'query', schema: { type: 'string' }, description: 'Comma-separated AWS regions' },
-    { name: 'resourceId', in: 'query', schema: { type: 'string' } },
-    { name: 'instanceIds', in: 'query', schema: { type: 'string' }, description: 'Comma-separated EC2 instance IDs' },
-    { name: 'findingIds', in: 'query', schema: { type: 'string' }, description: 'Comma-separated ASFF finding IDs' },
-    { name: 'lookbackDays', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 365, default: 30 } },
-    { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 20, default: 1 } },
-    { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 } },
-    { name: 'format', in: 'query', schema: { type: 'string', enum: ['normalized', 'asff'], default: 'normalized' } }
-  ],
+  parameters: securityHubParameters,
   responses: {
-    200: { description: 'A page of Security Hub findings' },
+    200: {
+      description: 'A cursor page of normalized findings or raw ASFF records.',
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: {
+                type: 'array',
+                items: {
+                  oneOf: [
+                    { $ref: '#/components/schemas/NormalizedSecurityHubFinding' },
+                    { type: 'object', description: 'Raw AWS Security Finding Format when format=asff.', additionalProperties: true }
+                  ]
+                }
+              },
+              metadata: {
+                type: 'object',
+                properties: {
+                  pagination: { $ref: '#/components/schemas/PaginationInfo' },
+                  format: { type: 'string', enum: ['normalized', 'asff'] },
+                  accounts: { type: 'array', items: { type: 'string' } },
+                  environment: { $ref: '#/components/schemas/AWSEnvironment' }
+                }
+              }
+            }
+          },
+          examples: {
+            multiAccount: {
+              summary: 'Globally sorted selected-account findings',
+              value: { success: true, data: [], metadata: { pagination: { limit: 100, returned: 0, hasMore: false, nextCursor: null, total: null, totalIsExact: false }, format: 'normalized' } }
+            },
+            rawAsff: {
+              summary: 'Raw AWS Security Finding Format',
+              value: { success: true, data: [{ SchemaVersion: '2018-10-08', Id: 'example-finding' }], metadata: { format: 'asff' } }
+            },
+            nextCursor: {
+              summary: 'Follow nextCursor',
+              value: { success: true, data: [], metadata: { pagination: { limit: 100, returned: 100, hasMore: true, nextCursor: 'opaque.signed-cursor', total: null, totalIsExact: false } } }
+            }
+          }
+        }
+      }
+    },
     400: { $ref: '#/components/schemas/Error' },
-    403: { $ref: '#/components/schemas/Error' }
+    401: { $ref: '#/components/schemas/Error' },
+    403: { $ref: '#/components/schemas/Error' },
+    502: { $ref: '#/components/schemas/Error' }
   }
 })
 
-const split = (value: unknown) => typeof value === 'string' ? value.split(',').map(item => item.trim()).filter(Boolean) : undefined
-
 export default defineEventHandler(async (event) => {
   await requireScope(event, 'security:read')
-  const query = getQuery(event)
-  const page = Math.min(20, Math.max(1, Number(query.page) || 1))
-  const limit = Math.min(100, Math.max(1, Number(query.limit) || 20))
-  const format = query.format === 'asff' ? 'asff' : 'normalized'
-  const filters: SecurityHubDatasetFilters = {
-    severities: split(query.severity) as SecurityHubDatasetFilters['severities'],
-    statuses: split(query.status) as SecurityHubDatasetFilters['statuses'],
-    products: split(query.product),
-    regions: split(query.region),
-    resourceId: typeof query.resourceId === 'string' ? query.resourceId : undefined,
-    resourceIds: split(query.instanceIds),
-    findingIds: split(query.findingIds),
-    lookbackDays: Math.min(365, Math.max(1, Number(query.lookbackDays) || 30)),
-    activeOnly: query.activeOnly !== 'false'
-  }
-
-  const accountScope = await resolveIntegrationAccountScope(event, query)
-  const result = await querySecurityHubFindings(accountScope?.commercialAccountIds || [], filters, {
-    limit: page * limit + 1,
-    format
+  const rawQuery = getQuery(event)
+  const query = parseSecurityHubQuery(rawQuery)
+  const accountScope = await resolveIntegrationAccountScope(event, rawQuery, {
+    required: hasIntegrationAccountSelector(rawQuery)
   })
-  const start = (page - 1) * limit
-  const records = result.records.slice(start, start + limit)
-  return sendSuccess(event, records, {
-    pagination: {
-      page,
-      limit,
-      hasMore: result.records.length > start + limit || result.hasMore
-    },
-    format
+  const result = await querySecurityHubApi(accountScope?.accounts, query)
+  return sendSuccess(event, result.records, {
+    pagination: result.pagination,
+    format: result.format,
+    accounts: result.accounts,
+    environment: result.environment
   })
 })

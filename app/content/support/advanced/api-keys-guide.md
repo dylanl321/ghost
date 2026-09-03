@@ -22,7 +22,9 @@ Every account-scoped v1 endpoint uses the same selectors:
 - `adminOf`: accounts where a person is primary admin, delegate, or cost manager
 - `ownedBy`: accounts owned by an account email or primary account admin
 
-Security integrations can use `/api/v1/security/findings` for Security Hub ASFF/normalized findings or `/api/v1/security/inspector/findings` for instance, CVE, package, and Inspector-specific filters.
+Security integrations can use `/api/v1/security/findings` for Security Hub ASFF/normalized findings or `/api/v1/security/inspector/findings` for resource, CVE/GHSA, package, repository, image, score, fix, exploit, status, and Inspector-specific filters. Inspector requests must include at least one account selector.
+
+Security finding lists use signed cursor pagination. Read `metadata.pagination.nextCursor` and pass it unchanged as `cursor` until `hasMore` is false. Numeric `page` remains available temporarily but is deprecated. `total` is `null` whenever AWS cannot calculate an exact total; never treat `returned` as the complete count.
 
 ## Using Your Key
 
@@ -30,6 +32,41 @@ Send the key in the `x-api-key` header:
 ```bash
 curl -H "x-api-key: YOUR_KEY" /api/v1/accounts
 ```
+
+List globally sorted Security Hub findings for two accounts:
+```bash
+curl -G -H "x-api-key: YOUR_KEY" \
+  --data-urlencode "accountIdentifiers=111111111111,222222222222" \
+  --data-urlencode "severity=CRITICAL,HIGH" \
+  --data-urlencode "sortBy=severity" \
+  --data-urlencode "sortOrder=desc" \
+  "https://ghost.example/api/v1/security/findings"
+```
+
+List historical closed Inspector findings in an inclusive date range:
+```bash
+curl -G -H "x-api-key: YOUR_KEY" \
+  --data-urlencode "accountIdentifiers=111111111111" \
+  --data-urlencode "status=CLOSED" \
+  --data-urlencode "dateField=updatedAt" \
+  --data-urlencode "startDate=2026-01-01T00:00:00Z" \
+  --data-urlencode "endDate=2026-01-31T23:59:59Z" \
+  "https://ghost.example/api/v1/security/inspector/findings"
+```
+
+Fetch raw ASFF and follow a cursor:
+```bash
+curl -G -H "x-api-key: YOUR_KEY" \
+  --data-urlencode "format=asff" \
+  "https://ghost.example/api/v1/security/findings"
+
+curl -G -H "x-api-key: YOUR_KEY" \
+  --data-urlencode "format=asff" \
+  --data-urlencode "cursor=PASTE_NEXT_CURSOR_HERE" \
+  "https://ghost.example/api/v1/security/findings"
+```
+
+`startDate` and `endDate` are inclusive, must be supplied together, and cannot be combined with `lookbackDays`. Security Hub defaults to the last 30 days by `firstObservedAt`; Inspector defaults to all active findings.
 
 ## Code Examples
 
