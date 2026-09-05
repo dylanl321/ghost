@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  buildSecurityProviderFailureLog,
   decodeSecurityCursor,
   encodeSecurityCursor,
   mergeSecurityStreams,
+  sanitizeProviderError,
   securityQueryFingerprint,
   type SecurityStreamState
 } from '../../server/utils/security-api-pagination'
@@ -125,4 +127,104 @@ test('curated provider filters are parsed for AWS pushdown', () => {
   assert.deepEqual(inspector.fixAvailable, ['YES', 'PARTIAL'])
   assert.equal(inspector.minInspectorScore, 4.5)
   assert.equal(inspector.title, 'OpenSSL')
+})
+
+// Build an AWS-SDK-shaped error that also carries sensitive fields we must never log.
+function providerError() {
+  return Object.assign(new Error('User arn:aws:iam::123456789012:role/GhostRole is not authorized'), {
+    name: 'AccessDeniedException',
+    stack: 'AccessDeniedException: at arn:aws:inspector2 (/app/secret-path.js:1:1)',
+    $metadata: {
+      requestId: 'req-abcdef-0001',
+      httpStatusCode: 403,
+      attempts: 3,
+      cfId: 'cf-should-not-leak'
+    }
+  })
+}
+
+test('provider failure log carries only the allowlisted diagnostic fields', () => {
+  const payload = buildSecurityProviderFailureLog('Amazon Inspector', providerError(), {
+    operation: 'ListFindings',
+    environment: 'commercial',
+    page: 2,
+    regionCount: 2,
+    accountCount: 47
+  }, 1_700_000_000_000)
+
+  assert.deepEqual(payload, {
+    type: 'security_provider_failure',
+    level: 'error',
+    provider: 'Amazon Inspector',
+    code: 'AccessDeniedException',
+    requestId: 'req-abcdef-0001',
+    httpStatus: 403,
+    attempts: 3,
+    operation: 'ListFindings',
+    environment: 'commercial',
+    page: 2,
+    regionCount: 2,
+    accountCount: 47,
+    timestamp: '2023-11-14T22:13:20.000Z'
+  })
+})
+
+test('provider failure log omits raw error and undefined context', () => {
+  // No name, no metadata, and no caller context: only the stable fields survive
+  // and code falls back to the generic label.
+  const payload = buildSecurityProviderFailureLog('Amazon Inspector', {}, undefined, 0)
+  assert.deepEqual(Object.keys(payload).sort(), ['code', 'level', 'provider', 'timestamp', 'type'])
+  assert.equal(payload.level, 'error')
+  assert.equal(payload.code, 'ProviderError')
+})
+
+test('sanitizeProviderError emits one safe line and never leaks sensitive fields', () => {
+  const originalWrite = process.stdout.write.bind(process.stdout)
+  const lines: string[] = []
+  ;(process.stdout as any).write = (chunk: string) => { lines.push(String(chunk)); return true }
+
+  let thrown: any
+  try {
+    sanitizeProviderError('Amazon Inspector', providerError(), {
+      operation: 'ListFindingAggregations',
+      environment: 'govcloud',
+      regionCount: 2,
+      accountCount: 47
+    })
+  } catch (error) {
+    thrown = error
+  } finally {
+    ;(process.stdout as any).write = originalWrite
+  }
+
+  // Exactly one structured record was emitted.
+  assert.equal(lines.length, 1)
+  const emitted = lines[0]!
+  const record = JSON.parse(emitted)
+  assert.equal(record.type, 'security_provider_failure')
+  assert.equal(record.level, 'error')
+  assert.equal(record.operation, 'ListFindingAggregations')
+  assert.equal(record.httpStatus, 403)
+  assert.equal(record.attempts, 3)
+
+  // The raw error text, stack, ARNs, account IDs, and unlisted metadata must never appear.
+  for (const secret of [
+    'arn:aws:iam',
+    'arn:aws:inspector2',
+    '123456789012',
+    'secret-path.js',
+    'not authorized',
+    'cf-should-not-leak',
+    'stack',
+    'message'
+  ]) {
+    assert.ok(!emitted.includes(secret), `emitted record must not contain "${secret}"`)
+  }
+
+  // The public 502 keeps its sanitized shape.
+  assert.equal(thrown?.statusCode, 502)
+  assert.equal(thrown?.data?.provider, 'Amazon Inspector')
+  assert.equal(thrown?.data?.code, 'AccessDeniedException')
+  assert.equal(thrown?.data?.requestId, 'req-abcdef-0001')
+  assert.equal(thrown?.data?.httpStatus, undefined)
 })

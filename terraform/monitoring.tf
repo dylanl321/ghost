@@ -171,6 +171,23 @@ resource "aws_cloudwatch_log_metric_filter" "api_5xx" {
   }
 }
 
+# Recurring 5xx from the Inspector findings endpoint specifically. Provider calls
+# there fail as a burst (STS succeeds, upstream errors), so a dedicated filter on
+# the exact normalized request path isolates it from unrelated 5xx noise.
+resource "aws_cloudwatch_log_metric_filter" "inspector_findings_5xx" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-inspector-findings-5xx"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "{ $.type = \"request\" && $.path = \"/api/v1/security/inspector/findings\" && $.statusCode >= 500 }"
+
+  metric_transformation {
+    name          = "InspectorFindings5xxCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
 # Credential failures can leave the task alive while most AWS-backed pages fail.
 resource "aws_cloudwatch_log_metric_filter" "aws_credential_failure" {
   provider       = aws.target_deployment_account
@@ -260,6 +277,27 @@ resource "aws_cloudwatch_metric_alarm" "aws_credential_failures" {
   period              = 300
   statistic           = "Sum"
   threshold           = 0
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Application = var.app_name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "inspector_findings_5xx" {
+  provider            = aws.target_deployment_account
+  alarm_name          = "${var.app_name}-inspector-findings-5xx"
+  alarm_description   = "Inspector findings endpoint returned 5xx at least 3 times in 5 minutes — recurring provider failure, not a single transient error"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "InspectorFindings5xxCount"
+  namespace           = "${var.app_name}/Application"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 3
   treat_missing_data  = "notBreaching"
 
   alarm_actions = [aws_sns_topic.alerts.arn]
