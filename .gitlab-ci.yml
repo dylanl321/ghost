@@ -191,6 +191,17 @@ seed_kirocrew_config:
   script:
     - python3 scripts/seed_kirocrew_config.py
 
+diagnose_kirocrew:
+  stage: deploy
+  extends: .assume_role
+  needs: []
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "dev"
+      when: manual
+  allow_failure: true
+  script:
+    - python3 scripts/diagnose_kirocrew.py
+
 Refresh Service:
   stage: deploy
   extends: .assume_role
