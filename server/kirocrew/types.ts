@@ -36,4 +36,18 @@ export interface KiroCrewRepository {
     records: KiroCrewRecord[]
     publishedBy: string
   }): Promise<KiroCrewRevision>
+  /**
+   * Return a prior retained revision by number, or null when it was never
+   * published. Reads the immutable `REV#<n>` item without touching CURRENT.
+   */
+  revision(revision: number): Promise<KiroCrewRevision | null>
+  /**
+   * Re-point CURRENT to a prior retained revision (rollback / audit re-point,
+   * Requirement 23.2). This is an admin action, not an operator one: it moves
+   * the CURRENT pointer to an already-published `revision` without creating a
+   * new revision, appending to history, or re-uploading its payload artifact
+   * (the prior revision's S3 object is retained write-once). The monotonic
+   * `REV#` history stays intact. Fails when the target revision does not exist.
+   */
+  repoint(revision: number): Promise<KiroCrewRevision>
 }

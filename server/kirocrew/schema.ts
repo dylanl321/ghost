@@ -80,6 +80,12 @@ export const bootstrapValueSchema = z.object({
     httpProxy: z.string().optional(),
     httpsProxy: z.string().optional(),
     noProxy: z.string().optional()
+  }).strict().optional(),
+  payload: z.object({
+    revision: z.number().int().min(1),
+    uri: z.string().min(1),
+    sha256: z.string().regex(/^[A-Fa-f0-9]{64}$/),
+    sizeBytes: z.number().int().min(1)
   }).strict().optional()
 }).strict()
 

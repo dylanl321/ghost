@@ -16,6 +16,9 @@ export function bootstrapFromRevision(revision: KiroCrewRevision) {
   const record = revision.records.find(candidate => candidate.name === 'kirocrew.bootstrap')
   if (!record || record.type !== 'setting') throw new Error('published revision has no bootstrap record')
   const value = bootstrapValueSchema.parse(record.value)
+  if (value.payload && value.payload.revision !== revision.revision) {
+    throw new Error(`bootstrap payload.revision ${value.payload.revision} does not match descriptor revision ${revision.revision}`)
+  }
   return {
     schemaVersion: 1 as const,
     revision: revision.revision,
@@ -60,6 +63,19 @@ export async function publishKiroCrewRevision(raw: unknown, publishedBy: string)
     }
     throw error
   }
+}
+
+/**
+ * Re-point CURRENT to a prior retained revision (rollback / audit re-point,
+ * Requirement 23.2). This is an admin action that moves the CURRENT pointer to
+ * an already-published revision without creating a new revision or re-uploading
+ * its payload artifact — the prior revision's S3 object is retained write-once
+ * and is advertised again unchanged. Returns the now-current revision so the
+ * route can `redactRevision` it before responding.
+ */
+export async function repointKiroCrewRevision(revision: number) {
+  const repository = getKiroCrewRepository()
+  return repository.repoint(revision)
 }
 
 function resolvePreservedSecrets(
