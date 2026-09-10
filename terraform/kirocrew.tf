@@ -52,10 +52,9 @@ resource "aws_dynamodb_table" "kirocrew_config" {
   }
 }
 
-resource "aws_iam_role_policy" "ecs_kirocrew_config" {
+resource "aws_iam_policy" "ecs_kirocrew_config" {
   provider = aws.target_deployment_account
   name     = "${var.app_name}_kirocrew_config"
-  role     = aws_iam_role.ecs_task_execution_role.name
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -83,4 +82,10 @@ resource "aws_iam_role_policy" "ecs_kirocrew_config" {
       }
     ]
   })
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_kirocrew_config" {
+  provider   = aws.target_deployment_account
+  role       = aws_iam_role.ecs_task_execution_role.name
+  policy_arn = aws_iam_policy.ecs_kirocrew_config.arn
 }
