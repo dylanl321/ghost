@@ -3,6 +3,8 @@ import { evaluateUserRoles } from '../../../../app/config/roles'
 import { getUserGroups } from '../../../utils/entra/graph-client'
 import { getUserSession } from '../../../utils/entra/session'
 import { logger } from '../../../utils/logger'
+import { getKiroCrewResourceUrl } from '../../../kirocrew/config'
+import { KIROCREW_SCOPES } from '../../../kirocrew/types'
 import { getOAuthProvider } from '../../../mcp/oauth/provider'
 import { getMcpResourceUrl } from '../../../mcp/config'
 import { saveMcpGraphDelegation } from '../../../mcp/oauth/delegated-graph'
@@ -16,12 +18,26 @@ interface InteractionBody {
 export function requestedGhostResourceScopes(
   params: { scope?: unknown; resource?: unknown },
   missingResourceScopes: Record<string, string[]> | undefined,
-  resource: string
-): Array<typeof GHOST_MCP_SCOPES[number]> {
-  const requested = new Set(String(params.scope || '').split(' ').filter(scope => GHOST_MCP_SCOPES.includes(scope as any)))
+  resource: string,
+  supportedScopes: readonly string[] = GHOST_MCP_SCOPES
+): string[] {
+  const requested = new Set(String(params.scope || '').split(' ').filter(scope => supportedScopes.includes(scope)))
   const missing = missingResourceScopes?.[resource]
   const candidates = missing?.length ? missing : [...requested]
-  return [...new Set(candidates.filter(scope => requested.has(scope) && GHOST_MCP_SCOPES.includes(scope as any)))] as Array<typeof GHOST_MCP_SCOPES[number]>
+  return [...new Set(candidates.filter(scope => requested.has(scope) && supportedScopes.includes(scope)))]
+}
+
+function requestedResource(value: unknown): string {
+  const candidate = Array.isArray(value) ? value[0] : value
+  return typeof candidate === 'string' && candidate
+    ? candidate
+    : getMcpResourceUrl().href
+}
+
+function scopesForResource(resource: string): readonly string[] {
+  if (resource === getMcpResourceUrl().href) return GHOST_MCP_SCOPES
+  if (resource === getKiroCrewResourceUrl().href) return KIROCREW_SCOPES
+  return []
 }
 
 function userValue(user: any, ...keys: string[]): string | undefined {
@@ -90,15 +106,17 @@ export default defineEventHandler(async event => {
   })
 
   if (body.action === 'details') {
+    const resource = requestedResource(details.params.resource)
+    const supportedScopes = scopesForResource(resource)
     return {
       prompt,
       client: {
         id: details.params.client_id,
-        name: client?.clientName || 'MCP client',
+        name: client?.clientName || (resource === getKiroCrewResourceUrl().href ? 'Kiro Crew' : 'MCP client'),
         uri: client?.clientUri
       },
-      scopes: String(details.params.scope || '').split(' ').filter(scope => GHOST_MCP_SCOPES.includes(scope as any)),
-      resource: details.params.resource
+      scopes: String(details.params.scope || '').split(' ').filter(scope => supportedScopes.includes(scope)),
+      resource
     }
   }
 
@@ -133,10 +151,13 @@ export default defineEventHandler(async event => {
   if (!details.session?.accountId || details.session.accountId !== identity.subject) {
     throw createError({ statusCode: 401, statusMessage: 'OAuth and Entra sessions do not match' })
   }
-  if (refreshToken) {
-    await saveMcpGraphDelegation(identity.subject, identity.tenantId, refreshToken)
-  } else {
-    logger.warn('[MCP Graph] GHOST session did not provide a delegated refresh token')
+  const resource = requestedResource(details.params.resource)
+  if (resource === getMcpResourceUrl().href) {
+    if (refreshToken) {
+      await saveMcpGraphDelegation(identity.subject, identity.tenantId, refreshToken)
+    } else {
+      logger.warn('[MCP Graph] GHOST session did not provide a delegated refresh token')
+    }
   }
 
   const grant = details.grantId
@@ -159,8 +180,19 @@ export default defineEventHandler(async event => {
   // Grant only the supported resource scopes the client requested and the user saw.
   if (missing.missingOIDCScope?.length) grant.addOIDCScope(missing.missingOIDCScope)
   if (missing.missingOIDCClaims?.length) grant.addOIDCClaims(missing.missingOIDCClaims)
-  const resource = getMcpResourceUrl().href
-  const requestedScopes = requestedGhostResourceScopes(details.params, missing.missingResourceScopes, resource)
+  const supportedScopes = scopesForResource(resource)
+  if (!supportedScopes.length) {
+    throw createError({ statusCode: 400, statusMessage: 'Unsupported OAuth resource' })
+  }
+  let requestedScopes = requestedGhostResourceScopes(
+    details.params,
+    missing.missingResourceScopes,
+    resource,
+    supportedScopes
+  )
+  if (resource === getKiroCrewResourceUrl().href && !identity.groups.includes('AWS-Product-Team')) {
+    requestedScopes = requestedScopes.filter(scope => scope !== 'kirocrew.config.admin')
+  }
   if (requestedScopes.length) grant.addResourceScope(resource, requestedScopes)
   const grantId = await grant.save()
   const consent = details.grantId ? {} : { grantId }

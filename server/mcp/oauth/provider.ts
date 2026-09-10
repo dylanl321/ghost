@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { exportJWK, generateKeyPair, type JWK } from 'jose'
 import Provider from 'oidc-provider'
 import { logger } from '../../utils/logger'
+import { getKiroCrewResourceUrl } from '../../kirocrew/config'
+import { KIROCREW_SCOPES } from '../../kirocrew/types'
 import { getGhostBaseUrl, getMcpResourceUrl, getOAuthAuthorizationTtlSeconds, getOAuthCookieKeys, getOAuthIssuer, isProductionEnvironment, useDurableOAuthStore } from '../config'
 import { GHOST_MCP_SCOPES } from '../types'
 import { DynamoOidcAdapter } from './adapter'
@@ -10,6 +12,11 @@ import { getGhostMcpIdentity } from './identity'
 
 let providerPromise: Promise<Provider> | undefined
 export const GHOST_REFRESH_TOKEN_ROTATION = false
+
+export interface GhostOAuthResource {
+  resource: string
+  scopes: readonly string[]
+}
 
 export type GhostRefreshFailureReason =
   | 'token_not_found'
@@ -55,6 +62,13 @@ export function createGhostRefreshEvent(status: 'success' | 'failure', reason?: 
   }
 }
 
+export function grantIncludesMcpResource(
+  grant: { resources?: Record<string, string> },
+  mcpResource = getMcpResourceUrl().href
+): boolean {
+  return Object.hasOwn(grant.resources || {}, mcpResource)
+}
+
 function recordRefreshEvent(status: 'success' | 'failure', reason?: GhostRefreshFailureReason): void {
   process.stdout.write(JSON.stringify(createGhostRefreshEvent(status, reason)) + '\n')
 }
@@ -74,14 +88,21 @@ async function loadJwks(): Promise<{ keys: JWK[] }> {
 }
 
 export function createGhostOAuthConfiguration(input: {
-  resource: string
+  resource?: string
+  resources?: GhostOAuthResource[]
   jwks: { keys: JWK[] }
   adapter?: any
   clients?: Array<Record<string, unknown>>
   findAccount?: (ctx: unknown, subject: string) => Promise<any>
   extraTokenClaims?: (ctx: unknown, token: { accountId?: string }) => Promise<Record<string, unknown>>
 }): any {
-  const { resource, jwks } = input
+  const { jwks } = input
+  const resources = input.resources?.length
+    ? input.resources
+    : [{ resource: String(input.resource), scopes: GHOST_MCP_SCOPES }]
+  const resourceByUrl = new Map(resources.map(definition => [definition.resource, definition]))
+  const defaultResource = resources[0]!.resource
+  const supportedScopes = [...new Set(resources.flatMap(definition => [...definition.scopes]))]
   const authorizationTtl = getOAuthAuthorizationTtlSeconds()
   return {
     adapter: input.adapter,
@@ -98,7 +119,7 @@ export function createGhostOAuthConfiguration(input: {
     grantTypes: ['authorization_code', 'refresh_token'],
     clientAuthMethods: ['none'],
     pkce: { required: () => true, methods: ['S256'] },
-    scopes: ['openid', 'offline_access', ...GHOST_MCP_SCOPES],
+    scopes: ['openid', 'offline_access', ...supportedScopes],
     // Codex omits prompt=consent, so explicitly issue refresh tokens to native public clients.
     issueRefreshToken: async (_ctx: unknown, client: RefreshTokenClient) => shouldIssueGhostRefreshToken(client),
     // A stable token avoids consuming the credential before Codex persists a rotated replacement.
@@ -111,11 +132,17 @@ export function createGhostOAuthConfiguration(input: {
       clientIdMetadataDocument: { enabled: false },
       resourceIndicators: {
         enabled: true,
-        defaultResource: async () => resource,
+        defaultResource: async () => defaultResource,
         useGrantedResource: async () => true,
         getResourceServerInfo: async (_ctx: unknown, requestedResource: string) => {
-          if (requestedResource !== resource) throw new Error('Unknown OAuth resource')
-          return { scope: GHOST_MCP_SCOPES.join(' '), audience: resource, accessTokenTTL: 3600, accessTokenFormat: 'opaque' }
+          const definition = resourceByUrl.get(requestedResource)
+          if (!definition) throw new Error('Unknown OAuth resource')
+          return {
+            scope: definition.scopes.join(' '),
+            audience: definition.resource,
+            accessTokenTTL: 3600,
+            accessTokenFormat: 'opaque'
+          }
         }
       },
       userinfo: { enabled: false },
@@ -156,8 +183,8 @@ export function attachGhostOAuthEvents(provider: Provider): void {
   provider.on('grant.error', (ctx: any, error: Error & { error_detail?: unknown }) => {
     if (ctx.oidc?.params?.grant_type === 'refresh_token') recordRefreshEvent('failure', classifyGhostRefreshFailure(error))
   })
-  provider.on('grant.destroyed', (grant: { accountId?: string }) => {
-    if (grant.accountId) {
+  provider.on('grant.destroyed', (grant: { accountId?: string; resources?: Record<string, string> }) => {
+    if (grant.accountId && grantIncludesMcpResource(grant)) {
       void deleteMcpGraphDelegation(grant.accountId).catch(error => logger.error('[MCP Graph] Failed to remove delegated token after grant revocation', error))
     }
   })
@@ -165,10 +192,14 @@ export function attachGhostOAuthEvents(provider: Provider): void {
 
 async function createProvider(): Promise<Provider> {
   const issuer = getOAuthIssuer()
-  const resource = getMcpResourceUrl().href
+  const mcpResource = getMcpResourceUrl().href
+  const kiroCrewResource = getKiroCrewResourceUrl().href
   const jwks = await loadJwks()
   const configuration = createGhostOAuthConfiguration({
-    resource,
+    resources: [
+      { resource: mcpResource, scopes: GHOST_MCP_SCOPES },
+      { resource: kiroCrewResource, scopes: KIROCREW_SCOPES }
+    ],
     jwks,
     adapter: useDurableOAuthStore() ? DynamoOidcAdapter : undefined,
   })
@@ -176,7 +207,12 @@ async function createProvider(): Promise<Provider> {
   const provider = new Provider(issuer, configuration)
   provider.proxy = true
   attachGhostOAuthEvents(provider)
-  logger.info('[MCP OAuth] Provider initialized', { issuer, resource, authorizationTtlSeconds: getOAuthAuthorizationTtlSeconds(), baseUrl: getGhostBaseUrl().origin })
+  logger.info('[Ghost OAuth] Provider initialized', {
+    issuer,
+    resources: [mcpResource, kiroCrewResource],
+    authorizationTtlSeconds: getOAuthAuthorizationTtlSeconds(),
+    baseUrl: getGhostBaseUrl().origin
+  })
   return provider
 }
 

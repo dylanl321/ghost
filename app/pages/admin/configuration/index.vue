@@ -22,6 +22,15 @@
       class="mb-6"
       :actions="[{ label: 'Open API Access', to: '/settings/api-access' }]"
     />
+    <UAlert
+      color="green"
+      variant="soft"
+      icon="i-heroicons-cloud-arrow-up"
+      title="Kiro Crew configuration"
+      description="Publish versioned settings, configuration files, and write-only secrets for authenticated Kiro Crew clients."
+      class="mb-6"
+      :actions="[{ label: 'Manage Kiro Crew', to: '/admin/kirocrew' }]"
+    />
     <div class="mt-6">
       <SiteConfigPanel v-if="activeTab === 0" />
       <DashboardDefaultPanel v-else-if="activeTab === 1" />

@@ -16,8 +16,13 @@ const scopeLabels: Record<string, string> = {
   'ghost.read': 'Read AWS account details, costs, user access, security findings, resources, and pipeline activity available to you',
   'ghost.ai.invoke': 'Use GHOST AI insights and chat to answer AWS questions',
   'ghost.collaborate': 'Manage your GHOST preferences, chat threads, reports, and exports',
-  'ghost.credentials.issue': 'Request short-lived AWS role credentials for roles assigned to you. GHOST will ask for confirmation before issuing them.'
+  'ghost.credentials.issue': 'Request short-lived AWS role credentials for roles assigned to you. GHOST will ask for confirmation before issuing them.',
+  'kirocrew.bootstrap.read': 'Read the Kiro Crew installation and corporate trust configuration',
+  'kirocrew.config.read': 'Read the organization’s published Kiro Crew settings, files, and secrets',
+  'kirocrew.config.admin': 'Publish Kiro Crew configuration revisions'
 }
+
+const isKiroCrew = computed(() => String(details.value?.resource || '').includes('/api/kirocrew'))
 
 interface InteractionResponse {
   redirectTo?: string
@@ -62,7 +67,7 @@ onMounted(() => submit('details'))
         </div>
         <div>
           <p class="oauth-consent-kicker">GHOST connection</p>
-          <h1 class="text-xl font-semibold">Allow {{ details?.client.name || 'your MCP client' }} to access GHOST</h1>
+          <h1 class="text-xl font-semibold">Allow {{ details?.client.name || 'your client' }} to access GHOST</h1>
         </div>
       </div>
 
@@ -71,7 +76,11 @@ onMounted(() => submit('details'))
       </div>
 
       <template v-else-if="details">
-        <p class="oauth-consent-intro">{{ details.client.name || 'This MCP client' }} will use your existing GHOST and AWS permissions. This does not grant access to additional accounts or roles.</p>
+        <p class="oauth-consent-intro">
+          {{ isKiroCrew
+            ? 'This client will use your GHOST identity to retrieve the organization configuration published for Kiro Crew.'
+            : `${details.client.name || 'This MCP client'} will use your existing GHOST and AWS permissions. This does not grant access to additional accounts or roles.` }}
+        </p>
         <h2 class="oauth-consent-heading">Permissions requested</h2>
         <ul class="space-y-3 mb-6">
           <li v-for="scope in details.scopes" :key="scope" class="flex gap-3 text-sm">

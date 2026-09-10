@@ -302,6 +302,14 @@ resource "aws_ecs_task_definition" "main" {
           value = aws_dynamodb_table.oauth_artifacts.name
         },
         {
+          name  = "GHOST_KIROCREW_RESOURCE_URL"
+          value = var.env == "prod" ? "https://ghost-aws.gd-ms.com/api/kirocrew" : "https://ghost-aws-dev.gd-ms.com/api/kirocrew"
+        },
+        {
+          name  = "GHOST_KIROCREW_CONFIG_TABLE_NAME"
+          value = aws_dynamodb_table.kirocrew_config.name
+        },
+        {
           name  = "GHOST_OAUTH_AUTHORIZATION_TTL_DAYS"
           value = "90"
         },

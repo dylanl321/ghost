@@ -30,6 +30,7 @@
     "check:deps": "depcheck --ignores=\"@nuxt/*,nuxt-*,@types/*,eslint,typescript\"",
     "test:chat": "tsx --test tests/chat/*.test.ts",
     "test:mcp": "tsx --test tests/mcp/*.test.ts",
+    "test:kirocrew": "tsx --test tests/kirocrew/*.test.ts",
     "test:vmaas": "tsx --test tests/vmaas/*.test.ts",
     "test:api": "tsx --test tests/api/*.test.ts",
     "test:budget-recipients": "tsx --test server/utils/__tests__/manual-budget-alert-recipients.test.ts",
