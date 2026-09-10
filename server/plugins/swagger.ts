@@ -118,6 +118,25 @@ const openApiSpec = {
         },
         required: ['findingArn', 'accountId', 'region', 'severity', 'title', 'type', 'status', 'cveIds']
       },
+      SecurityAccountError: {
+        type: 'object',
+        description: 'A selected account that could not be queried in the requested AWS partition.',
+        properties: {
+          code: { type: 'string', enum: ['MISSING_ENVIRONMENT_ACCOUNT_ID'] },
+          environment: { type: 'string', enum: ['commercial', 'govcloud'] },
+          account: {
+            type: 'object',
+            properties: {
+              accountId: { type: 'string' },
+              govCloudAccountId: { type: 'string' },
+              requestId: { oneOf: [{ type: 'string' }, { type: 'number' }] },
+              accountName: { type: 'string' }
+            }
+          },
+          message: { type: 'string' }
+        },
+        required: ['code', 'environment', 'account', 'message']
+      },
       AWSEnvironment: {
         type: 'string',
         enum: ['commercial', 'govcloud'],

@@ -17,6 +17,18 @@ export interface IntegrationAccountScope {
   govCloudAccountIds: string[]
 }
 
+export interface IntegrationAccountEnvironmentError {
+  code: 'MISSING_ENVIRONMENT_ACCOUNT_ID'
+  environment: 'commercial' | 'govcloud'
+  account: {
+    accountId?: string
+    govCloudAccountId?: string
+    requestId?: string | number
+    accountName?: string
+  }
+  message: string
+}
+
 const split = (value: unknown): string[] => {
   if (Array.isArray(value)) return value.flatMap(split)
   return typeof value === 'string'
@@ -27,6 +39,28 @@ const split = (value: unknown): string[] => {
 export const hasIntegrationAccountSelector = (query: Record<string, unknown>): boolean =>
   ['accountIdentifiers', 'accountIds', 'accountId', 'adminOf', 'ownedBy']
     .some(name => split(query[name]).length > 0)
+
+export function getIntegrationAccountEnvironmentErrors(
+  accounts: IntegrationAccount[],
+  environment: 'commercial' | 'govcloud'
+): IntegrationAccountEnvironmentError[] {
+  return accounts
+    .filter(account => environment === 'commercial' ? !account.accountId : !account.govCloudAccountId)
+    .map(account => {
+      const label = account.accountName || account.accountId || account.govCloudAccountId || String(account.requestId || 'Unknown account')
+      return {
+        code: 'MISSING_ENVIRONMENT_ACCOUNT_ID' as const,
+        environment,
+        account: {
+          accountId: account.accountId,
+          govCloudAccountId: account.govCloudAccountId,
+          requestId: account.requestId,
+          accountName: account.accountName
+        },
+        message: `${label} does not have a ${environment} account ID.`
+      }
+    })
+}
 
 const personMatches = (value: unknown, person: string): boolean => {
   if (typeof value !== 'string') return false

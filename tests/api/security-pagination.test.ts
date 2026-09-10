@@ -8,6 +8,9 @@ import {
   type SecurityStreamState
 } from '../../server/utils/security-api-pagination'
 import { parseInspectorQuery, parseSecurityHubQuery } from '../../server/utils/security-api-parameters'
+import { getIntegrationAccountEnvironmentErrors } from '../../server/utils/integration-account-scope'
+import { querySecurityHubApi } from '../../server/utils/security-hub-api'
+import { queryInspectorApi } from '../../server/utils/inspector-api'
 
 process.env.SECURITY_API_CURSOR_SECRET = 'test-only-security-cursor-secret'
 
@@ -59,16 +62,14 @@ test('signed cursors reject tampering, expiration, and filter or account mismatc
   assert.throws(() => decodeSecurityCursor(cursor, fingerprint, initial, 1_000 + 15 * 60 * 1000), /pagination cursor/i)
 })
 
-test('date rules, historical states, defaults, and deprecated numeric pages parse consistently', () => {
+test('date rules, historical states, and defaults parse consistently', () => {
   const securityHub = parseSecurityHubQuery({
     workflowStatus: 'RESOLVED,SUPPRESSED',
     recordState: 'ARCHIVED',
-    page: '3',
     limit: '50'
   })
   assert.deepEqual(securityHub.workflowStatuses, ['RESOLVED', 'SUPPRESSED'])
   assert.deepEqual(securityHub.recordStates, ['ARCHIVED'])
-  assert.equal(securityHub.page, 3)
   assert.equal(securityHub.date.dateField, 'firstObservedAt')
   assert.equal('lookbackDays' in securityHub.date ? securityHub.date.lookbackDays : undefined, 30)
 
@@ -83,6 +84,52 @@ test('date rules, historical states, defaults, and deprecated numeric pages pars
     lookbackDays: '2'
   }), /cannot be combined/i)
   assert.throws(() => parseInspectorQuery({ status: 'NOT_A_STATUS' }), /unsupported values/i)
+})
+
+test('missing partition IDs produce explicit per-account errors', () => {
+  const errors = getIntegrationAccountEnvironmentErrors([
+    {
+      accountId: '111111111111',
+      accountName: 'Commercial only'
+    },
+    {
+      accountId: '222222222222',
+      govCloudAccountId: '333333333333',
+      accountName: 'Dual partition'
+    }
+  ], 'govcloud')
+
+  assert.deepEqual(errors, [{
+    code: 'MISSING_ENVIRONMENT_ACCOUNT_ID',
+    environment: 'govcloud',
+    account: {
+      accountId: '111111111111',
+      govCloudAccountId: undefined,
+      requestId: undefined,
+      accountName: 'Commercial only'
+    },
+    message: 'Commercial only does not have a govcloud account ID.'
+  }])
+})
+
+test('finding queries return account errors without broadening to organization scope', async () => {
+  const accounts = [{ accountId: '111111111111', accountName: 'Commercial only' }]
+
+  const hub = await querySecurityHubApi(accounts, parseSecurityHubQuery({
+    environment: 'govcloud',
+    regions: 'us-gov-west-1'
+  }))
+  assert.deepEqual(hub.records, [])
+  assert.equal(hub.errors.length, 1)
+  assert.deepEqual(hub.accounts, [])
+
+  const inspector = await queryInspectorApi(accounts, parseInspectorQuery({
+    environment: 'govcloud',
+    regions: 'us-gov-west-1'
+  }))
+  assert.deepEqual(inspector.records, [])
+  assert.equal(inspector.errors.length, 1)
+  assert.deepEqual(inspector.accounts, [])
 })
 
 test('curated provider filters are parsed for AWS pushdown', () => {

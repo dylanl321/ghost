@@ -115,10 +115,12 @@ test('security v1 operations expose complete cursor metadata, filters, defaults,
     new Map(operation.parameters.map((item: any) => [item.name, item]))
 
   const hubParameters = names(hub)
-  for (const name of ['cursor', 'page', 'limit', 'sortBy', 'sortOrder', 'startDate', 'endDate', 'lookbackDays', 'recordState', 'workflowStatus', 'resourceTypes', 'findingTypes', 'controls', 'complianceStandards', 'complianceStatus', 'format']) {
+  for (const name of ['cursor', 'limit', 'sortBy', 'sortOrder', 'startDate', 'endDate', 'lookbackDays', 'recordState', 'workflowStatus', 'resourceTypes', 'findingTypes', 'controls', 'complianceStandards', 'complianceStatus', 'format']) {
     assert.ok(hubParameters.has(name), `Security Hub must document ${name}`)
   }
-  assert.equal(hubParameters.get('page').deprecated, true)
+  for (const removed of ['page', 'region', 'status', 'activeOnly', 'resourceId', 'instanceIds']) {
+    assert.equal(hubParameters.has(removed), false, `Security Hub must not expose legacy ${removed}`)
+  }
   assert.equal(hubParameters.get('limit').schema.default, 100)
   assert.equal(hubParameters.get('format').schema.default, 'normalized')
   assert.ok(hub.responses[200].content['application/json'].examples.rawAsff)
@@ -127,6 +129,9 @@ test('security v1 operations expose complete cursor metadata, filters, defaults,
   const inspectorParameters = names(inspector)
   for (const name of ['status', 'findingTypes', 'resourceTypes', 'vulnerabilityIds', 'relatedVulnerabilityIds', 'packageNames', 'repositoryNames', 'imageDigests', 'fixAvailable', 'exploitAvailable', 'minInspectorScore', 'maxInspectorScore', 'title']) {
     assert.ok(inspectorParameters.has(name), `Inspector must document ${name}`)
+  }
+  for (const removed of ['page', 'region', 'instanceIds', 'cveIds']) {
+    assert.equal(inspectorParameters.has(removed), false, `Inspector must not expose legacy ${removed}`)
   }
   assert.match(inspector.description, /At least one of accountIdentifiers, adminOf, or ownedBy is required/)
   assert.ok(inspector.responses[200].content['application/json'].examples.historicalClosed)
@@ -137,4 +142,6 @@ test('security v1 operations expose complete cursor metadata, filters, defaults,
   assert.equal(pagination.properties.total.nullable, true)
   assert.ok(spec.components.schemas.NormalizedSecurityHubFinding)
   assert.ok(spec.components.schemas.NormalizedInspectorFinding)
+  assert.ok(spec.components.schemas.SecurityAccountError)
+  assert.ok(hub.responses[200].content['application/json'].examples.missingGovCloudAccount)
 })

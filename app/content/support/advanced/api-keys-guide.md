@@ -24,7 +24,9 @@ Every account-scoped v1 endpoint uses the same selectors:
 
 Security integrations can use `/api/v1/security/findings` for Security Hub ASFF/normalized findings or `/api/v1/security/inspector/findings` for resource, CVE/GHSA, package, repository, image, score, fix, exploit, status, and Inspector-specific filters. Inspector requests must include at least one account selector.
 
-Security finding lists use signed cursor pagination. Read `metadata.pagination.nextCursor` and pass it unchanged as `cursor` until `hasMore` is false. Numeric `page` remains available temporarily but is deprecated. `total` is `null` whenever AWS cannot calculate an exact total; never treat `returned` as the complete count.
+Security finding lists use signed cursor pagination. Read `metadata.pagination.nextCursor` and pass it unchanged as `cursor` until `hasMore` is false. `total` is `null` whenever AWS cannot calculate an exact total; never treat `returned` as the complete count.
+
+When selected accounts do not have an ID for the requested `environment`, valid accounts are still queried and each skipped account appears in `metadata.errors` with its known IDs and account name.
 
 ## Using Your Key
 

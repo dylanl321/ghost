@@ -30,7 +30,8 @@ registerEndpoint('/api/v1/security/inspector/findings', 'GET', {
                 properties: {
                   pagination: { $ref: '#/components/schemas/PaginationInfo' },
                   accounts: { type: 'array', items: { type: 'string' } },
-                  environment: { $ref: '#/components/schemas/AWSEnvironment' }
+                  environment: { $ref: '#/components/schemas/AWSEnvironment' },
+                  errors: { type: 'array', items: { $ref: '#/components/schemas/SecurityAccountError' } }
                 }
               }
             }
@@ -63,9 +64,6 @@ export default defineEventHandler(async (event) => {
   const accountIds = query.environment === 'commercial'
     ? accountScope!.commercialAccountIds
     : accountScope!.govCloudAccountIds
-  if (accountIds.length !== accountScope!.accounts.length) {
-    throw createError({ statusCode: 400, statusMessage: `Every selected account must have a ${query.environment} account ID.` })
-  }
   if (accountIds.length > 50) {
     throw createError({ statusCode: 400, statusMessage: 'Inspector queries are limited to 50 resolved accounts.' })
   }
@@ -73,6 +71,7 @@ export default defineEventHandler(async (event) => {
   return sendSuccess(event, result.records, {
     pagination: result.pagination,
     accounts: result.accounts,
-    environment: result.environment
+    environment: result.environment,
+    errors: result.errors
   })
 })

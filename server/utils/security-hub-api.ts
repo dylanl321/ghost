@@ -9,7 +9,10 @@ import { createError } from 'h3'
 import type { SecurityHubFindingRecord } from '../../shared/types/dataset-reports'
 import type { FindingSeverity, WorkflowStatus } from '../../shared/types/security-hub'
 import { getClient } from '../lib/aws-client-factory'
-import type { IntegrationAccount } from './integration-account-scope'
+import {
+  getIntegrationAccountEnvironmentErrors,
+  type IntegrationAccount
+} from './integration-account-scope'
 import type { parseSecurityHubQuery } from './security-api-parameters'
 import {
   decodeSecurityCursor,
@@ -155,12 +158,7 @@ export async function querySecurityHubApi(
   const selectedIds = accounts
     ? accounts.map(account => accountIdentity(account, query.environment)).filter((id): id is string => Boolean(id))
     : []
-  if (accounts && selectedIds.length !== accounts.length) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: `Every selected account must have a ${query.environment} account ID.`
-    })
-  }
+  const errors = getIntegrationAccountEnvironmentErrors(accounts || [], query.environment)
   selectedIds.sort()
   const names = new Map((accounts || []).flatMap(account => {
     const name = account.accountName || account.accountId || account.govCloudAccountId || 'Unknown'
@@ -168,7 +166,7 @@ export async function querySecurityHubApi(
   }))
   const batches: string[][] = selectedIds.length
     ? Array.from({ length: Math.ceil(selectedIds.length / 20) }, (_, index) => selectedIds.slice(index * 20, index * 20 + 20))
-    : [[]]
+    : accounts ? [] : [[]]
   const descriptors = regions.flatMap(region => batches.map((ids, batch) => ({
     id: `${region}:${batch}`,
     region,
@@ -178,9 +176,9 @@ export async function querySecurityHubApi(
   const fingerprint = securityQueryFingerprint({
     provider: 'securityhub',
     accounts: selectedIds,
+    accountErrors: errors,
     ...query,
     cursor: undefined,
-    page: undefined,
     date: {
       ...query.date,
       start: 'lookbackDays' in query.date && query.date.lookbackDays ? undefined : query.date.start?.toISOString(),
@@ -191,13 +189,15 @@ export async function querySecurityHubApi(
   const securityAccount = query.environment === 'govcloud'
     ? process.env.AWS_GOVCLOUD_SECURITY_LAKE_ACCOUNT
     : process.env.AWS_COMMERCIAL_SECURITY_LAKE_ACCOUNT
-  if (!securityAccount) throw Object.assign(new Error('Security Hub aggregation account is not configured.'), { statusCode: 500 })
+  if (descriptors.length && !securityAccount) {
+    throw Object.assign(new Error('Security Hub aggregation account is not configured.'), { statusCode: 500 })
+  }
 
   const runPage = async () => {
     try {
       const merged = await mergeSecurityStreams(states, query.limit, async state => {
         const descriptor = descriptors.find(item => item.id === state.id)!
-        const client = await getClient<SecurityHubClient>(query.environment, 'securityhub', descriptor.region, securityAccount)
+        const client = await getClient<SecurityHubClient>(query.environment, 'securityhub', descriptor.region, securityAccount!)
         const sort: SortCriterion[] = [
           { Field: fieldMap[query.sortBy], SortOrder: query.sortOrder === 'asc' ? 'asc' : 'desc' },
           ...(query.sortBy === 'severity' ? [{ Field: 'UpdatedAt', SortOrder: 'desc' as const }] : [])
@@ -221,14 +221,7 @@ export async function querySecurityHubApi(
     }
   }
 
-  let result = await runPage()
-  for (let currentPage = 1; currentPage < query.page; currentPage++) {
-    if (!result.hasMore) {
-      result = { ...result, records: [] }
-      break
-    }
-    result = await runPage()
-  }
+  const result = await runPage()
   return {
     records: result.records,
     pagination: {
@@ -241,6 +234,7 @@ export async function querySecurityHubApi(
     },
     format: query.format,
     accounts: selectedIds,
-    environment: query.environment
+    environment: query.environment,
+    errors
   }
 }
