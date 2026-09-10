@@ -29,3 +29,7 @@ test('Swagger GET, HEAD, specification, and assets require an authenticated sess
   assert.equal(requiresAuthentication('/api/swagger-assets/swagger-ui.css'), true)
   assert.equal(requiresAuthentication('/api/health'), false)
 })
+
+test('Kiro Crew publishing uses the normal authenticated API boundary', () => {
+  assert.equal(requiresAuthentication('/api/admin/kirocrew/config'), true)
+})
