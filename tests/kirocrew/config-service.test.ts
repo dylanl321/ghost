@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { marshall } from '@aws-sdk/util-dynamodb'
 import { createGhostOAuthConfiguration, grantIncludesMcpResource } from '../../server/mcp/oauth/provider'
 import { bootstrapFromRevision, redactRevision, revisionEtag } from '../../server/kirocrew/service'
 import { validateKiroCrewRecords } from '../../server/kirocrew/schema'
 import { KIROCREW_SCOPES } from '../../server/kirocrew/types'
-import { KiroCrewRevisionConflict, MemoryKiroCrewRepository } from '../../server/kirocrew/repository'
+import { DynamoKiroCrewRepository, KiroCrewRevisionConflict, MemoryKiroCrewRepository } from '../../server/kirocrew/repository'
 
 const bootstrap = {
   name: 'kirocrew.bootstrap',
@@ -125,4 +126,27 @@ test('repository revisions are monotonic and reject stale publishers', async () 
     }),
     (error: unknown) => error instanceof KiroCrewRevisionConflict && error.actualRevision === 1
   )
+})
+
+test('Dynamo repository reads Ghost-owned configuration with its supplied task-role client', async () => {
+  const revision = {
+    profileId: 'PROFILE#default',
+    recordId: 'REV#000000000001',
+    schemaVersion: 1,
+    revision: 1,
+    updatedAt: '2026-09-10T12:00:00.000Z',
+    publishedBy: 'test',
+    records: validateKiroCrewRecords([bootstrap])
+  }
+  const responses = [
+    { Item: marshall({ profileId: 'PROFILE#default', recordId: 'CURRENT', revision: 1 }) },
+    { Item: marshall(revision) }
+  ]
+  const client = {
+    send: async () => responses.shift() || {}
+  }
+  const repository = new DynamoKiroCrewRepository('ghost-kirocrew-config-dev', client as any)
+  const current = await repository.current()
+  assert.equal(current?.revision, 1)
+  assert.equal(current?.records[0]?.name, 'kirocrew.bootstrap')
 })

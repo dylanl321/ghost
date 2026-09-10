@@ -1,7 +1,9 @@
-import { TransactWriteItemsCommand } from '@aws-sdk/client-dynamodb'
-import { marshall } from '@aws-sdk/util-dynamodb'
-import { getDynamoDBClient } from '../lib/aws-client-factory'
-import { getItem } from '../utils/dynamodb'
+import {
+  DynamoDBClient,
+  GetItemCommand,
+  TransactWriteItemsCommand
+} from '@aws-sdk/client-dynamodb'
+import { marshall, unmarshall } from '@aws-sdk/util-dynamodb'
 import { getKiroCrewTableName } from './config'
 import type { KiroCrewRepository, KiroCrewRevision } from './types'
 
@@ -45,20 +47,34 @@ interface StoredRevision extends KiroCrewRevision {
 }
 
 export class DynamoKiroCrewRepository implements KiroCrewRepository {
-  constructor(private readonly tableName: string) {}
+  constructor(
+    private readonly tableName: string,
+    private readonly client = new DynamoDBClient({
+      region: process.env.AWS_REGION || process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1',
+      useFipsEndpoint: true
+    })
+  ) {}
 
   async current(): Promise<KiroCrewRevision | null> {
-    const pointer = await getItem(this.tableName, {
-      profileId: PROFILE_ID,
-      recordId: 'CURRENT'
-    }) as { revision?: number } | null
+    const pointerResult = await this.client.send(new GetItemCommand({
+      TableName: this.tableName,
+      Key: marshall({ profileId: PROFILE_ID, recordId: 'CURRENT' }),
+      ConsistentRead: true
+    }))
+    const pointer = pointerResult.Item
+      ? unmarshall(pointerResult.Item) as { revision?: number }
+      : null
     if (!pointer?.revision) return null
-    const item = await getItem(this.tableName, {
-      profileId: PROFILE_ID,
-      recordId: revisionKey(pointer.revision)
-    }) as StoredRevision | null
-    if (!item) throw new Error('Kiro Crew current revision is missing')
-    return stripStorageKeys(item)
+    const revisionResult = await this.client.send(new GetItemCommand({
+      TableName: this.tableName,
+      Key: marshall({
+        profileId: PROFILE_ID,
+        recordId: revisionKey(pointer.revision)
+      }),
+      ConsistentRead: true
+    }))
+    if (!revisionResult.Item) throw new Error('Kiro Crew current revision is missing')
+    return stripStorageKeys(unmarshall(revisionResult.Item) as StoredRevision)
   }
 
   async publish(input: {
@@ -84,9 +100,8 @@ export class DynamoKiroCrewRepository implements KiroCrewRepository {
       revision: revision.revision,
       updatedAt: revision.updatedAt
     }
-    const client = await getDynamoDBClient('govcloud')
     try {
-      await client.send(new TransactWriteItemsCommand({
+      await this.client.send(new TransactWriteItemsCommand({
         TransactItems: [
           {
             Put: {
