@@ -18,6 +18,18 @@ import {
 const adminCache = new Map<string, { isAdmin: boolean, expiresAt: number }>()
 const ADMIN_CACHE_TTL = 10 * 60 * 1000 // 10 minutes
 
+function hasConfiguredAdminRole(user: any, groups: string[]): boolean {
+  const claims = user.claims || {}
+  return evaluateUserRoles({
+    userPrincipalName: user.email || claims.email || claims.preferred_username || '',
+    displayName: user.displayName || claims.name,
+    jobTitle: claims.jobTitle,
+    department: user.department || claims.department,
+    groups,
+    claims
+  }).some(role => role.id === 'admin')
+}
+
 // Periodic cleanup of expired cache entries (every 5 minutes)
 setInterval(() => {
   const now = Date.now()
@@ -53,7 +65,7 @@ export async function isUserAdmin(event: H3Event): Promise<boolean> {
   // Check if groups are already in the session (for API key auth or cached sessions)
   const sessionGroups = user.groups || user.claims?.groups || []
   if (sessionGroups.length > 0) {
-    return sessionGroups.includes('AWS-Product-Team')
+    return hasConfiguredAdminRole(user, sessionGroups)
   }
 
   // For OIDC auth, fetch groups from Microsoft Graph API
@@ -78,8 +90,11 @@ export async function isUserAdmin(event: H3Event): Promise<boolean> {
       // Fetch user's groups from Microsoft Graph
       const userGroups = await getUserGroups(event, userId)
 
-      // Check if user is in AWS-Product-Team group
-      const isAdmin = userGroups.some(group => group.displayName === 'AWS-Product-Team')
+      // Use the same role rules as the client, including configured admin usernames.
+      const isAdmin = hasConfiguredAdminRole(
+        user,
+        userGroups.map(group => group.displayName).filter(Boolean)
+      )
 
       // Cache the result
       adminCache.set(userId, {

@@ -180,6 +180,17 @@ apply:
     - terraform init "-backend-config=./conf/$ENV.conf"
     - terraform apply tfplan
 
+seed_kirocrew_config:
+  stage: deploy
+  extends: .assume_role
+  needs: []
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "dev"
+      when: manual
+  allow_failure: true
+  script:
+    - python3 scripts/seed_kirocrew_config.py
+
 Refresh Service:
   stage: deploy
   extends: .assume_role

@@ -321,7 +321,8 @@ const categories = [
     to: '/admin/configuration',
     children: [
       { label: 'Personal API Access', icon: 'i-heroicons-key', to: '/settings/api-access' },
-      { label: 'Site Config', icon: 'i-heroicons-cog', to: '/admin/configuration?tab=site-config' }
+      { label: 'Site Config', icon: 'i-heroicons-cog', to: '/admin/configuration?tab=site-config' },
+      { label: 'Kiro Crew Configuration', icon: 'i-heroicons-adjustments-horizontal', to: '/admin/kirocrew' }
     ]
   },
   {

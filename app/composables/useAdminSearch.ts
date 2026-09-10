@@ -45,6 +45,16 @@ export function useAdminSearch() {
       tab: 'site-config',
       keywords: ['site', 'config', 'configuration', 'general']
     },
+    {
+      id: 'config-kirocrew',
+      label: 'Kiro Crew Configuration',
+      description: 'Publish Kiro Crew settings, files, and secrets',
+      icon: 'i-heroicons-adjustments-horizontal',
+      category: 'configuration',
+      categoryLabel: 'Configuration',
+      to: '/admin/kirocrew',
+      keywords: ['kiro', 'crew', 'config', 'settings', 'files', 'secrets']
+    },
 
     // Users & Access (5 tabs)
     {

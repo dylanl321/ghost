@@ -74,6 +74,7 @@ const breadcrumbs = computed(() => {
   // Category name mappings for cleaner display
   const labelMap: Record<string, string> = {
     'configuration': 'Configuration',
+    'kirocrew': 'Kiro Crew Configuration',
     'users': 'Users & Access',
     'content': 'Content & Reports',
     'costs': 'Cost Management',
