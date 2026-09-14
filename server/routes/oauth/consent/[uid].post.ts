@@ -27,6 +27,12 @@ export function requestedGhostResourceScopes(
   return [...new Set(candidates.filter(scope => requested.has(scope) && supportedScopes.includes(scope)))]
 }
 
+export function canGrantKiroCrewAdmin(roles: readonly string[]): boolean {
+  // Use the same configured admin role as the browser/admin APIs. Checking one
+  // group here caused configured ".admin" users to loop on consent forever.
+  return roles.includes('admin')
+}
+
 function requestedResource(value: unknown): string {
   const candidate = Array.isArray(value) ? value[0] : value
   return typeof candidate === 'string' && candidate
@@ -190,8 +196,16 @@ export default defineEventHandler(async event => {
     resource,
     supportedScopes
   )
-  if (resource === getKiroCrewResourceUrl().href && !identity.groups.includes('AWS-Product-Team')) {
-    requestedScopes = requestedScopes.filter(scope => scope !== 'kirocrew.config.admin')
+  if (
+    resource === getKiroCrewResourceUrl().href
+    && requestedScopes.includes('kirocrew.config.admin')
+    && !canGrantKiroCrewAdmin(identity.roles)
+  ) {
+    const redirectTo = await provider.interactionResult(event.node.req, event.node.res, {
+      error: 'access_denied',
+      error_description: 'The GHOST administrator role is required to publish Kiro Crew configuration.'
+    })
+    return { redirectTo }
   }
   if (requestedScopes.length) grant.addResourceScope(resource, requestedScopes)
   const grantId = await grant.save()
