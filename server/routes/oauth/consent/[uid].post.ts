@@ -33,6 +33,18 @@ export function canGrantKiroCrewAdmin(roles: readonly string[]): boolean {
   return roles.includes('admin')
 }
 
+export function identityGroupNames(user: any, graphGroups: readonly string[] = []): string[] {
+  const sessionGroups = user?.groups ?? user?.claims?.groups ?? []
+  const names = Array.isArray(sessionGroups)
+    ? sessionGroups.map((group: any) => {
+      if (typeof group === 'string') return group
+      return group?.displayName || group?.name || ''
+    })
+    : []
+
+  return [...new Set([...names, ...graphGroups].filter(Boolean))]
+}
+
 function requestedResource(value: unknown): string {
   const candidate = Array.isArray(value) ? value[0] : value
   return typeof candidate === 'string' && candidate
@@ -64,12 +76,14 @@ async function getAuthenticatedIdentity(event: H3Event): Promise<{ identity: Gho
   const email = userValue(user, 'email', 'preferred_username', 'upn')
   if (!oid || !email) throw createError({ statusCode: 401, statusMessage: 'Entra identity claims are incomplete' })
 
-  let groups: string[]
+  let groups = identityGroupNames(user)
   try {
-    groups = (await getUserGroups(event, oid)).map(group => group.displayName).filter(Boolean)
+    groups = identityGroupNames(
+      user,
+      (await getUserGroups(event, oid)).map(group => group.displayName).filter(Boolean)
+    )
   } catch (error) {
     logger.warn('[MCP OAuth] Could not capture delegated Graph groups', error)
-    groups = []
   }
   const roles = evaluateUserRoles({
     userPrincipalName: email,
