@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { H3Event } from 'h3'
+import { userRoleGroups } from '../../server/utils/entra/graph-client'
 import { clearAllAdminCache, isUserAdmin } from '../../server/utils/user-roles'
 
 function oidcEvent(user: Record<string, any>): H3Event {
@@ -29,6 +30,18 @@ test('admin check resolves Entra group IDs before denying access', async () => {
 
   assert.equal(allowed, true)
   assert.equal(graphCalls, 1)
+})
+
+test('Graph role resolution retains non-account administrator groups', () => {
+  const groups = userRoleGroups([
+    { id: 'admin-group', displayName: 'AWS-Product-Team' },
+    { id: 'account-group', displayName: 'AWS-123456789012_Admin' }
+  ] as any)
+
+  assert.deepEqual(groups.map(group => group.displayName), [
+    'AWS-Product-Team',
+    'AWS-123456789012_Admin'
+  ])
 })
 
 test('admin check accepts named session groups without Graph', async () => {
