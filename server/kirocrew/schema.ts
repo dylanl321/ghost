@@ -43,6 +43,25 @@ const policyFlags = {
   require_operator_confirm: z.boolean().optional()
 }
 
+const jiraTeamStandardSchema = z.object({
+  schemaVersion: z.literal(1),
+  voice: z.literal('first-person-plural'),
+  doneWhenPrefixes: z.tuple([
+    z.literal('Done when we have'),
+    z.literal("Done when we've")
+  ]),
+  storyPoints: z.object({
+    allowed: z.tuple([
+      z.literal(1),
+      z.literal(2),
+      z.literal(3),
+      z.literal(4),
+      z.literal(5)
+    ]),
+    splitAbove: z.literal(5)
+  }).strict()
+}).strict()
+
 export const bootstrapValueSchema = z.object({
   schemaVersion: z.literal(1).optional(),
   install: z.object({
@@ -162,6 +181,22 @@ export function validateKiroCrewRecords(input: unknown): KiroCrewRecord[] {
     throw new Error('kirocrew.bootstrap setting is required')
   }
   bootstrapValueSchema.parse(bootstrap.value)
+  const organization = records.find(record => record.name === 'kirocrew.organization')
+  if (organization?.type === 'setting') {
+    const value = organization.value as Record<string, unknown> | null
+    const apps = value && typeof value === 'object'
+      ? value.apps as Record<string, unknown> | undefined
+      : undefined
+    const jira = apps && typeof apps === 'object'
+      ? apps['jira-crew'] as Record<string, unknown> | undefined
+      : undefined
+    const values = jira && typeof jira === 'object'
+      ? jira.values as Record<string, unknown> | undefined
+      : undefined
+    if (values && Object.prototype.hasOwnProperty.call(values, 'teamStandard')) {
+      jiraTeamStandardSchema.parse(values.teamStandard)
+    }
+  }
   if (Buffer.byteLength(JSON.stringify(records), 'utf8') > 256 * 1024) {
     throw new Error('configuration revision exceeds 256 KiB')
   }

@@ -32,6 +32,12 @@ FORBIDDEN_SECRET_NAME = re.compile(
     re.IGNORECASE,
 )
 JIRA_BASE_URL = os.environ.get("KIROCREW_JIRA_BASE_URL", "").strip().rstrip("/")
+JIRA_TEAM_STANDARD = {
+    "schemaVersion": 1,
+    "voice": "first-person-plural",
+    "doneWhenPrefixes": ["Done when we have", "Done when we've"],
+    "storyPoints": {"allowed": [1, 2, 3, 4, 5], "splitAbove": 5},
+}
 SKILLS_REPO_URL = os.environ.get("KIROCREW_SKILLS_REPO_URL", "").strip()
 SKILLS_REPO_REF = os.environ.get("KIROCREW_SKILLS_REPO_REF", "master").strip()
 SKILLS_REPO_SUBPATH = os.environ.get(
@@ -269,10 +275,13 @@ def merge_jira(records: list[dict[str, Any]], base_url: str) -> tuple[list[dict[
     values = dict(jira.get("values") or {})
     if values.get("baseUrl") != base_url:
         values["baseUrl"] = base_url
-        jira["values"] = values
-        org_apps["jira-crew"] = jira
-        organization["value"]["apps"] = org_apps
         changed = True
+    if values.get("teamStandard") != JIRA_TEAM_STANDARD:
+        values["teamStandard"] = json.loads(json.dumps(JIRA_TEAM_STANDARD))
+        changed = True
+    jira["values"] = values
+    org_apps["jira-crew"] = jira
+    organization["value"]["apps"] = org_apps
 
     outgoing.sort(key=lambda record: str(record.get("name") or ""))
     return outgoing, changed

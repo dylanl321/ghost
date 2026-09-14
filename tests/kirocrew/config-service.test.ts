@@ -82,6 +82,48 @@ test('bootstrap accepts pointer-bound provisioning controls', () => {
   assert.equal(records.length, 1)
 })
 
+test('organization validates the Jira team standard', () => {
+  const teamStandard = {
+    schemaVersion: 1,
+    voice: 'first-person-plural',
+    doneWhenPrefixes: ['Done when we have', "Done when we've"],
+    storyPoints: { allowed: [1, 2, 3, 4, 5], splitAbove: 5 }
+  }
+  const organization = {
+    name: 'kirocrew.organization',
+    type: 'setting' as const,
+    value: {
+      apps: {
+        'jira-crew': {
+          values: {
+            baseUrl: 'https://jira.example.test',
+            teamStandard
+          }
+        }
+      }
+    }
+  }
+  assert.equal(validateKiroCrewRecords([bootstrap, organization]).length, 2)
+  assert.throws(() => validateKiroCrewRecords([
+    bootstrap,
+    {
+      ...organization,
+      value: {
+        apps: {
+          'jira-crew': {
+            values: {
+              teamStandard: {
+                ...teamStandard,
+                storyPoints: { allowed: [1, 2, 3, 5, 8], splitAbove: 8 }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]), /invalid_literal|Invalid literal|Invalid input/)
+})
+
 test('secret-shaped non-secret fields and prohibited credentials are rejected', () => {
   assert.throws(() => validateKiroCrewRecords([
     bootstrap,
