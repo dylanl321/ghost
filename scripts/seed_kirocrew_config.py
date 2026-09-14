@@ -37,6 +37,10 @@ SKILLS_REPO_REF = os.environ.get("KIROCREW_SKILLS_REPO_REF", "master").strip()
 SKILLS_REPO_SUBPATH = os.environ.get(
     "KIROCREW_SKILLS_REPO_SUBPATH", "skills"
 ).strip().strip("/")
+SKILLS_SECRET_REF = os.environ.get(
+    "KIROCREW_SKILLS_SECRET_REF", "gitlab.skillsReadToken"
+).strip()
+SKILLS_TOKEN = os.environ.get("KIROCREW_SKILLS_TOKEN", "").strip()
 
 
 def aws(*arguments: str, input_text: str | None = None) -> str:
@@ -279,6 +283,8 @@ def merge_skills_sync(
     repo_url: str,
     ref: str,
     repo_subpath: str,
+    secret_ref: str,
+    token: str = "",
 ) -> tuple[list[dict[str, Any]], bool]:
     """Publish the organization skills source without replacing other records."""
 
@@ -294,6 +300,10 @@ def merge_skills_sync(
         )
     if not ref:
         raise ValueError("KIROCREW_SKILLS_REPO_REF must not be empty")
+    if not secret_ref or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", secret_ref):
+        raise ValueError("KIROCREW_SKILLS_SECRET_REF must be a valid record name")
+    if FORBIDDEN_SECRET_NAME.search(secret_ref):
+        raise ValueError("KIROCREW_SKILLS_SECRET_REF uses a prohibited credential name")
     parts = repo_subpath.replace("\\", "/").split("/")
     if not repo_subpath or any(part in ("", ".", "..") for part in parts):
         raise ValueError(
@@ -316,6 +326,7 @@ def merge_skills_sync(
         "repo_url": repo_url,
         "repo_subpath": repo_subpath,
         "ref": ref,
+        "secret_ref": secret_ref,
         "auto_remediate": True,
         "locked": False,
         "require_operator_confirm": False,
@@ -325,6 +336,23 @@ def merge_skills_sync(
     if changed:
         current["skills_sync"] = desired
         bootstrap["value"]["provisioning_controls"] = current
+    secret = next(
+        (record for record in outgoing if record.get("name") == secret_ref),
+        None,
+    )
+    if token:
+        if secret is None:
+            outgoing.append({"name": secret_ref, "type": "secret", "value": token})
+            changed = True
+        elif secret.get("type") != "secret":
+            raise ValueError("KIROCREW_SKILLS_SECRET_REF names a non-secret record")
+        elif secret.get("value") != token:
+            secret["value"] = token
+            changed = True
+    elif secret is None:
+        raise ValueError(
+            "KIROCREW_SKILLS_TOKEN is required until the named secret exists"
+        )
     outgoing.sort(key=lambda record: str(record.get("name") or ""))
     return outgoing, changed
 
@@ -413,6 +441,8 @@ def main() -> None:
                 SKILLS_REPO_URL,
                 SKILLS_REPO_REF,
                 SKILLS_REPO_SUBPATH,
+                SKILLS_SECRET_REF,
+                SKILLS_TOKEN,
             )
             changed = changed or skills_changed
         if not changed:
