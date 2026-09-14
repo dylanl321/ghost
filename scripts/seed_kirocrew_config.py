@@ -32,6 +32,7 @@ FORBIDDEN_SECRET_NAME = re.compile(
     re.IGNORECASE,
 )
 JIRA_BASE_URL = os.environ.get("KIROCREW_JIRA_BASE_URL", "").strip().rstrip("/")
+BASE_REVISION = int(os.environ.get("KIROCREW_BASE_REVISION", "0") or "0")
 JIRA_TEAM_STANDARD = {
     "schemaVersion": 1,
     "voice": "first-person-plural",
@@ -211,8 +212,8 @@ def decode_attribute(value: dict[str, Any]) -> Any:
     raise ValueError("DynamoDB item contains an unsupported attribute")
 
 
-def read_revision_records() -> list[dict[str, Any]]:
-    revision = current_revision()
+def read_revision_records(revision: int = 0) -> list[dict[str, Any]]:
+    revision = revision or current_revision()
     if revision <= 0:
         raise ValueError("Kiro Crew configuration has no current revision")
     key = json.dumps({
@@ -233,8 +234,25 @@ def read_revision_records() -> list[dict[str, Any]]:
     raw = response.get("Item", {}).get("records")
     records = decode_attribute(raw) if isinstance(raw, dict) else None
     if not isinstance(records, list) or not all(isinstance(record, dict) for record in records):
-        raise ValueError("current Kiro Crew revision has invalid records")
+        raise ValueError(f"Kiro Crew revision {revision} has invalid records")
     return records
+
+
+def jira_base_url_from_records(records: list[dict[str, Any]]) -> str:
+    organization = next(
+        (
+            record
+            for record in records
+            if record.get("name") == "kirocrew.organization"
+            and record.get("type") == "setting"
+        ),
+        {},
+    )
+    value = organization.get("value")
+    apps = value.get("apps") if isinstance(value, dict) else None
+    jira = apps.get("jira-crew") if isinstance(apps, dict) else None
+    values = jira.get("values") if isinstance(jira, dict) else None
+    return str(values.get("baseUrl") or "").strip().rstrip("/") if isinstance(values, dict) else ""
 
 
 def merge_jira(records: list[dict[str, Any]], base_url: str) -> tuple[list[dict[str, Any]], bool]:
@@ -438,11 +456,18 @@ def publish(records: list[dict[str, Any]]) -> int:
 def main() -> None:
     if ENVIRONMENT != "dev" and os.environ.get("ALLOW_KIROCREW_PRODUCTION_SEED") != "true":
         raise SystemExit("refusing to seed a non-dev environment")
-    if JIRA_BASE_URL or SKILLS_REPO_URL:
-        records = read_revision_records()
+    if BASE_REVISION or JIRA_BASE_URL or SKILLS_REPO_URL:
+        records = read_revision_records(BASE_REVISION)
         changed = False
-        if JIRA_BASE_URL:
-            records, jira_changed = merge_jira(records, JIRA_BASE_URL)
+        jira_base_url = JIRA_BASE_URL
+        if BASE_REVISION and not jira_base_url:
+            jira_base_url = jira_base_url_from_records(records)
+            if not jira_base_url:
+                raise ValueError(
+                    f"Kiro Crew revision {BASE_REVISION} has no Jira base URL"
+                )
+        if jira_base_url:
+            records, jira_changed = merge_jira(records, jira_base_url)
             changed = changed or jira_changed
         if SKILLS_REPO_URL:
             records, skills_changed = merge_skills_sync(
@@ -458,6 +483,13 @@ def main() -> None:
             print("Current Kiro Crew revision already contains the requested bindings")
             return
     else:
+        existing_revision = current_revision()
+        if existing_revision:
+            print(
+                f"Kiro Crew revision {existing_revision} already exists; "
+                "no bindings were requested"
+            )
+            return
         records = build_records(
             read_secret(BOOTSTRAP_SECRET),
             read_secret(PROFILE_SECRET),
