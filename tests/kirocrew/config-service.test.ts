@@ -62,6 +62,26 @@ test('configuration validates named records and bootstrap allowlist', () => {
   assert.equal(records.length, 3)
 })
 
+test('bootstrap accepts pointer-bound provisioning controls', () => {
+  const records = validateKiroCrewRecords([{
+    ...bootstrap,
+    value: {
+      ...bootstrap.value,
+      provisioning_controls: {
+        skills_sync: {
+          repo_url: 'https://git.example.test/org/ai-agent-skills.git',
+          repo_subpath: 'skills',
+          ref: 'master',
+          auto_remediate: true,
+          locked: false,
+          require_operator_confirm: false
+        }
+      }
+    }
+  }])
+  assert.equal(records.length, 1)
+})
+
 test('secret-shaped non-secret fields and prohibited credentials are rejected', () => {
   assert.throws(() => validateKiroCrewRecords([
     bootstrap,

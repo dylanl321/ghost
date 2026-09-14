@@ -37,6 +37,12 @@ const productSelection = z.union([
   z.boolean()
 ])
 
+const policyFlags = {
+  locked: z.boolean().optional(),
+  auto_remediate: z.boolean().optional(),
+  require_operator_confirm: z.boolean().optional()
+}
+
 export const bootstrapValueSchema = z.object({
   schemaVersion: z.literal(1).optional(),
   install: z.object({
@@ -80,6 +86,24 @@ export const bootstrapValueSchema = z.object({
     httpProxy: z.string().optional(),
     httpsProxy: z.string().optional(),
     noProxy: z.string().optional()
+  }).strict().optional(),
+  provisioning_controls: z.object({
+    skills_sync: z.object({
+      ...policyFlags,
+      repo_url: z.string().url().optional(),
+      repo_subpath: z.string().min(1).optional(),
+      ref: z.string().min(1).optional(),
+      secret_ref: z.string().regex(namePattern).optional()
+    }).strict().optional(),
+    config_hardening: z.object({
+      ...policyFlags,
+      keys: z.record(z.unknown()).optional()
+    }).strict().optional(),
+    channel_lockout: z.object({
+      ...policyFlags,
+      lock_channels: z.array(z.string()).optional(),
+      allow_channels: z.array(z.string()).optional()
+    }).strict().optional()
   }).strict().optional(),
   payload: z.object({
     revision: z.number().int().min(1),
