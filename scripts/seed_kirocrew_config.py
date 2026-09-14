@@ -32,6 +32,11 @@ FORBIDDEN_SECRET_NAME = re.compile(
     re.IGNORECASE,
 )
 JIRA_BASE_URL = os.environ.get("KIROCREW_JIRA_BASE_URL", "").strip().rstrip("/")
+SKILLS_REPO_URL = os.environ.get("KIROCREW_SKILLS_REPO_URL", "").strip()
+SKILLS_REPO_REF = os.environ.get("KIROCREW_SKILLS_REPO_REF", "master").strip()
+SKILLS_REPO_SUBPATH = os.environ.get(
+    "KIROCREW_SKILLS_REPO_SUBPATH", "skills"
+).strip().strip("/")
 
 
 def aws(*arguments: str, input_text: str | None = None) -> str:
@@ -269,6 +274,61 @@ def merge_jira(records: list[dict[str, Any]], base_url: str) -> tuple[list[dict[
     return outgoing, changed
 
 
+def merge_skills_sync(
+    records: list[dict[str, Any]],
+    repo_url: str,
+    ref: str,
+    repo_subpath: str,
+) -> tuple[list[dict[str, Any]], bool]:
+    """Publish the organization skills source without replacing other records."""
+
+    parsed = urlparse(repo_url)
+    if (
+        parsed.scheme != "https"
+        or not parsed.netloc
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        raise ValueError(
+            "KIROCREW_SKILLS_REPO_URL must be an HTTPS URL without credentials"
+        )
+    if not ref:
+        raise ValueError("KIROCREW_SKILLS_REPO_REF must not be empty")
+    parts = repo_subpath.replace("\\", "/").split("/")
+    if not repo_subpath or any(part in ("", ".", "..") for part in parts):
+        raise ValueError(
+            "KIROCREW_SKILLS_REPO_SUBPATH must be a safe repository-relative path"
+        )
+
+    outgoing = json.loads(json.dumps(records))
+    bootstrap = next(
+        (record for record in outgoing if record.get("name") == "kirocrew.bootstrap"),
+        None,
+    )
+    if (
+        not bootstrap
+        or bootstrap.get("type") != "setting"
+        or not isinstance(bootstrap.get("value"), dict)
+    ):
+        raise ValueError("current revision has no valid kirocrew.bootstrap record")
+
+    desired = {
+        "repo_url": repo_url,
+        "repo_subpath": repo_subpath,
+        "ref": ref,
+        "auto_remediate": True,
+        "locked": False,
+        "require_operator_confirm": False,
+    }
+    current = dict(bootstrap["value"].get("provisioning_controls") or {})
+    changed = current.get("skills_sync") != desired
+    if changed:
+        current["skills_sync"] = desired
+        bootstrap["value"]["provisioning_controls"] = current
+    outgoing.sort(key=lambda record: str(record.get("name") or ""))
+    return outgoing, changed
+
+
 def current_revision() -> int:
     key = json.dumps({
         "profileId": {"S": PROFILE_ID},
@@ -341,10 +401,22 @@ def publish(records: list[dict[str, Any]]) -> int:
 def main() -> None:
     if ENVIRONMENT != "dev" and os.environ.get("ALLOW_KIROCREW_PRODUCTION_SEED") != "true":
         raise SystemExit("refusing to seed a non-dev environment")
-    if JIRA_BASE_URL:
-        records, changed = merge_jira(read_revision_records(), JIRA_BASE_URL)
+    if JIRA_BASE_URL or SKILLS_REPO_URL:
+        records = read_revision_records()
+        changed = False
+        if JIRA_BASE_URL:
+            records, jira_changed = merge_jira(records, JIRA_BASE_URL)
+            changed = changed or jira_changed
+        if SKILLS_REPO_URL:
+            records, skills_changed = merge_skills_sync(
+                records,
+                SKILLS_REPO_URL,
+                SKILLS_REPO_REF,
+                SKILLS_REPO_SUBPATH,
+            )
+            changed = changed or skills_changed
         if not changed:
-            print("Current Kiro Crew revision already contains the Jira binding")
+            print("Current Kiro Crew revision already contains the requested bindings")
             return
     else:
         records = build_records(
