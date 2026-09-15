@@ -108,6 +108,15 @@ let cachedConfig: DynamoDBConfig | null = null
 let configLoadedAt: number | null = null
 const CONFIG_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
+// Throttle the "missing table key(s)" warning. The config reloads every 5
+// minutes, so an unchanged stale secret would otherwise emit the identical
+// warning ~288 times/day per process. Re-emit only when the missing-key
+// signature changes, or at most once per 6 hours, so the issue stays visible
+// without flooding CloudWatch.
+const MISSING_KEYS_WARN_INTERVAL = 6 * 60 * 60 * 1000 // 6 hours
+let lastMissingKeysSignature: string | null = null
+let lastMissingKeysWarnedAt: number | null = null
+
 /**
  * Get DynamoDB configuration from Secrets Manager
  */
@@ -422,14 +431,26 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
     }
 
     // Warn if the secret was missing keys the defaults supplied (signals a
-    // stale secret that should be refreshed), so the gap is observable.
+    // stale secret that should be refreshed), so the gap is observable. The
+    // fallback (merge over defaults) already happened above and is unchanged;
+    // this is purely observability. Throttle by signature so an unchanged
+    // stale secret does not re-warn on every 5-minute reload.
     const missingKeys = (Object.keys(envConfig) as (keyof DynamoDBConfig)[])
       .filter(k => !(k in secretsConfig))
     if (missingKeys.length > 0) {
-      logger.warn(
-        `DynamoDB config from secret was missing ${missingKeys.length} table key(s); ` +
-        `using env defaults for: ${missingKeys.join(', ')}`
-      )
+      const signature = missingKeys.join(',')
+      const now = Date.now()
+      const signatureChanged = signature !== lastMissingKeysSignature
+      const intervalElapsed = lastMissingKeysWarnedAt === null ||
+        (now - lastMissingKeysWarnedAt) >= MISSING_KEYS_WARN_INTERVAL
+      if (signatureChanged || intervalElapsed) {
+        logger.warn('DynamoDB config from secret was missing table key(s); using env defaults', {
+          missingKeyCount: missingKeys.length,
+          missingKeys
+        })
+        lastMissingKeysSignature = signature
+        lastMissingKeysWarnedAt = now
+      }
     }
 
     cachedConfig = mergedConfig

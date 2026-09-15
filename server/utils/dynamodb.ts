@@ -502,8 +502,17 @@ export async function batchPutItems(
     }
   }
   
-  logger.error(`Batch put completed: ${processedCount} processed, ${failedCount} failed`)
-  
+  // A completion with no failures is a normal success, not an error. Only log
+  // at error level when items were actually left unprocessed. Use a stable
+  // structured context (rather than interpolated values) so Logs Insights can
+  // aggregate, while keeping the searchable `Batch put completed` message.
+  const completionContext = { tableName, environment, processedCount, failedCount }
+  if (failedCount > 0) {
+    logger.error('Batch put completed', completionContext)
+  } else {
+    logger.info('Batch put completed', completionContext)
+  }
+
   return results
 }
 

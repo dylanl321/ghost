@@ -20,14 +20,27 @@
 
 import { createConsola, type LogObject } from 'consola'
 
-// Map Consola numeric levels to string names
+// Map Consola numeric levels to string names.
+// Consola 3 collapses several logger methods onto the same numeric level:
+//   0 -> fatal AND error   1 -> warn   2 -> log   3 -> info AND success
+//   4 -> debug             5 -> trace
+// Because fatal and error share level 0, we label 0 as `error` (not `fatal`)
+// so logger.error() is not misreported as fatal; likewise logger.warn()
+// (level 1) must surface as `warn`, and both `log`/`info` (levels 2/3) as
+// `info`. A missing level falls back to `info`.
 const LEVEL_NAMES: Record<number, string> = {
-  0: 'fatal',
-  1: 'error',
-  2: 'warn',
+  0: 'error',
+  1: 'warn',
+  2: 'info',
   3: 'info',
   4: 'debug',
   5: 'trace',
+}
+
+// Resolve a Consola numeric level to its reported string name, falling back to
+// `info` for any unexpected value. Exported for testing the mapping directly.
+export function levelName(level: number): string {
+  return LEVEL_NAMES[level] ?? 'info'
 }
 
 // Safely serialize a value, handling Error objects and circular references
@@ -46,7 +59,7 @@ function safeSerialize(value: unknown): unknown {
 // JSON reporter for production — writes one JSON line per log entry to stdout
 const jsonReporter = {
   log(logObj: LogObject) {
-    const level = LEVEL_NAMES[logObj.level] ?? 'info'
+    const level = levelName(logObj.level)
     const message = logObj.args
       .map(arg => (typeof arg === 'string' ? arg : JSON.stringify(safeSerialize(arg))))
       .join(' ')

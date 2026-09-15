@@ -70,8 +70,22 @@ export async function getAccountFromOrganizations(
 }
 
 /**
+ * Last-known-good in-memory cache of the full Organizations account list, keyed
+ * by environment. Populated only on a complete, successful pagination and used
+ * to survive transient throttling without returning a partial list.
+ */
+const _orgAccountsCache = new Map<AWSEnvironmentType, AccountInfo[]>()
+
+/**
  * Get all accounts from Organizations API
  * Used by: bulk operations in accounts-v2.ts
+ *
+ * ListAccounts is aggressively throttled (TooManyRequestsException /
+ * ThrottlingException). Each page is retried with bounded exponential backoff
+ * plus jitter. Because a partial pagination is indistinguishable from a
+ * truncated result, we never return a partial list as a success: if retries
+ * are exhausted mid-pagination we fall back to the last-known-good cache for
+ * this environment, or [] when no cache exists (preserving prior behaviour).
  */
 export async function getAllAccountsFromOrganizations(
   environment: AWSEnvironmentType = 'commercial'
@@ -81,17 +95,49 @@ export async function getAllAccountsFromOrganizations(
     return []
   }
 
+  const operation = 'organizations.listAccounts'
+  const maxAttempts = 4
+
   try {
     const orgAccountId = getOrganizationsAccountId(environment)
     const client = await getOrganizationsClient(environment, undefined, orgAccountId)
-    
+
     const { ListAccountsCommand } = await import('@aws-sdk/client-organizations')
     const accounts: AccountInfo[] = []
     let nextToken: string | undefined
-    
+
+    // Send one ListAccounts page, retrying only on throttling with bounded
+    // exponential backoff + full jitter. Non-throttle errors propagate.
+    const sendPageWithRetry = async (token: string | undefined) => {
+      let attempt = 0
+      for (;;) {
+        try {
+          return await client.send(new ListAccountsCommand({ NextToken: token }))
+        } catch (error: any) {
+          const isThrottled =
+            error?.name === 'TooManyRequestsException' ||
+            error?.name === 'ThrottlingException'
+          attempt++
+          if (!isThrottled || attempt >= maxAttempts) {
+            throw error
+          }
+          const backoffMs = Math.floor(Math.random() * Math.pow(2, attempt) * 200)
+          logger.warn('Organizations ListAccounts throttled; retrying', {
+            operation,
+            environment,
+            attempt,
+            maxAttempts,
+            errorName: error?.name,
+            backoffMs
+          })
+          await _sleep(backoffMs)
+        }
+      }
+    }
+
     do {
-      const response = await client.send(new ListAccountsCommand({ NextToken: nextToken }))
-      
+      const response = await sendPageWithRetry(nextToken)
+
       if (response.Accounts) {
         for (const account of response.Accounts) {
           if (account.Id && account.Name) {
@@ -108,13 +154,31 @@ export async function getAllAccountsFromOrganizations(
           }
         }
       }
-      
+
       nextToken = response.NextToken
     } while (nextToken)
-    
+
+    // Full pagination completed — refresh the last-known-good cache.
+    _orgAccountsCache.set(environment, accounts)
     return accounts
-  } catch (error) {
-    logger.error(`Failed to list accounts from Organizations (${environment}):`, error)
+  } catch (error: any) {
+    const cached = _orgAccountsCache.get(environment)
+    if (cached) {
+      logger.error('Failed to list accounts from Organizations; serving last-known-good cache', {
+        operation,
+        environment,
+        maxAttempts,
+        errorName: error?.name,
+        cachedCount: cached.length
+      })
+      return cached
+    }
+    logger.error('Failed to list accounts from Organizations; no cache available', {
+      operation,
+      environment,
+      maxAttempts,
+      errorName: error?.name
+    })
     return []
   }
 }

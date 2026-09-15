@@ -309,6 +309,37 @@ async function checkAWSEnvironment(environment: 'commercial' | 'govcloud') {
 }
 
 /**
+ * Fold an environment's dependency (DynamoDB / Organizations) accessibility
+ * into overall readiness. Previously only identity status affected health, so
+ * an environment with valid credentials but an inaccessible dependency could
+ * still report `healthy`. Only evaluated when identity is active (credential
+ * failures are already handled separately). Never downgrades an existing
+ * `unhealthy` status. Adds no new network calls — it inspects results already
+ * gathered by checkAWSEnvironment.
+ */
+function applyDependencyHealth(
+  environment: 'commercial' | 'govcloud',
+  envResult: Awaited<ReturnType<typeof checkAWSEnvironment>>,
+  healthData: any
+): void {
+  if (envResult.identity?.status !== 'active') return
+
+  if (!envResult.services.dynamodb.accessible) {
+    healthData.warnings.push(
+      `${environment} DynamoDB not accessible${envResult.services.dynamodb.error ? `: ${envResult.services.dynamodb.error}` : ''}`
+    )
+    if (healthData.status !== 'unhealthy') healthData.status = 'degraded'
+  }
+
+  if (!envResult.services.organizations.accessible) {
+    healthData.warnings.push(
+      `${environment} Organizations not accessible${envResult.services.organizations.error ? `: ${envResult.services.organizations.error}` : ''}`
+    )
+    if (healthData.status !== 'unhealthy') healthData.status = 'degraded'
+  }
+}
+
+/**
  * Format uptime to human-readable string
  */
 function formatUptime(seconds: number): string {
@@ -406,6 +437,8 @@ export default defineEventHandler(handleAsync(async (event) => {
       healthData.warnings.push('Commercial AWS credentials error')
       healthData.status = 'degraded'
     }
+
+    applyDependencyHealth('commercial', healthData.aws.commercial, healthData)
   }
 
   // Check govcloud environment
@@ -420,6 +453,8 @@ export default defineEventHandler(handleAsync(async (event) => {
       healthData.warnings.push('GovCloud AWS credentials error')
       healthData.status = 'degraded'
     }
+
+    applyDependencyHealth('govcloud', healthData.aws.govcloud, healthData)
   }
 
   // Check cache health
