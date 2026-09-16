@@ -209,7 +209,7 @@ export function assertRetainedWorkflowVersions(
  * (Requirement 18.14).
  */
 export function resolvePinnedWorkflowVersion(
-  retained: Map<string, Map<number, CollaborationWorkflowProfile>>,
+  retained: ReadonlyMap<string, ReadonlyMap<number, CollaborationWorkflowProfile>>,
   workflowProfileId: string,
   version: number
 ): CollaborationWorkflowProfile | undefined {

@@ -27,10 +27,15 @@ import {
   EVENT_SK_PREFIX,
   GSI1_PK,
   GSI1_SK,
+  GSI3_PK,
+  GSI3_SK,
   INVESTIGATION_BROWSE_INDEX,
   investigationMetaKey,
   investigationPartition,
   padSequence,
+  PENDING_MANIFEST_LIFECYCLE_INDEX,
+  pendingManifestLifecyclePartition,
+  pendingManifestLifecycleUpperBound,
   PRESENCE_SK_PREFIX,
   presencePartition,
   RUN_SK_PREFIX,
@@ -199,6 +204,39 @@ export class CollaborationAccessPatterns {
   /** All Artifact manifests in one Investigation. */
   queryArtifacts(scope: InvestigationScope): QueryDescriptor {
     return baseKeyQuery(this.tableName, investigationPartition(scope), ARTIFACT_SK_PREFIX)
+  }
+
+  /**
+   * Pending Artifact manifests in one Team_Space reserved at or before an
+   * instant, in reservation-time order. This is the abandoned-upload cleanup
+   * worker's read (task 4.3): a `Query` over the `PendingManifestLifecycle` GSI
+   * bounded by `reservedOnOrBefore`, never a `Scan` (Requirements 8.11, 7.12).
+   * Only pending manifests are indexed, so a Ready_Manifest can never be
+   * returned here. GSI reads are eventually consistent, which is acceptable: a
+   * just-finalized manifest that still lingers in the index is re-checked as
+   * ineligible by the worker before any removal.
+   */
+  queryPendingManifestsReservedOnOrBefore(
+    scope: SpaceScope,
+    reservedOnOrBefore: string,
+    options: { limit?: number } = {}
+  ): QueryDescriptor {
+    return {
+      op: 'Query',
+      tableName: this.tableName,
+      indexName: PENDING_MANIFEST_LIFECYCLE_INDEX,
+      keyConditionExpression: '#gpk = :gpk AND #gsk <= :hi',
+      expressionAttributeNames: { '#gpk': GSI3_PK, '#gsk': GSI3_SK },
+      expressionAttributeValues: marshall({
+        ':gpk': pendingManifestLifecyclePartition(scope),
+        ':hi': pendingManifestLifecycleUpperBound(reservedOnOrBefore)
+      }),
+      // GSIs cannot be strongly consistent.
+      consistentRead: false,
+      // Oldest reservations first.
+      scanIndexForward: true,
+      limit: options.limit
+    }
   }
 
   // -- Space-partition Queries (Change_Feed) --------------------------------

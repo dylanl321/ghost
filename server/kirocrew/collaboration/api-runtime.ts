@@ -33,7 +33,7 @@ import {
 import type { CollaborationFeedService } from './change-feed'
 import type { ArtifactService } from './artifact-service'
 import type { TeamSpaceAuthorizer } from './team-space-authorizer'
-import type { AuthorizeOptions } from './authorizer'
+import type { AuthorizeOptions, AdminAuthorizationResolver } from './authorizer'
 import { CollaborationAuthorizationError, notFound } from './errors'
 import type { SafeSpaceSummary } from './profile-projection'
 import type {
@@ -50,6 +50,7 @@ import type {
 import type { ArtifactEvidencePolicy } from './artifact-types'
 import type { SpaceScope, InvestigationScope } from './keys'
 import type { SubjectReference } from './subject'
+import type { HandoffOptions } from './checkpoint-types'
 
 // ---------------------------------------------------------------------------
 // Read/write ports the API surface depends on.
@@ -122,9 +123,54 @@ export interface CollaborationReadPort {
   listInvestigations(scope: SpaceScope, options: InvestigationListOptions): Promise<Page<unknown>>
   getInvestigation(scope: InvestigationScope): Promise<unknown | null>
   listEvents(scope: InvestigationScope, options: EventPageOptions): Promise<Page<unknown>>
-  readHandoff(scope: InvestigationScope): Promise<unknown | null>
+  /**
+   * Assemble the Handoff a continuing Operator receives: the Selected_Checkpoint,
+   * its Coverage_Watermark, the Events newer than that watermark up to a FIXED
+   * High_Water_Mark, and the first Evidence_Index page (Requirement 12.5, 16.1).
+   * When the newer Events or the Evidence_Index exceed one page, the assembled
+   * view carries a continuation cursor bound to the fixed mark + authorization
+   * scope (Requirement 12.6). `null` means the Investigation is unknown /
+   * off-scope, which the handler turns into a non-disclosing not-found.
+   */
+  readHandoff(scope: InvestigationScope, options?: HandoffOptions): Promise<unknown | null>
+  /**
+   * Follow a Handoff continuation cursor, returning the next ordered authorized
+   * page for the cursor's stream without skipping covered records
+   * (Requirement 12.7). A cursor bound to another scope or a tampered cursor
+   * raises a non-disclosing not-found (Requirement 12.8). Optional so a runtime
+   * without the Checkpoint/Handoff projection wired (disabled-first) simply does
+   * not expose continuation.
+   */
+  continueHandoff?(scope: InvestigationScope, cursor: string): Promise<unknown>
   /** The Team_Space Evidence_Policy the Artifact finalizer enforces. */
   evidencePolicyFor(spaceId: string): Promise<ArtifactEvidencePolicy>
+}
+
+/**
+ * The administrative deletion surface the admin route calls AFTER both the
+ * collaboration object authorization and the separate current Administrator
+ * authorization have passed (Requirement 4.10, 24.2). The concrete
+ * implementation is the GHOST_Admin_Service tombstone/cleanup state machine
+ * (task 4.4): it atomically writes a content-free Tombstone and deletion feed
+ * change before denying access, then schedules asynchronous physical cleanup.
+ * The API depends only on this narrow port so the authorization boundary is
+ * complete and testable now and the durable workflow plugs in later.
+ *
+ * `requestDeletion` returns only a safe, content-free acknowledgement (the
+ * accepted deletion Server_Sequence / a receipt id). It never returns object
+ * content, group ids, or storage detail. An unknown/foreign target is a
+ * non-disclosing not-found (thrown by the port or, before it is reached, by the
+ * object authorization the handler runs first).
+ */
+export interface AdminDeletionPort {
+  requestDeletion(scope: InvestigationScope): Promise<AdminDeletionAck>
+}
+
+/** Safe, content-free acknowledgement of an accepted permanent-deletion request. */
+export interface AdminDeletionAck {
+  investigationId: string
+  /** The Server_Sequence at which the Tombstone + deletion feed change committed. */
+  acceptedServerSequence?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -145,6 +191,19 @@ export interface CollaborationRuntime {
   presence: CollaborationPresenceService
   /** Safe published space summaries for the current identity's tenant. */
   listSafeSpaces(): Promise<SafeSpaceSummary[]>
+  /**
+   * The GHOST_Admin_Service deletion surface (task 4.4). Optional: when absent,
+   * permanent deletion is not provisioned and the admin route returns a
+   * non-disclosing not-found rather than revealing that deletion is unavailable
+   * (Requirement 22.1, 24.2).
+   */
+  admin?: AdminDeletionPort
+  /**
+   * Resolves separate current Administrator authorization (task 4.4). Optional:
+   * when absent, no request can satisfy the admin conjunction, so the admin
+   * route denies with a non-disclosing `forbidden` (Requirement 4.10).
+   */
+  adminAuthorization?: AdminAuthorizationResolver
   authorizeOptions?: AuthorizeOptions
 }
 
@@ -224,6 +283,8 @@ export function createCollaborationRuntime(parts: {
   artifacts: ArtifactService
   presence: CollaborationPresenceService
   listSafeSpaces: () => Promise<SafeSpaceSummary[]>
+  admin?: AdminDeletionPort
+  adminAuthorization?: AdminAuthorizationResolver
   authorizeOptions?: AuthorizeOptions
 }): CollaborationRuntime {
   return {
@@ -237,6 +298,8 @@ export function createCollaborationRuntime(parts: {
     artifacts: parts.artifacts,
     presence: parts.presence,
     listSafeSpaces: parts.listSafeSpaces,
+    admin: parts.admin,
+    adminAuthorization: parts.adminAuthorization,
     authorizeOptions: parts.authorizeOptions
   }
 }

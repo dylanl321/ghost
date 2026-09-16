@@ -120,6 +120,26 @@ export function authorizeResolvedToken(
 }
 
 /**
+ * Resolves whether the current request carries separate current Administrator
+ * authorization, WITHOUT the collaboration layer decoding the token or
+ * interpreting bearer claims. The concrete resolver is supplied by the
+ * GHOST_Admin_Service (task 4.4); it consults the existing configuration admin
+ * authority (current admin group / config admin scope) through the same stored
+ * identity/authorization context the GHOST_Token_Identity_Path already produced,
+ * and answers only a boolean. The collaboration boundary consumes the boolean
+ * and never a group id, admin list, or claim (Requirement 4.10, 24.2, 24.25).
+ *
+ * It is passed the already-authorized `CollaborationPrincipal` (so it can scope
+ * the admin decision to the same stored subject) and the raw `Authorization`
+ * header value UNCHANGED (so a resolver that re-consults the identity path is
+ * handed the opaque bearer, never a decoded token).
+ */
+export type AdminAuthorizationResolver = (
+  principal: CollaborationPrincipal,
+  authorization: string | undefined | null
+) => Promise<boolean> | boolean
+
+/**
  * Separate current Administrator authorization for permanent deletion
  * (Requirement 4.10, 24.25). Holding the Collaboration_Write_Scope is NOT
  * sufficient: the caller must present, in addition, the distinct configuration
@@ -130,6 +150,9 @@ export function authorizeResolvedToken(
  * The concrete Administrator authorization check (current admin group / config
  * admin scope) is supplied by the GHOST_Admin_Service in task 4.4; here we only
  * enforce that it is required in addition to a valid collaboration principal.
+ * The denial is a non-disclosing `forbidden`: it never reveals whether the
+ * missing predicate was the admin authority or something about the target
+ * object (Requirement 4.10, 24.2).
  */
 export function assertAdminDeletionAuthority(
   principal: CollaborationPrincipal,

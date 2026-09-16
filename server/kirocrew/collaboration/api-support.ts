@@ -272,8 +272,14 @@ export interface PresenceStore {
   listForSubject(scope: SpaceScope, subject: SubjectReference): Promise<PresenceLeaseRecord[]>
 }
 
-/** How long a renewed presence lease is valid, in ms (server-time expiry). */
-export const PRESENCE_LEASE_TTL_MS = 60 * 1000
+/**
+ * How long a renewed presence lease is valid, in ms (server-time expiry). A
+ * lease is current only before ninety seconds without renewal; at ninety
+ * seconds it is expired by server time and excluded from current presence even
+ * before storage TTL cleanup runs (Requirement 15.4, 15.13; design "Presence
+ * and recent activity": `expiresAt = lastSeenAt + 90 seconds`).
+ */
+export const PRESENCE_LEASE_TTL_MS = 90 * 1000
 
 /**
  * Reads and renews subject-keyed presence. Expiry is evaluated against a

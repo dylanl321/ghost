@@ -146,6 +146,19 @@ resource "aws_dynamodb_table" "records" {
     type = "S"
   }
 
+  # Pending Artifact manifest lifecycle GSI (Req 8.11, 7.12). Only `pending`
+  # manifests carry GSI3PK/GSI3SK; finalizing to `ready` clears them, so the
+  # abandoned-upload cleanup worker Queries this index by reservation age
+  # without a routine table scan and never sees a Ready_Manifest.
+  attribute {
+    name = "GSI3PK"
+    type = "S"
+  }
+  attribute {
+    name = "GSI3SK"
+    type = "S"
+  }
+
   global_secondary_index {
     name            = "SubjectLookup"
     hash_key        = "GSI1PK"
@@ -158,6 +171,26 @@ resource "aws_dynamodb_table" "records" {
     hash_key        = "GSI2PK"
     range_key       = "GSI2SK"
     projection_type = "ALL"
+  }
+
+  # Sparse index: only pending manifests are projected, keeping the cleanup
+  # Query small and scan-free (Req 8.11). KEYS_ONLY plus the projected key
+  # attributes is enough for the worker to locate each candidate and re-check
+  # eligibility via a strong direct read.
+  global_secondary_index {
+    name            = "PendingManifestLifecycle"
+    hash_key        = "GSI3PK"
+    range_key       = "GSI3SK"
+    projection_type = "INCLUDE"
+    non_key_attributes = [
+      "tenantId",
+      "spaceId",
+      "investigationId",
+      "artifactId",
+      "state",
+      "reservedAt",
+      "unreferenced",
+    ]
   }
 
   # Server-side TTL sweeps expired Presence_Leases. Queries still filter

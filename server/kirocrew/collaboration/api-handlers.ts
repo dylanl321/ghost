@@ -36,7 +36,8 @@ import {
   reserveRunBodySchema,
   subjectReferenceSchema
 } from './api-schemas'
-import { CollaborationAuthorizationError } from './errors'
+import { CollaborationAuthorizationError, notFound } from './errors'
+import { assertAdminDeletionAuthority } from './authorizer'
 import { canonicalPayloadHash } from './repository'
 import { objectOp, parsePageSize, spaceReadOp, spaceWriteOp } from './api-support'
 import type { RouteContext, RouteHandler, RouteResult } from './api-runtime'
@@ -274,6 +275,66 @@ export const patchInvestigation: RouteHandler = async (ctx): Promise<RouteResult
 }
 
 // ---------------------------------------------------------------------------
+// DELETE /spaces/{space}/investigations/{id}  (Administrator permanent deletion)
+// ---------------------------------------------------------------------------
+
+/**
+ * GHOST_Admin_Service permanent-deletion boundary (Requirement 4.10, 24.2).
+ *
+ * Authorization is an explicit conjunction, applied in a non-disclosing order:
+ *
+ *   1. Collaboration object authorization — the caller must be a current member
+ *      whose write scope reaches this space, and the target Investigation must
+ *      be contained in this space. An unknown/foreign/off-tenant target or a
+ *      non-member fails here as a non-disclosing not-found/forbidden, exactly as
+ *      every other object route (Requirement 4.7, 4.11), so the deletion route
+ *      never becomes a stronger existence oracle than a normal read.
+ *   2. Separate current Administrator authorization — holding the
+ *      Collaboration_Write_Scope is NOT sufficient. The GHOST_Admin_Service
+ *      resolver must independently confirm current admin authority
+ *      (Requirement 4.10, 24.25). A missing resolver or a negative answer is a
+ *      non-disclosing `forbidden` — indistinguishable from lacking any other
+ *      predicate.
+ *
+ * Only after BOTH pass is the deletion handed to the admin port, which
+ * atomically writes a content-free Tombstone + deletion feed change before
+ * denying access (the durable state machine is task 4.4). The response carries
+ * only a safe, content-free acknowledgement (Requirement 24.2). When the admin
+ * surface is not provisioned the route is a non-disclosing not-found (disabled
+ * first, Requirement 22.1).
+ */
+export const deleteInvestigation: RouteHandler = async (ctx): Promise<RouteResult> => {
+  const spaceId = requireParam(ctx, 'space')
+  const investigationId = requireParam(ctx, 'id')
+
+  // (1) Collaboration object authorization. This proves identity, current
+  // membership, and space containment WITHOUT disclosing which predicate failed
+  // for a caller who is not authorized (Requirement 4.7, 4.11).
+  const { principal } = await ctx.runtime.api.authorize(ctx.authorization, objectOp('write', spaceId))
+
+  // Disabled-first: no admin surface provisioned => non-disclosing not-found so
+  // the route does not reveal that deletion exists but is unavailable
+  // (Requirement 22.1, 24.2).
+  if (!ctx.runtime.admin) throw notFound()
+
+  // (2) Separate current Administrator authorization. The resolver is handed the
+  // authorized principal and the RAW Authorization header (never decoded here);
+  // it answers only a boolean (Requirement 4.10, 24.25). Absent resolver or a
+  // negative answer is a non-disclosing forbidden.
+  const isAdmin = ctx.runtime.adminAuthorization
+    ? await ctx.runtime.adminAuthorization(principal, ctx.authorization)
+    : false
+  assertAdminDeletionAuthority(principal, isAdmin)
+
+  const ack = await ctx.runtime.admin.requestDeletion({
+    tenantId: principal.subject.tenantId,
+    spaceId,
+    investigationId
+  })
+  return { status: 202, body: ack }
+}
+
+// ---------------------------------------------------------------------------
 // POST /spaces/{space}/investigations/{id}/runs  (reserve current Run)
 // ---------------------------------------------------------------------------
 
@@ -385,14 +446,37 @@ export const publishCheckpoint: RouteHandler = async (ctx): Promise<RouteResult>
 // GET /spaces/{space}/investigations/{id}/handoff
 // ---------------------------------------------------------------------------
 
+/**
+ * Return the cited Handoff (Requirement 12.5, 16.1). When a `cursor` query param
+ * is present the request FOLLOWS a Handoff continuation cursor instead of
+ * assembling a fresh view (Requirement 12.6, 12.7): the cursor already fixes the
+ * High_Water_Mark, so the next ordered page is returned bound to that same mark.
+ * A cursor bound to another scope or tampered with is a non-disclosing not-found
+ * (Requirement 12.8). Otherwise the first view is assembled with clamped page
+ * sizes (default 50 / maximum 200).
+ */
 export const readHandoff: RouteHandler = async (ctx): Promise<RouteResult> => {
   const spaceId = requireParam(ctx, 'space')
   const investigationId = requireParam(ctx, 'id')
   const { principal } = await ctx.runtime.api.authorize(ctx.authorization, objectOp('read', spaceId))
-  const handoff = await ctx.runtime.reads.readHandoff({
-    tenantId: principal.subject.tenantId,
-    spaceId,
-    investigationId
+  const scope = { tenantId: principal.subject.tenantId, spaceId, investigationId }
+
+  // Following a continuation cursor: the fixed High_Water_Mark and stream are
+  // carried inside the opaque cursor (Requirement 12.6, 12.7).
+  const cursor = ctx.query.cursor
+  if (cursor) {
+    if (!ctx.runtime.reads.continueHandoff) {
+      // Continuation is not provisioned in this runtime; do not disclose that a
+      // handoff cursor could otherwise be followed (Requirement 12.8, 22.1).
+      throw new CollaborationAuthorizationError({ code: 'not_found', safeMessage: 'The requested collaboration resource was not found.', retryable: false })
+    }
+    const page = await ctx.runtime.reads.continueHandoff(scope, cursor)
+    return { status: 200, body: page }
+  }
+
+  const handoff = await ctx.runtime.reads.readHandoff(scope, {
+    eventPageSize: parsePageSize(ctx.query.eventPageSize),
+    evidencePageSize: parsePageSize(ctx.query.evidencePageSize)
   })
   if (!handoff) {
     throw new CollaborationAuthorizationError({ code: 'not_found', safeMessage: 'The requested collaboration resource was not found.', retryable: false })

@@ -29,7 +29,14 @@
  * without any AWS dependency.
  */
 
-import type { InvestigationScope } from './keys'
+import type { DynamoDBClient } from '@aws-sdk/client-dynamodb'
+import type { S3Client } from '@aws-sdk/client-s3'
+import type { InvestigationScope, SpaceScope } from './keys'
+import {
+  DynamoAbandonedUploadLister,
+  DynamoWorkerClaimStore,
+  S3AndRecordAbandonedUploadRemover
+} from './lifecycle-worker-adapters'
 
 /** Seven days in milliseconds — the abandonment threshold (Requirement 8.11). */
 export const ABANDONED_UPLOAD_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
@@ -434,4 +441,40 @@ export class InMemoryAbandonedUploads implements AbandonedUploadLister, Abandone
   hasCandidate(scope: InvestigationScope, artifactId: string): boolean {
     return this.candidates.has(this.key(scope, artifactId))
   }
+}
+
+// ---------------------------------------------------------------------------
+// Production wiring factory.
+// ---------------------------------------------------------------------------
+
+/** Everything the production worker needs to reach DynamoDB and S3. */
+export interface AbandonedUploadWorkerDeps {
+  dynamo: DynamoDBClient
+  s3: S3Client
+  /** The dedicated Cloud_Record_Store table (task 3.1). */
+  tableName: string
+  /** The dedicated versioned Object_Store bucket (task 3.1). */
+  bucket: string
+  /** The enabled Team_Spaces to sweep (from the published Organization_Profile). */
+  spaces: readonly SpaceScope[]
+}
+
+/**
+ * Assemble the production {@link AbandonedUploadCleanupWorker} bound to the
+ * DynamoDB `PendingManifestLifecycle` GSI (lister + durable claim) and the
+ * versioned S3 Object_Store (version deletion). This is what the process the
+ * EventBridge schedule invokes constructs and calls `sweep()` on; it has no
+ * dashboard, browser, or report-scheduler dependency (Requirement 20.12).
+ */
+export function createAbandonedUploadCleanupWorker(
+  deps: AbandonedUploadWorkerDeps,
+  config: AbandonedUploadWorkerConfig = {}
+): AbandonedUploadCleanupWorker {
+  const lister = new DynamoAbandonedUploadLister(deps.dynamo, deps.tableName, deps.spaces)
+  const remover = new S3AndRecordAbandonedUploadRemover(deps.dynamo, deps.s3, {
+    tableName: deps.tableName,
+    bucket: deps.bucket
+  })
+  const claims = new DynamoWorkerClaimStore(deps.dynamo, { tableName: deps.tableName })
+  return new AbandonedUploadCleanupWorker(lister, remover, claims, config)
 }

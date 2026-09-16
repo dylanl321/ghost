@@ -336,6 +336,15 @@ export class CollaborationRepository {
     const replay = await this.replayFromIdempotency(invScope, command.operationId, payloadHash)
     if (replay) return replay
 
+    // Archived Investigations are read-only: a new Run reservation is a
+    // contribution and is rejected without altering archived history until an
+    // explicit reopen (Requirement 18.8, 18.9). This runs AFTER the Operation_ID
+    // replay so a reservation acknowledged before archival still returns its
+    // original acknowledgement, and BEFORE any Server_Sequence is allocated so a
+    // rejected contribution never advances state. Archive is orthogonal to Stage
+    // (Requirement 18.12), so the guard keys on `archived` alone.
+    await this.rejectIfArchived(invScope)
+
     return this.withSequenceRetry(scope, async (sequence, expectedCurrent) => {
       const runId = this.clock.newRunId()
       const nowIso = this.clock.now().toISOString()
@@ -418,6 +427,16 @@ export class CollaborationRepository {
         return finish.responseProjection
       }
     }
+
+    // Archived Investigations are read-only: appending a new Event is a
+    // contribution and is rejected without altering archived history until an
+    // explicit reopen (Requirement 18.8, 18.9). This runs AFTER both the
+    // Operation_ID replay and the `(Investigation_ID, Check_ID)` finish replay so
+    // a contribution acknowledged before archival still returns its original
+    // acknowledgement, and BEFORE any Server_Sequence is allocated so a rejected
+    // contribution never advances state or writes a Change_Feed entry. Archive is
+    // orthogonal to Stage (Requirement 18.12), so the guard keys on `archived`.
+    await this.rejectIfArchived(invScope)
 
     return this.withSequenceRetry(scope, async (sequence, expectedCurrent) => {
       const eventId = this.clock.newEventId()
@@ -825,6 +844,26 @@ export class CollaborationRepository {
     const found = await this.store.get(investigationMetaKey(scope))
     if (!found) return null
     return found as unknown as InvestigationRecord
+  }
+
+  /**
+   * Reject a contribution (Run reservation, Event append) that targets an
+   * Archived_Investigation, without altering archived history (Requirement 18.8,
+   * 18.9). Archived work is read-only until an authorized Operator explicitly
+   * reopens it (Requirement 18.10); reopen restores contribution under the
+   * pinned Workflow_Profile via `patchInvestigation`. Archive is orthogonal to
+   * Stage (Requirement 18.12), so this keys on `archived` alone and does not
+   * consult the workflow. A missing Investigation is treated non-disclosingly as
+   * a conflict rather than revealing existence (Requirement 24.2).
+   */
+  private async rejectIfArchived(scope: InvestigationScope): Promise<void> {
+    const current = await this.readInvestigation(scope)
+    if (!current) {
+      throw conflict('This Investigation could not accept the contribution.')
+    }
+    if (current.archived) {
+      throw conflict('This Investigation is archived and cannot accept contributions until it is reopened.')
+    }
   }
 
   private async readCreationLookup(

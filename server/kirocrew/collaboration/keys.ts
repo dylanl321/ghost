@@ -59,9 +59,20 @@ export const GSI1_PK = 'gsi1pk' as const
 export const GSI1_SK = 'gsi1sk' as const
 export const GSI2_PK = 'gsi2pk' as const
 export const GSI2_SK = 'gsi2sk' as const
+export const GSI3_PK = 'gsi3pk' as const
+export const GSI3_SK = 'gsi3sk' as const
 
 export const SUBJECT_LOOKUP_INDEX = 'SubjectLookup' as const
 export const INVESTIGATION_BROWSE_INDEX = 'InvestigationBrowse' as const
+/**
+ * Index over `pending` Artifact manifests, ordered by reservation time. The
+ * abandoned-upload cleanup worker (task 4.3) Queries this to find reservations
+ * older than the seven-day abandonment threshold WITHOUT a routine table scan
+ * (Requirements 8.11, 7.12). Only pending manifests carry the index attributes;
+ * finalizing a manifest to `ready` (task 4.2) clears them, so a Ready_Manifest
+ * never appears in this index and is never a cleanup candidate.
+ */
+export const PENDING_MANIFEST_LIFECYCLE_INDEX = 'PendingManifestLifecycle' as const
 
 /**
  * Structural delimiter between key segments. Component values are escaped (see
@@ -224,6 +235,42 @@ export function artifactKey(scope: InvestigationScope, artifactId: string): { pk
 
 /** SK prefix selecting every Artifact manifest in one Investigation. */
 export const ARTIFACT_SK_PREFIX = `ARTIFACT${DELIM}`
+
+/**
+ * The GSI3 (PendingManifestLifecycle) partition value for a Team_Space's
+ * pending Artifact manifests. It embeds the Tenant and Team_Space so the
+ * cleanup Query stays scope-contained (Requirement 7.2) and one Query only ever
+ * sees one space's pending reservations.
+ */
+export function pendingManifestLifecyclePartition(scope: SpaceScope): string {
+  return key('PENDINGART', scope.tenantId, scope.spaceId)
+}
+
+/**
+ * Derive the GSI3 attributes a `pending` Artifact manifest item must carry so
+ * the abandoned-upload cleanup worker can Query it by reservation age. The sort
+ * key is `reservedAt#artifactId`: ISO-8601 timestamps sort lexically in time
+ * order, and appending the opaque `artifactId` keeps the key unique when two
+ * reservations share a timestamp. A manifest omits these attributes once it is
+ * `ready`/`validation-failed`, which removes it from the index.
+ */
+export function pendingManifestLifecycleAttributes(input: {
+  scope: SpaceScope
+  reservedAt: string
+  artifactId: string
+}): { [GSI3_PK]: string; [GSI3_SK]: string } {
+  return {
+    [GSI3_PK]: pendingManifestLifecyclePartition(input.scope),
+    [GSI3_SK]: `${input.reservedAt}${DELIM}${encodeComponent(input.artifactId)}`
+  }
+}
+
+/** The GSI3 sort-key upper bound (inclusive) for reservations at or before an instant. */
+export function pendingManifestLifecycleUpperBound(reservedOnOrBefore: string): string {
+  // Any artifactId suffix sorts before the max code point, so appending it
+  // makes the bound inclusive of every reservation stamped at this instant.
+  return `${reservedOnOrBefore}${DELIM}\uffff`
+}
 
 /** Per-operation idempotency record scoped to an Investigation. */
 export function idempotencyKey(scope: InvestigationScope, operationId: string): { pk: string; sk: string } {
