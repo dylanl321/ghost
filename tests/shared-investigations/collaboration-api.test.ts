@@ -45,6 +45,7 @@ import {
 } from '../../server/kirocrew/collaboration/api-runtime.ts'
 import {
   createInvestigation,
+  deleteInvestigation,
   getInvestigation,
   listInvestigations,
   listSpaces,
@@ -53,6 +54,8 @@ import {
   resolveCreationOperation,
   creationPayloadHash
 } from '../../server/kirocrew/collaboration/api-handlers.ts'
+import type { AdminDeletionPort } from '../../server/kirocrew/collaboration/api-runtime.ts'
+import type { AdminAuthorizationResolver } from '../../server/kirocrew/collaboration/authorizer.ts'
 import { TeamSpaceAuthorizer } from '../../server/kirocrew/collaboration/team-space-authorizer.ts'
 import { CollaborationFeedService, FeedCursorCodec, InMemoryChangeFeedStore } from '../../server/kirocrew/collaboration/change-feed.ts'
 import { ArtifactService, InMemoryArtifactManifestStore } from '../../server/kirocrew/collaboration/artifact-service.ts'
@@ -200,6 +203,8 @@ function buildRuntime(options: {
   member?: boolean
   spaceEnabled?: boolean
   presence?: CollaborationPresenceService
+  admin?: AdminDeletionPort
+  adminAuthorization?: AdminAuthorizationResolver
 } = {}) {
   const identityPath = fakeIdentityPath(
     {
@@ -244,6 +249,8 @@ function buildRuntime(options: {
       artifacts,
       presence: options.presence ?? new CollaborationPresenceService(new InMemoryPresenceStore()),
       listSafeSpaces: async () => [{ spaceId: SPACE, label: 'Pilot', capabilities: ['read'] }],
+      admin: options.admin,
+      adminAuthorization: options.adminAuthorization,
       authorizeOptions: { resourceAudience: RESOURCE_AUDIENCE, identityPath }
     })
   }
@@ -511,4 +518,101 @@ test('presence query omits a subject the caller is not authorized for (non-discl
   })
   const rows = await presence.query({ tenantId: TENANT, spaceId: SPACE }, { subjects: [subject] }, () => false)
   assert.equal(rows.length, 0)
+})
+
+// ---------------------------------------------------------------------------
+// Route: DELETE /spaces/{space}/investigations/{id}  (Administrator deletion).
+//
+// Verifies the task 2.4 boundary: permanent deletion is authorized as the
+// conjunction of (1) collaboration object authorization and (2) separate current
+// Administrator authorization, and every denial is non-disclosing
+// (Requirement 4.10, 24.2, 24.25).
+// ---------------------------------------------------------------------------
+
+/** A recording admin deletion port that returns a safe, content-free ack. */
+function recordingAdminPort(): AdminDeletionPort & { calls: unknown[] } {
+  const calls: unknown[] = []
+  return {
+    calls,
+    async requestDeletion(scope) {
+      calls.push(scope)
+      return { investigationId: scope.investigationId, acceptedServerSequence: 42 }
+    }
+  }
+}
+
+const DELETE_REQUEST = { params: { space: SPACE, id: 'inv-1' } }
+
+test('DELETE investigation accepts a current member holding write + admin authority', async () => {
+  const admin = recordingAdminPort()
+  const { runtime } = buildRuntime({ admin, adminAuthorization: () => true })
+  const result = await run(deleteInvestigation, runtime, request(DELETE_REQUEST))
+  assert.equal(result.status, 202)
+  assert.deepEqual(result.body, { investigationId: 'inv-1', acceptedServerSequence: 42 })
+  assert.equal(admin.calls.length, 1)
+})
+
+test('DELETE investigation forbids a write-scoped member WITHOUT admin authority (non-disclosing)', async () => {
+  const admin = recordingAdminPort()
+  const { runtime } = buildRuntime({ admin, adminAuthorization: () => false })
+  const result = await run(deleteInvestigation, runtime, request(DELETE_REQUEST))
+  assert.equal(result.status, 403)
+  assert.equal((result.body as { code: string }).code, 'forbidden')
+  // The admin port is never reached when the admin conjunction fails.
+  assert.equal(admin.calls.length, 0)
+})
+
+test('DELETE investigation forbids when no admin resolver is provisioned', async () => {
+  const admin = recordingAdminPort()
+  const { runtime } = buildRuntime({ admin })
+  const result = await run(deleteInvestigation, runtime, request(DELETE_REQUEST))
+  assert.equal(result.status, 403)
+  assert.equal((result.body as { code: string }).code, 'forbidden')
+  assert.equal(admin.calls.length, 0)
+})
+
+test('DELETE investigation is a non-disclosing not-found when the admin surface is unprovisioned', async () => {
+  // A write-scoped current member, but no admin deletion port (disabled-first).
+  const { runtime } = buildRuntime({ adminAuthorization: () => true })
+  const result = await run(deleteInvestigation, runtime, request(DELETE_REQUEST))
+  assert.equal(result.status, 404)
+  assert.equal((result.body as { code: string }).code, 'not_found')
+})
+
+test('DELETE investigation denies a reader (write scope required) before any admin check', async () => {
+  const admin = recordingAdminPort()
+  const { runtime } = buildRuntime({ admin, adminAuthorization: () => true })
+  const result = await run(deleteInvestigation, runtime, request({ ...DELETE_REQUEST, authorization: 'Bearer reader-token' }))
+  assert.equal(result.status, 403)
+  assert.equal(admin.calls.length, 0)
+})
+
+test('DELETE investigation fails closed for a non-member with a non-disclosing denial', async () => {
+  const admin = recordingAdminPort()
+  const { runtime } = buildRuntime({ member: false, admin, adminAuthorization: () => true })
+  const result = await run(deleteInvestigation, runtime, request(DELETE_REQUEST))
+  assert.equal(result.status, 403)
+  assert.equal(admin.calls.length, 0)
+})
+
+test('DELETE investigation on a disabled space is a non-disclosing not-found', async () => {
+  const admin = recordingAdminPort()
+  const { runtime } = buildRuntime({ spaceEnabled: false, admin, adminAuthorization: () => true })
+  const result = await run(deleteInvestigation, runtime, request(DELETE_REQUEST))
+  assert.equal(result.status, 404)
+  assert.equal((result.body as { code: string }).code, 'not_found')
+  assert.equal(admin.calls.length, 0)
+})
+
+// Session identity is the stored GHOST subject; a gateway actor cannot override it.
+test('collaboration session uses verified identity and rejects config-only grants', async () => {
+  const { readCollaborationSession } = await import('../../server/kirocrew/collaboration/api-handlers')
+  const { runtime } = buildRuntime()
+  const accepted = await run(readCollaborationSession, runtime, request({
+    authorization: 'Bearer reader-token', query: { actor: 'other-operator' }
+  }))
+  assert.equal(accepted.status, 200)
+  assert.deepEqual(accepted.body, { tenantId: TENANT, subjectObjectId: 'oid-1' })
+  const denied = await run(readCollaborationSession, runtime, request({ authorization: 'Bearer config-only-token' }))
+  assert.equal(denied.status, 403)
 })

@@ -712,3 +712,12 @@ export function creationPayloadHash(body: z.infer<typeof createInvestigationBody
 
 /** Re-export the subject schema so route adapters can validate params if needed. */
 export { subjectReferenceSchema }
+
+/** Gateway partition identity comes only from GHOST's protected token path. */
+export const readCollaborationSession: RouteHandler = async ctx => {
+  const principal = await ctx.runtime.api.authorizeIdentity(ctx.authorization, 'read')
+  return {
+    status: 200,
+    body: { tenantId: principal.subject.tenantId, subjectObjectId: principal.subject.entraObjectId }
+  }
+}
