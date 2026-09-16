@@ -302,6 +302,12 @@ resource "aws_ecs_task_definition" "main" {
           value = aws_dynamodb_table.oauth_artifacts.name
         },
         {
+          # Development clients share corporate egress IPs. Keep a bounded
+          # registration quota without exhausting it after ten setup attempts.
+          name  = "GHOST_OAUTH_REGISTRATION_RATE_LIMIT_PER_HOUR"
+          value = var.env == "dev" ? "120" : "10"
+        },
+        {
           name  = "GHOST_KIROCREW_RESOURCE_URL"
           value = var.env == "prod" ? "https://ghost-aws.gd-ms.com/api/kirocrew" : "https://ghost-aws-dev.gd-ms.com/api/kirocrew"
         },
