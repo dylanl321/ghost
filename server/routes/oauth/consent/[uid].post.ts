@@ -15,6 +15,39 @@ interface InteractionBody {
   action: 'details' | 'login' | 'approve' | 'deny'
 }
 
+interface OidcLikeError {
+  name?: unknown
+  error?: unknown
+  error_description?: unknown
+  message?: unknown
+  cause?: unknown
+}
+
+// Detects the oidc-provider "interaction session missing/expired" failure that
+// interactionDetails throws when the interaction cookie is gone (expired session,
+// or the client replayed a stale consent URL). Walks the cause chain and matches
+// on the stable error shape so we do not import oidc-provider internals.
+export function isExpiredInteractionSessionError(error: unknown): boolean {
+  const seen = new Set<unknown>()
+  let current: unknown = error
+  while (current && typeof current === 'object' && !seen.has(current)) {
+    seen.add(current)
+    const candidate = current as OidcLikeError
+    const name = typeof candidate.name === 'string' ? candidate.name : ''
+    const code = typeof candidate.error === 'string' ? candidate.error : ''
+    const description = [candidate.error_description, candidate.message]
+      .filter((value): value is string => typeof value === 'string')
+      .join(' ')
+      .toLowerCase()
+    const mentionsMissingSession = description.includes('interaction session')
+      || description.includes('session id cookie not found')
+    if (name === 'SessionNotFound') return true
+    if (code === 'invalid_request' && mentionsMissingSession) return true
+    current = candidate.cause
+  }
+  return false
+}
+
 export function requestedGhostResourceScopes(
   params: { scope?: unknown; resource?: unknown },
   missingResourceScopes: Record<string, string[]> | undefined,
@@ -114,7 +147,29 @@ async function getAuthenticatedIdentity(event: H3Event): Promise<{ identity: Gho
 export default defineEventHandler(async event => {
   const body = await readBody<InteractionBody>(event)
   const provider = await getOAuthProvider()
-  const details = await provider.interactionDetails(event.node.req, event.node.res)
+  let details: Awaited<ReturnType<typeof provider.interactionDetails>>
+  try {
+    details = await provider.interactionDetails(event.node.req, event.node.res)
+  } catch (error) {
+    if (isExpiredInteractionSessionError(error)) {
+      logger.warn('[MCP OAuth] Interaction session missing or expired', {
+        route: '/oauth/consent/:uid',
+        action: body.action,
+        error: 'invalid_request',
+        reason: 'interaction_session_not_found'
+      })
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Authorization session expired. Restart authorization from your client.',
+        message: 'Authorization session expired. Restart authorization from your client.'
+      })
+    }
+    logger.error('[MCP OAuth] Failed to load interaction details', {
+      route: '/oauth/consent/:uid',
+      action: body.action
+    })
+    throw error
+  }
   const client = await provider.Client.find(String(details.params.client_id))
   const prompt = details.prompt.name
 
