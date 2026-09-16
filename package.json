@@ -33,6 +33,9 @@
     "test:kirocrew": "tsx --test tests/kirocrew/*.test.ts",
     "test:vmaas": "tsx --test tests/vmaas/*.test.ts",
     "test:api": "tsx --test tests/api/*.test.ts",
+    "test:shared-investigations": "tsx --test tests/shared-investigations/*.test.ts",
+    "contract:shared-investigations:sync": "tsx tests/shared-investigations/sync-contract.ts",
+    "contract:shared-investigations:check": "tsx tests/shared-investigations/sync-contract.ts --check",
     "test:budget-recipients": "tsx --test server/utils/__tests__/manual-budget-alert-recipients.test.ts",
     "changelog:generate": "tsx scripts/generate-changelog.ts"
   },

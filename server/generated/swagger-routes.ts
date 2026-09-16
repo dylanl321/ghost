@@ -14,6 +14,7 @@ const documentedRouteLoaders = [
   () => import('../api/accounts/lookup.post'),
   () => import('../api/accounts/sync.post'),
   () => import('../api/accounts/update.post'),
+  () => import('../api/admin/kirocrew/health.get'),
   () => import('../api/ai-usage/cost-drivers.get'),
   () => import('../api/ai-usage/details.get'),
   () => import('../api/ai-usage/error-causes.get'),

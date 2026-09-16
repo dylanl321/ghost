@@ -1,0 +1,4 @@
+{
+  "status": "ready",
+  "accessToken": "synthetic-token-should-never-be-in-status"
+}

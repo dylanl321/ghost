@@ -17,8 +17,8 @@
           variant="ghost"
           size="sm"
           :icon="sidebarCollapsed ? 'i-heroicons-chevron-right' : 'i-heroicons-chevron-left'"
-          @click="toggleSidebar"
           :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+          @click="toggleSidebar"
         />
       </div>
 
@@ -52,8 +52,8 @@
           variant="ghost"
           icon="i-heroicons-magnifying-glass"
           size="sm"
-          @click="expandAndFocusSearch"
           title="Search panels"
+          @click="expandAndFocusSearch"
         />
 
         <!-- Search Results Dropdown -->
@@ -241,12 +241,12 @@ function handleSearchKeydown(event: KeyboardEvent) {
       event.preventDefault()
       selectedIndex.value = Math.max(selectedIndex.value - 1, 0)
       break
-    case 'Enter':
+    case 'Enter': {
       event.preventDefault()
-      if (filteredPanels.value[selectedIndex.value]) {
-        selectPanel(filteredPanels.value[selectedIndex.value])
-      }
+      const selectedPanel = filteredPanels.value[selectedIndex.value]
+      if (selectedPanel) selectPanel(selectedPanel)
       break
+    }
     case 'Escape':
       event.preventDefault()
       clearSearch()
@@ -322,7 +322,7 @@ const categories = [
     children: [
       { label: 'Personal API Access', icon: 'i-heroicons-key', to: '/settings/api-access' },
       { label: 'Site Config', icon: 'i-heroicons-cog', to: '/admin/configuration?tab=site-config' },
-      { label: 'Kiro Crew Configuration', icon: 'i-heroicons-adjustments-horizontal', to: '/admin/kirocrew' }
+      { label: 'Kiro Crew Health & Configuration', icon: 'i-heroicons-adjustments-horizontal', to: '/admin/kirocrew' }
     ]
   },
   {

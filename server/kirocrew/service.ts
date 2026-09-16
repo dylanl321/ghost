@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { createError } from 'h3'
 import { getKiroCrewRepository, KiroCrewRevisionConflict } from './repository'
 import { bootstrapValueSchema, parseKiroCrewPublishInput, validateKiroCrewRecords } from './schema'
+import { CollaborationProfileError, validateCollaborationSection } from './collaboration/profile'
 import type { KiroCrewPublishInput, KiroCrewRecord, KiroCrewRevision } from './types'
 
 export function revisionEtag(revision: KiroCrewRevision, kind: 'bootstrap' | 'config'): string {
@@ -47,6 +48,17 @@ export async function publishKiroCrewRevision(raw: unknown, publishedBy: string)
   const current = await repository.current()
   const records = resolvePreservedSecrets(input, current)
   const validated = validateKiroCrewRecords(records)
+  // Every publisher (including the existing admin route) must validate before
+  // advancing CURRENT; a collaboration-only wrapper can be bypassed.
+  const organization = validated.find(record => record.name === 'kirocrew.organization')
+  try {
+    validateCollaborationSection(organization?.type === 'setting' ? organization.value : undefined)
+  } catch (error) {
+    if (error instanceof CollaborationProfileError) {
+      throw createError({ statusCode: 400, statusMessage: 'Invalid collaboration profile' })
+    }
+    throw error
+  }
   try {
     return await repository.publish({
       expectedRevision: input.expectedRevision,

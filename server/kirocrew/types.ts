@@ -1,10 +1,27 @@
 export const KIROCREW_SCOPES = [
   'kirocrew.bootstrap.read',
   'kirocrew.config.read',
-  'kirocrew.config.admin'
+  'kirocrew.config.admin',
+  'kirocrew.collaboration.read',
+  'kirocrew.collaboration.write'
 ] as const
 
 export type KiroCrewScope = typeof KIROCREW_SCOPES[number]
+
+/**
+ * Shared Investigations collaboration scopes carried by a Crew-resource token
+ * (Requirement 3.1, 3.2). These are advertised on the same `getKiroCrewResourceUrl()`
+ * resource as the configuration scopes so the existing GHOST OAuth provider mints
+ * them into the opaque access token, but collaboration authorization treats the
+ * configuration scopes (and every non-GHOST session) as insufficient on their own
+ * (Requirement 3.3, 24.1). Read and write are checked exactly per operation.
+ */
+export const COLLABORATION_READ_SCOPE = 'kirocrew.collaboration.read' as const
+export const COLLABORATION_WRITE_SCOPE = 'kirocrew.collaboration.write' as const
+
+export type CollaborationScope =
+  | typeof COLLABORATION_READ_SCOPE
+  | typeof COLLABORATION_WRITE_SCOPE
 
 export type KiroCrewRecord =
   | { name: string; type: 'setting'; value: unknown }

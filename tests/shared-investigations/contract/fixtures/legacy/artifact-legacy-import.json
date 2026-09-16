@@ -1,0 +1,14 @@
+{
+  "artifactId": "art-fake-legacy-01",
+  "investigationId": "inv-fake-0001",
+  "state": "ready",
+  "originalFilename": "imported-note.md",
+  "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+  "byteCount": 512,
+  "mediaType": "text/markdown",
+  "provenance": "legacy-import",
+  "redacted": false,
+  "truncated": false,
+  "reservedAt": "2023-06-01T00:00:00Z",
+  "readyAt": "2023-06-01T00:00:05Z"
+}
