@@ -55,6 +55,16 @@ export function useAdminSearch() {
       to: '/admin/kirocrew',
       keywords: ['kiro', 'crew', 'config', 'settings', 'files', 'secrets']
     },
+    {
+      id: 'config-oauth',
+      label: 'OAuth & Applications',
+      description: 'Inspect OAuth health, configuration, applications, activity, issues, and limits',
+      icon: 'i-heroicons-key',
+      category: 'configuration',
+      categoryLabel: 'Configuration',
+      to: '/admin/oauth',
+      keywords: ['oauth', 'applications', 'clients', 'grants', 'tokens', 'mcp', 'crew', 'consent', 'registration', 'issues', 'quota']
+    },
 
     // Users & Access (5 tabs)
     {
