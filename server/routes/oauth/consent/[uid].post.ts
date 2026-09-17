@@ -8,8 +8,12 @@ import { KIROCREW_SCOPES } from '../../../kirocrew/types'
 import { getOAuthProvider } from '../../../mcp/oauth/provider'
 import { getMcpResourceUrl } from '../../../mcp/config'
 import { saveMcpGraphDelegation } from '../../../mcp/oauth/delegated-graph'
+import { withSubjectGraphFence } from '../../../mcp/oauth/graph-delegation-cleanup'
 import { saveGhostMcpIdentity } from '../../../mcp/oauth/identity'
 import { GHOST_MCP_SCOPES, type GhostMcpIdentity } from '../../../mcp/types'
+import { getOAuthStageInstrumentation } from '../../../mcp/oauth/admin/stage-instrumentation'
+import { readManagedPolicy } from '../../../mcp/oauth/admin/managed-policy-service'
+import { evaluateBoundary } from '../../../mcp/oauth/admin/lifecycle-enforcement'
 
 interface InteractionBody {
   action: 'details' | 'login' | 'approve' | 'deny'
@@ -145,6 +149,12 @@ export default defineEventHandler(async event => {
       error: 'access_denied',
       error_description: 'The user denied access to GHOST.'
     })
+    // Consent observed as user-denied. Fire-and-forget; client reference only.
+    getOAuthStageInstrumentation().record({
+      stage: 'consent',
+      outcome: 'denied',
+      clientReference: details.params.client_id ? String(details.params.client_id) : undefined
+    })
     return { redirectTo }
   }
 
@@ -204,7 +214,7 @@ export default defineEventHandler(async event => {
   if (!supportedScopes.length) {
     throw createError({ statusCode: 400, statusMessage: 'Unsupported OAuth resource' })
   }
-  let requestedScopes = requestedGhostResourceScopes(
+  const requestedScopes = requestedGhostResourceScopes(
     details.params,
     missing.missingResourceScopes,
     resource,
@@ -219,14 +229,63 @@ export default defineEventHandler(async event => {
       error: 'access_denied',
       error_description: 'The GHOST administrator role is required to publish Kiro Crew configuration.'
     })
+    // Consent denied by managed policy (missing admin role). Post-login, so a
+    // subject reference is safe to include alongside the client/resource refs.
+    getOAuthStageInstrumentation().record({
+      stage: 'consent',
+      outcome: 'denied',
+      errorCode: 'access_denied',
+      clientReference: details.params.client_id ? String(details.params.client_id) : undefined,
+      resourceReference: resource,
+      subjectReference: identity.subject
+    })
     return { redirectTo }
   }
+  // Managed lifecycle + resource/scope policy enforcement at the consent
+  // boundary (task 8.2, Req 7.3, 7.4, 7.7, 7.8). A client with no managed-policy
+  // extension resolves to a null policy and is UNCHANGED: the gate returns
+  // ALLOW and consent proceeds exactly as today. Only a positively-identified
+  // managed client under an enforcing policy is denied here — a blocked/retired
+  // client cannot complete consent, and a requested resource/scope outside the
+  // approved policy is rejected (expansion beyond the approved set is an
+  // administrative action, not an auto-grant).
+  const managedPolicy = client ? readManagedPolicy(client.metadata() as Record<string, unknown>) : null
+  const consentDecision = evaluateBoundary(managedPolicy, 'consent', { resource, scopes: requestedScopes })
+  if (!consentDecision.allowed) {
+    const redirectTo = await provider.interactionResult(event.node.req, event.node.res, {
+      error: 'access_denied',
+      error_description: consentDecision.description || 'This client is not permitted to obtain this access.'
+    })
+    getOAuthStageInstrumentation().record({
+      stage: 'consent',
+      outcome: 'denied',
+      errorCode: consentDecision.reason || 'managed_policy_denied',
+      clientReference: details.params.client_id ? String(details.params.client_id) : undefined,
+      resourceReference: resource,
+      subjectReference: identity.subject
+    })
+    return { redirectTo }
+  }
+
   if (requestedScopes.length) grant.addResourceScope(resource, requestedScopes)
-  const grantId = await grant.save()
+  // Task 9.3 concurrency clause: persist the grant UNDER THE PER-SUBJECT FENCE
+  // so a concurrent `grant.destroyed` last-grant determination for the same user
+  // cannot delete the shared Graph delegation in the window between "no other
+  // live grant found" and this new grant becoming visible (Req 9.3). The fence
+  // is keyed by subject, so unrelated users never contend.
+  const grantId = await withSubjectGraphFence(identity.subject, () => grant.save())
   const consent = details.grantId ? {} : { grantId }
 
   const redirectTo = await provider.interactionResult(event.node.req, event.node.res, {
     consent
+  })
+  // Consent granted. Post-login: client/resource/subject references are safe.
+  getOAuthStageInstrumentation().record({
+    stage: 'consent',
+    outcome: 'success',
+    clientReference: details.params.client_id ? String(details.params.client_id) : undefined,
+    resourceReference: resource,
+    subjectReference: identity.subject
   })
   return { redirectTo }
 })

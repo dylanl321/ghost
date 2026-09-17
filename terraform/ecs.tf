@@ -302,6 +302,12 @@ resource "aws_ecs_task_definition" "main" {
           value = aws_dynamodb_table.oauth_artifacts.name
         },
         {
+          # Deployment-local OAuth administration projections/audit table.
+          # Isolated from GHOST_OAUTH_TABLE_NAME (provider artifacts).
+          name  = "GHOST_OAUTH_ADMIN_TABLE_NAME"
+          value = aws_dynamodb_table.oauth_administration.name
+        },
+        {
           # Development clients share corporate egress IPs. Keep a bounded
           # registration quota without exhausting it after ten setup attempts.
           name  = "GHOST_OAUTH_REGISTRATION_RATE_LIMIT_PER_HOUR"

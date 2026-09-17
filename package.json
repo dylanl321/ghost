@@ -159,6 +159,9 @@
       "uuid": "11.1.1"
     }
   },
+  "imports": {
+    "#shared/*": "./shared/*"
+  },
   "devDependencies": {
     "@iconify-json/simple-icons": "^1.2.93",
     "@types/node": "^22.19.0",

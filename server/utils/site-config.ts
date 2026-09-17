@@ -313,16 +313,24 @@ export async function resetSiteConfig(key: string, updatedBy?: string): Promise<
 }
 
 /**
- * Reset all configuration items to defaults
+ * Reset all configuration items to defaults.
+ *
+ * `excludeKeys` optionally preserves specific keys (they are neither reset nor
+ * rewritten). This is used to keep capability-gated keys (e.g. `oauth.alerts.*`)
+ * out of a generic "reset all" performed by a caller who does not hold the
+ * required capability, so the generic reset route cannot become a bypass.
  */
-export async function resetAllSiteConfig(updatedBy?: string): Promise<void> {
+export async function resetAllSiteConfig(updatedBy?: string, excludeKeys: readonly string[] = []): Promise<void> {
   const timestamp = new Date().toISOString();
-  const resetConfigs = DEFAULT_SITE_CONFIG.map((config) => ({
-    ...config,
-    value: config.defaultValue,
-    updatedAt: timestamp,
-    updatedBy,
-  }));
+  const excluded = new Set(excludeKeys);
+  const resetConfigs = DEFAULT_SITE_CONFIG
+    .filter((config) => !excluded.has(config.key))
+    .map((config) => ({
+      ...config,
+      value: config.defaultValue,
+      updatedAt: timestamp,
+      updatedBy,
+    }));
 
   // Batch write in chunks of 25 (DynamoDB limit)
   const client = await getDynamoDBClientDirect();
