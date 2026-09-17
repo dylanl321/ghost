@@ -404,39 +404,126 @@ export async function batchGetItems(
 }
 
 /**
- * Batch put items into DynamoDB with parallel processing and retry logic
+ * AWS error names/codes that indicate the request's temporary credentials have
+ * expired. Kept intentionally narrow: only expiry, never arbitrary auth/access
+ * failures (e.g. AccessDenied, UnauthorizedOperation) which must NOT trigger a
+ * credential refresh. Compared case-insensitively; SDK `__type` values may be
+ * namespaced (e.g. "com.amazon.coral.service#ExpiredTokenException").
  */
-export async function batchPutItems(
+const EXPIRED_CREDENTIAL_ERROR_NAMES = new Set([
+  'expiredtoken',
+  'expiredtokenexception',
+  'requestexpired'
+])
+
+/**
+ * Exact expired-security-token message AWS returns for stale session tokens,
+ * matched case-insensitively. Some SDK responses surface this without a
+ * recognizable error name, so the message is treated as an authoritative signal.
+ */
+const EXPIRED_SECURITY_TOKEN_MESSAGE = /the security token included in the request is expired/i
+
+/**
+ * Classify whether an error was caused by expired AWS credentials.
+ *
+ * Recognizes standard SDK error names/codes (ExpiredToken, ExpiredTokenException,
+ * RequestExpired) and the exact expired-security-token message. Deliberately does
+ * NOT classify generic authentication or authorization failures, so callers only
+ * refresh credentials for genuine expiry.
+ */
+export function isExpiredCredentialError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false
+  }
+
+  const candidate = error as {
+    name?: unknown
+    code?: unknown
+    Code?: unknown
+    __type?: unknown
+    message?: unknown
+  }
+
+  for (const identifier of [candidate.name, candidate.code, candidate.Code, candidate.__type]) {
+    if (typeof identifier === 'string' && identifier.length > 0) {
+      // Strip any service namespace prefix (e.g. "...#ExpiredTokenException").
+      const normalized = identifier.split(/[#/]/).pop()!.trim().toLowerCase()
+      if (EXPIRED_CREDENTIAL_ERROR_NAMES.has(normalized)) {
+        return true
+      }
+    }
+  }
+
+  if (typeof candidate.message === 'string' && EXPIRED_SECURITY_TOKEN_MESSAGE.test(candidate.message)) {
+    return true
+  }
+
+  return false
+}
+
+/**
+ * Minimal shape performBatchPut needs from a DynamoDB client. Declared so the
+ * core loop can be unit tested with a fake client and no real AWS calls.
+ */
+export interface BatchPutClient {
+  send: (command: BatchWriteItemCommand) => Promise<any>
+}
+
+/**
+ * Extract the AWS request ID from an error, if present, without touching
+ * anything sensitive. Returned only for correlation in logs.
+ */
+function getAwsRequestId(error: any): string | undefined {
+  return error?.$metadata?.requestId ?? error?.RequestId ?? undefined
+}
+
+/**
+ * Core batch-put loop, decoupled from the client factory so it is testable
+ * without real AWS. `acquireClient` returns a (possibly refreshed) client;
+ * calling it again is the credential-refresh path — getDynamoDBClient evicts and
+ * re-assumes when the cached client's temporary credentials are within the
+ * expiry buffer.
+ *
+ * On a classified credential expiry, the affected batch reacquires the client and
+ * retries the SAME unprocessed batch exactly once (bounded; arbitrary failures are
+ * not retried this way). After all batches settle, if any writes still failed a
+ * summary error is thrown so the caller records the operation as failed rather
+ * than a false success.
+ */
+export async function performBatchPut(
   tableName: string,
   items: Array<Record<string, any>>,
-  environment: 'commercial' | 'govcloud' = 'govcloud',
-  accountId?: string
-) {
-  const client = await getDynamoDBClient(environment, undefined, accountId)
-  
+  acquireClient: () => Promise<BatchPutClient>,
+  context: { environment: 'commercial' | 'govcloud', isCrossAccount: boolean }
+): Promise<any[]> {
+  let client = await acquireClient()
+
   const batchSize = 25 // DynamoDB limit
   const results: any[] = []
   let processedCount = 0
   let failedCount = 0
-  
+
   // Split items into batches
   const batches: Array<Array<Record<string, any>>> = []
   for (let i = 0; i < items.length; i += batchSize) {
     batches.push(items.slice(i, i + batchSize))
   }
-  
+
   logger.info(`Processing ${items.length} items in ${batches.length} batches`)
-  
+
   // Process batches with controlled parallelism
   const parallelLimit = 3 // Process 3 batches at a time
   for (let i = 0; i < batches.length; i += parallelLimit) {
     const parallelBatches = batches.slice(i, i + parallelLimit)
-    
+
     const batchPromises = parallelBatches.map(async (batch) => {
       let retryCount = 0
       const maxRetries = 3
       let currentBatch = batch
-      
+      // Bound the credential refresh to a single retry of this batch so expired
+      // credentials never trigger an unbounded loop.
+      let credentialRefreshAttempted = false
+
       while (currentBatch.length > 0 && retryCount < maxRetries) {
         try {
           const requestItems = {
@@ -459,7 +546,7 @@ export async function batchPutItems(
               unmarshall(req.PutRequest.Item, { wrapNumbers: false })
             )
             retryCount++
-            
+
             if (currentBatch.length > 0) {
               const delay = Math.pow(2, retryCount) * 100
               await new Promise(resolve => setTimeout(resolve, delay))
@@ -468,9 +555,43 @@ export async function batchPutItems(
             processedCount += batch.length
             currentBatch = []
           }
-          
+
           return response
         } catch (error: any) {
+          if (isExpiredCredentialError(error) && !credentialRefreshAttempted) {
+            // Reacquire the client (refreshing temporary credentials) and retry the
+            // SAME batch once. Concurrent batches may each refresh independently;
+            // that is safe and bounded. Never log credentials or account IDs.
+            credentialRefreshAttempted = true
+            logger.warn('[DynamoDB] Refreshing expired credentials for batch put', {
+              operation: 'batchPutItems',
+              tableName,
+              environment: context.environment,
+              crossAccount: context.isCrossAccount,
+              retryAttempt: retryCount + 1,
+              errorName: typeof error?.name === 'string' ? error.name : undefined,
+              errorCode: typeof error?.code === 'string' ? error.code : undefined,
+              awsRequestId: getAwsRequestId(error)
+            })
+            try {
+              client = await acquireClient()
+            } catch (refreshError: any) {
+              logger.error('[DynamoDB] Failed to refresh credentials for batch put', {
+                operation: 'batchPutItems',
+                tableName,
+                environment: context.environment,
+                crossAccount: context.isCrossAccount,
+                errorName: typeof refreshError?.name === 'string' ? refreshError.name : undefined,
+                errorCode: typeof refreshError?.code === 'string' ? refreshError.code : undefined
+              })
+              failedCount += currentBatch.length
+              throw refreshError
+            }
+            // Retry the same batch with the refreshed client without consuming a
+            // throughput retry.
+            continue
+          }
+
           if (error.name === 'ProvisionedThroughputExceededException' && retryCount < maxRetries) {
             retryCount++
             const delay = Math.pow(2, retryCount) * 200
@@ -483,28 +604,61 @@ export async function batchPutItems(
           }
         }
       }
-      
+
       if (currentBatch.length > 0) {
         failedCount += currentBatch.length
       }
     })
-    
+
     // Wait for this set of parallel batches to complete
     const batchResults = await Promise.allSettled(batchPromises)
     results.push(...batchResults)
-    
+
     // Progress update
     logger.info(`Processed ${Math.min((i + parallelLimit) * batchSize, items.length)}/${items.length} items`)
-    
+
     // Add delay between parallel batch sets
     if (i + parallelLimit < batches.length) {
       await new Promise(resolve => setTimeout(resolve, 100))
     }
   }
-  
+
   logger.error(`Batch put completed: ${processedCount} processed, ${failedCount} failed`)
-  
+
+  // Fail loudly on any lost writes so schedulers/callers do not record a job that
+  // silently dropped items as a success. Include counts/table/environment only.
+  if (failedCount > 0) {
+    const summaryError = new Error(
+      `Batch put to ${tableName} failed for ${failedCount} of ${items.length} items in ${context.environment}`
+    )
+    ;(summaryError as any).name = 'BatchPutPartialFailureError'
+    ;(summaryError as any).processedCount = processedCount
+    ;(summaryError as any).failedCount = failedCount
+    throw summaryError
+  }
+
   return results
+}
+
+/**
+ * Batch put items into DynamoDB with parallel processing and retry logic.
+ *
+ * The DynamoDB client is refreshable: a long-running operation whose temporary
+ * credentials expire mid-flight reacquires the client via getDynamoDBClient and
+ * retries the affected batch once. Partial failures throw a summary error.
+ */
+export async function batchPutItems(
+  tableName: string,
+  items: Array<Record<string, any>>,
+  environment: 'commercial' | 'govcloud' = 'govcloud',
+  accountId?: string
+) {
+  return performBatchPut(
+    tableName,
+    items,
+    () => getDynamoDBClient(environment, undefined, accountId),
+    { environment, isCrossAccount: Boolean(accountId) }
+  )
 }
 
 /**
