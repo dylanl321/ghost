@@ -24,7 +24,7 @@ import { logger } from './logger'
  * Removes undefined values, null values, and empty strings
  * DynamoDB does not support empty strings as attribute values
  */
-function sanitizeForDynamoDB(obj: any): any {
+export function sanitizeForDynamoDB(obj: any): any {
   if (obj === null || obj === undefined) {
     return undefined
   }

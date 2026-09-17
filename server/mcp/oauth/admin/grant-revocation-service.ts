@@ -70,6 +70,8 @@ import { DynamoOidcAdapter } from '../adapter'
 import { getOAuthProvider } from '../provider'
 import { getItem, putItem } from '../../../utils/dynamodb'
 import { getOAuthAdminTableConfig, useDurableOAuthAdminStore } from '../../config'
+import { resolveOAuthAdminDeploymentContext } from './deployment-context'
+import { singletonPartition } from './record-layout'
 
 /**
  * A durable revocation MARKER for a single grant. Persisted BEFORE cleanup so
@@ -152,11 +154,17 @@ export class DynamoGrantRevocationMarkerStore implements OAuthGrantRevocationMar
 
   constructor(
     private readonly tableConfig: () => { tableName: string, environment: 'commercial' | 'govcloud', accountId?: string },
-    private readonly deps = { putItem, getItem }
+    private readonly deps = { putItem, getItem },
+    private readonly deployment = resolveOAuthAdminDeploymentContext()
   ) {}
 
   private key(grantReference: OpaqueReference) {
-    return { artifactId: `oauth-admin#grant-markers#${grantReference}` }
+    // This is the administration table (PK/SK), not the provider artifact
+    // table (artifactId). Keep markers separate from grant-summary queries.
+    return {
+      PK: `${singletonPartition(this.deployment, 'grants')}#REVOCATION`,
+      SK: grantReference
+    }
   }
 
   async put(marker: OAuthGrantRevocationMarker): Promise<void> {

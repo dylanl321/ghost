@@ -84,7 +84,7 @@ function parseAuthorizeRequest(event: H3Event): ParsedRequest {
  * any failure the original request is left untouched and no fields are parsed
  * (the gate then fails open).
  */
-async function parseTokenRequestAndRestore(event: H3Event): Promise<ParsedRequest> {
+export async function parseTokenRequestAndRestore(event: H3Event): Promise<ParsedRequest> {
   const req = event.node.req
   const chunks: Buffer[] = []
   let total = 0

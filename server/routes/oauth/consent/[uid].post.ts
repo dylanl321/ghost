@@ -19,6 +19,13 @@ interface InteractionBody {
   action: 'details' | 'login' | 'approve' | 'deny'
 }
 
+export function consentSubmission(grantId: string) {
+  // Native clients require an explicit consent result on resume. The shared
+  // DynamoDB writer removes empty objects, so {} loses approval for a reused
+  // grant. Keep its saved ID in the result for both new and existing grants.
+  return { consent: { grantId } }
+}
+
 export function requestedGhostResourceScopes(
   params: { scope?: unknown; resource?: unknown },
   missingResourceScopes: Record<string, string[]> | undefined,
@@ -274,11 +281,9 @@ export default defineEventHandler(async event => {
   // live grant found" and this new grant becoming visible (Req 9.3). The fence
   // is keyed by subject, so unrelated users never contend.
   const grantId = await withSubjectGraphFence(identity.subject, () => grant.save())
-  const consent = details.grantId ? {} : { grantId }
-
-  const redirectTo = await provider.interactionResult(event.node.req, event.node.res, {
-    consent
-  })
+  const redirectTo = await provider.interactionResult(
+    event.node.req, event.node.res, consentSubmission(grantId)
+  )
   // Consent granted. Post-login: client/resource/subject references are safe.
   getOAuthStageInstrumentation().record({
     stage: 'consent',
