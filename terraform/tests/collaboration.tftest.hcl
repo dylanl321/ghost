@@ -1,7 +1,7 @@
 # Terraform assertions for the Shared Investigations collaboration persistence
 # layer (spec .kiro/specs/shared-investigations, task 3.1).
 #
-# These runs use `command = apply` against a fully mocked AWS provider, so they
+# These runs use `command = plan` against a fully mocked AWS provider, so they
 # need no AWS credentials, no network, and never touch real resources (the mock
 # provider fabricates all values in-memory). They assert the
 # storage controls the spec requires (Req 7.1, 8.1), the disabled-first rollout
@@ -21,7 +21,7 @@ mock_provider "aws" {
   # The AWS provider validates the *shape* of computed ARNs that are fed back
   # into other resources across the whole root module (KMS keys, IAM policies,
   # load balancer, target group, SNS topics). Give those a valid ARN so the
-  # whole-root apply the test engine performs succeeds; the collaboration
+  # whole-root validation the test engine performs succeeds; the collaboration
   # assertions below only compare our own resource attributes.
   mock_resource "aws_kms_key" {
     defaults = { arn = "arn:aws-us-gov:kms:us-gov-west-1:461760157232:key/00000000-0000-0000-0000-000000000000" }
@@ -38,7 +38,6 @@ mock_provider "aws" {
   mock_resource "aws_sns_topic" {
     defaults = { arn = "arn:aws-us-gov:sns:us-gov-west-1:461760157232:mock-topic" }
   }
-} }
 }
 
 mock_provider "aws" {
@@ -50,12 +49,6 @@ mock_provider "aws" {
   mock_data "aws_iam_policy_document" {
     defaults = {
       json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
-    }
-  }
-
-  mock_data "aws_region" {
-    defaults = {
-      name = "us-gov-west-1"
     }
   }
 
@@ -77,10 +70,7 @@ mock_provider "aws" {
   mock_resource "aws_sns_topic" {
     defaults = { arn = "arn:aws-us-gov:sns:us-gov-west-1:461760157232:mock-topic" }
   }
-}
-
-mock_provider "aws" {
-  alias = "org_account"region are consumed in ARNs and IAM policy ARNs, which
+  # Account, partition, and region are consumed in ARNs and IAM policy ARNs, which
   # must match the aws(-[a-z]+)* partition regex.
   mock_data "aws_caller_identity" {
     defaults = {
