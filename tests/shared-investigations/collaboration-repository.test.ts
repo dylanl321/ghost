@@ -353,6 +353,98 @@ test('a stale expected Revision conflicts (409) without changing metadata', asyn
   assert.deepEqual(after, before, 'metadata unchanged after a stale-revision conflict')
 })
 
+// --- Archive read-only + orthogonal reopen (task 11.3) ----------------------
+
+/** Archive an Investigation at Revision 0 (orthogonal to Stage, Req 18.12). */
+async function archive(repo: CollaborationRepository, investigationId: string) {
+  return repo.patchInvestigation(ctx, {
+    operationId: `op-archive-${investigationId}`,
+    investigationId,
+    expectedRevision: 0,
+    archived: true
+  })
+}
+
+test('an archived Investigation rejects new Run and Event contributions without altering history (Req 18.8, 18.9)', async () => {
+  const { repo, store } = makeRepo()
+  const created = await repo.createInvestigation(ctx, createCommand('op-c', 'explicit-new'))
+  const inv = created.investigationId
+  const archived = await archive(repo, inv)
+  assert.equal(archived.revision, 1)
+
+  const invScope = { ...scope, investigationId: inv }
+  const before = await store.get(investigationMetaKey(invScope))
+  const seqBefore = Number((await store.get(sequenceCounterKey(scope)))!.value)
+
+  await assert.rejects(
+    () => repo.reserveRun(ctx, { operationId: 'op-run', investigationId: inv }),
+    (e: unknown) => e instanceof CollaborationAuthorizationError && e.code === 'conflict'
+  )
+  await assert.rejects(
+    () =>
+      repo.appendEvent(ctx, {
+        operationId: 'op-evt',
+        investigationId: inv,
+        type: 'finding',
+        provenance: 'self-reported',
+        body: { text: 'late' }
+      }),
+    (e: unknown) => e instanceof CollaborationAuthorizationError && e.code === 'conflict'
+  )
+
+  const after = await store.get(investigationMetaKey(invScope))
+  assert.deepEqual(after, before, 'archived history unchanged by rejected contributions')
+  const seqAfter = Number((await store.get(sequenceCounterKey(scope)))!.value)
+  assert.equal(seqAfter, seqBefore, 'a rejected contribution never advances the Server_Sequence')
+})
+
+test('archive preserves Stage and a rejected contribution is orthogonal to workflow (Req 18.12)', async () => {
+  const { repo, store } = makeRepo()
+  const created = await repo.createInvestigation(
+    ctx,
+    createCommand('op-c', 'explicit-new', { stageId: 'investigating' })
+  )
+  const inv = created.investigationId
+  await archive(repo, inv)
+  const record = (await store.get(
+    investigationMetaKey({ ...scope, investigationId: inv })
+  )) as unknown as { archived: boolean; stageId: string }
+  assert.equal(record.archived, true)
+  assert.equal(record.stageId, 'investigating', 'archive does not rewrite Stage')
+})
+
+test('explicit reopen restores contributions under the pinned workflow (Req 18.10, 18.11)', async () => {
+  const { repo } = makeRepo()
+  const created = await repo.createInvestigation(ctx, createCommand('op-c', 'explicit-new'))
+  const inv = created.investigationId
+  await archive(repo, inv)
+
+  // Explicit reopen is a metadata-Revision transition orthogonal to Stage.
+  const reopened = await repo.patchInvestigation(ctx, {
+    operationId: 'op-reopen',
+    investigationId: inv,
+    expectedRevision: 1,
+    archived: false
+  })
+  assert.equal(reopened.revision, 2)
+
+  // Contributions are accepted again after reopen.
+  const run = await repo.reserveRun(ctx, { operationId: 'op-run-after', investigationId: inv })
+  assert.ok(run.acceptedServerSequence > 0, 'a Run is accepted after reopen')
+})
+
+test('an Operation_ID reservation acknowledged before archival still replays after archival', async () => {
+  const { repo } = makeRepo()
+  const created = await repo.createInvestigation(ctx, createCommand('op-c', 'explicit-new'))
+  const inv = created.investigationId
+  const firstRun = await repo.reserveRun(ctx, { operationId: 'op-run', investigationId: inv })
+  await archive(repo, inv)
+  // The same Operation_ID replays its prior acknowledgement even though the
+  // Investigation is now archived (idempotency precedes the archive guard).
+  const replay = await repo.reserveRun(ctx, { operationId: 'op-run', investigationId: inv })
+  assert.deepEqual(replay, firstRun)
+})
+
 // --- Property-style randomized checks ---------------------------------------
 
 /** Small deterministic PRNG so the property loop is reproducible. */

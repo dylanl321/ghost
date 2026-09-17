@@ -302,6 +302,18 @@ resource "aws_ecs_task_definition" "main" {
           value = aws_dynamodb_table.oauth_artifacts.name
         },
         {
+          # Deployment-local OAuth administration projections/audit table.
+          # Isolated from GHOST_OAUTH_TABLE_NAME (provider artifacts).
+          name  = "GHOST_OAUTH_ADMIN_TABLE_NAME"
+          value = aws_dynamodb_table.oauth_administration.name
+        },
+        {
+          # Development clients share corporate egress IPs. Keep a bounded
+          # registration quota without exhausting it after ten setup attempts.
+          name  = "GHOST_OAUTH_REGISTRATION_RATE_LIMIT_PER_HOUR"
+          value = var.env == "dev" ? "120" : "10"
+        },
+        {
           name  = "GHOST_KIROCREW_RESOURCE_URL"
           value = var.env == "prod" ? "https://ghost-aws.gd-ms.com/api/kirocrew" : "https://ghost-aws-dev.gd-ms.com/api/kirocrew"
         },

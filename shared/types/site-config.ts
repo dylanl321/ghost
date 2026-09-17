@@ -576,6 +576,81 @@ export const DEFAULT_SITE_CONFIG: SiteConfigItem[] = [
     isPublic: true,
     isEditable: true,
   },
+
+  // ---------------------------------------------------------------------------
+  // OAuth Administration — evidence-based alert settings (oauth.alerts.*)
+  //
+  // Stored via existing site configuration (design "Diagnostics, maintenance,
+  // and alerts"). These keys are OAuth-specific and every update/reset path is
+  // gated by the `oauth.operations.manage` capability — including the generic
+  // site-config admin route, which explicitly rejects `oauth.alerts.*` writes
+  // unless that capability is held (see server/utils/site-config guard and the
+  // dedicated /api/admin/oauth/alerts/settings routes). They are marked
+  // `isEditable: false` so the generic admin panel does not offer a free-form
+  // edit control that would bypass the capability + validation gate.
+  //
+  // Recipients NEVER carry a free-form address. `oauth.alerts.recipientsRef`
+  // references an EXISTING approved organization notification destination; the
+  // only supported reference is `admin-notifications` (the org-approved admin
+  // notification set resolved from `email.admin.notificationEmails`). `none`
+  // disables delivery. Delivery stays unavailable when no approved recipient
+  // exists and never falls back to an arbitrary caller/developer address
+  // (Requirement 15.4 / 18.6).
+  // ---------------------------------------------------------------------------
+  {
+    key: 'oauth.alerts.enabled',
+    value: false,
+    type: 'boolean',
+    category: 'system',
+    label: 'OAuth Alerts Enabled',
+    description: 'Master switch for evidence-based OAuth alert evaluation and delivery. Requires the OAuth operations capability to change.',
+    defaultValue: false,
+    isPublic: false,
+    isEditable: false,
+  },
+  {
+    key: 'oauth.alerts.thresholds',
+    value: {
+      registrationRejections: 5,
+      tokenFailures: 5,
+      refreshFailures: 5,
+      consecutiveDiscoveryFailures: 2,
+      consecutiveStorageFailures: 2,
+      signingKeyDeadlineDays: 14,
+      windowMinutes: 15,
+      consecutiveGapMinutes: 5,
+    },
+    type: 'object',
+    category: 'system',
+    label: 'OAuth Alert Thresholds',
+    description: 'Evidence thresholds for OAuth alerts: registration-rejection (>5 in 15m), token/refresh failure (>5 per stage in 15m), consecutive discovery/storage failures (2, five minutes apart), signing-key deadline (14 days). Requires the OAuth operations capability to change.',
+    defaultValue: {
+      registrationRejections: 5,
+      tokenFailures: 5,
+      refreshFailures: 5,
+      consecutiveDiscoveryFailures: 2,
+      consecutiveStorageFailures: 2,
+      signingKeyDeadlineDays: 14,
+      windowMinutes: 15,
+      consecutiveGapMinutes: 5,
+    },
+    isPublic: false,
+    isEditable: false,
+  },
+  {
+    key: 'oauth.alerts.recipientsRef',
+    value: 'admin-notifications',
+    type: 'string',
+    category: 'system',
+    label: 'OAuth Alert Recipients Reference',
+    description: 'Reference to an existing approved organization notification destination for OAuth alerts. Only "admin-notifications" (the approved admin notification set) or "none" (delivery disabled) are accepted. Free-form addresses are never accepted. Requires the OAuth operations capability to change.',
+    defaultValue: 'admin-notifications',
+    isPublic: false,
+    isEditable: false,
+    validation: {
+      allowedValues: ['admin-notifications', 'none'],
+    },
+  },
 ];
 
 /**

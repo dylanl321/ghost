@@ -17,6 +17,7 @@
 
 import { getGhostMcpIdentity } from '../../mcp/oauth/identity'
 import { getOAuthProvider } from '../../mcp/oauth/provider'
+import { isGrantRevoked } from '../../mcp/oauth/admin/lifecycle-enforcement'
 import type { AuthenticatedSubject, ValidatedTokenContext } from './types'
 
 /**
@@ -38,6 +39,13 @@ interface StoredAccessToken {
   exp?: number
   aud?: string | string[]
   scope?: string
+  /**
+   * The provider grant id this token belongs to. A RETURNED stored field (like
+   * `accountId`/`exp`), NOT parsed from the raw bearer — collaboration still
+   * never decodes the token. Used only to consult the grant-revocation fence
+   * (task 9.2, Req 9.2).
+   */
+  grantId?: string
 }
 
 /**
@@ -106,6 +114,13 @@ export async function resolveCollaborationToken(
   if (!accessToken?.accountId || !accessToken.clientId || !accessToken.exp) return null
   if (accessToken.exp <= path.now()) return null
 
+  // Task 9.2 (Req 9.2): collaboration is an opaque-token consumer, so a token
+  // whose grant is under a revocation marker is rejected as if unresolvable —
+  // the caller emits its single non-disclosing outcome. When no marker exists
+  // `isGrantRevoked` returns false and this is a pure pass-through, so a
+  // non-revoked grant resolves exactly as today (Req 18.2).
+  if (await isGrantRevoked(accessToken.grantId)) return null
+
   const audiences = normalizeAudience(accessToken.aud)
   if (audiences.length === 0) return null
 
@@ -131,6 +146,9 @@ export async function resolveCollaborationTokenWithAudiences(
   const accessToken = await path.findAccessToken(opaqueToken)
   if (!accessToken?.accountId || !accessToken.clientId || !accessToken.exp) return null
   if (accessToken.exp <= path.now()) return null
+
+  // Task 9.2 (Req 9.2): reject a token whose grant is under a revocation marker.
+  if (await isGrantRevoked(accessToken.grantId)) return null
 
   const audiences = normalizeAudience(accessToken.aud)
   if (audiences.length === 0) return null

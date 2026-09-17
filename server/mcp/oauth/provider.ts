@@ -7,8 +7,9 @@ import { KIROCREW_SCOPES } from '../../kirocrew/types'
 import { getGhostBaseUrl, getMcpResourceUrl, getOAuthAuthorizationTtlSeconds, getOAuthCookieKeys, getOAuthIssuer, isProductionEnvironment, useDurableOAuthStore } from '../config'
 import { GHOST_MCP_SCOPES } from '../types'
 import { DynamoOidcAdapter } from './adapter'
-import { deleteMcpGraphDelegation } from './delegated-graph'
+import { handleMcpGrantDestroyed } from './graph-delegation-cleanup'
 import { getGhostMcpIdentity } from './identity'
+import { getOAuthStageInstrumentation } from './admin/stage-instrumentation'
 
 let providerPromise: Promise<Provider> | undefined
 export const GHOST_REFRESH_TOKEN_ROTATION = false
@@ -85,6 +86,71 @@ async function loadJwks(): Promise<{ keys: JWK[] }> {
   jwk.use = 'sig'
   logger.warn('[MCP OAuth] Using an ephemeral development signing key')
   return { keys: [jwk] }
+}
+
+/**
+ * Safe, public-only signing-key metadata for a single JWK. Exposes ONLY the
+ * public identification parameters (`kid`, `kty`, `alg`, `use`) — NEVER the
+ * private parameters (`d`, `p`, `q`, `dp`, `dq`, `qi`, `k`) or any symmetric
+ * key material (Requirement 3.4). This is the shape the OAuth-administration
+ * configuration projection consumes so it never touches a private key value.
+ */
+export interface GhostPublicSigningKeyMetadata {
+  kid?: string
+  kty?: string
+  alg?: string
+  use?: string
+}
+
+/**
+ * The public signing-key observation used by the OAuth administration
+ * configuration projection. `source` distinguishes a configured JWKS
+ * (`GHOST_OAUTH_JWKS_JSON`) from an ephemeral development key that the provider
+ * generated at boot, and `available` is false when no key material could be
+ * read at all — in which case the projection reports signing keys as unknown
+ * rather than inventing metadata.
+ *
+ * SAFETY: rotation/expiry dates are intentionally NOT derived here. A JWK
+ * carries no certificate-style validity window, so signing-key dates remain
+ * unknown unless a deployment explicitly supplies them (Requirement 15.6).
+ */
+export interface GhostSigningKeyObservation {
+  available: boolean
+  source: 'configured' | 'ephemeral-development' | 'unavailable'
+  keys: GhostPublicSigningKeyMetadata[]
+}
+
+/**
+ * Project the running provider's JWKS down to safe public metadata only. Reads
+ * the same key material the provider is initialized with (`loadJwks`), then
+ * strips every field except the public identification parameters. Never throws
+ * to a caller: an unreadable/unavailable key set is reported as
+ * `available: false` so the administration surface can label signing keys
+ * unknown (Requirements 2.5, 3.3, 3.4).
+ */
+export async function getGhostPublicSigningKeyMetadata(): Promise<GhostSigningKeyObservation> {
+  const hasConfiguredJwks = Boolean(process.env.GHOST_OAUTH_JWKS_JSON)
+  try {
+    const jwks = await loadJwks()
+    const keys = (jwks.keys || []).map<GhostPublicSigningKeyMetadata>(key => ({
+      // Only public identification parameters are copied out; the private
+      // parameters (d/p/q/dp/dq/qi/k) present on the source JWK are never read.
+      kid: typeof key.kid === 'string' ? key.kid : undefined,
+      kty: typeof key.kty === 'string' ? key.kty : undefined,
+      alg: typeof key.alg === 'string' ? key.alg : undefined,
+      use: typeof key.use === 'string' ? key.use : undefined
+    }))
+    return {
+      available: keys.length > 0,
+      source: hasConfiguredJwks ? 'configured' : 'ephemeral-development',
+      keys
+    }
+  } catch {
+    // A missing/invalid JWKS in production (or any read failure) is surfaced as
+    // unavailable rather than propagated — the projection stays safe and labels
+    // signing keys unknown.
+    return { available: false, source: 'unavailable', keys: [] }
+  }
 }
 
 export function createGhostOAuthConfiguration(input: {
@@ -176,16 +242,77 @@ export function createGhostOAuthConfiguration(input: {
 }
 
 export function attachGhostOAuthEvents(provider: Provider): void {
-  provider.on('server_error', (_ctx: unknown, error: Error) => logger.error('[MCP OAuth] Provider error', error))
+  // Fire-and-forget OAuth-administration telemetry. Every `record*` call below
+  // returns synchronously and schedules its own background write; none of them
+  // may delay or fail OAuth traffic (Requirements 2.3, 4.1, 4.6, 18.3). The
+  // existing refresh alarm (`recordRefreshEvent`) keeps its OWN counting and is
+  // never touched by this instrumentation, so a refresh event is never counted
+  // twice (Requirement 4.7).
+  const telemetry = getOAuthStageInstrumentation()
+
+  provider.on('server_error', (ctx: any, error: Error) => {
+    logger.error('[MCP OAuth] Provider error', error)
+    // A provider-internal fault is a storage/processing boundary observation.
+    telemetry.recordProviderEvent('provider-storage', 'failure', ctx, { error: error as any })
+  })
+
+  // Authorization-server / protected-resource discovery only emits on failure;
+  // discovery success is observed at the metadata route wrappers.
+  provider.on('discovery.error', (ctx: any, error: Error) => {
+    telemetry.recordProviderEvent('authorization-server-discovery', 'failure', ctx, { error: error as any })
+  })
+
+  // Authorization endpoint. Client is bound here, but no subject reference is
+  // emitted (the authenticated subject is captured at the consent boundary).
+  provider.on('authorization.success', (ctx: any) => {
+    telemetry.recordProviderEvent('authorization', 'success', ctx, { includeClient: true, includeResource: true })
+  })
+  provider.on('authorization.error', (ctx: any, error: Error) => {
+    telemetry.recordProviderEvent('authorization', 'failure', ctx, { error: error as any, includeClient: true, includeResource: true })
+  })
+
+  // Dynamic client registration (a pre-login stage: no subject/client-owner).
+  provider.on('registration_create.success', (ctx: any) => {
+    telemetry.recordProviderEvent('registration', 'success', ctx)
+  })
+  provider.on('registration_create.error', (ctx: any, error: Error) => {
+    telemetry.recordProviderEvent('registration', 'failure', ctx, { error: error as any })
+  })
+
   provider.on('grant.success', (ctx: any) => {
-    if (ctx.oidc?.params?.grant_type === 'refresh_token') recordRefreshEvent('success')
+    const isRefresh = ctx.oidc?.params?.grant_type === 'refresh_token'
+    // Preserve the existing refresh alarm exactly — its own counter is separate.
+    if (isRefresh) recordRefreshEvent('success')
+    // Admin telemetry: token/code exchange vs refresh are distinct stages.
+    telemetry.recordProviderEvent(isRefresh ? 'refresh' : 'token-exchange', 'success', ctx, { includeClient: true, includeResource: true })
   })
   provider.on('grant.error', (ctx: any, error: Error & { error_detail?: unknown }) => {
-    if (ctx.oidc?.params?.grant_type === 'refresh_token') recordRefreshEvent('failure', classifyGhostRefreshFailure(error))
+    const isRefresh = ctx.oidc?.params?.grant_type === 'refresh_token'
+    if (isRefresh) recordRefreshEvent('failure', classifyGhostRefreshFailure(error))
+    telemetry.recordProviderEvent(isRefresh ? 'refresh' : 'token-exchange', 'failure', ctx, { error: error as any, includeClient: true, includeResource: true })
   })
-  provider.on('grant.destroyed', (grant: { accountId?: string; resources?: Record<string, string> }) => {
+
+  // Token revocation endpoint (client-authenticated; no subject reference).
+  provider.on('revocation.error', (ctx: any, error: Error) => {
+    telemetry.recordProviderEvent('revocation', 'failure', ctx, { error: error as any, includeClient: true })
+  })
+  provider.on('grant.revoked', (ctx: any) => {
+    telemetry.recordProviderEvent('revocation', 'success', ctx, { includeClient: true })
+  })
+
+  provider.on('grant.destroyed', (grant: { accountId?: string; jti?: string; resources?: Record<string, string> }) => {
+    // Provider-storage observation for a destroyed grant artifact. The grant is
+    // a model instance (not a ctx); only its safe presence is recorded.
+    telemetry.record({ stage: 'provider-storage', outcome: 'success' })
     if (grant.accountId && grantIncludesMcpResource(grant)) {
-      void deleteMcpGraphDelegation(grant.accountId).catch(error => logger.error('[MCP Graph] Failed to remove delegated token after grant revocation', error))
+      // Task 9.3: the shared per-subject Graph delegation is NOT deleted
+      // unconditionally. Instead, determine authoritatively (under a per-user
+      // fence, bounded and read-only) whether this was the user's LAST live MCP
+      // grant. Another live grant preserves the delegation; uncertain coverage
+      // preserves + schedules reconciliation; only a confirmed last live grant
+      // permits cleanup (Req 9.3, 9.5, 18.2).
+      void handleMcpGrantDestroyed(grant.accountId, grant.jti).catch(error =>
+        logger.error('[MCP Graph] Last-grant delegation cleanup failed', error))
     }
   })
 }
