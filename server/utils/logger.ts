@@ -19,16 +19,7 @@
  */
 
 import { createConsola, type LogObject } from 'consola'
-
-// Map Consola numeric levels to string names
-const LEVEL_NAMES: Record<number, string> = {
-  0: 'fatal',
-  1: 'error',
-  2: 'warn',
-  3: 'info',
-  4: 'debug',
-  5: 'trace',
-}
+import { deriveSeverity } from './log-severity'
 
 // Safely serialize a value, handling Error objects and circular references
 function safeSerialize(value: unknown): unknown {
@@ -46,7 +37,7 @@ function safeSerialize(value: unknown): unknown {
 // JSON reporter for production — writes one JSON line per log entry to stdout
 const jsonReporter = {
   log(logObj: LogObject) {
-    const level = LEVEL_NAMES[logObj.level] ?? 'info'
+    const level = deriveSeverity(logObj)
     const message = logObj.args
       .map(arg => (typeof arg === 'string' ? arg : JSON.stringify(safeSerialize(arg))))
       .join(' ')

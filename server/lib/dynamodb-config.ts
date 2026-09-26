@@ -106,6 +106,7 @@ export function mergeDynamoDBConfig(
 // Cache the configuration to avoid repeated Secrets Manager calls
 let cachedConfig: DynamoDBConfig | null = null
 let configLoadedAt: number | null = null
+let lastMissingKeysWarning: string | null = null
 const CONFIG_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
 /**
@@ -426,10 +427,17 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
     const missingKeys = (Object.keys(envConfig) as (keyof DynamoDBConfig)[])
       .filter(k => !(k in secretsConfig))
     if (missingKeys.length > 0) {
-      logger.warn(
-        `DynamoDB config from secret was missing ${missingKeys.length} table key(s); ` +
-        `using env defaults for: ${missingKeys.join(', ')}`
-      )
+      const warningSignature = missingKeys.join(',')
+      if (warningSignature !== lastMissingKeysWarning) {
+        logger.warn(
+          `DynamoDB config from secret was missing ${missingKeys.length} table key(s); ` +
+          `using env defaults for: ${missingKeys.join(', ')}`
+        )
+        lastMissingKeysWarning = warningSignature
+      }
+    } else {
+      // Allow a future regression to emit a fresh warning after the secret is fixed.
+      lastMissingKeysWarning = null
     }
 
     cachedConfig = mergedConfig

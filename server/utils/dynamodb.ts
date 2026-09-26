@@ -502,8 +502,13 @@ export async function batchPutItems(
     }
   }
   
-  logger.error(`Batch put completed: ${processedCount} processed, ${failedCount} failed`)
-  
+  const putSummary = `Batch put completed: ${processedCount} processed, ${failedCount} failed`
+  if (failedCount === 0) {
+    logger.info(putSummary)
+  } else {
+    logger.error(putSummary)
+  }
+
   return results
 }
 
@@ -603,8 +608,13 @@ export async function batchDeleteItems(
     }
   }
   
-  logger.error(`Batch delete completed: ${deletedCount} deleted, ${failedCount} failed`)
-  
+  const deleteSummary = `Batch delete completed: ${deletedCount} deleted, ${failedCount} failed`
+  if (failedCount === 0) {
+    logger.info(deleteSummary)
+  } else {
+    logger.error(deleteSummary)
+  }
+
   return {
     deletedCount,
     failedCount,

@@ -133,7 +133,25 @@ export default defineEventHandler(handleAsync(async (event) => {
     return sendSuccess(event, data, metadata)
 
   } catch (error: any) {
-    logger.error(`[Pipelines API] Failed to fetch global summary:`, error)
-    return errors.serverError(event, `Failed to fetch pipeline analytics: ${error.message || 'Unknown error'}`)
+    const durationMs = Date.now() - startTime
+    const rawMessage: string = error?.message || 'Unknown error'
+    // Normalize Athena's "Query timeout after N seconds" (see
+    // athena-pipeline-queries.ts) versus other failures so CloudWatch can
+    // distinguish slow-query timeouts from genuine query errors.
+    const isTimeout = /timeout/i.test(rawMessage) || /timed out/i.test(rawMessage)
+    const errorCode = isTimeout ? 'QueryTimeoutError' : (error?.name || 'UnknownError')
+    const category = isTimeout ? 'athena_timeout' : 'query_failure'
+
+    // Structured, secret-free context only — no tokens, credentials, or stack dumps.
+    logger.error('[Pipelines API] Failed to fetch global summary', {
+      route: '/api/pipelines/global-summary',
+      environment,
+      days,
+      durationMs,
+      errorCode,
+      category,
+      message: rawMessage
+    })
+    return errors.serverError(event, `Failed to fetch pipeline analytics: ${rawMessage}`)
   }
 }))
