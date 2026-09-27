@@ -108,6 +108,13 @@ let cachedConfig: DynamoDBConfig | null = null
 let configLoadedAt: number | null = null
 const CONFIG_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
+// Deduplicate the "stale secret is missing table key(s)" warning. The config
+// is reloaded every CONFIG_CACHE_TTL, so a persistently stale secret otherwise
+// re-emits the same warning indefinitely (~264 times/day observed). We warn
+// once per distinct missing-key signature per process; a CHANGED set of missing
+// keys still surfaces immediately, so a worsening/shifting gap is never hidden.
+let lastMissingKeySignature: string | null = null
+
 /**
  * Get DynamoDB configuration from Secrets Manager
  */
@@ -422,14 +429,27 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
     }
 
     // Warn if the secret was missing keys the defaults supplied (signals a
-    // stale secret that should be refreshed), so the gap is observable.
+    // stale secret that should be refreshed), so the gap is observable — but
+    // only once per distinct missing-key signature per process (see above).
+    // Missing "keys" are config property names (e.g. userNotifications), not
+    // secret values, so they are safe to log and aid CloudWatch diagnosis.
     const missingKeys = (Object.keys(envConfig) as (keyof DynamoDBConfig)[])
       .filter(k => !(k in secretsConfig))
     if (missingKeys.length > 0) {
-      logger.warn(
-        `DynamoDB config from secret was missing ${missingKeys.length} table key(s); ` +
-        `using env defaults for: ${missingKeys.join(', ')}`
-      )
+      const signature = [...missingKeys].sort().join(',')
+      if (signature !== lastMissingKeySignature) {
+        lastMissingKeySignature = signature
+        logger.warn(
+          `DynamoDB config from secret was missing ${missingKeys.length} table key(s); using env defaults`,
+          {
+            operation: 'dynamodbConfigMerge',
+            missingKeyCount: missingKeys.length,
+            missingKeys,
+            secretName: process.env.DYNAMODB_CONFIG_SECRET_NAME
+              || `ghost-dynamodb-config-${process.env.NODE_ENV || 'dev'}`,
+          }
+        )
+      }
     }
 
     cachedConfig = mergedConfig
@@ -450,6 +470,7 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
 export function clearConfigCache(): void {
   cachedConfig = null
   configLoadedAt = null
+  lastMissingKeySignature = null
 }
 
 // Track which tables have been logged to avoid duplicate logs

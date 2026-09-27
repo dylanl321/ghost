@@ -502,8 +502,22 @@ export async function batchPutItems(
     }
   }
   
-  logger.error(`Batch put completed: ${processedCount} processed, ${failedCount} failed`)
-  
+  // Successful completion is informational; only a nonzero failed count is an
+  // error. Structured context is promoted to queryable top-level fields by the
+  // JSON reporter (type/operation/tableName/processedCount/failedCount).
+  const putContext = {
+    type: 'dynamodb',
+    operation: 'batchPut',
+    tableName,
+    processedCount,
+    failedCount,
+  }
+  if (failedCount > 0) {
+    logger.error('Batch put completed with failures', putContext)
+  } else {
+    logger.info('Batch put completed', putContext)
+  }
+
   return results
 }
 
@@ -603,8 +617,20 @@ export async function batchDeleteItems(
     }
   }
   
-  logger.error(`Batch delete completed: ${deletedCount} deleted, ${failedCount} failed`)
-  
+  // Successful completion is informational; only a nonzero failed count is an error.
+  const deleteContext = {
+    type: 'dynamodb',
+    operation: 'batchDelete',
+    tableName,
+    deletedCount,
+    failedCount,
+  }
+  if (failedCount > 0) {
+    logger.error('Batch delete completed with failures', deleteContext)
+  } else {
+    logger.info('Batch delete completed', deleteContext)
+  }
+
   return {
     deletedCount,
     failedCount,
