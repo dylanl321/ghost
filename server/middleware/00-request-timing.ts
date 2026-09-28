@@ -8,8 +8,9 @@
  * metric filters can extract APILatencyMs and backgroundJobActive.
  */
 
-import { defineEventHandler, getRequestURL } from 'h3'
+import { defineEventHandler, getRequestURL, getRequestHeader, setResponseHeader } from 'h3'
 import { isAnyJobRunning, getActiveJobs } from '../utils/job-tracker'
+import { normalizeRequestId } from '../utils/request-id'
 
 // Normalize dynamic path segments for Log Insights grouping
 function normalizePath(path: string): string {
@@ -35,6 +36,10 @@ export default defineEventHandler((event) => {
 
   const start = performance.now()
 
+  // Correlation id: reuse a safe inbound token or generate one, and echo it back.
+  const requestId = normalizeRequestId(getRequestHeader(event, 'x-request-id'))
+  setResponseHeader(event, 'x-request-id', requestId)
+
   event.node.res.on('finish', () => {
     const durationMs = Math.round((performance.now() - start) * 100) / 100
     const backgroundJobActive = isAnyJobRunning()
@@ -46,6 +51,19 @@ export default defineEventHandler((event) => {
       statusCode: event.node.res.statusCode,
       durationMs,
       backgroundJobActive,
+      requestId,
+    }
+
+    // Attach an authenticated user id when a prior handler populated it.
+    // Prefer stable identifiers; never log email/name/groups/tokens. No auth
+    // calls here — timing middleware only reads context set upstream.
+    const auth = event.context.auth as { user?: Record<string, unknown> } | undefined
+    const user = auth?.user
+    if (user) {
+      const rawId = user.id ?? user.oid ?? user.sub
+      if (typeof rawId === 'string' || typeof rawId === 'number') {
+        entry.userId = String(rawId).slice(0, 128)
+      }
     }
 
     if (backgroundJobActive) {

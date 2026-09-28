@@ -78,8 +78,12 @@ code_quality_check:
         echo "Runner did not provide CI_SERVER_TLS_CA_FILE; cannot securely access the internal npm registry."
         exit 1
       fi
+      # NODE_EXTRA_CA_CERTS *extends* Node's built-in public CA roots with the
+      # internal GitLab CA, so registry.npmjs.org (public roots) and the internal
+      # registry both validate. A `npm config set cafile` would instead *replace*
+      # the public roots with the internal-only CA, breaking the public registry
+      # with UNABLE_TO_GET_ISSUER_CERT_LOCALLY — so it is intentionally omitted.
       export NODE_EXTRA_CA_CERTS="$CI_SERVER_TLS_CA_FILE"
-      npm config set cafile "$CI_SERVER_TLS_CA_FILE"
     - npm install -g npm@11.18.0
     - npm ci --legacy-peer-deps --no-audit --no-fund
   script:

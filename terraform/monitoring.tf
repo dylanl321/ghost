@@ -412,6 +412,22 @@ resource "aws_cloudwatch_query_definition" "errors_by_endpoint" {
   EOT
 }
 
+resource "aws_cloudwatch_query_definition" "api_5xx_details" {
+  provider        = aws.target_deployment_account
+  name            = "${var.app_name}/Recent API 5XX Details"
+  log_group_names = [aws_cloudwatch_log_group.ecs.name]
+
+  # Per-request 5xx detail for tracing a failure across handler logs via
+  # requestId/userId. No alarm here: live 5xx is zero and the API5xx/ALB
+  # metric alarm already covers alerting.
+  query_string = <<-EOT
+    filter type = "request" and statusCode >= 500
+    | fields @timestamp, method, path, statusCode, durationMs, requestId, userId
+    | sort @timestamp desc
+    | limit 50
+  EOT
+}
+
 resource "aws_cloudwatch_query_definition" "slowest_by_average" {
   provider        = aws.target_deployment_account
   name            = "${var.app_name}/Slowest Endpoints by Average"
