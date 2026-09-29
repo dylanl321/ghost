@@ -2,6 +2,7 @@ import { defineNitroPlugin } from 'nitropack/runtime/plugin'
 import { isChatQueueConfigured, receiveChatJobs } from '../utils/chat-job-queue'
 import { processChatQueueMessage } from '../utils/chat-worker'
 import { failStaleRunningJobs } from '../utils/strands-async-processor'
+import { computeReceiveBackoffMs } from '../utils/chat-worker-backoff'
 import { logger } from '../utils/logger'
 
 export default defineNitroPlugin(() => {
@@ -12,14 +13,24 @@ export default defineNitroPlugin(() => {
 
   const run = async () => {
     logger.info('[Chat Worker] Started')
+    let consecutiveFailures = 0
     while (!stopping) {
       try {
         const messages = await receiveChatJobs(controller.signal)
+        // A successful receive (including an empty one) clears the backoff.
+        consecutiveFailures = 0
         await Promise.all(messages.map(processChatQueueMessage))
       } catch (error: any) {
         if (!stopping && error.name !== 'AbortError') {
-          logger.error('[Chat Worker] Receive loop failed', error)
-          await new Promise(resolve => setTimeout(resolve, 2000))
+          consecutiveFailures += 1
+          const retryDelayMs = computeReceiveBackoffMs(consecutiveFailures)
+          logger.error('[Chat Worker] Receive loop failed', {
+            consecutiveFailures,
+            retryDelayMs,
+            errorName: error?.name,
+            errorCode: error?.code,
+          })
+          await new Promise(resolve => setTimeout(resolve, retryDelayMs))
         }
       }
     }

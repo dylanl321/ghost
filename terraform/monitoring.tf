@@ -1105,3 +1105,43 @@ resource "aws_cloudwatch_query_definition" "mcp_oauth_refresh_failures" {
     | sort @timestamp desc
   EOT
 }
+
+# Chat worker receive-loop failures (transient SQS dependency outages: ECONNRESET,
+# ETIMEDOUT). A tight burst indicates the worker cannot drain the chat queue.
+# Matched as a raw substring on the stable log wording so the filter stays valid
+# whether the fields are embedded in `message` (current JSON reporter) or promoted
+# to structured top-level fields.
+resource "aws_cloudwatch_log_metric_filter" "chat_receive_failure" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-chat-receive-failure"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "\"[Chat Worker] Receive loop failed\""
+
+  metric_transformation {
+    name          = "ChatReceiveFailureCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "chat_receive_failures" {
+  provider            = aws.target_deployment_account
+  alarm_name          = "${var.app_name}-chat-receive-failures"
+  alarm_description   = "Chat worker receive-loop failures exceeded 5 in 5 minutes — chat queue may not be draining"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ChatReceiveFailureCount"
+  namespace           = "${var.app_name}/Application"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 5
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Application = var.app_name
+  }
+}
