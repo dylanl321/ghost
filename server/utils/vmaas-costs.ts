@@ -570,7 +570,9 @@ async function loadInstanceActuals(month: string | undefined, referenceDate: Dat
     startDate: range.start,
     endDate: range.end,
     granularity: 'MONTHLY',
-    metrics: ['NetUnblendedCost'],
+    // UnblendedCost satisfies the authoritative reconciliation guard in
+    // validateCostQuery; per-instance amounts still use NetUnblendedCost below.
+    metrics: ['UnblendedCost', 'NetUnblendedCost'],
     groupBy: [{ type: 'TAG', key: 'InstanceID' }, { type: 'TAG', key: 'TenantID' }],
     filter: {
       And: [

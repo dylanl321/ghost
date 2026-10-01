@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildReconciliation, mergeCostExplorerPeriods } from '../../server/utils/cost-domain'
+import { buildReconciliation, mergeCostExplorerPeriods, validateCostQuery } from '../../server/utils/cost-domain'
 import { getRelativeDateRange } from '../../server/utils/date-helpers'
 import { getComparablePeriod } from '../../server/utils/date-periods'
 import { getPeriodBudget } from '../../shared/utils/budget-utils'
@@ -34,6 +34,17 @@ test('merges paginated groups by full period and preserves signed credits', () =
     delta: 50,
     reconciled: false
   })
+})
+
+test('authoritative guard rejects NetUnblendedCost-only queries but accepts the combined metrics', () => {
+  const base = { startDate: '2026-01-01', endDate: '2026-02-01', granularity: 'MONTHLY' as const }
+  // Regression: per-instance VMaaS actuals must request UnblendedCost alongside
+  // NetUnblendedCost so this guard no longer returns a 500.
+  assert.throws(
+    () => validateCostQuery({ ...base, metrics: ['NetUnblendedCost'] }),
+    /UnblendedCost is required for authoritative cost queries/
+  )
+  assert.doesNotThrow(() => validateCostQuery({ ...base, metrics: ['UnblendedCost', 'NetUnblendedCost'] }))
 })
 
 test('combines a logical group split across pagination pages once', () => {
