@@ -33,9 +33,12 @@ const {
   selectedView,
   filters,
   overview,
+  overviewWindow,
+  applicationsHealth,
   configuration,
   applications,
   applicationDetail,
+  reconcile,
   attempts,
   grants,
   issues,
@@ -45,6 +48,26 @@ const {
   audit,
   isEmpty
 } = admin
+
+/** Allowlisted Overview time windows exposed by the window selector. */
+type OverviewWindow = '1h' | '24h' | '7d'
+const OVERVIEW_WINDOW_OPTIONS: { value: OverviewWindow, label: string }[] = [
+  { value: '1h', label: 'Last 1h' },
+  { value: '24h', label: 'Last 24h' },
+  { value: '7d', label: 'Last 7d' }
+]
+
+/**
+ * The selected Overview window, defaulting to `24h` (the server default) when
+ * the composable has no explicit selection yet. Changing it reloads the
+ * Overview through the composable so the server realigns its freshness horizon.
+ */
+const selectedWindow = computed<OverviewWindow>({
+  get: () => (overviewWindow.value ?? '24h'),
+  set: (value: OverviewWindow) => {
+    admin.loadOverview(value)
+  }
+})
 
 const TABS: { view: OAuthAdminView, label: string, icon: string }[] = [
   { view: 'overview', label: 'Overview', icon: 'i-heroicons-heart' },
@@ -64,6 +87,10 @@ const TABS: { view: OAuthAdminView, label: string, icon: string }[] = [
 function loadView(view: OAuthAdminView) {
   switch (view) {
     case 'overview':
+      // The Overview shows both stage health and the always-present
+      // Applications health block; load both. loadOverview reuses the last
+      // selected window (default 24h).
+      admin.loadApplicationsHealth()
       return admin.loadOverview()
     case 'configuration':
       return admin.loadConfiguration()
@@ -126,6 +153,18 @@ function filterApplications(clientId: string | undefined) {
   admin.setFilters({ clientId })
 }
 
+/**
+ * Kick one bounded inventory reconcile, then refresh the Applications inventory
+ * so newly seeded clients appear. The composable's `reconcileInventory()` keeps
+ * its own coverage/loading state in composable memory; `loadApplications()`
+ * reuses the abortable, generation-guarded loader so a superseded response can
+ * never overwrite the current view.
+ */
+async function reconcileApplications() {
+  await admin.reconcileInventory()
+  await admin.loadApplications()
+}
+
 const activeIndex = computed(() => OAUTH_ADMIN_VIEWS.indexOf(selectedView.value))
 </script>
 
@@ -169,15 +208,41 @@ const activeIndex = computed(() => OAUTH_ADMIN_VIEWS.indexOf(selectedView.value)
     </nav>
 
     <div :key="activeIndex">
-      <OAuthOverviewPanel
-        v-if="selectedView === 'overview'"
-        :state="overview"
-        :empty="isEmpty(overview)"
-        @retry="admin.loadOverview()"
-      />
+      <div v-if="selectedView === 'overview'" class="space-y-6">
+        <!-- Overview time-window selector (1h / 24h / 7d, default 24h). Bound
+             to the composable so a change realigns the server freshness
+             horizon and reloads stage health. -->
+        <div class="flex items-center justify-end gap-2">
+          <label for="oauth-overview-window" class="text-xs font-medium text-gray-500 dark:text-gray-400">
+            Window
+          </label>
+          <USelect
+            id="oauth-overview-window"
+            v-model="selectedWindow"
+            :options="OVERVIEW_WINDOW_OPTIONS"
+            option-attribute="label"
+            value-attribute="value"
+            size="sm"
+            class="w-32"
+            aria-label="Overview time window"
+          />
+        </div>
+
+        <OAuthApplicationsHealthPanel
+          :state="applicationsHealth"
+          :empty="isEmpty(applicationsHealth)"
+          @retry="admin.loadApplicationsHealth()"
+        />
+
+        <OAuthOverviewPanel
+          :state="overview"
+          :empty="isEmpty(overview)"
+          @retry="admin.loadOverview()"
+        />
+      </div>
 
       <OAuthConfigurationPanel
-        v-else-if="selectedView === 'configuration'"
+        v-if="selectedView === 'configuration'"
         :state="configuration"
         :empty="isEmpty(configuration)"
         @retry="admin.loadConfiguration()"
@@ -189,11 +254,13 @@ const activeIndex = computed(() => OAUTH_ADMIN_VIEWS.indexOf(selectedView.value)
         :detail="applicationDetail"
         :list-empty="isEmpty(applications)"
         :client-id-filter="filters.clientId"
+        :reconcile="reconcile"
         @retry="admin.loadApplications()"
         @load-more="(cursor: string) => admin.loadApplications(cursor)"
         @select="selectApplication"
         @filter="filterApplications"
         @created="admin.loadApplications()"
+        @reconcile="reconcileApplications"
       />
 
       <OAuthActivityPanel

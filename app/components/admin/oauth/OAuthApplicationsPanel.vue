@@ -12,8 +12,23 @@ import type {
   OAuthApplicationDetail,
   OAuthApplicationLifecycle,
   OAuthApplicationSummary,
+  OAuthBackfillCoverage,
+  OAuthCoverageState,
   OAuthObservedUse
 } from '#shared/types/oauth-administration'
+
+/**
+ * The composable's in-memory reconcile state (`reconcile`) surfaced to the panel
+ * so it can render the "Reconcile inventory now" control, its loading/coverage
+ * result, and a "last reconciled" indicator. State stays in composable memory;
+ * the panel only reads it and emits `reconcile` to trigger a run.
+ */
+interface ReconcileState {
+  loading: boolean
+  coverage: OAuthBackfillCoverage | null
+  error: string | null
+  unavailable: boolean
+}
 
 interface ViewState<T> {
   data: T | null
@@ -36,6 +51,8 @@ const props = defineProps<{
   detail: ViewState<OAuthApplicationDetail>
   listEmpty: boolean
   clientIdFilter?: string
+  /** In-memory reconcile state from the composable (task 6.1). */
+  reconcile?: ReconcileState
 }>()
 
 const emit = defineEmits<{
@@ -45,6 +62,12 @@ const emit = defineEmits<{
   filter: [clientId: string | undefined]
   /** Emitted when a client was created so the page can reload the inventory. */
   created: []
+  /**
+   * Emitted to kick one bounded inventory reconcile. The page awaits
+   * `reconcileInventory()` then refreshes the inventory; this panel only
+   * reflects the composable's `reconcile` state.
+   */
+  reconcile: []
 }>()
 
 const search = ref(props.clientIdFilter || '')
@@ -58,6 +81,80 @@ function onCreated() {
 }
 
 const applications = computed(() => props.list.data || [])
+
+/**
+ * The coverage backing the banner: prefer the most recent in-session reconcile
+ * result, otherwise fall back to the list's own coverage from the last load.
+ * Drives whether the "still reconciling" banner is shown.
+ */
+const activeCoverage = computed<OAuthCoverageState | null>(() => {
+  return props.reconcile?.coverage?.coverage
+    ?? (props.list.coverage as OAuthCoverageState | null)
+    ?? null
+})
+
+/** Show the banner while coverage is partial / rebuilding / unavailable. */
+const showCoverageBanner = computed(() => {
+  const coverage = activeCoverage.value
+  return coverage === 'partial' || coverage === 'rebuilding' || coverage === 'unavailable'
+})
+
+/** Human-readable banner copy keyed off the current coverage state. */
+const coverageBanner = computed(() => {
+  switch (activeCoverage.value) {
+    case 'unavailable':
+      return {
+        color: 'red' as const,
+        icon: 'i-heroicons-no-symbol',
+        title: 'Inventory coverage unavailable',
+        description: 'The provider inventory could not be read, so some applications may be missing. Try reconciling again shortly.'
+      }
+    case 'rebuilding':
+      return {
+        color: 'sky' as const,
+        icon: 'i-heroicons-arrow-path',
+        title: 'Inventory is rebuilding',
+        description: 'Inventory is still being reconciled — some applications may be missing until it completes.'
+      }
+    default:
+      return {
+        color: 'amber' as const,
+        icon: 'i-heroicons-exclamation-triangle',
+        title: 'Inventory is still being reconciled',
+        description: 'Some applications may be missing until reconciliation completes.'
+      }
+  }
+})
+
+const reconcileLoading = computed(() => props.reconcile?.loading ?? false)
+const reconcileResult = computed(() => props.reconcile?.coverage ?? null)
+
+/**
+ * The "last reconciled" timestamp: prefer the in-session reconcile checkpoint
+ * (`updatedAt`, else the high-water mark), otherwise fall back to the list's
+ * observation time. Returns null when nothing is known so the UI shows "—".
+ */
+const lastReconciledAt = computed<string | null>(() => {
+  const coverage = props.reconcile?.coverage
+  if (coverage) return coverage.updatedAt || coverage.highWaterMark || null
+  return props.list.observedAt || null
+})
+
+const lastReconciledLabel = computed(() => {
+  const value = lastReconciledAt.value
+  return value ? formatTimestamp(value) : '—'
+})
+
+/** Brief counts surfaced after a completed reconcile run. */
+const reconcileCounts = computed(() => {
+  const coverage = reconcileResult.value
+  if (!coverage) return null
+  return `${coverage.clientsProjected} client(s), ${coverage.grantsProjected} grant(s)`
+})
+
+function onReconcile() {
+  emit('reconcile')
+}
 
 function lifecycleMeta(lifecycle: OAuthApplicationLifecycle) {
   switch (lifecycle) {
@@ -151,6 +248,48 @@ const detailData = computed(() => props.detail.data)
     </header>
 
     <OAuthApplicationCreateForm v-model:open="createOpen" @created="onCreated" />
+
+    <!-- Reconcile inventory control + "last reconciled" indicator. The button
+         kicks one bounded backfill via the composable (POST /applications/
+         reconcile); the page refreshes the inventory on completion. -->
+    <div class="flex flex-col gap-2 rounded-md border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/40 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600 dark:text-gray-400">
+        <span>
+          Last reconciled:
+          <span class="font-medium text-gray-800 dark:text-gray-200">{{ lastReconciledLabel }}</span>
+        </span>
+        <span v-if="reconcileCounts" class="text-gray-500 dark:text-gray-500">
+          Seeded {{ reconcileCounts }}
+        </span>
+        <span v-if="reconcile?.error" class="text-red-600 dark:text-red-400">{{ reconcile.error }}</span>
+        <span v-else-if="reconcile?.unavailable" class="text-red-600 dark:text-red-400">
+          Reconcile is unavailable for your session.
+        </span>
+      </div>
+      <UButton
+        icon="i-heroicons-arrow-path"
+        color="gray"
+        variant="soft"
+        size="sm"
+        :loading="reconcileLoading"
+        :disabled="reconcileLoading"
+        aria-label="Reconcile inventory now"
+        @click="onReconcile"
+      >
+        Reconcile inventory now
+      </UButton>
+    </div>
+
+    <!-- Coverage banner: explicit while the seed is partial / rebuilding /
+         unavailable so a partial backfill never looks like missing data. -->
+    <UAlert
+      v-if="showCoverageBanner"
+      :color="coverageBanner.color"
+      variant="subtle"
+      :icon="coverageBanner.icon"
+      :title="coverageBanner.title"
+      :description="coverageBanner.description"
+    />
 
     <OAuthCoverageBadge
       :coverage="(list.coverage as any)"

@@ -228,6 +228,8 @@ export const supportedV1Paths = [
   '/api/v1/accounts/{identifier}',
   '/api/v1/organization',
   '/api/v1/costs/summary',
+  '/api/v1/costs/tags',
+  '/api/v1/costs/tag-keys',
   '/api/v1/forecasts/aws',
   '/api/v1/forecasts/financial',
   '/api/v1/security/summary',

@@ -10,6 +10,7 @@ import { getMcpResourceUrl } from '../../../mcp/config'
 import { saveMcpGraphDelegation } from '../../../mcp/oauth/delegated-graph'
 import { withSubjectGraphFence } from '../../../mcp/oauth/graph-delegation-cleanup'
 import { saveGhostMcpIdentity } from '../../../mcp/oauth/identity'
+import { saveGrantPointer } from '../../../mcp/oauth/grant-pointer'
 import { GHOST_MCP_SCOPES, type GhostMcpIdentity } from '../../../mcp/types'
 import { getOAuthStageInstrumentation } from '../../../mcp/oauth/admin/stage-instrumentation'
 import { readManagedPolicy } from '../../../mcp/oauth/admin/managed-policy-service'
@@ -281,6 +282,12 @@ export default defineEventHandler(async event => {
   // live grant found" and this new grant becoming visible (Req 9.3). The fence
   // is keyed by subject, so unrelated users never contend.
   const grantId = await withSubjectGraphFence(identity.subject, () => grant.save())
+  // Consent-once (pure SSO): record the approved grant for this (subject, client)
+  // so a later sign-in in a fresh session reuses it without re-prompting. This
+  // is a convenience pointer only — reuse is still gated by lifecycle/revocation
+  // in loadReusableGhostGrant, so a write failure just means "prompt again".
+  await saveGrantPointer(identity.subject, String(details.params.client_id), grantId)
+    .catch(error => logger.warn('[MCP OAuth] Could not record consent-once grant pointer', error))
   const redirectTo = await provider.interactionResult(
     event.node.req, event.node.res, consentSubmission(grantId)
   )

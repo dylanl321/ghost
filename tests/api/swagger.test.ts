@@ -10,6 +10,8 @@ import { documentedRouteCount } from '../../server/generated/swagger-routes'
 import '../../server/api/v1/accounts/index.get'
 import '../../server/api/v1/accounts/[identifier].get'
 import '../../server/api/v1/costs/summary.get'
+import '../../server/api/v1/costs/tags.get'
+import '../../server/api/v1/costs/tag-keys.get'
 import '../../server/api/v1/forecasts/aws.get'
 import '../../server/api/v1/forecasts/financial.get'
 import '../../server/api/v1/organization.get'
@@ -51,10 +53,10 @@ test('OpenAPI output is deterministic and supplies operation IDs and path parame
   )
 })
 
-test('primary OpenAPI contains exactly the nine supported v1 paths', () => {
+test('primary OpenAPI contains exactly the supported v1 paths', () => {
   const spec: any = getOpenApiSpec()
   assert.deepEqual(Object.keys(spec.paths).sort(), [...supportedV1Paths].sort())
-  assert.equal(Object.keys(spec.paths).length, 9)
+  assert.equal(Object.keys(spec.paths).length, 11)
   assert.ok(Object.keys(spec.paths).every(path => path.startsWith('/api/v1/')))
   assert.deepEqual(spec.tags.map((tag: any) => tag.name), ['Accounts', 'Costs', 'Forecasts', 'Security'])
 
@@ -91,6 +93,8 @@ test('every account-scoped v1 operation documents canonical account selectors', 
   const accountScopedPaths = [
     '/api/v1/accounts',
     '/api/v1/costs/summary',
+    '/api/v1/costs/tags',
+    '/api/v1/costs/tag-keys',
     '/api/v1/forecasts/aws',
     '/api/v1/forecasts/financial',
     '/api/v1/organization',
@@ -104,6 +108,39 @@ test('every account-scoped v1 operation documents canonical account selectors', 
     assert.ok(names.has('adminOf'), `${path} must support adminOf`)
     assert.ok(names.has('ownedBy'), `${path} must support ownedBy`)
   }
+})
+
+test('cost APIs document tag discovery, normalized cost data, and page-compatible options', () => {
+  const spec = getOpenApiSpec()
+  const analysis = spec.paths['/api/v1/costs/tags'].get
+  const discovery = spec.paths['/api/v1/costs/tag-keys'].get
+  const summary = spec.paths['/api/v1/costs/summary'].get
+  const names = (operation: any): Map<string, any> =>
+    new Map(operation.parameters.map((item: any) => [item.name, item]))
+  const parameters = names(analysis)
+  for (const name of ['tagKey', 'period', 'startDate', 'endDate', 'includeValues', 'includeAccounts', 'valueGroupKey', 'proforma']) {
+    assert.ok(parameters.has(name), `Tag costs must document ${name}`)
+  }
+  assert.equal(parameters.get('tagKey').required, true)
+  assert.equal(parameters.get('includeValues').schema.default, true)
+  assert.equal(parameters.get('includeAccounts').schema.default, true)
+  assert.match(parameters.get('endDate').description, /exclusive/i)
+  assert.match(parameters.get('proforma').description, /estimates/i)
+  assert.equal(names(discovery).get('tagKey').required, false)
+  assert.ok(names(summary).has('period'))
+  assert.ok(names(summary).has('tagFilterValues'))
+
+  const data = analysis.responses[200].content['application/json'].schema.properties.data
+  for (const field of ['values', 'accounts', 'signedTotalCost', 'totalTaggedCost', 'totalUntaggedCost', 'overallCoverage', 'proformaEstimation']) {
+    assert.ok(data.properties[field], `Tag costs must document ${field}`)
+  }
+  for (const operation of [analysis, discovery]) {
+    assert.deepEqual(operation.security, [{ ApiKeyAuth: [] }, { OIDCAuth: [] }])
+  }
+
+  // Aliases must not change the browser endpoint's default coverage-only payload.
+  const internal = getInternalOpenApiSpec().paths['/api/costs/tag-coverage'].get
+  assert.equal(names(internal).get('includeValues').schema.default, false)
 })
 
 test('security v1 operations expose complete cursor metadata, filters, defaults, and examples', () => {

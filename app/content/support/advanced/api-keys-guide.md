@@ -1,6 +1,6 @@
 ---
 title: API Keys & Programmatic Access
-lastUpdated: 2026-09-03
+lastUpdated: 2026-10-01
 icon: i-heroicons-key
 ---
 
@@ -22,11 +22,13 @@ Every account-scoped v1 endpoint uses the same selectors:
 - `adminOf`: accounts where a person is primary admin, delegate, or cost manager
 - `ownedBy`: accounts owned by an account email or primary account admin
 
+If a supplied selector matches no accounts, the request returns an error. Omit selectors to request organization-wide data.
+
 Security integrations can use `/api/v1/security/findings` for Security Hub ASFF/normalized findings or `/api/v1/security/inspector/findings` for resource, CVE/GHSA, package, repository, image, score, fix, exploit, status, and Inspector-specific filters. Inspector requests must include at least one account selector.
 
 Security finding lists use signed cursor pagination. Read `metadata.pagination.nextCursor` and pass it unchanged as `cursor` until `hasMore` is false. `total` is `null` whenever AWS cannot calculate an exact total; never treat `returned` as the complete count.
 
-When selected accounts do not have an ID for the requested `environment`, valid accounts are still queried and each skipped account appears in `metadata.errors` with its known IDs and account name.
+For security requests, when selected accounts do not have an ID for the requested `environment`, valid accounts are still queried and each skipped account appears in `metadata.errors` with its known IDs and account name.
 
 ## Using Your Key
 
@@ -69,6 +71,28 @@ curl -G -H "x-api-key: YOUR_KEY" \
 ```
 
 `startDate` and `endDate` are inclusive, must be supplied together, and cannot be combined with `lookbackDays`. Security Hub defaults to the last 30 days by `firstObservedAt`; Inspector defaults to all active findings.
+
+## Costs by Tag
+
+Use a key with `costs:read` to retrieve the same cost breakdown as the Tag Analysis page:
+
+```bash
+curl -G -H "x-api-key: YOUR_KEY" \
+  --data-urlencode "tagKey=Project" \
+  --data-urlencode "period=lastMonth" \
+  --data-urlencode "accountIdentifiers=111111111111,222222222222" \
+  "https://ghost.example/api/v1/costs/tags"
+```
+
+The response includes `data.values` with each normalized tag value, `billableCost`, raw source values, and contributing accounts. It also includes tagged and untagged totals, `signedTotalCost` including credits, and `overallCoverage` calculated from positive charges. Costs use `NetUnblendedCost`, matching the Tag Analysis page.
+
+- Use `/api/v1/costs/tag-keys?period=lastMonth` to discover tag keys. Add `tagKey=Project` to discover that key's raw values.
+- Use `includeAccounts=false` for a smaller tag-value response. Each value still includes its `accountCount`.
+- Pass a returned `values[].groupKey` as `valueGroupKey` to retrieve one value and its account contributions. Coverage and scope totals still describe the entire tag key.
+- Set `tagKey=aws:createdBy` to combine the same creator across accounts. Filter the returned values by `isPerson=true` to reproduce the page's People view.
+- Set `proforma=true` in the commercial environment for account-and-month weighted estimates. Check `proformaEstimation.available`; estimates are omitted when the necessary data is incomplete. Use account-level proforma totals for chargeback.
+
+Both tag endpoints accept the standard account selectors and default to `last90days` if no dates are supplied. For cost requests, `startDate` is inclusive and `endDate` is exclusive; supply both or use `period`. For example, August costs use `startDate=2026-08-01&endDate=2026-09-01`.
 
 ## Code Examples
 
