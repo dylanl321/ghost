@@ -20,6 +20,84 @@ import type { AccountInfo, AWSEnvironmentType, AccountLookupCriteria } from '../
 import { getTableName, getTableEnvironment } from '../lib/dynamodb-config'
 import { logger } from './logger'
 
+// ---------------------------------------------------------------------------
+// Organizations throttle-aware retry
+//
+// Organizations ListAccounts shares a low request budget and surfaces
+// TooManyRequestsException (and equivalents) under modest concurrency. The
+// paginated walk below retries those with bounded exponential backoff + full
+// jitter; all non-throttle errors propagate unchanged to the existing catch.
+// ---------------------------------------------------------------------------
+
+const ORG_THROTTLE_ERROR_NAMES = new Set([
+  'TooManyRequestsException',
+  'ThrottlingException',
+  'RequestThrottledException',
+  'Throttling',
+  'TooManyRequests',
+])
+
+function isOrgThrottleError(err: unknown): boolean {
+  if (err && typeof err === 'object') {
+    const e = err as Record<string, any>
+    if (typeof e.name === 'string' && ORG_THROTTLE_ERROR_NAMES.has(e.name)) return true
+    if (e.$metadata && typeof e.$metadata === 'object' && e.$metadata.httpStatusCode === 429) return true
+  }
+  return false
+}
+
+export interface OrgThrottleRetryOptions {
+  environment: AWSEnvironmentType
+  operation: string
+  maxAttempts?: number
+  baseDelayMs?: number
+  /** Injectable for tests — defaults to real timers. */
+  sleep?: (ms: number) => Promise<void>
+  /** Injectable for tests — defaults to Math.random. */
+  random?: () => number
+}
+
+/**
+ * Run `fn`, retrying only on throttle errors with bounded exponential backoff
+ * and full jitter. Non-throttle errors (and the final throttle error after
+ * exhausting attempts) are rethrown unchanged. Exported for unit testing.
+ */
+export async function withOrganizationsThrottleRetry<T>(
+  fn: () => Promise<T>,
+  opts: OrgThrottleRetryOptions
+): Promise<T> {
+  const maxAttempts = opts.maxAttempts ?? 5
+  const baseDelayMs = opts.baseDelayMs ?? 200
+  const sleep = opts.sleep ?? _sleep
+  const random = opts.random ?? Math.random
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn()
+    } catch (error) {
+      if (isOrgThrottleError(error) && attempt < maxAttempts) {
+        // Full-jitter exponential backoff: delay in [0, base * 2^(attempt-1)]
+        const cap = baseDelayMs * Math.pow(2, attempt - 1)
+        const delayMs = Math.floor(random() * cap)
+        logger.warn(
+          `Organizations throttled, retrying: ${JSON.stringify({
+            environment: opts.environment,
+            operation: opts.operation,
+            attempt,
+            maxAttempts,
+            delayMs,
+          })}`
+        )
+        await sleep(delayMs)
+        continue
+      }
+      throw error
+    }
+  }
+  // Unreachable: the loop either returns or rethrows on the final attempt.
+  throw new Error(`Organizations ${opts.operation} exhausted ${maxAttempts} attempts`)
+}
+
 /**
  * Get the DynamoDB table name for accounts (with config loader)
  */
@@ -90,8 +168,11 @@ export async function getAllAccountsFromOrganizations(
     let nextToken: string | undefined
     
     do {
-      const response = await client.send(new ListAccountsCommand({ NextToken: nextToken }))
-      
+      const response = await withOrganizationsThrottleRetry(
+        () => client.send(new ListAccountsCommand({ NextToken: nextToken })),
+        { environment, operation: 'ListAccounts' }
+      )
+
       if (response.Accounts) {
         for (const account of response.Accounts) {
           if (account.Id && account.Name) {
