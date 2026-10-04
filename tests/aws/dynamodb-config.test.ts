@@ -1,11 +1,44 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  clearConfigCache,
+  getDynamoDBConfig,
+  getDynamoDBConfigDiagnostic,
   isProductionDeployment,
   mergeDynamoDBConfig,
   type DynamoDBConfig,
   type DynamoDBTableConfig
 } from '../../server/lib/dynamodb-config'
+
+test('config diagnostic is redacted and returned as a defensive copy', async () => {
+  const originalNodeEnv = process.env.NODE_ENV
+  process.env.NODE_ENV = 'development'
+
+  try {
+    clearConfigCache()
+    await getDynamoDBConfig()
+
+    const diagnostic = getDynamoDBConfigDiagnostic()
+    assert.equal(diagnostic.source, 'development-env')
+    assert.equal(diagnostic.missingKeyCount, 0)
+    assert.deepEqual(diagnostic.missingKeys, [])
+    assert.ok(diagnostic.loadedAt)
+    assert.deepEqual(Object.keys(diagnostic).sort(), [
+      'loadedAt',
+      'missingKeyCount',
+      'missingKeys',
+      'source'
+    ])
+
+    const returnedKeys: string[] = diagnostic.missingKeys
+    returnedKeys.push('mutation-must-not-leak')
+    assert.deepEqual(getDynamoDBConfigDiagnostic().missingKeys, [])
+  } finally {
+    if (originalNodeEnv === undefined) delete process.env.NODE_ENV
+    else process.env.NODE_ENV = originalNodeEnv
+    clearConfigCache()
+  }
+})
 
 const monitoringLocation = {
   environment: 'commercial',
