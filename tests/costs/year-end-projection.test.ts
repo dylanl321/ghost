@@ -48,6 +48,24 @@ test('year-end projection can derive scoped actuals when displayed spend is unav
   assert.deepEqual(projection, { actual: 125, remainder: 25, projectedTotal: 150 })
 })
 
+test('YTD displayed spend is not used as the current-month actual or projection', () => {
+  for (const mode of ['billable', 'proforma']) {
+    const accounts = [
+      { accountId: 'selected', totalCost: 300 },
+      { accountId: 'other', totalCost: 1100 }
+    ]
+    const projection = resolveCurrentMonthProjection({
+      displayedCurrentSpend: 1600, // YTD total, not this month's cost
+      timeframe: 'ytd',
+      currentMonthData: mode === 'proforma' ? { proforma: { accounts } } : { accounts },
+      mode,
+      accountScope: new Set(['selected']),
+      remainderForecast: 50
+    })
+    assert.deepEqual(projection, { actual: 300, remainder: 50, projectedTotal: 350 })
+  }
+})
+
 test('default account filters use explicit environment metadata, not request ID', () => {
   const filtered = applyAccountFilters([
     { accountId: 'prod', requestID: '100', enclaveStatus: 'Sustainment', environment: 'production' },
