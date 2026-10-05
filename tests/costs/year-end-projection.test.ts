@@ -33,6 +33,7 @@ test('year-end projection uses displayed spend instead of hidden account costs',
 
 test('year-end projection can derive scoped actuals when displayed spend is unavailable', () => {
   const projection = resolveCurrentMonthProjection({
+    timeframe: 'thisMonth',
     currentMonthData: {
       accounts: [
         { accountId: 'included', totalCost: 125 },
