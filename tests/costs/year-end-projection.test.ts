@@ -11,6 +11,7 @@ test('year-end projection uses displayed spend instead of hidden account costs',
   const accountScope = new Set(['prod-account'])
   const projection = resolveCurrentMonthProjection({
     displayedCurrentSpend: 300,
+    timeframe: 'thisMonth',
     currentMonthData: {
       proforma: {
         accounts: [
