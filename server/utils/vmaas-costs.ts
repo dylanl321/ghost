@@ -18,6 +18,14 @@ import {
 export const VMAAS_ACCOUNT_ID = '650505514334'
 export const VMAAS_BILLING_ACCOUNT_ID = '871049984747'
 export const VMAAS_REGION = 'us-gov-west-1'
+
+/**
+ * Instance-level actuals are grouped on NetUnblendedCost, but queryCostDataset
+ * requires UnblendedCost to reconcile the authoritative total (see
+ * validateCostQuery). Request both so the query passes validation while the
+ * grouped per-instance amounts keep using NetUnblendedCost.
+ */
+export const VMAAS_INSTANCE_ACTUAL_METRICS = ['UnblendedCost', 'NetUnblendedCost'] as const
 const TEAM_TABLE = 'vmaas-team-registry'
 const TENANT_TABLE = 'vmaas-tenant-registry'
 const SCHEDULER_TABLE = 'SchedulerConfig'
@@ -570,7 +578,7 @@ async function loadInstanceActuals(month: string | undefined, referenceDate: Dat
     startDate: range.start,
     endDate: range.end,
     granularity: 'MONTHLY',
-    metrics: ['NetUnblendedCost'],
+    metrics: [...VMAAS_INSTANCE_ACTUAL_METRICS],
     groupBy: [{ type: 'TAG', key: 'InstanceID' }, { type: 'TAG', key: 'TenantID' }],
     filter: {
       And: [
