@@ -1105,3 +1105,56 @@ resource "aws_cloudwatch_query_definition" "mcp_oauth_refresh_failures" {
     | sort @timestamp desc
   EOT
 }
+
+# Authoritative cost queries reject requests missing UnblendedCost, surfacing as
+# sparse HTTP 500s that fall under the ALB target-5xx alarm threshold. Alarm on
+# the exact validation signature so any occurrence pages immediately.
+resource "aws_cloudwatch_log_metric_filter" "cost_query_validation_failure" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-cost-query-validation-failure"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "\"UnblendedCost is required for authoritative cost queries\""
+
+  metric_transformation {
+    name          = "CostQueryValidationFailureCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "cost_query_validation_failures" {
+  provider            = aws.target_deployment_account
+  alarm_name          = "${var.app_name}-cost-query-validation-failures"
+  alarm_description   = "Cost query validation failures detected — authoritative query missing UnblendedCost"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "CostQueryValidationFailureCount"
+  namespace           = "${var.app_name}/Application"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Application = var.app_name
+  }
+}
+
+resource "aws_cloudwatch_query_definition" "api_5xx_by_endpoint_binned" {
+  provider        = aws.target_deployment_account
+  name            = "${var.app_name}/API 5XX Counts by Endpoint (5m)"
+  log_group_names = [aws_cloudwatch_log_group.ecs.name]
+
+  query_string = <<-EOT
+    filter type = "request" and statusCode >= 500
+    | stats count(*) as errors,
+            avg(durationMs) as avg_ms,
+            pct(durationMs, 95) as p95_ms
+      by method, path, bin(5m) as window
+    | sort window desc
+  EOT
+}
