@@ -113,14 +113,6 @@ export const NOTIFICATION_SOURCE_REGISTRY: NotificationSourceDefinition[] = [
     icon: 'i-heroicons-envelope'
   },
   {
-    id: 'strands-async-processor',
-    name: 'AI Chat Completion',
-    description: 'Notifies users when their async AI analysis query completes or encounters an error.',
-    triggerType: 'user-action',
-    categories: ['CHAT_COMPLETE'],
-    icon: 'i-heroicons-chat-bubble-left-right'
-  },
-  {
     id: 'feedback-submission',
     name: 'Feedback Confirmation',
     description: 'Sends a confirmation notification when a user submits feedback (issue, feature request, or general feedback).',

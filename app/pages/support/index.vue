@@ -80,7 +80,7 @@
       <!-- MCP Setup -->
       <UCard
         class="cursor-pointer"
-        @click="navigateTo('/chat/mcp')"
+        @click="navigateTo('/mcp-connections')"
       >
         <div class="p-6">
           <div class="w-12 h-12 bg-cyan-100 dark:bg-cyan-900/30 rounded-lg flex items-center justify-center mb-4">

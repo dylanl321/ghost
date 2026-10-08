@@ -8,7 +8,9 @@
 export interface InsightPromptConfig {
   systemPrompt: string
   buildPrompt: (context: Record<string, any>) => string
-  /** Cache TTL override in seconds (default: 1800 = 30 min) */
+  /** Output limit override (default: 120 tokens). */
+  maxTokens?: number
+  /** Cache TTL override in seconds (default: 1800 = 30 min). */
   ttl?: number
 }
 
@@ -34,6 +36,36 @@ function billingCycleContext(): string {
 const DATA_CONSTRAINT = `Only reference data provided below — do not speculate, suggest what's missing, or recommend actions the data doesn't clearly support.`
 
 export const insightPrompts: Record<string, InsightPromptConfig> = {
+
+  'cost-report-analysis': {
+    systemPrompt: 'You are an AWS FinOps analyst. Analyze the provided cost report data directly, without preambles. ' + DATA_CONSTRAINT,
+    maxTokens: 500,
+    buildPrompt(ctx) {
+      const { totalCost = 0, totalBudget, budgetUtilization, previousCost, changePercent, topAccounts = [], topServices = [] } = ctx
+      return `COST OVERVIEW:
+- Total Spend: $${totalCost.toLocaleString()}${changePercent !== undefined ? ` (${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(1)}% vs previous period)` : ''}
+${totalBudget ? `- Total Budget: $${totalBudget.toLocaleString()}` : ''}
+${budgetUtilization !== undefined ? `- Budget Utilization: ${budgetUtilization.toFixed(1)}%` : ''}
+${previousCost !== undefined ? `- Previous Period: $${previousCost.toLocaleString()}` : ''}
+
+TOP 15 ACCOUNTS:
+${topAccounts.map((a: any, i: number) =>
+  `${i + 1}. ${a.name}: $${a.cost.toLocaleString()}${a.budget ? ` (Budget: $${a.budget.toLocaleString()}, ${a.utilization?.toFixed(0)}% utilized)` : ''}`
+).join('\n')}
+
+TOP AWS SERVICES:
+${topServices.map((s: any, i: number) => `${i + 1}. ${s.name}: $${s.cost.toLocaleString()}`).join('\n')}
+
+Write 3-4 concise paragraphs (~200 words) covering:
+
+1. Overall Cost Health: Assess the spending trends and budget performance
+2. Key Patterns & Highlights: Identify notable spending patterns, top accounts, and services driving costs
+3. Notable Items: Highlight accounts or services that warrant attention (over/under budget, unusual patterns)
+
+IMPORTANT: Focus on analysis and observations, not recommendations. Write direct analysis without preambles or meta-commentary. Never use phrases like "Based on the provided data". Be specific with numbers and patterns.`
+    }
+  },
+
 
   'dashboard-briefing': {
     systemPrompt: [

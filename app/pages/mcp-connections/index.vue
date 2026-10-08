@@ -359,7 +359,7 @@ onBeforeUnmount(() => {
         <summary><span>Help, capabilities, and manual configuration</span><UIcon name="i-heroicons-chevron-down" /></summary>
         <div class="advanced-links">
           <UButton to="/support/docs?topic=mcp-connections-guide" icon="i-heroicons-lifebuoy" color="gray" variant="ghost">Help and troubleshooting</UButton>
-          <UButton to="/chat/mcp/details" icon="i-heroicons-command-line" color="gray" variant="ghost">View capabilities</UButton>
+          <UButton to="/mcp-connections/details" icon="i-heroicons-command-line" color="gray" variant="ghost">View capabilities</UButton>
         </div>
         <div v-if="config" class="advanced-content">
           <section><h3>Reconnect GHOST</h3><p class="advanced-copy">Authorizations last 90 days. If Codex reports that reauthentication is required, authenticate the GHOST connection in MCP settings or run these commands.</p><div class="command-list"><CommandBlock :value="config.codex.resetCommands[0]" label="Logout command" wrap :copied="isCopied(config.codex.resetCommands[0])" @copy="copy(config.codex.resetCommands[0], 'Logout command')" /><CommandBlock :value="config.codex.loginCommand" label="Login command" wrap :copied="isCopied(config.codex.loginCommand)" @copy="copy(config.codex.loginCommand, 'Login command')" /></div></section>

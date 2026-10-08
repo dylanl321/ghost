@@ -87,7 +87,7 @@ code_quality_check:
 
     # The parallel Docker job verifies the complete production build.
     - echo "Running automated tests..."
-    - npm run test:chat
+    - npm run test:shared-content
 
     # TypeScript strict checking (non-blocking until existing errors are resolved)
     - echo "Checking TypeScript types..."

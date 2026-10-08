@@ -34,7 +34,7 @@
 
       <!-- Helper text for new users -->
       <div v-if="recentCommandItems.length === 0" class="flex-1 space-y-2 text-xs text-gray-500 dark:text-gray-400">
-        <p class="leading-relaxed">Search accounts, jump to pages, run actions, or ask AI questions — all from one place.</p>
+        <p class="leading-relaxed">Search accounts, jump to pages, run actions — all from one place.</p>
         <p class="text-[11px]">
           <NuxtLink to="/support/docs?topic=command-palette-guide" class="text-emerald-600 dark:text-emerald-400 hover:underline">Learn more</NuxtLink>
         </p>
@@ -70,17 +70,16 @@
         @click="open"
       >
         <UIcon name="i-heroicons-magnifying-glass" class="w-4 h-4" />
-        <span class="flex-1">Search pages, accounts, or ask a question...</span>
+        <span class="flex-1">Search pages and accounts...</span>
         <kbd class="text-[10px] px-1.5 py-0.5 bg-white dark:bg-slate-600 rounded text-gray-400 border border-gray-200 dark:border-gray-600">{{ isMac ? '⌘K' : 'Ctrl+K' }}</kbd>
       </button>
 
       <!-- Helper text for new users -->
       <div v-if="recentCommandItems.length === 0" class="mb-4 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/30">
-        <p class="text-xs text-gray-600 dark:text-gray-300 leading-relaxed mb-2">Search accounts, jump to pages, toggle theme, or ask AI — all from one keyboard shortcut.</p>
+        <p class="text-xs text-gray-600 dark:text-gray-300 leading-relaxed mb-2">Search accounts, jump to pages, toggle theme — all from one keyboard shortcut.</p>
         <div class="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400">
           <span>Search accounts by name or ID</span>
           <span>Select an account to drill into costs, security, tags</span>
-          <span>Type a question to ask AI</span>
         </div>
         <NuxtLink to="/support/docs?topic=command-palette-guide" class="inline-block mt-2 text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline">Full guide</NuxtLink>
       </div>
@@ -122,10 +121,7 @@
             <span>Security</span>
             <span><kbd class="px-1 py-0.5 bg-gray-100 dark:bg-slate-700 rounded text-[10px]">g s</kbd></span>
           </div>
-          <div class="flex items-center justify-between">
-            <span>AI Chat</span>
-            <span><kbd class="px-1 py-0.5 bg-gray-100 dark:bg-slate-700 rounded text-[10px]">g h</kbd></span>
-          </div>
+
           <div class="flex items-center justify-between">
             <span>Org Chart</span>
             <span><kbd class="px-1 py-0.5 bg-gray-100 dark:bg-slate-700 rounded text-[10px]">g o</kbd></span>
@@ -165,10 +161,7 @@
                 <UIcon name="i-heroicons-bolt" class="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-emerald-500" />
                 <span><strong>Actions</strong> like toggle theme, copy URL, or toggle sidebar</span>
               </li>
-              <li class="flex items-start gap-1.5">
-                <UIcon name="i-heroicons-sparkles" class="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-emerald-500" />
-                <span><strong>Ask AI</strong> — type a question and it routes to GHOST Chat</span>
-              </li>
+
             </ul>
             <NuxtLink to="/support/docs?topic=command-palette-guide" class="inline-block mt-2 text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline">Read the full guide</NuxtLink>
           </div>
@@ -280,7 +273,6 @@ const allShortcuts = [
   { label: 'Admin', keys: 'g a' },
   { label: 'Org Chart', keys: 'g o' },
   { label: 'Reports', keys: 'g r' },
-  { label: 'AI Chat', keys: 'g h' },
   { label: 'Profile', keys: 'g p' },
   { label: 'Changelog', keys: 'g l' },
 ]

@@ -210,16 +210,6 @@ export const CONDITION_CHECKERS: Record<string, ConditionChecker> = {
 
   // ── Existing placeholder conditions ─────────────────────────────────
 
-  ai_non_work_question: (event) => {
-    if (event.type !== 'ai.chat.sent') return false
-    const msg = String(event.payload.message ?? '')
-    const nonWorkPatterns = [
-      /meaning of life/i, /tell me a joke/i, /who are you/i,
-      /what('s| is) your (name|favorite)/i, /can you (sing|rap|dance)/i,
-      /how are you/i, /are you sentient/i, /what is love/i
-    ]
-    return nonWorkPatterns.some(p => p.test(msg))
-  },
 
   drilldown_depth_4_plus: (event) => {
     if (event.type !== 'drilldown.entered') return false

@@ -43,9 +43,6 @@ export type ActivityType =
   // Search
   | 'search.explorer'
   | 'search.cost'
-  // Chat
-  | 'chat.thread_create'
-  | 'chat.thread_share'
 
 /**
  * Log a structured user action to CloudWatch and local activity store.

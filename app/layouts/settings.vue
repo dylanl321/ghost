@@ -59,17 +59,13 @@
 
           <!-- Right: Active Queries -->
           <div class="flex items-center gap-3">
-            <ClientOnly>
-              <ActiveQueriesIndicator />
-            </ClientOnly>
           </div>
         </div>
       </footer>
     </div>
 
-    <!-- Global AI Assistant -->
+    <!-- Development options -->
     <ClientOnly>
-      <ChatThreadsSidebar v-if="siteConfigStore.isStrandsChatEnabled" />
 
       <!-- Dev Options Panel (only shows in dev auth mode) -->
       <DevOptionsPanel />
@@ -79,11 +75,9 @@
 
 <script setup lang="ts">
 import { useNavigationStore } from '~/stores/useNavigationStore'
-import { useSiteConfigStore } from '~/stores/useSiteConfigStore'
 
 const route = useRoute()
 const navigationStore = useNavigationStore()
-const siteConfigStore = useSiteConfigStore()
 const sideNavRef = ref()
 const mobileSettingsItems = [
   { label: 'API Access', to: '/settings/api-access' },

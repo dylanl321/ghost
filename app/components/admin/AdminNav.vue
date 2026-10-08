@@ -377,16 +377,11 @@ const categories = [
   },
   {
     id: 'ai',
-    label: 'AI & Agents',
+    label: 'AI Usage',
     icon: 'i-heroicons-sparkles',
     to: '/admin/ai',
     children: [
-      { label: 'Chat Monitor', icon: 'i-heroicons-chat-bubble-left-right', to: '/admin/ai?tab=chat-monitor' },
-      { label: 'Agent Logs', icon: 'i-heroicons-document-text', to: '/admin/ai?tab=agent-logs' },
-      { label: 'Agent Testing', icon: 'i-heroicons-beaker', to: '/admin/ai?tab=agent-testing' },
-      { label: 'Agent Health', icon: 'i-heroicons-heart', to: '/admin/ai?tab=agent-health' },
-      { label: 'AI Metrics', icon: 'i-heroicons-chart-bar', to: '/admin/ai?tab=ai-metrics' },
-      { label: 'Usage Collection', icon: 'i-heroicons-circle-stack', to: '/admin/ai?tab=usage-collection' },
+      { label: 'Usage Collection', icon: 'i-heroicons-circle-stack', to: '/admin/ai' },
       { label: 'MCP Usage', icon: 'i-heroicons-chart-bar-square', to: '/admin/mcp-usage' }
     ]
   },

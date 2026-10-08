@@ -11,7 +11,7 @@ const modeClasses = {
 <template>
   <div class="mx-auto max-w-5xl px-4 pb-14 sm:px-6">
     <header class="border-b py-7" style="border-color: var(--ghost-border)">
-      <UButton to="/chat/mcp" icon="i-heroicons-arrow-left" color="gray" variant="ghost" size="xs">MCP Connections</UButton>
+      <UButton to="/mcp-connections" icon="i-heroicons-arrow-left" color="gray" variant="ghost" size="xs">MCP Connections</UButton>
       <p class="mt-5 text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">GHOST MCP</p>
       <h1 class="mt-1 text-3xl font-semibold" style="color: var(--ghost-text)">What GHOST can do</h1>
       <p class="mt-2 max-w-2xl text-sm leading-6" style="color: var(--ghost-text-muted)">Explore the command families GHOST makes available to your MCP client, from official Handbook guidance to live AWS and personal workspace context.</p>
