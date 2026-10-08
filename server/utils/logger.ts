@@ -19,48 +19,12 @@
  */
 
 import { createConsola, type LogObject } from 'consola'
-
-// Map Consola numeric levels to string names
-const LEVEL_NAMES: Record<number, string> = {
-  0: 'fatal',
-  1: 'error',
-  2: 'warn',
-  3: 'info',
-  4: 'debug',
-  5: 'trace',
-}
-
-// Safely serialize a value, handling Error objects and circular references
-function safeSerialize(value: unknown): unknown {
-  if (value instanceof Error) {
-    return {
-      message: value.message,
-      stack: value.stack,
-      name: value.name,
-      ...(value as any).code ? { code: (value as any).code } : {},
-    }
-  }
-  return value
-}
+import { formatLogEntry } from './log-format'
 
 // JSON reporter for production — writes one JSON line per log entry to stdout
 const jsonReporter = {
   log(logObj: LogObject) {
-    const level = LEVEL_NAMES[logObj.level] ?? 'info'
-    const message = logObj.args
-      .map(arg => (typeof arg === 'string' ? arg : JSON.stringify(safeSerialize(arg))))
-      .join(' ')
-
-    const entry: Record<string, unknown> = {
-      timestamp: new Date().toISOString(),
-      level,
-      message,
-    }
-
-    if (logObj.tag) {
-      entry.tag = logObj.tag
-    }
-
+    const entry = formatLogEntry(logObj, new Date().toISOString())
     process.stdout.write(JSON.stringify(entry) + '\n')
   },
 }

@@ -502,8 +502,19 @@ export async function batchPutItems(
     }
   }
   
-  logger.error(`Batch put completed: ${processedCount} processed, ${failedCount} failed`)
-  
+  const batchPutSummary = {
+    component: 'dynamodb',
+    operation: 'batchPutItems',
+    processedCount,
+    failedCount
+  }
+  const batchPutMessage = `Batch put completed: ${processedCount} processed, ${failedCount} failed`
+  if (failedCount > 0) {
+    logger.error(batchPutMessage, batchPutSummary)
+  } else {
+    logger.info(batchPutMessage, batchPutSummary)
+  }
+
   return results
 }
 
