@@ -1,0 +1,6 @@
+{
+  "sourceBindingId": "binding-fake-jira-01",
+  "sourceType": "jira",
+  "stableSourceId": "PROJ-1234",
+  "displayLabel": "Investigate flaky deploy (synthetic)"
+}

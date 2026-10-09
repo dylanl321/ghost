@@ -35,10 +35,7 @@ registerEndpoint('/api/entra/accounts/{accountId}/owners', 'GET', {
     }
   ],
   security: [
-    { ApiKeyAuth: [] },
-    { BearerAuth: [] },
-    { OIDCAuth: [] },
-    { DevBypass: [] }
+    { OIDCAuth: [] }
   ],
   responses: {
     200: {

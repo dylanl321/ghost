@@ -31,14 +31,9 @@ export interface DynamoDBConfig {
   externalAccounts: DynamoDBTableConfig
   userPreferences: DynamoDBTableConfig
   accountNotes: DynamoDBTableConfig
-  chatThreads: DynamoDBTableConfig
-  chatMessages: DynamoDBTableConfig
   siteConfig: DynamoDBTableConfig
   adminNotifications: DynamoDBTableConfig
-  streamingMetrics: DynamoDBTableConfig
-  asyncChatJobs: DynamoDBTableConfig
   datasetExportJobs: DynamoDBTableConfig
-  asyncMetrics: DynamoDBTableConfig
   aiUsage: DynamoDBTableConfig
   budgetAlerts: DynamoDBTableConfig
   budgetAlertConfig: DynamoDBTableConfig
@@ -249,18 +244,6 @@ function loadFromEnvironment(): DynamoDBConfig {
       region: govCloudRegion,
       accountId: deploymentAccountId
     },
-    chatThreads: {
-      tableName: process.env.CHAT_THREADS_TABLE_NAME || 'ghost-chat-threads',
-      environment: 'govcloud',
-      region: govCloudRegion,
-      accountId: deploymentAccountId
-    },
-    chatMessages: {
-      tableName: process.env.CHAT_MESSAGES_TABLE_NAME || 'ghost-chat-messages',
-      environment: 'govcloud',
-      region: govCloudRegion,
-      accountId: deploymentAccountId
-    },
     siteConfig: {
       tableName: process.env.SITE_CONFIG_TABLE || 'ghost-site-config',
       environment: 'govcloud',
@@ -273,26 +256,8 @@ function loadFromEnvironment(): DynamoDBConfig {
       region: govCloudRegion,
       accountId: deploymentAccountId
     },
-    streamingMetrics: {
-      tableName: process.env.STREAMING_METRICS_TABLE_NAME || 'ghost-streaming-metrics',
-      environment: 'govcloud',
-      region: govCloudRegion,
-      accountId: deploymentAccountId
-    },
-    asyncChatJobs: {
-      tableName: process.env.AWS_ASYNC_JOBS_TABLE_NAME || 'ghost-async-chat-jobs',
-      environment: 'govcloud',
-      region: govCloudRegion,
-      accountId: deploymentAccountId
-    },
     datasetExportJobs: {
       tableName: process.env.DATASET_EXPORT_JOBS_TABLE_NAME || 'ghost-dataset-export-jobs',
-      environment: 'govcloud',
-      region: govCloudRegion,
-      accountId: deploymentAccountId
-    },
-    asyncMetrics: {
-      tableName: process.env.AWS_ASYNC_METRICS_TABLE_NAME || 'ghost-async-metrics',
       environment: 'govcloud',
       region: govCloudRegion,
       accountId: deploymentAccountId

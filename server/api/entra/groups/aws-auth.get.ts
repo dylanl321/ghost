@@ -24,10 +24,7 @@ registerEndpoint('/api/entra/groups/aws-auth', 'GET', {
     { $ref: '#/components/parameters/Search' }
   ],
   security: [
-    { ApiKeyAuth: [] },
-    { BearerAuth: [] },
-    { OIDCAuth: [] },
-    { DevBypass: [] }
+    { OIDCAuth: [] }
   ],
   responses: {
     200: {

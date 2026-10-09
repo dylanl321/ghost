@@ -1,6 +1,6 @@
 {
   "name": "ghost-dashboard",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "type": "module",
   "private": true,
   "packageManager": "npm@11.18.0",
@@ -9,13 +9,15 @@
     "npm": ">=11.0.0 <12"
   },
   "scripts": {
-    "build": "npm run bundle:support && nuxt build",
-    "dev": "cross-env NODE_OPTIONS='--max-old-space-size=12288' nuxt dev",
+    "build": "npm run swagger:prepare && npm run bundle:support && nuxt build",
+    "dev": "npm run swagger:prepare && cross-env NODE_OPTIONS='--max-old-space-size=12288' nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "start": "nuxt start",
     "bundle:support": "tsx scripts/bundle-support-articles.ts",
+    "swagger:assets": "tsx scripts/copy-swagger-assets.ts",
+    "swagger:prepare": "npm run swagger:assets && tsx scripts/generate-swagger-registry.ts",
     "seed:email-templates": "tsx scripts/seed-email-templates.ts",
     "mcp:secrets": "tsx scripts/generate-mcp-oauth-secrets.ts",
     "ghost:aws": "tsx scripts/ghost-aws.ts",
@@ -26,11 +28,16 @@
     "check:lint:fix": "eslint . --ext .ts,.vue,.js --fix",
     "check:unused": "ts-prune --project tsconfig.json",
     "check:deps": "depcheck --ignores=\"@nuxt/*,nuxt-*,@types/*,eslint,typescript\"",
-    "test:chat": "tsx --test tests/chat/*.test.ts",
     "test:mcp": "tsx --test tests/mcp/*.test.ts",
+    "test:kirocrew": "tsx --test tests/kirocrew/*.test.ts",
     "test:vmaas": "tsx --test tests/vmaas/*.test.ts",
+    "test:api": "tsx --test tests/api/*.test.ts",
+    "test:shared-investigations": "tsx --test tests/shared-investigations/*.test.ts",
+    "contract:shared-investigations:sync": "tsx tests/shared-investigations/sync-contract.ts",
+    "contract:shared-investigations:check": "tsx tests/shared-investigations/sync-contract.ts --check",
     "test:budget-recipients": "tsx --test server/utils/__tests__/manual-budget-alert-recipients.test.ts",
-    "changelog:generate": "tsx scripts/generate-changelog.ts"
+    "changelog:generate": "tsx scripts/generate-changelog.ts",
+    "test:shared-content": "tsx --test tests/shared-content/*.test.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^7.3.4",
@@ -93,7 +100,6 @@
     "eslint": "^10.8.0",
     "exceljs": "^4.4.0",
     "fuse.js": "^7.5.0",
-    "got": "^14.6.6",
     "gray-matter": "^4.0.3",
     "html2canvas": "^1.4.1",
     "isomorphic-dompurify": "3.22.0",
@@ -110,6 +116,7 @@
     "pinia": "^3.0.3",
     "pinia-plugin-persistedstate": "^4.7.1",
     "sortablejs": "^1.15.7",
+    "swagger-ui-dist": "5.32.14",
     "tsx": "^4.23.9",
     "typescript": "^5.9.2",
     "uuid": "^13.0.2",
@@ -150,6 +157,9 @@
     "exceljs": {
       "uuid": "11.1.1"
     }
+  },
+  "imports": {
+    "#shared/*": "./shared/*"
   },
   "devDependencies": {
     "@iconify-json/simple-icons": "^1.2.93",

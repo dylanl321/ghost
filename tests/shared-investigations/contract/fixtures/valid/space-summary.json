@@ -1,0 +1,5 @@
+{
+  "spaceId": "space-0000-fake-aaaa",
+  "label": "Example Team Space (synthetic)",
+  "capabilities": ["list", "search", "read", "contribute", "artifact-read", "artifact-write", "presence"]
+}

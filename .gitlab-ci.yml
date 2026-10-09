@@ -87,7 +87,7 @@ code_quality_check:
 
     # The parallel Docker job verifies the complete production build.
     - echo "Running automated tests..."
-    - npm run test:chat
+    - npm run test:shared-content
 
     # TypeScript strict checking (non-blocking until existing errors are resolved)
     - echo "Checking TypeScript types..."
@@ -179,6 +179,28 @@ apply:
     - cd $TF_WORKING_DIR
     - terraform init "-backend-config=./conf/$ENV.conf"
     - terraform apply tfplan
+
+seed_kirocrew_config:
+  stage: deploy
+  extends: .assume_role
+  needs: []
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "dev"
+      when: manual
+  allow_failure: true
+  script:
+    - python3 scripts/seed_kirocrew_config.py
+
+diagnose_kirocrew:
+  stage: deploy
+  extends: .assume_role
+  needs: []
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "dev"
+      when: manual
+  allow_failure: true
+  script:
+    - python3 scripts/diagnose_kirocrew.py
 
 Refresh Service:
   stage: deploy
