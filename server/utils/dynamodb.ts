@@ -502,8 +502,22 @@ export async function batchPutItems(
     }
   }
   
-  logger.error(`Batch put completed: ${processedCount} processed, ${failedCount} failed`)
-  
+  // Successful completions (failedCount === 0) are routine and must not surface
+  // as errors; only genuine failures escalate. Attach compact structured context
+  // for CloudWatch Logs Insights while keeping the stable human-readable message.
+  const summaryMessage = `Batch put completed: ${processedCount} processed, ${failedCount} failed`
+  const summaryContext = {
+    component: 'dynamodb',
+    operation: 'batchPutItems',
+    processedCount,
+    failedCount,
+  }
+  if (failedCount > 0) {
+    logger.error(summaryMessage, summaryContext)
+  } else {
+    logger.info(summaryMessage, summaryContext)
+  }
+
   return results
 }
 

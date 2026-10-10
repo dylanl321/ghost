@@ -204,6 +204,22 @@ registerEndpoint('/api/health/ready', 'GET', {
                       }
                     }
                   },
+                  dependencies: {
+                    type: 'object',
+                    properties: {
+                      dynamodbConfig: {
+                        type: 'object',
+                        description: 'Redacted DynamoDB config diagnostic. Never contains secret values or table contents.',
+                        properties: {
+                          source: { type: 'string', nullable: true, enum: ['secret', 'env'] },
+                          missingKeyCount: { type: 'number' },
+                          missingKeys: { type: 'array', items: { type: 'string' } },
+                          loadedAt: { type: 'string', format: 'date-time', nullable: true },
+                          lastObservedAt: { type: 'string', format: 'date-time', nullable: true }
+                        }
+                      }
+                    }
+                  },
                   warnings: {
                     type: 'array',
                     items: { type: 'string' }
@@ -441,6 +457,31 @@ export default defineEventHandler(handleAsync(async (event) => {
     healthData.circuitBreaker = assumeRoleCircuitBreaker.getStats()
   } catch (error) {
     logger.warn('Could not retrieve circuit breaker statistics:', error)
+  }
+
+  // Expose the redacted DynamoDB config diagnostic. A stale secret that omits
+  // table keys is a persistent degraded configuration worth surfacing here.
+  try {
+    const { getDynamoDBConfig, getDynamoDBConfigDiagnostic } = await import('../../lib/dynamodb-config')
+    await getDynamoDBConfig()
+    const dynamodbConfig = getDynamoDBConfigDiagnostic()
+
+    healthData.dependencies = {
+      ...(healthData.dependencies || {}),
+      dynamodbConfig
+    }
+
+    if (dynamodbConfig.missingKeyCount > 0) {
+      healthData.warnings.push(
+        `DynamoDB config secret is stale: missing ${dynamodbConfig.missingKeyCount} table key(s)`
+      )
+      // Downgrade only from healthy; never upgrade an unhealthy status.
+      if (healthData.status === 'healthy') {
+        healthData.status = 'degraded'
+      }
+    }
+  } catch (error) {
+    logger.warn('Could not retrieve DynamoDB config diagnostic:', error)
   }
 
   // Add warnings if no environments are configured

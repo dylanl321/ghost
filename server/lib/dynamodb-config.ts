@@ -104,6 +104,63 @@ let configLoadedAt: number | null = null
 const CONFIG_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
 /**
+ * Redacted diagnostic describing where the active DynamoDB config came from and
+ * whether a secret-sourced config was missing keys (a stale-secret signal).
+ * Contains NO secret values or table contents — only key names and counts.
+ */
+export interface DynamoDBConfigDiagnostic {
+  source: 'secret' | 'env' | null
+  missingKeyCount: number
+  missingKeys: string[]
+  loadedAt: string | null
+  lastObservedAt: string | null
+}
+
+let configDiagnostic: DynamoDBConfigDiagnostic = {
+  source: null,
+  missingKeyCount: 0,
+  missingKeys: [],
+  loadedAt: null,
+  lastObservedAt: null,
+}
+
+// Rate-limit state for the stale-secret warning (per process). An unchanged
+// missing-key signature logs at most once per hour rather than on every
+// five-minute cache refresh; a changed signature logs immediately.
+let staleSecretSignature: string | null = null
+let staleSecretLastLoggedAt = 0
+const STALE_SECRET_LOG_INTERVAL_MS = 60 * 60 * 1000 // once per hour
+
+/**
+ * Decide whether the stale-secret warning should be emitted for the given
+ * missing-key signature. Updates the throttle state as a side effect when it
+ * returns true. Exported for testing. `now` is injectable for deterministic tests.
+ */
+export function shouldLogStaleSecret(signature: string, now: number = Date.now()): boolean {
+  const signatureChanged = signature !== staleSecretSignature
+  if (signatureChanged || now - staleSecretLastLoggedAt >= STALE_SECRET_LOG_INTERVAL_MS) {
+    staleSecretSignature = signature
+    staleSecretLastLoggedAt = now
+    return true
+  }
+  return false
+}
+
+/**
+ * Get a redacted snapshot of the DynamoDB config diagnostic. Safe to expose on
+ * health endpoints: never contains secret values or table contents.
+ */
+export function getDynamoDBConfigDiagnostic(): DynamoDBConfigDiagnostic {
+  return {
+    source: configDiagnostic.source,
+    missingKeyCount: configDiagnostic.missingKeyCount,
+    missingKeys: [...configDiagnostic.missingKeys],
+    loadedAt: configDiagnostic.loadedAt,
+    lastObservedAt: configDiagnostic.lastObservedAt,
+  }
+}
+
+/**
  * Get DynamoDB configuration from Secrets Manager
  */
 async function loadFromSecretsManager(): Promise<Partial<DynamoDBConfig> | null> {
@@ -358,8 +415,16 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
   // of writing to production simply because a developer can read its config.
   const nodeEnv = process.env.NODE_ENV?.toLowerCase()
   if (nodeEnv === 'development' || nodeEnv === 'dev') {
+    const now = Date.now()
+    configDiagnostic = {
+      source: 'env',
+      missingKeyCount: 0,
+      missingKeys: [],
+      loadedAt: new Date(now).toISOString(),
+      lastObservedAt: new Date(now).toISOString(),
+    }
     cachedConfig = envConfig
-    configLoadedAt = Date.now()
+    configLoadedAt = now
     logger.info('Using DynamoDB configuration from environment variables (development mode)')
     return envConfig
   }
@@ -390,21 +455,53 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
     // stale secret that should be refreshed), so the gap is observable.
     const missingKeys = (Object.keys(envConfig) as (keyof DynamoDBConfig)[])
       .filter(k => !(k in secretsConfig))
+      .map(String)
+    const now = Date.now()
+    const nowIso = new Date(now).toISOString()
+
+    configDiagnostic = {
+      source: 'secret',
+      missingKeyCount: missingKeys.length,
+      missingKeys,
+      loadedAt: nowIso,
+      lastObservedAt: nowIso,
+    }
+
     if (missingKeys.length > 0) {
-      logger.warn(
-        `DynamoDB config from secret was missing ${missingKeys.length} table key(s); ` +
-        `using env defaults for: ${missingKeys.join(', ')}`
-      )
+      const signature = missingKeys.join(',')
+      if (shouldLogStaleSecret(signature, now)) {
+        logger.warn(
+          `DynamoDB config from secret was missing ${missingKeys.length} table key(s); ` +
+          `using env defaults for: ${missingKeys.join(', ')}`,
+          {
+            component: 'dynamodb-config',
+            event: 'stale-secret',
+            missingKeyCount: missingKeys.length,
+            missingKeys,
+          }
+        )
+      }
+    } else {
+      // Secret is complete; reset the throttle so a future regression logs at once.
+      staleSecretSignature = null
     }
 
     cachedConfig = mergedConfig
-    configLoadedAt = Date.now()
+    configLoadedAt = now
     return mergedConfig
   }
 
   // No secret available — use env defaults directly.
+  const now = Date.now()
+  configDiagnostic = {
+    source: 'env',
+    missingKeyCount: 0,
+    missingKeys: [],
+    loadedAt: new Date(now).toISOString(),
+    lastObservedAt: new Date(now).toISOString(),
+  }
   cachedConfig = envConfig
-  configLoadedAt = Date.now()
+  configLoadedAt = now
 
   return envConfig
 }
@@ -415,6 +512,15 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
 export function clearConfigCache(): void {
   cachedConfig = null
   configLoadedAt = null
+  configDiagnostic = {
+    source: null,
+    missingKeyCount: 0,
+    missingKeys: [],
+    loadedAt: null,
+    lastObservedAt: null,
+  }
+  staleSecretSignature = null
+  staleSecretLastLoggedAt = 0
 }
 
 // Track which tables have been logged to avoid duplicate logs
