@@ -78,9 +78,29 @@ code_quality_check:
         echo "Runner did not provide CI_SERVER_TLS_CA_FILE; cannot securely access the internal npm registry."
         exit 1
       fi
+      # Trust the runner-provided CA for all TLS (Node + npm). Verification stays ON;
+      # we never set strict-ssl false or otherwise suppress certificate errors.
       export NODE_EXTRA_CA_CERTS="$CI_SERVER_TLS_CA_FILE"
       npm config set cafile "$CI_SERVER_TLS_CA_FILE"
+      # Route npm through the internal Nexus mirror BEFORE the first network call
+      # (the `npm install -g` below), matching the Dockerfile. This avoids the public
+      # registry.npmjs.org, which is not trusted on this runner and caused prior
+      # code_quality_check failures (UNABLE_TO_GET_ISSUER_CERT_LOCALLY).
+      npm config set registry "https://nexus.engapps.gd-ms.us/repository/TOS-npm/"
+      # Rewrite registry.npmjs.org resolved URLs from package-lock.json onto the
+      # configured registry so lockfile entries also resolve via Nexus. Smallest
+      # setting supported by npm 10/11 (default is "npmjs"); package-lock.json is
+      # left untouched.
+      npm config set replace-registry-host npmjs
+    - |
+      # Safe diagnostics only: versions and effective registry. Never echo the CA
+      # file contents, credentials, or tokens.
+      echo "node version: $(node --version)"
+      echo "npm version (initial): $(npm --version)"
+      echo "npm effective registry: $(npm config get registry)"
     - npm install -g npm@11.18.0
+    - |
+      echo "npm version (after upgrade): $(npm --version)"
     - npm ci --legacy-peer-deps --no-audit --no-fund
   script:
     - echo "Running code quality checks for feature branch $CI_COMMIT_REF_NAME"
