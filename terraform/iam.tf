@@ -170,10 +170,10 @@ resource "aws_iam_role_policy" "ecs_api_keys_dynamodb" {
           "dynamodb:BatchWriteItem"
         ]
         Resource = [
-          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-api-keys",
-          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-api-keys/index/*",
-          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-api-keys-usage",
-          "arn:${local.child_partition}:dynamodb:${local.child_region}:${local.child_account_id}:table/ghost-api-keys-usage/index/*"
+          aws_dynamodb_table.api_keys.arn,
+          "${aws_dynamodb_table.api_keys.arn}/index/*",
+          aws_dynamodb_table.api_keys_usage.arn,
+          "${aws_dynamodb_table.api_keys_usage.arn}/index/*"
         ]
       }
     ]
