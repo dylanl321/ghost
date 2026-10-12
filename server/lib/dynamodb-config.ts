@@ -85,6 +85,16 @@ export function mergeDynamoDBConfig(
 ): DynamoDBConfig {
   const merged = { ...defaults, ...configured }
 
+  // ECS supplies the deployed table names; older secrets still name the dev tables.
+  for (const [key, tableName] of [
+    ['apiKeys', process.env.DYNAMODB_API_KEYS_TABLE],
+    ['apiKeysUsage', process.env.DYNAMODB_API_KEY_USAGE_TABLE]
+  ] as const) {
+    if (tableName) {
+      merged[key] = { ...defaults[key], ...configured[key], tableName }
+    }
+  }
+
   for (const key of BUDGET_ALERT_CONFIG_KEYS) {
     merged[key] = {
       ...defaults[key],
