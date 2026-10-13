@@ -27,7 +27,7 @@ export type ConfigCategory = 'features' | 'services' | 'performance' | 'ui' | 's
  * Base configuration item stored in DynamoDB
  */
 export interface SiteConfigItem {
-  /** Unique key in dot notation (e.g., 'features.strandsChat.enabled') */
+  /** Unique key in dot notation (e.g., 'features.reportScheduler.enabled') */
   key: string;
 
   /** Current value */
@@ -92,33 +92,11 @@ export interface SiteConfig {
     };
   };
   features?: {
-    strandsChat?: {
-      enabled?: boolean;
-      streaming?: {
-        enabled?: boolean;
-        rolloutPercentage?: number;
-        allowedUsers?: string[];
-        showReconnectIndicator?: boolean;
-        maxReconnectAttempts?: number;
-        streamTimeout?: number;
-      };
-    };
-    strandsChatPopup?: {
-      enabled?: boolean;
-    };
     reportScheduler?: {
       enabled?: boolean;
     };
     adminNotifications?: {
       enabled?: boolean;
-    };
-  };
-  services?: {
-    strands?: {
-      serverUrl?: string;
-      timeout?: number;
-      retries?: number;
-      retryDelay?: number;
     };
   };
   performance?: {
@@ -158,108 +136,7 @@ export const DEFAULT_SITE_CONFIG: SiteConfigItem[] = [
     isEditable: true,
   },
   // Feature Flags
-  {
-    key: 'features.strandsChat.enabled',
-    value: true,
-    type: 'boolean',
-    category: 'features',
-    label: 'Strands Chat',
-    description: 'Enable the AI-powered Strands chat interface for querying AWS account data',
-    defaultValue: true,
-    isPublic: true,
-    isEditable: true,
-  },
-  {
-    key: 'features.strandsChatPopup.enabled',
-    value: false,
-    type: 'boolean',
-    category: 'features',
-    label: 'Strands Chat Popup',
-    description: 'Enable the floating Strands chat popup widget on all pages',
-    defaultValue: false,
-    isPublic: true,
-    isEditable: true,
-  },
 
-  // Strands Streaming Configuration
-  {
-    key: 'features.strandsChat.streaming.enabled',
-    value: true,
-    type: 'boolean',
-    category: 'features',
-    label: 'Strands Streaming',
-    description: 'Enable SSE streaming for real-time progress updates in chat queries',
-    defaultValue: true,
-    isPublic: true,
-    isEditable: true,
-  },
-  {
-    key: 'features.strandsChat.streaming.rolloutPercentage',
-    value: 100,
-    type: 'number',
-    category: 'features',
-    label: 'Streaming Rollout %',
-    description: 'Percentage of users to enable streaming for (0-100). Use for gradual rollout.',
-    defaultValue: 100,
-    isPublic: false,
-    isEditable: true,
-    validation: {
-      min: 0,
-      max: 100,
-    },
-  },
-  {
-    key: 'features.strandsChat.streaming.allowedUsers',
-    value: [],
-    type: 'array',
-    category: 'features',
-    label: 'Streaming Allowed Users',
-    description: 'List of user emails to enable streaming for. Leave empty for percentage-based rollout.',
-    defaultValue: [],
-    isPublic: false,
-    isEditable: true,
-  },
-  {
-    key: 'features.strandsChat.streaming.showReconnectIndicator',
-    value: true,
-    type: 'boolean',
-    category: 'features',
-    label: 'Show Reconnect Indicator',
-    description: 'Show toast notification when streaming connection drops and reconnects',
-    defaultValue: true,
-    isPublic: false,
-    isEditable: true,
-  },
-  {
-    key: 'features.strandsChat.streaming.maxReconnectAttempts',
-    value: 3,
-    type: 'number',
-    category: 'features',
-    label: 'Max Reconnect Attempts',
-    description: 'Maximum number of automatic reconnection attempts before showing error',
-    defaultValue: 3,
-    isPublic: false,
-    isEditable: true,
-    validation: {
-      min: 0,
-      max: 5,
-    },
-  },
-  {
-    key: 'features.strandsChat.streaming.streamTimeout',
-    value: 300000,
-    type: 'number',
-    category: 'features',
-    label: 'Stream Timeout (ms)',
-    description: 'Maximum duration for streaming connection before timeout (5 minutes)',
-    defaultValue: 300000,
-    isPublic: false,
-    isEditable: true,
-    validation: {
-      min: 60000,
-      max: 600000,
-    },
-  },
   {
     key: 'features.reportScheduler.enabled',
     value: true,
@@ -358,66 +235,6 @@ export const DEFAULT_SITE_CONFIG: SiteConfigItem[] = [
     isEditable: true,
   },
 
-  // Service Configuration
-  {
-    key: 'services.strands.serverUrl',
-    value: 'http://internal-lz-mcp-servers-dev-alb-1428009891.us-gov-west-1.elb.amazonaws.com:80',
-    type: 'string',
-    category: 'services',
-    label: 'Strands Server URL',
-    description: 'ALB endpoint for the Strands ECS service',
-    defaultValue: 'http://internal-lz-mcp-servers-dev-alb-1428009891.us-gov-west-1.elb.amazonaws.com:80',
-    isPublic: false,
-    isEditable: true,
-    validation: {
-      pattern: '^https?://.+',
-    },
-  },
-  {
-    key: 'services.strands.timeout',
-    value: 300000,
-    type: 'number',
-    category: 'services',
-    label: 'Strands Timeout (ms)',
-    description: 'Request timeout for Strands API calls in milliseconds (5 minutes for MCP operations)',
-    defaultValue: 300000,
-    isPublic: false,
-    isEditable: true,
-    validation: {
-      min: 10000,
-      max: 600000,
-    },
-  },
-  {
-    key: 'services.strands.retries',
-    value: 2,
-    type: 'number',
-    category: 'services',
-    label: 'Strands Retry Count',
-    description: 'Number of retry attempts for failed Strands requests',
-    defaultValue: 2,
-    isPublic: false,
-    isEditable: true,
-    validation: {
-      min: 0,
-      max: 5,
-    },
-  },
-  {
-    key: 'services.strands.retryDelay',
-    value: 2000,
-    type: 'number',
-    category: 'services',
-    label: 'Strands Retry Delay (ms)',
-    description: 'Base delay between retry attempts (uses exponential backoff)',
-    defaultValue: 2000,
-    isPublic: false,
-    isEditable: true,
-    validation: {
-      min: 500,
-      max: 10000,
-    },
-  },
 
   // Performance Settings
   {
@@ -576,6 +393,81 @@ export const DEFAULT_SITE_CONFIG: SiteConfigItem[] = [
     isPublic: true,
     isEditable: true,
   },
+
+  // ---------------------------------------------------------------------------
+  // OAuth Administration — evidence-based alert settings (oauth.alerts.*)
+  //
+  // Stored via existing site configuration (design "Diagnostics, maintenance,
+  // and alerts"). These keys are OAuth-specific and every update/reset path is
+  // gated by the `oauth.operations.manage` capability — including the generic
+  // site-config admin route, which explicitly rejects `oauth.alerts.*` writes
+  // unless that capability is held (see server/utils/site-config guard and the
+  // dedicated /api/admin/oauth/alerts/settings routes). They are marked
+  // `isEditable: false` so the generic admin panel does not offer a free-form
+  // edit control that would bypass the capability + validation gate.
+  //
+  // Recipients NEVER carry a free-form address. `oauth.alerts.recipientsRef`
+  // references an EXISTING approved organization notification destination; the
+  // only supported reference is `admin-notifications` (the org-approved admin
+  // notification set resolved from `email.admin.notificationEmails`). `none`
+  // disables delivery. Delivery stays unavailable when no approved recipient
+  // exists and never falls back to an arbitrary caller/developer address
+  // (Requirement 15.4 / 18.6).
+  // ---------------------------------------------------------------------------
+  {
+    key: 'oauth.alerts.enabled',
+    value: false,
+    type: 'boolean',
+    category: 'system',
+    label: 'OAuth Alerts Enabled',
+    description: 'Master switch for evidence-based OAuth alert evaluation and delivery. Requires the OAuth operations capability to change.',
+    defaultValue: false,
+    isPublic: false,
+    isEditable: false,
+  },
+  {
+    key: 'oauth.alerts.thresholds',
+    value: {
+      registrationRejections: 5,
+      tokenFailures: 5,
+      refreshFailures: 5,
+      consecutiveDiscoveryFailures: 2,
+      consecutiveStorageFailures: 2,
+      signingKeyDeadlineDays: 14,
+      windowMinutes: 15,
+      consecutiveGapMinutes: 5,
+    },
+    type: 'object',
+    category: 'system',
+    label: 'OAuth Alert Thresholds',
+    description: 'Evidence thresholds for OAuth alerts: registration-rejection (>5 in 15m), token/refresh failure (>5 per stage in 15m), consecutive discovery/storage failures (2, five minutes apart), signing-key deadline (14 days). Requires the OAuth operations capability to change.',
+    defaultValue: {
+      registrationRejections: 5,
+      tokenFailures: 5,
+      refreshFailures: 5,
+      consecutiveDiscoveryFailures: 2,
+      consecutiveStorageFailures: 2,
+      signingKeyDeadlineDays: 14,
+      windowMinutes: 15,
+      consecutiveGapMinutes: 5,
+    },
+    isPublic: false,
+    isEditable: false,
+  },
+  {
+    key: 'oauth.alerts.recipientsRef',
+    value: 'admin-notifications',
+    type: 'string',
+    category: 'system',
+    label: 'OAuth Alert Recipients Reference',
+    description: 'Reference to an existing approved organization notification destination for OAuth alerts. Only "admin-notifications" (the approved admin notification set) or "none" (delivery disabled) are accepted. Free-form addresses are never accepted. Requires the OAuth operations capability to change.',
+    defaultValue: 'admin-notifications',
+    isPublic: false,
+    isEditable: false,
+    validation: {
+      allowedValues: ['admin-notifications', 'none'],
+    },
+  },
 ];
 
 /**
@@ -635,4 +527,9 @@ export interface SiteConfigHistoryResponse {
   success: boolean;
   history: SiteConfigHistoryEntry[];
   count: number;
+}
+
+/** Retired persisted settings must not re-enable or expose the removed chatbot. */
+export function isRetiredSiteConfigKey(key: string): boolean {
+  return /^(features\.strandsChat(?:Popup)?|services\.strands)(?:\.|$)/.test(key)
 }

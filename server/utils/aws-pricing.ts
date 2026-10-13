@@ -35,21 +35,23 @@ export function getEC2PricingFilters(
   pricingRegionName: string,
   operatingSystem: EC2OperatingSystem = 'linux'
 ) {
+  // AWS Price List EC2 product attributes represent each OS via the
+  // `operatingSystem` field, with `preInstalledSw=NA` for the base OS offerings.
+  // RHEL is operatingSystem=RHEL (NOT Linux + preInstalledSw=RHEL, which never matches).
+  const operatingSystemValue =
+    operatingSystem === 'windows' ? 'Windows' : operatingSystem === 'rhel' ? 'RHEL' : 'Linux'
+
   return [
     { Type: 'TERM_MATCH' as const, Field: 'instanceType', Value: instanceType },
     { Type: 'TERM_MATCH' as const, Field: 'location', Value: pricingRegionName },
     {
       Type: 'TERM_MATCH' as const,
       Field: 'operatingSystem',
-      Value: operatingSystem === 'windows' ? 'Windows' : 'Linux'
+      Value: operatingSystemValue
     },
     { Type: 'TERM_MATCH' as const, Field: 'tenancy', Value: 'Shared' },
     { Type: 'TERM_MATCH' as const, Field: 'capacitystatus', Value: 'Used' },
-    {
-      Type: 'TERM_MATCH' as const,
-      Field: 'preInstalledSw',
-      Value: operatingSystem === 'rhel' ? 'RHEL' : 'NA'
-    }
+    { Type: 'TERM_MATCH' as const, Field: 'preInstalledSw', Value: 'NA' }
   ]
 }
 
@@ -125,7 +127,13 @@ export async function getEC2InstancePricing(
     const response = await pricingClient.send(command)
 
     if (!response.PriceList || response.PriceList.length === 0) {
-      logger.warn(`[AWS Pricing] No ${operatingSystem} pricing found for ${instanceType} in ${region}`)
+      logger.warn(`[AWS Pricing] No ${operatingSystem} pricing found for ${instanceType} in ${region}`, {
+        signature: 'ec2_pricing_no_product',
+        environment,
+        instanceType,
+        region,
+        operatingSystem
+      })
       return null
     }
 

@@ -1,0 +1,763 @@
+{
+  "x-jsonSchemaDialect": "draft/2020-12",
+  "$id": "urn:kirocrew:contracts:shared-investigations:wire-contract:v1",
+  "title": "Shared Investigations collaboration wire contract v1",
+  "description": "Canonical, versioned cross-repository wire contract for Shared Investigations. The Registry (Registry_Collaboration_Client, Python) and Ghostv2 (GHOST_Collaboration_Service, TypeScript) validate the SAME fixtures against this SAME schema. Owner: shared-investigations (both repositories). Requirements: 1.1-1.8, 6.1-6.6, 10.14-10.18, 14.8-14.17, 15.2-15.11, 19.1-19.14, 21.1-21.8, 24.27-24.29.",
+  "$comment": "schemaVersion 1. Bumping the wire contract requires a new schemaVersion and preserving legacy fixtures. All IDs are opaque; clients MUST NOT infer tenancy or ordering from them. Operator-visible and status projections never contain endpoints, storage configuration, group object identifiers, tokens, secret values, secret URIs, PEMs, or credentials.",
+
+  "$defs": {
+    "SchemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "OpaqueId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Opaque UUID/ULID-class identifier. No tenancy or ordering may be inferred."
+    },
+    "SafeLabel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "Operator-visible label. Must never encode secrets, endpoints, or group object identifiers."
+    },
+    "OperationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Stable client-generated idempotency key."
+    },
+    "SubmissionId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "Digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Lowercase SHA-256 hex digest over the shared bytes / canonical payload."
+    },
+    "ServerSequence": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Monotonically increasing within a Team_Space. Controls synchronization order; wall-clock time never does."
+    },
+    "Revision": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Expected-Revision optimistic concurrency for mutable Investigation metadata."
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "minLength": 20,
+      "maxLength": 40,
+      "description": "RFC 3339 timestamp. Server timestamps are authoritative; client timestamps are provenance/display only."
+    },
+    "SourceType": {
+      "type": "string",
+      "enum": ["jira", "servicenow", "gitlab", "aws", "extension"]
+    },
+
+    "AuthenticatedSubject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenantId", "entraObjectId"],
+      "properties": {
+        "tenantId": { "$ref": "#/$defs/OpaqueId" },
+        "entraObjectId": { "$ref": "#/$defs/OpaqueId" }
+      },
+      "description": "Stored identity loaded by the existing GHOST_Token_Identity_Path. Never derived from client actor fields."
+    },
+    "GatewayOrigin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gatewayId"],
+      "properties": {
+        "gatewayId": { "$ref": "#/$defs/OpaqueId" }
+      }
+    },
+    "DestinationScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenantId", "subjectObjectId", "spaceId", "sourceBindingId"],
+      "properties": {
+        "tenantId": { "$ref": "#/$defs/OpaqueId" },
+        "subjectObjectId": { "$ref": "#/$defs/OpaqueId" },
+        "spaceId": { "$ref": "#/$defs/OpaqueId" },
+        "sourceBindingId": { "$ref": "#/$defs/OpaqueId" }
+      }
+    },
+
+    "SubjectReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceBindingId", "sourceType", "stableSourceId"],
+      "properties": {
+        "sourceBindingId": { "$ref": "#/$defs/OpaqueId" },
+        "sourceType": { "$ref": "#/$defs/SourceType" },
+        "stableSourceId": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "displayLabel": { "$ref": "#/$defs/SafeLabel" }
+      },
+      "description": "Subject identity is (Source_Binding, source type, Stable_Source_ID). displayLabel is mutable display data and never part of identity."
+    },
+
+    "SpaceCapability": {
+      "type": "string",
+      "enum": [
+        "list",
+        "search",
+        "read",
+        "contribute",
+        "artifact-read",
+        "artifact-write",
+        "presence"
+      ]
+    },
+    "SpaceSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["spaceId", "label", "capabilities"],
+      "properties": {
+        "spaceId": { "$ref": "#/$defs/OpaqueId" },
+        "label": { "$ref": "#/$defs/SafeLabel" },
+        "capabilities": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SpaceCapability" },
+          "uniqueItems": true
+        }
+      },
+      "description": "Authorized, published Team_Space projection returned to the Operator. Contains only safe labels/capabilities; never group object IDs, endpoints, or storage settings."
+    },
+
+    "Stage": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Stable stage identifier from the pinned Workflow_Profile. Defaults include investigating, waiting, ready-for-handoff, complete."
+    },
+
+    "Investigation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "investigationId",
+        "tenantId",
+        "spaceId",
+        "primarySubject",
+        "workflowProfileId",
+        "workflowVersion",
+        "stageId",
+        "revision",
+        "archived",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "investigationId": { "$ref": "#/$defs/OpaqueId" },
+        "tenantId": { "$ref": "#/$defs/OpaqueId" },
+        "spaceId": { "$ref": "#/$defs/OpaqueId" },
+        "primarySubject": { "$ref": "#/$defs/SubjectReference" },
+        "relatedSubjects": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SubjectReference" }
+        },
+        "workflowProfileId": { "$ref": "#/$defs/OpaqueId" },
+        "workflowVersion": { "type": "integer", "minimum": 1 },
+        "stageId": { "$ref": "#/$defs/Stage" },
+        "leadSubjectId": { "$ref": "#/$defs/OpaqueId" },
+        "revision": { "$ref": "#/$defs/Revision" },
+        "selectedCheckpointId": { "$ref": "#/$defs/OpaqueId" },
+        "archived": { "type": "boolean" },
+        "createdAt": { "$ref": "#/$defs/Timestamp" },
+        "updatedAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+
+    "Run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "investigationId",
+        "author",
+        "gatewayId",
+        "state",
+        "startedAt"
+      ],
+      "properties": {
+        "runId": { "$ref": "#/$defs/OpaqueId" },
+        "investigationId": { "$ref": "#/$defs/OpaqueId" },
+        "author": { "$ref": "#/$defs/AuthenticatedSubject" },
+        "gatewayId": { "$ref": "#/$defs/OpaqueId" },
+        "parentCheckpointId": { "$ref": "#/$defs/OpaqueId" },
+        "state": { "type": "string", "enum": ["active", "finished", "interrupted"] },
+        "startedAt": { "$ref": "#/$defs/Timestamp" },
+        "finishedAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+
+    "CoverageLimitation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "safeMessage"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "denied",
+            "incomplete",
+            "capture-failed",
+            "unsafe-projection",
+            "truncated",
+            "interrupted",
+            "unsupported",
+            "stale"
+          ]
+        },
+        "safeMessage": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "originalOutcome": {
+          "type": "string",
+          "enum": ["failed", "denied", "interrupted", "unknown"]
+        }
+      },
+      "description": "Coverage is data: missing/denied/unsafe/truncated/failed/incomplete collection is explicit, never fabricated completeness."
+    },
+
+    "EventType": {
+      "type": "string",
+      "enum": [
+        "check-started",
+        "check-finished",
+        "finding",
+        "decision",
+        "source-action-outcome",
+        "coverage-gap",
+        "self-reported",
+        "lifecycle"
+      ]
+    },
+    "Event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eventId",
+        "investigationId",
+        "type",
+        "author",
+        "gatewayId",
+        "occurredAt",
+        "receivedAt",
+        "serverSequence",
+        "operationId",
+        "provenance"
+      ],
+      "properties": {
+        "eventId": { "$ref": "#/$defs/OpaqueId" },
+        "investigationId": { "$ref": "#/$defs/OpaqueId" },
+        "runId": { "$ref": "#/$defs/OpaqueId" },
+        "type": { "$ref": "#/$defs/EventType" },
+        "checkId": { "$ref": "#/$defs/OpaqueId" },
+        "author": { "$ref": "#/$defs/AuthenticatedSubject" },
+        "gatewayId": { "$ref": "#/$defs/OpaqueId" },
+        "sourceSubject": { "$ref": "#/$defs/SubjectReference" },
+        "occurredAt": { "$ref": "#/$defs/Timestamp" },
+        "receivedAt": { "$ref": "#/$defs/Timestamp" },
+        "serverSequence": { "$ref": "#/$defs/ServerSequence" },
+        "operationId": { "$ref": "#/$defs/OperationId" },
+        "body": {
+          "type": "object",
+          "description": "Policy-validated projection. Total event body/metadata must be <= 16 KiB (enforced by byte-limit validation, not by JSON Schema)."
+        },
+        "artifactIds": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/OpaqueId" },
+          "description": "Ready Artifact references only."
+        },
+        "provenance": { "type": "string", "enum": ["adapter", "self-reported", "system"] },
+        "limitations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CoverageLimitation" }
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "check-started and check-finished MUST carry a stable checkId.",
+          "if": {
+            "properties": {
+              "type": { "enum": ["check-started", "check-finished"] }
+            },
+            "required": ["type"]
+          },
+          "then": { "required": ["checkId"] }
+        }
+      ]
+    },
+
+    "ArtifactManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifactId",
+        "investigationId",
+        "state",
+        "originalFilename",
+        "sha256",
+        "byteCount",
+        "mediaType",
+        "provenance",
+        "redacted",
+        "truncated",
+        "reservedAt"
+      ],
+      "properties": {
+        "artifactId": { "$ref": "#/$defs/OpaqueId" },
+        "investigationId": { "$ref": "#/$defs/OpaqueId" },
+        "state": { "type": "string", "enum": ["pending", "ready", "validation-failed"] },
+        "producingEventId": { "$ref": "#/$defs/OpaqueId" },
+        "producingRunId": { "$ref": "#/$defs/OpaqueId" },
+        "checkId": { "$ref": "#/$defs/OpaqueId" },
+        "originalFilename": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "sha256": { "$ref": "#/$defs/Digest" },
+        "byteCount": { "type": "integer", "minimum": 0 },
+        "mediaType": {
+          "type": "string",
+          "enum": [
+            "text/plain; charset=utf-8",
+            "text/markdown",
+            "application/json",
+            "text/csv",
+            "application/pdf",
+            "image/png",
+            "image/jpeg"
+          ]
+        },
+        "sourceReferences": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 512 }
+        },
+        "collectedAt": { "$ref": "#/$defs/Timestamp" },
+        "queryWindow": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["start", "end"],
+          "properties": {
+            "start": { "$ref": "#/$defs/Timestamp" },
+            "end": { "$ref": "#/$defs/Timestamp" }
+          }
+        },
+        "collectorVersion": { "type": "string", "maxLength": 128 },
+        "sourceVersionOrEtag": { "type": "string", "maxLength": 512 },
+        "provenance": { "type": "string", "enum": ["automatic", "explicit", "legacy-import"] },
+        "redacted": { "type": "boolean" },
+        "truncated": { "type": "boolean" },
+        "limitations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CoverageLimitation" }
+        },
+        "reservedAt": { "$ref": "#/$defs/Timestamp" },
+        "readyAt": { "$ref": "#/$defs/Timestamp" }
+      },
+      "description": "Only ready manifests may be cited. sha256 is computed over the final post-redaction shared bytes."
+    },
+
+    "Checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "checkpointId",
+        "investigationId",
+        "runId",
+        "author",
+        "currentQuestion",
+        "coverageWatermark",
+        "documentArtifactId",
+        "createdAt"
+      ],
+      "properties": {
+        "checkpointId": { "$ref": "#/$defs/OpaqueId" },
+        "investigationId": { "$ref": "#/$defs/OpaqueId" },
+        "runId": { "$ref": "#/$defs/OpaqueId" },
+        "author": { "$ref": "#/$defs/AuthenticatedSubject" },
+        "currentQuestion": { "type": "string", "maxLength": 4096 },
+        "observedFacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["text", "citationIds"],
+            "properties": {
+              "text": { "type": "string", "maxLength": 4096 },
+              "citationIds": { "type": "array", "items": { "$ref": "#/$defs/OpaqueId" } }
+            }
+          }
+        },
+        "interpretations": { "type": "array", "items": { "type": "string", "maxLength": 4096 } },
+        "attemptedApproaches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["description", "outcome", "citationIds"],
+            "properties": {
+              "description": { "type": "string", "maxLength": 4096 },
+              "outcome": { "type": "string", "maxLength": 4096 },
+              "citationIds": { "type": "array", "items": { "$ref": "#/$defs/OpaqueId" } }
+            }
+          }
+        },
+        "unresolvedQuestions": { "type": "array", "items": { "type": "string", "maxLength": 4096 } },
+        "proposedNextActions": { "type": "array", "items": { "type": "string", "maxLength": 4096 } },
+        "sourceActionOutcomes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["summary", "outcome", "citationIds"],
+            "properties": {
+              "summary": { "type": "string", "maxLength": 4096 },
+              "outcome": { "type": "string", "enum": ["applied", "failed", "unknown"] },
+              "citationIds": { "type": "array", "items": { "$ref": "#/$defs/OpaqueId" } }
+            }
+          }
+        },
+        "coverageWatermark": { "$ref": "#/$defs/ServerSequence" },
+        "documentArtifactId": { "$ref": "#/$defs/OpaqueId" },
+        "createdAt": { "$ref": "#/$defs/Timestamp" }
+      },
+      "description": "Immutable cited candidate. Citations resolve only to authorized Ready Artifacts or durable Events in the same Investigation."
+    },
+
+    "PresenceActivityKind": {
+      "type": "string",
+      "enum": ["viewing", "working"]
+    },
+    "PresenceLease": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenantId",
+        "spaceId",
+        "subjectReference",
+        "subject",
+        "gatewayId",
+        "activityKind",
+        "lastSeenAt",
+        "expiresAt"
+      ],
+      "properties": {
+        "tenantId": { "$ref": "#/$defs/OpaqueId" },
+        "spaceId": { "$ref": "#/$defs/OpaqueId" },
+        "subjectReference": { "$ref": "#/$defs/SubjectReference" },
+        "subject": { "$ref": "#/$defs/AuthenticatedSubject" },
+        "gatewayId": { "$ref": "#/$defs/OpaqueId" },
+        "activityKind": { "$ref": "#/$defs/PresenceActivityKind" },
+        "investigationId": { "$ref": "#/$defs/OpaqueId" },
+        "runId": { "$ref": "#/$defs/OpaqueId" },
+        "lastSeenAt": { "$ref": "#/$defs/Timestamp" },
+        "expiresAt": { "$ref": "#/$defs/Timestamp" }
+      },
+      "description": "Presence identity is (Tenant, Team_Space, Subject_Reference, Authenticated_Subject, Gateway_ID, activityKind). Viewing presence exists for a live subject even when no Investigation exists; investigationId/runId are optional context only."
+    },
+    "PresenceQuery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["spaceId", "subjectReferences"],
+      "properties": {
+        "spaceId": { "$ref": "#/$defs/OpaqueId" },
+        "subjectReferences": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/SubjectReference" }
+        },
+        "investigationId": { "$ref": "#/$defs/OpaqueId" },
+        "runId": { "$ref": "#/$defs/OpaqueId" }
+      }
+    },
+
+    "InvestigationAck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operationId", "investigationId", "revision", "acceptedServerSequence"],
+      "properties": {
+        "operationId": { "$ref": "#/$defs/OperationId" },
+        "investigationId": { "$ref": "#/$defs/OpaqueId" },
+        "revision": { "$ref": "#/$defs/Revision" },
+        "acceptedServerSequence": { "$ref": "#/$defs/ServerSequence" }
+      }
+    },
+    "MutationAck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operationId"],
+      "properties": {
+        "operationId": { "$ref": "#/$defs/OperationId" },
+        "acceptedServerSequence": { "$ref": "#/$defs/ServerSequence" },
+        "revision": { "$ref": "#/$defs/Revision" },
+        "objectId": { "$ref": "#/$defs/OpaqueId" }
+      },
+      "description": "Mutation responses return the accepted Operation_ID and the applicable Server_Sequence or Revision."
+    },
+
+    "CreateInvestigationCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operationId", "spaceId", "mode", "primarySubject"],
+      "properties": {
+        "operationId": { "$ref": "#/$defs/OperationId" },
+        "spaceId": { "$ref": "#/$defs/OpaqueId" },
+        "mode": { "type": "string", "enum": ["default-first", "explicit-new"] },
+        "primarySubject": { "$ref": "#/$defs/SubjectReference" },
+        "relatedSubjects": { "type": "array", "items": { "$ref": "#/$defs/SubjectReference" } }
+      }
+    },
+    "ReserveRunCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operationId", "investigationId"],
+      "properties": {
+        "operationId": { "$ref": "#/$defs/OperationId" },
+        "investigationId": { "$ref": "#/$defs/OpaqueId" },
+        "parentCheckpointId": { "$ref": "#/$defs/OpaqueId" }
+      }
+    },
+    "AppendEventCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operationId", "investigationId", "type", "provenance"],
+      "properties": {
+        "operationId": { "$ref": "#/$defs/OperationId" },
+        "investigationId": { "$ref": "#/$defs/OpaqueId" },
+        "runId": { "$ref": "#/$defs/OpaqueId" },
+        "type": { "$ref": "#/$defs/EventType" },
+        "checkId": { "$ref": "#/$defs/OpaqueId" },
+        "sourceSubject": { "$ref": "#/$defs/SubjectReference" },
+        "occurredAt": { "$ref": "#/$defs/Timestamp" },
+        "body": { "type": "object" },
+        "artifactIds": { "type": "array", "items": { "$ref": "#/$defs/OpaqueId" } },
+        "provenance": { "type": "string", "enum": ["adapter", "self-reported", "system"] },
+        "limitations": { "type": "array", "items": { "$ref": "#/$defs/CoverageLimitation" } }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "type": { "enum": ["check-started", "check-finished"] } },
+            "required": ["type"]
+          },
+          "then": { "required": ["checkId"] }
+        }
+      ]
+    },
+    "PatchInvestigationCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operationId", "investigationId", "expectedRevision"],
+      "properties": {
+        "operationId": { "$ref": "#/$defs/OperationId" },
+        "investigationId": { "$ref": "#/$defs/OpaqueId" },
+        "expectedRevision": { "$ref": "#/$defs/Revision" },
+        "stageId": { "$ref": "#/$defs/Stage" },
+        "leadSubjectId": { "$ref": "#/$defs/OpaqueId" },
+        "selectedCheckpointId": { "$ref": "#/$defs/OpaqueId" },
+        "archived": { "type": "boolean" }
+      }
+    },
+
+    "CreationOperationLookup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenantId",
+        "spaceId",
+        "operationId",
+        "payloadHash",
+        "investigationId",
+        "responseProjection",
+        "acceptedServerSequence",
+        "acceptedRevision"
+      ],
+      "properties": {
+        "tenantId": { "$ref": "#/$defs/OpaqueId" },
+        "spaceId": { "$ref": "#/$defs/OpaqueId" },
+        "operationId": { "$ref": "#/$defs/OperationId" },
+        "payloadHash": { "$ref": "#/$defs/Digest" },
+        "investigationId": { "$ref": "#/$defs/OpaqueId" },
+        "responseProjection": { "$ref": "#/$defs/InvestigationAck" },
+        "acceptedServerSequence": { "$ref": "#/$defs/ServerSequence" },
+        "acceptedRevision": { "$ref": "#/$defs/Revision" }
+      },
+      "description": "Written atomically for every default-first and explicit-new creation so a client that never received an Investigation ID can recover by (Tenant, Team_Space, Operation_ID)."
+    },
+    "IdempotencyRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenantId", "spaceId", "operationId", "payloadHash", "statusCode"],
+      "properties": {
+        "tenantId": { "$ref": "#/$defs/OpaqueId" },
+        "spaceId": { "$ref": "#/$defs/OpaqueId" },
+        "operationId": { "$ref": "#/$defs/OperationId" },
+        "payloadHash": { "$ref": "#/$defs/Digest" },
+        "statusCode": { "type": "integer", "minimum": 100, "maximum": 599 },
+        "responseProjection": { "type": "object" },
+        "acceptedServerSequence": { "$ref": "#/$defs/ServerSequence" },
+        "acceptedRevision": { "$ref": "#/$defs/Revision" }
+      }
+    },
+
+    "AllocationState": {
+      "type": "string",
+      "enum": [
+        "local-only",
+        "reserving",
+        "reserved",
+        "conversation-allocated",
+        "submitting",
+        "submitted"
+      ]
+    },
+    "SubmissionState": {
+      "type": "string",
+      "enum": ["not-created", "pending", "accepted", "unresolved"]
+    },
+    "LocalInvestigationLink": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["localInvestigationId", "slotKey", "allocationState", "submissionState"],
+      "properties": {
+        "localInvestigationId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "slotKey": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "sharedInvestigationId": { "$ref": "#/$defs/OpaqueId" },
+        "runId": { "$ref": "#/$defs/OpaqueId" },
+        "destination": { "$ref": "#/$defs/DestinationScope" },
+        "creationOperationId": { "$ref": "#/$defs/OperationId" },
+        "startupOperationId": { "$ref": "#/$defs/OperationId" },
+        "submissionId": { "$ref": "#/$defs/SubmissionId" },
+        "submissionPromptHash": { "$ref": "#/$defs/Digest" },
+        "submissionState": { "$ref": "#/$defs/SubmissionState" },
+        "allocationState": { "$ref": "#/$defs/AllocationState" }
+      },
+      "description": "Joining shared work preserves the local Investigation identifier and slotKey; only shared/startup fields are added or updated."
+    },
+
+    "CollaborationStatus": {
+      "type": "string",
+      "enum": [
+        "disabled",
+        "setup_required",
+        "unsupported_host",
+        "reauth_required",
+        "forbidden",
+        "offline",
+        "syncing",
+        "ready"
+      ],
+      "description": "Status precedence order (safest actionable first). A source-specific failure never turns an authorization or offline state into ready."
+    },
+    "SafeCollaborationStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "$ref": "#/$defs/CollaborationStatus" },
+        "pendingCount": { "type": "integer", "minimum": 0 },
+        "spaces": { "type": "array", "items": { "$ref": "#/$defs/SpaceSummary" } },
+        "captureWarnings": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 2048 }
+        },
+        "lastSuccessfulSyncAt": { "$ref": "#/$defs/Timestamp" }
+      },
+      "description": "Status payloads contain ONLY these safe documented fields. They exclude tokens, profile values, secret URIs, group IDs, storage configuration, endpoints, and credentials."
+    },
+
+    "ErrorCode": {
+      "type": "string",
+      "enum": [
+        "disabled",
+        "setup_required",
+        "unsupported_host",
+        "reauth_required",
+        "forbidden",
+        "not_found",
+        "conflict",
+        "revision_conflict",
+        "payload_mismatch",
+        "unresolved",
+        "invalid_cursor",
+        "rate_limited",
+        "payload_too_large",
+        "unsupported_media_type",
+        "offline"
+      ]
+    },
+    "ErrorEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "safeMessage"],
+      "properties": {
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "safeMessage": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "operationId": { "$ref": "#/$defs/OperationId" },
+        "retryable": { "type": "boolean" },
+        "expectedRevision": { "$ref": "#/$defs/Revision" }
+      },
+      "description": "Non-disclosing denial/error. Never contains protected object fields, Artifact bytes, storage credentials, group IDs, or distinguishable existence detail."
+    },
+
+    "Cursor": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "description": "Opaque authenticated continuation cursor bound to identity, scope, query, and High_Water_Mark. Never decoded by the client."
+    },
+    "ChangeFeedItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenantId", "spaceId", "serverSequence", "kind", "objectId", "safeProjection"],
+      "properties": {
+        "tenantId": { "$ref": "#/$defs/OpaqueId" },
+        "spaceId": { "$ref": "#/$defs/OpaqueId" },
+        "serverSequence": { "$ref": "#/$defs/ServerSequence" },
+        "kind": {
+          "type": "string",
+          "enum": ["investigation", "run", "event", "checkpoint", "artifact", "deletion"]
+        },
+        "objectId": { "$ref": "#/$defs/OpaqueId" },
+        "safeProjection": {
+          "type": "object",
+          "description": "Bounded synchronization data or a content-free invalidation marker (e.g. deletion)."
+        }
+      }
+    },
+    "FeedPage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items", "highWaterMark", "pageSize"],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ChangeFeedItem" }
+        },
+        "highWaterMark": { "$ref": "#/$defs/ServerSequence" },
+        "pageSize": { "type": "integer", "minimum": 1, "maximum": 200 },
+        "nextCursor": { "$ref": "#/$defs/Cursor" }
+      },
+      "description": "Fixed-high-water page ordered by Server_Sequence. Default page size 50, maximum 200. Absence of nextCursor means the mark is reached."
+    },
+    "SynchronizationCursor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenantId", "authenticatedSubjectId", "spaceId", "sourceBindingId", "lastAppliedServerSequence"],
+      "properties": {
+        "tenantId": { "$ref": "#/$defs/OpaqueId" },
+        "authenticatedSubjectId": { "$ref": "#/$defs/OpaqueId" },
+        "spaceId": { "$ref": "#/$defs/OpaqueId" },
+        "sourceBindingId": { "$ref": "#/$defs/OpaqueId" },
+        "lastAppliedServerSequence": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+
+  "$comment-models": "Every wire message validates against exactly one named model under $defs. fixtures/manifest.json binds each fixture to its model via a JSON Pointer (e.g. #/$defs/Event). Validators load this file, then validate each fixture against the referenced $defs subschema. This avoids top-level oneOf ambiguity for overlapping shapes."
+}

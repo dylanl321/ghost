@@ -1,12 +1,12 @@
 import DOMPurify from 'isomorphic-dompurify'
 
-const CHAT_TAGS = [
+const MARKDOWN_TAGS = [
   'a', 'blockquote', 'br', 'code', 'del', 'div', 'em', 'h1', 'h2', 'h3', 'h4',
   'h5', 'h6', 'hr', 'img', 'li', 'ol', 'p', 'pre', 'span', 'strong', 'table',
   'tbody', 'td', 'th', 'thead', 'tr', 'ul'
 ]
 
-const CHAT_ATTRIBUTES = [
+const MARKDOWN_ATTRIBUTES = [
   'alt', 'class', 'data-entity-type', 'data-entity-value', 'data-nuxt-link',
   'data-popover-enabled', 'data-rendered', 'height', 'href', 'id', 'rel', 'src',
   'target', 'title', 'width'
@@ -14,10 +14,10 @@ const CHAT_ATTRIBUTES = [
 
 const SAFE_URI = /^(?:(?:https?|mailto):|\/(?!\/)|#)/i
 
-export function sanitizeChatHtml(html: string): string {
+export function sanitizeMarkdownHtml(html: string): string {
   return DOMPurify.sanitize(html, {
-    ALLOWED_TAGS: CHAT_TAGS,
-    ALLOWED_ATTR: CHAT_ATTRIBUTES,
+    ALLOWED_TAGS: MARKDOWN_TAGS,
+    ALLOWED_ATTR: MARKDOWN_ATTRIBUTES,
     ALLOWED_URI_REGEXP: SAFE_URI,
     ADD_URI_SAFE_ATTR: ['data-entity-type', 'data-entity-value', 'data-popover-enabled', 'data-rendered'],
     ALLOW_DATA_ATTR: false,

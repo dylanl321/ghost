@@ -126,7 +126,7 @@ export async function sendUserNotification(
         // On error, deliver to inbox only (emailSent = true = skip email)
       }
     } else {
-      // Always-deliver categories (REPORT_READY, CHAT_COMPLETE, SYSTEM)
+      // Always-deliver categories (REPORT_READY, SYSTEM)
       // Only send immediate email for critical severity
       if (options.severity === 'critical') {
         shouldSendImmediateEmail = true

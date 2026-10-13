@@ -5,7 +5,7 @@
 
 import { defineEventHandler, getQuery } from 'h3'
 import { getCostAndUsage, getProformaCosts } from '../../utils/cost-explorer'
-import { sendSuccess, parseQueryParams, errors, handleAsync } from '../../utils/api-response'
+import { sendSuccess, parseQueryParams, validateEnvironment, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { parseAndValidateAccountFilters, getAccountIdsFromCriteria } from '../../utils/account-filters'
 import { getAccountScopeCacheKey } from '../../utils/cache-keys'
@@ -34,14 +34,14 @@ registerEndpoint('/api/costs/tag-coverage', 'GET', {
       in: 'query',
       required: false,
       schema: { type: 'string', format: 'date' },
-      description: 'Start date (YYYY-MM-DD). Required if period is not specified.'
+      description: 'Inclusive start date (YYYY-MM-DD). Must be paired with endDate.'
     },
     {
       name: 'endDate',
       in: 'query',
       required: false,
       schema: { type: 'string', format: 'date' },
-      description: 'End date (YYYY-MM-DD). Required if period is not specified.'
+      description: 'Exclusive end date (YYYY-MM-DD). Must be paired with startDate.'
     },
     {
       name: 'period',
@@ -51,7 +51,7 @@ registerEndpoint('/api/costs/tag-coverage', 'GET', {
         type: 'string',
         enum: ['last7days', 'last30days', 'last90days', 'thisMonth', 'lastMonth', 'thisQuarter', 'lastQuarter', 'thisYear', 'lastYear', 'ytd', 'last12months']
       },
-      description: 'Relative date period. Cannot be used with startDate/endDate.'
+      description: 'Relative date period; defaults to last90days when no dates are supplied. Cannot be used with startDate/endDate.'
     },
     {
       name: 'accountIds',
@@ -93,14 +93,14 @@ registerEndpoint('/api/costs/tag-coverage', 'GET', {
       in: 'query',
       required: false,
       schema: { type: 'string' },
-      description: 'Return one normalized tag value, typically for a lazy account drill-down'
+      description: 'Return one normalized tag value from values[].groupKey. Requires includeValues=true. Coverage and scope totals remain for the entire tag key.'
     },
     {
       name: 'proforma',
       in: 'query',
       required: false,
       schema: { type: 'boolean', default: false },
-      description: 'Include account-weighted estimated proforma costs'
+      description: 'Include account-and-month weighted proforma estimates (commercial only). Estimates are not suitable for chargeback; inspect proformaEstimation.available before using them.'
     }
   ],
   responses: {
@@ -123,15 +123,23 @@ registerEndpoint('/api/costs/tag-coverage', 'GET', {
                       type: 'object',
                       properties: {
                         accountId: { type: 'string' },
+                        accountName: { type: 'string' },
                         taggedCost: { type: 'number' },
                         untaggedCost: { type: 'number' },
-                        coveragePercent: { type: 'number' }
+                        positiveTaggedCost: { type: 'number' },
+                        positiveUntaggedCost: { type: 'number' },
+                        coveragePercent: { type: 'number', description: 'Percentage of positive charges that are tagged.' },
+                        estimatedProformaTaggedCost: { type: 'number' },
+                        estimatedProformaUntaggedCost: { type: 'number' }
                       }
                     }
                   },
                   totalTaggedCost: { type: 'number' },
                   totalUntaggedCost: { type: 'number' },
-                  overallCoverage: { type: 'number' },
+                  signedTotalCost: { type: 'number', description: 'Total tagged and untagged costs, including credits.' },
+                  positiveTaggedCost: { type: 'number' },
+                  positiveUntaggedCost: { type: 'number' },
+                  overallCoverage: { type: 'number', description: 'Percentage of positive charges that are tagged.' },
                   estimatedProformaTaggedCost: { type: 'number' },
                   estimatedProformaUntaggedCost: { type: 'number' },
                   values: {
@@ -149,7 +157,20 @@ registerEndpoint('/api/costs/tag-coverage', 'GET', {
                         rawValues: { type: 'array', items: { type: 'string' } },
                         billableCost: { type: 'number' },
                         estimatedProformaCost: { type: 'number' },
-                        accounts: { type: 'array', items: { type: 'object' } }
+                        accountCount: { type: 'integer', description: 'Contributing account count when includeAccounts=false.' },
+                        accounts: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              accountId: { type: 'string' },
+                              accountName: { type: 'string' },
+                              billableCost: { type: 'number' },
+                              estimatedProformaCost: { type: 'number' },
+                              rawValues: { type: 'array', items: { type: 'string' } }
+                            }
+                          }
+                        }
                       }
                     }
                   },
@@ -179,10 +200,23 @@ export default defineEventHandler(handleAsync(async (event) => {
   const query = getQuery(event)
   const { environment } = parseQueryParams(event)
 
+  if (!validateEnvironment(environment)) {
+    return errors.badRequest(event, 'environment must be commercial or govcloud')
+  }
+
   // tagKey is required
-  const tagKey = query.tagKey as string
-  if (!tagKey) {
-    return errors.badRequest(event, 'tagKey parameter is required')
+  const tagKey = query.tagKey
+  if (typeof tagKey !== 'string' || !tagKey.trim()) {
+    return errors.badRequest(event, 'tagKey must be a non-empty string')
+  }
+  for (const name of ['includeValues', 'includeAccounts', 'proforma'] as const) {
+    const value = query[name]
+    if (value !== undefined && ![true, false, 'true', 'false'].includes(value as string | boolean)) {
+      return errors.badRequest(event, `${name} must be true or false`)
+    }
+  }
+  if (query.valueGroupKey !== undefined && (typeof query.valueGroupKey !== 'string' || !query.valueGroupKey)) {
+    return errors.badRequest(event, 'valueGroupKey must be a non-empty string')
   }
 
   // Validate date parameters — default to last 90 days if none provided
@@ -209,6 +243,9 @@ export default defineEventHandler(handleAsync(async (event) => {
   const proformaAccountId = (query.proformaAccountId as string) || process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832'
   const masterAccountId = (query.masterAccountId as string) || process.env.AWS_MASTER_ACCOUNT_ID || '205950196477'
 
+  if (valueGroupKey && !includeValues) {
+    return errors.badRequest(event, 'valueGroupKey requires includeValues=true')
+  }
   if (proforma && environment !== 'commercial') {
     return errors.badRequest(event, 'Proforma data analysis is only available for commercial environment')
   }

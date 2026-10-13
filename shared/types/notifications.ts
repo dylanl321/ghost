@@ -19,7 +19,6 @@ export type NotificationCategory =
   | 'PIPELINE_FAILURE'
   | 'DEPLOYMENT'
   | 'REPORT_READY'
-  | 'CHAT_COMPLETE'
   | 'SYSTEM'
   | 'ACHIEVEMENT'
 
@@ -101,7 +100,6 @@ export const CATEGORY_PREFERENCE_MAP: Record<NotificationCategory, string | null
   PIPELINE_FAILURE: 'pipelineFailures',
   DEPLOYMENT: 'deploymentCompletions',
   REPORT_READY: null,   // Always delivered (user requested the report)
-  CHAT_COMPLETE: null,   // Always delivered (user started the query)
   SYSTEM: null,          // Always delivered (admin announcements)
   ACHIEVEMENT: null      // Always delivered (earned by user action, no email)
 }
@@ -126,7 +124,6 @@ export const CATEGORY_DISPLAY: Record<NotificationCategory, CategoryDisplayInfo>
   PIPELINE_FAILURE: { label: 'Pipeline', icon: 'i-heroicons-cog-6-tooth', color: 'red' },
   DEPLOYMENT: { label: 'Deployment', icon: 'i-heroicons-rocket-launch', color: 'green' },
   REPORT_READY: { label: 'Report', icon: 'i-heroicons-document-chart-bar', color: 'blue' },
-  CHAT_COMPLETE: { label: 'AI Chat', icon: 'i-heroicons-chat-bubble-left-right', color: 'violet' },
   SYSTEM: { label: 'System', icon: 'i-heroicons-megaphone', color: 'gray' },
   ACHIEVEMENT: { label: 'Achievement', icon: 'i-heroicons-trophy', color: 'yellow' }
 }
@@ -143,7 +140,7 @@ export const FILTER_GROUP_CATEGORIES: Record<NotificationFilterGroup, Notificati
   budget: ['BUDGET_THRESHOLD', 'COST_ANOMALY', 'COST_SUMMARY'],
   security: ['SECURITY_CRITICAL', 'COMPLIANCE', 'SECURITY_SCORE'],
   pipeline: ['PIPELINE_FAILURE', 'DEPLOYMENT'],
-  system: ['REPORT_READY', 'CHAT_COMPLETE', 'SYSTEM', 'ACHIEVEMENT']
+  system: ['REPORT_READY', 'SYSTEM', 'ACHIEVEMENT']
 }
 
 // ---------------------------------------------------------------------------

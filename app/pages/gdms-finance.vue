@@ -61,6 +61,14 @@
           </UBadge>
           <USelectMenu v-model="selectedYear" :options="yearOptions" class="w-24" size="sm" />
           <UButton
+            v-if="activeDept && selectedYear === currentYear"
+            color="purple"
+            :variant="showForecastYear ? 'soft' : 'ghost'"
+            icon="i-heroicons-calendar-days"
+            size="sm"
+            @click="showForecastYear = !showForecastYear"
+          >{{ showForecastYear ? `${currentYear} + ${currentYear + 1}` : `Show ${currentYear + 1}` }}</UButton>
+          <UButton
             color="gray"
             variant="ghost"
             icon="i-heroicons-arrow-path"
@@ -209,13 +217,20 @@
       <!-- ── DEPARTMENT TAB ── -->
       <template v-else>
         <div v-if="activeDept">
+          <template v-if="showForecastYear && selectedYear === currentYear">
+            <UCard class="mb-4">
+              <template #header><div><h2 class="text-sm font-semibold text-gray-900 dark:text-white">{{ currentYear + 1 }} Forecast Plan — {{ activeDept.department }}</h2><p class="mt-0.5 text-xs text-gray-400 dark:text-gray-500">AWS Cost Explorer forecast values saved with the current Finance forecast version.</p></div></template>
+              <div class="overflow-x-auto"><table class="w-full text-sm tabular-nums"><thead><tr class="border-b border-gray-200 dark:border-gray-700"><th class="py-2 pr-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">Plan</th><th v-for="month in nextYearForecastMonths" :key="month" class="px-3 py-2 text-right text-xs font-semibold text-gray-500 dark:text-gray-400">{{ formatMonthShort(month) }}</th></tr></thead><tbody><tr><td class="py-3 pr-4 font-semibold text-blue-600 dark:text-blue-400">Forecast Plan</td><td v-for="month in nextYearForecastMonths" :key="month" class="px-3 py-3 text-right text-blue-600 dark:text-blue-400">{{ formatCurrency(nextYearForecastValues[month] || 0, 0) }}</td></tr></tbody></table></div>
+            </UCard>
+          </template>
+          <template v-else>
           <!-- Monthly summary table (spreadsheet-style) -->
           <UCard class="mb-4">
             <template #header>
               <div class="flex items-center justify-between">
                 <div>
                   <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Monthly Plan vs Actual — {{ activeDept.department }}</h2>
-                  <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Plan and actual spend by invoicing month. Cumulative actual stops at the last month with data.</p>
+                  <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Completed months use posted chargeback actuals. Open and future months use AWS Cost Explorer forecasts by component.</p>
                 </div>
                 <div class="flex items-center gap-2">
                   <UButton
@@ -225,9 +240,16 @@
                     icon="i-heroicons-calendar"
                     @click="deptFullYear = !deptFullYear"
                   >Full Year</UButton>
-                  <UButton color="gray" variant="ghost" icon="i-heroicons-arrow-down-tray" size="xs" :loading="excelExporting" :disabled="excelExporting" @click="exportExcel">
-                    {{ excelExporting ? 'Generating…' : 'Export Excel' }}
-                  </UButton>
+                  <div class="flex items-center gap-1">
+                    <UButton color="purple" variant="soft" icon="i-heroicons-chart-bar-square" size="xs" :loading="forecastGenerating" @click="generateForecast">
+                      Generate Forecast
+                    </UButton>
+                    <UButton color="gray" variant="ghost" icon="i-heroicons-arrow-down-tray" size="xs" :loading="excelExporting" :disabled="excelExporting" @click="exportExcel">
+                      {{ excelExporting ? 'Generating…' : 'Export Excel' }}
+                    </UButton>
+                  </div>
+                  <span v-if="forecastError" class="text-xs text-red-500">{{ forecastError }}</span>
+                  <span v-else-if="forecastNotice" class="text-xs text-amber-600 dark:text-amber-400">{{ forecastNotice }}</span>
                   <span v-if="excelExportError" class="text-xs text-red-500">{{ excelExportError }}</span>
                 </div>
               </div>
@@ -283,6 +305,101 @@
               </table>
             </div>
           </UCard>
+
+          <UAlert
+            v-if="forecastError"
+            color="red"
+            variant="subtle"
+            icon="i-heroicons-exclamation-triangle"
+            title="Forecast generation failed"
+            :description="forecastError"
+            class="mb-4"
+          />
+          <div v-if="forecastErrorContext.length" class="mb-4 border border-red-200 p-3 text-sm text-red-700 dark:border-red-900 dark:text-red-300">
+            <div v-for="item in forecastErrorContext" :key="item.label" class="mt-1 first:mt-0"><span class="font-medium">{{ item.label }}:</span> {{ item.value }}</div>
+          </div>
+          <div v-if="forecastFailures.length" class="mb-4 border border-red-200 dark:border-red-900">
+            <div v-for="failure in forecastFailures" :key="failure.message" class="border-b border-red-100 p-3 last:border-b-0 dark:border-red-900/60">
+              <div class="text-sm font-medium text-red-700 dark:text-red-300">{{ failure.message }}</div>
+              <div v-for="account in failure.accounts" :key="account.accountId" class="mt-1 flex flex-wrap gap-x-2 text-xs text-red-600 dark:text-red-400"><span class="font-mono">{{ account.accountId }}</span><span>{{ account.name }}</span><span class="text-red-400 dark:text-red-500">{{ account.source }}</span></div>
+            </div>
+          </div>
+          <UAlert v-if="forecastExcludedAccounts.length" color="amber" variant="subtle" icon="i-heroicons-information-circle" title="Catalog records excluded from forecast" class="mb-4">
+            <template #description><div v-for="account in forecastExcludedAccounts" :key="account.accountId" class="mt-1"><span class="font-mono">{{ account.accountId }}</span> {{ account.name }}: {{ account.reason }}</div></template>
+          </UAlert>
+
+          <UCard v-if="planHistory.length" class="mb-4">
+            <template #header>
+              <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Plan Change History</h2>
+            </template>
+            <div class="divide-y divide-gray-100 dark:divide-gray-700 text-sm">
+              <div v-for="entry in planHistory" :key="entry.sk" class="flex items-center gap-3 py-2">
+                <span class="flex-1 text-gray-700 dark:text-gray-300">{{ formatPlanAction(entry.action) }}</span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">{{ entry.actor }}</span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">{{ new Date(entry.createdAt).toLocaleString() }}</span>
+                <UButton color="gray" variant="ghost" size="xs" icon="i-heroicons-arrow-uturn-left" @click="revertPlan(entry)">Revert Change</UButton>
+              </div>
+            </div>
+          </UCard>
+
+          <UCard v-if="forecastComposition" class="mb-4">
+            <template #header>
+              <div><h2 class="text-sm font-semibold text-gray-900 dark:text-white">Forecast Account Composition</h2><p class="text-xs text-gray-500 mt-1">AWS forecast results and posted actuals recorded with this plan version.</p></div>
+            </template>
+            <div v-if="forecastComposition.methodology" class="mb-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div v-for="item in forecastComposition.methodology" :key="item.component" class="border border-gray-200 p-2 text-xs dark:border-gray-700"><span class="font-medium">{{ item.component }}:</span> {{ item.source }} · {{ item.operation }}</div>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead><tr class="border-b border-gray-200 dark:border-gray-700 text-left text-xs text-gray-500 dark:text-gray-400"><th class="py-2">Account</th><th class="py-2 text-right">Allocation</th><th class="py-2 text-right">Forecast Remainder</th></tr></thead>
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                  <tr v-for="row in forecastCompositionRows" :key="row.accountId"><td class="py-2 font-mono text-xs">{{ row.accountId }}</td><td class="py-2 text-right tabular-nums">{{ (row.share * 100).toFixed(1) }}%</td><td class="py-2 text-right tabular-nums">{{ formatCurrency(row.total, 0) }}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </UCard>
+
+          <UModal v-model="showForecastPreview" :ui="{ width: 'sm:max-w-5xl' }">
+            <UCard
+              :ui="{
+                ring: '',
+                divide: 'divide-y divide-gray-700',
+                body: { base: 'p-6', padding: '' },
+                header: { base: 'px-6 py-4 bg-gray-900' },
+                footer: { base: 'px-6 py-4 bg-gray-900' }
+              }"
+            >
+              <template #header>
+                <div class="flex items-center justify-between gap-4">
+                  <div><div class="flex items-center gap-2"><UIcon name="i-heroicons-chart-bar-square" class="h-5 w-5 text-blue-400" /><h2 class="text-lg font-semibold text-white">Forecast Decision Review</h2></div><p class="mt-1 text-sm text-gray-400">{{ activeDept?.department }} plan changes are calculated but not saved until confirmed.</p></div>
+                  <div class="flex items-center gap-2"><UButton color="gray" :variant="showNextForecastYear ? 'soft' : 'ghost'" icon="i-heroicons-calendar-days" size="sm" @click="showNextForecastYear = !showNextForecastYear">{{ showNextForecastYear ? `${selectedYear} + ${selectedYear + 1}` : selectedYear }}</UButton><UButton color="gray" variant="ghost" icon="i-heroicons-x-mark-20-solid" size="sm" @click="showForecastPreview = false" /></div>
+                </div>
+              </template>
+              <div class="max-h-[58vh] overflow-y-auto space-y-5">
+                <div v-if="previewView === 'overview'" class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Plan Change</div><div class="mt-1 text-xl font-semibold" :class="forecastPreviewMetrics.delta >= 0 ? 'text-red-500' : 'text-emerald-500'">{{ forecastPreviewMetrics.delta >= 0 ? '+' : '' }}{{ formatCurrency(forecastPreviewMetrics.delta, 0) }}</div><div class="mt-1 text-xs text-gray-500">{{ forecastYearLabel }}</div></div>
+                  <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Proposed Plan</div><div class="mt-1 text-xl font-semibold text-gray-900 dark:text-white">{{ formatCurrency(forecastPreviewMetrics.proposed, 0) }}</div><div class="mt-1 text-xs text-gray-500">{{ forecastYearLabel }}</div></div>
+                  <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Forecast Components</div><div class="mt-1 text-xl font-semibold text-blue-500">{{ forecastPreviewRows.length }}</div><div class="mt-1 text-xs text-gray-500">AWS account and special scopes</div></div>
+                  <div class="rounded-lg bg-gray-50 p-3 dark:bg-gray-800"><div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Past Months Rebased</div><div class="mt-1 text-xl font-semibold text-orange-500">{{ forecastPreviewMetrics.rebasedMonths }}</div><div class="mt-1 text-xs text-gray-500">set to posted actuals</div></div>
+                </div>
+                <div v-if="previewView === 'overview'" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div v-for="annual in forecastPreviewAnnualSummaries" :key="annual.year" class="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+                    <div class="flex items-center justify-between"><h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ annual.year }} Plan</h3><span class="text-xs" :class="annual.delta >= 0 ? 'text-red-500' : 'text-emerald-500'">{{ annual.delta >= 0 ? '+' : '' }}{{ formatCurrency(annual.delta, 0) }}</span></div>
+                    <div class="mt-2 grid grid-cols-2 gap-3 text-sm"><div><div class="text-xs text-gray-500">Current</div><div class="font-medium">{{ formatCurrency(annual.current, 0) }}</div></div><div><div class="text-xs text-gray-500">Proposed</div><div class="font-medium text-blue-500">{{ formatCurrency(annual.proposed, 0) }}</div></div></div>
+                  </div>
+                </div>
+                <div v-if="previewView === 'overview'"><h3 class="text-sm font-medium mb-2">Largest forecast drivers</h3><div class="grid grid-cols-1 sm:grid-cols-3 gap-3"><div v-for="row in forecastPreviewRows.slice(0, 3)" :key="row.accountId" class="border border-gray-200 p-3 dark:border-gray-700"><div class="truncate text-sm font-medium">{{ row.name }}</div><div class="mt-1 text-lg font-semibold">{{ formatCurrency(row.total, 0) }}</div><div class="text-xs text-gray-500">{{ row.share.toFixed(1) }}% of proposed forecast</div><div class="mt-2 h-1.5 bg-gray-100 dark:bg-gray-700"><div class="h-full bg-blue-500" :style="{ width: row.share + '%' }" /></div></div></div></div>
+                <div v-if="previewView === 'overview'"><h3 class="text-sm font-medium mb-2">Monthly plan change</h3><VChart :option="forecastPreviewChartOption" class="h-56" autoresize /></div>
+                <div v-if="previewView === 'overview'"><h3 class="text-sm font-medium mb-2">Monthly plan changes</h3><table class="w-full text-sm"><thead><tr class="text-left text-xs text-gray-500"><th class="pb-2">Month</th><th class="pb-2 text-right">Current</th><th class="pb-2 text-right">Proposed</th><th class="pb-2 text-right">Change</th></tr></thead><tbody><tr v-for="change in forecastPreviewVisibleChanges" :key="change.month" class="border-t border-gray-100 dark:border-gray-700"><td class="py-2">{{ formatMonthShort(change.month) }}</td><td class="py-2 text-right">{{ formatCurrency(change.previous, 0) }}</td><td class="py-2 text-right">{{ formatCurrency(change.next, 0) }}</td><td class="py-2 text-right" :class="change.delta >= 0 ? 'text-red-600' : 'text-emerald-600'">{{ change.delta >= 0 ? '+' : '' }}{{ formatCurrency(change.delta, 0) }}</td></tr></tbody></table></div>
+                <div v-if="previewView === 'actuals'"><div class="flex items-center justify-between mb-2"><h3 class="text-sm font-medium">Month calculation ledger</h3><USelectMenu v-model="selectedPreviewMonth" :options="previewMonthOptions" size="xs" class="w-28" /></div><p class="mb-2 text-xs text-gray-500">{{ selectedPreviewMonthIsHistorical ? 'Completed month: proposed plan equals approved actual charges.' : 'Open month: proposed plan combines charges to date with the forecast remainder.' }}</p><div class="border border-gray-200 dark:border-gray-700"><div v-for="entry in selectedPreviewMonthLedger" :key="entry.key" class="flex items-center gap-3 border-b border-gray-100 p-2 text-sm last:border-b-0 dark:border-gray-700"><span class="w-2 h-2" :class="entry.kind === 'actual' ? 'bg-orange-500' : entry.kind === 'special' ? 'bg-violet-500' : 'bg-blue-500'"/><span class="flex-1 truncate">{{ entry.name }}</span><span class="text-xs text-gray-500">{{ entry.label }}</span><span class="font-medium">{{ formatCurrency(entry.value, 0) }}</span></div><div v-if="!selectedPreviewMonthLedger.length" class="p-3 text-sm text-gray-500">No component detail is available for this month.</div></div></div>
+                <div v-if="previewView === 'actuals'"><h3 class="text-sm font-medium mb-2">Completed-month actual basis</h3><p class="mb-2 text-xs text-gray-500">These charged values replace past plan months before the forecast is applied.</p><div class="border border-gray-200 dark:border-gray-700"><div v-for="month in historicalActualMonths" :key="month.month" class="border-b border-gray-100 last:border-b-0 dark:border-gray-700"><button class="flex w-full items-center gap-3 p-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800/40" @click="toggleHistoricalMonth(month.month)"><UIcon :name="expandedHistoricalMonths.has(month.month) ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'" class="w-4 h-4 text-gray-400"/><span class="flex-1 text-sm font-medium">{{ formatMonthShort(month.month) }}</span><span class="text-sm font-medium">{{ formatCurrency(month.total, 0) }}</span></button><div v-if="expandedHistoricalMonths.has(month.month)" class="border-t border-gray-100 px-10 py-3 dark:border-gray-700"><div v-for="entry in month.entries" :key="entry.key" class="flex items-center gap-3 py-1.5 text-sm"><span class="flex-1"><span class="font-medium">{{ entry.name }}</span><span class="ml-2 font-mono text-xs text-gray-500">{{ entry.accountId }}</span></span><span>{{ formatCurrency(entry.value, 0) }}</span></div></div></div></div></div>
+                <div v-if="previewView === 'overview'"><h3 class="text-sm font-medium mb-2">Forecast basis</h3><div v-for="reason in forecastPreview?.reasons" :key="reason.component" class="border-t border-gray-100 py-2 text-sm dark:border-gray-700"><span class="font-medium">{{ reason.component }}:</span> {{ reason.reason }}</div></div>
+                <div v-if="previewView === 'overview'"><h3 class="text-sm font-medium mb-2">Data provenance</h3><div class="grid grid-cols-1 lg:grid-cols-2 gap-2"><div v-for="item in forecastPreview?.forecastComposition?.methodology" :key="item.component" class="border border-gray-200 p-3 text-xs dark:border-gray-700"><div class="font-medium text-sm">{{ item.component }}</div><div class="mt-1 text-gray-500">{{ item.source }}</div><div class="mt-2"><span class="font-medium">Operation:</span> {{ item.operation }}</div><div class="mt-1"><span class="font-medium">Value basis:</span> {{ item.valuation }}</div></div></div></div>
+                <div v-if="previewView === 'accounts'"><h3 class="text-sm font-medium mb-2">Forecast composition</h3><div class="border border-gray-200 dark:border-gray-700"><div v-for="row in forecastPreviewRows" :key="row.accountId" class="border-b border-gray-100 last:border-b-0 dark:border-gray-700"><button class="flex w-full items-center gap-3 p-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800/40" @click="togglePreviewAccount(row.accountId)"><UIcon :name="expandedPreviewAccounts.has(row.accountId) ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'" class="w-4 h-4 text-gray-400"/><div class="min-w-0 flex-1"><div class="truncate text-sm font-medium">{{ row.name }}</div><div class="font-mono text-xs text-gray-500">{{ row.special ? 'Special component' : row.accountId }} · {{ row.lifecycle }}</div></div><div class="text-right"><div class="text-sm font-medium">{{ formatCurrency(row.total, 0) }}</div><div class="text-xs text-gray-500">{{ row.share.toFixed(1) }}% of forecast total</div></div></button><div v-if="expandedPreviewAccounts.has(row.accountId)" class="border-t border-gray-100 px-10 py-3 dark:border-gray-700"><div class="grid grid-cols-3 gap-2 text-xs"><div v-for="month in row.months" :key="month.month" class="border border-gray-100 p-2 dark:border-gray-700"><div class="text-gray-500">{{ formatMonthShort(month.month) }}</div><div class="mt-1 font-medium">{{ formatCurrency(month.value, 0) }}</div></div></div></div></div></div></div>
+              </div>
+              <template #footer><div class="flex justify-end gap-2"><UButton color="gray" variant="ghost" @click="showForecastPreview = false">Cancel</UButton><UButton color="purple" :loading="forecastApplying" @click="applyForecast">Apply Forecast</UButton></div></template>
+            </UCard>
+          </UModal>
 
           <!-- Charts: side-by-side -->
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
@@ -351,6 +468,7 @@
               <VChart :option="deptYtdChartOption" class="h-64" autoresize />
             </UCard>
           </div>
+          </template>
 
           <!-- Metrics strip -->
           <div class="grid grid-cols-3 gap-3 mb-6">
@@ -623,6 +741,7 @@ const activeTab = ref(0)
 const expandedAccountLists = ref(new Set<string>())
 const expandedAccounts = ref(new Set<string>())
 const selectedMonth = ref<string | null>(null)
+const showForecastYear = ref(false)
 
 // Overview chart view toggle: false = truncated to last month with data, true = full year
 const overviewFullYear = ref(false)
@@ -643,6 +762,158 @@ const planOverridesLoading = ref(false)
 const planSaveError = ref<string | null>(null)
 const editingPlan = ref(false)
 const planDraft = ref<Record<string, string>>({})
+const forecastGenerating = ref(false)
+const forecastApplying = ref(false)
+const showForecastPreview = ref(false)
+const forecastPreview = ref<any>(null)
+const showNextForecastYear = ref(false)
+const previewView = ref<'overview' | 'actuals' | 'accounts'>('overview')
+const forecastError = ref<string | null>(null)
+const forecastErrorDetails = ref<Record<string, unknown> | null>(null)
+const forecastNotice = ref<string | null>(null)
+const forecastComposition = ref<any>(null)
+const forecastFailures = computed(() => Array.isArray((forecastErrorDetails.value as any)?.failures) ? (forecastErrorDetails.value as any).failures : [])
+const forecastExcludedAccounts = ref<Array<{ accountId: string; name: string; source: string; pepEnvironmentStatus?: string; enclaveStatus?: string; reason: string }>>([])
+const forecastErrorContext = computed(() => {
+  const details = forecastErrorDetails.value as any
+  if (!details) return []
+  return [
+    details.source ? { label: 'Source', value: details.source } : null,
+    details.message ? { label: 'AWS response', value: details.message } : null,
+    details.billingViewArn ? { label: 'Billing view', value: details.billingViewArn } : null,
+    details.fallbackAccountId ? { label: 'Fallback account', value: details.fallbackAccountId } : null
+  ].filter(Boolean) as Array<{ label: string; value: string }>
+})
+const forecastCompositionRows = computed(() => {
+  if (!forecastComposition.value) return []
+  const monthly = forecastComposition.value.accountMonthlyValues || {}
+  const totals: Record<string, number> = {}
+  for (const values of Object.values(monthly) as any[]) {
+    for (const [accountId, value] of Object.entries(values || {})) totals[accountId] = (totals[accountId] || 0) + Number(value || 0)
+  }
+  const grandTotal = Object.values(totals).reduce((sum, value) => sum + value, 0)
+  return Object.entries(totals).map(([accountId, total]) => ({ accountId, total, share: grandTotal ? total / grandTotal : 0 })).sort((a, b) => b.total - a.total)
+})
+const forecastPreviewRows = computed(() => {
+  const monthly = forecastPreview.value?.forecastComposition?.accountMonthlyValues || {}
+  const details = new Map((forecastPreview.value?.forecastComposition?.normalAccounts || []).map((account: any) => [account.accountId, account]))
+  const total = Object.values(monthly).reduce((sum: number, values: any) => sum + Object.values(values || {}).reduce((inner: number, value) => inner + Number(value || 0), 0), 0)
+  const normalRows = Object.entries(monthly).map(([accountId, values]: [string, any]) => {
+    const account = details.get(accountId) || {}
+    const accountTotal = Object.values(values || {}).reduce((sum: number, value) => sum + Number(value || 0), 0)
+    return { accountId, name: account.name || 'Unknown account', lifecycle: account.pepEnvironmentStatus || account.enclaveStatus || 'Unknown lifecycle', total: accountTotal, share: total ? accountTotal / total * 100 : 0, months: Object.entries(values || {}).map(([month, value]) => ({ month, value: Number(value || 0) })).sort((a, b) => a.month.localeCompare(b.month)) }
+  })
+  const special = forecastPreview.value?.forecastComposition?.specialMonthlyValues || {}
+  const specialRows = Object.entries(special.components || {}).map(([component, values]: [string, any]) => ({
+    accountId: `special:${component}`,
+    name: component,
+    lifecycle: special.definitions?.[component] || 'Special forecast component',
+    total: Object.values(values || {}).reduce((sum: number, value) => sum + Number(value || 0), 0),
+    share: 0,
+    months: Object.entries(values || {}).map(([month, value]) => ({ month, value: Number(value || 0) })).sort((a, b) => a.month.localeCompare(b.month)),
+    special: true
+  }))
+  const combined = [...specialRows, ...normalRows]
+  const combinedTotal = combined.reduce((sum, row) => sum + row.total, 0)
+  return combined.map(row => ({ ...row, share: combinedTotal ? row.total / combinedTotal * 100 : 0 })).sort((a, b) => b.total - a.total)
+})
+const forecastPreviewMetrics = computed(() => {
+  const changes = forecastPreviewVisibleChanges.value
+  return { delta: changes.reduce((sum: number, change: any) => sum + Number(change.delta || 0), 0), proposed: changes.reduce((sum: number, change: any) => sum + Number(change.next || 0), 0), rebasedMonths: changes.filter((change: any) => change.month < ytdCutoff && Math.abs(Number(change.delta || 0)) >= 0.01).length }
+})
+const forecastYearLabel = computed(() => showNextForecastYear.value ? `${selectedYear.value} + ${selectedYear.value + 1}` : String(selectedYear.value))
+const forecastPreviewVisibleChanges = computed(() => {
+  const lastYear = selectedYear.value + (showNextForecastYear.value ? 1 : 0)
+  return (forecastPreview.value?.changes || []).filter((change: any) => Number(change.month.slice(0, 4)) <= lastYear)
+})
+const forecastPreviewAnnualSummaries = computed(() => {
+  const lastYear = selectedYear.value + (showNextForecastYear.value ? 1 : 0)
+  return (forecastPreview.value?.annualSummaries || []).filter((summary: any) => Number(summary.year) <= lastYear)
+})
+const forecastPreviewChartOption = computed(() => {
+  const changes = forecastPreviewVisibleChanges.value
+  return { tooltip: { trigger: 'axis', valueFormatter: (value: number) => formatCurrency(value, 0) }, legend: { data: ['Current Plan', 'Proposed Plan'], bottom: 0 }, grid: { left: 82, right: 24, top: 22, bottom: 52, containLabel: false }, xAxis: { type: 'category', axisTick: { alignWithLabel: true }, axisLabel: { interval: 0, fontSize: 11 }, data: changes.map((change: any) => formatMonthShort(change.month)) }, yAxis: { type: 'value', axisLabel: { formatter: (value: number) => formatCurrency(value, 0), fontSize: 10 }, splitLine: { lineStyle: { color: '#334155' } } }, series: [{ name: 'Current Plan', type: 'bar', barMaxWidth: 22, data: changes.map((change: any) => change.previous), itemStyle: { color: '#94a3b8' } }, { name: 'Proposed Plan', type: 'bar', barMaxWidth: 22, data: changes.map((change: any) => change.next), itemStyle: { color: '#4a7ca8' } }] }
+})
+const expandedPreviewAccounts = ref(new Set<string>())
+const expandedHistoricalMonths = ref(new Set<string>())
+const selectedPreviewMonth = ref<string | { label: string; value: string } | null>(null)
+function togglePreviewAccount(accountId: string) {
+  if (expandedPreviewAccounts.value.has(accountId)) expandedPreviewAccounts.value.delete(accountId)
+  else expandedPreviewAccounts.value.add(accountId)
+}
+function toggleHistoricalMonth(month: string) {
+  if (expandedHistoricalMonths.value.has(month)) expandedHistoricalMonths.value.delete(month)
+  else expandedHistoricalMonths.value.add(month)
+}
+const historicalActualMonths = computed(() => {
+  const breakdown = forecastPreview.value?.historicalActualBreakdown || {}
+  const entries = Object.values(breakdown) as any[]
+  const months = new Map<string, any[]>()
+  for (const entry of entries) {
+    for (const [month, rawValue] of Object.entries(entry.monthlyActuals || {})) {
+      if (month > ytdCutoff) continue
+      const value = Number(rawValue || 0)
+      if (!value) continue
+      const values = months.get(month) || []
+      values.push({ key: `${entry.accountId}:${month}`, accountId: entry.accountId, name: entry.name, value })
+      months.set(month, values)
+    }
+  }
+  return [...months.entries()].map(([month, monthEntries]) => ({ month, entries: monthEntries.sort((a, b) => b.value - a.value), total: monthEntries.reduce((sum, entry) => sum + entry.value, 0) })).sort((a, b) => a.month.localeCompare(b.month))
+})
+const previewMonthOptions = computed(() => (forecastPreview.value?.months || forecastPreview.value?.changes?.map((change: any) => change.month) || []).map((month: string) => ({ label: formatMonthShort(month), value: month })))
+const selectedPreviewMonthKey = computed(() => {
+  const selected = selectedPreviewMonth.value
+  return typeof selected === 'string' ? selected : selected?.value || null
+})
+const selectedPreviewMonthIsHistorical = computed(() => Boolean(selectedPreviewMonthKey.value && selectedPreviewMonthKey.value <= ytdCutoff))
+const selectedPreviewMonthLedger = computed(() => {
+  const month = selectedPreviewMonthKey.value
+  if (!month) return []
+  const rows: Array<{ key: string; name: string; label: string; value: number; kind: 'actual' | 'forecast' | 'special' }> = []
+  if (selectedPreviewMonthIsHistorical.value) {
+    for (const entry of Object.values(forecastPreview.value?.historicalActualBreakdown || {}) as any[]) {
+      const value = Number(entry.monthlyActuals?.[month] || 0)
+      if (value) rows.push({ key: `actual:${entry.accountId}`, name: entry.name, label: 'Pro forma chargeback', value, kind: 'actual' })
+    }
+  } else {
+    for (const row of forecastPreviewRows.value) {
+      const value = Number(row.months.find((item: any) => item.month === month)?.value || 0)
+      if (value) rows.push({ key: row.accountId, name: row.name, label: row.special ? 'Special component' : 'Account forecast', value, kind: row.special ? 'special' : 'forecast' })
+    }
+  }
+  return rows.sort((a, b) => b.value - a.value)
+})
+interface PlanHistoryEntry { sk: string; action: string; actor: string; createdAt: string; monthlyValues: Record<string, number>; forecastComposition?: Record<string, unknown> }
+const planHistory = ref<PlanHistoryEntry[]>([])
+const nextYearForecastMonths = computed(() => Array.from({ length: 12 }, (_, index) => `${currentYear + 1}-${String(index + 1).padStart(2, '0')}-01`))
+const nextYearForecastValues = computed<Record<string, number>>(() => {
+  const latestForecast = planHistory.value.find(entry => entry.action === 'forecast-generated')
+  if (!latestForecast) return {}
+  return Object.fromEntries(nextYearForecastMonths.value.map(month => [month, Number(latestForecast.monthlyValues?.[month] || 0)]))
+})
+
+async function loadPlanHistory() {
+  const dept = activeDept.value
+  if (!dept) return
+  const response = await $fetch<{ data: { entries: PlanHistoryEntry[] } }>(`/api/costs/financial-plan-history?department=${dept.department}&year=${selectedYear.value}`)
+  planHistory.value = response.data.entries
+  forecastComposition.value = response.data.entries.find(entry => entry.forecastComposition)?.forecastComposition || null
+}
+
+function formatPlanAction(action: string) {
+  return ({ 'manual-save': 'Manual plan update', 'forecast-generated': 'AWS forecast generated', reverted: 'Historical plan restored' } as Record<string, string>)[action] || action
+}
+
+async function revertPlan(entry: PlanHistoryEntry) {
+  const dept = activeDept.value
+  if (!dept) return
+  const response = await $fetch<{ data: { monthlyValues: Record<string, number> } }>('/api/costs/financial-plan-history-revert', {
+    method: 'POST', body: { department: dept.department, year: selectedYear.value, historyKey: entry.sk, restorePrevious: true }
+  })
+  planOverrides.value = { ...planOverrides.value, [dept.department]: response.data.monthlyValues }
+  await loadPlanHistory()
+}
 
 async function loadPlanOverrides(dept: string, year: number) {
   if (planOverrides.value[dept] !== undefined) return
@@ -689,10 +960,81 @@ async function savePlan() {
     })
     planOverrides.value = { ...planOverrides.value, [dept.department]: overrides }
     editingPlan.value = false
+    await loadPlanHistory()
   } catch (err: any) {
     planSaveError.value = err?.data?.message || err?.message || 'Failed to save plan values.'
   } finally {
     planOverridesLoading.value = false
+  }
+}
+
+async function generateForecast() {
+  const dept = activeDept.value
+  if (!dept || forecastGenerating.value) return
+  forecastGenerating.value = true
+  forecastError.value = null
+  forecastErrorDetails.value = null
+  forecastExcludedAccounts.value = []
+  forecastNotice.value = null
+  try {
+    const monthlyActuals = Object.fromEntries(dept.monthly.map(month => [month.month, visibleActual(month)]))
+    const historicalActualBreakdown: Record<string, { accountId: string; name: string; monthlyActuals: Record<string, number> }> = {}
+    const accountMonthlyActuals: Record<string, number> = {}
+    const specialMonthlyActuals: Record<string, number> = {}
+    for (const category of dept.categories) {
+      const categoryActual = category.accounts.reduce((sum, account) => sum + Number(account.monthlyActuals?.[ytdCutoff] || 0), 0)
+      if (category.name === 'GDMS Cloud' || category.name === 'GDMS-DevOrg') specialMonthlyActuals[category.name] = categoryActual
+      for (const account of category.accounts) historicalActualBreakdown[`${category.name}:${account.accountId}`] = { accountId: account.accountId, name: account.name || category.name, monthlyActuals: account.monthlyActuals || {} }
+      if (category.name !== 'GDMS Cloud' && category.name !== 'GDMS-DevOrg') for (const account of category.accounts) accountMonthlyActuals[account.accountId] = Number(account.monthlyActuals?.[ytdCutoff] || 0)
+    }
+    const response = await $fetch<{ data: { preview: any; components?: { excludedCatalogAccounts?: Array<{ accountId: string; name: string; source: string; pepEnvironmentStatus?: string; enclaveStatus?: string; reason: string }> } } }>('/api/costs/financial-plan-forecast', {
+      method: 'POST',
+      body: { department: dept.department, year: selectedYear.value, monthlyActuals, accountMonthlyActuals, specialMonthlyActuals, historicalActualBreakdown, currentPlanValues: resolvedMonthlyPlan.value, preview: true }
+    })
+    forecastPreview.value = response.data.preview
+    showNextForecastYear.value = false
+    previewView.value = 'overview'
+    expandedPreviewAccounts.value = new Set()
+    expandedHistoricalMonths.value = new Set()
+    selectedPreviewMonth.value = response.data.preview.months?.find((month: string) => month === ytdCutoff) || response.data.preview.months?.[0] || null
+    forecastExcludedAccounts.value = response.data.components?.excludedCatalogAccounts || []
+    showForecastPreview.value = true
+  } catch (err: any) {
+    forecastError.value = err?.data?.error?.message || err?.data?.message || err?.message || 'Failed to generate forecast.'
+    forecastErrorDetails.value = err?.data?.error?.details || null
+    forecastExcludedAccounts.value = err?.data?.error?.details?.excludedCatalogAccounts || []
+  } finally {
+    forecastGenerating.value = false
+  }
+}
+
+async function applyForecast() {
+  const dept = activeDept.value
+  if (!dept || !forecastPreview.value) return
+  forecastApplying.value = true
+  try {
+    const monthlyActuals = Object.fromEntries(dept.monthly.map(month => [month.month, visibleActual(month)]))
+    const historicalActualBreakdown: Record<string, { accountId: string; name: string; monthlyActuals: Record<string, number> }> = {}
+    const accountMonthlyActuals: Record<string, number> = {}
+    const specialMonthlyActuals: Record<string, number> = {}
+    for (const category of dept.categories) {
+      const categoryActual = category.accounts.reduce((sum, account) => sum + Number(account.monthlyActuals?.[ytdCutoff] || 0), 0)
+      if (category.name === 'GDMS Cloud' || category.name === 'GDMS-DevOrg') specialMonthlyActuals[category.name] = categoryActual
+      for (const account of category.accounts) historicalActualBreakdown[`${category.name}:${account.accountId}`] = { accountId: account.accountId, name: account.name || category.name, monthlyActuals: account.monthlyActuals || {} }
+      if (category.name !== 'GDMS Cloud' && category.name !== 'GDMS-DevOrg') for (const account of category.accounts) accountMonthlyActuals[account.accountId] = Number(account.monthlyActuals?.[ytdCutoff] || 0)
+    }
+    const response = await $fetch<{ data: { monthlyValues: Record<string, number>; forecastComposition: any } }>('/api/costs/financial-plan-forecast', {
+      method: 'POST', body: { department: dept.department, year: selectedYear.value, monthlyActuals, accountMonthlyActuals, specialMonthlyActuals, historicalActualBreakdown, currentPlanValues: resolvedMonthlyPlan.value }
+    })
+    planOverrides.value = { ...planOverrides.value, [dept.department]: response.data.monthlyValues }
+    forecastComposition.value = response.data.forecastComposition
+    forecastNotice.value = 'Forecast applied and recorded.'
+    showForecastPreview.value = false
+    await loadPlanHistory()
+  } catch (err: any) {
+    forecastError.value = err?.data?.error?.message || err?.message || 'Failed to apply forecast.'
+  } finally {
+    forecastApplying.value = false
   }
 }
 
@@ -782,7 +1124,9 @@ if (import.meta.client) {
   watch(activeDept, async (dept) => {
     selectedMonth.value = null
     deptFullYear.value = false
+    showForecastYear.value = false
     if (dept) await loadPlanOverrides(dept.department, selectedYear.value)
+    if (dept) await loadPlanHistory()
   }, { immediate: true })
 
   watch([departments, selectedYear], async ([depts]) => {
@@ -1057,6 +1401,7 @@ const ACTUAL_COLOR = '#f28e2b' // orange
 const DEPT_COLORS: Record<string, string> = {
   DE158: '#f28e2b',
   DT509: '#4a7ca8',
+  DT328: '#4f8a6b',
 }
 
 // Overview: grouped bars — one plan + one actual bar per department per month
@@ -1172,7 +1517,7 @@ const overviewYtdChartOption = computed(() => {
     : allMonthsFull.filter(m => m <= cutoff)
   const labels = allMonths.map(formatMonthShort)
 
-  const PLAN_TINTS: Record<string, string> = { DE158: '#f9c88a', DT509: '#93b8d6' }
+  const PLAN_TINTS: Record<string, string> = { DE158: '#f9c88a', DT509: '#93b8d6', DT328: '#9dccb3' }
   const legendNames: string[] = []
   const series: any[] = []
 
@@ -1464,14 +1809,16 @@ async function exportExcel() {
   excelExporting.value = true
   excelExportError.value = null
   try {
-    const buf = await $fetch<ArrayBuffer>(`/api/costs/budget-vs-actual-export?year=${selectedYear.value}`, {
+    const department = activeDept.value?.department
+    if (!department) return
+    const buf = await $fetch<ArrayBuffer>(`/api/costs/budget-vs-actual-export?year=${selectedYear.value}&department=${department}`, {
       responseType: 'arrayBuffer'
     })
     const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `IT-AWS-Cost-Tracking-${selectedYear.value}.xlsx`
+    a.download = `${department}-AWS-Forecast-Review-${selectedYear.value}-${selectedYear.value + 1}.xlsx`
     a.click()
     URL.revokeObjectURL(url)
   } catch (err: any) {

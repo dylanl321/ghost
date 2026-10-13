@@ -96,54 +96,73 @@ export default defineEventHandler(handleAsync(async (event) => {
   const environment = 'govcloud'
   
   const accountId = query.accountId as string | undefined
+  const accountIds = typeof query.accountIds === 'string'
+    ? query.accountIds.split(',').map(id => id.trim()).filter(Boolean)
+    : []
   const period = query.period as string | undefined
   const status = query.status as string | undefined
 
   try {
     let result
 
-    if (accountId) {
+    if (accountIds.length > 0) {
+      const accountResults = await Promise.all(accountIds.map(id => queryItems(
+        {
+          tableName: 'ghost-dashboard-forecast-data',
+          queryExpression: 'PK = :pk',
+          expressionAttributeValues: { ':pk': `FORECAST#${id}` },
+          limit
+        },
+        environment
+      )))
+      const items = accountResults.flatMap(accountResult => accountResult.items).slice(0, limit)
+      result = {
+        items,
+        count: accountResults.reduce((count, accountResult) => count + accountResult.count, 0),
+        nextToken: undefined
+      }
+    } else if (accountId) {
       // Query by account ID using PK
       result = await queryItems(
-        'ghost-dashboard-forecast-data',
         {
-          KeyConditionExpression: 'PK = :pk',
-          ExpressionAttributeValues: {
+          tableName: 'ghost-dashboard-forecast-data',
+          queryExpression: 'PK = :pk',
+          expressionAttributeValues: {
             ':pk': `FORECAST#${accountId}`
-          }
+          },
+          limit,
+          nextToken
         },
-        limit,
-        nextToken,
         environment
       )
     } else if (period) {
       // Query by period using GSI1
       result = await queryItems(
-        'ghost-dashboard-forecast-data',
         {
-          IndexName: 'GSI1',
-          KeyConditionExpression: 'GSI1PK = :gsi1pk',
-          ExpressionAttributeValues: {
+          tableName: 'ghost-dashboard-forecast-data',
+          indexName: 'GSI1',
+          queryExpression: 'GSI1PK = :gsi1pk',
+          expressionAttributeValues: {
             ':gsi1pk': `PERIOD#${period}`
-          }
+          },
+          limit,
+          nextToken
         },
-        limit,
-        nextToken,
         environment
       )
     } else if (status) {
       // Query by status using GSI2
       result = await queryItems(
-        'ghost-dashboard-forecast-data',
         {
-          IndexName: 'GSI2',
-          KeyConditionExpression: 'GSI2PK = :gsi2pk',
-          ExpressionAttributeValues: {
+          tableName: 'ghost-dashboard-forecast-data',
+          indexName: 'GSI2',
+          queryExpression: 'GSI2PK = :gsi2pk',
+          expressionAttributeValues: {
             ':gsi2pk': `STATUS#${status}`
-          }
+          },
+          limit,
+          nextToken
         },
-        limit,
-        nextToken,
         environment
       )
     } else {

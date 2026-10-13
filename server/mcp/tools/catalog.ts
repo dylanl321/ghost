@@ -36,17 +36,7 @@ import {
 } from '../../utils/athena-pipeline-queries'
 import { queryAIUsage } from '../../utils/ai-usage-query'
 import { invokeBedrock } from '../../utils/bedrock-client'
-import { sendStrandsQuery } from '../../utils/strands-client'
 import { getUserPreferences, updateUserPreferences } from '../../utils/user-preferences'
-import {
-  addMessageToThread,
-  createThread,
-  createThreadWithInitialMessage,
-  deleteThread,
-  getThreadById,
-  getUserThreads,
-  updateThread
-} from '../../utils/chat-threads'
 import { cancelDatasetExportJob, createDatasetExportJob, getDatasetExportJob, queryDatasetExportJobs } from '../../utils/dataset-export-jobs'
 import { setNotificationMute, setNotificationStatus } from '../../utils/notification-service'
 import { getDatasetReportConfigErrors } from '../../utils/dataset-report-validation'
@@ -95,6 +85,7 @@ import {
   type ResolvedOperationalScope
 } from '../tool-input'
 import { registerGhostTool } from './register'
+import { buildAccountResolution } from '../account-resolver'
 
 const operationalEnvironmentSchema = z.string().default('govcloud').transform(value => operationalEnvironment(value))
 const costEnvironmentSchema = z.enum(['commercial', 'govcloud']).default('commercial')
@@ -102,7 +93,7 @@ const accountIdentifiersSchema = z.union([z.string(), z.array(z.string())]).defa
 const notificationCategorySchema = z.enum([
   'BUDGET_THRESHOLD', 'COST_ANOMALY', 'COST_SUMMARY', 'SECURITY_CRITICAL',
   'COMPLIANCE', 'SECURITY_SCORE', 'PIPELINE_FAILURE', 'DEPLOYMENT',
-  'REPORT_READY', 'CHAT_COMPLETE', 'SYSTEM', 'ACHIEVEMENT'
+  'REPORT_READY', 'SYSTEM', 'ACHIEVEMENT'
 ])
 const notificationStatusSchema = z.enum(['unread', 'read', 'archived'])
 const paginationSchema = {
@@ -252,6 +243,27 @@ export function registerCatalogTools(
     const [summary, timeline] = await Promise.all([getOrganizationSummary(days, 'govcloud'), getOrganizationTimeline(days, limit, 'govcloud')])
     return toolSuccess({ mode: 'overview', summary, timeline }, 'Pipeline overview loaded.', 'Athena pipeline telemetry', { resolvedScope: scopeMetadata(scope), appliedFilters: { days, limit } })
   }
+
+  read({
+    name: 'ghost.accounts.resolve', title: 'Resolve an AWS access target',
+    description: 'Return canonical account metadata, direct IDC choices, and approved master-account hub recipes without returning credentials.',
+    inputSchema: z.object({ identifier: z.string().min(1) }),
+    handler: async args => {
+      const resolved = await resolveAccount(args.identifier)
+      const environment = (
+        resolved.identifierType === 'govId' ||
+        args.identifier === resolved.account.govCloudAccountId ||
+        args.identifier === resolved.account.awsGovCloudAccountID ||
+        (!['accountId'].includes(resolved.identifierType) && Boolean(resolved.account.govCloudAccountId || resolved.account.awsGovCloudAccountID))
+      ) ? 'govcloud' : 'commercial'
+      const userAccess = await getMcpIdentityCenterUserAccess(principal.email, [environment])
+      const result = buildAccountResolution(
+        { account: resolved.account, identifierType: resolved.identifierType, matchedValue: resolved.matchedValue },
+        userAccess.accounts
+      )
+      return toolSuccess(result, `Resolved AWS access target ${result.canonical_account_id}.`, 'GHOST account metadata and AWS IAM Identity Center Admin')
+    }
+  })
 
   read({
     name: 'ghost.accounts.search', title: 'Search GHOST accounts',
@@ -766,6 +778,7 @@ export function registerCatalogTools(
     }
   })
 
+  const confirmationSchema = z.object({ confirm: z.boolean() })
   const credentialConfirmationSchema = z.object({ confirm: z.boolean() })
   credentials({
     name: 'ghost.credentials.start', title: 'Start AWS Identity Center authorization',
@@ -1178,12 +1191,6 @@ export function registerCatalogTools(
     }
   })
 
-  ai({
-    name: 'ghost.ai.chat', title: 'Chat with the GHOST agent', description: 'Ask the existing GHOST Strands agent an AWS question after using direct GHOST tools. For internal catalogs, standards, processes, architecture, or team concepts, call ghost.docs.search first. The downstream agent must not be configured with this GHOST MCP server.',
-    inputSchema: z.object({ message: z.string().min(1).max(10000), account_identifier: z.string().optional(), session_id: z.string().optional(), timezone: z.string().optional(), prefer_govcloud: z.boolean().default(true) }),
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-    handler: async args => toolSuccess(await sendStrandsQuery(args.message, { accountIdentifier: args.account_identifier, sessionId: args.session_id, timezone: args.timezone, preferGovcloud: args.prefer_govcloud }), 'GHOST agent response received.', 'GHOST Strands agent')
-  })
 
   collaborate({
     name: 'ghost.preferences.get', title: 'Get my preferences', description: 'Return the authenticated user’s GHOST preferences.',
@@ -1346,99 +1353,6 @@ export function registerCatalogTools(
     }
   })
 
-  collaborate({
-    name: 'ghost.chat_threads.list', title: 'List my chat threads', description: 'List the authenticated user’s GHOST chat threads.',
-    inputSchema: z.object({ search: z.string().optional(), pinned: z.boolean().optional(), archived: z.boolean().optional(), limit: z.number().int().min(1).max(100).default(25), cursor: z.string().optional() }),
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
-    handler: async args => {
-      const cursor = decodeCursor<{ threadId: string; lastMessageAt: string }>(args.cursor)
-      const result = await getUserThreads(principal.email, { searchQuery: args.search, isPinned: args.pinned, isArchived: args.archived, limit: args.limit, lastKey: cursor })
-      return toolSuccess(result, 'Chat threads loaded.', 'GHOST chat storage', { nextCursor: result.lastKey ? encodeCursor(result.lastKey) : undefined })
-    }
-  })
-
-  collaborate({
-    name: 'ghost.chat_threads.get', title: 'Get my chat thread', description: 'Get one authenticated-user-owned GHOST chat thread.',
-    inputSchema: z.object({ thread_id: z.string().uuid() }), annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
-    handler: async args => {
-      const thread = await getThreadById(args.thread_id, principal.email)
-      return thread ? toolSuccess(thread, 'Chat thread loaded.', 'GHOST chat storage') : toolError('THREAD_NOT_FOUND', 'Thread not found.')
-    }
-  })
-
-  collaborate({
-    name: 'ghost.chat_threads.create', title: 'Create a chat thread', description: 'Create a user-owned GHOST chat thread.',
-    inputSchema: z.object({ title: z.string().max(120).optional(), initial_message: z.string().max(10000).optional(), idempotency_key: idempotencyKeySchema() }),
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-    handler: async args => {
-      const result = await runIdempotent(principal, 'ghost.chat_threads.create', args.idempotency_key, { title: args.title, initialMessage: args.initial_message }, async () => {
-        return args.initial_message
-          ? await createThreadWithInitialMessage(principal.email, args.initial_message, { title: args.title, messageKey: `mcp-${args.idempotency_key}` })
-          : await createThread(principal.email, { title: args.title })
-      }, value => ({ threadId: value.threadId }), async reference => {
-        const thread = await getThreadById(reference.threadId, principal.email)
-        if (!thread) throw new Error('Idempotent chat thread no longer exists.')
-        return thread
-      })
-      return toolSuccess(result.value, result.replayed ? 'Existing chat thread returned for this idempotency key.' : 'Chat thread created.', 'GHOST chat storage')
-    }
-  })
-
-  collaborate({
-    name: 'ghost.chat_threads.update', title: 'Update a chat thread', description: 'Rename, pin, archive, or describe a user-owned GHOST chat thread.',
-    inputSchema: z.object({ thread_id: z.string().uuid(), title: z.string().max(120).optional(), description: z.string().max(1000).optional(), pinned: z.boolean().optional(), archived: z.boolean().optional() }),
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-    handler: async args => {
-      const thread = await updateThread(args.thread_id, principal.email, { title: args.title, description: args.description, isPinned: args.pinned, isArchived: args.archived })
-      return thread ? toolSuccess(thread, 'Chat thread updated.', 'GHOST chat storage') : toolError('THREAD_NOT_FOUND', 'Thread not found.')
-    }
-  })
-
-  collaborate({
-    name: 'ghost.chat_threads.add_message', title: 'Add a chat message', description: 'Append a user message to a user-owned GHOST chat thread.',
-    inputSchema: z.object({ thread_id: z.string().uuid(), content: z.string().min(1).max(10000), idempotency_key: idempotencyKeySchema() }),
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-    handler: async args => {
-      const result = await runIdempotent(principal, 'ghost.chat_threads.add_message', args.idempotency_key, { threadId: args.thread_id, content: args.content }, () =>
-        addMessageToThread(args.thread_id, principal.email, { role: 'user', content: args.content }, { messageKey: `mcp-${args.idempotency_key}` }),
-      value => ({ threadId: value?.threadId || args.thread_id }), async reference => getThreadById(reference.threadId, principal.email))
-      const thread = result.value
-      return thread ? toolSuccess({
-        threadId: thread.threadId,
-        title: thread.title,
-        messageCount: thread.messageCount,
-        lastMessageAt: thread.lastMessageAt,
-        lastMessagePreview: thread.lastMessagePreview,
-        hasMoreMessages: thread.hasMoreMessages,
-        messagesNextToken: thread.messagesNextToken
-      }, 'Message added.', 'GHOST chat storage') : toolError('THREAD_NOT_FOUND', 'Thread not found.')
-    }
-  })
-
-  const confirmationSchema = z.object({ confirm: z.boolean() })
-  collaborate({
-    name: 'ghost.chat_threads.delete', title: 'Delete a chat thread', description: 'Permanently delete a user-owned GHOST chat thread after explicit MCP elicitation confirmation.',
-    inputSchema: z.object({ thread_id: z.string().uuid() }),
-    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
-    handler: async (args, context: ServerContext) => {
-      const confirmed = acceptedContent(context.mcpReq.inputResponses, 'confirm_delete', confirmationSchema)
-      const state = context.mcpReq.requestState<{ tool: string; targetId: string }>()
-      if (!confirmed?.confirm || state?.tool !== 'ghost.chat_threads.delete' || state.targetId !== args.thread_id) {
-        return inputRequired({
-          inputRequests: {
-            confirm_delete: inputRequired.elicit({
-              message: `Permanently delete GHOST chat thread ${args.thread_id}?`,
-              requestedSchema: confirmationSchema
-            })
-          },
-          requestState: await confirmationCodec.mint({ tool: 'ghost.chat_threads.delete', targetId: args.thread_id }, context)
-        })
-      }
-      return await deleteThread(args.thread_id, principal.email)
-        ? toolSuccess({ deleted: true, threadId: args.thread_id }, 'Chat thread deleted.', 'GHOST chat storage')
-        : toolError('THREAD_NOT_FOUND', 'Thread not found.')
-    }
-  })
 
   collaborate({
     name: 'ghost.reports.list', title: 'List my reports and exports', description: 'List the authenticated user’s scheduled reports and recent asynchronous dataset exports.',

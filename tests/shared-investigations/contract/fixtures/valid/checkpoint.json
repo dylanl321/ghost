@@ -1,0 +1,36 @@
+{
+  "checkpointId": "cp-fake-0007",
+  "investigationId": "inv-fake-0001",
+  "runId": "run-fake-0001",
+  "author": {
+    "tenantId": "tenant-fake-0001",
+    "entraObjectId": "obj-fake-operator-a"
+  },
+  "currentQuestion": "Why does the deploy pipeline fail intermittently?",
+  "observedFacts": [
+    {
+      "text": "Two incidents reference the same failing stage.",
+      "citationIds": ["art-fake-ready-01"]
+    }
+  ],
+  "interpretations": ["Likely a shared runner resource contention."],
+  "attemptedApproaches": [
+    {
+      "description": "Read linked incidents",
+      "outcome": "found correlation",
+      "citationIds": ["art-fake-ready-01"]
+    }
+  ],
+  "unresolvedQuestions": ["Is the runner pool saturated during peak hours?"],
+  "proposedNextActions": ["Correlate runner metrics with failure timestamps."],
+  "sourceActionOutcomes": [
+    {
+      "summary": "Added a comment linking the incidents",
+      "outcome": "applied",
+      "citationIds": ["art-fake-ready-01"]
+    }
+  ],
+  "coverageWatermark": 12,
+  "documentArtifactId": "art-fake-cpdoc-01",
+  "createdAt": "2024-01-02T03:09:00Z"
+}

@@ -5,7 +5,7 @@
  */
 
 import { marked } from 'marked'
-import { escapeHtml, normalizeSafeHref, sanitizeChatHtml } from '~/utils/sanitizeHtml'
+import { escapeHtml, normalizeSafeHref, sanitizeMarkdownHtml } from '~/utils/sanitizeHtml'
 
 const logger = createLogger('Markdown Parser')
 
@@ -88,10 +88,10 @@ export function useMarkdownLinkParser() {
     })
 
     try {
-      return sanitizeChatHtml(marked.parse(content) as string)
+      return sanitizeMarkdownHtml(marked.parse(content) as string)
     } catch (error) {
       logger.error('Error parsing markdown:', error)
-      return sanitizeChatHtml(escapeHtml(content).replace(/\n/g, '<br>'))
+      return sanitizeMarkdownHtml(escapeHtml(content).replace(/\n/g, '<br>'))
     }
   }
 
