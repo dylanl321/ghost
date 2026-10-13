@@ -17,7 +17,6 @@ import {
   buildDistributionGroupFilter,
   GRAPH_SELECT_FIELDS,
   getGraphBaseUrl,
-  isAwsAuthorizationGroupName,
   entraConfig
 } from './config'
 import { groupByAccount } from './group-parser'
@@ -499,6 +498,14 @@ export async function searchUsers(
 /**
  * Get groups for a specific user
  */
+export function userRoleGroups(groups: EntraGroup[]): EntraGroup[] {
+  // Role rules are not limited to account authorization groups. In
+  // particular, AWS-Product-Team grants the configured administrator role.
+  // Filtering to 12-digit AWS account groups here made ID-only OIDC sessions
+  // impossible to resolve to their real GHOST roles.
+  return groups.filter(group => Boolean(group.displayName))
+}
+
 export async function getUserGroups(
   event: H3Event,
   userId: string
@@ -519,24 +526,19 @@ export async function getUserGroups(
     
     const endpoint = `/users/${userId}/transitiveMemberOf/microsoft.graph.group?${queryParams}`
     const groups = await getAllPages<EntraGroup>(event, endpoint)
-    
-    // Filter to only AWS-related groups
-    const awsGroups = groups.filter(g => 
-      isAwsAuthorizationGroupName(g.displayName) ||
-      g.displayName.endsWith(entraConfig.search.distributionSuffix)
-    )
+    const roleGroups = userRoleGroups(groups)
     
     // Cache the results
     await accountCache.set(
       cacheKey,
-      awsGroups,
+      roleGroups,
       {
         ttl: entraConfig.cache.ttl,
         tags: [CacheTags.ACCOUNTS, EntraCacheTags.ENTRA, EntraCacheTags.ENTRA_GROUPS, EntraCacheTags.ENTRA_USERS]
       }
     )
     
-    return awsGroups
+    return roleGroups
   } catch (error) {
     logger.error(`Failed to fetch groups for user ${userId}:`, error)
     throw error

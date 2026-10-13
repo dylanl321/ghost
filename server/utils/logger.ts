@@ -20,14 +20,44 @@
 
 import { createConsola, type LogObject } from 'consola'
 
-// Map Consola numeric levels to string names
+// Consola's LogObject.type is the authoritative severity name (the method
+// invoked, e.g. 'warn', 'error'). The numeric `level` is NOT a 1:1 severity
+// map — Consola collapses several types onto the same level (fatal/error → 0,
+// warn → 1, info/success/ready/start/box → 3), so classifying by `level`
+// alone misreports warn as error and error as fatal. Prefer `type`.
+const VALID_LEVEL_TYPES = new Set<string>([
+  'fatal',
+  'error',
+  'warn',
+  'info',
+  'debug',
+  'trace',
+  'success',
+  'log',
+  'verbose',
+  'ready',
+  'start',
+  'box',
+])
+
+// Numeric-level fallback, used only when `type` is absent or unrecognized.
 const LEVEL_NAMES: Record<number, string> = {
-  0: 'fatal',
-  1: 'error',
-  2: 'warn',
+  0: 'error',
+  1: 'warn',
+  2: 'info',
   3: 'info',
   4: 'debug',
   5: 'trace',
+}
+
+// Derive the structured JSON `level` from a Consola LogObject, preferring the
+// authoritative `type` name and guarding against arbitrary type values.
+function resolveLevel(logObj: LogObject): string {
+  const type = logObj.type
+  if (typeof type === 'string' && VALID_LEVEL_TYPES.has(type)) {
+    return type
+  }
+  return LEVEL_NAMES[logObj.level] ?? 'info'
 }
 
 // Safely serialize a value, handling Error objects and circular references
@@ -46,7 +76,7 @@ function safeSerialize(value: unknown): unknown {
 // JSON reporter for production — writes one JSON line per log entry to stdout
 const jsonReporter = {
   log(logObj: LogObject) {
-    const level = LEVEL_NAMES[logObj.level] ?? 'info'
+    const level = resolveLevel(logObj)
     const message = logObj.args
       .map(arg => (typeof arg === 'string' ? arg : JSON.stringify(safeSerialize(arg))))
       .join(' ')

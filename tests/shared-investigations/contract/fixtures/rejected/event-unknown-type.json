@@ -1,0 +1,12 @@
+{
+  "eventId": "evt-bad-2",
+  "investigationId": "inv-fake-0001",
+  "type": "arbitrary-shell-output",
+  "author": { "tenantId": "tenant-fake-0001", "entraObjectId": "obj-fake-operator-a" },
+  "gatewayId": "gw-fake-workstation-1",
+  "occurredAt": "2024-01-02T03:06:00Z",
+  "receivedAt": "2024-01-02T03:06:01Z",
+  "serverSequence": 10,
+  "operationId": "op-bad-2",
+  "provenance": "adapter"
+}

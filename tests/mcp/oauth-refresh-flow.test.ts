@@ -3,6 +3,8 @@ import { createServer, type Server } from 'node:http'
 import test from 'node:test'
 import { exportJWK, generateKeyPair } from 'jose'
 import Provider from 'oidc-provider'
+import { createEvent } from 'h3'
+import { parseTokenRequestAndRestore } from '../../server/mcp/oauth/provider-lifecycle-gate'
 import { createGhostOAuthConfiguration } from '../../server/mcp/oauth/provider'
 
 interface StoredValue {
@@ -89,8 +91,17 @@ function providerConfiguration(keys: Awaited<ReturnType<typeof jwks>>) {
   })
 }
 
-async function listen(provider: Provider): Promise<{ server: Server; origin: string }> {
-  const server = createServer(provider.callback())
+async function listen(provider: Provider, replay = false): Promise<{ server: Server; origin: string }> {
+  const server = createServer(async (req, res) => {
+    const event = createEvent(req, res)
+    try {
+      if (replay) await parseTokenRequestAndRestore(event)
+      await provider.callback()(event.node.req, res)
+    } catch {
+      res.statusCode = 500
+      res.end(JSON.stringify({ error: 'request_adapter_failed' }))
+    }
+  })
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
   const address = server.address()
   if (!address || typeof address === 'string') throw new Error('Test OAuth server did not bind')
@@ -109,7 +120,7 @@ async function refresh(origin: string, refreshToken: string) {
   assert.equal(body.refresh_token, refreshToken)
 }
 
-test('the same Codex refresh token works repeatedly and after provider restart', async () => {
+async function refreshFlow(replay = false) {
   SharedTestAdapter.values.clear()
   const keys = await jwks()
   const firstProvider = new Provider('http://127.0.0.1', providerConfiguration(keys))
@@ -129,7 +140,7 @@ test('the same Codex refresh token works repeatedly and after provider restart',
   })
   const refreshToken = await token.save()
 
-  const first = await listen(firstProvider)
+  const first = await listen(firstProvider, replay)
   try {
     await refresh(first.origin, refreshToken)
     await refresh(first.origin, refreshToken)
@@ -138,10 +149,13 @@ test('the same Codex refresh token works repeatedly and after provider restart',
   }
 
   const restartedProvider = new Provider('http://127.0.0.1', providerConfiguration(keys))
-  const restarted = await listen(restartedProvider)
+  const restarted = await listen(restartedProvider, replay)
   try {
     await refresh(restarted.origin, refreshToken)
   } finally {
     await new Promise<void>((resolve, reject) => restarted.server.close(error => error ? reject(error) : resolve()))
   }
-})
+}
+
+test('the same Codex refresh token works repeatedly and after provider restart', () => refreshFlow())
+test('token-body inspection preserves refresh through the real provider HTTP callback', () => refreshFlow(true))

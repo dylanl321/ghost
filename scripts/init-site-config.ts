@@ -15,7 +15,7 @@ async function main() {
     console.log('✓ All default settings have been written to the ghost-site-config table.');
     console.log('\nYou can now:');
     console.log('  - View settings at: http://localhost:3000/admin (System Settings)');
-    console.log('  - Use the Strands chat feature');
+    console.log('  - Use the report scheduler feature');
     console.log('  - Customize feature flags and service URLs');
   } catch (error: any) {
     console.error('✗ Failed to initialize site configuration:', error.message);

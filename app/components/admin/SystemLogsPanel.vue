@@ -590,7 +590,6 @@ function getActionIcon(actionType?: string): string {
     case 'account': return 'i-heroicons-star'
     case 'dashboard': return 'i-heroicons-squares-2x2'
     case 'search': return 'i-heroicons-magnifying-glass'
-    case 'chat': return 'i-heroicons-chat-bubble-left-right'
     default: return 'i-heroicons-bolt'
   }
 }
@@ -605,7 +604,6 @@ function getActionIconClass(actionType?: string): string {
     case 'account': return `${base} bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400`
     case 'dashboard': return `${base} bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400`
     case 'search': return `${base} bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400`
-    case 'chat': return `${base} bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400`
     default: return `${base} bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400`
   }
 }
@@ -649,8 +647,6 @@ function getEventLabel(type: string, parsed?: ParsedLog): string {
       'dashboard.daterange_change': 'changed date range',
       'search.explorer': 'searched accounts',
       'search.cost': 'searched costs',
-      'chat.thread_create': 'created chat thread',
-      'chat.thread_share': 'shared chat thread',
     }
     return labels[parsed.actionType] || 'performed action'
   }
@@ -678,8 +674,6 @@ function formatActionLabel(actionType: string, detail?: string): string {
     'dashboard.daterange_change': 'Date range change',
     'search.explorer': 'Account search',
     'search.cost': 'Cost search',
-    'chat.thread_create': 'New chat thread',
-    'chat.thread_share': 'Shared chat thread',
   }
   const label = labels[actionType] || actionType
   return detail ? `${label} (${detail})` : label
@@ -701,7 +695,6 @@ function getPageIcon(path: string): string {
   if (path.includes('/account/costs')) return 'i-heroicons-currency-dollar'
   if (path.includes('/account/explorer')) return 'i-heroicons-magnifying-glass'
   if (path.includes('/account/')) return 'i-heroicons-building-office'
-  if (path.includes('/chat')) return 'i-heroicons-chat-bubble-left-right'
   if (path.includes('/profile')) return 'i-heroicons-user-circle'
   if (path.includes('/settings')) return 'i-heroicons-cog-6-tooth'
   if (path.includes('/support')) return 'i-heroicons-question-mark-circle'

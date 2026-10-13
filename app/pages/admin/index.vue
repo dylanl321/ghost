@@ -55,9 +55,6 @@
           <UButton color="gray" variant="soft" icon="i-heroicons-clipboard-document-check" @click="navigateTo('/admin/costs/data-validation')">
             Run Validation
           </UButton>
-          <UButton color="gray" variant="soft" icon="i-heroicons-heart" @click="navigateTo('/admin/ai?tab=agent-health')">
-            Check Agent Health
-          </UButton>
           <UButton color="gray" variant="soft" icon="i-heroicons-exclamation-triangle" @click="navigateTo('/admin/users?tab=feedback')">
             View Feedback
           </UButton>
@@ -132,10 +129,7 @@
               <span class="text-sm text-gray-600 dark:text-gray-400">Total Users</span>
               <span class="text-sm font-semibold text-gray-900 dark:text-white">{{ loading ? '...' : totalUsers }}</span>
             </div>
-            <div class="flex items-center justify-between">
-              <span class="text-sm text-gray-600 dark:text-gray-400">Chat Threads</span>
-              <span class="text-sm font-semibold text-gray-900 dark:text-white">{{ loading ? '...' : aiChatSessions }}</span>
-            </div>
+
             <div class="flex items-center justify-between">
               <span class="text-sm text-gray-600 dark:text-gray-400">Share Links</span>
               <span class="text-sm font-semibold text-gray-900 dark:text-white">{{ loading ? '...' : shortlinksTotal }}</span>
@@ -170,7 +164,6 @@ const systemHealth = ref([
   { name: 'API Gateway', status: 'healthy', responseTime: '<100ms' },
   { name: 'Database', status: 'healthy', responseTime: '50ms' },
   { name: 'AWS Services', status: 'healthy', responseTime: '200ms' },
-  { name: 'Strands AI', status: 'healthy', responseTime: '1.2s' },
 ])
 
 // User activity data (last 7 days)
@@ -187,8 +180,6 @@ const activityData = ref([
 // Stats
 const totalUsers = ref(0)
 const shortlinksTotal = ref(0)
-const aiChatSessions = ref(0)
-const aiChatsToday = ref(0)
 const scheduledReportsCount = ref(0)
 const loading = ref(true)
 const metricsError = ref<string | null>(null)
@@ -202,20 +193,9 @@ const fetchMetrics = async () => {
     loading.value = true
     metricsError.value = null
 
-    const [
-      userPrefsResult,
-      chatMetrics24hResult,
-      chatMetricsAllResult,
-      reportsResult,
-      chatMetrics7dResult,
-      strandsHealthResult
-    ] = await Promise.allSettled([
+    const [userPrefsResult, reportsResult] = await Promise.allSettled([
       $fetch('/api/admin/user-preferences', { query: { limit: 5000 } }),
-      $fetch('/api/admin/chat/metrics', { query: { period: '24h' } }),
-      $fetch('/api/admin/chat/metrics', { query: { period: 'all' } }),
-      $fetch('/api/admin/scheduled-reports/stats'),
-      $fetch('/api/admin/chat/metrics', { query: { period: '7d' } }),
-      $fetch('/api/admin/strands-health')
+      $fetch('/api/admin/scheduled-reports/stats')
     ])
 
     await fetchShortlinks({ limit: 1 })
@@ -225,42 +205,10 @@ const fetchMetrics = async () => {
       totalUsers.value = userPrefsResult.value.data.total || 0
     }
 
-    if (chatMetrics24hResult.status === 'fulfilled') {
-      aiChatsToday.value = chatMetrics24hResult.value.metrics.totalQueries || 0
-    }
-
-    if (chatMetricsAllResult.status === 'fulfilled') {
-      aiChatSessions.value = chatMetricsAllResult.value.metrics.totalThreads || 0
-    }
-
     if (reportsResult.status === 'fulfilled') {
       scheduledReportsCount.value = reportsResult.value.data.totalReports || 0
     }
 
-    if (chatMetrics7dResult.status === 'fulfilled') {
-      const dailyAvg = Math.floor((chatMetrics7dResult.value.metrics.uniqueUsers || 0) / 7)
-      activityData.value = activityData.value.map((day) => ({
-        ...day,
-        users: dailyAvg
-      }))
-    }
-
-    if (strandsHealthResult.status === 'fulfilled') {
-      const healthData = strandsHealthResult.value as any
-      const strandsStatus = healthData?.healthy ? 'healthy' : 'degraded'
-      const strandsLatency = healthData?.results?.health?.service?.latency
-        ? `${healthData.results.health.service.latency}ms`
-        : 'N/A'
-      const strandsIndex = systemHealth.value.findIndex(s => s.name === 'Strands AI')
-      if (strandsIndex !== -1) {
-        systemHealth.value[strandsIndex] = { name: 'Strands AI', status: strandsStatus, responseTime: strandsLatency }
-      }
-    } else {
-      const strandsIndex = systemHealth.value.findIndex(s => s.name === 'Strands AI')
-      if (strandsIndex !== -1) {
-        systemHealth.value[strandsIndex] = { name: 'Strands AI', status: 'degraded', responseTime: 'Error' }
-      }
-    }
 
   } catch (error) {
     logger.error('Failed to fetch admin metrics:', error)

@@ -32,10 +32,7 @@ registerEndpoint('/api/entra/accounts/{accountId}/groups', 'GET', {
     { $ref: '#/components/parameters/SortByRole' }
   ],
   security: [
-    { ApiKeyAuth: [] },
-    { BearerAuth: [] },
-    { OIDCAuth: [] },
-    { DevBypass: [] }
+    { OIDCAuth: [] }
   ],
   responses: {
     200: {

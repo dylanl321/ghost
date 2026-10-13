@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { getOAuthAuthorizationTtlSeconds } from '../../server/mcp/config'
 import { classifyGhostRefreshFailure, createGhostOAuthConfiguration, createGhostRefreshEvent, GHOST_REFRESH_TOKEN_ROTATION, shouldIssueGhostRefreshToken } from '../../server/mcp/oauth/provider'
-import { requestedGhostResourceScopes } from '../../server/routes/oauth/consent/[uid].post'
+import { canGrantKiroCrewAdmin, identityGroupNames, isExpiredInteractionSessionError, requestedGhostResourceScopes } from '../../server/routes/oauth/consent/[uid].post'
 
 function client(options: {
   applicationType?: string
@@ -39,6 +39,33 @@ test('Ghost rejects refresh tokens for clients outside the native public policy'
     applicationType: 'native',
     clientAuthMethod: 'none',
     refreshGrant: false
+  })), false)
+})
+
+test('Ghost recognises the expired oidc interaction-session failure', () => {
+  // Direct SessionNotFound instance, as oidc-provider throws it.
+  const direct = Object.assign(new Error('invalid_request'), {
+    name: 'SessionNotFound',
+    error: 'invalid_request',
+    error_description: 'interaction session id cookie not found'
+  })
+  assert.equal(isExpiredInteractionSessionError(direct), true)
+
+  // Wrapped in a cause chain (Nitro re-throws through its own error).
+  const nested = new Error('Interaction failed', {
+    cause: Object.assign(new Error('invalid_request'), {
+      name: 'SessionNotFound',
+      error: 'invalid_request',
+      error_description: 'interaction session id cookie not found'
+    })
+  })
+  assert.equal(isExpiredInteractionSessionError(nested), true)
+
+  // An unrelated failure keeps its own error semantics.
+  assert.equal(isExpiredInteractionSessionError(new Error('database unavailable')), false)
+  assert.equal(isExpiredInteractionSessionError(Object.assign(new Error('bad'), {
+    name: 'InvalidClient',
+    error: 'invalid_client'
   })), false)
 })
 
@@ -116,4 +143,18 @@ test('Ghost consent grants only requested supported resource scopes', () => {
     { [resource]: ['ghost.read'] },
     resource
   ), ['ghost.read'])
+})
+
+test('Kiro Crew publishing follows the configured GHOST administrator role', () => {
+  assert.equal(canGrantKiroCrewAdmin(['viewer', 'admin']), true)
+  assert.equal(canGrantKiroCrewAdmin(['viewer', 'power_user']), false)
+})
+
+test('Kiro Crew OAuth preserves session groups when Graph lookup is unavailable', () => {
+  assert.deepEqual(identityGroupNames({
+    groups: [{ displayName: 'AWS-Product-Team' }, 'Another-Group']
+  }), ['AWS-Product-Team', 'Another-Group'])
+  assert.deepEqual(identityGroupNames({
+    claims: { groups: ['AWS-Product-Team'] }
+  }, ['Graph-Resolved-Group', 'AWS-Product-Team']), ['AWS-Product-Team', 'Graph-Resolved-Group'])
 })

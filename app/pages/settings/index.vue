@@ -10,6 +10,24 @@
 
     <!-- Settings Cards Grid -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <NuxtLink to="/settings/api-access">
+        <UCard class="h-full hover:shadow-lg transition-shadow cursor-pointer group">
+          <div class="flex items-start gap-4">
+            <div class="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform">
+              <UIcon name="i-heroicons-key" class="w-6 h-6" />
+            </div>
+            <div class="flex-1">
+              <h3 class="font-semibold text-gray-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                API Access
+              </h3>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Create personal API keys, review usage, and open integration documentation.
+              </p>
+            </div>
+          </div>
+        </UCard>
+      </NuxtLink>
+
       <!-- Preferences Card -->
       <NuxtLink to="/settings/preferences">
         <UCard class="h-full hover:shadow-lg transition-shadow cursor-pointer group">
@@ -166,7 +184,7 @@ const favoriteCount = computed(() => favorites.value?.length || 0)
 const recentCount = computed(() => recentAccounts.value?.length || 0)
 
 const currentTheme = computed(() => {
-  if (process.client) {
+  if (import.meta.client) {
     return document.documentElement.classList.contains('dark') ? 'Dark' : 'Light'
   }
   return 'System'

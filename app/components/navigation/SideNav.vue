@@ -106,43 +106,9 @@
           </div>
 
           <!-- Menu Item -->
-          <!-- AI Assistant - Controlled by feature flag -->
-          <ClientOnly v-if="item.label === 'AI Assistant'">
-            <NuxtLink
-              v-if="strandsEnabled"
-              :to="item.to"
-              prefetch
-              class="flex items-center px-3 py-2 rounded-md text-sm text-slate-700 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors relative group overflow-hidden"
-              :class="{ 'text-slate-900 bg-slate-100 dark:text-white dark:bg-slate-800': isActive(item) }"
-            >
-              <UIcon :name="item.icon" class="flex-shrink-0 w-5 h-5" />
-              <span
-                class="font-medium ml-3 truncate transition-all duration-300"
-                :class="{
-                  'opacity-0 w-0':
-                    navigationStore.isCollapsed && !navigationStore.isHovered,
-                  'opacity-100 w-full':
-                    !navigationStore.isCollapsed || navigationStore.isHovered,
-                }"
-              >
-                {{ item.label }}
-              </span>
-
-              <!-- Tooltip for collapsed state -->
-              <div
-                v-if="navigationStore.isCollapsed && !navigationStore.isHovered"
-                class="absolute left-full ml-2 px-2 py-1 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 border border-slate-200 dark:border-slate-600 shadow-lg"
-              >
-                {{ item.label }}
-                <div
-                  class="absolute left-0 top-1/2 transform -translate-x-1 -translate-y-1/2 w-0 h-0 border-r-4 border-r-white dark:border-r-slate-800 border-t-2 border-b-2 border-t-transparent border-b-transparent"
-                ></div>
-              </div>
-            </NuxtLink>
-          </ClientOnly>
 
           <!-- Pipeline Analytics - Admin only -->
-          <ClientOnly v-else-if="item.label === 'Pipeline Analytics'">
+          <ClientOnly v-if="item.label === 'Pipeline Analytics'">
             <NuxtLink
               v-if="isAdmin"
               :to="item.to"
@@ -326,11 +292,8 @@ const logger = createLogger('SideNav')
 const route = useRoute();
 const navigationStore = useNavigationStore();
 const { isAdmin } = useUserRoles();
-const siteConfigStore = useSiteConfigStore();
 const { isIntroActive: mcpIntroActive } = useMcpOfferingDiscovery();
 
-// Check if Strands chat is enabled
-const strandsEnabled = computed(() => siteConfigStore.isStrandsChatEnabled);
 const isSidebarExpanded = computed(
   () => !navigationStore.isCollapsed || navigationStore.isHovered
 );
@@ -505,14 +468,8 @@ const navigationItems = computed(() => {
       section: "Workspace",
     },
     {
-      label: "AI Assistant",
-      to: "/chat",
-      icon: "i-heroicons-sparkles",
-      section: "Workspace",
-    },
-    {
       label: "MCP Connections",
-      to: "/chat/mcp",
+      to: "/mcp-connections",
       icon: "i-heroicons-link",
       section: "Workspace",
       accent: "mcp",

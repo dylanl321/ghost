@@ -1,0 +1,17 @@
+{
+  "tenantId": "tenant-fake-0001",
+  "spaceId": "space-0000-fake-aaaa",
+  "subjectReference": {
+    "sourceBindingId": "binding-fake-jira-01",
+    "sourceType": "jira",
+    "stableSourceId": "PROJ-5678"
+  },
+  "subject": {
+    "tenantId": "tenant-fake-0001",
+    "entraObjectId": "obj-fake-operator-b"
+  },
+  "gatewayId": "gw-fake-workstation-2",
+  "activityKind": "viewing",
+  "lastSeenAt": "2024-01-02T03:12:00Z",
+  "expiresAt": "2024-01-02T03:13:30Z"
+}

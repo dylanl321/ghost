@@ -1,0 +1,10 @@
+{
+  "operationId": "op-fake-create-new-2",
+  "spaceId": "space-0000-fake-aaaa",
+  "mode": "explicit-new",
+  "primarySubject": {
+    "sourceBindingId": "binding-fake-jira-01",
+    "sourceType": "jira",
+    "stableSourceId": "PROJ-1234"
+  }
+}
