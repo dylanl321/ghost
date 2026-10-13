@@ -17,8 +17,8 @@
           variant="ghost"
           size="sm"
           :icon="sidebarCollapsed ? 'i-heroicons-chevron-right' : 'i-heroicons-chevron-left'"
-          @click="toggleSidebar"
           :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+          @click="toggleSidebar"
         />
       </div>
 
@@ -52,8 +52,8 @@
           variant="ghost"
           icon="i-heroicons-magnifying-glass"
           size="sm"
-          @click="expandAndFocusSearch"
           title="Search panels"
+          @click="expandAndFocusSearch"
         />
 
         <!-- Search Results Dropdown -->
@@ -241,12 +241,12 @@ function handleSearchKeydown(event: KeyboardEvent) {
       event.preventDefault()
       selectedIndex.value = Math.max(selectedIndex.value - 1, 0)
       break
-    case 'Enter':
+    case 'Enter': {
       event.preventDefault()
-      if (filteredPanels.value[selectedIndex.value]) {
-        selectPanel(filteredPanels.value[selectedIndex.value])
-      }
+      const selectedPanel = filteredPanels.value[selectedIndex.value]
+      if (selectedPanel) selectPanel(selectedPanel)
       break
+    }
     case 'Escape':
       event.preventDefault()
       clearSearch()
@@ -322,7 +322,8 @@ const categories = [
     children: [
       { label: 'Personal API Access', icon: 'i-heroicons-key', to: '/settings/api-access' },
       { label: 'Site Config', icon: 'i-heroicons-cog', to: '/admin/configuration?tab=site-config' },
-      { label: 'Kiro Crew Configuration', icon: 'i-heroicons-adjustments-horizontal', to: '/admin/kirocrew' }
+      { label: 'Kiro Crew Health & Configuration', icon: 'i-heroicons-adjustments-horizontal', to: '/admin/kirocrew' },
+      { label: 'OAuth & Applications', icon: 'i-heroicons-key', to: '/admin/oauth' }
     ]
   },
   {
@@ -376,16 +377,11 @@ const categories = [
   },
   {
     id: 'ai',
-    label: 'AI & Agents',
+    label: 'AI Usage',
     icon: 'i-heroicons-sparkles',
     to: '/admin/ai',
     children: [
-      { label: 'Chat Monitor', icon: 'i-heroicons-chat-bubble-left-right', to: '/admin/ai?tab=chat-monitor' },
-      { label: 'Agent Logs', icon: 'i-heroicons-document-text', to: '/admin/ai?tab=agent-logs' },
-      { label: 'Agent Testing', icon: 'i-heroicons-beaker', to: '/admin/ai?tab=agent-testing' },
-      { label: 'Agent Health', icon: 'i-heroicons-heart', to: '/admin/ai?tab=agent-health' },
-      { label: 'AI Metrics', icon: 'i-heroicons-chart-bar', to: '/admin/ai?tab=ai-metrics' },
-      { label: 'Usage Collection', icon: 'i-heroicons-circle-stack', to: '/admin/ai?tab=usage-collection' },
+      { label: 'Usage Collection', icon: 'i-heroicons-circle-stack', to: '/admin/ai' },
       { label: 'MCP Usage', icon: 'i-heroicons-chart-bar-square', to: '/admin/mcp-usage' }
     ]
   },

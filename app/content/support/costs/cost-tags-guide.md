@@ -1,6 +1,6 @@
 ---
 title: Tag Analysis & Cost Breakdown by Tag
-lastUpdated: 2026-03-23
+lastUpdated: 2026-10-01
 icon: i-heroicons-tag
 ---
 
@@ -137,6 +137,14 @@ Compute Foundry tenant usage. Shared and untagged residual costs remain owned by
 GDMS IT.
 
 When estimated proforma costs are shown, a note appears above the breakdown table explaining the extrapolation.
+
+## Programmatic Access
+
+With a `costs:read` API key, request `GET /api/v1/costs/tags?tagKey=Project&period=lastMonth` to retrieve normalized tag-value costs, tagged and untagged coverage, and contributing accounts. Add `accountIdentifiers`, `adminOf`, or `ownedBy` to select accounts, or omit selectors for the entire organization.
+
+Use `GET /api/v1/costs/tag-keys?period=lastMonth` to discover available keys. The cost response uses billable Net Unblended costs by default; add `proforma=true` for the same estimates described above. For `aws:createdBy`, the response includes all creators with an `isPerson` flag for reproducing People view.
+
+See the [API key guide](/support/docs#api-keys-guide) for examples and options, or try the endpoints in [Swagger UI](/api/swagger-ui).
 
 ## Common Questions
 

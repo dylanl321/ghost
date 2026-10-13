@@ -65,42 +65,12 @@ export const useSiteConfigStore = defineStore('siteConfig', {
     /**
      * Feature flag shortcuts
      */
-    isStrandsChatEnabled: (state): boolean => {
-      return state.config.features?.strandsChat?.enabled ?? true;
-    },
-
-    isStrandsChatPopupEnabled: (state): boolean => {
-      return state.config.features?.strandsChatPopup?.enabled ?? false;
-    },
-
     isReportSchedulerEnabled: (state): boolean => {
       return state.config.features?.reportScheduler?.enabled ?? true;
     },
 
     isAdminNotificationsEnabled: (state): boolean => {
       return state.config.features?.adminNotifications?.enabled ?? true;
-    },
-
-    /**
-     * Service configuration shortcuts
-     */
-    strandsServerUrl: (state): string => {
-      return (
-        state.config.services?.strands?.serverUrl ||
-        'http://internal-lz-mcp-servers-dev-alb-1428009891.us-gov-west-1.elb.amazonaws.com:80'
-      );
-    },
-
-    strandsTimeout: (state): number => {
-      return state.config.services?.strands?.timeout ?? 300000;
-    },
-
-    strandsRetries: (state): number => {
-      return state.config.services?.strands?.retries ?? 2;
-    },
-
-    strandsRetryDelay: (state): number => {
-      return state.config.services?.strands?.retryDelay ?? 2000;
     },
 
     /**
@@ -168,8 +138,6 @@ export const useSiteConfigStore = defineStore('siteConfig', {
           // Set sensible defaults on error
           this.config = {
             features: {
-              strandsChat: { enabled: true },
-              strandsChatPopup: { enabled: false },
               reportScheduler: { enabled: true },
               adminNotifications: { enabled: true },
             },
@@ -211,6 +179,7 @@ export const useSiteConfigStore = defineStore('siteConfig', {
   // Persist in storage (survives page refresh, cleared on logout)
   persist: {
     key: 'ghost-site-config',
+    pick: ['config.mcp', 'config.features.reportScheduler', 'config.features.adminNotifications', 'config.performance', 'config.ui', 'config.announcements', 'loaded', 'lastFetch'],
     storage: process.client ? sessionStorage : undefined,
   },
 });

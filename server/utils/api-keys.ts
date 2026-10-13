@@ -7,7 +7,7 @@
 import { randomBytes, scryptSync, timingSafeEqual } from 'crypto'
 import { putItem, getItem, scanItems, updateItem } from './dynamodb'
 import { accountCache } from './cache-manager'
-import { getTableName, getTableEnvironment } from '../lib/dynamodb-config'
+import { getTableName, getTableEnvironment, getTableAccountId } from '../lib/dynamodb-config'
 import { logger } from './logger'
 
 export interface ApiKey {
@@ -141,7 +141,8 @@ async function loadApiKeys(): Promise<ApiKey[]> {
     // Scan DynamoDB table
     const tableName = await getTableName('apiKeys')
     const environment = await getTableEnvironment('apiKeys')
-    const result = await scanItems(tableName, undefined, undefined, undefined, environment)
+    const accountId = await getTableAccountId('apiKeys')
+    const result = await scanItems(tableName, undefined, undefined, undefined, environment, undefined, undefined, accountId)
     const items = result.items
     const apiKeys: ApiKey[] = items.map(item => ({
       id: item.id,
@@ -190,7 +191,9 @@ async function saveApiKey(apiKey: ApiKey): Promise<void> {
 
     const tableName = await getTableName('apiKeys')
     const environment = await getTableEnvironment('apiKeys')
-    await putItem(tableName, dbItem, environment)
+    // The base credentials belong to the organizations account, not the table account.
+    const accountId = await getTableAccountId('apiKeys')
+    await putItem(tableName, dbItem, environment, accountId)
 
     // Invalidate cache
     await accountCache.delete('api_keys:all')
@@ -219,11 +222,13 @@ async function updateApiKey(id: string, updates: Partial<ApiKey>): Promise<void>
 
     const tableName = await getTableName('apiKeys')
     const environment = await getTableEnvironment('apiKeys')
+    const accountId = await getTableAccountId('apiKeys')
     await updateItem(
       tableName,
       { id },
       dbUpdates,
-      environment
+      environment,
+      accountId
     )
 
     // Invalidate cache
@@ -376,7 +381,8 @@ export async function deactivateApiKey(keyId: string, userId: string): Promise<b
     // Get the specific API key
     const tableName = await getTableName('apiKeys')
     const environment = await getTableEnvironment('apiKeys')
-    const apiKey = await getItem(tableName, { id: keyId }, environment)
+    const accountId = await getTableAccountId('apiKeys')
+    const apiKey = await getItem(tableName, { id: keyId }, environment, accountId)
     
     if (!apiKey) {
       return false
@@ -401,7 +407,8 @@ export async function deactivateApiKey(keyId: string, userId: string): Promise<b
 export async function isApiKeyOwnedBy(keyId: string, userId: string): Promise<boolean> {
   const tableName = await getTableName('apiKeys')
   const environment = await getTableEnvironment('apiKeys')
-  const apiKey = await getItem(tableName, { id: keyId }, environment)
+  const accountId = await getTableAccountId('apiKeys')
+  const apiKey = await getItem(tableName, { id: keyId }, environment, accountId)
   return isApiKeyOwner(apiKey as ApiKey | undefined, userId)
 }
 
@@ -522,7 +529,8 @@ export async function recordApiKeyUsage(
 
     const usageTableName = await getTableName('apiKeysUsage')
     const environment = await getTableEnvironment('apiKeysUsage')
-    await putItem(usageTableName, usageRecord, environment)
+    const accountId = await getTableAccountId('apiKeysUsage')
+    await putItem(usageTableName, usageRecord, environment, accountId)
     logger.info(`Successfully recorded API key usage for keyId=${keyId}`)
   } catch (error) {
     // Don't throw error - usage recording should not block API calls
@@ -552,7 +560,8 @@ export async function getApiKeyUsageHistory(
 
     const usageTableName = await getTableName('apiKeysUsage')
     const environment = await getTableEnvironment('apiKeysUsage')
-    const client = await getDynamoDBClient(environment)
+    const accountId = await getTableAccountId('apiKeysUsage')
+    const client = await getDynamoDBClient(environment, undefined, accountId)
 
     // Query by keyId (partition key) and get most recent records
     const command = new QueryCommand({

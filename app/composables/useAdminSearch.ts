@@ -55,6 +55,16 @@ export function useAdminSearch() {
       to: '/admin/kirocrew',
       keywords: ['kiro', 'crew', 'config', 'settings', 'files', 'secrets']
     },
+    {
+      id: 'config-oauth',
+      label: 'OAuth & Applications',
+      description: 'Inspect OAuth health, configuration, applications, activity, issues, and limits',
+      icon: 'i-heroicons-key',
+      category: 'configuration',
+      categoryLabel: 'Configuration',
+      to: '/admin/oauth',
+      keywords: ['oauth', 'applications', 'clients', 'grants', 'tokens', 'mcp', 'crew', 'consent', 'registration', 'issues', 'quota']
+    },
 
     // Users & Access (5 tabs)
     {
@@ -180,69 +190,14 @@ export function useAdminSearch() {
       keywords: ['validation', 'data', 'integrity', 'quality', 'accuracy', 'cost']
     },
 
-    // AI & Agents (6 tabs)
-    {
-      id: 'ai-chat-monitor',
-      label: 'Chat Monitor',
-      description: 'Monitor AI chat sessions',
-      icon: 'i-heroicons-chat-bubble-left-right',
-      category: 'ai',
-      categoryLabel: 'AI & Agents',
-      to: '/admin/ai',
-      tab: 'chat-monitor',
-      keywords: ['chat', 'monitor', 'conversations', 'sessions', 'ai']
-    },
-    {
-      id: 'ai-agent-logs',
-      label: 'Agent Logs',
-      description: 'View AI agent execution logs',
-      icon: 'i-heroicons-document-text',
-      category: 'ai',
-      categoryLabel: 'AI & Agents',
-      to: '/admin/ai',
-      tab: 'agent-logs',
-      keywords: ['agent', 'logs', 'execution', 'strands', 'ai']
-    },
-    {
-      id: 'ai-agent-testing',
-      label: 'Agent Testing',
-      description: 'Test AI agents in sandbox',
-      icon: 'i-heroicons-beaker',
-      category: 'ai',
-      categoryLabel: 'AI & Agents',
-      to: '/admin/ai',
-      tab: 'agent-testing',
-      keywords: ['testing', 'agent', 'test', 'sandbox', 'ai']
-    },
-    {
-      id: 'ai-agent-health',
-      label: 'Agent Health',
-      description: 'Monitor Strands AI agent health status',
-      icon: 'i-heroicons-heart',
-      category: 'ai',
-      categoryLabel: 'AI & Agents',
-      to: '/admin/ai',
-      tab: 'agent-health',
-      keywords: ['health', 'agent', 'strands', 'status', 'uptime']
-    },
-    {
-      id: 'ai-metrics',
-      label: 'AI Metrics',
-      description: 'View AI performance metrics and analytics',
-      icon: 'i-heroicons-chart-bar',
-      category: 'ai',
-      categoryLabel: 'AI & Agents',
-      to: '/admin/ai',
-      tab: 'ai-metrics',
-      keywords: ['metrics', 'dashboard', 'performance', 'analytics', 'ai']
-    },
+    // AI usage collection
     {
       id: 'ai-usage-collection',
       label: 'Usage Collection',
       description: 'Run and review organization AI usage collection',
       icon: 'i-heroicons-circle-stack',
       category: 'ai',
-      categoryLabel: 'AI & Agents',
+      categoryLabel: 'AI Usage',
       to: '/admin/ai',
       tab: 'usage-collection',
       keywords: ['usage', 'collection', 'bedrock', 'mantle', 'errors', 'status']
@@ -253,7 +208,7 @@ export function useAdminSearch() {
       description: 'View organization MCP tool usage and adoption',
       icon: 'i-heroicons-chart-bar-square',
       category: 'ai',
-      categoryLabel: 'AI & Agents',
+      categoryLabel: 'AI Usage',
       to: '/admin/mcp-usage',
       keywords: ['mcp', 'usage', 'tools', 'adoption', 'calls', 'latency', 'fallbacks']
     },

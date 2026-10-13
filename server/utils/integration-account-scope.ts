@@ -72,8 +72,10 @@ const personMatches = (value: unknown, person: string): boolean => {
 
 const canonicalize = (account: any): IntegrationAccount => ({
   ...account,
-  accountId: account.accountId || account.awsStandardAccountID || account.id,
-  govCloudAccountId: account.govCloudAccountId || account.awsGovCloudAccountID || account.govId,
+  // GovCloud Organizations enrichment can replace accountId with the GovCloud ID.
+  accountId: account.awsStandardAccountID || (account.environment !== 'govcloud' ? account.accountId || account.id : undefined),
+  govCloudAccountId: account.awsGovCloudAccountID || account.govCloudAccountId || account.govId ||
+    (account.environment === 'govcloud' ? account.accountId || account.id : undefined),
   requestId: account.requestId || account.requestID,
   accountName: account.accountName || account.name || account.projectName
 })
@@ -94,8 +96,20 @@ export async function resolveIntegrationAccountScope(
   const accounts: IntegrationAccount[] = []
 
   for (const identifier of identifiers) {
-    const result = await lookupAccountOptimized(event, identifier, { includeDecommissioned: false })
-    if (result?.account) accounts.push(canonicalize(result.account))
+    try {
+      const result = await lookupAccountOptimized(event, identifier, { includeDecommissioned: false })
+      if (result?.account) accounts.push(canonicalize(result.account))
+    } catch (error) {
+      // The legacy lookup throws response envelopes; preserve their client error status.
+      const response = error as { success?: boolean; error?: { message?: string } }
+      if (response?.success === false && response.error?.message) {
+        throw createError({
+          statusCode: event.node.res.statusCode,
+          statusMessage: response.error.message
+        })
+      }
+      throw error
+    }
   }
 
   if (adminOf.length > 0 || ownedBy.length > 0) {
@@ -117,7 +131,7 @@ export async function resolveIntegrationAccountScope(
   }
 
   if (accounts.length === 0) {
-    if (options.required) {
+    if (options.required || hasIntegrationAccountSelector(query)) {
       throw createError({
         statusCode: 400,
         statusMessage: 'Provide accountIdentifiers/accountIds, adminOf, or ownedBy and ensure at least one account resolves.'

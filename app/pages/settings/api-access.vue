@@ -55,7 +55,7 @@ definePageMeta({ layout: 'settings' })
 const apiOrigin = computed(() => import.meta.client ? window.location.origin : 'https://ghost.example')
 const scopes = [
   { name: 'accounts:read', description: 'Account inventory and organization structure.', endpoints: ['GET /api/v1/accounts', 'GET /api/v1/accounts/{identifier}', 'GET /api/v1/organization'] },
-  { name: 'costs:read', description: 'AWS cost summaries.', endpoints: ['GET /api/v1/costs/summary'] },
+  { name: 'costs:read', description: 'AWS cost summaries, tag costs, and tag discovery.', endpoints: ['GET /api/v1/costs/summary', 'GET /api/v1/costs/tags', 'GET /api/v1/costs/tag-keys'] },
   { name: 'forecast:read', description: 'AWS Cost Explorer and GHOST financial forecasts.', endpoints: ['GET /api/v1/forecasts/aws', 'GET /api/v1/forecasts/financial'] },
   { name: 'security:read', description: 'Security summaries, Security Hub findings, and Inspector findings.', endpoints: ['GET /api/v1/security/summary', 'GET /api/v1/security/findings', 'GET /api/v1/security/inspector/findings'] }
 ]

@@ -10,15 +10,19 @@ export function accountMatchesScope(account: any, scope: Set<string>): boolean {
 
 export function resolveCurrentMonthProjection(options: {
   displayedCurrentSpend?: number
+  timeframe: string
   currentMonthData: any
   mode: string
   accountScope: Set<string>
   remainderForecast: number
 }): { actual: number, remainder: number, projectedTotal: number } {
-  const { displayedCurrentSpend, currentMonthData, mode, accountScope } = options
-  let actual = Number.isFinite(displayedCurrentSpend) ? displayedCurrentSpend! : 0
+  const { displayedCurrentSpend, timeframe, currentMonthData, mode, accountScope } = options
+  // The displayed spend is only a current-month actual in the This Month view.
+  // For YTD (or any other timeframe), derive the actual from the dedicated monthly summary.
+  const useDisplayedSpend = timeframe === 'thisMonth' && Number.isFinite(displayedCurrentSpend)
+  let actual = useDisplayedSpend ? displayedCurrentSpend! : 0
 
-  if (!Number.isFinite(displayedCurrentSpend)) {
+  if (!useDisplayedSpend) {
     const modeData = mode === 'proforma' && currentMonthData?.proforma
       ? currentMonthData.proforma
       : currentMonthData

@@ -1,0 +1,14 @@
+{
+  "artifactId": "art-fake-empty-01",
+  "investigationId": "inv-fake-0001",
+  "state": "ready",
+  "originalFilename": "empty-result.txt",
+  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "byteCount": 0,
+  "mediaType": "text/plain; charset=utf-8",
+  "provenance": "automatic",
+  "redacted": false,
+  "truncated": false,
+  "reservedAt": "2024-01-02T03:06:20Z",
+  "readyAt": "2024-01-02T03:06:40Z"
+}
