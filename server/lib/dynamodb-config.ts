@@ -113,6 +113,11 @@ let cachedConfig: DynamoDBConfig | null = null
 let configLoadedAt: number | null = null
 const CONFIG_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
+// The config cache refreshes every 5 minutes, so a stale secret would log the
+// same missing-key warning repeatedly. Suppress it per process once we've
+// warned for a given sorted missing-key set; a changed set warns once more.
+let lastMissingKeysFingerprint: string | null = null
+
 /**
  * Get DynamoDB configuration from Secrets Manager
  */
@@ -397,14 +402,24 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
     }
 
     // Warn if the secret was missing keys the defaults supplied (signals a
-    // stale secret that should be refreshed), so the gap is observable.
+    // stale secret that should be refreshed), so the gap is observable. Sort
+    // the keys for a stable fingerprint/message and log only once per process
+    // for an unchanged missing-key set to avoid flooding on each cache refresh.
     const missingKeys = (Object.keys(envConfig) as (keyof DynamoDBConfig)[])
       .filter(k => !(k in secretsConfig))
+      .sort()
     if (missingKeys.length > 0) {
-      logger.warn(
-        `DynamoDB config from secret was missing ${missingKeys.length} table key(s); ` +
-        `using env defaults for: ${missingKeys.join(', ')}`
-      )
+      const fingerprint = missingKeys.join(',')
+      if (fingerprint !== lastMissingKeysFingerprint) {
+        lastMissingKeysFingerprint = fingerprint
+        logger.warn(
+          `DynamoDB config from secret was missing ${missingKeys.length} table key(s); ` +
+          `using env defaults for: ${missingKeys.join(', ')}. ` +
+          `Regenerate the DynamoDB config secret to include these keys.`
+        )
+      }
+    } else {
+      lastMissingKeysFingerprint = null
     }
 
     cachedConfig = mergedConfig
