@@ -608,8 +608,14 @@ export async function batchDeleteItems(
     }
   }
   
-  logger.error(`Batch delete completed: ${deletedCount} deleted, ${failedCount} failed`)
-  
+  // Mirror batchPutItems: a clean completion is info, failures are error.
+  const deleteSummary = { deletedCount, failedCount, tableName, environment }
+  if (failedCount === 0) {
+    logger.info(`Batch delete completed: ${deletedCount} deleted, 0 failed`, deleteSummary)
+  } else {
+    logger.error(`Batch delete completed with failures: ${deletedCount} deleted, ${failedCount} failed`, deleteSummary)
+  }
+
   return {
     deletedCount,
     failedCount,

@@ -47,6 +47,9 @@ export function useNotifications() {
   function connectSSE() {
     if (eventSourceInstance) return
     if (!import.meta.client) return
+    // Never open an SSE stream while logged out — the endpoint returns 401 and
+    // the resulting onerror would schedule an endless reconnect loop.
+    if (!loggedIn.value) return
 
     try {
       eventSourceInstance = new EventSource('/api/notifications/stream')
@@ -79,6 +82,9 @@ export function useNotifications() {
 
       eventSourceInstance.onerror = () => {
         disconnectSSE()
+        // If auth dropped, the stream 401'd on logout — do not reconnect or
+        // restart polling, otherwise we spin an endless loop of 401 requests.
+        if (!loggedIn.value) return
         // Exponential backoff reconnect: 1s, 2s, 4s, 8s, 16s, max 30s
         const delay = Math.min(1000 * Math.pow(2, sseReconnectAttempts), 30_000)
         sseReconnectAttempts++
@@ -127,6 +133,8 @@ export function useNotifications() {
   }
 
   async function fetchUnreadCount() {
+    // Skip while logged out — a stale poll tick would 401 against the endpoint.
+    if (!loggedIn.value) return
     try {
       const result = await $fetch<{ success: boolean; data: { count: number } }>('/api/notifications/unread-count')
 
@@ -310,6 +318,9 @@ export function useNotifications() {
       } else {
         stopPolling()
         disconnectSSE()
+        // Reset backoff so a later re-login starts fresh rather than resuming
+        // a large delay accumulated from prior disconnects.
+        sseReconnectAttempts = 0
         unreadCount.value = 0
         notifications.value = []
       }
