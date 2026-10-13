@@ -1,4 +1,5 @@
-import { BedrockAgentRuntimeClient, RetrieveAndGenerateCommand, RetrieveCommand } from '@aws-sdk/client-bedrock-agent-runtime'
+import { RetrieveAndGenerateCommand, RetrieveCommand } from '@aws-sdk/client-bedrock-agent-runtime'
+import type { BedrockAgentRuntimeClient } from '@aws-sdk/client-bedrock-agent-runtime'
 import { getClient } from '../lib/aws-client-factory'
 
 export interface SupportKnowledgeBaseConfig {
@@ -17,6 +18,8 @@ export interface SupportKnowledgeAnswer {
   guardrailAction?: string
 }
 
+const DEFAULT_SUPPORT_MODEL_ID = 'us-gov.anthropic.claude-sonnet-4-5-20250929-v1:0'
+
 function normalizeAccountId(value: string): string {
   return value.replace(/\D/g, '')
 }
@@ -34,6 +37,22 @@ export function getSupportKnowledgeBaseConfig(): SupportKnowledgeBaseConfig {
     region: isGovCloudDocs ? 'us-gov-west-1' : process.env.GHOST_SUPPORT_KNOWLEDGE_BASE_REGION || (environment === 'govcloud' ? 'us-gov-west-1' : 'us-east-1'),
     environment
   }
+}
+
+export function resolveSupportKnowledgeBaseModelArn(
+  config: SupportKnowledgeBaseConfig,
+  configuredArn = process.env.GHOST_SUPPORT_KNOWLEDGE_BASE_MODEL_ARN,
+  fallbackModelId = process.env.BEDROCK_CLAUDE_MODEL_ID || DEFAULT_SUPPORT_MODEL_ID
+): string | undefined {
+  const model = configuredArn?.trim() || fallbackModelId?.trim()
+  if (!model) return undefined
+  if (model.startsWith('arn:')) return model
+
+  const partition = config.environment === 'govcloud' ? 'aws-us-gov' : 'aws'
+  const isInferenceProfile = /^(?:us|us-gov|eu|apac)\./.test(model)
+  const resourceType = isInferenceProfile ? 'inference-profile' : 'foundation-model'
+  const accountId = isInferenceProfile ? config.accountId : ''
+  return `arn:${partition}:bedrock:${config.region}:${accountId}:${resourceType}/${model}`
 }
 
 function sourceLocation(location: any): string | undefined {
@@ -85,7 +104,8 @@ export async function searchSupportKnowledgeBase(query: string, maxResults = 5, 
  */
 export async function answerSupportKnowledgeBase(query: string, maxResults = 5, sessionId?: string): Promise<SupportKnowledgeAnswer> {
   const config = getSupportKnowledgeBaseConfig()
-  const modelArn = process.env.GHOST_SUPPORT_KNOWLEDGE_BASE_MODEL_ARN
+  // Reuse the task's approved Bedrock model when a dedicated KB ARN was not supplied.
+  const modelArn = resolveSupportKnowledgeBaseModelArn(config)
   if (!modelArn) {
     const error = new Error('GHOST_SUPPORT_KNOWLEDGE_BASE_MODEL_ARN must be configured for ghost.docs.answer.')
     error.name = 'KNOWLEDGE_BASE_MODEL_NOT_CONFIGURED'

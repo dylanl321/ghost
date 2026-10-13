@@ -1,13 +1,16 @@
 <template>
   <div>
     <!-- Header -->
-    <div class="mb-6 flex items-center justify-between">
-      <div>
+    <div
+      class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+      :class="{ 'sm:justify-end': !showHeading }"
+    >
+      <div v-if="showHeading">
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-1">
-          API Keys
+          Personal API Keys
         </h1>
         <p class="text-sm text-gray-600 dark:text-gray-400">
-          Manage API keys for programmatic access to GHOST APIs
+          Manage your own keys for programmatic access to GHOST APIs
         </p>
       </div>
       <UButton
@@ -27,7 +30,7 @@
       icon="i-heroicons-information-circle"
       class="mb-6"
       title="About API Keys"
-      description="API keys allow external systems to access GHOST APIs. They work for all endpoints except Entra ID APIs, which require user authentication."
+      description="API keys provide organization-wide, read-only access to supported /api/v1 endpoints. Send them only in the x-api-key header."
     />
 
     <!-- API Keys List -->
@@ -69,7 +72,7 @@
         >
           <div class="space-y-4">
             <!-- Header -->
-            <div class="flex items-start justify-between">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div class="flex-1">
                 <div class="flex items-center gap-3 mb-2">
                   <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
@@ -105,6 +108,10 @@
                     <Icon name="i-heroicons-clock" class="w-4 h-4" />
                     <span>Expires {{ formatDate(key.expiresAt) }}</span>
                   </div>
+                  <div v-else class="flex items-center gap-2">
+                    <Icon name="i-heroicons-clock" class="w-4 h-4" />
+                    <span>Never expires</span>
+                  </div>
                   <div v-if="key.lastUsedAt" class="flex items-center gap-2">
                     <Icon name="i-heroicons-arrow-path" class="w-4 h-4" />
                     <span>Last used {{ formatDate(key.lastUsedAt) }}</span>
@@ -113,7 +120,7 @@
               </div>
 
               <!-- Actions -->
-              <div class="flex items-center gap-2">
+              <div class="flex flex-wrap items-center gap-2">
                 <UButton
                   v-if="key.isActive"
                   color="blue"
@@ -157,12 +164,8 @@
                 </summary>
                 <div class="mt-3 space-y-2">
                   <div class="bg-gray-50 dark:bg-gray-800 rounded p-2 text-xs font-mono overflow-x-auto">
-                    <span class="text-gray-500"># Using x-api-key header</span><br />
-                    curl -H "x-api-key: YOUR_API_KEY" {{ currentDomain }}/api/accounts/list
-                  </div>
-                  <div class="bg-gray-50 dark:bg-gray-800 rounded p-2 text-xs font-mono overflow-x-auto">
-                    <span class="text-gray-500"># Using Bearer token</span><br />
-                    curl -H "Authorization: Bearer YOUR_API_KEY" {{ currentDomain }}/api/costs/summary
+                    <span class="text-gray-500"># Using x-api-key header</span><br>
+                    curl -H "x-api-key: YOUR_API_KEY" {{ currentDomain }}/api/v1/accounts
                   </div>
                 </div>
               </details>
@@ -182,6 +185,21 @@
         </template>
 
         <div v-if="!createdKey" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Permissions
+            </label>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <UCheckbox
+                v-for="scope in scopeOptions"
+                :key="scope.value"
+                v-model="newKeyScopes"
+                :value="scope.value"
+                :label="scope.label"
+              />
+            </div>
+          </div>
+
           <div>
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Key Name
@@ -264,16 +282,12 @@
               How to Use This Key
             </h4>
             <p class="text-xs text-gray-600 dark:text-gray-400 mb-3">
-              Include this key in your API requests using one of these methods:
+              Include this key in the x-api-key header:
             </p>
             <div class="space-y-2">
               <div class="bg-white dark:bg-gray-900 rounded p-2 text-xs font-mono">
-                <span class="text-gray-500"># Header method</span><br />
-                curl -H "x-api-key: {{ createdKey }}" {{ currentDomain }}/api/accounts/list
-              </div>
-              <div class="bg-white dark:bg-gray-900 rounded p-2 text-xs font-mono">
-                <span class="text-gray-500"># Bearer token method</span><br />
-                curl -H "Authorization: Bearer {{ createdKey }}" {{ currentDomain }}/api/costs/summary
+                <span class="text-gray-500"># Header method</span><br>
+                curl -H "x-api-key: {{ createdKey }}" {{ currentDomain }}/api/v1/accounts
               </div>
             </div>
           </div>
@@ -293,7 +307,7 @@
               v-if="!createdKey"
               color="blue"
               :loading="creating"
-              :disabled="!newKeyName"
+              :disabled="!newKeyName.trim() || newKeyScopes.length === 0"
               @click="createKey"
             >
               Create API Key
@@ -369,7 +383,7 @@
 
         <div v-else class="space-y-6">
           <!-- Statistics -->
-          <div v-if="usageStats" class="grid grid-cols-3 gap-4">
+          <div v-if="usageStats" class="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
               <div class="text-2xl font-bold text-gray-900 dark:text-white">
                 {{ usageStats.totalCalls.toLocaleString() }}
@@ -411,7 +425,35 @@
             </div>
           </div>
 
-          <div v-else class="text-center py-8 text-gray-500 dark:text-gray-400">
+          <div v-if="usageStats && Object.keys(usageStats.callsByStatus).length > 0">
+            <h4 class="mb-2 text-sm font-semibold text-gray-900 dark:text-white">Response statuses</h4>
+            <div class="flex flex-wrap gap-2">
+              <UBadge v-for="(count, status) in usageStats.callsByStatus" :key="status" color="gray" variant="soft">
+                {{ status }} · {{ count }}
+              </UBadge>
+            </div>
+          </div>
+
+          <div v-if="usageHistory.length > 0">
+            <h4 class="mb-2 text-sm font-semibold text-gray-900 dark:text-white">Recent calls</h4>
+            <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+              <table class="min-w-full divide-y divide-gray-200 text-left text-xs dark:divide-gray-700">
+                <thead class="bg-gray-50 dark:bg-gray-800">
+                  <tr><th class="px-3 py-2">Time</th><th class="px-3 py-2">Method</th><th class="px-3 py-2">Endpoint</th><th class="px-3 py-2">Status</th></tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                  <tr v-for="call in usageHistory.slice(0, 20)" :key="`${call.timestamp}-${call.endpoint}`">
+                    <td class="whitespace-nowrap px-3 py-2">{{ formatDate(call.timestamp) }}</td>
+                    <td class="px-3 py-2 font-mono">{{ call.method }}</td>
+                    <td class="px-3 py-2 font-mono">{{ call.endpoint }}</td>
+                    <td class="px-3 py-2">{{ call.statusCode }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div v-if="!usageStats?.totalCalls" class="text-center py-8 text-gray-500 dark:text-gray-400">
             No usage history available yet
           </div>
         </div>
@@ -465,6 +507,10 @@
 </template>
 
 <script setup lang="ts">
+withDefaults(defineProps<{ showHeading?: boolean }>(), {
+  showHeading: true
+})
+
 const logger = createLogger('ApiKeysPanel')
 
 const toast = useToast()
@@ -483,7 +529,8 @@ const usageHistory = ref<any[]>([])
 const loadingUsage = ref(false)
 const newKeyName = ref('')
 const newKeyDescription = ref('')
-const newKeyExpiration = ref('never')
+const newKeyExpiration = ref('90')
+const newKeyScopes = ref<string[]>(['accounts:read'])
 const editKeyDescription = ref('')
 const creating = ref(false)
 const deleting = ref(false)
@@ -501,11 +548,17 @@ const currentDomain = computed(() => {
 
 // Expiration options
 const expirationOptions = [
-  { label: 'Never expires', value: 'never' },
-  { label: '30 days', value: '30' },
   { label: '90 days', value: '90' },
+  { label: '30 days', value: '30' },
   { label: '180 days', value: '180' },
-  { label: '1 year', value: '365' }
+  { label: '1 year', value: '365' },
+  { label: 'Never expires', value: 'never' }
+]
+const scopeOptions = [
+  { label: 'Accounts', value: 'accounts:read' },
+  { label: 'Costs', value: 'costs:read' },
+  { label: 'Forecasts', value: 'forecast:read' },
+  { label: 'Security', value: 'security:read' }
 ]
 
 // Load API keys
@@ -544,24 +597,9 @@ const createKey = async () => {
       method: 'POST',
       body: {
         name: newKeyName.value,
-        scopes: [
-          'entra:read',
-          'entra:write',
-          'entra:admin',
-          'accounts:read',
-          'accounts:write',
-          'costs:read',
-          'costs:write',
-          'forecast:read',
-          'forecast:write',
-          'security-lake:read',
-          'security-lake:write',
-          'groups:read',
-          'users:read',
-          'cache:manage',
-          'admin:all'
-        ],
+        scopes: newKeyScopes.value,
         expiresInDays,
+        neverExpires: newKeyExpiration.value === 'never',
         metadata
       }
     })
@@ -594,7 +632,8 @@ const closeCreateModal = () => {
   createdKey.value = ''
   newKeyName.value = ''
   newKeyDescription.value = ''
-  newKeyExpiration.value = 'never'
+  newKeyExpiration.value = '90'
+  newKeyScopes.value = ['accounts:read']
   loadKeys()
 }
 

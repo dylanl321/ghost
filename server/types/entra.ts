@@ -97,6 +97,7 @@ export interface GroupMembersResponse {
   members: EntraUser[]
   totalCount: number
   nextLink?: string
+  truncated?: boolean
 }
 
 /**
@@ -163,6 +164,7 @@ export interface CreateApiKeyRequest {
   name: string
   scopes: string[]
   expiresInDays?: number
+  neverExpires?: boolean
   metadata?: Record<string, any>
 }
 

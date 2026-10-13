@@ -1,0 +1,14 @@
+{
+  "items": [
+    {
+      "tenantId": "tenant-fake-0001",
+      "spaceId": "space-0000-fake-aaaa",
+      "serverSequence": 1,
+      "kind": "investigation",
+      "objectId": "inv-fake-0001",
+      "safeProjection": {}
+    }
+  ],
+  "highWaterMark": 1,
+  "pageSize": 1
+}

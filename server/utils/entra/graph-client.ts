@@ -10,13 +10,6 @@ import type {
   EntraUser,
   GroupMembersResponse,
 } from '../../types/entra'
-
-interface GroupSearchFilters {
-  accountId?: string
-  environment?: 'commercial' | 'govcloud'
-  role?: string
-  includeDistribution?: boolean
-}
 import { EntraCacheTags } from '../../types/entra'
 import {
   getCacheKey,
@@ -24,13 +17,19 @@ import {
   buildDistributionGroupFilter,
   GRAPH_SELECT_FIELDS,
   getGraphBaseUrl,
-  isAwsAuthorizationGroupName,
   entraConfig
 } from './config'
 import { groupByAccount } from './group-parser'
 import { accountCache, CacheTags } from '../cache-manager'
 import { getUserSession } from './session'
 import { logger } from '../logger'
+
+interface GroupSearchFilters {
+  accountId?: string
+  environment?: 'commercial' | 'govcloud'
+  role?: string
+  includeDistribution?: boolean
+}
 
 /**
  * Check if the current session is in dev mode (using mock authentication)
@@ -227,6 +226,14 @@ export async function getAllPages<T>(
   initialEndpoint: string,
   options: { limit?: number; maxPages?: number; signal?: AbortSignal } = {}
 ): Promise<T[]> {
+  return (await getAllPagesResult<T>(event, initialEndpoint, options)).records
+}
+
+export async function getAllPagesResult<T>(
+  event: H3Event,
+  initialEndpoint: string,
+  options: { limit?: number; maxPages?: number; signal?: AbortSignal } = {}
+): Promise<{ records: T[]; truncated: boolean }> {
   const results: T[] = []
   let nextLink: string | null = initialEndpoint
   let pageCount = 0
@@ -269,7 +276,7 @@ export async function getAllPages<T>(
   }
   
   logger.info(`Pagination complete: ${results.length} total items across ${pageCount} pages`)
-  return results
+  return { records: results, truncated: Boolean(nextLink) }
 }
 
 /**
@@ -279,14 +286,14 @@ export async function getAWSGroups(
   event: H3Event,
   filters?: GroupSearchFilters,
   options: { maxPages?: number; signal?: AbortSignal } = {}
-): Promise<{ data: Record<string, any>, fromCache: boolean }> {
+): Promise<{ data: Record<string, any>; fromCache: boolean; truncated?: boolean }> {
   const cacheKey = getCacheKey('groups', filters?.accountId || 'all')
   
   // Check cache first
   const cached = await accountCache.get(cacheKey)
   if (cached) {
     logger.info(`Cache hit for ${cacheKey}`)
-    return { data: cached, fromCache: true }
+    return { data: cached, fromCache: true, truncated: false }
   }
   
   logger.info(`Cache miss for ${cacheKey}, fetching from Graph API...`)
@@ -313,7 +320,8 @@ export async function getAWSGroups(
     }
     
     const endpoint = `/groups?${queryParams}`
-    const groups = await getAllPages<EntraGroup>(event, endpoint, options)
+    const groupPage = await getAllPagesResult<EntraGroup>(event, endpoint, options)
+    const groups = groupPage.records
     
     // Also get distribution groups if requested
     let allGroups = groups
@@ -351,7 +359,7 @@ export async function getAWSGroups(
       }
     )
     
-    return { data: parsed, fromCache: false }
+    return { data: parsed, fromCache: false, truncated: groupPage.truncated }
   } catch (error) {
     logger.error('Failed to fetch AWS groups:', error)
     throw error
@@ -390,7 +398,8 @@ export async function getGroupMembers(
     })
     
     const membersEndpoint = `/groups/${groupId}/members?${queryParams}`
-    const members = await getAllPages<EntraUser>(event, membersEndpoint, options)
+    const memberPage = await getAllPagesResult<EntraUser>(event, membersEndpoint, options)
+    const members = memberPage.records
     
     // Transform members to include just essential info
     const memberList = includeDetails ? members : members.map(m => ({
@@ -403,7 +412,8 @@ export async function getGroupMembers(
       groupId,
       displayName: group.displayName,
       members: memberList as any,
-      totalCount: members.length
+      totalCount: members.length,
+      truncated: memberPage.truncated
     }
     
     // Cache the results
@@ -488,6 +498,14 @@ export async function searchUsers(
 /**
  * Get groups for a specific user
  */
+export function userRoleGroups(groups: EntraGroup[]): EntraGroup[] {
+  // Role rules are not limited to account authorization groups. In
+  // particular, AWS-Product-Team grants the configured administrator role.
+  // Filtering to 12-digit AWS account groups here made ID-only OIDC sessions
+  // impossible to resolve to their real GHOST roles.
+  return groups.filter(group => Boolean(group.displayName))
+}
+
 export async function getUserGroups(
   event: H3Event,
   userId: string
@@ -508,24 +526,19 @@ export async function getUserGroups(
     
     const endpoint = `/users/${userId}/transitiveMemberOf/microsoft.graph.group?${queryParams}`
     const groups = await getAllPages<EntraGroup>(event, endpoint)
-    
-    // Filter to only AWS-related groups
-    const awsGroups = groups.filter(g => 
-      isAwsAuthorizationGroupName(g.displayName) ||
-      g.displayName.endsWith(entraConfig.search.distributionSuffix)
-    )
+    const roleGroups = userRoleGroups(groups)
     
     // Cache the results
     await accountCache.set(
       cacheKey,
-      awsGroups,
+      roleGroups,
       {
         ttl: entraConfig.cache.ttl,
         tags: [CacheTags.ACCOUNTS, EntraCacheTags.ENTRA, EntraCacheTags.ENTRA_GROUPS, EntraCacheTags.ENTRA_USERS]
       }
     )
     
-    return awsGroups
+    return roleGroups
   } catch (error) {
     logger.error(`Failed to fetch groups for user ${userId}:`, error)
     throw error

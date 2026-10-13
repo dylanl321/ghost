@@ -8,23 +8,23 @@
  */
 
 import { v4 as uuidv4 } from 'uuid'
-import type {
-  UserNotification,
-  NotificationCategory,
-  NotificationSeverity,
-  NotificationStatus,
-  SendUserNotificationOptions,
-  NotificationListParams,
-  NotificationListResponse,
-  UnreadCountResponse,
-  AdminNotificationListParams,
-  NotificationStats
+import {
+  CATEGORY_PREFERENCE_MAP,
+  type MuteDuration,
+  type UserNotification,
+  type NotificationCategory,
+  type NotificationStatus,
+  type SendUserNotificationOptions,
+  type NotificationListParams,
+  type NotificationListResponse,
+  type UnreadCountResponse,
+  type AdminNotificationListParams,
+  type NotificationStats
 } from '../../shared/types/notifications'
-import { CATEGORY_PREFERENCE_MAP } from '../../shared/types/notifications'
 import { getTableConfig } from '../lib/dynamodb-config'
 import { getItem, putItem, updateItem, deleteItem, queryItems, scanItems } from './dynamodb'
 import { getConfigValue } from './site-config'
-import { getUserPreferences } from './user-preferences'
+import { getUserPreferences, updateUserPreferences } from './user-preferences'
 import { sendEmail } from './email-service'
 import { notificationEmitter } from './notification-emitter'
 import { logger } from './logger'
@@ -126,7 +126,7 @@ export async function sendUserNotification(
         // On error, deliver to inbox only (emailSent = true = skip email)
       }
     } else {
-      // Always-deliver categories (REPORT_READY, CHAT_COMPLETE, SYSTEM)
+      // Always-deliver categories (REPORT_READY, SYSTEM)
       // Only send immediate email for critical severity
       if (options.severity === 'critical') {
         shouldSendImmediateEmail = true
@@ -304,16 +304,47 @@ export async function markNotificationAsRead(
   userId: string,
   notificationId: string
 ): Promise<void> {
+  await setNotificationStatus(userId, notificationId, 'read')
+}
+
+export async function setNotificationStatus(
+  userId: string,
+  notificationId: string,
+  status: Extract<NotificationStatus, 'read' | 'archived'>
+): Promise<boolean> {
   userId = userId.toLowerCase()
   const { tableName, environment, accountId } = await getTableInfo()
+  const existing = await getItem(tableName, { userId, notificationId }, environment, accountId)
+  if (!existing) return false
 
   await updateItem(
     tableName,
     { userId, notificationId },
-    { status: 'read' as NotificationStatus },
+    { status },
     environment,
     accountId
   )
+  return true
+}
+
+const MUTE_DURATIONS: Record<MuteDuration, number> = {
+  '1h': 60 * 60 * 1000,
+  '4h': 4 * 60 * 60 * 1000,
+  '24h': 24 * 60 * 60 * 1000
+}
+
+export async function setNotificationMute(userId: string, options: { duration?: MuteDuration; unmute?: boolean }, now = Date.now()) {
+  const preferences = await getUserPreferences(userId)
+  const notificationPreferences = { ...(preferences.preferences?.notificationPreferences || {}) }
+  if (options.unmute) delete notificationPreferences.mutedUntil
+  else {
+    const duration = options.duration || '1h'
+    const durationMs = MUTE_DURATIONS[duration]
+    if (!durationMs) throw Object.assign(new Error('Invalid mute duration.'), { code: 'INVALID_MUTE_DURATION' })
+    notificationPreferences.mutedUntil = new Date(now + durationMs).toISOString()
+  }
+  await updateUserPreferences(userId, { preferences: { notificationPreferences } })
+  return { mutedUntil: notificationPreferences.mutedUntil || null }
 }
 
 export async function markAllNotificationsAsRead(userId: string): Promise<number> {

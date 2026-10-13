@@ -3,14 +3,104 @@ import { evaluateUserRoles } from '../../../../app/config/roles'
 import { getUserGroups } from '../../../utils/entra/graph-client'
 import { getUserSession } from '../../../utils/entra/session'
 import { logger } from '../../../utils/logger'
+import { getKiroCrewResourceUrl } from '../../../kirocrew/config'
+import { KIROCREW_SCOPES } from '../../../kirocrew/types'
 import { getOAuthProvider } from '../../../mcp/oauth/provider'
 import { getMcpResourceUrl } from '../../../mcp/config'
 import { saveMcpGraphDelegation } from '../../../mcp/oauth/delegated-graph'
+import { withSubjectGraphFence } from '../../../mcp/oauth/graph-delegation-cleanup'
 import { saveGhostMcpIdentity } from '../../../mcp/oauth/identity'
+import { saveGrantPointer } from '../../../mcp/oauth/grant-pointer'
 import { GHOST_MCP_SCOPES, type GhostMcpIdentity } from '../../../mcp/types'
+import { getOAuthStageInstrumentation } from '../../../mcp/oauth/admin/stage-instrumentation'
+import { readManagedPolicy } from '../../../mcp/oauth/admin/managed-policy-service'
+import { evaluateBoundary } from '../../../mcp/oauth/admin/lifecycle-enforcement'
 
 interface InteractionBody {
   action: 'details' | 'login' | 'approve' | 'deny'
+}
+
+export function consentSubmission(grantId: string) {
+  // Native clients require an explicit consent result on resume. The shared
+  // DynamoDB writer removes empty objects, so {} loses approval for a reused
+  // grant. Keep its saved ID in the result for both new and existing grants.
+  return { consent: { grantId } }
+}
+
+interface OidcLikeError {
+  name?: unknown
+  error?: unknown
+  error_description?: unknown
+  message?: unknown
+  cause?: unknown
+}
+
+// Detects the oidc-provider "interaction session missing/expired" failure that
+// interactionDetails throws when the interaction cookie is gone (expired session,
+// or the client replayed a stale consent URL). Walks the cause chain and matches
+// on the stable error shape so we do not import oidc-provider internals.
+export function isExpiredInteractionSessionError(error: unknown): boolean {
+  const seen = new Set<unknown>()
+  let current: unknown = error
+  while (current && typeof current === 'object' && !seen.has(current)) {
+    seen.add(current)
+    const candidate = current as OidcLikeError
+    const name = typeof candidate.name === 'string' ? candidate.name : ''
+    const code = typeof candidate.error === 'string' ? candidate.error : ''
+    const description = [candidate.error_description, candidate.message]
+      .filter((value): value is string => typeof value === 'string')
+      .join(' ')
+      .toLowerCase()
+    const mentionsMissingSession = description.includes('interaction session')
+      || description.includes('session id cookie not found')
+    if (name === 'SessionNotFound') return true
+    if (code === 'invalid_request' && mentionsMissingSession) return true
+    current = candidate.cause
+  }
+  return false
+}
+
+export function requestedGhostResourceScopes(
+  params: { scope?: unknown; resource?: unknown },
+  missingResourceScopes: Record<string, string[]> | undefined,
+  resource: string,
+  supportedScopes: readonly string[] = GHOST_MCP_SCOPES
+): string[] {
+  const requested = new Set(String(params.scope || '').split(' ').filter(scope => supportedScopes.includes(scope)))
+  const missing = missingResourceScopes?.[resource]
+  const candidates = missing?.length ? missing : [...requested]
+  return [...new Set(candidates.filter(scope => requested.has(scope) && supportedScopes.includes(scope)))]
+}
+
+export function canGrantKiroCrewAdmin(roles: readonly string[]): boolean {
+  // Use the same configured admin role as the browser/admin APIs. Checking one
+  // group here caused configured ".admin" users to loop on consent forever.
+  return roles.includes('admin')
+}
+
+export function identityGroupNames(user: any, graphGroups: readonly string[] = []): string[] {
+  const sessionGroups = user?.groups ?? user?.claims?.groups ?? []
+  const names = Array.isArray(sessionGroups)
+    ? sessionGroups.map((group: any) => {
+      if (typeof group === 'string') return group
+      return group?.displayName || group?.name || ''
+    })
+    : []
+
+  return [...new Set([...names, ...graphGroups].filter(Boolean))]
+}
+
+function requestedResource(value: unknown): string {
+  const candidate = Array.isArray(value) ? value[0] : value
+  return typeof candidate === 'string' && candidate
+    ? candidate
+    : getMcpResourceUrl().href
+}
+
+function scopesForResource(resource: string): readonly string[] {
+  if (resource === getMcpResourceUrl().href) return GHOST_MCP_SCOPES
+  if (resource === getKiroCrewResourceUrl().href) return KIROCREW_SCOPES
+  return []
 }
 
 function userValue(user: any, ...keys: string[]): string | undefined {
@@ -31,12 +121,14 @@ async function getAuthenticatedIdentity(event: H3Event): Promise<{ identity: Gho
   const email = userValue(user, 'email', 'preferred_username', 'upn')
   if (!oid || !email) throw createError({ statusCode: 401, statusMessage: 'Entra identity claims are incomplete' })
 
-  let groups: string[]
+  let groups = identityGroupNames(user)
   try {
-    groups = (await getUserGroups(event, oid)).map(group => group.displayName).filter(Boolean)
+    groups = identityGroupNames(
+      user,
+      (await getUserGroups(event, oid)).map(group => group.displayName).filter(Boolean)
+    )
   } catch (error) {
     logger.warn('[MCP OAuth] Could not capture delegated Graph groups', error)
-    groups = []
   }
   const roles = evaluateUserRoles({
     userPrincipalName: email,
@@ -67,7 +159,29 @@ async function getAuthenticatedIdentity(event: H3Event): Promise<{ identity: Gho
 export default defineEventHandler(async event => {
   const body = await readBody<InteractionBody>(event)
   const provider = await getOAuthProvider()
-  const details = await provider.interactionDetails(event.node.req, event.node.res)
+  let details: Awaited<ReturnType<typeof provider.interactionDetails>>
+  try {
+    details = await provider.interactionDetails(event.node.req, event.node.res)
+  } catch (error) {
+    if (isExpiredInteractionSessionError(error)) {
+      logger.warn('[MCP OAuth] Interaction session missing or expired', {
+        route: '/oauth/consent/:uid',
+        action: body.action,
+        error: 'invalid_request',
+        reason: 'interaction_session_not_found'
+      })
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Authorization session expired. Restart authorization from your client.',
+        message: 'Authorization session expired. Restart authorization from your client.'
+      })
+    }
+    logger.error('[MCP OAuth] Failed to load interaction details', {
+      route: '/oauth/consent/:uid',
+      action: body.action
+    })
+    throw error
+  }
   const client = await provider.Client.find(String(details.params.client_id))
   const prompt = details.prompt.name
 
@@ -79,15 +193,17 @@ export default defineEventHandler(async event => {
   })
 
   if (body.action === 'details') {
+    const resource = requestedResource(details.params.resource)
+    const supportedScopes = scopesForResource(resource)
     return {
       prompt,
       client: {
         id: details.params.client_id,
-        name: client?.clientName || 'MCP client',
+        name: client?.clientName || (resource === getKiroCrewResourceUrl().href ? 'Kiro Crew' : 'MCP client'),
         uri: client?.clientUri
       },
-      scopes: String(details.params.scope || '').split(' ').filter(scope => GHOST_MCP_SCOPES.includes(scope as any)),
-      resource: details.params.resource
+      scopes: String(details.params.scope || '').split(' ').filter(scope => supportedScopes.includes(scope)),
+      resource
     }
   }
 
@@ -95,6 +211,12 @@ export default defineEventHandler(async event => {
     const redirectTo = await provider.interactionResult(event.node.req, event.node.res, {
       error: 'access_denied',
       error_description: 'The user denied access to GHOST.'
+    })
+    // Consent observed as user-denied. Fire-and-forget; client reference only.
+    getOAuthStageInstrumentation().record({
+      stage: 'consent',
+      outcome: 'denied',
+      clientReference: details.params.client_id ? String(details.params.client_id) : undefined
     })
     return { redirectTo }
   }
@@ -122,10 +244,13 @@ export default defineEventHandler(async event => {
   if (!details.session?.accountId || details.session.accountId !== identity.subject) {
     throw createError({ statusCode: 401, statusMessage: 'OAuth and Entra sessions do not match' })
   }
-  if (refreshToken) {
-    await saveMcpGraphDelegation(identity.subject, identity.tenantId, refreshToken)
-  } else {
-    logger.warn('[MCP Graph] GHOST session did not provide a delegated refresh token')
+  const resource = requestedResource(details.params.resource)
+  if (resource === getMcpResourceUrl().href) {
+    if (refreshToken) {
+      await saveMcpGraphDelegation(identity.subject, identity.tenantId, refreshToken)
+    } else {
+      logger.warn('[MCP Graph] GHOST session did not provide a delegated refresh token')
+    }
   }
 
   const grant = details.grantId
@@ -145,19 +270,89 @@ export default defineEventHandler(async event => {
       hasGrant: Boolean(details.grantId)
     })
   }
-  // Use the provider's computed gaps for OIDC claims, then grant the normal GHOST
-  // capability set. Clients should not need to know or choose internal scope names.
+  // Grant only the supported resource scopes the client requested and the user saw.
   if (missing.missingOIDCScope?.length) grant.addOIDCScope(missing.missingOIDCScope)
   if (missing.missingOIDCClaims?.length) grant.addOIDCClaims(missing.missingOIDCClaims)
-  for (const [resource, scopes] of Object.entries(missing.missingResourceScopes || {})) {
-    grant.addResourceScope(resource, scopes)
+  const supportedScopes = scopesForResource(resource)
+  if (!supportedScopes.length) {
+    throw createError({ statusCode: 400, statusMessage: 'Unsupported OAuth resource' })
   }
-  grant.addResourceScope(getMcpResourceUrl().href, GHOST_MCP_SCOPES)
-  const grantId = await grant.save()
-  const consent = details.grantId ? {} : { grantId }
+  const requestedScopes = requestedGhostResourceScopes(
+    details.params,
+    missing.missingResourceScopes,
+    resource,
+    supportedScopes
+  )
+  if (
+    resource === getKiroCrewResourceUrl().href
+    && requestedScopes.includes('kirocrew.config.admin')
+    && !canGrantKiroCrewAdmin(identity.roles)
+  ) {
+    const redirectTo = await provider.interactionResult(event.node.req, event.node.res, {
+      error: 'access_denied',
+      error_description: 'The GHOST administrator role is required to publish Kiro Crew configuration.'
+    })
+    // Consent denied by managed policy (missing admin role). Post-login, so a
+    // subject reference is safe to include alongside the client/resource refs.
+    getOAuthStageInstrumentation().record({
+      stage: 'consent',
+      outcome: 'denied',
+      errorCode: 'access_denied',
+      clientReference: details.params.client_id ? String(details.params.client_id) : undefined,
+      resourceReference: resource,
+      subjectReference: identity.subject
+    })
+    return { redirectTo }
+  }
+  // Managed lifecycle + resource/scope policy enforcement at the consent
+  // boundary (task 8.2, Req 7.3, 7.4, 7.7, 7.8). A client with no managed-policy
+  // extension resolves to a null policy and is UNCHANGED: the gate returns
+  // ALLOW and consent proceeds exactly as today. Only a positively-identified
+  // managed client under an enforcing policy is denied here — a blocked/retired
+  // client cannot complete consent, and a requested resource/scope outside the
+  // approved policy is rejected (expansion beyond the approved set is an
+  // administrative action, not an auto-grant).
+  const managedPolicy = client ? readManagedPolicy(client.metadata() as Record<string, unknown>) : null
+  const consentDecision = evaluateBoundary(managedPolicy, 'consent', { resource, scopes: requestedScopes })
+  if (!consentDecision.allowed) {
+    const redirectTo = await provider.interactionResult(event.node.req, event.node.res, {
+      error: 'access_denied',
+      error_description: consentDecision.description || 'This client is not permitted to obtain this access.'
+    })
+    getOAuthStageInstrumentation().record({
+      stage: 'consent',
+      outcome: 'denied',
+      errorCode: consentDecision.reason || 'managed_policy_denied',
+      clientReference: details.params.client_id ? String(details.params.client_id) : undefined,
+      resourceReference: resource,
+      subjectReference: identity.subject
+    })
+    return { redirectTo }
+  }
 
-  const redirectTo = await provider.interactionResult(event.node.req, event.node.res, {
-    consent
+  if (requestedScopes.length) grant.addResourceScope(resource, requestedScopes)
+  // Task 9.3 concurrency clause: persist the grant UNDER THE PER-SUBJECT FENCE
+  // so a concurrent `grant.destroyed` last-grant determination for the same user
+  // cannot delete the shared Graph delegation in the window between "no other
+  // live grant found" and this new grant becoming visible (Req 9.3). The fence
+  // is keyed by subject, so unrelated users never contend.
+  const grantId = await withSubjectGraphFence(identity.subject, () => grant.save())
+  // Consent-once (pure SSO): record the approved grant for this (subject, client)
+  // so a later sign-in in a fresh session reuses it without re-prompting. This
+  // is a convenience pointer only — reuse is still gated by lifecycle/revocation
+  // in loadReusableGhostGrant, so a write failure just means "prompt again".
+  await saveGrantPointer(identity.subject, String(details.params.client_id), grantId)
+    .catch(error => logger.warn('[MCP OAuth] Could not record consent-once grant pointer', error))
+  const redirectTo = await provider.interactionResult(
+    event.node.req, event.node.res, consentSubmission(grantId)
+  )
+  // Consent granted. Post-login: client/resource/subject references are safe.
+  getOAuthStageInstrumentation().record({
+    stage: 'consent',
+    outcome: 'success',
+    clientReference: details.params.client_id ? String(details.params.client_id) : undefined,
+    resourceReference: resource,
+    subjectReference: identity.subject
   })
   return { redirectTo }
 })

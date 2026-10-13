@@ -116,7 +116,8 @@ export function buildMcpCostDashboard(input: BuildMcpCostDashboardInput) {
       environment: input.environment,
       period: input.period,
       requestedAccountIdentifiers: input.accountIdentifiers,
-      resolvedCommercialAccountIds: input.resolvedAccountIds,
+      resolvedLinkedAccountIds: input.resolvedAccountIds,
+      resolvedCommercialAccountIds: input.environment === 'commercial' ? input.resolvedAccountIds : [],
       accountCount: input.accounts.length
     },
     summary: {

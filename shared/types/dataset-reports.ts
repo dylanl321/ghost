@@ -26,6 +26,7 @@ export interface DatasetQueryOptions {
   signal?: AbortSignal
   onProgress?: (progress: { phase: string; processed: number; total?: number }) => void | Promise<void>
   onAthenaQuery?: (queryExecutionId: string | null) => void | Promise<void>
+  format?: 'normalized' | 'asff'
 }
 
 export interface DatasetQueryResult<T> {
@@ -42,6 +43,7 @@ export interface DatasetQueryResult<T> {
  */
 export interface ConfigDatasetFilters {
   resourceId?: string
+
   resourceName?: string
   tags?: Record<string, string>
   /**
@@ -59,6 +61,9 @@ export interface ConfigDatasetFilters {
    * Only include resources with compliance rules
    */
   complianceOnly?: boolean
+
+  /** EC2 instance states; used only with AWS::EC2::Instance queries. */
+  instanceStates?: string[]
 
   /**
    * Filter by specific regions
@@ -124,6 +129,12 @@ export interface SecurityHubDatasetFilters {
    * Uses CONTAINS comparison to match partial IDs
    */
   resourceId?: string
+
+  /** Filter by one or more exact resource IDs, such as EC2 instance IDs. */
+  resourceIds?: string[]
+
+  /** Filter by exact Security Hub finding IDs. */
+  findingIds?: string[]
 
   /**
    * Filter by specific regions

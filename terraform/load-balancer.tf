@@ -5,7 +5,7 @@ resource "aws_lb" "main" {
   load_balancer_type = "application"
   security_groups    = [aws_security_group.lb.id]
   subnets            = var.subnets
-  idle_timeout       = 600 # 10 minutes - increased for long-running AI queries (Strands can take 5-10 min)
+  idle_timeout       = 600 # 10 minutes - increased for long-running AI queries
 }
 
 resource "aws_lb_listener" "main" {

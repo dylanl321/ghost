@@ -6,9 +6,9 @@ function severityRank(severity: string): number {
   return ({ CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, INFORMATIONAL: 4, UNTRIAGED: 5 } as Record<string, number>)[severity] ?? 6
 }
 
-function deploymentState(finding: VulnerabilityFinding): DeploymentState {
+function deploymentState(finding: VulnerabilityFinding, now: number): DeploymentState {
   const observed = finding.lastObservedAt || finding.updatedAt
-  const ageDays = observed ? (Date.now() - Date.parse(observed)) / 86_400_000 : Number.POSITIVE_INFINITY
+  const ageDays = observed ? (now - Date.parse(observed)) / 86_400_000 : Number.POSITIVE_INFINITY
   if (ageDays > 90) return 'stale_superseded'
   if (finding.instanceId?.startsWith('i-') || finding.lambdaArn) return 'currently_deployed'
   if (finding.imageDigest || finding.repository) return 'retained_not_deployed'
@@ -22,13 +22,13 @@ function keyFor(finding: VulnerabilityFinding): string {
   ].join('|')
 }
 
-export function deduplicateRemediationFindings(findings: VulnerabilityFinding[]) {
+export function deduplicateRemediationFindings(findings: VulnerabilityFinding[], now = Date.now()) {
   const groups = new Map<string, { key: string; findings: VulnerabilityFinding[]; deploymentState: DeploymentState }>()
   for (const finding of findings) {
     const key = keyFor(finding)
-    const current = groups.get(key) || { key, findings: [], deploymentState: deploymentState(finding) }
+    const current = groups.get(key) || { key, findings: [], deploymentState: deploymentState(finding, now) }
     current.findings.push(finding)
-    const nextState = deploymentState(finding)
+    const nextState = deploymentState(finding, now)
     if (current.deploymentState !== 'currently_deployed' && nextState === 'currently_deployed') current.deploymentState = nextState
     groups.set(key, current)
   }

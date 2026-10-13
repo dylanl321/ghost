@@ -47,6 +47,22 @@ test('resolves punctuation-insensitive account names and either account ID', asy
   assert.equal((await resolveAccountReference('519494780165', accounts)).accountId, '130647805848')
 })
 
+test('collapses duplicate metadata rows for the same AWS account', async () => {
+  const duplicate = { ...itAiOps, requestId: 2, requestID: 2 }
+  assert.equal((await resolveAccountReference('130647805848', [itAiOps, duplicate])).accountId, '130647805848')
+  assert.equal((await resolveAccountReference('it-aiops', [itAiOps, duplicate])).accountId, '130647805848')
+})
+
+test('keeps a shared account name ambiguous across different AWS accounts', async () => {
+  const otherAccount = { ...itAiOps, accountId: '111111111111', awsStandardAccountID: '111111111111' }
+  await assert.rejects(
+    () => resolveAccountReference('it-aiops', [itAiOps, otherAccount]),
+    (error: unknown) => error instanceof McpInputError &&
+      error.code === 'ACCOUNT_AMBIGUOUS' &&
+      (error.details?.correctedExample as { account?: string })?.account === '130647805848'
+  )
+})
+
 test('Config account scope maps GovCloud IDs and never broadens an unresolved request', () => {
   const scope = resolveConfigAccountScope([itAiOps], ['519494780165'], 'govcloud')
   assert.deepEqual(scope.validAccounts, ['519494780165'])

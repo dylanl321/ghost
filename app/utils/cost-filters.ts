@@ -107,10 +107,13 @@ export const applyAccountFilters = (
         return false
       }
       
-      // Filter dev accounts if setting is enabled (requestId 9100 or higher)
+      // Filter only accounts explicitly classified as development. Request IDs are
+      // monotonically increasing for new accounts and are not lifecycle metadata.
       if (settings.hideDevAccounts) {
-        const requestId = parseInt(account.requestId || account.requestID || '0')
-        if (requestId >= 9100) {
+        const environment = String(account.environment || account.accountEnvironment || '')
+          .trim()
+          .toLowerCase()
+        if (environment === 'dev' || environment === 'development') {
           return false
         }
       }

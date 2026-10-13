@@ -37,6 +37,7 @@ export async function recordMcpAudit(input: {
   retryable?: boolean
   result?: any
   rawFailure?: unknown
+  source?: string
   environment?: 'commercial' | 'govcloud' | 'unknown'
   client?: Partial<GhostMcpClientAttribution>
 }): Promise<void> {
@@ -114,7 +115,7 @@ export async function recordMcpAudit(input: {
       rawErrorCaptured,
       eventDate: timestamp.slice(0, 10),
       environment: input.environment || 'unknown',
-      source: metadata.source,
+      source: metadata.source || input.source,
       resultCount,
       serializedSizeBytes: envelope ? safeJsonSize(envelope) : 0,
       truncated: Boolean(metadata.truncated || metadata.nextCursor),
@@ -168,12 +169,57 @@ export function sanitizeErrorExplanation(value: unknown): string {
     .slice(0, 1000)
 }
 
+const NEVER_CAPTURE_ARGUMENT = /(?:session[_-]?id|credential|access[_-]?key|secret|token|authorization|password|prompt|question|message|content|context|policy|report[_-]?config|payload)/i
+
+function argumentShape(value: unknown): Record<string, unknown> {
+  if (value === null) return { type: 'null' }
+  if (Array.isArray(value)) return { type: 'array', length: value.length }
+  if (typeof value === 'string') return { type: 'string', length: value.length }
+  if (typeof value === 'object') return { type: 'object', keys: Object.keys(value as Record<string, unknown>).slice(0, 50), keyCount: Object.keys(value as Record<string, unknown>).length }
+  return { type: typeof value }
+}
+
+function safeDiagnosticValue(name: string, value: unknown, allowed: Set<string>): unknown {
+  if (NEVER_CAPTURE_ARGUMENT.test(name) || !allowed.has(name)) return argumentShape(value)
+  if (typeof value === 'string') return value.slice(0, 200)
+  if (typeof value === 'number' || typeof value === 'boolean' || value === null) return value
+  if (Array.isArray(value) && value.length <= 20 && value.every(item => ['string', 'number', 'boolean'].includes(typeof item))) {
+    return value.map(item => typeof item === 'string' ? item.slice(0, 100) : item)
+  }
+  return argumentShape(value)
+}
+
+/** Build failure diagnostics without retaining caller content or authorization material. */
+export function prepareMcpDiagnosticFailure(
+  args: unknown,
+  failure: unknown,
+  safeArgumentNames: string[] = []
+): Record<string, unknown> {
+  const values = args && typeof args === 'object' && !Array.isArray(args) ? args as Record<string, unknown> : {}
+  const allowed = new Set(safeArgumentNames)
+  const error = failure instanceof Error
+    ? {
+        name: failure.name,
+        message: sanitizeErrorExplanation(failure.message),
+        stack: sanitizeErrorExplanation(failure.stack).slice(0, 4000)
+      }
+    : {
+        code: (failure as any)?.structuredContent?.error?.code || (failure as any)?.code,
+        message: sanitizeErrorExplanation((failure as any)?.structuredContent?.error?.message || (failure as any)?.message)
+      }
+  return {
+    arguments: Object.fromEntries(Object.entries(values).map(([name, value]) => [name, safeDiagnosticValue(name, value, allowed)])),
+    error
+  }
+}
+
 export function normalizeMcpClient(input: Partial<GhostMcpClientAttribution>): GhostMcpClientType {
   const text = [input.oauthClientName, input.oauthClientUri, input.oauthSoftwareId, input.mcpClientName, input.userAgent]
     .filter(Boolean).join(' ').toLowerCase()
   if (/claude[ /_-]*code/.test(text)) return 'claude_code'
   if (/chatgpt/.test(text)) return 'chatgpt'
   if (/codex/.test(text) && /desktop/.test(text)) return 'codex_desktop'
+  if (/codex-mcp-client/.test(text)) return 'codex_cli'
   if (/codex/.test(text) && /\b(cli|command.line|terminal)\b/.test(text)) return 'codex_cli'
   if (/codex/.test(text)) return 'codex_unknown'
   return text ? 'other' : 'unknown'
@@ -193,7 +239,11 @@ export function prepareRawMcpErrorRecord(input: {
     eventId: input.eventId,
     timestamp: input.timestamp,
     tool: input.tool,
-    principal: input.principal,
+    principal: {
+      subject: input.principal.subject,
+      clientId: input.principal.clientId,
+      scopes: input.principal.scopes
+    },
     client: input.client,
     failure: input.rawFailure
   })
