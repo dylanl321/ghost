@@ -2,14 +2,25 @@ import { randomUUID } from 'node:crypto'
 import { exportJWK, generateKeyPair, type JWK } from 'jose'
 import Provider from 'oidc-provider'
 import { logger } from '../../utils/logger'
+import { getKiroCrewResourceUrl } from '../../kirocrew/config'
+import { KIROCREW_SCOPES } from '../../kirocrew/types'
 import { getGhostBaseUrl, getMcpResourceUrl, getOAuthAuthorizationTtlSeconds, getOAuthCookieKeys, getOAuthIssuer, isProductionEnvironment, useDurableOAuthStore } from '../config'
 import { GHOST_MCP_SCOPES } from '../types'
 import { DynamoOidcAdapter } from './adapter'
-import { deleteMcpGraphDelegation } from './delegated-graph'
+import { handleMcpGrantDestroyed } from './graph-delegation-cleanup'
 import { getGhostMcpIdentity } from './identity'
+import { findGrantPointer } from './grant-pointer'
+import { getOAuthStageInstrumentation } from './admin/stage-instrumentation'
+import { readManagedPolicy } from './admin/managed-policy-service'
+import { evaluateBoundary, isGrantRevoked } from './admin/lifecycle-enforcement'
 
 let providerPromise: Promise<Provider> | undefined
 export const GHOST_REFRESH_TOKEN_ROTATION = false
+
+export interface GhostOAuthResource {
+  resource: string
+  scopes: readonly string[]
+}
 
 export type GhostRefreshFailureReason =
   | 'token_not_found'
@@ -55,6 +66,13 @@ export function createGhostRefreshEvent(status: 'success' | 'failure', reason?: 
   }
 }
 
+export function grantIncludesMcpResource(
+  grant: { resources?: Record<string, string> },
+  mcpResource = getMcpResourceUrl().href
+): boolean {
+  return Object.hasOwn(grant.resources || {}, mcpResource)
+}
+
 function recordRefreshEvent(status: 'success' | 'failure', reason?: GhostRefreshFailureReason): void {
   process.stdout.write(JSON.stringify(createGhostRefreshEvent(status, reason)) + '\n')
 }
@@ -73,15 +91,160 @@ async function loadJwks(): Promise<{ keys: JWK[] }> {
   return { keys: [jwk] }
 }
 
+/**
+ * Safe, public-only signing-key metadata for a single JWK. Exposes ONLY the
+ * public identification parameters (`kid`, `kty`, `alg`, `use`) — NEVER the
+ * private parameters (`d`, `p`, `q`, `dp`, `dq`, `qi`, `k`) or any symmetric
+ * key material (Requirement 3.4). This is the shape the OAuth-administration
+ * configuration projection consumes so it never touches a private key value.
+ */
+export interface GhostPublicSigningKeyMetadata {
+  kid?: string
+  kty?: string
+  alg?: string
+  use?: string
+}
+
+/**
+ * The public signing-key observation used by the OAuth administration
+ * configuration projection. `source` distinguishes a configured JWKS
+ * (`GHOST_OAUTH_JWKS_JSON`) from an ephemeral development key that the provider
+ * generated at boot, and `available` is false when no key material could be
+ * read at all — in which case the projection reports signing keys as unknown
+ * rather than inventing metadata.
+ *
+ * SAFETY: rotation/expiry dates are intentionally NOT derived here. A JWK
+ * carries no certificate-style validity window, so signing-key dates remain
+ * unknown unless a deployment explicitly supplies them (Requirement 15.6).
+ */
+export interface GhostSigningKeyObservation {
+  available: boolean
+  source: 'configured' | 'ephemeral-development' | 'unavailable'
+  keys: GhostPublicSigningKeyMetadata[]
+}
+
+/**
+ * Project the running provider's JWKS down to safe public metadata only. Reads
+ * the same key material the provider is initialized with (`loadJwks`), then
+ * strips every field except the public identification parameters. Never throws
+ * to a caller: an unreadable/unavailable key set is reported as
+ * `available: false` so the administration surface can label signing keys
+ * unknown (Requirements 2.5, 3.3, 3.4).
+ */
+export async function getGhostPublicSigningKeyMetadata(): Promise<GhostSigningKeyObservation> {
+  const hasConfiguredJwks = Boolean(process.env.GHOST_OAUTH_JWKS_JSON)
+  try {
+    const jwks = await loadJwks()
+    const keys = (jwks.keys || []).map<GhostPublicSigningKeyMetadata>(key => ({
+      // Only public identification parameters are copied out; the private
+      // parameters (d/p/q/dp/dq/qi/k) present on the source JWK are never read.
+      kid: typeof key.kid === 'string' ? key.kid : undefined,
+      kty: typeof key.kty === 'string' ? key.kty : undefined,
+      alg: typeof key.alg === 'string' ? key.alg : undefined,
+      use: typeof key.use === 'string' ? key.use : undefined
+    }))
+    return {
+      available: keys.length > 0,
+      source: hasConfiguredJwks ? 'configured' : 'ephemeral-development',
+      keys
+    }
+  } catch {
+    // A missing/invalid JWKS in production (or any read failure) is surfaced as
+    // unavailable rather than propagated — the projection stays safe and labels
+    // signing keys unknown.
+    return { available: false, source: 'unavailable', keys: [] }
+  }
+}
+
+/**
+ * Minimal shape of the OIDC `Grant` model instance the reuse gate inspects.
+ * Only the safe references it needs to re-check policy are read.
+ */
+interface ReusableGrant {
+  jti: string
+  accountId?: string
+  clientId?: string
+  /** Consented resource scopes keyed by resource URL, e.g. `{ '<mcp>': 'a b' }`. */
+  resources?: Record<string, string>
+}
+
+/**
+ * Consent-once grant reuse (pure SSO).
+ *
+ * `oidc-provider`'s default `loadExistingGrant` reuses a grant only when it is
+ * already bound to the current OIDC session or carried on the in-flight
+ * interaction result. Because Codex starts a fresh browser context per
+ * `codex mcp login`, that binding is absent and the user is prompted for
+ * consent every time. This helper additionally consults the durable
+ * `(subject, clientId)` grant pointer so a previously approved grant is reused
+ * across sessions — approve once, then sign in silently.
+ *
+ * SAFETY — reuse is GATED, never blind (this is why it is not just the default):
+ *   - A reused grant is still subject to the managed-lifecycle matrix. If the
+ *     client has since been BLOCKED or RETIRED, {@link evaluateBoundary} denies
+ *     and we return `undefined` so the normal consent boundary runs its own
+ *     (also-denying) enforcement instead of silently resuming.
+ *   - A grant under a revocation marker ({@link isGrantRevoked}) is never
+ *     reused; the user must re-consent (which mints a fresh grant).
+ *   - Account/client identity on the found grant must match the current
+ *     request, or it is ignored (the provider also re-checks this).
+ * A `null` managed policy (unmanaged dynamic client) is always allowed, so
+ * unmanaged clients get consent-once with no behavior change.
+ */
+export async function loadReusableGhostGrant(ctx: any): Promise<unknown> {
+  const provider = ctx?.oidc?.provider
+  const account = ctx?.oidc?.account
+  const client = ctx?.oidc?.client
+  if (!provider || !account?.accountId || !client?.clientId) return undefined
+
+  // 1. Resolve a candidate grant id: the default sources first (in-flight
+  //    consent result, then this session's association), then the durable
+  //    cross-session pointer for this (subject, client) pair.
+  const sessionGrantId = ctx.oidc.result?.consent?.grantId
+    || ctx.oidc.session?.grantIdFor?.(client.clientId)
+  const grantId = sessionGrantId || await findGrantPointer(account.accountId, client.clientId)
+  if (!grantId) return undefined
+
+  const grant = await provider.Grant.find(grantId) as ReusableGrant | undefined
+  if (!grant) return undefined
+
+  // 2. Identity must match the current request. The provider re-checks this
+  //    too, but we fail closed here rather than hand back a mismatched grant.
+  if (grant.accountId !== account.accountId || grant.clientId !== client.clientId) return undefined
+
+  // 3. A revoked grant is never silently reused (task 9 fence).
+  if (await isGrantRevoked(grant.jti)) return undefined
+
+  // 4. The managed lifecycle/policy must still permit this client. A blocked or
+  //    retired managed client must not resume silently; returning `undefined`
+  //    routes it back through the consent boundary, which denies it there.
+  const managedPolicy = typeof client.metadata === 'function'
+    ? readManagedPolicy(client.metadata() as Record<string, unknown>)
+    : null
+  if (managedPolicy) {
+    const decision = evaluateBoundary(managedPolicy, 'authorize')
+    if (!decision.allowed) return undefined
+  }
+
+  return grant
+}
+
 export function createGhostOAuthConfiguration(input: {
-  resource: string
+  resource?: string
+  resources?: GhostOAuthResource[]
   jwks: { keys: JWK[] }
   adapter?: any
   clients?: Array<Record<string, unknown>>
   findAccount?: (ctx: unknown, subject: string) => Promise<any>
   extraTokenClaims?: (ctx: unknown, token: { accountId?: string }) => Promise<Record<string, unknown>>
 }): any {
-  const { resource, jwks } = input
+  const { jwks } = input
+  const resources = input.resources?.length
+    ? input.resources
+    : [{ resource: String(input.resource), scopes: GHOST_MCP_SCOPES }]
+  const resourceByUrl = new Map(resources.map(definition => [definition.resource, definition]))
+  const defaultResource = resources[0]!.resource
+  const supportedScopes = [...new Set(resources.flatMap(definition => [...definition.scopes]))]
   const authorizationTtl = getOAuthAuthorizationTtlSeconds()
   return {
     adapter: input.adapter,
@@ -98,7 +261,13 @@ export function createGhostOAuthConfiguration(input: {
     grantTypes: ['authorization_code', 'refresh_token'],
     clientAuthMethods: ['none'],
     pkce: { required: () => true, methods: ['S256'] },
-    scopes: ['openid', 'offline_access', ...GHOST_MCP_SCOPES],
+    scopes: ['openid', 'offline_access', ...supportedScopes],
+    // Consent-once (pure SSO): reuse a previously approved grant across sessions
+    // for the same (subject, client) so native clients are not re-prompted every
+    // sign-in. Reuse is gated on managed lifecycle + grant revocation, so a
+    // blocked/retired client or a revoked grant still re-consents (see
+    // loadReusableGhostGrant).
+    loadExistingGrant: loadReusableGhostGrant,
     // Codex omits prompt=consent, so explicitly issue refresh tokens to native public clients.
     issueRefreshToken: async (_ctx: unknown, client: RefreshTokenClient) => shouldIssueGhostRefreshToken(client),
     // A stable token avoids consuming the credential before Codex persists a rotated replacement.
@@ -111,11 +280,17 @@ export function createGhostOAuthConfiguration(input: {
       clientIdMetadataDocument: { enabled: false },
       resourceIndicators: {
         enabled: true,
-        defaultResource: async () => resource,
+        defaultResource: async () => defaultResource,
         useGrantedResource: async () => true,
         getResourceServerInfo: async (_ctx: unknown, requestedResource: string) => {
-          if (requestedResource !== resource) throw new Error('Unknown OAuth resource')
-          return { scope: GHOST_MCP_SCOPES.join(' '), audience: resource, accessTokenTTL: 3600, accessTokenFormat: 'opaque' }
+          const definition = resourceByUrl.get(requestedResource)
+          if (!definition) throw new Error('Unknown OAuth resource')
+          return {
+            scope: definition.scopes.join(' '),
+            audience: definition.resource,
+            accessTokenTTL: 3600,
+            accessTokenFormat: 'opaque'
+          }
         }
       },
       userinfo: { enabled: false },
@@ -149,26 +324,91 @@ export function createGhostOAuthConfiguration(input: {
 }
 
 export function attachGhostOAuthEvents(provider: Provider): void {
-  provider.on('server_error', (_ctx: unknown, error: Error) => logger.error('[MCP OAuth] Provider error', error))
+  // Fire-and-forget OAuth-administration telemetry. Every `record*` call below
+  // returns synchronously and schedules its own background write; none of them
+  // may delay or fail OAuth traffic (Requirements 2.3, 4.1, 4.6, 18.3). The
+  // existing refresh alarm (`recordRefreshEvent`) keeps its OWN counting and is
+  // never touched by this instrumentation, so a refresh event is never counted
+  // twice (Requirement 4.7).
+  const telemetry = getOAuthStageInstrumentation()
+
+  provider.on('server_error', (ctx: any, error: Error) => {
+    logger.error('[MCP OAuth] Provider error', error)
+    // A provider-internal fault is a storage/processing boundary observation.
+    telemetry.recordProviderEvent('provider-storage', 'failure', ctx, { error: error as any })
+  })
+
+  // Authorization-server / protected-resource discovery only emits on failure;
+  // discovery success is observed at the metadata route wrappers.
+  provider.on('discovery.error', (ctx: any, error: Error) => {
+    telemetry.recordProviderEvent('authorization-server-discovery', 'failure', ctx, { error: error as any })
+  })
+
+  // Authorization endpoint. Client is bound here, but no subject reference is
+  // emitted (the authenticated subject is captured at the consent boundary).
+  provider.on('authorization.success', (ctx: any) => {
+    telemetry.recordProviderEvent('authorization', 'success', ctx, { includeClient: true, includeResource: true })
+  })
+  provider.on('authorization.error', (ctx: any, error: Error) => {
+    telemetry.recordProviderEvent('authorization', 'failure', ctx, { error: error as any, includeClient: true, includeResource: true })
+  })
+
+  // Dynamic client registration (a pre-login stage: no subject/client-owner).
+  provider.on('registration_create.success', (ctx: any) => {
+    telemetry.recordProviderEvent('registration', 'success', ctx)
+  })
+  provider.on('registration_create.error', (ctx: any, error: Error) => {
+    telemetry.recordProviderEvent('registration', 'failure', ctx, { error: error as any })
+  })
+
   provider.on('grant.success', (ctx: any) => {
-    if (ctx.oidc?.params?.grant_type === 'refresh_token') recordRefreshEvent('success')
+    const isRefresh = ctx.oidc?.params?.grant_type === 'refresh_token'
+    // Preserve the existing refresh alarm exactly — its own counter is separate.
+    if (isRefresh) recordRefreshEvent('success')
+    // Admin telemetry: token/code exchange vs refresh are distinct stages.
+    telemetry.recordProviderEvent(isRefresh ? 'refresh' : 'token-exchange', 'success', ctx, { includeClient: true, includeResource: true })
   })
   provider.on('grant.error', (ctx: any, error: Error & { error_detail?: unknown }) => {
-    if (ctx.oidc?.params?.grant_type === 'refresh_token') recordRefreshEvent('failure', classifyGhostRefreshFailure(error))
+    const isRefresh = ctx.oidc?.params?.grant_type === 'refresh_token'
+    if (isRefresh) recordRefreshEvent('failure', classifyGhostRefreshFailure(error))
+    telemetry.recordProviderEvent(isRefresh ? 'refresh' : 'token-exchange', 'failure', ctx, { error: error as any, includeClient: true, includeResource: true })
   })
-  provider.on('grant.destroyed', (grant: { accountId?: string }) => {
-    if (grant.accountId) {
-      void deleteMcpGraphDelegation(grant.accountId).catch(error => logger.error('[MCP Graph] Failed to remove delegated token after grant revocation', error))
+
+  // Token revocation endpoint (client-authenticated; no subject reference).
+  provider.on('revocation.error', (ctx: any, error: Error) => {
+    telemetry.recordProviderEvent('revocation', 'failure', ctx, { error: error as any, includeClient: true })
+  })
+  provider.on('grant.revoked', (ctx: any) => {
+    telemetry.recordProviderEvent('revocation', 'success', ctx, { includeClient: true })
+  })
+
+  provider.on('grant.destroyed', (grant: { accountId?: string; jti?: string; resources?: Record<string, string> }) => {
+    // Provider-storage observation for a destroyed grant artifact. The grant is
+    // a model instance (not a ctx); only its safe presence is recorded.
+    telemetry.record({ stage: 'provider-storage', outcome: 'success' })
+    if (grant.accountId && grantIncludesMcpResource(grant)) {
+      // Task 9.3: the shared per-subject Graph delegation is NOT deleted
+      // unconditionally. Instead, determine authoritatively (under a per-user
+      // fence, bounded and read-only) whether this was the user's LAST live MCP
+      // grant. Another live grant preserves the delegation; uncertain coverage
+      // preserves + schedules reconciliation; only a confirmed last live grant
+      // permits cleanup (Req 9.3, 9.5, 18.2).
+      void handleMcpGrantDestroyed(grant.accountId, grant.jti).catch(error =>
+        logger.error('[MCP Graph] Last-grant delegation cleanup failed', error))
     }
   })
 }
 
 async function createProvider(): Promise<Provider> {
   const issuer = getOAuthIssuer()
-  const resource = getMcpResourceUrl().href
+  const mcpResource = getMcpResourceUrl().href
+  const kiroCrewResource = getKiroCrewResourceUrl().href
   const jwks = await loadJwks()
   const configuration = createGhostOAuthConfiguration({
-    resource,
+    resources: [
+      { resource: mcpResource, scopes: GHOST_MCP_SCOPES },
+      { resource: kiroCrewResource, scopes: KIROCREW_SCOPES }
+    ],
     jwks,
     adapter: useDurableOAuthStore() ? DynamoOidcAdapter : undefined,
   })
@@ -176,7 +416,12 @@ async function createProvider(): Promise<Provider> {
   const provider = new Provider(issuer, configuration)
   provider.proxy = true
   attachGhostOAuthEvents(provider)
-  logger.info('[MCP OAuth] Provider initialized', { issuer, resource, authorizationTtlSeconds: getOAuthAuthorizationTtlSeconds(), baseUrl: getGhostBaseUrl().origin })
+  logger.info('[Ghost OAuth] Provider initialized', {
+    issuer,
+    resources: [mcpResource, kiroCrewResource],
+    authorizationTtlSeconds: getOAuthAuthorizationTtlSeconds(),
+    baseUrl: getGhostBaseUrl().origin
+  })
   return provider
 }
 

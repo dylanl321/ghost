@@ -111,7 +111,8 @@ export async function batchForecastCalls(
             request.metric,
             request.granularity,
             filter,
-            request.environment
+            request.environment,
+            request.proforma ? process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832' : undefined
           )
 
           return {
@@ -199,7 +200,8 @@ export async function batchForecastCalls(
           request.metric,
           request.granularity,
           filter,
-          request.environment
+          request.environment,
+          request.proforma ? process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832' : undefined
         )
 
         results.push({

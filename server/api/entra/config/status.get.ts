@@ -18,10 +18,7 @@ registerEndpoint('/api/entra/config/status', 'GET', {
   description: 'Get comprehensive status of Entra ID configuration, OIDC setup, and API keys (admin only)',
   tags: ['Configuration'],
   security: [
-    { ApiKeyAuth: [] },
-    { BearerAuth: [] },
-    { OIDCAuth: [] },
-    { DevBypass: [] }
+    { OIDCAuth: [] }
   ],
   responses: {
     200: {

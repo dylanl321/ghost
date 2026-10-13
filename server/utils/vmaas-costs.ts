@@ -18,6 +18,14 @@ import {
 export const VMAAS_ACCOUNT_ID = '650505514334'
 export const VMAAS_BILLING_ACCOUNT_ID = '871049984747'
 export const VMAAS_REGION = 'us-gov-west-1'
+
+/**
+ * Instance-level actuals are grouped on NetUnblendedCost, but queryCostDataset
+ * requires UnblendedCost to reconcile the authoritative total (see
+ * validateCostQuery). Request both so the query passes validation while the
+ * grouped per-instance amounts keep using NetUnblendedCost.
+ */
+export const VMAAS_INSTANCE_ACTUAL_METRICS = ['UnblendedCost', 'NetUnblendedCost'] as const
 const TEAM_TABLE = 'vmaas-team-registry'
 const TENANT_TABLE = 'vmaas-tenant-registry'
 const SCHEDULER_TABLE = 'SchedulerConfig'
@@ -64,6 +72,8 @@ export interface VmaasServerCost {
   schedule_savings_usd: number | null
   scheduled_estimate_available: boolean
   scheduled_estimate_reason?: string
+  actual_month_usd: number | null
+  in_fleet: boolean
 }
 
 export interface VmaasCostReport {
@@ -81,6 +91,7 @@ export interface VmaasCostReport {
     scheduled_monthly_usd: number
     always_on_monthly_usd: number
     schedule_savings_usd: number
+    actual_month_usd: number
     unavailable_server_count: number
   }
   servers: VmaasServerCost[]
@@ -221,25 +232,42 @@ function round(value: number, digits = 2): number {
   return Math.round((value + Number.EPSILON) * factor) / factor
 }
 
-function closedMonthRange(month?: string, referenceDate = new Date()): { start: string; end: string } {
+function parseMonthParts(month?: string, referenceDate = new Date(), fallback: 'previous' | 'current' = 'previous'): { year: number; monthIndex: number } {
   const match = month ? /^(\d{4})-(\d{2})$/.exec(month) : null
-  let year: number
-  let monthIndex: number
   if (month) {
     if (!match) throw new Error('VMaaS allocation month must use YYYY-MM')
-    year = Number(match[1])
-    monthIndex = Number(match[2]) - 1
+    const year = Number(match[1])
+    const monthIndex = Number(match[2]) - 1
     if (monthIndex < 0 || monthIndex > 11) throw new Error('VMaaS allocation month is invalid')
-  } else {
-    year = referenceDate.getUTCFullYear()
-    monthIndex = referenceDate.getUTCMonth() - 1
+    return { year, monthIndex }
   }
+  return {
+    year: referenceDate.getUTCFullYear(),
+    monthIndex: fallback === 'current' ? referenceDate.getUTCMonth() : referenceDate.getUTCMonth() - 1
+  }
+}
+
+function closedMonthRange(month?: string, referenceDate = new Date()): { start: string; end: string } {
+  const { year, monthIndex } = parseMonthParts(month, referenceDate, 'previous')
   const start = new Date(Date.UTC(year, monthIndex, 1))
   const end = new Date(Date.UTC(year, monthIndex + 1, 1))
   if (end > new Date(Date.UTC(referenceDate.getUTCFullYear(), referenceDate.getUTCMonth(), 1))) {
     throw new Error('VMaaS allocation reports are available only for closed months')
   }
   return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) }
+}
+
+export function reportingMonthRange(month?: string, referenceDate = new Date()): { start: string; end: string; closed: boolean } {
+  const { year, monthIndex } = parseMonthParts(month, referenceDate, 'current')
+  const start = new Date(Date.UTC(year, monthIndex, 1))
+  const monthEnd = new Date(Date.UTC(year, monthIndex + 1, 1))
+  const currentMonthStart = new Date(Date.UTC(referenceDate.getUTCFullYear(), referenceDate.getUTCMonth(), 1))
+  if (start > currentMonthStart) throw new Error('VMaaS cost reports are not available for future months')
+  const closed = monthEnd <= currentMonthStart
+  const end = closed
+    ? monthEnd
+    : new Date(Date.UTC(referenceDate.getUTCFullYear(), referenceDate.getUTCMonth(), referenceDate.getUTCDate()))
+  return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10), closed }
 }
 
 function tagValue(key: string, value: string | undefined): string {
@@ -450,7 +478,21 @@ async function loadActual(source: 'billable' | 'proforma', billingAccountId: str
 }
 
 async function loadAllocationInputs(month: string | undefined, referenceDate: Date) {
-  const range = closedMonthRange(month, referenceDate)
+  let range: { start: string; end: string }
+  try {
+    range = closedMonthRange(month, referenceDate)
+  } catch (error) {
+    const reporting = reportingMonthRange(month, referenceDate)
+    return {
+      range: { start: reporting.start, end: reporting.end },
+      groups: [] as VmaasBillableGroup[],
+      billableTotal: Number.NaN,
+      proformaTotal: Number.NaN,
+      estimated: true,
+      dataThrough: null,
+      issues: [error instanceof Error ? error.message : String(error)]
+    }
+  }
   const accountFilter = { Dimensions: { Key: 'LINKED_ACCOUNT', Values: [VMAAS_BILLING_ACCOUNT_ID], MatchOptions: ['EQUALS'] } }
   const tenantFilter = {
     And: [
@@ -525,6 +567,47 @@ async function loadAllocationInputs(month: string | undefined, referenceDate: Da
   }
 }
 
+async function loadInstanceActuals(month: string | undefined, referenceDate: Date): Promise<{
+  range: { start: string; end: string; closed: boolean }
+  actuals: VmaasInstanceActual[]
+  dataThrough: string | null
+}> {
+  const range = reportingMonthRange(month, referenceDate)
+  if (range.start === range.end) return { range, actuals: [], dataThrough: null }
+  const result = await queryCostDataset({
+    startDate: range.start,
+    endDate: range.end,
+    granularity: 'MONTHLY',
+    metrics: [...VMAAS_INSTANCE_ACTUAL_METRICS],
+    groupBy: [{ type: 'TAG', key: 'InstanceID' }, { type: 'TAG', key: 'TenantID' }],
+    filter: {
+      And: [
+        { Dimensions: { Key: 'LINKED_ACCOUNT', Values: [VMAAS_BILLING_ACCOUNT_ID], MatchOptions: ['EQUALS'] } },
+        { Tags: { Key: 'Module', Values: ['shared-vpc-tenant'], MatchOptions: ['EQUALS'] } }
+      ]
+    }
+  }, {
+    environment: 'commercial',
+    source: 'billable',
+    accountId: process.env.AWS_MASTER_ACCOUNT_ID || '205950196477'
+  })
+  const actuals: VmaasInstanceActual[] = []
+  for (const period of result.resultsByTime) {
+    for (const group of period.Groups || []) {
+      const instanceTag = tagValue('InstanceID', group.Keys?.[0])
+      const tenantId = tagValue('TenantID', group.Keys?.[1])
+      const amount = Number(group.Metrics?.NetUnblendedCost?.Amount || 0)
+      if (!amount) continue
+      actuals.push({
+        instance_id: INSTANCE_ID.test(instanceTag) ? instanceTag : '',
+        tenant_id: tenantId,
+        actual_month_usd: amount
+      })
+    }
+  }
+  return { range, actuals, dataThrough: result.dataset.dataThroughDate }
+}
+
 function sum(values: Array<number | null>): number {
   return values.reduce<number>((total, value) => total + (value || 0), 0)
 }
@@ -534,19 +617,72 @@ export function aggregateVmaasProjections(servers: VmaasServerCost[]) {
     scheduled_monthly_usd: round(sum(servers.map(server => server.scheduled_monthly_usd))),
     always_on_monthly_usd: round(sum(servers.map(server => server.always_on_monthly_usd))),
     schedule_savings_usd: round(sum(servers.map(server => server.schedule_savings_usd))),
+    actual_month_usd: round(sum(servers.map(server => server.actual_month_usd))),
     unavailable_server_count: servers.filter(server => !server.scheduled_estimate_available).length
   }
 }
 
+export interface VmaasInstanceActual {
+  instance_id: string
+  tenant_id: string
+  actual_month_usd: number
+}
+
+const INSTANCE_ID = /^i-[0-9a-f]{8,17}$/
+
+export function mergeVmaasInstanceActuals(servers: VmaasServerCost[], actuals: VmaasInstanceActual[]): VmaasServerCost[] {
+  const remaining = new Map<string, VmaasInstanceActual>()
+  for (const actual of actuals) {
+    const key = actual.instance_id || `unmapped:${actual.tenant_id}`
+    const current = remaining.get(key)
+    remaining.set(key, {
+      instance_id: actual.instance_id,
+      tenant_id: actual.tenant_id,
+      actual_month_usd: (current?.actual_month_usd || 0) + actual.actual_month_usd
+    })
+  }
+  const merged = servers.map(server => {
+    const actual = remaining.get(server.instance_id)
+    if (actual) remaining.delete(server.instance_id)
+    return { ...server, actual_month_usd: actual ? round(actual.actual_month_usd) : 0, in_fleet: true }
+  })
+  for (const actual of remaining.values()) {
+    merged.push({
+      instance_id: actual.instance_id || `unmapped:${actual.tenant_id || 'shared'}`,
+      name: actual.instance_id || 'Untagged VMaaS usage',
+      team_id: '',
+      department: '',
+      operating_system: 'Linux',
+      instance_type: '',
+      region: VMAAS_REGION,
+      state: actual.instance_id ? 'terminated' : 'unmapped',
+      schedule: '',
+      compute_hourly_usd: null,
+      storage_monthly_usd: null,
+      scheduled_hours: null,
+      scheduled_monthly_usd: null,
+      always_on_hours: 0,
+      always_on_monthly_usd: null,
+      schedule_savings_usd: null,
+      scheduled_estimate_available: false,
+      scheduled_estimate_reason: 'Server is not in the current fleet',
+      actual_month_usd: round(actual.actual_month_usd),
+      in_fleet: false
+    })
+  }
+  return merged
+}
+
 async function buildReport(referenceDate = new Date(), allocationMonth?: string): Promise<VmaasCostReport> {
-  const [instances, teams, tenants, schedulerRows, billable, proforma, allocationInput] = await Promise.all([
+  const [instances, teams, tenants, schedulerRows, billable, proforma, allocationInput, instanceActuals] = await Promise.all([
     loadInstances(),
     scanTable(TEAM_TABLE),
     scanTable(TENANT_TABLE),
     scanTable(SCHEDULER_TABLE),
     loadActual('billable', process.env.AWS_MASTER_ACCOUNT_ID || '205950196477', referenceDate),
     loadActual('proforma', process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832', referenceDate),
-    loadAllocationInputs(allocationMonth, referenceDate)
+    loadAllocationInputs(allocationMonth, referenceDate),
+    loadInstanceActuals(allocationMonth, referenceDate)
   ])
   const volumes = await loadVolumes(instances)
   const teamMap = new Map(teams.map(team => [String(team.team_id || ''), team]))
@@ -554,7 +690,7 @@ async function buildReport(referenceDate = new Date(), allocationMonth?: string)
   const scheduleMap = new Map(schedulerRows.filter(row => row.type === 'schedule').map(row => [String(row.name), row as SchedulerSchedule]))
   const periods = schedulerRows.filter(row => row.type === 'period') as SchedulerPeriod[]
 
-  const servers = await Promise.all(instances.map(async instance => {
+  const projected = await Promise.all(instances.map(async instance => {
     const tags = tagsOf(instance)
     const os = normalizeVmaasOperatingSystem(instance, tags)
     const scheduleName = tags.Schedule || ''
@@ -608,9 +744,21 @@ async function buildReport(referenceDate = new Date(), allocationMonth?: string)
       always_on_monthly_usd: alwaysOnMonthly === null ? null : round(alwaysOnMonthly),
       schedule_savings_usd: scheduledMonthly === null || alwaysOnMonthly === null ? null : round(Math.max(0, alwaysOnMonthly - scheduledMonthly)),
       scheduled_estimate_available: Boolean(scheduleHours.available && compute && storageAvailable),
-      ...(!scheduleHours.available ? { scheduled_estimate_reason: scheduleHours.reason } : {})
+      ...(!scheduleHours.available ? { scheduled_estimate_reason: scheduleHours.reason } : {}),
+      actual_month_usd: 0,
+      in_fleet: true
     } satisfies VmaasServerCost
   }))
+
+  const servers = mergeVmaasInstanceActuals(projected, instanceActuals.actuals).map(server => {
+    if (server.in_fleet) return server
+    const actual = instanceActuals.actuals.find(row => (row.instance_id || `unmapped:${row.tenant_id}`) === server.instance_id || row.instance_id === server.instance_id)
+    if (!actual?.tenant_id) return server
+    const tenant = tenantMap.get(actual.tenant_id) || {}
+    const teamId = String(tenant.team_id || '')
+    const team = teamMap.get(teamId)
+    return { ...server, team_id: teamId, department: String(team?.department || '') }
+  })
 
   servers.sort((a, b) => a.team_id.localeCompare(b.team_id) || a.name.localeCompare(b.name))
   const allocationIssues = [...allocationInput.issues]
@@ -675,15 +823,14 @@ async function buildReport(referenceDate = new Date(), allocationMonth?: string)
       rows: []
     }
   }
-  const nextMonth = new Date(Date.UTC(referenceDate.getUTCFullYear(), referenceDate.getUTCMonth() + 1, 1))
   return {
     account_id: VMAAS_ACCOUNT_ID,
     currency: 'USD',
     generated_at: referenceDate.toISOString(),
     month: {
-      start: new Date(Date.UTC(referenceDate.getUTCFullYear(), referenceDate.getUTCMonth(), 1)).toISOString().slice(0, 10),
-      end: nextMonth.toISOString().slice(0, 10),
-      data_through: billable?.dataThroughDate || proforma?.dataThroughDate || null
+      start: instanceActuals.range.start,
+      end: instanceActuals.range.end,
+      data_through: instanceActuals.dataThrough || billable?.dataThroughDate || proforma?.dataThroughDate || null
     },
     actuals: {
       billable_mtd_usd: billable ? round(billable.total) : null,
@@ -705,8 +852,8 @@ export async function getVmaasCostReport(month?: string): Promise<VmaasCostRepor
   })
 }
 
-export async function getVmaasInstanceCost(instanceId: string): Promise<VmaasServerCost | null> {
-  if (!/^i-[0-9a-f]{8,17}$/.test(instanceId)) return null
-  const report = await getVmaasCostReport()
+export async function getVmaasInstanceCost(instanceId: string, month?: string): Promise<VmaasServerCost | null> {
+  if (!INSTANCE_ID.test(instanceId)) return null
+  const report = await getVmaasCostReport(month)
   return report.servers.find(server => server.instance_id === instanceId) || null
 }

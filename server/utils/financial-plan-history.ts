@@ -34,11 +34,11 @@ function monthlyValueAttributes(monthlyValues: Record<string, number>) {
   return attributes
 }
 
-function readMonthlyValues(item: Record<string, any> | null, year: number) {
+function readMonthlyValues(item: Record<string, any> | null, years: Set<number>) {
   const monthlyValues: Record<string, number> = {}
   for (const [key, value] of Object.entries(item || {})) {
     const match = key.match(/^(\d{2})\/(\d{4})$/)
-    if (match && Number(match[2]) === year) monthlyValues[`${match[2]}-${match[1]}-01`] = Number(value)
+    if (match && years.has(Number(match[2]))) monthlyValues[`${match[2]}-${match[1]}-01`] = Number(value)
   }
   return monthlyValues
 }
@@ -56,7 +56,8 @@ export async function saveFinancialPlan(input: {
   const plan = config.financialPlanOverrides
   const history = config.financialPlanHistory
   const current = await getItem(plan.tableName, { pk: input.department }, plan.environment, plan.accountId)
-  const previousMonthlyValues = readMonthlyValues(current, input.year)
+  const affectedYears = new Set(Object.keys(input.monthlyValues).map(month => Number(month.slice(0, 4))).filter(Number.isInteger))
+  const previousMonthlyValues = readMonthlyValues(current, affectedYears.size ? affectedYears : new Set([input.year]))
   const createdAt = new Date().toISOString()
   const entry: FinancialPlanHistoryEntry = {
     pk: financialPlanKey(input.department, input.year),

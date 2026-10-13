@@ -1,0 +1,23 @@
+{
+  "items": [
+    {
+      "tenantId": "tenant-fake-0001",
+      "spaceId": "space-0000-fake-aaaa",
+      "serverSequence": 10,
+      "kind": "event",
+      "objectId": "evt-fake-0001",
+      "safeProjection": { "type": "check-started", "checkId": "chk-fake-aaaa" }
+    },
+    {
+      "tenantId": "tenant-fake-0001",
+      "spaceId": "space-0000-fake-aaaa",
+      "serverSequence": 12,
+      "kind": "event",
+      "objectId": "evt-fake-0002",
+      "safeProjection": { "type": "check-finished", "checkId": "chk-fake-aaaa" }
+    }
+  ],
+  "highWaterMark": 12,
+  "pageSize": 50,
+  "nextCursor": "cursor-fake-opaque-eyJ2IjoxfQ"
+}

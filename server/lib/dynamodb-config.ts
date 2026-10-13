@@ -31,14 +31,9 @@ export interface DynamoDBConfig {
   externalAccounts: DynamoDBTableConfig
   userPreferences: DynamoDBTableConfig
   accountNotes: DynamoDBTableConfig
-  chatThreads: DynamoDBTableConfig
-  chatMessages: DynamoDBTableConfig
   siteConfig: DynamoDBTableConfig
   adminNotifications: DynamoDBTableConfig
-  streamingMetrics: DynamoDBTableConfig
-  asyncChatJobs: DynamoDBTableConfig
   datasetExportJobs: DynamoDBTableConfig
-  asyncMetrics: DynamoDBTableConfig
   aiUsage: DynamoDBTableConfig
   budgetAlerts: DynamoDBTableConfig
   budgetAlertConfig: DynamoDBTableConfig
@@ -90,6 +85,16 @@ export function mergeDynamoDBConfig(
 ): DynamoDBConfig {
   const merged = { ...defaults, ...configured }
 
+  // ECS supplies the deployed table names; older secrets still name the dev tables.
+  for (const [key, tableName] of [
+    ['apiKeys', process.env.DYNAMODB_API_KEYS_TABLE],
+    ['apiKeysUsage', process.env.DYNAMODB_API_KEY_USAGE_TABLE]
+  ] as const) {
+    if (tableName) {
+      merged[key] = { ...defaults[key], ...configured[key], tableName }
+    }
+  }
+
   for (const key of BUDGET_ALERT_CONFIG_KEYS) {
     merged[key] = {
       ...defaults[key],
@@ -107,6 +112,11 @@ export function mergeDynamoDBConfig(
 let cachedConfig: DynamoDBConfig | null = null
 let configLoadedAt: number | null = null
 const CONFIG_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+// The config cache refreshes every 5 minutes, so a stale secret would log the
+// same missing-key warning repeatedly. Suppress it per process once we've
+// warned for a given sorted missing-key set; a changed set warns once more.
+let lastMissingKeysFingerprint: string | null = null
 
 /**
  * Get DynamoDB configuration from Secrets Manager
@@ -152,11 +162,26 @@ async function loadFromSecretsManager(): Promise<Partial<DynamoDBConfig> | null>
   }
 }
 
+export function isProductionDeployment(env: NodeJS.ProcessEnv = process.env): boolean {
+  const explicitEnvironment = env.GHOST_ENV?.trim().toLowerCase()
+  if (explicitEnvironment) return explicitEnvironment === 'prod' || explicitEnvironment === 'production'
+
+  // Nitro production builds can inline NODE_ENV="production" even when the
+  // running ECS service is dev. The environment-specific secret name remains
+  // runtime configuration, so use it as the compatibility signal.
+  const secretName = env.DYNAMODB_CONFIG_SECRET_NAME?.trim().toLowerCase()
+  if (secretName?.endsWith('-dev')) return false
+  if (secretName?.endsWith('-prod')) return true
+
+  const nodeEnv = env.NODE_ENV?.trim().toLowerCase()
+  return nodeEnv === 'production' || nodeEnv === 'prod'
+}
+
 /**
  * Get DynamoDB configuration from environment variables (fallback)
  */
 function loadFromEnvironment(): DynamoDBConfig {
-  const isProduction = process.env.NODE_ENV?.toLowerCase() === 'production' || process.env.NODE_ENV?.toLowerCase() === 'prod'
+  const isProduction = isProductionDeployment()
   const govCloudRegion = process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1'
   const commercialRegion = process.env.AWS_COMMERCIAL_REGION || 'us-east-1'
   const govCloudAccountId = process.env.AWS_GOVCLOUD_ORGANIZATIONS_ACCOUNT_ID || ''
@@ -234,18 +259,6 @@ function loadFromEnvironment(): DynamoDBConfig {
       region: govCloudRegion,
       accountId: deploymentAccountId
     },
-    chatThreads: {
-      tableName: process.env.CHAT_THREADS_TABLE_NAME || 'ghost-chat-threads',
-      environment: 'govcloud',
-      region: govCloudRegion,
-      accountId: deploymentAccountId
-    },
-    chatMessages: {
-      tableName: process.env.CHAT_MESSAGES_TABLE_NAME || 'ghost-chat-messages',
-      environment: 'govcloud',
-      region: govCloudRegion,
-      accountId: deploymentAccountId
-    },
     siteConfig: {
       tableName: process.env.SITE_CONFIG_TABLE || 'ghost-site-config',
       environment: 'govcloud',
@@ -258,26 +271,8 @@ function loadFromEnvironment(): DynamoDBConfig {
       region: govCloudRegion,
       accountId: deploymentAccountId
     },
-    streamingMetrics: {
-      tableName: process.env.STREAMING_METRICS_TABLE_NAME || 'ghost-streaming-metrics',
-      environment: 'govcloud',
-      region: govCloudRegion,
-      accountId: deploymentAccountId
-    },
-    asyncChatJobs: {
-      tableName: process.env.AWS_ASYNC_JOBS_TABLE_NAME || 'ghost-async-chat-jobs',
-      environment: 'govcloud',
-      region: govCloudRegion,
-      accountId: deploymentAccountId
-    },
     datasetExportJobs: {
       tableName: process.env.DATASET_EXPORT_JOBS_TABLE_NAME || 'ghost-dataset-export-jobs',
-      environment: 'govcloud',
-      region: govCloudRegion,
-      accountId: deploymentAccountId
-    },
-    asyncMetrics: {
-      tableName: process.env.AWS_ASYNC_METRICS_TABLE_NAME || 'ghost-async-metrics',
       environment: 'govcloud',
       region: govCloudRegion,
       accountId: deploymentAccountId
@@ -407,14 +402,24 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
     }
 
     // Warn if the secret was missing keys the defaults supplied (signals a
-    // stale secret that should be refreshed), so the gap is observable.
+    // stale secret that should be refreshed), so the gap is observable. Sort
+    // the keys for a stable fingerprint/message and log only once per process
+    // for an unchanged missing-key set to avoid flooding on each cache refresh.
     const missingKeys = (Object.keys(envConfig) as (keyof DynamoDBConfig)[])
       .filter(k => !(k in secretsConfig))
+      .sort()
     if (missingKeys.length > 0) {
-      logger.warn(
-        `DynamoDB config from secret was missing ${missingKeys.length} table key(s); ` +
-        `using env defaults for: ${missingKeys.join(', ')}`
-      )
+      const fingerprint = missingKeys.join(',')
+      if (fingerprint !== lastMissingKeysFingerprint) {
+        lastMissingKeysFingerprint = fingerprint
+        logger.warn(
+          `DynamoDB config from secret was missing ${missingKeys.length} table key(s); ` +
+          `using env defaults for: ${missingKeys.join(', ')}. ` +
+          `Regenerate the DynamoDB config secret to include these keys.`
+        )
+      }
+    } else {
+      lastMissingKeysFingerprint = null
     }
 
     cachedConfig = mergedConfig

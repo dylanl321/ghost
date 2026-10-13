@@ -3,52 +3,50 @@
  * List API keys for the authenticated user
  */
 
-import { defineEventHandler, getQuery } from 'h3'
-import { createError } from 'h3'
-import { listApiKeys, getApiKeyStats } from '../../../utils/api-keys'
-import { getAuthContext, requireScope } from '../../../middleware/entra-auth'
+import { createError, defineEventHandler } from 'h3'
+import { listApiKeys } from '../../../utils/api-keys'
+import { getAuthContext, requireOIDCAuth } from '../../../middleware/entra-auth'
 import type { ApiKey, EntraAPIResponse } from '../../../types/entra'
 import { logger } from '../../../utils/logger'
 
 interface ApiKeysResponse {
   keys: Omit<ApiKey, 'keyHash' | 'salt'>[]
-  stats: Awaited<ReturnType<typeof getApiKeyStats>>
+  stats: { total: number; active: number; expired: number; byScope: Record<string, number> }
   canCreateKeys: boolean
 }
 
 export default defineEventHandler(async (event): Promise<EntraAPIResponse<ApiKeysResponse>> => {
   try {
-    // Require read access to view API keys
-    await requireScope(event, 'read')
+    requireOIDCAuth(event)
     
     // Get authenticated user context
     const authContext = getAuthContext(event)
-    const userId = authContext.user?.email || authContext.user?.displayName || 'unknown'
-    
-    // Get query parameters
-    const query = getQuery(event)
-    const includeAll = query.all === 'true' && authContext.scopes?.includes('admin')
+    const userIdValue = authContext.user?.email || authContext.user?.preferred_username ||
+      authContext.user?.claims?.email || authContext.user?.claims?.preferred_username
+    if (!userIdValue) throw createError({ statusCode: 403, statusMessage: 'A verified user identity is required' })
+    const userId = String(userIdValue).toLowerCase()
     
     logger.info(`Listing API keys for ${userId}`)
     
     // Get API keys
-    const apiKeys = await listApiKeys(includeAll ? undefined : userId)
-    
-    // Get statistics (only if admin)
-    let stats = { total: 0, active: 0, expired: 0, byScope: {} }
-    if (authContext.scopes?.includes('admin')) {
-      stats = await getApiKeyStats()
+    const apiKeys = await listApiKeys(userId)
+    const now = new Date()
+    const stats = {
+      total: apiKeys.length,
+      active: apiKeys.filter(key => key.isActive && (!key.expiresAt || key.expiresAt > now)).length,
+      expired: apiKeys.filter(key => !key.isActive || Boolean(key.expiresAt && key.expiresAt <= now)).length,
+      byScope: apiKeys.flatMap(key => key.scopes).reduce<Record<string, number>>((counts, scope) => {
+        counts[scope] = (counts[scope] || 0) + 1
+        return counts
+      }, {})
     }
-    
-    // Check if user can create keys
-    const canCreateKeys = authContext.scopes?.includes('admin') || false
     
     return {
       success: true,
       data: {
         keys: apiKeys,
         stats,
-        canCreateKeys
+        canCreateKeys: true
       }
     }
   } catch (error: any) {

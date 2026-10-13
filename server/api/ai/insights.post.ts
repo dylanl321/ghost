@@ -9,6 +9,34 @@ import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { insightPrompts } from '../../utils/ai-insight-prompts'
 import { insightCache, CacheManager } from '../../utils/cache-manager'
 import { logger } from '../../utils/logger'
+import { registerEndpoint } from '../../plugins/swagger'
+
+registerEndpoint('/api/ai/insights', 'POST', {
+  summary: 'Generate a bounded AI insight',
+  description: 'Generate dashboard insights or cost-report-analysis for PDF exports.',
+  tags: ['AI'],
+  requestBody: {
+    required: true,
+    content: {
+      'application/json': {
+        schema: {
+          type: 'object',
+          required: ['type'],
+          properties: {
+            type: { type: 'string', enum: Object.keys(insightPrompts) },
+            context: { type: 'object', additionalProperties: true },
+            refresh: { type: 'boolean' }
+          }
+        }
+      }
+    }
+  },
+  responses: {
+    200: { description: 'Insight returned in data.insight' },
+    400: { description: 'Missing or unknown insight type' },
+    500: { description: 'Insight generation failed' }
+  }
+})
 
 interface InsightRequest {
   type: string
@@ -54,7 +82,7 @@ export default handleAsync(defineEventHandler(async (event) => {
     systemPrompt: promptConfig.systemPrompt,
     model: 'claude-sonnet',
     temperature: 0.3,
-    maxTokens: 120
+    maxTokens: promptConfig.maxTokens ?? 120
   })
 
   if (!result.success || !result.content) {

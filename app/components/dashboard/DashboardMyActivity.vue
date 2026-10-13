@@ -15,10 +15,6 @@
           <UIcon name="i-heroicons-eye" class="w-3.5 h-3.5 text-blue-500" />
           <span class="text-[11px] font-medium text-blue-600 dark:text-blue-400">{{ viewCount }}</span>
         </div>
-        <div v-if="chatCount > 0" class="flex items-center gap-1.5 px-2 py-1 rounded-full bg-purple-50 dark:bg-purple-900/20">
-          <UIcon name="i-heroicons-chat-bubble-left-right" class="w-3.5 h-3.5 text-purple-500" />
-          <span class="text-[11px] font-medium text-purple-600 dark:text-purple-400">{{ chatCount }}</span>
-        </div>
         <div v-if="actionCount > 0" class="flex items-center gap-1.5 px-2 py-1 rounded-full bg-cyan-50 dark:bg-cyan-900/20">
           <UIcon name="i-heroicons-bolt" class="w-3.5 h-3.5 text-cyan-500" />
           <span class="text-[11px] font-medium text-cyan-600 dark:text-cyan-400">{{ actionCount }}</span>
@@ -93,13 +89,12 @@ const props = withDefaults(defineProps<{
 
 const NuxtLink = resolveComponent('NuxtLink')
 const { recentAccounts } = useRecentAccounts()
-const chatStore = useChatThreadsStore()
 const { actionItems: cloudActions, fetchServerActions } = useMyActivity()
 
 // Fetch server-side actions on mount for cross-device persistence
 onMounted(() => fetchServerActions())
 
-type ActivityCategory = 'view' | 'chat' | 'cost' | 'export' | 'favorite' | 'search' | 'dashboard' | 'action'
+type ActivityCategory = 'view' | 'cost' | 'export' | 'favorite' | 'search' | 'dashboard' | 'action'
 
 interface ActivityItem {
   id: string
@@ -112,7 +107,6 @@ interface ActivityItem {
 
 const activityMeta: Record<ActivityCategory, { icon: string; bg: string; text: string; dot: string }> = {
   view: { icon: 'i-heroicons-eye', bg: 'bg-blue-50 dark:bg-blue-900/20 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30', text: 'text-blue-500', dot: 'bg-blue-400' },
-  chat: { icon: 'i-heroicons-chat-bubble-left-right', bg: 'bg-purple-50 dark:bg-purple-900/20 group-hover:bg-purple-100 dark:group-hover:bg-purple-900/30', text: 'text-purple-500', dot: 'bg-purple-400' },
   cost: { icon: 'i-heroicons-currency-dollar', bg: 'bg-cyan-50 dark:bg-cyan-900/20 group-hover:bg-cyan-100 dark:group-hover:bg-cyan-900/30', text: 'text-cyan-500', dot: 'bg-cyan-400' },
   export: { icon: 'i-heroicons-arrow-down-tray', bg: 'bg-emerald-50 dark:bg-emerald-900/20 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900/30', text: 'text-emerald-500', dot: 'bg-emerald-400' },
   favorite: { icon: 'i-heroicons-star', bg: 'bg-yellow-50 dark:bg-yellow-900/20 group-hover:bg-yellow-100 dark:group-hover:bg-yellow-900/30', text: 'text-yellow-500', dot: 'bg-yellow-400' },
@@ -135,7 +129,7 @@ function formatTimeAgo(ms: number): string {
 function actionTypeToCategory(type: string): ActivityCategory {
   const prefix = type.split('.')[0] || ''
   if (prefix === 'account') return 'favorite'
-  if (['cost', 'export', 'search', 'dashboard', 'chat'].includes(prefix)) return prefix as ActivityCategory
+  if (['cost', 'export', 'search', 'dashboard'].includes(prefix)) return prefix as ActivityCategory
   return 'action'
 }
 
@@ -153,8 +147,6 @@ const actionLabels: Record<string, string> = {
   'dashboard.daterange_change': 'Changed date range',
   'search.explorer': 'Searched accounts',
   'search.cost': 'Searched costs',
-  'chat.thread_create': 'Created chat thread',
-  'chat.thread_share': 'Shared chat thread',
 }
 
 const activityItems = computed<ActivityItem[]>(() => {
@@ -174,22 +166,9 @@ const activityItems = computed<ActivityItem[]>(() => {
     })
   }
 
-  // Chat threads
-  for (const thread of chatStore.threads) {
-    if (thread.isArchived) continue
-    const ts = new Date(thread.lastMessageAt).getTime()
-    items.push({
-      id: `chat-${thread.id}`,
-      type: 'chat',
-      label: `Chat: ${thread.title || 'Untitled'}`,
-      timestamp: ts,
-      timeAgo: formatTimeAgo(now - ts),
-      link: `/chat?thread=${thread.id}`,
-    })
-  }
-
   // Action items from hybrid composable (local + server)
   for (const action of cloudActions.value) {
+    if (action.type.startsWith('chat.') || action.type.startsWith('ai.chat.')) continue
     const category = actionTypeToCategory(action.type)
     items.push({
       id: `action-${action.type}-${action.timestamp}`,
@@ -204,8 +183,7 @@ const activityItems = computed<ActivityItem[]>(() => {
 })
 
 const viewCount = computed(() => activityItems.value.filter(i => i.type === 'view').length)
-const chatCount = computed(() => activityItems.value.filter(i => i.type === 'chat').length)
-const actionCount = computed(() => activityItems.value.filter(i => !['view', 'chat'].includes(i.type)).length)
+const actionCount = computed(() => activityItems.value.filter(i => !['view'].includes(i.type)).length)
 
 const displayedItems = computed(() => {
   if (props.displayStyle === 'third') return activityItems.value.slice(0, 4)

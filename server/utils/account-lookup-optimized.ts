@@ -156,7 +156,7 @@ async function getAccountByEmail(
       }))
       
       if (result.Items && result.Items.length > 0) {
-        account = unmarshall(result.Items[0])
+        account = unmarshall(result.Items[0]!)
       }
     } catch (gsiError: any) {
       // GSI doesn't exist, fall back to Scan
@@ -184,6 +184,23 @@ async function getAccountByEmail(
       } else {
         throw gsiError
       }
+    }
+
+    // Some deployments have an email index over a legacy field name. Fall
+    // back when the index exists but returns no item for awsAccountEmail.
+    if (!account) {
+      const { scanItems } = await import('./dynamodb')
+      const scanResult = await scanItems(
+        await getAccountsTableName(),
+        undefined,
+        undefined,
+        undefined,
+        'govcloud'
+      )
+      account = scanResult.items.find(item =>
+        [item.awsAccountEmail, item.accountEmail, item.email]
+          .some(value => typeof value === 'string' && value.toLowerCase() === email.toLowerCase())
+      ) || null
     }
     
     if (!account) return null
