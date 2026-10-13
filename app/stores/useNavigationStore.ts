@@ -59,11 +59,6 @@ export const useNavigationStore = defineStore('navigation', () => {
       reason: 'Analytics page needs maximum viewport width for visualizations'
     },
     {
-      path: '/chat',
-      rule: 'default-collapsed',
-      reason: 'Chat interface benefits from maximum viewport width for better conversation flow'
-    },
-    {
       path: '/reports/datasets',
       rule: 'default-collapsed',
       reason: 'Dataset reports page benefits from more screen real estate for query builder and preview'

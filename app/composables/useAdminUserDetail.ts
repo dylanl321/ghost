@@ -89,8 +89,6 @@ const ACTION_TYPE_LABELS: Record<string, string> = {
   'dashboard.daterange_change': 'Date Range',
   'search.explorer': 'Search',
   'search.cost': 'Cost Search',
-  'chat.thread_create': 'New Chat',
-  'chat.thread_share': 'Share Chat',
 }
 
 export function formatActionType(type: string): string {

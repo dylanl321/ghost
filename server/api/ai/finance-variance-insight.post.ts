@@ -360,7 +360,7 @@ function buildPrompt(
   const variance = category.ytdActual - category.ytdBudget
   const variancePct = category.ytdBudget > 0 ? (variance / category.ytdBudget) * 100 : 0
 
-  lines.push(`Analyze the AWS cost variance for this GDMS Finance category and write a detailed FinOps explanation.`)
+  lines.push(`Write an executive variance summary for this GDMS Finance category.`)
   lines.push(``)
   lines.push(`## Category Overview`)
   lines.push(`- Category: ${category.name}`)
@@ -378,7 +378,7 @@ function buildPrompt(
   )
   if (visibleAccounts.length) {
     lines.push(`## Account Breakdown`)
-    for (const acct of visibleAccounts.sort((a, b) => b.ytdActual - a.ytdActual)) {
+    for (const acct of visibleAccounts.sort((a, b) => b.ytdActual - a.ytdActual).slice(0, 3)) {
       const months = Object.entries(acct.monthlyActuals)
         .filter(([m]) => m <= ytdCutoff)
         .sort(([a], [b]) => a.localeCompare(b))
@@ -414,7 +414,7 @@ function buildPrompt(
   if (breakdown.length) {
     const priorMap = new Map(priorBreakdown.map(s => [s.service, s]))
     lines.push(`## Service & Usage Type Breakdown`)
-    for (const svc of breakdown.slice(0, 10)) {
+    for (const svc of breakdown.slice(0, 3)) {
       const prior = priorMap.get(svc.service)
       const yoyPct = prior && prior.total > 0
         ? ` | YoY: ${((svc.total - prior.total) / prior.total * 100).toFixed(1)}%`
@@ -450,7 +450,9 @@ function buildPrompt(
 
 // ── System prompt ─────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are a senior AWS FinOps analyst writing a concise variance summary for a GDMS Finance cost category in an internal dashboard.
+const SYSTEM_PROMPT = `You are a GDMS Finance executive analyst writing a variance summary.
+
+Write one or two short sentences, 45 words maximum. State the variance direction and magnitude, then name the single strongest root cause. Mention a recent shift only when material. Do not list evidence, recommend actions, or add caveats.
 
 Your audience is GDMS Finance staff and IT leadership. Write 2–3 sentences of plain prose — no bullet points, no headers, no lists.
 
@@ -488,7 +490,7 @@ export default handleAsync(defineEventHandler(async (event) => {
 
   const { category, department, year, refresh } = body
 
-  const cacheKey = CacheManager.generateKey('finance-variance-insight-v3', {
+  const cacheKey = CacheManager.generateKey('finance-variance-insight-v4', {
     dept: department,
     cat: category.name,
     year,

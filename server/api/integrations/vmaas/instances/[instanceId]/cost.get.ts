@@ -1,4 +1,4 @@
-import { createError, defineEventHandler, getRouterParam } from 'h3'
+import { createError, defineEventHandler, getQuery, getRouterParam } from 'h3'
 import { requireScope } from '../../../../../middleware/entra-auth'
 import { registerEndpoint } from '../../../../../plugins/swagger'
 import { sendSuccess } from '../../../../../utils/api-response'
@@ -15,7 +15,8 @@ registerEndpoint('/api/integrations/vmaas/instances/{instanceId}/cost', 'GET', {
 export default defineEventHandler(async event => {
   await requireScope(event, 'vmaas:costs:read')
   const instanceId = getRouterParam(event, 'instanceId') || ''
-  const projection = await getVmaasInstanceCost(instanceId)
+  const month = String(getQuery(event).month || '') || undefined
+  const projection = await getVmaasInstanceCost(instanceId, month)
   if (!projection) throw createError({ statusCode: 404, statusMessage: 'Managed VMaaS server not found' })
   return sendSuccess(event, projection)
 })

@@ -5,6 +5,7 @@
 
 import { getCostForecast } from './cost-explorer'
 import { logger } from './logger'
+import type { Expression } from '@aws-sdk/client-cost-explorer'
 
 interface ForecastRequest {
   accountId: string
@@ -24,6 +25,35 @@ interface ForecastResult {
     forecastResultsByTime: any[]
   }
   error?: string
+  errorName?: string
+  retryable?: boolean
+}
+
+/** Cost Explorer cannot create a forecast without enough historical data. */
+export function isNonRetryableForecastError(error: unknown): boolean {
+  const candidate = error as { name?: string, message?: string } | null
+  return candidate?.name === 'DataUnavailableException' ||
+    candidate?.message?.includes('Insufficient amount of historical data') === true
+}
+
+function boundedErrorName(error: unknown): string {
+  const name = (error as { name?: unknown } | null)?.name
+  return typeof name === 'string' && name.length > 0 ? name.slice(0, 80) : 'UnknownError'
+}
+
+function summarizeErrorNames(results: ForecastResult[]): Record<string, number> {
+  const counts = new Map<string, number>()
+  for (const result of results) {
+    if (!result.success) {
+      const name = (result.errorName || 'UnknownError').slice(0, 80)
+      counts.set(name, (counts.get(name) || 0) + 1)
+    }
+  }
+  return Object.fromEntries(
+    [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+  )
 }
 
 /**
@@ -36,13 +66,15 @@ export async function batchForecastCalls(
     delayBetweenBatches?: number
     maxRetries?: number
     retryDelay?: number
+    forecastFn?: typeof getCostForecast
   } = {}
 ): Promise<ForecastResult[]> {
   const {
     batchSize = 15,
     delayBetweenBatches = 200, // milliseconds
     maxRetries = 2,
-    retryDelay = 1000 // milliseconds
+    retryDelay = 1000, // milliseconds
+    forecastFn = getCostForecast
   } = options
 
   const results: ForecastResult[] = []
@@ -58,7 +90,7 @@ export async function batchForecastCalls(
 
   // Process each batch
   for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
-    const batch = batches[batchIndex]
+    const batch = batches[batchIndex]!
     logger.info(`[ForecastBatcher] Processing batch ${batchIndex + 1}/${batches.length} (${batch.length} accounts)`)
 
     // Process batch in parallel
@@ -66,20 +98,21 @@ export async function batchForecastCalls(
       batch.map(async (request) => {
         try {
           // Create filter for specific account
-          const filter = {
+          const filter: Expression = {
             Dimensions: {
               Key: 'LINKED_ACCOUNT',
               Values: [request.accountId]
             }
           }
 
-          const forecast = await getCostForecast(
+          const forecast = await forecastFn(
             request.startDate,
             request.endDate,
             request.metric,
             request.granularity,
             filter,
-            request.environment
+            request.environment,
+            request.proforma ? process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832' : undefined
           )
 
           return {
@@ -88,11 +121,18 @@ export async function batchForecastCalls(
             data: forecast
           } as ForecastResult
         } catch (error: any) {
-          logger.warn(`[ForecastBatcher] Failed to fetch forecast for account ${request.accountId}:`, error.message)
+          const retryable = !isNonRetryableForecastError(error)
+          if (retryable) {
+            logger.warn('[ForecastBatcher] Forecast request failed and will be retried', {
+              errorName: boundedErrorName(error)
+            })
+          }
           return {
             accountId: request.accountId,
             success: false,
-            error: error.message
+            error: error.message,
+            errorName: boundedErrorName(error),
+            retryable
           } as ForecastResult
         }
       })
@@ -104,17 +144,20 @@ export async function batchForecastCalls(
         const forecastResult = result.value
         if (forecastResult.success) {
           results.push(forecastResult)
+        } else if (forecastResult.retryable === false) {
+          // Deterministic no-history failures cannot succeed on retry.
+          results.push(forecastResult)
         } else {
           // Queue for retry
           failedRequests.push({
-            request: batch[index],
+            request: batch[index]!,
             retries: 0
           })
         }
       } else {
         // Promise rejected
         failedRequests.push({
-          request: batch[index],
+          request: batch[index]!,
           retries: 0
         })
       }
@@ -144,20 +187,21 @@ export async function batchForecastCalls(
       await sleep(retryDelay * (retries + 1))
 
       try {
-        const filter = {
+        const filter: Expression = {
           Dimensions: {
             Key: 'LINKED_ACCOUNT',
             Values: [request.accountId]
           }
         }
 
-        const forecast = await getCostForecast(
+        const forecast = await forecastFn(
           request.startDate,
           request.endDate,
           request.metric,
           request.granularity,
           filter,
-          request.environment
+          request.environment,
+          request.proforma ? process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832' : undefined
         )
 
         results.push({
@@ -166,13 +210,18 @@ export async function batchForecastCalls(
           data: forecast
         })
 
-        logger.info(`[ForecastBatcher] Retry successful for account ${request.accountId}`)
+        logger.info('[ForecastBatcher] Forecast retry succeeded')
       } catch (error: any) {
-        logger.warn(`[ForecastBatcher] Retry ${retries + 1} failed for account ${request.accountId}:`, error.message)
+        logger.warn('[ForecastBatcher] Forecast retry failed', {
+          retry: retries + 1,
+          errorName: boundedErrorName(error)
+        })
         results.push({
           accountId: request.accountId,
           success: false,
-          error: error.message
+          error: error.message,
+          errorName: boundedErrorName(error),
+          retryable: !isNonRetryableForecastError(error)
         })
       }
     }
@@ -180,8 +229,16 @@ export async function batchForecastCalls(
 
   const successCount = results.filter(r => r.success).length
   const failureCount = results.filter(r => !r.success).length
+  const nonRetryableCount = results.filter(r => !r.success && r.retryable === false).length
 
-  logger.info(`[ForecastBatcher] Completed: ${successCount} successful, ${failureCount} failed`)
+  logger.info('forecast_batch_summary', {
+    signature: 'forecast_batch_summary',
+    attemptedCount: requests.length,
+    successCount,
+    failureCount,
+    nonRetryableCount,
+    errorNames: summarizeErrorNames(results)
+  })
 
   return results
 }

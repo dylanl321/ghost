@@ -5,12 +5,12 @@ const logger = createLogger('CommandPalette')
 /**
  * Command Palette Composable
  * Global state and logic for the Cmd+K command palette
- * Supports navigation, actions, fuzzy search, server-side search, AI routing, and context-aware suggestions
+ * Supports navigation, actions, fuzzy search, server-side search, context-aware suggestions
  */
 
 export type CommandCategory =
   | 'navigation' | 'settings' | 'admin' | 'recent' | 'accounts'
-  | 'actions' | 'favorites' | 'recentAccounts' | 'search-results' | 'ai' | 'fun'
+  | 'actions' | 'favorites' | 'recentAccounts' | 'search-results' | 'fun'
 
 export interface CommandItem {
   id: string
@@ -58,7 +58,6 @@ const RECENT_STORAGE_KEY = 'ghost-command-palette-recent'
 // Tips shown when palette opens with empty query
 const TIPS = [
   'Search accounts by name, ID, or business line',
-  'Type a question to ask the AI assistant',
   'Press ? to see all keyboard shortcuts',
   'Try g+c to jump to costs, g+e for explorer',
   'Use action commands like "toggle theme" or "copy url"',
@@ -73,7 +72,6 @@ const ROUTE_CONTEXT: Record<string, string[]> = {
   '/account/user': ['nav-explorer', 'nav-my-access'],
   '/security': ['nav-explorer', 'nav-costs'],
   '/admin': ['admin-dashboard', 'admin-system', 'admin-configuration'],
-  '/chat': ['nav-home', 'nav-explorer'],
   '/settings': ['settings-appearance', 'settings-prefs', 'settings-accounts'],
   '/reports': ['nav-reports', 'nav-scheduled-reports'],
 }
@@ -132,7 +130,7 @@ export function useCommandPalette() {
       { id: 'nav-security', label: 'Security Health', description: 'Security findings and compliance', icon: 'i-heroicons-shield-exclamation', to: '/security', category: 'navigation', keywords: ['security', 'findings', 'compliance', 'vulnerabilities'], shortcut: 'g s' },
       { id: 'nav-reports', label: 'Dataset Reports', description: 'View dataset reports', icon: 'i-heroicons-server-stack', to: '/reports/datasets', category: 'navigation', keywords: ['reports', 'datasets', 'data', 'query'], shortcut: 'g r' },
       { id: 'nav-scheduled-reports', label: 'Scheduled Reports', description: 'View scheduled reports', icon: 'i-heroicons-calendar-days', to: '/reports/scheduled', category: 'navigation', keywords: ['scheduled', 'reports', 'automation'] },
-      { id: 'nav-chat', label: 'AI Assistant', description: 'Chat with AI assistant', icon: 'i-heroicons-sparkles', to: '/chat', category: 'navigation', keywords: ['ai', 'chat', 'assistant', 'strands'], shortcut: 'g h' },
+      { id: 'nav-mcp', label: 'MCP Connections', description: 'Connect AI clients to hosted GHOST tools', icon: 'i-heroicons-link', to: '/mcp-connections', category: 'navigation', keywords: ['mcp', 'connections', 'tools', 'ai'] },
       { id: 'nav-profile', label: 'My Profile', description: 'View your profile', icon: 'i-heroicons-user-circle', to: '/profile', category: 'navigation', keywords: ['profile', 'me'], shortcut: 'g p' },
       { id: 'nav-changelog', label: 'Changelog', description: 'View version history and updates', icon: 'i-heroicons-document-text', to: '/changelog', category: 'navigation', keywords: ['changelog', 'updates', 'releases', 'version', 'history'], shortcut: 'g l' },
       { id: 'nav-support', label: 'Support Hub', description: 'Help and support resources', icon: 'i-heroicons-lifebuoy', to: '/support', category: 'navigation', keywords: ['support', 'help'] },
@@ -290,14 +288,6 @@ export function useCommandPalette() {
     return []
   })
 
-  // Check if query looks like a question for AI
-  function isQuestionQuery(query: string): boolean {
-    const q = query.toLowerCase().trim()
-    if (q.includes('?')) return true
-    const questionStarts = ['how', 'what', 'why', 'who', 'where', 'when', 'can', 'show me', 'find', 'list', 'tell me']
-    return questionStarts.some(s => q.startsWith(s))
-  }
-
   // Filtered commands based on search query
   const filteredCommands = computed(() => {
     const query = searchQuery.value.toLowerCase().trim()
@@ -324,21 +314,6 @@ export function useCommandPalette() {
       accountId: item.accountId,
       isGovCloud: item.isGovCloud
     }))
-
-    // Build AI suggestion if query looks like a question or has no results
-    const aiCommands: CommandItem[] = []
-    if (query.length > 2 && (isQuestionQuery(query) || (staticMatches.length === 0 && accountMatches.length === 0))) {
-      aiCommands.push({
-        id: 'ai-ask',
-        label: `Ask AI: "${searchQuery.value.trim()}"`,
-        description: 'Send this question to GHOST AI Assistant',
-        icon: 'i-heroicons-sparkles',
-        category: 'ai',
-        action: () => {
-          router.push({ path: '/chat', query: { q: searchQuery.value.trim() } })
-        }
-      })
-    }
 
     if (isMagicQuery) {
       const funCommands: CommandItem[] = [
@@ -429,10 +404,10 @@ export function useCommandPalette() {
           }
         },
       ]
-      return [...funCommands, ...staticMatches, ...accountMatches, ...serverResults.value, ...aiCommands]
+      return [...funCommands, ...staticMatches, ...accountMatches, ...serverResults.value]
     }
 
-    return [...staticMatches, ...accountMatches, ...serverResults.value, ...aiCommands]
+    return [...staticMatches, ...accountMatches, ...serverResults.value]
   })
 
   // Generate deep-link sub-actions for a selected account
@@ -481,7 +456,6 @@ export function useCommandPalette() {
       admin: [],
       accounts: [],
       'search-results': [],
-      ai: [],
       fun: []
     }
 
@@ -640,7 +614,6 @@ export function useCommandPalette() {
         s: '/security',
         a: '/admin',
         p: '/profile',
-        h: '/chat',
         r: '/reports/datasets',
         o: '/account/org-chart',
         l: '/changelog'

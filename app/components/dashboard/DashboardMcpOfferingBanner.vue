@@ -42,7 +42,7 @@ async function dismiss() {
 async function openConfiguration() {
   visible.value = false
   await acknowledge('configure')
-  await navigateTo('/chat/mcp')
+  await navigateTo('/mcp-connections')
 }
 
 async function openSupport() {

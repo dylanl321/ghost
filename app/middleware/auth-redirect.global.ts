@@ -67,7 +67,6 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
   if (to.path.startsWith('/auth/')) return
 
   // Skip for public shared content pages (no auth required)
-  if (to.path.startsWith('/chat/shared/')) return
   if (to.path.startsWith('/s/')) return
 
   const { user, loggedIn, login } = useOidcAuth()

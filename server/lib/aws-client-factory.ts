@@ -289,10 +289,14 @@ async function assumeRole(
   environment: AWSEnvironmentType,
   sessionName?: string
 ): Promise<AWSCredentials> {
-  logger.info('[AWS Client Factory] assumeRole called:', {
-    targetAccountId,
+  // Routine lifecycle logging is debug-level to avoid dominating CloudWatch;
+  // failures still surface as errors to the caller (getClient).
+  logger.debug('[AWS Client Factory] assumeRole called', {
+    component: 'aws-client-factory',
+    operation: 'assumeRole',
+    environment,
     region,
-    environment
+    targetAccountId
   })
 
   // Create STS client with base credentials
@@ -304,7 +308,12 @@ async function assumeRole(
   const roleName = await getAssumeRoleName()
   const roleArn = buildAssumeRoleArn(environment, targetAccountId, roleName)
 
-  logger.info('[AWS Client Factory] Assuming role:', { roleArn })
+  logger.debug('[AWS Client Factory] Assuming role', {
+    component: 'aws-client-factory',
+    operation: 'assumeRole',
+    environment,
+    roleArn
+  })
 
   // Prepare assume role request
   const duration = await getAssumeRoleDuration()
@@ -321,10 +330,14 @@ async function assumeRole(
   }
 
   // Assume the role
-  logger.info('[AWS Client Factory] Sending AssumeRole command...')
   const command = new AssumeRoleCommand(assumeRoleParams)
   const response = await stsClient.send(command)
-  logger.info('[AWS Client Factory] AssumeRole succeeded')
+  logger.debug('[AWS Client Factory] AssumeRole succeeded', {
+    component: 'aws-client-factory',
+    operation: 'assumeRole',
+    environment,
+    targetAccountId
+  })
   
   if (!response.Credentials) {
     throw new Error(`Failed to assume role in account ${targetAccountId}`)

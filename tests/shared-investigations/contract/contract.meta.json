@@ -1,0 +1,26 @@
+{
+  "contract": "shared-investigations-collaboration-wire",
+  "schemaVersion": 1,
+  "owner": "shared-investigations",
+  "ownership": "both-repositories",
+  "canonicalSource": "contracts/shared-investigations/",
+  "consumers": {
+    "registry": {
+      "language": "python",
+      "role": "validated-counterpart",
+      "validator": "contracts/shared-investigations/validator.py",
+      "verifiedBy": "tests/test_shared_investigations_contract.py"
+    },
+    "ghostv2": {
+      "language": "typescript",
+      "role": "validated-counterpart",
+      "note": "Ghostv2 consumes wire-contract.v1.schema.json and shared fixtures with ajv; it must not maintain a divergent handwritten copy."
+    }
+  },
+  "notes": [
+    "This directory is the single canonical, versioned source of the Shared Investigations collaboration wire contract.",
+    "Both repositories validate the SAME fixtures against this schema rather than keeping divergent handwritten meanings.",
+    "Fixtures contain only synthetic values. No real organization endpoints, group object identifiers, tokens, PEMs, or secrets appear here.",
+    "Bumping the wire contract requires a new schemaVersion and preserving legacy fixtures so supported legacy clients keep validating."
+  ]
+}

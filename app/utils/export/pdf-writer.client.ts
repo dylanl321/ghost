@@ -10,19 +10,19 @@ const logger = createLogger('PdfWriter')
 
 /**
  * Generate AI-powered cost analysis (client-side)
- * Calls the /api/ai/chat endpoint
+ * Calls the /api/ai/insights endpoint
  */
 async function generateAICostAnalysis(
   summarySheet: any,
   servicesSheet: any,
-  config: DataExportConfig
+  _config: DataExportConfig
 ): Promise<string | null> {
   try {
     // Extract key data points - calculate totals if needed
     const summaryData = summarySheet.data?.[0] || {}
     let totalCost = summaryData.totalCost || summaryData.cost || summaryData.current || 0
     let previousCost = summaryData.previousCost || summaryData.previous
-    let changePercent = summaryData.changePercent || summaryData.change
+    const changePercent = summaryData.changePercent || summaryData.change
     let budgetUtilization = summaryData.budgetUtilization || summaryData.utilization
     let totalBudget: number | undefined
 
@@ -63,36 +63,16 @@ async function generateAICostAnalysis(
       cost: s.cost || s.amount || s.Cost || 0
     })) || []
 
-    // Call AI API with system-level instruction to avoid preambles
-    const response = await $fetch<{responseBody: string, references: any[]}>('/api/ai/chat', {
+    const response = await $fetch<{ success: boolean; data?: { insight: string } }>('/api/ai/insights', {
       method: 'POST',
       body: {
-        userInput: `COST OVERVIEW:
-- Total Spend: $${totalCost.toLocaleString()}${changePercent !== undefined ? ` (${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(1)}% vs previous period)` : ''}
-${totalBudget ? `- Total Budget: $${totalBudget.toLocaleString()}` : ''}
-${budgetUtilization !== undefined ? `- Budget Utilization: ${budgetUtilization.toFixed(1)}%` : ''}
-${previousCost !== undefined ? `- Previous Period: $${previousCost.toLocaleString()}` : ''}
-
-TOP 15 ACCOUNTS:
-${topAccounts.map((a: any, i: number) =>
-  `${i + 1}. ${a.name}: $${a.cost.toLocaleString()}${a.budget ? ` (Budget: $${a.budget.toLocaleString()}, ${a.utilization?.toFixed(0)}% utilized)` : ''}`
-).join('\n')}
-
-TOP AWS SERVICES:
-${topServices.map((s: any, i: number) => `${i + 1}. ${s.name}: $${s.cost.toLocaleString()}`).join('\n')}
-
-Write 3-4 concise paragraphs (~200 words) covering:
-
-1. Overall Cost Health: Assess the spending trends and budget performance
-2. Key Patterns & Highlights: Identify notable spending patterns, top accounts, and services driving costs
-3. Notable Items: Highlight accounts or services that warrant attention (over/under budget, unusual patterns)
-
-IMPORTANT: Focus on analysis and observations, not recommendations. Write direct analysis without preambles or meta-commentary. Never use phrases like "Based on the provided data". Be specific with numbers and patterns.`
+        type: 'cost-report-analysis',
+        context: { totalCost, previousCost, changePercent, totalBudget, budgetUtilization, topAccounts, topServices }
       }
     })
 
-    if (response?.responseBody) {
-      return response.responseBody.trim()
+    if (response.success && response.data?.insight) {
+      return response.data.insight.trim()
     }
 
     return null
