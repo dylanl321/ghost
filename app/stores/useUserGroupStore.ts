@@ -43,6 +43,7 @@ const COMM_IDENTIFIER = ' | comm'
 // Time until the data needs to be refreshed
 // This only gets checked when the user first "loads" the website (e.g. first visit, hard refresh, new tab, etc.). This is done via the "init-check.client.ts" custom plugin.
 const timeToLiveSeconds = 60 * 60 * 24
+let groupInitializationPromise: Promise<void> | null = null
 
 export const useUserGroupStore = defineStore('userGroups', {
   state: (): UserGroupState => ({
@@ -236,6 +237,17 @@ export const useUserGroupStore = defineStore('userGroups', {
       }
     },
 
+    async ensureGroupsInitialized(accessToken: string) {
+      if (!this.groupsNeedRefresh) return
+
+      // Route middleware and the mounted store initializer can run together on refresh.
+      groupInitializationPromise ||= this.initializeGroups(accessToken, true)
+        .finally(() => {
+          groupInitializationPromise = null
+        })
+      await groupInitializationPromise
+    },
+
     async initializeAWSRoles(enclaveData: Record<string, AWSEnclaveData>, force: boolean = false) {
       if (!import.meta.client) return // only run on client-side
       if (!this.awsRolesNeedRefresh && !force) {
@@ -341,5 +353,8 @@ export const useUserGroupStore = defineStore('userGroups', {
     }
   },
 
-  persist: true
+  persist: {
+    key: 'ghost-user-groups',
+    storage: piniaPluginPersistedstate.localStorage()
+  }
 })

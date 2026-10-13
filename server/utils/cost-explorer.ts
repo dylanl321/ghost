@@ -92,7 +92,8 @@ export async function getCostForecast(
   granularity: 'DAILY' | 'MONTHLY' = 'DAILY',
   filter?: Expression,
   environment: 'commercial' | 'govcloud' = 'commercial',
-  targetAccountId?: string
+  targetAccountId?: string,
+  options?: { billingViewArn?: string }
 ) {
   const client = await getCostExplorerClient(environment, undefined, targetAccountId)
   
@@ -103,7 +104,8 @@ export async function getCostForecast(
     },
     Metric: metric as any,
     Granularity: granularity as Granularity,
-    Filter: filter
+    Filter: filter,
+    ...(options?.billingViewArn ? { BillingViewArn: options.billingViewArn } : {})
   })
 
   const response = await client.send(command)
@@ -150,20 +152,22 @@ export async function getCostAllocationTags(
   tagKey?: string,
   filter?: Expression,
   environment: 'commercial' | 'govcloud' = 'commercial',
-  targetAccountId?: string
+  targetAccountId?: string,
+  options: { limit?: number; nextToken?: string } = {}
 ) {
   const client = await getCostExplorerClient(environment, undefined, targetAccountId)
 
   const tags = new Set<string>()
   let returnSize = 0
   let totalSize = 0
-  let nextPageToken: string | undefined
+  let nextPageToken: string | undefined = options.nextToken
 
   do {
     const response = await client.send(new GetTagsCommand({
       TimePeriod: timePeriod,
       TagKey: tagKey,
       Filter: filter,
+      MaxResults: options.limit ? Math.min(100, Math.max(1, options.limit - tags.size)) : undefined,
       NextPageToken: nextPageToken
     }))
 
@@ -171,12 +175,13 @@ export async function getCostAllocationTags(
     returnSize += response.ReturnSize || 0
     totalSize = Math.max(totalSize, response.TotalSize || 0)
     nextPageToken = response.NextPageToken
-  } while (nextPageToken)
+  } while (nextPageToken && (!options.limit || tags.size < options.limit))
 
   return {
     tags: Array.from(tags).sort((a, b) => a.localeCompare(b)),
     returnSize,
-    totalSize
+    totalSize,
+    nextToken: nextPageToken
   }
 }
 

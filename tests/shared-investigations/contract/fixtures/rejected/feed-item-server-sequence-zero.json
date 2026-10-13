@@ -1,0 +1,14 @@
+{
+  "items": [
+    {
+      "tenantId": "tenant-fake-0001",
+      "spaceId": "space-0000-fake-aaaa",
+      "serverSequence": 0,
+      "kind": "event",
+      "objectId": "evt-bad-3",
+      "safeProjection": {}
+    }
+  ],
+  "highWaterMark": 1,
+  "pageSize": 50
+}

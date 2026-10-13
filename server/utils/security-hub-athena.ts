@@ -426,7 +426,8 @@ export async function buildAccountSecurityViaAthena(
  * Falls back to the legacy Security Hub API (capped) if Athena fails entirely.
  */
 export async function buildSecuritySummaryViaAthena(
-  onProgress?: ProgressCallback
+  onProgress?: ProgressCallback,
+  options: { allowFallback?: boolean } = {}
 ): Promise<OrgSecuritySummary> {
   const environment = (process.env.AWS_SECURITYHUB_ENVIRONMENT as 'commercial' | 'govcloud') || 'govcloud'
   const findingsSource = buildFindingsSource()
@@ -767,6 +768,7 @@ export async function buildSecuritySummaryViaAthena(
     logger.info(`[SecurityAthena] Summary built: ${totalFindings} findings, ${accountBreakdown.size} accounts, orgRiskScore=${orgRiskScore}`)
     return result
   } catch (err: any) {
+    if (options.allowFallback === false) throw err
     logger.error('[SecurityAthena] Athena queries failed entirely, falling back to legacy API', { error: err.message })
     onProgress?.({ stage: 'fallback', message: 'Athena unavailable, using legacy API...', percent: 50 })
 

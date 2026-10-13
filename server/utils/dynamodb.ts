@@ -24,7 +24,7 @@ import { logger } from './logger'
  * Removes undefined values, null values, and empty strings
  * DynamoDB does not support empty strings as attribute values
  */
-function sanitizeForDynamoDB(obj: any): any {
+export function sanitizeForDynamoDB(obj: any): any {
   if (obj === null || obj === undefined) {
     return undefined
   }
@@ -502,13 +502,11 @@ export async function batchPutItems(
     }
   }
   
-  // A completed batch with zero failures is normal operation — log at info.
-  // Only escalate to error when items actually failed to write.
-  const putSummary = { processedCount, failedCount, tableName, environment }
-  if (failedCount === 0) {
-    logger.info(`Batch put completed: ${processedCount} processed, 0 failed`, putSummary)
+  const completionSummary = `Batch put completed: ${processedCount} processed, ${failedCount} failed`
+  if (failedCount > 0) {
+    logger.error(completionSummary)
   } else {
-    logger.error(`Batch put completed with failures: ${processedCount} processed, ${failedCount} failed`, putSummary)
+    logger.info(completionSummary)
   }
 
   return results

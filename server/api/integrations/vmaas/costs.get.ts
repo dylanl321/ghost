@@ -1,4 +1,4 @@
-import { defineEventHandler } from 'h3'
+import { defineEventHandler, getQuery } from 'h3'
 import { requireScope } from '../../../middleware/entra-auth'
 import { registerEndpoint } from '../../../plugins/swagger'
 import { sendSuccess } from '../../../utils/api-response'
@@ -13,5 +13,6 @@ registerEndpoint('/api/integrations/vmaas/costs', 'GET', {
 
 export default defineEventHandler(async event => {
   await requireScope(event, 'vmaas:costs:read')
-  return sendSuccess(event, await getVmaasCostReport())
+  const month = String(getQuery(event).month || '') || undefined
+  return sendSuccess(event, await getVmaasCostReport(month))
 })

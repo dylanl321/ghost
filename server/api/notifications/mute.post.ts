@@ -4,15 +4,9 @@
  */
 
 import { getUserSession } from '../../utils/entra/session'
-import { getUserPreferences, updateUserPreferences } from '../../utils/user-preferences'
+import { setNotificationMute } from '../../utils/notification-service'
 import type { MuteDuration } from '#shared/types/notifications'
 import { logger } from '../../utils/logger'
-
-const MUTE_DURATIONS: Record<MuteDuration, number> = {
-  '1h': 60 * 60 * 1000,
-  '4h': 4 * 60 * 60 * 1000,
-  '24h': 24 * 60 * 60 * 1000
-}
 
 export default defineEventHandler(async (event) => {
   try {
@@ -27,32 +21,11 @@ export default defineEventHandler(async (event) => {
     }
 
     const body = await readBody<{ duration?: MuteDuration; unmute?: boolean }>(event)
-
-    const prefs = await getUserPreferences(userId)
-    const notifPrefs = prefs.preferences?.notificationPreferences || {}
-
-    if (body.unmute) {
-      // Remove mute
-      delete notifPrefs.mutedUntil
-    } else {
-      const duration = body.duration || '1h'
-      const ms = MUTE_DURATIONS[duration]
-      if (!ms) {
-        throw createError({ statusCode: 400, message: 'Invalid mute duration. Use 1h, 4h, or 24h' })
-      }
-      notifPrefs.mutedUntil = new Date(Date.now() + ms).toISOString()
+    if (!body.unmute && body.duration && !['1h', '4h', '24h'].includes(body.duration)) {
+      throw createError({ statusCode: 400, message: 'Invalid mute duration. Use 1h, 4h, or 24h' })
     }
 
-    await updateUserPreferences(userId, {
-      notificationPreferences: notifPrefs
-    })
-
-    return {
-      success: true,
-      data: {
-        mutedUntil: notifPrefs.mutedUntil || null
-      }
-    }
+    return { success: true, data: await setNotificationMute(userId, body) }
   } catch (error: any) {
     logger.error('Error muting notifications:', error)
     if (error.statusCode) throw error

@@ -1,6 +1,6 @@
 ---
 title: Tag Analysis & Cost Breakdown by Tag
-lastUpdated: 2026-03-23
+lastUpdated: 2026-10-01
 icon: i-heroicons-tag
 ---
 
@@ -126,7 +126,25 @@ To bridge this gap, GHOST **extrapolates proforma costs per account and AWS time
 
 > **Important:** Tag-level proforma cost estimates are for directional insight only. They are extrapolated from billable percentages, not calculated by AWS Billing Conductor, and should **not** be used for chargeback or financial reconciliation. For chargeback, use proforma account-level totals, which are calculated directly by AWS Billing Conductor.
 
+### Compute Foundry VMaaS exception
+
+The dedicated **VMaaS Costs → Allocated usage** report is not the generic Tag
+Analysis estimate. It uses a fixed shared account, a locked `TenantID` and
+`CostCenter` contract, registered team cost managers, a closed month, and an
+explicit reconciliation to the authoritative account-level pro forma total.
+Only this dedicated, Finance-approved VMaaS report may be used to allocate
+Compute Foundry tenant usage. Shared and untagged residual costs remain owned by
+GDMS IT.
+
 When estimated proforma costs are shown, a note appears above the breakdown table explaining the extrapolation.
+
+## Programmatic Access
+
+With a `costs:read` API key, request `GET /api/v1/costs/tags?tagKey=Project&period=lastMonth` to retrieve normalized tag-value costs, tagged and untagged coverage, and contributing accounts. Add `accountIdentifiers`, `adminOf`, or `ownedBy` to select accounts, or omit selectors for the entire organization.
+
+Use `GET /api/v1/costs/tag-keys?period=lastMonth` to discover available keys. The cost response uses billable Net Unblended costs by default; add `proforma=true` for the same estimates described above. For `aws:createdBy`, the response includes all creators with an `isPerson` flag for reproducing People view.
+
+See the [API key guide](/support/docs#api-keys-guide) for examples and options, or try the endpoints in [Swagger UI](/api/swagger-ui).
 
 ## Common Questions
 

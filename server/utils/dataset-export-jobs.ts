@@ -48,12 +48,24 @@ export async function updateDatasetExportJob(jobId: string, updates: Partial<Dat
 }
 
 export async function listDatasetExportJobs(userId: string): Promise<DatasetExportJob[]> {
+  return (await queryDatasetExportJobs(userId)).jobs
+}
+
+export async function queryDatasetExportJobs(userId: string, options: { status?: DatasetExportJob['status']; limit?: number; cursor?: string } = {}): Promise<{ jobs: DatasetExportJob[]; nextCursor?: string }> {
   const config = await table()
+  const expressionAttributeNames = options.status ? { '#status': 'status' } : undefined
+  const expressionAttributeValues: Record<string, unknown> = { ':userId': userId }
+  if (options.status) expressionAttributeValues[':status'] = options.status
   const result = await queryItems({
     tableName: config.tableName, indexName: 'UserIdIndex', queryExpression: 'userId = :userId',
-    expressionAttributeValues: { ':userId': userId }, limit: 50, scanIndexForward: false
+    filterExpression: options.status ? '#status = :status' : undefined,
+    expressionAttributeNames,
+    expressionAttributeValues,
+    limit: options.limit || 50,
+    nextToken: options.cursor,
+    scanIndexForward: false
   }, config.environment, config.accountId)
-  return result.items as DatasetExportJob[]
+  return { jobs: result.items as DatasetExportJob[], nextCursor: result.nextToken }
 }
 
 export async function cancelDatasetExportJob(jobId: string, userId: string): Promise<boolean> {

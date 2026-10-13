@@ -5,6 +5,40 @@ All notable changes to GHOST are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-09-16
+<!-- highlights: Crew Identity Verification -->
+
+### Improvements
+- Added protected operator identity checks for Crew collaboration. The full shared-investigation rollout remains pending.
+
+## [2.1.0] - 2026-08-17
+<!-- highlights: MCP Cost Comparison, Operational Health -->
+
+### New Features
+- MCP clients can compare reconciled AWS cost periods and review bounded AWS cost anomalies
+- You can now mark, archive, mute, or unmute personal notifications and cancel your queued or running exports
+- Pipeline searches now include deployment health and drift modes, and EC2 instance health combines patch, security, vulnerability, alarm, and inventory evidence
+
+### Improvements
+- Cost anomaly searches scan until matching account results are collected and clearly report whether more AWS records remain
+- The cost variance prompt now uses the canonical comparison workflow
+
+## [2.0.0] - 2026-08-17
+<!-- highlights: Safer MCP Access, Reliable AWS Results -->
+
+### Improvements
+- MCP access results now include direct and group-based IAM Identity Center assignments
+- Commercial and GovCloud cost tools now use the correct account IDs, payer accounts, date rules, and pagination
+- MCP permissions, resource access, diagnostics, rate limits, and retry protection now enforce stricter privacy and reliability boundaries
+- Account, user, instance, alert, compliance, report, and chat searches now return consistent bounded and paginated results
+
+### Breaking Changes
+- Removed retired compatibility tool names and synchronous report execution from MCP; use the canonical account, forecast, documentation, audit, pipeline, and report workflows instead
+
+### Bug Fixes
+- Fixed incomplete user-access results, GovCloud cost filters, ignored tool filters, and duplicate write execution under concurrent retries
+- Fixed evidence bundles reporting lookback periods that were not applied to their underlying data
+
 ## [1.20.0] - 2026-08-14
 <!-- highlights: GHOST MCP, Codex Integration, Flexible AWS Tools -->
 

@@ -47,9 +47,9 @@ function markdown(title: string, evidence: any, hash: string): string {
 }
 
 export async function createEvidenceBundle(input: { ownerSubject: string; accountIdentifier: string; title: string; selectedDomains: EvidenceDomain[]; lookbackDays: number; account: any; environment: 'commercial' | 'govcloud' }) {
-  const health = await buildAccountHealth(input.account, input.environment)
+  const health = await buildAccountHealth(input.account, input.environment, { lookbackDays: input.lookbackDays })
   const domains = Object.fromEntries(input.selectedDomains.map(domain => [domain, health.domains[domain]]))
-  const evidence = { generatedAt: new Date().toISOString(), account: health.account, environment: input.environment, lookbackDays: input.lookbackDays, domains }
+  const evidence = { generatedAt: new Date().toISOString(), account: health.account, environment: input.environment, requestedLookbackDays: input.lookbackDays, domains }
   const hash = hashEvidence(evidence)
   const bundleId = randomUUID()
   const prefix = `reports/evidence/${encodeURIComponent(input.ownerSubject)}/${bundleId}`
@@ -59,11 +59,19 @@ export async function createEvidenceBundle(input: { ownerSubject: string; accoun
     uploadToS3({ key: jsonKey, buffer: Buffer.from(JSON.stringify({ ...evidence, hash }, null, 2)), contentType: 'application/json', metadata: { bundleId, owner: input.ownerSubject, hash } }),
     uploadToS3({ key: markdownKey, buffer: Buffer.from(markdown(input.title, evidence, hash)), contentType: 'text/markdown', metadata: { bundleId, owner: input.ownerSubject, hash } })
   ])
-  if (!jsonUpload.success || !markdownUpload.success) throw new Error(jsonUpload.error || markdownUpload.error || 'Failed to store evidence bundle.')
+  if (!jsonUpload.success || !markdownUpload.success) {
+    await Promise.all([jsonUpload.success ? deleteFromS3(jsonKey) : undefined, markdownUpload.success ? deleteFromS3(markdownKey) : undefined])
+    throw new Error(jsonUpload.error || markdownUpload.error || 'Failed to store evidence bundle.')
+  }
   const createdAt = new Date().toISOString()
   const record: EvidenceBundleRecord = { bundleId, ownerSubject: input.ownerSubject, accountIdentifier: input.accountIdentifier, title: input.title, domains: input.selectedDomains, createdAt, expiresAt: new Date(Date.now() + RETENTION_SECONDS * 1000).toISOString(), ttl: Math.floor(Date.now() / 1000) + RETENTION_SECONDS, hash, jsonKey, markdownKey }
   const config = getMcpEvidenceTableConfig()
-  await putItem(config.tableName, record, config.environment, config.accountId)
+  try {
+    await putItem(config.tableName, record, config.environment, config.accountId)
+  } catch (error) {
+    await Promise.all([deleteFromS3(jsonKey), deleteFromS3(markdownKey)])
+    throw error
+  }
   return record
 }
 

@@ -1,0 +1,13 @@
+{
+  "artifactId": "art-bad-2",
+  "investigationId": "inv-fake-0001",
+  "state": "ready",
+  "originalFilename": "macro.docm",
+  "sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+  "byteCount": 100,
+  "mediaType": "application/vnd.ms-word.document.macroEnabled.12",
+  "provenance": "explicit",
+  "redacted": false,
+  "truncated": false,
+  "reservedAt": "2024-01-02T03:06:20Z"
+}

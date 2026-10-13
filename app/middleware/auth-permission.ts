@@ -1,7 +1,7 @@
 // Middleware to check if user has required permissions or roles for a route
-export default defineNuxtRouteMiddleware((to) => {
+export default defineNuxtRouteMiddleware(async (to) => {
   // Skip on server-side rendering
-  if (process.server) return
+  if (import.meta.server) return
 
   // Get the required permission/role from route meta
   const requiredPermission = to.meta.permission as string | undefined
@@ -11,8 +11,38 @@ export default defineNuxtRouteMiddleware((to) => {
   // If no permission requirements, allow access
   if (!requiredPermission && !requiredPermissions) return
 
-  const { can, canAny, canAll, hasRole } = useUserRoles()
+  const { user, loggedIn } = useOidcAuth()
+  if (!loggedIn.value || !user.value) return
+
+  const userGroupStore = useUserGroupStore()
+  const accessToken = user.value.accessToken
   const toast = useToast()
+
+  if (user.value.provider === 'dev' && userGroupStore.groupsNeedRefresh) {
+    const config = useRuntimeConfig()
+    const groups = String(config.public.devUserGroups || 'AWS-Product-Team')
+      .split(',')
+      .map(group => group.trim())
+      .filter(Boolean)
+    userGroupStore.setDevGroups(groups)
+  } else if (accessToken && userGroupStore.groupsNeedRefresh) {
+    try {
+      await userGroupStore.ensureGroupsInitialized(accessToken)
+    } catch {
+      toast.add({
+        title: 'Unable to Verify Access',
+        description: 'Your permissions could not be refreshed. Please try again.',
+        color: 'red',
+        icon: 'i-heroicons-shield-exclamation'
+      })
+      return navigateTo('/')
+    }
+  }
+
+  // Authentication middleware handles incomplete sessions; do not mislabel them as authorization failures.
+  if (!userGroupStore.groupsLastFetch) return
+
+  const { can, canAny, canAll, hasRole } = useUserRoles()
 
   // Check single permission or role
   if (requiredPermission) {

@@ -138,12 +138,31 @@ function exactAccountMatch(accounts: UnifiedAccount[], reference: string): Unifi
   })
 }
 
+function uniqueAccounts(accounts: UnifiedAccount[]): UnifiedAccount[] {
+  const seen = new Set<string>()
+  return accounts.filter((account, index) => {
+    const accountIds = ids(account)
+    const key = accountIds.commercial
+      ? `commercial:${accountIds.commercial}`
+      : accountIds.govcloud
+        ? `govcloud:${accountIds.govcloud}`
+        : account.requestId || (account as any).requestID
+          ? `request:${account.requestId || (account as any).requestID}`
+          : `record:${index}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 export async function resolveAccountReference(reference: string, accounts: UnifiedAccount[]): Promise<UnifiedAccount> {
-  const exact = exactAccountMatch(accounts, reference)
+  // Historical metadata rows can describe the same AWS account more than once.
+  const catalog = uniqueAccounts(accounts)
+  const exact = exactAccountMatch(catalog, reference)
   if (exact.length === 1) return exact[0]!
   if (exact.length > 1) throw ambiguousAccount(reference, exact)
 
-  const fuzzy = await fuzzySearchAccounts(reference, accounts, 5)
+  const fuzzy = await fuzzySearchAccounts(reference, catalog, 5)
   const top = fuzzy[0]
   const runnerUp = fuzzy[1]
   const topRelevance = top ? Math.round((1 - top.score) * 100) : 0
@@ -166,7 +185,7 @@ function ambiguousAccount(reference: string, accounts: UnifiedAccount[], scores?
       govCloudAccountId: ids(account).govcloud,
       relevance: scores?.[index]
     })),
-    correctedExample: { account: ids(accounts[0]!).govcloud || ids(accounts[0]!).commercial }
+    correctedExample: { account: ids(accounts[0]!).commercial || ids(accounts[0]!).govcloud }
   })
 }
 
