@@ -89,7 +89,8 @@ export default defineEventHandler(async (event) => {
   const accountScope = await resolveIntegrationAccountScope(event, rawQuery, {
     required: hasIntegrationAccountSelector(rawQuery)
   })
-  const result = await querySecurityHubApi(accountScope?.accounts, query)
+  const ghostRequestId = typeof event.context.requestId === 'string' ? event.context.requestId : undefined
+  const result = await querySecurityHubApi(accountScope?.accounts, query, { requestId: ghostRequestId })
   return sendSuccess(event, result.records, {
     pagination: result.pagination,
     format: result.format,

@@ -10,10 +10,31 @@ import {
   scheduledHoursForMonth,
   VMAAS_ACCOUNT_ID,
   VMAAS_BILLING_ACCOUNT_ID,
+  VMAAS_INSTANCE_ACTUAL_METRICS,
   type VmaasServerCost
 } from '../../server/utils/vmaas-costs'
 import { getEC2PricingCacheKey, getEC2PricingFilters } from '../../server/utils/aws-pricing'
+import { validateCostQuery } from '../../server/utils/cost-domain'
 import { isAllowedVmaasCostPath } from '../../server/middleware/entra-auth'
+
+test('instance actual metrics include UnblendedCost so the authoritative query validates', () => {
+  // Regression: loadInstanceActuals previously requested only NetUnblendedCost,
+  // which queryCostDataset rejects with "UnblendedCost is required...".
+  assert.ok(VMAAS_INSTANCE_ACTUAL_METRICS.includes('UnblendedCost'))
+  assert.ok(VMAAS_INSTANCE_ACTUAL_METRICS.includes('NetUnblendedCost'))
+  assert.doesNotThrow(() => validateCostQuery({
+    startDate: '2026-01-01',
+    endDate: '2026-02-01',
+    granularity: 'MONTHLY',
+    metrics: [...VMAAS_INSTANCE_ACTUAL_METRICS]
+  }))
+  assert.throws(() => validateCostQuery({
+    startDate: '2026-01-01',
+    endDate: '2026-02-01',
+    granularity: 'MONTHLY',
+    metrics: ['NetUnblendedCost']
+  }), /UnblendedCost is required/)
+})
 
 test('VMaaS pricing keys and filters distinguish Linux, RHEL, and Windows', () => {
   const keys = ['linux', 'rhel', 'windows'].map(os => getEC2PricingCacheKey(
@@ -22,7 +43,11 @@ test('VMaaS pricing keys and filters distinguish Linux, RHEL, and Windows', () =
   assert.equal(new Set(keys).size, 3)
   assert.deepEqual(
     getEC2PricingFilters('m6i.large', 'AWS GovCloud (US-West)', 'rhel').find(filter => filter.Field === 'preInstalledSw'),
-    { Type: 'TERM_MATCH', Field: 'preInstalledSw', Value: 'RHEL' }
+    { Type: 'TERM_MATCH', Field: 'preInstalledSw', Value: 'NA' }
+  )
+  assert.equal(
+    getEC2PricingFilters('m6i.large', 'AWS GovCloud (US-West)', 'rhel').find(filter => filter.Field === 'operatingSystem')?.Value,
+    'RHEL'
   )
   assert.equal(
     getEC2PricingFilters('m6i.large', 'AWS GovCloud (US-West)', 'windows').find(filter => filter.Field === 'operatingSystem')?.Value,

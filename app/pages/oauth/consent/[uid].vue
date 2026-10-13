@@ -14,8 +14,8 @@ const details = ref<{
 
 const scopeLabels: Record<string, string> = {
   'ghost.read': 'Read AWS account details, costs, user access, security findings, resources, and pipeline activity available to you',
-  'ghost.ai.invoke': 'Use GHOST AI insights and chat to answer AWS questions',
-  'ghost.collaborate': 'Manage your GHOST preferences, chat threads, reports, and exports',
+  'ghost.ai.invoke': 'Use GHOST AI insights and troubleshooting to answer AWS questions',
+  'ghost.collaborate': 'Manage your GHOST preferences, reports, and exports',
   'ghost.credentials.issue': 'Request short-lived AWS role credentials for roles assigned to you. GHOST will ask for confirmation before issuing them.',
   'kirocrew.bootstrap.read': 'Read the Kiro Crew installation and corporate trust configuration',
   'kirocrew.config.read': 'Read the organization’s published Kiro Crew settings, files, and secrets',

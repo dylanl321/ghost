@@ -328,6 +328,45 @@ async function checkAWSEnvironment(environment: 'commercial' | 'govcloud') {
 }
 
 /**
+ * Evaluate an active environment's dependency results and, when a dependency
+ * is unavailable, push concise environment-specific warnings and downgrade the
+ * overall status to `degraded`. Never downgrades an existing `unhealthy` status.
+ * Warnings identify the failing dependency without leaking credentials — the
+ * detailed error strings remain in the `aws` section of the response.
+ */
+function evaluateDependencyHealth(
+  healthData: any,
+  environment: 'commercial' | 'govcloud',
+  envResult: ReturnType<typeof checkAWSEnvironment> extends Promise<infer R> ? R : never
+): void {
+  // Only meaningful when STS identity is active; expired/error is handled by caller.
+  if (envResult.identity?.status !== 'active') return
+
+  const label = environment === 'commercial' ? 'Commercial' : 'GovCloud'
+  const warnings: string[] = []
+
+  const dynamodb = envResult.services.dynamodb
+  if (!dynamodb.accessible) {
+    warnings.push(`${label} DynamoDB inaccessible`)
+  } else if (!dynamodb.tableExists) {
+    warnings.push(`${label} DynamoDB accounts table missing`)
+  }
+
+  const organizations = envResult.services.organizations
+  if (!organizations.accessible) {
+    warnings.push(`${label} Organizations inaccessible`)
+  }
+
+  if (warnings.length > 0) {
+    healthData.warnings.push(...warnings)
+    // Never downgrade an existing unhealthy status back to degraded.
+    if (healthData.status !== 'unhealthy') {
+      healthData.status = 'degraded'
+    }
+  }
+}
+
+/**
  * Format uptime to human-readable string
  */
 function formatUptime(seconds: number): string {
@@ -424,6 +463,8 @@ export default defineEventHandler(handleAsync(async (event) => {
     } else if (healthData.aws.commercial.identity?.status === 'error') {
       healthData.warnings.push('Commercial AWS credentials error')
       healthData.status = 'degraded'
+    } else {
+      evaluateDependencyHealth(healthData, 'commercial', healthData.aws.commercial)
     }
   }
 
@@ -438,6 +479,8 @@ export default defineEventHandler(handleAsync(async (event) => {
     } else if (healthData.aws.govcloud.identity?.status === 'error') {
       healthData.warnings.push('GovCloud AWS credentials error')
       healthData.status = 'degraded'
+    } else {
+      evaluateDependencyHealth(healthData, 'govcloud', healthData.aws.govcloud)
     }
   }
 

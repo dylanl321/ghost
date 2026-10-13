@@ -16,7 +16,7 @@ import {
 import { STSClient, AssumeRoleCommand } from '@aws-sdk/client-sts';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import type { SiteConfigItem, SiteConfigHistoryEntry } from '../../shared/types/site-config';
-import { DEFAULT_SITE_CONFIG } from '../../shared/types/site-config';
+import { DEFAULT_SITE_CONFIG, isRetiredSiteConfigKey } from '../../shared/types/site-config';
 
 const TABLE_NAME = process.env.SITE_CONFIG_TABLE || 'ghost-site-config';
 const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
@@ -135,6 +135,7 @@ function getSiteConfigContext() {
  * Get a single configuration item by key
  */
 export async function getSiteConfig(key: string, useCache = true): Promise<SiteConfigItem | null> {
+  if (isRetiredSiteConfigKey(key)) return null;
   // Check cache first
   if (useCache) {
     const cached = configCache.get(key);
@@ -198,7 +199,7 @@ export async function getAllSiteConfig(useCache = true): Promise<SiteConfigItem[
     });
 
     const response = await client.send(command);
-    const items = response.Items ? response.Items.map(item => unmarshall(item) as SiteConfigItem) : [];
+    const items = response.Items ? response.Items.map(item => unmarshall(item) as SiteConfigItem).filter(item => !isRetiredSiteConfigKey(item.key)) : [];
 
     // If DB is empty or has fewer items than defaults, merge with defaults
     if (items.length === 0) {
@@ -410,12 +411,12 @@ export async function getConfigValue<T = any>(key: string, useCache = true): Pro
 
 /**
  * Build a nested configuration object from flat config items
- * Converts 'features.strandsChat.enabled' to { features: { strandsChat: { enabled: true } } }
+ * Converts 'features.reportScheduler.enabled' to { features: { reportScheduler: { enabled: true } } }
  */
 export function buildNestedConfig(items: SiteConfigItem[]): Record<string, any> {
   const result: Record<string, any> = {};
 
-  items.forEach((item) => {
+  items.filter(item => !isRetiredSiteConfigKey(item.key)).forEach((item) => {
     const keys = item.key.split('.');
     let current = result;
 
