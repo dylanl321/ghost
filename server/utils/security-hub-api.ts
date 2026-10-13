@@ -9,6 +9,7 @@ import { createError } from 'h3'
 import type { SecurityHubFindingRecord } from '../../shared/types/dataset-reports'
 import type { FindingSeverity, WorkflowStatus } from '../../shared/types/security-hub'
 import { getClient } from '../lib/aws-client-factory'
+import { logger } from './logger'
 import {
   getIntegrationAccountEnvironmentErrors,
   type IntegrationAccount
@@ -25,6 +26,50 @@ import {
 } from './security-api-pagination'
 
 export type ParsedSecurityHubQuery = ReturnType<typeof parseSecurityHubQuery>
+
+export interface SecurityFindingsFailureContext {
+  provider: string
+  environment: string
+  regionCount: number
+  accountCount: number
+  requestId?: string
+}
+
+/**
+ * Build a sanitized, stable diagnostic record for a failed
+ * /api/v1/security/findings execution. Emits only non-sensitive provider
+ * context (counts, environment, sanitized error name, AWS request ID, HTTP
+ * status). It never includes account IDs, query/filter values, error
+ * messages, stack traces, or the raw error object so it is safe for
+ * CloudWatch Log Insights. Fields are omitted rather than emitted as null
+ * when unavailable to keep query shapes stable.
+ */
+export function buildSecurityFindingsFailureLog(
+  error: unknown,
+  context: SecurityFindingsFailureContext
+): Record<string, unknown> {
+  const candidate = error as {
+    name?: string
+    code?: string
+    statusCode?: number
+    $metadata?: { requestId?: string; requestID?: string; httpStatusCode?: number }
+  } | undefined
+  const awsRequestId = candidate?.$metadata?.requestId || candidate?.$metadata?.requestID
+  const httpStatus = candidate?.statusCode ?? candidate?.$metadata?.httpStatusCode
+  const entry: Record<string, unknown> = {
+    type: 'security_findings_failure',
+    route: '/api/v1/security/findings',
+    provider: context.provider,
+    environment: context.environment,
+    regionCount: context.regionCount,
+    accountCount: context.accountCount,
+    errorCode: candidate?.name || candidate?.code || 'ProviderError'
+  }
+  if (awsRequestId) entry.awsRequestId = awsRequestId
+  if (httpStatus !== undefined) entry.httpStatus = httpStatus
+  if (context.requestId) entry.ghostRequestId = context.requestId
+  return entry
+}
 
 const severityRank: Record<string, number> = {
   CRITICAL: 5,
@@ -147,7 +192,8 @@ function accountIdentity(account: IntegrationAccount, environment: 'commercial' 
 
 export async function querySecurityHubApi(
   accounts: IntegrationAccount[] | undefined,
-  query: ParsedSecurityHubQuery
+  query: ParsedSecurityHubQuery,
+  options: { requestId?: string } = {}
 ) {
   const anchor = securityCursorIssuedAt(query.cursor) || Date.now()
   if ('lookbackDays' in query.date && query.date.lookbackDays) {
@@ -216,7 +262,20 @@ export async function querySecurityHubApi(
       states = merged.states
       return merged
     } catch (error) {
-      if ((error as any)?.statusCode) throw error
+      const statusCode = (error as { statusCode?: number })?.statusCode
+      // Log only server-side failures so this signal stays clean for isolating
+      // the unexplained 5xx responses; client 4xx validation errors (e.g. the
+      // filter-count guard) are rethrown untouched without an error log.
+      if (typeof statusCode !== 'number' || statusCode >= 500) {
+        logger.error('Security Hub findings request failed', buildSecurityFindingsFailureLog(error, {
+          provider: 'AWS Security Hub',
+          environment: query.environment,
+          regionCount: regions.length,
+          accountCount: selectedIds.length,
+          requestId: options.requestId
+        }))
+      }
+      if (statusCode) throw error
       sanitizeProviderError('AWS Security Hub', error)
     }
   }
