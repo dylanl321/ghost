@@ -471,6 +471,14 @@ export async function getClient<T = any>(
     clientConfig.retryMode = 'adaptive'
   }
 
+  // Config Service: use adaptive retry to reduce ThrottlingException / Rate exceeded
+  // propagation. Application-level withThrottleRetry in config-service.ts adds a
+  // second layer with jittered backoff before surfacing throttle errors to callers.
+  if (service === 'config') {
+    clientConfig.maxAttempts = 4
+    clientConfig.retryMode = 'adaptive'
+  }
+
   const client = new ClientClass(clientConfig)
   
   // Cache the client with expiration tracking
