@@ -49,7 +49,17 @@ export const ROLES: RoleDefinition[] = [
       'accounts.edit',
       'accounts.create',
       'accounts.delete',
-      'users.manage'
+      'users.manage',
+      // OAuth administration capabilities (oauth-administration spec, Req 1.3).
+      // These are assigned to the Administrator role ONLY — no parallel admin
+      // identity and no grant to ordinary users. The server access service
+      // (server/mcp/oauth/admin/access-service.ts) checks these per-route in
+      // addition to requireAdmin.
+      'oauth.configuration.view',
+      'oauth.activity.view',
+      'oauth.applications.manage',
+      'oauth.grants.revoke',
+      'oauth.operations.manage'
     ],
     rules: {
       groups_exact: ['AWS-Product-Team'],
@@ -149,6 +159,16 @@ export const PERMISSION_CATEGORIES = {
     permissions: {
       'admin.logs': 'Access system logs',
       'admin.issues': 'Access issue management'
+    }
+  },
+  oauth: {
+    label: 'OAuth Administration',
+    permissions: {
+      'oauth.configuration.view': 'View OAuth overview, configuration, inventory, and quotas',
+      'oauth.activity.view': 'View OAuth activity, grants, issues, audit, and identity details',
+      'oauth.applications.manage': 'Create and manage OAuth applications and lifecycle',
+      'oauth.grants.revoke': 'Revoke OAuth grants and apply grant-affecting lifecycle actions',
+      'oauth.operations.manage': 'Run diagnostics, update issues, and manage OAuth alerts'
     }
   }
 }

@@ -52,13 +52,8 @@ interface ReportShareLinkState {
   reportType?: 'cost' | 'dataset'
 }
 
-interface ChatThreadShareLinkState {
-  shareId: string
-  threadId: string
-  type: 'chat-thread'
-}
 
-type ShareLinkState = CostShareLinkState | AccountShareLinkState | UserShareLinkState | ReportShareLinkState | ChatThreadShareLinkState
+type ShareLinkState = CostShareLinkState | AccountShareLinkState | UserShareLinkState | ReportShareLinkState
 
 // Get the shortlink code from the route
 const route = useRoute()
@@ -89,13 +84,6 @@ onMounted(async () => {
     }
 
     const { pagePath, configData } = response.data
-
-    // Handle chat thread shares - redirect to dedicated view page
-    if ('type' in configData && configData.type === 'chat-thread') {
-      const chatData = configData as ChatThreadShareLinkState
-      await navigateTo(`/chat/shared/${chatData.shareId}`, { replace: true })
-      return
-    }
 
     // Handle shared report downloads directly
     if ('shareId' in configData && !('type' in configData)) {

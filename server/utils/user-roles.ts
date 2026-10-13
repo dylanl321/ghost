@@ -18,8 +18,36 @@ import {
 const adminCache = new Map<string, { isAdmin: boolean, expiresAt: number }>()
 const ADMIN_CACHE_TTL = 10 * 60 * 1000 // 10 minutes
 
+function hasConfiguredAdminRole(user: any, groups: string[]): boolean {
+  const claims = user.claims || {}
+  return evaluateUserRoles({
+    userPrincipalName: user.email || claims.email || claims.preferred_username || '',
+    displayName: user.displayName || claims.name,
+    jobTitle: claims.jobTitle,
+    department: user.department || claims.department,
+    groups,
+    claims
+  }).some(role => role.id === 'admin')
+}
+
+function getSessionGroupNames(user: any): string[] {
+  const groups = user.groups || user.claims?.groups || []
+  if (!Array.isArray(groups)) {
+    return []
+  }
+
+  return groups
+    .map((group: any) => {
+      if (typeof group === 'string') {
+        return group
+      }
+      return group?.displayName || group?.name || ''
+    })
+    .filter(Boolean)
+}
+
 // Periodic cleanup of expired cache entries (every 5 minutes)
-setInterval(() => {
+const adminCacheCleanupTimer = setInterval(() => {
   const now = Date.now()
   for (const [userId, entry] of adminCache.entries()) {
     if (entry.expiresAt <= now) {
@@ -27,13 +55,17 @@ setInterval(() => {
     }
   }
 }, 5 * 60 * 1000)
+adminCacheCleanupTimer.unref()
 
 /**
  * Check if a user is an admin
  * Fetches user groups from Microsoft Graph API to check for admin group membership
  * Results are cached for 10 minutes to avoid excessive Graph API calls
  */
-export async function isUserAdmin(event: H3Event): Promise<boolean> {
+export async function isUserAdmin(
+  event: H3Event,
+  loadUserGroups: typeof getUserGroups = getUserGroups
+): Promise<boolean> {
   const auth = event.context.auth
   if (!auth || !auth.isAuthenticated) {
     return false
@@ -50,10 +82,12 @@ export async function isUserAdmin(event: H3Event): Promise<boolean> {
     return false
   }
 
-  // Check if groups are already in the session (for API key auth or cached sessions)
-  const sessionGroups = user.groups || user.claims?.groups || []
-  if (sessionGroups.length > 0) {
-    return sessionGroups.includes('AWS-Product-Team')
+  // Use the same named-group role rules as the browser. Entra commonly stores
+  // group object IDs in the session, so a failed direct match must fall
+  // through to Graph instead of becoming an immediate denial.
+  const sessionGroups = getSessionGroupNames(user)
+  if (hasConfiguredAdminRole(user, sessionGroups)) {
+    return true
   }
 
   // For OIDC auth, fetch groups from Microsoft Graph API
@@ -76,10 +110,13 @@ export async function isUserAdmin(event: H3Event): Promise<boolean> {
     // Fetch from Graph API
     try {
       // Fetch user's groups from Microsoft Graph
-      const userGroups = await getUserGroups(event, userId)
+      const userGroups = await loadUserGroups(event, userId)
 
-      // Check if user is in AWS-Product-Team group
-      const isAdmin = userGroups.some(group => group.displayName === 'AWS-Product-Team')
+      // Use the same role rules as the client, including configured admin usernames.
+      const isAdmin = hasConfiguredAdminRole(
+        user,
+        userGroups.map(group => group.displayName).filter(Boolean)
+      )
 
       // Cache the result
       adminCache.set(userId, {
@@ -155,7 +192,7 @@ export async function getUserPermissions(event: H3Event): Promise<Set<string>> {
 
   // Gather the user's group display names.
   let groupNames: string[] = []
-  const sessionGroups: string[] = user.groups || user.claims?.groups || []
+  const sessionGroups = getSessionGroupNames(user)
   if (sessionGroups.length > 0) {
     groupNames = sessionGroups
   } else if (auth.authType === 'oidc') {

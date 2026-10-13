@@ -7,7 +7,10 @@ import {
   type Inspector2Client
 } from '@aws-sdk/client-inspector2'
 import { getInspector2Client } from '../lib/aws-client-factory'
-import type { IntegrationAccount } from './integration-account-scope'
+import {
+  getIntegrationAccountEnvironmentErrors,
+  type IntegrationAccount
+} from './integration-account-scope'
 import type { VulnerabilityFinding, VulnerabilitySeverity } from './inspector-findings'
 import type { parseInspectorQuery } from './security-api-parameters'
 import {
@@ -209,6 +212,7 @@ export async function queryInspectorApi(accounts: IntegrationAccount[], query: P
     query.date.end = new Date(anchor)
   }
   const ids = accounts.map(account => accountId(account, query.environment)).filter((id): id is string => Boolean(id))
+  const errors = getIntegrationAccountEnvironmentErrors(accounts, query.environment)
   ids.sort()
   const regions = query.regions || defaultRegions(query.environment)
   const securityAccount = query.environment === 'govcloud'
@@ -225,9 +229,9 @@ export async function queryInspectorApi(accounts: IntegrationAccount[], query: P
   const fingerprint = securityQueryFingerprint({
     provider: 'inspector',
     accounts: [...ids].sort(),
+    accountErrors: errors,
     ...query,
     cursor: undefined,
-    page: undefined,
     date: {
       ...query.date,
       start: 'lookbackDays' in query.date && query.date.lookbackDays ? undefined : query.date.start?.toISOString(),
@@ -275,18 +279,11 @@ export async function queryInspectorApi(accounts: IntegrationAccount[], query: P
     }
   }
 
-  let result = await runPage()
-  for (let currentPage = 1; currentPage < query.page; currentPage++) {
-    if (!result.hasMore) {
-      result = { ...result, records: [] }
-      break
-    }
-    result = await runPage()
-  }
+  const result = await runPage()
 
   let total: number | null = null
   let totalIsExact = false
-  if (exactTotalEligible(query)) {
+  if (ids.length && exactTotalEligible(query)) {
     try {
       total = 0
       for (const region of regions) {
@@ -321,6 +318,7 @@ export async function queryInspectorApi(accounts: IntegrationAccount[], query: P
       totalIsExact
     },
     accounts: ids,
-    environment: query.environment
+    environment: query.environment,
+    errors
   }
 }

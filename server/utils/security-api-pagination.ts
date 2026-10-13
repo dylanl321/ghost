@@ -39,9 +39,13 @@ export function securityQueryFingerprint(value: unknown): string {
 }
 
 function cursorSecret(): string {
+  // ECS supplies the Nuxt OIDC names; all replicas must use the same signing key.
   const secret = process.env.SECURITY_API_CURSOR_SECRET ||
     process.env.NUXT_SESSION_PASSWORD ||
-    process.env.ENTRA_CLIENT_SECRET
+    process.env.ENTRA_CLIENT_SECRET ||
+    process.env.NUXT_OIDC_SESSION_SECRET ||
+    process.env.NUXT_OIDC_AUTH_SESSION_SECRET ||
+    process.env.NUXT_OIDC_PROVIDERS_ENTRA_CLIENT_SECRET
   if (!secret || secret.length < 16) {
     throw createError({
       statusCode: 500,
@@ -84,7 +88,8 @@ function readSecurityCursor(encoded: string, now = Date.now()): SecurityCursor {
       throw new Error('Expired cursor')
     }
     return cursor
-  } catch {
+  } catch (error) {
+    if ((error as { statusCode?: number })?.statusCode === 500) throw error
     throw createError({
       statusCode: 400,
       statusMessage: 'The pagination cursor is invalid, expired, tampered with, or does not match the requested filters.'
@@ -117,7 +122,8 @@ export function decodeSecurityCursor(
       offset: Math.max(0, Number(stream.offset) || 0),
       done: Boolean(stream.done)
     }))
-  } catch {
+  } catch (error) {
+    if ((error as { statusCode?: number })?.statusCode === 500) throw error
     throw createError({
       statusCode: 400,
       statusMessage: 'The pagination cursor is invalid, expired, tampered with, or does not match the requested filters.'

@@ -1,6 +1,6 @@
 ---
 title: Using Swagger UI for API Testing
-lastUpdated: 2026-09-03
+lastUpdated: 2026-10-01
 icon: i-heroicons-code-bracket
 ---
 
@@ -26,16 +26,16 @@ That's it. No setup required.
 
 ## API Categories
 
-- **Accounts** - List and manage accounts
-- **Costs** - Cost data, forecasts, analysis
-- **Admin** - Admin stuff
-- **User** - Your profile and settings
+- **Accounts** - Account inventory and organization structure
+- **Costs** - Cost summaries, tag analysis, and tag discovery
+- **Forecasts** - AWS and GHOST financial forecasts
+- **Security** - Security summaries, Security Hub findings, and Inspector findings
 
 ## Example: Getting Cost Data
 
 Let's grab this month's costs:
 
-1. Find `GET /api/v1/costs/summary` under Integrations v1
+1. Find `GET /api/v1/costs/summary` under Costs
 2. Click "Try it out"
 3. Set parameters:
    ```
@@ -63,6 +63,18 @@ GET /api/v1/costs/summary?period=thisMonth&groupBy=LINKED_ACCOUNT
 ```
 GET /api/v1/forecasts/aws?period=current-month-remainder&granularity=DAILY
 ```
+
+**Costs by tag value:**
+```
+GET /api/v1/costs/tags?tagKey=Project&period=lastMonth
+```
+
+**Available cost allocation tags:**
+```
+GET /api/v1/costs/tag-keys?period=lastMonth
+```
+
+Tag costs include normalized values and account contributions by default. Use the same `accountIdentifiers`, `adminOf`, or `ownedBy` selectors as other v1 endpoints.
 
 ## Using API Keys
 

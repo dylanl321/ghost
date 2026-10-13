@@ -1,0 +1,14 @@
+{
+  "items": [
+    {
+      "tenantId": "tenant-fake-0001",
+      "spaceId": "space-0000-fake-aaaa",
+      "serverSequence": 99,
+      "kind": "deletion",
+      "objectId": "inv-fake-0001",
+      "safeProjection": { "invalidated": true }
+    }
+  ],
+  "highWaterMark": 99,
+  "pageSize": 200
+}

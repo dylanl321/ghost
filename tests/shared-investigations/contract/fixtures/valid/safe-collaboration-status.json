@@ -1,0 +1,13 @@
+{
+  "status": "ready",
+  "pendingCount": 0,
+  "spaces": [
+    {
+      "spaceId": "space-0000-fake-aaaa",
+      "label": "Example Team Space (synthetic)",
+      "capabilities": ["list", "read", "contribute"]
+    }
+  ],
+  "captureWarnings": [],
+  "lastSuccessfulSyncAt": "2024-01-02T09:00:00Z"
+}

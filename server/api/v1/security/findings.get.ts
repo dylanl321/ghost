@@ -36,7 +36,8 @@ registerEndpoint('/api/v1/security/findings', 'GET', {
                   pagination: { $ref: '#/components/schemas/PaginationInfo' },
                   format: { type: 'string', enum: ['normalized', 'asff'] },
                   accounts: { type: 'array', items: { type: 'string' } },
-                  environment: { $ref: '#/components/schemas/AWSEnvironment' }
+                  environment: { $ref: '#/components/schemas/AWSEnvironment' },
+                  errors: { type: 'array', items: { $ref: '#/components/schemas/SecurityAccountError' } }
                 }
               }
             }
@@ -44,7 +45,23 @@ registerEndpoint('/api/v1/security/findings', 'GET', {
           examples: {
             multiAccount: {
               summary: 'Globally sorted selected-account findings',
-              value: { success: true, data: [], metadata: { pagination: { limit: 100, returned: 0, hasMore: false, nextCursor: null, total: null, totalIsExact: false }, format: 'normalized' } }
+              value: { success: true, data: [], metadata: { pagination: { limit: 100, returned: 0, hasMore: false, nextCursor: null, total: null, totalIsExact: false }, format: 'normalized', errors: [] } }
+            },
+            missingGovCloudAccount: {
+              summary: 'Selected account missing a GovCloud ID',
+              value: {
+                success: true,
+                data: [],
+                metadata: {
+                  pagination: { limit: 100, returned: 0, hasMore: false, nextCursor: null, total: null, totalIsExact: false },
+                  errors: [{
+                    code: 'MISSING_ENVIRONMENT_ACCOUNT_ID',
+                    environment: 'govcloud',
+                    account: { accountId: '111111111111', accountName: 'Example Commercial Account' },
+                    message: 'Example Commercial Account does not have a govcloud account ID.'
+                  }]
+                }
+              }
             },
             rawAsff: {
               summary: 'Raw AWS Security Finding Format',
@@ -72,11 +89,13 @@ export default defineEventHandler(async (event) => {
   const accountScope = await resolveIntegrationAccountScope(event, rawQuery, {
     required: hasIntegrationAccountSelector(rawQuery)
   })
-  const result = await querySecurityHubApi(accountScope?.accounts, query)
+  const ghostRequestId = typeof event.context.requestId === 'string' ? event.context.requestId : undefined
+  const result = await querySecurityHubApi(accountScope?.accounts, query, { requestId: ghostRequestId })
   return sendSuccess(event, result.records, {
     pagination: result.pagination,
     format: result.format,
     accounts: result.accounts,
-    environment: result.environment
+    environment: result.environment,
+    errors: result.errors
   })
 })

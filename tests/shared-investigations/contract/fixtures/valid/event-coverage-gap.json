@@ -1,0 +1,24 @@
+{
+  "eventId": "evt-fake-0003",
+  "investigationId": "inv-fake-0001",
+  "runId": "run-fake-0001",
+  "type": "coverage-gap",
+  "author": {
+    "tenantId": "tenant-fake-0001",
+    "entraObjectId": "obj-fake-operator-a"
+  },
+  "gatewayId": "gw-fake-workstation-1",
+  "occurredAt": "2024-01-02T03:08:00Z",
+  "receivedAt": "2024-01-02T03:08:01Z",
+  "serverSequence": 13,
+  "operationId": "op-fake-gap-1",
+  "body": {},
+  "provenance": "adapter",
+  "limitations": [
+    {
+      "kind": "denied",
+      "safeMessage": "Source read was not permitted by the evidence policy.",
+      "originalOutcome": "denied"
+    }
+  ]
+}

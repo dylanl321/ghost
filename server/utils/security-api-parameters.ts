@@ -11,9 +11,8 @@ import {
 const parameter = (
   name: string,
   description: string,
-  schema: Record<string, unknown> = { type: 'string' },
-  deprecated = false
-) => ({ name, in: 'query', description, schema, ...(deprecated ? { deprecated: true } : {}) })
+  schema: Record<string, unknown> = { type: 'string' }
+) => ({ name, in: 'query', description, schema })
 
 export const SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFORMATIONAL'] as const
 export const INSPECTOR_SEVERITIES = [...SEVERITIES, 'UNTRIAGED'] as const
@@ -26,13 +25,11 @@ const commonFindingParameters = [
   ...integrationAccountParameters,
   parameter('environment', 'AWS partition to query.', { type: 'string', enum: ['commercial', 'govcloud'], default: 'govcloud' }),
   parameter('regions', 'Comma-separated AWS regions. Defaults to both primary regions in the selected partition.'),
-  parameter('region', 'Deprecated alias for regions.', { type: 'string' }, true),
   parameter('startDate', 'Inclusive ISO-8601 range start. Must be paired with endDate and cannot be combined with lookbackDays.', { type: 'string', format: 'date-time' }),
   parameter('endDate', 'Inclusive ISO-8601 range end. Must be paired with startDate and cannot be combined with lookbackDays.', { type: 'string', format: 'date-time' }),
   parameter('lookbackDays', 'Relative date range. Cannot be combined with startDate/endDate.', { type: 'integer', minimum: 1, maximum: 3650 }),
   parameter('limit', 'Maximum findings returned per cursor page.', { type: 'integer', minimum: 1, maximum: 100, default: 100 }),
   parameter('cursor', 'Opaque, signed forward-only continuation cursor returned as nextCursor.'),
-  parameter('page', 'Deprecated numeric page alias. Cursor pagination is canonical.', { type: 'integer', minimum: 1, maximum: 20, default: 1 }, true),
   parameter('sortOrder', 'Sort direction.', { type: 'string', enum: SORT_ORDERS, default: 'desc' })
 ]
 
@@ -41,14 +38,10 @@ export const securityHubParameters = [
   parameter('dateField', 'Security Hub date field used by startDate/endDate or lookbackDays.', { type: 'string', enum: ['firstObservedAt', 'lastObservedAt', 'createdAt', 'updatedAt'], default: 'firstObservedAt' }),
   parameter('severity', 'Comma-separated severity labels.', { type: 'string', enum: SEVERITIES }),
   parameter('workflowStatus', 'Comma-separated workflow states, including historical resolved or suppressed findings.', { type: 'string', enum: SECURITY_HUB_WORKFLOWS }),
-  parameter('status', 'Deprecated alias for workflowStatus.', { type: 'string', enum: SECURITY_HUB_WORKFLOWS }, true),
   parameter('recordState', 'Comma-separated ACTIVE or ARCHIVED record states.', { type: 'string', enum: SECURITY_HUB_STATES, default: 'ACTIVE' }),
-  parameter('activeOnly', 'Deprecated state alias. false includes ACTIVE and ARCHIVED records; use recordState instead.', { type: 'boolean' }, true),
   parameter('product', 'Comma-separated product names. Values use provider substring matching.'),
   parameter('findingIds', 'Comma-separated exact ASFF finding IDs.'),
   parameter('resourceIds', 'Comma-separated exact resource IDs.'),
-  parameter('resourceId', 'Deprecated single-value alias for resourceIds.', { type: 'string' }, true),
-  parameter('instanceIds', 'Deprecated alias for resourceIds.', { type: 'string' }, true),
   parameter('resourceTypes', 'Comma-separated ASFF resource types.'),
   parameter('findingTypes', 'Comma-separated ASFF finding type namespaces.'),
   parameter('controls', 'Comma-separated Security Hub control IDs.'),
@@ -70,10 +63,8 @@ export const inspectorParameters = [
   parameter('findingTypes', 'Comma-separated Inspector finding types.'),
   parameter('resourceTypes', 'Comma-separated Inspector resource types.'),
   parameter('resourceIds', 'Comma-separated exact resource IDs.'),
-  parameter('instanceIds', 'Deprecated alias for resourceIds.', { type: 'string' }, true),
   parameter('findingArns', 'Comma-separated exact Inspector finding ARNs.'),
   parameter('vulnerabilityIds', 'Comma-separated CVE, GHSA, or other vulnerability identifiers.'),
-  parameter('cveIds', 'Deprecated alias for vulnerabilityIds.', { type: 'string' }, true),
   parameter('relatedVulnerabilityIds', 'Comma-separated related CVE or GHSA identifiers.'),
   parameter('packageNames', 'Comma-separated vulnerable package names.'),
   parameter('repositoryNames', 'Comma-separated ECR repository names.'),
@@ -101,16 +92,11 @@ const allowedNumber = (value: unknown, name: string) => {
 
 export function parseCommonSecurityQuery(query: Record<string, unknown>, defaultLookbackDays?: number) {
   const cursor = typeof query.cursor === 'string' && query.cursor ? query.cursor : undefined
-  const page = parseBoundedInteger(query.page, 'page', 1, 1, 20)
-  if (cursor && page !== 1) {
-    throw createError({ statusCode: 400, statusMessage: 'cursor cannot be combined with page values greater than 1.' })
-  }
   return {
     environment: parseEnum(query.environment, 'environment', ['commercial', 'govcloud'] as const, 'govcloud')!,
-    regions: parseCsv(query.regions ?? query.region),
+    regions: parseCsv(query.regions),
     limit: parseBoundedInteger(query.limit, 'limit', 100, 1, 100),
     cursor,
-    page,
     sortOrder: parseEnum(query.sortOrder, 'sortOrder', SORT_ORDERS, 'desc')!,
     date: parseDateRange(query, defaultLookbackDays)
   }
@@ -118,9 +104,6 @@ export function parseCommonSecurityQuery(query: Record<string, unknown>, default
 
 export function parseSecurityHubQuery(query: Record<string, unknown>) {
   const common = parseCommonSecurityQuery(query, 30)
-  if (query.activeOnly !== undefined && query.activeOnly !== 'true' && query.activeOnly !== 'false') {
-    throw createError({ statusCode: 400, statusMessage: 'activeOnly must be true or false.' })
-  }
   return {
     ...common,
     date: {
@@ -128,12 +111,11 @@ export function parseSecurityHubQuery(query: Record<string, unknown>) {
       dateField: parseEnum(query.dateField, 'dateField', ['firstObservedAt', 'lastObservedAt', 'createdAt', 'updatedAt'] as const, 'firstObservedAt')!
     },
     severities: parseEnumCsv(query.severity, 'severity', SEVERITIES),
-    workflowStatuses: parseEnumCsv(query.workflowStatus ?? query.status, 'workflowStatus', SECURITY_HUB_WORKFLOWS),
-    recordStates: parseEnumCsv(query.recordState, 'recordState', SECURITY_HUB_STATES) ||
-      (query.activeOnly === 'false' ? ['ACTIVE', 'ARCHIVED'] : ['ACTIVE']),
+    workflowStatuses: parseEnumCsv(query.workflowStatus, 'workflowStatus', SECURITY_HUB_WORKFLOWS),
+    recordStates: parseEnumCsv(query.recordState, 'recordState', SECURITY_HUB_STATES) || ['ACTIVE'],
     products: parseCsv(query.product),
     findingIds: parseCsv(query.findingIds),
-    resourceIds: parseCsv(query.resourceIds ?? query.instanceIds ?? query.resourceId),
+    resourceIds: parseCsv(query.resourceIds),
     resourceTypes: parseCsv(query.resourceTypes),
     findingTypes: parseCsv(query.findingTypes),
     controls: parseCsv(query.controls),
@@ -161,9 +143,9 @@ export function parseInspectorQuery(query: Record<string, unknown>) {
     severities: parseEnumCsv(query.severity, 'severity', INSPECTOR_SEVERITIES),
     findingTypes: parseCsv(query.findingTypes),
     resourceTypes: parseCsv(query.resourceTypes),
-    resourceIds: parseCsv(query.resourceIds ?? query.instanceIds),
+    resourceIds: parseCsv(query.resourceIds),
     findingArns: parseCsv(query.findingArns),
-    vulnerabilityIds: parseCsv(query.vulnerabilityIds ?? query.cveIds),
+    vulnerabilityIds: parseCsv(query.vulnerabilityIds),
     relatedVulnerabilityIds: parseCsv(query.relatedVulnerabilityIds),
     packageNames: parseCsv(query.packageNames),
     repositoryNames: parseCsv(query.repositoryNames),

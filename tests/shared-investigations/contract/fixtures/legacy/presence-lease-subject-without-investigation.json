@@ -1,0 +1,17 @@
+{
+  "tenantId": "tenant-fake-0001",
+  "spaceId": "space-0000-fake-aaaa",
+  "subjectReference": {
+    "sourceBindingId": "binding-fake-snow-01",
+    "sourceType": "servicenow",
+    "stableSourceId": "INC0001111"
+  },
+  "subject": {
+    "tenantId": "tenant-fake-0001",
+    "entraObjectId": "obj-fake-operator-c"
+  },
+  "gatewayId": "gw-fake-workstation-3",
+  "activityKind": "viewing",
+  "lastSeenAt": "2023-06-01T00:00:00Z",
+  "expiresAt": "2023-06-01T00:01:30Z"
+}

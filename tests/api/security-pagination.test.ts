@@ -5,13 +5,70 @@ import {
   decodeSecurityCursor,
   encodeSecurityCursor,
   mergeSecurityStreams,
+  securityCursorIssuedAt,
   sanitizeProviderError,
   securityQueryFingerprint,
   type SecurityStreamState
 } from '../../server/utils/security-api-pagination'
 import { parseInspectorQuery, parseSecurityHubQuery } from '../../server/utils/security-api-parameters'
+import { getIntegrationAccountEnvironmentErrors } from '../../server/utils/integration-account-scope'
+import { querySecurityHubApi } from '../../server/utils/security-hub-api'
+import { queryInspectorApi } from '../../server/utils/inspector-api'
 
 process.env.SECURITY_API_CURSOR_SECRET = 'test-only-security-cursor-secret'
+
+const cursorSecretNames = [
+  'SECURITY_API_CURSOR_SECRET',
+  'NUXT_SESSION_PASSWORD',
+  'ENTRA_CLIENT_SECRET',
+  'NUXT_OIDC_SESSION_SECRET',
+  'NUXT_OIDC_AUTH_SESSION_SECRET',
+  'NUXT_OIDC_PROVIDERS_ENTRA_CLIENT_SECRET'
+] as const
+
+test('security cursors work with the OIDC secret names supplied by ECS', (t) => {
+  const saved = cursorSecretNames.map(name => [name, process.env[name]] as const)
+  t.after(() => {
+    for (const [name, value] of saved) {
+      if (value === undefined) Reflect.deleteProperty(process.env, name)
+      else process.env[name] = value
+    }
+  })
+  for (const name of cursorSecretNames) Reflect.deleteProperty(process.env, name)
+
+  const fingerprint = securityQueryFingerprint({ environment: 'govcloud', sortBy: 'severity' })
+  const states = [{ id: 'us-gov-west-1:0', token: 'aws-next-page', offset: 12, done: false }]
+  for (const name of cursorSecretNames.slice(3)) {
+    process.env[name] = 'test-only-deployed-oidc-session-secret'
+    const cursor = encodeSecurityCursor(fingerprint, states, 1_000)
+    assert.deepEqual(decodeSecurityCursor(cursor, fingerprint, states, 1_001), states)
+    assert.equal(securityCursorIssuedAt(cursor, 1_001), 1_000)
+    Reflect.deleteProperty(process.env, name)
+  }
+})
+
+test('a dedicated cursor secret takes precedence and missing configuration stays a server error', (t) => {
+  const saved = cursorSecretNames.map(name => [name, process.env[name]] as const)
+  t.after(() => {
+    for (const [name, value] of saved) {
+      if (value === undefined) Reflect.deleteProperty(process.env, name)
+      else process.env[name] = value
+    }
+  })
+  for (const name of cursorSecretNames) Reflect.deleteProperty(process.env, name)
+  process.env.SECURITY_API_CURSOR_SECRET = 'test-only-dedicated-cursor-secret'
+  process.env.NUXT_OIDC_SESSION_SECRET = 'test-only-original-session-secret'
+  const states = [{ id: 'us-gov-west-1:0', offset: 0 }]
+  const cursor = encodeSecurityCursor('fingerprint', states, 1_000)
+  process.env.NUXT_OIDC_SESSION_SECRET = 'test-only-rotated-session-secret'
+  assert.doesNotThrow(() => decodeSecurityCursor(cursor, 'fingerprint', states, 1_001))
+
+  for (const name of cursorSecretNames) Reflect.deleteProperty(process.env, name)
+  assert.throws(() => encodeSecurityCursor('fingerprint', states), { statusCode: 500 })
+  assert.throws(() => decodeSecurityCursor(cursor, 'fingerprint', states, 1_001), { statusCode: 500 })
+  process.env.SECURITY_API_CURSOR_SECRET = 'too-short'
+  assert.throws(() => encodeSecurityCursor('fingerprint', states), { statusCode: 500 })
+})
 
 interface Record {
   id: string
@@ -61,16 +118,14 @@ test('signed cursors reject tampering, expiration, and filter or account mismatc
   assert.throws(() => decodeSecurityCursor(cursor, fingerprint, initial, 1_000 + 15 * 60 * 1000), /pagination cursor/i)
 })
 
-test('date rules, historical states, defaults, and deprecated numeric pages parse consistently', () => {
+test('date rules, historical states, and defaults parse consistently', () => {
   const securityHub = parseSecurityHubQuery({
     workflowStatus: 'RESOLVED,SUPPRESSED',
     recordState: 'ARCHIVED',
-    page: '3',
     limit: '50'
   })
   assert.deepEqual(securityHub.workflowStatuses, ['RESOLVED', 'SUPPRESSED'])
   assert.deepEqual(securityHub.recordStates, ['ARCHIVED'])
-  assert.equal(securityHub.page, 3)
   assert.equal(securityHub.date.dateField, 'firstObservedAt')
   assert.equal('lookbackDays' in securityHub.date ? securityHub.date.lookbackDays : undefined, 30)
 
@@ -85,6 +140,52 @@ test('date rules, historical states, defaults, and deprecated numeric pages pars
     lookbackDays: '2'
   }), /cannot be combined/i)
   assert.throws(() => parseInspectorQuery({ status: 'NOT_A_STATUS' }), /unsupported values/i)
+})
+
+test('missing partition IDs produce explicit per-account errors', () => {
+  const errors = getIntegrationAccountEnvironmentErrors([
+    {
+      accountId: '111111111111',
+      accountName: 'Commercial only'
+    },
+    {
+      accountId: '222222222222',
+      govCloudAccountId: '333333333333',
+      accountName: 'Dual partition'
+    }
+  ], 'govcloud')
+
+  assert.deepEqual(errors, [{
+    code: 'MISSING_ENVIRONMENT_ACCOUNT_ID',
+    environment: 'govcloud',
+    account: {
+      accountId: '111111111111',
+      govCloudAccountId: undefined,
+      requestId: undefined,
+      accountName: 'Commercial only'
+    },
+    message: 'Commercial only does not have a govcloud account ID.'
+  }])
+})
+
+test('finding queries return account errors without broadening to organization scope', async () => {
+  const accounts = [{ accountId: '111111111111', accountName: 'Commercial only' }]
+
+  const hub = await querySecurityHubApi(accounts, parseSecurityHubQuery({
+    environment: 'govcloud',
+    regions: 'us-gov-west-1'
+  }))
+  assert.deepEqual(hub.records, [])
+  assert.equal(hub.errors.length, 1)
+  assert.deepEqual(hub.accounts, [])
+
+  const inspector = await queryInspectorApi(accounts, parseInspectorQuery({
+    environment: 'govcloud',
+    regions: 'us-gov-west-1'
+  }))
+  assert.deepEqual(inspector.records, [])
+  assert.equal(inspector.errors.length, 1)
+  assert.deepEqual(inspector.accounts, [])
 })
 
 test('curated provider filters are parsed for AWS pushdown', () => {

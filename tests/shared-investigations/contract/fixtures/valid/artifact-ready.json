@@ -1,0 +1,26 @@
+{
+  "artifactId": "art-fake-ready-01",
+  "investigationId": "inv-fake-0001",
+  "state": "ready",
+  "producingEventId": "evt-fake-0002",
+  "producingRunId": "run-fake-0001",
+  "checkId": "chk-fake-aaaa",
+  "originalFilename": "jira-evidence.json",
+  "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "byteCount": 2048,
+  "mediaType": "application/json",
+  "sourceReferences": ["jira:PROJ-1234"],
+  "collectedAt": "2024-01-02T03:06:30Z",
+  "queryWindow": {
+    "start": "2024-01-01T00:00:00Z",
+    "end": "2024-01-02T00:00:00Z"
+  },
+  "collectorVersion": "landing-zone-ops/0.1.0",
+  "sourceVersionOrEtag": "etag-fake-abc",
+  "provenance": "automatic",
+  "redacted": true,
+  "truncated": false,
+  "limitations": [],
+  "reservedAt": "2024-01-02T03:06:20Z",
+  "readyAt": "2024-01-02T03:06:40Z"
+}

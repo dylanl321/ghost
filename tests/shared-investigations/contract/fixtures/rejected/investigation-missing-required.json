@@ -1,0 +1,12 @@
+{
+  "investigationId": "inv-bad-1",
+  "tenantId": "tenant-fake-0001",
+  "spaceId": "space-0000-fake-aaaa",
+  "workflowProfileId": "wf-fake-default",
+  "workflowVersion": 1,
+  "stageId": "investigating",
+  "revision": 0,
+  "archived": false,
+  "createdAt": "2024-01-02T03:04:05Z",
+  "updatedAt": "2024-01-02T09:10:11Z"
+}

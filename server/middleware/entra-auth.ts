@@ -30,6 +30,11 @@ export function isAllowedIntegrationApiPath(pathname: string): boolean {
  * Check if request is for API endpoints that require authentication
  */
 export function requiresAuthentication(url: string): boolean {
+  // Kiro Crew APIs perform exact OAuth resource/scope validation in their
+  // handlers. A Ghost browser session or API key must not satisfy them.
+  if (url.startsWith('/api/kirocrew/v1/')) {
+    return false
+  }
   // Exclude public endpoints that don't need auth
   const publicEndpoints = [
     '/api/health',
@@ -38,7 +43,6 @@ export function requiresAuthentication(url: string): boolean {
     '/api/_content',      // Nuxt content API
     '/api/_auth',         // OIDC authentication endpoints
     '/api/_nuxt_icon',    // Nuxt Icon API
-    '/api/chat/threads/shared/', // Public read-only chat shares
     '/api/shortlinks/',
     '/api/reports/download/',
     '/api/dataset-reports/download/'
