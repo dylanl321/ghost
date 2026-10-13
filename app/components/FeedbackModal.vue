@@ -1,12 +1,12 @@
 <template>
   <div>
-    <UButton icon="i-heroicons-document-text" color="white" variant="ghost" @click="open">
+    <UButton icon="i-heroicons-document-text" color="white" variant="ghost" @click="open()">
       Submit Feedback
     </UButton>
 
-    <UModal v-model="isOpen" title="Submit Feedback">
+    <UModal v-model="isOpen" :title="modalTitle">
       <div class="p-6 space-y-4">
-        <h1 class="text-xl mb-8 font-semibold">Submit Feedback</h1>
+        <h1 class="text-xl mb-8 font-semibold">{{ modalTitle }}</h1>
 
         <div>
           <label class="block mb-1 text-sm font-medium">Type</label>
@@ -56,6 +56,12 @@ const logger = createLogger('FeedbackModal')
 const { user } = useOidcAuth()
 
 type FeatureOptions = 'Issue' | 'Feature Request' | 'General Feedback'
+type FeedbackSource = 'mcp-connections'
+
+interface FeedbackOpenOptions {
+  type?: FeatureOptions
+  source?: FeedbackSource
+}
 
 const isOpen = ref(false)
 const featureTypeSelection = ref<FeatureOptions>('Issue')
@@ -64,15 +70,38 @@ const description = ref('')
 const reporter_email = ref('')
 const isAnonymous = ref(false)
 const isSubmitting = ref(false)
+const feedbackSource = ref<FeedbackSource | undefined>()
 
 const toast = useToast()
+const { on, emit } = useEventBus()
+let unsubscribeFromOpen: (() => void) | undefined
 
-function open() {
+const modalTitle = computed(() => feedbackSource.value === 'mcp-connections' ? 'Provide MCP feedback' : 'Submit Feedback')
+
+function open(options: FeedbackOpenOptions = {}) {
+  feedbackSource.value = options.source
+  featureTypeSelection.value = options.type ?? 'Issue'
+  description.value = ''
+  isAnonymous.value = false
   isOpen.value = true
   if (user.value?.claims?.email) {
     reporter_email.value = user.value?.claims?.email as string
+  } else {
+    reporter_email.value = ''
   }
 }
+
+onMounted(() => {
+  unsubscribeFromOpen = on('feedback.open', (event) => {
+    const type = featureOptions.includes(event.payload.type as FeatureOptions)
+      ? event.payload.type as FeatureOptions
+      : undefined
+    const source = event.payload.source === 'mcp-connections' ? 'mcp-connections' : undefined
+    open({ type, source })
+  })
+})
+
+onBeforeUnmount(() => unsubscribeFromOpen?.())
 
 // Watch for anonymous toggle to clear/restore email
 watch(isAnonymous, (checked) => {
@@ -86,6 +115,12 @@ watch(isAnonymous, (checked) => {
 })
 
 const descriptionPlaceholder = computed(() => {
+  if (feedbackSource.value === 'mcp-connections') {
+    return featureTypeSelection.value === 'Issue'
+      ? 'Describe what happened while configuring or using GHOST MCP, including any error text and steps to reproduce it.'
+      : 'Share your feedback or suggestions about the GHOST MCP connection experience.'
+  }
+
   switch (featureTypeSelection.value) {
     case 'Issue':
       return 'Describe the issue. Please include details such as what page(s) it occurs on, what you expected to happen, and any steps to reproduce the problem.'
@@ -115,6 +150,7 @@ async function submit() {
       type: featureTypeSelection.value,
       description: description.value,
       reporter_email: reporter_email.value,
+      source: feedbackSource.value,
     }
 
     const result = await $fetch<{ success: boolean }>('/api/feedback/submit', {
@@ -126,7 +162,7 @@ async function submit() {
       throw new Error('Server returned unsuccessful response')
     }
 
-    useEventBus().emit('feedback.submitted', {})
+    emit('feedback.submitted', { source: feedbackSource.value })
 
     toast.add({
       title: 'Feedback Submitted',
@@ -140,6 +176,7 @@ async function submit() {
     description.value = ''
     reporter_email.value = ''
     isAnonymous.value = false
+    feedbackSource.value = undefined
   } catch (err) {
     logger.error('Failed to submit feedback:', err)
     toast.add({ title: 'Error', description: 'Failed to submit feedback.', color: 'red' })

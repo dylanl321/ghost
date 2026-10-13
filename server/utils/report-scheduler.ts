@@ -4,6 +4,7 @@
  */
 
 import type { ScheduledReport } from '../../shared/types/scheduled-reports'
+import type { DatasetReportConfig } from '../../shared/types/dataset-reports'
 import {
   getUpcomingReports,
   updateReportRunStatus,
@@ -13,7 +14,7 @@ import {
 import { generateCostReport } from './report-generator'
 import { generateDatasetReport } from './dataset-report-generator'
 import { sendReportEmail, renderTemplate, getDefaultTemplate } from './email-service'
-import { claimExecutionLock, createLockId } from './execution-locks'
+import { claimExecutionLock } from './execution-locks'
 import { uploadReportToS3 } from './s3-reports-storage'
 import { sendUserNotification } from './notification-service'
 import { logger } from './logger'
@@ -25,6 +26,7 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
   success: boolean
   error?: string
   duration?: number
+  executionId?: string
 }> {
   const startTime = Date.now()
 
@@ -34,9 +36,11 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
     // Step 1: Generate the report (route based on report type)
     logger.info(`  → Generating ${report.reportType || 'cost'} report...`)
 
+    const isDatasetReport = report.reportType === 'dataset' ||
+      (!report.reportType && Boolean((report.reportConfig as any)?.datasets))
     let reportResult
-    if (report.reportType === 'dataset') {
-      reportResult = await generateDatasetReport(report.reportConfig)
+    if (isDatasetReport) {
+      reportResult = await generateDatasetReport(report.reportConfig as unknown as DatasetReportConfig)
     } else {
       // Default to cost report for backwards compatibility
       reportResult = await generateCostReport(report.reportConfig)
@@ -60,7 +64,7 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
         reportName: report.reportName,
         userId: report.createdBy,
         executionId,
-        format: report.reportConfig.format === 'pdf' ? 'pdf' : 'csv'
+        format: report.reportConfig.format
       }
     )
 
@@ -72,18 +76,22 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
     }
 
     // Step 3: Prepare email content with enhanced date context
-    const dateContext = buildDateContext(report.reportConfig.timeframe)
+    const dateContext = isDatasetReport
+      ? {}
+      : buildDateContext(report.reportConfig.timeframe)
 
     const emailSubject = renderTemplate(report.emailTemplate.subject, {
       reportName: report.reportName,
-      timeframe: formatTimeframe(report.reportConfig.timeframe),
-      dataMode: formatDataMode(report.reportConfig.dataMode),
+      timeframe: isDatasetReport ? 'Current dataset query' : formatTimeframe(report.reportConfig.timeframe),
+      dataMode: isDatasetReport ? 'Dataset report' : formatDataMode(report.reportConfig.dataMode),
       ...dateContext
     })
 
     let emailBody = report.emailTemplate.body
     if (!emailBody || emailBody.trim() === '') {
-      emailBody = getDefaultTemplate()
+      emailBody = isDatasetReport
+        ? getDatasetDefaultEmailTemplate()
+        : getDefaultTemplate()
     }
 
     // Build template context
@@ -98,8 +106,8 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
     const templateContext = {
       userName: report.createdBy.split('@')[0], // Extract name from email
       reportName: report.reportName,
-      timeframe: formatTimeframe(report.reportConfig.timeframe),
-      dataMode: formatDataMode(report.reportConfig.dataMode),
+      timeframe: isDatasetReport ? 'Current dataset query' : formatTimeframe(report.reportConfig.timeframe),
+      dataMode: isDatasetReport ? 'Dataset report' : formatDataMode(report.reportConfig.dataMode),
       accountCount: report.reportConfig.accounts?.length || 'All',
       format: report.reportConfig.format.toUpperCase(),
       timestamp: new Date().toLocaleString('en-US', {
@@ -170,7 +178,8 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
 
     return {
       success: true,
-      duration
+      duration,
+      executionId
     }
   } catch (error: any) {
     const duration = Date.now() - startTime
@@ -211,6 +220,16 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
       duration
     }
   }
+}
+
+function getDatasetDefaultEmailTemplate(): string {
+  return `
+    <h1>AWS Dataset Report</h1>
+    <p>Hello {{userName}},</p>
+    <p>Your scheduled dataset report <strong>{{reportName}}</strong> is ready and attached.</p>
+    <p>Accounts: {{accountCount}}<br>Format: {{format}}<br>Generated: {{timestamp}}</p>
+    {{#if downloadUrl}}<p><a href="{{downloadUrl}}">Download report</a></p>{{/if}}
+  `.trim()
 }
 
 /**
@@ -468,8 +487,8 @@ function buildDateContext(timeframe: string): Record<string, string> {
     dateRange: `${startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
 
     // ISO format dates (for technical use)
-    startDateISO: startDate.toISOString().split('T')[0],
-    endDateISO: endDate.toISOString().split('T')[0],
+    startDateISO: startDate.toISOString().split('T')[0] || '',
+    endDateISO: endDate.toISOString().split('T')[0] || '',
 
     // Quarter information
     quarter: `Q${Math.floor(startDate.getMonth() / 3) + 1}`,

@@ -328,7 +328,7 @@ export const DATASET_PRESETS: DatasetPreset[] = [
       entraUsers: {
         enabled: true,
         filters: {
-          activeOnly: true,
+          activityStatus: 'inactive',
           lookbackDays: 90
         }
       }

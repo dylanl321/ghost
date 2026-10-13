@@ -31,8 +31,8 @@ export async function getAccountsTableName(): Promise<string> {
  * Get the Organizations account ID for the environment
  */
 function getOrganizationsAccountId(environment: AWSEnvironmentType = 'commercial'): string | undefined {
-  return environment === 'commercial' 
-    ? process.env.AWS_COMMERCIAL_ORGANIZATIONS_ACCOUNT_ID
+  return environment === 'commercial'
+    ? (process.env.COMMERCIAL_AWS_ORGANIZATIONS_ACCOUNT_ID || process.env.AWS_COMMERCIAL_ORGANIZATIONS_ACCOUNT_ID)
     : process.env.AWS_GOVCLOUD_ORGANIZATIONS_ACCOUNT_ID
 }
 
@@ -70,53 +70,153 @@ export async function getAccountFromOrganizations(
 }
 
 /**
+ * Organizations ListAccounts throttling is retryable; AccessDenied and other
+ * failures are not. These names/metadata mirror the SDK's throttle signals.
+ */
+const RETRYABLE_ORGANIZATIONS_ERROR_NAMES = new Set([
+  'TooManyRequestsException',
+  'ThrottlingException',
+  'RequestThrottledException',
+  'Throttling'
+])
+
+const LIST_ACCOUNTS_OPERATION = 'listAccountsFromOrganizations'
+const LIST_ACCOUNTS_MAX_ATTEMPTS = 5
+const LIST_ACCOUNTS_BASE_DELAY_MS = 500
+const LIST_ACCOUNTS_MAX_DELAY_MS = 8000
+
+/**
+ * Pure classifier: true only for retryable Organizations throttling errors.
+ * Checks the SDK error name/code and HTTP 429 metadata; everything else
+ * (AccessDenied, validation, arbitrary failures) is treated as non-retryable.
+ */
+export function isRetryableOrganizationsError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const err = error as Record<string, unknown>
+  const name = typeof err.name === 'string' ? err.name : undefined
+  const code = typeof err.code === 'string' ? err.code : undefined
+  if ((name && RETRYABLE_ORGANIZATIONS_ERROR_NAMES.has(name)) ||
+      (code && RETRYABLE_ORGANIZATIONS_ERROR_NAMES.has(code))) {
+    return true
+  }
+  const metadata = err.$metadata
+  if (metadata && typeof metadata === 'object') {
+    return (metadata as Record<string, unknown>).httpStatusCode === 429
+  }
+  return false
+}
+
+/**
+ * Pure full-jitter exponential backoff. `attempt` is 1-based. `random` is
+ * injectable so the delay is deterministic under test.
+ */
+export function computeOrganizationsRetryDelayMs(
+  attempt: number,
+  baseDelayMs: number = LIST_ACCOUNTS_BASE_DELAY_MS,
+  maxDelayMs: number = LIST_ACCOUNTS_MAX_DELAY_MS,
+  random: () => number = Math.random
+): number {
+  const cap = Math.min(baseDelayMs * 2 ** Math.max(0, attempt - 1), maxDelayMs)
+  return Math.floor(random() * cap)
+}
+
+/** Extract the error name/code for structured logs without leaking payloads. */
+function describeError(error: unknown): { errorName?: string; errorCode?: string } {
+  if (!error || typeof error !== 'object') return {}
+  const err = error as Record<string, unknown>
+  return {
+    errorName: typeof err.name === 'string' ? err.name : undefined,
+    errorCode: typeof err.code === 'string' ? err.code : undefined
+  }
+}
+
+/**
  * Get all accounts from Organizations API
  * Used by: bulk operations in accounts-v2.ts
+ *
+ * Retries only on Organizations throttling (TooManyRequestsException /
+ * ThrottlingException / HTTP 429) with exponential backoff and full jitter.
+ * Non-retryable errors (e.g. AccessDenied) and exhausted retries both fall
+ * back to an empty list, preserving the original non-fatal contract.
  */
 export async function getAllAccountsFromOrganizations(
   environment: AWSEnvironmentType = 'commercial'
 ): Promise<AccountInfo[]> {
   if (!hasCredentials(environment)) {
-    logger.warn(`No credentials available for ${environment} environment`)
+    logger.warn('No credentials available for Organizations account list, returning empty list', {
+      component: 'accounts-consolidated',
+      operation: LIST_ACCOUNTS_OPERATION,
+      environment
+    })
     return []
   }
 
-  try {
-    const orgAccountId = getOrganizationsAccountId(environment)
-    const client = await getOrganizationsClient(environment, undefined, orgAccountId)
-    
-    const { ListAccountsCommand } = await import('@aws-sdk/client-organizations')
-    const accounts: AccountInfo[] = []
-    let nextToken: string | undefined
-    
-    do {
-      const response = await client.send(new ListAccountsCommand({ NextToken: nextToken }))
-      
-      if (response.Accounts) {
-        for (const account of response.Accounts) {
-          if (account.Id && account.Name) {
-            accounts.push({
-              accountId: account.Id,
-              accountName: account.Name,
-              accountEmail: account.Email,
-              accountStatus: account.Status,
-              organizationArn: account.Arn,
-              joinedMethod: account.JoinedMethod,
-              joinedTimestamp: account.JoinedTimestamp?.toISOString(),
-              environment: environment
-            })
+  for (let attempt = 1; attempt <= LIST_ACCOUNTS_MAX_ATTEMPTS; attempt++) {
+    try {
+      const orgAccountId = getOrganizationsAccountId(environment)
+      const client = await getOrganizationsClient(environment, undefined, orgAccountId)
+
+      const { ListAccountsCommand } = await import('@aws-sdk/client-organizations')
+      const accounts: AccountInfo[] = []
+      let nextToken: string | undefined
+
+      do {
+        const response = await client.send(new ListAccountsCommand({ NextToken: nextToken }))
+
+        if (response.Accounts) {
+          for (const account of response.Accounts) {
+            if (account.Id && account.Name) {
+              accounts.push({
+                accountId: account.Id,
+                accountName: account.Name,
+                accountEmail: account.Email,
+                accountStatus: account.Status,
+                organizationArn: account.Arn,
+                joinedMethod: account.JoinedMethod,
+                joinedTimestamp: account.JoinedTimestamp?.toISOString(),
+                environment: environment
+              })
+            }
           }
         }
+
+        nextToken = response.NextToken
+      } while (nextToken)
+
+      return accounts
+    } catch (error) {
+      const retryable = isRetryableOrganizationsError(error)
+      if (retryable && attempt < LIST_ACCOUNTS_MAX_ATTEMPTS) {
+        const retryDelayMs = computeOrganizationsRetryDelayMs(attempt)
+        logger.warn('Organizations account list throttled, retrying', {
+          component: 'accounts-consolidated',
+          operation: LIST_ACCOUNTS_OPERATION,
+          environment,
+          attempt,
+          maxAttempts: LIST_ACCOUNTS_MAX_ATTEMPTS,
+          retryDelayMs,
+          ...describeError(error)
+        })
+        await _sleep(retryDelayMs)
+        continue
       }
-      
-      nextToken = response.NextToken
-    } while (nextToken)
-    
-    return accounts
-  } catch (error) {
-    logger.error(`Failed to list accounts from Organizations (${environment}):`, error)
-    return []
+
+      // Non-retryable error, or throttling that outlasted our retries:
+      // preserve the original fallback-to-empty-array behaviour.
+      logger.error('Failed to list accounts from Organizations', {
+        component: 'accounts-consolidated',
+        operation: LIST_ACCOUNTS_OPERATION,
+        environment,
+        attempt,
+        maxAttempts: LIST_ACCOUNTS_MAX_ATTEMPTS,
+        retryable,
+        ...describeError(error)
+      })
+      return []
+    }
   }
+
+  return []
 }
 
 /**

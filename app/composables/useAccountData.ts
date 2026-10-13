@@ -7,10 +7,12 @@ import { getMonthlyBudget } from '#shared/utils/budget-utils'
 
 const logger = createLogger('AccountData')
 
-interface CostResponse {
+interface ApiResponse<T> {
   success: boolean
-  data: CostData
+  data: T
+  error?: string | { message?: string }
 }
+type CostResponse = ApiResponse<CostData>
 interface CostData {
   billableMonthToDateTotal: number
   proformaMonthToDateTotal: number
@@ -20,6 +22,18 @@ interface CostData {
 interface CostDaily {
   date: string
   cost: number
+}
+
+async function fetchAccountApi<T>(url: string, label: string): Promise<ApiResponse<T>> {
+  const response = await fetch(url)
+  const body = await response.json() as ApiResponse<T>
+
+  if (!response.ok || !body.success) {
+    const apiMessage = typeof body.error === 'string' ? body.error : body.error?.message
+    throw new Error(`${label} request failed (${response.status}): ${apiMessage || response.statusText}`)
+  }
+
+  return body
 }
 
 export function useAccountData(
@@ -38,7 +52,7 @@ export function useAccountData(
   const forecastData = ref<any>(null)
   const loading = ref(true)
 
-  const currentSpend = computed(() => costResponse.value?.data.proformaMonthToDateTotal || 0)
+  const currentSpend = computed(() => costResponse.value?.data?.proformaMonthToDateTotal ?? 0)
 
   const budget = computed(() => {
     const enclave = enclaveStore.enclaves[accountId.value]
@@ -46,13 +60,11 @@ export function useAccountData(
   })
 
   const billableTimeSeries = computed(() => {
-    if (!costResponse.value) return []
-    return costResponse.value.data.billableLast14Days
+    return costResponse.value?.data?.billableLast14Days ?? []
   })
 
   const proformaTimeSeries = computed(() => {
-    if (!costResponse.value) return []
-    return costResponse.value.data.proformaLast14Days
+    return costResponse.value?.data?.proformaLast14Days ?? []
   })
 
   async function fetchAll() {
@@ -74,21 +86,30 @@ export function useAccountData(
       const resourceAccountId = govCloudId.value || accountId.value
       const resourceEnvironment = govCloudId.value ? 'govcloud' : 'commercial'
 
-      const [costsRes, resourcesRes, forecastRes] = await Promise.all([
-        fetch(`/api/accounts/dashboard-simplified?standard_account_id=${accountId.value}${days ? `&days=${days.value}` : ''}`),
-        fetch(`/api/config/summary-simplified?account_id=${resourceAccountId}&environment=${resourceEnvironment}`),
-        fetch(`/api/costs/projections?period=current-month-remainder&accountIds=${accountId.value}&granularity=DAILY&environment=commercial`),
+      // Keep successful sections usable when one AWS dependency is unavailable.
+      const [costsResult, resourcesResult, forecastResult] = await Promise.allSettled([
+        fetchAccountApi<CostData>(`/api/accounts/dashboard-simplified?standard_account_id=${accountId.value}${days ? `&days=${days.value}` : ''}`, 'Costs'),
+        fetchAccountApi<ResourceCounts>(`/api/config/summary-simplified?account_id=${resourceAccountId}&environment=${resourceEnvironment}`, 'Resources'),
+        fetchAccountApi<any>(`/api/costs/projections?period=current-month-remainder&accountIds=${accountId.value}&granularity=DAILY&environment=commercial`, 'Forecast'),
       ])
 
-      const [costsJson, resourcesJson, forecastJson] = await Promise.all([
-        costsRes.json(),
-        resourcesRes.json(),
-        forecastRes.json(),
-      ])
+      if (costsResult.status === 'fulfilled') {
+        costResponse.value = costsResult.value
+      } else {
+        logger.error('Error fetching account costs:', costsResult.reason)
+      }
 
-      costResponse.value = costsJson
-      resourceCounts.value = resourcesJson.data
-      forecastData.value = forecastJson.data
+      if (resourcesResult.status === 'fulfilled') {
+        resourceCounts.value = resourcesResult.value.data
+      } else {
+        logger.error('Error fetching account resources:', resourcesResult.reason)
+      }
+
+      if (forecastResult.status === 'fulfilled') {
+        forecastData.value = forecastResult.value.data
+      } else {
+        logger.error('Error fetching account forecast:', forecastResult.reason)
+      }
     } catch (err) {
       logger.error('Error fetching account data:', err)
     } finally {

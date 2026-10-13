@@ -4,9 +4,15 @@
  * Fallback: estimatedMonthlyCharge when PEP data unavailable
  */
 
-interface BudgetSource {
+export interface BudgetSource {
   pepBudget2026Monthly?: string
   estimatedMonthlyCharge?: string | number
+}
+
+export interface PeriodBudgetResult {
+  periodBudget: number | null
+  paceToDateBudget: number | null
+  source: 'pep-monthly' | 'estimated-monthly' | 'unavailable'
 }
 
 /**
@@ -156,4 +162,70 @@ export function getAnnualBudgetArray(source: BudgetSource | undefined | null): {
   // Fall back to estimatedMonthlyCharge (flat value for all months)
   const flatValue = parseEstimatedMonthlyCharge(source.estimatedMonthlyCharge)
   return { monthlyArray: Array(12).fill(flatValue), isPepData: false }
+}
+
+function parseDateOnly(value: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+  const date = new Date(`${value}T00:00:00.000Z`)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+/**
+ * Calculate a budget aligned to an exclusive-end AWS cost range.
+ * PEP values are year-specific, so the legacy monthly estimate is never
+ * projected backward into a historical month that lacks PEP data.
+ */
+export function getPeriodBudget(
+  source: BudgetSource | undefined | null,
+  startDate: string,
+  endDate: string,
+  options: { referenceDate?: Date; includeFullCurrentMonth?: boolean } = {}
+): PeriodBudgetResult {
+  const start = parseDateOnly(startDate)
+  const end = parseDateOnly(endDate)
+  if (!source || !start || !end || start >= end) {
+    return { periodBudget: null, paceToDateBudget: null, source: 'unavailable' }
+  }
+
+  const reference = options.referenceDate || new Date()
+  const currentMonth = new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth(), 1))
+  const currentMonthEnd = new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth() + 1, 1))
+  const { monthlyArray, isPepData } = getAnnualBudgetArray(source)
+  let periodBudget = 0
+  let paceToDateBudget = 0
+  let hasApplicableBudget = false
+  let month = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1))
+
+  while (month < end) {
+    const monthEnd = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1))
+    const overlapStart = new Date(Math.max(start.getTime(), month.getTime()))
+    const overlapEnd = new Date(Math.min(end.getTime(), monthEnd.getTime()))
+    if (overlapStart < overlapEnd) {
+      const isCurrent = month.getTime() === currentMonth.getTime()
+      const pepApplies = isPepData && month.getUTCFullYear() === 2026
+      const estimateApplies = !isPepData && isCurrent
+      if (pepApplies || estimateApplies) {
+        const monthlyBudget = pepApplies
+          ? monthlyArray[month.getUTCMonth()] || 0
+          : parseEstimatedMonthlyCharge(source.estimatedMonthlyCharge)
+        const monthDays = Math.round((monthEnd.getTime() - month.getTime()) / 86400000)
+        const observedDays = Math.round((overlapEnd.getTime() - overlapStart.getTime()) / 86400000)
+        const prorated = monthlyBudget * (observedDays / monthDays)
+        hasApplicableBudget = true
+        periodBudget += options.includeFullCurrentMonth && isCurrent ? monthlyBudget : prorated
+        paceToDateBudget += prorated
+      }
+    }
+    month = monthEnd
+  }
+
+  // A current-month estimate is a present planning input, never a historical budget.
+  if (!hasApplicableBudget || (!isPepData && (end <= currentMonth || start >= currentMonthEnd))) {
+    return { periodBudget: null, paceToDateBudget: null, source: 'unavailable' }
+  }
+  return {
+    periodBudget,
+    paceToDateBudget,
+    source: isPepData ? 'pep-monthly' : 'estimated-monthly'
+  }
 }

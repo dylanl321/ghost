@@ -5,10 +5,12 @@
 
 import { defineEventHandler, getQuery, setHeader } from 'h3'
 import { runValidation, generateCsvReport } from '../../utils/cost-validation'
-import { sendSuccess, parseQueryParams, errors, handleAsync } from '../../utils/api-response'
+import { sendSuccess, parseQueryParams, handleAsync } from '../../utils/api-response'
 import type { RelativePeriod } from '../../utils/date-helpers'
+import { requireScope } from '../../middleware/entra-auth'
 
 export default defineEventHandler(handleAsync(async (event) => {
+  await requireScope(event, 'admin')
   const query = getQuery(event)
   const { environment } = parseQueryParams(event)
 

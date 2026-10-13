@@ -5,11 +5,13 @@
 
 import { defineEventHandler, getQuery } from 'h3'
 import { getCostAllocationTags } from '../../utils/cost-explorer'
-import { sendSuccess, parseQueryParams, errors, handleAsync } from '../../utils/api-response'
+import { sendSuccess, parseQueryParams, validateEnvironment, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { costCache, CacheTags } from '../../utils/cache-manager'
 import { validateDateParams, type RelativePeriod } from '../../utils/date-helpers'
 import { logger } from '../../utils/logger'
+import { getAccountIdsFromCriteria, parseAndValidateAccountFilters } from '../../utils/account-filters'
+import { getAccountScopeCacheKey } from '../../utils/cache-keys'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/costs/tags', 'GET', {
@@ -23,14 +25,14 @@ registerEndpoint('/api/costs/tags', 'GET', {
       in: 'query',
       required: false,
       schema: { type: 'string', format: 'date' },
-      description: 'Start date (YYYY-MM-DD). Required if period is not specified.'
+      description: 'Inclusive start date (YYYY-MM-DD). Must be paired with endDate.'
     },
     {
       name: 'endDate',
       in: 'query',
       required: false,
       schema: { type: 'string', format: 'date' },
-      description: 'End date (YYYY-MM-DD). Required if period is not specified.'
+      description: 'Exclusive end date (YYYY-MM-DD). Must be paired with startDate.'
     },
     {
       name: 'period',
@@ -40,7 +42,7 @@ registerEndpoint('/api/costs/tags', 'GET', {
         type: 'string',
         enum: ['last7days', 'last30days', 'last90days', 'thisMonth', 'lastMonth', 'thisQuarter', 'lastQuarter', 'thisYear', 'lastYear', 'ytd', 'last12months']
       },
-      description: 'Relative date period. Cannot be used with startDate/endDate.'
+      description: 'Relative date period; defaults to last90days when no dates are supplied. Cannot be used with startDate/endDate.'
     },
     {
       name: 'tagKey',
@@ -48,6 +50,13 @@ registerEndpoint('/api/costs/tags', 'GET', {
       required: false,
       schema: { type: 'string' },
       description: 'Filter to a specific tag key to retrieve its values'
+    },
+    {
+      name: 'accountIds',
+      in: 'query',
+      required: false,
+      schema: { type: 'string' },
+      description: 'Comma-separated list of account identifiers to filter'
     }
   ],
   responses: {
@@ -90,8 +99,16 @@ export default defineEventHandler(handleAsync(async (event) => {
   const query = getQuery(event)
   const { environment } = parseQueryParams(event)
 
+  if (!validateEnvironment(environment)) {
+    return errors.badRequest(event, 'environment must be commercial or govcloud')
+  }
+  const tagKey = query.tagKey
+  if (tagKey !== undefined && (typeof tagKey !== 'string' || !tagKey.trim())) {
+    return errors.badRequest(event, 'tagKey must be a non-empty string')
+  }
+
   // Validate date parameters - default to last 90 days if none provided
-  let dateRange: { startDate: string; endDate: string; description?: string }
+  let dateRange: { startDate: string; endDate: string; description?: string; empty: boolean }
   try {
     const hasAnyDateParam = query.startDate || query.endDate || query.period
     dateRange = validateDateParams({
@@ -104,20 +121,49 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
 
   const { startDate, endDate } = dateRange
-  const tagKey = query.tagKey as string | undefined
+  const billableAccountId = environment === 'commercial'
+    ? process.env.AWS_MASTER_ACCOUNT_ID || '205950196477'
+    : undefined
 
-  const cacheKey = `costs:tags:${JSON.stringify({ startDate, endDate, tagKey, environment })}`
+  const { criteria: accountFilters, errors: filterErrors } = parseAndValidateAccountFilters(query)
+  if (filterErrors.length > 0) {
+    return errors.badRequest(event, `Invalid account filters: ${filterErrors.join('; ')}`)
+  }
+
+  const filteredAccountIds = accountFilters.accountIds?.length
+    ? await getAccountIdsFromCriteria(accountFilters)
+    : undefined
+
+  if (filteredAccountIds !== undefined && filteredAccountIds.length === 0) {
+    return errors.notFound(event, 'No accounts found matching the specified filters')
+  }
+
+  const accountFilter = filteredAccountIds?.length
+    ? { Dimensions: { Key: 'LINKED_ACCOUNT', Values: filteredAccountIds, MatchOptions: ['EQUALS'] } }
+    : undefined
+
+  const cacheKey = `costs:tags:${JSON.stringify({
+    startDate,
+    endDate,
+    tagKey,
+    environment,
+    accountScope: getAccountScopeCacheKey(filteredAccountIds)
+  })}`
 
   const result = await costCache.getOrSet(
     cacheKey,
     async () => {
+      if (dateRange.empty) {
+        return { tags: [], returnSize: 0, totalSize: 0, tagKey: tagKey || null }
+      }
       logger.info(`Cache miss: Fetching cost allocation tags (tagKey=${tagKey || 'all'})...`)
 
       const data = await getCostAllocationTags(
         { Start: startDate, End: endDate },
         tagKey,
-        undefined,
-        environment
+        accountFilter,
+        environment,
+        billableAccountId
       )
 
       return {

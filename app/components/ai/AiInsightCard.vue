@@ -1,6 +1,6 @@
 <template>
   <div
-    v-if="!disabled && !dismissed"
+    v-if="!dismissed"
     class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 overflow-hidden"
   >
     <!-- Header -->
@@ -69,7 +69,7 @@
 
 <script setup lang="ts">
 import { marked } from 'marked'
-import { useSiteConfigStore } from '~/stores/useSiteConfigStore'
+import { escapeHtml, sanitizeMarkdownHtml } from '~/utils/sanitizeHtml'
 
 const props = withDefaults(defineProps<{
   type: string
@@ -85,7 +85,6 @@ const props = withDefaults(defineProps<{
   dismissible: false
 })
 
-const siteConfigStore = useSiteConfigStore()
 const { getPreference, setPreference } = useUserPreferences()
 
 const loading = ref(false)
@@ -95,7 +94,6 @@ const cached = ref(false)
 const generatedAt = ref<string | null>(null)
 const dismissed = ref(false)
 
-const disabled = computed(() => !siteConfigStore.isStrandsChatEnabled)
 
 const prefKey = computed(() => `aiInsight_${props.type}_collapsed`)
 const collapsed = ref(false)
@@ -112,9 +110,9 @@ const timeAgo = computed(() => {
 const renderedInsight = computed(() => {
   if (!insight.value) return ''
   try {
-    return marked.parse(insight.value, { gfm: true, breaks: true }) as string
+    return sanitizeMarkdownHtml(marked.parse(insight.value, { gfm: true, breaks: true }) as string)
   } catch {
-    return insight.value
+    return sanitizeMarkdownHtml(escapeHtml(insight.value))
   }
 })
 
@@ -168,14 +166,9 @@ onMounted(() => {
   collapsed.value = getPreference(prefKey.value, false)
 })
 
-// Watch for context changes and fetch
+// Fetch when usable data arrives, independently of the retired chatbot settings.
 watch(contextString, () => {
-  if (!disabled.value) fetchInsight()
-}, { immediate: false })
-
-// Initial fetch when component mounts with data
-watch(disabled, (val) => {
-  if (!val && props.context && Object.keys(props.context).length > 0) fetchInsight()
+  if (props.context && Object.keys(props.context).length > 0) fetchInsight()
 }, { immediate: true })
 </script>
 

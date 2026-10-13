@@ -1,0 +1,27 @@
+{
+  "investigationId": "inv-fake-0001",
+  "tenantId": "tenant-fake-0001",
+  "spaceId": "space-0000-fake-aaaa",
+  "primarySubject": {
+    "sourceBindingId": "binding-fake-jira-01",
+    "sourceType": "jira",
+    "stableSourceId": "PROJ-1234",
+    "displayLabel": "Investigate flaky deploy (synthetic)"
+  },
+  "relatedSubjects": [
+    {
+      "sourceBindingId": "binding-fake-snow-01",
+      "sourceType": "servicenow",
+      "stableSourceId": "INC0009999"
+    }
+  ],
+  "workflowProfileId": "wf-fake-default",
+  "workflowVersion": 1,
+  "stageId": "investigating",
+  "leadSubjectId": "obj-fake-operator-a",
+  "revision": 3,
+  "selectedCheckpointId": "cp-fake-0007",
+  "archived": false,
+  "createdAt": "2024-01-02T03:04:05Z",
+  "updatedAt": "2024-01-02T09:10:11Z"
+}

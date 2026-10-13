@@ -13,12 +13,39 @@
 /**
  * Supported dataset types
  */
-export type DatasetType = 'config' | 'securityHub' | 'cloudtrail'
+export type DatasetType = 'config' | 'securityHub' | 'cloudtrail' | 'entraUsers'
+
+export type DatasetQueryMode = 'preview' | 'export'
+
+export interface DatasetQueryOptions {
+  mode?: DatasetQueryMode
+  environment?: 'commercial' | 'govcloud'
+  limit?: number
+  maxScanned?: number
+  cursor?: string
+  signal?: AbortSignal
+  onProgress?: (progress: { phase: string; processed: number; total?: number }) => void | Promise<void>
+  onAthenaQuery?: (queryExecutionId: string | null) => void | Promise<void>
+  format?: 'normalized' | 'asff'
+}
+
+export interface DatasetQueryResult<T> {
+  records: T[]
+  sampleCount: number
+  hasMore: boolean
+  truncated: boolean
+  scannedCount?: number
+  nextCursor?: string
+}
 
 /**
  * AWS Config resource filter options
  */
 export interface ConfigDatasetFilters {
+  resourceId?: string
+
+  resourceName?: string
+  tags?: Record<string, string>
   /**
    * Filter by specific resource types (e.g., 'AWS::EC2::Instance', 'AWS::S3::Bucket')
    * Empty array = all resource types
@@ -34,6 +61,9 @@ export interface ConfigDatasetFilters {
    * Only include resources with compliance rules
    */
   complianceOnly?: boolean
+
+  /** EC2 instance states; used only with AWS::EC2::Instance queries. */
+  instanceStates?: string[]
 
   /**
    * Filter by specific regions
@@ -99,6 +129,12 @@ export interface SecurityHubDatasetFilters {
    * Uses CONTAINS comparison to match partial IDs
    */
   resourceId?: string
+
+  /** Filter by one or more exact resource IDs, such as EC2 instance IDs. */
+  resourceIds?: string[]
+
+  /** Filter by exact Security Hub finding IDs. */
+  findingIds?: string[]
 
   /**
    * Filter by specific regions
@@ -168,6 +204,8 @@ export interface CloudTrailDatasetFilters {
  * Entra ID (Azure AD) user filter options
  */
 export interface EntraUsersDatasetFilters {
+  /** Activity state. Prefer this over the legacy activeOnly flag. */
+  activityStatus?: 'all' | 'active' | 'inactive'
   /**
    * Filter by specific role names
    */
@@ -241,6 +279,9 @@ export interface DatasetReportConfig {
    */
   accounts: string[]
 
+  /** Explicit selection intent. Absent preserves the legacy empty-array-means-all behavior. */
+  accountScope?: 'all' | 'selected'
+
   /**
    * Selected datasets and their configurations
    */
@@ -257,6 +298,9 @@ export interface DatasetReportConfig {
    */
   enableAI?: boolean
 
+  /** Optional export column keys selected by the user. */
+  columns?: string[]
+
   /**
    * Time range for dataset queries
    * Some datasets (CloudTrail, Security Hub) are time-based
@@ -269,6 +313,46 @@ export interface DatasetReportConfig {
     startDate?: string     // ISO 8601
     endDate?: string       // ISO 8601
   }
+}
+
+export type DatasetExportJobStatus = 'queued' | 'running' | 'complete' | 'error' | 'canceled'
+
+export interface DatasetExportJob {
+  jobId: string
+  userId: string
+  status: DatasetExportJobStatus
+  phase: string
+  progressPercent: number
+  reportConfig: DatasetReportConfig
+  datasetCounts: Partial<Record<DatasetType, number>>
+  cancelRequested: boolean
+  activeAthenaQueryIds: string[]
+  s3Key?: string
+  filename?: string
+  mimeType?: string
+  sizeBytes?: number
+  errorMessage?: string
+  createdAt: string
+  startedAt?: string
+  completedAt?: string
+  heartbeatAt?: string
+  lastUpdated: string
+  ttl: number
+}
+
+export interface DatasetAccountMatch {
+  reference: string
+  accountId?: string
+  accountName?: string
+  candidates?: Array<{ accountId: string; accountName: string }>
+}
+
+export interface DatasetInterpretationResult {
+  config: DatasetReportConfig
+  explanation: string
+  warnings: string[]
+  accountMatches: DatasetAccountMatch[]
+  requiresResolution: boolean
 }
 
 // ============================================================================
@@ -290,6 +374,7 @@ export interface ConfigResourceRecord {
   configurationItemCaptureTime: string
   tags?: Record<string, string>
   arn?: string
+  configuration?: Record<string, any>
 }
 
 /**

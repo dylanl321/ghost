@@ -59,11 +59,6 @@ export const useNavigationStore = defineStore('navigation', () => {
       reason: 'Analytics page needs maximum viewport width for visualizations'
     },
     {
-      path: '/chat',
-      rule: 'default-collapsed',
-      reason: 'Chat interface benefits from maximum viewport width for better conversation flow'
-    },
-    {
       path: '/reports/datasets',
       rule: 'default-collapsed',
       reason: 'Dataset reports page benefits from more screen real estate for query builder and preview'
@@ -87,7 +82,9 @@ export const useNavigationStore = defineStore('navigation', () => {
 
   const contentMargin = computed(() => {
     if (isMobile.value) return '0px'
-    if (isCollapsed.value && !isHovered.value) return '4rem'
+    // A collapsed sidebar temporarily expands over the page on hover. Keeping
+    // the content margin fixed prevents the entire workspace from shifting.
+    if (isCollapsed.value) return '4rem'
     return '16rem'
   })
 

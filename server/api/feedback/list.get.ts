@@ -32,6 +32,7 @@ registerEndpoint('/api/feedback/list', 'GET', {
                     type: { type: 'string' },
                     description: { type: 'string' },
                     reporter_email: { type: 'string' },
+                    source: { type: 'string', enum: ['mcp-connections'] },
                     resolved: { type: 'boolean' },
                     environment: { type: 'string' },
                     date_utc: { type: 'string' },

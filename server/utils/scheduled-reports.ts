@@ -12,9 +12,7 @@ import type {
   ReportStatistics
 } from '../../shared/types/scheduled-reports'
 import {
-  getItem,
   putItem,
-  updateItem,
   deleteItem,
   queryItems,
   scanItems
@@ -176,12 +174,12 @@ function convertToTimezone(date: Date, timezone: string): Date {
   // Note: This Date object is in the local system timezone but represents
   // the same wall-clock time as in the target timezone
   return new Date(
-    parseInt(dateParts.year),
-    parseInt(dateParts.month) - 1, // Month is 0-indexed
-    parseInt(dateParts.day),
-    parseInt(dateParts.hour),
-    parseInt(dateParts.minute),
-    parseInt(dateParts.second)
+    parseInt(dateParts.year!),
+    parseInt(dateParts.month!) - 1, // Month is 0-indexed
+    parseInt(dateParts.day!),
+    parseInt(dateParts.hour!),
+    parseInt(dateParts.minute!),
+    parseInt(dateParts.second!)
   )
 }
 
@@ -274,8 +272,9 @@ export async function getReport(reportId: string): Promise<ScheduledReport | nul
 export async function listUserReports(
   userId: string,
   status?: string,
-  limit: number = 50
-): Promise<{ reports: ScheduledReport[]; total: number }> {
+  limit: number = 50,
+  cursor?: string
+): Promise<{ reports: ScheduledReport[]; total: number; nextCursor?: string }> {
   try {
     if (!userId) {
       logger.warn('listUserReports called without userId')
@@ -300,7 +299,7 @@ export async function listUserReports(
       tableName,
       filterExpression,
       limit,
-      undefined,
+      cursor,
       environment,
       Object.keys(expressionAttributeNames).length > 0 ? expressionAttributeNames : undefined,
       expressionAttributeValues,
@@ -309,7 +308,8 @@ export async function listUserReports(
 
     return {
       reports: result.items as ScheduledReport[],
-      total: result.count
+      total: result.count,
+      nextCursor: result.nextToken
     }
   } catch (error) {
     logger.error('Error listing user reports:', error)
@@ -414,6 +414,7 @@ export async function createReport(
     reportId,
     reportName: request.reportName,
     description: request.description,
+    reportType: request.reportType || 'cost',
     createdBy,
     isAdmin,
     reportConfig: request.reportConfig,
@@ -572,11 +573,13 @@ export async function updateReportRunStatus(
 /**
  * Record a report execution in history
  */
-export async function recordExecution(execution: Omit<ReportExecution, 'executionId'>): Promise<void> {
+export async function recordExecution(
+  execution: Omit<ReportExecution, 'executionId'> & { executionId?: string }
+): Promise<ReportExecution> {
   try {
     const fullExecution: ReportExecution = {
       ...execution,
-      executionId: uuidv4(),
+      executionId: execution.executionId || uuidv4(),
       expiresAt: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days TTL
     }
 
@@ -584,8 +587,10 @@ export async function recordExecution(execution: Omit<ReportExecution, 'executio
     const environment = await getTableEnvironment('reportExecutions')
     const accountId = await getTableAccountId('reportExecutions')
     await putItem(executionsTableName, fullExecution, environment, accountId)
+    return fullExecution
   } catch (error) {
     logger.error('Error recording execution:', error)
+    throw error
   }
 }
 

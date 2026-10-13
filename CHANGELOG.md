@@ -5,6 +5,122 @@ All notable changes to GHOST are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-09-16
+<!-- highlights: Crew Identity Verification -->
+
+### Improvements
+- Added protected operator identity checks for Crew collaboration. The full shared-investigation rollout remains pending.
+
+## [2.1.0] - 2026-08-17
+<!-- highlights: MCP Cost Comparison, Operational Health -->
+
+### New Features
+- MCP clients can compare reconciled AWS cost periods and review bounded AWS cost anomalies
+- You can now mark, archive, mute, or unmute personal notifications and cancel your queued or running exports
+- Pipeline searches now include deployment health and drift modes, and EC2 instance health combines patch, security, vulnerability, alarm, and inventory evidence
+
+### Improvements
+- Cost anomaly searches scan until matching account results are collected and clearly report whether more AWS records remain
+- The cost variance prompt now uses the canonical comparison workflow
+
+## [2.0.0] - 2026-08-17
+<!-- highlights: Safer MCP Access, Reliable AWS Results -->
+
+### Improvements
+- MCP access results now include direct and group-based IAM Identity Center assignments
+- Commercial and GovCloud cost tools now use the correct account IDs, payer accounts, date rules, and pagination
+- MCP permissions, resource access, diagnostics, rate limits, and retry protection now enforce stricter privacy and reliability boundaries
+- Account, user, instance, alert, compliance, report, and chat searches now return consistent bounded and paginated results
+
+### Breaking Changes
+- Removed retired compatibility tool names and synchronous report execution from MCP; use the canonical account, forecast, documentation, audit, pipeline, and report workflows instead
+
+### Bug Fixes
+- Fixed incomplete user-access results, GovCloud cost filters, ignored tool filters, and duplicate write execution under concurrent retries
+- Fixed evidence bundles reporting lookback periods that were not applied to their underlying data
+
+## [1.20.0] - 2026-08-14
+<!-- highlights: GHOST MCP, Codex Integration, Flexible AWS Tools -->
+
+### New Features
+- Added the GHOST MCP offering, giving Codex secure access to GHOST account details, costs, AWS inventory, security posture, official documentation, pipeline activity, reports, and personal workspace data
+- Added guided MCP connection and authorization experiences so users can connect Codex, review available capabilities, and troubleshoot authentication from within GHOST
+- Added simplified searches for EC2 instances, organization CloudTrail activity, and deployment pipelines using account names, aliases, request IDs, or either Commercial or GovCloud account ID
+- Users with an assigned workload account can now request confirmed, short-lived IAM Identity Center credentials when an advanced direct AWS query is needed
+
+### Improvements
+- MCP tools now accept friendlier account references, single values or lists, common AWS resource names, flexible casing, and clearer corrected examples when a request is invalid
+- Tool responses now identify the resolved account scope, applied filters, result limitations, and safe next steps instead of repeatedly trying unrelated data sources
+- CloudTrail searches now use the organization trail stored in CloudWatch Logs and remain scoped to the requested accounts
+- Account, resource, security, cost, and pipeline tools share consistent resolution behavior while preserving compatibility with existing MCP tool calls
+- MCP usage diagnostics provide clearer visibility into client adoption, tool reliability, data sources, and errors without exposing credentials or sensitive failure details
+
+### Bug Fixes
+- Fixed account-scoped inventory searches returning unrelated organization resources when an account could not be resolved
+- Fixed AWS Config name and instance lookups that could fail because of unsupported wildcard matching
+- Fixed MCP OAuth refresh handling so supported Codex clients can retain authorization more reliably across sessions and service restarts
+- Prevented advanced credential guidance and issuance for organization, master, monitoring, deployment, payer, and other central accounts
+
+---
+
+## [1.19.0] - 2026-08-11
+<!-- highlights: Organization AI Usage, Usage Collection -->
+
+### New Features
+- Added an organization AI Usage workspace for reviewing adoption, invocations, tokens, models, projects, and spend across Commercial AWS, GovCloud, individual enclaves, and custom account selections
+- Added detailed Amazon Bedrock Runtime and Bedrock Mantle reporting alongside cost-based adoption tracking for other AWS AI services
+- Administrators can now monitor collection health, review categorized collection errors, and start incremental or full historical collections from the AI & Agents area
+
+### Improvements
+- AI usage actuals and current estimates are clearly separated, with Commercial pro forma and billable cost views available alongside GovCloud billable costs
+- Side navigation is now organized into Workspace, Accounts, FinOps, Insights, Manage, and Admin sections while keeping every destination one click away
+- Collection errors and account-access details are now restricted to administrators; general users see only aggregate coverage status
+- AI usage breakdowns distinguish cost-only services from services with invocation telemetry, preventing unavailable usage from appearing as zero
+- AI usage snapshots refresh hourly and retain daily adoption history for long-term comparisons
+
+### Bug Fixes
+- AI Usage now opens cleanly before its storage infrastructure has been initialized
+- AI usage permissions now deploy without exceeding the ECS task role inline-policy size limit
+
+---
+
+## [1.18.0] - 2026-07-28
+<!-- highlights: Dataset Reports, Durable AI Chat, Finance & Cost Reporting -->
+
+### New Features
+- Dataset Reports now provide a complete workflow for previewing, exporting, sharing, saving, scheduling, and reviewing AWS Config, Security Hub, CloudTrail, and Entra user data
+- Dataset exports support PDF, Excel, CSV, and JSON with customizable columns, reusable query presets, AI summaries, and secure share links
+- AI chat work now continues reliably in the background, so long-running conversations and analyses can finish even when you navigate away or the application restarts
+- Finance reporting now includes departmental Budget vs. Actual views and improved AI-assisted variance analysis
+- Account user-access lists can now be copied or exported to CSV and Excel for audits and access reviews
+- Infrastructure monitoring now includes container health and application metrics for improved operational visibility
+
+### Improvements
+- Historical cost charts now use live billable or pro forma data for the selected accounts instead of sample values
+- Selected and decommissioned accounts retain their names and metadata when opened through direct links or filtered dashboard views
+- Dataset schedules, execution history, downloads, test delivery, and shared links now use consistent report metadata and file formats
+- AWS Config compliance and common security presets now return evaluated resource data, including public exposure, encryption, internet access, and MFA checks
+- CloudTrail reports now honor exact time ranges and clearly surface query failures instead of presenting failed requests as empty results
+- Entra activity filters now distinguish active and inactive users correctly, including the 90-day inactive-user preset
+- Cost and finance views include more consistent account identifiers, names, department data, forecasts, and variance context
+- AWS Organizations, Athena, DynamoDB, credential loading, and scheduled-report processing now use stronger retry and recovery behavior under throttling or temporary service failures
+- Container images and deployment pipelines have been streamlined with health-check preservation, dependency hardening, lifecycle cleanup, and immutable image references
+
+### Bug Fixes
+- Fixed dataset schedules disappearing after creation or running through the cost-report generator
+- Fixed generated PDF reports containing HTML instead of valid PDF data
+- Fixed dataset preview tables showing blank dynamic columns, timestamps, and detail views
+- Fixed report history downloads using IDs that did not match stored executions
+- Fixed test report delivery calling outdated storage and email workflows
+- Fixed users being able to run, pause, inspect, or download reports owned by other users
+- Fixed report updates accepting ownership, identifier, and administrative fields that should not be editable
+- Fixed Excel and JSON reports being stored or downloaded with CSV file metadata
+- Fixed shared report links incorrectly requiring an authenticated session
+- Fixed cost trend charts losing explicitly selected accounts when general sidebar filters were enabled
+- Fixed several account matching, forecast, DynamoDB configuration, CloudTrail query, and authentication redirect reliability issues
+
+---
+
 ## [1.17.0] - 2026-03-30
 <!-- highlights: Achievement Badges, Gamification, User Milestones -->
 

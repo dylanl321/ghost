@@ -14,7 +14,10 @@
 
     <!-- Chart -->
     <div v-else>
-      <h4 class="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">Cost Over Time by Service</h4>
+      <div class="flex items-center gap-2 mb-2">
+        <h4 class="text-xs font-semibold text-gray-600 dark:text-gray-400">Cost Over Time by Service</h4>
+        <UBadge color="gray" variant="soft" size="xs">Exact billable</UBadge>
+      </div>
       <v-chart :option="chartOption" :autoresize="true" style="height: 250px" />
     </div>
   </div>
@@ -26,13 +29,17 @@ import VChart from 'vue-echarts'
 
 const logger = createLogger('TagValueTrend')
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   accountId: string
   tagKey: string
-  tagValue: string
+  tagValue?: string
+  tagValues?: string[]
   tagValueLabel?: string
   period?: string
-}>()
+}>(), {
+  tagValue: '',
+  tagValues: () => []
+})
 
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -49,6 +56,10 @@ function stripTagPrefix(rawValue: string, tagKey: string): string {
   return rawValue
 }
 
+const effectiveTagValues = computed(() => props.tagValues.length > 0
+  ? props.tagValues
+  : props.tagValue ? [stripTagPrefix(props.tagValue, props.tagKey)] : [])
+
 // Periods that benefit from daily granularity
 const dailyPeriods = new Set(['last7days', 'last30days', 'thisMonth', 'lastMonth'])
 
@@ -57,19 +68,19 @@ function getGranularity(period: string): 'DAILY' | 'MONTHLY' {
 }
 
 async function fetchData() {
-  if (!props.accountId || !props.tagKey || !props.tagValue) return
+  if (!props.accountId || !props.tagKey || effectiveTagValues.value.length === 0) return
 
   loading.value = true
   error.value = null
 
   try {
-    const strippedValue = stripTagPrefix(props.tagValue, props.tagKey)
     const apiPeriod = props.period || 'last90days'
     const response = await $fetch('/api/costs/historical', {
       params: {
         groupBy: 'SERVICE',
         accountIds: props.accountId,
-        tagFilter: `${props.tagKey}||${strippedValue}`,
+        tagFilterKey: props.tagKey,
+        tagFilterValues: effectiveTagValues.value,
         period: apiPeriod,
         granularity: getGranularity(apiPeriod)
       }
@@ -191,10 +202,10 @@ const chartOption = computed(() => {
       type: 'category',
       data: timeKeys.map(k => {
         if (isDaily) {
-          const [y, mo, d] = k.split('-')
+          const [y = '1970', mo = '01', d = '01'] = k.split('-')
           return new Date(+y, +mo - 1, +d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
         }
-        const [y, mo] = k.split('-')
+        const [y = '1970', mo = '01'] = k.split('-')
         return new Date(+y, +mo - 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
       }),
       axisLabel: { color: '#9ca3af', fontSize: 10 },
@@ -210,7 +221,7 @@ const chartOption = computed(() => {
   }
 })
 
-watch([() => props.accountId, () => props.tagKey, () => props.tagValue, () => props.period], () => {
+watch([() => props.accountId, () => props.tagKey, () => props.tagValue, () => props.tagValues.join('|'), () => props.period], () => {
   fetchData()
 }, { immediate: true })
 </script>

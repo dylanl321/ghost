@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
     const rolesSet = new Set<string>()
     const departmentsSet = new Set<string>()
 
-    for (const [accountId, accountGroups] of Object.entries(groupsByAccount)) {
+    for (const accountGroups of Object.values(groupsByAccount)) {
       // Ensure commercial and govcloud are arrays before spreading
       const commercial = Array.isArray(accountGroups.commercial) ? accountGroups.commercial : []
       const govcloud = Array.isArray(accountGroups.govcloud) ? accountGroups.govcloud : []

@@ -9,11 +9,10 @@
  */
 
 import { defineEventHandler, getQuery } from 'h3'
-import { getCostAndUsage, getProformaCosts } from '../../utils/cost-explorer'
-import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
+import { sendSuccess, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
-import { logger } from '../../utils/logger'
 import { requireScope } from '../../middleware/entra-auth'
+import { runValidation } from '../../utils/cost-validation'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/costs/validate', 'GET', {
@@ -69,86 +68,20 @@ registerEndpoint('/api/costs/validate', 'GET', {
   }
 })
 
-// Helper to get current month dates
-function getCurrentMonthDates(): { startDate: string, endDate: string } {
-  const now = new Date()
-  const startDate = new Date(now.getFullYear(), now.getMonth(), 1)
-  const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1)
-
-  return {
-    startDate: startDate.toISOString().split('T')[0],
-    endDate: endDate.toISOString().split('T')[0]
-  }
-}
-
-// Helper to compare values within tolerance
-function valuesMatch(val1: number, val2: number, tolerance: number = 0.01): boolean {
-  return Math.abs(val1 - val2) <= tolerance
-}
-
 export default defineEventHandler(handleAsync(async (event) => {
-  // Require admin scope as stated in the docs
   await requireScope(event, 'admin')
-
-  logger.info('Running cost data validation checks...')
-
-  const checks: any[] = []
-  const { startDate, endDate } = getCurrentMonthDates()
-
-  // Check 1: Direct API Comparison (Billable)
-  // Temporarily disabled to avoid circular API calls during development
-  checks.push({
-    name: 'Billable Cost Accuracy',
-    passed: true,
-    message: 'Check temporarily disabled (use validation script instead)',
-    ourValue: 0,
-    awsValue: 0,
-    difference: 0
+  const query = getQuery(event)
+  const period = (query.period as any) || 'lastMonth'
+  const environment = (query.environment as 'commercial' | 'govcloud') || 'commercial'
+  const result = await runValidation(
+    period,
+    environment,
+    query.includeProforma !== 'false',
+    (query.masterAccountId as string) || process.env.AWS_MASTER_ACCOUNT_ID || '205950196477',
+    (query.proformaAccountId as string) || process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832'
+  )
+  return sendSuccess(event, result, {
+    deprecated: true,
+    replacement: '/api/admin/validate-costs'
   })
-  logger.info('Check 1: Temporarily disabled (use npx tsx scripts/validate-aws-costs.ts for full validation)')
-
-  // Check 2: Proforma Calculation
-  // Simplified to avoid circular API calls
-  checks.push({
-    name: 'Proforma Calculation',
-    passed: true,
-    message: 'Check temporarily disabled (use validation script instead)',
-    ourValue: 0,
-    awsValue: 0,
-    difference: 0
-  })
-  logger.info('Check 2: Temporarily disabled (use npx tsx scripts/validate-aws-costs.ts for full validation)')
-
-  // Check 3: Mode Switching
-  // Simplified to avoid circular API calls
-  checks.push({
-    name: 'Mode Switching',
-    passed: true,
-    message: 'Check temporarily disabled (use validation script instead)',
-    ourValue: 0,
-    awsValue: 0,
-    difference: 0
-  })
-  logger.info('Check 3: Temporarily disabled (use npx tsx scripts/validate-aws-costs.ts for full validation)')
-
-  // Calculate summary
-  const totalChecks = checks.length
-  const passedChecks = checks.filter(c => c.passed).length
-  const failedChecks = totalChecks - passedChecks
-  const overallStatus = failedChecks === 0 ? 'PASS' : 'FAIL'
-
-  const result = {
-    timestamp: new Date().toISOString(),
-    checks,
-    summary: {
-      totalChecks,
-      passed: passedChecks,
-      failed: failedChecks,
-      overallStatus
-    }
-  }
-
-  logger.info(`Validation complete: ${passedChecks}/${totalChecks} checks passed`)
-
-  return sendSuccess(event, result)
 }))

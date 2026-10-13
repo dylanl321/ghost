@@ -1,0 +1,15 @@
+{
+  "tenantId": "tenant-fake-0001",
+  "spaceId": "space-0000-fake-aaaa",
+  "operationId": "op-fake-create-lost-ack",
+  "payloadHash": "4444444444444444444444444444444444444444444444444444444444444444",
+  "investigationId": "inv-fake-recovered-1",
+  "responseProjection": {
+    "operationId": "op-fake-create-lost-ack",
+    "investigationId": "inv-fake-recovered-1",
+    "revision": 0,
+    "acceptedServerSequence": 1
+  },
+  "acceptedServerSequence": 1,
+  "acceptedRevision": 0
+}

@@ -52,12 +52,6 @@ resource "aws_ecs_task_definition" "main" {
           name  = "NODE_ENV"
           value = var.env
         },
-        # Admin Access Bypass - allows all authenticated users to have admin access
-        # Required in ECS because Microsoft Graph API integration for group checking is not available
-        {
-          name  = "ADMIN_BYPASS"
-          value = "true"
-        },
         {
           name  = "DYNAMODB_CONFIG_SECRET_NAME"
           value = aws_secretsmanager_secret.dynamodb_config.name
@@ -82,8 +76,48 @@ resource "aws_ecs_task_definition" "main" {
           value = "374673712317"
         },
         {
+          name  = "AWS_GOVCLOUD_ORGANIZATIONS_ROLE_PATH"
+          value = "GD"
+        },
+        {
+          name  = "GHOST_CLOUDTRAIL_GOVCLOUD_ACCOUNT_ID"
+          value = "374673712317"
+        },
+        {
+          name  = "GHOST_CLOUDTRAIL_GOVCLOUD_ORGANIZATION_ID"
+          value = "o-oiu9mwd7zf"
+        },
+        {
+          name  = "GHOST_CLOUDTRAIL_GOVCLOUD_REGION"
+          value = "us-gov-west-1"
+        },
+        {
+          name  = "GHOST_CLOUDTRAIL_GOVCLOUD_LOG_GROUP"
+          value = "aws-cloudtrail-logs-374673712317-d7a04176"
+        },
+        {
+          name  = "GHOST_CLOUDTRAIL_COMMERCIAL_ACCOUNT_ID"
+          value = "205950196477"
+        },
+        {
+          name  = "GHOST_CLOUDTRAIL_COMMERCIAL_ORGANIZATION_ID"
+          value = "o-sb7o7424ts"
+        },
+        {
+          name  = "GHOST_CLOUDTRAIL_COMMERCIAL_REGION"
+          value = "us-east-1"
+        },
+        {
+          name  = "GHOST_CLOUDTRAIL_COMMERCIAL_LOG_GROUP"
+          value = "CloudTrail/DefaultLogGroup"
+        },
+        {
           name  = "AWS_MASTER_ACCOUNT_ID"
           value = "205950196477"
+        },
+        {
+          name  = "AWS_GOVCLOUD_MASTER_ACCOUNT_ID"
+          value = "374673712317"
         },
         {
           name  = "AWS_PROFORMA_ACCOUNT_ID"
@@ -153,6 +187,10 @@ resource "aws_ecs_task_definition" "main" {
           value = "https://login.microsoftonline.us"
         },
         {
+          name  = "ENTRA_TENANT_ID"
+          value = "7c5a26cf-ddf0-400c-9703-4070b4e3a54d"
+        },
+        {
           name  = "ENTRA_GRAPH_BASE_URL"
           value = "https://graph.microsoft.us"
         },
@@ -162,7 +200,7 @@ resource "aws_ecs_task_definition" "main" {
         },
         {
           name  = "ENTRA_AWS_GROUP_PREFIX"
-          value = "AWS_"
+          value = "AWS-"
         },
         {
           name  = "ENTRA_DISTRIBUTION_GROUP_SUFFIX"
@@ -211,20 +249,113 @@ resource "aws_ecs_task_definition" "main" {
           value = aws_dynamodb_table.site_config.name
         },
         {
-          name  = "CHAT_THREADS_TABLE_NAME"
-          value = aws_dynamodb_table.chat_threads.name
-        },
-        {
           name  = "ADMIN_NOTIFICATIONS_TABLE"
           value = aws_dynamodb_table.admin_notifications.name
         },
         {
-          name  = "AWS_ASYNC_JOBS_TABLE_NAME"
-          value = aws_dynamodb_table.async_chat_jobs.name
+          name  = "DATASET_EXPORT_JOBS_TABLE_NAME"
+          value = aws_dynamodb_table.dataset_export_jobs.name
         },
         {
-          name  = "AWS_ASYNC_METRICS_TABLE_NAME"
-          value = aws_dynamodb_table.async_metrics.name
+          name  = "DATASET_EXPORT_JOBS_QUEUE_URL"
+          value = aws_sqs_queue.dataset_export_jobs.url
+        },
+        {
+          name  = "AI_USAGE_TABLE_NAME"
+          value = aws_dynamodb_table.ai_usage.name
+        },
+        {
+          name  = "AI_USAGE_COLLECTION_ENABLED"
+          value = "true"
+        },
+        # GHOST hosted MCP and OAuth state
+        {
+          name  = "GHOST_MCP_BASE_URL"
+          value = var.env == "prod" ? "https://ghost-aws.gd-ms.com" : "https://ghost-aws-dev.gd-ms.com"
+        },
+        {
+          name  = "GHOST_OAUTH_ISSUER"
+          value = var.env == "prod" ? "https://ghost-aws.gd-ms.com" : "https://ghost-aws-dev.gd-ms.com"
+        },
+        {
+          name  = "GHOST_OAUTH_TABLE_NAME"
+          value = aws_dynamodb_table.oauth_artifacts.name
+        },
+        {
+          # Deployment-local OAuth administration projections/audit table.
+          # Isolated from GHOST_OAUTH_TABLE_NAME (provider artifacts).
+          name  = "GHOST_OAUTH_ADMIN_TABLE_NAME"
+          value = aws_dynamodb_table.oauth_administration.name
+        },
+        {
+          # Development clients share corporate egress IPs. Keep a bounded
+          # registration quota without exhausting it after ten setup attempts.
+          name  = "GHOST_OAUTH_REGISTRATION_RATE_LIMIT_PER_HOUR"
+          value = var.env == "dev" ? "120" : "10"
+        },
+        {
+          name  = "GHOST_KIROCREW_RESOURCE_URL"
+          value = var.env == "prod" ? "https://ghost-aws.gd-ms.com/api/kirocrew" : "https://ghost-aws-dev.gd-ms.com/api/kirocrew"
+        },
+        {
+          name  = "GHOST_KIROCREW_CONFIG_TABLE_NAME"
+          value = aws_dynamodb_table.kirocrew_config.name
+        },
+        {
+          name  = "GHOST_KIROCREW_PAYLOAD_BUCKET_NAME"
+          value = aws_s3_bucket.kirocrew_payload.id
+        },
+        {
+          name  = "GHOST_OAUTH_AUTHORIZATION_TTL_DAYS"
+          value = "90"
+        },
+        {
+          name  = "GHOST_MCP_AUDIT_TABLE_NAME"
+          value = aws_dynamodb_table.mcp_audit.name
+        },
+        {
+          name  = "GHOST_MCP_RAW_ERRORS_TABLE_NAME"
+          value = aws_dynamodb_table.mcp_raw_errors.name
+        },
+        {
+          name  = "GHOST_MCP_EVIDENCE_TABLE_NAME"
+          value = aws_dynamodb_table.mcp_evidence.name
+        },
+        {
+          name  = "GHOST_MCP_USAGE_DAILY_TABLE_NAME"
+          value = aws_dynamodb_table.mcp_usage_daily.name
+        },
+        {
+          name  = "GHOST_MCP_SECRET_KMS_KEY_ARN"
+          value = aws_kms_key.mcp_secrets.arn
+        },
+        {
+          name  = "GHOST_MCP_IDC_DEVICE_FLOW_ENABLED"
+          value = "true"
+        },
+        {
+          name  = "GHOST_SUPPORT_KNOWLEDGE_BASE_NAME"
+          value = "isgddocs-knowledge-base"
+        },
+        {
+          name  = "GHOST_SUPPORT_KNOWLEDGE_BASE_ID"
+          value = "MWEQITO53C"
+        },
+        {
+          name  = "GHOST_SUPPORT_KNOWLEDGE_BASE_ACCOUNT_ID"
+          value = "926182194632"
+        },
+        {
+          name  = "GHOST_SUPPORT_KNOWLEDGE_BASE_ENVIRONMENT"
+          value = "govcloud"
+        },
+        {
+          name  = "GHOST_SUPPORT_KNOWLEDGE_BASE_REGION"
+          value = "us-gov-west-1"
+        },
+        {
+          name  = "GHOST_SUPPORT_KNOWLEDGE_BASE_MODEL_ARN"
+          value = var.ghost_support_knowledge_base_model_arn
         },
         {
           name  = "ACCOUNT_NOTES_TABLE"
@@ -356,23 +487,6 @@ resource "aws_ecs_task_definition" "main" {
           name  = "BEDROCK_CLAUDE_FALLBACK_MODELS"
           value = "anthropic.claude-3-5-sonnet-20240620-v1:0,anthropic.claude-3-sonnet-20240229-v1:0"
         },
-        # Strands Agent Configuration
-        {
-          name  = "STRANDS_SERVER_URL"
-          value = "http://internal-lz-mcp-servers-dev-alb-1428009891.us-gov-west-1.elb.amazonaws.com:80"
-        },
-        {
-          name  = "STRANDS_TIMEOUT"
-          value = "600000"
-        },
-        {
-          name  = "STRANDS_RETRIES"
-          value = "2"
-        },
-        {
-          name  = "STRANDS_RETRY_DELAY"
-          value = "2000"
-        },
         # Public URLs (environment-specific)
         {
           name  = "NUXT_PUBLIC_SITE_URL"
@@ -432,9 +546,21 @@ resource "aws_ecs_task_definition" "main" {
           name      = "NUXT_OIDC_AUTH_SESSION_SECRET"
           valueFrom = "${local.secret_arn}:oidc_auth_session_secret::"
         },
+        {
+          name      = "GHOST_OAUTH_JWKS_JSON"
+          valueFrom = "${local.secret_arn}:ghost_oauth_jwks_json::"
+        },
+        {
+          name      = "GHOST_OAUTH_COOKIE_KEYS"
+          valueFrom = "${local.secret_arn}:ghost_oauth_cookie_keys::"
+        },
+        {
+          name      = "GHOST_MCP_REQUEST_STATE_KEY"
+          valueFrom = "${local.secret_arn}:ghost_mcp_request_state_key::"
+        },
       ],
       healthCheck = {
-        command     = ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+        command     = ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/api/health').then(response => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
         interval    = 30
         timeout     = 5
         retries     = 3

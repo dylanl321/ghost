@@ -93,7 +93,7 @@
     </div>
 
     <!-- Tabs -->
-    <UTabs v-model="selectedTab" :items="tabs" data-tour="account-tabs">
+    <UTabs v-model="selectedTab" :items="tabs" :unmount="true" data-tour="account-tabs">
       <!-- Overview Tab -->
       <template #overview>
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 row-auto">
@@ -197,7 +197,7 @@
             v-if="govCloudId || accountId"
             :account-id="govCloudId || accountId"
             :environment="govCloudId ? 'govcloud' : 'commercial'"
-            :expected-instance-count="resourceCounts?.ec2Instances"
+            :expected-instance-count="resourceCounts?.ec2?.total"
             @loaded="(data) => utilizationMap = data"
           />
         </div>
@@ -297,12 +297,12 @@ const accountHealthContext = computed(() => {
   return {
     accountId: accountId.value,
     accountName: accountName.value,
-    lob: enclave?.lineOfBusiness,
+    lob: enclave?.linesOfBusiness,
     status: accountStatus.value,
     mtdCost: currentSpend.value,
     budget: budget.value,
     budgetUtilization: budget.value > 0 ? (currentSpend.value / budget.value) * 100 : undefined,
-    instanceCount: resourceCounts.value?.ec2Instances,
+    instanceCount: resourceCounts.value?.ec2?.total,
   }
 })
 

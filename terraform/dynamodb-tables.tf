@@ -369,91 +369,9 @@ resource "aws_dynamodb_table" "admin_notifications" {
   }
 }
 
-# ============================================================================
-# Chat Threads Table (GovCloud Environment)
-# ============================================================================
-# Stores user chat conversations with the Strands AI assistant
-# Supports multiple threads per user, sharing, and export
-resource "aws_dynamodb_table" "chat_threads" {
+resource "aws_dynamodb_table" "dataset_export_jobs" {
   provider     = aws.target_deployment_account
-  name         = var.env == "prod" ? "ghost-chat-threads-prod" : "ghost-chat-threads"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "threadId"
-  range_key    = "createdAt"
-
-  attribute {
-    name = "threadId"
-    type = "S"
-  }
-
-  attribute {
-    name = "createdAt"
-    type = "S"
-  }
-
-  attribute {
-    name = "userId"
-    type = "S"
-  }
-
-  attribute {
-    name = "lastMessageAt"
-    type = "S"
-  }
-
-  attribute {
-    name = "shareId"
-    type = "S"
-  }
-
-  # GSI for querying threads by user (sorted by recent activity)
-  global_secondary_index {
-    name            = "UserIdIndex"
-    hash_key        = "userId"
-    range_key       = "lastMessageAt"
-    projection_type = "ALL"
-  }
-
-  # GSI for accessing shared threads (public links)
-  global_secondary_index {
-    name            = "ShareIdIndex"
-    hash_key        = "shareId"
-    projection_type = "ALL"
-  }
-
-  # Enable TTL to auto-delete old threads (90 days default, configurable)
-  ttl {
-    attribute_name = "ttl"
-    enabled        = true
-  }
-
-  # Enable encryption at rest
-  server_side_encryption {
-    enabled = true
-  }
-
-  # Enable point-in-time recovery
-  point_in_time_recovery {
-    enabled = true
-  }
-
-  tags = {
-    Name        = "GHOST Chat Threads"
-    Environment = local.environment
-    ManagedBy   = "Terraform"
-    Service     = "GHOST"
-    Component   = "ChatThreads"
-  }
-}
-
-# ============================================================================
-# Async Chat Jobs Table (GovCloud Environment)
-# ============================================================================
-# Stores async polling job status for Strands AI chat queries
-# Jobs expire after 24 hours via TTL
-resource "aws_dynamodb_table" "async_chat_jobs" {
-  provider     = aws.target_deployment_account
-  name         = var.env == "prod" ? "ghost-async-chat-jobs-prod" : "ghost-async-chat-jobs"
+  name         = var.env == "prod" ? "ghost-dataset-export-jobs-prod" : "ghost-dataset-export-jobs"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "jobId"
 
@@ -461,130 +379,89 @@ resource "aws_dynamodb_table" "async_chat_jobs" {
     name = "jobId"
     type = "S"
   }
-
   attribute {
     name = "userId"
     type = "S"
   }
-
   attribute {
     name = "status"
     type = "S"
   }
-
   attribute {
     name = "createdAt"
     type = "S"
   }
 
-  # GSI for querying jobs by user
   global_secondary_index {
     name            = "UserIdIndex"
     hash_key        = "userId"
     range_key       = "createdAt"
     projection_type = "ALL"
   }
-
-  # GSI for querying jobs by status
   global_secondary_index {
     name            = "StatusIndex"
     hash_key        = "status"
     range_key       = "createdAt"
     projection_type = "ALL"
   }
-
-  # Enable TTL to auto-delete old jobs (24 hours)
   ttl {
     attribute_name = "ttl"
     enabled        = true
   }
-
-  # Enable encryption at rest
   server_side_encryption {
     enabled = true
   }
-
-  # Enable point-in-time recovery
   point_in_time_recovery {
     enabled = true
   }
-
   tags = {
-    Name        = "GHOST Async Chat Jobs"
+    Name        = "GHOST Dataset Export Jobs"
     Environment = local.environment
     ManagedBy   = "Terraform"
     Service     = "GHOST"
-    Component   = "AsyncChatJobs"
+    Component   = "DatasetExports"
   }
 }
 
-# ============================================================================
-# Async Chat Metrics Table (GovCloud Environment)
-# ============================================================================
-# Stores async polling chat metrics for monitoring and analytics
-# Tracks performance, usage, and errors with 90-day retention
-resource "aws_dynamodb_table" "async_metrics" {
+# Normalized organization-wide AI adoption, telemetry, and cost snapshots.
+resource "aws_dynamodb_table" "ai_usage" {
   provider     = aws.target_deployment_account
-  name         = var.env == "prod" ? "ghost-async-metrics-prod" : "ghost-async-metrics"
+  name         = var.env == "prod" ? "ghost-ai-usage-prod" : "ghost-ai-usage"
   billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "metricDate"
-  range_key    = "metricType"
+  hash_key     = "pk"
+  range_key    = "sk"
 
   attribute {
-    name = "metricDate"
+    name = "pk"
     type = "S"
   }
 
   attribute {
-    name = "metricType"
+    name = "sk"
     type = "S"
   }
 
-  # Enable TTL to auto-delete old metrics (90 days)
   ttl {
     attribute_name = "ttl"
     enabled        = true
   }
 
-  # Enable encryption at rest
   server_side_encryption {
     enabled = true
   }
 
-  # Enable point-in-time recovery
   point_in_time_recovery {
     enabled = true
   }
 
   tags = {
-    Name        = "GHOST Async Chat Metrics"
+    Name        = "GHOST AI Usage"
     Environment = local.environment
     ManagedBy   = "Terraform"
     Service     = "GHOST"
-    Component   = "AsyncMetrics"
+    Component   = "AIUsage"
   }
 }
-
-# ============================================================================
-# Strands Agent Metrics Table (GovCloud Environment)
-# ============================================================================
-# NOTE: This table is OWNED and MANAGED by the Strands team's Terraform
-#
-# Table name: strands-agent-metrics-{environment}
-# Example: strands-agent-metrics-dev, strands-agent-metrics-prod
-#
-# GHOST only READS from this table via API endpoints in:
-#   - /server/api/admin/strands-agent/dashboard.get.ts
-#   - /server/api/admin/strands-agent/session-trace.get.ts
-#   - /server/api/admin/strands-agent/account-metrics.get.ts
-#
-# The Strands team's implementation details:
-#   - File: strands_metrics_integration.md
-#   - Their Terraform: terraform/dynamodb.tf (in Strands repo)
-#   - Python metrics service: agent/services/metrics_service.py
-#
-# DO NOT uncomment this resource - it will conflict with the Strands team's
-# Terraform state. GHOST only needs read-only IAM permissions to query the table.
 
 # ============================================================================
 # Cost Tag Configuration Table (GovCloud Environment)
@@ -946,34 +823,102 @@ output "site_config_table_arn" {
   value       = aws_dynamodb_table.site_config.arn
 }
 
-output "chat_threads_table_name" {
-  description = "Name of the DynamoDB table for chat threads"
-  value       = aws_dynamodb_table.chat_threads.name
+
+
+
+
+# ============================================================================
+# Manual Plan Values Table (GovCloud Environment)
+# Stores manually entered monthly plan values per department + year.
+# PK: "PLAN#<DEPARTMENT>#<YEAR>" (e.g. "PLAN#DE158#2026")
+# ============================================================================
+resource "aws_dynamodb_table" "manual_plan_values" {
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-manual-plan-values-prod" : "ghost-manual-plan-values"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  server_side_encryption {
+    enabled = true
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Name        = "GHOST Manual Plan Values"
+    Environment = local.environment
+    ManagedBy   = "Terraform"
+    Service     = "GHOST"
+    Component   = "FinancialMetrics"
+  }
 }
 
-output "chat_threads_table_arn" {
-  description = "ARN of the DynamoDB table for chat threads"
-  value       = aws_dynamodb_table.chat_threads.arn
+output "manual_plan_values_table_name" {
+  description = "Name of the DynamoDB table for manual plan values"
+  value       = aws_dynamodb_table.manual_plan_values.name
 }
 
-output "async_chat_jobs_table_name" {
-  description = "Name of the DynamoDB table for async chat jobs"
-  value       = aws_dynamodb_table.async_chat_jobs.name
+output "manual_plan_values_table_arn" {
+  description = "ARN of the DynamoDB table for manual plan values"
+  value       = aws_dynamodb_table.manual_plan_values.arn
 }
 
-output "async_chat_jobs_table_arn" {
-  description = "ARN of the DynamoDB table for async chat jobs"
-  value       = aws_dynamodb_table.async_chat_jobs.arn
+resource "aws_dynamodb_table" "financial_plan_history" {
+  provider     = aws.target_deployment_account
+  name         = var.env == "prod" ? "ghost-financial-plan-history-prod" : "ghost-financial-plan-history"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+  server_side_encryption { enabled = true }
+  point_in_time_recovery { enabled = true }
+
+  tags = {
+    Name        = "GHOST Financial Plan History"
+    Environment = local.environment
+    ManagedBy   = "Terraform"
+    Service     = "GHOST"
+    Component   = "FinancialMetrics"
+  }
 }
 
-output "async_metrics_table_name" {
-  description = "Name of the DynamoDB table for async metrics"
-  value       = aws_dynamodb_table.async_metrics.name
+output "financial_plan_history_table_name" {
+  description = "Name of the DynamoDB table for financial plan history"
+  value       = aws_dynamodb_table.financial_plan_history.name
 }
 
-output "async_metrics_table_arn" {
-  description = "ARN of the DynamoDB table for async metrics"
-  value       = aws_dynamodb_table.async_metrics.arn
+
+
+
+
+
+
+
+
+output "ai_usage_table_name" {
+  description = "Name of the normalized AI usage table"
+  value       = aws_dynamodb_table.ai_usage.name
+}
+
+output "ai_usage_table_arn" {
+  description = "ARN of the normalized AI usage table"
+  value       = aws_dynamodb_table.ai_usage.arn
 }
 
 output "cost_tag_config_table_name" {
@@ -1006,6 +951,4 @@ output "utilization_analysis_table_arn" {
   value       = aws_dynamodb_table.utilization_analysis.arn
 }
 
-# NOTE: strands_agent_metrics table outputs removed
-# That table is managed by the Strands team's Terraform, not GHOST
 # GHOST only needs read-only access to query it via API endpoints

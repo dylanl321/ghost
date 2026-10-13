@@ -27,6 +27,17 @@
 
         <!-- Page Content -->
         <div class="flex-1 overflow-y-auto">
+          <nav class="flex gap-2 overflow-x-auto border-b border-[color:var(--ghost-border)] bg-[var(--ghost-surface-2)] px-4 py-3 md:hidden dark:border-slate-700 dark:bg-slate-800" aria-label="Settings">
+            <NuxtLink
+              v-for="item in mobileSettingsItems"
+              :key="item.to"
+              :to="item.to"
+              class="whitespace-nowrap rounded-full px-3 py-1.5 text-sm"
+              :class="route.path === item.to ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' : 'text-gray-600 dark:text-gray-300'"
+            >
+              {{ item.label }}
+            </NuxtLink>
+          </nav>
           <div class="max-w-4xl mx-auto px-6 py-8">
             <slot />
           </div>
@@ -48,18 +59,13 @@
 
           <!-- Right: Active Queries -->
           <div class="flex items-center gap-3">
-            <ClientOnly>
-              <ActiveQueriesIndicator />
-            </ClientOnly>
           </div>
         </div>
       </footer>
     </div>
 
-    <!-- Global AI Assistant Popup -->
+    <!-- Development options -->
     <ClientOnly>
-      <StrandsChatPopup v-if="siteConfigStore.isStrandsChatPopupEnabled" />
-      <ChatThreadsSidebar v-if="siteConfigStore.isStrandsChatEnabled" />
 
       <!-- Dev Options Panel (only shows in dev auth mode) -->
       <DevOptionsPanel />
@@ -69,12 +75,18 @@
 
 <script setup lang="ts">
 import { useNavigationStore } from '~/stores/useNavigationStore'
-import { useSiteConfigStore } from '~/stores/useSiteConfigStore'
 
 const route = useRoute()
 const navigationStore = useNavigationStore()
-const siteConfigStore = useSiteConfigStore()
 const sideNavRef = ref()
+const mobileSettingsItems = [
+  { label: 'API Access', to: '/settings/api-access' },
+  { label: 'Overview', to: '/settings' },
+  { label: 'Preferences', to: '/settings/preferences' },
+  { label: 'Appearance', to: '/settings/appearance' },
+  { label: 'Accounts', to: '/settings/accounts' },
+  { label: 'Notifications', to: '/settings/notifications' }
+]
 
 // Mobile menu handler
 const handleMobileMenuToggle = () => {

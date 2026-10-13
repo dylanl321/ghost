@@ -5,6 +5,7 @@
 .nitro
 .cache
 dist
+public/api/swagger-assets
 
 # Node dependencies
 node_modules
@@ -24,7 +25,9 @@ logs
 !.env.example
 
 # Other
+/.aidlc
 dev-notes.md
+SHARED_SERVICES_ACCESS.md
 *.sh
 .cursor/worktrees.json
 /.kiro
@@ -32,3 +35,4 @@ dev-notes.md
 CLAUDE.md
 DEPLOYMENT_STEPS.md
 /.omc
+/aidlc-docs

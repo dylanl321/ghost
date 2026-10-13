@@ -24,6 +24,8 @@ export type AWSServiceType =
   | 'securityhub'
   | 'securitylake'
   | 'athena'
+  | 'bedrock'
+  | 'bedrock-agent-runtime'
   | 'ram'
   | 'bedrock-runtime'
   | 'compute-optimizer'
@@ -35,6 +37,7 @@ export type AWSServiceType =
   | 'inspector2'
   | 'cloudwatch-logs'
   | 'resource-groups-tagging'
+  | 'billing'
 
 export interface AWSClientOptions {
   environment: AWSEnvironmentType

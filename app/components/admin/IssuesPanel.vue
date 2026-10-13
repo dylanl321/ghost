@@ -54,6 +54,12 @@
           <p class="whitespace-pre-wrap">{{ row.description }}</p>
         </template>
 
+        <template #source-data="{ row }">
+          <UBadge :color="row.source === 'mcp-connections' ? 'amber' : 'gray'" variant="soft" size="xs">
+            {{ feedbackSourceLabel(row.source) }}
+          </UBadge>
+        </template>
+
         <template #resolved-data="{ row }">
           <UBadge :color="row.resolved ? 'green' : 'gray'">
             {{ row.resolved ? 'Yes' : 'No' }}
@@ -106,12 +112,17 @@ const pageCount = 10
 
 const columns = [
   { key: 'type', label: 'Type', sortable: true },
+  { key: 'source', label: 'Source', sortable: true },
   { key: 'reporter_email', label: 'Reporter', sortable: true },
   { key: 'date_utc', label: 'Date', sortable: true },
   { key: 'description', label: 'Description' },
   { key: 'resolved', label: 'Resolved', sortable: true },
   { key: 'actions', label: '' }
 ]
+
+function feedbackSourceLabel(source?: string) {
+  return source === 'mcp-connections' ? 'MCP Connections' : 'General'
+}
 
 // --- Actions ---
 const getActionItems = (row: any) => [

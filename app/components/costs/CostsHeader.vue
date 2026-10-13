@@ -80,8 +80,11 @@
           :selected-accounts="selectedAccounts"
           :timeframe="modelSelectedTimeframe || ''"
           :data-mode="modelMode"
-          view-by=""
+          :view-by="modelViewBy"
           :active-tab="activeTab"
+          :chart-tab="activeChartTab"
+          :tag="selectedTag"
+          :tag-view="tagView"
           @load="(preset: any) => emit('load-preset', preset)"
         />
 
@@ -107,7 +110,7 @@
       </div>
 
       <!-- View By Selector -->
-      <div class="flex items-center gap-1" data-tour="costs-view-by">
+      <div v-if="activeChartTab !== 'tags'" class="flex items-center gap-1" data-tour="costs-view-by">
         <span class="text-xs text-gray-500 dark:text-gray-400 mr-1">View:</span>
         <div class="inline-flex rounded-md shadow-sm">
           <UButton
@@ -273,19 +276,34 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import type { DataMode } from '~/types/costs'
-import type { NormalizedDataset } from '~/types/costs'
+import type { DataMode, NormalizedDataset } from '~/types/costs'
 import type { ExportFormat } from '#shared/types/export'
-import ExportButton from '~/components/shared/ExportButton.vue'
+import { getCostTagWorkspaceQuery } from '~/utils/cost-tag-workspace'
+import type { CostTagCreatorView } from '~/utils/cost-tag-workspace'
 
 const logger = createLogger('CostsHeader')
 
-const emit = defineEmits<{ (e: 'refresh'): void; (e: 'start-tour'): void; (e: 'view-alerts'): void; (e: 'load-preset', preset: { selectedAccounts: string[]; timeframe: string; dataMode: string; viewBy: string; activeTab: string }): void }>()
+const emit = defineEmits<{
+  (e: 'refresh' | 'start-tour' | 'view-alerts'): void
+  (e: 'load-preset', preset: {
+    selectedAccounts: string[]
+    timeframe: string
+    dataMode: string
+    viewBy: string
+    activeTab: string
+    chartTab?: string
+    tag?: string | null
+    tagView?: CostTagCreatorView
+  }): void
+}>()
 
 const props = defineProps<{
   timeframeOptions: Array<{ label: string, value: string }>,
   selectedAccounts: string[],
   activeTab: string,
+  activeChartTab: string,
+  selectedTag?: string | null,
+  tagView: CostTagCreatorView,
   dataset?: NormalizedDataset | null,
   alertsCount?: number,
   alertsBySeverity?: { critical: number, escalation: number, warning: number, info: number }
@@ -441,7 +459,8 @@ async function generateShareUrl() {
     if (props.selectedAccounts.length > 0) {
       // Use 'account' (singular) for single account, 'accounts' (plural) for multiple
       if (props.selectedAccounts.length === 1) {
-        params.set('account', props.selectedAccounts[0])
+        const accountId = props.selectedAccounts[0]
+        if (accountId) params.set('account', accountId)
       } else {
         params.set('accounts', props.selectedAccounts.join(','))
       }
@@ -451,6 +470,14 @@ async function generateShareUrl() {
     }
     if (props.activeTab) {
       params.set('tab', props.activeTab)
+    }
+    const workspaceQuery = getCostTagWorkspaceQuery({
+      chartTab: props.activeChartTab,
+      selectedTag: props.selectedTag,
+      tagView: props.tagView
+    })
+    for (const [key, value] of Object.entries(workspaceQuery)) {
+      if (value) params.set(key, value)
     }
     if (modelMode.value) {
       params.set('mode', modelMode.value)
@@ -467,6 +494,9 @@ async function generateShareUrl() {
           selectedAccounts: props.selectedAccounts,
           timeframe: modelSelectedTimeframe.value,
           tab: props.activeTab,
+          chartTab: props.activeChartTab,
+          tag: props.activeChartTab === 'tags' ? props.selectedTag : undefined,
+          tagView: props.activeChartTab === 'tags' ? props.tagView : undefined,
           dataMode: modelMode.value
         },
         description: 'Cost Analytics Share Link',
@@ -528,12 +558,6 @@ async function copyShareUrl() {
     })
   }
 }
-
-// Extract user email from claims
-const userEmail = computed(() => {
-  if (!user.value) return ''
-  return user.value.claims?.email || user.value.claims?.preferred_username || ''
-})
 
 const {
   showSimpleModal,
@@ -818,5 +842,3 @@ async function handleScheduleSubmit(data: any) {
   }
 }
 </script>
-
-

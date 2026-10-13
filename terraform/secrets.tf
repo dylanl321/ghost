@@ -51,13 +51,13 @@ resource "aws_secretsmanager_secret_version" "dynamodb_config" {
 
     # API Keys Tables (GovCloud Account B - where app is deployed)
     apiKeys = {
-      tableName   = "ghost-api-keys"
+      tableName   = aws_dynamodb_table.api_keys.name
       environment = "govcloud"
       region      = var.aws_region
       accountId   = local.child_account_id
     }
     apiKeysUsage = {
-      tableName   = "ghost-api-keys-usage"
+      tableName   = aws_dynamodb_table.api_keys_usage.name
       environment = "govcloud"
       region      = var.aws_region
       accountId   = local.child_account_id
@@ -84,6 +84,30 @@ resource "aws_secretsmanager_secret_version" "dynamodb_config" {
       region      = var.aws_region
       accountId   = local.child_account_id
     }
+    datasetExportJobs = {
+      tableName   = aws_dynamodb_table.dataset_export_jobs.name
+      environment = "govcloud"
+      region      = var.aws_region
+      accountId   = local.child_account_id
+    }
+    aiUsage = {
+      tableName   = aws_dynamodb_table.ai_usage.name
+      environment = "govcloud"
+      region      = var.aws_region
+      accountId   = local.child_account_id
+    }
+    financialPlanOverrides = {
+      tableName   = aws_dynamodb_table.manual_plan_values.name
+      environment = "govcloud"
+      region      = var.aws_region
+      accountId   = local.child_account_id
+    }
+    financialPlanHistory = {
+      tableName   = aws_dynamodb_table.financial_plan_history.name
+      environment = "govcloud"
+      region      = var.aws_region
+      accountId   = local.child_account_id
+    }
 
     # External Accounts Table (GovCloud, in master/org account)
     externalAccounts = {
@@ -92,6 +116,22 @@ resource "aws_secretsmanager_secret_version" "dynamodb_config" {
       region      = var.aws_region
       accountId   = local.org_account_id
       readOnly    = true
+    }
+
+    # External budget alert tables live in the Commercial monitoring account.
+    budgetAlerts = {
+      tableName   = "budget-alert-system-alert-history-prod"
+      environment = "commercial"
+      region      = "us-east-1"
+      accountId   = "253821132832"
+      readOnly    = true
+    }
+    budgetAlertConfig = {
+      tableName   = "budget-alert-system-config-prod"
+      environment = "commercial"
+      region      = "us-east-1"
+      accountId   = "253821132832"
+      readOnly    = false
     }
   })
 

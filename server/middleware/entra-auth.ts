@@ -17,21 +17,35 @@ interface AuthContext {
   scopes?: string[]
 }
 
+export function isAllowedVmaasCostPath(pathname: string, method: string): boolean {
+  return method === 'GET' && (pathname === '/api/integrations/vmaas/costs' ||
+    /^\/api\/integrations\/vmaas\/instances\/i-[0-9a-f]{8,17}\/cost$/.test(pathname))
+}
+
+export function isAllowedIntegrationApiPath(pathname: string): boolean {
+  return pathname.startsWith('/api/v1/')
+}
+
 /**
  * Check if request is for API endpoints that require authentication
  */
-function requiresAuthentication(url: string): boolean {
+export function requiresAuthentication(url: string): boolean {
+  // Kiro Crew APIs perform exact OAuth resource/scope validation in their
+  // handlers. A Ghost browser session or API key must not satisfy them.
+  if (url.startsWith('/api/kirocrew/v1/')) {
+    return false
+  }
   // Exclude public endpoints that don't need auth
   const publicEndpoints = [
     '/api/health',
-    '/api/swagger',
-    '/api/swagger-ui',
-    '/api/swagger.json',
     '/api/schema',        // Schema metadata for query builder
     '/_nuxt/',
     '/api/_content',      // Nuxt content API
     '/api/_auth',         // OIDC authentication endpoints
-    '/api/_nuxt_icon'     // Nuxt Icon API
+    '/api/_nuxt_icon',    // Nuxt Icon API
+    '/api/shortlinks/',
+    '/api/reports/download/',
+    '/api/dataset-reports/download/'
   ]
 
   // Check if URL starts with any public endpoint
@@ -48,7 +62,7 @@ function requiresAuthentication(url: string): boolean {
  * Validate API key authentication
  */
 async function validateAPIKeyAuth(event: H3Event): Promise<AuthContext | null> {
-  const apiKey = getHeader(event, 'x-api-key') || getHeader(event, 'authorization')?.replace('Bearer ', '')
+  const apiKey = getHeader(event, 'x-api-key')
   
   if (!apiKey) {
     return null
@@ -174,6 +188,28 @@ export default defineEventHandler(async (event) => {
   // Add auth context to event for use in API handlers
   event.context.auth = authContext
 
+  // Compute Foundry's VMaaS key is intentionally incapable of reaching any
+  // other GHOST surface, even if it is accidentally sent to the wrong path.
+  if (authContext.authType === 'apikey' && authContext.scopes?.includes('vmaas:costs:read')) {
+    const pathname = getRequestURL(event).pathname
+    if (!isAllowedVmaasCostPath(pathname, event.node.req.method || '')) {
+      throw createError({
+        statusCode: 403,
+        statusMessage: 'The VMaaS cost key is restricted to VMaaS cost APIs.'
+      })
+    }
+  }
+
+  if (authContext.authType === 'apikey' && !authContext.scopes?.includes('vmaas:costs:read')) {
+    const pathname = getRequestURL(event).pathname
+    if (!isAllowedIntegrationApiPath(pathname)) {
+      throw createError({
+        statusCode: 403,
+        statusMessage: 'Integration API keys are restricted to the supported /api/v1 contract.'
+      })
+    }
+  }
+
   // Log successful authentication
   logger.debug(`Authenticated via ${authContext.authType} for ${event.node.req.url}`)
 
@@ -246,7 +282,10 @@ export function requireOIDCAuth(event: H3Event): void {
  * For 'admin' scope, delegates to the real admin group membership check
  */
 export function hasScope(event: H3Event, requiredScope: string): boolean {
-  return isAuthenticated(event)
+  const auth = getAuthContext(event)
+  if (!auth?.isAuthenticated) return false
+  if (auth.authType !== 'apikey' || !requiredScope.includes(':')) return true
+  return Boolean(auth.scopes?.includes(requiredScope))
 }
 
 export async function requireScope(event: H3Event, requiredScope: string): Promise<void> {
@@ -254,6 +293,13 @@ export async function requireScope(event: H3Event, requiredScope: string): Promi
     throw createError({
       statusCode: 401,
       statusMessage: 'Authentication required'
+    })
+  }
+
+  if (!hasScope(event, requiredScope)) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: `API key requires ${requiredScope} scope`
     })
   }
 

@@ -5,6 +5,7 @@ import type { Scenario } from '~/composables/useCostScenario'
 import { getAnnualBudgetArray, hasPerMonthBudget } from '#shared/utils/budget-utils'
 import { unwrapCostData, getResultsByTime, getAccountsFromAnalysis, unwrapByMode, buildAccountToGroupMap, extractForecastTotal } from '~/utils/cost-data-unwrap'
 import { buildGroupTrendData } from '~/utils/group-trend-extractor'
+import { accountMatchesScope, resolveCurrentMonthProjection } from '~/utils/year-end-projection'
 // import { calculateComprehensiveVariance, generateVarianceInsights } from '#shared/utils/variance-calculator'
 
 // ── Named constants for thresholds and limits ──
@@ -273,8 +274,8 @@ export const useChartRegistry = (args: {
     // Compares projected end-of-month (actual MTD + forecast remainder) vs last month
     serviceCostVariance: {
       id: 'serviceCostVariance',
-      title: 'Service Cost Changes',
-      description: 'Projected end-of-month vs last month by service',
+      title: 'Estimated Service Cost Changes',
+      description: 'Proportional end-of-month estimate vs last month by service',
       type: 'bar',
       extractor: (dataset) => {
         const services = dataset.services as any
@@ -338,6 +339,7 @@ export const useChartRegistry = (args: {
             projected,
             previous,
             change,
+            allocationMethod: 'proportional-estimate',
             percentChange: previous > 0 ? ((projected - previous) / previous) * 100 : null
           }
         })
@@ -873,11 +875,11 @@ export const useChartRegistry = (args: {
       }
     },
 
-    // Last Month vs This Month vs AWS Projection (Multi-bar Chart)
+    // Last Month vs This Month vs proportional aggregate-forecast allocation
     monthlyTrendWithForecast: {
       id: 'monthlyTrendWithForecast',
-      title: 'Monthly Trend with AWS Projection',
-      description: 'Compare last month, current month, and next month AWS projection',
+      title: 'Monthly Trend with Estimated Allocation',
+      description: 'Compare last month, current month, and a proportional allocation of the aggregate AWS forecast',
       type: 'bar',
       extractor: (dataset) => {
         const summary = dataset.summary as any
@@ -951,6 +953,7 @@ export const useChartRegistry = (args: {
             lastMonth: data.lastMonth,
             currentMonth: data.current,
             forecast: data.forecast,
+            allocationMethod: 'proportional-estimate',
             monthOverMonth: data.lastMonth > 0 ? ((data.current - data.lastMonth) / data.lastMonth) * 100 : 0,
             forecastChange: data.current > 0 ? ((data.forecast - data.current) / data.current) * 100 : 0
           }))
@@ -1017,8 +1020,8 @@ export const useChartRegistry = (args: {
     // Account Forecast Comparison (Horizontal Bar Chart)
     accountForecastComparison: {
       id: 'accountForecastComparison',
-      title: 'Account AWS Projection Comparison',
-      description: 'Side-by-side AWS projection comparison across accounts',
+      title: 'Estimated Account Forecast Allocation',
+      description: 'Aggregate AWS forecast allocated to accounts in proportion to current spend',
       type: 'bar',
       extractor: (dataset) => {
         const forecast = dataset.forecast as any
@@ -1071,6 +1074,7 @@ export const useChartRegistry = (args: {
               accountName: account.accountName || account.accountId,
               currentCost,
               forecastCost,
+              allocationMethod: 'proportional-estimate',
               budget,
               forecastToBudgetRatio: budget > 0 ? (forecastCost / budget) * 100 : 0,
               growthProjection: currentCost > 0 ? ((forecastCost - currentCost) / currentCost) * 100 : 0,
@@ -1204,8 +1208,8 @@ export const useChartRegistry = (args: {
     // Historical vs Forecast Comparison
     historicalVsForecastComparison: {
       id: 'historicalVsForecastComparison',
-      title: 'Historical Average vs AWS Projection',
-      description: 'Compare AWS projection to historical spending patterns',
+      title: 'Historical Average vs Estimated Allocation',
+      description: 'Compare a proportional allocation of the aggregate AWS forecast to historical spending',
       type: 'bar',
       extractor: (dataset) => {
         const historical = dataset.historical as any
@@ -1249,6 +1253,7 @@ export const useChartRegistry = (args: {
               accountName: account.accountName || account.accountId,
               historicalAverage: historicalAvg,
               forecastValue: accountForecast,
+              allocationMethod: 'proportional-estimate',
               variance: accountForecast - historicalAvg,
               variancePercent: historicalAvg > 0 ? ((accountForecast - historicalAvg) / historicalAvg) * 100 : 0,
               trend: accountForecast > historicalAvg ? 'increasing' : accountForecast < historicalAvg ? 'decreasing' : 'stable'
@@ -1519,6 +1524,10 @@ export const useChartRegistry = (args: {
 
         const selectedAccounts = dataset.accounts || []
         const filterBySelection = selectedAccounts.length > 0
+        const displayedAccountIds = dataset.displayedAccountIds || []
+        const accountScopeIds = filterBySelection ? selectedAccounts : displayedAccountIds
+        const accountScopeSet = new Set(accountScopeIds)
+        const filterByAccountScope = accountScopeSet.size > 0
 
         // Use filtered data when accounts are selected, org-wide data otherwise
         const historical = filterBySelection
@@ -1590,7 +1599,9 @@ export const useChartRegistry = (args: {
 
         // Create a map of YYYY-MM to cost for easier lookup
         // Check if we're using filtered historical data or need to filter org-wide data
-        const usingFilteredHistorical = filterBySelection && !!dataset.historical
+        const usingScopedHistorical = filterBySelection
+          ? !!dataset.historical
+          : !!dataset.orgWideHistorical
 
         const historicalCostMap = new Map<string, number>()
         monthlyBreakdown.forEach((month: any) => {
@@ -1598,13 +1609,13 @@ export const useChartRegistry = (args: {
 
           let cost = 0
 
-          if (usingFilteredHistorical) {
-            // Using filtered historical data from API - month.cost is already filtered
+          if (usingScopedHistorical) {
+            // The historical endpoint was requested with the effective account scope.
             cost = month.cost || 0
-          } else if (filterBySelection && month.accountBreakdown && Array.isArray(month.accountBreakdown)) {
-            // Using org-wide data but need client-side filtering by accountBreakdown
+          } else if (filterByAccountScope && month.accountBreakdown && Array.isArray(month.accountBreakdown)) {
+            // Filter a fallback unscoped response by its per-account breakdown.
             cost = month.accountBreakdown
-              .filter((acc: any) => selectedAccounts.includes(acc.accountId))
+              .filter((acc: any) => accountScopeSet.has(acc.accountId))
               .reduce((sum: number, acc: any) => sum + (acc.cost || 0), 0)
           } else {
             // Use total cost (org-wide, no filtering needed)
@@ -1620,37 +1631,17 @@ export const useChartRegistry = (args: {
         const currentMonthSummary = dataset.currentMonthOrgWide as any
         const currentMonthData = currentMonthSummary?.data || currentMonthSummary
 
-        let currentMonthActual = 0
-        if (mode === 'proforma' && currentMonthData?.proforma?.accounts) {
-          const accounts = currentMonthData.proforma.accounts
-          if (filterBySelection) {
-            currentMonthActual = accounts
-              .filter((acc: any) => selectedAccounts.includes(acc.accountId))
-              .reduce((sum: number, account: any) => sum + (account.totalCost || 0), 0)
-          } else {
-            currentMonthActual = accounts
-              .reduce((sum: number, account: any) => sum + (account.totalCost || 0), 0)
-          }
-        } else if (currentMonthData?.accounts) {
-          const accounts = currentMonthData.accounts
-          if (filterBySelection) {
-            currentMonthActual = accounts
-              .filter((acc: any) => selectedAccounts.includes(acc.accountId))
-              .reduce((sum: number, account: any) => sum + (account.totalCost || 0), 0)
-          } else {
-            currentMonthActual = accounts
-              .reduce((sum: number, account: any) => sum + (account.totalCost || 0), 0)
-          }
-        }
-
-
-        // Get current month's end-of-month forecast (actual + remainder)
-        let currentMonthEndForecast = currentMonthActual // Default to actual if no forecast
         const remainderForecast = extractForecastTotal(currentForecastData)
-        if (remainderForecast > 0) {
-          currentMonthEndForecast = currentMonthActual + remainderForecast
-        } else {
-        }
+        const currentMonthProjection = resolveCurrentMonthProjection({
+          displayedCurrentSpend: dataset.displayedCurrentSpend,
+          timeframe: dataset.timeframe,
+          currentMonthData,
+          mode,
+          accountScope: accountScopeSet,
+          remainderForecast
+        })
+        const currentMonthActual = currentMonthProjection.actual
+        const currentMonthEndForecast = currentMonthProjection.projectedTotal
 
         // Build full year view (Jan-Dec)
         for (let m = 0; m < 12; m++) {
@@ -1744,8 +1735,8 @@ export const useChartRegistry = (args: {
 
         // Try to use accountsList first (has PEP data)
         if (accountsList.length > 0) {
-          const relevantAccounts = filterBySelection
-            ? accountsList.filter((acc: any) => selectedAccounts.includes(acc.accountId))
+          const relevantAccounts = filterByAccountScope
+            ? accountsList.filter((acc: any) => accountMatchesScope(acc, accountScopeSet))
             : accountsList
 
           // Aggregate monthly budgets across all relevant accounts
@@ -1765,10 +1756,10 @@ export const useChartRegistry = (args: {
 
         // Fallback to analysis API budget data if accountsList didn't yield results
         if (totalAnnualBudget === 0 && byAccount.length > 0) {
-          if (filterBySelection) {
-            // Sum budgets for selected accounts
+          if (filterByAccountScope) {
+            // Sum budgets for the same account scope represented by the chart
             totalAnnualBudget = byAccount
-              .filter((a: any) => selectedAccounts.includes(a.accountId))
+              .filter((a: any) => accountScopeSet.has(a.accountId))
               .reduce((sum: number, a: any) => sum + (a.budgetedCost || 0), 0) * 12
           } else {
             // Sum all account budgets for org-wide view

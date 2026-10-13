@@ -4,7 +4,9 @@ import { getAllAccountsUnified } from './accounts-consolidated'
 import { logger } from './logger'
 import type {
   EntraUserRecord,
-  EntraUsersDatasetFilters
+  EntraUsersDatasetFilters,
+  DatasetQueryOptions,
+  DatasetQueryResult
 } from '../../shared/types/dataset-reports'
 
 /**
@@ -14,8 +16,18 @@ import type {
 export async function getEntraUsers(
   event: H3Event,
   accountIds: string[],
-  filters: EntraUsersDatasetFilters = {}
+  filters: EntraUsersDatasetFilters = {},
+  options: DatasetQueryOptions = {}
 ): Promise<EntraUserRecord[]> {
+  return (await queryEntraUsers(event, accountIds, filters, options)).records
+}
+
+export async function queryEntraUsers(
+  event: H3Event,
+  accountIds: string[],
+  filters: EntraUsersDatasetFilters = {},
+  options: DatasetQueryOptions = {}
+): Promise<DatasetQueryResult<EntraUserRecord>> {
   const startTime = Date.now()
 
   logger.info('[EntraUsers] Fetching user access data', {
@@ -36,14 +48,15 @@ export async function getEntraUsers(
       : allAccounts.map(acc => acc.accountId)
 
     // 3. Get AWS groups from Entra (server-side, uses session)
-    const { data: groupsByAccount } = await getAWSGroups(event, {
+    const { data: groupsByAccount, truncated: groupsTruncated } = await getAWSGroups(event, {
       accountId: undefined, // Get all groups
       includeDistribution: false // Only role groups for access reports
-    })
+    }, options.mode === 'preview' ? { maxPages: 2, signal: options.signal } : { signal: options.signal })
 
     // 4. Build user-account-role mappings
     const userRecords: EntraUserRecord[] = []
     const processedGroups: string[] = []
+    let hasMore = false
 
     // groupsByAccount structure: Record<accountId, AccountGroups>
     // AccountGroups has: { accountId, commercial: ParsedAWSGroup[], govcloud: ParsedAWSGroup[], distribution, uniqueOwners }
@@ -57,6 +70,11 @@ export async function getEntraUsers(
       const allGroups = [...accountGroups.commercial, ...accountGroups.govcloud]
 
       for (const group of allGroups) {
+        if (options.signal?.aborted) throw options.signal.reason || new Error('Query canceled')
+        if (options.limit && userRecords.length >= options.limit) {
+          hasMore = true
+          break
+        }
         // Filter by roles if specified
         if (filters.roles && filters.roles.length > 0 && !filters.roles.includes(group.role)) {
           continue
@@ -64,15 +82,20 @@ export async function getEntraUsers(
 
         try {
           // Get members of this group
-          const membersResponse = await getGroupMembers(event, group.id, true)
+          const membersResponse = await getGroupMembers(event, group.id, true, options.mode === 'preview'
+            ? { maxPages: 2, signal: options.signal }
+            : { signal: options.signal })
+
+          if (membersResponse.truncated) hasMore = true
 
           for (const member of membersResponse.members || []) {
+            const graphMember = member as any
             // Only include users (not groups or service principals)
-            if (member['@odata.type'] !== '#microsoft.graph.user') {
+            if (graphMember['@odata.type'] !== '#microsoft.graph.user') {
               continue
             }
 
-            userRecords.push({
+            const record: EntraUserRecord = {
               userId: member.id,
               userPrincipalName: member.userPrincipalName || '',
               displayName: member.displayName || 'Unknown User',
@@ -82,14 +105,21 @@ export async function getEntraUsers(
               role: group.role,
               groupName: group.displayName,
               groupId: group.id,
-              lastSignIn: member.signInActivity?.lastSignInDateTime,
+              lastSignIn: graphMember.signInActivity?.lastSignInDateTime,
               jobTitle: member.jobTitle,
               department: member.department,
-              manager: member.manager?.displayName
-            })
+              manager: graphMember.manager?.displayName
+            }
+            if (!matchesEntraFilters(record, filters)) continue
+            userRecords.push(record)
+            if (options.limit && userRecords.length >= options.limit) {
+              hasMore = true
+              break
+            }
           }
 
           processedGroups.push(group.displayName)
+          await options.onProgress?.({ phase: 'entraUsers', processed: userRecords.length })
         } catch (error: any) {
           logger.warn('[EntraUsers] Failed to fetch members for group', {
             groupName: group.displayName,
@@ -99,44 +129,8 @@ export async function getEntraUsers(
       }
     }
 
-    // 5. Apply additional filters
-    let filteredRecords = userRecords
-
-    // User search filter
-    if (filters.userSearch) {
-      const search = filters.userSearch.toLowerCase()
-      filteredRecords = filteredRecords.filter(r =>
-        r.displayName.toLowerCase().includes(search) ||
-        r.email.toLowerCase().includes(search) ||
-        r.userPrincipalName.toLowerCase().includes(search)
-      )
-    }
-
-    // Active/inactive filter
-    if (filters.activeOnly !== undefined) {
-      if (filters.activeOnly) {
-        // Only users with sign-in activity
-        filteredRecords = filteredRecords.filter(r => r.lastSignIn !== undefined)
-      }
-
-      // Apply lookback period if specified
-      if (filters.lookbackDays) {
-        const cutoffDate = new Date()
-        cutoffDate.setDate(cutoffDate.getDate() - filters.lookbackDays)
-
-        filteredRecords = filteredRecords.filter(r => {
-          if (!r.lastSignIn) return !filters.activeOnly
-          return new Date(r.lastSignIn) >= cutoffDate
-        })
-      }
-    }
-
-    // Department filter
-    if (filters.departments && filters.departments.length > 0) {
-      filteredRecords = filteredRecords.filter(r =>
-        r.department && filters.departments!.includes(r.department)
-      )
-    }
+    const filteredRecords = userRecords
+    if (groupsTruncated) hasMore = true
 
     const duration = Date.now() - startTime
     logger.info('[EntraUsers] Fetch complete', {
@@ -145,12 +139,35 @@ export async function getEntraUsers(
       durationMs: duration
     })
 
-    return filteredRecords
+    const records = options.limit ? filteredRecords.slice(0, options.limit) : filteredRecords
+    return {
+      records,
+      sampleCount: records.length,
+      hasMore,
+      truncated: hasMore,
+      scannedCount: userRecords.length
+    }
 
   } catch (error: any) {
     logger.error('[EntraUsers] Failed to fetch user data', { error: error.message, stack: error.stack })
-    throw new Error(`Failed to fetch Entra user data: ${error.message}`)
+    throw new Error(`Failed to fetch Entra user data: ${error.message}`, { cause: error })
   }
+}
+
+function matchesEntraFilters(record: EntraUserRecord, filters: EntraUsersDatasetFilters): boolean {
+  if (filters.userSearch) {
+    const search = filters.userSearch.toLowerCase()
+    if (![record.displayName, record.email, record.userPrincipalName].some(value => value.toLowerCase().includes(search))) return false
+  }
+  if (filters.departments?.length && (!record.department || !filters.departments.includes(record.department))) return false
+  const activityStatus = filters.activityStatus || (filters.activeOnly ? 'active' : 'all')
+  if (activityStatus !== 'all') {
+    const cutoff = Date.now() - (filters.lookbackDays || 30) * 86_400_000
+    const lastSignIn = record.lastSignIn ? Date.parse(record.lastSignIn) : Number.NaN
+    if (activityStatus === 'active' && (!Number.isFinite(lastSignIn) || lastSignIn < cutoff)) return false
+    if (activityStatus === 'inactive' && Number.isFinite(lastSignIn) && lastSignIn >= cutoff) return false
+  }
+  return true
 }
 
 /**
@@ -186,7 +203,6 @@ export async function getEntraUsersSummary(
 
   for (const user of users) {
     // Count unique users per account
-    const key = `${user.accountId}`
     const uniqueUsersForAccount = users
       .filter(u => u.accountId === user.accountId)
       .map(u => u.userId)

@@ -1,0 +1,7 @@
+{
+  "tenantId": "tenant-fake-0001",
+  "authenticatedSubjectId": "obj-fake-operator-a",
+  "spaceId": "space-0000-fake-aaaa",
+  "sourceBindingId": "binding-fake-jira-01",
+  "lastAppliedServerSequence": 12
+}

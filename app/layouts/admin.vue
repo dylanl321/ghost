@@ -44,14 +44,8 @@
       </div>
     </footer>
 
-    <!-- Global AI Assistant Popup (feature flag controlled) -->
+    <!-- Development options -->
     <ClientOnly>
-      <StrandsChatPopup v-if="siteConfigStore.isStrandsChatPopupEnabled" />
-
-      <!-- Chat Threads Sidebar -->
-      <ChatThreadsSidebar
-        v-if="siteConfigStore.isStrandsChatEnabled"
-      />
 
       <!-- Dev Options Panel (only shows in dev auth mode) -->
       <DevOptionsPanel />
@@ -60,10 +54,8 @@
 </template>
 
 <script setup lang="ts">
-import { useSiteConfigStore } from '~/stores/useSiteConfigStore'
 
 const route = useRoute()
-const siteConfigStore = useSiteConfigStore()
 
 // Generate breadcrumbs for admin pages
 const breadcrumbs = computed(() => {
@@ -77,10 +69,11 @@ const breadcrumbs = computed(() => {
   // Category name mappings for cleaner display
   const labelMap: Record<string, string> = {
     'configuration': 'Configuration',
+    'kirocrew': 'Kiro Crew Configuration',
     'users': 'Users & Access',
     'content': 'Content & Reports',
     'costs': 'Cost Management',
-    'ai': 'AI & Agents',
+    'ai': 'AI Usage',
     'system': 'System Health',
     'pipelines': 'Pipeline Analytics',
     'budget-alerts': 'Budget Alerts',

@@ -63,19 +63,25 @@ export function getTenantId(environment?: 'commercial' | 'govcloud'): string {
  * Pattern: AWS-[ACCOUNT-ID]_[ROLE]
  */
 export function buildGroupFilter(accountId?: string, _environment?: 'commercial' | 'govcloud'): string {
-  const config = getEntraConfig()
-  const prefix = config.search.groupPrefix
-  
   // Note: Environment is not encoded in group names, so we ignore it for filtering
-  // The actual pattern is AWS-[ACCOUNT-ID]_[ROLE], not AWS-[ACCOUNT-ID]-[ENV]-[ROLE]
+  // Both AWS- and legacy AWS_ prefixes exist, as do _ and - role separators.
   
   // If accountId is specified, look for all groups for that account
   if (accountId) {
-    return `startsWith(displayName, '${prefix}${accountId}_')`
+    return `(${[
+      `startsWith(displayName, 'AWS-${accountId}_')`,
+      `startsWith(displayName, 'AWS-${accountId}-')`,
+      `startsWith(displayName, 'AWS_${accountId}_')`,
+      `startsWith(displayName, 'AWS_${accountId}-')`
+    ].join(' or ')})`
   }
   
   // Otherwise, get all AWS groups
-  return `startsWith(displayName, '${prefix}')`
+  return "(startsWith(displayName, 'AWS-') or startsWith(displayName, 'AWS_'))"
+}
+
+export function isAwsAuthorizationGroupName(displayName: string): boolean {
+  return /^AWS[-_]\d{12}[_-].+$/i.test(displayName)
 }
 
 /**

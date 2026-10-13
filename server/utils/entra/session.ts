@@ -7,6 +7,24 @@ import type { H3Event } from 'h3'
 import { createError } from 'h3'
 import { logger } from '../logger'
 
+async function getPersistentOidcRefreshToken(event: H3Event): Promise<string | undefined> {
+  try {
+    const [{ getUserSessionId }, { decryptToken }, { useStorage }] = await Promise.all([
+      import('nuxt-oidc-auth/runtime/server/utils/session.js'),
+      import('nuxt-oidc-auth/runtime/server/utils/security.js'),
+      import('nitropack/runtime')
+    ])
+    const sessionId = await getUserSessionId(event)
+    const persistentSession = await useStorage('oidc').getItem<{ refreshToken?: unknown }>(sessionId)
+    const tokenKey = process.env.NUXT_OIDC_TOKEN_KEY
+    if (!persistentSession?.refreshToken || !tokenKey) return undefined
+    return await decryptToken(persistentSession.refreshToken as any, tokenKey)
+  } catch (error) {
+    logger.warn('Unable to read the persistent delegated refresh token:', error)
+    return undefined
+  }
+}
+
 /**
  * Validate JWT token expiration
  */
@@ -15,7 +33,7 @@ function isTokenExpired(token: string): boolean {
     const parts = token.split('.')
     if (parts.length !== 3) return true
     
-    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString())
+    const payload = JSON.parse(Buffer.from(parts[1]!, 'base64').toString())
     if (!payload.exp) return false // No expiration claim, assume valid
     
     const now = Math.floor(Date.now() / 1000)
@@ -39,27 +57,6 @@ export async function getUserSession(event: H3Event): Promise<{
   refreshToken?: string
   user?: any
 } | null> {
-  // Always check Authorization header first (works for both dev and prod)
-  const authHeader = event.node.req.headers.authorization
-  if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.substring(7)
-    
-    // Validate token expiration
-    if (isTokenExpired(token)) {
-      logger.debug('Bearer token is expired')
-      return null
-    }
-    
-    return {
-      accessToken: token,
-      user: {
-        id: 'bearer-user',
-        displayName: 'Bearer Token User',
-        email: 'bearer@auth'
-      }
-    }
-  }
-
   // Development mode - use test token ONLY if explicitly set
   const nodeEnv = process.env.NODE_ENV?.toLowerCase()
   if ((nodeEnv === 'development' || nodeEnv === 'dev') && process.env.ENTRA_TEST_ACCESS_TOKEN) {
@@ -82,14 +79,14 @@ export async function getUserSession(event: H3Event): Promise<{
       // Import getUserSession from nuxt-oidc-auth
       const { getUserSession: getOIDCUserSession } = await import('nuxt-oidc-auth/runtime/server/utils/session.js')
       oidcSession = await getOIDCUserSession(event)
-    } catch (e) {
+    } catch {
       // Fallback to h3 session silently (this is expected for unauthenticated requests)
       try {
         const { getSession } = await import('h3')
         oidcSession = await getSession(event, {
           password: process.env.NUXT_OIDC_SESSION_SECRET || process.env.NUXT_SESSION_PASSWORD || 'secret-must-be-at-least-32-characters-long'
         })
-      } catch (e2) {
+      } catch {
         // Silently handle - this is expected for unauthenticated requests
       }
     }
@@ -158,7 +155,7 @@ export async function getUserSession(event: H3Event): Promise<{
 
     return {
       accessToken: accessToken,
-      refreshToken: sessionData.refreshToken || sessionData.refresh_token || session.refreshToken || session.refresh_token,
+      refreshToken: sessionData.refreshToken || sessionData.refresh_token || session.refreshToken || session.refresh_token || await getPersistentOidcRefreshToken(event),
       user: user || { id: 'session-user', email: 'unknown' }
     }
   } catch (error) {

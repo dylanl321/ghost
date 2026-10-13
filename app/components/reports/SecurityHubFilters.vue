@@ -4,6 +4,10 @@
       Filter Options
     </div>
 
+    <UFormGroup label="Resource ID"><UInput v-model="filters.resourceId" placeholder="Instance, bucket, or ARN prefix" /></UFormGroup>
+    <UFormGroup label="Control IDs" help="Comma-separated"><UInput v-model="controlIdsText" placeholder="EC2.1,S3.8" /></UFormGroup>
+    <UFormGroup label="Regions" help="Comma-separated"><UInput v-model="regionsText" placeholder="us-east-1,us-west-2" /></UFormGroup>
+
     <!-- Severity Levels -->
     <UFormGroup label="Severity Levels" help="Select which severity findings to include">
       <div class="flex flex-wrap gap-2">
@@ -154,6 +158,15 @@ const filters = defineModel<SecurityHubDatasetFilters>({
   })
 })
 
+function csvModel(field: 'controlIds' | 'regions') {
+  return computed({
+    get: () => (filters.value[field] || []).join(','),
+    set: (value: string) => { filters.value[field] = value.split(',').map(item => item.trim()).filter(Boolean) }
+  })
+}
+const controlIdsText = csvModel('controlIds')
+const regionsText = csvModel('regions')
+
 // Computed wrappers to extract just the values from select menus
 const selectedProducts = computed({
   get: () => filters.value.products || [],
@@ -182,14 +195,14 @@ const severities = [
   { value: 'MEDIUM', label: 'Medium', color: 'yellow' },
   { value: 'LOW', label: 'Low', color: 'blue' },
   { value: 'INFORMATIONAL', label: 'Info', color: 'gray' }
-]
+] as const
 
 const workflowStatuses = [
   { value: 'NEW', label: 'New', color: 'red' },
   { value: 'NOTIFIED', label: 'Notified', color: 'yellow' },
   { value: 'RESOLVED', label: 'Resolved', color: 'green' },
   { value: 'SUPPRESSED', label: 'Suppressed', color: 'gray' }
-]
+] as const
 
 const productOptions = [
   { value: 'GuardDuty', label: 'Amazon GuardDuty' },

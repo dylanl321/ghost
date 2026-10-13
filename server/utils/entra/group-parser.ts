@@ -22,7 +22,7 @@ function parseAWSGroupName(displayName: string, contextEnvironment?: AWSEnvironm
   environment: AWSEnvironmentType
   role: string
 } | null {
-  const pattern = new RegExp(`^${entraConfig.search.groupPrefix}(\\d{12})_(.+)$`, 'i')
+  const pattern = /^AWS[-_](\d{12})[_-](.+)$/i
   const match = displayName.match(pattern)
   
   if (!match) {

@@ -53,11 +53,11 @@ GHOST is a comprehensive AWS dashboard with **professional-grade UI/UX** built o
 #### Admin Section
 - **`/admin/index.vue`** - Admin dashboard (Access control + System health cards)
   - Access denied page for non-admins with explanation
-  - Quick action buttons (Validation, Agent Health, Feedback, Budget Alerts, Tag Compliance)
+  - Quick action buttons (Validation, Feedback, Budget Alerts, Tag Compliance)
   - System health status cards
   - Activity charts and metrics
 - **`/admin/users/index.vue`** - User management and feedback
-- **`/admin/ai/index.vue`** - AI/Strands agent administration and testing
+- **`/admin/ai/index.vue`** - AI usage collection and administration
 - **`/admin/content.vue`** - Content management interface
 - **`/admin/configuration/index.vue`** - System configuration settings
 - **`/admin/system/index.vue`** - System info and diagnostics
@@ -71,16 +71,9 @@ GHOST is a comprehensive AWS dashboard with **professional-grade UI/UX** built o
 - **`/admin/pipelines/[repoId]/[pipelineId]/index.vue`** - Pipeline details
 - **`/admin/pipelines/authors/index.vue`** - Author management
 
-#### Chat & AI
-- **`/chat.vue`** - Full-page chat interface (when Strands enabled)
-  - Thread list sidebar with favorite/pin capability
-  - Main chat area with thread info header
-  - Editable thread titles
-  - Thread sharing and export functionality
-  - Thread creation workflow
-  - Feature disabled notice when Strands is off
-- **`/chat/shared/[shareId].vue`** - Shared chat thread view
-- **Query routes** - Likely for saved queries
+#### Hosted MCP
+- **`/mcp-connections/index.vue`** - Hosted MCP setup and client connections
+- **`/mcp-connections/details.vue`** - Hosted MCP capabilities
 
 #### Security
 - **`/security/index.vue`** - Organization-wide security health dashboard
@@ -234,24 +227,15 @@ GHOST is a comprehensive AWS dashboard with **professional-grade UI/UX** built o
 #### Admin Components (15+)
 - **AlertSettingsPanel.vue** - Alert configuration interface
   - Sections: Recipients, DryRun, Settings, AnomalyDetection, RateLimiting, AlertLevels
-- **AIChatMonitorPanel.vue** - AI chat query monitoring
 - **RolesPanel.vue** - Role management
 - **ShareLinksPanel.vue** - Share link management
 - **StoredReportsPanel.vue** - Saved reports listing
 - **ConfigItem.vue** - Individual config setting item
 - **EmailDeliveryModal.vue** - Email configuration modal
-- **StrandsAgentTester.vue** - Agent testing interface
 - **SecurityDataPanel.vue** - Security data management
 
-#### AI/Strands Components (10+)
-- **StrandsChatPopup.vue** - Floating chat AI popup
-- **ChatThreadsSidebar.vue** - Chat threads sidebar
-- **ThreadListItem.vue** - Individual thread item
-- **ThreadListSidebar.vue** - Thread management sidebar
-- **ActiveQueriesIndicator.vue** - Running query indicator
-- **AIThinkingBlock.vue** - AI thinking visualization
-- **AccountDisambiguationModal.vue** - Account selection modal for queries
-- **AiInsightCard.vue** - AI insight widget (dashboard-briefing type)
+#### AI Components
+- **AiInsightCard.vue** - Bedrock insight widget
 
 #### Pipeline/Report Components (20+)
 - **PipelineSuccessChart.vue** - Pipeline success rate chart

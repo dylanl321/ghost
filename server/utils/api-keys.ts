@@ -5,9 +5,9 @@
  */
 
 import { randomBytes, scryptSync, timingSafeEqual } from 'crypto'
-import { putItem, getItem, scanItems, updateItem, deleteItem } from './dynamodb'
+import { putItem, getItem, scanItems, updateItem } from './dynamodb'
 import { accountCache } from './cache-manager'
-import { getTableName, getTableEnvironment } from '../lib/dynamodb-config'
+import { getTableName, getTableEnvironment, getTableAccountId } from '../lib/dynamodb-config'
 import { logger } from './logger'
 
 export interface ApiKey {
@@ -35,6 +35,7 @@ export interface CreateApiKeyRequest {
   name: string
   scopes: string[]
   expiresInDays?: number
+  neverExpires?: boolean
   metadata?: Record<string, any>
 }
 
@@ -50,35 +51,45 @@ export interface CreateApiKeyResponse {
  * Available scopes for API keys
  */
 export const API_KEY_SCOPES = {
-  // Entra ID scopes
-  'entra:read': 'Read access to Entra ID data',
-  'entra:write': 'Write access to Entra ID data',
-  'entra:admin': 'Administrative access to Entra ID APIs',
-
-  // Account scopes
   'accounts:read': 'Read access to AWS account data',
-  'accounts:write': 'Modify AWS account metadata',
-
-  // Cost scopes
   'costs:read': 'View AWS cost data and reports',
-  'costs:write': 'Import and modify cost forecasts',
-
-  // Forecast scopes
   'forecast:read': 'View cost forecast data',
-  'forecast:write': 'Import, modify, and delete forecast data',
-
-  // Security Lake scopes
-  'security-lake:read': 'Query Security Lake data',
-  'security-lake:write': 'Execute Security Lake queries',
-
-  // User and group scopes
-  'groups:read': 'Read access to group data',
-  'users:read': 'Read access to user data',
-
-  // System scopes
-  'cache:manage': 'Manage cache operations',
-  'admin:all': 'Full administrative access to all APIs'
+  'security:read': 'View Security Hub summaries and findings',
+  // Existing dedicated VMaaS keys retain this scope and their separate allowlist.
+  'vmaas:costs:read': 'Read fixed-account VMaaS cost projections'
 } as const
+
+export const INTEGRATION_API_KEY_SCOPES = [
+  'accounts:read',
+  'costs:read',
+  'forecast:read',
+  'security:read'
+] as const
+
+export function validateIntegrationApiKeyRequest(request: CreateApiKeyRequest): string | null {
+  if (!request.name || request.name.trim().length === 0) return 'API key name is required'
+  if (request.name.trim().length > 100) return 'API key name must be 100 characters or fewer'
+  if (!Array.isArray(request.scopes) || request.scopes.length === 0) return 'At least one scope is required'
+
+  const invalidScopes = request.scopes.filter(scope =>
+    !(INTEGRATION_API_KEY_SCOPES as readonly string[]).includes(scope)
+  )
+  if (invalidScopes.length > 0) {
+    return `Invalid scopes: ${invalidScopes.join(', ')}. Valid scopes: ${INTEGRATION_API_KEY_SCOPES.join(', ')}`
+  }
+  if (request.neverExpires && request.expiresInDays !== undefined) {
+    return 'Choose either an expiration or Never expires'
+  }
+  if (request.expiresInDays !== undefined &&
+    (!Number.isInteger(request.expiresInDays) || request.expiresInDays < 1 || request.expiresInDays > 365)) {
+    return 'Expiration must be a whole number between 1 and 365 days'
+  }
+  return null
+}
+
+export function isApiKeyOwner(apiKey: Pick<ApiKey, 'createdBy'> | null | undefined, userId: string): boolean {
+  return Boolean(apiKey && userId && apiKey.createdBy.toLowerCase() === userId.toLowerCase())
+}
 
 /**
  * Generate a secure API key
@@ -130,7 +141,8 @@ async function loadApiKeys(): Promise<ApiKey[]> {
     // Scan DynamoDB table
     const tableName = await getTableName('apiKeys')
     const environment = await getTableEnvironment('apiKeys')
-    const result = await scanItems(tableName, undefined, undefined, undefined, environment)
+    const accountId = await getTableAccountId('apiKeys')
+    const result = await scanItems(tableName, undefined, undefined, undefined, environment, undefined, undefined, accountId)
     const items = result.items
     const apiKeys: ApiKey[] = items.map(item => ({
       id: item.id,
@@ -179,7 +191,9 @@ async function saveApiKey(apiKey: ApiKey): Promise<void> {
 
     const tableName = await getTableName('apiKeys')
     const environment = await getTableEnvironment('apiKeys')
-    await putItem(tableName, dbItem, environment)
+    // The base credentials belong to the organizations account, not the table account.
+    const accountId = await getTableAccountId('apiKeys')
+    await putItem(tableName, dbItem, environment, accountId)
 
     // Invalidate cache
     await accountCache.delete('api_keys:all')
@@ -208,11 +222,13 @@ async function updateApiKey(id: string, updates: Partial<ApiKey>): Promise<void>
 
     const tableName = await getTableName('apiKeys')
     const environment = await getTableEnvironment('apiKeys')
+    const accountId = await getTableAccountId('apiKeys')
     await updateItem(
       tableName,
       { id },
       dbUpdates,
-      environment
+      environment,
+      accountId
     )
 
     // Invalidate cache
@@ -248,9 +264,10 @@ export async function createApiKey(
     
     // Calculate expiration
     let expiresAt: Date | undefined
-    if (request.expiresInDays) {
+    const expiresInDays = request.neverExpires ? 0 : (request.expiresInDays ?? 90)
+    if (expiresInDays > 0) {
       expiresAt = new Date()
-      expiresAt.setDate(expiresAt.getDate() + request.expiresInDays)
+      expiresAt.setDate(expiresAt.getDate() + expiresInDays)
     }
     
     // Create API key record
@@ -311,8 +328,13 @@ export async function validateApiKey(key: string): Promise<ApiKeyValidation> {
       if (storedHash.length === providedHash.length && 
           timingSafeEqual(storedHash, providedHash)) {
         
-        // Update last used timestamp
-        await updateApiKey(apiKey.id, { lastUsedAt: new Date() })
+        // Avoid invalidating the validation cache and writing DynamoDB on every call.
+        const lastUsedAge = apiKey.lastUsedAt ? Date.now() - apiKey.lastUsedAt.getTime() : Infinity
+        if (lastUsedAge >= 5 * 60 * 1000) {
+          void updateApiKey(apiKey.id, { lastUsedAt: new Date() }).catch(error => {
+            logger.warn(`Failed to update lastUsedAt for API key ${apiKey.id}:`, error)
+          })
+        }
         
         return {
           valid: true,
@@ -343,7 +365,7 @@ export async function listApiKeys(createdBy?: string): Promise<Omit<ApiKey, 'key
     const apiKeys = await loadApiKeys()
     
     return apiKeys
-      .filter(key => !createdBy || key.createdBy === createdBy)
+      .filter(key => !createdBy || isApiKeyOwner(key, createdBy))
       .map(({ keyHash, salt, ...key }) => key)
   } catch (error) {
     logger.error('Failed to list API keys:', error)
@@ -359,15 +381,16 @@ export async function deactivateApiKey(keyId: string, userId: string): Promise<b
     // Get the specific API key
     const tableName = await getTableName('apiKeys')
     const environment = await getTableEnvironment('apiKeys')
-    const apiKey = await getItem(tableName, { id: keyId }, environment)
+    const accountId = await getTableAccountId('apiKeys')
+    const apiKey = await getItem(tableName, { id: keyId }, environment, accountId)
     
     if (!apiKey) {
       return false
     }
     
     // Check if user has permission to deactivate this key
-    if (apiKey.createdBy !== userId) {
-      throw new Error('Insufficient permissions to deactivate this API key')
+    if (!isApiKeyOwner(apiKey as ApiKey, userId)) {
+      return false
     }
     
     // Update to inactive
@@ -379,6 +402,14 @@ export async function deactivateApiKey(keyId: string, userId: string): Promise<b
     logger.error('Failed to deactivate API key:', error)
     throw error
   }
+}
+
+export async function isApiKeyOwnedBy(keyId: string, userId: string): Promise<boolean> {
+  const tableName = await getTableName('apiKeys')
+  const environment = await getTableEnvironment('apiKeys')
+  const accountId = await getTableAccountId('apiKeys')
+  const apiKey = await getItem(tableName, { id: keyId }, environment, accountId)
+  return isApiKeyOwner(apiKey as ApiKey | undefined, userId)
 }
 
 /**
@@ -409,6 +440,24 @@ export async function cleanupExpiredKeys(): Promise<number> {
     logger.error('Failed to cleanup expired keys:', error)
     return 0
   }
+}
+
+export async function revokeLegacyIntegrationKeys(dryRun = true): Promise<string[]> {
+  const keys = await loadApiKeys()
+  const legacyKeyIds = keys
+    .filter(key =>
+      key.isActive &&
+      !key.scopes.includes('vmaas:costs:read') &&
+      key.metadata?.integrationContract !== 'v1'
+    )
+    .map(key => key.id)
+
+  if (!dryRun) {
+    for (const keyId of legacyKeyIds) {
+      await updateApiKey(keyId, { isActive: false })
+    }
+  }
+  return legacyKeyIds
 }
 
 /**
@@ -480,7 +529,8 @@ export async function recordApiKeyUsage(
 
     const usageTableName = await getTableName('apiKeysUsage')
     const environment = await getTableEnvironment('apiKeysUsage')
-    await putItem(usageTableName, usageRecord, environment)
+    const accountId = await getTableAccountId('apiKeysUsage')
+    await putItem(usageTableName, usageRecord, environment, accountId)
     logger.info(`Successfully recorded API key usage for keyId=${keyId}`)
   } catch (error) {
     // Don't throw error - usage recording should not block API calls
@@ -510,7 +560,8 @@ export async function getApiKeyUsageHistory(
 
     const usageTableName = await getTableName('apiKeysUsage')
     const environment = await getTableEnvironment('apiKeysUsage')
-    const client = await getDynamoDBClient(environment)
+    const accountId = await getTableAccountId('apiKeysUsage')
+    const client = await getDynamoDBClient(environment, undefined, accountId)
 
     // Query by keyId (partition key) and get most recent records
     const command = new QueryCommand({
@@ -565,7 +616,7 @@ export async function getApiKeyUsageStats(keyId: string): Promise<{
 
     const stats = {
       totalCalls: history.length,
-      lastUsed: history.length > 0 ? history[0].timestamp : null,
+      lastUsed: history.length > 0 ? history[0]!.timestamp : null,
       callsByEndpoint: {} as Record<string, number>,
       callsByStatus: {} as Record<number, number>,
       last24Hours: 0,

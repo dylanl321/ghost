@@ -82,8 +82,11 @@ export function useAchievementEngine() {
         Object.entries(saved.uniques).map(([k, v]) => [k, new Set(v)])
       ),
       seen: new Set(saved.seen),
-      awarded: new Set(saved.awarded),
-      awardedAt: { ...saved.awardedAt }
+      // Retired badge definitions must not inflate totals or return during sync.
+      awarded: new Set(saved.awarded.filter(id => badges.some(badge => badge.id === id))),
+      awardedAt: Object.fromEntries(
+        Object.entries(saved.awardedAt).filter(([id]) => badges.some(badge => badge.id === id))
+      )
     }
     dirty = false
   }
@@ -145,7 +148,7 @@ export function useAchievementEngine() {
         const ukey = `unique:${rule.event}:${rule.field}`
         if (!progress.uniques[ukey]) progress.uniques[ukey] = new Set()
         const value = event.payload[rule.field]
-        if (value != null) {
+        if (value !== null && value !== undefined) {
           progress.uniques[ukey].add(String(value))
           dirty = true
         }

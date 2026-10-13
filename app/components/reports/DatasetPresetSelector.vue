@@ -127,9 +127,19 @@ const emit = defineEmits<{
 const categories = getPresetCategories()
 const selectedCategory = ref<DatasetPreset['category'] | null>(null)
 const searchQuery = ref('')
+const customPresets = ref<DatasetPreset[]>([])
+
+watch(isOpen, (open) => {
+  if (!open || !import.meta.client) return
+  try {
+    customPresets.value = JSON.parse(localStorage.getItem('dataset-report-presets') || '[]')
+  } catch {
+    customPresets.value = []
+  }
+})
 
 const filteredPresets = computed(() => {
-  let presets = DATASET_PRESETS
+  let presets = [...customPresets.value, ...DATASET_PRESETS]
 
   // Filter by category
   if (selectedCategory.value) {
