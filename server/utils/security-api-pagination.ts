@@ -264,15 +264,96 @@ export function parseDateRange(query: Record<string, unknown>, defaultLookbackDa
   }
 }
 
-export function sanitizeProviderError(provider: string, error: unknown): never {
-  const candidate = error as { name?: string; $metadata?: { requestId?: string; requestID?: string } }
+/**
+ * Bounded, non-sensitive operation context callers may attach to a provider
+ * failure. Only counts, the environment partition, and the page number are
+ * permitted — never IDs, ARNs, cursors, query values, or credentials.
+ */
+export interface SecurityProviderErrorContext {
+  operation?: string
+  environment?: 'commercial' | 'govcloud'
+  page?: number
+  regionCount?: number
+  accountCount?: number
+}
+
+/**
+ * Diagnostic payload emitted when a security provider call fails. Every field
+ * is explicitly allowlisted; the raw Error, its message/stack, and any caller
+ * context beyond {@link SecurityProviderErrorContext} are intentionally dropped
+ * so that ARNs, account IDs, cursors, credentials, and user input never reach
+ * the logs. Exported for regression testing of the safe shape.
+ */
+export interface SecurityProviderFailureLog extends SecurityProviderErrorContext {
+  type: 'security_provider_failure'
+  level: 'error'
+  provider: string
+  code: string
+  requestId?: string
+  httpStatus?: number
+  attempts?: number
+  timestamp: string
+}
+
+/**
+ * Build the safe diagnostic payload for a provider failure, reading only
+ * allowlisted metadata off the error and merging allowlisted caller context.
+ * Undefined fields are stripped so the emitted record stays compact.
+ */
+export function buildSecurityProviderFailureLog(
+  provider: string,
+  error: unknown,
+  context?: SecurityProviderErrorContext,
+  now = Date.now()
+): SecurityProviderFailureLog {
+  const candidate = error as {
+    name?: string
+    $metadata?: { requestId?: string; requestID?: string; httpStatusCode?: number; attempts?: number }
+  }
+  const metadata = candidate?.$metadata
+  const payload: SecurityProviderFailureLog = {
+    type: 'security_provider_failure',
+    level: 'error',
+    provider,
+    code: candidate?.name || 'ProviderError',
+    requestId: metadata?.requestId || metadata?.requestID,
+    httpStatus: metadata?.httpStatusCode,
+    attempts: metadata?.attempts,
+    operation: context?.operation,
+    environment: context?.environment,
+    page: context?.page,
+    regionCount: context?.regionCount,
+    accountCount: context?.accountCount,
+    timestamp: new Date(now).toISOString()
+  }
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined)
+  ) as SecurityProviderFailureLog
+}
+
+/**
+ * Emit the safe diagnostic payload as one structured JSON line. Written
+ * directly to stdout (mirroring the request/job records) so the exact shape
+ * reaches CloudWatch Log Insights unaltered.
+ */
+export function logSecurityProviderFailure(payload: SecurityProviderFailureLog): void {
+  process.stdout.write(JSON.stringify(payload) + '\n')
+}
+
+export function sanitizeProviderError(
+  provider: string,
+  error: unknown,
+  context?: SecurityProviderErrorContext
+): never {
+  const payload = buildSecurityProviderFailureLog(provider, error, context)
+  logSecurityProviderFailure(payload)
   throw createError({
     statusCode: 502,
     statusMessage: `${provider} could not complete the findings request.`,
     data: {
       provider,
-      code: candidate?.name || 'ProviderError',
-      requestId: candidate?.$metadata?.requestId || candidate?.$metadata?.requestID
+      code: payload.code,
+      requestId: payload.requestId
     }
   })
 }
