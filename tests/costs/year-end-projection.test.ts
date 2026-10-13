@@ -11,6 +11,7 @@ test('year-end projection uses displayed spend instead of hidden account costs',
   const accountScope = new Set(['prod-account'])
   const projection = resolveCurrentMonthProjection({
     displayedCurrentSpend: 300,
+    timeframe: 'thisMonth',
     currentMonthData: {
       proforma: {
         accounts: [
@@ -32,6 +33,7 @@ test('year-end projection uses displayed spend instead of hidden account costs',
 
 test('year-end projection can derive scoped actuals when displayed spend is unavailable', () => {
   const projection = resolveCurrentMonthProjection({
+    timeframe: 'thisMonth',
     currentMonthData: {
       accounts: [
         { accountId: 'included', totalCost: 125 },
@@ -46,11 +48,30 @@ test('year-end projection can derive scoped actuals when displayed spend is unav
   assert.deepEqual(projection, { actual: 125, remainder: 25, projectedTotal: 150 })
 })
 
-test('default account filters recognize requestID and enclaveStatus aliases', () => {
+test('YTD displayed spend is not used as the current-month actual or projection', () => {
+  for (const mode of ['billable', 'proforma']) {
+    const accounts = [
+      { accountId: 'selected', totalCost: 300 },
+      { accountId: 'other', totalCost: 1100 }
+    ]
+    const projection = resolveCurrentMonthProjection({
+      displayedCurrentSpend: 1600, // YTD total, not this month's cost
+      timeframe: 'ytd',
+      currentMonthData: mode === 'proforma' ? { proforma: { accounts } } : { accounts },
+      mode,
+      accountScope: new Set(['selected']),
+      remainderForecast: 50
+    })
+    assert.deepEqual(projection, { actual: 300, remainder: 50, projectedTotal: 350 })
+  }
+})
+
+test('default account filters use explicit environment metadata, not request ID', () => {
   const filtered = applyAccountFilters([
-    { accountId: 'prod', requestID: '100', enclaveStatus: 'Active' },
-    { accountId: 'dev', requestID: '9100', enclaveStatus: 'Active' },
-    { accountId: 'closed', requestID: '200', enclaveStatus: 'Decommissioned' }
+    { accountId: 'prod', requestID: '100', enclaveStatus: 'Sustainment', environment: 'production' },
+    { accountId: 'api-west', requestID: '10274', enclaveStatus: 'Sustainment', environment: 'production' },
+    { accountId: 'dev', requestID: '100', enclaveStatus: 'Sustainment', environment: 'development' },
+    { accountId: 'closed', requestID: '200', enclaveStatus: 'Decommissioned', environment: 'production' }
   ], {
     hideSavingsPlans: false,
     hideEnterpriseSupport: false,
@@ -62,5 +83,5 @@ test('default account filters recognize requestID and enclaveStatus aliases', ()
     selectedTableColumns: null
   })
 
-  assert.deepEqual(filtered.map(account => account.accountId), ['prod'])
+  assert.deepEqual(filtered.map(account => account.accountId), ['prod', 'api-west'])
 })

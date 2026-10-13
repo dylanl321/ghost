@@ -1,0 +1,29 @@
+{
+  "eventId": "evt-fake-0002",
+  "investigationId": "inv-fake-0001",
+  "runId": "run-fake-0001",
+  "type": "check-finished",
+  "checkId": "chk-fake-aaaa",
+  "author": {
+    "tenantId": "tenant-fake-0001",
+    "entraObjectId": "obj-fake-operator-a"
+  },
+  "gatewayId": "gw-fake-workstation-1",
+  "sourceSubject": {
+    "sourceBindingId": "binding-fake-jira-01",
+    "sourceType": "jira",
+    "stableSourceId": "PROJ-1234"
+  },
+  "occurredAt": "2024-01-02T03:07:00Z",
+  "receivedAt": "2024-01-02T03:07:01Z",
+  "serverSequence": 12,
+  "operationId": "op-fake-check-finish-1",
+  "body": {
+    "status": "success",
+    "result": "issue read; 2 linked incidents",
+    "exitStatus": 0
+  },
+  "artifactIds": ["art-fake-ready-01"],
+  "provenance": "adapter",
+  "limitations": []
+}

@@ -48,7 +48,6 @@ Categories classify notifications and control user preference routing, UI groupi
 | `PIPELINE_FAILURE` | Terraform pipeline failures | Yes | Pipeline |
 | `DEPLOYMENT` | Deployment status updates | Yes | Pipeline |
 | `REPORT_READY` | Scheduled report completed or failed | No (always delivered) | System |
-| `CHAT_COMPLETE` | Async AI analysis finished | No (always delivered) | System |
 | `SYSTEM` | System messages, broadcasts, feedback confirmations | No (always delivered) | System |
 
 Categories with "No" in the user toggle column are mapped to `null` in `CATEGORY_PREFERENCE_MAP` and bypass user preference checks.
@@ -220,21 +219,6 @@ Severity:    info (success) | warning (failure)
 Action:      /settings/reports → "View Reports"
 Metadata:    { reportId, executionId, s3Url } or { reportId, error }
 Guard:       Natural (each execution runs once)
-```
-
-### 2. Async Chat Completion
-
-**Location:** `server/utils/strands-async-processor.ts`
-
-Fires when an async AI query reaches terminal status (complete or error) during `pollJobStatus()`.
-
-```
-Category:    CHAT_COMPLETE
-Severity:    info (complete) | warning (error)
-Action:      /chat → "View Result"
-Metadata:    { jobId, toolsCalled }
-DedupeKey:   chat-job-{jobId}
-Guard:       Transition check (job.status was non-terminal, now terminal)
 ```
 
 ### 3. Budget Threshold Alerts

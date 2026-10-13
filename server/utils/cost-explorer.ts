@@ -92,7 +92,8 @@ export async function getCostForecast(
   granularity: 'DAILY' | 'MONTHLY' = 'DAILY',
   filter?: Expression,
   environment: 'commercial' | 'govcloud' = 'commercial',
-  targetAccountId?: string
+  targetAccountId?: string,
+  options?: { billingViewArn?: string }
 ) {
   const client = await getCostExplorerClient(environment, undefined, targetAccountId)
   
@@ -103,7 +104,8 @@ export async function getCostForecast(
     },
     Metric: metric as any,
     Granularity: granularity as Granularity,
-    Filter: filter
+    Filter: filter,
+    ...(options?.billingViewArn ? { BillingViewArn: options.billingViewArn } : {})
   })
 
   const response = await client.send(command)

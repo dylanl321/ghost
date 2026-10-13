@@ -20,10 +20,7 @@ registerEndpoint('/api/entra/cache/invalidate', 'POST', {
   description: 'Invalidate specific or all Entra ID cache entries (admin only)',
   tags: ['Cache Management'],
   security: [
-    { ApiKeyAuth: [] },
-    { BearerAuth: [] },
-    { OIDCAuth: [] },
-    { DevBypass: [] }
+    { OIDCAuth: [] }
   ],
   requestBody: {
     required: false,

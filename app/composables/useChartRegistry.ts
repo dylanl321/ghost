@@ -1634,6 +1634,7 @@ export const useChartRegistry = (args: {
         const remainderForecast = extractForecastTotal(currentForecastData)
         const currentMonthProjection = resolveCurrentMonthProjection({
           displayedCurrentSpend: dataset.displayedCurrentSpend,
+          timeframe: dataset.timeframe,
           currentMonthData,
           mode,
           accountScope: accountScopeSet,

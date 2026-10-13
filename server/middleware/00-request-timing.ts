@@ -8,8 +8,9 @@
  * metric filters can extract APILatencyMs and backgroundJobActive.
  */
 
-import { defineEventHandler, getRequestURL } from 'h3'
+import { defineEventHandler, getRequestHeader, getRequestURL, setResponseHeader } from 'h3'
 import { isAnyJobRunning, getActiveJobs } from '../utils/job-tracker'
+import { resolveRequestId } from '../utils/request-id'
 
 // Normalize dynamic path segments for Log Insights grouping
 function normalizePath(path: string): string {
@@ -33,6 +34,12 @@ export default defineEventHandler((event) => {
     return
   }
 
+  // Establish a request correlation ID so logs, errors, and the response can
+  // be tied together. Reuse a safe caller-supplied id or mint a new one.
+  const requestId = resolveRequestId(getRequestHeader(event, 'x-request-id'))
+  event.context.requestId = requestId
+  setResponseHeader(event, 'x-request-id', requestId)
+
   const start = performance.now()
 
   event.node.res.on('finish', () => {
@@ -41,6 +48,7 @@ export default defineEventHandler((event) => {
 
     const entry: Record<string, unknown> = {
       type: 'request',
+      requestId,
       method: event.method,
       path: normalizePath(pathname),
       statusCode: event.node.res.statusCode,

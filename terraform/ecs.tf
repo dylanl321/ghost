@@ -52,12 +52,6 @@ resource "aws_ecs_task_definition" "main" {
           name  = "NODE_ENV"
           value = var.env
         },
-        # Admin Access Bypass - allows all authenticated users to have admin access
-        # Required in ECS because Microsoft Graph API integration for group checking is not available
-        {
-          name  = "ADMIN_BYPASS"
-          value = "true"
-        },
         {
           name  = "DYNAMODB_CONFIG_SECRET_NAME"
           value = aws_secretsmanager_secret.dynamodb_config.name
@@ -255,24 +249,8 @@ resource "aws_ecs_task_definition" "main" {
           value = aws_dynamodb_table.site_config.name
         },
         {
-          name  = "CHAT_THREADS_TABLE_NAME"
-          value = aws_dynamodb_table.chat_threads.name
-        },
-        {
-          name  = "CHAT_MESSAGES_TABLE_NAME"
-          value = aws_dynamodb_table.chat_messages.name
-        },
-        {
           name  = "ADMIN_NOTIFICATIONS_TABLE"
           value = aws_dynamodb_table.admin_notifications.name
-        },
-        {
-          name  = "AWS_ASYNC_JOBS_TABLE_NAME"
-          value = aws_dynamodb_table.async_chat_jobs.name
-        },
-        {
-          name  = "CHAT_JOBS_QUEUE_URL"
-          value = aws_sqs_queue.chat_jobs.url
         },
         {
           name  = "DATASET_EXPORT_JOBS_TABLE_NAME"
@@ -281,10 +259,6 @@ resource "aws_ecs_task_definition" "main" {
         {
           name  = "DATASET_EXPORT_JOBS_QUEUE_URL"
           value = aws_sqs_queue.dataset_export_jobs.url
-        },
-        {
-          name  = "AWS_ASYNC_METRICS_TABLE_NAME"
-          value = aws_dynamodb_table.async_metrics.name
         },
         {
           name  = "AI_USAGE_TABLE_NAME"
@@ -306,6 +280,30 @@ resource "aws_ecs_task_definition" "main" {
         {
           name  = "GHOST_OAUTH_TABLE_NAME"
           value = aws_dynamodb_table.oauth_artifacts.name
+        },
+        {
+          # Deployment-local OAuth administration projections/audit table.
+          # Isolated from GHOST_OAUTH_TABLE_NAME (provider artifacts).
+          name  = "GHOST_OAUTH_ADMIN_TABLE_NAME"
+          value = aws_dynamodb_table.oauth_administration.name
+        },
+        {
+          # Development clients share corporate egress IPs. Keep a bounded
+          # registration quota without exhausting it after ten setup attempts.
+          name  = "GHOST_OAUTH_REGISTRATION_RATE_LIMIT_PER_HOUR"
+          value = var.env == "dev" ? "120" : "10"
+        },
+        {
+          name  = "GHOST_KIROCREW_RESOURCE_URL"
+          value = var.env == "prod" ? "https://ghost-aws.gd-ms.com/api/kirocrew" : "https://ghost-aws-dev.gd-ms.com/api/kirocrew"
+        },
+        {
+          name  = "GHOST_KIROCREW_CONFIG_TABLE_NAME"
+          value = aws_dynamodb_table.kirocrew_config.name
+        },
+        {
+          name  = "GHOST_KIROCREW_PAYLOAD_BUCKET_NAME"
+          value = aws_s3_bucket.kirocrew_payload.id
         },
         {
           name  = "GHOST_OAUTH_AUTHORIZATION_TTL_DAYS"
@@ -488,23 +486,6 @@ resource "aws_ecs_task_definition" "main" {
         {
           name  = "BEDROCK_CLAUDE_FALLBACK_MODELS"
           value = "anthropic.claude-3-5-sonnet-20240620-v1:0,anthropic.claude-3-sonnet-20240229-v1:0"
-        },
-        # Strands Agent Configuration
-        {
-          name  = "STRANDS_SERVER_URL"
-          value = "http://internal-lz-mcp-servers-dev-alb-1428009891.us-gov-west-1.elb.amazonaws.com:80"
-        },
-        {
-          name  = "STRANDS_TIMEOUT"
-          value = "600000"
-        },
-        {
-          name  = "STRANDS_RETRIES"
-          value = "2"
-        },
-        {
-          name  = "STRANDS_RETRY_DELAY"
-          value = "2000"
         },
         # Public URLs (environment-specific)
         {
