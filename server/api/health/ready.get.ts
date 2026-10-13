@@ -24,6 +24,7 @@ import { DescribeOrganizationCommand } from '@aws-sdk/client-organizations'
 import os from 'os'
 import process from 'process'
 import { getAccountsTableName } from '../../utils/accounts-consolidated'
+import { getDynamoDBConfigDiagnostic } from '../../lib/dynamodb-config'
 import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
@@ -200,6 +201,24 @@ registerEndpoint('/api/health/ready', 'GET', {
                         properties: {
                           entries: { type: 'number' },
                           hitRate: { type: 'number' }
+                        }
+                      }
+                    }
+                  },
+                  dependencies: {
+                    type: 'object',
+                    properties: {
+                      dynamodbConfig: {
+                        type: 'object',
+                        description: 'Redacted DynamoDB config load diagnostic. Non-sensitive: never contains secret values or table contents.',
+                        properties: {
+                          source: {
+                            type: 'string',
+                            enum: ['development-env', 'dynamodb-config-env', 'secrets-manager', 'env-defaults']
+                          },
+                          missingKeyCount: { type: 'number' },
+                          missingKeys: { type: 'array', items: { type: 'string' } },
+                          loadedAt: { type: 'string', format: 'date-time', nullable: true }
                         }
                       }
                     }
@@ -484,6 +503,27 @@ export default defineEventHandler(handleAsync(async (event) => {
     healthData.circuitBreaker = assumeRoleCircuitBreaker.getStats()
   } catch (error) {
     logger.warn('Could not retrieve circuit breaker statistics:', error)
+  }
+
+  // Surface DynamoDB config health: a stale/partial secret falls back to env
+  // defaults (safe), but the degraded condition should be visible here.
+  try {
+    const dynamodbConfig = getDynamoDBConfigDiagnostic()
+    healthData.dependencies = {
+      ...(healthData.dependencies || {}),
+      dynamodbConfig
+    }
+
+    if (dynamodbConfig.missingKeyCount > 0) {
+      healthData.warnings.push(
+        `DynamoDB config is using env defaults for ${dynamodbConfig.missingKeyCount} missing secret key(s): ${dynamodbConfig.missingKeys.join(', ')}`
+      )
+      if (healthData.status === 'healthy') {
+        healthData.status = 'degraded'
+      }
+    }
+  } catch (error) {
+    logger.warn('Could not retrieve DynamoDB config diagnostic:', error)
   }
 
   // Add warnings if no environments are configured

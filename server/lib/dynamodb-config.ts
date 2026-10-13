@@ -119,6 +119,28 @@ const CONFIG_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 let lastMissingKeysFingerprint: string | null = null
 
 /**
+ * Redacted, non-sensitive diagnostic describing the most recent config load.
+ *
+ * Contains ONLY the resolution source, the names of config keys the secret was
+ * missing (which are static table keys like "userNotifications", never secret
+ * values or table contents), the missing-key count, and the load time. Safe to
+ * expose on an admin readiness endpoint.
+ */
+export interface DynamoDBConfigDiagnostic {
+  source: 'development-env' | 'dynamodb-config-env' | 'secrets-manager' | 'env-defaults'
+  missingKeyCount: number
+  missingKeys: string[]
+  loadedAt: string | null
+}
+
+let configDiagnostic: DynamoDBConfigDiagnostic = {
+  source: 'env-defaults',
+  missingKeyCount: 0,
+  missingKeys: [],
+  loadedAt: null
+}
+
+/**
  * Get DynamoDB configuration from Secrets Manager
  */
 async function loadFromSecretsManager(): Promise<Partial<DynamoDBConfig> | null> {
@@ -375,6 +397,12 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
   if (nodeEnv === 'development' || nodeEnv === 'dev') {
     cachedConfig = envConfig
     configLoadedAt = Date.now()
+    configDiagnostic = {
+      source: 'development-env',
+      missingKeyCount: 0,
+      missingKeys: [],
+      loadedAt: new Date(configLoadedAt).toISOString()
+    }
     logger.info('Using DynamoDB configuration from environment variables (development mode)')
     return envConfig
   }
@@ -408,6 +436,11 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
     const missingKeys = (Object.keys(envConfig) as (keyof DynamoDBConfig)[])
       .filter(k => !(k in secretsConfig))
       .sort()
+      .map(k => String(k))
+
+    const source: DynamoDBConfigDiagnostic['source'] =
+      process.env.DYNAMODB_CONFIG ? 'dynamodb-config-env' : 'secrets-manager'
+
     if (missingKeys.length > 0) {
       const fingerprint = missingKeys.join(',')
       if (fingerprint !== lastMissingKeysFingerprint) {
@@ -424,14 +457,42 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
 
     cachedConfig = mergedConfig
     configLoadedAt = Date.now()
+    configDiagnostic = {
+      source,
+      missingKeyCount: missingKeys.length,
+      missingKeys,
+      loadedAt: new Date(configLoadedAt).toISOString()
+    }
     return mergedConfig
   }
 
   // No secret available — use env defaults directly.
   cachedConfig = envConfig
   configLoadedAt = Date.now()
+  configDiagnostic = {
+    source: 'env-defaults',
+    missingKeyCount: 0,
+    missingKeys: [],
+    loadedAt: new Date(configLoadedAt).toISOString()
+  }
 
   return envConfig
+}
+
+/**
+ * Redacted diagnostic for the most recent DynamoDB config load.
+ *
+ * Returns a defensive copy exposing only non-sensitive signals (source,
+ * missing config-key names, count, load time) for observability/readiness
+ * surfaces. Never contains secret values or table contents.
+ */
+export function getDynamoDBConfigDiagnostic(): DynamoDBConfigDiagnostic {
+  return {
+    source: configDiagnostic.source,
+    missingKeyCount: configDiagnostic.missingKeyCount,
+    missingKeys: [...configDiagnostic.missingKeys],
+    loadedAt: configDiagnostic.loadedAt
+  }
 }
 
 /**
@@ -440,6 +501,12 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
 export function clearConfigCache(): void {
   cachedConfig = null
   configLoadedAt = null
+  configDiagnostic = {
+    source: 'env-defaults',
+    missingKeyCount: 0,
+    missingKeys: [],
+    loadedAt: null
+  }
 }
 
 // Track which tables have been logged to avoid duplicate logs
