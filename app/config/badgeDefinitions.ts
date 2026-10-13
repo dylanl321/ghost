@@ -198,17 +198,6 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     rule: { type: 'event_once', event: 'dashboard.customized' }
   },
   {
-    id: 'ai-whisperer',
-    name: 'AI Whisperer',
-    description: 'Used the AI chat assistant for the first time',
-    hint: 'Try asking it something.',
-    category: 'discovery',
-    hidden: false,
-    icon: 'fa-solid fa-robot',
-    color: '#A78BFA',
-    rule: { type: 'event_once', event: 'ai.chat.sent' }
-  },
-  {
     id: 'voice-heard',
     name: 'Voice Heard',
     description: 'Submitted feedback through the platform',
@@ -330,28 +319,6 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     icon: 'fa-solid fa-earth-americas',
     color: '#0EA5E9',
     rule: { type: 'unique_count', event: 'page.visited', field: 'page', threshold: 50 }
-  },
-  {
-    id: 'chatterbox',
-    name: 'Chatterbox',
-    description: 'Sent 25 messages to the AI assistant',
-    hint: 'You two have a lot to talk about.',
-    category: 'discovery',
-    hidden: false,
-    icon: 'fa-solid fa-comments',
-    color: '#A78BFA',
-    rule: { type: 'event_count', event: 'ai.chat.sent', threshold: 25 }
-  },
-  {
-    id: 'ai-confidant',
-    name: 'AI Confidant',
-    description: 'Sent 100 messages to the AI assistant',
-    hint: 'At this point it knows your style.',
-    category: 'discovery',
-    hidden: false,
-    icon: 'fa-solid fa-robot',
-    color: '#D946EF',
-    rule: { type: 'event_count', event: 'ai.chat.sent', threshold: 100 }
   },
   {
     id: 'export-machine',
@@ -549,28 +516,6 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     rule: { type: 'event_once', event: 'easter_egg.triggered' }
   },
   {
-    id: 'the-narrator',
-    name: 'The Narrator',
-    description: 'Renamed 3+ AI chat threads',
-    hint: 'Every story deserves a proper name.',
-    category: 'hidden',
-    hidden: true,
-    icon: 'fa-solid fa-pen-fancy',
-    color: '#D946EF',
-    rule: { type: 'event_count', event: 'chat.thread_renamed', threshold: 3 }
-  },
-  {
-    id: 'the-archivist',
-    name: 'The Archivist',
-    description: 'Exported an AI chat thread',
-    hint: 'Some conversations are worth keeping.',
-    category: 'hidden',
-    hidden: true,
-    icon: 'fa-solid fa-box-archive',
-    color: '#78716C',
-    rule: { type: 'event_once', event: 'chat.thread_exported' }
-  },
-  {
     id: 'inception',
     name: 'Inception',
     description: 'Earned a badge while viewing the badges page',
@@ -613,17 +558,6 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     icon: 'fa-solid fa-user-secret',
     color: '#A855F7',
     rule: { type: 'condition', key: 'viewed_profile_3_times_in_session' }
-  },
-  {
-    id: 'philosopher',
-    name: 'Philosopher',
-    description: 'Asked the AI chat a non-work-related question',
-    hint: 'Not every question has a line item.',
-    category: 'hidden',
-    hidden: true,
-    icon: 'fa-solid fa-brain',
-    color: '#C084FC',
-    rule: { type: 'condition', key: 'ai_non_work_question' }
   },
   {
     id: 'mobile-scout',

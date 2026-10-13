@@ -38,7 +38,7 @@ async function fetchOrgDefault(force = false) {
     try {
       const res = await $fetch<{ success: boolean; layout: DashboardLayoutConfig | null }>('/api/admin/dashboard-layout/get-default')
       if (res.success && res.layout) {
-        orgDefault.value = res.layout
+        orgDefault.value = { ...res.layout, sections: res.layout.sections.filter(section => ALL_SECTION_IDS.includes(section.id)) }
       }
       orgDefaultLastFetched.value = Date.now()
     } catch (err) {

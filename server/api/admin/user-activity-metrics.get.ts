@@ -223,7 +223,6 @@ function simplifyPath(path: string): string {
     home: 'Dashboard',
     account: 'Account',
     admin: 'Admin',
-    chat: 'AI Chat',
     costs: 'Costs',
     explorer: 'Explorer',
     profile: 'Profile',

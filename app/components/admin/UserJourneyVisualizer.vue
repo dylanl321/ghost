@@ -624,7 +624,6 @@ const siteMapNodes = computed(() => {
     { id: 'costs', label: 'Costs', x: 600, y: 180, color: '#10b981', icon: '💰' },
     { id: 'account', label: 'Account', x: 150, y: 300, color: '#f59e0b', icon: '🏢' },
     { id: 'admin', label: 'Admin', x: 400, y: 300, color: '#ef4444', icon: '⚙️' },
-    { id: 'chat', label: 'AI Chat', x: 650, y: 300, color: '#06b6d4', icon: '💬' },
     { id: 'profile', label: 'Profile', x: 250, y: 420, color: '#ec4899', icon: '👤' },
     { id: 'reports', label: 'Reports', x: 550, y: 420, color: '#84cc16', icon: '📊' },
   ]
@@ -851,7 +850,6 @@ function simplifyPath(path: string): string {
   if (path.includes('/account/costs')) return 'Costs'
   if (path.includes('/account/org')) return 'Org Chart'
   if (path.includes('/admin')) return 'Admin'
-  if (path.includes('/chat')) return 'AI Chat'
   if (path.includes('/profile')) return 'Profile'
   if (path.includes('/settings')) return 'Settings'
   if (path.includes('/reports')) return 'Reports'
@@ -871,7 +869,6 @@ function getNodeColor(name: string): string {
     'Costs': '#10b981',
     'Account Details': '#f59e0b',
     'Admin': '#ef4444',
-    'AI Chat': '#06b6d4',
     'Profile': '#ec4899',
     'Settings': '#6366f1',
     'Reports': '#84cc16',
@@ -887,7 +884,6 @@ function getPageIcon(path: string): string {
   if (path.includes('/account/costs')) return 'i-heroicons-currency-dollar'
   if (path.includes('/account/explorer')) return 'i-heroicons-magnifying-glass'
   if (path.match(/^\/account\/\d+/)) return 'i-heroicons-building-office'
-  if (path.includes('/chat')) return 'i-heroicons-chat-bubble-left-right'
   if (path.includes('/profile')) return 'i-heroicons-user-circle'
   if (path.includes('/settings')) return 'i-heroicons-cog-6-tooth'
   if (path.includes('/reports')) return 'i-heroicons-document-chart-bar'
@@ -922,7 +918,6 @@ function getDetailedPageName(path: string): string {
     if (p === 'costs') return 'Costs'
     if (p === 'explorer') return 'Explorer'
     if (p === 'org') return 'Org Chart'
-    if (p === 'chat') return 'AI Chat'
     if (p === 'profile') return 'Profile'
     if (p === 'reports') return 'Reports'
     if (p === 'support') return 'Support'

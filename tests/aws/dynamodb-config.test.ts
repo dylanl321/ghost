@@ -17,6 +17,39 @@ function budgetConfig(tableName: string, readOnly: boolean): DynamoDBTableConfig
   return { tableName, ...monitoringLocation, readOnly }
 }
 
+test('deployed API key table names override stale secrets while retaining their location', () => {
+  const previousKeys = process.env.DYNAMODB_API_KEYS_TABLE
+  const previousUsage = process.env.DYNAMODB_API_KEY_USAGE_TABLE
+  try {
+    process.env.DYNAMODB_API_KEYS_TABLE = 'ghost-api-keys-prod'
+    process.env.DYNAMODB_API_KEY_USAGE_TABLE = 'ghost-api-keys-usage-prod'
+    const defaults = {
+      budgetAlerts: budgetConfig('alerts', true),
+      budgetAlertConfig: budgetConfig('alert-config', false),
+      apiKeys: budgetConfig('ghost-api-keys-prod', false),
+      apiKeysUsage: budgetConfig('ghost-api-keys-usage-prod', false)
+    } as DynamoDBConfig
+    const configured = {
+      apiKeys: budgetConfig('ghost-api-keys', false),
+      apiKeysUsage: budgetConfig('ghost-api-keys-usage', false)
+    }
+    const merged = mergeDynamoDBConfig(defaults, configured)
+    assert.deepEqual(merged.apiKeys, defaults.apiKeys)
+    assert.deepEqual(merged.apiKeysUsage, defaults.apiKeysUsage)
+
+    delete process.env.DYNAMODB_API_KEYS_TABLE
+    delete process.env.DYNAMODB_API_KEY_USAGE_TABLE
+    const withoutOverrides = mergeDynamoDBConfig(defaults, configured)
+    assert.deepEqual(withoutOverrides.apiKeys, configured.apiKeys)
+    assert.deepEqual(withoutOverrides.apiKeysUsage, configured.apiKeysUsage)
+  } finally {
+    if (previousKeys === undefined) delete process.env.DYNAMODB_API_KEYS_TABLE
+    else process.env.DYNAMODB_API_KEYS_TABLE = previousKeys
+    if (previousUsage === undefined) delete process.env.DYNAMODB_API_KEY_USAGE_TABLE
+    else process.env.DYNAMODB_API_KEY_USAGE_TABLE = previousUsage
+  }
+})
+
 test('stale secrets cannot relocate budget alert tables from the monitoring account', () => {
   const defaults = {
     budgetAlerts: budgetConfig('budget-alert-system-alert-history-prod', true),
