@@ -31,14 +31,9 @@ export interface DynamoDBConfig {
   externalAccounts: DynamoDBTableConfig
   userPreferences: DynamoDBTableConfig
   accountNotes: DynamoDBTableConfig
-  chatThreads: DynamoDBTableConfig
-  chatMessages: DynamoDBTableConfig
   siteConfig: DynamoDBTableConfig
   adminNotifications: DynamoDBTableConfig
-  streamingMetrics: DynamoDBTableConfig
-  asyncChatJobs: DynamoDBTableConfig
   datasetExportJobs: DynamoDBTableConfig
-  asyncMetrics: DynamoDBTableConfig
   aiUsage: DynamoDBTableConfig
   budgetAlerts: DynamoDBTableConfig
   budgetAlertConfig: DynamoDBTableConfig
@@ -48,6 +43,7 @@ export interface DynamoDBConfig {
   achievementProgress: DynamoDBTableConfig
   utilizationAnalysis: DynamoDBTableConfig
   financialPlanOverrides: DynamoDBTableConfig
+  financialPlanHistory: DynamoDBTableConfig
 }
 
 // -----------------------------------------------------------------------------
@@ -89,6 +85,16 @@ export function mergeDynamoDBConfig(
 ): DynamoDBConfig {
   const merged = { ...defaults, ...configured }
 
+  // ECS supplies the deployed table names; older secrets still name the dev tables.
+  for (const [key, tableName] of [
+    ['apiKeys', process.env.DYNAMODB_API_KEYS_TABLE],
+    ['apiKeysUsage', process.env.DYNAMODB_API_KEY_USAGE_TABLE]
+  ] as const) {
+    if (tableName) {
+      merged[key] = { ...defaults[key], ...configured[key], tableName }
+    }
+  }
+
   for (const key of BUDGET_ALERT_CONFIG_KEYS) {
     merged[key] = {
       ...defaults[key],
@@ -106,6 +112,33 @@ export function mergeDynamoDBConfig(
 let cachedConfig: DynamoDBConfig | null = null
 let configLoadedAt: number | null = null
 const CONFIG_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+// The config cache refreshes every 5 minutes, so a stale secret would log the
+// same missing-key warning repeatedly. Suppress it per process once we've
+// warned for a given sorted missing-key set; a changed set warns once more.
+let lastMissingKeysFingerprint: string | null = null
+
+/**
+ * Redacted, non-sensitive diagnostic describing the most recent config load.
+ *
+ * Contains ONLY the resolution source, the names of config keys the secret was
+ * missing (which are static table keys like "userNotifications", never secret
+ * values or table contents), the missing-key count, and the load time. Safe to
+ * expose on an admin readiness endpoint.
+ */
+export interface DynamoDBConfigDiagnostic {
+  source: 'development-env' | 'dynamodb-config-env' | 'secrets-manager' | 'env-defaults'
+  missingKeyCount: number
+  missingKeys: string[]
+  loadedAt: string | null
+}
+
+let configDiagnostic: DynamoDBConfigDiagnostic = {
+  source: 'env-defaults',
+  missingKeyCount: 0,
+  missingKeys: [],
+  loadedAt: null
+}
 
 /**
  * Get DynamoDB configuration from Secrets Manager
@@ -151,10 +184,26 @@ async function loadFromSecretsManager(): Promise<Partial<DynamoDBConfig> | null>
   }
 }
 
+export function isProductionDeployment(env: NodeJS.ProcessEnv = process.env): boolean {
+  const explicitEnvironment = env.GHOST_ENV?.trim().toLowerCase()
+  if (explicitEnvironment) return explicitEnvironment === 'prod' || explicitEnvironment === 'production'
+
+  // Nitro production builds can inline NODE_ENV="production" even when the
+  // running ECS service is dev. The environment-specific secret name remains
+  // runtime configuration, so use it as the compatibility signal.
+  const secretName = env.DYNAMODB_CONFIG_SECRET_NAME?.trim().toLowerCase()
+  if (secretName?.endsWith('-dev')) return false
+  if (secretName?.endsWith('-prod')) return true
+
+  const nodeEnv = env.NODE_ENV?.trim().toLowerCase()
+  return nodeEnv === 'production' || nodeEnv === 'prod'
+}
+
 /**
  * Get DynamoDB configuration from environment variables (fallback)
  */
 function loadFromEnvironment(): DynamoDBConfig {
+  const isProduction = isProductionDeployment()
   const govCloudRegion = process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1'
   const commercialRegion = process.env.AWS_COMMERCIAL_REGION || 'us-east-1'
   const govCloudAccountId = process.env.AWS_GOVCLOUD_ORGANIZATIONS_ACCOUNT_ID || ''
@@ -232,18 +281,6 @@ function loadFromEnvironment(): DynamoDBConfig {
       region: govCloudRegion,
       accountId: deploymentAccountId
     },
-    chatThreads: {
-      tableName: process.env.CHAT_THREADS_TABLE_NAME || 'ghost-chat-threads',
-      environment: 'govcloud',
-      region: govCloudRegion,
-      accountId: deploymentAccountId
-    },
-    chatMessages: {
-      tableName: process.env.CHAT_MESSAGES_TABLE_NAME || 'ghost-chat-messages',
-      environment: 'govcloud',
-      region: govCloudRegion,
-      accountId: deploymentAccountId
-    },
     siteConfig: {
       tableName: process.env.SITE_CONFIG_TABLE || 'ghost-site-config',
       environment: 'govcloud',
@@ -256,26 +293,8 @@ function loadFromEnvironment(): DynamoDBConfig {
       region: govCloudRegion,
       accountId: deploymentAccountId
     },
-    streamingMetrics: {
-      tableName: process.env.STREAMING_METRICS_TABLE_NAME || 'ghost-streaming-metrics',
-      environment: 'govcloud',
-      region: govCloudRegion,
-      accountId: deploymentAccountId
-    },
-    asyncChatJobs: {
-      tableName: process.env.AWS_ASYNC_JOBS_TABLE_NAME || 'ghost-async-chat-jobs',
-      environment: 'govcloud',
-      region: govCloudRegion,
-      accountId: deploymentAccountId
-    },
     datasetExportJobs: {
       tableName: process.env.DATASET_EXPORT_JOBS_TABLE_NAME || 'ghost-dataset-export-jobs',
-      environment: 'govcloud',
-      region: govCloudRegion,
-      accountId: deploymentAccountId
-    },
-    asyncMetrics: {
-      tableName: process.env.AWS_ASYNC_METRICS_TABLE_NAME || 'ghost-async-metrics',
       environment: 'govcloud',
       region: govCloudRegion,
       accountId: deploymentAccountId
@@ -333,7 +352,13 @@ function loadFromEnvironment(): DynamoDBConfig {
       accountId: deploymentAccountId
     },
     financialPlanOverrides: {
-      tableName: process.env.FINANCIAL_PLAN_OVERRIDES_TABLE || 'ghost-manual-plan-values',
+      tableName: process.env.FINANCIAL_PLAN_OVERRIDES_TABLE || (isProduction ? 'ghost-manual-plan-values-prod' : 'ghost-manual-plan-values'),
+      environment: 'govcloud',
+      region: govCloudRegion,
+      accountId: deploymentAccountId
+    },
+    financialPlanHistory: {
+      tableName: process.env.FINANCIAL_PLAN_HISTORY_TABLE || (isProduction ? 'ghost-financial-plan-history-prod' : 'ghost-financial-plan-history'),
       environment: 'govcloud',
       region: govCloudRegion,
       accountId: deploymentAccountId
@@ -365,6 +390,23 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
   // Env-variable config is the complete set of defaults for every table.
   const envConfig = loadFromEnvironment()
 
+  // Local development must never inherit table locations from a shared secret.
+  // In particular, Finance plan changes are user edits and must not be capable
+  // of writing to production simply because a developer can read its config.
+  const nodeEnv = process.env.NODE_ENV?.toLowerCase()
+  if (nodeEnv === 'development' || nodeEnv === 'dev') {
+    cachedConfig = envConfig
+    configLoadedAt = Date.now()
+    configDiagnostic = {
+      source: 'development-env',
+      missingKeyCount: 0,
+      missingKeys: [],
+      loadedAt: new Date(configLoadedAt).toISOString()
+    }
+    logger.info('Using DynamoDB configuration from environment variables (development mode)')
+    return envConfig
+  }
+
   // Try loading from Secrets Manager first; merge over defaults so a stale or
   // partial secret can never drop a table key.
   const secretsConfig = await loadFromSecretsManager()
@@ -388,31 +430,69 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
     }
 
     // Warn if the secret was missing keys the defaults supplied (signals a
-    // stale secret that should be refreshed), so the gap is observable.
+    // stale secret that should be refreshed), so the gap is observable. Sort
+    // the keys for a stable fingerprint/message and log only once per process
+    // for an unchanged missing-key set to avoid flooding on each cache refresh.
     const missingKeys = (Object.keys(envConfig) as (keyof DynamoDBConfig)[])
       .filter(k => !(k in secretsConfig))
+      .sort()
+      .map(k => String(k))
+
+    const source: DynamoDBConfigDiagnostic['source'] =
+      process.env.DYNAMODB_CONFIG ? 'dynamodb-config-env' : 'secrets-manager'
+
     if (missingKeys.length > 0) {
-      logger.warn(
-        `DynamoDB config from secret was missing ${missingKeys.length} table key(s); ` +
-        `using env defaults for: ${missingKeys.join(', ')}`
-      )
+      const fingerprint = missingKeys.join(',')
+      if (fingerprint !== lastMissingKeysFingerprint) {
+        lastMissingKeysFingerprint = fingerprint
+        logger.warn(
+          `DynamoDB config from secret was missing ${missingKeys.length} table key(s); ` +
+          `using env defaults for: ${missingKeys.join(', ')}. ` +
+          `Regenerate the DynamoDB config secret to include these keys.`
+        )
+      }
+    } else {
+      lastMissingKeysFingerprint = null
     }
 
     cachedConfig = mergedConfig
     configLoadedAt = Date.now()
+    configDiagnostic = {
+      source,
+      missingKeyCount: missingKeys.length,
+      missingKeys,
+      loadedAt: new Date(configLoadedAt).toISOString()
+    }
     return mergedConfig
   }
 
   // No secret available — use env defaults directly.
   cachedConfig = envConfig
   configLoadedAt = Date.now()
-
-  const nodeEnv = process.env.NODE_ENV?.toLowerCase()
-  if (nodeEnv === 'development' || nodeEnv === 'dev') {
-    logger.info('Using DynamoDB configuration from environment variables (development mode)')
+  configDiagnostic = {
+    source: 'env-defaults',
+    missingKeyCount: 0,
+    missingKeys: [],
+    loadedAt: new Date(configLoadedAt).toISOString()
   }
 
   return envConfig
+}
+
+/**
+ * Redacted diagnostic for the most recent DynamoDB config load.
+ *
+ * Returns a defensive copy exposing only non-sensitive signals (source,
+ * missing config-key names, count, load time) for observability/readiness
+ * surfaces. Never contains secret values or table contents.
+ */
+export function getDynamoDBConfigDiagnostic(): DynamoDBConfigDiagnostic {
+  return {
+    source: configDiagnostic.source,
+    missingKeyCount: configDiagnostic.missingKeyCount,
+    missingKeys: [...configDiagnostic.missingKeys],
+    loadedAt: configDiagnostic.loadedAt
+  }
 }
 
 /**
@@ -421,6 +501,12 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
 export function clearConfigCache(): void {
   cachedConfig = null
   configLoadedAt = null
+  configDiagnostic = {
+    source: 'env-defaults',
+    missingKeyCount: 0,
+    missingKeys: [],
+    loadedAt: null
+  }
 }
 
 // Track which tables have been logged to avoid duplicate logs

@@ -22,22 +22,27 @@ export function isAllowedVmaasCostPath(pathname: string, method: string): boolea
     /^\/api\/integrations\/vmaas\/instances\/i-[0-9a-f]{8,17}\/cost$/.test(pathname))
 }
 
+export function isAllowedIntegrationApiPath(pathname: string): boolean {
+  return pathname.startsWith('/api/v1/')
+}
+
 /**
  * Check if request is for API endpoints that require authentication
  */
-function requiresAuthentication(url: string): boolean {
+export function requiresAuthentication(url: string): boolean {
+  // Kiro Crew APIs perform exact OAuth resource/scope validation in their
+  // handlers. A Ghost browser session or API key must not satisfy them.
+  if (url.startsWith('/api/kirocrew/v1/')) {
+    return false
+  }
   // Exclude public endpoints that don't need auth
   const publicEndpoints = [
     '/api/health',
-    '/api/swagger',
-    '/api/swagger-ui',
-    '/api/swagger.json',
     '/api/schema',        // Schema metadata for query builder
     '/_nuxt/',
     '/api/_content',      // Nuxt content API
     '/api/_auth',         // OIDC authentication endpoints
     '/api/_nuxt_icon',    // Nuxt Icon API
-    '/api/chat/threads/shared/', // Public read-only chat shares
     '/api/shortlinks/',
     '/api/reports/download/',
     '/api/dataset-reports/download/'
@@ -57,7 +62,7 @@ function requiresAuthentication(url: string): boolean {
  * Validate API key authentication
  */
 async function validateAPIKeyAuth(event: H3Event): Promise<AuthContext | null> {
-  const apiKey = getHeader(event, 'x-api-key') || getHeader(event, 'authorization')?.replace('Bearer ', '')
+  const apiKey = getHeader(event, 'x-api-key')
   
   if (!apiKey) {
     return null
@@ -195,6 +200,16 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  if (authContext.authType === 'apikey' && !authContext.scopes?.includes('vmaas:costs:read')) {
+    const pathname = getRequestURL(event).pathname
+    if (!isAllowedIntegrationApiPath(pathname)) {
+      throw createError({
+        statusCode: 403,
+        statusMessage: 'Integration API keys are restricted to the supported /api/v1 contract.'
+      })
+    }
+  }
+
   // Log successful authentication
   logger.debug(`Authenticated via ${authContext.authType} for ${event.node.req.url}`)
 
@@ -270,7 +285,7 @@ export function hasScope(event: H3Event, requiredScope: string): boolean {
   const auth = getAuthContext(event)
   if (!auth?.isAuthenticated) return false
   if (auth.authType !== 'apikey' || !requiredScope.includes(':')) return true
-  return Boolean(auth.scopes?.includes(requiredScope) || auth.scopes?.includes('admin:all'))
+  return Boolean(auth.scopes?.includes(requiredScope))
 }
 
 export async function requireScope(event: H3Event, requiredScope: string): Promise<void> {

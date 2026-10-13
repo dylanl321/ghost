@@ -854,7 +854,27 @@ async function generateOrganizationOverview(options: {
         generatedAt: new Date().toISOString()
       }
       
-      logger.error(`[${options.requestId}] AI analysis completed. Insights: ${aiAnalysis.insights ? 'Generated' : 'Failed'}, Recommendations: ${aiAnalysis.recommendations ? 'Generated' : 'Failed'}`)
+      // Structured, non-secret context for CloudWatch Bedrock filters. A fully
+      // successful analysis is info; a partial/unsuccessful result is warn.
+      // (Thrown failures are logged at error in the catch block below.)
+      const analysisLogContext = {
+        type: 'bedrock',
+        operation: 'organizationOverviewAnalysis',
+        requestId: options.requestId,
+        model: aiAnalysis.model,
+        success: aiAnalysis.success,
+        insightsGenerated: !!aiAnalysis.insights,
+        recommendationsGenerated: !!aiAnalysis.recommendations,
+        processingTimeMs: aiAnalysis.processingTime,
+        tokenTotal: (aiAnalysis.tokenUsage?.input || 0) + (aiAnalysis.tokenUsage?.output || 0),
+        errorCount: aiAnalysis.errors?.length || 0,
+      }
+      const analysisLogMessage = `[${options.requestId}] AI analysis completed. Insights: ${aiAnalysis.insights ? 'Generated' : 'Failed'}, Recommendations: ${aiAnalysis.recommendations ? 'Generated' : 'Failed'}`
+      if (aiAnalysis.success) {
+        logger.info(analysisLogMessage, analysisLogContext)
+      } else {
+        logger.warn(analysisLogMessage, analysisLogContext)
+      }
       
     } catch (error: any) {
       logger.error(`[${options.requestId}] AI analysis failed:`, error)

@@ -1,0 +1,26 @@
+{
+  "eventId": "evt-fake-0001",
+  "investigationId": "inv-fake-0001",
+  "runId": "run-fake-0001",
+  "type": "check-started",
+  "checkId": "chk-fake-aaaa",
+  "author": {
+    "tenantId": "tenant-fake-0001",
+    "entraObjectId": "obj-fake-operator-a"
+  },
+  "gatewayId": "gw-fake-workstation-1",
+  "sourceSubject": {
+    "sourceBindingId": "binding-fake-jira-01",
+    "sourceType": "jira",
+    "stableSourceId": "PROJ-1234"
+  },
+  "occurredAt": "2024-01-02T03:06:00Z",
+  "receivedAt": "2024-01-02T03:06:01Z",
+  "serverSequence": 10,
+  "operationId": "op-fake-check-start-1",
+  "body": {
+    "purpose": "read jira issue evidence",
+    "target": "PROJ-1234"
+  },
+  "provenance": "adapter"
+}

@@ -32,6 +32,14 @@ import { requirePermission } from '../../utils/user-roles'
 import { insightCache, CacheManager } from '../../utils/cache-manager'
 import { handleAsync, sendSuccess, errors } from '../../utils/api-response'
 import { logger } from '../../utils/logger'
+import {
+  CE_MAX_ATTEMPTS,
+  CE_OPERATION,
+  ceBackoffDelayMs,
+  ceErrorCode,
+  ceErrorName,
+  isCeThrottleError,
+} from '../../utils/finance-variance-insight-retry'
 
 const PAYER_ACCOUNT_ID = process.env.AWS_MASTER_ACCOUNT_ID || '205950196477'
 const PROFORMA_ACCOUNT_ID = process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832'
@@ -78,6 +86,50 @@ interface ServiceUsageBreakdown {
   byMonth: Record<string, number>
 }
 
+// ── CE throttle-aware retry helpers ─────────────────────────────────────────────
+
+const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+
+/**
+ * Send one paginated GetCostAndUsage request, retrying only throttle errors up
+ * to CE_MAX_ATTEMPTS. Emits concise structured context (no raw errors, ARNs,
+ * credentials, or account IDs). The terminal failure is logged at error level.
+ */
+async function sendCePageWithRetry(
+  client: Awaited<ReturnType<typeof getCostExplorerClient>>,
+  input: any,
+  logCtx: { startDate: string; endDate: string; billingViewPresent: boolean },
+): Promise<any> {
+  for (let attempt = 1; attempt <= CE_MAX_ATTEMPTS; attempt++) {
+    try {
+      return await client.send(new GetCostAndUsageCommand(input))
+    } catch (err) {
+      const throttled = isCeThrottleError(err)
+      const context = {
+        operation: CE_OPERATION,
+        errorName: ceErrorName(err),
+        errorCode: ceErrorCode(err),
+        attempt,
+        maxAttempts: CE_MAX_ATTEMPTS,
+        throttled,
+        retryable: throttled,
+        ...logCtx,
+      }
+      if (throttled && attempt < CE_MAX_ATTEMPTS) {
+        const delayMs = ceBackoffDelayMs(attempt - 1)
+        logger.warn('[FinanceVarianceInsight] CE query throttled; retrying', { ...context, delayMs })
+        await sleep(delayMs)
+        continue
+      }
+      // Non-retryable error, or throttle retries exhausted — terminal failure.
+      logger.error('[FinanceVarianceInsight] CE query failed', context)
+      throw err
+    }
+  }
+  // Unreachable: the loop always returns or throws.
+  throw new Error('CE retry loop exited unexpectedly')
+}
+
 // ── CE helpers ─────────────────────────────────────────────────────────────────
 
 async function runCeQuery(
@@ -102,16 +154,24 @@ async function runCeQuery(
     ...(params.billingViewArn ? { BillingViewArn: params.billingViewArn } : {})
   }
 
+  const logCtx = {
+    startDate: params.startDate,
+    endDate: params.endDate,
+    billingViewPresent: Boolean(params.billingViewArn),
+  }
+
   let resultsByTime: any[] = []
   try {
     let token: string | undefined
     do {
-      const res = await client.send(new GetCostAndUsageCommand({ ...input, NextPageToken: token }))
+      const res = await sendCePageWithRetry(client, { ...input, NextPageToken: token }, logCtx)
       resultsByTime = resultsByTime.concat(res.ResultsByTime || [])
       token = res.NextPageToken
     } while (token)
-  } catch (err) {
-    logger.warn('[FinanceVarianceInsight] CE query failed:', err)
+  } catch {
+    // Terminal failure already logged with structured context in
+    // sendCePageWithRetry. Preserve existing fallback behavior: return whatever
+    // pages were accumulated (empty when the first page failed).
   }
   return resultsByTime
 }
@@ -300,7 +360,7 @@ function buildPrompt(
   const variance = category.ytdActual - category.ytdBudget
   const variancePct = category.ytdBudget > 0 ? (variance / category.ytdBudget) * 100 : 0
 
-  lines.push(`Analyze the AWS cost variance for this GDMS Finance category and write a detailed FinOps explanation.`)
+  lines.push(`Write an executive variance summary for this GDMS Finance category.`)
   lines.push(``)
   lines.push(`## Category Overview`)
   lines.push(`- Category: ${category.name}`)
@@ -318,7 +378,7 @@ function buildPrompt(
   )
   if (visibleAccounts.length) {
     lines.push(`## Account Breakdown`)
-    for (const acct of visibleAccounts.sort((a, b) => b.ytdActual - a.ytdActual)) {
+    for (const acct of visibleAccounts.sort((a, b) => b.ytdActual - a.ytdActual).slice(0, 3)) {
       const months = Object.entries(acct.monthlyActuals)
         .filter(([m]) => m <= ytdCutoff)
         .sort(([a], [b]) => a.localeCompare(b))
@@ -354,7 +414,7 @@ function buildPrompt(
   if (breakdown.length) {
     const priorMap = new Map(priorBreakdown.map(s => [s.service, s]))
     lines.push(`## Service & Usage Type Breakdown`)
-    for (const svc of breakdown.slice(0, 10)) {
+    for (const svc of breakdown.slice(0, 3)) {
       const prior = priorMap.get(svc.service)
       const yoyPct = prior && prior.total > 0
         ? ` | YoY: ${((svc.total - prior.total) / prior.total * 100).toFixed(1)}%`
@@ -390,7 +450,9 @@ function buildPrompt(
 
 // ── System prompt ─────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are a senior AWS FinOps analyst writing a concise variance summary for a GDMS Finance cost category in an internal dashboard.
+const SYSTEM_PROMPT = `You are a GDMS Finance executive analyst writing a variance summary.
+
+Write one or two short sentences, 45 words maximum. State the variance direction and magnitude, then name the single strongest root cause. Mention a recent shift only when material. Do not list evidence, recommend actions, or add caveats.
 
 Your audience is GDMS Finance staff and IT leadership. Write 2–3 sentences of plain prose — no bullet points, no headers, no lists.
 
@@ -428,7 +490,7 @@ export default handleAsync(defineEventHandler(async (event) => {
 
   const { category, department, year, refresh } = body
 
-  const cacheKey = CacheManager.generateKey('finance-variance-insight-v3', {
+  const cacheKey = CacheManager.generateKey('finance-variance-insight-v4', {
     dept: department,
     cat: category.name,
     year,

@@ -1,0 +1,13 @@
+{
+  "artifactId": "art-bad-1",
+  "investigationId": "inv-fake-0001",
+  "state": "ready",
+  "originalFilename": "x.json",
+  "sha256": "NOT-A-VALID-HEX-DIGEST",
+  "byteCount": 10,
+  "mediaType": "application/json",
+  "provenance": "automatic",
+  "redacted": false,
+  "truncated": false,
+  "reservedAt": "2024-01-02T03:06:20Z"
+}

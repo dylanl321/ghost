@@ -1,0 +1,268 @@
+{
+  "$comment": "Machine-readable index binding each synthetic fixture to the wire-contract.v1 $defs model it exercises and the expected outcome. Both repositories load this manifest and validate the SAME fixtures against the SAME schema. 'model' is a JSON Pointer fragment into wire-contract.v1.schema.json. 'expect' is one of valid | rejected.",
+  "schemaFile": "wire-contract.v1.schema.json",
+  "schemaVersion": 1,
+  "fixtures": [
+    {
+      "path": "valid/space-summary.json",
+      "model": "#/$defs/SpaceSummary",
+      "expect": "valid",
+      "note": "Authorized published space with only safe labels/capabilities."
+    },
+    {
+      "path": "valid/subject-reference.json",
+      "model": "#/$defs/SubjectReference",
+      "expect": "valid",
+      "note": "Subject identity = (binding, type, stableSourceId); displayLabel is display-only."
+    },
+    {
+      "path": "valid/investigation.json",
+      "model": "#/$defs/Investigation",
+      "expect": "valid",
+      "note": "Full investigation with related subjects, lead, selected checkpoint, revision."
+    },
+    {
+      "path": "valid/run.json",
+      "model": "#/$defs/Run",
+      "expect": "valid",
+      "note": "Active run attributed to one authenticated subject and gateway."
+    },
+    {
+      "path": "valid/event-check-started.json",
+      "model": "#/$defs/Event",
+      "expect": "valid",
+      "note": "check-started carries a stable checkId (Requirement 10.16)."
+    },
+    {
+      "path": "valid/event-check-finished.json",
+      "model": "#/$defs/Event",
+      "expect": "valid",
+      "note": "check-finished carries the same checkId and attributes producing artifact."
+    },
+    {
+      "path": "valid/event-coverage-gap.json",
+      "model": "#/$defs/Event",
+      "expect": "valid",
+      "note": "Coverage gap with a non-disclosing limitation; denied outcome preserved."
+    },
+    {
+      "path": "valid/artifact-ready.json",
+      "model": "#/$defs/ArtifactManifest",
+      "expect": "valid",
+      "note": "Ready manifest with producing Event/Run/Check attribution and sha256."
+    },
+    {
+      "path": "valid/checkpoint.json",
+      "model": "#/$defs/Checkpoint",
+      "expect": "valid",
+      "note": "Immutable cited checkpoint candidate with coverage watermark."
+    },
+    {
+      "path": "valid/presence-lease-with-investigation.json",
+      "model": "#/$defs/PresenceLease",
+      "expect": "valid",
+      "note": "Working presence with optional investigation/run context."
+    },
+    {
+      "path": "valid/presence-lease-subject-only.json",
+      "model": "#/$defs/PresenceLease",
+      "expect": "valid",
+      "note": "Subject presence without an Investigation (Requirement 15.2-15.5)."
+    },
+    {
+      "path": "valid/safe-collaboration-status.json",
+      "model": "#/$defs/SafeCollaborationStatus",
+      "expect": "valid",
+      "note": "Ready status with only safe documented fields."
+    },
+    {
+      "path": "valid/creation-operation-lookup.json",
+      "model": "#/$defs/CreationOperationLookup",
+      "expect": "valid",
+      "note": "Team_Space-scoped creation lookup keyed by Operation_ID."
+    },
+    {
+      "path": "valid/local-investigation-link.json",
+      "model": "#/$defs/LocalInvestigationLink",
+      "expect": "valid",
+      "note": "Startup allocation + Submission_ID state preserving local link identity."
+    },
+    {
+      "path": "valid/synchronization-cursor.json",
+      "model": "#/$defs/SynchronizationCursor",
+      "expect": "valid",
+      "note": "Persisted scoped cursor at last applied server sequence."
+    },
+    {
+      "path": "valid/feed-page.json",
+      "model": "#/$defs/FeedPage",
+      "expect": "valid",
+      "note": "Ordered fixed-high-water feed page with opaque continuation cursor."
+    },
+    {
+      "path": "valid/feed-page-deletion.json",
+      "model": "#/$defs/FeedPage",
+      "expect": "valid",
+      "note": "Content-free deletion change item."
+    },
+    {
+      "path": "valid/investigation-ack.json",
+      "model": "#/$defs/InvestigationAck",
+      "expect": "valid",
+      "note": "Creation acknowledgement with revision and accepted server sequence."
+    },
+    {
+      "path": "valid/mutation-ack.json",
+      "model": "#/$defs/MutationAck",
+      "expect": "valid",
+      "note": "Mutation acknowledgement returns operationId and server sequence."
+    },
+    {
+      "path": "valid/command-create-investigation-explicit-new.json",
+      "model": "#/$defs/CreateInvestigationCommand",
+      "expect": "valid",
+      "note": "Explicit-new creation command."
+    },
+    {
+      "path": "valid/error-envelope-forbidden.json",
+      "model": "#/$defs/ErrorEnvelope",
+      "expect": "valid",
+      "note": "Non-disclosing forbidden denial."
+    },
+
+    {
+      "path": "boundary/artifact-empty-success.json",
+      "model": "#/$defs/ArtifactManifest",
+      "expect": "valid",
+      "note": "Empty success: byteCount 0 with the SHA-256 of empty bytes."
+    },
+    {
+      "path": "boundary/feed-page-size-1.json",
+      "model": "#/$defs/FeedPage",
+      "expect": "valid",
+      "note": "Minimum page size 1."
+    },
+    {
+      "path": "boundary/feed-page-size-200.json",
+      "model": "#/$defs/FeedPage",
+      "expect": "valid",
+      "note": "Maximum page size 200."
+    },
+    {
+      "path": "boundary/feed-page-interleaved-checks.json",
+      "model": "#/$defs/FeedPage",
+      "expect": "valid",
+      "note": "Interleaved check histories: A started, B started, B finished, A finished."
+    },
+    {
+      "path": "boundary/presence-lease-expiry-window.json",
+      "model": "#/$defs/PresenceLease",
+      "expect": "valid",
+      "note": "expiresAt is lastSeenAt + 90 seconds."
+    },
+    {
+      "path": "boundary/synchronization-cursor-zero.json",
+      "model": "#/$defs/SynchronizationCursor",
+      "expect": "valid",
+      "note": "Cursor at lastAppliedServerSequence 0 (nothing applied yet)."
+    },
+    {
+      "path": "boundary/subject-reference-unicode.json",
+      "model": "#/$defs/SubjectReference",
+      "expect": "valid",
+      "note": "Unicode (accents, CJK, emoji) in stableSourceId and displayLabel."
+    },
+
+    {
+      "path": "legacy/status-minimal.json",
+      "model": "#/$defs/SafeCollaborationStatus",
+      "expect": "valid",
+      "note": "Older client sends status with no optional fields."
+    },
+    {
+      "path": "legacy/investigation-minimal.json",
+      "model": "#/$defs/Investigation",
+      "expect": "valid",
+      "note": "Older client omits optional related subjects/lead/checkpoint."
+    },
+    {
+      "path": "legacy/artifact-legacy-import.json",
+      "model": "#/$defs/ArtifactManifest",
+      "expect": "valid",
+      "note": "legacy-import provenance for selected imported legacy content."
+    },
+    {
+      "path": "legacy/creation-operation-lookup-pre-id-recovery.json",
+      "model": "#/$defs/CreationOperationLookup",
+      "expect": "valid",
+      "note": "Pre-Investigation-ID creation recovery via Operation_ID (Requirement 14.14, 24.26)."
+    },
+    {
+      "path": "legacy/presence-lease-subject-without-investigation.json",
+      "model": "#/$defs/PresenceLease",
+      "expect": "valid",
+      "note": "Subject presence without an Investigation from an older client."
+    },
+
+    {
+      "path": "rejected/status-with-token-field.json",
+      "model": "#/$defs/SafeCollaborationStatus",
+      "expect": "rejected",
+      "reason": "additionalProperties: status projection must never carry a token/secret field."
+    },
+    {
+      "path": "rejected/feed-page-size-over-max.json",
+      "model": "#/$defs/FeedPage",
+      "expect": "rejected",
+      "reason": "pageSize 201 exceeds the maximum of 200."
+    },
+    {
+      "path": "rejected/artifact-bad-sha256.json",
+      "model": "#/$defs/ArtifactManifest",
+      "expect": "rejected",
+      "reason": "sha256 is not a lowercase 64-char hex digest."
+    },
+    {
+      "path": "rejected/artifact-unsupported-media-type.json",
+      "model": "#/$defs/ArtifactManifest",
+      "expect": "rejected",
+      "reason": "mediaType is not in the approved enum (no macro documents)."
+    },
+    {
+      "path": "rejected/event-check-started-missing-checkid.json",
+      "model": "#/$defs/Event",
+      "expect": "rejected",
+      "reason": "check-started requires a stable checkId."
+    },
+    {
+      "path": "rejected/event-unknown-type.json",
+      "model": "#/$defs/Event",
+      "expect": "rejected",
+      "reason": "Unknown event type is not in the enum."
+    },
+    {
+      "path": "rejected/investigation-missing-required.json",
+      "model": "#/$defs/Investigation",
+      "expect": "rejected",
+      "reason": "Missing required primarySubject."
+    },
+    {
+      "path": "rejected/feed-item-server-sequence-zero.json",
+      "model": "#/$defs/FeedPage",
+      "expect": "rejected",
+      "reason": "serverSequence must be >= 1 (monotonic within a Team_Space)."
+    },
+    {
+      "path": "rejected/presence-query-empty-subjects.json",
+      "model": "#/$defs/PresenceQuery",
+      "expect": "rejected",
+      "reason": "subjectReferences must contain at least one subject."
+    },
+    {
+      "path": "rejected/command-create-investigation-bad-mode.json",
+      "model": "#/$defs/CreateInvestigationCommand",
+      "expect": "rejected",
+      "reason": "mode must be default-first or explicit-new; no implicit/silent creation."
+    }
+  ]
+}

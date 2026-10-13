@@ -8,10 +8,11 @@
  * metric filters can extract APILatencyMs and backgroundJobActive.
  */
 
-import { defineEventHandler, getRequestURL, getRequestHeader, setResponseHeader } from 'h3'
-import { randomUUID } from 'node:crypto'
+import { defineEventHandler, getRequestHeader, getRequestURL, setResponseHeader } from 'h3'
 import { isAnyJobRunning, getActiveJobs } from '../utils/job-tracker'
-import { normalizePath, isSafeRequestId } from '../utils/request-telemetry'
+import { resolveRequestId } from '../utils/request-id'
+
+import { normalizePath } from '../utils/request-telemetry'
 
 export default defineEventHandler((event) => {
   const url = getRequestURL(event)
@@ -22,10 +23,9 @@ export default defineEventHandler((event) => {
     return
   }
 
-  // Establish a request id for end-to-end correlation. Accept an incoming
-  // x-request-id only if it is a safe bounded token; otherwise generate one.
-  const incoming = getRequestHeader(event, 'x-request-id')
-  const requestId = isSafeRequestId(incoming) ? incoming : randomUUID()
+  // Establish a request correlation ID so logs, errors, and the response can
+  // be tied together. Reuse a safe caller-supplied id or mint a new one.
+  const requestId = resolveRequestId(getRequestHeader(event, 'x-request-id'))
   event.context.requestId = requestId
   setResponseHeader(event, 'x-request-id', requestId)
 

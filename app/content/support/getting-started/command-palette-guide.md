@@ -6,7 +6,7 @@ icon: i-heroicons-command-line
 
 # Using the Command Palette
 
-The Command Palette is a power-user hub for navigating GHOST instantly. Open it from anywhere to search accounts, jump to pages, run actions, or ask AI questions.
+The Command Palette is a power-user hub for navigating GHOST instantly. Open it from anywhere to search accounts, jump to pages, run actions.
 
 ## Opening the Command Palette
 
@@ -39,7 +39,7 @@ Each sub-action deep-links to the correct page pre-filtered to the selected acco
 
 ### Navigate Pages
 
-Type any page name to jump there: `costs`, `security`, `explorer`, `changelog`, `reports`, `admin`, `about`, `support`, `chat`, and more. The search is fuzzy — `cst dshbrd` will find "Cost Dashboard."
+Type any page name to jump there: `costs`, `security`, `explorer`, `changelog`, `reports`, `admin`, `about`, `support`, and more. The search is fuzzy — `cst dshbrd` will find "Cost Dashboard."
 
 ### Run Actions
 
@@ -49,10 +49,6 @@ Action commands do things without navigating:
 - **Copy Current URL** — Copy the current page URL to clipboard
 - **Toggle Sidebar** — Collapse or expand the sidebar navigation
 - **Refresh Page Data** — Reload the current page
-
-### Ask AI
-
-Type a question (starts with how, what, why, show, can, find, or contains `?`) and the palette offers an **Ask AI** option. Selecting it opens GHOST Chat with your question pre-filled.
 
 ### Admin Commands
 
@@ -71,7 +67,6 @@ Press **g** followed by a second key to jump to pages instantly. These work from
 | **g e** | Account Explorer |
 | **g s** | Security |
 | **g a** | Admin Panel |
-| **g h** | AI Chat |
 | **g r** | Reports |
 | **g o** | Org Chart |
 | **g p** | Profile |
@@ -122,7 +117,6 @@ You can resize, reorder, or hide this card from the dashboard Customize panel.
 ## Tips
 
 - **Use drill-down** — Select an account first, then pick the specific page you want. This is faster than navigating and then filtering.
-- **Type questions** — If you're not sure where something is, just ask. The AI fallback routes you to GHOST Chat.
 - **Learn g-shortcuts** — After a few days, muscle memory makes these faster than any mouse navigation.
 - **Press ? anywhere** — Opens the full keyboard shortcuts reference modal.
 - **Fuzzy matching** — Don't worry about exact spelling. The search tolerates typos and partial matches.

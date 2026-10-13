@@ -155,6 +155,13 @@ export function handleAsync<T extends (...args: any[]) => Promise<any>>(fn: T): 
     } catch (error: any) {
       const event = args[0] as H3Event
 
+      // Preserve intentional H3/createError responses (401/403/404/409/etc.) so
+      // typed status codes are not masked as a generic 500. These carry an
+      // explicit numeric `statusCode` set by the caller (e.g. createError).
+      if (error && typeof error.statusCode === 'number') {
+        throw error
+      }
+
       // Emit a top-level structured error event to stdout for CloudWatch
       // correlation (consistent with the request-timing telemetry). Wrapped
       // so telemetry can never mask the original error/response.

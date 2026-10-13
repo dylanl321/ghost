@@ -2,6 +2,9 @@
 
 This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
+When the user invokes AI-DLC, read and follow
+`.aidlc/aidlc-rules/aws-aidlc-rules/core-workflow.md` to start the workflow.
+
 ## Project Overview
 GHOST is a web dashboard providing centralized access to AWS account data and functionality. It's built with Nuxt 4, uses Entra ID for authentication, and integrates with multiple AWS services.
 

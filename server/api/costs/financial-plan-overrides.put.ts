@@ -14,9 +14,8 @@
 
 import { defineEventHandler, readBody } from 'h3'
 import { handleAsync, sendSuccess, errors } from '../../utils/api-response'
-import { requirePermission } from '../../utils/user-roles'
-import { getItem, putItem } from '../../utils/dynamodb'
-import { getDynamoDBConfig } from '../../lib/dynamodb-config'
+import { getUserEmail, requirePermission } from '../../utils/user-roles'
+import { saveFinancialPlan } from '../../utils/financial-plan-history'
 
 export default defineEventHandler(handleAsync(async (event) => {
   await requirePermission(event, 'costs.budget_vs_actual')
@@ -30,22 +29,15 @@ export default defineEventHandler(handleAsync(async (event) => {
   if (!year || isNaN(year)) return errors.badRequest(event, 'year is required')
   if (!monthlyValues || typeof monthlyValues !== 'object') return errors.badRequest(event, 'monthlyValues is required')
 
-  const config = await getDynamoDBConfig()
-  const { tableName, environment, accountId } = config.financialPlanOverrides
-
-  // Fetch existing item to preserve months from other years
-  const existing = await getItem(tableName, { pk: department }, environment, accountId) || {}
+  await saveFinancialPlan({
+    department,
+    year,
+    monthlyValues,
+    action: 'manual-save',
+    actor: getUserEmail(event) || 'Unknown user'
+  })
 
   // Convert incoming YYYY-MM-01 keys → MM/YYYY, merging over existing item
-  const item: Record<string, any> = { ...existing, pk: department }
-  for (const [isoKey, value] of Object.entries(monthlyValues)) {
-    const match = isoKey.match(/^(\d{4})-(\d{2})-01$/)
-    if (match) {
-      item[`${match[2]}/${match[1]}`] = value
-    }
-  }
-
-  await putItem(tableName, item, environment, accountId)
 
   return sendSuccess(event, { department, year, monthlyValues })
 }))
