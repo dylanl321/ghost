@@ -1179,3 +1179,52 @@ resource "aws_cloudwatch_query_definition" "api_5xx_by_endpoint_binned" {
     | sort window desc
   EOT
 }
+
+# Count structured application records logged at error or fatal level.
+resource "aws_cloudwatch_log_metric_filter" "application_errors" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-application-errors"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "{ $.level = \"error\" || $.level = \"fatal\" }"
+
+  metric_transformation {
+    name          = "ApplicationErrorCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "application_errors_high" {
+  provider            = aws.target_deployment_account
+  alarm_name          = "${var.app_name}-application-errors-high"
+  alarm_description   = "Application error/fatal log records exceeded 5 in 5 minutes"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ApplicationErrorCount"
+  namespace           = "${var.app_name}/Application"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 5
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Application = var.app_name
+  }
+}
+
+resource "aws_cloudwatch_query_definition" "error_signatures" {
+  provider        = aws.target_deployment_account
+  name            = "${var.app_name}/Application Error Signatures"
+  log_group_names = [aws_cloudwatch_log_group.ecs.name]
+
+  query_string = <<-EOT
+    filter level in ["error", "fatal"]
+    | stats count(*) as occurrences by level, message
+    | sort occurrences desc
+    | limit 25
+  EOT
+}
