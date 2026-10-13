@@ -106,7 +106,7 @@ export function useAchievements() {
       const cached = loadFromLocalStorage()
       if (cached) {
         engine.loadProgress(cached)
-        awarded.value = new Set(cached.awarded)
+        awarded.value = new Set(cached.awarded.filter(id => BADGE_DEFINITIONS.some(badge => badge.id === id)))
         awardedAt.value = { ...cached.awardedAt }
       }
 
@@ -117,7 +117,7 @@ export function useAchievements() {
         )
         if (response.success && response.data) {
           engine.loadProgress(response.data)
-          awarded.value = new Set(response.data.awarded)
+          awarded.value = new Set(response.data.awarded.filter(id => BADGE_DEFINITIONS.some(badge => badge.id === id)))
           awardedAt.value = { ...response.data.awardedAt }
           saveToLocalStorage()
         }

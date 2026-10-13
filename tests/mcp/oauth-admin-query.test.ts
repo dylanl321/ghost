@@ -205,6 +205,56 @@ test('overview projects independent per-stage health from a bounded window', asy
   assert.equal(registration?.state, 'unknown')
 })
 
+test('overview derives the freshness horizon from a supplied window so within-window activity reads fresh', async () => {
+  const repo = new InMemoryOAuthAdminRepository()
+  const now = Date.now()
+  // A success ~2h ago: OLDER than the default 15m freshness horizon but well
+  // within a 24h window. With the horizon derived from the window it must read
+  // as fresh/healthy rather than collapsing to a stale `unknown` (Req 4.3).
+  const twoHoursAgo = new Date(now - 2 * 60 * 60 * 1000).toISOString()
+  await repo.putEvent(ctx, event({ stage: 'token-exchange', outcome: 'success', timestamp: twoHoursAgo }))
+  const service = new OAuthQueryService(repo)
+  const health = await service.overview(accessWith(), { now, windowMs: 24 * 60 * 60 * 1000 })
+  const token = health.find(h => h.stage === 'token-exchange')
+  assert.equal(token?.state, 'healthy', 'within-window success reads fresh when horizon is derived from the window')
+  assert.equal(token?.freshness, 'fresh')
+})
+
+test('overview keeps the default 15m horizon when no window is supplied', async () => {
+  const repo = new InMemoryOAuthAdminRepository()
+  const now = Date.now()
+  // A success ~2h ago with NO window supplied: the fallback default horizon
+  // (15m) applies, so the evidence is stale and the stage is NOT healthy while
+  // absence stays `unknown` — the original behaviour is preserved (Req 4.3, 4.5).
+  const twoHoursAgo = new Date(now - 2 * 60 * 60 * 1000).toISOString()
+  await repo.putEvent(ctx, event({ stage: 'token-exchange', outcome: 'success', timestamp: twoHoursAgo }))
+  const service = new OAuthQueryService(repo)
+  const health = await service.overview(accessWith(), { now })
+  const token = health.find(h => h.stage === 'token-exchange')
+  const registration = health.find(h => h.stage === 'registration')
+  assert.notEqual(token?.state, 'healthy', 'stale evidence under the default horizon is never healthy')
+  assert.equal(registration?.state, 'unknown', 'absence is still unknown, never healthy')
+})
+
+test('overview clamps an explicit freshness horizon so it never exceeds the window', async () => {
+  const repo = new InMemoryOAuthAdminRepository()
+  const now = Date.now()
+  // Evidence ~30m ago. Window is 1h; an explicit oversized horizon (2h) must be
+  // clamped to the window (1h), so 30m-old evidence stays within horizon and is
+  // fresh — proving the clamp does not spuriously push evidence out of range,
+  // while the horizon can never exceed the selected window (Req 4.3).
+  const thirtyMinutesAgo = new Date(now - 30 * 60 * 1000).toISOString()
+  await repo.putEvent(ctx, event({ stage: 'token-exchange', outcome: 'success', timestamp: thirtyMinutesAgo }))
+  const service = new OAuthQueryService(repo)
+  const health = await service.overview(accessWith(), {
+    now,
+    windowMs: 60 * 60 * 1000,
+    freshnessHorizonMs: 2 * 60 * 60 * 1000
+  })
+  const token = health.find(h => h.stage === 'token-exchange')
+  assert.equal(token?.state, 'healthy', 'within-window evidence stays fresh after the horizon is clamped to the window')
+})
+
 test('attempts requires the activity capability', async () => {
   const repo = new InMemoryOAuthAdminRepository()
   const service = new OAuthQueryService(repo)
@@ -249,4 +299,118 @@ test('limits reports the configured registration limit as a non-mutating observa
   assert.ok(observation.limit > 0)
   assert.equal(observation.source, 'dynamic-registration')
   assert.ok(observation.rejectedAttemptNotice.length > 0)
+})
+
+// --- Query service: always-present application status ---------------------
+
+// The well-known resource URLs derived from the default runtime config, used to
+// seed provider-client projections the status projector matches against.
+const MCP_RESOURCE = new URL('/mcp', 'http://localhost:3000').href
+const KIROCREW_RESOURCE = new URL('/api/kirocrew', 'http://localhost:3000').href
+
+function clientProjection(overrides: Partial<OAuthApplicationDetail> & { clientId: string }): OAuthApplicationDetail {
+  return {
+    type: 'native-public',
+    origin: 'dynamic',
+    ownership: {},
+    lifecycle: 'unassigned',
+    redirectPolicy: { redirectUris: [], allowsLoopback: false },
+    permittedResources: [],
+    permittedScopes: [],
+    revision: 'r1',
+    metadata: meta,
+    ...overrides
+  }
+}
+
+test('applicationsHealth always returns both well-known applications even on a quiet deployment', async () => {
+  const repo = new InMemoryOAuthAdminRepository()
+  // No checkpoint, no clients, no grants: coverage is unavailable -> unknown.
+  const service = new OAuthQueryService(repo)
+  const statuses = await service.applicationsHealth(accessWith())
+  assert.equal(statuses.length, 2)
+  const labels = statuses.map(s => s.application).sort()
+  assert.deepEqual(labels, ['kiro-crew', 'mcp'])
+  // Requirement 3.8: without a durable checkpoint, coverage is unavailable and
+  // the status is unknown (never a confident not-registered/registered).
+  for (const status of statuses) {
+    assert.equal(status.coverage, 'unavailable')
+    assert.equal(status.status, 'unknown')
+  }
+})
+
+test('applicationsHealth reports not-registered under complete coverage with no matching client', async () => {
+  const repo = new InMemoryOAuthAdminRepository()
+  await repo.putCheckpoint(ctx, {
+    checkpointId: 'cp1',
+    kind: 'checkpoints',
+    coverage: 'complete',
+    updatedAt: new Date().toISOString()
+  })
+  const service = new OAuthQueryService(repo)
+  const statuses = await service.applicationsHealth(accessWith())
+  for (const status of statuses) {
+    assert.equal(status.coverage, 'complete')
+    assert.equal(status.status, 'not-registered')
+  }
+})
+
+test('applicationsHealth matches a seeded MCP client to its resource and reports no-activity', async () => {
+  const repo = new InMemoryOAuthAdminRepository()
+  await repo.putCheckpoint(ctx, {
+    checkpointId: 'cp1',
+    kind: 'checkpoints',
+    coverage: 'complete',
+    updatedAt: new Date().toISOString()
+  })
+  // A correctly configured MCP client (advertises the MCP resource + a supported
+  // MCP scope) with zero live grants.
+  // Advertise only the MCP-specific resource + scope (no shared base scope) so
+  // the match is unambiguously to MCP and not the Kiro Crew resource.
+  await repo.upsertApplication(ctx, clientProjection({
+    clientId: 'mcp_client',
+    permittedResources: [MCP_RESOURCE],
+    permittedScopes: ['ghost.read']
+  }))
+  const service = new OAuthQueryService(repo)
+  const statuses = await service.applicationsHealth(accessWith())
+  const mcp = statuses.find(s => s.application === 'mcp')
+  const crew = statuses.find(s => s.application === 'kiro-crew')
+  // Registered + correctly configured + no live grants => benign no-activity.
+  assert.equal(mcp?.status, 'no-activity')
+  assert.equal(mcp?.clientReference, 'mcp_client')
+  assert.equal(mcp?.liveGrantCount, 0)
+  // The unmatched Kiro Crew application is still present as not-registered.
+  assert.equal(crew?.status, 'not-registered')
+})
+
+test('applicationsHealth counts a live grant for a matched client as active', async () => {
+  const repo = new InMemoryOAuthAdminRepository()
+  const now = Date.now()
+  await repo.putCheckpoint(ctx, {
+    checkpointId: 'cp1',
+    kind: 'checkpoints',
+    coverage: 'complete',
+    updatedAt: new Date().toISOString()
+  })
+  await repo.upsertApplication(ctx, clientProjection({
+    clientId: 'crew_client',
+    permittedResources: [KIROCREW_RESOURCE],
+    permittedScopes: ['openid', 'kirocrew.config.read']
+  }))
+  await repo.upsertGrant(ctx, {
+    grantReference: 'grant_1',
+    clientReference: 'crew_client',
+    requestedScopes: ['kirocrew.config.read'],
+    consentedScopes: ['kirocrew.config.read'],
+    resource: KIROCREW_RESOURCE,
+    consentedAt: new Date(now - 1000).toISOString(),
+    expiresAt: new Date(now + 60_000).toISOString(),
+    metadata: meta
+  })
+  const service = new OAuthQueryService(repo, undefined, undefined, undefined, undefined)
+  const statuses = await service.applicationsHealth(accessWith(), { now })
+  const crew = statuses.find(s => s.application === 'kiro-crew')
+  assert.equal(crew?.status, 'active')
+  assert.equal(crew?.liveGrantCount, 1)
 })

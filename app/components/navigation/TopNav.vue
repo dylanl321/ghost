@@ -70,18 +70,6 @@
             </span>
           </button>
 
-          <!-- AI Assistant Chat Button -->
-          <UButton
-            v-if="siteConfigStore.isStrandsChatEnabled"
-            variant="ghost"
-            color="gray"
-            size="sm"
-            icon="i-heroicons-chat-bubble-left-right"
-            :title="chatSidebar.isOpen.value ? 'Close AI Assistant' : 'Open AI Assistant'"
-            class="transition-all duration-200 opacity-70 hover:opacity-100"
-            @click="chatSidebar.toggle()"
-          />
-
           <!-- Notification Bell -->
           <NotificationBell />
 
@@ -116,7 +104,6 @@
 
 <script setup lang="ts">
 import { useNavigationStore } from '~/stores/useNavigationStore'
-import { useSiteConfigStore } from '~/stores/useSiteConfigStore'
 import UserAvatar from '~/components/ui/UserAvatar.vue'
 
 const logger = createLogger('TopNav')
@@ -147,8 +134,6 @@ const emit = defineEmits<{
 
 const { user, logout } = useOidcAuth()
 const navigationStore = useNavigationStore()
-const siteConfigStore = useSiteConfigStore()
-const chatSidebar = useChatSidebar()
 const colorMode = useColorMode()
 const route = useRoute()
 const { can, isAdmin } = useUserRoles()

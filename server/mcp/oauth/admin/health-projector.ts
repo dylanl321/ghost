@@ -139,15 +139,35 @@ function deriveOutcomeAndState(
   return { outcome: 'unknown', state: 'unknown' }
 }
 
-/** A safe, human-readable next action for a stage state. */
-function nextActionFor(stage: OAuthStage, state: HealthState): string | undefined {
+/**
+ * A safe, human-readable next action for a stage state.
+ *
+ * The `unknown` state covers two behaviourally distinct situations that
+ * Requirement 4.4 forbids collapsing into the same rendering:
+ *   - NEVER observed: the stage has no evidence at all (`collectedAt` absent).
+ *     This is benign on a quiet deployment and must read neutrally as
+ *     "No activity observed yet", NOT as a problem to investigate.
+ *   - Stale: the stage HAS evidence (`collectedAt` present) but it is older
+ *     than the freshness horizon, so it cannot be trusted as current.
+ * Neither ever renders as `healthy` (Requirement 4.5); the distinction is only
+ * in the copy so the client can present a never-observed stage neutrally and a
+ * stale one as actionable.
+ */
+function nextActionFor(
+  stage: OAuthStage,
+  state: HealthState,
+  hasEvidence: boolean
+): string | undefined {
   switch (state) {
     case 'failing':
       return `Investigate recent ${stage} failures in the Activity view.`
     case 'unavailable':
       return 'Telemetry collection is unavailable; recent evidence may be missing.'
     case 'unknown':
-      return `No recent ${stage} evidence was observed; the stage state is unknown.`
+      // Never-observed reads neutrally; stale-but-present reads as actionable.
+      return hasEvidence
+        ? `The most recent ${stage} evidence is stale; review the Activity view to confirm current health.`
+        : 'No activity observed yet.'
     case 'degraded':
       return `Some ${stage} evidence is incomplete; review the Activity view.`
     default:
@@ -203,7 +223,11 @@ function projectStage(
     coverage,
     state,
     outcome,
-    nextAction: nextActionFor(stage, state)
+    // `collectedAt` (newest) present ⇒ the stage HAS evidence, so an `unknown`
+    // state means stale. Absent ⇒ never observed, which reads neutrally. This
+    // is what keeps a never-observed stage distinct from a stale one (4.4)
+    // without introducing an unsafe field.
+    nextAction: nextActionFor(stage, state, newest !== undefined)
   }
 }
 

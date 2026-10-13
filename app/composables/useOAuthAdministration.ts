@@ -38,7 +38,9 @@ import { computed, reactive, ref } from 'vue'
 import type {
   OAuthAdminOperation,
   OAuthApplicationDetail,
+  OAuthApplicationStatus,
   OAuthApplicationSummary,
+  OAuthBackfillCoverage,
   OAuthConfiguration,
   OAuthCoverageState,
   OAuthDiagnosticCheck,
@@ -314,6 +316,7 @@ export function useOAuthAdministration() {
   const overview = reactive(createViewState<OAuthObservation[]>()) as OAuthViewState<OAuthObservation[]>
   const configuration = reactive(createViewState<OAuthConfiguration>()) as OAuthViewState<OAuthConfiguration>
   const applications = reactive(createViewState<OAuthApplicationSummary[]>()) as OAuthViewState<OAuthApplicationSummary[]>
+  const applicationsHealth = reactive(createViewState<OAuthApplicationStatus[]>()) as OAuthViewState<OAuthApplicationStatus[]>
   const applicationDetail = reactive(createViewState<OAuthApplicationDetail>()) as OAuthViewState<OAuthApplicationDetail>
   const attempts = reactive(createViewState<OAuthEvent[][]>()) as OAuthViewState<OAuthEvent[][]>
   const grants = reactive(createViewState<OAuthGrantSummary[]>()) as OAuthViewState<OAuthGrantSummary[]>
@@ -424,14 +427,33 @@ export function useOAuthAdministration() {
     }
   }
 
+  /** Allowlisted Overview time windows the panel can request. */
+  const OAUTH_OVERVIEW_WINDOWS = ['1h', '24h', '7d'] as const
+  type OAuthOverviewWindow = typeof OAUTH_OVERVIEW_WINDOWS[number]
+
+  /**
+   * The selected Overview window, kept in composable memory only (never in the
+   * URL or a persisted store) so a page can bind a selector to it. `null` means
+   * "no explicit window" and the server default (24h) applies.
+   */
+  const overviewWindow = ref<OAuthOverviewWindow | null>(null)
+
   // --- Loaders (one per view) ----------------------------------------------
 
-  function loadOverview() {
+  /**
+   * Load the Overview health observations. Accepts an optional bounded `window`
+   * (`1h`/`24h`/`7d`); when provided it is stored in composable memory and sent
+   * as the `window` query so the server aligns its freshness horizon. When
+   * omitted, the last selected window (if any) is reused; when neither is set,
+   * the server default (24h) applies.
+   */
+  function loadOverview(window?: OAuthOverviewWindow) {
+    if (window && OAUTH_OVERVIEW_WINDOWS.includes(window)) overviewWindow.value = window
     return run(
       'overview',
       overview,
       '/api/admin/oauth/overview',
-      {},
+      { window: overviewWindow.value ?? undefined },
       data => (Array.isArray(data) ? (data as OAuthObservation[]) : []),
       'OAuth health observations could not be loaded.'
     )
@@ -456,6 +478,23 @@ export function useOAuthAdministration() {
       listQuery(cursor),
       data => (data as { items?: OAuthApplicationSummary[] })?.items ?? [],
       'The application inventory could not be loaded.'
+    )
+  }
+
+  /**
+   * Load the always-present MCP + Kiro Crew application status list from
+   * `GET /applications/health`. Follows the same abortable, generation-guarded
+   * per-view pattern as the other loaders (slot `applications-health`) and keeps
+   * the result in composable memory only.
+   */
+  function loadApplicationsHealth() {
+    return run(
+      'applications-health',
+      applicationsHealth,
+      '/api/admin/oauth/applications/health',
+      {},
+      data => (Array.isArray(data) ? (data as OAuthApplicationStatus[]) : []),
+      'Application health could not be loaded.'
     )
   }
 
@@ -559,6 +598,7 @@ export function useOAuthAdministration() {
       overview,
       configuration,
       applications,
+      applicationsHealth,
       applicationDetail,
       attempts,
       grants,
@@ -575,6 +615,9 @@ export function useOAuthAdministration() {
     diagnostics.job = null
     diagnostics.polling = false
     diagnostics.creating = false
+    // Drop any retained reconcile result on authorization loss (Req 1.5/17.6).
+    reconcile.coverage = null
+    reconcile.loading = false
   }
 
   /** Whether a view state represents an empty (loaded, no data) result. */
@@ -674,6 +717,100 @@ export function useOAuthAdministration() {
       return null
     } finally {
       creation.previewing = false
+    }
+  }
+
+  /**
+   * Fetch the deployment's supported resources/scopes for the create wizard's
+   * multiselects. This is a non-validating, non-mutating GET
+   * (`/api/admin/oauth/applications/options`) so it needs no CSRF token and can
+   * populate the dropdowns before the form is otherwise valid (design "D.
+   * Create-form options fix"; Requirement 5.1). Returns the `{ resources, scopes }`
+   * payload, or `null` on error so the caller can leave the multiselects empty.
+   */
+  async function fetchApplicationOptions(): Promise<{ resources: string[], scopes: string[] } | null> {
+    try {
+      const response = await $fetch<OAuthEnvelope<{ resources: string[], scopes: string[] }>>(
+        '/api/admin/oauth/applications/options'
+      )
+      return response.data
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * One-shot fetch of the always-present MCP + Kiro Crew application status list
+   * (`GET /applications/health`). This is a non-mutating GET so it needs no CSRF
+   * token. Unlike `loadApplicationsHealth()` (which drives the reactive
+   * `applicationsHealth` view-state), this returns the `OAuthApplicationStatus[]`
+   * payload directly, or `null` on error, for callers that only need the value.
+   */
+  async function fetchApplicationsHealth(): Promise<OAuthApplicationStatus[] | null> {
+    try {
+      const response = await $fetch<OAuthEnvelope<unknown>>(
+        '/api/admin/oauth/applications/health'
+      )
+      return Array.isArray(response.data) ? (response.data as OAuthApplicationStatus[]) : []
+    } catch {
+      return null
+    }
+  }
+
+  // --- Inventory reconcile flow (task 6.1) ----------------------------------
+
+  /**
+   * In-memory state for the "Reconcile inventory now" control. Mirrors the
+   * `creation`/`diagnostics` mutation-state discipline: nothing is persisted to
+   * localStorage/Pinia/the URL. `coverage` holds the most recent reconcile
+   * result so the Applications tab can show progress + a "last reconciled" time.
+   */
+  const reconcile = reactive({
+    /** True while a reconcile run is in flight. */
+    loading: false,
+    /** The most recent bounded reconcile result (coverage + counts + updatedAt). */
+    coverage: null as OAuthBackfillCoverage | null,
+    /** A safe error message when the reconcile fails. */
+    error: null as string | null,
+    /** True when the last failure was a 401/403 (access denied / session lost). */
+    unavailable: false
+  })
+
+  /**
+   * Kick one bounded projection backfill via `POST /applications/reconcile` and
+   * return the resulting coverage body (coverage/processed/clientsProjected/
+   * grantsProjected/hasMore/highWaterMark/updatedAt), or `null` on error. It is a
+   * mutation-shaped maintenance action, so it sends the session CSRF token in the
+   * `X-CSRF-Token` header, a fresh idempotency key, and a reason on a same-origin
+   * POST. The result is kept in composable memory only.
+   */
+  async function reconcileInventory(reason = 'Manual reconcile requested'): Promise<OAuthBackfillCoverage | null> {
+    reconcile.loading = true
+    reconcile.error = null
+    reconcile.unavailable = false
+    try {
+      const token = await getCsrfToken()
+      const idempotencyKey = crypto.randomUUID()
+      const response = await $fetch<OAuthEnvelope<OAuthBackfillCoverage>>(
+        '/api/admin/oauth/applications/reconcile',
+        {
+          method: 'POST',
+          headers: { 'X-CSRF-Token': token },
+          body: { idempotencyKey, reason }
+        }
+      )
+      reconcile.coverage = response.data
+      return response.data
+    } catch (cause: unknown) {
+      const status = errorStatus(cause)
+      if (status === 401 || status === 403) {
+        reconcile.unavailable = true
+      } else {
+        reconcile.error = errorMessage(cause, 'The inventory could not be reconciled.')
+      }
+      return null
+    } finally {
+      reconcile.loading = false
     }
   }
 
@@ -1077,8 +1214,10 @@ export function useOAuthAdministration() {
 
     // per-view state
     overview,
+    overviewWindow,
     configuration,
     applications,
+    applicationsHealth,
     applicationDetail,
     attempts,
     grants,
@@ -1091,6 +1230,7 @@ export function useOAuthAdministration() {
     loadOverview,
     loadConfiguration,
     loadApplications,
+    loadApplicationsHealth,
     loadApplicationDetail,
     loadAttempts,
     loadGrants,
@@ -1103,10 +1243,16 @@ export function useOAuthAdministration() {
     creation,
     getCsrfToken,
     resetCreation,
+    fetchApplicationOptions,
+    fetchApplicationsHealth,
     previewApplication,
     createApplication,
     pollOperation,
     devSignInTest,
+
+    // inventory reconcile flow (task 6.1)
+    reconcile,
+    reconcileInventory,
 
     // diagnostics operation flow (task 11.2)
     diagnostics,

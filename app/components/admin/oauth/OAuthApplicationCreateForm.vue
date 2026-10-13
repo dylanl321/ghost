@@ -7,8 +7,9 @@
  *
  *   1. Details — name, accountable owner/team/purpose, redirect URIs, and
  *      resource/scope multiselects populated from the deployment's supported
- *      options (fetched via the server-side preview, so they mirror the running
- *      provider configuration rather than a hard-coded list).
+ *      options (fetched via the dedicated, non-validating options route, so
+ *      they mirror the running provider configuration rather than a hard-coded
+ *      list).
  *   2. Confirm — the server-validated normalized preview (client type/auth
  *      profile, redirect URIs, resources, scopes). Submitting here runs the
  *      idempotent create operation and polls it to a terminal state.
@@ -86,37 +87,28 @@ watch(
       options.scopes = []
       localError.value = null
       admin.resetCreation()
-      // Preload the supported options with a light preview so the multiselects
-      // populate even before the form is valid. Ignore validation errors here.
+      // Populate the supported options from the dedicated options route so the
+      // multiselects fill in even before the form is valid.
       void hydrateOptions()
     }
   }
 )
 
 /**
- * Fetch the supported resources/scopes via the preview route. The preview
- * validates too, so on the initial (empty) form it returns a 400; we only keep
- * the options when a preview succeeds. A dedicated tiny probe keeps the initial
- * multiselects populated by sending a minimal probe payload.
+ * Fetch the supported resources/scopes from the dedicated, non-validating
+ * options route (`GET /api/admin/oauth/applications/options`) so the
+ * multiselects populate on open, before the form is otherwise valid
+ * (Requirement 5.1). The options mirror the running provider configuration; a
+ * partial configuration simply yields a shorter list, so on error we leave the
+ * multiselects empty rather than surfacing a failure. The real Step 1 → 2
+ * `POST /preview` path in `goToConfirm()` is unaffected.
  */
 async function hydrateOptions() {
-  // Ask the server for options by previewing a throwaway minimal candidate. If
-  // it fails validation we fall back to leaving options empty until the user's
-  // first explicit preview populates them.
-  const probe = await admin.previewApplication({
-    name: 'probe',
-    ownership: { owner: 'probe' },
-    redirectUris: ['http://127.0.0.1:53682/callback'],
-    permittedResources: [],
-    permittedScopes: []
-  }).catch(() => null)
-  if (probe?.options) {
-    options.resources = probe.options.resources
-    options.scopes = probe.options.scopes
+  const supported = await admin.fetchApplicationOptions()
+  if (supported) {
+    options.resources = supported.resources
+    options.scopes = supported.scopes
   }
-  // Clear the probe preview + any probe validation error so the UI stays clean.
-  creation.preview = null
-  creation.error = null
 }
 
 function addRedirect() {

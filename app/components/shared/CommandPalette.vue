@@ -46,7 +46,7 @@
                   ref="inputRef"
                   v-model="searchQuery"
                   type="text"
-                  :placeholder="selectedAccount ? `Filter actions for ${selectedAccount.name}...` : 'Search pages, accounts, actions, or ask a question...'"
+                  :placeholder="selectedAccount ? `Filter actions for ${selectedAccount.name}...` : 'Search pages, accounts, and actions...'"
                   class="w-full border-0 bg-transparent py-4 pl-12 pr-4 text-gray-900 dark:text-white placeholder:text-gray-400 focus:ring-0 text-base"
                   @keydown="handleInputKeydown"
                 />
@@ -77,7 +77,7 @@
                     No results found
                   </p>
                   <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    Try a different search term or ask AI
+                    Try a different search term
                   </p>
                 </div>
 
@@ -160,17 +160,6 @@
                     :commands="groupedCommands.admin"
                     :selected-index="selectedIndex"
                     :get-global-index="(idx: number) => getGlobalIndex('admin', idx)"
-                    @select="executeCommand"
-                  />
-
-                  <!-- AI -->
-                  <CommandGroup
-                    v-if="groupedCommands.ai && groupedCommands.ai.length > 0"
-                    label="AI Assistant"
-                    label-class="text-purple-400"
-                    :commands="groupedCommands.ai"
-                    :selected-index="selectedIndex"
-                    :get-global-index="(idx: number) => getGlobalIndex('ai', idx)"
                     @select="executeCommand"
                   />
 
@@ -264,7 +253,7 @@ watch(searchQuery, () => {
 })
 
 // Category order for keyboard navigation — search results and accounts first when searching
-const CATEGORY_ORDER = ['suggested', 'recent', 'accounts', 'search-results', 'navigation', 'actions', 'settings', 'admin', 'ai', 'fun']
+const CATEGORY_ORDER = ['suggested', 'recent', 'accounts', 'search-results', 'navigation', 'actions', 'settings', 'admin', 'fun']
 
 // Check if there are truly no results
 const hasNoResults = computed(() => {
@@ -337,7 +326,6 @@ function handleInputKeydown(event: KeyboardEvent) {
 </script>
 
 <script lang="ts">
-import type { CommandItem as CmdItem } from '~/composables/useCommandPalette'
 
 // CommandGroup sub-component for rendering a labeled section of commands
 const CommandGroup = defineComponent({
@@ -345,7 +333,7 @@ const CommandGroup = defineComponent({
   props: {
     label: { type: String, required: true },
     labelClass: { type: String, default: '' },
-    commands: { type: Array as PropType<CmdItem[]>, required: true },
+    commands: { type: Array as PropType<CommandItemType[]>, required: true },
     selectedIndex: { type: Number, required: true },
     getGlobalIndex: { type: Function as PropType<(idx: number) => number>, required: true }
   },
@@ -355,7 +343,7 @@ const CommandGroup = defineComponent({
       h('div', {
         class: ['px-2 py-1 text-xs font-semibold uppercase tracking-wider', props.labelClass || 'text-gray-500 dark:text-gray-400']
       }, props.label),
-      ...props.commands.map((cmd: CmdItem, idx: number) =>
+      ...props.commands.map((cmd: CommandItemType, idx: number) =>
         h(CommandItemRow, {
           key: cmd.id,
           command: cmd,
@@ -372,7 +360,7 @@ const CommandItemRow = defineComponent({
   name: 'CommandItemRow',
   props: {
     command: {
-      type: Object as PropType<CmdItem>,
+      type: Object as PropType<CommandItemType>,
       required: true
     },
     selected: {
@@ -397,7 +385,7 @@ const CommandItemRow = defineComponent({
       props.command.icon
         ? h(resolveComponent('UIcon'), {
             name: props.command.icon,
-            class: ['w-5 h-5 flex-shrink-0', props.command.category === 'ai' ? 'text-purple-400' : '']
+            class: ['w-5 h-5 flex-shrink-0', '']
           })
         : null,
       h('div', { class: 'flex-1 min-w-0 flex items-center gap-2' }, [

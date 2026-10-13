@@ -19,7 +19,6 @@ export type DashboardSectionId =
   | 'adminPipeline'
   | 'adminFeedback'
   | 'aiBriefing'
-  | 'quickChat'
   | 'commandPalette'
   | 'achievements'
 
@@ -60,7 +59,6 @@ export const SECTION_LABELS: Record<DashboardSectionId, string> = {
   adminPipeline: 'Admin: Pipeline Activity',
   adminFeedback: 'Admin: Feature Requests',
   aiBriefing: 'AI Briefing',
-  quickChat: 'Quick Chat',
   commandPalette: 'Command Palette',
   achievements: 'Achievements',
 }
@@ -84,7 +82,6 @@ export const SECTION_STYLE_SUPPORT: Record<DashboardSectionId, DisplayStyle[]> =
   adminPipeline: ['full', 'two-thirds', 'half', 'third'],
   adminFeedback: ['full', 'two-thirds', 'half', 'third'],
   aiBriefing: ['full', 'two-thirds', 'half'],
-  quickChat: ['full', 'two-thirds', 'half', 'third'],
   commandPalette: ['full', 'two-thirds', 'half', 'third'],
   achievements: ['full', 'two-thirds', 'half', 'third'],
 }
@@ -116,7 +113,6 @@ export const ALL_SECTION_IDS: DashboardSectionId[] = [
   'adminPipeline',
   'adminFeedback',
   'aiBriefing',
-  'quickChat',
   'commandPalette',
   'achievements',
 ]
@@ -171,7 +167,6 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayoutConfig = {
     { id: 'newAccounts', visible: false },
     { id: 'securitySnapshot', visible: false },
     { id: 'adminOverview', visible: false },
-    { id: 'quickChat', visible: false, displayStyle: 'half' },
     { id: 'commandPalette', visible: true, displayStyle: 'third' },
     { id: 'achievements', visible: true, displayStyle: 'third' },
   ],

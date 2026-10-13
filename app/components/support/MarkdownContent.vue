@@ -7,7 +7,7 @@
 <script setup lang="ts">
 import { marked } from 'marked'
 import mermaid from 'mermaid'
-import { escapeHtml, sanitizeChatHtml, sanitizeMermaidSvg } from '~/utils/sanitizeHtml'
+import { escapeHtml, sanitizeMarkdownHtml, sanitizeMermaidSvg } from '~/utils/sanitizeHtml'
 
 const logger = createLogger('MarkdownContent')
 
@@ -60,7 +60,7 @@ const renderedContent = computed(() => {
     mermaidCounter = 0
     // Parse markdown with marked
     const html = marked.parse(props.content, { renderer }) as string
-    return sanitizeChatHtml(html)
+    return sanitizeMarkdownHtml(html)
   } catch (error) {
     logger.error('Error parsing markdown:', error)
     return '<p class="text-red-500">Error rendering markdown content</p>'

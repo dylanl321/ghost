@@ -39,10 +39,12 @@
 
 import type {
   OAuthApplicationDetail,
+  OAuthApplicationStatus,
   OAuthApplicationSummary,
   OAuthAuditRecord,
   OAuthCapability,
   OAuthConfiguration,
+  OAuthCoverageState,
   OAuthDeploymentContext,
   OAuthEvent,
   OAuthGrantSummary,
@@ -64,15 +66,29 @@ import { getOAuthAdminRepository } from './index'
 import { oauthAdminCursorCodec, cursorBindingFor, decodeBoundCursor, issueBoundCursor, type CursorBinding } from './cursor-codec'
 import { oauthAdminErrors } from './access-service'
 import { MAX_LIMIT, resolveLimit } from './repository-support'
-import { projectStageHealth, projectUnavailableHealth, type HealthProjectionOptions } from './health-projector'
+import { projectStageHealth, projectUnavailableHealth, DEFAULT_FRESHNESS_HORIZON_MS, type HealthProjectionOptions } from './health-projector'
 import { assembleAttempts, type OAuthAttempt } from './attempt-assembler'
 import { oauthConfigurationService, type OAuthConfigurationService } from './configuration-service'
 import { oauthQuotaService, type OAuthQuotaService, type QuotaObservationRequest } from './quota-service'
 import { getOAuthProjectionService } from './projection-service'
 import { OAuthReadAuditWriter } from './read-audit'
+import {
+  projectApplicationStatus,
+  type OAuthApplicationConfig,
+  type ApplicationStatusProjectionOptions
+} from './application-status-projector'
+import { getMcpResourceUrl } from '../../config'
+import { GHOST_MCP_SCOPES } from '../../types'
+import { getKiroCrewResourceUrl } from '../../../kirocrew/config'
+import { KIROCREW_SCOPES } from '../../../kirocrew/types'
 
-/** The recent-event window (ms) the Overview health cards project over. */
-const OVERVIEW_WINDOW_MS = 60 * 60 * 1000
+/**
+ * The DEFAULT recent-event window (ms) the Overview health cards project over
+ * when no bounded window is supplied. A caller (the `/overview` route) passes an
+ * allowlisted window (`1h`/`24h`/`7d`) through {@link OverviewOptions.windowMs};
+ * this constant is only the fallback (Requirement 4.3).
+ */
+const DEFAULT_OVERVIEW_WINDOW_MS = 60 * 60 * 1000
 
 /** Default registration quota mirrored from the register route rate decision. */
 const DEFAULT_REGISTRATION_LIMIT_PER_HOUR = 10
@@ -97,6 +113,25 @@ const IDENTITY_FILTER_FIELDS = ['subject'] as const
  * `nextCursor` (when more rows remain) and the exact-total decision.
  */
 type EnrichedPage<T> = OAuthPagedResult<T>
+
+/**
+ * Options bounding a single {@link OAuthQueryService.overview} projection.
+ *
+ * Extends {@link HealthProjectionOptions} with a bounded observation `windowMs`.
+ * The `/overview` route maps its allowlisted `window` query (`1h`/`24h`/`7d`) to
+ * a window-ms and passes it here. When `windowMs` is supplied, the freshness
+ * horizon is DERIVED from it so it never exceeds the selected window; when it is
+ * absent the window falls back to {@link DEFAULT_OVERVIEW_WINDOW_MS} and the
+ * horizon to {@link DEFAULT_FRESHNESS_HORIZON_MS} (Requirement 4.3).
+ */
+export interface OverviewOptions extends HealthProjectionOptions {
+  /**
+   * The bounded recent-event window in milliseconds. Defaults to
+   * {@link DEFAULT_OVERVIEW_WINDOW_MS} when absent. The route is responsible for
+   * mapping only allowlisted window tokens to a value here.
+   */
+  windowMs?: number
+}
 
 /**
  * Read-only OAuth administration query service. Constructed with injectable
@@ -128,15 +163,31 @@ export class OAuthQueryService {
    * events query is unavailable, explicit unavailable health is projected — an
    * absent/failed query is NEVER converted into a healthy or zero-failure state
    * (Requirement 2.1 / 16.5).
+   *
+   * The observation window is bounded by {@link OverviewOptions.windowMs} (the
+   * route maps its allowlisted `1h`/`24h`/`7d` value here) and defaults to
+   * {@link DEFAULT_OVERVIEW_WINDOW_MS} when absent. The freshness horizon is
+   * DERIVED from the selected window so it never exceeds it: when a window is
+   * supplied the horizon equals the window (recent-but-not-most-recent activity
+   * reads fresh/stale over the chosen range rather than collapsing to unknown),
+   * and when no window is supplied the horizon falls back to
+   * {@link DEFAULT_FRESHNESS_HORIZON_MS}. An explicit `freshnessHorizonMs` is
+   * still honoured but is always clamped to the window so the horizon can never
+   * exceed the selected window (Requirement 4.3). This threading changes no
+   * projector logic — absence is still never healthy and a stale all-success
+   * stage is still never healthy.
    */
   async overview(
     access: OAuthAdminAccessContext,
-    options?: HealthProjectionOptions
+    options?: OverviewOptions
   ): Promise<OAuthObservation[]> {
     const ctx = access.deployment
     const now = options?.now ?? Date.now()
+    const windowMs = options?.windowMs ?? DEFAULT_OVERVIEW_WINDOW_MS
+    const freshnessHorizonMs = this.resolveFreshnessHorizon(options, windowMs)
+    const source = options?.source
     const windowQuery: OAuthListQuery = {
-      from: new Date(now - OVERVIEW_WINDOW_MS).toISOString(),
+      from: new Date(now - windowMs).toISOString(),
       to: new Date(now).toISOString(),
       // A generous but bounded page so the health projection sees the window's
       // events; the repository still caps this at 100.
@@ -147,13 +198,30 @@ export class OAuthQueryService {
       const page = await this.repository.queryEvents(ctx, this.sanitizeQuery(windowQuery, access))
       // A partial/rebuilding/unavailable coverage cannot be reported as healthy.
       if (page.page.coverage === 'unavailable') {
-        return projectUnavailableHealth(ctx, { now }, page.page.coverage)
+        return projectUnavailableHealth(ctx, { now, freshnessHorizonMs, source }, page.page.coverage)
       }
-      return projectStageHealth(ctx, page.items, { now })
+      return projectStageHealth(ctx, page.items, { now, freshnessHorizonMs, source })
     } catch {
       // The events query itself failed: surface explicit unavailable health.
-      return projectUnavailableHealth(ctx, { now })
+      return projectUnavailableHealth(ctx, { now, freshnessHorizonMs, source })
     }
+  }
+
+  /**
+   * Derive the freshness horizon for an overview projection from the selected
+   * window so it can NEVER exceed that window (Requirement 4.3):
+   *   - When a bounded `windowMs` is supplied, the horizon equals that window
+   *     (so activity anywhere in the chosen range reads fresh/stale rather than
+   *     collapsing to unknown).
+   *   - When no window is supplied, the horizon falls back to
+   *     {@link DEFAULT_FRESHNESS_HORIZON_MS}, preserving the original behaviour.
+   *   - An explicit `freshnessHorizonMs` is honoured but always clamped to the
+   *     window so the horizon still cannot exceed the selected window.
+   */
+  private resolveFreshnessHorizon(options: OverviewOptions | undefined, windowMs: number): number {
+    const derivedDefault = options?.windowMs !== undefined ? windowMs : DEFAULT_FRESHNESS_HORIZON_MS
+    const requested = options?.freshnessHorizonMs ?? derivedDefault
+    return Math.min(requested, windowMs)
   }
 
   // --- Configuration ------------------------------------------------------
@@ -202,6 +270,50 @@ export class OAuthQueryService {
       throw oauthAdminErrors.notFound({ message: 'Application not found in this deployment' })
     }
     return detail
+  }
+
+  /**
+   * Always-present MCP + Kiro Crew application status (Requirements 3.1, 3.2,
+   * 3.9). Resolves three truth sources — configuration (the well-known MCP and
+   * Kiro Crew resource URLs and their supported scopes), provider/projection
+   * (the seeded Client projections read from the projection store), and grant
+   * truth (the live Grant projections) — plus the backfill checkpoint coverage,
+   * and delegates the classification to the pure {@link projectApplicationStatus}
+   * projector.
+   *
+   * SAFETY: this read never scans the provider on a request hot path — it only
+   * reads the already-seeded projections and the durable checkpoint. The single
+   * per-detail `reconcileClient` allowance (used by {@link applicationDetail})
+   * is the only per-request provider read and is NOT invoked here (Requirement
+   * 3.2 / 3.9; parent invariant preserved).
+   */
+  async applicationsHealth(
+    access: OAuthAdminAccessContext,
+    options?: ApplicationStatusProjectionOptions
+  ): Promise<OAuthApplicationStatus[]> {
+    const ctx = access.deployment
+
+    // 1. Configuration truth for the two well-known applications, composed from
+    //    the same runtime accessors the provider was built from.
+    const configs = this.resolveApplicationConfigs()
+
+    // 2. Provider/projection truth: the seeded Client projections. The summary
+    //    query is indexed and bounded; the projector needs the detail shape
+    //    (permitted resources/scopes, observed use), so each summary is resolved
+    //    to its stored detail. This reads only the projection store — never the
+    //    provider artifact table.
+    const clients = await this.resolveClientProjections(ctx)
+
+    // 3. Grant truth: the live (non-expired, non-tombstoned) Grant projections.
+    const grants = await this.resolveGrantProjections(ctx)
+
+    // 4. Coverage from the durable backfill checkpoint; when no checkpoint
+    //    exists yet the inventory has never been seeded, so coverage is
+    //    `unavailable` (the projector then reports `unknown` with a reconcile
+    //    hint rather than a misleading `not-registered`).
+    const coverage = await this.resolveBackfillCoverage(ctx)
+
+    return projectApplicationStatus(configs, clients, grants, coverage, options)
   }
 
   // --- Attempts (activity) ------------------------------------------------
@@ -495,6 +607,68 @@ export class OAuthQueryService {
     }
 
     return effective
+  }
+
+  // --- Application-status resolution helpers ------------------------------
+
+  /**
+   * Compose the per-application configuration truth for the two well-known
+   * deployment applications from the same runtime accessors the provider was
+   * built from. `openid`/`offline_access` are the base OIDC scopes every
+   * application supports; the resource-specific scopes are unioned on top so
+   * each application's `expectedScopes` reflects the deployment's real
+   * configuration rather than a hard-coded list.
+   */
+  private resolveApplicationConfigs(): OAuthApplicationConfig[] {
+    const baseScopes = ['openid', 'offline_access']
+    return [
+      {
+        application: 'mcp',
+        resource: getMcpResourceUrl().href,
+        expectedScopes: [...new Set([...baseScopes, ...GHOST_MCP_SCOPES])]
+      },
+      {
+        application: 'kiro-crew',
+        resource: getKiroCrewResourceUrl().href,
+        expectedScopes: [...new Set([...baseScopes, ...KIROCREW_SCOPES])]
+      }
+    ]
+  }
+
+  /**
+   * Resolve the seeded Client projections to the detail shape the status
+   * projector needs. Reads a bounded page of application summaries from the
+   * indexed projection query, then loads each stored detail. This touches ONLY
+   * the projection store; it never scans the provider artifact table and never
+   * invokes the per-detail `reconcileClient` allowance.
+   */
+  private async resolveClientProjections(ctx: OAuthDeploymentContext): Promise<OAuthApplicationDetail[]> {
+    const page = await this.repository.queryApplications(ctx, { limit: MAX_LIMIT, order: 'desc' })
+    const details = await Promise.all(
+      page.items.map(summary => this.repository.getApplication(ctx, summary.clientId))
+    )
+    return details.filter((detail): detail is OAuthApplicationDetail => detail !== null)
+  }
+
+  /**
+   * Resolve the live Grant projections used for grant-truth. Reads a bounded
+   * page from the indexed projection query; expiry/tombstone filtering is
+   * applied by the pure projector so grant liveness stays deterministic.
+   */
+  private async resolveGrantProjections(ctx: OAuthDeploymentContext): Promise<OAuthGrantSummary[]> {
+    const page = await this.repository.queryGrants(ctx, { limit: MAX_LIMIT, order: 'desc' })
+    return page.items
+  }
+
+  /**
+   * Read the backfill checkpoint coverage. A missing checkpoint means the
+   * inventory has never been seeded, so coverage is `unavailable` and the
+   * projector reports `unknown` rather than a confident registration state
+   * (Requirement 3.8).
+   */
+  private async resolveBackfillCoverage(ctx: OAuthDeploymentContext): Promise<OAuthCoverageState> {
+    const checkpoint = await this.repository.getCheckpoint(ctx, 'checkpoints')
+    return checkpoint?.coverage ?? 'unavailable'
   }
 
   /** Throw a typed 403 when the access context lacks the given capability. */

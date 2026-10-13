@@ -27,7 +27,7 @@ export type ConfigCategory = 'features' | 'services' | 'performance' | 'ui' | 's
  * Base configuration item stored in DynamoDB
  */
 export interface SiteConfigItem {
-  /** Unique key in dot notation (e.g., 'features.strandsChat.enabled') */
+  /** Unique key in dot notation (e.g., 'features.reportScheduler.enabled') */
   key: string;
 
   /** Current value */
@@ -92,33 +92,11 @@ export interface SiteConfig {
     };
   };
   features?: {
-    strandsChat?: {
-      enabled?: boolean;
-      streaming?: {
-        enabled?: boolean;
-        rolloutPercentage?: number;
-        allowedUsers?: string[];
-        showReconnectIndicator?: boolean;
-        maxReconnectAttempts?: number;
-        streamTimeout?: number;
-      };
-    };
-    strandsChatPopup?: {
-      enabled?: boolean;
-    };
     reportScheduler?: {
       enabled?: boolean;
     };
     adminNotifications?: {
       enabled?: boolean;
-    };
-  };
-  services?: {
-    strands?: {
-      serverUrl?: string;
-      timeout?: number;
-      retries?: number;
-      retryDelay?: number;
     };
   };
   performance?: {
@@ -158,108 +136,7 @@ export const DEFAULT_SITE_CONFIG: SiteConfigItem[] = [
     isEditable: true,
   },
   // Feature Flags
-  {
-    key: 'features.strandsChat.enabled',
-    value: true,
-    type: 'boolean',
-    category: 'features',
-    label: 'Strands Chat',
-    description: 'Enable the AI-powered Strands chat interface for querying AWS account data',
-    defaultValue: true,
-    isPublic: true,
-    isEditable: true,
-  },
-  {
-    key: 'features.strandsChatPopup.enabled',
-    value: false,
-    type: 'boolean',
-    category: 'features',
-    label: 'Strands Chat Popup',
-    description: 'Enable the floating Strands chat popup widget on all pages',
-    defaultValue: false,
-    isPublic: true,
-    isEditable: true,
-  },
 
-  // Strands Streaming Configuration
-  {
-    key: 'features.strandsChat.streaming.enabled',
-    value: true,
-    type: 'boolean',
-    category: 'features',
-    label: 'Strands Streaming',
-    description: 'Enable SSE streaming for real-time progress updates in chat queries',
-    defaultValue: true,
-    isPublic: true,
-    isEditable: true,
-  },
-  {
-    key: 'features.strandsChat.streaming.rolloutPercentage',
-    value: 100,
-    type: 'number',
-    category: 'features',
-    label: 'Streaming Rollout %',
-    description: 'Percentage of users to enable streaming for (0-100). Use for gradual rollout.',
-    defaultValue: 100,
-    isPublic: false,
-    isEditable: true,
-    validation: {
-      min: 0,
-      max: 100,
-    },
-  },
-  {
-    key: 'features.strandsChat.streaming.allowedUsers',
-    value: [],
-    type: 'array',
-    category: 'features',
-    label: 'Streaming Allowed Users',
-    description: 'List of user emails to enable streaming for. Leave empty for percentage-based rollout.',
-    defaultValue: [],
-    isPublic: false,
-    isEditable: true,
-  },
-  {
-    key: 'features.strandsChat.streaming.showReconnectIndicator',
-    value: true,
-    type: 'boolean',
-    category: 'features',
-    label: 'Show Reconnect Indicator',
-    description: 'Show toast notification when streaming connection drops and reconnects',
-    defaultValue: true,
-    isPublic: false,
-    isEditable: true,
-  },
-  {
-    key: 'features.strandsChat.streaming.maxReconnectAttempts',
-    value: 3,
-    type: 'number',
-    category: 'features',
-    label: 'Max Reconnect Attempts',
-    description: 'Maximum number of automatic reconnection attempts before showing error',
-    defaultValue: 3,
-    isPublic: false,
-    isEditable: true,
-    validation: {
-      min: 0,
-      max: 5,
-    },
-  },
-  {
-    key: 'features.strandsChat.streaming.streamTimeout',
-    value: 300000,
-    type: 'number',
-    category: 'features',
-    label: 'Stream Timeout (ms)',
-    description: 'Maximum duration for streaming connection before timeout (5 minutes)',
-    defaultValue: 300000,
-    isPublic: false,
-    isEditable: true,
-    validation: {
-      min: 60000,
-      max: 600000,
-    },
-  },
   {
     key: 'features.reportScheduler.enabled',
     value: true,
@@ -358,66 +235,6 @@ export const DEFAULT_SITE_CONFIG: SiteConfigItem[] = [
     isEditable: true,
   },
 
-  // Service Configuration
-  {
-    key: 'services.strands.serverUrl',
-    value: 'http://internal-lz-mcp-servers-dev-alb-1428009891.us-gov-west-1.elb.amazonaws.com:80',
-    type: 'string',
-    category: 'services',
-    label: 'Strands Server URL',
-    description: 'ALB endpoint for the Strands ECS service',
-    defaultValue: 'http://internal-lz-mcp-servers-dev-alb-1428009891.us-gov-west-1.elb.amazonaws.com:80',
-    isPublic: false,
-    isEditable: true,
-    validation: {
-      pattern: '^https?://.+',
-    },
-  },
-  {
-    key: 'services.strands.timeout',
-    value: 300000,
-    type: 'number',
-    category: 'services',
-    label: 'Strands Timeout (ms)',
-    description: 'Request timeout for Strands API calls in milliseconds (5 minutes for MCP operations)',
-    defaultValue: 300000,
-    isPublic: false,
-    isEditable: true,
-    validation: {
-      min: 10000,
-      max: 600000,
-    },
-  },
-  {
-    key: 'services.strands.retries',
-    value: 2,
-    type: 'number',
-    category: 'services',
-    label: 'Strands Retry Count',
-    description: 'Number of retry attempts for failed Strands requests',
-    defaultValue: 2,
-    isPublic: false,
-    isEditable: true,
-    validation: {
-      min: 0,
-      max: 5,
-    },
-  },
-  {
-    key: 'services.strands.retryDelay',
-    value: 2000,
-    type: 'number',
-    category: 'services',
-    label: 'Strands Retry Delay (ms)',
-    description: 'Base delay between retry attempts (uses exponential backoff)',
-    defaultValue: 2000,
-    isPublic: false,
-    isEditable: true,
-    validation: {
-      min: 500,
-      max: 10000,
-    },
-  },
 
   // Performance Settings
   {
@@ -710,4 +527,9 @@ export interface SiteConfigHistoryResponse {
   success: boolean;
   history: SiteConfigHistoryEntry[];
   count: number;
+}
+
+/** Retired persisted settings must not re-enable or expose the removed chatbot. */
+export function isRetiredSiteConfigKey(key: string): boolean {
+  return /^(features\.strandsChat(?:Popup)?|services\.strands)(?:\.|$)/.test(key)
 }

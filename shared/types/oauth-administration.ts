@@ -757,6 +757,114 @@ export interface OAuthCreateDiagnosticRequest extends OAuthMutationEnvelope {
   checks: OAuthDiagnosticCheck[]
 }
 
+// ---------------------------------------------------------------------------
+// DTO: OAuthApplicationStatus
+// ---------------------------------------------------------------------------
+
+/**
+ * The two well-known deployment applications the panel always surfaces. Keyed
+ * to real deployment truth (the MCP and Kiro Crew resource URLs derived from
+ * runtime configuration), not a hard-coded inventory list.
+ */
+export type OAuthApplicationLabel = 'mcp' | 'kiro-crew'
+
+/**
+ * Derived, always-present status for a well-known deployment application.
+ *
+ * - `registered`     A provider client exists for the resource with the
+ *                    expected approved resources/scopes.
+ * - `no-activity`    Registered and correctly configured, but no live grants /
+ *                    no recent observed use. Benign, not an error.
+ * - `active`         Registered, correctly configured, with >=1 live grant
+ *                    and/or recent observed use.
+ * - `misconfigured`  A client exists but its approved resources/scopes diverge
+ *                    from the deployment's supported set. Actionable.
+ * - `not-registered` No provider client advertises the resource yet.
+ * - `unknown`        Backfill coverage is incomplete, so registration state
+ *                    cannot be asserted yet.
+ */
+export type OAuthApplicationStatusState =
+  | 'registered'
+  | 'no-activity'
+  | 'active'
+  | 'misconfigured'
+  | 'not-registered'
+  | 'unknown'
+
+/**
+ * Always-present, redactor-safe status projection for one of the two well-known
+ * deployment applications (MCP or Kiro Crew). Composed from configuration truth,
+ * provider/projection truth, and live-grant truth — never from recent-event
+ * presence — and labeled with coverage/freshness.
+ *
+ * SAFETY CONTRACT: contains only public configuration values (resource URLs,
+ * scope names) and opaque references. It MUST NOT expose secrets, tokens,
+ * authorization codes, or identity detail, and it is NEVER an authorization or
+ * enforcement input.
+ */
+export interface OAuthApplicationStatus {
+  /** Which well-known deployment application this status describes. */
+  application: OAuthApplicationLabel
+  /** Public resource URL the application is keyed to. */
+  resource: string
+  /** Derived, actionable status. */
+  status: OAuthApplicationStatusState
+  /** Public resources the matched provider client currently approves. */
+  approvedResources: string[]
+  /** Public scopes the matched provider client currently approves. */
+  approvedScopes: string[]
+  /** Public resources the deployment configuration expects for this application. */
+  expectedResources: string[]
+  /** Public scopes the deployment configuration expects for this application. */
+  expectedScopes: string[]
+  /** Count of live (non-expired, non-tombstoned) grants for the resource. */
+  liveGrantCount: number
+  /** When use was last observed, when known. Absent means never observed. */
+  lastObservedUse?: IsoDateTime
+  /** Opaque reference to the matched provider client, when one exists. */
+  clientReference?: OpaqueReference
+  /** Backfill coverage state backing this status. */
+  coverage: OAuthCoverageState
+  /** Freshness of the underlying evidence relative to the observation window. */
+  freshness: OAuthFreshness
+  /** When the underlying evidence was collected, when known. */
+  collectedAt?: IsoDateTime
+  /** Safe, human-readable next action, when applicable. */
+  nextAction?: string
+}
+
+// ---------------------------------------------------------------------------
+// DTO: OAuthBackfillCoverage (reconcile response)
+// ---------------------------------------------------------------------------
+
+/**
+ * Thin, redactor-safe reconcile response describing the state of the bounded,
+ * resumable projection backfill. This is the server-side backfill result
+ * (coverage, processed, clientsProjected, grantsProjected, hasMore,
+ * highWaterMark) plus the checkpoint's `updatedAt`, surfaced as the reconcile
+ * route's public body.
+ *
+ * Contains only safe metrics and coverage state — no provider artifacts,
+ * tokens, secrets, or identity detail. Introduces no new table, index, or
+ * retention rule; the underlying checkpoint and projections already exist.
+ */
+export interface OAuthBackfillCoverage {
+  /** Coverage reached after the most recent bounded run. */
+  coverage: OAuthCoverageState
+  /** Number of provider artifacts processed in the most recent run. */
+  processed: number
+  /** Number of Client projections seeded/updated in the most recent run. */
+  clientsProjected: number
+  /** Number of Grant projections seeded/updated in the most recent run. */
+  grantsProjected: number
+  /** True when there is more provider data to process (checkpoint is resumable). */
+  hasMore: boolean
+  /** High-water mark recorded on the checkpoint, when known. */
+  highWaterMark?: IsoDateTime
+  /** When the durable backfill checkpoint was last updated. */
+  updatedAt: IsoDateTime
+}
+
 /** Bounded, redacted issue export document. */
 export interface OAuthIssueExport {
   issue: OAuthIssue

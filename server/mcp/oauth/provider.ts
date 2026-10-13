@@ -9,7 +9,10 @@ import { GHOST_MCP_SCOPES } from '../types'
 import { DynamoOidcAdapter } from './adapter'
 import { handleMcpGrantDestroyed } from './graph-delegation-cleanup'
 import { getGhostMcpIdentity } from './identity'
+import { findGrantPointer } from './grant-pointer'
 import { getOAuthStageInstrumentation } from './admin/stage-instrumentation'
+import { readManagedPolicy } from './admin/managed-policy-service'
+import { evaluateBoundary, isGrantRevoked } from './admin/lifecycle-enforcement'
 
 let providerPromise: Promise<Provider> | undefined
 export const GHOST_REFRESH_TOKEN_ROTATION = false
@@ -153,6 +156,79 @@ export async function getGhostPublicSigningKeyMetadata(): Promise<GhostSigningKe
   }
 }
 
+/**
+ * Minimal shape of the OIDC `Grant` model instance the reuse gate inspects.
+ * Only the safe references it needs to re-check policy are read.
+ */
+interface ReusableGrant {
+  jti: string
+  accountId?: string
+  clientId?: string
+  /** Consented resource scopes keyed by resource URL, e.g. `{ '<mcp>': 'a b' }`. */
+  resources?: Record<string, string>
+}
+
+/**
+ * Consent-once grant reuse (pure SSO).
+ *
+ * `oidc-provider`'s default `loadExistingGrant` reuses a grant only when it is
+ * already bound to the current OIDC session or carried on the in-flight
+ * interaction result. Because Codex starts a fresh browser context per
+ * `codex mcp login`, that binding is absent and the user is prompted for
+ * consent every time. This helper additionally consults the durable
+ * `(subject, clientId)` grant pointer so a previously approved grant is reused
+ * across sessions — approve once, then sign in silently.
+ *
+ * SAFETY — reuse is GATED, never blind (this is why it is not just the default):
+ *   - A reused grant is still subject to the managed-lifecycle matrix. If the
+ *     client has since been BLOCKED or RETIRED, {@link evaluateBoundary} denies
+ *     and we return `undefined` so the normal consent boundary runs its own
+ *     (also-denying) enforcement instead of silently resuming.
+ *   - A grant under a revocation marker ({@link isGrantRevoked}) is never
+ *     reused; the user must re-consent (which mints a fresh grant).
+ *   - Account/client identity on the found grant must match the current
+ *     request, or it is ignored (the provider also re-checks this).
+ * A `null` managed policy (unmanaged dynamic client) is always allowed, so
+ * unmanaged clients get consent-once with no behavior change.
+ */
+export async function loadReusableGhostGrant(ctx: any): Promise<unknown> {
+  const provider = ctx?.oidc?.provider
+  const account = ctx?.oidc?.account
+  const client = ctx?.oidc?.client
+  if (!provider || !account?.accountId || !client?.clientId) return undefined
+
+  // 1. Resolve a candidate grant id: the default sources first (in-flight
+  //    consent result, then this session's association), then the durable
+  //    cross-session pointer for this (subject, client) pair.
+  const sessionGrantId = ctx.oidc.result?.consent?.grantId
+    || ctx.oidc.session?.grantIdFor?.(client.clientId)
+  const grantId = sessionGrantId || await findGrantPointer(account.accountId, client.clientId)
+  if (!grantId) return undefined
+
+  const grant = await provider.Grant.find(grantId) as ReusableGrant | undefined
+  if (!grant) return undefined
+
+  // 2. Identity must match the current request. The provider re-checks this
+  //    too, but we fail closed here rather than hand back a mismatched grant.
+  if (grant.accountId !== account.accountId || grant.clientId !== client.clientId) return undefined
+
+  // 3. A revoked grant is never silently reused (task 9 fence).
+  if (await isGrantRevoked(grant.jti)) return undefined
+
+  // 4. The managed lifecycle/policy must still permit this client. A blocked or
+  //    retired managed client must not resume silently; returning `undefined`
+  //    routes it back through the consent boundary, which denies it there.
+  const managedPolicy = typeof client.metadata === 'function'
+    ? readManagedPolicy(client.metadata() as Record<string, unknown>)
+    : null
+  if (managedPolicy) {
+    const decision = evaluateBoundary(managedPolicy, 'authorize')
+    if (!decision.allowed) return undefined
+  }
+
+  return grant
+}
+
 export function createGhostOAuthConfiguration(input: {
   resource?: string
   resources?: GhostOAuthResource[]
@@ -186,6 +262,12 @@ export function createGhostOAuthConfiguration(input: {
     clientAuthMethods: ['none'],
     pkce: { required: () => true, methods: ['S256'] },
     scopes: ['openid', 'offline_access', ...supportedScopes],
+    // Consent-once (pure SSO): reuse a previously approved grant across sessions
+    // for the same (subject, client) so native clients are not re-prompted every
+    // sign-in. Reuse is gated on managed lifecycle + grant revocation, so a
+    // blocked/retired client or a revoked grant still re-consents (see
+    // loadReusableGhostGrant).
+    loadExistingGrant: loadReusableGhostGrant,
     // Codex omits prompt=consent, so explicitly issue refresh tokens to native public clients.
     issueRefreshToken: async (_ctx: unknown, client: RefreshTokenClient) => shouldIssueGhostRefreshToken(client),
     // A stable token avoids consuming the credential before Codex persists a rotated replacement.

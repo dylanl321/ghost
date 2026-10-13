@@ -36,7 +36,7 @@ function registeredTools(scopes: GhostMcpPrincipal['scopes']): Set<string> {
 test('registers every tool in the end-user MCP coverage contract', () => {
   const registered = registeredTools(['ghost.read', 'ghost.ai.invoke', 'ghost.collaborate', 'ghost.credentials.issue'])
   assert.deepEqual([...registered].sort(), [...ghostMcpToolNames].sort())
-  assert.equal(registered.size, 68)
+  assert.equal(registered.size, 61)
   assert.deepEqual([...endUserMcpToolNames].sort(), ghostMcpCatalog.filter(tool => tool.visibility === 'advertised').map(tool => tool.name).sort())
   assert.deepEqual(endUserMcpCapabilityGroups.flatMap(group => group.tools.map(tool => tool.name)).sort(), [...endUserMcpToolNames].sort())
   assert.equal(ghostMcpCatalog.every(tool => Boolean(tool.scope && tool.domain && tool.source && tool.annotations)), true)
@@ -44,7 +44,7 @@ test('registers every tool in the end-user MCP coverage contract', () => {
 
 test('removed compatibility and synchronous report tools are absent', () => {
   const registered = registeredTools(['ghost.read', 'ghost.ai.invoke', 'ghost.collaborate', 'ghost.credentials.issue'])
-  for (const name of ['ghost.forecasts.get', 'ghost.support.search', 'ghost.instances.get', 'ghost.audit.cloudtrail', 'ghost.pipelines.for_account', 'ghost.pipelines.search_resources', 'ghost.reports.run']) {
+  for (const name of ['ghost.forecasts.get', 'ghost.support.search', 'ghost.instances.get', 'ghost.audit.cloudtrail', 'ghost.pipelines.for_account', 'ghost.pipelines.search_resources', 'ghost.reports.run', 'ghost.ai.chat', 'ghost.chat_threads.list', 'ghost.chat_threads.get', 'ghost.chat_threads.create', 'ghost.chat_threads.update', 'ghost.chat_threads.add_message', 'ghost.chat_threads.delete']) {
     assert.equal(registered.has(name), false, `${name} must be removed`)
   }
 })
