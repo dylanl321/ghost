@@ -43,7 +43,11 @@ test('VMaaS pricing keys and filters distinguish Linux, RHEL, and Windows', () =
   assert.equal(new Set(keys).size, 3)
   assert.deepEqual(
     getEC2PricingFilters('m6i.large', 'AWS GovCloud (US-West)', 'rhel').find(filter => filter.Field === 'preInstalledSw'),
-    { Type: 'TERM_MATCH', Field: 'preInstalledSw', Value: 'RHEL' }
+    { Type: 'TERM_MATCH', Field: 'preInstalledSw', Value: 'NA' }
+  )
+  assert.equal(
+    getEC2PricingFilters('m6i.large', 'AWS GovCloud (US-West)', 'rhel').find(filter => filter.Field === 'operatingSystem')?.Value,
+    'RHEL'
   )
   assert.equal(
     getEC2PricingFilters('m6i.large', 'AWS GovCloud (US-West)', 'windows').find(filter => filter.Field === 'operatingSystem')?.Value,
