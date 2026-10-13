@@ -68,3 +68,25 @@ test('configured admin usernames do not depend on Graph', async () => {
 
   assert.equal(allowed, true)
 })
+
+
+test('production ignores ADMIN_BYPASS for an authenticated non-admin', async () => {
+  const previousEnv = process.env.NODE_ENV
+  const previousBypass = process.env.ADMIN_BYPASS
+  try {
+    process.env.NODE_ENV = 'production'
+    process.env.ADMIN_BYPASS = 'true'
+    clearAllAdminCache()
+    const allowed = await isUserAdmin(oidcEvent({
+      id: 'production-bypass-test',
+      email: 'non-admin@example.test'
+    }), async () => [])
+    assert.equal(allowed, false)
+  } finally {
+    if (previousEnv === undefined) delete process.env.NODE_ENV
+    else process.env.NODE_ENV = previousEnv
+    if (previousBypass === undefined) delete process.env.ADMIN_BYPASS
+    else process.env.ADMIN_BYPASS = previousBypass
+    clearAllAdminCache()
+  }
+})
