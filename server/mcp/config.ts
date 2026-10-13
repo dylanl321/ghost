@@ -81,6 +81,32 @@ export function useDurableOAuthStore(): boolean {
   return isProductionEnvironment() || Boolean(process.env.GHOST_OAUTH_TABLE_NAME)
 }
 
+/**
+ * Server-only runtime configuration for the deployment-local OAuth
+ * administration table. Intentionally isolated from {@link getOAuthTableConfig}
+ * (provider artifacts) so administration projections and audit records never
+ * share storage with credential artifacts. The table name is resolved from the
+ * server environment only; a caller can never supply it. Shape matches the
+ * `OAuthAdminTableConfig` contract in `server/mcp/oauth/admin/types.ts`.
+ */
+export function getOAuthAdminTableConfig() {
+  return {
+    tableName: process.env.GHOST_OAUTH_ADMIN_TABLE_NAME || 'ghost-oauth-administration',
+    environment: (process.env.GHOST_OAUTH_ADMIN_TABLE_ENVIRONMENT || 'govcloud') as 'commercial' | 'govcloud',
+    accountId: process.env.AWS_DEPLOYMENT_ACCOUNT_ID || undefined
+  }
+}
+
+/**
+ * Whether durable OAuth administration storage is available. Mirrors
+ * {@link useDurableOAuthStore}: a memory-only deployment may still show safe
+ * configuration and explicit "unavailable" history but cannot claim durable
+ * inventory/audit or enable enforcement-changing operations.
+ */
+export function useDurableOAuthAdminStore(): boolean {
+  return isProductionEnvironment() || Boolean(process.env.GHOST_OAUTH_ADMIN_TABLE_NAME)
+}
+
 export function getMcpAuditTableConfig() {
   return {
     tableName: process.env.GHOST_MCP_AUDIT_TABLE_NAME || 'ghost-mcp-audit',

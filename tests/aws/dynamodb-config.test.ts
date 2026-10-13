@@ -1,13 +1,44 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  clearConfigCache,
+  getDynamoDBConfig,
+  getDynamoDBConfigDiagnostic,
   isProductionDeployment,
   mergeDynamoDBConfig,
-  warnPartialSecretFallback,
-  resetPartialSecretFallbackWarning,
   type DynamoDBConfig,
   type DynamoDBTableConfig
 } from '../../server/lib/dynamodb-config'
+
+test('config diagnostic is redacted and returned as a defensive copy', async () => {
+  const originalNodeEnv = process.env.NODE_ENV
+  process.env.NODE_ENV = 'development'
+
+  try {
+    clearConfigCache()
+    await getDynamoDBConfig()
+
+    const diagnostic = getDynamoDBConfigDiagnostic()
+    assert.equal(diagnostic.source, 'development-env')
+    assert.equal(diagnostic.missingKeyCount, 0)
+    assert.deepEqual(diagnostic.missingKeys, [])
+    assert.ok(diagnostic.loadedAt)
+    assert.deepEqual(Object.keys(diagnostic).sort(), [
+      'loadedAt',
+      'missingKeyCount',
+      'missingKeys',
+      'source'
+    ])
+
+    const returnedKeys: string[] = diagnostic.missingKeys
+    returnedKeys.push('mutation-must-not-leak')
+    assert.deepEqual(getDynamoDBConfigDiagnostic().missingKeys, [])
+  } finally {
+    if (originalNodeEnv === undefined) delete process.env.NODE_ENV
+    else process.env.NODE_ENV = originalNodeEnv
+    clearConfigCache()
+  }
+})
 
 const monitoringLocation = {
   environment: 'commercial',
@@ -18,6 +49,39 @@ const monitoringLocation = {
 function budgetConfig(tableName: string, readOnly: boolean): DynamoDBTableConfig {
   return { tableName, ...monitoringLocation, readOnly }
 }
+
+test('deployed API key table names override stale secrets while retaining their location', () => {
+  const previousKeys = process.env.DYNAMODB_API_KEYS_TABLE
+  const previousUsage = process.env.DYNAMODB_API_KEY_USAGE_TABLE
+  try {
+    process.env.DYNAMODB_API_KEYS_TABLE = 'ghost-api-keys-prod'
+    process.env.DYNAMODB_API_KEY_USAGE_TABLE = 'ghost-api-keys-usage-prod'
+    const defaults = {
+      budgetAlerts: budgetConfig('alerts', true),
+      budgetAlertConfig: budgetConfig('alert-config', false),
+      apiKeys: budgetConfig('ghost-api-keys-prod', false),
+      apiKeysUsage: budgetConfig('ghost-api-keys-usage-prod', false)
+    } as DynamoDBConfig
+    const configured = {
+      apiKeys: budgetConfig('ghost-api-keys', false),
+      apiKeysUsage: budgetConfig('ghost-api-keys-usage', false)
+    }
+    const merged = mergeDynamoDBConfig(defaults, configured)
+    assert.deepEqual(merged.apiKeys, defaults.apiKeys)
+    assert.deepEqual(merged.apiKeysUsage, defaults.apiKeysUsage)
+
+    delete process.env.DYNAMODB_API_KEYS_TABLE
+    delete process.env.DYNAMODB_API_KEY_USAGE_TABLE
+    const withoutOverrides = mergeDynamoDBConfig(defaults, configured)
+    assert.deepEqual(withoutOverrides.apiKeys, configured.apiKeys)
+    assert.deepEqual(withoutOverrides.apiKeysUsage, configured.apiKeysUsage)
+  } finally {
+    if (previousKeys === undefined) delete process.env.DYNAMODB_API_KEYS_TABLE
+    else process.env.DYNAMODB_API_KEYS_TABLE = previousKeys
+    if (previousUsage === undefined) delete process.env.DYNAMODB_API_KEY_USAGE_TABLE
+    else process.env.DYNAMODB_API_KEY_USAGE_TABLE = previousUsage
+  }
+})
 
 test('stale secrets cannot relocate budget alert tables from the monitoring account', () => {
   const defaults = {
@@ -68,21 +132,4 @@ test('prod deployment remains production', () => {
     GHOST_ENV: 'prod',
     DYNAMODB_CONFIG_SECRET_NAME: 'ghost-dynamodb-config-prod'
   }), true)
-})
-
-test('partial-secret fallback warns once per unchanged missing-key signature', () => {
-  resetPartialSecretFallbackWarning()
-  const missing = ['userNotifications', 'aiUsage']
-
-  // First occurrence warns; the 5-minute cache reload with the same gap does not.
-  assert.equal(warnPartialSecretFallback(missing), true)
-  assert.equal(warnPartialSecretFallback(missing), false)
-  assert.equal(warnPartialSecretFallback([...missing].reverse()), false)
-
-  // A changed signature warns again exactly once.
-  assert.equal(warnPartialSecretFallback([...missing, 'costTagConfig']), true)
-  assert.equal(warnPartialSecretFallback([...missing, 'costTagConfig']), false)
-
-  // No missing keys never warns.
-  assert.equal(warnPartialSecretFallback([]), false)
 })

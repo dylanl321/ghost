@@ -51,13 +51,13 @@ resource "aws_secretsmanager_secret_version" "dynamodb_config" {
 
     # API Keys Tables (GovCloud Account B - where app is deployed)
     apiKeys = {
-      tableName   = "ghost-api-keys"
+      tableName   = aws_dynamodb_table.api_keys.name
       environment = "govcloud"
       region      = var.aws_region
       accountId   = local.child_account_id
     }
     apiKeysUsage = {
-      tableName   = "ghost-api-keys-usage"
+      tableName   = aws_dynamodb_table.api_keys_usage.name
       environment = "govcloud"
       region      = var.aws_region
       accountId   = local.child_account_id

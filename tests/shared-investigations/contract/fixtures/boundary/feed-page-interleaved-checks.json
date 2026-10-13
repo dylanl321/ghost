@@ -1,0 +1,38 @@
+{
+  "items": [
+    {
+      "tenantId": "tenant-fake-0001",
+      "spaceId": "space-0000-fake-aaaa",
+      "serverSequence": 20,
+      "kind": "event",
+      "objectId": "evt-fake-i1",
+      "safeProjection": { "type": "check-started", "checkId": "chk-fake-A" }
+    },
+    {
+      "tenantId": "tenant-fake-0001",
+      "spaceId": "space-0000-fake-aaaa",
+      "serverSequence": 21,
+      "kind": "event",
+      "objectId": "evt-fake-i2",
+      "safeProjection": { "type": "check-started", "checkId": "chk-fake-B" }
+    },
+    {
+      "tenantId": "tenant-fake-0001",
+      "spaceId": "space-0000-fake-aaaa",
+      "serverSequence": 22,
+      "kind": "event",
+      "objectId": "evt-fake-i3",
+      "safeProjection": { "type": "check-finished", "checkId": "chk-fake-B" }
+    },
+    {
+      "tenantId": "tenant-fake-0001",
+      "spaceId": "space-0000-fake-aaaa",
+      "serverSequence": 23,
+      "kind": "event",
+      "objectId": "evt-fake-i4",
+      "safeProjection": { "type": "check-finished", "checkId": "chk-fake-A" }
+    }
+  ],
+  "highWaterMark": 23,
+  "pageSize": 50
+}

@@ -20,14 +20,44 @@
 
 import { createConsola, type LogObject } from 'consola'
 
-// Map Consola numeric levels to string names
+// Consola's LogObject.type is the authoritative severity name (the method
+// invoked, e.g. 'warn', 'error'). The numeric `level` is NOT a 1:1 severity
+// map — Consola collapses several types onto the same level (fatal/error → 0,
+// warn → 1, info/success/ready/start/box → 3), so classifying by `level`
+// alone misreports warn as error and error as fatal. Prefer `type`.
+const VALID_LEVEL_TYPES = new Set<string>([
+  'fatal',
+  'error',
+  'warn',
+  'info',
+  'debug',
+  'trace',
+  'success',
+  'log',
+  'verbose',
+  'ready',
+  'start',
+  'box',
+])
+
+// Numeric-level fallback, used only when `type` is absent or unrecognized.
 const LEVEL_NAMES: Record<number, string> = {
-  0: 'fatal',
-  1: 'error',
-  2: 'warn',
+  0: 'error',
+  1: 'warn',
+  2: 'info',
   3: 'info',
   4: 'debug',
   5: 'trace',
+}
+
+// Derive the structured JSON `level` from a Consola LogObject, preferring the
+// authoritative `type` name and guarding against arbitrary type values.
+function resolveLevel(logObj: LogObject): string {
+  const type = logObj.type
+  if (typeof type === 'string' && VALID_LEVEL_TYPES.has(type)) {
+    return type
+  }
+  return LEVEL_NAMES[logObj.level] ?? 'info'
 }
 
 // Safely serialize a value, handling Error objects and circular references
@@ -43,61 +73,25 @@ function safeSerialize(value: unknown): unknown {
   return value
 }
 
-// A trailing plain object on a log call is treated as structured context and
-// lifted to top-level JSON fields. Errors/arrays are messages, not context.
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (value === null || typeof value !== 'object') return false
-  if (Array.isArray(value) || value instanceof Error) return false
-  const proto = Object.getPrototypeOf(value)
-  return proto === Object.prototype || proto === null
-}
-
-// Fields the reporter owns; structured context must never overwrite them.
-const RESERVED_FIELDS = new Set(['timestamp', 'level', 'message', 'tag'])
-
-// Build the structured JSON entry for a Consola log object. Exported for tests.
-export function buildLogEntry(logObj: Pick<LogObject, 'type' | 'level' | 'args' | 'tag'>): Record<string, unknown> {
-  // Consola's numeric level is ambiguous (warn and error can share level 1),
-  // so prefer the semantic type; fall back to the numeric map, then 'info'.
-  const level = logObj.type || LEVEL_NAMES[logObj.level] || 'info'
-
-  const args = [...logObj.args]
-
-  // Pull a trailing plain object off the args as structured context.
-  let context: Record<string, unknown> | undefined
-  if (args.length > 0 && isPlainObject(args[args.length - 1])) {
-    context = args.pop() as Record<string, unknown>
-  }
-
-  const message = args
-    .map(arg => (typeof arg === 'string' ? arg : JSON.stringify(safeSerialize(arg))))
-    .join(' ')
-
-  const entry: Record<string, unknown> = {
-    timestamp: new Date().toISOString(),
-    level,
-    message,
-  }
-
-  if (logObj.tag) {
-    entry.tag = logObj.tag
-  }
-
-  // Merge structured context as top-level fields, protecting reserved keys.
-  if (context) {
-    for (const [key, value] of Object.entries(context)) {
-      if (RESERVED_FIELDS.has(key)) continue
-      entry[key] = safeSerialize(value)
-    }
-  }
-
-  return entry
-}
-
 // JSON reporter for production — writes one JSON line per log entry to stdout
 const jsonReporter = {
   log(logObj: LogObject) {
-    process.stdout.write(JSON.stringify(buildLogEntry(logObj)) + '\n')
+    const level = resolveLevel(logObj)
+    const message = logObj.args
+      .map(arg => (typeof arg === 'string' ? arg : JSON.stringify(safeSerialize(arg))))
+      .join(' ')
+
+    const entry: Record<string, unknown> = {
+      timestamp: new Date().toISOString(),
+      level,
+      message,
+    }
+
+    if (logObj.tag) {
+      entry.tag = logObj.tag
+    }
+
+    process.stdout.write(JSON.stringify(entry) + '\n')
   },
 }
 

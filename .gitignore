@@ -5,6 +5,7 @@
 .nitro
 .cache
 dist
+public/api/swagger-assets
 
 # Node dependencies
 node_modules
@@ -34,3 +35,4 @@ SHARED_SERVICES_ACCESS.md
 CLAUDE.md
 DEPLOYMENT_STEPS.md
 /.omc
+/aidlc-docs

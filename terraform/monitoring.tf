@@ -171,6 +171,23 @@ resource "aws_cloudwatch_log_metric_filter" "api_5xx" {
   }
 }
 
+# Recurring 5xx from the Inspector findings endpoint specifically. Provider calls
+# there fail as a burst (STS succeeds, upstream errors), so a dedicated filter on
+# the exact normalized request path isolates it from unrelated 5xx noise.
+resource "aws_cloudwatch_log_metric_filter" "inspector_findings_5xx" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-inspector-findings-5xx"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "{ $.type = \"request\" && $.path = \"/api/v1/security/inspector/findings\" && $.statusCode >= 500 }"
+
+  metric_transformation {
+    name          = "InspectorFindings5xxCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
 # Credential failures can leave the task alive while most AWS-backed pages fail.
 resource "aws_cloudwatch_log_metric_filter" "aws_credential_failure" {
   provider       = aws.target_deployment_account
@@ -249,6 +266,27 @@ resource "aws_cloudwatch_metric_alarm" "api_p95_latency" {
   }
 }
 
+resource "aws_cloudwatch_metric_alarm" "api_5xx_errors" {
+  provider            = aws.target_deployment_account
+  alarm_name          = "${var.app_name}-api-5xx-errors"
+  alarm_description   = "Application-level API 5XX errors exceeded 5 in 5 minutes"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "API5xxCount"
+  namespace           = "${var.app_name}/Application"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 5
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Application = var.app_name
+  }
+}
+
 resource "aws_cloudwatch_metric_alarm" "aws_credential_failures" {
   provider            = aws.target_deployment_account
   alarm_name          = "${var.app_name}-aws-credential-failures"
@@ -260,6 +298,27 @@ resource "aws_cloudwatch_metric_alarm" "aws_credential_failures" {
   period              = 300
   statistic           = "Sum"
   threshold           = 0
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Application = var.app_name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "inspector_findings_5xx" {
+  provider            = aws.target_deployment_account
+  alarm_name          = "${var.app_name}-inspector-findings-5xx"
+  alarm_description   = "Inspector findings endpoint returned 5xx at least 3 times in 5 minutes — recurring provider failure, not a single transient error"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "InspectorFindings5xxCount"
+  namespace           = "${var.app_name}/Application"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 3
   treat_missing_data  = "notBreaching"
 
   alarm_actions = [aws_sns_topic.alerts.arn]
@@ -396,6 +455,29 @@ resource "aws_cloudwatch_query_definition" "error_frequency" {
     filter level = "error" or level = "fatal"
     | stats count(*) as errors by bin(15m)
     | sort @timestamp desc
+  EOT
+}
+
+resource "aws_cloudwatch_query_definition" "top_error_signatures" {
+  provider        = aws.target_deployment_account
+  name            = "${var.app_name}/Top Error Signatures"
+  log_group_names = [aws_cloudwatch_log_group.ecs.name]
+
+  # Structured-field query: matches lowercase logger severities (level = "error"
+  # or "fatal") and structured API error events (type = "api_error"), since raw
+  # @message never contains uppercase "ERROR". Grouping keys are bounded,
+  # low-cardinality signature fields — requestId is surfaced in detail via an
+  # example only, so recurring signatures collapse into one row instead of
+  # exploding into per-request cardinality.
+  query_string = <<-EOT
+    filter level = "error" or level = "fatal" or type = "api_error"
+    | stats count(*) as occurrences,
+            earliest(@timestamp) as first_seen,
+            latest(@timestamp) as last_seen,
+            max(requestId) as example_requestId
+      by level, type, errorName, statusCode, path, message
+    | sort occurrences desc
+    | limit 50
   EOT
 }
 
@@ -544,7 +626,7 @@ resource "aws_cloudwatch_log_metric_filter" "bedrock_pricing_catalog_failure" {
   provider       = aws.target_deployment_account
   name           = "${var.app_name}-bedrock-pricing-catalog-failure"
   log_group_name = aws_cloudwatch_log_group.ecs.name
-  pattern        = "{ $.event = \"bedrock_pricing_catalog_failure\" }"
+  pattern        = "\"[AI Usage] Bedrock pricing catalog fetch failed\""
 
   metric_transformation {
     name          = "BedrockPricingCatalogFailureCount"
@@ -1139,5 +1221,107 @@ resource "aws_cloudwatch_query_definition" "mcp_oauth_refresh_failures" {
             sum(status = "failure") as failures
       by reason, bin(15m)
     | sort @timestamp desc
+  EOT
+}
+
+# Authoritative cost queries reject requests missing UnblendedCost, surfacing as
+# sparse HTTP 500s that fall under the ALB target-5xx alarm threshold. Alarm on
+# the exact validation signature so any occurrence pages immediately.
+resource "aws_cloudwatch_log_metric_filter" "cost_query_validation_failure" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-cost-query-validation-failure"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "\"UnblendedCost is required for authoritative cost queries\""
+
+  metric_transformation {
+    name          = "CostQueryValidationFailureCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "cost_query_validation_failures" {
+  provider            = aws.target_deployment_account
+  alarm_name          = "${var.app_name}-cost-query-validation-failures"
+  alarm_description   = "Cost query validation failures detected — authoritative query missing UnblendedCost"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "CostQueryValidationFailureCount"
+  namespace           = "${var.app_name}/Application"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Application = var.app_name
+  }
+}
+
+resource "aws_cloudwatch_query_definition" "api_5xx_by_endpoint_binned" {
+  provider        = aws.target_deployment_account
+  name            = "${var.app_name}/API 5XX Counts by Endpoint (5m)"
+  log_group_names = [aws_cloudwatch_log_group.ecs.name]
+
+  query_string = <<-EOT
+    filter type = "request" and statusCode >= 500
+    | stats count(*) as errors,
+            avg(durationMs) as avg_ms,
+            pct(durationMs, 95) as p95_ms
+      by method, path, bin(5m) as window
+    | sort window desc
+  EOT
+}
+
+# Count structured application records logged at error or fatal level.
+resource "aws_cloudwatch_log_metric_filter" "application_errors" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-application-errors"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "{ $.level = \"error\" || $.level = \"fatal\" }"
+
+  metric_transformation {
+    name          = "ApplicationErrorCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "application_errors_high" {
+  provider            = aws.target_deployment_account
+  alarm_name          = "${var.app_name}-application-errors-high"
+  alarm_description   = "Application error/fatal log records exceeded 5 in 5 minutes"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ApplicationErrorCount"
+  namespace           = "${var.app_name}/Application"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 5
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Application = var.app_name
+  }
+}
+
+resource "aws_cloudwatch_query_definition" "error_signatures" {
+  provider        = aws.target_deployment_account
+  name            = "${var.app_name}/Application Error Signatures"
+  log_group_names = [aws_cloudwatch_log_group.ecs.name]
+
+  query_string = <<-EOT
+    filter level in ["error", "fatal"]
+    | stats count(*) as occurrences by level, message
+    | sort occurrences desc
+    | limit 25
   EOT
 }

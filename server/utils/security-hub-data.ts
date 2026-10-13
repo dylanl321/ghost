@@ -180,6 +180,18 @@ function buildSecurityHubFilters(filters: SecurityHubDatasetFilters) {
       },
     ]
   }
+  if (filters.resourceIds && filters.resourceIds.length > 0) {
+    findingFilters.ResourceId = filters.resourceIds.map(resourceId => ({
+      Value: resourceId,
+      Comparison: 'EQUALS'
+    }))
+  }
+  if (filters.findingIds && filters.findingIds.length > 0) {
+    findingFilters.Id = filters.findingIds.map(findingId => ({
+      Value: findingId,
+      Comparison: 'EQUALS'
+    }))
+  }
 
   return findingFilters
 }
@@ -242,7 +254,7 @@ async function fetchFindingsForRegion(
         if (response.Findings) {
           for (const finding of response.Findings) {
             const accountName = accountNameMap.get(finding.AwsAccountId || '') || finding.AwsAccountId || 'Unknown'
-            findings.push(normalizeFinding(finding, accountName))
+            findings.push((options.format === 'asff' ? finding : normalizeFinding(finding, accountName)) as SecurityHubFindingRecord)
           }
         }
 
@@ -453,7 +465,7 @@ export async function querySecurityHubFindings(
 
   } catch (error) {
     logger.error('[SecurityHub] Failed to fetch findings', { error })
-    throw new Error(`Failed to fetch Security Hub findings: ${(error instanceof Error ? error.message : String(error))}`)
+    throw new Error(`Failed to fetch Security Hub findings: ${(error instanceof Error ? error.message : String(error))}`, { cause: error })
   }
 }
 

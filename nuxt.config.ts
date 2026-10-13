@@ -16,6 +16,11 @@ const entra_tenant_id = "7c5a26cf-ddf0-400c-9703-4070b4e3a54d";
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
+  routeRules: {
+    '/chat/mcp': { redirect: { to: '/mcp-connections', statusCode: 301 } },
+    '/chat/mcp/details': { redirect: { to: '/mcp-connections/details', statusCode: 301 } },
+    '/support/mcp': { redirect: { to: '/mcp-connections', statusCode: 301 } },
+  },
   compatibilityDate: "2025-07-15",
   devtools: { enabled: false },
 
@@ -105,8 +110,6 @@ export default defineNuxtConfig({
   runtimeConfig: {
     // Server-side only (not exposed to client)
     changelogContent,
-    strandsServerUrl: process.env.STRANDS_SERVER_URL || '',
-    strandsTimeout: parseInt(process.env.STRANDS_TIMEOUT || '30000', 10),
 
     // Admin Notifications
     adminNotificationEmails: process.env.ADMIN_NOTIFICATION_EMAILS || 'dylan.lewis@gd-ms.com',

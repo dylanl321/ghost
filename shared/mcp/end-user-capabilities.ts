@@ -72,14 +72,13 @@ export const endUserMcpCapabilityGroups: McpCapabilityGroup[] = [
   },
   {
     id: 'personal', label: 'Personal workspace', icon: 'i-heroicons-folder-open',
-    description: 'Use your private account context, notification inbox, reports, exports, preferences, and chat threads.',
+    description: 'Use your private account context, notification inbox, reports, exports, and preferences.',
     tools: [
       { name: 'ghost.accounts.personal_context', description: 'Resolve your favorite and recently viewed accounts to current GHOST metadata.', mode: 'Read' },
       { name: 'ghost.notifications.list', description: 'Read your GHOST notification inbox.', mode: 'Read' },
       { name: 'ghost.notifications.action', description: 'Mark, archive, mute, or unmute your notifications.', mode: 'Create' },
       { name: 'ghost.reports.list', description: 'List your reports and recent exports.', mode: 'Read' },
       { name: 'ghost.reports.cancel_export', description: 'Cancel one of your queued or running exports.', mode: 'Create' },
-      { name: 'ghost.chat_threads.list', description: 'List your GHOST chat threads.', mode: 'Read' },
       { name: 'ghost.evidence.create', description: 'Create a private evidence bundle with a 90-day retention period.', mode: 'Create' }
     ]
   },

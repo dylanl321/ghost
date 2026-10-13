@@ -1,0 +1,12 @@
+{
+  "runId": "run-fake-0001",
+  "investigationId": "inv-fake-0001",
+  "author": {
+    "tenantId": "tenant-fake-0001",
+    "entraObjectId": "obj-fake-operator-a"
+  },
+  "gatewayId": "gw-fake-workstation-1",
+  "parentCheckpointId": "cp-fake-0007",
+  "state": "active",
+  "startedAt": "2024-01-02T03:05:00Z"
+}

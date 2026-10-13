@@ -1,0 +1,18 @@
+{
+  "localInvestigationId": "local-inv-fake-77",
+  "slotKey": "slot-fake-abc",
+  "sharedInvestigationId": "inv-fake-0001",
+  "runId": "run-fake-0001",
+  "destination": {
+    "tenantId": "tenant-fake-0001",
+    "subjectObjectId": "obj-fake-operator-a",
+    "spaceId": "space-0000-fake-aaaa",
+    "sourceBindingId": "binding-fake-jira-01"
+  },
+  "creationOperationId": "op-fake-create-1",
+  "startupOperationId": "op-fake-startup-1",
+  "submissionId": "sub-fake-0001",
+  "submissionPromptHash": "2222222222222222222222222222222222222222222222222222222222222222",
+  "submissionState": "accepted",
+  "allocationState": "submitted"
+}

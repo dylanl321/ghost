@@ -31,14 +31,9 @@ export interface DynamoDBConfig {
   externalAccounts: DynamoDBTableConfig
   userPreferences: DynamoDBTableConfig
   accountNotes: DynamoDBTableConfig
-  chatThreads: DynamoDBTableConfig
-  chatMessages: DynamoDBTableConfig
   siteConfig: DynamoDBTableConfig
   adminNotifications: DynamoDBTableConfig
-  streamingMetrics: DynamoDBTableConfig
-  asyncChatJobs: DynamoDBTableConfig
   datasetExportJobs: DynamoDBTableConfig
-  asyncMetrics: DynamoDBTableConfig
   aiUsage: DynamoDBTableConfig
   budgetAlerts: DynamoDBTableConfig
   budgetAlertConfig: DynamoDBTableConfig
@@ -90,6 +85,16 @@ export function mergeDynamoDBConfig(
 ): DynamoDBConfig {
   const merged = { ...defaults, ...configured }
 
+  // ECS supplies the deployed table names; older secrets still name the dev tables.
+  for (const [key, tableName] of [
+    ['apiKeys', process.env.DYNAMODB_API_KEYS_TABLE],
+    ['apiKeysUsage', process.env.DYNAMODB_API_KEY_USAGE_TABLE]
+  ] as const) {
+    if (tableName) {
+      merged[key] = { ...defaults[key], ...configured[key], tableName }
+    }
+  }
+
   for (const key of BUDGET_ALERT_CONFIG_KEYS) {
     merged[key] = {
       ...defaults[key],
@@ -108,43 +113,31 @@ let cachedConfig: DynamoDBConfig | null = null
 let configLoadedAt: number | null = null
 const CONFIG_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
-// The config cache reloads every 5 minutes; without this, a stale partial
-// secret re-emits the same fallback warning on every reload. Track the last
-// warned missing-key signature so we warn at most once per process for an
-// unchanged set of missing keys (and again only if the signature changes).
-let lastMissingKeysSignature: string | null = null
+// The config cache refreshes every 5 minutes, so a stale secret would log the
+// same missing-key warning repeatedly. Suppress it per process once we've
+// warned for a given sorted missing-key set; a changed set warns once more.
+let lastMissingKeysFingerprint: string | null = null
 
 /**
- * Emit the partial-secret fallback warning at most once per process for an
- * unchanged missing-key signature. Returns true when a warning was emitted.
- * This is a warning (an intentional, functional fallback), never an error.
+ * Redacted, non-sensitive diagnostic describing the most recent config load.
+ *
+ * Contains ONLY the resolution source, the names of config keys the secret was
+ * missing (which are static table keys like "userNotifications", never secret
+ * values or table contents), the missing-key count, and the load time. Safe to
+ * expose on an admin readiness endpoint.
  */
-export function warnPartialSecretFallback(missingKeys: string[]): boolean {
-  if (missingKeys.length === 0) return false
-
-  const signature = [...missingKeys].sort().join(',')
-  if (signature === lastMissingKeysSignature) return false
-  lastMissingKeysSignature = signature
-
-  logger.warn(
-    `DynamoDB config from secret was missing ${missingKeys.length} table key(s); ` +
-    `using env defaults for: ${missingKeys.join(', ')}`,
-    {
-      event: 'dynamodb_config_fallback',
-      missingKeyCount: missingKeys.length,
-      missingKeys,
-      configSource: 'secrets-manager',
-      fallbackSource: 'env-defaults'
-    }
-  )
-  return true
+export interface DynamoDBConfigDiagnostic {
+  source: 'development-env' | 'dynamodb-config-env' | 'secrets-manager' | 'env-defaults'
+  missingKeyCount: number
+  missingKeys: string[]
+  loadedAt: string | null
 }
 
-/**
- * Reset the fallback-warning dedupe state (useful for testing).
- */
-export function resetPartialSecretFallbackWarning(): void {
-  lastMissingKeysSignature = null
+let configDiagnostic: DynamoDBConfigDiagnostic = {
+  source: 'env-defaults',
+  missingKeyCount: 0,
+  missingKeys: [],
+  loadedAt: null
 }
 
 /**
@@ -288,18 +281,6 @@ function loadFromEnvironment(): DynamoDBConfig {
       region: govCloudRegion,
       accountId: deploymentAccountId
     },
-    chatThreads: {
-      tableName: process.env.CHAT_THREADS_TABLE_NAME || 'ghost-chat-threads',
-      environment: 'govcloud',
-      region: govCloudRegion,
-      accountId: deploymentAccountId
-    },
-    chatMessages: {
-      tableName: process.env.CHAT_MESSAGES_TABLE_NAME || 'ghost-chat-messages',
-      environment: 'govcloud',
-      region: govCloudRegion,
-      accountId: deploymentAccountId
-    },
     siteConfig: {
       tableName: process.env.SITE_CONFIG_TABLE || 'ghost-site-config',
       environment: 'govcloud',
@@ -312,26 +293,8 @@ function loadFromEnvironment(): DynamoDBConfig {
       region: govCloudRegion,
       accountId: deploymentAccountId
     },
-    streamingMetrics: {
-      tableName: process.env.STREAMING_METRICS_TABLE_NAME || 'ghost-streaming-metrics',
-      environment: 'govcloud',
-      region: govCloudRegion,
-      accountId: deploymentAccountId
-    },
-    asyncChatJobs: {
-      tableName: process.env.AWS_ASYNC_JOBS_TABLE_NAME || 'ghost-async-chat-jobs',
-      environment: 'govcloud',
-      region: govCloudRegion,
-      accountId: deploymentAccountId
-    },
     datasetExportJobs: {
       tableName: process.env.DATASET_EXPORT_JOBS_TABLE_NAME || 'ghost-dataset-export-jobs',
-      environment: 'govcloud',
-      region: govCloudRegion,
-      accountId: deploymentAccountId
-    },
-    asyncMetrics: {
-      tableName: process.env.AWS_ASYNC_METRICS_TABLE_NAME || 'ghost-async-metrics',
       environment: 'govcloud',
       region: govCloudRegion,
       accountId: deploymentAccountId
@@ -434,6 +397,12 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
   if (nodeEnv === 'development' || nodeEnv === 'dev') {
     cachedConfig = envConfig
     configLoadedAt = Date.now()
+    configDiagnostic = {
+      source: 'development-env',
+      missingKeyCount: 0,
+      missingKeys: [],
+      loadedAt: new Date(configLoadedAt).toISOString()
+    }
     logger.info('Using DynamoDB configuration from environment variables (development mode)')
     return envConfig
   }
@@ -461,21 +430,69 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
     }
 
     // Warn if the secret was missing keys the defaults supplied (signals a
-    // stale secret that should be refreshed), so the gap is observable.
+    // stale secret that should be refreshed), so the gap is observable. Sort
+    // the keys for a stable fingerprint/message and log only once per process
+    // for an unchanged missing-key set to avoid flooding on each cache refresh.
     const missingKeys = (Object.keys(envConfig) as (keyof DynamoDBConfig)[])
       .filter(k => !(k in secretsConfig))
-    warnPartialSecretFallback(missingKeys as string[])
+      .sort()
+      .map(k => String(k))
+
+    const source: DynamoDBConfigDiagnostic['source'] =
+      process.env.DYNAMODB_CONFIG ? 'dynamodb-config-env' : 'secrets-manager'
+
+    if (missingKeys.length > 0) {
+      const fingerprint = missingKeys.join(',')
+      if (fingerprint !== lastMissingKeysFingerprint) {
+        lastMissingKeysFingerprint = fingerprint
+        logger.warn(
+          `DynamoDB config from secret was missing ${missingKeys.length} table key(s); ` +
+          `using env defaults for: ${missingKeys.join(', ')}. ` +
+          `Regenerate the DynamoDB config secret to include these keys.`
+        )
+      }
+    } else {
+      lastMissingKeysFingerprint = null
+    }
 
     cachedConfig = mergedConfig
     configLoadedAt = Date.now()
+    configDiagnostic = {
+      source,
+      missingKeyCount: missingKeys.length,
+      missingKeys,
+      loadedAt: new Date(configLoadedAt).toISOString()
+    }
     return mergedConfig
   }
 
   // No secret available — use env defaults directly.
   cachedConfig = envConfig
   configLoadedAt = Date.now()
+  configDiagnostic = {
+    source: 'env-defaults',
+    missingKeyCount: 0,
+    missingKeys: [],
+    loadedAt: new Date(configLoadedAt).toISOString()
+  }
 
   return envConfig
+}
+
+/**
+ * Redacted diagnostic for the most recent DynamoDB config load.
+ *
+ * Returns a defensive copy exposing only non-sensitive signals (source,
+ * missing config-key names, count, load time) for observability/readiness
+ * surfaces. Never contains secret values or table contents.
+ */
+export function getDynamoDBConfigDiagnostic(): DynamoDBConfigDiagnostic {
+  return {
+    source: configDiagnostic.source,
+    missingKeyCount: configDiagnostic.missingKeyCount,
+    missingKeys: [...configDiagnostic.missingKeys],
+    loadedAt: configDiagnostic.loadedAt
+  }
 }
 
 /**
@@ -484,6 +501,12 @@ export async function getDynamoDBConfig(): Promise<DynamoDBConfig> {
 export function clearConfigCache(): void {
   cachedConfig = null
   configLoadedAt = null
+  configDiagnostic = {
+    source: 'env-defaults',
+    missingKeyCount: 0,
+    missingKeys: [],
+    loadedAt: null
+  }
 }
 
 // Track which tables have been logged to avoid duplicate logs

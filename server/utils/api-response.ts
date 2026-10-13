@@ -3,10 +3,11 @@
  * Standardized response formatting and error handling
  */
 
-import { setResponseStatus, getQuery } from 'h3'
+import { setResponseStatus, getQuery, getRequestURL } from 'h3'
 import type { H3Event } from 'h3'
 import type { APIResponse, PaginatedResponse } from '../types'
 import { logger } from './logger'
+import { buildApiErrorEntry } from './request-telemetry'
 
 /**
  * Send a successful response
@@ -153,12 +154,34 @@ export function handleAsync<T extends (...args: any[]) => Promise<any>>(fn: T): 
       return await fn(...args)
     } catch (error: any) {
       const event = args[0] as H3Event
-      
+
+      // Preserve intentional H3/createError responses (401/403/404/409/etc.) so
+      // typed status codes are not masked as a generic 500. These carry an
+      // explicit numeric `statusCode` set by the caller (e.g. createError).
+      if (error && typeof error.statusCode === 'number') {
+        throw error
+      }
+
+      // Emit a top-level structured error event to stdout for CloudWatch
+      // correlation (consistent with the request-timing telemetry). Wrapped
+      // so telemetry can never mask the original error/response.
+      try {
+        const entry = buildApiErrorEntry({
+          requestId: event?.context?.requestId,
+          method: event?.method,
+          path: getRequestURL(event).pathname,
+          error,
+        })
+        process.stdout.write(JSON.stringify(entry) + '\n')
+      } catch {
+        // Best-effort telemetry only.
+      }
+
       // Check if it's an AWS error
       if (error.$metadata) {
         return errors.awsError(event, error)
       }
-      
+
       // Generic error handling
       logger.error('API Error:', error)
       return errors.serverError(event, error.message || 'An unexpected error occurred')
