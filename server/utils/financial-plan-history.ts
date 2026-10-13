@@ -3,6 +3,7 @@ import { marshall } from '@aws-sdk/util-dynamodb'
 import { getDynamoDBClient } from '../lib/aws-client-factory'
 import { getDynamoDBConfig } from '../lib/dynamodb-config'
 import { getItem, queryItems } from './dynamodb'
+import { logger } from './logger'
 
 export type FinancialPlanChangeType = 'manual-save' | 'forecast-generated' | 'reverted'
 
@@ -83,13 +84,43 @@ export async function saveFinancialPlan(input: {
 }
 
 export async function getFinancialPlanHistory(department: string, year: number) {
-  const config = await getDynamoDBConfig()
-  const table = config.financialPlanHistory
-  const response = await queryItems({
-    tableName: table.tableName,
-    queryExpression: 'pk = :pk',
-    expressionAttributeValues: { ':pk': financialPlanKey(department, year) },
-    scanIndexForward: false
-  }, table.environment, table.accountId)
-  return response.items as FinancialPlanHistoryEntry[]
+  const startedAt = Date.now()
+  let table: Awaited<ReturnType<typeof getDynamoDBConfig>>['financialPlanHistory'] | undefined
+  try {
+    const config = await getDynamoDBConfig()
+    table = config.financialPlanHistory
+    const response = await queryItems({
+      tableName: table.tableName,
+      queryExpression: 'pk = :pk',
+      expressionAttributeValues: { ':pk': financialPlanKey(department, year) },
+      scanIndexForward: false
+    }, table.environment, table.accountId)
+    logger.debug('financial_plan_history_read_succeeded', {
+      signature: 'financial_plan_history_read_succeeded',
+      operation: 'query',
+      department: department.slice(0, 32),
+      year,
+      tableName: table.tableName,
+      environment: table.environment,
+      accountId: table.accountId,
+      count: response.items.length,
+      durationMs: Date.now() - startedAt
+    })
+    return response.items as FinancialPlanHistoryEntry[]
+  } catch (error) {
+    const candidate = error as { name?: unknown, message?: unknown }
+    logger.error('financial_plan_history_read_failed', {
+      signature: 'financial_plan_history_read_failed',
+      operation: 'query',
+      department: department.slice(0, 32),
+      year,
+      tableName: table?.tableName,
+      environment: table?.environment,
+      accountId: table?.accountId,
+      errorName: typeof candidate?.name === 'string' ? candidate.name.slice(0, 80) : 'UnknownError',
+      errorMessage: typeof candidate?.message === 'string' ? candidate.message.slice(0, 500) : 'Unknown error',
+      durationMs: Date.now() - startedAt
+    })
+    throw error
+  }
 }
