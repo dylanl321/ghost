@@ -12,18 +12,7 @@ import { defineEventHandler, getRequestHeader, getRequestURL, setResponseHeader 
 import { isAnyJobRunning, getActiveJobs } from '../utils/job-tracker'
 import { resolveRequestId } from '../utils/request-id'
 
-// Normalize dynamic path segments for Log Insights grouping
-function normalizePath(path: string): string {
-  return path
-    // Strip query string
-    .split('?')[0]
-    // Replace UUIDs (8-4-4-4-12 hex)
-    .replace(/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '/:id')
-    // Replace long hex strings (8+ chars)
-    .replace(/\/[0-9a-f]{8,}/gi, '/:id')
-    // Replace pure numeric segments
-    .replace(/\/\d+/g, '/:num')
-}
+import { normalizePath } from '../utils/request-telemetry'
 
 export default defineEventHandler((event) => {
   const url = getRequestURL(event)
