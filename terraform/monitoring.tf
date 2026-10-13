@@ -249,6 +249,27 @@ resource "aws_cloudwatch_metric_alarm" "api_p95_latency" {
   }
 }
 
+resource "aws_cloudwatch_metric_alarm" "api_5xx_errors" {
+  provider            = aws.target_deployment_account
+  alarm_name          = "${var.app_name}-api-5xx-errors"
+  alarm_description   = "Application-level API 5XX errors exceeded 5 in 5 minutes"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "API5xxCount"
+  namespace           = "${var.app_name}/Application"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 5
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Application = var.app_name
+  }
+}
+
 resource "aws_cloudwatch_metric_alarm" "aws_credential_failures" {
   provider            = aws.target_deployment_account
   alarm_name          = "${var.app_name}-aws-credential-failures"
