@@ -220,7 +220,7 @@ test('resetOAuthAlertSettings resets the alert keys and returns defaults', async
   const { deps, store } = fakeDeps({
     [OAUTH_ALERT_SETTING_KEYS.enabled]: true,
     [OAUTH_ALERT_SETTING_KEYS.recipientsRef]: 'none',
-    'features.strandsChat.enabled': true // an unrelated key must be untouched
+    'features.reportScheduler.enabled': true // an unrelated key must be untouched
   })
   const settings = await resetOAuthAlertSettings(access(), 'act_test', deps)
 
@@ -234,7 +234,7 @@ test('resetOAuthAlertSettings resets the alert keys and returns defaults', async
     assert.equal(store.has(key), false, `alert key not reset: ${key}`)
   }
   // …and the unrelated non-OAuth key was left alone.
-  assert.equal(store.get('features.strandsChat.enabled'), true)
+  assert.equal(store.get('features.reportScheduler.enabled'), true)
 })
 
 // --- bypass-closure predicate (Req 15.3) -----------------------------------
@@ -244,7 +244,7 @@ test('isOAuthAlertSettingKey identifies exactly the oauth.alerts.* keys', () => 
   assert.equal(isOAuthAlertSettingKey('oauth.alerts.thresholds'), true)
   assert.equal(isOAuthAlertSettingKey('oauth.alerts.recipientsRef'), true)
   // A non-OAuth key is not protected.
-  assert.equal(isOAuthAlertSettingKey('features.strandsChat.enabled'), false)
+  assert.equal(isOAuthAlertSettingKey('features.reportScheduler.enabled'), false)
   assert.equal(isOAuthAlertSettingKey('ui.siteName'), false)
 })
 

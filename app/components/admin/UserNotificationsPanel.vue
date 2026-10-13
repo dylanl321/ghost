@@ -116,7 +116,6 @@ const categoryOptions = [
   { label: 'Pipeline', value: 'PIPELINE_FAILURE' },
   { label: 'Deployment', value: 'DEPLOYMENT' },
   { label: 'Report', value: 'REPORT_READY' },
-  { label: 'AI Chat', value: 'CHAT_COMPLETE' },
   { label: 'System', value: 'SYSTEM' }
 ]
 

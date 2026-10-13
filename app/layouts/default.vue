@@ -27,7 +27,7 @@
       </ClientOnly>
 
       <!-- Main Content Area -->
-      <main 
+      <main
         class="flex-1 min-h-0 flex flex-col bg-[var(--ghost-bg)] dark:bg-slate-900"
         :class="isExplorerPage ? 'overflow-hidden' : 'pt-4 md:pt-4 overflow-auto'"
       >
@@ -56,12 +56,9 @@
             <NuxtLink to="/changelog" class="text-xs hover:text-primary transition-colors">v{{ $config.public.appVersion }}</NuxtLink>
           </div>
 
-          <!-- Right: Feedback & Active Queries -->
+          <!-- Right: Feedback -->
           <div class="flex items-center gap-3">
-            <!-- Active Queries Indicator (with popover) -->
-            <ClientOnly>
-              <ActiveQueriesIndicator />
-            </ClientOnly>
+
 
             <FeedbackModal />
           </div>
@@ -69,11 +66,8 @@
       </footer>
     </div>
 
-    <!-- Global AI Assistant -->
+    <!-- Development options -->
     <ClientOnly>
-      <ChatThreadsSidebar
-        v-if="siteConfigStore.isStrandsChatEnabled"
-      />
 
       <!-- Dev Options Panel (only shows in dev auth mode) -->
       <DevOptionsPanel />
@@ -106,12 +100,7 @@ const showWhatsNew = ref(false)
 const preferences = useUserPreferences()
 const currentVersion = useRuntimeConfig().public.appVersion
 
-// Initialize streaming notifications monitoring (background polling for chat queries)
-const { startMonitoring } = useStreamingNotifications()
-
-// Start monitoring on mount
 onMounted(async () => {
-  startMonitoring()
 
   // Ensure user preferences are loaded before checking dismissed state
   if (!preferences.initialized.value) {
@@ -152,8 +141,7 @@ function onWhatsNewDismiss() {
 // Detect full-height pages that need special layout (no padding, overflow handled by page)
 const isExplorerPage = computed(() =>
   route.path === '/account/explorer' ||
-  route.path === '/reports/datasets' ||
-  route.path === '/chat'
+  route.path === '/reports/datasets'
 )
 
 // Mobile menu handler

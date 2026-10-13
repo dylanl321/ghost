@@ -502,8 +502,13 @@ export async function batchPutItems(
     }
   }
   
-  logger.error(`Batch put completed: ${processedCount} processed, ${failedCount} failed`)
-  
+  const completionSummary = `Batch put completed: ${processedCount} processed, ${failedCount} failed`
+  if (failedCount > 0) {
+    logger.error(completionSummary)
+  } else {
+    logger.info(completionSummary)
+  }
+
   return results
 }
 

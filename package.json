@@ -28,7 +28,6 @@
     "check:lint:fix": "eslint . --ext .ts,.vue,.js --fix",
     "check:unused": "ts-prune --project tsconfig.json",
     "check:deps": "depcheck --ignores=\"@nuxt/*,nuxt-*,@types/*,eslint,typescript\"",
-    "test:chat": "tsx --test tests/chat/*.test.ts",
     "test:mcp": "tsx --test tests/mcp/*.test.ts",
     "test:kirocrew": "tsx --test tests/kirocrew/*.test.ts",
     "test:vmaas": "tsx --test tests/vmaas/*.test.ts",
@@ -37,7 +36,8 @@
     "contract:shared-investigations:sync": "tsx tests/shared-investigations/sync-contract.ts",
     "contract:shared-investigations:check": "tsx tests/shared-investigations/sync-contract.ts --check",
     "test:budget-recipients": "tsx --test server/utils/__tests__/manual-budget-alert-recipients.test.ts",
-    "changelog:generate": "tsx scripts/generate-changelog.ts"
+    "changelog:generate": "tsx scripts/generate-changelog.ts",
+    "test:shared-content": "tsx --test tests/shared-content/*.test.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^7.3.4",
@@ -100,7 +100,6 @@
     "eslint": "^10.8.0",
     "exceljs": "^4.4.0",
     "fuse.js": "^7.5.0",
-    "got": "^14.6.6",
     "gray-matter": "^4.0.3",
     "html2canvas": "^1.4.1",
     "isomorphic-dompurify": "3.22.0",

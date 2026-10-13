@@ -80,14 +80,27 @@ code_quality_check:
       fi
       export NODE_EXTRA_CA_CERTS="$CI_SERVER_TLS_CA_FILE"
       npm config set cafile "$CI_SERVER_TLS_CA_FILE"
-    - npm install -g npm@11.18.0
+      # Route installs through the internal TOS-npm proxy and rewrite only the
+      # lockfile's registry.npmjs.org resolved URLs to it, since the runner
+      # cannot reach registry.npmjs.org (UNABLE_TO_GET_ISSUER_CERT_LOCALLY).
+      # "npmjs" (not "always") leaves lockfile URLs that already point at Nexus
+      # untouched; "always" re-prefixed them, producing duplicated
+      # .../repository/TOS-npm/repository/TOS-npm/... paths that 404'd.
+      npm config set registry "https://nexus.engapps.gd-ms.us/repository/TOS-npm/"
+      npm config set replace-registry-host npmjs
+    # Use the npm bundled with the pinned node image. The previous global
+    # upgrade (npm install -g npm@11.18.0) reached registry.npmjs.org and failed
+    # with UNABLE_TO_GET_ISSUER_CERT_LOCALLY; the bundled npm installs this
+    # lockfile fine once installs route through the internal TOS-npm registry
+    # above, and keeps CA validation/strict SSL intact.
+    - npm --version
     - npm ci --legacy-peer-deps --no-audit --no-fund
   script:
     - echo "Running code quality checks for feature branch $CI_COMMIT_REF_NAME"
 
     # The parallel Docker job verifies the complete production build.
     - echo "Running automated tests..."
-    - npm run test:chat
+    - npm run test:shared-content
 
     # TypeScript strict checking (non-blocking until existing errors are resolved)
     - echo "Checking TypeScript types..."

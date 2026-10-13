@@ -8,21 +8,21 @@ icon: i-heroicons-link
 
 GHOST can connect directly to the Codex desktop app or Codex CLI through Model Context Protocol (MCP). The connection uses your GHOST identity and the AWS account access already assigned to you.
 
-Open [MCP Connections](/chat/mcp) to get the current server URL and commands for this GHOST environment.
+Open [MCP Connections](/mcp-connections) to get the current server URL and commands for this GHOST environment.
 
 ## Configure the Codex desktop app
 
 1. In Codex, open **Settings**.
 2. Select **Plugins**, choose **MCP**, then open **Custom**.
 3. Create a custom MCP connection named **GHOST**.
-4. Copy the server URL from [MCP Connections](/chat/mcp) and paste it into the server URL field.
+4. Copy the server URL from [MCP Connections](/mcp-connections) and paste it into the server URL field.
 5. Save the connection.
 6. Complete the GHOST sign-in and authorization when Codex prompts you.
 7. Confirm that GHOST is connected, then open a new Codex task.
 
 ## Configure the Codex CLI
 
-Use the generated commands on [MCP Connections](/chat/mcp). The equivalent flow is:
+Use the generated commands on [MCP Connections](/mcp-connections). The equivalent flow is:
 
     codex mcp add ghost --url <server-url> --oauth-resource <server-url>
     codex mcp login ghost
@@ -41,8 +41,8 @@ To sign out or remove the connection:
 Codex receives only the GHOST capabilities shown on the authorization screen. These can include:
 
 - Reading AWS account details, costs, access, security findings, resources, and pipeline activity available to you
-- Using GHOST AI insights and chat
-- Managing your own GHOST preferences, chat threads, reports, and exports
+- Using GHOST AI insights and troubleshooting
+- Managing your own GHOST preferences, reports, and exports
 - Requesting short-lived AWS role credentials for roles already assigned to you
 
 Connecting Codex does not grant access to additional AWS accounts or roles. Credential issuance requires a separate confirmation and the credentials should remain process-local.
@@ -70,7 +70,7 @@ An authorization is valid for 90 days. Reconnecting replaces rejected or legacy 
 ### GHOST does not appear in Codex
 
 - Confirm the custom connection is enabled.
-- Confirm the server URL exactly matches the value on [MCP Connections](/chat/mcp), including <code>/mcp</code>.
+- Confirm the server URL exactly matches the value on [MCP Connections](/mcp-connections), including <code>/mcp</code>.
 - In the CLI, run <code>codex mcp get ghost --json</code> and <code>codex mcp list</code>.
 - Remove and recreate the connection if its saved URL is incorrect.
 
@@ -79,7 +79,7 @@ An authorization is valid for 90 days. Reconnecting replaces rejected or legacy 
 - Confirm GHOST is connected and authenticated.
 - Refresh the MCP connection if Codex offers that action.
 - Start a new Codex task after refreshing. Existing tasks may retain the earlier tool catalog.
-- Review the [GHOST tool catalog](/chat/mcp/details) to confirm that the capability exists.
+- Review the [GHOST tool catalog](/mcp-connections/details) to confirm that the capability exists.
 
 ### The authorization page does not open
 
@@ -124,7 +124,7 @@ Do not include OAuth tokens, refresh tokens, session cookies, AWS access keys, s
 
 ## Get help
 
-1. Review [MCP Connections](/chat/mcp) and verify the saved URL and sign-in state.
+1. Review [MCP Connections](/mcp-connections) and verify the saved URL and sign-in state.
 2. Try the recovery steps above in a new Codex task.
 3. Use the [GHOST Support page](/support) to open a ServiceNow ticket or contact the support team.
 4. Include the safe diagnostics listed above.
