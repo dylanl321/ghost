@@ -16,9 +16,27 @@ interface CatalogEntry {
   loadedAt: number
 }
 
+interface CatalogFailure {
+  failedAt: number
+  retryAfterMs: number
+}
+
 const catalogCache = new Map<string, CatalogEntry>()
 const catalogLoads = new Map<string, Promise<TokenRate[]>>()
+// Region-scoped negative cache so one catalog outage does not refetch/log per model.
+const catalogFailures = new Map<string, CatalogFailure>()
 const CATALOG_TTL_MS = 24 * 60 * 60 * 1000
+const CATALOG_FETCH_TIMEOUT_MS = 5_000
+const CATALOG_FAILURE_BACKOFF_MS = 5 * 60 * 1000 // 5 minutes
+
+// Thrown when a region is inside its failure backoff window. Distinct from a
+// real fetch error so callers can stay silent (the failure was already logged).
+class CatalogUnavailableError extends Error {
+  constructor(region: string) {
+    super(`Bedrock pricing catalog unavailable for ${region} (backoff)`)
+    this.name = 'CatalogUnavailableError'
+  }
+}
 
 function normalizedModel(value: string): string {
   return value
@@ -50,6 +68,14 @@ function tokensPerUnit(unit: string): number {
 async function loadCatalog(region: string): Promise<TokenRate[]> {
   const cached = catalogCache.get(region)
   if (cached && Date.now() - cached.loadedAt < CATALOG_TTL_MS) return cached.rates
+
+  // Inside the backoff window, fail fast without refetching or logging so a
+  // single catalog outage does not produce one fetch/warning per model.
+  const failure = catalogFailures.get(region)
+  if (failure && Date.now() - failure.failedAt < failure.retryAfterMs) {
+    throw new CatalogUnavailableError(region)
+  }
+
   const activeLoad = catalogLoads.get(region)
   if (activeLoad) return activeLoad
 
@@ -63,35 +89,50 @@ async function loadCatalog(region: string): Promise<TokenRate[]> {
 }
 
 async function loadCatalogFromAWS(region: string): Promise<TokenRate[]> {
-  const rates: TokenRate[] = []
   const url = `https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current/${encodeURIComponent(region)}/index.json`
-  const response = await fetch(url)
-  if (!response.ok) throw new Error(`AWS Price List returned ${response.status} for ${region}`)
-  const catalog = await response.json() as any
 
-  for (const [sku, product] of Object.entries(catalog.products || {}) as [string, any][]) {
-    const attributes = product.attributes || {}
-    const tokenKind = classifyUsageType(attributes.usagetype || '')
-    if (!tokenKind || !attributes.servicename) continue
-    const onDemand = catalog.terms?.OnDemand?.[sku] || {}
-    for (const term of Object.values(onDemand) as any[]) {
-      for (const dimension of Object.values(term.priceDimensions || {}) as any[]) {
-        const price = Number.parseFloat(dimension.pricePerUnit?.USD || '')
-        if (!Number.isFinite(price)) continue
-        rates.push({
-          modelName: attributes.servicename,
-          normalizedModel: normalizedModel(attributes.servicename),
-          tokenKind,
-          price,
-          tokensPerUnit: tokensPerUnit(dimension.unit || ''),
-          effectiveDate: term.effectiveDate
-        })
+  try {
+    const rates: TokenRate[] = []
+    const response = await fetch(url, { signal: AbortSignal.timeout(CATALOG_FETCH_TIMEOUT_MS) })
+    if (!response.ok) throw new Error(`AWS Price List returned ${response.status} for ${region}`)
+    const catalog = await response.json() as any
+
+    for (const [sku, product] of Object.entries(catalog.products || {}) as [string, any][]) {
+      const attributes = product.attributes || {}
+      const tokenKind = classifyUsageType(attributes.usagetype || '')
+      if (!tokenKind || !attributes.servicename) continue
+      const onDemand = catalog.terms?.OnDemand?.[sku] || {}
+      for (const term of Object.values(onDemand) as any[]) {
+        for (const dimension of Object.values(term.priceDimensions || {}) as any[]) {
+          const price = Number.parseFloat(dimension.pricePerUnit?.USD || '')
+          if (!Number.isFinite(price)) continue
+          rates.push({
+            modelName: attributes.servicename,
+            normalizedModel: normalizedModel(attributes.servicename),
+            tokenKind,
+            price,
+            tokensPerUnit: tokensPerUnit(dimension.unit || ''),
+            effectiveDate: term.effectiveDate
+          })
+        }
       }
     }
-  }
 
-  catalogCache.set(region, { rates, loadedAt: Date.now() })
-  return rates
+    catalogCache.set(region, { rates, loadedAt: Date.now() })
+    catalogFailures.delete(region)
+    return rates
+  } catch (error) {
+    // Open the backoff window and emit exactly one structured warning for this
+    // actual failed fetch. Subsequent per-model calls fail fast and stay silent.
+    catalogFailures.set(region, { failedAt: Date.now(), retryAfterMs: CATALOG_FAILURE_BACKOFF_MS })
+    logger.warn('[AI Usage] Bedrock pricing catalog fetch failed', {
+      event: 'bedrock_pricing_catalog_failure',
+      region,
+      retryAfterMs: CATALOG_FAILURE_BACKOFF_MS,
+      error: error instanceof Error ? { name: error.name, message: error.message } : String(error)
+    })
+    throw error
+  }
 }
 
 function matchRate(rates: TokenRate[], modelId: string, tokenKind: TokenKind): TokenRate | undefined {
@@ -155,8 +196,10 @@ export async function estimateBedrockTokenCost(input: {
       coveragePercent: totalTokens ? (pricedTokens / totalTokens) * 100 : null,
       priceEffectiveDate
     }
-  } catch (error) {
-    logger.warn(`[AI Usage] Bedrock price lookup failed for ${input.modelId} in ${input.region}:`, error)
+  } catch {
+    // The catalog fetch failure (if any) is logged once in loadCatalogFromAWS
+    // and negatively cached, so we must not log a duplicate per-model warning
+    // here. Retain the zero-cost fallback.
     return { estimatedCost: 0, pricedTokens: 0, totalTokens, coveragePercent: 0 }
   }
 }
@@ -164,4 +207,5 @@ export async function estimateBedrockTokenCost(input: {
 export function clearAIUsagePricingCache(): void {
   catalogCache.clear()
   catalogLoads.clear()
+  catalogFailures.clear()
 }

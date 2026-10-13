@@ -621,6 +621,21 @@ resource "aws_cloudwatch_log_metric_filter" "bedrock_tokens" {
   }
 }
 
+# Bedrock pricing catalog fetch failures (emitted once per region/backoff window)
+resource "aws_cloudwatch_log_metric_filter" "bedrock_pricing_catalog_failure" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-bedrock-pricing-catalog-failure"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "\"[AI Usage] Bedrock pricing catalog fetch failed\""
+
+  metric_transformation {
+    name          = "BedrockPricingCatalogFailureCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
 # Track SES email sends
 resource "aws_cloudwatch_log_metric_filter" "email_sent" {
   provider       = aws.target_deployment_account
@@ -734,6 +749,27 @@ resource "aws_cloudwatch_metric_alarm" "bedrock_latency_high" {
   period              = 300
   extended_statistic  = "p95"
   threshold           = 30000
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Application = var.app_name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "bedrock_pricing_catalog_failures" {
+  provider            = aws.target_deployment_account
+  alarm_name          = "${var.app_name}-bedrock-pricing-catalog-failures"
+  alarm_description   = "Bedrock pricing catalog fetch failed; AI usage cost estimates fall back to zero"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "BedrockPricingCatalogFailureCount"
+  namespace           = "${var.app_name}/Application"
+  period              = 3600
+  statistic           = "Sum"
+  threshold           = 2
   treat_missing_data  = "notBreaching"
 
   alarm_actions = [aws_sns_topic.alerts.arn]
