@@ -71,7 +71,7 @@ export async function processRecentBudgetAlerts(): Promise<{ processed: number; 
   const dateFrom = new Date(now.getTime() - LOOKBACK_MINUTES * 60 * 1000).toISOString()
   const month = now.toISOString().substring(0, 7) // YYYY-MM
 
-  logger.info('[BudgetAlertNotifier] Processing recent alerts', { month, dateFrom })
+  logger.debug('[BudgetAlertNotifier] Processing recent alerts', { month, dateFrom })
 
   let processed = 0
   let notified = 0
@@ -90,7 +90,7 @@ export async function processRecentBudgetAlerts(): Promise<{ processed: number; 
     { component: 'budget-alert-notifier', operation: 'getAlertsByMonth', month }
   )
 
-  logger.info('[BudgetAlertNotifier] Found alerts to process', { count: result.count })
+  logger.debug('[BudgetAlertNotifier] Found alerts to process', { count: result.count })
 
   for (const alert of result.alerts) {
     processed++
@@ -160,6 +160,13 @@ export async function processRecentBudgetAlerts(): Promise<{ processed: number; 
     }
   }
 
-  logger.info('[BudgetAlertNotifier] Processing complete', { processed, notified, skipped })
+  // Only surface the completion at info when the cycle did real work; empty
+  // no-op cycles stay at debug to avoid routine every-15-minute noise.
+  const didWork = processed > 0 || notified > 0 || skipped > 0
+  if (didWork) {
+    logger.info('[BudgetAlertNotifier] Processing complete', { processed, notified, skipped })
+  } else {
+    logger.debug('[BudgetAlertNotifier] Processing complete', { processed, notified, skipped })
+  }
   return { processed, notified, skipped }
 }

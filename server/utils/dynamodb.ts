@@ -425,7 +425,7 @@ export async function batchPutItems(
     batches.push(items.slice(i, i + batchSize))
   }
   
-  logger.info(`Processing ${items.length} items in ${batches.length} batches`)
+  logger.debug(`Processing ${items.length} items in ${batches.length} batches`)
   
   // Process batches with controlled parallelism
   const parallelLimit = 3 // Process 3 batches at a time
@@ -494,7 +494,7 @@ export async function batchPutItems(
     results.push(...batchResults)
     
     // Progress update
-    logger.info(`Processed ${Math.min((i + parallelLimit) * batchSize, items.length)}/${items.length} items`)
+    logger.debug(`Processed ${Math.min((i + parallelLimit) * batchSize, items.length)}/${items.length} items`)
     
     // Add delay between parallel batch sets
     if (i + parallelLimit < batches.length) {
