@@ -32,6 +32,7 @@ import { collectGenAIObservabilityErrorCauses } from './ai-usage-genai-observabi
 import { classifyAIUsageCollectionFailure } from './ai-usage-failures'
 import { logger } from './logger'
 import { getCacheManager } from './cache-manager'
+import { normalizeAIUsageDiagnostics, type AIUsageCollectionDiagnostics } from './ai-usage-diagnostics'
 
 const HOUR_MS = 60 * 60 * 1000
 const DAY_MS = 24 * HOUR_MS
@@ -399,6 +400,7 @@ export async function collectAIUsage(options: { backfillDays?: number } = {}): P
   factsWritten: number
   warnings: string[]
   initialBackfill: boolean
+  diagnostics: AIUsageCollectionDiagnostics
 }> {
   const existingState = await getAIUsageCollectorState()
   const initialBackfill = !existingState?.completedAt
@@ -414,6 +416,11 @@ export async function collectAIUsage(options: { backfillDays?: number } = {}): P
   let factsWritten = 0
   let markersWritten = 0
   let causesWritten = 0
+  let scopeResolutionMs: number
+  let telemetryCollectionMs: number
+  let costCollectionMs: number
+  let causeCollectionMs: number
+  let persistenceMs: number
 
   await saveAIUsageCollectorState({
     pk: 'META', sk: 'COLLECTOR', status: 'running', startedAt,
@@ -421,7 +428,9 @@ export async function collectAIUsage(options: { backfillDays?: number } = {}): P
   })
 
   try {
+    const scopeResolutionStart = performance.now()
     const scopes = await resolveAIUsageScopes()
+    scopeResolutionMs = performance.now() - scopeResolutionStart
     const work = scopes.filter(scope => scope.telemetryEligible).flatMap(scope => scope.members.flatMap(member =>
       getAIUsageRegions(member.environment).map(region => ({ scope, ...member, region }))))
     accountsAttempted = work.length
@@ -437,6 +446,7 @@ export async function collectAIUsage(options: { backfillDays?: number } = {}): P
     const hourStart = new Date(now.getTime() - 2 * HOUR_MS)
     const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
     const dayStart = new Date(todayStart.getTime() - (backfillDays - 1) * DAY_MS)
+    const telemetryCollectionStart = performance.now()
     const telemetryResults = await concurrentMap(work, TELEMETRY_CONCURRENCY, async item => {
       const [hourly, daily] = await Promise.all([
         fetchTelemetryFacts({ ...item, granularity: 'hour', startTime: hourStart, endTime: now }),
@@ -444,6 +454,7 @@ export async function collectAIUsage(options: { backfillDays?: number } = {}): P
       ])
       return [...hourly, ...daily]
     })
+    telemetryCollectionMs = performance.now() - telemetryCollectionStart
 
     const telemetryFacts: AIUsageFact[] = []
     const markers: AIUsageCollectionMarker[] = []
@@ -479,8 +490,10 @@ export async function collectAIUsage(options: { backfillDays?: number } = {}): P
       { environment: 'commercial' as const, basis: 'billable' as const },
       { environment: 'commercial' as const, basis: 'proforma' as const }
     ]
+    const costCollectionStart = performance.now()
     const costResults = await Promise.allSettled(costRequests.map(request =>
       collectCostFacts(scopes, request.environment, request.basis, startDate, endDate)))
+    costCollectionMs = performance.now() - costCollectionStart
     const costFacts: AIUsageFact[] = []
     for (let index = 0; index < costResults.length; index++) {
       const result = costResults[index]!
@@ -495,6 +508,7 @@ export async function collectAIUsage(options: { backfillDays?: number } = {}): P
       }
     }
 
+    const causeCollectionStart = performance.now()
     const runtimeCauseResult = await collectRuntimeErrorCauses(scopes, initialCauseBackfill ? 90 : 2)
     const mantleTargets = work.filter(item => telemetryFacts.some(fact =>
       fact.provider === 'bedrock-mantle' &&
@@ -505,6 +519,7 @@ export async function collectAIUsage(options: { backfillDays?: number } = {}): P
       mantleTargets,
       initialCauseBackfill ? 90 : 2
     )
+    causeCollectionMs = performance.now() - causeCollectionStart
     causesWritten = runtimeCauseResult.causes.length + genAICauseResult.causes.length
     failures.push(...runtimeCauseResult.failures, ...genAICauseResult.failures)
     warnings.push(...runtimeCauseResult.failures.map(failure => failure.message), ...genAICauseResult.failures.map(failure => failure.message))
@@ -520,8 +535,10 @@ export async function collectAIUsage(options: { backfillDays?: number } = {}): P
     const facts = [...telemetryFacts, ...costFacts]
     factsWritten = facts.length
     markersWritten = markers.length
+    const persistenceStart = performance.now()
     await Promise.all([saveAIUsageFacts(facts), saveAIUsageCollectionMarkers(markers)])
     await getCacheManager().invalidateByTags(['ai-usage'])
+    persistenceMs = performance.now() - persistenceStart
     const completedAt = new Date().toISOString()
     await saveAIUsageCollectorState({
       pk: 'META', sk: 'COLLECTOR',
@@ -546,20 +563,30 @@ export async function collectAIUsage(options: { backfillDays?: number } = {}): P
       failures: failures.slice(0, 100)
     })
     logger.info(`[AI Usage] Collection complete: ${factsWritten} facts, ${warnings.length} warning(s)`)
-    return { factsWritten, warnings, initialBackfill }
+    const diagnostics = normalizeAIUsageDiagnostics({
+      scopeResolutionMs,
+      telemetryCollectionMs,
+      costCollectionMs,
+      causeCollectionMs,
+      persistenceMs,
+      accountRegionTargetsAttempted: accountsAttempted,
+      accountRegionTargetsSucceeded: accountsSucceeded
+    })
+    return { factsWritten, warnings, initialBackfill, diagnostics }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
+    const terminalFailure: AIUsageCollectorFailure = {
+      environment: 'commercial',
+      category: classifyAIUsageCollectionFailure(message).category,
+      message
+    }
     await saveAIUsageCollectorState({
       pk: 'META', sk: 'COLLECTOR', status: 'error', startedAt, completedAt: new Date().toISOString(),
       accountsAttempted, accountsSucceeded, uniqueAccountsAttempted, uniqueAccountsSucceeded,
       accountRegionTargetsAttempted: accountsAttempted, accountRegionTargetsSucceeded: accountsSucceeded,
       factsWritten, markersWritten, causesWritten,
       warnings: [...warnings, message].slice(0, 100),
-      failures: [...failures, {
-        environment: 'commercial',
-        category: classifyAIUsageCollectionFailure(message).category,
-        message
-      }].slice(0, 100)
+      failures: [...failures, terminalFailure].slice(0, 100)
     }).catch(() => {})
     throw error
   }

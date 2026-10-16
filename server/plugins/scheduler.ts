@@ -268,7 +268,8 @@ export default defineNitroPlugin(async () => {
         logJobCompletion('ai-usage-collector', 'success', performance.now() - start, {
           factsWritten: result.factsWritten,
           warnings: result.warnings.length,
-          initialBackfill: result.initialBackfill
+          initialBackfill: result.initialBackfill,
+          ...result.diagnostics
         })
         writeSourceHeartbeat('ai-usage-collector', {
           lastRun: new Date().toISOString(),
