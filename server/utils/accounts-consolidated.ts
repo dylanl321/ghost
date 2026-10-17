@@ -19,6 +19,7 @@ import { getOrganizationsClient, hasCredentials } from '../lib/aws-client-factor
 import type { AccountInfo, AWSEnvironmentType, AccountLookupCriteria } from '../types'
 import { getTableName, getTableEnvironment } from '../lib/dynamodb-config'
 import { logger } from './logger'
+import { sanitizeErrorText } from './request-telemetry'
 
 /**
  * Get the DynamoDB table name for accounts (with config loader)
@@ -130,6 +131,72 @@ function describeError(error: unknown): { errorName?: string; errorCode?: string
   }
 }
 
+export interface OrganizationsAccountListFailureInput {
+  environment: AWSEnvironmentType
+  attempt: number
+  maxAttempts: number
+  retryable: boolean
+  error: unknown
+}
+
+/**
+ * Build the top-level structured terminal-failure event for Organizations
+ * ListAccounts. Pure and side-effect free so the exact emitted shape can be
+ * asserted in tests.
+ *
+ * Deliberately conservative: only bounded, low-cardinality signature fields
+ * reach the output. Stack traces, raw error messages, credentials, account
+ * IDs, headers, and tokens are never included. errorName/errorCode appear only
+ * when present and bounded; httpStatusCode only when numeric.
+ */
+export function buildOrganizationsAccountListFailureEvent(
+  input: OrganizationsAccountListFailureInput
+): Record<string, unknown> {
+  const { environment, attempt, maxAttempts, retryable, error } = input
+
+  const entry: Record<string, unknown> = {
+    type: 'organizations_account_list_failure',
+    level: 'error',
+    timestamp: new Date().toISOString(),
+    component: 'accounts-consolidated',
+    operation: LIST_ACCOUNTS_OPERATION,
+    environment,
+    attempt,
+    maxAttempts,
+    retryable
+  }
+
+  if (error && typeof error === 'object') {
+    const err = error as Record<string, unknown>
+
+    const errorName = typeof err.name === 'string' ? sanitizeErrorText(err.name, 128) : ''
+    if (errorName) entry.errorName = errorName
+
+    const errorCode = typeof err.code === 'string' ? sanitizeErrorText(err.code, 128) : ''
+    if (errorCode) entry.errorCode = errorCode
+
+    const metadata = err.$metadata
+    if (metadata && typeof metadata === 'object') {
+      const httpStatusCode = (metadata as Record<string, unknown>).httpStatusCode
+      if (typeof httpStatusCode === 'number' && Number.isFinite(httpStatusCode)) {
+        entry.httpStatusCode = httpStatusCode
+      }
+    }
+  }
+
+  return entry
+}
+
+/**
+ * Emit the terminal Organizations ListAccounts failure as one top-level
+ * structured JSON line, matching the stdout convention used by
+ * request-telemetry.ts and job-tracker.ts so CloudWatch metric filters can
+ * query its fields directly.
+ */
+function emitOrganizationsAccountListFailure(input: OrganizationsAccountListFailureInput): void {
+  process.stdout.write(JSON.stringify(buildOrganizationsAccountListFailureEvent(input)) + '\n')
+}
+
 /**
  * Get all accounts from Organizations API
  * Used by: bulk operations in accounts-v2.ts
@@ -202,15 +269,15 @@ export async function getAllAccountsFromOrganizations(
       }
 
       // Non-retryable error, or throttling that outlasted our retries:
-      // preserve the original fallback-to-empty-array behaviour.
-      logger.error('Failed to list accounts from Organizations', {
-        component: 'accounts-consolidated',
-        operation: LIST_ACCOUNTS_OPERATION,
+      // preserve the original fallback-to-empty-array behaviour. Emit a single
+      // top-level structured event (replacing the generic logger.error) so the
+      // failure's fields are directly queryable in CloudWatch.
+      emitOrganizationsAccountListFailure({
         environment,
         attempt,
         maxAttempts: LIST_ACCOUNTS_MAX_ATTEMPTS,
         retryable,
-        ...describeError(error)
+        error
       })
       return []
     }

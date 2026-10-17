@@ -1325,3 +1325,72 @@ resource "aws_cloudwatch_query_definition" "error_signatures" {
     | limit 25
   EOT
 }
+
+# Terminal AWS Organizations ListAccounts failures (retries exhausted or a
+# non-retryable error). Emitted once per terminal failure by
+# accounts-consolidated as a top-level structured JSON event.
+resource "aws_cloudwatch_log_metric_filter" "organizations_account_list_failure" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-organizations-account-list-failure"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "{ $.type = \"organizations_account_list_failure\" }"
+
+  metric_transformation {
+    name          = "OrganizationsAccountListFailureCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+# Retryable (throttling) failures that still exhausted all retries — the exact
+# TooManyRequestsException pattern seen terminating in production.
+resource "aws_cloudwatch_log_metric_filter" "organizations_account_list_retryable_failure" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-organizations-account-list-retryable-failure"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "{ $.type = \"organizations_account_list_failure\" && $.retryable IS TRUE }"
+
+  metric_transformation {
+    name          = "OrganizationsAccountListRetryableFailureCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "organizations_account_list_retryable_failures" {
+  provider            = aws.target_deployment_account
+  alarm_name          = "${var.app_name}-organizations-account-list-retryable-failures"
+  alarm_description   = "Organizations ListAccounts exhausted retries on throttling at least once in 5 minutes — account listing degraded to an empty result"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "OrganizationsAccountListRetryableFailureCount"
+  namespace           = "${var.app_name}/Application"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Application = var.app_name
+  }
+}
+
+resource "aws_cloudwatch_query_definition" "organizations_account_list_failures" {
+  provider        = aws.target_deployment_account
+  name            = "${var.app_name}/Organizations Account List Failures"
+  log_group_names = [aws_cloudwatch_log_group.ecs.name]
+
+  query_string = <<-EOT
+    filter type = "organizations_account_list_failure"
+    | stats count(*) as failures,
+            max(attempt) as max_attempt,
+            latest(@timestamp) as last_seen
+      by environment, retryable, errorName, errorCode, httpStatusCode
+    | sort failures desc
+  EOT
+}
