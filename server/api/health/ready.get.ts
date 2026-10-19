@@ -25,6 +25,7 @@ import os from 'os'
 import process from 'process'
 import { getAccountsTableName } from '../../utils/accounts-consolidated'
 import { getDynamoDBConfigDiagnostic } from '../../lib/dynamodb-config'
+import { evaluateCircuitBreakerHealth } from '../../utils/circuit-breaker-health'
 import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
@@ -221,6 +222,15 @@ registerEndpoint('/api/health/ready', 'GET', {
                           loadedAt: { type: 'string', format: 'date-time', nullable: true }
                         }
                       }
+                    }
+                  },
+                  circuitBreaker: {
+                    type: 'object',
+                    description: 'Assume-role credential circuit breaker diagnostic. Account IDs identify tripped circuits only; never contains credentials, errors, or secret material.',
+                    properties: {
+                      open: { type: 'array', items: { type: 'string' } },
+                      halfOpen: { type: 'array', items: { type: 'string' } },
+                      totalTracked: { type: 'number' }
                     }
                   },
                   warnings: {
@@ -497,10 +507,18 @@ export default defineEventHandler(handleAsync(async (event) => {
     logger.warn('Could not retrieve cache statistics:', error)
   }
 
-  // Circuit breaker stats for assume-role failures
+  // Circuit breaker stats for assume-role failures. An open/half-open circuit
+  // means a dependency account is actively failing, so surface it as a warning
+  // and downgrade healthy -> degraded (never masking a worse status).
   try {
     const { assumeRoleCircuitBreaker } = await import('../../utils/credential-circuit-breaker')
     healthData.circuitBreaker = assumeRoleCircuitBreaker.getStats()
+
+    const cbHealth = evaluateCircuitBreakerHealth(healthData.circuitBreaker, healthData.status)
+    if (cbHealth.warning) {
+      healthData.warnings.push(cbHealth.warning)
+      healthData.status = cbHealth.status
+    }
   } catch (error) {
     logger.warn('Could not retrieve circuit breaker statistics:', error)
   }

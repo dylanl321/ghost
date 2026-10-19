@@ -1313,6 +1313,74 @@ resource "aws_cloudwatch_metric_alarm" "application_errors_high" {
   }
 }
 
+# The assume-role credential circuit breaker opens after repeated failures for a
+# dependency account, causing bursts of 5xx on AWS-backed endpoints while the
+# task stays alive. The breaker logs stable warnings via the structured logger.
+# "Circuit OPENED" (first trip) and "Circuit remains OPEN" (half-open probe
+# failed) are distinct substrings, so two filters feed one metric rather than
+# relying on a single wildcard that could also match the recovery/reset lines.
+resource "aws_cloudwatch_log_metric_filter" "credential_circuit_breaker_opened" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-credential-circuit-breaker-opened"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "\"[Circuit Breaker] Circuit OPENED\""
+
+  metric_transformation {
+    name          = "CredentialCircuitBreakerOpenCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "credential_circuit_breaker_remains_open" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-credential-circuit-breaker-remains-open"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "\"[Circuit Breaker] Circuit remains OPEN\""
+
+  metric_transformation {
+    name          = "CredentialCircuitBreakerOpenCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "credential_circuit_breaker_open" {
+  provider            = aws.target_deployment_account
+  alarm_name          = "${var.app_name}-credential-circuit-breaker-open"
+  alarm_description   = "Assume-role credential circuit breaker opened for a dependency account — AWS-backed endpoints are failing while the circuit is open"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "CredentialCircuitBreakerOpenCount"
+  namespace           = "${var.app_name}/Application"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Application = var.app_name
+  }
+}
+
+resource "aws_cloudwatch_query_definition" "credential_circuit_breaker" {
+  provider        = aws.target_deployment_account
+  name            = "${var.app_name}/Credential Circuit Breaker Events"
+  log_group_names = [aws_cloudwatch_log_group.ecs.name]
+
+  query_string = <<-EOT
+    filter message like "[Circuit Breaker]"
+    | stats count(*) as occurrences by level, message
+    | sort occurrences desc
+    | limit 25
+  EOT
+}
+
 resource "aws_cloudwatch_query_definition" "error_signatures" {
   provider        = aws.target_deployment_account
   name            = "${var.app_name}/Application Error Signatures"
