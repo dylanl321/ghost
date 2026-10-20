@@ -78,6 +78,7 @@ def lambda_handler(event, context):
     version_id = event.get("version_id")
     if not isinstance(version_id, str) or not version_id.strip():
         raise ValueError("Rotation version_id is required")
+    credential["rotation_token"] = version_id
 
     secrets = boto3.client("secretsmanager")
     ecs = boto3.client("ecs")
