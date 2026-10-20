@@ -25,4 +25,19 @@ def _sync_target(target, credential, secrets, ecs):
     ecs.get_waiter("services_stable").wait(cluster=cluster, services=[service])
 
 
-# __NEXT__
+def lambda_handler(event, context):
+    credential = event.get("credential") or {}
+    if not credential.get("access_key_id") or not credential.get("secret_access_key"):
+        raise ValueError("Validated pending credential is required")
+
+    secrets = boto3.client("secretsmanager")
+    ecs = boto3.client("ecs")
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [
+            executor.submit(_sync_target, target, credential, secrets, ecs)
+            for target in TARGETS
+        ]
+        for future in futures:
+            future.result()
+    return {"status": "success", "synced_consumers": len(TARGETS)}
+
