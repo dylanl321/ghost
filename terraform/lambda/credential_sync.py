@@ -26,9 +26,12 @@ def _claim(dynamodb, rotation_target):
             Item={
                 "rotation_target": {"S": rotation_target},
                 "status": {"S": "IN_PROGRESS"},
-                "expires_at": {"N": str(now + 86400)},
+                "expires_at": {"N": str(now + 900)},
             },
-            ConditionExpression="attribute_not_exists(rotation_target)",
+            ConditionExpression=(
+                "attribute_not_exists(rotation_target) OR expires_at < :now"
+            ),
+            ExpressionAttributeValues={":now": {"N": str(now)}},
         )
         return True
     except ClientError as exc:
@@ -39,7 +42,9 @@ def _claim(dynamodb, rotation_target):
             Key={"rotation_target": {"S": rotation_target}},
             ConsistentRead=True,
         ).get("Item", {})
-        return item.get("status", {}).get("S") != "SUCCEEDED"
+        if item.get("status", {}).get("S") == "SUCCEEDED":
+            return False
+        raise RuntimeError("Synchronization target is already in progress") from exc
 
 
 def _sync_target(target, credential, secrets, ecs):
