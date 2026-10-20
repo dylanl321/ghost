@@ -46,8 +46,8 @@ resource "aws_iam_role_policy" "credential_sync" {
     Statement = [
       {
         Effect = "Allow"
-        Action = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
-        Resource = "arn:aws-us-gov:logs:us-gov-west-1:${local.child_account_id}:*"
+        Action = ["logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "arn:aws-us-gov:logs:us-gov-west-1:${local.child_account_id}:log-group:/aws/lambda/gdmsc-5177-ghost-credential-sync:*"
       },
       {
         Effect = "Allow"
