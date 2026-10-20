@@ -53,8 +53,8 @@ resource "aws_iam_role_policy" "credential_sync" {
         Effect = "Allow"
         Action = ["secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue"]
         Resource = [
-          "arn:aws-us-gov:secretsmanager:us-gov-west-1:${local.child_account_id}:secret:ghost-dashboard-credentials-*",
-          "arn:aws-us-gov:secretsmanager:us-gov-west-1:${local.child_account_id}:secret:ghost-dashboard-dev-credentials-*"
+          "arn:aws-us-gov:secretsmanager:us-gov-west-1:${local.child_account_id}:secret:ghost-dashboard-credentials-nHKwT7",
+          "arn:aws-us-gov:secretsmanager:us-gov-west-1:${local.child_account_id}:secret:ghost-dashboard-dev-credentials-jxKfi8"
         ]
       },
       {
