@@ -68,8 +68,9 @@ test_docker_build:
 
 terraform_feature_plan:
   stage: test
+  resource_group: gdmsc-5177-ghost-sync-plan
   rules:
-    - if: $CI_COMMIT_REF_NAME != "dev" && $CI_COMMIT_REF_NAME != "master"
+    - if: '$CI_COMMIT_REF_NAME == "GDMSC-5177-consumer-sync"'
   script:
     - python -m py_compile terraform/lambda/credential_sync.py
     - cd $TF_WORKING_DIR
