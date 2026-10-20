@@ -65,14 +65,15 @@ resource "aws_lambda_function" "credential_sync" {
 }
 
 resource "aws_lambda_permission" "credential_sync_rotator" {
+  count         = var.env == "dev" ? 1 : 0
   provider      = aws.target_deployment_account
   statement_id  = "AllowCommercialTerraformOrchestratorRotator"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.credential_sync.function_name
-  principal     = "arn:aws-us-gov:iam::374673712317:role/commercial-terraform-orchestrator-rotator-role"
+  function_name = aws_lambda_function.credential_sync[0].function_name
+  principal     = "374673712317"
 }
 
 output "credential_sync_lambda_arn" {
-  value = aws_lambda_function.credential_sync.arn
+  value = var.env == "dev" ? aws_lambda_function.credential_sync[0].arn : null
 }
 
