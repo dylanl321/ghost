@@ -18,6 +18,24 @@ resource "aws_iam_role" "credential_sync" {
   })
 }
 
+resource "aws_dynamodb_table" "credential_sync_state" {
+  count        = var.env == "dev" ? 1 : 0
+  provider     = aws.target_deployment_account
+  name         = "gdmsc-5177-ghost-credential-sync-state"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "rotation_target"
+
+  attribute {
+    name = "rotation_target"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "expires_at"
+    enabled        = true
+  }
+}
+
 resource "aws_iam_role_policy" "credential_sync" {
   count    = var.env == "dev" ? 1 : 0
   provider = aws.target_deployment_account
