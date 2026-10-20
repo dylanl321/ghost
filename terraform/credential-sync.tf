@@ -81,7 +81,7 @@ resource "aws_lambda_permission" "credential_sync_rotator" {
   statement_id  = "AllowCommercialTerraformOrchestratorRotator"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.credential_sync[0].function_name
-  principal     = "arn:aws-us-gov:iam::374673712317:role/commercial-terraform-orchestrator-rotator-role"
+  principal     = "374673712317"
 }
 
 output "credential_sync_lambda_arn" {
