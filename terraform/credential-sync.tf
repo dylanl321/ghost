@@ -49,4 +49,27 @@ resource "aws_iam_role_policy" "credential_sync" {
   })
 }
 
-# __NEXT__
+resource "aws_lambda_function" "credential_sync" {
+  provider         = aws.target_deployment_account
+  function_name    = "gdmsc-5177-ghost-credential-sync"
+  role             = aws_iam_role.credential_sync.arn
+  handler          = "credential_sync.lambda_handler"
+  runtime          = "python3.12"
+  filename         = data.archive_file.credential_sync.output_path
+  source_code_hash = data.archive_file.credential_sync.output_base64sha256
+  timeout          = 900
+  memory_size      = 256
+}
+
+resource "aws_lambda_permission" "credential_sync_rotator" {
+  provider      = aws.target_deployment_account
+  statement_id  = "AllowCommercialTerraformOrchestratorRotator"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.credential_sync.function_name
+  principal     = "arn:aws-us-gov:iam::374673712317:role/commercial-terraform-orchestrator-rotator-role"
+}
+
+output "credential_sync_lambda_arn" {
+  value = aws_lambda_function.credential_sync.arn
+}
+
