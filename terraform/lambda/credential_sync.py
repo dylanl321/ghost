@@ -1,9 +1,11 @@
 """Synchronize a validated pending Commercial credential into Ghost."""
 
 import json
-from concurrent.futures import ThreadPoolExecutor
+import os
+import time
 
 import boto3
+from botocore.exceptions import ClientError
 
 SECRET_FIELDS = (
     "commercial_aws_access_key_id",
