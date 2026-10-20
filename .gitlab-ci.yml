@@ -66,6 +66,17 @@ test_docker_build:
     - docker images | grep $APP_NAME # Show the built image
   allow_failure: false
 
+terraform_feature_plan:
+  stage: test
+  rules:
+    - if: $CI_COMMIT_REF_NAME != "dev" && $CI_COMMIT_REF_NAME != "master"
+  script:
+    - python -m py_compile terraform/lambda/credential_sync.py
+    - cd $TF_WORKING_DIR
+    - terraform init "-backend-config=./conf/dev.conf"
+    - terraform validate
+    - terraform plan -var "env=dev" -var "app_name=ghost-dashboard-dev" -var "app_domain=ghost-aws-dev.gd-ms.com"
+
 code_quality_check:
   stage: test
   image: node:22.23.1-bookworm-slim
