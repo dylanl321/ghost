@@ -14,4 +14,15 @@ TARGETS = (
     ("ghost-dashboard-credentials", "ghost-dashboard", "ghost-dashboard-service"),
 )
 
+def _sync_target(target, credential, secrets, ecs):
+    secret_name, cluster, service = target
+    current = secrets.get_secret_value(SecretId=secret_name)
+    secret = json.loads(current["SecretString"])
+    secret[SECRET_FIELDS[0]] = credential["access_key_id"]
+    secret[SECRET_FIELDS[1]] = credential["secret_access_key"]
+    secrets.put_secret_value(SecretId=secret_name, SecretString=json.dumps(secret))
+    ecs.update_service(cluster=cluster, service=service, forceNewDeployment=True)
+    ecs.get_waiter("services_stable").wait(cluster=cluster, services=[service])
+
+
 # __NEXT__
