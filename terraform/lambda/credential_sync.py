@@ -15,6 +15,32 @@ TARGETS = (
     ("ghost-dashboard-dev-credentials", "ghost-dashboard-dev", "ghost-dashboard-dev-service"),
     ("ghost-dashboard-credentials", "ghost-dashboard", "ghost-dashboard-service"),
 )
+STATE_TABLE = os.environ["SYNC_STATE_TABLE"]
+
+
+def _claim(dynamodb, rotation_target):
+    now = int(time.time())
+    try:
+        dynamodb.put_item(
+            TableName=STATE_TABLE,
+            Item={
+                "rotation_target": {"S": rotation_target},
+                "status": {"S": "IN_PROGRESS"},
+                "expires_at": {"N": str(now + 86400)},
+            },
+            ConditionExpression="attribute_not_exists(rotation_target)",
+        )
+        return True
+    except ClientError as exc:
+        if exc.response["Error"]["Code"] != "ConditionalCheckFailedException":
+            raise
+        item = dynamodb.get_item(
+            TableName=STATE_TABLE,
+            Key={"rotation_target": {"S": rotation_target}},
+            ConsistentRead=True,
+        ).get("Item", {})
+        return item.get("status", {}).get("S") != "SUCCEEDED"
+
 
 def _sync_target(target, credential, secrets, ecs):
     secret_name, cluster, service = target
