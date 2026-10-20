@@ -15,6 +15,7 @@ TARGETS = (
     ("ghost-dashboard-dev-credentials", "ghost-dashboard-dev", "ghost-dashboard-dev-service"),
     ("ghost-dashboard-credentials", "ghost-dashboard", "ghost-dashboard-service"),
 )
+# Durable per-version target state makes retries safe after partial completion.
 STATE_TABLE = os.environ["SYNC_STATE_TABLE"]
 
 
