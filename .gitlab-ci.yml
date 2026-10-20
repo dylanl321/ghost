@@ -73,6 +73,7 @@ terraform_feature_plan:
     - if: '$CI_COMMIT_REF_NAME == "GDMSC-5177-consumer-sync"'
   script:
     - python -m py_compile terraform/lambda/credential_sync.py
+    - python -m unittest discover -s terraform/tests -p 'test_credential_sync.py'
     - cd $TF_WORKING_DIR
     - terraform init "-backend-config=./conf/dev.conf"
     - terraform validate
