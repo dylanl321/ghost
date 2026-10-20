@@ -51,6 +51,13 @@ resource "aws_iam_role_policy" "credential_sync" {
   })
 }
 
+resource "aws_cloudwatch_log_group" "credential_sync" {
+  count             = var.env == "dev" ? 1 : 0
+  provider          = aws.target_deployment_account
+  name              = "/aws/lambda/gdmsc-5177-ghost-credential-sync"
+  retention_in_days = 90
+}
+
 resource "aws_lambda_function" "credential_sync" {
   count            = var.env == "dev" ? 1 : 0
   provider         = aws.target_deployment_account
