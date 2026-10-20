@@ -53,7 +53,11 @@ def _sync_target(target, credential, secrets, ecs):
     secret = json.loads(current["SecretString"])
     secret[SECRET_FIELDS[0]] = credential["access_key_id"]
     secret[SECRET_FIELDS[1]] = credential["secret_access_key"]
-    secrets.put_secret_value(SecretId=secret_name, SecretString=json.dumps(secret))
+    secrets.put_secret_value(
+        SecretId=secret_name,
+        ClientRequestToken=credential["rotation_token"],
+        SecretString=json.dumps(secret),
+    )
     ecs.update_service(cluster=cluster, service=service, forceNewDeployment=True)
     ecs.get_waiter("services_stable").wait(cluster=cluster, services=[service])
 
