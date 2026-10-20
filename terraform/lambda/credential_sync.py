@@ -54,18 +54,39 @@ def _sync_target(target, credential, secrets, ecs):
 
 
 def lambda_handler(event, context):
-    credential = event.get("credential") or {}
-    if not credential.get("access_key_id") or not credential.get("secret_access_key"):
+    if not isinstance(event, dict):
+        raise ValueError("Lambda event must be an object")
+    credential = event.get("credential")
+    if (
+        not isinstance(credential, dict)
+        or not isinstance(credential.get("access_key_id"), str)
+        or not credential["access_key_id"].strip()
+        or not isinstance(credential.get("secret_access_key"), str)
+        or not credential["secret_access_key"].strip()
+    ):
         raise ValueError("Validated pending credential is required")
+
+    version_id = event.get("version_id")
+    if not isinstance(version_id, str) or not version_id.strip():
+        raise ValueError("Rotation version_id is required")
 
     secrets = boto3.client("secretsmanager")
     ecs = boto3.client("ecs")
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        futures = [
-            executor.submit(_sync_target, target, credential, secrets, ecs)
-            for target in TARGETS
-        ]
-        for future in futures:
-            future.result()
-    return {"status": "success", "synced_consumers": len(TARGETS)}
+    dynamodb = boto3.client("dynamodb")
+    synced = 0
+    for target in TARGETS:
+        rotation_target = f"{version_id}:{target[0]}"
+        if not _claim(dynamodb, rotation_target):
+            synced += 1
+            continue
+        _sync_target(target, credential, secrets, ecs)
+        dynamodb.update_item(
+            TableName=STATE_TABLE,
+            Key={"rotation_target": {"S": rotation_target}},
+            UpdateExpression="SET #status = :status",
+            ExpressionAttributeNames={"#status": "status"},
+            ExpressionAttributeValues={":status": {"S": "SUCCEEDED"}},
+        )
+        synced += 1
+    return {"status": "success", "synced_consumers": synced}
 
