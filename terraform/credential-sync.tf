@@ -59,6 +59,11 @@ resource "aws_iam_role_policy" "credential_sync" {
       },
       {
         Effect = "Allow"
+        Action = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"]
+        Resource = aws_dynamodb_table.credential_sync_state[0].arn
+      },
+      {
+        Effect = "Allow"
         Action = ["ecs:DescribeServices", "ecs:UpdateService"]
         Resource = [
           "arn:aws-us-gov:ecs:us-gov-west-1:${local.child_account_id}:service/ghost-dashboard/ghost-dashboard-service",
