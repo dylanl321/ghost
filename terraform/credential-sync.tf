@@ -19,9 +19,10 @@ resource "aws_iam_role" "credential_sync" {
 }
 
 resource "aws_iam_role_policy" "credential_sync" {
+  count    = var.env == "dev" ? 1 : 0
   provider = aws.target_deployment_account
   name     = "gdmsc-5177-ghost-credential-sync"
-  role     = aws_iam_role.credential_sync.id
+  role     = aws_iam_role.credential_sync[0].id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
