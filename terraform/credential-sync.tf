@@ -52,9 +52,10 @@ resource "aws_iam_role_policy" "credential_sync" {
 }
 
 resource "aws_lambda_function" "credential_sync" {
+  count            = var.env == "dev" ? 1 : 0
   provider         = aws.target_deployment_account
   function_name    = "gdmsc-5177-ghost-credential-sync"
-  role             = aws_iam_role.credential_sync.arn
+  role             = aws_iam_role.credential_sync[0].arn
   handler          = "credential_sync.lambda_handler"
   runtime          = "python3.12"
   filename         = data.archive_file.credential_sync.output_path
