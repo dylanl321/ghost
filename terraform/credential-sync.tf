@@ -67,7 +67,7 @@ resource "aws_lambda_function" "credential_sync" {
   runtime          = "python3.12"
   filename         = data.archive_file.credential_sync.output_path
   source_code_hash = data.archive_file.credential_sync.output_base64sha256
-  timeout          = 900
+  timeout          = 840
   memory_size      = 256
   depends_on       = [aws_cloudwatch_log_group.credential_sync]
 }
