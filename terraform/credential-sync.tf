@@ -69,7 +69,10 @@ resource "aws_lambda_function" "credential_sync" {
   source_code_hash = data.archive_file.credential_sync.output_base64sha256
   timeout          = 840
   memory_size      = 256
-  depends_on       = [aws_cloudwatch_log_group.credential_sync]
+  depends_on = [
+    aws_cloudwatch_log_group.credential_sync,
+    aws_iam_role_policy.credential_sync
+  ]
 }
 
 resource "aws_lambda_permission" "credential_sync_rotator" {
