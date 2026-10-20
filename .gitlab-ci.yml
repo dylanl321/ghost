@@ -75,7 +75,7 @@ terraform_feature_plan:
     - cd $TF_WORKING_DIR
     - terraform init "-backend-config=./conf/dev.conf"
     - terraform validate
-    - terraform plan -var "env=dev" -var "app_name=ghost-dashboard-dev" -var "app_domain=ghost-aws-dev.gd-ms.com"
+    - terraform plan -var "env=dev" -var "app_name=ghost-dashboard-dev" -var "app_domain=ghost-aws-dev.gd-ms.com" -target=aws_lambda_permission.credential_sync_rotator -target=aws_cloudwatch_log_group.credential_sync
 
 code_quality_check:
   stage: test
