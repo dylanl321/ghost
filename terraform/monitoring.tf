@@ -1214,12 +1214,12 @@ resource "aws_cloudwatch_query_definition" "mcp_oauth_refresh_failures" {
   log_group_names = [aws_cloudwatch_log_group.ecs.name]
 
   query_string = <<-EOT
-    fields @timestamp, status, reason
+    fields @timestamp, status, reason, errorCode
     | filter type = "mcp_oauth" and event = "refresh"
     | stats count(*) as attempts,
             sum(status = "success") as successes,
             sum(status = "failure") as failures
-      by reason, bin(15m)
+      by reason, errorCode, bin(15m)
     | sort @timestamp desc
   EOT
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { getOAuthAuthorizationTtlSeconds } from '../../server/mcp/config'
-import { classifyGhostRefreshFailure, createGhostOAuthConfiguration, createGhostRefreshEvent, GHOST_REFRESH_TOKEN_ROTATION, shouldIssueGhostRefreshToken } from '../../server/mcp/oauth/provider'
+import { classifyGhostRefreshFailure, createGhostOAuthConfiguration, createGhostRefreshEvent, GHOST_REFRESH_TOKEN_ROTATION, refreshErrorCode, shouldIssueGhostRefreshToken } from '../../server/mcp/oauth/provider'
 import { canGrantKiroCrewAdmin, identityGroupNames, isExpiredInteractionSessionError, requestedGhostResourceScopes } from '../../server/routes/oauth/consent/[uid].post'
 
 function client(options: {
@@ -134,6 +134,71 @@ test('Ghost refresh telemetry excludes credentials and identity', () => {
   assert.equal(JSON.stringify(event).includes('tokenValue'), false)
   assert.equal(JSON.stringify(event).includes('subject'), false)
   assert.equal(JSON.stringify(event).includes('clientId'), false)
+  // No errorCode is fabricated when none is supplied.
+  assert.equal('errorCode' in event, false)
+})
+
+test('Ghost refresh telemetry surfaces only the OAuth protocol error field', () => {
+  // ONLY the OAuth protocol `error` field is the safe, low-cardinality code; the
+  // free-form description (which can embed token/identity material) is never read.
+  const errorCode = refreshErrorCode({
+    error: 'invalid_grant',
+    error_description: 'refresh token abc.def.ghi not found for alice@example.com',
+    message: 'refresh token abc.def.ghi not found for alice@example.com'
+  } as any)
+  assert.equal(errorCode, 'invalid_grant')
+
+  const event = createGhostRefreshEvent('failure', 'token_not_found', '2026-10-20T00:00:00.000Z', errorCode)
+  assert.deepEqual(event, {
+    type: 'mcp_oauth',
+    event: 'refresh',
+    timestamp: '2026-10-20T00:00:00.000Z',
+    status: 'failure',
+    reason: 'token_not_found',
+    errorCode: 'invalid_grant'
+  })
+
+  // The serialized event never carries the secret-bearing description, identity,
+  // or token material behind the sanitized code.
+  const serialized = JSON.stringify(event)
+  assert.equal(serialized.includes('alice@example.com'), false)
+  assert.equal(serialized.includes('abc.def.ghi'), false)
+  assert.equal(serialized.includes('error_description'), false)
+})
+
+test('Ghost refresh error code is NEVER derived from free-form message or error_detail', () => {
+  // A secret-bearing message/error_description/error_detail with NO OAuth `error`
+  // field must yield no errorCode — the message fallback (which would retain the
+  // alphanumeric token value after sanitization) must never fire for refresh.
+  const secret = 'bearer token=' + 'A'.repeat(200) + ' for user@host'
+  assert.equal(refreshErrorCode({ message: secret } as any), undefined)
+  assert.equal(refreshErrorCode({ error_detail: secret } as any), undefined)
+  assert.equal(refreshErrorCode({ error_description: secret } as any), undefined)
+
+  // And the omitted field means no secret material can reach the event at all.
+  const event = createGhostRefreshEvent('failure', 'other', '2026-10-20T00:00:00.000Z', refreshErrorCode({ message: secret } as any))
+  const serialized = JSON.stringify(event)
+  assert.equal('errorCode' in event, false)
+  assert.equal(serialized.includes('AAAA'), false)
+  assert.equal(serialized.includes('user@host'), false)
+
+  // Nothing to extract yields no errorCode (so the field is omitted).
+  assert.equal(refreshErrorCode(undefined), undefined)
+  assert.equal(refreshErrorCode({}), undefined)
+  // A non-string protocol error value is ignored, not coerced.
+  assert.equal(refreshErrorCode({ error: { nested: 'object' } } as any), undefined)
+})
+
+test('Ghost refresh error code sanitizes and bounds a malformed OAuth error value', () => {
+  // A malformed protocol `error` value is sanitized (whitespace/punctuation
+  // stripped) and bounded to 64 chars — never emitted raw.
+  const malformed = 'invalid grant\n<script>=' + 'x'.repeat(200)
+  const errorCode = refreshErrorCode({ error: malformed } as any)
+  assert.ok(errorCode && errorCode.length <= 64)
+  assert.equal(errorCode!.includes(' '), false)
+  assert.equal(errorCode!.includes('<'), false)
+  assert.equal(errorCode!.includes('='), false)
+  assert.equal(errorCode!.includes('\n'), false)
 })
 
 test('Ghost consent grants only requested supported resource scopes', () => {

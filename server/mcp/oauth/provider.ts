@@ -10,7 +10,7 @@ import { DynamoOidcAdapter } from './adapter'
 import { handleMcpGrantDestroyed } from './graph-delegation-cleanup'
 import { getGhostMcpIdentity } from './identity'
 import { findGrantPointer } from './grant-pointer'
-import { getOAuthStageInstrumentation } from './admin/stage-instrumentation'
+import { getOAuthStageInstrumentation, safeProviderErrorCode } from './admin/stage-instrumentation'
 import { readManagedPolicy } from './admin/managed-policy-service'
 import { evaluateBoundary, isGrantRevoked } from './admin/lifecycle-enforcement'
 
@@ -56,13 +56,32 @@ export function classifyGhostRefreshFailure(error: { error_detail?: unknown; mes
   return 'other'
 }
 
-export function createGhostRefreshEvent(status: 'success' | 'failure', reason?: GhostRefreshFailureReason, timestamp = new Date().toISOString()) {
+/**
+ * The safe, low-cardinality error code for the PRIMARY mcp_oauth refresh event.
+ * ONLY the OAuth protocol `error` field (e.g. `invalid_grant`) is ever read —
+ * never the free-form `message` or `error_detail`. Those can embed token or
+ * identity material that survives {@link safeProviderErrorCode}'s sanitization
+ * as a bare alphanumeric token (e.g. `bearer token=AAAA…` → `bearertokenAAAA…`),
+ * so they must not reach it. Returns undefined when the provider exposed no
+ * protocol `error` field, so the refresh event omits errorCode entirely.
+ */
+export function refreshErrorCode(error: { error?: unknown } | undefined): string | undefined {
+  // Hand safeProviderErrorCode ONLY the protocol `error` field so its message
+  // fallback can never fire. A malformed `error` value is still sanitized and
+  // bounded by safeProviderErrorCode.
+  return safeProviderErrorCode({ error: typeof error?.error === 'string' ? error.error : undefined })
+}
+
+export function createGhostRefreshEvent(status: 'success' | 'failure', reason?: GhostRefreshFailureReason, timestamp = new Date().toISOString(), errorCode?: string) {
   return {
     type: 'mcp_oauth' as const,
     event: 'refresh' as const,
     timestamp,
     status,
-    ...(reason ? { reason } : {})
+    ...(reason ? { reason } : {}),
+    // Already-sanitized, low-cardinality provider error code (e.g. `invalid_grant`).
+    // Additive only: never tokens, raw descriptions, identity, headers, or stacks.
+    ...(errorCode ? { errorCode } : {})
   }
 }
 
@@ -73,8 +92,8 @@ export function grantIncludesMcpResource(
   return Object.hasOwn(grant.resources || {}, mcpResource)
 }
 
-function recordRefreshEvent(status: 'success' | 'failure', reason?: GhostRefreshFailureReason): void {
-  process.stdout.write(JSON.stringify(createGhostRefreshEvent(status, reason)) + '\n')
+function recordRefreshEvent(status: 'success' | 'failure', reason?: GhostRefreshFailureReason, errorCode?: string): void {
+  process.stdout.write(JSON.stringify(createGhostRefreshEvent(status, reason, undefined, errorCode)) + '\n')
 }
 
 async function loadJwks(): Promise<{ keys: JWK[] }> {
@@ -368,9 +387,9 @@ export function attachGhostOAuthEvents(provider: Provider): void {
     // Admin telemetry: token/code exchange vs refresh are distinct stages.
     telemetry.recordProviderEvent(isRefresh ? 'refresh' : 'token-exchange', 'success', ctx, { includeClient: true, includeResource: true })
   })
-  provider.on('grant.error', (ctx: any, error: Error & { error_detail?: unknown }) => {
+  provider.on('grant.error', (ctx: any, error: Error & { error_detail?: unknown; error?: unknown }) => {
     const isRefresh = ctx.oidc?.params?.grant_type === 'refresh_token'
-    if (isRefresh) recordRefreshEvent('failure', classifyGhostRefreshFailure(error))
+    if (isRefresh) recordRefreshEvent('failure', classifyGhostRefreshFailure(error), refreshErrorCode(error))
     telemetry.recordProviderEvent(isRefresh ? 'refresh' : 'token-exchange', 'failure', ctx, { error: error as any, includeClient: true, includeResource: true })
   })
 
