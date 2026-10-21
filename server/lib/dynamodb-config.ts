@@ -147,7 +147,7 @@ async function loadFromSecretsManager(): Promise<Partial<DynamoDBConfig> | null>
   try {
     // Check for direct config via environment variable first (skips Secrets Manager API call)
     if (process.env.DYNAMODB_CONFIG) {
-      logger.info('Loading DynamoDB configuration from DYNAMODB_CONFIG env var')
+      logger.debug('Loading DynamoDB configuration from DYNAMODB_CONFIG env var')
       return JSON.parse(process.env.DYNAMODB_CONFIG) as Partial<DynamoDBConfig>
     }
 

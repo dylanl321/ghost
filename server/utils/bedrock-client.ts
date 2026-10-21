@@ -13,6 +13,7 @@ import type { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime'
 import { InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime'
 import { getBedrockRuntimeClient } from '../lib/aws-client-factory'
 import { logger } from './logger'
+import { BEDROCK_COMPLETION_EVENT, buildBedrockCompletionLog } from './bedrock-logging'
 
 // Supported AI models with their configurations
 export type BedrockModel = 'nova-pro' | 'claude-sonnet'
@@ -106,7 +107,7 @@ async function getBedrockClient(): Promise<BedrockRuntimeClient> {
     ? process.env.AWS_COMMERCIAL_BEDROCK_ACCOUNT
     : process.env.AWS_GOVCLOUD_BEDROCK_ACCOUNT
   
-  logger.info(`[Bedrock] Using environment: ${useEnvironment}, region: ${region}`)
+  logger.debug(`[Bedrock] Using environment: ${useEnvironment}, region: ${region}`)
   
   return await getBedrockRuntimeClient(useEnvironment as any, region, accountId)
 }
@@ -250,7 +251,7 @@ async function tryInvokeWithFallbacks(
   
   for (const modelId of fallbackIds) {
     try {
-      logger.info(`[Bedrock] Trying model ID: ${modelId}`)
+      logger.debug(`[Bedrock] Trying model ID: ${modelId}`)
       
       const command = new InvokeModelCommand({
         modelId,
@@ -260,7 +261,7 @@ async function tryInvokeWithFallbacks(
       })
 
       const response = await client.send(command)
-      logger.info(`[Bedrock] Successfully connected to model: ${modelId}`)
+      logger.debug(`[Bedrock] Successfully connected to model: ${modelId}`)
       return { success: true, response, modelUsed: modelId }
       
     } catch (error: any) {
@@ -295,7 +296,7 @@ export async function invokeBedrock(request: BedrockRequest): Promise<BedrockRes
   const startTime = Date.now()
   const model = request.model || 'claude-sonnet' // Default to Claude Sonnet
   
-  logger.info('[Bedrock] invokeBedrock called with model:', model, 'type:', typeof model)
+  logger.debug('[Bedrock] invokeBedrock called with model:', model, 'type:', typeof model)
   
   // Ensure model is a string and is valid
   const modelStr = String(model).trim()
@@ -318,7 +319,7 @@ export async function invokeBedrock(request: BedrockRequest): Promise<BedrockRes
   }
 
   try {
-    logger.info(`[Bedrock] Invoking ${config.modelId} with ${request.prompt.length} character prompt`)
+    logger.debug(`[Bedrock] Invoking ${config.modelId} with ${request.prompt.length} character prompt`)
     
     // Get Bedrock client
     const client = await getBedrockClient()
@@ -352,7 +353,7 @@ export async function invokeBedrock(request: BedrockRequest): Promise<BedrockRes
     const response = result.response!
     const actualModelUsed = result.modelUsed!
     
-    logger.info(`[Bedrock] Successfully using model: ${actualModelUsed}`)
+    logger.debug(`[Bedrock] Successfully using model: ${actualModelUsed}`)
     
     if (!response.body) {
       return {
@@ -375,13 +376,24 @@ export async function invokeBedrock(request: BedrockRequest): Promise<BedrockRes
 
     logger.debug(`[Bedrock] Success: ${content.length} characters generated, tokens: ${inputTokens}→${outputTokens}`)
 
+    const processingTime = Date.now() - startTime
+
+    // Single concise, structured completion record (model + timing + tokens only).
+    logger.info(BEDROCK_COMPLETION_EVENT, buildBedrockCompletionLog({
+      requestedModel: modelStr,
+      actualModel: actualModelUsed,
+      processingTimeMs: processingTime,
+      inputTokens,
+      outputTokens
+    }))
+
     return {
       success: true,
       content,
       model: actualModelUsed, // Use the actual model that worked
       inputTokens,
       outputTokens,
-      processingTime: Date.now() - startTime
+      processingTime
     }
 
   } catch (error: any) {

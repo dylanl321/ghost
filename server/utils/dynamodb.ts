@@ -493,8 +493,9 @@ export async function batchPutItems(
     const batchResults = await Promise.allSettled(batchPromises)
     results.push(...batchResults)
     
-    // Progress update
-    logger.info(`Processed ${Math.min((i + parallelLimit) * batchSize, items.length)}/${items.length} items`)
+    // Progress update (per parallel batch set) — verbose, so debug only. The
+    // final completion summary below remains info/error for visibility.
+    logger.debug(`Processed ${Math.min((i + parallelLimit) * batchSize, items.length)}/${items.length} items`)
     
     // Add delay between parallel batch sets
     if (i + parallelLimit < batches.length) {
