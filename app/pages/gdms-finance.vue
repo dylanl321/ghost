@@ -160,7 +160,7 @@
           <UCard :ui="{ body: { padding: 'px-4 py-3' } }">
             <div class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Projected Variance</div>
             <div class="text-lg font-bold tabular-nums" :class="grandForecast > grandFullYearPlan ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">
-              {{ grandForecast > grandFullYearPlan ? '+' : '' }}{{ formatCurrency(grandForecast - grandFullYearPlan, 0) }}
+              {{ grandProjectedVariance > 0 ? '+' : '' }}{{ formatCurrency(grandProjectedVariance, 0) }} ({{ grandProjectedVariancePercent > 0 ? '+' : '' }}{{ grandProjectedVariancePercent.toFixed(1) }}%)
             </div>
             <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">Projected year-end variance vs full-year plan of {{ formatCurrency(grandFullYearPlan, 0) }}</div>
           </UCard>
@@ -202,6 +202,7 @@
                     :class="(deptVisibleActual(d) - resolvedDeptPlan(d)) > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'"
                   >
                     {{ (deptVisibleActual(d) - resolvedDeptPlan(d)) > 0 ? '+' : '' }}{{ formatCurrency(deptVisibleActual(d) - resolvedDeptPlan(d), 0) }}
+                    <span class="text-xs font-normal text-gray-400 dark:text-gray-500">({{ departmentVarianceShare(d).toFixed(1) }}% of total)</span>
                   </td>
                   <td class="px-4 py-3 text-right">
                     <UIcon name="i-heroicons-chevron-right" class="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-gray-500 dark:group-hover:text-gray-300 transition-colors" />
@@ -238,8 +239,18 @@
                     :color="deptFullYear ? 'purple' : 'gray'"
                     :variant="deptFullYear ? 'soft' : 'ghost'"
                     icon="i-heroicons-calendar"
-                    @click="deptFullYear = !deptFullYear"
+                    @click="toggleDeptFullYear"
                   >Full Year</UButton>
+                  <UTooltip v-if="deptFullYear && selectedYear === currentYear" text="Refresh point-in-time estimate">
+                    <UButton
+                      color="gray"
+                      variant="ghost"
+                      icon="i-heroicons-arrow-path"
+                      size="xs"
+                      :loading="pointInTimeEstimating"
+                      @click="refreshPointInTimeEstimate"
+                    />
+                  </UTooltip>
                   <div class="flex items-center gap-1">
                     <UButton color="purple" variant="soft" icon="i-heroicons-chart-bar-square" size="xs" :loading="forecastGenerating" @click="generateForecast">
                       Generate Forecast
@@ -250,6 +261,7 @@
                   </div>
                   <span v-if="forecastError" class="text-xs text-red-500">{{ forecastError }}</span>
                   <span v-else-if="forecastNotice" class="text-xs text-amber-600 dark:text-amber-400">{{ forecastNotice }}</span>
+                  <span v-if="pointInTimeEstimateError" class="text-xs text-red-500">{{ pointInTimeEstimateError }}</span>
                   <span v-if="excelExportError" class="text-xs text-red-500">{{ excelExportError }}</span>
                 </div>
               </div>
@@ -283,6 +295,24 @@
                       class="py-2 px-3 text-right"
                       :class="visibleActual(m) > 0 ? 'text-orange-500 dark:text-orange-400' : 'text-gray-300 dark:text-gray-600'"
                     >{{ visibleActual(m) > 0 ? formatCurrency(visibleActual(m), 0) : '—' }}</td>
+                  </tr>
+                  <tr>
+                    <td class="py-2 pr-4 font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">Variance</td>
+                    <td
+                      v-for="m in deptVisibleMonthly"
+                      :key="m.month"
+                      class="py-2 px-3 text-right text-xs"
+                      :class="monthlyVarianceClass(actualMonthlyVariance(m))"
+                    >{{ formatMonthlyVariance(actualMonthlyVariance(m)) || 'â€”' }}</td>
+                  </tr>
+                  <tr v-if="deptFullYear && pointInTimeEstimate">
+                    <td class="py-2 pr-4 font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">Expected Variance</td>
+                    <td
+                      v-for="m in deptVisibleMonthly"
+                      :key="m.month"
+                      class="py-2 px-3 text-right text-xs"
+                      :class="monthlyVarianceClass(expectedMonthlyVariance(m))"
+                    >{{ formatMonthlyVariance(expectedMonthlyVariance(m)) || 'â€”' }}</td>
                   </tr>
                   <tr class="border-t border-gray-200 dark:border-gray-600">
                     <td class="py-2 pr-4 font-semibold text-blue-400 dark:text-blue-500 whitespace-nowrap">Plan (Cumulative)</td>
@@ -413,8 +443,18 @@
                     :color="deptFullYear ? 'purple' : 'gray'"
                     :variant="deptFullYear ? 'soft' : 'ghost'"
                     icon="i-heroicons-calendar"
-                    @click="deptFullYear = !deptFullYear"
+                    @click="toggleDeptFullYear"
                   >Full Year</UButton>
+                  <UTooltip v-if="deptFullYear && selectedYear === currentYear" text="Refresh point-in-time estimate">
+                    <UButton
+                      color="gray"
+                      variant="ghost"
+                      icon="i-heroicons-arrow-path"
+                      size="xs"
+                      :loading="pointInTimeEstimating"
+                      @click="refreshPointInTimeEstimate"
+                    />
+                  </UTooltip>
                 </div>
               </template>
 
@@ -461,8 +501,18 @@
                     :color="deptFullYear ? 'purple' : 'gray'"
                     :variant="deptFullYear ? 'soft' : 'ghost'"
                     icon="i-heroicons-calendar"
-                    @click="deptFullYear = !deptFullYear"
+                    @click="toggleDeptFullYear"
                   >Full Year</UButton>
+                  <UTooltip v-if="deptFullYear && selectedYear === currentYear" text="Refresh point-in-time estimate">
+                    <UButton
+                      color="gray"
+                      variant="ghost"
+                      icon="i-heroicons-arrow-path"
+                      size="xs"
+                      :loading="pointInTimeEstimating"
+                      @click="refreshPointInTimeEstimate"
+                    />
+                  </UTooltip>
                 </div>
               </template>
               <VChart :option="deptYtdChartOption" class="h-64" autoresize />
@@ -772,6 +822,9 @@ const forecastError = ref<string | null>(null)
 const forecastErrorDetails = ref<Record<string, unknown> | null>(null)
 const forecastNotice = ref<string | null>(null)
 const forecastComposition = ref<any>(null)
+const pointInTimeEstimate = ref<Record<string, number> | null>(null)
+const pointInTimeEstimating = ref(false)
+const pointInTimeEstimateError = ref<string | null>(null)
 const forecastFailures = computed(() => Array.isArray((forecastErrorDetails.value as any)?.failures) ? (forecastErrorDetails.value as any).failures : [])
 const forecastExcludedAccounts = ref<Array<{ accountId: string; name: string; source: string; pepEnvironmentStatus?: string; enclaveStatus?: string; reason: string }>>([])
 const forecastErrorContext = computed(() => {
@@ -928,7 +981,12 @@ async function loadPlanOverrides(dept: string, year: number) {
 }
 
 // Reload overrides when year changes
-watch(selectedYear, () => { planOverrides.value = {} })
+watch(selectedYear, () => {
+  planOverrides.value = {}
+  pointInTimeEstimate.value = null
+  pointInTimeEstimateError.value = null
+  pointInTimeEstimating.value = false
+})
 
 function startEditPlan() {
   const dept = activeDept.value
@@ -959,6 +1017,7 @@ async function savePlan() {
       body: { department: dept.department, year: selectedYear.value, monthlyValues: overrides }
     })
     planOverrides.value = { ...planOverrides.value, [dept.department]: overrides }
+    pointInTimeEstimate.value = null
     editingPlan.value = false
     await loadPlanHistory()
   } catch (err: any) {
@@ -1027,6 +1086,7 @@ async function applyForecast() {
       method: 'POST', body: { department: dept.department, year: selectedYear.value, monthlyActuals, accountMonthlyActuals, specialMonthlyActuals, historicalActualBreakdown, currentPlanValues: resolvedMonthlyPlan.value }
     })
     planOverrides.value = { ...planOverrides.value, [dept.department]: response.data.monthlyValues }
+    pointInTimeEstimate.value = null
     forecastComposition.value = response.data.forecastComposition
     forecastNotice.value = 'Forecast applied and recorded.'
     showForecastPreview.value = false
@@ -1036,6 +1096,76 @@ async function applyForecast() {
   } finally {
     forecastApplying.value = false
   }
+}
+
+async function toggleDeptFullYear() {
+  deptFullYear.value = !deptFullYear.value
+  if (deptFullYear.value && selectedYear.value === currentYear) await refreshPointInTimeEstimate()
+}
+
+async function refreshPointInTimeEstimate() {
+  const dept = activeDept.value
+  if (!dept || selectedYear.value !== currentYear || pointInTimeEstimating.value) return
+  const requestKey = `${dept.department}:${selectedYear.value}`
+  pointInTimeEstimating.value = true
+  pointInTimeEstimateError.value = null
+  try {
+    const monthlyActuals = Object.fromEntries(dept.monthly.map(month => [month.month, visibleActual(month)]))
+    const response = await $fetch<{ data: { monthlyValues: Record<string, number> } }>('/api/costs/financial-plan-forecast', {
+      method: 'POST',
+      body: {
+        department: dept.department,
+        year: selectedYear.value,
+        monthlyActuals,
+        currentPlanValues: resolvedMonthlyPlan.value,
+        preview: true
+      }
+    })
+    if (`${activeDept.value?.department}:${selectedYear.value}` === requestKey) {
+      pointInTimeEstimate.value = response.data.monthlyValues
+    }
+  } catch (err: any) {
+    if (`${activeDept.value?.department}:${selectedYear.value}` === requestKey) {
+      pointInTimeEstimateError.value = err?.data?.message || err?.message || 'Unable to refresh the point-in-time estimate.'
+    }
+  } finally {
+    if (`${activeDept.value?.department}:${selectedYear.value}` === requestKey) pointInTimeEstimating.value = false
+  }
+}
+
+interface MonthlyVariance {
+  amount: number
+  percent: number | null
+}
+
+function actualMonthlyVariance(month: MonthlyPoint): MonthlyVariance | null {
+  if (month.month > deptLastDataMonth.value) return null
+  return calculateMonthlyVariance(visibleActual(month), resolvedMonthlyPlan.value[month.month] ?? month.budget)
+}
+
+function expectedMonthlyVariance(month: MonthlyPoint): MonthlyVariance | null {
+  if (!pointInTimeEstimate.value || month.month <= deptLastDataMonth.value) return null
+  const estimate = pointInTimeEstimate.value[month.month]
+  if (estimate === undefined) return null
+  return calculateMonthlyVariance(estimate, resolvedMonthlyPlan.value[month.month] ?? month.budget)
+}
+
+function calculateMonthlyVariance(value: number, plan: number): MonthlyVariance | null {
+  const amount = value - plan
+  if (Math.abs(amount) < 0.01) return null
+  return { amount, percent: plan > 0 ? (amount / plan) * 100 : null }
+}
+
+function formatMonthlyVariance(variance: MonthlyVariance | null): string | null {
+  if (!variance) return null
+  const amountSign = variance.amount > 0 ? '+' : ''
+  const percent = variance.percent === null ? 'n/a' : `${variance.percent > 0 ? '+' : ''}${variance.percent.toFixed(1)}%`
+  return `${amountSign}${formatCurrency(variance.amount, 0)} (${percent})`
+}
+
+function monthlyVarianceClass(variance: MonthlyVariance | null): string {
+  if (!variance) return 'text-gray-300 dark:text-gray-600'
+  return variance.amount > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'
 }
 
 function cancelEditPlan() {
@@ -1125,6 +1255,9 @@ if (import.meta.client) {
     selectedMonth.value = null
     deptFullYear.value = false
     showForecastYear.value = false
+    pointInTimeEstimate.value = null
+    pointInTimeEstimateError.value = null
+    pointInTimeEstimating.value = false
     if (dept) await loadPlanOverrides(dept.department, selectedYear.value)
     if (dept) await loadPlanHistory()
   }, { immediate: true })
@@ -1178,6 +1311,16 @@ const grandForecast = computed(() => {
   const remaining = 12 - lastMonthNum
   return grandActual.value + grandBurnRate.value * remaining
 })
+
+const grandProjectedVariance = computed(() => grandForecast.value - grandFullYearPlan.value)
+const grandProjectedVariancePercent = computed(() => grandFullYearPlan.value > 0
+  ? (grandProjectedVariance.value / grandFullYearPlan.value) * 100
+  : 0)
+
+function departmentVarianceShare(d: DepartmentResult): number {
+  if (grandVariance.value === 0) return 0
+  return ((deptVisibleActual(d) - resolvedDeptPlan(d)) / grandVariance.value) * 100
+}
 
 // Last month key (YYYY-MM-01) that has any visible actual data across all departments
 const overviewLastDataMonth = computed(() => {
