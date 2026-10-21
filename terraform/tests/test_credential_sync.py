@@ -41,6 +41,34 @@ class CredentialSyncTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             credential_sync._claim(dynamodb, "token:secret")
 
+    def test_claim_separates_lock_and_record_expiration(self):
+        dynamodb = Mock()
+        with patch.object(credential_sync.time, "time", return_value=1000):
+            self.assertTrue(credential_sync._claim(dynamodb, "token:secret"))
+        item = dynamodb.put_item.call_args.kwargs["Item"]
+        self.assertEqual(
+            item["lock_expires_at"]["N"],
+            str(1000 + credential_sync.LOCK_SECONDS),
+        )
+        self.assertEqual(
+            item["record_expires_at"]["N"],
+            str(1000 + credential_sync.RECORD_RETENTION_SECONDS),
+        )
+        condition = dynamodb.put_item.call_args.kwargs["ConditionExpression"]
+        self.assertIn("#status = :in_progress", condition)
+
+    def test_waiter_budget_is_shared_across_remaining_targets(self):
+        context = Mock()
+        context.get_remaining_time_in_millis.return_value = 840000
+        config = credential_sync._waiter_config(context, 2)
+        self.assertEqual(config, {"Delay": 15, "MaxAttempts": 26})
+
+    def test_waiter_rejects_insufficient_remaining_time(self):
+        context = Mock()
+        context.get_remaining_time_in_millis.return_value = 60000
+        with self.assertRaises(RuntimeError):
+            credential_sync._waiter_config(context, 1)
+
 
 if __name__ == "__main__":
     unittest.main()
