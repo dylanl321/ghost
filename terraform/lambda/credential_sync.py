@@ -114,12 +114,19 @@ def lambda_handler(event, context):
     ecs = boto3.client("ecs")
     dynamodb = boto3.client("dynamodb")
     synced = 0
-    for target in TARGETS:
+    for index, target in enumerate(TARGETS):
         rotation_target = f"{version_id}:{target[0]}"
         if not _claim(dynamodb, rotation_target):
             synced += 1
             continue
-        _sync_target(target, credential, secrets, ecs)
+        targets_remaining = len(TARGETS) - index
+        _sync_target(
+            target,
+            credential,
+            secrets,
+            ecs,
+            _waiter_config(context, targets_remaining),
+        )
         dynamodb.update_item(
             TableName=STATE_TABLE,
             Key={"rotation_target": {"S": rotation_target}},
