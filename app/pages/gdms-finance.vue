@@ -231,7 +231,7 @@
               <div class="flex items-center justify-between">
                 <div>
                   <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Monthly Plan vs Actual — {{ activeDept.department }}</h2>
-                  <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Completed months use posted chargeback actuals. Open and future months use AWS Cost Explorer forecasts by component.</p>
+                  <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Completed months use posted chargeback actuals. Full Year estimates remaining months from the current actual-to-plan trend.</p>
                 </div>
                 <div class="flex items-center gap-2">
                   <UButton
@@ -241,16 +241,6 @@
                     icon="i-heroicons-calendar"
                     @click="toggleDeptFullYear"
                   >Full Year</UButton>
-                  <UTooltip v-if="deptFullYear && selectedYear === currentYear" text="Refresh point-in-time estimate">
-                    <UButton
-                      color="gray"
-                      variant="ghost"
-                      icon="i-heroicons-arrow-path"
-                      size="xs"
-                      :loading="pointInTimeEstimating"
-                      @click="refreshPointInTimeEstimate"
-                    />
-                  </UTooltip>
                   <div class="flex items-center gap-1">
                     <UButton color="purple" variant="soft" icon="i-heroicons-chart-bar-square" size="xs" :loading="forecastGenerating" @click="generateForecast">
                       Generate Forecast
@@ -261,7 +251,6 @@
                   </div>
                   <span v-if="forecastError" class="text-xs text-red-500">{{ forecastError }}</span>
                   <span v-else-if="forecastNotice" class="text-xs text-amber-600 dark:text-amber-400">{{ forecastNotice }}</span>
-                  <span v-if="pointInTimeEstimateError" class="text-xs text-red-500">{{ pointInTimeEstimateError }}</span>
                   <span v-if="excelExportError" class="text-xs text-red-500">{{ excelExportError }}</span>
                 </div>
               </div>
@@ -288,31 +277,22 @@
                     >{{ formatCurrency(resolvedMonthlyPlan[m.month] ?? m.budget, 0) }}</td>
                   </tr>
                   <tr>
-                    <td class="py-2 pr-4 font-semibold text-orange-500 dark:text-orange-400 whitespace-nowrap">Actual By Month</td>
+                    <td class="py-2 pr-4 font-semibold text-orange-500 dark:text-orange-400 whitespace-nowrap">{{ deptFullYear ? 'Actual / Estimate' : 'Actual By Month' }}</td>
                     <td
                       v-for="m in deptVisibleMonthly"
                       :key="m.month"
-                      class="py-2 px-3 text-right"
-                      :class="visibleActual(m) > 0 ? 'text-orange-500 dark:text-orange-400' : 'text-gray-300 dark:text-gray-600'"
-                    >{{ visibleActual(m) > 0 ? formatCurrency(visibleActual(m), 0) : '—' }}</td>
-                  </tr>
-                  <tr>
-                    <td class="py-2 pr-4 font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">Variance</td>
-                    <td
-                      v-for="m in deptVisibleMonthly"
-                      :key="m.month"
-                      class="py-2 px-3 text-right text-xs"
-                      :class="monthlyVarianceClass(actualMonthlyVariance(m))"
-                    >{{ formatMonthlyVariance(actualMonthlyVariance(m)) || 'â€”' }}</td>
-                  </tr>
-                  <tr v-if="deptFullYear && pointInTimeEstimate">
-                    <td class="py-2 pr-4 font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">Expected Variance</td>
-                    <td
-                      v-for="m in deptVisibleMonthly"
-                      :key="m.month"
-                      class="py-2 px-3 text-right text-xs"
-                      :class="monthlyVarianceClass(expectedMonthlyVariance(m))"
-                    >{{ formatMonthlyVariance(expectedMonthlyVariance(m)) || 'â€”' }}</td>
+                      class="py-2 px-3 text-right whitespace-nowrap"
+                    >
+                      <template v-if="isPostedDepartmentMonth(m)">
+                        <span class="text-orange-500 dark:text-orange-400">{{ formatCurrency(visibleActual(m), 0) }}</span>
+                        <span v-if="actualMonthlyVariance(m)" class="ml-1 text-xs" :class="monthlyVarianceClass(actualMonthlyVariance(m))">{{ formatMonthlyVariance(actualMonthlyVariance(m)) }}</span>
+                      </template>
+                      <template v-else-if="estimatedMonthlyValue(m) !== null">
+                        <span class="text-purple-500 dark:text-purple-400">Est. {{ formatCurrency(estimatedMonthlyValue(m)!, 0) }}</span>
+                        <span v-if="estimatedMonthlyVariance(m)" class="ml-1 text-xs" :class="monthlyVarianceClass(estimatedMonthlyVariance(m))">{{ formatMonthlyVariance(estimatedMonthlyVariance(m)) }}</span>
+                      </template>
+                      <span v-else class="text-gray-300 dark:text-gray-600">-</span>
+                    </td>
                   </tr>
                   <tr class="border-t border-gray-200 dark:border-gray-600">
                     <td class="py-2 pr-4 font-semibold text-blue-400 dark:text-blue-500 whitespace-nowrap">Plan (Cumulative)</td>
@@ -323,13 +303,18 @@
                     >{{ formatCurrency(deptVisibleMonthly.slice(0, i + 1).reduce((s, p) => s + (resolvedMonthlyPlan[p.month] ?? p.budget), 0), 0) }}</td>
                   </tr>
                   <tr>
-                    <td class="py-2 pr-4 font-semibold text-orange-400 dark:text-orange-500 whitespace-nowrap">Actual (Cumulative)</td>
+                    <td class="py-2 pr-4 font-semibold text-orange-400 dark:text-orange-500 whitespace-nowrap">{{ deptFullYear ? 'Actual / Estimate (Cumulative)' : 'Actual (Cumulative)' }}</td>
                     <td
                       v-for="(m, i) in deptVisibleMonthly"
                       :key="m.month"
-                      class="py-2 px-3 text-right"
-                      :class="deptVisibleMonthly.slice(0, i + 1).every(p => visibleActual(p) > 0) ? 'text-orange-400 dark:text-orange-500' : 'text-gray-300 dark:text-gray-600'"
-                    >{{ deptVisibleMonthly.slice(0, i + 1).every(p => visibleActual(p) > 0) ? formatCurrency(deptVisibleMonthly.slice(0, i + 1).reduce((s, p) => s + visibleActual(p), 0), 0) : '—' }}</td>
+                      class="py-2 px-3 text-right whitespace-nowrap"
+                    >
+                      <template v-if="cumulativeActualOrEstimate(i) !== null">
+                        <span :class="isPostedDepartmentMonth(m) ? 'text-orange-400 dark:text-orange-500' : 'text-purple-500 dark:text-purple-400'">{{ formatCurrency(cumulativeActualOrEstimate(i)!, 0) }}</span>
+                        <span v-if="cumulativeVariance(i)" class="ml-1 text-xs" :class="monthlyVarianceClass(cumulativeVariance(i))">{{ formatMonthlyVariance(cumulativeVariance(i)) }}</span>
+                      </template>
+                      <span v-else class="text-gray-300 dark:text-gray-600">-</span>
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -357,37 +342,6 @@
           <UAlert v-if="forecastExcludedAccounts.length" color="amber" variant="subtle" icon="i-heroicons-information-circle" title="Catalog records excluded from forecast" class="mb-4">
             <template #description><div v-for="account in forecastExcludedAccounts" :key="account.accountId" class="mt-1"><span class="font-mono">{{ account.accountId }}</span> {{ account.name }}: {{ account.reason }}</div></template>
           </UAlert>
-
-          <UCard v-if="planHistory.length" class="mb-4">
-            <template #header>
-              <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Plan Change History</h2>
-            </template>
-            <div class="divide-y divide-gray-100 dark:divide-gray-700 text-sm">
-              <div v-for="entry in planHistory" :key="entry.sk" class="flex items-center gap-3 py-2">
-                <span class="flex-1 text-gray-700 dark:text-gray-300">{{ formatPlanAction(entry.action) }}</span>
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{ entry.actor }}</span>
-                <span class="text-xs text-gray-500 dark:text-gray-400">{{ new Date(entry.createdAt).toLocaleString() }}</span>
-                <UButton color="gray" variant="ghost" size="xs" icon="i-heroicons-arrow-uturn-left" @click="revertPlan(entry)">Revert Change</UButton>
-              </div>
-            </div>
-          </UCard>
-
-          <UCard v-if="forecastComposition" class="mb-4">
-            <template #header>
-              <div><h2 class="text-sm font-semibold text-gray-900 dark:text-white">Forecast Account Composition</h2><p class="text-xs text-gray-500 mt-1">AWS forecast results and posted actuals recorded with this plan version.</p></div>
-            </template>
-            <div v-if="forecastComposition.methodology" class="mb-3 grid grid-cols-1 md:grid-cols-2 gap-2">
-              <div v-for="item in forecastComposition.methodology" :key="item.component" class="border border-gray-200 p-2 text-xs dark:border-gray-700"><span class="font-medium">{{ item.component }}:</span> {{ item.source }} · {{ item.operation }}</div>
-            </div>
-            <div class="overflow-x-auto">
-              <table class="w-full text-sm">
-                <thead><tr class="border-b border-gray-200 dark:border-gray-700 text-left text-xs text-gray-500 dark:text-gray-400"><th class="py-2">Account</th><th class="py-2 text-right">Allocation</th><th class="py-2 text-right">Forecast Remainder</th></tr></thead>
-                <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-                  <tr v-for="row in forecastCompositionRows" :key="row.accountId"><td class="py-2 font-mono text-xs">{{ row.accountId }}</td><td class="py-2 text-right tabular-nums">{{ (row.share * 100).toFixed(1) }}%</td><td class="py-2 text-right tabular-nums">{{ formatCurrency(row.total, 0) }}</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </UCard>
 
           <UModal v-model="showForecastPreview" :ui="{ width: 'sm:max-w-5xl' }">
             <UCard
@@ -445,16 +399,6 @@
                     icon="i-heroicons-calendar"
                     @click="toggleDeptFullYear"
                   >Full Year</UButton>
-                  <UTooltip v-if="deptFullYear && selectedYear === currentYear" text="Refresh point-in-time estimate">
-                    <UButton
-                      color="gray"
-                      variant="ghost"
-                      icon="i-heroicons-arrow-path"
-                      size="xs"
-                      :loading="pointInTimeEstimating"
-                      @click="refreshPointInTimeEstimate"
-                    />
-                  </UTooltip>
                 </div>
               </template>
 
@@ -503,16 +447,6 @@
                     icon="i-heroicons-calendar"
                     @click="toggleDeptFullYear"
                   >Full Year</UButton>
-                  <UTooltip v-if="deptFullYear && selectedYear === currentYear" text="Refresh point-in-time estimate">
-                    <UButton
-                      color="gray"
-                      variant="ghost"
-                      icon="i-heroicons-arrow-path"
-                      size="xs"
-                      :loading="pointInTimeEstimating"
-                      @click="refreshPointInTimeEstimate"
-                    />
-                  </UTooltip>
                 </div>
               </template>
               <VChart :option="deptYtdChartOption" class="h-64" autoresize />
@@ -552,6 +486,62 @@
             </UCard>
           </div>
 
+          <div class="space-y-3 mb-4">
+            <UCard v-if="planHistory.length" :ui="{ body: { padding: 'p-0' } }">
+              <template #header>
+                <button
+                  type="button"
+                  class="flex w-full items-center gap-3 text-left"
+                  :aria-expanded="planHistoryExpanded"
+                  @click="planHistoryExpanded = !planHistoryExpanded"
+                >
+                  <div class="min-w-0 flex-1">
+                    <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Plan Change History</h2>
+                  </div>
+                  <span class="text-xs text-gray-400 dark:text-gray-500">{{ planHistory.length }}</span>
+                  <UIcon :name="planHistoryExpanded ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'" class="h-4 w-4 text-gray-400" />
+                </button>
+              </template>
+              <div v-if="planHistoryExpanded" class="divide-y divide-gray-100 px-4 dark:divide-gray-700">
+                <div v-for="entry in planHistory" :key="entry.sk" class="flex items-center gap-3 py-2 text-sm">
+                  <span class="min-w-0 flex-1 truncate text-gray-700 dark:text-gray-300">{{ formatPlanAction(entry.action) }}</span>
+                  <span class="hidden text-xs text-gray-500 dark:text-gray-400 sm:inline">{{ entry.actor }}</span>
+                  <span class="text-xs text-gray-500 dark:text-gray-400">{{ new Date(entry.createdAt).toLocaleString() }}</span>
+                  <UButton color="gray" variant="ghost" size="xs" icon="i-heroicons-arrow-uturn-left" @click="revertPlan(entry)">Revert Change</UButton>
+                </div>
+              </div>
+            </UCard>
+
+            <UCard v-if="forecastComposition" :ui="{ body: { padding: 'p-0' } }">
+              <template #header>
+                <button
+                  type="button"
+                  class="flex w-full items-center gap-3 text-left"
+                  :aria-expanded="forecastCompositionExpanded"
+                  @click="forecastCompositionExpanded = !forecastCompositionExpanded"
+                >
+                  <div class="min-w-0 flex-1">
+                    <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Forecast Account Composition</h2>
+                  </div>
+                  <span class="text-xs text-gray-400 dark:text-gray-500">{{ forecastCompositionRows.length }}</span>
+                  <UIcon :name="forecastCompositionExpanded ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'" class="h-4 w-4 text-gray-400" />
+                </button>
+              </template>
+              <div v-if="forecastCompositionExpanded" class="p-4">
+                <div v-if="forecastComposition.methodology" class="mb-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+                  <div v-for="item in forecastComposition.methodology" :key="item.component" class="border border-gray-200 p-2 text-xs dark:border-gray-700"><span class="font-medium">{{ item.component }}:</span> {{ item.source }} - {{ item.operation }}</div>
+                </div>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead><tr class="border-b border-gray-200 text-left text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400"><th class="py-2">Account</th><th class="py-2 text-right">Allocation</th><th class="py-2 text-right">Forecast Remainder</th></tr></thead>
+                    <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                      <tr v-for="row in forecastCompositionRows" :key="row.accountId"><td class="py-2 font-mono text-xs">{{ row.accountId }}</td><td class="py-2 text-right tabular-nums">{{ (row.share * 100).toFixed(1) }}%</td><td class="py-2 text-right tabular-nums">{{ formatCurrency(row.total, 0) }}</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </UCard>
+          </div>
           <!-- Category breakdown: compact list rows -->
           <UCard>
             <template #header>
@@ -822,9 +812,8 @@ const forecastError = ref<string | null>(null)
 const forecastErrorDetails = ref<Record<string, unknown> | null>(null)
 const forecastNotice = ref<string | null>(null)
 const forecastComposition = ref<any>(null)
-const pointInTimeEstimate = ref<Record<string, number> | null>(null)
-const pointInTimeEstimating = ref(false)
-const pointInTimeEstimateError = ref<string | null>(null)
+const planHistoryExpanded = ref(false)
+const forecastCompositionExpanded = ref(false)
 const forecastFailures = computed(() => Array.isArray((forecastErrorDetails.value as any)?.failures) ? (forecastErrorDetails.value as any).failures : [])
 const forecastExcludedAccounts = ref<Array<{ accountId: string; name: string; source: string; pepEnvironmentStatus?: string; enclaveStatus?: string; reason: string }>>([])
 const forecastErrorContext = computed(() => {
@@ -983,9 +972,6 @@ async function loadPlanOverrides(dept: string, year: number) {
 // Reload overrides when year changes
 watch(selectedYear, () => {
   planOverrides.value = {}
-  pointInTimeEstimate.value = null
-  pointInTimeEstimateError.value = null
-  pointInTimeEstimating.value = false
 })
 
 function startEditPlan() {
@@ -1017,7 +1003,6 @@ async function savePlan() {
       body: { department: dept.department, year: selectedYear.value, monthlyValues: overrides }
     })
     planOverrides.value = { ...planOverrides.value, [dept.department]: overrides }
-    pointInTimeEstimate.value = null
     editingPlan.value = false
     await loadPlanHistory()
   } catch (err: any) {
@@ -1086,7 +1071,6 @@ async function applyForecast() {
       method: 'POST', body: { department: dept.department, year: selectedYear.value, monthlyActuals, accountMonthlyActuals, specialMonthlyActuals, historicalActualBreakdown, currentPlanValues: resolvedMonthlyPlan.value }
     })
     planOverrides.value = { ...planOverrides.value, [dept.department]: response.data.monthlyValues }
-    pointInTimeEstimate.value = null
     forecastComposition.value = response.data.forecastComposition
     forecastNotice.value = 'Forecast applied and recorded.'
     showForecastPreview.value = false
@@ -1098,39 +1082,8 @@ async function applyForecast() {
   }
 }
 
-async function toggleDeptFullYear() {
+function toggleDeptFullYear() {
   deptFullYear.value = !deptFullYear.value
-  if (deptFullYear.value && selectedYear.value === currentYear) await refreshPointInTimeEstimate()
-}
-
-async function refreshPointInTimeEstimate() {
-  const dept = activeDept.value
-  if (!dept || selectedYear.value !== currentYear || pointInTimeEstimating.value) return
-  const requestKey = `${dept.department}:${selectedYear.value}`
-  pointInTimeEstimating.value = true
-  pointInTimeEstimateError.value = null
-  try {
-    const monthlyActuals = Object.fromEntries(dept.monthly.map(month => [month.month, visibleActual(month)]))
-    const response = await $fetch<{ data: { monthlyValues: Record<string, number> } }>('/api/costs/financial-plan-forecast', {
-      method: 'POST',
-      body: {
-        department: dept.department,
-        year: selectedYear.value,
-        monthlyActuals,
-        currentPlanValues: resolvedMonthlyPlan.value,
-        preview: true
-      }
-    })
-    if (`${activeDept.value?.department}:${selectedYear.value}` === requestKey) {
-      pointInTimeEstimate.value = response.data.monthlyValues
-    }
-  } catch (err: any) {
-    if (`${activeDept.value?.department}:${selectedYear.value}` === requestKey) {
-      pointInTimeEstimateError.value = err?.data?.message || err?.message || 'Unable to refresh the point-in-time estimate.'
-    }
-  } finally {
-    if (`${activeDept.value?.department}:${selectedYear.value}` === requestKey) pointInTimeEstimating.value = false
-  }
 }
 
 interface MonthlyVariance {
@@ -1138,16 +1091,59 @@ interface MonthlyVariance {
   percent: number | null
 }
 
+function isPostedDepartmentMonth(month: MonthlyPoint): boolean {
+  return Boolean(deptLastDataMonth.value) && month.month <= deptLastDataMonth.value
+}
+
+const deptEstimateMultiplier = computed(() => {
+  const dept = activeDept.value
+  if (!dept) return 1
+  const postedMonths = dept.monthly.filter(isPostedDepartmentMonth)
+  const plan = postedMonths.reduce((sum, month) => sum + (resolvedMonthlyPlan.value[month.month] ?? month.budget), 0)
+  if (plan <= 0) return 1
+  const actual = postedMonths.reduce((sum, month) => sum + visibleActual(month), 0)
+  return actual / plan
+})
+
 function actualMonthlyVariance(month: MonthlyPoint): MonthlyVariance | null {
-  if (month.month > deptLastDataMonth.value) return null
+  if (!isPostedDepartmentMonth(month)) return null
   return calculateMonthlyVariance(visibleActual(month), resolvedMonthlyPlan.value[month.month] ?? month.budget)
 }
 
-function expectedMonthlyVariance(month: MonthlyPoint): MonthlyVariance | null {
-  if (!pointInTimeEstimate.value || month.month <= deptLastDataMonth.value) return null
-  const estimate = pointInTimeEstimate.value[month.month]
-  if (estimate === undefined) return null
+function estimatedMonthlyValue(month: MonthlyPoint): number | null {
+  if (!deptFullYear.value || isPostedDepartmentMonth(month)) return null
+  const plan = resolvedMonthlyPlan.value[month.month] ?? month.budget
+  return plan * deptEstimateMultiplier.value
+}
+
+function estimatedMonthlyVariance(month: MonthlyPoint): MonthlyVariance | null {
+  const estimate = estimatedMonthlyValue(month)
+  if (estimate === null) return null
   return calculateMonthlyVariance(estimate, resolvedMonthlyPlan.value[month.month] ?? month.budget)
+}
+
+function cumulativeActualOrEstimate(index: number): number | null {
+  const months = deptVisibleMonthly.value.slice(0, index + 1)
+  let total = 0
+  for (const month of months) {
+    if (isPostedDepartmentMonth(month)) {
+      total += visibleActual(month)
+      continue
+    }
+    const estimate = estimatedMonthlyValue(month)
+    if (estimate === null) return null
+    total += estimate
+  }
+  return total
+}
+
+function cumulativeVariance(index: number): MonthlyVariance | null {
+  const actualOrEstimate = cumulativeActualOrEstimate(index)
+  if (actualOrEstimate === null) return null
+  const plan = deptVisibleMonthly.value
+    .slice(0, index + 1)
+    .reduce((sum, month) => sum + (resolvedMonthlyPlan.value[month.month] ?? month.budget), 0)
+  return calculateMonthlyVariance(actualOrEstimate, plan)
 }
 
 function calculateMonthlyVariance(value: number, plan: number): MonthlyVariance | null {
@@ -1255,9 +1251,8 @@ if (import.meta.client) {
     selectedMonth.value = null
     deptFullYear.value = false
     showForecastYear.value = false
-    pointInTimeEstimate.value = null
-    pointInTimeEstimateError.value = null
-    pointInTimeEstimating.value = false
+    planHistoryExpanded.value = false
+    forecastCompositionExpanded.value = false
     if (dept) await loadPlanOverrides(dept.department, selectedYear.value)
     if (dept) await loadPlanHistory()
   }, { immediate: true })
