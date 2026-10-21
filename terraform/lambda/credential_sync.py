@@ -32,12 +32,20 @@ def _claim(dynamodb, rotation_target):
             Item={
                 "rotation_target": {"S": rotation_target},
                 "status": {"S": "IN_PROGRESS"},
-                "expires_at": {"N": str(now + 900)},
+                "lock_expires_at": {"N": str(now + LOCK_SECONDS)},
+                "record_expires_at": {
+                    "N": str(now + RECORD_RETENTION_SECONDS)
+                },
             },
             ConditionExpression=(
-                "attribute_not_exists(rotation_target) OR expires_at < :now"
+                "attribute_not_exists(rotation_target) OR "
+                "(#status = :in_progress AND lock_expires_at < :now)"
             ),
-            ExpressionAttributeValues={":now": {"N": str(now)}},
+            ExpressionAttributeNames={"#status": "status"},
+            ExpressionAttributeValues={
+                ":in_progress": {"S": "IN_PROGRESS"},
+                ":now": {"N": str(now)},
+            },
         )
         return True
     except ClientError as exc:
