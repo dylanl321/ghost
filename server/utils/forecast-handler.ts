@@ -178,7 +178,8 @@ export async function handleForecastRequest(event: H3Event, options: ForecastHan
     return errors.badRequest(event, `Proforma ${responseKey} analysis is only available for commercial environment`)
   }
 
-  if (proforma) {
+  try {
+    if (proforma) {
     // ================================
     // PROFORMA MODE
     // ================================
@@ -231,7 +232,7 @@ export async function handleForecastRequest(event: H3Event, options: ForecastHan
     }
 
     return sendSuccess(event, result)
-  } else {
+    } else {
     // ================================
     // STANDARD MODE
     // ================================
@@ -286,6 +287,23 @@ export async function handleForecastRequest(event: H3Event, options: ForecastHan
         : `${responseKey === 'forecast' ? 'Forecast' : 'AWS ML projection'} based on raw AWS billing data from master account (all accounts)`
     }
 
-    return sendSuccess(event, result)
+      return sendSuccess(event, result)
+    }
+  } catch (error: any) {
+    // Attach endpoint context to otherwise opaque AWS forecast failures so the
+    // resulting 500 is diagnosable in CloudWatch. Never log account IDs or
+    // secrets — only the count of accounts requested. Rethrow so the existing
+    // HTTP error handling / status semantics are unchanged.
+    logger.error(`${logPrefix} ${responseKey} generation failed`, {
+      logPrefix,
+      responseKey,
+      environment,
+      period,
+      accountCount: accountIds.length,
+      proforma,
+      errorName: error?.name,
+      errorMessage: error?.message
+    })
+    throw error
   }
 }

@@ -269,7 +269,13 @@ export async function queryInspectorApi(accounts: IntegrationAccount[], query: P
       return merged
     } catch (error) {
       if ((error as any)?.statusCode) throw error
-      sanitizeProviderError('Amazon Inspector', error)
+      sanitizeProviderError('Amazon Inspector', error, {
+        operation: 'ListFindings',
+        environment: query.environment,
+        page: query.page,
+        regionCount: regions.length,
+        accountCount: ids.length
+      })
     }
   }
 
@@ -292,7 +298,12 @@ export async function queryInspectorApi(accounts: IntegrationAccount[], query: P
       }
       totalIsExact = true
     } catch (error) {
-      sanitizeProviderError('Amazon Inspector', error)
+      sanitizeProviderError('Amazon Inspector', error, {
+        operation: 'ListFindingAggregations',
+        environment: query.environment,
+        regionCount: regions.length,
+        accountCount: ids.length
+      })
     }
   }
 
