@@ -2,7 +2,7 @@ import importlib.util
 import os
 import pathlib
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 os.environ["SYNC_STATE_TABLE"] = "sync-state"
 MODULE_PATH = pathlib.Path(__file__).parents[1] / "lambda" / "credential_sync.py"
