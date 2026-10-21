@@ -17,6 +17,11 @@ TARGETS = (
 )
 # Durable per-version target state makes retries safe after partial completion.
 STATE_TABLE = os.environ["SYNC_STATE_TABLE"]
+LOCK_SECONDS = 15 * 60
+RECORD_RETENTION_SECONDS = 90 * 24 * 60 * 60
+WAITER_DELAY_SECONDS = 15
+WAITER_MAX_ATTEMPTS = 40
+WAITER_RESERVE_SECONDS = 60
 
 
 def _claim(dynamodb, rotation_target):
