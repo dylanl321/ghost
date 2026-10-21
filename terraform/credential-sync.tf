@@ -31,7 +31,8 @@ resource "aws_dynamodb_table" "credential_sync_state" {
   }
 
   ttl {
-    attribute_name = "expires_at"
+    # Retain completed rotation records independently from the short work lock.
+    attribute_name = "record_expires_at"
     enabled        = true
   }
 }
