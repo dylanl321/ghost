@@ -85,7 +85,11 @@ def _sync_target(target, credential, secrets, ecs, waiter_config):
         SecretString=json.dumps(secret),
     )
     ecs.update_service(cluster=cluster, service=service, forceNewDeployment=True)
-    ecs.get_waiter("services_stable").wait(cluster=cluster, services=[service])
+    ecs.get_waiter("services_stable").wait(
+        cluster=cluster,
+        services=[service],
+        WaiterConfig=waiter_config,
+    )
 
 
 def lambda_handler(event, context):
