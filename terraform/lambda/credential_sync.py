@@ -61,7 +61,19 @@ def _claim(dynamodb, rotation_target):
         raise RuntimeError("Synchronization target is already in progress") from exc
 
 
-def _sync_target(target, credential, secrets, ecs):
+def _waiter_config(context, targets_remaining):
+    remaining_seconds = context.get_remaining_time_in_millis() // 1000
+    usable_seconds = remaining_seconds - WAITER_RESERVE_SECONDS
+    max_attempts = min(
+        WAITER_MAX_ATTEMPTS,
+        usable_seconds // (WAITER_DELAY_SECONDS * targets_remaining),
+    )
+    if max_attempts < 1:
+        raise RuntimeError("Insufficient Lambda time remains for ECS stabilization")
+    return {"Delay": WAITER_DELAY_SECONDS, "MaxAttempts": max_attempts}
+
+
+def _sync_target(target, credential, secrets, ecs, waiter_config):
     secret_name, cluster, service = target
     current = secrets.get_secret_value(SecretId=secret_name)
     secret = json.loads(current["SecretString"])
