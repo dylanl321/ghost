@@ -546,11 +546,11 @@ export default defineEventHandler(handleAsync(async (event) => {
         }
       ] : [])
     ],
-    accountMonthlyValues: Object.fromEntries(accountIds.map(accountId => [accountId, {
+    accountMonthlyValues: Object.fromEntries(normalAccountIds.map(accountId => [accountId, {
       ...normalCurrent.byAccountMonth[accountId],
       ...normalFuture.byAccountMonth[accountId]
     }])),
-    normalAccounts: accountIds.map(accountId => ({
+    normalAccounts: normalAccountIds.map(accountId => ({
       accountId,
       name: accountMetadata.get(accountId)?.name || 'Unknown account',
       source: accountMetadata.get(accountId)?.source || 'unknown',
