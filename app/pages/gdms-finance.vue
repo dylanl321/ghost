@@ -231,7 +231,7 @@
               <div class="flex items-center justify-between">
                 <div>
                   <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Monthly Plan vs Actual — {{ activeDept.department }}</h2>
-                  <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Completed months use posted chargeback actuals. Full Year estimates remaining months from the current actual-to-plan trend.</p>
+                  <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Completed months use posted chargeback actuals. Full Year uses the current AWS Cost Explorer estimate by component.</p>
                 </div>
                 <div class="flex items-center gap-2">
                   <UButton
@@ -239,6 +239,7 @@
                     :color="deptFullYear ? 'purple' : 'gray'"
                     :variant="deptFullYear ? 'soft' : 'ghost'"
                     icon="i-heroicons-calendar"
+                    :loading="pointInTimeForecasting"
                     @click="toggleDeptFullYear"
                   >Full Year</UButton>
                   <div class="flex items-center gap-1">
@@ -251,6 +252,7 @@
                   </div>
                   <span v-if="forecastError" class="text-xs text-red-500">{{ forecastError }}</span>
                   <span v-else-if="forecastNotice" class="text-xs text-amber-600 dark:text-amber-400">{{ forecastNotice }}</span>
+                  <span v-if="pointInTimeForecastError" class="text-xs text-red-500">{{ pointInTimeForecastError }}</span>
                   <span v-if="excelExportError" class="text-xs text-red-500">{{ excelExportError }}</span>
                 </div>
               </div>
@@ -285,14 +287,21 @@
                     >
                       <template v-if="isPostedDepartmentMonth(m)">
                         <span class="text-orange-500 dark:text-orange-400">{{ formatCurrency(visibleActual(m), 0) }}</span>
-                        <span v-if="actualMonthlyVariance(m)" class="ml-1 text-xs" :class="monthlyVarianceClass(actualMonthlyVariance(m))">{{ formatMonthlyVariance(actualMonthlyVariance(m)) }}</span>
                       </template>
                       <template v-else-if="estimatedMonthlyValue(m) !== null">
                         <span class="text-purple-500 dark:text-purple-400">Est. {{ formatCurrency(estimatedMonthlyValue(m)!, 0) }}</span>
-                        <span v-if="estimatedMonthlyVariance(m)" class="ml-1 text-xs" :class="monthlyVarianceClass(estimatedMonthlyVariance(m))">{{ formatMonthlyVariance(estimatedMonthlyVariance(m)) }}</span>
                       </template>
                       <span v-else class="text-gray-300 dark:text-gray-600">-</span>
                     </td>
+                  </tr>
+                  <tr>
+                    <td class="py-2 pr-4 font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">Variance</td>
+                    <td
+                      v-for="m in deptVisibleMonthly"
+                      :key="m.month"
+                      class="py-2 px-3 text-right text-xs whitespace-nowrap"
+                      :class="monthlyVarianceClass(isPostedDepartmentMonth(m) ? actualMonthlyVariance(m) : estimatedMonthlyVariance(m))"
+                    >{{ formatMonthlyVariance(isPostedDepartmentMonth(m) ? actualMonthlyVariance(m) : estimatedMonthlyVariance(m)) || '-' }}</td>
                   </tr>
                   <tr class="border-t border-gray-200 dark:border-gray-600">
                     <td class="py-2 pr-4 font-semibold text-blue-400 dark:text-blue-500 whitespace-nowrap">Plan (Cumulative)</td>
@@ -311,10 +320,18 @@
                     >
                       <template v-if="cumulativeActualOrEstimate(i) !== null">
                         <span :class="isPostedDepartmentMonth(m) ? 'text-orange-400 dark:text-orange-500' : 'text-purple-500 dark:text-purple-400'">{{ formatCurrency(cumulativeActualOrEstimate(i)!, 0) }}</span>
-                        <span v-if="cumulativeVariance(i)" class="ml-1 text-xs" :class="monthlyVarianceClass(cumulativeVariance(i))">{{ formatMonthlyVariance(cumulativeVariance(i)) }}</span>
                       </template>
                       <span v-else class="text-gray-300 dark:text-gray-600">-</span>
                     </td>
+                  </tr>
+                  <tr>
+                    <td class="py-2 pr-4 font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">Cumulative Variance</td>
+                    <td
+                      v-for="(m, i) in deptVisibleMonthly"
+                      :key="m.month"
+                      class="py-2 px-3 text-right text-xs whitespace-nowrap"
+                      :class="monthlyVarianceClass(cumulativeVariance(i))"
+                    >{{ formatMonthlyVariance(cumulativeVariance(i)) || '-' }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -397,6 +414,7 @@
                     :color="deptFullYear ? 'purple' : 'gray'"
                     :variant="deptFullYear ? 'soft' : 'ghost'"
                     icon="i-heroicons-calendar"
+                    :loading="pointInTimeForecasting"
                     @click="toggleDeptFullYear"
                   >Full Year</UButton>
                 </div>
@@ -445,6 +463,7 @@
                     :color="deptFullYear ? 'purple' : 'gray'"
                     :variant="deptFullYear ? 'soft' : 'ghost'"
                     icon="i-heroicons-calendar"
+                    :loading="pointInTimeForecasting"
                     @click="toggleDeptFullYear"
                   >Full Year</UButton>
                 </div>
@@ -486,67 +505,11 @@
             </UCard>
           </div>
 
-          <div class="space-y-3 mb-4">
-            <UCard v-if="planHistory.length" :ui="{ body: { padding: 'p-0' } }">
-              <template #header>
-                <button
-                  type="button"
-                  class="flex w-full items-center gap-3 text-left"
-                  :aria-expanded="planHistoryExpanded"
-                  @click="planHistoryExpanded = !planHistoryExpanded"
-                >
-                  <div class="min-w-0 flex-1">
-                    <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Plan Change History</h2>
-                  </div>
-                  <span class="text-xs text-gray-400 dark:text-gray-500">{{ planHistory.length }}</span>
-                  <UIcon :name="planHistoryExpanded ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'" class="h-4 w-4 text-gray-400" />
-                </button>
-              </template>
-              <div v-if="planHistoryExpanded" class="divide-y divide-gray-100 px-4 dark:divide-gray-700">
-                <div v-for="entry in planHistory" :key="entry.sk" class="flex items-center gap-3 py-2 text-sm">
-                  <span class="min-w-0 flex-1 truncate text-gray-700 dark:text-gray-300">{{ formatPlanAction(entry.action) }}</span>
-                  <span class="hidden text-xs text-gray-500 dark:text-gray-400 sm:inline">{{ entry.actor }}</span>
-                  <span class="text-xs text-gray-500 dark:text-gray-400">{{ new Date(entry.createdAt).toLocaleString() }}</span>
-                  <UButton color="gray" variant="ghost" size="xs" icon="i-heroicons-arrow-uturn-left" @click="revertPlan(entry)">Revert Change</UButton>
-                </div>
-              </div>
-            </UCard>
-
-            <UCard v-if="forecastComposition" :ui="{ body: { padding: 'p-0' } }">
-              <template #header>
-                <button
-                  type="button"
-                  class="flex w-full items-center gap-3 text-left"
-                  :aria-expanded="forecastCompositionExpanded"
-                  @click="forecastCompositionExpanded = !forecastCompositionExpanded"
-                >
-                  <div class="min-w-0 flex-1">
-                    <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Forecast Account Composition</h2>
-                  </div>
-                  <span class="text-xs text-gray-400 dark:text-gray-500">{{ forecastCompositionRows.length }}</span>
-                  <UIcon :name="forecastCompositionExpanded ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'" class="h-4 w-4 text-gray-400" />
-                </button>
-              </template>
-              <div v-if="forecastCompositionExpanded" class="p-4">
-                <div v-if="forecastComposition.methodology" class="mb-3 grid grid-cols-1 gap-2 md:grid-cols-2">
-                  <div v-for="item in forecastComposition.methodology" :key="item.component" class="border border-gray-200 p-2 text-xs dark:border-gray-700"><span class="font-medium">{{ item.component }}:</span> {{ item.source }} - {{ item.operation }}</div>
-                </div>
-                <div class="overflow-x-auto">
-                  <table class="w-full text-sm">
-                    <thead><tr class="border-b border-gray-200 text-left text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400"><th class="py-2">Account</th><th class="py-2 text-right">Allocation</th><th class="py-2 text-right">Forecast Remainder</th></tr></thead>
-                    <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-                      <tr v-for="row in forecastCompositionRows" :key="row.accountId"><td class="py-2 font-mono text-xs">{{ row.accountId }}</td><td class="py-2 text-right tabular-nums">{{ (row.share * 100).toFixed(1) }}%</td><td class="py-2 text-right tabular-nums">{{ formatCurrency(row.total, 0) }}</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </UCard>
-          </div>
           <!-- Category breakdown: compact list rows -->
           <UCard>
             <template #header>
-              <h2 class="text-base font-semibold text-gray-900 dark:text-white">Cost Breakdown</h2>
-              <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Individual accounts sorted by largest YTD variance</p>
+              <h2 class="text-base font-semibold text-gray-900 dark:text-white">Variance Drivers</h2>
+              <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Categories ordered by material YTD variance. Expand a driver to inspect the contributing accounts.</p>
             </template>
             <div class="overflow-x-auto">
               <table class="w-full text-sm">
@@ -715,6 +678,63 @@
               </table>
             </div>
           </UCard>
+
+          <div class="space-y-3 mb-4">
+            <UCard v-if="planHistory.length" :ui="{ body: { padding: 'p-0' } }">
+              <template #header>
+                <button
+                  type="button"
+                  class="flex w-full items-center gap-3 text-left"
+                  :aria-expanded="planHistoryExpanded"
+                  @click="planHistoryExpanded = !planHistoryExpanded"
+                >
+                  <div class="min-w-0 flex-1">
+                    <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Plan Change History</h2>
+                  </div>
+                  <span class="text-xs text-gray-400 dark:text-gray-500">{{ planHistory.length }}</span>
+                  <UIcon :name="planHistoryExpanded ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'" class="h-4 w-4 text-gray-400" />
+                </button>
+              </template>
+              <div v-if="planHistoryExpanded" class="divide-y divide-gray-100 px-4 dark:divide-gray-700">
+                <div v-for="entry in planHistory" :key="entry.sk" class="flex items-center gap-3 py-2 text-sm">
+                  <span class="min-w-0 flex-1 truncate text-gray-700 dark:text-gray-300">{{ formatPlanAction(entry.action) }}</span>
+                  <span class="hidden text-xs text-gray-500 dark:text-gray-400 sm:inline">{{ entry.actor }}</span>
+                  <span class="text-xs text-gray-500 dark:text-gray-400">{{ new Date(entry.createdAt).toLocaleString() }}</span>
+                  <UButton color="gray" variant="ghost" size="xs" icon="i-heroicons-arrow-uturn-left" @click="revertPlan(entry)">Revert Change</UButton>
+                </div>
+              </div>
+            </UCard>
+
+            <UCard v-if="forecastComposition" :ui="{ body: { padding: 'p-0' } }">
+              <template #header>
+                <button
+                  type="button"
+                  class="flex w-full items-center gap-3 text-left"
+                  :aria-expanded="forecastCompositionExpanded"
+                  @click="forecastCompositionExpanded = !forecastCompositionExpanded"
+                >
+                  <div class="min-w-0 flex-1">
+                    <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Forecast Account Composition</h2>
+                  </div>
+                  <span class="text-xs text-gray-400 dark:text-gray-500">{{ forecastCompositionRows.length }}</span>
+                  <UIcon :name="forecastCompositionExpanded ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'" class="h-4 w-4 text-gray-400" />
+                </button>
+              </template>
+              <div v-if="forecastCompositionExpanded" class="p-4">
+                <div v-if="forecastComposition.methodology" class="mb-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+                  <div v-for="item in forecastComposition.methodology" :key="item.component" class="border border-gray-200 p-2 text-xs dark:border-gray-700"><span class="font-medium">{{ item.component }}:</span> {{ item.source }} - {{ item.operation }}</div>
+                </div>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead><tr class="border-b border-gray-200 text-left text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400"><th class="py-2">Account</th><th class="py-2 text-right">Allocation</th><th class="py-2 text-right">Forecast Remainder</th></tr></thead>
+                    <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                      <tr v-for="row in forecastCompositionRows" :key="row.accountId"><td class="py-2 font-mono text-xs">{{ row.accountId }}</td><td class="py-2 text-right tabular-nums">{{ (row.share * 100).toFixed(1) }}%</td><td class="py-2 text-right tabular-nums">{{ formatCurrency(row.total, 0) }}</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </UCard>
+          </div>
         </div>
       </template>
     </template>
@@ -812,6 +832,9 @@ const forecastError = ref<string | null>(null)
 const forecastErrorDetails = ref<Record<string, unknown> | null>(null)
 const forecastNotice = ref<string | null>(null)
 const forecastComposition = ref<any>(null)
+const pointInTimeForecast = ref<Record<string, number> | null>(null)
+const pointInTimeForecasting = ref(false)
+const pointInTimeForecastError = ref<string | null>(null)
 const planHistoryExpanded = ref(false)
 const forecastCompositionExpanded = ref(false)
 const forecastFailures = computed(() => Array.isArray((forecastErrorDetails.value as any)?.failures) ? (forecastErrorDetails.value as any).failures : [])
@@ -954,6 +977,7 @@ async function revertPlan(entry: PlanHistoryEntry) {
     method: 'POST', body: { department: dept.department, year: selectedYear.value, historyKey: entry.sk, restorePrevious: true }
   })
   planOverrides.value = { ...planOverrides.value, [dept.department]: response.data.monthlyValues }
+  pointInTimeForecast.value = null
   await loadPlanHistory()
 }
 
@@ -972,6 +996,9 @@ async function loadPlanOverrides(dept: string, year: number) {
 // Reload overrides when year changes
 watch(selectedYear, () => {
   planOverrides.value = {}
+  pointInTimeForecast.value = null
+  pointInTimeForecastError.value = null
+  pointInTimeForecasting.value = false
 })
 
 function startEditPlan() {
@@ -1003,6 +1030,7 @@ async function savePlan() {
       body: { department: dept.department, year: selectedYear.value, monthlyValues: overrides }
     })
     planOverrides.value = { ...planOverrides.value, [dept.department]: overrides }
+    pointInTimeForecast.value = null
     editingPlan.value = false
     await loadPlanHistory()
   } catch (err: any) {
@@ -1071,6 +1099,7 @@ async function applyForecast() {
       method: 'POST', body: { department: dept.department, year: selectedYear.value, monthlyActuals, accountMonthlyActuals, specialMonthlyActuals, historicalActualBreakdown, currentPlanValues: resolvedMonthlyPlan.value }
     })
     planOverrides.value = { ...planOverrides.value, [dept.department]: response.data.monthlyValues }
+    pointInTimeForecast.value = null
     forecastComposition.value = response.data.forecastComposition
     forecastNotice.value = 'Forecast applied and recorded.'
     showForecastPreview.value = false
@@ -1082,10 +1111,41 @@ async function applyForecast() {
   }
 }
 
-function toggleDeptFullYear() {
+async function toggleDeptFullYear() {
   deptFullYear.value = !deptFullYear.value
+  if (deptFullYear.value && selectedYear.value === currentYear) await refreshPointInTimeForecast()
 }
 
+async function refreshPointInTimeForecast() {
+  const dept = activeDept.value
+  if (!dept || selectedYear.value !== currentYear || pointInTimeForecasting.value) return
+  const requestKey = `${dept.department}:${selectedYear.value}`
+  pointInTimeForecasting.value = true
+  pointInTimeForecastError.value = null
+  try {
+    const monthlyActuals = Object.fromEntries(dept.monthly.map(month => [month.month, visibleActual(month)]))
+    const historicalActualBreakdown: Record<string, { accountId: string; name: string; monthlyActuals: Record<string, number> }> = {}
+    const accountMonthlyActuals: Record<string, number> = {}
+    const specialMonthlyActuals: Record<string, number> = {}
+    for (const category of dept.categories) {
+      const categoryActual = category.accounts.reduce((sum, account) => sum + Number(account.monthlyActuals?.[ytdCutoff] || 0), 0)
+      if (category.name === 'GDMS Cloud' || category.name === 'GDMS-DevOrg') specialMonthlyActuals[category.name] = categoryActual
+      for (const account of category.accounts) historicalActualBreakdown[`${category.name}:${account.accountId}`] = { accountId: account.accountId, name: account.name || category.name, monthlyActuals: account.monthlyActuals || {} }
+      if (category.name !== 'GDMS Cloud' && category.name !== 'GDMS-DevOrg') for (const account of category.accounts) accountMonthlyActuals[account.accountId] = Number(account.monthlyActuals?.[ytdCutoff] || 0)
+    }
+    const response = await $fetch<{ data: { monthlyValues: Record<string, number> } }>('/api/costs/financial-plan-forecast', {
+      method: 'POST',
+      body: { department: dept.department, year: selectedYear.value, monthlyActuals, accountMonthlyActuals, specialMonthlyActuals, historicalActualBreakdown, currentPlanValues: resolvedMonthlyPlan.value, preview: true }
+    })
+    if (`${activeDept.value?.department}:${selectedYear.value}` === requestKey) pointInTimeForecast.value = response.data.monthlyValues
+  } catch (err: any) {
+    if (`${activeDept.value?.department}:${selectedYear.value}` === requestKey) {
+      pointInTimeForecastError.value = err?.data?.error?.message || err?.data?.message || err?.message || 'Unable to calculate the current AWS estimate.'
+    }
+  } finally {
+    if (`${activeDept.value?.department}:${selectedYear.value}` === requestKey) pointInTimeForecasting.value = false
+  }
+}
 interface MonthlyVariance {
   amount: number
   percent: number | null
@@ -1095,25 +1155,15 @@ function isPostedDepartmentMonth(month: MonthlyPoint): boolean {
   return Boolean(deptLastDataMonth.value) && month.month <= deptLastDataMonth.value
 }
 
-const deptEstimateMultiplier = computed(() => {
-  const dept = activeDept.value
-  if (!dept) return 1
-  const postedMonths = dept.monthly.filter(isPostedDepartmentMonth)
-  const plan = postedMonths.reduce((sum, month) => sum + (resolvedMonthlyPlan.value[month.month] ?? month.budget), 0)
-  if (plan <= 0) return 1
-  const actual = postedMonths.reduce((sum, month) => sum + visibleActual(month), 0)
-  return actual / plan
-})
-
 function actualMonthlyVariance(month: MonthlyPoint): MonthlyVariance | null {
   if (!isPostedDepartmentMonth(month)) return null
   return calculateMonthlyVariance(visibleActual(month), resolvedMonthlyPlan.value[month.month] ?? month.budget)
 }
 
 function estimatedMonthlyValue(month: MonthlyPoint): number | null {
-  if (!deptFullYear.value || isPostedDepartmentMonth(month)) return null
-  const plan = resolvedMonthlyPlan.value[month.month] ?? month.budget
-  return plan * deptEstimateMultiplier.value
+  if (!deptFullYear.value || isPostedDepartmentMonth(month) || !pointInTimeForecast.value) return null
+  const estimate = pointInTimeForecast.value[month.month]
+  return estimate === undefined ? null : estimate
 }
 
 function estimatedMonthlyVariance(month: MonthlyPoint): MonthlyVariance | null {
@@ -1253,6 +1303,9 @@ if (import.meta.client) {
     showForecastYear.value = false
     planHistoryExpanded.value = false
     forecastCompositionExpanded.value = false
+    pointInTimeForecast.value = null
+    pointInTimeForecastError.value = null
+    pointInTimeForecasting.value = false
     if (dept) await loadPlanOverrides(dept.department, selectedYear.value)
     if (dept) await loadPlanHistory()
   }, { immediate: true })
