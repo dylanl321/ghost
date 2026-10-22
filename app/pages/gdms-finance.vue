@@ -108,7 +108,7 @@
             <template #header>
               <div class="flex items-center justify-between">
                 <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Plan vs Actual by Department</h2>
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center justify-end gap-2">
                   <UButton
                     size="xs"
                     :color="overviewFullYear ? 'purple' : 'gray'"
@@ -127,7 +127,7 @@
             <template #header>
               <div class="flex items-center justify-between">
                 <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Cumulative YTD Plan vs Actual</h2>
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center justify-end gap-2">
                   <UButton
                     size="xs"
                     :color="overviewFullYear ? 'purple' : 'gray'"
@@ -233,7 +233,7 @@
                   <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Monthly Plan vs Actual — {{ activeDept.department }}</h2>
                   <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Completed months use posted chargeback actuals. Full Year uses the current AWS Cost Explorer estimate by component.</p>
                 </div>
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center justify-end gap-2">
                   <UButton
                     size="xs"
                     :color="deptFullYear ? 'purple' : 'gray'"
@@ -250,19 +250,20 @@
                       {{ excelExporting ? 'Generating…' : 'Export Excel' }}
                     </UButton>
                   </div>
-                  <span v-if="forecastError" class="text-xs text-red-500">{{ forecastError }}</span>
-                  <span v-else-if="forecastNotice" class="text-xs text-amber-600 dark:text-amber-400">{{ forecastNotice }}</span>
-                  <span v-if="pointInTimeForecastWarning" class="text-xs text-amber-600 dark:text-amber-400">{{ pointInTimeForecastWarning }}</span>
-                  <span v-if="pointInTimeForecastError" class="text-xs text-red-500">{{ pointInTimeForecastError }}</span>
-                  <span v-if="excelExportError" class="text-xs text-red-500">{{ excelExportError }}</span>
                 </div>
               </div>
             </template>
+            <div v-if="forecastNotice || pointInTimeForecastWarning || pointInTimeForecastError || excelExportError" class="space-y-2 px-4 pt-3">
+              <UAlert v-if="forecastNotice" color="amber" variant="subtle" icon="i-heroicons-information-circle" title="Forecast updated" :description="forecastNotice" />
+              <UAlert v-if="pointInTimeForecastWarning" color="amber" variant="subtle" icon="i-heroicons-exclamation-triangle" title="AWS forecast fallback" :description="pointInTimeForecastWarning" />
+              <UAlert v-if="pointInTimeForecastError" color="red" variant="subtle" icon="i-heroicons-exclamation-triangle" title="AWS preview unavailable" :description="pointInTimeForecastError" />
+              <UAlert v-if="excelExportError" color="red" variant="subtle" icon="i-heroicons-exclamation-triangle" title="Export unavailable" :description="excelExportError" />
+            </div>
             <div class="w-full">
               <table class="w-full table-fixed text-[11px] tabular-nums">
                 <thead>
                   <tr class="border-b border-gray-200 dark:border-gray-700">
-                    <th class="w-24 py-2 pr-2 text-left font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-normal"></th>
+                    <th class="w-36 py-2 pr-2 text-left font-semibold text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap"></th>
                     <th
                       v-for="m in deptVisibleMonthly"
                       :key="m.month"
@@ -272,7 +273,7 @@
                 </thead>
                 <tbody class="divide-y divide-gray-100 dark:divide-gray-700/60">
                   <tr>
-                    <td class="py-2 pr-2 font-semibold text-blue-600 dark:text-blue-400 whitespace-normal">Plan By Month</td>
+                    <td class="py-2 pr-2 font-semibold text-blue-600 dark:text-blue-400 whitespace-nowrap">Plan By Month</td>
                     <td
                       v-for="m in deptVisibleMonthly"
                       :key="m.month"
@@ -280,7 +281,7 @@
                     >{{ formatCurrency(resolvedMonthlyPlan[m.month] ?? m.budget, 0) }}</td>
                   </tr>
                   <tr>
-                    <td class="py-2 pr-2 font-semibold text-orange-500 dark:text-orange-400 whitespace-normal">{{ deptFullYear ? 'Actual / Estimate' : 'Actual By Month' }}</td>
+                    <td class="py-2 pr-2 font-semibold text-orange-500 dark:text-orange-400 whitespace-nowrap">{{ deptFullYear ? 'Actual / Est.' : 'Actual By Month' }}</td>
                     <td
                       v-for="m in deptVisibleMonthly"
                       :key="m.month"
@@ -296,7 +297,7 @@
                     </td>
                   </tr>
                   <tr>
-                    <td class="py-2 pr-2 font-semibold text-gray-500 dark:text-gray-400 whitespace-normal">Variance</td>
+                    <td class="py-2 pr-2 font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">Variance</td>
                     <td
                       v-for="m in deptVisibleMonthly"
                       :key="m.month"
@@ -305,7 +306,7 @@
                     >{{ formatMonthlyVariance(isPostedDepartmentMonth(m) ? actualMonthlyVariance(m) : estimatedMonthlyVariance(m)) || '-' }}</td>
                   </tr>
                   <tr class="border-t border-gray-200 dark:border-gray-600">
-                    <td class="py-2 pr-2 font-semibold text-blue-400 dark:text-blue-500 whitespace-normal">Plan (Cumulative)</td>
+                    <td class="py-2 pr-2 font-semibold text-blue-400 dark:text-blue-500 whitespace-nowrap">Plan (Cumulative)</td>
                     <td
                       v-for="(m, i) in deptVisibleMonthly"
                       :key="m.month"
@@ -313,7 +314,7 @@
                     >{{ formatCurrency(deptVisibleMonthly.slice(0, i + 1).reduce((s, p) => s + (resolvedMonthlyPlan[p.month] ?? p.budget), 0), 0) }}</td>
                   </tr>
                   <tr>
-                    <td class="py-2 pr-2 font-semibold text-orange-400 dark:text-orange-500 whitespace-normal">{{ deptFullYear ? 'Actual / Estimate (Cumulative)' : 'Actual (Cumulative)' }}</td>
+                    <td class="py-2 pr-2 font-semibold text-orange-400 dark:text-orange-500 whitespace-nowrap">{{ deptFullYear ? 'Actual / Est. (Cumulative)' : 'Actual (Cumulative)' }}</td>
                     <td
                       v-for="(m, i) in deptVisibleMonthly"
                       :key="m.month"
@@ -326,7 +327,7 @@
                     </td>
                   </tr>
                   <tr>
-                    <td class="py-2 pr-2 font-semibold text-gray-500 dark:text-gray-400 whitespace-normal">Cumulative Variance</td>
+                    <td class="py-2 pr-2 font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">Cumulative Variance</td>
                     <td
                       v-for="(m, i) in deptVisibleMonthly"
                       :key="m.month"
