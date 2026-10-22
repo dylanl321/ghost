@@ -14,6 +14,7 @@ import type {
 } from '#shared/types/notifications'
 import { FILTER_GROUP_CATEGORIES } from '#shared/types/notifications'
 import type { NotificationFilterGroup } from '#shared/types/notifications'
+import { isUnauthorizedError } from '~/utils/error-helpers'
 
 const logger = createLogger('Notifications')
 
@@ -142,6 +143,17 @@ export function useNotifications() {
         unreadCount.value = result.data.count
       }
     } catch (error) {
+      // The server session can expire while the client still believes it is
+      // logged in (stale loggedIn=true). A 401 here is expected in that window,
+      // so stop polling and the SSE stream immediately instead of warning and
+      // spinning retries until the global auth redirect lands. watch(loggedIn)
+      // restarts polling/SSE after a later successful login.
+      if (isUnauthorizedError(error)) {
+        stopPolling()
+        disconnectSSE()
+        sseReconnectAttempts = 0
+        return
+      }
       logger.warn('Failed to fetch unread count:', error)
     }
   }

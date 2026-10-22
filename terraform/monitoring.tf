@@ -203,6 +203,25 @@ resource "aws_cloudwatch_log_metric_filter" "aws_credential_failure" {
   }
 }
 
+# A burst of nuxt-oidc-auth "State mismatch" errors means the OIDC callback
+# state did not match the stored value — a stale/duplicate callback or a session
+# rotation during deploy. Observability only: root cause is ambiguous, so this
+# does not change session behavior. Matches the exact raw log line emitted by
+# the library (no tokens/cookies/identity are present in that message).
+resource "aws_cloudwatch_log_metric_filter" "oidc_state_mismatch" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-oidc-state-mismatch"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "\"[nuxt-oidc-auth]  ERROR  [nuxt-oidc-auth]: State mismatch - Code: 500\""
+
+  metric_transformation {
+    name          = "OIDCStateMismatchCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
 resource "aws_cloudwatch_log_metric_filter" "job_failure" {
   provider       = aws.target_deployment_account
   name           = "${var.app_name}-job-failure"
@@ -319,6 +338,27 @@ resource "aws_cloudwatch_metric_alarm" "inspector_findings_5xx" {
   period              = 300
   statistic           = "Sum"
   threshold           = 3
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Application = var.app_name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "oidc_state_mismatch" {
+  provider            = aws.target_deployment_account
+  alarm_name          = "${var.app_name}-oidc-state-mismatch"
+  alarm_description   = "nuxt-oidc-auth reported an OIDC state mismatch at least 2 times in 15 minutes — recurring auth callback failure, not a single transient error"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "OIDCStateMismatchCount"
+  namespace           = "${var.app_name}/Application"
+  period              = 900
+  statistic           = "Sum"
+  threshold           = 2
   treat_missing_data  = "notBreaching"
 
   alarm_actions = [aws_sns_topic.alerts.arn]
@@ -477,6 +517,22 @@ resource "aws_cloudwatch_query_definition" "top_error_signatures" {
             max(requestId) as example_requestId
       by level, type, errorName, statusCode, path, message
     | sort occurrences desc
+    | limit 50
+  EOT
+}
+
+resource "aws_cloudwatch_query_definition" "oidc_state_mismatch" {
+  provider        = aws.target_deployment_account
+  name            = "${var.app_name}/OIDC State Mismatch"
+  log_group_names = [aws_cloudwatch_log_group.ecs.name]
+
+  # Raw-message query (the library logs a plain line, not a structured record).
+  # Surfaces when and on which task/stream the mismatch fired, without exposing
+  # any token, cookie, or identity material.
+  query_string = <<-EOT
+    fields @timestamp, @logStream, @message
+    | filter @message like "[nuxt-oidc-auth]: State mismatch - Code: 500"
+    | sort @timestamp desc
     | limit 50
   EOT
 }

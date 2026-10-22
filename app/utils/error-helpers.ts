@@ -20,6 +20,23 @@ export function isTransientError(e: any): boolean {
   return false
 }
 
+/**
+ * Returns true when an error represents an HTTP 401 Unauthorized response.
+ *
+ * $fetch/ofetch surface the status inconsistently depending on where the error
+ * originates, so check the common shapes: a top-level `statusCode`/`status`, the
+ * parsed error body `data.statusCode`, and `response.status`.
+ */
+export function isUnauthorizedError(e: any): boolean {
+  if (!e) return false
+  return (
+    e.statusCode === 401 ||
+    e.status === 401 ||
+    e?.data?.statusCode === 401 ||
+    e?.response?.status === 401
+  )
+}
+
 /** Map error codes/messages to user-facing strings. */
 export function getUserFriendlyMessage(e: any): string {
   if (!e) return 'An unknown error occurred'
