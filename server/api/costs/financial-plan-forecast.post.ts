@@ -103,6 +103,50 @@ function mergeSpecialForecastResults(results: Awaited<ReturnType<typeof forecast
   return { byMonth, byComponentMonth, failures }
 }
 
+function hasInsufficientForecastHistory(message: string) {
+  return message.includes('Insufficient amount of historical data')
+}
+
+function latestPostedAccountActual(historicalActualBreakdown: Record<string, unknown> | undefined, accountId: string): number {
+  let latestMonth = ''
+  let latestAmount = 0
+  for (const rawEntry of Object.values(historicalActualBreakdown || {})) {
+    const entry = rawEntry as { accountId?: string; monthlyActuals?: Record<string, number> }
+    if (entry.accountId !== accountId) continue
+    for (const [month, rawAmount] of Object.entries(entry.monthlyActuals || {})) {
+      const amount = Number(rawAmount || 0)
+      if (amount > 0 && month > latestMonth) {
+        latestMonth = month
+        latestAmount = amount
+      }
+    }
+  }
+  return latestAmount
+}
+
+function fallbackForecastMonths(startMonth: string, endMonth: string) {
+  const months: string[] = []
+  const current = new Date(`${startMonth}T00:00:00Z`)
+  const end = new Date(`${endMonth}T00:00:00Z`)
+  while (current < end) {
+    months.push(current.toISOString().slice(0, 10))
+    current.setUTCMonth(current.getUTCMonth() + 1)
+  }
+  return months
+}
+
+function addAccountForecastValue(
+  target: { byMonth: Record<string, number>; byAccountMonth: Record<string, Record<string, number>> },
+  accountId: string,
+  month: string,
+  value: number
+) {
+  if (value <= 0) return
+  target.byAccountMonth[accountId] = target.byAccountMonth[accountId] || {}
+  target.byAccountMonth[accountId][month] = (target.byAccountMonth[accountId][month] || 0) + value
+  target.byMonth[month] = (target.byMonth[month] || 0) + value
+}
+
 async function loadExistingPlanValues(department: string, years: Set<number>) {
   const config = await getDynamoDBConfig()
   const table = config.financialPlanOverrides
@@ -139,6 +183,38 @@ async function forecastDevOrg(billingViewArn: string, startDate: string, endDate
   }
 }
 
+async function loadBillingViewActual(billingViewArn: string, startDate: string, endDate: string) {
+  const client = await getCostExplorerClient('commercial', 'us-east-1')
+  const response = await client.send(new GetCostAndUsageCommand({
+    TimePeriod: { Start: startDate, End: endDate },
+    Granularity: 'MONTHLY',
+    Metrics: ['UnblendedCost'],
+    BillingViewArn: billingViewArn
+  }))
+  return (response.ResultsByTime || []).reduce(
+    (sum, period) => sum + Number(period.Total?.UnblendedCost?.Amount || 0),
+    0
+  )
+}
+
+async function loadCurrentDevOrgActual(billingViewArn: string, startDate: string, endDate: string) {
+  try {
+    return await loadBillingViewActual(billingViewArn, startDate, endDate)
+  } catch (viewError) {
+    if (!DEV_ORG_MASTER_ACCOUNT_ID) throw viewError
+    logger.warn('[FinancialPlanForecast] DevOrg billing-view actual query failed; trying DevOrg master', { error: viewError })
+    const response = await getCostAndUsage({
+      startDate,
+      endDate,
+      granularity: 'MONTHLY',
+      metrics: ['UnblendedCost']
+    }, 'commercial', DEV_ORG_MASTER_ACCOUNT_ID)
+    return (response.resultsByTime || []).reduce(
+      (sum, period) => sum + Number(period.Total?.UnblendedCost?.Amount || 0),
+      0
+    )
+  }
+}
 async function forecastAccounts(accountIds: string[], startDate: string, endDate: string, granularity: 'DAILY' | 'MONTHLY') {
   const results = await batchForecastCalls(accountIds.map(accountId => ({
     accountId, startDate, endDate, metric: 'UNBLENDED_COST', granularity, proforma: true, environment: 'commercial' as const
@@ -247,30 +323,14 @@ export default defineEventHandler(handleAsync(async (event) => {
       enclaveStatus: account.enclaveStatus || 'missing'
     }))
     .filter((account): account is { accountId: string; name: string; source: string; pepEnvironmentStatus: string; enclaveStatus: string } => Boolean(account.accountId) && account.accountId !== PAYER_ACCOUNT_ID && account.accountId !== DEV_ORG_ACCOUNT_ID && !EXCLUDED_ACCOUNT_IDS.has(account.accountId))
-  const excludedCatalogAccounts = departmentAccounts
-    .filter(account => !isForecastEligibleAccount(account))
-    .map(account => ({
-      ...account,
-      reason: account.pepEnvironmentStatus
-        ? `PEP environment status is "${account.pepEnvironmentStatus}", not an eligible Finance forecasting state`
-        : `PEP environment status is missing and enclaveStatus is "${account.enclaveStatus}", not Active`
-    }))
-  const financeAccounts = departmentAccounts.filter(isForecastEligibleAccount)
-  if (!financeAccounts.length) return errors.badRequest(event, `No forecastable accounts are mapped to ${department}`)
-  const accountMetadata = new Map(financeAccounts.map(account => [account.accountId, account]))
-  const accountIds = financeAccounts.map(account => account.accountId)
-
-  const special: SpecialComponent[] = []
-  let normalAccountIds = accountIds
-  let devOrgMembers: string[] = []
   let devOrgViewArn: string | undefined
+  let billingViewMemberIds = new Set<string>()
   if (department === 'DE158') {
     const devOrg = await resolveBillingView(DEV_ORG_VIEW_NAME)
     if (!devOrg.arn) return errors.badRequest(event, `Could not resolve the ${DEV_ORG_VIEW_NAME} billing view`)
     devOrgViewArn = devOrg.arn
-    let memberIds: Set<string>
     try {
-      memberIds = await getBillingViewMembers(devOrg.arn, today)
+      billingViewMemberIds = await getBillingViewMembers(devOrg.arn, today)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown Cost Explorer error'
       return errors.badRequest(event, 'Could not read GDMS-DevOrg Billing View membership.', {
@@ -279,15 +339,35 @@ export default defineEventHandler(handleAsync(async (event) => {
         message
       })
     }
-    devOrgMembers = accountIds.filter(accountId => memberIds.has(accountId))
-    const nonDevOrgAccounts = financeAccounts.filter(account => !memberIds.has(account.accountId))
+  }
+
+  // DevOrg membership is authoritative for its billing transfer group. These accounts
+  // often have no PEP record, so do not exclude them based on lifecycle metadata alone.
+  const isDevOrgMember = (accountId: string) => department === 'DE158' && billingViewMemberIds.has(accountId)
+  const financeAccounts = departmentAccounts.filter(account => isForecastEligibleAccount(account) || isDevOrgMember(account.accountId))
+  if (!financeAccounts.length) return errors.badRequest(event, `No forecastable accounts are mapped to ${department}`)
+  const excludedCatalogAccounts = departmentAccounts
+    .filter(account => !isForecastEligibleAccount(account) && !isDevOrgMember(account.accountId))
+    .map(account => ({
+      ...account,
+      reason: account.pepEnvironmentStatus
+        ? `PEP environment status is "${account.pepEnvironmentStatus}", not an eligible Finance forecasting state`
+        : `PEP environment status is missing and enclaveStatus is "${account.enclaveStatus}", not Active or a GDMS-DevOrg member`
+    }))
+  const accountMetadata = new Map(financeAccounts.map(account => [account.accountId, account]))
+  const accountIds = financeAccounts.map(account => account.accountId)
+
+  const special: SpecialComponent[] = []
+  let normalAccountIds = accountIds
+  const devOrgMembers = accountIds.filter(accountId => billingViewMemberIds.has(accountId))
+  if (department === 'DE158') {
+    const nonDevOrgAccounts = financeAccounts.filter(account => !billingViewMemberIds.has(account.accountId))
     normalAccountIds = nonDevOrgAccounts.map(account => account.accountId)
     special.push({ id: 'GDMS Cloud', accountId: PAYER_ACCOUNT_ID, filter: { And: [
       { Dimensions: { Key: 'LINKED_ACCOUNT', Values: [PAYER_ACCOUNT_ID] } },
       { Not: { Dimensions: { Key: 'SERVICE', Values: SAVINGS_PLAN_SERVICES } } }
     ] } })
   }
-
   // Finance posts the preceding usage month in the current month. The Finance
   // page supplies that posted proforma chargeback as an actual, so it must not
   // also receive a forecast remainder.
@@ -313,9 +393,16 @@ export default defineEventHandler(handleAsync(async (event) => {
   const normalFuture = normalAccountIds.length ? mergeAccountForecastResults(normalFutureResults) : { byMonth: {}, byAccountMonth: {}, failures: [] as Array<{ id: string; message: string }> }
   const specialCurrent = await forecastSpecial(special, currentForecastStart, currentEnd, 'DAILY')
   const specialFuture = mergeSpecialForecastResults(specialFutureResults)
+  const devOrgCurrentByMonth: Record<string, number> = {}
   const devOrgFutureByMonth: Record<string, number> = {}
   try {
     if (devOrgViewArn) {
+      const [currentForecast, currentActual] = await Promise.all([
+        forecastDevOrg(devOrgViewArn, currentForecastStart, currentEnd, 'DAILY'),
+        loadCurrentDevOrgActual(devOrgViewArn, currentUsageStart, currentForecastStart)
+      ])
+      addForecast(devOrgCurrentByMonth, currentForecast, 1)
+      devOrgCurrentByMonth[currentEnd] = (devOrgCurrentByMonth[currentEnd] || 0) + currentActual
       for (const window of forecastWindows) addForecast(devOrgFutureByMonth, await forecastDevOrg(devOrgViewArn, window.startDate, window.endDate, 'MONTHLY'), 1)
     }
   } catch (error) {
@@ -323,9 +410,50 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.badRequest(event, `AWS could not forecast GDMS-DevOrg: ${message}`, { source: 'GDMS-DevOrg', billingViewArn: devOrgViewArn, fallbackAccountId: DEV_ORG_MASTER_ACCOUNT_ID })
   }
   const failures = [...normalCurrent.failures, ...normalFuture.failures, ...specialCurrent.failures, ...specialFuture.failures]
-  if (failures.length) {
+
+  // The next Finance posting month combines accrued charges with the forecast remainder.
+  const [currentAccountActuals, currentSpecialActuals] = await Promise.all([
+    loadCurrentAccountActuals(normalAccountIds, currentUsageStart, currentForecastStart),
+    loadCurrentSpecialActuals(special, currentUsageStart, currentForecastStart)
+  ])
+  for (const [accountId, actual] of Object.entries(currentAccountActuals)) {
+    normalCurrent.byAccountMonth[accountId] = normalCurrent.byAccountMonth[accountId] || {}
+    normalCurrent.byAccountMonth[accountId][currentEnd] = (normalCurrent.byAccountMonth[accountId][currentEnd] || 0) + actual
+    normalCurrent.byMonth[currentEnd] = (normalCurrent.byMonth[currentEnd] || 0) + actual
+  }
+  for (const [component, actual] of Object.entries(currentSpecialActuals)) {
+    specialCurrent.byComponentMonth[component] = specialCurrent.byComponentMonth[component] || {}
+    specialCurrent.byComponentMonth[component][currentEnd] = (specialCurrent.byComponentMonth[component][currentEnd] || 0) + actual
+    specialCurrent.byMonth[currentEnd] = (specialCurrent.byMonth[currentEnd] || 0) + actual
+  }
+
+  const fallbackAccounts: Array<{ accountId: string; name: string; monthlyValue: number }> = []
+  const unresolvedFailures = failures.filter(failure => !hasInsufficientForecastHistory(failure.message))
+  const unresolvedInsufficientFailures = new Map<string, string>()
+  const fallbackMonths = fallbackForecastMonths(currentEnd, futureEnd)
+  for (const failure of failures) {
+    if (!hasInsufficientForecastHistory(failure.message) || unresolvedInsufficientFailures.has(failure.id) || fallbackAccounts.some(account => account.accountId === failure.id)) continue
+    const historicalActual = latestPostedAccountActual(historicalActualBreakdown, failure.id)
+    const currentActual = Number(currentAccountActuals[failure.id] || 0)
+    const monthlyValue = Math.max(historicalActual, currentActual)
+    if (monthlyValue <= 0) {
+      unresolvedInsufficientFailures.set(failure.id, failure.message)
+      continue
+    }
+    for (const month of fallbackMonths) {
+      const target = month === currentEnd ? normalCurrent : normalFuture
+      const existing = target.byAccountMonth[failure.id]?.[month] || 0
+      // Keep any successful AWS future-month forecast intact. The current Finance posting
+      // month contains accrued actuals, so bring it up to the latest posted monthly amount.
+      const fallbackValue = month === currentEnd ? Math.max(0, monthlyValue - existing) : (existing > 0 ? 0 : monthlyValue)
+      addAccountForecastValue(target, failure.id, month, fallbackValue)
+    }
+    fallbackAccounts.push({ accountId: failure.id, name: accountMetadata.get(failure.id)?.name || 'Unknown account', monthlyValue })
+  }
+  for (const [id, message] of unresolvedInsufficientFailures) unresolvedFailures.push({ id, message })
+  if (unresolvedFailures.length) {
     const grouped = new Map<string, string[]>()
-    for (const failure of failures) {
+    for (const failure of unresolvedFailures) {
       const ids = grouped.get(failure.message) || []
       if (!ids.includes(failure.id)) ids.push(failure.id)
       grouped.set(failure.message, ids)
@@ -343,28 +471,10 @@ export default defineEventHandler(handleAsync(async (event) => {
       excludedCatalogAccounts
     })
   }
-
-  // The next Finance posting month is the current calendar month's accrued
-  // chargeback plus its remaining-days forecast. Store one combined value so
-  // the ledger cannot double-count or show one row per forecast day.
-  const [currentAccountActuals, currentSpecialActuals] = await Promise.all([
-    loadCurrentAccountActuals(normalAccountIds, currentUsageStart, currentForecastStart),
-    loadCurrentSpecialActuals(special, currentUsageStart, currentForecastStart)
-  ])
-  for (const [accountId, actual] of Object.entries(currentAccountActuals)) {
-    normalCurrent.byAccountMonth[accountId] = normalCurrent.byAccountMonth[accountId] || {}
-    normalCurrent.byAccountMonth[accountId][currentEnd] = (normalCurrent.byAccountMonth[accountId][currentEnd] || 0) + actual
-    normalCurrent.byMonth[currentEnd] = (normalCurrent.byMonth[currentEnd] || 0) + actual
-  }
-  for (const [component, actual] of Object.entries(currentSpecialActuals)) {
-    specialCurrent.byComponentMonth[component] = specialCurrent.byComponentMonth[component] || {}
-    specialCurrent.byComponentMonth[component][currentEnd] = (specialCurrent.byComponentMonth[component][currentEnd] || 0) + actual
-    specialCurrent.byMonth[currentEnd] = (specialCurrent.byMonth[currentEnd] || 0) + actual
-  }
-
   const futureByMonth = { ...normalCurrent.byMonth, ...normalFuture.byMonth }
   for (const [month, value] of Object.entries(specialCurrent.byMonth)) futureByMonth[month] = (futureByMonth[month] || 0) + value
   for (const [month, value] of Object.entries(specialFuture.byMonth)) futureByMonth[month] = (futureByMonth[month] || 0) + value
+  for (const [month, value] of Object.entries(devOrgCurrentByMonth)) futureByMonth[month] = (futureByMonth[month] || 0) + value
   for (const [month, value] of Object.entries(devOrgFutureByMonth)) futureByMonth[month] = (futureByMonth[month] || 0) + value
   const monthlyValues: Record<string, number> = {}
   const financeMonths = Array.from({ length: 24 }, (_, index) => {
@@ -379,7 +489,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   )
   if (devOrgViewArn) {
     specialComponentMonths['GDMS-DevOrg'] = {}
-    Object.assign(specialComponentMonths['GDMS-DevOrg'], devOrgFutureByMonth)
+    Object.assign(specialComponentMonths['GDMS-DevOrg'], devOrgCurrentByMonth, devOrgFutureByMonth)
   }
   for (const accountId of accountIds) {
     const actual = Number(accountMonthlyActuals?.[accountId] || 0)
@@ -409,6 +519,12 @@ export default defineEventHandler(handleAsync(async (event) => {
         operation: 'GetCostForecast per eligible account through the Cost Dashboard batcher',
           valuation: 'AWS returns the current-month remainder and future monthly forecast values; GHOST only sums them.'
       },
+      ...(fallbackAccounts.length ? [{
+        component: 'Accounts without AWS forecast history',
+        source: 'GHOST Finance actuals',
+        operation: 'Latest posted actual held constant for future months',
+        valuation: 'AWS Cost Explorer returned insufficient history for these accounts, so their latest posted actual is used until enough history exists.'
+      }] : []),
       ...(department === 'DE158' ? [
         {
           component: 'GDMS Cloud',
@@ -449,7 +565,8 @@ export default defineEventHandler(handleAsync(async (event) => {
         'Secret Cloud': 'Historical Finance-supplied actuals only; no future forecast is added without Finance-provided values.'
       },
       devOrgMembers,
-      excludedCatalogAccounts
+      excludedCatalogAccounts,
+      fallbackAccounts
     }
   }
   const affectedYears = new Set(Object.keys(monthlyValues).map(month => Number(month.slice(0, 4))))
@@ -476,14 +593,14 @@ export default defineEventHandler(handleAsync(async (event) => {
       { component: 'Normal accounts', reason: `Individual Cost Dashboard-style AWS forecasts through November ${year + 1}; AWS requests are split into ${forecastWindows.length} contiguous windows when needed.` },
       ...(department === 'DE158' ? [
         { component: 'GDMS Cloud', reason: 'Payer-account forecast with the Savings Plans service excluded, matching the Cost Explorer console filter.' },
-        { component: 'GDMS-DevOrg', reason: 'Whole Billing View forecast, matching the AWS console.' },
+        { component: 'GDMS-DevOrg', reason: 'Whole Billing View forecast, including accrued current usage and the daily current-period remainder.' },
         { component: 'Secret Cloud', reason: 'Finance-supplied historical actuals are included when rebasing completed months; no future Secret Cloud forecast is added without Finance-provided values.' }
       ] : [])
     ],
     forecastComposition,
     historicalActualBreakdown
   }
-  if (previewOnly) return sendSuccess(event, { monthlyValues, preview, components: { normalAccountCount: normalAccountIds.length, devOrgMemberCount: devOrgMembers.length, excludedCatalogAccounts } })
+  if (previewOnly) return sendSuccess(event, { monthlyValues, preview, components: { normalAccountCount: normalAccountIds.length, devOrgMemberCount: devOrgMembers.length, excludedCatalogAccounts, fallbackAccounts } })
   const entry = await saveFinancialPlan({ department, year, monthlyValues, action: 'forecast-generated', actor: getUserEmail(event) || 'Unknown user', forecastComposition })
-  return sendSuccess(event, { monthlyValues, entry, forecastComposition, components: { normalAccountCount: normalAccountIds.length, devOrgMemberCount: devOrgMembers.length, excludedCatalogAccounts, special: [...special.map(component => component.id), ...(devOrgViewArn ? ['GDMS-DevOrg'] : [])] } })
+  return sendSuccess(event, { monthlyValues, entry, forecastComposition, components: { normalAccountCount: normalAccountIds.length, devOrgMemberCount: devOrgMembers.length, excludedCatalogAccounts, fallbackAccounts, special: [...special.map(component => component.id), ...(devOrgViewArn ? ['GDMS-DevOrg'] : [])] } })
 }))
