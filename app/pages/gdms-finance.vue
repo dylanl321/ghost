@@ -252,6 +252,7 @@
                   </div>
                   <span v-if="forecastError" class="text-xs text-red-500">{{ forecastError }}</span>
                   <span v-else-if="forecastNotice" class="text-xs text-amber-600 dark:text-amber-400">{{ forecastNotice }}</span>
+                  <span v-if="pointInTimeForecastWarning" class="text-xs text-amber-600 dark:text-amber-400">{{ pointInTimeForecastWarning }}</span>
                   <span v-if="pointInTimeForecastError" class="text-xs text-red-500">{{ pointInTimeForecastError }}</span>
                   <span v-if="excelExportError" class="text-xs text-red-500">{{ excelExportError }}</span>
                 </div>
@@ -835,6 +836,7 @@ const forecastComposition = ref<any>(null)
 const pointInTimeForecast = ref<Record<string, number> | null>(null)
 const pointInTimeForecasting = ref(false)
 const pointInTimeForecastError = ref<string | null>(null)
+const pointInTimeForecastWarning = ref<string | null>(null)
 const planHistoryExpanded = ref(false)
 const forecastCompositionExpanded = ref(false)
 const forecastFailures = computed(() => Array.isArray((forecastErrorDetails.value as any)?.failures) ? (forecastErrorDetails.value as any).failures : [])
@@ -998,6 +1000,7 @@ watch(selectedYear, () => {
   planOverrides.value = {}
   pointInTimeForecast.value = null
   pointInTimeForecastError.value = null
+  pointInTimeForecastWarning.value = null
   pointInTimeForecasting.value = false
 })
 
@@ -1122,6 +1125,7 @@ async function refreshPointInTimeForecast() {
   const requestKey = `${dept.department}:${selectedYear.value}`
   pointInTimeForecasting.value = true
   pointInTimeForecastError.value = null
+  pointInTimeForecastWarning.value = null
   try {
     const monthlyActuals = Object.fromEntries(dept.monthly.map(month => [month.month, visibleActual(month)]))
     const historicalActualBreakdown: Record<string, { accountId: string; name: string; monthlyActuals: Record<string, number> }> = {}
@@ -1133,11 +1137,17 @@ async function refreshPointInTimeForecast() {
       for (const account of category.accounts) historicalActualBreakdown[`${category.name}:${account.accountId}`] = { accountId: account.accountId, name: account.name || category.name, monthlyActuals: account.monthlyActuals || {} }
       if (category.name !== 'GDMS Cloud' && category.name !== 'GDMS-DevOrg') for (const account of category.accounts) accountMonthlyActuals[account.accountId] = Number(account.monthlyActuals?.[ytdCutoff] || 0)
     }
-    const response = await $fetch<{ data: { monthlyValues: Record<string, number> } }>('/api/costs/financial-plan-forecast', {
+    const response = await $fetch<{ data: { monthlyValues: Record<string, number>; components?: { fallbackAccounts?: Array<{ accountId: string; name: string }> } } }>('/api/costs/financial-plan-forecast', {
       method: 'POST',
       body: { department: dept.department, year: selectedYear.value, monthlyActuals, accountMonthlyActuals, specialMonthlyActuals, historicalActualBreakdown, currentPlanValues: resolvedMonthlyPlan.value, preview: true }
     })
-    if (`${activeDept.value?.department}:${selectedYear.value}` === requestKey) pointInTimeForecast.value = response.data.monthlyValues
+    if (`${activeDept.value?.department}:${selectedYear.value}` === requestKey) {
+      pointInTimeForecast.value = response.data.monthlyValues
+      const fallbackAccounts = response.data.components?.fallbackAccounts || []
+      pointInTimeForecastWarning.value = fallbackAccounts.length
+        ? `AWS forecast history is unavailable for ${fallbackAccounts.map(account => account.name).join(', ')}; the latest posted actual is held constant.`
+        : null
+    }
   } catch (err: any) {
     if (`${activeDept.value?.department}:${selectedYear.value}` === requestKey) {
       pointInTimeForecastError.value = err?.data?.error?.message || err?.data?.message || err?.message || 'Unable to calculate the current AWS estimate.'
@@ -1305,6 +1315,7 @@ if (import.meta.client) {
     forecastCompositionExpanded.value = false
     pointInTimeForecast.value = null
     pointInTimeForecastError.value = null
+    pointInTimeForecastWarning.value = null
     pointInTimeForecasting.value = false
     if (dept) await loadPlanOverrides(dept.department, selectedYear.value)
     if (dept) await loadPlanHistory()
