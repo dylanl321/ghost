@@ -47,10 +47,10 @@ function isForecastEligibleAccount(account: { pepEnvironmentStatus: string; encl
   return account.enclaveStatus.trim().toLowerCase() === 'active'
 }
 
-function addForecast(target: Record<string, number>, forecast: any, postingMonthOffset = 0) {
+function addForecast(target: Record<string, number>, forecast: any, postingMonthOffset = 0, endDateExclusive?: string) {
   for (const point of forecast?.forecastResultsByTime || []) {
     const start = point.TimePeriod?.Start
-    if (!start) continue
+    if (!start || (endDateExclusive && start >= endDateExclusive)) continue
     const postingMonth = new Date(`${start}T00:00:00Z`)
     postingMonth.setUTCMonth(postingMonth.getUTCMonth() + postingMonthOffset)
     postingMonth.setUTCDate(1)
@@ -224,7 +224,7 @@ async function forecastAccounts(accountIds: string[], startDate: string, endDate
   const failures = results.filter(result => !result.success).map(result => ({ id: result.accountId, message: result.error || 'Unknown Cost Explorer error' }))
   for (const result of results.filter(result => result.success)) {
     const monthly: Record<string, number> = {}
-    addForecast(monthly, result.data, 1)
+    addForecast(monthly, result.data, 1, granularity === 'DAILY' ? endDate : undefined)
     byAccountMonth[result.accountId] = monthly
     for (const [month, value] of Object.entries(monthly)) byMonth[month] = (byMonth[month] || 0) + value
   }
@@ -239,7 +239,7 @@ async function forecastSpecial(components: SpecialComponent[], startDate: string
     try {
       const forecast = await getCostForecast(startDate, endDate, 'UNBLENDED_COST', granularity, component.filter, 'commercial', component.accountId, { billingViewArn: component.billingViewArn })
       const componentMonths: Record<string, number> = {}
-      addForecast(componentMonths, forecast, 1)
+      addForecast(componentMonths, forecast, 1, granularity === 'DAILY' ? endDate : undefined)
       byComponentMonth[component.id] = componentMonths
       for (const [month, value] of Object.entries(componentMonths)) byMonth[month] = (byMonth[month] || 0) + value
     } catch (error) {
@@ -401,7 +401,7 @@ export default defineEventHandler(handleAsync(async (event) => {
         forecastDevOrg(devOrgViewArn, currentForecastStart, currentEnd, 'DAILY'),
         loadCurrentDevOrgActual(devOrgViewArn, currentUsageStart, currentForecastStart)
       ])
-      addForecast(devOrgCurrentByMonth, currentForecast, 1)
+      addForecast(devOrgCurrentByMonth, currentForecast, 1, currentEnd)
       devOrgCurrentByMonth[currentEnd] = (devOrgCurrentByMonth[currentEnd] || 0) + currentActual
       for (const window of forecastWindows) addForecast(devOrgFutureByMonth, await forecastDevOrg(devOrgViewArn, window.startDate, window.endDate, 'MONTHLY'), 1)
     }
@@ -484,6 +484,23 @@ export default defineEventHandler(handleAsync(async (event) => {
   for (const key of financeMonths) {
     monthlyValues[key] = key <= currentMonth ? Number(monthlyActuals[key] || 0) : futureByMonth[key] || 0
   }
+  const monthlyBreakdown = Object.fromEntries(
+    financeMonths
+      .filter(month => month > currentMonth)
+      .map(month => {
+        const normalAccounts = (normalCurrent.byMonth[month] || 0) + (normalFuture.byMonth[month] || 0)
+        const gdmsCloud = (specialCurrent.byComponentMonth['GDMS Cloud']?.[month] || 0) + (specialFuture.byComponentMonth['GDMS Cloud']?.[month] || 0)
+        const gdmsDevOrg = (devOrgCurrentByMonth[month] || 0) + (devOrgFutureByMonth[month] || 0)
+        const total = futureByMonth[month] || 0
+        return [month, {
+          normalAccounts,
+          gdmsCloud,
+          gdmsDevOrg,
+          total,
+          unreconciled: total - normalAccounts - gdmsCloud - gdmsDevOrg
+        }]
+      })
+  )
   const specialComponentMonths: Record<string, Record<string, number>> = Object.fromEntries(
     special.map(component => [component.id, { ...specialCurrent.byComponentMonth[component.id], ...specialFuture.byComponentMonth[component.id] }])
   )
@@ -600,7 +617,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     forecastComposition,
     historicalActualBreakdown
   }
-  if (previewOnly) return sendSuccess(event, { monthlyValues, preview, components: { normalAccountCount: normalAccountIds.length, devOrgMemberCount: devOrgMembers.length, excludedCatalogAccounts, fallbackAccounts } })
+  if (previewOnly) return sendSuccess(event, { monthlyValues, preview, components: { normalAccountCount: normalAccountIds.length, devOrgMemberCount: devOrgMembers.length, excludedCatalogAccounts, fallbackAccounts, monthlyBreakdown } })
   const entry = await saveFinancialPlan({ department, year, monthlyValues, action: 'forecast-generated', actor: getUserEmail(event) || 'Unknown user', forecastComposition })
-  return sendSuccess(event, { monthlyValues, entry, forecastComposition, components: { normalAccountCount: normalAccountIds.length, devOrgMemberCount: devOrgMembers.length, excludedCatalogAccounts, fallbackAccounts, special: [...special.map(component => component.id), ...(devOrgViewArn ? ['GDMS-DevOrg'] : [])] } })
+  return sendSuccess(event, { monthlyValues, entry, forecastComposition, components: { normalAccountCount: normalAccountIds.length, devOrgMemberCount: devOrgMembers.length, excludedCatalogAccounts, fallbackAccounts, monthlyBreakdown, special: [...special.map(component => component.id), ...(devOrgViewArn ? ['GDMS-DevOrg'] : [])] } })
 }))
