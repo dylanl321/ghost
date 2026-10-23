@@ -464,18 +464,21 @@ resource "aws_cloudwatch_query_definition" "top_error_signatures" {
   log_group_names = [aws_cloudwatch_log_group.ecs.name]
 
   # Structured-field query: matches lowercase logger severities (level = "error"
-  # or "fatal") and structured API error events (type = "api_error"), since raw
+  # or "fatal"), structured API error events (type = "api_error"), and generic
+  # Nitro request_error records only when statusCode >= 500, so true server
+  # failures are captured without admitting the 4xx (e.g. 401) flood. Raw
   # @message never contains uppercase "ERROR". Grouping keys are bounded,
-  # low-cardinality signature fields — requestId is surfaced in detail via an
-  # example only, so recurring signatures collapse into one row instead of
-  # exploding into per-request cardinality.
+  # low-cardinality signature fields (errorMessage gives request_error records
+  # useful signature text) — requestId is surfaced in detail via an example
+  # only, so recurring signatures collapse into one row instead of exploding
+  # into per-request cardinality.
   query_string = <<-EOT
-    filter level = "error" or level = "fatal" or type = "api_error"
+    filter level = "error" or level = "fatal" or type = "api_error" or (type = "request_error" and statusCode >= 500)
     | stats count(*) as occurrences,
             earliest(@timestamp) as first_seen,
             latest(@timestamp) as last_seen,
             max(requestId) as example_requestId
-      by level, type, errorName, statusCode, path, message
+      by level, type, errorName, statusCode, path, message, errorMessage
     | sort occurrences desc
     | limit 50
   EOT
