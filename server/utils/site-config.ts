@@ -59,7 +59,7 @@ async function getDynamoDBClientDirect(): Promise<DynamoDBClient | null> {
     }
 
     // Credentials expired or about to expire, clear cache
-    logger.info('[Site Config] DynamoDB client credentials expired, refreshing...');
+    logger.debug('[Site Config] DynamoDB client credentials expired, refreshing...');
     cachedDynamoDBClient = null;
   }
 
@@ -110,7 +110,7 @@ async function getDynamoDBClientDirect(): Promise<DynamoDBClient | null> {
       expiration: assumeRoleResponse.Credentials.Expiration,
     };
 
-    logger.info(`[Site Config] Created DynamoDB client for deployment account ${deploymentAccountId}, expires at ${assumeRoleResponse.Credentials.Expiration.toISOString()}`);
+    logger.debug(`[Site Config] Created DynamoDB client for deployment account ${deploymentAccountId}, expires at ${assumeRoleResponse.Credentials.Expiration.toISOString()}`);
 
     return client;
   } catch (error) {
