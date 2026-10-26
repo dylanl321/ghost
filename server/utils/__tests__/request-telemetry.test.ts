@@ -6,6 +6,7 @@ import {
   sanitizeErrorText,
   redactSensitive,
   buildApiErrorEntry,
+  buildAuthTelemetry,
 } from '../request-telemetry'
 
 test('isSafeRequestId accepts bounded opaque tokens', () => {
@@ -134,6 +135,92 @@ test('buildApiErrorEntry never leaks stack traces, unsafe ids, or defaults name'
   assert.equal('requestId' in entry, false, 'unsafe request id must be dropped')
   assert.equal(entry.errorName, 'Error')
   assert.equal(entry.errorMessage, 'plain object error')
+})
+
+test('buildAuthTelemetry returns no fields for unauthenticated or missing auth', () => {
+  assert.deepEqual(buildAuthTelemetry(undefined), {})
+  assert.deepEqual(buildAuthTelemetry(null), {})
+  assert.deepEqual(buildAuthTelemetry({ isAuthenticated: false, authType: 'oidc' }), {})
+})
+
+test('buildAuthTelemetry uses the opaque apiKeyId for API keys', () => {
+  assert.deepEqual(
+    buildAuthTelemetry({ isAuthenticated: true, authType: 'apikey', apiKeyId: 'key_01HXYZ' }),
+    { authType: 'apikey', actorId: 'key_01HXYZ' },
+  )
+})
+
+test('buildAuthTelemetry omits actorId when the apiKeyId is unsafe or missing', () => {
+  assert.deepEqual(
+    buildAuthTelemetry({ isAuthenticated: true, authType: 'apikey' }),
+    { authType: 'apikey' },
+  )
+  assert.deepEqual(
+    buildAuthTelemetry({ isAuthenticated: true, authType: 'apikey', apiKeyId: 'has space' }),
+    { authType: 'apikey' },
+  )
+})
+
+test('buildAuthTelemetry picks the first safe opaque OIDC id', () => {
+  assert.deepEqual(
+    buildAuthTelemetry({
+      isAuthenticated: true,
+      authType: 'oidc',
+      user: { id: '550e8400-e29b-41d4-a716-446655440000' },
+    }),
+    { authType: 'oidc', actorId: '550e8400-e29b-41d4-a716-446655440000' },
+  )
+})
+
+test('buildAuthTelemetry never leaks an email-shaped user.id, falling through to claims', () => {
+  const out = buildAuthTelemetry({
+    isAuthenticated: true,
+    authType: 'oidc',
+    user: {
+      id: 'jane.doe@example.com',
+      claims: { oid: 'abc-oid-123', sub: 'sub-999' },
+    },
+  })
+  assert.equal(out.actorId, 'abc-oid-123')
+  assert.ok(!/@/.test(out.actorId as string))
+})
+
+test('buildAuthTelemetry prefers oid over sub and omits actorId when no safe id exists', () => {
+  assert.equal(
+    buildAuthTelemetry({
+      isAuthenticated: true,
+      authType: 'oidc',
+      user: { oid: 'oid-1', sub: 'sub-1' },
+    }).actorId,
+    'oid-1',
+  )
+  assert.deepEqual(
+    buildAuthTelemetry({
+      isAuthenticated: true,
+      authType: 'oidc',
+      user: { id: 'name with spaces', email: 'x@y.com' } as any,
+    }),
+    { authType: 'oidc' },
+  )
+})
+
+test('buildAuthTelemetry never emits email, displayName, scopes, or the auth object', () => {
+  const out = buildAuthTelemetry({
+    isAuthenticated: true,
+    authType: 'oidc',
+    scopes: ['*'],
+    user: {
+      id: 'opaque-id-1',
+      displayName: 'Jane Doe',
+      email: 'jane@example.com',
+      groups: ['Admins'],
+    },
+  } as any)
+  assert.deepEqual(Object.keys(out).sort(), ['actorId', 'authType'])
+  const serialized = JSON.stringify(out)
+  assert.ok(!/jane@example\.com/.test(serialized))
+  assert.ok(!/Jane Doe/.test(serialized))
+  assert.ok(!/Admins/.test(serialized))
 })
 
 test('buildApiErrorEntry includes bounded AWS request id from $metadata', () => {

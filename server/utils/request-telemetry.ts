@@ -79,6 +79,79 @@ export function sanitizeErrorText(value: unknown, maxLength = 512): string {
   return redactSensitive(out).replace(/ {2,}/g, ' ').trim().slice(0, maxLength)
 }
 
+// An opaque actor identifier must look like a bounded token with no
+// delimiters that could smuggle PII (an '@' from an email) or break the
+// JSON log line. Mirrors the conservative request-id shape but allows the
+// longer opaque subject identifiers OIDC issuers emit (e.g. Entra oid/sub).
+const SAFE_ACTOR_ID = /^[A-Za-z0-9._-]{1,200}$/
+
+function isSafeActorId(value: unknown): value is string {
+  return typeof value === 'string' && SAFE_ACTOR_ID.test(value)
+}
+
+export interface AuthTelemetryInput {
+  isAuthenticated?: boolean
+  authType?: unknown
+  apiKeyId?: unknown
+  user?: {
+    id?: unknown
+    oid?: unknown
+    sub?: unknown
+    claims?: { oid?: unknown; sub?: unknown } | null
+  } | null
+}
+
+/**
+ * Derive safe caller-classification fields for a completed request so that
+ * operators can distinguish browser OIDC traffic from integration API keys
+ * and correlate repeated failures to the same opaque actor.
+ *
+ * Emits only `authType` and an opaque `actorId`. Never returns email,
+ * display name, user/claims names, scopes, tokens, or the auth object
+ * itself. Returns an empty object for unauthenticated/public requests, so
+ * no actor fields are attached to them.
+ *
+ * For API keys the actor is the opaque apiKeyId. For OIDC (including dev
+ * sessions) it is the first safe non-empty value among user.id, user.oid,
+ * user.sub, user.claims.oid, user.claims.sub; an email-shaped user.id is
+ * rejected by the safe-id check and falls through to the next candidate.
+ */
+export function buildAuthTelemetry(
+  auth: AuthTelemetryInput | null | undefined,
+): { authType?: string; actorId?: string } {
+  if (!auth || auth.isAuthenticated !== true) {
+    return {}
+  }
+
+  const out: { authType?: string; actorId?: string } = {}
+
+  if (typeof auth.authType === 'string' && auth.authType.length > 0) {
+    out.authType = auth.authType
+  }
+
+  if (auth.authType === 'apikey') {
+    if (isSafeActorId(auth.apiKeyId)) {
+      out.actorId = auth.apiKeyId
+    }
+    return out
+  }
+
+  // OIDC / dev sessions: emit only an opaque subject identifier. First safe
+  // non-empty candidate wins; anything non-opaque (e.g. an email) is skipped.
+  const user = auth.user
+  if (user) {
+    const candidates = [user.id, user.oid, user.sub, user.claims?.oid, user.claims?.sub]
+    for (const candidate of candidates) {
+      if (isSafeActorId(candidate)) {
+        out.actorId = candidate
+        break
+      }
+    }
+  }
+
+  return out
+}
+
 export interface ApiErrorEntryInput {
   requestId?: unknown
   method?: string

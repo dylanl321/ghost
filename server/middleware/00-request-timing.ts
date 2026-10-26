@@ -12,7 +12,8 @@ import { defineEventHandler, getRequestHeader, getRequestURL, setResponseHeader 
 import { isAnyJobRunning, getActiveJobs } from '../utils/job-tracker'
 import { resolveRequestId } from '../utils/request-id'
 
-import { normalizePath } from '../utils/request-telemetry'
+import { buildAuthTelemetry, normalizePath } from '../utils/request-telemetry'
+import type { AuthTelemetryInput } from '../utils/request-telemetry'
 
 export default defineEventHandler((event) => {
   const url = getRequestURL(event)
@@ -47,6 +48,20 @@ export default defineEventHandler((event) => {
 
     if (backgroundJobActive) {
       entry.activeJobs = getActiveJobs()
+    }
+
+    // Classify the caller (set by the auth middleware, which runs after this
+    // one but before the response finishes). Adds authType and an opaque
+    // actorId for authenticated requests only; public/unauthenticated
+    // requests have no auth context and so remain without actor fields.
+    const { authType, actorId } = buildAuthTelemetry(
+      event.context.auth as AuthTelemetryInput | undefined,
+    )
+    if (authType) {
+      entry.authType = authType
+    }
+    if (actorId) {
+      entry.actorId = actorId
     }
 
     entry.timestamp = new Date().toISOString()
