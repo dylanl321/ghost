@@ -8,6 +8,7 @@ import type { H3Event } from 'h3'
 import { validateApiKey, recordApiKeyUsage } from '../utils/api-keys'
 import { getUserSession as getOIDCSession } from '../utils/entra/session'
 import { logger } from '../utils/logger'
+import { buildAuthFailureEntry } from '../utils/request-telemetry'
 
 interface AuthContext {
   isAuthenticated: boolean
@@ -148,6 +149,27 @@ async function validateOIDCAuth(event: H3Event): Promise<AuthContext | null> {
 
 
 /**
+ * Emit a single bounded, structured JSON auth-failure record compatible with
+ * the existing `{ $.type = "auth" && $.status = "failure" }` metric filter, so
+ * the AuthFailureCount alarm can see unauthenticated API requests. Mirrors the
+ * direct-stdout JSON pattern used by the request-timing middleware. Never
+ * throws — observability must not alter auth behavior.
+ */
+function emitAuthFailure(event: H3Event): void {
+  try {
+    const entry = buildAuthFailureEntry({
+      requestId: event.context?.requestId,
+      method: event.node.req.method,
+      path: getRequestURL(event).pathname,
+      reason: 'missing_or_invalid_credentials',
+    })
+    process.stdout.write(JSON.stringify(entry) + '\n')
+  } catch {
+    // Never throw from the auth-failure telemetry path.
+  }
+}
+
+/**
  * Main authentication middleware
  */
 export default defineEventHandler(async (event) => {
@@ -170,6 +192,9 @@ export default defineEventHandler(async (event) => {
   
   // If no valid authentication found
   if (!authContext || !authContext.isAuthenticated) {
+    // Emit the structured auth-failure event before rejecting so the
+    // AuthFailureCount metric filter is not blind to unauthenticated requests.
+    emitAuthFailure(event)
     throw createError({
       statusCode: 401,
       statusMessage: 'Authentication required. Please provide a valid API key or sign in with Entra ID.'

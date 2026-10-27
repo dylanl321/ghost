@@ -550,6 +550,11 @@ resource "aws_cloudwatch_log_metric_filter" "auth_success" {
   }
 }
 
+# Counts structured auth-failure events emitted by server/middleware/entra-auth.ts
+# before it rejects an unauthenticated API request. Those events carry a
+# normalized path and a low-cardinality reason (e.g. "missing_or_invalid_credentials")
+# but never headers, credentials, query strings, or concrete resource IDs. The
+# pattern below is the stable contract — keep it in sync with buildAuthFailureEntry.
 resource "aws_cloudwatch_log_metric_filter" "auth_failure" {
   provider       = aws.target_deployment_account
   name           = "${var.app_name}-auth-failure"
@@ -793,6 +798,27 @@ resource "aws_cloudwatch_query_definition" "auth_events" {
             sum(status = "success") as successes,
             sum(status = "failure") as failures
       by bin(15m)
+  EOT
+}
+
+# Group expected client rejections by normalized route so operators can tell
+# apart a steady trickle of unauthenticated callers (type = "auth") and 4xx
+# rejections surfaced by the API error hook (type = "request_rejection") from
+# genuine server errors. These are warn-level by design and must stay queryable
+# here without feeding the error-level ApplicationErrorCount alarm.
+resource "aws_cloudwatch_query_definition" "client_rejections_by_route" {
+  provider        = aws.target_deployment_account
+  name            = "${var.app_name}/Client Rejections by Route"
+  log_group_names = [aws_cloudwatch_log_group.ecs.name]
+
+  query_string = <<-EOT
+    filter type = "auth" and status = "failure" or type = "request_rejection"
+    | stats count(*) as rejections,
+            earliest(@timestamp) as first_seen,
+            latest(@timestamp) as last_seen
+      by type, statusCode, reason, method, path
+    | sort rejections desc
+    | limit 50
   EOT
 }
 

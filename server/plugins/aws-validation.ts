@@ -5,7 +5,7 @@
 import { getRequestURL } from 'h3'
 import { validateAWSConfiguration } from '../lib/aws-client-factory'
 import { logger } from '../utils/logger'
-import { boundedLogField } from '../utils/log-sanitize'
+import { buildRequestErrorEntry } from '../utils/request-telemetry'
 
 // Resolve an HTTP status code for the error record. Prefer an explicit numeric
 // code carried on the error (h3/Nitro set either `statusCode` or `status`),
@@ -26,9 +26,14 @@ function resolveErrorStatusCode(error: any, event: any): number | undefined {
 
 // Emit exactly one bounded, structured JSON record for an API request error so
 // generic (non-AWS) failures are observable in CloudWatch alongside the
-// request-timing entries. Only safe, non-PII fields are included: no headers,
-// cookies, tokens, user identity, query strings, request body, or raw error
-// objects. Mirrors the direct-stdout JSON pattern used by request timing.
+// request-timing entries. Expected 4xx client rejections are classified as
+// warn-level `request_rejection` records while genuine >=500 (or unresolved)
+// failures stay error-level `request_error` records — so a normal 401 does not
+// masquerade as an application error. Only safe, non-PII fields are included:
+// no headers, cookies, tokens, user identity, query strings, request body, or
+// raw error objects, and the path is normalized so dynamic resource IDs (e.g.
+// EC2 instance IDs) never leak. Mirrors the direct-stdout JSON pattern used by
+// request timing.
 function logRequestError(error: any, event: any): void {
   try {
     if (!event) {
@@ -41,19 +46,13 @@ function logRequestError(error: any, event: any): void {
       return
     }
 
-    // Every string field is passed through boundedLogField so control
-    // characters (forged newlines) are stripped and length is capped, keeping
-    // the record a single, bounded, log-injection-safe JSON line.
-    const entry: Record<string, unknown> = {
-      type: 'request_error',
-      timestamp: new Date().toISOString(),
-      requestId: boundedLogField(event.context?.requestId, 128),
-      method: boundedLogField(event.method, 16),
-      path: boundedLogField(pathname, 256),
+    const entry = buildRequestErrorEntry({
+      requestId: event.context?.requestId,
+      method: event.method,
+      path: pathname,
       statusCode: resolveErrorStatusCode(error, event),
-      errorName: boundedLogField(error?.name, 128),
-      errorMessage: boundedLogField(error?.message, 512),
-    }
+      error,
+    })
 
     process.stdout.write(JSON.stringify(entry) + '\n')
   } catch {

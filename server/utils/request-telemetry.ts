@@ -118,3 +118,113 @@ export function buildApiErrorEntry(input: ApiErrorEntryInput): Record<string, un
 
   return entry
 }
+
+export interface AuthFailureEntryInput {
+  requestId?: unknown
+  method?: string
+  path: string
+  // A low-cardinality, caller-supplied reason (e.g. "missing_or_invalid_credentials").
+  // Never a raw error message, so the metric stays groupable and leak-free.
+  reason?: string
+}
+
+/**
+ * Build a structured authentication-failure event compatible with the
+ * existing `{ $.type = "auth" && $.status = "failure" }` metric filter.
+ *
+ * Emitted at `warn` level because an unauthenticated client request is an
+ * expected rejection, not an application error. Intentionally excludes
+ * headers, API keys, query strings, user objects, account IDs, and concrete
+ * resource IDs — the path is normalized so dynamic segments (e.g. EC2
+ * instance IDs) never reach the record.
+ */
+export function buildAuthFailureEntry(input: AuthFailureEntryInput): Record<string, unknown> {
+  const { requestId, method, path, reason } = input
+
+  const entry: Record<string, unknown> = {
+    type: 'auth',
+    status: 'failure',
+    level: 'warn',
+    timestamp: new Date().toISOString(),
+    method: sanitizeErrorText(method, 16) || undefined,
+    path: normalizePath(path ?? ''),
+    reason: sanitizeErrorText(reason, 64) || 'missing_or_invalid_credentials',
+  }
+
+  if (isSafeRequestId(requestId)) {
+    entry.requestId = requestId
+  }
+
+  return entry
+}
+
+// Map a 4xx status code to a stable, low-cardinality reason slug so client
+// rejections collapse into a handful of groupable rows instead of echoing
+// free-form error prose into the metric.
+function clientRejectionReason(statusCode?: number): string {
+  switch (statusCode) {
+    case 400: return 'bad_request'
+    case 401: return 'unauthorized'
+    case 403: return 'forbidden'
+    case 404: return 'not_found'
+    case 409: return 'conflict'
+    case 422: return 'unprocessable_entity'
+    case 429: return 'rate_limited'
+    default: return 'client_error'
+  }
+}
+
+export interface RequestErrorEntryInput {
+  requestId?: unknown
+  method?: string
+  path: string
+  statusCode?: number
+  error: any
+}
+
+/**
+ * Build a structured record for an API request that ended in an error hook.
+ *
+ * Classifies expected client rejections (4xx) separately from genuine server
+ * failures so normal 401/403/404 responses do not masquerade as error-level
+ * application failures:
+ *
+ *   - 4xx           -> type="request_rejection", level="warn" (stays queryable
+ *                      as a warning, carries a low-cardinality reason)
+ *   - >=500 / other -> type="request_error",     level="error" (sanitized
+ *                      errorName/errorMessage, remains error-level)
+ *
+ * The path is normalized (dynamic resource IDs removed) and all free-form text
+ * is sanitized so credentials and account IDs can never reach the record.
+ */
+export function buildRequestErrorEntry(input: RequestErrorEntryInput): Record<string, unknown> {
+  const { requestId, method, path, statusCode, error } = input
+  const isClientRejection = typeof statusCode === 'number' && statusCode >= 400 && statusCode < 500
+
+  const entry: Record<string, unknown> = isClientRejection
+    ? {
+        type: 'request_rejection',
+        level: 'warn',
+        timestamp: new Date().toISOString(),
+        method: sanitizeErrorText(method, 16) || undefined,
+        path: normalizePath(path ?? ''),
+        statusCode,
+        reason: clientRejectionReason(statusCode),
+      }
+    : {
+        type: 'request_error',
+        level: 'error',
+        timestamp: new Date().toISOString(),
+        method: sanitizeErrorText(method, 16) || undefined,
+        path: normalizePath(path ?? ''),
+        statusCode,
+        errorName: sanitizeErrorText(error?.name, 128) || 'Error',
+        errorMessage: sanitizeErrorText(error?.message),
+      }
+
+  if (isSafeRequestId(requestId)) {
+    entry.requestId = requestId
+  }
+
+  return entry
+}

@@ -6,6 +6,8 @@ import {
   sanitizeErrorText,
   redactSensitive,
   buildApiErrorEntry,
+  buildAuthFailureEntry,
+  buildRequestErrorEntry,
 } from '../request-telemetry'
 
 test('isSafeRequestId accepts bounded opaque tokens', () => {
@@ -154,4 +156,108 @@ test('buildApiErrorEntry includes bounded AWS request id from $metadata', () => 
     error: { name: 'X', message: 'y', $metadata: { requestId: 'bad id!' } },
   })
   assert.equal('awsRequestId' in unsafe, false)
+})
+
+test('buildAuthFailureEntry emits a filter-compatible warn event', () => {
+  const entry = buildAuthFailureEntry({
+    requestId: 'req-abc',
+    method: 'GET',
+    path: '/api/integrations/vmaas/instances/i-05cd04ddf94b4c099/cost',
+    reason: 'missing_or_invalid_credentials',
+  })
+
+  // Must match the `{ $.type = "auth" && $.status = "failure" }` metric filter.
+  assert.equal(entry.type, 'auth')
+  assert.equal(entry.status, 'failure')
+  // Expected client rejection: warn, not error — must not trip ApplicationErrorCount.
+  assert.equal(entry.level, 'warn')
+  assert.equal(entry.method, 'GET')
+  assert.equal(entry.reason, 'missing_or_invalid_credentials')
+  assert.equal(entry.requestId, 'req-abc')
+  assert.ok(!Number.isNaN(Date.parse(entry.timestamp as string)))
+
+  // The concrete EC2 instance id must be normalized away.
+  assert.equal(entry.path, '/api/integrations/vmaas/instances/:awsResourceId/cost')
+  assert.ok(!/i-05cd04ddf94b4c099/.test(JSON.stringify(entry)))
+})
+
+test('buildAuthFailureEntry drops unsafe request ids and defaults the reason', () => {
+  const entry = buildAuthFailureEntry({
+    requestId: 'unsafe id with spaces',
+    method: 'POST',
+    path: '/api/costs',
+  })
+  assert.equal('requestId' in entry, false)
+  assert.equal(entry.reason, 'missing_or_invalid_credentials')
+})
+
+test('buildRequestErrorEntry classifies 401 as a warn-level rejection', () => {
+  const entry = buildRequestErrorEntry({
+    requestId: 'req-401',
+    method: 'GET',
+    path: '/api/integrations/vmaas/instances/i-05cd04ddf94b4c099/cost',
+    statusCode: 401,
+    error: Object.assign(new Error('Authentication required. Please provide a valid API key or sign in with Entra ID.'), { name: 'Error' }),
+  })
+
+  assert.equal(entry.type, 'request_rejection')
+  assert.equal(entry.level, 'warn')
+  assert.equal(entry.statusCode, 401)
+  assert.equal(entry.reason, 'unauthorized')
+  assert.equal(entry.requestId, 'req-401')
+  // A 401 must not masquerade as an application error.
+  assert.equal('errorName' in entry, false)
+  // The EC2 instance id must not leak into the record.
+  assert.equal(entry.path, '/api/integrations/vmaas/instances/:awsResourceId/cost')
+  assert.ok(!/i-05cd04ddf94b4c099/.test(JSON.stringify(entry)))
+})
+
+test('buildRequestErrorEntry maps common 4xx codes to stable reasons', () => {
+  const reasonFor = (statusCode: number) =>
+    buildRequestErrorEntry({ path: '/api/x', statusCode, error: new Error('x') }).reason
+  assert.equal(reasonFor(403), 'forbidden')
+  assert.equal(reasonFor(404), 'not_found')
+  assert.equal(reasonFor(429), 'rate_limited')
+  assert.equal(reasonFor(418), 'client_error')
+})
+
+test('buildRequestErrorEntry keeps 500s as error-level request_error', () => {
+  const entry = buildRequestErrorEntry({
+    requestId: 'req-500',
+    method: 'POST',
+    path: '/api/costs/projections?environment=commercial',
+    statusCode: 500,
+    error: Object.assign(new Error('boom happened'), { name: 'TypeError' }),
+  })
+
+  assert.equal(entry.type, 'request_error')
+  assert.equal(entry.level, 'error')
+  assert.equal(entry.statusCode, 500)
+  assert.equal(entry.errorName, 'TypeError')
+  assert.equal(entry.errorMessage, 'boom happened')
+  assert.equal(entry.path, '/api/costs/projections')
+  assert.equal('reason' in entry, false)
+})
+
+test('buildRequestErrorEntry treats an unresolved status code as a server error', () => {
+  const entry = buildRequestErrorEntry({
+    path: '/api/x',
+    statusCode: undefined,
+    error: new Error('unexpected'),
+  })
+  assert.equal(entry.type, 'request_error')
+  assert.equal(entry.level, 'error')
+})
+
+test('buildRequestErrorEntry redacts secrets and account ids in 500 messages', () => {
+  const entry = buildRequestErrorEntry({
+    path: '/api/aws',
+    statusCode: 500,
+    error: new Error('AccessDenied for arn:aws:iam::123456789012:role/Svc using secret=s3cr3tValue'),
+  })
+  const message = entry.errorMessage as string
+  assert.ok(!/\b\d{12}\b/.test(message), 'account id must not survive')
+  assert.ok(!/s3cr3tValue/.test(message), 'secret value must not survive')
+  assert.match(message, /\[REDACTED_ACCT\]/)
+  assert.match(message, /secret=\[REDACTED\]/)
 })
