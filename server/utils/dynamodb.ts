@@ -117,14 +117,6 @@ export async function updateItem(
   // Sanitize updates before marshalling
   const sanitizedUpdates = sanitizeForDynamoDB(updates)
 
-  // Debug logging for serialization issues
-  logger.info('[DynamoDB updateItem] Pre-sanitization data:', {
-    tableName,
-    key,
-    updateFieldCount: Object.keys(updates).length,
-    sanitizedFieldCount: Object.keys(sanitizedUpdates).length
-  })
-
   // Check if all fields were removed during sanitization
   if (Object.keys(sanitizedUpdates).length === 0) {
     logger.warn('[DynamoDB updateItem] All update fields were removed during sanitization', {
@@ -148,14 +140,6 @@ export async function updateItem(
     valueMap[attrValue] = value
   })
 
-  // Log key before marshalling to check for issues
-  logger.info('[DynamoDB updateItem] Key before marshalling:', {
-    tableName,
-    key: JSON.stringify(key),
-    keyType: typeof key,
-    keyKeys: Object.keys(key)
-  })
-
   // Marshall all values at once to ensure proper DynamoDB format
   const expressionAttributeValues = marshall(valueMap, {
     removeUndefinedValues: true,
@@ -171,24 +155,19 @@ export async function updateItem(
     ReturnValues: 'ALL_NEW' as const
   }
 
-  // Log command details for debugging
-  logger.info('[DynamoDB updateItem] Command parameters:', {
+  // Metadata-only diagnostics. Never log key values, update values, attribute
+  // names, or marshalled payloads — these carry high-cardinality application
+  // data (and were the source of INFO-level false-positive "error" matches and
+  // potential data exposure in CloudWatch). Counts and sizes are safe.
+  logger.debug('[DynamoDB updateItem] prepared command', {
     tableName,
-    updateExpression: commandParams.UpdateExpression,
+    environment,
+    updateFieldCount: Object.keys(sanitizedUpdates).length,
     attributeNameCount: Object.keys(expressionAttributeNames).length,
     attributeValueCount: Object.keys(expressionAttributeValues).length,
-    attributeNames: Object.keys(expressionAttributeNames).map(k => `${k}=${expressionAttributeNames[k]}`),
     keySize: JSON.stringify(commandParams.Key).length,
     valuesSize: JSON.stringify(commandParams.ExpressionAttributeValues).length
   })
-
-  // Log the actual marshalled values (first 500 chars for debugging)
-  try {
-    const marshalledStr = JSON.stringify(commandParams.ExpressionAttributeValues)
-    logger.info('[DynamoDB updateItem] Marshalled values sample:', marshalledStr.substring(0, 500))
-  } catch (e) {
-    logger.warn('[DynamoDB updateItem] Could not stringify marshalled values')
-  }
 
   const command = new UpdateItemCommand(commandParams)
 

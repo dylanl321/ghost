@@ -1325,3 +1325,34 @@ resource "aws_cloudwatch_query_definition" "error_signatures" {
     | limit 25
   EOT
 }
+
+# CloudWatch GetMetricData throttling retries emitted by
+# server/utils/cloudwatch-metrics.ts as warn-level logs with a stable message
+# prefix. Counting them surfaces throttle pressure as a metric for trend
+# analysis. No alarm is defined here on purpose: a meaningful threshold needs a
+# production baseline and human review before paging.
+resource "aws_cloudwatch_log_metric_filter" "cloudwatch_metrics_throttle" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-cloudwatch-metrics-throttle"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "\"[CloudWatch Metrics] Throttled on batch\""
+
+  metric_transformation {
+    name          = "CloudWatchMetricThrottleCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
+resource "aws_cloudwatch_query_definition" "cloudwatch_metrics_throttle" {
+  provider        = aws.target_deployment_account
+  name            = "${var.app_name}/CloudWatch Metrics Throttle Retries"
+  log_group_names = [aws_cloudwatch_log_group.ecs.name]
+
+  query_string = <<-EOT
+    filter message like /\[CloudWatch Metrics\] Throttled on batch/
+    | stats count(*) as retries by bin(15m)
+    | sort @timestamp desc
+  EOT
+}
