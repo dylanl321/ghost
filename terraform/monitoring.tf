@@ -243,6 +243,25 @@ resource "aws_cloudwatch_log_metric_filter" "api_latency_during_jobs" {
   }
 }
 
+# Site-config DynamoDB dependency failures (AssumeRole timeouts/errors). The
+# application emits one structured `dependency_error` record per actually-failed
+# initialization attempt (single-flighted, so waiting callers do not each log).
+# Match on the stable low-cardinality dependency+operation identity rather than
+# the changing endpoint IP or free-form message.
+resource "aws_cloudwatch_log_metric_filter" "site_config_dependency_error" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-site-config-dependency-error"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "{ $.type = \"dependency_error\" && $.dependency = \"site-config-dynamodb\" && $.operation = \"assume-role\" }"
+
+  metric_transformation {
+    name          = "SiteConfigDependencyErrorCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "1"
+    default_value = "0"
+  }
+}
+
 # --- Application-Level Alarms ---
 
 resource "aws_cloudwatch_metric_alarm" "api_p95_latency" {
@@ -298,6 +317,27 @@ resource "aws_cloudwatch_metric_alarm" "aws_credential_failures" {
   period              = 300
   statistic           = "Sum"
   threshold           = 0
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Application = var.app_name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "site_config_dependency_errors" {
+  provider            = aws.target_deployment_account
+  alarm_name          = "${var.app_name}-site-config-dependency-errors"
+  alarm_description   = "Site-config DynamoDB AssumeRole initialization failed one or more times in 5 minutes (e.g. STS endpoint timeouts). App falls back to defaults, but recurring failures should be investigated."
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "SiteConfigDependencyErrorCount"
+  namespace           = "${var.app_name}/Application"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 1
   treat_missing_data  = "notBreaching"
 
   alarm_actions = [aws_sns_topic.alerts.arn]
@@ -491,6 +531,26 @@ resource "aws_cloudwatch_query_definition" "errors_by_endpoint" {
     | stats count(*) as errors by path, statusCode
     | sort errors desc
     | limit 20
+  EOT
+}
+
+resource "aws_cloudwatch_query_definition" "site_config_dependency_errors" {
+  provider        = aws.target_deployment_account
+  name            = "${var.app_name}/Site Config Dependency Errors"
+  log_group_names = [aws_cloudwatch_log_group.ecs.name]
+
+  # Group the structured site-config dependency_error records by their stable,
+  # low-cardinality identity (dependency/operation/errorName/errorCode) so
+  # recurring failures collapse into one row instead of fragmenting by the
+  # changing STS endpoint IP or free-form error message.
+  query_string = <<-EOT
+    filter type = "dependency_error" and dependency = "site-config-dynamodb"
+    | stats count(*) as occurrences,
+            earliest(@timestamp) as first_seen,
+            latest(@timestamp) as last_seen
+      by dependency, operation, errorName, errorCode
+    | sort occurrences desc
+    | limit 50
   EOT
 }
 

@@ -17,6 +17,7 @@ import { STSClient, AssumeRoleCommand } from '@aws-sdk/client-sts';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import type { SiteConfigItem, SiteConfigHistoryEntry } from '../../shared/types/site-config';
 import { DEFAULT_SITE_CONFIG, isRetiredSiteConfigKey } from '../../shared/types/site-config';
+import { boundedLogField } from './log-sanitize';
 
 const TABLE_NAME = process.env.SITE_CONFIG_TABLE || 'ghost-site-config';
 const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
@@ -30,6 +31,219 @@ interface CachedDynamoDBClient {
   expiration: Date;
 }
 let cachedDynamoDBClient: CachedDynamoDBClient | null = null;
+
+// Bounded cooldown applied after a failed client initialization so a burst of
+// callers cannot repeatedly hammer the STS AssumeRole endpoint while it is
+// timing out. A failed attempt is NEVER cached as a permanent client.
+const INIT_FAILURE_COOLDOWN_MS = 30 * 1000; // 30 seconds
+
+/**
+ * Shares one in-flight initialization across concurrent callers (single-flight)
+ * and enforces a bounded failure cooldown.
+ *
+ * - While an attempt is in flight, concurrent callers receive the same Promise
+ *   instead of each starting their own AssumeRole call (prevents a thundering
+ *   herd against the STS endpoint).
+ * - After a rejected attempt, callers within `cooldownMs` get `null` (fail fast
+ *   and fall back to defaults) without starting a new attempt. The failure is
+ *   never retained beyond the cooldown window.
+ * - `onFailure` runs exactly once per actually-failed attempt (not once per
+ *   waiting caller), which is where the single structured log record is emitted.
+ *
+ * Exported for unit testing of the single-flight / cooldown contract.
+ */
+export class SingleFlightInit<T> {
+  private inFlight: Promise<T | null> | null = null;
+  private retryAfterMs = 0;
+
+  constructor(
+    private readonly cooldownMs: number,
+    private readonly now: () => number = () => Date.now(),
+  ) {}
+
+  /** Epoch-ms timestamp before which new attempts fail fast; 0 when idle. */
+  get retryAfter(): number {
+    return this.retryAfterMs;
+  }
+
+  isCoolingDown(): boolean {
+    return this.retryAfterMs > this.now();
+  }
+
+  /** Clear any active cooldown (on success and for test reset). */
+  reset(): void {
+    this.retryAfterMs = 0;
+  }
+
+  async run(
+    factory: () => Promise<T>,
+    onFailure?: (error: unknown) => void,
+  ): Promise<T | null> {
+    if (this.isCoolingDown()) {
+      return null;
+    }
+    if (this.inFlight) {
+      return this.inFlight;
+    }
+
+    this.inFlight = (async () => {
+      try {
+        const result = await factory();
+        this.retryAfterMs = 0;
+        return result;
+      } catch (error) {
+        this.retryAfterMs = this.now() + this.cooldownMs;
+        onFailure?.(error);
+        return null;
+      } finally {
+        this.inFlight = null;
+      }
+    })();
+
+    return this.inFlight;
+  }
+}
+
+const clientInitGuard = new SingleFlightInit<DynamoDBClient>(INIT_FAILURE_COOLDOWN_MS);
+
+// Redacted, in-memory diagnostic describing the most recent site-config
+// DynamoDB client initialization. Exposes only bounded, low-cardinality
+// operational signals — never credentials, stack, endpoint IP, or raw error.
+export type SiteConfigDependencyStatus = 'unconfigured' | 'healthy' | 'degraded';
+
+export interface SiteConfigDependencyDiagnostic {
+  status: SiteConfigDependencyStatus;
+  lastSuccessAt: string | null;
+  lastFailureAt: string | null;
+  errorName: string | null;
+  errorCode: string | null;
+  retryAfter: string | null;
+}
+
+const siteConfigDiagnostic = {
+  lastSuccessAt: null as string | null,
+  lastFailureAt: null as string | null,
+  errorName: null as string | null,
+  errorCode: null as string | null,
+  retryAfter: null as string | null,
+};
+
+/** Extract stable error name/code for structured logs without leaking payloads. */
+function describeError(error: unknown): { errorName?: string; errorCode?: string } {
+  if (!error || typeof error !== 'object') return {};
+  const err = error as Record<string, unknown>;
+  return {
+    errorName: typeof err.name === 'string' ? err.name : undefined,
+    errorCode: typeof err.code === 'string' ? err.code : undefined,
+  };
+}
+
+/**
+ * Emit exactly one bounded, structured dependency_error record for a failed
+ * AssumeRole-backed client initialization. Written as raw JSON (matching the
+ * job/request telemetry convention) so CloudWatch metric filters can match on
+ * stable low-cardinality fields. Deliberately excludes stack, endpoint IP,
+ * tokens, role session name, and the raw error message.
+ */
+function logSiteConfigDependencyError(
+  accountId: string,
+  errorName: string | undefined,
+  errorCode: string | undefined,
+): void {
+  const entry: Record<string, unknown> = {
+    type: 'dependency_error',
+    timestamp: new Date().toISOString(),
+    dependency: 'site-config-dynamodb',
+    operation: 'assume-role',
+    environment: 'govcloud',
+    accountId,
+  };
+
+  const name = boundedLogField(errorName, 64);
+  if (name) entry.errorName = name;
+  const code = boundedLogField(errorCode, 64);
+  if (code) entry.errorCode = code;
+
+  process.stdout.write(JSON.stringify(entry) + '\n');
+}
+
+function recordInitSuccess(): void {
+  siteConfigDiagnostic.lastSuccessAt = new Date().toISOString();
+  siteConfigDiagnostic.errorName = null;
+  siteConfigDiagnostic.errorCode = null;
+  siteConfigDiagnostic.retryAfter = null;
+}
+
+function recordInitFailure(accountId: string, error: unknown): void {
+  const { errorName, errorCode } = describeError(error);
+  siteConfigDiagnostic.lastFailureAt = new Date().toISOString();
+  siteConfigDiagnostic.errorName = errorName ?? null;
+  siteConfigDiagnostic.errorCode = errorCode ?? null;
+  siteConfigDiagnostic.retryAfter = clientInitGuard.retryAfter
+    ? new Date(clientInitGuard.retryAfter).toISOString()
+    : null;
+  logSiteConfigDependencyError(accountId, errorName, errorCode);
+}
+
+/**
+ * Perform the STS AssumeRole and construct the assumed-role DynamoDB client.
+ * Throws on any failure so the single-flight guard records the failure and
+ * applies the cooldown uniformly. Caches the client with expiration tracking
+ * on success.
+ */
+async function assumeRoleAndCreateClient(
+  region: string,
+  deploymentAccountId: string,
+  roleName: string,
+): Promise<DynamoDBClient> {
+  // Create STS client with base credentials (org account)
+  const stsClient = new STSClient({
+    region,
+    credentials: {
+      accessKeyId: process.env.AWS_GOVCLOUD_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.AWS_GOVCLOUD_SECRET_ACCESS_KEY!,
+    },
+  });
+
+  // Assume role in deployment account
+  // Use 1 hour duration (safe default that works with most role configurations)
+  // The client will auto-refresh before expiration
+  const assumeRoleCommand = new AssumeRoleCommand({
+    RoleArn: `arn:aws-us-gov:iam::${deploymentAccountId}:role/${roleName}`,
+    RoleSessionName: `site-config-${Date.now()}`,
+    DurationSeconds: 3600, // 1 hour (auto-refreshes before expiration)
+  });
+
+  const assumeRoleResponse = await stsClient.send(assumeRoleCommand);
+
+  if (!assumeRoleResponse.Credentials || !assumeRoleResponse.Credentials.Expiration) {
+    const error = new Error('AssumeRole response contained no credentials');
+    error.name = 'SiteConfigAssumeRoleEmptyCredentials';
+    throw error;
+  }
+
+  // Create DynamoDB client with assumed role credentials
+  const client = new DynamoDBClient({
+    region,
+    credentials: {
+      accessKeyId: assumeRoleResponse.Credentials.AccessKeyId!,
+      secretAccessKey: assumeRoleResponse.Credentials.SecretAccessKey!,
+      sessionToken: assumeRoleResponse.Credentials.SessionToken!,
+    },
+  });
+
+  // Cache the client with expiration tracking
+  cachedDynamoDBClient = {
+    client,
+    expiration: assumeRoleResponse.Credentials.Expiration,
+  };
+
+  recordInitSuccess();
+
+  logger.info(`[Site Config] Created DynamoDB client for deployment account ${deploymentAccountId}, expires at ${assumeRoleResponse.Credentials.Expiration.toISOString()}`);
+
+  return client;
+}
 
 /**
  * Get DynamoDB client directly without aws-client-factory to avoid circular deps
@@ -63,60 +277,56 @@ async function getDynamoDBClientDirect(): Promise<DynamoDBClient | null> {
     cachedDynamoDBClient = null;
   }
 
-  // Create new client with fresh credentials
+  // New client needed: share one in-flight AssumeRole across concurrent callers
+  // and fail fast during the post-failure cooldown. On failure the guard returns
+  // null and callers fall back to defaults (unchanged behavior).
   const region = process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1';
   const deploymentAccountId = process.env.AWS_DEPLOYMENT_ACCOUNT_ID || '461760157232';
   const roleName = process.env.AWS_ASSUME_ROLE_NAME || 'GDMSOrganizationsRole';
 
-  try {
-    // Create STS client with base credentials (org account)
-    const stsClient = new STSClient({
-      region,
-      credentials: {
-        accessKeyId: process.env.AWS_GOVCLOUD_ACCESS_KEY_ID!,
-        secretAccessKey: process.env.AWS_GOVCLOUD_SECRET_ACCESS_KEY!,
-      },
-    });
+  return clientInitGuard.run(
+    () => assumeRoleAndCreateClient(region, deploymentAccountId, roleName),
+    (error) => recordInitFailure(deploymentAccountId, error),
+  );
+}
 
-    // Assume role in deployment account
-    // Use 1 hour duration (safe default that works with most role configurations)
-    // The client will auto-refresh before expiration
-    const assumeRoleCommand = new AssumeRoleCommand({
-      RoleArn: `arn:aws-us-gov:iam::${deploymentAccountId}:role/${roleName}`,
-      RoleSessionName: `site-config-${Date.now()}`,
-      DurationSeconds: 3600, // 1 hour (auto-refreshes before expiration)
-    });
+/**
+ * Redacted, in-memory diagnostic for the site-config DynamoDB dependency,
+ * suitable for health/readiness surfaces. Does NOT perform any network call.
+ *
+ * - `unconfigured`: base GovCloud credentials are absent (expected in some
+ *   environments) — reported without error fields to avoid error spam.
+ * - `degraded`: a recent initialization failure is still within its cooldown.
+ * - `healthy`: otherwise.
+ *
+ * Never exposes credentials, stack, endpoint IP, or the raw error object.
+ */
+export function getSiteConfigDependencyDiagnostic(): SiteConfigDependencyDiagnostic {
+  const hasCredentials = Boolean(
+    process.env.AWS_GOVCLOUD_ACCESS_KEY_ID && process.env.AWS_GOVCLOUD_SECRET_ACCESS_KEY,
+  );
 
-    const assumeRoleResponse = await stsClient.send(assumeRoleCommand);
-
-    if (!assumeRoleResponse.Credentials || !assumeRoleResponse.Credentials.Expiration) {
-      logger.error('Failed to assume role for site-config access');
-      return null;
-    }
-
-    // Create DynamoDB client with assumed role credentials
-    const client = new DynamoDBClient({
-      region,
-      credentials: {
-        accessKeyId: assumeRoleResponse.Credentials.AccessKeyId!,
-        secretAccessKey: assumeRoleResponse.Credentials.SecretAccessKey!,
-        sessionToken: assumeRoleResponse.Credentials.SessionToken!,
-      },
-    });
-
-    // Cache the client with expiration tracking
-    cachedDynamoDBClient = {
-      client,
-      expiration: assumeRoleResponse.Credentials.Expiration,
+  if (!hasCredentials) {
+    return {
+      status: 'unconfigured',
+      lastSuccessAt: null,
+      lastFailureAt: null,
+      errorName: null,
+      errorCode: null,
+      retryAfter: null,
     };
-
-    logger.info(`[Site Config] Created DynamoDB client for deployment account ${deploymentAccountId}, expires at ${assumeRoleResponse.Credentials.Expiration.toISOString()}`);
-
-    return client;
-  } catch (error) {
-    logger.error('Error assuming role for site-config:', error);
-    return null;
   }
+
+  const degraded = clientInitGuard.isCoolingDown();
+
+  return {
+    status: degraded ? 'degraded' : 'healthy',
+    lastSuccessAt: siteConfigDiagnostic.lastSuccessAt,
+    lastFailureAt: siteConfigDiagnostic.lastFailureAt,
+    errorName: siteConfigDiagnostic.errorName,
+    errorCode: siteConfigDiagnostic.errorCode,
+    retryAfter: degraded ? siteConfigDiagnostic.retryAfter : null,
+  };
 }
 
 /**

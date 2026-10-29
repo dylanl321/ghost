@@ -25,6 +25,7 @@ import os from 'os'
 import process from 'process'
 import { getAccountsTableName } from '../../utils/accounts-consolidated'
 import { getDynamoDBConfigDiagnostic } from '../../lib/dynamodb-config'
+import { getSiteConfigDependencyDiagnostic } from '../../utils/site-config'
 import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
@@ -219,6 +220,21 @@ registerEndpoint('/api/health/ready', 'GET', {
                           missingKeyCount: { type: 'number' },
                           missingKeys: { type: 'array', items: { type: 'string' } },
                           loadedAt: { type: 'string', format: 'date-time', nullable: true }
+                        }
+                      },
+                      siteConfigDynamodb: {
+                        type: 'object',
+                        description: 'Redacted site-config DynamoDB dependency diagnostic. Non-sensitive: never contains credentials, stack, endpoint IP, or raw error objects.',
+                        properties: {
+                          status: {
+                            type: 'string',
+                            enum: ['unconfigured', 'healthy', 'degraded']
+                          },
+                          lastSuccessAt: { type: 'string', format: 'date-time', nullable: true },
+                          lastFailureAt: { type: 'string', format: 'date-time', nullable: true },
+                          errorName: { type: 'string', nullable: true },
+                          errorCode: { type: 'string', nullable: true },
+                          retryAfter: { type: 'string', format: 'date-time', nullable: true }
                         }
                       }
                     }
@@ -524,6 +540,27 @@ export default defineEventHandler(handleAsync(async (event) => {
     }
   } catch (error) {
     logger.warn('Could not retrieve DynamoDB config diagnostic:', error)
+  }
+
+  // Surface site-config DynamoDB dependency health. A degraded state means a
+  // recent AssumeRole initialization failed and is within its retry cooldown;
+  // callers transparently fall back to defaults, so this is degraded (not
+  // unhealthy). Purely in-memory — no network call is made here.
+  try {
+    const siteConfigDynamodb = getSiteConfigDependencyDiagnostic()
+    healthData.dependencies = {
+      ...(healthData.dependencies || {}),
+      siteConfigDynamodb
+    }
+
+    if (siteConfigDynamodb.status === 'degraded') {
+      healthData.warnings.push('Site config DynamoDB dependency degraded: recent AssumeRole failure within cooldown')
+      if (healthData.status === 'healthy') {
+        healthData.status = 'degraded'
+      }
+    }
+  } catch (error) {
+    logger.warn('Could not retrieve site-config dependency diagnostic:', error)
   }
 
   // Add warnings if no environments are configured

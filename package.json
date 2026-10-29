@@ -37,6 +37,7 @@
     "contract:shared-investigations:check": "tsx tests/shared-investigations/sync-contract.ts --check",
     "test:budget-recipients": "tsx --test server/utils/__tests__/manual-budget-alert-recipients.test.ts",
     "test:budget-alert-retry": "tsx --test server/utils/__tests__/budget-alert-retry.test.ts",
+    "test:site-config-resilience": "tsx --test server/utils/__tests__/site-config-resilience.test.ts",
     "changelog:generate": "tsx scripts/generate-changelog.ts",
     "test:shared-content": "tsx --test tests/shared-content/*.test.ts"
   },
