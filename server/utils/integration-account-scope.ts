@@ -62,13 +62,20 @@ export function getIntegrationAccountEnvironmentErrors(
     })
 }
 
-const personMatches = (value: unknown, person: string): boolean => {
+export const personMatches = (value: unknown, person: string): boolean => {
   if (typeof value !== 'string') return false
   const normalizedValue = value.trim().toLowerCase()
   const normalizedPerson = person.trim().toLowerCase()
-  return normalizedValue === normalizedPerson ||
-    normalizedValue.split('@')[0] === normalizedPerson.split('@')[0]
+  if (!normalizedValue || !normalizedPerson) return false
+  if (normalizedValue === normalizedPerson) return true
+  // Two full email addresses must match exactly: jane@a.example is not
+  // jane@b.example. A bare username still matches the local part of an email.
+  if (normalizedValue.includes('@') && normalizedPerson.includes('@')) return false
+  return normalizedValue.split('@')[0] === normalizedPerson.split('@')[0]
 }
+
+/** Upper bound on selector values per request; each identifier is a lookup. */
+export const MAX_INTEGRATION_ACCOUNT_SELECTORS = 100
 
 const canonicalize = (account: any): IntegrationAccount => ({
   ...account,
@@ -90,9 +97,21 @@ export async function resolveIntegrationAccountScope(
   query: Record<string, unknown>,
   options: { required?: boolean } = {}
 ): Promise<IntegrationAccountScope | undefined> {
-  const identifiers = split(query.accountIdentifiers ?? query.accountIds ?? query.accountId)
+  // Every documented alias contributes; previously accountIds was silently
+  // ignored whenever accountIdentifiers was also present.
+  const identifiers = [...new Set([
+    ...split(query.accountIdentifiers),
+    ...split(query.accountIds),
+    ...split(query.accountId)
+  ])]
   const adminOf = split(query.adminOf)
   const ownedBy = split(query.ownedBy)
+  if (identifiers.length + adminOf.length + ownedBy.length > MAX_INTEGRATION_ACCOUNT_SELECTORS) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: `Provide at most ${MAX_INTEGRATION_ACCOUNT_SELECTORS} account selector values per request.`
+    })
+  }
   const accounts: IntegrationAccount[] = []
 
   for (const identifier of identifiers) {

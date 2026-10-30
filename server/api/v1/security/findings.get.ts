@@ -1,10 +1,11 @@
-import { defineEventHandler, getQuery } from 'h3'
+import { getQuery } from 'h3'
 import { requireScope } from '../../../middleware/entra-auth'
 import { registerEndpoint } from '../../../plugins/swagger'
 import { sendSuccess } from '../../../utils/api-response'
 import { querySecurityHubApi } from '../../../utils/security-hub-api'
 import { parseSecurityHubQuery, securityHubParameters } from '../../../utils/security-api-parameters'
 import { hasIntegrationAccountSelector, resolveIntegrationAccountScope } from '../../../utils/integration-account-scope'
+import { withV1Errors } from '../../../utils/v1-errors'
 
 registerEndpoint('/api/v1/security/findings', 'GET', {
   summary: 'List Security Hub findings',
@@ -82,7 +83,7 @@ registerEndpoint('/api/v1/security/findings', 'GET', {
   }
 })
 
-export default defineEventHandler(async (event) => {
+export default withV1Errors(async (event) => {
   await requireScope(event, 'security:read')
   const rawQuery = getQuery(event)
   const query = parseSecurityHubQuery(rawQuery)

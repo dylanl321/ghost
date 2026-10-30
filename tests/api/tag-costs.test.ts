@@ -234,3 +234,22 @@ test('tag discovery returns an empty current month on day one without calling AW
   assert.deepEqual(response.data.data.tags, [])
   assert.equal(provider.mock.callCount(), 0)
 })
+
+test('GovCloud-only selections are reported instead of silently dropped from cost totals', async (t) => {
+  await mockProviders(t)
+  process.env.AWS_GOVCLOUD_ACCESS_KEY_ID = 'test-gov-key'
+  process.env.AWS_GOVCLOUD_SECRET_ACCESS_KEY = 'test-gov-secret'
+  t.mock.method(DynamoDBClient.prototype, 'send', async () => ({
+    Items: [
+      marshall({ requestID: 42, awsStandardAccountID: '111111111111', awsGovCloudAccountID: '333333333333', projectName: 'Production' }),
+      marshall({ requestID: 43, awsGovCloudAccountID: '444444444444', projectName: 'GovCloud Only' })
+    ]
+  }))
+  t.mock.method(OrganizationsClient.prototype, 'send', async () => ({}))
+  const alias = defineV1Alias('/api/v1/costs/test', 'costs:read', 'Test', () => ({ success: true, data: [] }), [], true)
+  const response = await request(alias, '/api/v1/costs/test?accountIdentifiers=333333333333,444444444444')
+  assert.equal(response.status, 200)
+  assert.deepEqual(response.data.metadata.errors.map((error: any) => [error.code, error.account.govCloudAccountId]), [
+    ['MISSING_ENVIRONMENT_ACCOUNT_ID', '444444444444']
+  ])
+})

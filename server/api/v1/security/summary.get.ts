@@ -1,4 +1,4 @@
-import { createError, defineEventHandler, getQuery } from 'h3'
+import { createError, getQuery } from 'h3'
 import { requireScope } from '../../../middleware/entra-auth'
 import { registerEndpoint } from '../../../plugins/swagger'
 import { sendSuccess } from '../../../utils/api-response'
@@ -10,6 +10,7 @@ import {
   resolveIntegrationAccountScope
 } from '../../../utils/integration-account-scope'
 import { sanitizeProviderError } from '../../../utils/security-api-pagination'
+import { withV1Errors } from '../../../utils/v1-errors'
 
 registerEndpoint('/api/v1/security/summary', 'GET', {
   summary: 'Get organization or selected-account security summary',
@@ -37,7 +38,7 @@ registerEndpoint('/api/v1/security/summary', 'GET', {
   }
 })
 
-export default defineEventHandler(async (event) => {
+export default withV1Errors(async (event) => {
   await requireScope(event, 'security:read')
   const query = getQuery(event)
   const accountScope = await resolveIntegrationAccountScope(event, query, {

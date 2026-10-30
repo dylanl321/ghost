@@ -7,6 +7,7 @@ import { defineEventHandler, getHeader, createError, getRequestURL, setResponseH
 import type { H3Event } from 'h3'
 import { validateApiKey, recordApiKeyUsage } from '../utils/api-keys'
 import { getClientAddress } from '../utils/client-address'
+import { isV1Path, sendV1Error } from '../utils/v1-errors'
 import { getUserSession as getOIDCSession } from '../utils/entra/session'
 import { logger } from '../utils/logger'
 
@@ -186,21 +187,18 @@ export default defineEventHandler(async (event) => {
   
   // If no valid authentication found
   if (!authContext || !authContext.isAuthenticated) {
-    if (apiKeyAuth.unavailable) {
-      // A storage outage is not the caller's fault; tell integrations to retry
-      // rather than to rotate a key that is probably still valid.
-      setResponseHeader(event, 'Retry-After', 5)
-      throw createError({
-        statusCode: 503,
-        statusMessage: 'API key validation is temporarily unavailable. Retry shortly.'
-      })
-    }
-    throw createError({
-      statusCode: 401,
-      statusMessage: apiKeyAuth.rejection
+    // A storage outage is not the caller's fault; tell integrations to retry
+    // rather than to rotate a key that is probably still valid.
+    const statusCode = apiKeyAuth.unavailable ? 503 : 401
+    const statusMessage = apiKeyAuth.unavailable
+      ? 'API key validation is temporarily unavailable. Retry shortly.'
+      : apiKeyAuth.rejection
         ? `${apiKeyAuth.rejection}. Provide a valid, active key in the x-api-key header.`
         : 'Authentication required. Please provide a valid API key or sign in with Entra ID.'
-    })
+    if (apiKeyAuth.unavailable) setResponseHeader(event, 'Retry-After', 5)
+    // The integration contract documents a single error envelope.
+    if (isV1Path(getRequestURL(event).pathname)) return sendV1Error(event, statusCode, statusMessage)
+    throw createError({ statusCode, statusMessage })
   }
 
   // Special rule: Entra APIs require OIDC authentication (need user's Entra token)

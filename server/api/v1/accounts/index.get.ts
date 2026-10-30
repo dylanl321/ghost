@@ -1,8 +1,9 @@
-import { defineEventHandler, getQuery } from 'h3'
+import { getQuery } from 'h3'
 import legacyHandler from '../../accounts/list.get'
 import { requireScope } from '../../../middleware/entra-auth'
 import { registerEndpoint } from '../../../plugins/swagger'
 import { integrationAccountParameters, resolveIntegrationAccountScope } from '../../../utils/integration-account-scope'
+import { withV1Errors } from '../../../utils/v1-errors'
 
 registerEndpoint('/api/v1/accounts', 'GET', {
   summary: 'List AWS accounts',
@@ -13,7 +14,7 @@ registerEndpoint('/api/v1/accounts', 'GET', {
   responses: { 200: { description: 'AWS accounts' }, 403: { $ref: '#/components/schemas/Error' } }
 })
 
-export default defineEventHandler(async (event) => {
+export default withV1Errors(async (event) => {
   await requireScope(event, 'accounts:read')
   const scope = await resolveIntegrationAccountScope(event, getQuery(event))
   const response: any = await legacyHandler(event)

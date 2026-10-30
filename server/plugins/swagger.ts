@@ -51,9 +51,20 @@ const openApiSpec = {
           error: {
             type: 'object',
             properties: {
-              code: { type: 'string' },
+              code: {
+                type: 'string',
+                description: 'BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, RATE_LIMITED, SERVICE_UNAVAILABLE (retry after the Retry-After header), or INTERNAL_ERROR.',
+                example: 'FORBIDDEN'
+              },
               message: { type: 'string' },
               details: { type: 'object' }
+            }
+          },
+          metadata: {
+            type: 'object',
+            properties: {
+              timestamp: { type: 'string', format: 'date-time' },
+              requestID: { type: 'string', description: 'Matches the x-request-id response header; quote it when reporting a problem.' }
             }
           }
         }

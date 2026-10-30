@@ -1,8 +1,9 @@
-import { defineEventHandler, getQuery } from 'h3'
+import { getQuery } from 'h3'
 import legacyHandler from '../organization/structure.get'
 import { requireScope } from '../../middleware/entra-auth'
 import { registerEndpoint } from '../../plugins/swagger'
 import { integrationAccountParameters, resolveIntegrationAccountScope } from '../../utils/integration-account-scope'
+import { withV1Errors } from '../../utils/v1-errors'
 
 registerEndpoint('/api/v1/organization', 'GET', {
   summary: 'Get organization structure',
@@ -27,7 +28,7 @@ const filterTree = (node: any, allowed: Set<string>): any | null => {
   return accounts.length > 0 || children.length > 0 ? { ...node, accounts, children } : null
 }
 
-export default defineEventHandler(async (event) => {
+export default withV1Errors(async (event) => {
   await requireScope(event, 'accounts:read')
   const scope = await resolveIntegrationAccountScope(event, getQuery(event))
   const response: any = await legacyHandler(event)
