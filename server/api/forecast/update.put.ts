@@ -5,6 +5,7 @@
 
 import { defineEventHandler, readBody } from 'h3'
 import { updateItem } from '../../utils/dynamodb'
+import { findForecastItemById, FORECAST_TABLE, FORECAST_ENVIRONMENT, FORECAST_KEY_ATTRIBUTES } from '../../utils/forecast-data'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { logger } from '../../utils/logger'
@@ -68,8 +69,6 @@ export default defineEventHandler(handleAsync(async (event) => {
   // Require admin scope for write operations
   await requireScope(event, 'admin')
 
-  // Forecast table is in GovCloud
-  const environment = 'govcloud'
   const body = await readBody(event)
   
   if (!body || !body.id || !body.updates) {
@@ -79,58 +78,24 @@ export default defineEventHandler(handleAsync(async (event) => {
   const { id, updates, timestamp } = body
 
   try {
-    // First, find the item by ID
-    const scanResult = await scanItems(
-      'ghost-dashboard-forecast-data',
-      'id = :id',
-      1,
-      undefined,
-      environment,
-      { ':id': id }
-    )
-
-    if (scanResult.items.length === 0) {
+    const item = await findForecastItemById(id)
+    if (!item) {
       return errors.notFound(event, `Forecast data with ID ${id} not found`)
     }
 
-    const item = scanResult.items[0]
-    
-    // Prepare update expression
-    const updateExpression: string[] = []
-    const expressionAttributeNames: Record<string, string> = {}
-    const expressionAttributeValues: Record<string, any> = {}
-
-    // Add updatedAt timestamp
-    updateExpression.push('updatedAt = :updatedAt')
-    expressionAttributeValues[':updatedAt'] = timestamp || new Date().toISOString()
-
-    // Process each update field
-    Object.entries(updates).forEach(([key, value]) => {
-      if (value !== undefined) {
-        const attributeName = `#${key}`
-        const attributeValue = `:${key}`
-        
-        updateExpression.push(`${attributeName} = ${attributeValue}`)
-        expressionAttributeNames[attributeName] = key
-        expressionAttributeValues[attributeValue] = value
-      }
-    })
-
-    if (updateExpression.length === 1) { // Only updatedAt
+    // Key and index attributes identify the record and are never client-editable
+    const fieldUpdates = Object.fromEntries(
+      Object.entries(updates).filter(([key, value]) => value !== undefined && !FORECAST_KEY_ATTRIBUTES.has(key))
+    )
+    if (Object.keys(fieldUpdates).length === 0) {
       return errors.badRequest(event, 'No valid fields to update')
     }
 
-    // Update the item
     const result = await updateItem(
-      'ghost-dashboard-forecast-data',
-      {
-        PK: item.PK,
-        SK: item.SK
-      },
-      updateExpression.join(', '),
-      expressionAttributeNames,
-      expressionAttributeValues,
-      environment
+      FORECAST_TABLE,
+      { PK: item.PK, SK: item.SK },
+      { ...fieldUpdates, updatedAt: timestamp || new Date().toISOString() },
+      FORECAST_ENVIRONMENT
     )
 
     return sendSuccess(event, result, {
