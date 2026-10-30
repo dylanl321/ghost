@@ -7,8 +7,9 @@
 
 import { getUserEmail, isUserAdmin } from '../../../utils/user-roles'
 import { createReport } from '../../../utils/scheduled-reports'
-import { requireScheduledReportAccess } from '../../../utils/dataset-report-access'
+import { requireScheduledReportAccess, isDatasetReport } from '../../../utils/dataset-report-access'
 import { logger } from '../../../utils/logger'
+import { assertCanCreateReport, assertSelfOnlyRecipients } from '../../../utils/report-limits'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -50,6 +51,8 @@ export default defineEventHandler(async (event) => {
 
     // Users can only duplicate their own reports (admins can duplicate any)
     const existingReport = await requireScheduledReportAccess(event, reportId)
+    if (!isDatasetReport(existingReport)) await assertSelfOnlyRecipients(event, existingReport.recipients)
+    await assertCanCreateReport(event)
 
     // Create new report with copied settings
     const newReportName = `Copy of ${existingReport.reportName}`

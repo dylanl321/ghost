@@ -9,6 +9,7 @@ import { validateEmails } from '../../utils/email-service'
 import { isUserAdmin, getUserEmail } from '../../utils/user-roles'
 import { getScheduleErrors } from '../../../shared/utils/report-schedule'
 import { logger } from '../../utils/logger'
+import { assertCanCreateReport, assertSelfOnlyRecipients } from '../../utils/report-limits'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -74,6 +75,8 @@ export default defineEventHandler(async (event) => {
     }
 
     const isAdmin = await isUserAdmin(event)
+    if (body.reportType !== 'dataset') await assertSelfOnlyRecipients(event, body.recipients)
+    await assertCanCreateReport(event)
 
     // Create the report
     const report = await createReport(body, userEmail, isAdmin)

@@ -9,6 +9,7 @@ import { requireScheduledReportAccess } from './dataset-report-access'
 import { executeScheduledReport } from './report-scheduler'
 import { validateEmails } from './email-service'
 import { getUserEmail } from './user-roles'
+import { assertSelfOnlyRecipients } from './report-limits'
 import { logger } from './logger'
 
 export async function handleReportTestSend(event: H3Event, options: { datasetOnly?: boolean } = {}) {
@@ -30,6 +31,9 @@ export async function handleReportTestSend(event: H3Event, options: { datasetOnl
   } else if (typeof body?.testRecipient === 'string' && body.testRecipient.trim()) {
     recipients = [body.testRecipient.trim()]
   }
+
+  // Non-admins may only send a test to themselves
+  await assertSelfOnlyRecipients(event, recipients)
 
   const emailValidation = validateEmails(recipients)
   if (!emailValidation.valid || recipients.length === 0) {

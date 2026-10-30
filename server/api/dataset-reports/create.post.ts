@@ -11,6 +11,7 @@ import { getUserEmail, isUserAdmin } from '../../utils/user-roles'
 import { logger } from '../../utils/logger'
 import { getScheduledDatasetReportErrors } from '../../utils/dataset-report-validation'
 import { getScheduleErrors } from '../../../shared/utils/report-schedule'
+import { assertCanCreateReport } from '../../utils/report-limits'
 
 interface CreateDatasetReportRequest {
   reportName: string
@@ -103,6 +104,7 @@ export default defineEventHandler(async (event) => {
 
     // Check if user has admin privileges (AWS-Product-Team membership)
     const isAdmin = await isUserAdmin(event)
+    await assertCanCreateReport(event)
 
     // Convert to ReportConfig format (compatible with existing infrastructure)
     const reportRequest: CreateReportRequest = {
