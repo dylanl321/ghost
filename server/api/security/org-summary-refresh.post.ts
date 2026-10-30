@@ -10,19 +10,11 @@ import { organizationCache, CacheTags } from '../../utils/cache-manager'
 import { buildSecuritySummaryViaAthena } from '../../utils/security-hub-athena'
 import { saveSecuritySummary } from '../../utils/security-summary-store'
 import { logger } from '../../utils/logger'
+import { requireAdmin } from '../../utils/user-roles'
 
 export default defineEventHandler(handleAsync(async (event) => {
-  // Admin authorization check
-  const session = await getUserSession(event)
-  const userGroups = session.user?.groups || []
-  const isAdmin = userGroups.includes('AWS-Product-Team')
-
-  if (!isAdmin) {
-    throw createError({
-      statusCode: 403,
-      message: 'Forbidden: Admin access required',
-    })
-  }
+  // Same role rules as every other admin check (session groups, then Graph)
+  await requireAdmin(event)
 
   logger.info('[OrgSecurity] Admin-triggered refresh starting')
   const start = Date.now()

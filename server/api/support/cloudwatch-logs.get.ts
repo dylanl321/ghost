@@ -15,6 +15,7 @@ import { assumeChildAccountRole } from '../../utils/credentials/awsAccountCreden
 import { logger } from '../../utils/logger'
 import { registerEndpoint } from '../../plugins/swagger'
 import type { AWSEnvironmentType } from '../../types'
+import { requireAdmin } from '../../utils/user-roles'
 
 export interface CloudWatchLogEntry {
   timestamp: number
@@ -222,6 +223,8 @@ function tryParseJSON(message: string): Record<string, any> | undefined {
 }
 
 export default defineEventHandler(handleAsync(async (event) => {
+  await requireAdmin(event)
+
   const query = getQuery(event)
 
   // Required parameters

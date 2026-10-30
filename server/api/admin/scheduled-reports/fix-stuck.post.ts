@@ -9,10 +9,13 @@
 import { listAllReports, calculateNextRunTime, updateReport } from '../../../utils/scheduled-reports'
 import { cleanupStaleLocks } from '../../../utils/execution-locks'
 import { logger } from '../../../utils/logger'
+import { requireAdmin } from '../../../utils/user-roles'
 
 // Force reload - no external dependencies needed
 
 export default defineEventHandler(async (event) => {
+  await requireAdmin(event)
+
   try {
     logger.info('Admin: Fixing stuck scheduled reports...')
 

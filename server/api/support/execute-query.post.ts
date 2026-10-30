@@ -15,6 +15,7 @@ import { assumeChildAccountRole } from '../../utils/credentials/awsAccountCreden
 import { logger } from '../../utils/logger'
 import { registerEndpoint } from '../../plugins/swagger'
 import type { AWSEnvironmentType } from '../../types'
+import { requireAdmin } from '../../utils/user-roles'
 
 interface ExecuteQueryRequest {
   queryType: 'config' | 'cloudwatch' | 'cloudtrail'
@@ -293,6 +294,8 @@ async function executeCloudTrailQuery(
 }
 
 export default defineEventHandler(handleAsync(async (event) => {
+  await requireAdmin(event)
+
   const body = await readBody<ExecuteQueryRequest>(event)
 
   // Validate required fields

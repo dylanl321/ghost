@@ -6,20 +6,11 @@
  */
 
 import { getAllConfigHistory } from '../../../utils/site-config';
+import { requireAdmin } from '../../../utils/user-roles';
 import type { SiteConfigHistoryResponse } from '../../../../shared/types/site-config';
 
 export default defineEventHandler(async (event): Promise<SiteConfigHistoryResponse> => {
-  // Check if user is admin
-  const session = await getUserSession(event);
-  const userGroups = session.user?.groups || [];
-  const isAdmin = userGroups.includes('AWS-Product-Team');
-
-  if (!isAdmin) {
-    throw createError({
-      statusCode: 403,
-      message: 'Forbidden: Admin access required',
-    });
-  }
+  await requireAdmin(event);
 
   try {
     const history = await getAllConfigHistory(200); // Get last 200 changes

@@ -7,7 +7,7 @@
  */
 
 import { getUserSession } from '../../utils/entra/session'
-import { recordBadgeAward } from '../../utils/achievement-store'
+import { recordBadgeAward, findBadgeDefinition } from '../../utils/achievement-store'
 import { sendUserNotification } from '../../utils/notification-service'
 import type { AwardBadgeRequest } from '../../../shared/types/achievements'
 import { logger } from '../../utils/logger'
@@ -29,24 +29,31 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, message: 'badgeId and badgeName are required' })
     }
 
+    // Only catalog badges can be recorded, and the notification text comes
+    // from the catalog rather than the request body.
+    const badge = findBadgeDefinition(body.badgeId)
+    if (!badge) {
+      throw createError({ statusCode: 400, message: 'Unknown badgeId' })
+    }
+
     // Record the badge in the progress table
-    await recordBadgeAward(userId, body.badgeId)
+    await recordBadgeAward(userId, badge.id)
 
     // Send in-browser notification via the existing notification system
     const notifResult = await sendUserNotification({
       userId,
       category: 'ACHIEVEMENT',
-      title: `Badge Earned: ${body.badgeName}`,
-      body: body.badgeDescription || 'You earned a new achievement badge!',
+      title: `Badge Earned: ${badge.name}`,
+      body: badge.description || 'You earned a new achievement badge!',
       severity: 'info',
       actionUrl: '/profile?tab=achievements',
       actionLabel: 'View Badges',
       metadata: {
-        badgeId: body.badgeId,
-        icon: body.badgeIcon,
-        color: body.badgeColor
+        badgeId: badge.id,
+        icon: badge.icon,
+        color: badge.color
       },
-      dedupeKey: `achievement-${body.badgeId}`,
+      dedupeKey: `achievement-${badge.id}`,
       skipEmail: true // In-browser only — no email for achievements
     })
 
@@ -61,7 +68,7 @@ export default defineEventHandler(async (event) => {
 
     return {
       success: true,
-      message: `Badge "${body.badgeName}" awarded`,
+      message: `Badge "${badge.name}" awarded`,
       notificationCreated: notifResult.success && !notifResult.skipped
     }
 

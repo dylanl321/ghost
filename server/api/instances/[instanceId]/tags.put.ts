@@ -18,6 +18,7 @@ import { getResourceConfig, getAggregatorName } from '../../../utils/config-serv
 import { getEC2Client } from '../../../lib/aws-client-factory'
 import type { AWSEnvironmentType } from '../../../types'
 import { logger } from '../../../utils/logger'
+import { requireAdmin } from '../../../utils/user-roles'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/instances/[instanceId]/tags', 'PUT', {
@@ -161,6 +162,8 @@ registerEndpoint('/api/instances/[instanceId]/tags', 'PUT', {
 })
 
 export default defineEventHandler(handleAsync(async (event) => {
+  await requireAdmin(event)
+
   try {
     const instanceId = getRouterParam(event, 'instanceId')
     const body = await readBody(event)

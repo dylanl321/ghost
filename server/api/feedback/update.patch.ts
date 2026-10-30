@@ -3,6 +3,7 @@ import { registerEndpoint } from '../../plugins/swagger'
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb"
 import { DynamoDBDocumentClient, UpdateCommand } from "@aws-sdk/lib-dynamodb"
 import { logger } from '../../utils/logger'
+import { requirePermission } from '../../utils/user-roles'
 
 const region = 'us-gov-west-1'
 const deploymentAccountId = '461760157232'
@@ -49,6 +50,8 @@ registerEndpoint('/api/feedback/update', 'POST', {
 })
 
 export default defineEventHandler(async (event) => {
+  await requirePermission(event, 'admin.issues')
+
   const startTime = Date.now()
   const body = await readBody<{ id: string; resolved: boolean }>(event)
   const { id, resolved } = body
