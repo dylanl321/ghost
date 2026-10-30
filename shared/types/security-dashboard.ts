@@ -84,6 +84,8 @@ export interface OrgSecuritySummary {
   findingsTrend?: FindingsTrendPoint[]
   severityByProduct?: SeverityByProductEntry[]
   findingAgeBuckets?: FindingAgeBuckets
+  /** 'security-hub-api' when Athena failed and the capped API fallback was used */
+  dataSource?: 'athena' | 'security-hub-api'
 }
 
 /** Weekly time-series data point for findings trend */

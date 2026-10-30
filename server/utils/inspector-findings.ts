@@ -55,8 +55,13 @@ export interface InstanceVulnerabilitySummary {
   low: number
   informational: number
   total: number
+  /** True when the finding cap was reached, so the counts are lower bounds */
+  truncated: boolean
   findings: VulnerabilityFinding[]
 }
+
+const INSTANCE_FINDING_CAP = 500
+const ACCOUNT_FINDING_CAP = 1000
 
 /**
  * Parse Inspector finding to our format
@@ -128,6 +133,7 @@ export async function getInstanceVulnerabilities(
     low: 0,
     informational: 0,
     total: 0,
+    truncated: false,
     findings: []
   }
 
@@ -204,7 +210,8 @@ export async function getInstanceVulnerabilities(
       }
 
       nextToken = response.nextToken
-    } while (nextToken && allFindings.length < 500)
+    } while (nextToken && allFindings.length < INSTANCE_FINDING_CAP)
+    summary.truncated = !!nextToken
 
     // Sort findings by severity
     const severityOrder: Record<VulnerabilitySeverity, number> = {
@@ -226,14 +233,10 @@ export async function getInstanceVulnerabilities(
     return summary
 
   } catch (error: any) {
+    // An empty summary would read as "no vulnerabilities"; callers report
+    // the source as unavailable instead.
     logger.error(`[Inspector] Failed to get vulnerabilities for ${instanceId}:`, error.message)
-
-    // Return empty summary if Inspector not enabled
-    if (error.name === 'AccessDeniedException' || error.name === 'ResourceNotFoundException') {
-      logger.warn(`[Inspector] Inspector not enabled or accessible in account ${accountId}`)
-    }
-
-    return summary
+    throw inspectorError(error, accountId)
   }
 }
 
@@ -256,6 +259,8 @@ export async function getAccountVulnerabilities(
     low: number
     total: number
   }
+  /** True when the finding cap was reached, so the counts are lower bounds */
+  truncated: boolean
   findings: VulnerabilityFinding[]
 }> {
   const targetRegion = region || (environment === 'commercial' ? 'us-east-1' : 'us-gov-west-1')
@@ -271,6 +276,7 @@ export async function getAccountVulnerabilities(
       low: 0,
       total: 0
     },
+    truncated: false,
     findings: [] as VulnerabilityFinding[]
   }
 
@@ -342,7 +348,8 @@ export async function getAccountVulnerabilities(
       }
 
       nextToken = response.nextToken
-    } while (nextToken && result.findings.length < 1000)
+    } while (nextToken && result.findings.length < ACCOUNT_FINDING_CAP)
+    result.truncated = !!nextToken
 
     result.summary.total = result.findings.length
 
@@ -352,6 +359,16 @@ export async function getAccountVulnerabilities(
 
   } catch (error: any) {
     logger.error(`[Inspector] Failed to get account vulnerabilities for ${accountId}:`, error.message)
-    return result
+    throw inspectorError(error, accountId)
   }
+}
+
+function inspectorError(error: any, accountId: string): Error {
+  const notAvailable = error?.name === 'AccessDeniedException' || error?.name === 'ResourceNotFoundException'
+  return Object.assign(
+    new Error(notAvailable
+      ? `Inspector is not enabled or not accessible for account ${accountId}: ${error.message}`
+      : `Inspector query failed for account ${accountId}: ${error?.message || String(error)}`),
+    { name: error?.name || 'InspectorError', cause: error }
+  )
 }

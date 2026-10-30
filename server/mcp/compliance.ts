@@ -56,7 +56,7 @@ export async function collectCompliance(accountId: string, environment: 'commerc
   ])
   const failed = (source: string, reason: unknown): ComplianceDomain => ({ status: 'unknown', evidence: null, source, queriedAt, coverageGaps: [reason instanceof Error ? reason.message : String(reason)] })
   const vulnerability = inspector.status === 'fulfilled'
-    ? { status: statusForFindings(inspector.value.summary), evidence: { ...inspector.value.summary, ...(detailLevel === 'detailed' ? { details: inspector.value.findings.slice(0, 25), truncated: inspector.value.findings.length > 25 } : {}) }, source: 'AWS Inspector', queriedAt, observedAt: inspector.value.findings.map(f => f.updatedAt).filter(Boolean).sort().at(-1), coverageGaps: [] } satisfies ComplianceDomain
+    ? { status: statusForFindings(inspector.value.summary), evidence: { ...inspector.value.summary, ...(detailLevel === 'detailed' ? { details: inspector.value.findings.slice(0, 25), truncated: inspector.value.findings.length > 25 } : {}) }, source: 'AWS Inspector', queriedAt, observedAt: inspector.value.findings.map(f => f.updatedAt).filter(Boolean).sort().at(-1), coverageGaps: inspector.value.truncated ? ['Inspector returned more findings than were read; counts are lower bounds.'] : [] } satisfies ComplianceDomain
     : failed('AWS Inspector', inspector.reason)
   const controlRecords = securityHub.status === 'fulfilled' ? securityHub.value.records.filter(record => Boolean(record.complianceStatus)) : []
   const failedControls = controlRecords.filter(record => record.complianceStatus === 'FAILED')

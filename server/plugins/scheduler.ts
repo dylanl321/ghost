@@ -169,10 +169,8 @@ export default defineNitroPlugin(async (nitroApp) => {
 
       logger.info('[SecurityScheduler] Starting nightly security summary computation...')
       const jobStart = Date.now()
-      const { buildSecuritySummaryViaAthena } = await import('../utils/security-hub-athena')
-      const { saveSecuritySummary } = await import('../utils/security-summary-store')
-      const result = await buildSecuritySummaryViaAthena()
-      await saveSecuritySummary(result, { durationMs: Date.now() - jobStart })
+      const { refreshSecuritySummary } = await import('../utils/security-summary-store')
+      await refreshSecuritySummary()
       logger.info(`[SecurityScheduler] Nightly summary complete in ${Date.now() - jobStart}ms`)
       await releaseExecutionLock('security-summary-nightly', today)
       logJobCompletion('security-summary-nightly', 'success', performance.now() - start)

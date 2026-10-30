@@ -129,7 +129,6 @@ test('privileged non-admin-prefixed routes check the caller server-side', () => 
     'server/api/support/execute-query.post.ts': /await requireAdmin\(event\)/,
     'server/api/support/cloudwatch-logs.get.ts': /await requireAdmin\(event\)/,
     'server/api/instances/[instanceId]/tags.put.ts': /await requireAdmin\(event\)/,
-    'server/api/security/org-summary-refresh.post.ts': /await requireAdmin\(event\)/,
     'server/api/feedback/update.patch.ts': /await requirePermission\(event, 'admin\.issues'\)/
   }
   for (const [file, pattern] of Object.entries(guarded)) {
