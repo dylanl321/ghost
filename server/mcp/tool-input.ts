@@ -1,4 +1,4 @@
-import * as z from 'zod-v4'
+import * as z from 'zod'
 import { getAllAccountsUnified, type UnifiedAccount } from '../utils/accounts-consolidated'
 import { fuzzySearchAccounts } from '../utils/fuzzy-search'
 

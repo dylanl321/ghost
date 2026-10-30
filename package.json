@@ -41,7 +41,7 @@
     "test:shared-content": "tsx --test tests/shared-content/*.test.ts"
   },
   "dependencies": {
-    "@asteasolutions/zod-to-openapi": "^7.3.4",
+    "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-athena": "^3.1104.0",
     "@aws-sdk/client-bedrock": "^3.1109.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1104.0",
@@ -125,8 +125,7 @@
     "vue-echarts": "^8.0.0-beta.1",
     "vue-router": "^5.2.0",
     "xlsx": "npm:@e965/xlsx@0.20.3",
-    "zod": "^3.25.76",
-    "zod-v4": "npm:zod@^4.2.0"
+    "zod": "^4.6.7"
   },
   "overrides": {
     "undici": "8.12.3",
@@ -160,6 +159,9 @@
     },
     "exceljs": {
       "uuid": "11.1.1"
+    },
+    "@nuxt/ui": {
+      "zod": "$zod"
     }
   },
   "imports": {
