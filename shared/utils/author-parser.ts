@@ -1,9 +1,10 @@
 /**
  * Author field parsing utilities
  * Handles "Name <email@domain.com>" format from GitLab commit authors
+ * Shared by the pipeline author API routes and the pipeline author UI
  */
 
-import type { AuthorInfo } from '../../shared/types/pipelines'
+import type { AuthorInfo } from '../types/pipelines'
 
 /**
  * Parse author field from GitLab format: "Name <email@domain.com>"
@@ -62,26 +63,4 @@ export function parseAuthorField(authorField: string | null | undefined): Author
     displayName: trimmed,
     raw: trimmed,
   }
-}
-
-/**
- * Extract just the email address from author field
- */
-export function extractEmail(authorField: string | null | undefined): string {
-  return parseAuthorField(authorField).email
-}
-
-/**
- * Extract just the display name from author field
- */
-export function extractName(authorField: string | null | undefined): string {
-  return parseAuthorField(authorField).name
-}
-
-/**
- * Normalize author email for comparison and filtering
- * Converts to lowercase for case-insensitive matching
- */
-export function normalizeAuthorEmail(email: string): string {
-  return email.trim().toLowerCase()
 }
