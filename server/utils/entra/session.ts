@@ -57,6 +57,16 @@ export async function getUserSession(event: H3Event): Promise<{
   refreshToken?: string
   user?: any
 } | null> {
+  // Server-built Graph events (background dataset exports, MCP delegated
+  // Graph) carry an application or delegated token in the Authorization
+  // header and have no browser session. Only server code sets this context
+  // flag; a request cannot.
+  if (event.context?.datasetExportService) {
+    const authorization = event.node?.req?.headers?.authorization
+    const accessToken = typeof authorization === 'string' ? /^Bearer (\S+)$/i.exec(authorization)?.[1] : undefined
+    return accessToken ? { accessToken, user: { id: 'ghost-service' } } : null
+  }
+
   // Development mode - use test token ONLY if explicitly set
   const nodeEnv = process.env.NODE_ENV?.toLowerCase()
   if ((nodeEnv === 'development' || nodeEnv === 'dev') && process.env.ENTRA_TEST_ACCESS_TOKEN) {
