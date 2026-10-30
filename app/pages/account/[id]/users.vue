@@ -37,16 +37,6 @@ definePageMeta({
   description: 'View all users with access to this AWS account'
 })
 
-// Breadcrumb items
-const breadcrumbItems = computed(() => [
-  { label: 'Accounts', to: '/account/explorer' },
-  { 
-    label: enhancedAccountInfo.value?.displayName || `Account ${accountId.value}`, 
-    to: `/account/${accountId.value}` 
-  },
-  { label: 'Users', current: true, icon: 'i-heroicons-users' }
-])
-
 // Fetch users for the account
 const fetchUsers = async () => {
   if (!accountId.value) return
@@ -119,7 +109,7 @@ function buildExportConfig(): DataExportConfig {
     title: `${accountName} - User Access List`,
     subtitle: `AWS Account ${accountId.value}`,
     metadata: {
-      generatedBy: user.value?.claims?.name || user.value?.claims?.email || 'GHOST',
+      generatedBy: String(user.value?.claims?.name || user.value?.claims?.email || 'GHOST'),
       timestamp: new Date().toISOString(),
       scope: 'single-account' as const,
       selectedAccounts: [accountId.value],
@@ -201,7 +191,13 @@ const exportMenuItems = computed(() => [
 
 // Initialize data
 onMounted(async () => {
-  await enclaveStore.initialize()
+  // The enclave list only supplies a GovCloud ID fallback; the page still
+  // loads from the account record when it is unavailable.
+  try {
+    await enclaveStore.initialize()
+  } catch (err) {
+    logger.error('Enclave list failed to load:', err)
+  }
   await initialize()
   await fetchUsers()
   // Fetch IDC sessions in parallel (don't block on this)
@@ -213,8 +209,6 @@ onMounted(async () => {
   <div class="space-y-6">
     <!-- Enhanced Header with Two-Column Layout -->
     <div class="space-y-4">
-      <Breadcrumb :items="breadcrumbItems" />
-      
       <!-- Compact Account Header Card -->
       <UCard v-if="enhancedAccountInfo">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
