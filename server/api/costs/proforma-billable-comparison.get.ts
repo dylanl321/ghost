@@ -9,7 +9,8 @@
  * - department: string (optional) - Filter by Department
  * - includeDecommissioned: boolean (default: false)
  * - historicalYear: number (default: current year - 1)
- * - forecastYear: number (default: current year)
+ * - forecastYear: number (default: current year). Its figures are actuals to
+ *   date plus the Cost Explorer forecast for the rest of the year.
  * - environment: 'commercial' | 'govcloud' (default: 'commercial')
  */
 
@@ -119,11 +120,13 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
 
   // Filter out master and proforma accounts
+  const excludedAccountIds = new Set([
+    process.env.AWS_MASTER_ACCOUNT_ID || '205950196477',
+    process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832'
+  ])
   accountsList = accountsList.filter(acc =>
-    acc.accountId !== '205950196477' &&
-    acc.accountId !== '253821132832' &&
-    acc.awsStandardAccountID !== '205950196477' &&
-    acc.awsStandardAccountID !== '253821132832'
+    !excludedAccountIds.has(acc.accountId) &&
+    !excludedAccountIds.has(acc.awsStandardAccountID)
   )
 
   if (accountsList.length === 0) {
@@ -133,90 +136,71 @@ export default defineEventHandler(handleAsync(async (event) => {
   logger.info(`[ProformaComparison] Processing ${accountsList.length} accounts`)
 
   // ==========================================
-  // STEP 1: Fetch Historical Data (2025)
+  // STEP 1: Fetch actuals
   // ==========================================
+  // Cost Explorer end dates are exclusive: a calendar year ends on Jan 1 of the
+  // next year. "-12-31" silently dropped December 31.
 
-  const historicalStartDate = `${historicalYear}-01-01`
-  const historicalEndDate = `${historicalYear}-12-31`
-
-  logger.info('[ProformaComparison] Fetching historical data...')
-
-  let billableHistoricalData: any
-  let proformaHistoricalData: any
-
-  if (proforma) {
-    // Fetch both billable and proforma using getProformaCosts
-    const historicalCosts = await getProformaCosts({
-      startDate: historicalStartDate,
-      endDate: historicalEndDate,
-      granularity: 'MONTHLY',
+  const fetchActuals = async (startDate: string, endDate: string) => {
+    if (startDate >= endDate) return { billable: null, proforma: null }
+    const params = {
+      startDate,
+      endDate,
+      granularity: 'MONTHLY' as const,
       metrics: ['UnblendedCost'],
-      groupBy: [{ type: 'DIMENSION', key: 'LINKED_ACCOUNT' }]
-    })
-
-    billableHistoricalData = historicalCosts.billable.costs
-    proformaHistoricalData = historicalCosts.proforma.costs
-  } else {
-    // Fetch only billable
-    billableHistoricalData = await getCostAndUsage({
-      startDate: historicalStartDate,
-      endDate: historicalEndDate,
-      granularity: 'MONTHLY',
-      metrics: ['UnblendedCost'],
-      groupBy: [{ type: 'DIMENSION', key: 'LINKED_ACCOUNT' }]
-    }, environment)
-
-    proformaHistoricalData = null
+      groupBy: [{ type: 'DIMENSION' as const, key: 'LINKED_ACCOUNT' }]
+    }
+    if (proforma) {
+      const costs = await getProformaCosts(params)
+      return { billable: costs.billable.costs, proforma: costs.proforma.costs }
+    }
+    return { billable: await getCostAndUsage(params, environment), proforma: null }
   }
 
+  const todayDate = new Date().toISOString().slice(0, 10)
+  const forecastYearStart = `${forecastYear}-01-01`
+  const forecastYearEnd = `${forecastYear + 1}-01-01`
+  // The forecast-year figures are actuals to date plus the AWS forecast for the
+  // rest of the year. Cost Explorer rejects forecasts that start in the past,
+  // which made every forecast for the current year fail and report $0.
+  const forecastStartDate = todayDate > forecastYearStart ? todayDate : forecastYearStart
+  const actualToDateEnd = forecastStartDate < forecastYearEnd ? forecastStartDate : forecastYearEnd
+
+  logger.info('[ProformaComparison] Fetching actuals...')
+  const [historicalActuals, forecastYearActuals] = await Promise.all([
+    fetchActuals(`${historicalYear}-01-01`, `${historicalYear + 1}-01-01`),
+    fetchActuals(forecastYearStart, actualToDateEnd)
+  ])
+
   // ==========================================
-  // STEP 2: Fetch Forecast Data (2026)
+  // STEP 2: Fetch forecast for the rest of the forecast year
   // ==========================================
 
   logger.info('[ProformaComparison] Fetching forecast data...')
 
-  const forecastStartDate = `${forecastYear}-01-01`
-  const forecastEndDate = `${forecastYear}-12-31`
-
-  // Build forecast requests for each account
   const accountIds = accountsList.map(acc =>
     environment === 'govcloud'
       ? (acc.govCloudAccountId || acc.awsGovCloudAccountID)
       : (acc.accountId || acc.awsStandardAccountID)
   )
 
-  const billableForecastRequests = accountIds.map(accountId => ({
-    accountId,
-    startDate: forecastStartDate,
-    endDate: forecastEndDate,
-    metric: 'UNBLENDED_COST',
-    granularity: 'MONTHLY' as const,
-    proforma: false,
-    environment
-  }))
+  const hasForecastWindow = forecastStartDate < forecastYearEnd
+  const forecastRequests = (isProforma: boolean) => hasForecastWindow
+    ? accountIds.map(accountId => ({
+        accountId,
+        startDate: forecastStartDate,
+        endDate: forecastYearEnd,
+        metric: 'UNBLENDED_COST',
+        granularity: 'MONTHLY' as const,
+        proforma: isProforma,
+        environment
+      }))
+    : []
+  const batchOptions = { batchSize: 15, delayBetweenBatches: 200, maxRetries: 2 }
 
-  const proformaForecastRequests = proforma ? accountIds.map(accountId => ({
-    accountId,
-    startDate: forecastStartDate,
-    endDate: forecastEndDate,
-    metric: 'UNBLENDED_COST',
-    granularity: 'MONTHLY' as const,
-    proforma: true,
-    environment
-  })) : []
-
-  // Fetch forecasts in batches
   const [billableForecastResults, proformaForecastResults] = await Promise.all([
-    batchForecastCalls(billableForecastRequests, {
-      batchSize: 15,
-      delayBetweenBatches: 200,
-      maxRetries: 2
-    }),
-    proforma ? batchForecastCalls(proformaForecastRequests, {
-      batchSize: 15,
-      delayBetweenBatches: 200,
-      maxRetries: 2
-    }) : Promise.resolve([])
+    batchForecastCalls(forecastRequests(false), batchOptions),
+    proforma ? batchForecastCalls(forecastRequests(true), batchOptions) : Promise.resolve([])
   ])
 
   logger.info('[ProformaComparison] Forecast fetch complete', {
@@ -229,6 +213,35 @@ export default defineEventHandler(handleAsync(async (event) => {
   // ==========================================
   // STEP 3: Process and Structure Data
   // ==========================================
+
+  // Month keys are YYYY-MM-01. A forecast that starts mid-month shares its
+  // month with the actuals before it, so values for one month are summed.
+  const monthKey = (date: string) => `${date.slice(0, 7)}-01`
+  const addMonthlyActuals = (months: Map<string, number>, data: any, accountId: string) => {
+    for (const period of data?.resultsByTime || []) {
+      const start = period.TimePeriod?.Start
+      if (!start) continue
+      const group = period.Groups?.find((g: any) => g.Keys?.[0] === accountId)
+      const key = monthKey(start)
+      months.set(key, (months.get(key) || 0) + parseFloat(group?.Metrics?.UnblendedCost?.Amount || '0'))
+    }
+  }
+  const addMonthlyForecast = (months: Map<string, number>, results: any[], accountId: string) => {
+    const result = results.find(r => r.accountId === accountId)
+    if (!result?.success || !result.data) return
+    for (const period of result.data.forecastResultsByTime || []) {
+      const start = period.TimePeriod?.Start
+      if (!start) continue
+      const key = monthKey(start)
+      months.set(key, (months.get(key) || 0) + parseFloat(period.MeanValue || '0'))
+    }
+  }
+  const toBreakdown = (months: Map<string, number>) => {
+    const monthlyBreakdown: MonthlyData[] = [...months.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([month, cost]) => ({ month, cost }))
+    return { yearTotal: monthlyBreakdown.reduce((sum, m) => sum + m.cost, 0), monthlyBreakdown }
+  }
 
   const accountComparisons: AccountComparison[] = []
 
@@ -243,75 +256,30 @@ export default defineEventHandler(handleAsync(async (event) => {
     const accountLob = account.linesOfBusiness || account.lineOfBusiness || ''
     const accountDept = account.departmentNumber || account.department || ''
 
-    // Process historical billable data
-    const billableHistoricalMonthly: MonthlyData[] = []
-    let billableHistoricalTotal = 0
+    const billableHistoricalMonths = new Map<string, number>()
+    const proformaHistoricalMonths = new Map<string, number>()
+    addMonthlyActuals(billableHistoricalMonths, historicalActuals.billable, accountId)
+    addMonthlyActuals(proformaHistoricalMonths, historicalActuals.proforma, accountId)
 
-    if (billableHistoricalData?.resultsByTime) {
-      for (const period of billableHistoricalData.resultsByTime) {
-        const month = period.TimePeriod?.Start || ''
-        const accountGroup = period.Groups?.find((g: any) => g.Keys?.[0] === accountId)
-        const cost = parseFloat(accountGroup?.Metrics?.UnblendedCost?.Amount || '0')
+    const billableOutlookMonths = new Map<string, number>()
+    const proformaOutlookMonths = new Map<string, number>()
+    addMonthlyActuals(billableOutlookMonths, forecastYearActuals.billable, accountId)
+    addMonthlyActuals(proformaOutlookMonths, forecastYearActuals.proforma, accountId)
+    addMonthlyForecast(billableOutlookMonths, billableForecastResults, accountId)
+    addMonthlyForecast(proformaOutlookMonths, proformaForecastResults, accountId)
 
-        if (month) {
-          billableHistoricalMonthly.push({ month, cost })
-          billableHistoricalTotal += cost
-        }
-      }
-    }
-
-    // Process historical proforma data
-    const proformaHistoricalMonthly: MonthlyData[] = []
-    let proformaHistoricalTotal = 0
-
-    if (proformaHistoricalData?.resultsByTime) {
-      for (const period of proformaHistoricalData.resultsByTime) {
-        const month = period.TimePeriod?.Start || ''
-        const accountGroup = period.Groups?.find((g: any) => g.Keys?.[0] === accountId)
-        const cost = parseFloat(accountGroup?.Metrics?.UnblendedCost?.Amount || '0')
-
-        if (month) {
-          proformaHistoricalMonthly.push({ month, cost })
-          proformaHistoricalTotal += cost
-        }
-      }
-    }
-
-    // Process forecast billable data
-    const billableForecastResult = billableForecastResults.find(r => r.accountId === accountId)
-    const billableForecastMonthly: MonthlyData[] = []
-    let billableForecastTotal = 0
-
-    if (billableForecastResult?.success && billableForecastResult.data) {
-      billableForecastTotal = parseFloat(billableForecastResult.data.total?.Amount || '0')
-
-      for (const period of billableForecastResult.data.forecastResultsByTime) {
-        const month = period.TimePeriod?.Start || ''
-        const cost = parseFloat(period.MeanValue || '0')
-
-        if (month) {
-          billableForecastMonthly.push({ month, cost })
-        }
-      }
-    }
-
-    // Process forecast proforma data
-    const proformaForecastResult = proformaForecastResults.find(r => r.accountId === accountId)
-    const proformaForecastMonthly: MonthlyData[] = []
-    let proformaForecastTotal = 0
-
-    if (proformaForecastResult?.success && proformaForecastResult.data) {
-      proformaForecastTotal = parseFloat(proformaForecastResult.data.total?.Amount || '0')
-
-      for (const period of proformaForecastResult.data.forecastResultsByTime) {
-        const month = period.TimePeriod?.Start || ''
-        const cost = parseFloat(period.MeanValue || '0')
-
-        if (month) {
-          proformaForecastMonthly.push({ month, cost })
-        }
-      }
-    }
+    const billableHistorical = toBreakdown(billableHistoricalMonths)
+    const proformaHistorical = toBreakdown(proformaHistoricalMonths)
+    const billableForecast = toBreakdown(billableOutlookMonths)
+    const proformaForecast = toBreakdown(proformaOutlookMonths)
+    const billableHistoricalMonthly = billableHistorical.monthlyBreakdown
+    const proformaHistoricalMonthly = proformaHistorical.monthlyBreakdown
+    const billableForecastMonthly = billableForecast.monthlyBreakdown
+    const proformaForecastMonthly = proformaForecast.monthlyBreakdown
+    const billableHistoricalTotal = billableHistorical.yearTotal
+    const proformaHistoricalTotal = proformaHistorical.yearTotal
+    const billableForecastTotal = billableForecast.yearTotal
+    const proformaForecastTotal = proformaForecast.yearTotal
 
     // Calculate savings
     const historicalSavings = billableHistoricalTotal - proformaHistoricalTotal
@@ -381,6 +349,8 @@ export default defineEventHandler(handleAsync(async (event) => {
       accountsCount: accountComparisons.length,
       historicalYear,
       forecastYear,
+      // Forecast-year totals are actuals before this date plus the forecast from it.
+      forecastStartDate: hasForecastWindow ? forecastStartDate : null,
       durationMs: duration,
       filters: {
         ...(accountIdsParam && { accountIds: accountIdsParam }),
