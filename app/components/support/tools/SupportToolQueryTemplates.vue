@@ -60,7 +60,6 @@
 </template>
 
 <script setup lang="ts">
-const toast = useToast()
 
 const categoryIcons: Record<string, string> = {
   security: 'i-heroicons-shield-check',
@@ -98,13 +97,6 @@ async function fetchQueryTemplates() {
 
 function selectTemplate(template: any) {
   selectedTemplate.value = selectedTemplate.value?.id === template.id ? null : template
-}
-
-async function copyToClipboard(text: string) {
-  try {
-    await navigator.clipboard.writeText(text)
-    toast.add({ title: 'Query copied to clipboard', icon: 'i-heroicons-clipboard-document-check', color: 'green', timeout: 2000 })
-  } catch { toast.add({ title: 'Failed to copy', color: 'red', timeout: 2000 }) }
 }
 
 onMounted(() => { if (!templates.value.length) fetchQueryTemplates() })

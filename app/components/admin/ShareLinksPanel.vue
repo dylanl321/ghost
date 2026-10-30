@@ -142,7 +142,6 @@
 </template>
 
 <script setup lang="ts">
-const toast = useToast()
 
 // Shortlinks management
 const { links: shortlinks, total: shortlinksTotal, loading: shortlinksLoading, error: shortlinksError, fetchShortlinks } = useShortlinks()
@@ -179,23 +178,6 @@ const formatTimeAgo = (dateString: string) => {
 }
 
 // Copy to clipboard
-const copyToClipboard = async (text: string) => {
-  try {
-    await navigator.clipboard.writeText(text)
-    toast.add({
-      title: 'Copied to clipboard',
-      icon: 'i-heroicons-check-circle',
-      color: 'green'
-    })
-  } catch (err) {
-    toast.add({
-      title: 'Failed to copy',
-      icon: 'i-heroicons-x-circle',
-      color: 'red'
-    })
-  }
-}
-
 // Open link in new tab
 const openLink = (url: string) => {
   window.open(url, '_blank')

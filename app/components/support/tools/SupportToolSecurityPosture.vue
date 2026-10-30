@@ -85,7 +85,7 @@
           </div>
           <!-- Resource ID + actions for finding -->
           <div v-if="finding.resourceId" class="flex items-center gap-2 mt-1.5 pl-2">
-            <span class="text-xs font-mono text-gray-400 cursor-pointer hover:text-primary-500 transition-colors" @click="copyText(finding.resourceId)">
+            <span class="text-xs font-mono text-gray-400 cursor-pointer hover:text-primary-500 transition-colors" @click="copyToClipboard(finding.resourceId)">
               {{ finding.resourceId }}
               <Icon name="i-heroicons-clipboard" class="w-3 h-3 inline ml-0.5 opacity-50" />
             </span>
@@ -124,13 +124,6 @@
 const toast = useToast()
 const supportContext = useSupportContext()
 const emit = defineEmits<{ navigateTool: [toolId: string, params: Record<string, string>] }>()
-
-async function copyText(text: string) {
-  try {
-    await navigator.clipboard.writeText(text)
-    toast.add({ title: 'Copied to clipboard', icon: 'i-heroicons-clipboard-document-check', color: 'green', timeout: 2000 })
-  } catch { /* silent */ }
-}
 
 const loading = ref(false)
 const data = ref<any>(null)

@@ -112,7 +112,7 @@
               v-for="(val, key) in step.params"
               :key="key"
               class="text-xs font-mono px-2 py-0.5 bg-gray-200 dark:bg-gray-700 rounded cursor-pointer hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-              @click="copyText(`${val}`)"
+              @click="copyToClipboard(`${val}`)"
             >
               {{ key }}: {{ val }}
             </span>
@@ -205,13 +205,6 @@ async function troubleshoot() {
   } catch (err: any) {
     error.value = err.data?.error?.message || err.message || 'Failed to generate troubleshooting plan'
   } finally { loading.value = false }
-}
-
-async function copyText(text: string) {
-  try {
-    await navigator.clipboard.writeText(text)
-    toast.add({ title: 'Copied to clipboard', icon: 'i-heroicons-clipboard-document-check', color: 'green', timeout: 2000 })
-  } catch { /* silent */ }
 }
 
 function exportResult() {

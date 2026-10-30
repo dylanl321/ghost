@@ -30,7 +30,7 @@
       <div v-if="result.found && result.resource" class="grid grid-cols-2 gap-4 text-sm">
         <div>
           <span class="text-gray-500">Instance ID:</span>
-          <span class="ml-2 text-gray-900 dark:text-white font-mono text-xs cursor-pointer hover:text-primary-500 transition-colors" @click="copyText(result.resource.resourceId)">
+          <span class="ml-2 text-gray-900 dark:text-white font-mono text-xs cursor-pointer hover:text-primary-500 transition-colors" @click="copyToClipboard(result.resource.resourceId)">
             {{ result.resource.resourceId }}
             <Icon name="i-heroicons-clipboard" class="w-3 h-3 inline ml-1 opacity-50" />
           </span>
@@ -63,14 +63,14 @@
         </div>
         <div v-if="result.resource.configuration?.privateIpAddress">
           <span class="text-gray-500">Private IP:</span>
-          <span class="ml-2 text-gray-900 dark:text-white font-mono text-xs cursor-pointer hover:text-primary-500 transition-colors" @click="copyText(result.resource.configuration.privateIpAddress)">
+          <span class="ml-2 text-gray-900 dark:text-white font-mono text-xs cursor-pointer hover:text-primary-500 transition-colors" @click="copyToClipboard(result.resource.configuration.privateIpAddress)">
             {{ result.resource.configuration.privateIpAddress }}
             <Icon name="i-heroicons-clipboard" class="w-3 h-3 inline ml-1 opacity-50" />
           </span>
         </div>
         <div v-if="result.resource.configuration?.publicIpAddress">
           <span class="text-gray-500">Public IP:</span>
-          <span class="ml-2 text-gray-900 dark:text-white font-mono text-xs cursor-pointer hover:text-primary-500 transition-colors" @click="copyText(result.resource.configuration.publicIpAddress)">
+          <span class="ml-2 text-gray-900 dark:text-white font-mono text-xs cursor-pointer hover:text-primary-500 transition-colors" @click="copyToClipboard(result.resource.configuration.publicIpAddress)">
             {{ result.resource.configuration.publicIpAddress }}
             <Icon name="i-heroicons-clipboard" class="w-3 h-3 inline ml-1 opacity-50" />
           </span>
@@ -107,7 +107,7 @@
           </UButton>
         </div>
         <!-- CLI Hint -->
-        <div class="mt-2 text-xs text-gray-400 font-mono bg-gray-100 dark:bg-gray-800 rounded px-2 py-1 cursor-pointer hover:text-gray-600 transition-colors" @click="copyText(`aws ec2 describe-instances --instance-ids ${result.resource.resourceId} --region ${result.resource.region}`)">
+        <div class="mt-2 text-xs text-gray-400 font-mono bg-gray-100 dark:bg-gray-800 rounded px-2 py-1 cursor-pointer hover:text-gray-600 transition-colors" @click="copyToClipboard(`aws ec2 describe-instances --instance-ids ${result.resource.resourceId} --region ${result.resource.region}`)">
           $ aws ec2 describe-instances --instance-ids {{ result.resource.resourceId }} --region {{ result.resource.region }}
           <Icon name="i-heroicons-clipboard" class="w-3 h-3 inline ml-1" />
         </div>
@@ -150,13 +150,6 @@ async function searchInstance() {
   } catch (err: any) {
     error.value = err.data?.error?.message || err.message || 'Failed to lookup instance'
   } finally { loading.value = false }
-}
-
-async function copyText(text: string) {
-  try {
-    await navigator.clipboard.writeText(text)
-    toast.add({ title: 'Copied to clipboard', icon: 'i-heroicons-clipboard-document-check', color: 'green', timeout: 2000 })
-  } catch { /* silent */ }
 }
 
 function openConsole() {

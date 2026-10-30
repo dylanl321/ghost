@@ -46,7 +46,7 @@
       <div v-if="generatedFilter" class="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 space-y-2">
         <div class="flex items-center justify-between">
           <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Generated Filter Pattern:</span>
-          <UButton size="xs" variant="ghost" @click="copyText(generatedFilter)">
+          <UButton size="xs" variant="ghost" @click="copyToClipboard(generatedFilter)">
             <Icon name="i-heroicons-clipboard" class="w-4 h-4" />
           </UButton>
         </div>
@@ -179,11 +179,6 @@ async function generateLogFilter() {
   } catch (err: any) {
     error.value = err.data?.error?.message || err.message || 'Failed to generate filter'
   } finally { aiLoading.value = false }
-}
-
-async function copyText(text: string) {
-  try { await navigator.clipboard.writeText(text); toast.add({ title: 'Copied to clipboard', color: 'green', timeout: 2000 }) }
-  catch { toast.add({ title: 'Failed to copy', color: 'red', timeout: 2000 }) }
 }
 
 function exportLogs() {

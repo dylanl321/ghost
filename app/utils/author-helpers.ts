@@ -1,12 +1,10 @@
 /**
  * Client-side author utility functions
- * Contact URLs, clipboard and display helpers for pipeline authors
+ * Contact URLs and display helpers for pipeline authors
  * (parsing lives in shared/utils/author-parser so the API uses the same rules)
  */
 
 import type { AuthorInfo } from '#shared/types/pipelines'
-
-const logger = createLogger('AuthorHelpers')
 
 /**
  * Generate mailto: URL for email
@@ -34,41 +32,6 @@ export function getTeamsUrl(email: string): string {
  */
 export function getTeamsWebUrl(email: string): string {
   return `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(email)}`
-}
-
-/**
- * Copy text to clipboard with toast notification
- * Returns true if successful, false otherwise
- */
-export async function copyToClipboard(text: string, successMessage?: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text)
-
-    // Show success toast using Nuxt UI toast
-    const toast = useToast()
-    toast.add({
-      title: successMessage || 'Copied to clipboard',
-      icon: 'i-heroicons-check-circle',
-      color: 'green',
-      timeout: 2000
-    })
-
-    return true
-  } catch (error) {
-    logger.error('Failed to copy to clipboard:', error)
-
-    // Show error toast
-    const toast = useToast()
-    toast.add({
-      title: 'Failed to copy',
-      description: 'Unable to copy to clipboard',
-      icon: 'i-heroicons-x-circle',
-      color: 'red',
-      timeout: 3000
-    })
-
-    return false
-  }
 }
 
 /**
