@@ -75,14 +75,7 @@ onMounted(async () => {
       logActivity(`Login (DevMode) - USER:${username}`)
 
       // Set mock groups from env via runtime config
-      const config = useRuntimeConfig()
-      const devGroups = (config.public.devUserGroups || 'AWS-Product-Team')
-        .split(',')
-        .map((g: string) => g.trim())
-        .filter((g: string) => g.length > 0)
-
-      logger.info('Dev mode: Setting groups:', devGroups)
-      userGroupStore.setDevGroups(devGroups)
+      userGroupStore.applyConfiguredDevGroups()
 
       // Load enclave data so accounts are available in the dev options panel
       step.value = "Loading AWS account data..."
