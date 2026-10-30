@@ -45,6 +45,7 @@ export interface EnrichedInstanceData {
   accountId: string
   region: string
   accountName?: string
+  configurationItemCaptureTime?: Date
 
   // Enhanced fields
   instanceName?: string
@@ -423,10 +424,14 @@ export async function generateOptimizationInsights(
 /**
  * Enrich basic resource data with instance-specific information
  */
-export async function enrichInstanceData(
-  resource: ResourceDetail & { accountName?: string }, 
-  environment: AWSEnvironmentType = 'commercial'
-): Promise<EnrichedInstanceData> {
+/**
+ * Build instance data from a Config item without any AWS calls. The list
+ * page's fast path and the utilization analysis use this directly, so all
+ * views read names, management and scheduling tags the same way.
+ */
+export function buildInstanceData(
+  resource: ResourceDetail & { accountName?: string }
+): EnrichedInstanceData {
   // Convert tags from config format if needed (defensive check)
   let tags = resource.tags || {}
   if (resource.configuration?.tags && Array.isArray(resource.configuration.tags)) {
@@ -443,7 +448,8 @@ export async function enrichInstanceData(
     resourceType: resource.resourceType,
     accountId: resource.accountId,
     region: resource.region,
-    accountName: resource.accountName
+    accountName: resource.accountName,
+    configurationItemCaptureTime: resource.creationTime // When Config last detected a change
   }
   
   // Extract instance name
@@ -503,6 +509,18 @@ export async function enrichInstanceData(
 
   // Extract metadata
   enriched.metadata = extractInstanceMetadata(tags)
+
+  return enriched
+}
+
+/**
+ * buildInstanceData plus AWS-powered optimization insights
+ */
+export async function enrichInstanceData(
+  resource: ResourceDetail & { accountName?: string },
+  environment: AWSEnvironmentType = 'commercial'
+): Promise<EnrichedInstanceData> {
+  const enriched = buildInstanceData(resource)
 
   // Generate AWS-powered optimization insights
   if (enriched.instanceType) {

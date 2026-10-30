@@ -173,11 +173,14 @@ export default defineEventHandler(handleAsync(async (event) => {
     }
     
     // Validate instance ID format
-    if (!instanceId.match(/^i-[a-f0-9]{17}$/)) {
+    if (!instanceId.match(/^i-[a-f0-9]{8,17}$/)) {
       return errors.badRequest(event, 'Invalid instance ID format')
     }
     
-    const { action, tags, tagKeys, template, accountId, dryRun = false, environment: bodyEnvironment } = body
+    const { action, tags, tagKeys, template, accountId, dryRun = false, environment: bodyEnvironment, region: bodyRegion } = body ?? {}
+    if (bodyEnvironment && bodyEnvironment !== 'commercial' && bodyEnvironment !== 'govcloud') {
+      return errors.badRequest(event, 'environment must be "commercial" or "govcloud"')
+    }
     const environment = (bodyEnvironment as AWSEnvironmentType) || 'commercial'
     
     if (!action) {
@@ -189,14 +192,20 @@ export default defineEventHandler(handleAsync(async (event) => {
     // Get environment-specific configuration
     const aggregatorName = getAggregatorName(environment)
       
-    const region = environment === 'commercial'
+    const aggregatorRegion = environment === 'commercial'
       ? (process.env.AWS_COMMERCIAL_REGION || 'us-east-1')
       : (process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1')
+    // The instance's own region; the Config aggregator lives in the default one.
+    const region = typeof bodyRegion === 'string' && bodyRegion ? bodyRegion : aggregatorRegion
     
     // Find the instance to get current tags and account info
     let instanceResource
     let foundInAccount = accountId
     
+    if (accountId && !/^\d{12}$/.test(String(accountId))) {
+      return errors.badRequest(event, 'accountId must be a 12-digit AWS account ID')
+    }
+
     if (accountId) {
       // Use provided account ID
       try {
@@ -209,7 +218,7 @@ export default defineEventHandler(handleAsync(async (event) => {
             ResourceType: 'AWS::EC2::Instance'
           },
           environment,
-          region
+          aggregatorRegion
         )
       } catch (error) {
         return errors.notFound(event, `EC2 instance ${instanceId} in account ${accountId}`)
@@ -231,14 +240,17 @@ export default defineEventHandler(handleAsync(async (event) => {
     switch (action) {
       case 'add':
       case 'update':
-        if (!tags || Object.keys(tags).length === 0) {
+        if (!tags || typeof tags !== 'object' || Array.isArray(tags) || Object.keys(tags).length === 0) {
           return errors.badRequest(event, 'Tags are required for add/update action')
+        }
+        if (Object.values(tags).some(value => typeof value !== 'string')) {
+          return errors.badRequest(event, 'Tag values must be strings')
         }
         tagsToApply = tags
         break
         
       case 'remove':
-        if (!tagKeys || tagKeys.length === 0) {
+        if (!Array.isArray(tagKeys) || tagKeys.length === 0 || tagKeys.some(key => typeof key !== 'string')) {
           return errors.badRequest(event, 'Tag keys are required for remove action')
         }
         tagsToRemove = tagKeys
@@ -306,7 +318,9 @@ export default defineEventHandler(handleAsync(async (event) => {
     // Perform actual tag updates if not dry run
     if (!dryRun) {
       try {
-        const ec2Client = await getEC2Client(environment, region)
+        // Tag in the instance's own account: without the account ID the client
+        // would use the base credentials and the instance would not be found.
+        const ec2Client = await getEC2Client(environment, region, accountId)
         
         // Apply new tags
         if (Object.keys(tagsToApply).length > 0) {

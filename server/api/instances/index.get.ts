@@ -8,22 +8,14 @@
 import { defineEventHandler, getQuery } from 'h3'
 import { sendSuccess, errors, handleAsync, parseQueryParams } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
-import { 
-  batchEnrichInstances,
-  analyzeSchedulingTags,
-  extractInstanceName,
-  type EnrichedInstanceData 
-} from '../../utils/instance-enrichment'
+import { batchEnrichInstances, buildInstanceData } from '../../utils/instance-enrichment'
 import {
   listAggregateResources,
   batchGetResourceConfigs,
-  filterResourcesByTags,
-  calculateResourceStats,
   getAggregatorName
 } from '../../utils/config-service'
-import { parseAndValidateAccountFilters, filterAccounts } from '../../utils/account-filters'
-import { lookupAccountOptimized } from '../../utils/account-lookup-optimized'
-import type { AWSEnvironmentType } from '../../types'
+import { filterAccounts, hasActiveFilters } from '../../utils/account-filters'
+import { lookupAccountOptimized, getEnvironmentAccountId } from '../../utils/account-lookup-optimized'
 import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
@@ -212,14 +204,8 @@ export default defineEventHandler(handleAsync(async (event) => {
           // Store the account object for name mapping later
           resolvedAccountObjects.push(lookupResult.account)
           
-          // Choose the appropriate account ID based on the environment
-          let fullAccountId: string | undefined
-          if (environment === 'govcloud') {
-            fullAccountId = lookupResult.account.govCloudAccountId || lookupResult.account.awsGovCloudAccountID || lookupResult.account.primaryAccountID
-          } else {
-            fullAccountId = lookupResult.account.accountId || lookupResult.account.awsStandardAccountID || lookupResult.account.id
-          }
-          
+          const fullAccountId = getEnvironmentAccountId(lookupResult.account, environment)
+
           if (fullAccountId) {
             resolvedAccountIds.push(fullAccountId)
           } else {
@@ -233,20 +219,29 @@ export default defineEventHandler(handleAsync(async (event) => {
       if (resolveErrors.length > 0) {
         logger.warn(`[Instances API] Account resolution errors:`, resolveErrors)
       }
-      
+
+      // With no account filter the Config query covers every account, so a
+      // request for accounts that could not be resolved must not fall
+      // through to the whole organization.
+      if (resolvedAccountIds.length === 0) {
+        return errors.notFound(event, `No ${environment} account found for: ${accountFilters.accountIds.join(', ')}`)
+      }
+
       targetAccountIds = resolvedAccountIds
-    } else {
-      // If no specific accounts requested, use standard filtering
+    } else if (hasActiveFilters(accountFilters)) {
+      // LOB/department/advanced filters narrow the account list first
       const filteredAccounts = await filterAccounts(accountFilters)
-      targetAccountIds = filteredAccounts.map(acc => {
-        if (environment === 'govcloud') {
-          return acc.govCloudAccountId || acc.awsGovCloudAccountID || acc.govId
-        } else {
-          return acc.accountId || acc.awsStandardAccountID || acc.id
-        }
-      }).filter(Boolean)
+      targetAccountIds = filteredAccounts
+        .map(acc => getEnvironmentAccountId(acc, environment))
+        .filter((id): id is string => !!id)
+      if (targetAccountIds.length === 0) {
+        return errors.notFound(event, 'No accounts match the given filters')
+      }
     }
-    
+    // With no account filter, query the aggregator as a whole: listing every
+    // account ID would make one Config call per account and truncate the
+    // combined result with no way to page.
+
     // Get environment-specific configuration
     const aggregatorName = getAggregatorName(environment)
       
@@ -299,67 +294,14 @@ export default defineEventHandler(handleAsync(async (event) => {
       // Fast enrichment without AWS API calls
       enrichedInstances = batchResult.successful
         .filter(resource => resource.resourceType === 'AWS::EC2::Instance')
-        .map(resource => {
-          // Convert tags from config format if needed (already handled by parseConfigurationItem but being defensive)
-          let tags = resource.tags || {}
-          if (resource.configuration?.tags && Array.isArray(resource.configuration.tags)) {
-            tags = {}
-            for (const tag of resource.configuration.tags) {
-              if (tag.key && tag.value !== undefined) {
-                tags[tag.key] = tag.value
-              }
-            }
-          }
-          
-          return {
-            resourceId: resource.resourceId,
-            resourceType: resource.resourceType,
-            accountId: resource.accountId,
-            region: resource.region,
-            accountName: resource.accountName,
-            instanceName: tags.Name || tags.name,
-            instanceType: resource.configuration?.instanceType,
-            instanceState: resource.configuration?.state?.name,
-            launchTime: resource.configuration?.launchTime,
-            configurationItemCaptureTime: resource.creationTime, // When Config last detected a change
-            networkInfo: {
-              privateIpAddress: resource.configuration?.privateIpAddress,
-              publicIpAddress: resource.configuration?.publicIpAddress,
-              vpcId: resource.configuration?.vpcId,
-              subnetId: resource.configuration?.subnetId
-            },
-            managementInfo: {
-              isGDMSManaged: tags.GDMS_Managed?.toLowerCase() === 'true',
-              gdmsManagedValue: tags.GDMS_Managed
-            },
-            schedulingInfo: {
-              hasSchedule: !!tags.Schedule,
-              scheduleName: tags.Schedule,
-              lastScheduleMessage: tags.ScheduleMessage,
-              scheduleStatus: tags.ScheduleMessage?.toLowerCase().includes('started') ? 'running' as const :
-                             tags.ScheduleMessage?.toLowerCase().includes('stopped') ? 'stopped' as const : 'unknown' as const
-            },
-            patchingInfo: {
-              patchGroup: tags['Patch Group'],
-              patchingAutomation: tags.PatchingAutomation
-            },
-            metadata: {
-              environment: tags.Environment || tags.environment || tags.Env,
-              project: tags.Project || tags.project || tags.Application,
-              owner: tags.Owner || tags.owner,
-              tags: tags
-            }
-          }
-        })
+        .map(resource => buildInstanceData(resource))
     }
     
     // Enrich with account names from the resolved account objects
     const accountMap = new Map<string, string>()
     resolvedAccountObjects.forEach(acc => {
-      const accountId = environment === 'govcloud' 
-        ? (acc.govCloudAccountId || acc.awsGovCloudAccountID || acc.primaryAccountID)
-        : (acc.accountId || acc.awsStandardAccountID || acc.id)
-      
+      const accountId = getEnvironmentAccountId(acc, environment)
+
       if (accountId && (acc.name || acc.accountName)) {
         accountMap.set(accountId, acc.name || acc.accountName)
       }
@@ -381,14 +323,13 @@ export default defineEventHandler(handleAsync(async (event) => {
     
     if (schedulingFilter !== 'all') {
       enrichedInstances = enrichedInstances.filter(instance => {
-        const isScheduled = instance.schedulingInfo?.isScheduled || false
+        const isScheduled = instance.schedulingInfo?.hasSchedule || false
         return schedulingFilter === 'scheduled' ? isScheduled : !isScheduled
       })
     }
     
     if (managedByFilter) {
       enrichedInstances = enrichedInstances.filter(instance =>
-        instance.schedulingInfo?.managedBy?.toLowerCase().includes(managedByFilter.toLowerCase()) ||
         instance.metadata?.owner?.toLowerCase().includes(managedByFilter.toLowerCase())
       )
     }

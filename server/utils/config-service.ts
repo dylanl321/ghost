@@ -29,8 +29,9 @@ const CACHE_TTL = {
 }
 
 const CACHE_KEYS = {
-  RESOURCE_LIST: (aggregator: string, type?: string, accountId?: string, limit?: number) =>
-    `config:resources:${aggregator}:${type || 'all'}:${accountId || 'all'}:${limit || 100}`,
+  // The region filter changes the result, so it is part of the key.
+  RESOURCE_LIST: (aggregator: string, type?: string, accountId?: string, limit?: number, region?: string) =>
+    `config:resources:${aggregator}:${type || 'all'}:${accountId || 'all'}:${region || 'all'}:${limit || 100}`,
   RESOURCE_DETAIL: (aggregator: string, resourceId: string) => 
     `config:resource:${aggregator}:${resourceId}`,
   RESOURCE_CONFIG: (aggregator: string, resourceId: string) => 
@@ -235,7 +236,8 @@ export async function listAggregateResources(
     aggregatorName,
     filter?.resourceType,
     filter?.accountIds?.[0],
-    filter?.limit
+    filter?.limit,
+    filter?.regions?.[0]
   )
 
   // Check cache for non-paginated requests
@@ -362,7 +364,7 @@ export async function listAggregateResources(
       params.Filters = filters
     }
 
-    logger.info(`[Config] Query params: ${JSON.stringify(params, null, 2)}`)
+    logger.debug('[Config] Query params', params)
 
     const command = new ListAggregateDiscoveredResourcesCommand(params)
     const response = await withThrottleRetry(
