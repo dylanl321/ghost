@@ -143,7 +143,7 @@
               :key="tab.id"
               class="flex-1 px-3 py-2 text-xs font-medium border-b-2 transition-colors flex items-center justify-center gap-1"
               :class="{
-                'text-blue-400 border-blue-400 bg-blue-900/20': activeTab === tab.id,
+                'text-blue-600 dark:text-blue-400 border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20': activeTab === tab.id,
                 'text-gray-600 dark:text-gray-400 border-transparent hover:text-gray-900 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600': activeTab !== tab.id
               }"
               @click="activeTab = tab.id"
@@ -183,7 +183,7 @@
                           :key="option.value"
                           class="w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                           :class="{ 
-                            'bg-blue-900/50 text-blue-300': accountSortBy === option.value,
+                            'bg-blue-50 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300': accountSortBy === option.value,
                             'text-gray-700 dark:text-gray-300': accountSortBy !== option.value
                           }"
                           @click="accountSortBy = option.value as 'cost' | 'name' | 'budget' | 'utilization'; close()"
@@ -216,7 +216,7 @@
                 :key="getAccountKey(account)"
                 :account="account"
                 :account-key="getAccountKey(account)"
-                :selected="selectedAccounts.includes(getAccountKey(account))"
+                :selected="selectedAccountSet.has(getAccountKey(account))"
                 :budget="getBudget(account)"
                 :spend="getSpend(account)"
                 :format-currency="formatCurrency"
@@ -314,6 +314,7 @@
         v-model:mode="dataMode"
         v-model:selected-timeframe="selectedTimeframe"
         v-model:view-by="viewBy"
+        v-model:compare="compareMode"
         :timeframe-options="timeframeOptions"
         :selected-accounts="selectedAccounts"
         :active-tab="activeTab"
@@ -329,50 +330,35 @@
         @load-preset="applyPreset"
       />
 
-      <!-- Compare Toggle -->
-      <div v-if="!isTagAnalysis" class="px-4 md:px-5 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center gap-2">
-        <UTooltip text="Compare two time periods side by side">
-          <UButton
-            size="xs"
-            :color="compareMode ? 'blue' : 'gray'"
-            :variant="compareMode ? 'soft' : 'ghost'"
-            icon="i-heroicons-arrows-right-left"
-            @click="compareMode = !compareMode"
-          >
-            Compare
-          </UButton>
-        </UTooltip>
-      </div>
-
       <!-- Selected Account Context Banner -->
       <div v-if="selectedAccounts.length > 0 && !isTagAnalysis" class="px-4 md:px-6 pt-4">
-        <div class="bg-blue-900/30 border border-blue-700 rounded-lg px-4 py-3 flex items-center justify-between gap-4">
+        <div class="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg px-4 py-3 flex items-center justify-between gap-4">
           <div class="flex items-center gap-3 min-w-0 flex-1">
-            <div class="flex-shrink-0 p-1.5 bg-blue-900/50 rounded-lg">
-              <Icon name="i-heroicons-funnel" class="w-4 h-4 text-blue-400" />
+            <div class="flex-shrink-0 p-1.5 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
+              <Icon name="i-heroicons-funnel" class="w-4 h-4 text-blue-600 dark:text-blue-400" />
             </div>
             <div class="min-w-0 flex-1">
               <template v-if="selectedAccounts.length === 1">
-                <div class="text-sm font-semibold text-white truncate">
+                <div class="text-sm font-semibold text-gray-900 dark:text-white truncate">
                   {{ getSelectedAccountName(selectedAccounts[0]) }}
                 </div>
-                <div class="text-xs text-blue-300">
+                <div class="text-xs text-blue-700 dark:text-blue-300">
                   {{ selectedAccounts[0] }}
                 </div>
               </template>
               <template v-else-if="selectedAccounts.length <= 5">
-                <div class="text-sm font-semibold text-white">
+                <div class="text-sm font-semibold text-gray-900 dark:text-white">
                   {{ selectedAccounts.length }} accounts selected
                 </div>
-                <div class="text-xs text-blue-300 truncate">
+                <div class="text-xs text-blue-700 dark:text-blue-300 truncate">
                   {{ selectedAccounts.map(id => getSelectedAccountName(id)).join(', ') }}
                 </div>
               </template>
               <template v-else>
-                <div class="text-sm font-semibold text-white">
+                <div class="text-sm font-semibold text-gray-900 dark:text-white">
                   {{ selectedAccounts.length }} accounts selected
                 </div>
-                <div class="text-xs text-blue-300">
+                <div class="text-xs text-blue-700 dark:text-blue-300">
                   Filtered view — showing data for selected accounts only
                 </div>
               </template>
@@ -392,7 +378,7 @@
         <!-- Comparison Mode -->
         <div v-if="compareMode && !isTagAnalysis">
           <div class="mb-4 flex items-center gap-3">
-            <h2 class="text-base font-semibold text-white">Period Comparison</h2>
+            <h2 class="text-base font-semibold text-gray-900 dark:text-white">Period Comparison</h2>
             <UButton size="xs" color="gray" variant="soft" icon="i-heroicons-x-mark" @click="compareMode = false">
               Exit Compare
             </UButton>
@@ -400,8 +386,8 @@
           <CostComparisonView :selected-accounts="selectedAccounts" :mode="dataMode" />
         </div>
 
-        <!-- Loading State -->
-        <div v-else-if="isLoading" class="flex items-center justify-center h-full">
+        <!-- Loading State (first load only; a refresh keeps the current view on screen) -->
+        <div v-else-if="isLoading && !hasAccounts" class="flex items-center justify-center h-full">
           <div class="text-center">
             <Icon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin text-blue-500 mx-auto mb-2" />
             <p class="text-gray-600 dark:text-gray-400">Loading cost data...</p>
@@ -409,7 +395,7 @@
         </div>
 
         <!-- Error State -->
-        <div v-else-if="error" class="flex items-center justify-center h-full">
+        <div v-else-if="error && !hasAccounts" class="flex items-center justify-center h-full">
           <div class="text-center">
             <Icon name="i-heroicons-exclamation-triangle" class="w-8 h-8 text-red-500 mx-auto mb-2" />
             <p class="text-red-400">{{ error }}</p>
@@ -421,15 +407,22 @@
 
         <!-- Main Content -->
         <div v-else class="space-y-6">
+          <!-- A failed refresh keeps the last good data and says so -->
+          <div v-if="error" class="flex items-center gap-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+            <Icon name="i-heroicons-exclamation-triangle" class="w-5 h-5 flex-shrink-0" />
+            <span class="flex-1">Couldn't refresh the account list: {{ error }}. Showing the last loaded data.</span>
+            <UButton size="xs" color="red" variant="soft" @click="refreshData">Retry</UButton>
+          </div>
+
           <!-- First Day of Month Notice -->
-          <div v-if="isFirstDayOfMonth && !isTagAnalysis" class="bg-amber-900/20 border border-amber-700 rounded-lg p-4">
+          <div v-if="isFirstDayOfMonth && !isTagAnalysis" class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-4">
             <div class="flex items-start gap-3">
               <Icon name="i-heroicons-calendar" class="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
               <div class="flex-1">
                 <div class="flex items-start justify-between">
                   <div class="flex-1">
-                    <h4 class="text-sm font-medium text-amber-300">Current Month Has No Observed Days Yet</h4>
-                    <p class="text-xs text-amber-400 mt-1">
+                    <h4 class="text-sm font-medium text-amber-800 dark:text-amber-300">Current Month Has No Observed Days Yet</h4>
+                    <p class="text-xs text-amber-700 dark:text-amber-400 mt-1">
                       This Month is empty because AWS Cost Explorer reports through yesterday and uses an exclusive end date. No prior-month charges are substituted.
                     </p>
                   </div>
@@ -449,14 +442,14 @@
           </div>
 
           <!-- Early Month Notice (days 2-5) -->
-          <div v-else-if="isEarlyInMonth && !isTagAnalysis" class="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
+          <div v-else-if="isEarlyInMonth && !isTagAnalysis" class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-4">
             <div class="flex items-start gap-3">
               <Icon name="i-heroicons-calendar" class="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
               <div class="flex-1">
                 <div class="flex items-start justify-between">
                   <div class="flex-1">
-                    <h4 class="text-sm font-medium text-blue-300">Limited Data Available for Current Month</h4>
-                    <p class="text-xs text-blue-400 mt-1">
+                    <h4 class="text-sm font-medium text-blue-800 dark:text-blue-300">Limited Data Available for Current Month</h4>
+                    <p class="text-xs text-blue-700 dark:text-blue-400 mt-1">
                       It's early in the month, so cost data for {{ new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }) }} is still accumulating.
                       Data shown is through yesterday due to AWS Cost Explorer's 24-hour processing lag.
                       For a complete view of recent spending patterns, you may want to review last month's data.
@@ -478,12 +471,12 @@
           </div>
 
           <!-- Historical Data Warning -->
-          <div v-if="isHistoricalTimeframe && !isTagAnalysis" class="bg-yellow-900/20 border border-yellow-700 rounded-lg p-4">
+          <div v-if="isHistoricalTimeframe && !isTagAnalysis" class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-4">
             <div class="flex items-start gap-3">
               <Icon name="i-heroicons-information-circle" class="w-5 h-5 text-yellow-500 mt-0.5 flex-shrink-0" />
               <div class="flex-1">
-                <h4 class="text-sm font-medium text-yellow-300">Historical Data Limitations</h4>
-                <p class="text-xs text-yellow-400 mt-1">
+                <h4 class="text-sm font-medium text-yellow-800 dark:text-yellow-300">Historical Data Limitations</h4>
+                <p class="text-xs text-yellow-700 dark:text-yellow-400 mt-1">
                   Budget comparisons and forecasts are not available for historical periods as budget data is only maintained for the current period.
                   Additionally, some accounts may have been decommissioned and won't appear in historical views.
                 </p>
@@ -504,15 +497,19 @@
             />
           </div>
 
-          <div v-if="isCostPending && !isTagAnalysis" class="bg-white dark:bg-gray-900 border border-amber-300 dark:border-amber-600 rounded-lg p-4 text-amber-700 dark:text-amber-400 flex items-center gap-2">
-            <Icon name="i-heroicons-clock" class="w-5 h-5 animate-pulse" />
-            <span>Waiting for account selection to complete...</span>
+          <!-- First load: nothing to show yet -->
+          <div v-if="!dataset && (isCostPending || isCostFetching) && !isTagAnalysis" class="space-y-4" aria-busy="true">
+            <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+              <Icon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin" />
+              Loading charts...
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div v-for="n in 4" :key="n" class="h-64 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-900 animate-pulse" />
+            </div>
           </div>
-          <div v-else-if="isCostFetching && !isTagAnalysis" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-gray-700 dark:text-gray-300">
-            Loading charts...
-          </div>
-          <div v-else-if="costError && !isTagAnalysis" class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-red-600 dark:text-red-400">
-            {{ costError }}
+          <div v-else-if="costError && !isTagAnalysis" class="bg-white dark:bg-gray-900 border border-red-200 dark:border-red-800 rounded-lg p-6 flex items-center justify-between gap-4">
+            <span class="text-red-600 dark:text-red-400">{{ costError }}</span>
+            <UButton color="red" variant="soft" size="sm" @click="fetchCosts({ force: true })">Try Again</UButton>
           </div>
           <!-- =============================================================
                CHART RENDERING COMPONENT
@@ -523,11 +520,17 @@
                Charts are dynamically selected based on scenario and timeframe
                ============================================================= -->
           <div v-else data-tour="costs-chart">
+            <!-- Filter changed: keep the current charts on screen while the new data loads -->
+            <div v-if="(isCostPending || isCostFetching) && !isTagAnalysis" class="mb-3 flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg text-xs text-blue-600 dark:text-blue-400" role="status">
+              <Icon name="i-heroicons-arrow-path" class="w-3.5 h-3.5 animate-spin flex-shrink-0" />
+              <span>Updating charts...</span>
+            </div>
             <!-- Subtle indicator while forecast/supplementary data loads in background -->
-            <div v-if="isDeferredLoading && !isTagAnalysis" class="mb-3 flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg text-xs text-blue-600 dark:text-blue-400">
+            <div v-else-if="isDeferredLoading && !isTagAnalysis" class="mb-3 flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg text-xs text-blue-600 dark:text-blue-400" role="status">
               <Icon name="i-heroicons-arrow-path" class="w-3.5 h-3.5 animate-spin flex-shrink-0" />
               <span>Loading forecast and supplementary data...</span>
             </div>
+            <div :class="{ 'opacity-60 transition-opacity': (isCostPending || isCostFetching) && !isTagAnalysis }">
             <ChartTabs
               v-model:tag="selectedTag"
               v-model:tag-view="tagView"
@@ -545,10 +548,11 @@
               :warnings="fetchWarnings"
               :cost-summary-context="costSummaryContext"
               @toggle-regression-line="showRegressionLine = !showRegressionLine"
-              @toggle-advanced-charts="showAdvancedCharts = !showAdvancedCharts; localStorage.setItem('showAdvancedCharts', String(showAdvancedCharts))"
+              @toggle-advanced-charts="toggleAdvancedCharts"
               @tab-changed="activeChartTab = $event"
-              @refresh-data="fetchCosts"
+              @refresh-data="fetchCosts({ force: true })"
             />
+            </div>
 
           </div>
         </div>
@@ -652,6 +656,7 @@ const accountsList = computed<Account[]>(() => {
   )
   return [...baseAccounts, ...missingSupplements]
 })
+const hasAccounts = computed(() => accountsList.value.length > 0)
 
 // =============================================================================
 // COST DATA MERGING AND FILTERING
@@ -795,8 +800,8 @@ const alertsBySeverity = computed(() => {
 
 async function fetchAlertsSummary() {
   try {
-    const now = new Date()
-    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    // UTC, matching Cost Explorer and the month notices on this page
+    const month = new Date().toISOString().slice(0, 7)
     const res = await $fetch<{ success: boolean; data: BudgetAlert[] }>('/api/alerts/list', {
       query: { month, limit: 100 }
     })
@@ -990,33 +995,32 @@ const sortedFilteredAccounts = computed<Account[]>(() => {
   }
 })
 
-const totalBudget = computed<number>(() => {
-  const accountsSubset: Account[] = selectedAccounts.value.length > 0 
-    ? accountsWithCosts.value.filter((acc: Account) => selectedAccounts.value.includes(getAccountKey(acc)))
-    : accountsWithCosts.value
-    
-  return accountsSubset.reduce((sum: number, acc: Account) => sum + getBudget(acc), 0)
+// Selection may use any of an account's ids (URL links can carry the commercial id),
+// so every total, the charts and the sidebar match on all of them.
+const selectedAccountSet = computed(() => new Set(selectedAccounts.value))
+
+// Accounts the summary cards and charts describe: the selection, or everything shown
+const displayedAccounts = computed<Account[]>(() => {
+  if (selectedAccounts.value.length === 0) return accountsWithCosts.value
+  const selected = selectedAccountSet.value
+  return accountsWithCosts.value.filter((account: Account) =>
+    getPossibleAccountIds(account).some(id => selected.has(id)))
 })
 
-const totalSpend = computed<number>(() => {
-  const accountsSubset: Account[] = selectedAccounts.value.length > 0 
-    ? accountsWithCosts.value.filter((acc: Account) => selectedAccounts.value.includes(getAccountKey(acc)))
-    : accountsWithCosts.value
-    
-  return accountsSubset.reduce((sum: number, acc: Account) => sum + getSpend(acc), 0)
-})
+const totalBudget = computed<number>(() =>
+  displayedAccounts.value.reduce((sum: number, acc: Account) => sum + getBudget(acc), 0))
+
+const totalSpend = computed<number>(() =>
+  displayedAccounts.value.reduce((sum: number, acc: Account) => sum + getSpend(acc), 0))
 
 const chartDataset = computed<NormalizedDataset | null>(() => {
   if (!dataset.value) return null
 
-  const displayedAccounts = selectedAccounts.value.length > 0
-    ? accountsWithCosts.value.filter((account: Account) =>
-        getPossibleAccountIds(account).some(id => selectedAccounts.value.includes(id)))
-    : accountsWithCosts.value
+  const displayed = displayedAccounts.value
 
   return {
     ...dataset.value,
-    displayedAccountIds: displayedAccounts.flatMap(getPossibleAccountIds),
+    displayedAccountIds: displayed.flatMap(getPossibleAccountIds),
     displayedCurrentSpend: totalSpend.value
   }
 })
@@ -1030,7 +1034,7 @@ const utilization = computed(() => {
 const costSummaryContext = computed(() => {
   if (totalSpend.value === 0) return {}
   const accts = selectedAccounts.value.length > 0
-    ? accountsWithCosts.value.filter((a: Account) => selectedAccounts.value.includes(getAccountKey(a)))
+    ? displayedAccounts.value
     : accountsWithCosts.value.slice(0, 10)
 
   const ctx: Record<string, any> = {
@@ -1067,12 +1071,8 @@ const costSummaryContext = computed(() => {
 })
 
 // Selected accounts display logic
-const selectedAccountObjects = computed(() => {
-  if (selectedAccounts.value.length === 0) return []
-  return accountsWithCosts.value.filter((acc: Account) =>
-    selectedAccounts.value.includes(getAccountKey(acc))
-  )
-})
+const selectedAccountObjects = computed(() =>
+  selectedAccounts.value.length === 0 ? [] : displayedAccounts.value)
 
 const displayedSelectedAccounts = computed(() => {
   return selectedAccountObjects.value.slice(0, 3)
@@ -1142,11 +1142,35 @@ const clearSearch = () => {
   searchScope.value = 'tab'
 }
 
-const refreshData = async () => {
+const loadAccounts = async (): Promise<boolean> => {
   // Include decommissioned accounts when viewing historical data
   // as they may have had costs in the past
   const includeDecommissioned = isHistoricalTimeframe.value
-  await fetchAccounts({ includeDecommissioned, enrichment: 'full' })
+  try {
+    await fetchAccounts({ includeDecommissioned, enrichment: 'full' })
+    return true
+  } catch {
+    // useAccountCosts records the error for the page to show
+    return false
+  }
+}
+
+// Refresh button and error retries: reload accounts and bypass the client cost cache.
+// Also completes the first-load sequence if the initial accounts request failed.
+const refreshData = async () => {
+  const [accountsOk] = await Promise.all([
+    loadAccounts(),
+    initialized.value ? fetchCosts({ force: true }) : Promise.resolve()
+  ])
+  if (!initialized.value && accountsOk) await finishInitialLoad()
+}
+
+const finishInitialLoad = async () => {
+  await ensureSelectedAccountMetadata()
+  // Initial cost data fetch (watchers are not immediate)
+  await fetchCosts()
+  // Enable watchers now that URL state is applied and initial fetch is done
+  initialized.value = true
 }
 
 const ensureSelectedAccountMetadata = async () => {
@@ -1282,15 +1306,8 @@ onMounted(async () => {
     // Apply any shared state from URL first
     applySharedStateFromUrl()
     
-    // Then refresh data with the applied state
-    await refreshData()
-    await ensureSelectedAccountMetadata()
-
-    // Trigger initial cost data fetch (watchers are not immediate)
-    await fetchCosts()
-
-    // Enable watchers now that URL state is applied and initial fetch is done
-    initialized.value = true
+    // Then load data with the applied state
+    if (await loadAccounts()) await finishInitialLoad()
 
     // Emit cost-specific events for achievement badges (fire-and-forget)
     nextTick(() => {
@@ -1312,9 +1329,13 @@ onMounted(async () => {
     await initTourOnMount()
 
     // Load advanced charts toggle state from localStorage
-    const saved = localStorage.getItem('showAdvancedCharts')
-    if (saved !== null) {
-      showAdvancedCharts.value = saved === 'true'
+    try {
+      const saved = localStorage.getItem('showAdvancedCharts')
+      if (saved !== null) {
+        showAdvancedCharts.value = saved === 'true'
+      }
+    } catch {
+      // Storage unavailable (private mode); keep the default
     }
   }
 })
@@ -1344,6 +1365,14 @@ const { scenario } = useCostScenario({ selectedAccounts, activeTab })
 
 // Advanced charts toggle (persisted in localStorage)
 const showAdvancedCharts = ref(false)
+const toggleAdvancedCharts = () => {
+  showAdvancedCharts.value = !showAdvancedCharts.value
+  try {
+    localStorage.setItem('showAdvancedCharts', String(showAdvancedCharts.value))
+  } catch {
+    // Storage unavailable (private mode); the toggle still works for this visit
+  }
+}
 
 // 3. useChartRegistry: Contains all chart definitions and selects appropriate charts
 //    - Each chart has an extractor function that transforms dataset into chart data

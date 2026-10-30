@@ -109,36 +109,18 @@
         />
       </div>
 
-      <!-- View By Selector -->
-      <div v-if="activeChartTab !== 'tags'" class="flex items-center gap-1" data-tour="costs-view-by">
-        <span class="text-xs text-gray-500 dark:text-gray-400 mr-1">View:</span>
-        <div class="inline-flex rounded-md shadow-sm">
-          <UButton
-            size="xs"
-            :color="modelViewBy === 'LINKED_ACCOUNT' ? 'blue' : 'gray'"
-            :variant="modelViewBy === 'LINKED_ACCOUNT' ? 'solid' : 'ghost'"
-            @click="setViewBy('LINKED_ACCOUNT')"
-          >
-            Account
-          </UButton>
-          <UButton
-            size="xs"
-            :color="modelViewBy === 'SERVICE' ? 'blue' : 'gray'"
-            :variant="modelViewBy === 'SERVICE' ? 'solid' : 'ghost'"
-            @click="setViewBy('SERVICE')"
-          >
-            Service
-          </UButton>
-          <UButton
-            size="xs"
-            :color="modelViewBy === 'REGION' ? 'blue' : 'gray'"
-            :variant="modelViewBy === 'REGION' ? 'solid' : 'ghost'"
-            @click="setViewBy('REGION')"
-          >
-            Region
-          </UButton>
-        </div>
-      </div>
+      <!-- Compare two periods side by side (not available in Tag Analysis) -->
+      <UTooltip v-if="activeChartTab !== 'tags'" text="Compare two time periods side by side">
+        <UButton
+          size="sm"
+          :color="modelCompare ? 'blue' : 'gray'"
+          :variant="modelCompare ? 'soft' : 'ghost'"
+          icon="i-heroicons-arrows-right-left"
+          @click="modelCompare = !modelCompare"
+        >
+          Compare
+        </UButton>
+      </UTooltip>
     </div>
 
     <!-- Share Link Modal -->
@@ -311,16 +293,14 @@ const props = defineProps<{
 
 const modelMode = defineModel<DataMode>('mode', { default: 'proforma' })
 const modelSelectedTimeframe = defineModel<string>('selectedTimeframe')
+// Kept for saved presets and share links; no control sets it on this page
 const modelViewBy = defineModel<string>('viewBy', { default: 'LINKED_ACCOUNT' })
+const modelCompare = defineModel<boolean>('compare', { default: false })
 
 const modeOptions = [
   { label: 'Billable', value: 'billable' },
   { label: 'Proforma', value: 'proforma' }
 ]
-
-function setViewBy(value: string) {
-  modelViewBy.value = value
-}
 
 const isExporting = ref(false)
 const showShareReportModal = ref(false)

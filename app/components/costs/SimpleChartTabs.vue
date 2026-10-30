@@ -2,53 +2,53 @@
   <div class="chart-tabs-container">
     <!-- Tab Navigation with Show More Toggle -->
     <div class="border-b border-gray-200 dark:border-gray-700 mb-4" data-tour="chart-tabs">
-      <div class="flex items-center justify-between mb-2">
-        <div class="flex-1" />
+      <div class="flex items-end justify-between gap-4">
+        <nav class="-mb-px flex flex-1 flex-wrap gap-x-4 lg:gap-x-8 gap-y-1" aria-label="Chart Tabs">
+          <button
+            v-for="tab in tabs"
+            :key="tab.id"
+            :class="[
+              activeTab === tab.id
+                ? 'border-blue-500 text-blue-500'
+                : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-300 hover:border-gray-300',
+              'whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-150'
+            ]"
+            @click="activeTab = tab.id"
+          >
+            <UIcon v-if="tab.icon" :name="tab.icon" class="w-4 h-4 inline-block mr-1" />
+            <span class="hidden sm:inline">{{ tab.label }}</span>
+            <span class="sm:hidden">{{ tab.shortLabel || tab.label }}</span>
+            <UTooltip v-if="tab.badge && tab.badgeTooltip" :text="tab.badgeTooltip">
+              <NuxtLink
+                :to="tab.badgeLink || '/support/docs?topic=proforma-vs-billable'"
+                class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                @click.stop
+              >
+                {{ tab.badge }}
+                <UIcon name="i-heroicons-question-mark-circle" class="w-3 h-3 ml-1" />
+              </NuxtLink>
+            </UTooltip>
+            <span
+              v-else-if="tab.badge"
+              class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+            >
+              {{ tab.badge }}
+            </span>
+          </button>
+        </nav>
         <!-- Show Advanced Charts Toggle -->
         <UButton
           v-if="activeTab === 'smart'"
           :color="props.showAdvancedCharts ? 'blue' : 'gray'"
           :variant="props.showAdvancedCharts ? 'solid' : 'outline'"
           size="xs"
+          class="mb-2 flex-shrink-0"
           @click="toggleAdvancedCharts"
         >
           <UIcon name="i-heroicons-adjustments-horizontal" class="w-3 h-3 mr-1" />
           {{ props.showAdvancedCharts ? 'Show Less' : 'Show More Charts' }}
         </UButton>
       </div>
-      <nav class="-mb-px flex flex-wrap gap-x-4 lg:gap-x-8 gap-y-1" aria-label="Chart Tabs">
-        <button
-          v-for="tab in tabs"
-          :key="tab.id"
-          :class="[
-            activeTab === tab.id
-              ? 'border-blue-500 text-blue-500'
-              : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-300 hover:border-gray-300',
-            'whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm transition-colors duration-150'
-          ]"
-          @click="activeTab = tab.id"
-        >
-          <UIcon v-if="tab.icon" :name="tab.icon" class="w-4 h-4 inline-block mr-1" />
-          <span class="hidden sm:inline">{{ tab.label }}</span>
-          <span class="sm:hidden">{{ tab.shortLabel || tab.label }}</span>
-          <UTooltip v-if="tab.badge && tab.badgeTooltip" :text="tab.badgeTooltip">
-            <NuxtLink
-              :to="tab.badgeLink || '/support/docs?topic=proforma-vs-billable'"
-              class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-              @click.stop
-            >
-              {{ tab.badge }}
-              <UIcon name="i-heroicons-question-mark-circle" class="w-3 h-3 ml-1" />
-            </NuxtLink>
-          </UTooltip>
-          <span
-            v-else-if="tab.badge"
-            class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
-          >
-            {{ tab.badge }}
-          </span>
-        </button>
-      </nav>
     </div>
 
     <!-- Tab Content -->
@@ -59,6 +59,7 @@
         <BudgetHealthSummaryCards
           :dataset="dataset"
           :data-mode="dataMode"
+          scope-to-displayed
         />
 
         <ChartsRenderer

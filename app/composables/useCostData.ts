@@ -2,31 +2,19 @@ import { ref, computed, watch, onUnmounted } from 'vue'
 import type { Ref } from 'vue'
 import type { DataMode, NormalizedDataset, CostsQuery } from '~/types/costs'
 import type { AWSEnclaveData } from '~~/shared/types/accounts'
-import { getCachedDataset, setCachedDataset, invalidateByMode } from '~/composables/useCostDataCache'
+import { getCachedDataset, setCachedDataset, fetchCostResponse, clearCostDataCache } from '~/composables/useCostDataCache'
 import { getUserFriendlyMessage, retryWithBackoff } from '~/utils/error-helpers'
 
 /**
- * CLIENT-SIDE CACHING GAP
+ * CLIENT-SIDE CACHING
  *
- * This composable re-fetches all cost data from scratch on every navigation
- * to the costs page and on every filter change. There is no client-side
- * memoization layer — the NormalizedDataset lives in a component-scoped ref
- * and is lost when the user navigates away.
- *
- * Server-side caching (15-30 minute TTL via costCache) already reduces the
- * load on AWS Cost Explorer, so this is not an urgent performance issue.
- * However, adding a client-side cache would improve UX by:
- *   - Avoiding full re-fetches when toggling between tabs
- *   - Enabling instant back-navigation to a previously viewed timeframe
- *
- * Recommended approaches if this becomes a priority:
- *   A. Use Nuxt's useAsyncData with a key based on {timeframe, mode, accounts}
- *      to get built-in deduplication and caching.
- *   B. Add a simple LRU cache (e.g. Map with 5-minute TTL) keyed by
- *      JSON.stringify({ timeframe, mode, accounts }) that stores the
- *      NormalizedDataset and serves it on cache hit.
- *   C. Lift the dataset into a Pinia store with persistence so it survives
- *      navigation (but adds complexity around staleness).
+ * Two layers in useCostDataCache, both with a 5-minute TTL:
+ *   - Each API response is cached by URL, so a filter change only re-requests
+ *     the endpoints whose URL actually changed (most deferred requests ignore
+ *     the timeframe or the selection).
+ *   - The assembled NormalizedDataset is cached by {scope, timeframe, mode},
+ *     so going back to a view already seen renders without any request.
+ * fetchCosts({ force: true }) clears both, which is what Refresh does.
  */
 
 interface UseCostDataArgs {
@@ -50,8 +38,9 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
   const dataset = ref<NormalizedDataset | null>(null)
   const initialized = ref(false) // Gate watchers until after initial mount fetch
   let debounceTimer: NodeJS.Timeout | null = null
-  let abortController: AbortController | null = null
-  let fetchGeneration = 0 // Counter to discard stale responses
+  // Requests are not aborted when superseded: their responses land in the
+  // response cache for the next view. This counter discards stale results.
+  let fetchGeneration = 0
 
   const query = computed<CostsQuery>(() => ({
     accounts: selectedAccounts.value,
@@ -234,7 +223,7 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     return `/api/costs/summary?${params.toString()}`
   }
 
-  const fetchCosts = async () => {
+  const fetchCosts = async (options: { force?: boolean } = {}) => {
     // Clear any pending debounce since we're fetching now
     isPending.value = false
     if (debounceTimer) {
@@ -242,13 +231,11 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
       debounceTimer = null
     }
 
-    // Cancel any in-flight request
-    if (abortController) {
-      abortController.abort()
-    }
-    abortController = new AbortController()
-    const signal = abortController.signal
     const thisGeneration = ++fetchGeneration
+    const isCurrent = () => thisGeneration === fetchGeneration
+
+    // An explicit refresh must not be answered from the client-side caches
+    if (options.force) clearCostDataCache()
 
     loadingPhase.value = 'core'
     isFetching.value = true
@@ -268,9 +255,12 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
         ? { ...cached, accountsList: accountsList.value }
         : cached
       isFetching.value = false
+      isDeferredLoading.value = false
       loadingPhase.value = 'complete'
       return
     }
+
+    const get = <T = any>(url: string) => fetchCostResponse<T>(url, () => $fetch<T>(url))
 
     try {
       // ── Fire ALL requests at t=0 ──
@@ -280,46 +270,45 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
       // core requests complete, eliminating the idle gap between phases.
 
       // Core batch (awaited first for immediate UI) — retried on transient errors
-      const summaryP = retryWithBackoff(() => $fetch(buildSummaryUrl(), { signal }))
-      const historicalP = retryWithBackoff(() => $fetch(buildHistoricalUrl(), { signal }))
-      const analysisP = retryWithBackoff(() => $fetch(buildAnalysisUrl(), { signal }))
-      const servicesP = retryWithBackoff(() => $fetch(buildServicesSummaryUrl(), { signal }))
+      const summaryP = retryWithBackoff(() => get(buildSummaryUrl()))
+      const historicalP = retryWithBackoff(() => get(buildHistoricalUrl()))
+      const analysisP = retryWithBackoff(() => get(buildAnalysisUrl()))
+      const servicesP = retryWithBackoff(() => get(buildServicesSummaryUrl()))
 
       // Deferred wave 1: chart-critical (forecast + org-wide historical)
       // Fired now, awaited after core renders
-      const warnOnFail = (label: string) => (err: any) => {
-        if (err?.name !== 'AbortError') {
-          fetchWarnings.value.push(`${label} data unavailable`)
-        }
+      // A superseded fetch must not report its failures against the current view
+      const warnOnFail = (label: string) => () => {
+        if (isCurrent()) fetchWarnings.value.push(`${label} data unavailable`)
         return null
       }
       const wave1: Record<string, Promise<any>> = {}
       if (!isHistorical) {
-        wave1.forecast = $fetch(buildForecastUrl(), { signal }).catch(warnOnFail('Forecast'))
-        wave1.extendedForecast = $fetch(buildExtendedForecastUrl(), { signal }).catch(warnOnFail('Extended forecast'))
-        wave1.yearEndForecast = $fetch(buildYearEndForecastUrl(), { signal }).catch(warnOnFail('Year-end forecast'))
+        wave1.forecast = get(buildForecastUrl()).catch(warnOnFail('Forecast'))
+        wave1.extendedForecast = get(buildExtendedForecastUrl()).catch(warnOnFail('Extended forecast'))
+        wave1.yearEndForecast = get(buildYearEndForecastUrl()).catch(warnOnFail('Year-end forecast'))
       }
-      wave1.orgWideHistorical = $fetch(buildOrgWideHistoricalUrl(), { signal }).catch(warnOnFail('Org-wide historical'))
+      wave1.orgWideHistorical = get(buildOrgWideHistoricalUrl()).catch(warnOnFail('Org-wide historical'))
 
       // Deferred wave 2: data-table supplements
       // Fired now, awaited after wave 1 patches the dataset
       const wave2: Record<string, Promise<any>> = {}
-      wave2.ytdSummary = $fetch(buildYtdSummaryUrl(), { signal }).catch(warnOnFail('YTD summary'))
+      wave2.ytdSummary = get(buildYtdSummaryUrl()).catch(warnOnFail('YTD summary'))
       // Skip duplicate requests — reuse core summaryRes when URLs would match
       if (currentTimeframe !== 'lastMonth') {
-        wave2.lastMonthSummary = $fetch(buildLastMonthSummaryUrl(), { signal }).catch(warnOnFail('Last month summary'))
+        wave2.lastMonthSummary = get(buildLastMonthSummaryUrl()).catch(warnOnFail('Last month summary'))
       }
       if (!isHistorical && !(currentTimeframe === 'thisMonth' && currentCostScopeAccounts.length === 0)) {
-        wave2.currentMonthOrgWide = $fetch(buildCurrentMonthOrgWideSummaryUrl(), { signal }).catch(warnOnFail('Current month org-wide'))
+        wave2.currentMonthOrgWide = get(buildCurrentMonthOrgWideSummaryUrl()).catch(warnOnFail('Current month org-wide'))
       }
-      wave2.lastMonthServices = $fetch(buildLastMonthServicesSummaryUrl(), { signal }).catch(warnOnFail('Last month services'))
+      wave2.lastMonthServices = get(buildLastMonthServicesSummaryUrl()).catch(warnOnFail('Last month services'))
 
       // ── Phase 1: Await core batch for immediate UI rendering ──
       const [summaryRes, historicalRes, analysisRes, servicesRes] = await Promise.all([
         summaryP, historicalP, analysisP, servicesP
       ])
 
-      if (thisGeneration !== fetchGeneration) return
+      if (!isCurrent()) return
 
       dataset.value = {
         accounts: currentAccounts,
@@ -349,23 +338,22 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
       const wave1Keys = Object.keys(wave1)
       const wave1Results = await Promise.all(Object.values(wave1))
 
-      if (thisGeneration === fetchGeneration && dataset.value && dataset.value.timeframe === currentTimeframe && dataset.value.mode === currentMode) {
+      if (!isCurrent()) return
+
+      if (dataset.value && dataset.value.timeframe === currentTimeframe && dataset.value.mode === currentMode) {
         const patch: Record<string, any> = {}
         wave1Keys.forEach((key, i) => { patch[key] = wave1Results[i] })
         dataset.value = { ...dataset.value, ...patch }
       }
       loadingPhase.value = 'wave2'
 
-      if (thisGeneration !== fetchGeneration) {
-        isDeferredLoading.value = false
-        return
-      }
-
       // ── Phase 3: Await wave 2 (already in-flight since t=0) ──
       const wave2Keys = Object.keys(wave2)
       const wave2Results = await Promise.all(Object.values(wave2))
 
-      if (thisGeneration === fetchGeneration && dataset.value && dataset.value.timeframe === currentTimeframe && dataset.value.mode === currentMode) {
+      if (!isCurrent()) return
+
+      if (dataset.value && dataset.value.timeframe === currentTimeframe && dataset.value.mode === currentMode) {
         const patch: Record<string, any> = {}
         wave2Keys.forEach((key, i) => { patch[key] = wave2Results[i] })
         // Apply duplicate reuse from core summaryRes
@@ -382,17 +370,13 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
       loadingPhase.value = 'complete'
 
       // Store completed dataset in client-side cache
-      if (thisGeneration === fetchGeneration && dataset.value) {
+      if (dataset.value) {
         setCachedDataset(currentCostScopeAccounts, currentTimeframe, currentMode, dataset.value)
       }
 
     } catch (e: any) {
-      // Ignore abort errors - these are expected when a newer fetch supersedes
-      if (e?.name === 'AbortError' || thisGeneration !== fetchGeneration) {
-        isDeferredLoading.value = false
-        loadingPhase.value = 'idle'
-        return
-      }
+      // A newer fetch owns the loading state; leave it alone
+      if (!isCurrent()) return
       fetchError.value = getUserFriendlyMessage(e)
       isFetching.value = false
       isDeferredLoading.value = false
@@ -443,15 +427,6 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     }, { deep: true })
   }
 
-  // Server caches are source-keyed; a mode change only invalidates local snapshots.
-  watch(mode, (newMode, oldMode) => {
-    if (!initialized.value) return
-    if (oldMode !== undefined && newMode !== oldMode) {
-      invalidateByMode(oldMode)
-      invalidateByMode(newMode)
-    }
-  })
-
   // Watch for changes to timeframe and mode without debouncing
   // NOT immediate -- initial fetch is triggered explicitly by the page's onMounted
   watch([selectedTimeframe, mode], () => {
@@ -467,14 +442,12 @@ export const useCostData = ({ selectedAccounts, selectedTimeframe, initialMode =
     })
   }
 
-  // Cleanup on unmount
+  // Cleanup on unmount. In-flight requests finish into the response cache.
   onUnmounted(() => {
     if (debounceTimer) {
       clearTimeout(debounceTimer)
     }
-    if (abortController) {
-      abortController.abort()
-    }
+    fetchGeneration++
   })
 
   return { mode, isFetching, isDeferredLoading, isPending, loadingPhase, fetchError, fetchWarnings, dataset, fetchCosts, initialized }

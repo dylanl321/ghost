@@ -80,18 +80,22 @@ function evictOldest(): void {
     }
     setIndex(index)
   } else {
-    const fb = getFallback()
-    if (fb.size <= MAX_ENTRIES) return
-    let oldestKey: string | null = null
-    let oldestTime = Infinity
-    for (const [key, entry] of fb) {
-      if (entry.timestamp < oldestTime) {
-        oldestTime = entry.timestamp
-        oldestKey = key
-      }
-    }
-    if (oldestKey) fb.delete(oldestKey)
+    evictFallback()
   }
+}
+
+function evictFallback(): void {
+  const fb = getFallback()
+  if (fb.size <= MAX_ENTRIES) return
+  let oldestKey: string | null = null
+  let oldestTime = Infinity
+  for (const [key, entry] of fb) {
+    if (entry.timestamp < oldestTime) {
+      oldestTime = entry.timestamp
+      oldestKey = key
+    }
+  }
+  if (oldestKey) fb.delete(oldestKey)
 }
 
 export function getCachedDataset(accounts: string[], timeframe: string, mode: DataMode): NormalizedDataset | null {
@@ -100,7 +104,8 @@ export function getCachedDataset(accounts: string[], timeframe: string, mode: Da
   if (useStorage()) {
     try {
       const raw = sessionStorage.getItem(PREFIX + key)
-      if (!raw) return null
+      // Datasets too large for sessionStorage are kept in the in-memory fallback instead
+      if (!raw) return getFallbackDataset(key)
       const entry: CacheEntry = JSON.parse(raw)
       if (isExpired(entry)) {
         sessionStorage.removeItem(PREFIX + key)
@@ -120,7 +125,12 @@ export function getCachedDataset(accounts: string[], timeframe: string, mode: Da
     }
   }
 
-  const fb = getFallback()
+  return getFallbackDataset(key)
+}
+
+function getFallbackDataset(key: string): NormalizedDataset | null {
+  if (!fallbackMap) return null
+  const fb = fallbackMap
   const entry = fb.get(key)
   if (!entry) return null
   if (isExpired(entry)) {
@@ -146,10 +156,12 @@ export function setCachedDataset(accounts: string[], timeframe: string, mode: Da
       setIndex(index)
       evictOldest()
     } catch {
-      // Quota exceeded - fall back to in-memory
+      // Quota exceeded - fall back to in-memory. Drop any partial index entry so
+      // evictOldest() on the storage path does not count a key it cannot read.
+      setIndex(getIndex().filter(k => k !== key))
       const fb = getFallback()
       fb.set(key, entry)
-      evictOldest()
+      evictFallback()
     }
     return
   }
@@ -183,7 +195,45 @@ export function invalidateByMode(mode: DataMode): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Per-request response cache
+// ---------------------------------------------------------------------------
+// Most of the dashboard's requests do not depend on every filter: forecasts,
+// YTD and last-month summaries ignore the timeframe, and the org-wide summary
+// and analysis ignore the account selection. Caching each response by URL lets
+// a filter change re-request only what actually changed, and concurrent
+// callers for the same URL share one request.
+
+const MAX_RESPONSES = 60
+const responseCache = new Map<string, { promise: Promise<unknown>; timestamp: number }>()
+
+export function fetchCostResponse<T>(url: string, fetcher: () => Promise<T>): Promise<T> {
+  // Module state is shared across requests on the server, so never cache there
+  if (import.meta.server) return fetcher()
+
+  const hit = responseCache.get(url)
+  if (hit && Date.now() - hit.timestamp <= CACHE_TTL_MS) return hit.promise as Promise<T>
+
+  const promise = fetcher()
+  responseCache.delete(url)
+  responseCache.set(url, { promise, timestamp: Date.now() })
+  // Failed requests are not cached, so the next caller retries
+  promise.catch(() => {
+    if (responseCache.get(url)?.promise === promise) responseCache.delete(url)
+  })
+
+  // Map iteration order is insertion order, so the first key is the oldest
+  while (responseCache.size > MAX_RESPONSES) {
+    const oldest = responseCache.keys().next().value
+    if (oldest === undefined) break
+    responseCache.delete(oldest)
+  }
+  return promise
+}
+
 export function clearCostDataCache(): void {
+  responseCache.clear()
+
   if (useStorage()) {
     const index = getIndex()
     for (const key of index) {
