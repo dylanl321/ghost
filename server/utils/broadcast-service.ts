@@ -13,9 +13,8 @@ import type {
   BroadcastStatus
 } from '#shared/types/notifications'
 import { getTableConfig } from '../lib/dynamodb-config'
-import { putItem, queryItems, getItem } from './dynamodb'
+import { putItem, queryItems, getItem, scanAllItems } from './dynamodb'
 import { sendUserNotification } from './notification-service'
-import { getAllUserPreferences } from './user-preferences'
 import { logger } from './logger'
 
 // ---------------------------------------------------------------------------
@@ -56,16 +55,18 @@ export async function createBroadcast(
     let targetUserIds: string[] = []
 
     if (options.targetAudience === 'all') {
-      const allPrefs = await getAllUserPreferences(1000)
-      targetUserIds = allPrefs.preferences.map(p => p.userId)
+      // Every page of the preferences table: one capped scan page left out
+      // users once the table grew past it
+      const { tableName: prefsTable, environment: prefsEnv, accountId: prefsAccount } = await getTableConfig('userPreferences')
+      const allPrefs = await scanAllItems(prefsTable, undefined, prefsEnv, undefined, undefined, prefsAccount)
+      targetUserIds = allPrefs.map(p => p.userId).filter((id): id is string => typeof id === 'string' && id.length > 0)
     } else if (options.targetAudience === 'list' && options.targetUserIds) {
       targetUserIds = options.targetUserIds
-    } else if (options.targetAudience === 'role' && options.targetRole) {
-      // Filter users by role from preferences (role stored in preferences)
-      const allPrefs = await getAllUserPreferences(1000)
-      targetUserIds = allPrefs.preferences
-        .filter(p => p.preferences?.role === options.targetRole)
-        .map(p => p.userId)
+    } else {
+      // 'role' targeted users by preferences.role, a field every user can set
+      // through PATCH /api/user/preferences, so anyone could add themselves to
+      // a role broadcast. There is no trusted per-user role store to target.
+      return { success: false, error: `Unsupported broadcast audience: ${options.targetAudience}` }
     }
 
     if (targetUserIds.length === 0) {

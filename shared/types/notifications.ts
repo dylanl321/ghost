@@ -166,6 +166,8 @@ export const FILTER_GROUP_CATEGORIES: Record<NotificationFilterGroup, Notificati
 // ---------------------------------------------------------------------------
 
 export type BroadcastStatus = 'pending' | 'in-progress' | 'complete' | 'scheduled'
+// 'role' is kept only so older broadcast records still type-check; new
+// broadcasts are 'all' or 'list'
 export type BroadcastTarget = 'all' | 'role' | 'list'
 
 export interface BroadcastNotification {
