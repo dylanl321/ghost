@@ -1,5 +1,5 @@
 import type { DatasetAccountMatch, DatasetInterpretationResult, DatasetReportConfig } from '../../shared/types/dataset-reports'
-import { invokeBedrock } from './bedrock-client'
+import { invokeBedrock, parseModelJson } from './bedrock-client'
 import { getAllAccountsUnified } from './accounts-consolidated'
 import { getDatasetReportConfigErrors } from './dataset-report-validation'
 
@@ -23,8 +23,7 @@ function assertKnownKeys(value: any, allowed: Set<string>, path: string) {
 }
 
 export function parseDatasetInterpretationJson(content: string): any {
-  const cleaned = content.trim().replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```$/, '').trim()
-  return JSON.parse(cleaned)
+  return parseModelJson(content)
 }
 
 export function validateDatasetInterpretationDraft(draft: any): void {
