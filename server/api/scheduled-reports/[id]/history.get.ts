@@ -3,8 +3,8 @@
  * GET /api/scheduled-reports/:id/history
  */
 
-import { getReport, getExecutionHistory } from '../../../utils/scheduled-reports'
-import { getUserEmail, isUserAdmin } from '../../../utils/user-roles'
+import { getExecutionHistory } from '../../../utils/scheduled-reports'
+import { requireScheduledReportAccess } from '../../../utils/dataset-report-access'
 import { logger } from '../../../utils/logger'
 
 export default defineEventHandler(async (event) => {
@@ -19,8 +19,6 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    const userEmail = getUserEmail(event)
-
     // Get report ID from route params
     const reportId = getRouterParam(event, 'id')
     if (!reportId) {
@@ -30,18 +28,7 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Get the report
-    const report = await getReport(reportId)
-    if (!report) {
-      throw createError({
-        statusCode: 404,
-        message: 'Report not found'
-      })
-    }
-
-    if (!userEmail || (report.createdBy !== userEmail && !await isUserAdmin(event))) {
-      throw createError({ statusCode: 403, message: 'Access denied' })
-    }
+    await requireScheduledReportAccess(event, reportId)
 
     // Get query parameters
     const query = getQuery(event)

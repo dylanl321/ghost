@@ -4,8 +4,7 @@
  * Returns full execution metadata including error details and email delivery status
  */
 
-import { getTableConfig } from '../../../../../lib/dynamodb-config'
-import type { ReportExecution } from '../../../../../../shared/types/scheduled-reports'
+import { getExecution } from '../../../../../utils/scheduled-reports'
 import { logger } from '../../../../../utils/logger'
 import { requireDatasetReportAccess } from '../../../../../utils/dataset-report-access'
 
@@ -24,15 +23,7 @@ export default defineEventHandler(async (event) => {
     logger.info(`Fetching execution details: ${reportId} / ${executionId}`)
     await requireDatasetReportAccess(event, reportId)
 
-    const tableConfig = await getTableConfig('reportExecutions')
-
-    // Get the execution record
-    const execution = await getItem(
-      tableConfig.tableName,
-      { reportId, executionId },
-      tableConfig.environment,
-      tableConfig.accountId
-    ) as ReportExecution | null
+    const execution = await getExecution(reportId, executionId)
 
     if (!execution) {
       throw createError({

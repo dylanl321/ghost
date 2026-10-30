@@ -15,228 +15,14 @@ import {
   putItem,
   deleteItem,
   queryItems,
-  scanItems
+  queryAllItems,
+  scanAllItems
 } from './dynamodb'
+import { calculateNextRunTime } from '../../shared/utils/report-schedule'
 import { getTableName, getTableEnvironment, getTableAccountId } from '../lib/dynamodb-config'
 import { logger } from './logger'
 
 // Table configuration now loaded dynamically from Secrets Manager or environment variables
-
-/**
- * Calculate next N run times based on schedule configuration
- * Returns an array of upcoming execution times
- */
-export function calculateNextNRunTimes(schedule: any, timezone: string, n: number = 3): Date[] {
-  const runs: Date[] = []
-  let currentTime = new Date()
-
-  for (let i = 0; i < n; i++) {
-    const nextRun = calculateNextRunTime(schedule, timezone, currentTime)
-    runs.push(nextRun)
-    // Set current time to just after this run for next calculation
-    currentTime = new Date(nextRun.getTime() + 60000) // Add 1 minute
-  }
-
-  return runs
-}
-
-/**
- * Calculate next run time based on schedule configuration
- */
-export function calculateNextRunTime(schedule: any, timezone: string, fromTime?: Date): Date {
-  const now = fromTime || new Date()
-
-  // Convert current time to user's timezone for calculation
-  const nowInTz = convertToTimezone(now, timezone)
-
-  let nextRunInTz: Date
-
-  switch (schedule.frequency) {
-    case 'daily': {
-      // Parse time (HH:MM) - this is in user's timezone
-      const [hours, minutes] = schedule.time.split(':').map(Number)
-      nextRunInTz = new Date(nowInTz)
-      nextRunInTz.setHours(hours, minutes, 0, 0)
-
-      // If time has passed today, schedule for tomorrow
-      if (nextRunInTz <= nowInTz) {
-        nextRunInTz.setDate(nextRunInTz.getDate() + 1)
-      }
-      break
-    }
-
-    case 'weekly': {
-      const [hours, minutes] = schedule.time.split(':').map(Number)
-      // Ensure dayOfWeek is a number (handle both string and number from DB)
-      const targetDay = Number(schedule.dayOfWeek) || 1 // Default Monday
-      const currentDay = nowInTz.getDay()
-
-      nextRunInTz = new Date(nowInTz)
-      nextRunInTz.setHours(hours, minutes, 0, 0)
-
-      // Calculate days until target day
-      let daysUntil = targetDay - currentDay
-      if (daysUntil <= 0 || (daysUntil === 0 && nextRunInTz <= nowInTz)) {
-        daysUntil += 7
-      }
-
-      nextRunInTz.setDate(nowInTz.getDate() + daysUntil)
-      break
-    }
-
-    case 'monthly': {
-      const [hours, minutes] = schedule.time.split(':').map(Number)
-      // Ensure dayOfMonth is a number (handle both string and number from DB)
-      const targetDay = Number(schedule.dayOfMonth) || 1
-
-      nextRunInTz = new Date(nowInTz)
-      nextRunInTz.setHours(hours, minutes, 0, 0)
-      nextRunInTz.setDate(targetDay)
-
-      // If date has passed this month, schedule for next month
-      if (nextRunInTz <= nowInTz) {
-        nextRunInTz.setMonth(nextRunInTz.getMonth() + 1)
-      }
-
-      // Handle month overflow (e.g., day 31 in February)
-      // Now both sides are numbers for proper comparison
-      if (nextRunInTz.getDate() !== targetDay) {
-        // Set to last day of month
-        nextRunInTz.setDate(0)
-      }
-      break
-    }
-
-    case 'quarterly': {
-      const [hours, minutes] = schedule.time.split(':').map(Number)
-      // Ensure monthOfQuarter is a number (handle both string and number from DB)
-      const targetMonth = Number(schedule.monthOfQuarter) || 1
-      const currentMonth = nowInTz.getMonth()
-      const currentQuarter = Math.floor(currentMonth / 3)
-
-      nextRunInTz = new Date(nowInTz)
-      nextRunInTz.setHours(hours, minutes, 0, 0)
-
-      // Calculate next quarter month
-      let nextQuarter = currentQuarter
-      const targetMonthInYear = (currentQuarter * 3) + (targetMonth - 1)
-
-      if (currentMonth > targetMonthInYear ||
-          (currentMonth === targetMonthInYear && nextRunInTz <= nowInTz)) {
-        nextQuarter++
-      }
-
-      if (nextQuarter > 3) {
-        nextQuarter = 0
-        nextRunInTz.setFullYear(nextRunInTz.getFullYear() + 1)
-      }
-
-      nextRunInTz.setMonth((nextQuarter * 3) + (targetMonth - 1))
-      nextRunInTz.setDate(1)
-      break
-    }
-
-    default:
-      nextRunInTz = new Date(nowInTz)
-  }
-
-  // Convert back to UTC for storage
-  return convertFromTimezone(nextRunInTz, timezone)
-}
-
-/**
- * Convert a Date to a specific timezone (returns a Date representing that time in that timezone)
- * This properly handles DST and timezone offsets
- */
-function convertToTimezone(date: Date, timezone: string): Date {
-  // Get the date components in the target timezone using Intl API
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false
-  })
-
-  const parts = formatter.formatToParts(date)
-  const dateParts: Record<string, string> = {}
-
-  for (const part of parts) {
-    if (part.type !== 'literal') {
-      dateParts[part.type] = part.value
-    }
-  }
-
-  // Create a new Date object with the converted components
-  // Note: This Date object is in the local system timezone but represents
-  // the same wall-clock time as in the target timezone
-  return new Date(
-    parseInt(dateParts.year!),
-    parseInt(dateParts.month!) - 1, // Month is 0-indexed
-    parseInt(dateParts.day!),
-    parseInt(dateParts.hour!),
-    parseInt(dateParts.minute!),
-    parseInt(dateParts.second!)
-  )
-}
-
-/**
- * Convert a date from a specific timezone back to UTC
- * Input date represents a local time in the timezone (as wall-clock time), output is UTC
- */
-function convertFromTimezone(localDate: Date, timezone: string): Date {
-  // Create an ISO string from the local date components (treating them as wall-clock time)
-  const year = localDate.getFullYear()
-  const month = String(localDate.getMonth() + 1).padStart(2, '0')
-  const day = String(localDate.getDate()).padStart(2, '0')
-  const hours = String(localDate.getHours()).padStart(2, '0')
-  const minutes = String(localDate.getMinutes()).padStart(2, '0')
-  const seconds = String(localDate.getSeconds()).padStart(2, '0')
-
-  // Create a date string in ISO format without timezone indicator
-  const dateString = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`
-
-  // Use Intl.DateTimeFormat to get the offset for this timezone at this date/time
-  // We need to determine what UTC time corresponds to this local time in the given timezone
-
-  // Create a test date by parsing the string as if it were UTC
-  const testDate = new Date(`${dateString}Z`)
-
-  // Get what this UTC time looks like in the target timezone
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false
-  })
-
-  const parts = formatter.formatToParts(testDate)
-  const dateParts: Record<string, string> = {}
-
-  for (const part of parts) {
-    if (part.type !== 'literal') {
-      dateParts[part.type] = part.value
-    }
-  }
-
-  // Reconstruct what time it shows in the timezone
-  const tzTimeString = `${dateParts.year}-${dateParts.month}-${dateParts.day}T${dateParts.hour}:${dateParts.minute}:${dateParts.second}`
-
-  // Calculate the offset between what we want and what we got
-  const wantedTime = new Date(dateString).getTime()
-  const gotTime = new Date(tzTimeString).getTime()
-  const offset = wantedTime - gotTime
-
-  // Adjust the test date by the offset to get the correct UTC time
-  return new Date(testDate.getTime() + offset)
-}
 
 /**
  * Get a scheduled report by ID
@@ -295,21 +81,24 @@ export async function listUserReports(
       filterExpression += ' AND #status = :status'
     }
 
-    const result = await scanItems(
+    // Scan every page: Limit is applied before the filter, so a limited scan
+    // only sees the first N reports in the table, not the first N of this user's.
+    const items = await scanAllItems(
       tableName,
       filterExpression,
-      limit,
-      cursor,
       environment,
       Object.keys(expressionAttributeNames).length > 0 ? expressionAttributeNames : undefined,
       expressionAttributeValues,
       accountId
-    )
+    ) as ScheduledReport[]
+    items.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
 
+    const offset = Math.max(Number.parseInt(cursor || '0', 10) || 0, 0)
+    const page = items.slice(offset, offset + limit)
     return {
-      reports: result.items as ScheduledReport[],
-      total: result.count,
-      nextCursor: result.nextToken
+      reports: page,
+      total: items.length,
+      nextCursor: offset + limit < items.length ? String(offset + limit) : undefined
     }
   } catch (error) {
     logger.error('Error listing user reports:', error)
@@ -327,20 +116,12 @@ export async function listAllReports(
     const tableName = await getTableName('scheduledReports')
     const environment = await getTableEnvironment('scheduledReports')
     const accountId = await getTableAccountId('scheduledReports')
-    const result = await scanItems(
-      tableName,
-      undefined,
-      limit,
-      undefined,
-      environment,
-      undefined,
-      undefined,
-      accountId
-    )
+    const items = await scanAllItems(tableName, undefined, environment, undefined, undefined, accountId) as ScheduledReport[]
+    items.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
 
     return {
-      reports: result.items as ScheduledReport[],
-      total: result.count
+      reports: items.slice(0, limit),
+      total: items.length
     }
   } catch (error) {
     logger.error('Error listing all reports:', error)
@@ -361,11 +142,10 @@ export async function getUpcomingReports(
     const now = new Date()
     const future = new Date(now.getTime() + withinSeconds * 1000)
 
-    const result = await scanItems(
+    // Every page, so a due report is never missed once the table outgrows one page.
+    const items = await scanAllItems(
       tableName,
       `#status = :active AND nextRunTime <= :future`,
-      100,
-      undefined,
       environment,
       {
         '#status': 'status'
@@ -377,7 +157,7 @@ export async function getUpcomingReports(
       accountId
     )
 
-    return result.items.filter((report: any) => {
+    return items.filter((report: any) => {
       const nextRun = new Date(report.nextRunTime)
       return nextRun <= future && report.status === 'active'
     }) as ScheduledReport[]
@@ -441,6 +221,16 @@ export async function createReport(
   return report
 }
 
+const EDITABLE_REPORT_FIELDS = [
+  'reportName',
+  'description',
+  'reportConfig',
+  'schedule',
+  'recipients',
+  'emailTemplate',
+  'status'
+] as const satisfies readonly (keyof UpdateReportRequest)[]
+
 /**
  * Update a scheduled report
  */
@@ -452,9 +242,15 @@ export async function updateReport(
     const existing = await getReport(reportId)
     if (!existing) return null
 
+    // Only user-editable fields; ownership, run bookkeeping and keys stay as stored.
+    const editable: UpdateReportRequest = {}
+    for (const key of EDITABLE_REPORT_FIELDS) {
+      if (updates[key] !== undefined) (editable as any)[key] = updates[key]
+    }
+
     const updatedReport: any = {
       ...existing,
-      ...updates,
+      ...editable,
       updatedAt: new Date().toISOString()
     }
 
@@ -478,9 +274,16 @@ export async function updateReport(
       logger.info(`  New nextRunTime: ${updatedReport.nextRunTime}`)
     }
 
+    // A report resumed after its next run went by would otherwise be due
+    // immediately with a stale nextRunTime; schedule the next real slot.
+    if (!updates.schedule && editable.status === 'active' && existing.status !== 'active' &&
+        new Date(updatedReport.nextRunTime).getTime() <= Date.now()) {
+      updatedReport.nextRunTime = calculateNextRunTime(updatedReport.schedule, updatedReport.schedule.timezone).toISOString()
+    }
+
     // Update userIdStatus if status changed
-    if (updates.status) {
-      updatedReport.userIdStatus = `${existing.createdBy}#${updates.status}`
+    if (editable.status) {
+      updatedReport.userIdStatus = `${existing.createdBy}#${editable.status}`
     }
 
     const tableName = await getTableName('scheduledReports')
@@ -524,7 +327,8 @@ export async function deleteReport(reportId: string): Promise<boolean> {
 export async function updateReportRunStatus(
   reportId: string,
   status: 'success' | 'failed',
-  error?: string
+  error?: string,
+  scheduledSlot?: string
 ): Promise<void> {
   try {
     const report = await getReport(reportId)
@@ -535,10 +339,21 @@ export async function updateReportRunStatus(
     logger.info(`Updating run status for ${report.reportName} (status: ${status})`)
     logger.info(`  Using schedule timezone: ${report.schedule.timezone}`)
 
-    const nextRunTime = calculateNextRunTime(
-      report.schedule,
-      report.schedule.timezone
-    ).toISOString()
+    // A scheduled run can start up to a minute before its slot, so the next
+    // run is the one after that slot; counting from "now" would return the
+    // same slot again and send the report twice. A manual run leaves the
+    // schedule alone unless the stored time has already passed.
+    const nowMs = Date.now()
+    const storedNext = new Date(report.nextRunTime).getTime()
+    let nextRunTime: string
+    if (scheduledSlot) {
+      const base = Math.max(nowMs, new Date(scheduledSlot).getTime() || nowMs)
+      nextRunTime = calculateNextRunTime(report.schedule, report.schedule.timezone, new Date(base)).toISOString()
+    } else if (Number.isFinite(storedNext) && storedNext > nowMs) {
+      nextRunTime = report.nextRunTime
+    } else {
+      nextRunTime = calculateNextRunTime(report.schedule, report.schedule.timezone).toISOString()
+    }
 
     logger.info(`  Calculated nextRunTime: ${nextRunTime}`)
 
@@ -612,6 +427,8 @@ export async function getExecutionHistory(
         tableName: executionsTableName,
         queryExpression: 'reportId = :reportId',
         expressionAttributeValues: { ':reportId': reportId },
+        // Newest first, so the limit drops the oldest runs rather than the latest
+        scanIndexForward: false,
         limit
       },
       environment,
@@ -626,6 +443,51 @@ export async function getExecutionHistory(
     logger.error('Error getting execution history:', error)
     return []
   }
+}
+
+/**
+ * Find one execution of a report. The table's sort key is executionTime, so
+ * an executionId alone is not a key: look it up within the report's runs.
+ */
+export async function getExecution(reportId: string, executionId: string): Promise<ReportExecution | null> {
+  const executionsTableName = await getTableName('reportExecutions')
+  const environment = await getTableEnvironment('reportExecutions')
+  const accountId = await getTableAccountId('reportExecutions')
+
+  const matches = await queryAllItems(
+    {
+      tableName: executionsTableName,
+      queryExpression: 'reportId = :reportId',
+      filterExpression: 'executionId = :executionId',
+      expressionAttributeValues: { ':reportId': reportId, ':executionId': executionId },
+      scanIndexForward: false
+    },
+    environment,
+    accountId,
+    { stopWhen: items => items.length > 0 }
+  )
+  return (matches[0] as ReportExecution | undefined) || null
+}
+
+/**
+ * Count executions of a report since the given time (manual runs included)
+ */
+export async function countExecutionsSince(reportId: string, since: Date): Promise<number> {
+  const executionsTableName = await getTableName('reportExecutions')
+  const environment = await getTableEnvironment('reportExecutions')
+  const accountId = await getTableAccountId('reportExecutions')
+
+  const items = await queryAllItems(
+    {
+      tableName: executionsTableName,
+      queryExpression: 'reportId = :reportId AND executionTime >= :since',
+      expressionAttributeValues: { ':reportId': reportId, ':since': since.toISOString() },
+      projectionExpression: 'executionId'
+    },
+    environment,
+    accountId
+  )
+  return items.length
 }
 
 /**
@@ -669,7 +531,8 @@ export async function getReportStatistics(): Promise<ReportStatistics> {
       else if (report.status === 'disabled') stats.disabledReports++
 
       // Frequency
-      stats.reportsByFrequency[report.schedule.frequency]++
+      const frequency = report.schedule?.frequency
+      if (frequency && frequency in stats.reportsByFrequency) stats.reportsByFrequency[frequency]++
 
       // Upcoming runs
       const nextRun = new Date(report.nextRunTime)

@@ -330,6 +330,73 @@ export async function scanItems(
 }
 
 /**
+ * Scan every page of a table. DynamoDB applies Limit before FilterExpression
+ * and stops each page at 1 MB, so a single scanItems call can miss matching
+ * items; use this when the caller needs all of them.
+ */
+export async function scanAllItems(
+  tableName: string,
+  filterExpression?: string,
+  environment: 'commercial' | 'govcloud' = 'govcloud',
+  expressionAttributeNames?: Record<string, string>,
+  expressionAttributeValues?: Record<string, any>,
+  accountId?: string,
+  maxPages: number = 100
+): Promise<Record<string, any>[]> {
+  const items: Record<string, any>[] = []
+  let nextToken: string | undefined
+  let pages = 0
+
+  do {
+    const page = await scanItems(
+      tableName,
+      filterExpression,
+      undefined,
+      nextToken,
+      environment,
+      expressionAttributeNames,
+      expressionAttributeValues,
+      accountId
+    )
+    items.push(...page.items)
+    nextToken = page.nextToken
+    pages++
+  } while (nextToken && pages < maxPages)
+
+  if (nextToken) {
+    logger.warn(`[DynamoDB] scanAllItems stopped after ${maxPages} pages of ${tableName}`)
+  }
+
+  return items
+}
+
+/**
+ * Query every page of a key condition, for the same reason as scanAllItems.
+ * Stops early once `stopWhen` returns true for the items collected so far.
+ */
+export async function queryAllItems(
+  params: Omit<DynamoDBQueryParams, 'limit' | 'nextToken'>,
+  environment: 'commercial' | 'govcloud' = 'govcloud',
+  accountId?: string,
+  options: { maxPages?: number, stopWhen?: (items: Record<string, any>[]) => boolean } = {}
+): Promise<Record<string, any>[]> {
+  const maxPages = options.maxPages ?? 100
+  const items: Record<string, any>[] = []
+  let nextToken: string | undefined
+  let pages = 0
+
+  do {
+    const page = await queryItems({ ...params, nextToken }, environment, accountId)
+    items.push(...page.items)
+    nextToken = page.nextToken
+    pages++
+    if (options.stopWhen?.(items)) break
+  } while (nextToken && pages < maxPages)
+
+  return items
+}
+
+/**
  * Batch write items to DynamoDB
  */
 export async function batchWriteItems(

@@ -3,8 +3,8 @@
  * DELETE /api/scheduled-reports/:id
  */
 
-import { getReport, deleteReport } from '../../utils/scheduled-reports'
-import { isUserAdmin } from '../../utils/user-roles'
+import { deleteReport } from '../../utils/scheduled-reports'
+import { requireScheduledReportAccess } from '../../utils/dataset-report-access'
 import { logger } from '../../utils/logger'
 
 export default defineEventHandler(async (event) => {
@@ -19,8 +19,6 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    const userEmail = user.claims?.email || user.claims?.preferred_username
-
     // Get report ID from route params
     const reportId = getRouterParam(event, 'id')
     if (!reportId) {
@@ -30,16 +28,7 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Get existing report
-    const existing = await getReport(reportId)
-    if (!existing) {
-      throw createError({
-        statusCode: 404,
-        message: 'Report not found'
-      })
-    }
-
-    // Allow all authenticated users to delete any report
+    await requireScheduledReportAccess(event, reportId)
 
     // Delete the report
     const success = await deleteReport(reportId)

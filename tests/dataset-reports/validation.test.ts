@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { getDatasetReportConfigErrors, getScheduleErrors } from '../../server/utils/dataset-report-validation'
+import { getDatasetReportConfigErrors } from '../../server/utils/dataset-report-validation'
+import { getScheduleErrors } from '../../shared/utils/report-schedule'
 
 test('accepts a valid dataset report configuration', () => {
   assert.deepEqual(getDatasetReportConfigErrors({

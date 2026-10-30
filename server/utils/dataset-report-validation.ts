@@ -1,8 +1,6 @@
 import type { DatasetReportConfig } from '../../shared/types/dataset-reports'
-import type { ScheduleConfig } from '../../shared/types/scheduled-reports'
 
 const REPORT_FORMATS = new Set(['pdf', 'xlsx', 'csv', 'json'])
-const FREQUENCIES = new Set(['daily', 'weekly', 'monthly', 'quarterly'])
 const DATASET_KEYS = ['config', 'securityHub', 'cloudtrail', 'entraUsers'] as const
 const CONFIG_KEYS = new Set(['accounts', 'accountScope', 'datasets', 'format', 'enableAI', 'columns', 'timeRange'])
 const DATASET_VALUE_KEYS = new Set(['enabled', 'filters'])
@@ -129,27 +127,6 @@ export function getDatasetReportConfigErrors(value: unknown): string[] {
     const start = Date.parse(config.timeRange.startDate || '')
     const end = Date.parse(config.timeRange.endDate || '')
     if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) errors.push('Absolute time range is invalid')
-  }
-
-  return errors
-}
-
-export function getScheduleErrors(value: unknown): string[] {
-  if (!value || typeof value !== 'object') return ['Schedule is required']
-  const schedule = value as Partial<ScheduleConfig>
-  const errors: string[] = []
-
-  if (!schedule.frequency || !FREQUENCIES.has(schedule.frequency)) errors.push('Invalid schedule frequency')
-  if (!schedule.time || !/^([01]\d|2[0-3]):[0-5]\d$/.test(schedule.time)) errors.push('Schedule time must use HH:MM')
-  if (!schedule.timezone || typeof schedule.timezone !== 'string') errors.push('Schedule timezone is required')
-  if (schedule.frequency === 'weekly' && (!Number.isInteger(schedule.dayOfWeek) || schedule.dayOfWeek! < 0 || schedule.dayOfWeek! > 6)) {
-    errors.push('Weekly schedules require dayOfWeek from 0 to 6')
-  }
-  if (schedule.frequency === 'monthly' && (!Number.isInteger(schedule.dayOfMonth) || schedule.dayOfMonth! < 1 || schedule.dayOfMonth! > 31)) {
-    errors.push('Monthly schedules require dayOfMonth from 1 to 31')
-  }
-  if (schedule.frequency === 'quarterly' && (!Number.isInteger(schedule.monthOfQuarter) || schedule.monthOfQuarter! < 1 || schedule.monthOfQuarter! > 3)) {
-    errors.push('Quarterly schedules require monthOfQuarter from 1 to 3')
   }
 
   return errors

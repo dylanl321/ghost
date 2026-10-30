@@ -4,7 +4,8 @@
  */
 
 import { generateDatasetReport } from '../../../utils/dataset-report-generator'
-import { sendReportEmail, getDefaultTemplate, renderTemplate, validateEmails } from '../../../utils/email-service'
+import { sendReportEmail, renderTemplate, validateEmails } from '../../../utils/email-service'
+import { getDatasetDefaultEmailTemplate } from '../../../utils/report-scheduler'
 import { uploadReportToS3, getReportDownloadUrl } from '../../../utils/s3-reports-storage'
 import { getUserEmail } from '../../../utils/user-roles'
 import { requireDatasetReportAccess } from '../../../utils/dataset-report-access'
@@ -102,7 +103,8 @@ export default defineEventHandler(async (event) => {
 
     // Prepare email template
     const emailSubject = `[TEST] ${report.emailTemplate.subject || report.reportName}`
-    const emailBody = renderTemplate(report.emailTemplate.body || getDefaultTemplate(), {
+    // Same default body the scheduled run uses, not the cost-report template
+    const emailBody = renderTemplate(report.emailTemplate.body?.trim() ? report.emailTemplate.body : getDatasetDefaultEmailTemplate(), {
       reportName: report.reportName,
       userName: userEmail.split('@')[0],
       downloadUrl,

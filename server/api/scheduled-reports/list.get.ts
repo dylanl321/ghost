@@ -4,6 +4,7 @@
  */
 
 import { listUserReports } from '../../utils/scheduled-reports'
+import { getUserEmail } from '../../utils/user-roles'
 import { logger } from '../../utils/logger'
 
 export default defineEventHandler(async (event) => {
@@ -18,7 +19,7 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    const userEmail = user.email || user.claims?.email || user.claims?.preferred_username
+    const userEmail = getUserEmail(event)
 
     if (!userEmail) {
       throw createError({
@@ -30,16 +31,18 @@ export default defineEventHandler(async (event) => {
     // Get query parameters
     const query = getQuery(event)
     const status = query.status as string | undefined
-    const limit = parseInt(query.limit as string) || 50
+    const limit = Math.min(parseInt(query.limit as string) || 200, 500)
+    const cursor = query.cursor as string | undefined
 
     // List reports for this user
-    const result = await listUserReports(userEmail, status, limit)
+    const result = await listUserReports(userEmail, status, limit, cursor)
 
     return {
       success: true,
       data: {
         reports: result.reports,
-        total: result.total
+        total: result.total,
+        nextCursor: result.nextCursor
       }
     }
   } catch (error: any) {

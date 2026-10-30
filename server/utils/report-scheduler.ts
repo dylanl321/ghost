@@ -7,10 +7,13 @@ import type { ScheduledReport } from '../../shared/types/scheduled-reports'
 import type { DatasetReportConfig } from '../../shared/types/dataset-reports'
 import {
   getUpcomingReports,
+  updateReport,
   updateReportRunStatus,
   recordExecution,
-  calculateNextRunTime
+  countExecutionsSince
 } from './scheduled-reports'
+import { isScheduledSlot } from '../../shared/utils/report-schedule'
+import { isDatasetReport } from './dataset-report-access'
 import { generateCostReport } from './report-generator'
 import { generateDatasetReport } from './dataset-report-generator'
 import { sendReportEmail, renderTemplate, getDefaultTemplate } from './email-service'
@@ -22,7 +25,10 @@ import { logger } from './logger'
 /**
  * Execute a single scheduled report
  */
-export async function executeScheduledReport(report: ScheduledReport): Promise<{
+export async function executeScheduledReport(
+  report: ScheduledReport,
+  options: { scheduledSlot?: string } = {}
+): Promise<{
   success: boolean
   error?: string
   duration?: number
@@ -36,10 +42,9 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
     // Step 1: Generate the report (route based on report type)
     logger.info(`  → Generating ${report.reportType || 'cost'} report...`)
 
-    const isDatasetReport = report.reportType === 'dataset' ||
-      (!report.reportType && Boolean((report.reportConfig as any)?.datasets))
+    const isDataset = isDatasetReport(report)
     let reportResult
-    if (isDatasetReport) {
+    if (isDataset) {
       reportResult = await generateDatasetReport(report.reportConfig as unknown as DatasetReportConfig)
     } else {
       // Default to cost report for backwards compatibility
@@ -76,20 +81,20 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
     }
 
     // Step 3: Prepare email content with enhanced date context
-    const dateContext = isDatasetReport
+    const dateContext = isDataset
       ? {}
       : buildDateContext(report.reportConfig.timeframe)
 
     const emailSubject = renderTemplate(report.emailTemplate.subject, {
       reportName: report.reportName,
-      timeframe: isDatasetReport ? 'Current dataset query' : formatTimeframe(report.reportConfig.timeframe),
-      dataMode: isDatasetReport ? 'Dataset report' : formatDataMode(report.reportConfig.dataMode),
+      timeframe: isDataset ? 'Current dataset query' : formatTimeframe(report.reportConfig.timeframe),
+      dataMode: isDataset ? 'Dataset report' : formatDataMode(report.reportConfig.dataMode),
       ...dateContext
     })
 
     let emailBody = report.emailTemplate.body
     if (!emailBody || emailBody.trim() === '') {
-      emailBody = isDatasetReport
+      emailBody = isDataset
         ? getDatasetDefaultEmailTemplate()
         : getDefaultTemplate()
     }
@@ -106,8 +111,8 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
     const templateContext = {
       userName: report.createdBy.split('@')[0], // Extract name from email
       reportName: report.reportName,
-      timeframe: isDatasetReport ? 'Current dataset query' : formatTimeframe(report.reportConfig.timeframe),
-      dataMode: isDatasetReport ? 'Dataset report' : formatDataMode(report.reportConfig.dataMode),
+      timeframe: isDataset ? 'Current dataset query' : formatTimeframe(report.reportConfig.timeframe),
+      dataMode: isDataset ? 'Dataset report' : formatDataMode(report.reportConfig.dataMode),
       accountCount: report.reportConfig.accounts?.length || 'All',
       format: report.reportConfig.format.toUpperCase(),
       timestamp: new Date().toLocaleString('en-US', {
@@ -145,24 +150,26 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
     logger.info(`  ✓ Report sent successfully in ${duration}ms`)
 
     // Step 5: Update report status
-    await updateReportRunStatus(report.reportId, 'success')
+    await updateReportRunStatus(report.reportId, 'success', undefined, options.scheduledSlot)
 
-    // Step 6: Record execution with email delivery details and S3 storage info
+    // Step 6: Record execution with email delivery details and S3 storage info.
+    // The email has already gone out, so a history write failure is logged
+    // rather than rethrown: rethrowing would record the run as failed too.
     await recordExecution({
       reportId: report.reportId,
       executionId,
       executionTime: new Date().toISOString(),
       status: 'success',
       duration,
-      emailsSent: emailResult.deliveryDetails?.totalSent || report.recipients.length,
-      emailsFailed: emailResult.deliveryDetails?.totalFailed || 0,
+      emailsSent: emailResult.deliveryDetails?.totalSent ?? report.recipients.length,
+      emailsFailed: emailResult.deliveryDetails?.totalFailed ?? 0,
       reportSize: reportResult.buffer.length,
       emailDelivery: emailResult.deliveryDetails,  // Store detailed delivery info
       s3Key: s3UploadResult.key,                   // S3 object key
       s3Url: s3UploadResult.s3Url,                 // Presigned download URL
       s3UrlExpiresAt: s3UploadResult.s3UrlExpiresAt, // URL expiration
       downloadCount: 0                              // Initialize download counter
-    })
+    }).catch(error => logger.error(`  ⚠ Report sent but execution history was not recorded: ${error.message}`))
 
     // Notify report creator that their report is ready
     sendUserNotification({
@@ -171,7 +178,7 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
       title: `Report '${report.reportName}' is ready`,
       body: `Sent to ${report.recipients.length} recipient(s)`,
       severity: 'info',
-      actionUrl: '/settings/reports',
+      actionUrl: reportsPageFor(isDataset),
       actionLabel: 'View Reports',
       metadata: { reportId: report.reportId, executionId, s3Url: s3UploadResult.s3Url }
     }).catch(err => logger.warn('Failed to send report-ready notification:', err))
@@ -188,7 +195,7 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
     logger.error(`  ✗ Report execution failed: ${errorMessage}`)
 
     // Update report status with error
-    await updateReportRunStatus(report.reportId, 'failed', errorMessage)
+    await updateReportRunStatus(report.reportId, 'failed', errorMessage, options.scheduledSlot)
 
     // Record failed execution
     // Note: emailDelivery might be undefined if we failed before sending email
@@ -200,7 +207,7 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
       error: errorMessage,
       emailsSent: 0,
       emailsFailed: report.recipients.length
-    })
+    }).catch(recordError => logger.error(`  ⚠ Failed execution was not recorded: ${recordError.message}`))
 
     // Notify report creator of the failure
     sendUserNotification({
@@ -209,7 +216,7 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
       title: `Report '${report.reportName}' failed`,
       body: `Failed to generate: ${errorMessage}`,
       severity: 'warning',
-      actionUrl: '/settings/reports',
+      actionUrl: reportsPageFor(isDatasetReport(report)),
       actionLabel: 'View Reports',
       metadata: { reportId: report.reportId, error: errorMessage }
     }).catch(err => logger.warn('Failed to send report-failure notification:', err))
@@ -222,7 +229,12 @@ export async function executeScheduledReport(report: ScheduledReport): Promise<{
   }
 }
 
-function getDatasetDefaultEmailTemplate(): string {
+/** The page that lists this kind of report, for notification links. */
+function reportsPageFor(isDataset: boolean): string {
+  return isDataset ? '/reports/datasets' : '/reports/scheduled'
+}
+
+export function getDatasetDefaultEmailTemplate(): string {
   return `
     <h1>AWS Dataset Report</h1>
     <p>Hello {{userName}},</p>
@@ -258,18 +270,40 @@ export async function processScheduledReports(): Promise<{
 
     // Execute reports sequentially to avoid overwhelming the system
     for (const report of dueReports) {
-      // Safety check: Detect suspicious execution patterns
-      const isSuspicious = await checkForSuspiciousPattern(report)
+      try {
+        // Safety check: a corrupt or long-missed nextRunTime is realigned, and
+        // a report that has genuinely run too often is paused.
+        const check = await checkForSuspiciousPattern(report)
 
-      if (isSuspicious.detected) {
-        logger.warn(`⚠️  Suspicious pattern detected for ${report.reportName}: ${isSuspicious.reason}`)
-        logger.warn(`⚠️  Auto-pausing report for safety`)
+        if (check.action === 'realign') {
+          logger.warn(`⚠️  ${report.reportName}: ${check.reason}; rescheduling to the next slot without running`)
+          // Passing the schedule makes updateReport recompute nextRunTime
+          await updateReport(report.reportId, { schedule: report.schedule })
+          skipped++
+          continue
+        }
 
-        // Auto-pause the report
-        const { updateReport } = await import('./scheduled-reports')
-        await updateReport(report.reportId, { status: 'paused' })
-
-        paused++
+        if (check.action === 'pause') {
+          logger.warn(`⚠️  Suspicious pattern detected for ${report.reportName}: ${check.reason}`)
+          logger.warn(`⚠️  Auto-pausing report for safety`)
+          await updateReport(report.reportId, { status: 'paused' })
+          sendUserNotification({
+            userId: report.createdBy,
+            category: 'REPORT_READY',
+            title: `Report '${report.reportName}' was paused`,
+            body: `It was paused automatically: ${check.reason}. Resume it once the schedule looks right.`,
+            severity: 'warning',
+            actionUrl: reportsPageFor(isDatasetReport(report)),
+            actionLabel: 'View Reports',
+            metadata: { reportId: report.reportId, reason: check.reason }
+          }).catch(err => logger.warn('Failed to send report-paused notification:', err))
+          paused++
+          continue
+        }
+      } catch (error: any) {
+        // One report's bookkeeping failing must not stop the others from running
+        logger.error(`Safety check failed for ${report.reportName}, skipping this tick:`, error)
+        skipped++
         continue
       }
 
@@ -283,7 +317,7 @@ export async function processScheduledReports(): Promise<{
       }
 
       // Lock claimed successfully, execute the report
-      const result = await executeScheduledReport(report)
+      const result = await executeScheduledReport(report, { scheduledSlot: report.nextRunTime })
 
       if (result.success) {
         successful++
@@ -296,7 +330,7 @@ export async function processScheduledReports(): Promise<{
     }
 
     if (skipped > 0) {
-      logger.info(`⊘ Skipped ${skipped} report(s) (already claimed by other containers)`)
+      logger.info(`⊘ Skipped ${skipped} report(s) (claimed by another container or rescheduled)`)
     }
 
     if (paused > 0) {
@@ -315,68 +349,57 @@ export async function processScheduledReports(): Promise<{
   }
 }
 
+// Late runs within this window still go out (e.g. after a deploy or outage);
+// older ones are skipped to the next slot instead of sending stale data.
+const MAX_CATCH_UP_HOURS = 24
+
+// Executions in the last 24h (manual runs included) above which a report is
+// treated as stuck in a loop and paused.
+const MAX_RUNS_PER_DAY: Record<string, number> = {
+  daily: 5,
+  weekly: 3,
+  monthly: 2,
+  quarterly: 2
+}
+
 /**
- * Check if a report shows suspicious execution patterns
- * that might indicate a bug or misconfiguration
+ * Decide whether a due report should run.
+ * - realign: nextRunTime is not a slot this schedule produces (stored by an
+ *   older calculation or a corrupt write) or is more than a day overdue.
+ *   Recompute it and skip this tick; nothing is wrong with the report itself.
+ * - pause: the report has run far more often than its schedule allows.
  */
-async function checkForSuspiciousPattern(report: ScheduledReport): Promise<{
-  detected: boolean
-  reason?: string
-}> {
-  const now = new Date()
+export async function checkForSuspiciousPattern(
+  report: ScheduledReport,
+  now: Date = new Date(),
+  countRecentRuns: (reportId: string, since: Date) => Promise<number> = countExecutionsSince
+): Promise<{ action: 'run' | 'realign' | 'pause', reason?: string }> {
   const nextRun = new Date(report.nextRunTime)
 
-  // Check 1: Next run is more than 1 hour in the past
+  if (Number.isNaN(nextRun.getTime())) {
+    return { action: 'realign', reason: 'next run time is missing or invalid' }
+  }
+
   const hoursBehind = (now.getTime() - nextRun.getTime()) / (1000 * 60 * 60)
-  if (hoursBehind > 1) {
+  if (hoursBehind > MAX_CATCH_UP_HOURS) {
+    return { action: 'realign', reason: `next run time is ${hoursBehind.toFixed(1)} hours in the past` }
+  }
+
+  if (!isScheduledSlot(report.schedule, nextRun, report.schedule.timezone)) {
+    return { action: 'realign', reason: `next run time ${report.nextRunTime} does not match the ${report.schedule.frequency} schedule` }
+  }
+
+  // runCount is lifetime, so count the actual runs in the last 24 hours.
+  const threshold = MAX_RUNS_PER_DAY[report.schedule.frequency] || 5
+  const recentRuns = await countRecentRuns(report.reportId, new Date(now.getTime() - 24 * 60 * 60 * 1000))
+  if (recentRuns > threshold) {
     return {
-      detected: true,
-      reason: `Next run time is ${hoursBehind.toFixed(1)} hours in the past`
+      action: 'pause',
+      reason: `${recentRuns} runs in the last 24 hours (more than ${threshold} for a ${report.schedule.frequency} schedule)`
     }
   }
 
-  // Check 2: Excessive runs in a short period
-  // For daily reports: >5 runs in 24h is suspicious
-  // For weekly reports: >3 runs in 24h is suspicious
-  // For monthly reports: >2 runs in 24h is suspicious
-  if (report.lastRunTime) {
-    const lastRun = new Date(report.lastRunTime)
-    const hoursSinceLastRun = (now.getTime() - lastRun.getTime()) / (1000 * 60 * 60)
-
-    // If last run was in the past 24 hours, check run count
-    if (hoursSinceLastRun < 24) {
-      const maxRunsPerDay: Record<string, number> = {
-        daily: 5,
-        weekly: 3,
-        monthly: 2,
-        quarterly: 2
-      }
-
-      const threshold = maxRunsPerDay[report.schedule.frequency] || 5
-
-      if (report.runCount > threshold && hoursSinceLastRun < 24) {
-        return {
-          detected: true,
-          reason: `${report.runCount} runs detected (>${threshold} runs in 24h for ${report.schedule.frequency} schedule)`
-        }
-      }
-    }
-  }
-
-  // Check 3: Next run time doesn't match expected frequency
-  // This catches timezone conversion bugs
-  const calculatedNext = calculateNextRunTime(report.schedule, report.schedule.timezone)
-  const timeDiffHours = Math.abs(calculatedNext.getTime() - nextRun.getTime()) / (1000 * 60 * 60)
-
-  // Allow 2 hour tolerance for DST transitions
-  if (timeDiffHours > 2) {
-    return {
-      detected: true,
-      reason: `Stored next run differs from calculated by ${timeDiffHours.toFixed(1)} hours`
-    }
-  }
-
-  return { detected: false }
+  return { action: 'run' }
 }
 
 /**

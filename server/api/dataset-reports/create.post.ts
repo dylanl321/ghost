@@ -9,7 +9,8 @@ import { createReport } from '../../utils/scheduled-reports'
 import { validateEmails } from '../../utils/email-service'
 import { getUserEmail, isUserAdmin } from '../../utils/user-roles'
 import { logger } from '../../utils/logger'
-import { getDatasetReportConfigErrors, getScheduleErrors } from '../../utils/dataset-report-validation'
+import { getDatasetReportConfigErrors } from '../../utils/dataset-report-validation'
+import { getScheduleErrors } from '../../../shared/utils/report-schedule'
 
 interface CreateDatasetReportRequest {
   reportName: string
