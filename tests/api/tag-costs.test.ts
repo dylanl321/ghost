@@ -113,19 +113,19 @@ test('tag costs aggregate every AWS page with account selectors and preserve det
     const input = command.input
     assert.deepEqual(input.Filter?.Dimensions?.Values, ['111111111111', '222222222222'])
     assert.deepEqual(input.TimePeriod, timePeriod)
-    assert.ok(input.Metrics?.includes('NetUnblendedCost'))
+    assert.ok(input.Metrics?.includes('UnblendedCost'))
     if (!input.GroupBy) {
-      return { ResultsByTime: [{ TimePeriod: timePeriod, Total: { UnblendedCost: { Amount: '200' }, NetUnblendedCost: { Amount: '200' } } }] }
+      return { ResultsByTime: [{ TimePeriod: timePeriod, Total: { UnblendedCost: { Amount: '200' } } }] }
     }
     assert.deepEqual(input.GroupBy, [{ Type: 'DIMENSION', Key: 'LINKED_ACCOUNT' }, { Type: 'TAG', Key: 'Project' }])
     const groups = input.NextPageToken
       ? [
-          { Keys: ['222222222222', 'Project$Phoenix'], Metrics: { NetUnblendedCost: { Amount: '50' } } },
-          { Keys: ['222222222222', 'Project$Apollo'], Metrics: { NetUnblendedCost: { Amount: '30' } } }
+          { Keys: ['222222222222', 'Project$Phoenix'], Metrics: { UnblendedCost: { Amount: '50' } } },
+          { Keys: ['222222222222', 'Project$Apollo'], Metrics: { UnblendedCost: { Amount: '30' } } }
         ]
       : [
-          { Keys: ['111111111111', 'Project$Phoenix'], Metrics: { NetUnblendedCost: { Amount: '100' } } },
-          { Keys: ['111111111111', 'Project$'], Metrics: { NetUnblendedCost: { Amount: '20' } } }
+          { Keys: ['111111111111', 'Project$Phoenix'], Metrics: { UnblendedCost: { Amount: '100' } } },
+          { Keys: ['111111111111', 'Project$'], Metrics: { UnblendedCost: { Amount: '20' } } }
         ]
     return {
       ResultsByTime: [{ TimePeriod: timePeriod, Groups: groups }],
@@ -136,7 +136,7 @@ test('tag costs aggregate every AWS page with account selectors and preserve det
   const path = `/api/v1/costs/tags?tagKey=Project&${period}&ownedBy=owner%40example.test&ownedBy=other%40example.test`
   const response = await request(tagCostsHandler, path)
   assert.equal(response.status, 200)
-  assert.equal(response.data.data.costMetric, 'NetUnblendedCost')
+  assert.equal(response.data.data.costMetric, 'UnblendedCost')
   assert.equal(response.data.data.signedTotalCost, 200)
   assert.equal(response.data.data.totalTaggedCost, 180)
   assert.equal(response.data.data.totalUntaggedCost, 20)

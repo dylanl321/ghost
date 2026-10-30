@@ -114,13 +114,13 @@
       <UIcon :name="dataBasisIcon" class="mt-0.5 h-4 w-4 flex-shrink-0" />
       <p class="text-xs">
         <template v-if="dataMode === 'billable'">
-          Exact billable Net Unblended Cost Explorer tag data is shown. Account-level proforma totals remain the source for chargeback.
+          Exact billable Unblended Cost Explorer tag data is shown. Account-level proforma totals remain the source for chargeback.
         </template>
         <template v-else-if="tagCoverage && !proformaAvailable">
           A complete proforma estimate is unavailable for this scope, so exact billable tag costs are shown instead.
         </template>
         <template v-else>
-          Tag costs are account-and-month weighted proforma estimates based on billable Net Unblended tag distribution. They are directional and not suitable for chargeback.
+          Tag costs are account-and-month weighted proforma estimates based on billable Unblended tag distribution. They are directional and not suitable for chargeback.
         </template>
         <NuxtLink to="/support/docs?topic=cost-tags-guide" class="ml-1 underline underline-offset-2">Learn more</NuxtLink>
       </p>
