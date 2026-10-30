@@ -138,7 +138,7 @@ export async function runAthenaQuery(sql: string, options: AthenaQueryOptions): 
   const queryExecutionId = await startAthenaQuery(sql, options)
   const { client } = await athenaClientFor(options.environment)
 
-  let dataScannedBytes = 0
+  let dataScannedBytes: number
   for (;;) {
     const status = await client.send(new GetQueryExecutionCommand({ QueryExecutionId: queryExecutionId }))
     const state = status.QueryExecution?.Status?.State

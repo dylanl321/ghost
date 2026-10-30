@@ -227,7 +227,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       // Efficient: Query by account using primary key
       queryStrategy = 'account-query'
       logger.debug('[Alerts API] Using primary key query for account', { accountId: accountIds[0] })
-      result = await getAlertsByAccount(accountIds[0], queryOptions)
+      result = await getAlertsByAccount(accountIds[0]!, queryOptions)
     } else {
       // Least efficient: Full scan (log warning)
       queryStrategy = 'full-scan'

@@ -123,7 +123,7 @@ async function getAccountByRequestId(requestId: string): Promise<any | null> {
  */
 async function getAccountByPepId(pepId: string): Promise<any | null> {
   const record = await findRegistryRecord(item =>
-    item.pepExternalEnclaveID != null && String(item.pepExternalEnclaveID) === pepId
+    item.pepExternalEnclaveID !== undefined && item.pepExternalEnclaveID !== null && String(item.pepExternalEnclaveID) === pepId
   )
   return record ? normalizeAndEnrich(record) : null
 }

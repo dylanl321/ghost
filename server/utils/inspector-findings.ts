@@ -6,10 +6,8 @@
 
 import {
   ListFindingsCommand,
-  type Inspector2Client,
   type Finding,
-  type FilterCriteria,
-  type StringFilter
+  type FilterCriteria
 } from '@aws-sdk/client-inspector2'
 import { getInspector2Client } from '../lib/aws-client-factory'
 import { logger } from './logger'

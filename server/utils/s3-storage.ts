@@ -164,7 +164,7 @@ export async function getPresignedDownloadUrl(options: PresignedUrlOptions): Pro
     return url
   } catch (error: any) {
     logger.error('Error generating presigned URL:', error)
-    throw new Error(`Failed to generate presigned URL: ${error.message}`)
+    throw new Error(`Failed to generate presigned URL: ${error.message}`, { cause: error })
   }
 }
 
@@ -237,6 +237,6 @@ export async function listObjectsByPrefix(
   } catch (error: any) {
     // An empty list would read as "no reports stored"
     logger.error('Error listing S3 objects:', error)
-    throw new Error(`Failed to list S3 objects under ${prefix}: ${error.message}`)
+    throw new Error(`Failed to list S3 objects under ${prefix}: ${error.message}`, { cause: error })
   }
 }

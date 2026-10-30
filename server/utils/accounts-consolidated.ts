@@ -449,7 +449,7 @@ export async function lookupAccountUnified(criteria: AccountLookupCriteria): Pro
     // The registry stores the project code as projectNumber.
     if (criteria.projectCode) {
       const code = String(criteria.projectCode).toLowerCase()
-      if ([acc.projectCode, acc.projectNumber].some(value => value != null && String(value).toLowerCase() === code)) {
+      if ([acc.projectCode, acc.projectNumber].some(value => value !== undefined && value !== null && String(value).toLowerCase() === code)) {
         return true
       }
     }

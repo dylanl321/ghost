@@ -7,7 +7,6 @@
  */
 
 import { queryItems, scanItems } from './dynamodb'
-import { getDynamoDBClient } from '../lib/aws-client-factory'
 import {
   BUDGET_ALERTS_TABLE,
   BUDGET_ALERTS_INDEXES,

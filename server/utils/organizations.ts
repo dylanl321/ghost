@@ -268,7 +268,7 @@ export async function getOrganizationalUnitTree(
       return result
     }
 
-    const root = rootsResponse.Roots[0]
+    const root = rootsResponse.Roots[0]!
 
     // Per-walk concurrency limiter — serialises OU enumeration to ≤2 concurrent
     const limit = createConcurrencyLimiter(OU_WALK_CONCURRENCY)
@@ -447,7 +447,7 @@ export async function getAccountOU(
       return null
     }
 
-    const parent = response.Parents[0]
+    const parent = response.Parents[0]!
 
     // An account directly under the root has no OU to describe;
     // DescribeOrganizationalUnit rejects root IDs.

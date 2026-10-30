@@ -88,7 +88,7 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const handler = SECTION_HANDLERS[section]
+    const handler = SECTION_HANDLERS[section]!
     const data = await handler()
 
     return {

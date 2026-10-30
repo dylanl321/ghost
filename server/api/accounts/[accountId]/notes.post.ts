@@ -52,7 +52,7 @@ export default defineEventHandler(async (event) => {
       {
         accountId,
         content: body.content.trim(),
-        tags: Array.isArray(body.tags) ? body.tags.filter(tag => typeof tag === 'string') : [],
+        tags: Array.isArray(body.tags) ? body.tags.filter((tag: unknown) => typeof tag === 'string') : [],
         mentionedUsers
       },
       userEmail

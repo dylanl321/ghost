@@ -10,7 +10,7 @@ import tagCostsHandler from '../../server/api/v1/costs/tags.get'
 import tagKeysHandler from '../../server/api/v1/costs/tag-keys.get'
 import financialForecastHandler from '../../server/api/v1/forecasts/financial.get'
 import { clearClientCache } from '../../server/lib/aws-client-factory'
-import { costCache } from '../../server/utils/cache-manager'
+import { accountCache, costCache } from '../../server/utils/cache-manager'
 import { defineV1Alias } from '../../server/utils/v1-route'
 
 const auth = { isAuthenticated: true, authType: 'apikey', scopes: ['costs:read'] }
@@ -53,6 +53,8 @@ async function mockProviders(t: TestContext) {
   }
   clearClientCache()
   await costCache.clear()
+  // Account lookups share one cached registry scan; each test mocks its own registry
+  await accountCache.clear()
   t.after(async () => {
     for (const [name, value] of saved) {
       if (value === undefined) Reflect.deleteProperty(process.env, name)
@@ -60,6 +62,7 @@ async function mockProviders(t: TestContext) {
     }
     clearClientCache()
     await costCache.clear()
+    await accountCache.clear()
   })
   t.mock.method(OrganizationsClient.prototype, 'send', async () => ({ Accounts: accounts }))
   t.mock.method(STSClient.prototype, 'send', async () => ({

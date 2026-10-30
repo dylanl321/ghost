@@ -94,7 +94,7 @@ export async function filterAccounts(
         account.requestID ? String(account.requestID) : null
       ].filter(Boolean) // Remove undefined/null values
       // Emails are accepted as identifiers (see validateAccountFilters).
-      const emails = [account.email, account.awsAccountEmail]
+      const emails = [account.email, (account as { awsAccountEmail?: unknown }).awsAccountEmail]
         .filter((value): value is string => typeof value === 'string')
         .map(value => value.toLowerCase())
 
@@ -166,14 +166,16 @@ export async function filterAccounts(
             return compareFilterValues(stringValue, filter.value) < 0
           case 'lte':
             return compareFilterValues(stringValue, filter.value) <= 0
-          case 'in':
+          case 'in': {
             // Check if account value is in the comma-separated filter value
             const values = filter.value.split(',').map(v => v.trim().toLowerCase())
             return values.includes(stringValue.toLowerCase())
-          case 'not_in':
+          }
+          case 'not_in': {
             // Check if account value is NOT in the comma-separated filter value
             const notValues = filter.value.split(',').map(v => v.trim().toLowerCase())
             return !notValues.includes(stringValue.toLowerCase())
+          }
           default:
             return true // Unreachable: validateAccountFilters rejects unknown operators
         }
@@ -354,8 +356,8 @@ export function parseAccountFilters(query: Record<string, any>): AccountFilterCr
 
       if (Array.isArray(filtersData)) {
         criteria.advancedFilters = filtersData.map(filter => ({
-          key: filter?.key != null ? String(filter.key).trim() : '',
-          value: filter?.value != null ? String(filter.value).trim() : '',
+          key: filter?.key !== undefined && filter?.key !== null ? String(filter.key).trim() : '',
+          value: filter?.value !== undefined && filter?.value !== null ? String(filter.value).trim() : '',
           operator: (filter.operator || 'eq') as AdvancedFilter['operator']
         })).filter(filter => filter.key)
       } else {

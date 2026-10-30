@@ -108,11 +108,11 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.badRequest(event, 'importantTags must contain only strings')
   }
 
-  if (body.defaultGroupByTag != null && typeof body.defaultGroupByTag !== 'string') {
+  if (body.defaultGroupByTag !== undefined && body.defaultGroupByTag !== null && typeof body.defaultGroupByTag !== 'string') {
     return errors.badRequest(event, 'defaultGroupByTag must be a string')
   }
   for (const field of ['tagDescriptions', 'tagValueAliases'] as const) {
-    if (body[field] != null && !isStringMap(body[field])) {
+    if (body[field] !== undefined && body[field] !== null && !isStringMap(body[field])) {
       return errors.badRequest(event, `${field} must be an object of string values`)
     }
   }

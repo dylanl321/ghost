@@ -159,6 +159,6 @@ export async function getInstanceAlarms(
     logger.error(`[CloudWatch] Failed to get alarms for ${instanceId}:`, error.message)
     throw new Error(error.name === 'AccessDeniedException'
       ? `CloudWatch access denied for account ${accountId}: ${error.message}`
-      : `CloudWatch alarm lookup failed for ${instanceId}: ${error.message}`)
+      : `CloudWatch alarm lookup failed for ${instanceId}: ${error.message}`, { cause: error })
   }
 }

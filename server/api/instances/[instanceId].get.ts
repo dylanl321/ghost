@@ -21,10 +21,7 @@ import {
   getAggregatorName,
   type ResourceDetail
 } from '../../utils/config-service'
-import {
-  getBatchOptimizationRecommendations,
-  generateOptimizationSummaryText
-} from '../../utils/compute-optimizer'
+import { getBatchOptimizationRecommendations } from '../../utils/compute-optimizer'
 import { lookupAccountOptimized, getEnvironmentAccountId } from '../../utils/account-lookup-optimized'
 import type { AWSEnvironmentType } from '../../types'
 import { logger } from '../../utils/logger'
@@ -295,7 +292,7 @@ export default defineEventHandler(handleAsync(async (event) => {
         accountIds = { commercial: accountIdentifier, govcloud: accountIdentifier }
       } else {
         try {
-          const { account } = await lookupAccountOptimized(event, accountIdentifier, { includeDecommissioned: true })
+          const account = (await lookupAccountOptimized(event, accountIdentifier, { includeDecommissioned: true }))?.account
           accountIds = {
             commercial: getEnvironmentAccountId(account, 'commercial'),
             govcloud: getEnvironmentAccountId(account, 'govcloud')
