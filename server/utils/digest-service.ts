@@ -12,7 +12,7 @@ import { sendEmail, escapeHtml } from './email-service'
 import { getConfigValue } from './site-config'
 import { logger } from './logger'
 import type { UserNotification, NotificationCategory } from '#shared/types/notifications'
-import { CATEGORY_DISPLAY } from '#shared/types/notifications'
+import { CATEGORY_DISPLAY, DEFAULT_NOTIFICATION_PREFERENCES } from '#shared/types/notifications'
 
 const SITE_URL = process.env.NUXT_PUBLIC_SITE_URL || 'https://ghost.gd-ms.com'
 
@@ -106,9 +106,9 @@ function shouldDeliverDigestNow(
   notifPrefs: Record<string, any>,
   userTimezone: string
 ): boolean {
-  const frequency = notifPrefs.emailDigestFrequency || 'daily'
-  const preferredHour = notifPrefs.emailDigestTime ?? 8 // Default 8 AM
-  const preferredDay = notifPrefs.emailDigestDay || 'monday'
+  const frequency = notifPrefs.emailDigestFrequency || DEFAULT_NOTIFICATION_PREFERENCES.emailDigestFrequency
+  const preferredHour = notifPrefs.emailDigestTime ?? DEFAULT_NOTIFICATION_PREFERENCES.emailDigestTime
+  const preferredDay = notifPrefs.emailDigestDay || DEFAULT_NOTIFICATION_PREFERENCES.emailDigestDay
 
   // Get current time in user's timezone
   let now: Date

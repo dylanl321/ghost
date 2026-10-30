@@ -8,6 +8,7 @@ import type { H3Event } from 'h3'
 import { requireScheduledReportAccess } from './dataset-report-access'
 import { executeScheduledReport } from './report-scheduler'
 import { validateEmails } from './email-service'
+import { getUserEmail } from './user-roles'
 import { logger } from './logger'
 
 export async function handleReportTestSend(event: H3Event, options: { datasetOnly?: boolean } = {}) {
@@ -18,11 +19,14 @@ export async function handleReportTestSend(event: H3Event, options: { datasetOnl
 
   const report = await requireScheduledReportAccess(event, reportId, { datasetOnly: options.datasetOnly })
 
+  // A test goes to the person who asked for it ("check your inbox") unless
+  // they name recipients; it used to email the report's whole distribution.
   // Dataset reports send { recipients }, the cost report page { testRecipient }
   const body = await readBody(event).catch(() => undefined) as { recipients?: unknown, testRecipient?: unknown } | undefined
-  let recipients = report.recipients
+  const requester = getUserEmail(event)
+  let recipients: string[] = requester ? [requester] : report.recipients
   if (Array.isArray(body?.recipients) && body.recipients.length > 0) {
-    recipients = body.recipients
+    recipients = body.recipients as string[]
   } else if (typeof body?.testRecipient === 'string' && body.testRecipient.trim()) {
     recipients = [body.testRecipient.trim()]
   }

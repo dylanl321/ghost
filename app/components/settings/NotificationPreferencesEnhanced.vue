@@ -245,8 +245,10 @@
 </template>
 
 <script setup lang="ts">
+import { DEFAULT_NOTIFICATION_PREFERENCES } from '#shared/types/notifications'
+
 const toast = useToast()
-const { setPreference, getPreference } = useUserPreferences()
+const { setPreference, getPreference, initialized } = useUserPreferences()
 const { clearAll: clearAllNotifications, muteTemporarily } = useNotifications()
 
 const showClearConfirm = ref(false)
@@ -255,16 +257,9 @@ const muting = ref(false)
 const clearing = ref(false)
 const mutedUntil = ref<string | null>(null)
 
+// Shared with the server so the page shows what is actually delivered
 const defaultPrefs = {
-  criticalSecurityFindings: true,
-  complianceViolations: true,
-  securityScoreChanges: false,
-  pipelineFailures: true,
-  deploymentCompletions: false,
-  emailDigestEnabled: true,
-  emailDigestFrequency: 'weekly',
-  emailDigestTime: 8,
-  emailDigestDay: 'monday',
+  ...DEFAULT_NOTIFICATION_PREFERENCES,
   mutedUntil: null as string | null
 }
 
@@ -300,16 +295,21 @@ function formatMuteTime(iso: string): string {
   return new Date(iso).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' })
 }
 
-onMounted(() => {
+// Wait for saved preferences to load: reading them on mount showed defaults
+// on a fresh page load, and saving then overwrote the real settings
+watch(initialized, (ready) => {
+  if (!ready) return
   const saved = getPreference('notificationPreferences', defaultPrefs)
   Object.assign(prefs, saved)
   mutedUntil.value = prefs.mutedUntil
-})
+}, { immediate: true })
 
 async function save() {
   saving.value = true
   try {
-    const success = await setPreference('notificationPreferences', { ...prefs })
+    // Mute is changed through its own endpoint; send its current value so a
+    // save does not restore a stale one
+    const success = await setPreference('notificationPreferences', { ...prefs, mutedUntil: mutedUntil.value })
     if (success) {
       toast.add({ title: 'Settings Saved', description: 'Your notification preferences have been updated.', color: 'green', icon: 'i-heroicons-check-circle' })
     } else {

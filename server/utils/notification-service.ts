@@ -10,6 +10,7 @@
 import { v4 as uuidv4 } from 'uuid'
 import {
   CATEGORY_PREFERENCE_MAP,
+  DEFAULT_NOTIFICATION_PREFERENCES,
   type MuteDuration,
   type UserNotification,
   type NotificationCategory,
@@ -136,8 +137,8 @@ export async function sendUserNotification(
       const prefKey = CATEGORY_PREFERENCE_MAP[options.category]!
       try {
         const userPrefs = await getUserPreferences(options.userId)
-        const notifPrefs = userPrefs.preferences?.notificationPreferences || {}
-        const isEnabled = notifPrefs[prefKey] !== false // Default to enabled
+        const notifPrefs = { ...DEFAULT_NOTIFICATION_PREFERENCES, ...userPrefs.preferences?.notificationPreferences }
+        const isEnabled = notifPrefs[prefKey as keyof typeof notifPrefs] !== false
 
         if (isEnabled && options.severity === 'critical') {
           shouldSendImmediateEmail = true
