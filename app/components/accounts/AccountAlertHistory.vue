@@ -452,7 +452,7 @@ async function fetchAlerts() {
       // Always default to current month (it's always in the dropdown now)
       selectedMonth.value = getCurrentMonthKey()
     } else {
-      throw new Error(data.error || 'Failed to fetch alerts')
+      throw new Error(apiErrorMessage(data, 'Failed to fetch alerts'))
     }
   } catch (err: any) {
     logger.error('Failed to fetch budget alerts:', err)
@@ -484,7 +484,7 @@ async function viewEmail(alert: BudgetAlert) {
       emailHtml.value = data.data.html
       emailSubject.value = data.data.subject || alert.email_subject || 'Budget Alert'
     } else {
-      throw new Error(data.error || 'Failed to load email content')
+      throw new Error(apiErrorMessage(data, 'Failed to load email content'))
     }
   } catch (err: any) {
     logger.error('Failed to fetch email content:', err)

@@ -265,7 +265,7 @@ async function viewEmail(alert: BudgetAlert) {
       emailHtml.value = res.data.html
       emailSubject.value = res.data.subject || alert.email_subject || 'Budget Alert'
     } else {
-      throw new Error(res.error || 'Failed to load email content')
+      throw new Error(apiErrorMessage(res, 'Failed to load email content'))
     }
   } catch (err: any) {
     logger.error('Failed to fetch email content:', err)

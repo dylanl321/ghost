@@ -319,7 +319,7 @@ async function fetchNotifications() {
     if (data.success && data.data?.notifications) {
       notifications.value = data.data.notifications
     } else {
-      throw new Error(data.error || 'Failed to fetch notifications')
+      throw new Error(apiErrorMessage(data, 'Failed to fetch notifications'))
     }
   } catch (err: any) {
     logger.error('Failed to fetch notifications:', err)

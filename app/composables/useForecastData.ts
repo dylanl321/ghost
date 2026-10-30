@@ -40,7 +40,7 @@ export const useForecastData = () => {
         await fetchForecastData()
         return response
       } else {
-        throw new Error(response.error || 'Failed to upload forecast data')
+        throw new Error(apiErrorMessage(response, 'Failed to upload forecast data'))
       }
     } catch (err: any) {
       error.value = err.message || 'Failed to upload forecast data'
@@ -79,7 +79,7 @@ export const useForecastData = () => {
         forecastData.value = response.data || []
         return response.data
       } else {
-        throw new Error(response.error || 'Failed to fetch forecast data')
+        throw new Error(apiErrorMessage(response, 'Failed to fetch forecast data'))
       }
     } catch (err: any) {
       error.value = err.message || 'Failed to fetch forecast data'
@@ -108,7 +108,7 @@ export const useForecastData = () => {
         forecastData.value = forecastData.value.filter(item => !ids.includes(item.id))
         return response
       } else {
-        throw new Error(response.error || 'Failed to delete forecast data')
+        throw new Error(apiErrorMessage(response, 'Failed to delete forecast data'))
       }
     } catch (err: any) {
       error.value = err.message || 'Failed to delete forecast data'
@@ -144,7 +144,7 @@ export const useForecastData = () => {
         }
         return response
       } else {
-        throw new Error(response.error || 'Failed to update forecast data')
+        throw new Error(apiErrorMessage(response, 'Failed to update forecast data'))
       }
     } catch (err: any) {
       error.value = err.message || 'Failed to update forecast data'
