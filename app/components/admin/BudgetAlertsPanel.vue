@@ -172,7 +172,7 @@
       >
         <!-- Date Column -->
         <template #created_at-data="{ row }">
-          {{ formatDate(row.created_at) }}
+          {{ formatDateTime(row.created_at) }}
         </template>
 
         <!-- Account Column -->
@@ -203,10 +203,10 @@
         <!-- Spend Column -->
         <template #spend-data="{ row }">
           <span v-if="row.overspend_amount" class="text-red-400 font-medium">
-            +{{ formatCurrency(row.overspend_amount) }}
+            +{{ formatCurrency(row.overspend_amount, 0) }}
           </span>
           <span v-else class="text-gray-400 text-sm">
-            {{ formatCurrency(row.actual_spend) }} / {{ formatCurrency(row.budget) }}
+            {{ formatCurrency(row.actual_spend, 0) }} / {{ formatCurrency(row.budget, 0) }}
           </span>
         </template>
 
@@ -368,27 +368,7 @@ const columns = [
   { key: 'actions', label: '' }
 ]
 
-// Format date as "Jan 15, 2026 2:30 PM"
-function formatDate(timestamp: string): string {
-  return new Date(timestamp).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  })
-}
-
-// Format currency values
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(amount)
-}
+const { formatDateTime } = useDateFormatter()
 
 // Get color for alert level badge
 function getLevelColor(level: string): string {

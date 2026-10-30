@@ -429,7 +429,7 @@
             <div>
               <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Last Run</label>
               <div class="mt-1 text-sm text-gray-900 dark:text-white">
-                {{ selectedReport.lastRunTime ? formatDate(selectedReport.lastRunTime) : 'Never' }}
+                {{ selectedReport.lastRunTime ? formatShortDateTime(selectedReport.lastRunTime) : 'Never' }}
               </div>
             </div>
           </div>
@@ -898,17 +898,7 @@ async function resumeAllPaused() {
   resumingAll.value = false
 }
 
-// Date formatting helpers
-function formatDate(dateString: string): string {
-  const date = new Date(dateString)
-  return date.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  })
-}
+const { formatShortDateTime } = useDateFormatter()
 
 function formatDateInTimezone(dateString: string, timezone: string): string {
   const date = new Date(dateString)

@@ -79,6 +79,18 @@ export function formatNumber(value: number, decimalPlaces: number): string {
   }).format(value)
 }
 
+/**
+ * Format a duration given in milliseconds ("850ms", "42s", "3m 5s").
+ * Returns 'N/A' when the value is missing.
+ */
+export function formatDurationMs(ms: number | null | undefined): string {
+  if (ms === null || ms === undefined || isNaN(ms)) return 'N/A'
+  if (ms < 1000) return `${ms}ms`
+  const seconds = Math.floor(ms / 1000)
+  if (seconds < 60) return `${seconds}s`
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+}
+
 export interface FormatTimeAgoOptions {
   /** Returned when the value is missing or not a valid date (default: '') */
   empty?: string

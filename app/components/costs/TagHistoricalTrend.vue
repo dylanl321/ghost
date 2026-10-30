@@ -182,12 +182,6 @@ const chartOption = computed(() => {
     })
   }
 
-  const formatCurrency = (value: number) => {
-    if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`
-    if (value >= 1000) return `$${(value / 1000).toFixed(1)}K`
-    return `$${value.toFixed(0)}`
-  }
-
   return {
     backgroundColor: 'transparent',
     tooltip: {
@@ -198,7 +192,7 @@ const chartOption = computed(() => {
           .sort((a: any, b: any) => (b.value || 0) - (a.value || 0))
           .forEach((item: any) => {
             if (item.value > 0) {
-              result += `${item.marker} ${item.seriesName}: ${formatCurrency(item.value)}<br/>`
+              result += `${item.marker} ${item.seriesName}: ${formatCostValue(item.value)}<br/>`
             }
           })
         return result
@@ -229,7 +223,7 @@ const chartOption = computed(() => {
       type: 'value',
       axisLabel: {
         color: '#9ca3af',
-        formatter: (v: number) => formatCurrency(v)
+        formatter: (v: number) => formatCostValue(v)
       },
       axisLine: { lineStyle: { color: 'rgba(156, 163, 175, 0.2)' } },
       splitLine: { lineStyle: { color: 'rgba(156, 163, 175, 0.05)' } }

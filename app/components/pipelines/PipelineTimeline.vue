@@ -38,7 +38,7 @@
         <!-- Timestamp column with formatted date -->
         <template #timestamp_start-data="{ row }">
           <div class="text-sm">
-            <div class="text-white">{{ formatDate(row.timestamp_start) }}</div>
+            <div class="text-white">{{ formatDateOnly(row.timestamp_start) }}</div>
             <div class="text-gray-400 text-xs">{{ formatTime(row.timestamp_start) }}</div>
           </div>
         </template>
@@ -270,15 +270,7 @@ function formatDuration(seconds: number): string {
   return `${secs}s`
 }
 
-function formatDate(timestamp: string): string {
-  if (!timestamp) return 'N/A'
-  const date = new Date(timestamp)
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  })
-}
+const { formatDateOnly } = useDateFormatter()
 
 function formatTime(timestamp: string): string {
   if (!timestamp) return ''

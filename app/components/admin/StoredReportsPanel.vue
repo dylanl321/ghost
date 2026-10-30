@@ -202,7 +202,7 @@
           <!-- Last Modified -->
           <template #lastModified-data="{ row }">
             <div class="text-sm">
-              <div class="text-gray-900 dark:text-white">{{ formatDate(row.lastModified) }}</div>
+              <div class="text-gray-900 dark:text-white">{{ formatShortDateTime(row.lastModified) }}</div>
               <div class="text-xs text-gray-500 dark:text-gray-400">
                 {{ formatTimeAgo(row.lastModified) }}
               </div>
@@ -439,17 +439,7 @@ async function refreshData() {
   await fetchStoredReports()
 }
 
-// Date formatting helpers
-function formatDate(dateString: string): string {
-  const date = new Date(dateString)
-  return date.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  })
-}
+const { formatShortDateTime } = useDateFormatter()
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B'

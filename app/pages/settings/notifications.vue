@@ -58,7 +58,7 @@
               </UBadge>
             </template>
             <template #createdAt-data="{ row }">
-              <span class="text-xs text-gray-500">{{ formatDate(row.createdAt) }}</span>
+              <span class="text-xs text-gray-500">{{ formatDateTime(row.createdAt) }}</span>
             </template>
           </UTable>
 
@@ -125,9 +125,7 @@ function getCategoryLabel(category: NotificationCategory): string {
   return CATEGORY_DISPLAY[category]?.label || category
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' })
-}
+const { formatDateTime } = useDateFormatter()
 
 onMounted(() => {
   fetchNotifications()

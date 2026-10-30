@@ -72,7 +72,7 @@
           <Icon :name="row.emailSent ? 'i-heroicons-check-circle' : 'i-heroicons-clock'" :class="row.emailSent ? 'text-green-500' : 'text-gray-400'" class="w-5 h-5" />
         </template>
         <template #createdAt-data="{ row }">
-          <span class="text-xs text-gray-500">{{ formatDate(row.createdAt) }}</span>
+          <span class="text-xs text-gray-500">{{ formatDateTime(row.createdAt) }}</span>
         </template>
       </UTable>
 
@@ -144,9 +144,7 @@ function getCategoryLabel(category: NotificationCategory): string {
   return CATEGORY_DISPLAY[category]?.label || category
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' })
-}
+const { formatDateTime } = useDateFormatter()
 
 async function loadNotifications(append = false) {
   if (append) {

@@ -42,7 +42,7 @@
     >
       <!-- Date Column -->
       <template #created_at-data="{ row }">
-        <span class="text-sm">{{ formatDate(row.created_at) }}</span>
+        <span class="text-sm">{{ formatShortDateTime(row.created_at) }}</span>
       </template>
 
       <!-- Account Column -->
@@ -186,16 +186,7 @@ const columns = [
   { key: 'actions', label: '' }
 ]
 
-// Format date as "Jan 15, 2:30 PM"
-function formatDate(timestamp: string): string {
-  return new Date(timestamp).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  })
-}
+const { formatShortDateTime } = useDateFormatter()
 
 // Truncate account name for compact display
 function truncateName(name: string): string {

@@ -8,7 +8,7 @@
               Email Delivery Details
             </h3>
             <p class="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-              {{ formatDate(execution?.executionTime) }}
+              {{ formatDateTime(execution?.executionTime) }}
             </p>
           </div>
           <UButton
@@ -204,7 +204,7 @@
           <div>
             <p class="text-xs text-gray-600 dark:text-gray-400 mb-1">Duration</p>
             <p class="text-sm font-semibold text-gray-900 dark:text-white">
-              {{ formatDuration(execution.duration) }}
+              {{ formatDurationMs(execution.duration) }}
             </p>
           </div>
           <div>
@@ -274,17 +274,7 @@ function close() {
   isOpen.value = false
 }
 
-function formatDate(dateString?: string): string {
-  if (!dateString) return 'N/A'
-  return new Date(dateString).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  })
-}
+const { formatDateTime } = useDateFormatter()
 
 function formatTime(dateString: string): string {
   return new Date(dateString).toLocaleTimeString('en-US', {
@@ -293,16 +283,6 @@ function formatTime(dateString: string): string {
     second: '2-digit',
     hour12: true
   })
-}
-
-function formatDuration(ms?: number): string {
-  if (!ms) return 'N/A'
-  if (ms < 1000) return `${ms}ms`
-  const seconds = Math.floor(ms / 1000)
-  if (seconds < 60) return `${seconds}s`
-  const minutes = Math.floor(seconds / 60)
-  const remainingSeconds = seconds % 60
-  return `${minutes}m ${remainingSeconds}s`
 }
 
 function formatBytes(bytes?: number): string {

@@ -13,11 +13,11 @@ export function useDateFormatter() {
   /**
    * Format a date with custom options, respecting user timezone preference
    */
-  function formatDate(timestamp: string | Date | null | undefined, options?: Intl.DateTimeFormatOptions): string {
+  function formatDate(timestamp: string | number | Date | null | undefined, options?: Intl.DateTimeFormatOptions): string {
     if (!timestamp) return 'N/A'
 
     try {
-      const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp
+      const date = timestamp instanceof Date ? timestamp : new Date(timestamp)
 
       return date.toLocaleString('en-US', {
         timeZone: timezone.value,
@@ -32,7 +32,7 @@ export function useDateFormatter() {
   /**
    * Format just the date portion (e.g., "Nov 18, 2025")
    */
-  function formatDateOnly(timestamp: string | Date | null | undefined): string {
+  function formatDateOnly(timestamp: string | number | Date | null | undefined): string {
     return formatDate(timestamp, {
       month: 'short',
       day: 'numeric',
@@ -53,14 +53,26 @@ export function useDateFormatter() {
   }
 
   /**
-   * Format full date and time (e.g., "Nov 18, 2025, 07:16 AM")
+   * Format full date and time (e.g., "Nov 18, 2025, 7:16 AM")
    */
-  function formatDateTime(timestamp: string | Date | null | undefined): string {
+  function formatDateTime(timestamp: string | number | Date | null | undefined): string {
     return formatDate(timestamp, {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
-      hour: '2-digit',
+      hour: 'numeric',
+      minute: '2-digit'
+    })
+  }
+
+  /**
+   * Format date and time without the year (e.g., "Nov 18, 7:16 AM")
+   */
+  function formatShortDateTime(timestamp: string | number | Date | null | undefined): string {
+    return formatDate(timestamp, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
       minute: '2-digit'
     })
   }
@@ -134,6 +146,7 @@ export function useDateFormatter() {
     formatDateOnly,
     formatTimeOnly,
     formatDateTime,
+    formatShortDateTime,
     formatRelativeTime,
     formatDuration,
     formatDurationShort

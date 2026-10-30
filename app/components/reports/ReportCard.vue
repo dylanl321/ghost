@@ -32,7 +32,7 @@
         <div class="flex-1">
           <ScheduleDisplay :schedule="report.schedule" text-class="text-gray-700 dark:text-gray-300" />
           <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Next run: {{ formatDate(report.nextRunTime) }}
+            Next run: {{ formatDateTime(report.nextRunTime) }}
           </p>
         </div>
       </div>
@@ -157,17 +157,6 @@ const lastRunIconClass = computed(() => {
     : 'text-red-500'
 })
 
-// Date formatting helpers
-function formatDate(dateString: string): string {
-  const date = new Date(dateString)
-  return date.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  })
-}
+const { formatDateTime } = useDateFormatter()
 
 </script>

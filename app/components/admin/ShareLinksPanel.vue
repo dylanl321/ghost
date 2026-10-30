@@ -101,7 +101,7 @@
 
           <template #createdAt-data="{ row }">
             <div class="text-sm">
-              <div class="text-gray-900 dark:text-white">{{ formatDate(row.createdAt) }}</div>
+              <div class="text-gray-900 dark:text-white">{{ formatDateOnly(row.createdAt) }}</div>
               <div class="text-xs text-gray-500 dark:text-gray-400">
                 {{ formatTimeAgo(row.createdAt) }}
               </div>
@@ -156,14 +156,7 @@ const shortlinksColumns = [
   { key: 'actions', label: '', sortable: false }
 ]
 
-// Date formatting helpers
-const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  })
-}
+const { formatDateOnly } = useDateFormatter()
 
 // Copy to clipboard
 // Open link in new tab
