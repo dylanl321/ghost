@@ -3,9 +3,10 @@
  * Handles both OIDC user authentication and API key authentication
  */
 
-import { defineEventHandler, getHeader, createError, getRequestURL } from 'h3'
+import { defineEventHandler, getHeader, createError, getRequestURL, setResponseHeader } from 'h3'
 import type { H3Event } from 'h3'
 import { validateApiKey, recordApiKeyUsage } from '../utils/api-keys'
+import { getClientAddress } from '../utils/client-address'
 import { getUserSession as getOIDCSession } from '../utils/entra/session'
 import { logger } from '../utils/logger'
 
@@ -58,31 +59,45 @@ export function requiresAuthentication(url: string): boolean {
 }
 
 
+interface APIKeyAuthResult {
+  context: AuthContext | null
+  /** Why a presented key was rejected, so the 401 can say so. */
+  rejection?: string
+  /** Validation could not reach key storage; the key itself may be fine. */
+  unavailable?: boolean
+}
+
 /**
  * Validate API key authentication
  */
-async function validateAPIKeyAuth(event: H3Event): Promise<AuthContext | null> {
-  const apiKey = getHeader(event, 'x-api-key')
+async function validateAPIKeyAuth(event: H3Event): Promise<APIKeyAuthResult> {
+  const apiKey = getHeader(event, 'x-api-key')?.trim()
   
   if (!apiKey) {
-    return null
+    return { context: null }
   }
   
   try {
     const keyInfo = await validateApiKey(apiKey)
     if (!keyInfo.valid) {
-      return null
+      return {
+        context: null,
+        rejection: keyInfo.error || 'Invalid API key',
+        unavailable: keyInfo.error === 'API key validation failed'
+      }
     }
     
     return {
-      isAuthenticated: true,
-      authType: 'apikey',
-      apiKeyId: keyInfo.id,
-      scopes: keyInfo.scopes || []
+      context: {
+        isAuthenticated: true,
+        authType: 'apikey',
+        apiKeyId: keyInfo.id,
+        scopes: keyInfo.scopes || []
+      }
     }
   } catch (error) {
     logger.error('API key validation failed:', error)
-    return null
+    return { context: null, rejection: 'API key validation failed', unavailable: true }
   }
 }
 
@@ -161,7 +176,8 @@ export default defineEventHandler(async (event) => {
   let authContext: AuthContext | null = null
 
   // Try API key authentication first
-  authContext = await validateAPIKeyAuth(event)
+  const apiKeyAuth = await validateAPIKeyAuth(event)
+  authContext = apiKeyAuth.context
 
   // If no API key, try OIDC authentication (includes nuxt-oidc-auth devMode sessions)
   if (!authContext) {
@@ -170,9 +186,20 @@ export default defineEventHandler(async (event) => {
   
   // If no valid authentication found
   if (!authContext || !authContext.isAuthenticated) {
+    if (apiKeyAuth.unavailable) {
+      // A storage outage is not the caller's fault; tell integrations to retry
+      // rather than to rotate a key that is probably still valid.
+      setResponseHeader(event, 'Retry-After', 5)
+      throw createError({
+        statusCode: 503,
+        statusMessage: 'API key validation is temporarily unavailable. Retry shortly.'
+      })
+    }
     throw createError({
       statusCode: 401,
-      statusMessage: 'Authentication required. Please provide a valid API key or sign in with Entra ID.'
+      statusMessage: apiKeyAuth.rejection
+        ? `${apiKeyAuth.rejection}. Provide a valid, active key in the x-api-key header.`
+        : 'Authentication required. Please provide a valid API key or sign in with Entra ID.'
     })
   }
 
@@ -217,9 +244,7 @@ export default defineEventHandler(async (event) => {
   if (authContext.authType === 'apikey' && authContext.apiKeyId) {
     const url = getRequestURL(event)
     const method = event.node.req.method || 'GET'
-    const ipAddress = event.node.req.headers['x-forwarded-for'] as string ||
-                      event.node.req.headers['x-real-ip'] as string ||
-                      event.node.req.socket?.remoteAddress
+    const ipAddress = getClientAddress(event.node.req)
     const userAgent = event.node.req.headers['user-agent'] as string
 
     // Record usage after request completes
