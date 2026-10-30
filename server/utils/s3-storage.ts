@@ -4,7 +4,7 @@
  * Supports uploads, downloads, presigned URLs, and object management
  */
 
-import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3'
+import { PutObjectCommand, GetObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { getS3Client } from '../lib/aws-client-factory'
 import { logger } from './logger'
@@ -39,18 +39,6 @@ export interface S3UploadResult {
   size: number
   etag?: string
   error?: string
-}
-
-/**
- * Object metadata result
- */
-export interface S3ObjectMetadata {
-  key: string
-  size: number
-  lastModified: Date
-  contentType: string
-  etag: string
-  metadata?: Record<string, string>
 }
 
 /**
@@ -102,8 +90,8 @@ function getDefaultPresignedExpiration(): number {
   return actualDays * 24 * 60 * 60 // Convert to seconds
 }
 
-// Deployment account ID where S3 bucket and DynamoDB tables are located
-const deploymentAccountId = '461760157232'
+// Deployment account that owns the storage bucket (same default as site-config)
+const deploymentAccountId = process.env.AWS_DEPLOYMENT_ACCOUNT_ID || '461760157232'
 
 /**
  * Upload a file to S3
@@ -143,7 +131,7 @@ export async function uploadToS3(options: UploadOptions): Promise<S3UploadResult
     return {
       success: false,
       key: options.key,
-      bucket: getBucketName(),
+      bucket: process.env.AWS_S3_STORAGE_BUCKET || '',
       size: options.buffer.length,
       error: error.message || 'Unknown S3 upload error'
     }
@@ -213,38 +201,6 @@ export async function deleteFromS3(key: string): Promise<{ success: boolean; err
 }
 
 /**
- * Get metadata for an S3 object
- */
-export async function getObjectMetadata(key: string): Promise<S3ObjectMetadata | null> {
-  try {
-    const bucket = getBucketName()
-    const region = getRegion()
-
-    // Get S3 client for GovCloud with role assumption to deployment account
-    const s3Client = await getS3Client('govcloud', region, deploymentAccountId)
-
-    const command = new HeadObjectCommand({
-      Bucket: bucket,
-      Key: key
-    })
-
-    const response = await s3Client.send(command)
-
-    return {
-      key,
-      size: response.ContentLength || 0,
-      lastModified: response.LastModified || new Date(),
-      contentType: response.ContentType || 'application/octet-stream',
-      etag: response.ETag || '',
-      metadata: response.Metadata
-    }
-  } catch (error: any) {
-    logger.error('Error getting S3 object metadata:', error)
-    return null
-  }
-}
-
-/**
  * List objects by prefix
  */
 export async function listObjectsByPrefix(
@@ -279,15 +235,8 @@ export async function listObjectsByPrefix(
       nextToken: response.NextContinuationToken
     }
   } catch (error: any) {
+    // An empty list would read as "no reports stored"
     logger.error('Error listing S3 objects:', error)
-    return { objects: [] }
+    throw new Error(`Failed to list S3 objects under ${prefix}: ${error.message}`)
   }
-}
-
-/**
- * Check if an object exists in S3
- */
-export async function objectExists(key: string): Promise<boolean> {
-  const metadata = await getObjectMetadata(key)
-  return metadata !== null
 }
