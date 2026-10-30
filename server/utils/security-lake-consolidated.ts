@@ -3,7 +3,9 @@
  * This file contains all Security Lake functionality in a single file to avoid duplicate import issues
  */
 
+import { createHash } from 'node:crypto'
 import { getAthenaClient } from '../lib/aws-client-factory'
+import { getEnvironmentConfig, runAthenaQuery, startAthenaQuery, getAthenaQueryRows } from './athena-query'
 import { getCacheManager } from './cache-manager'
 import { logger } from './logger'
 
@@ -69,34 +71,12 @@ export interface QueryResult {
     queryName: string
     recordCount: number
     dataScannedBytes: number
+    queryExecutionId?: string
+    cached?: boolean
   }
 }
 
-export interface EnvironmentConfig {
-  region: string
-  database: string
-  athenaResultsBucket: string
-  monitoringAccountId: string
-}
-
-// Configuration
-export function getEnvironmentConfig(environment: 'commercial' | 'govcloud'): EnvironmentConfig {
-  if (environment === 'govcloud') {
-    return {
-      region: process.env.AWS_GOVCLOUD_SECURITY_LAKE_REGION || 'us-gov-west-1',
-      database: process.env.AWS_GOVCLOUD_SECURITY_LAKE_DATABASE || 'amazon_security_lake_glue_db_us_gov_west_1',
-      athenaResultsBucket: process.env.AWS_GOVCLOUD_ATHENA_RESULTS_BUCKET || 'aws-athena-query-results-us-gov-west-1',
-      monitoringAccountId: process.env.AWS_GOVCLOUD_SECURITY_LAKE_ACCOUNT || '083876038518'
-    }
-  }
-  
-  return {
-    region: process.env.AWS_COMMERCIAL_SECURITY_LAKE_REGION || 'us-east-1',
-    database: process.env.AWS_COMMERCIAL_SECURITY_LAKE_DATABASE || 'amazon_security_lake_glue_db_us_east_1',
-    athenaResultsBucket: process.env.AWS_COMMERCIAL_ATHENA_RESULTS_BUCKET || 'aws-athena-query-results-us-east-1-253821132832',
-    monitoringAccountId: process.env.AWS_COMMERCIAL_SECURITY_LAKE_ACCOUNT || '253821132832'
-  }
-}
+export { getEnvironmentConfig, type EnvironmentConfig } from './athena-query'
 
 export function buildTableName(
   environment: 'commercial' | 'govcloud',
@@ -357,7 +337,9 @@ export function getAllQueryIds(): string[] {
 
 // Execution Functions
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
-const DEFAULT_TIMEOUT_SECONDS = parseInt(process.env.ATHENA_TIMEOUT_SECONDS || '60')
+const DEFAULT_TIMEOUT_SECONDS = parseInt(process.env.ATHENA_TIMEOUT_SECONDS || '60') || 60
+// Stored queries cap LIMIT at 10,000
+const MAX_ASYNC_RESULT_ROWS = 10000
 
 export async function executeStoredQuery(request: QueryExecutionRequest): Promise<QueryResult> {
   const { queryId, parameters, environment = 'commercial', dryRun = false, async = false } = request
@@ -399,7 +381,7 @@ export async function executeStoredQuery(request: QueryExecutionRequest): Promis
     logger.error(`[Security Lake] Query execution failed:`, error)
     return {
       success: false,
-      error: error instanceof Error ? (error instanceof Error ? error.message : String(error)) : String(error)
+      error: error instanceof Error ? error.message : String(error)
     }
   }
 }
@@ -495,123 +477,39 @@ export function buildSQL(query: StoredQuery, parameters: Record<string, any>, en
 }
 
 async function executeSQL(sql: string, query: StoredQuery, environment: 'commercial' | 'govcloud', async: boolean = false): Promise<QueryResult> {
+  const metadata = { queryId: query.id, queryName: query.name }
+
+  if (async) {
+    logger.info(`[Security Lake] Starting async query '${query.id}' in ${environment}`)
+    const queryExecutionId = await startAthenaQuery(sql, { environment })
+    return { success: true, data: [], metadata: { ...metadata, recordCount: 0, dataScannedBytes: 0, queryExecutionId } }
+  }
+
+  // Keyed by a hash of the full SQL: parameters (accounts, time window,
+  // limit) are part of the statement, so a prefix would collide across them.
   const cache = getCacheManager()
-  const cacheKey = `security-lake:${query.id}:${Buffer.from(sql).toString('base64').slice(0, 32)}`
-
-  // Check cache first
-  const cached = await cache.get(cacheKey)
+  const cacheKey = `security-lake:${environment}:${query.id}:${createHash('sha256').update(sql).digest('hex')}`
+  const cached = await cache.get<QueryResult>(cacheKey)
   if (cached) {
-    return { ...cached, metadata: { ...cached.metadata, cached: true } }
+    return { ...cached, metadata: { ...cached.metadata!, cached: true } }
   }
 
-  const startTime = Date.now()
-  const config = getEnvironmentConfig(environment)
+  logger.info(`[Security Lake] Executing query '${query.id}' in ${environment}`)
+  const result = await runAthenaQuery(sql, { environment, timeoutMs: DEFAULT_TIMEOUT_SECONDS * 1000 })
 
-  try {
-    // Get Athena client
-    const athenaClient = await getAthenaClient(environment, config.region, config.monitoringAccountId)
-
-    logger.info(`[Security Lake V2] Executing query '${query.id}' in ${environment}`)
-
-    // Start query execution
-    const { StartQueryExecutionCommand } = await import('@aws-sdk/client-athena')
-    const startResponse = await athenaClient.send(new StartQueryExecutionCommand({
-      QueryString: sql,
-      WorkGroup: 'primary',
-      ResultConfiguration: {
-        OutputLocation: `s3://${config.athenaResultsBucket}/security-lake/`
-      }
-    }))
-
-    if (!startResponse.QueryExecutionId) {
-      throw new Error('Failed to start Athena query')
+  const queryResult: QueryResult = {
+    success: true,
+    data: result.rows,
+    executionTimeMs: result.executionTimeMs,
+    metadata: {
+      ...metadata,
+      recordCount: result.rows.length,
+      dataScannedBytes: result.dataScannedBytes,
+      queryExecutionId: result.queryExecutionId
     }
-
-    const queryExecutionId = startResponse.QueryExecutionId
-
-    // If async mode, return query ID immediately
-    if (async) {
-      return {
-        success: true,
-        data: [],
-        metadata: {
-          queryId: query.id,
-          queryName: query.name,
-          recordCount: 0,
-          dataScannedBytes: 0,
-          queryExecutionId: queryExecutionId
-        }
-      }
-    }
-
-    // Wait for completion
-    const { GetQueryExecutionCommand } = await import('@aws-sdk/client-athena')
-    let attempts = 0
-    const pollIntervalMs = 2000 // Check status every 2 seconds
-    const maxAttempts = Math.ceil(DEFAULT_TIMEOUT_SECONDS * 1000 / pollIntervalMs) // Dynamic based on timeout
-
-    while (attempts < maxAttempts) {
-      const statusResponse = await athenaClient.send(new GetQueryExecutionCommand({
-        QueryExecutionId: startResponse.QueryExecutionId
-      }))
-
-      const state = statusResponse.QueryExecution?.Status?.State
-
-      if (state === 'SUCCEEDED') {
-        break
-      } else if (state === 'FAILED' || state === 'CANCELLED') {
-        const reason = statusResponse.QueryExecution?.Status?.StateChangeReason || 'Unknown error'
-        throw new Error(`Query failed: ${reason}`)
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      attempts++
-    }
-
-    if (attempts >= maxAttempts) {
-      throw new Error(`Query timeout after ${DEFAULT_TIMEOUT_SECONDS} seconds`)
-    }
-
-    // Get results
-    const { GetQueryResultsCommand } = await import('@aws-sdk/client-athena')
-    const resultsResponse = await athenaClient.send(new GetQueryResultsCommand({
-      QueryExecutionId: startResponse.QueryExecutionId
-    }))
-
-    // Parse results
-    const rows = resultsResponse.ResultSet?.Rows || []
-    const columns = rows[0]?.Data || []
-    const data = rows.slice(1).map(row => {
-      const record: Record<string, any> = {}
-      row.Data?.forEach((cell, index) => {
-        const columnName = columns[index]?.VarCharValue || `column_${index}`
-        record[columnName] = cell.VarCharValue || null
-      })
-      return record
-    })
-
-    const executionTimeMs = Date.now() - startTime
-    const result: QueryResult = {
-      success: true,
-      data,
-      executionTimeMs,
-      metadata: {
-        queryId: query.id,
-        queryName: query.name,
-        recordCount: data.length,
-        dataScannedBytes: 0 // Would need to get this from query execution details
-      }
-    }
-
-    // Cache result
-    await cache.set(cacheKey, result, { ttl: CACHE_TTL_MS / 1000 })
-
-    return result
-
-  } catch (error) {
-    logger.error(`[Security Lake V2] SQL execution failed:`, error)
-    throw error
   }
+  await cache.set(cacheKey, queryResult, { ttl: CACHE_TTL_MS / 1000 })
+  return queryResult
 }
 
 export async function getAsyncQueryStatus(
@@ -619,11 +517,10 @@ export async function getAsyncQueryStatus(
   queryName: string,
   environment: 'commercial' | 'govcloud' = 'commercial'
 ): Promise<QueryStatusResponse> {
-  const config = getEnvironmentConfig(environment)
-
   try {
+    const config = getEnvironmentConfig(environment)
     const athenaClient = await getAthenaClient(environment, config.region, config.monitoringAccountId)
-    const { GetQueryExecutionCommand, GetQueryResultsCommand } = await import('@aws-sdk/client-athena')
+    const { GetQueryExecutionCommand } = await import('@aws-sdk/client-athena')
 
     // Get query status
     const statusResponse = await athenaClient.send(new GetQueryExecutionCommand({
@@ -652,20 +549,7 @@ export async function getAsyncQueryStatus(
     // If query succeeded, get results
     if (status === 'SUCCEEDED') {
       try {
-        const resultsResponse = await athenaClient.send(new GetQueryResultsCommand({
-          QueryExecutionId: queryExecutionId
-        }))
-
-        const rows = resultsResponse.ResultSet?.Rows || []
-        const columns = rows[0]?.Data || []
-        const data = rows.slice(1).map(row => {
-          const record: Record<string, any> = {}
-          row.Data?.forEach((cell, index) => {
-            const columnName = columns[index]?.VarCharValue || `column_${index}`
-            record[columnName] = cell.VarCharValue || null
-          })
-          return record
-        })
+        const { rows: data } = await getAthenaQueryRows(queryExecutionId, environment, MAX_ASYNC_RESULT_ROWS)
 
         response.data = data
         response.metadata!.recordCount = data.length
@@ -688,7 +572,7 @@ export async function getAsyncQueryStatus(
     return {
       queryId: queryExecutionId,
       status: 'FAILED',
-      error: error instanceof Error ? (error instanceof Error ? error.message : String(error)) : String(error),
+      error: error instanceof Error ? error.message : String(error),
       metadata: { queryName }
     }
   }
