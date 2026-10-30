@@ -452,6 +452,16 @@ const isCategoryActive = (category: typeof categories[0]) => {
   return route.path === categoryPath || route.path.startsWith(categoryPath + '/')
 }
 
+// Open the section that holds the current page, so arriving from a link or a refresh
+// shows where you are instead of a collapsed section
+watch(() => route.path, () => {
+  for (const category of categories) {
+    if (isCategoryActive(category) || category.children?.some(child => isActive(child.to))) {
+      categoryExpanded.value[category.id] = true
+    }
+  }
+}, { immediate: true })
+
 // Expose methods for external control
 defineExpose({
   toggleSidebar,
