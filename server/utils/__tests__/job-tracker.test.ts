@@ -26,3 +26,15 @@ test('waitForActiveJobs gives up after the timeout and names what is still runni
 
   markJobComplete('security-summary-nightly')
 })
+
+test('a job stays active until every overlapping run of it completes', async () => {
+  markJobRunning('dataset-export')
+  markJobRunning('dataset-export')
+  markJobComplete('dataset-export')
+
+  const result = await waitForActiveJobs(20)
+  assert.deepEqual(result, { drained: false, remaining: ['dataset-export'] })
+
+  markJobComplete('dataset-export')
+  assert.deepEqual(await waitForActiveJobs(20), { drained: true, remaining: [] })
+})

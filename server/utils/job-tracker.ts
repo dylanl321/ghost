@@ -6,15 +6,21 @@
  * Also provides structured JSON logging for job completion events.
  */
 
-const activeJobs = new Set<string>()
+// Count per job name: two runs of the same job can overlap (two export
+// messages, or a slow run still going when the next tick starts), and with a
+// Set the first to finish marked the job idle while the other was mid-send.
+const activeJobs = new Map<string, number>()
 const idleWaiters = new Set<() => void>()
 
 export function markJobRunning(jobName: string): void {
-  activeJobs.add(jobName)
+  activeJobs.set(jobName, (activeJobs.get(jobName) || 0) + 1)
 }
 
 export function markJobComplete(jobName: string): void {
-  activeJobs.delete(jobName)
+  const remaining = (activeJobs.get(jobName) || 0) - 1
+  if (remaining > 0) activeJobs.set(jobName, remaining)
+  else activeJobs.delete(jobName)
+
   if (activeJobs.size === 0) {
     for (const notify of idleWaiters) notify()
     idleWaiters.clear()
@@ -48,7 +54,7 @@ export function isAnyJobRunning(): boolean {
 }
 
 export function getActiveJobs(): string[] {
-  return Array.from(activeJobs)
+  return Array.from(activeJobs.keys())
 }
 
 /**
