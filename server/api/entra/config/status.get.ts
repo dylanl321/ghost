@@ -7,6 +7,7 @@ import { defineEventHandler } from 'h3'
 import { validateAllEntraConfig, getConfigSummary } from '../../../utils/entra/validation'
 import { validateOIDCConfig } from '../../../utils/oidc-config'
 import { getApiKeyStats } from '../../../utils/api-keys'
+import { getTableEnvironment } from '../../../lib/dynamodb-config'
 import { getAuthContext, requireScope } from '../../../middleware/entra-auth'
 import { registerEndpoint } from '../../../plugins/swagger'
 import type { EntraAPIResponse } from '../../../types/entra'
@@ -108,7 +109,8 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Config
       oidcConfig,
       configSummary,
       apiKeyStats,
-      environment: process.env.API_KEYS_STORAGE_ENV || 'commercial',
+      // Where API keys are actually stored, from the same config the key code reads.
+      environment: await getTableEnvironment('apiKeys'),
       nodeEnv: process.env.NODE_ENV || 'development'
     }
     
