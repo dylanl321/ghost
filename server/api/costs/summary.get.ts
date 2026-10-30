@@ -131,7 +131,7 @@ registerEndpoint('/api/costs/summary', 'GET', {
         type: 'boolean',
         default: false
       },
-      description: 'Include decommissioned accounts in results (default: false)'
+      description: 'Also match decommissioned accounts when selecting by line of business or department (default: false). Explicitly selected accounts and organization-wide totals always include decommissioned accounts.'
     },
     {
       name: 'enhanced',
