@@ -96,7 +96,7 @@ const handleMobileMenuToggle = () => {
 }
 
 const breadcrumbs = computed(() => {
-  const segments = route.path.split('/').filter(Boolean)
+  const segments = breadcrumbSegments(route.path)
   const crumbs = [{ label: 'Dashboard', to: '/' }]
 
   for (let i = 0; i < segments.length; i++) {
@@ -107,7 +107,7 @@ const breadcrumbs = computed(() => {
     const label = seg.charAt(0).toUpperCase() + seg.slice(1).replace(/-/g, ' ')
     crumbs.push({
       label,
-      to: '/' + segments.slice(0, i + 1).join('/'),
+      to: breadcrumbPath(segments, i + 1),
     })
   }
 

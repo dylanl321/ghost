@@ -244,7 +244,7 @@ const props = defineProps<{
 }>()
 
 const toast = useToast()
-const loading = ref(false)
+const loading = ref(true) // true until the first fetch, so the empty state never flashes (and SSR matches)
 const alerts = ref<BudgetAlert[]>([])
 const selectedMonth = ref<string>('')
 
@@ -429,7 +429,10 @@ async function removeRecipient(email: string) {
 
 // Fetch alerts from API
 async function fetchAlerts() {
-  if (!props.accountId) return
+  if (!props.accountId) {
+    loading.value = false
+    return
+  }
 
   try {
     loading.value = true

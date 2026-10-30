@@ -59,7 +59,7 @@ const route = useRoute()
 
 // Generate breadcrumbs for admin pages
 const breadcrumbs = computed(() => {
-  const segments = route.path.split('/').filter(Boolean)
+  const segments = breadcrumbSegments(route.path)
 
   const crumbs = [
     { label: 'Dashboard', to: '/' },
@@ -95,7 +95,7 @@ const breadcrumbs = computed(() => {
 
     crumbs.push({
       label,
-      to: '/' + segments.slice(0, i + 1).join('/'),
+      to: breadcrumbPath(segments, i + 1),
     })
   }
 
