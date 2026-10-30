@@ -6,7 +6,14 @@
       <p class="text-gray-600 dark:text-gray-400">Your account information, roles, and permissions</p>
     </div>
 
-    <!-- Tab Navigation -->
+    <!-- Tab Navigation. Client-only: roles, permissions and groups load in the browser, so a
+         server render always shows a viewer's profile and then mismatches on hydration -->
+    <ClientOnly>
+    <template #fallback>
+      <div class="flex justify-center py-20">
+        <Icon name="i-heroicons-arrow-path" class="w-8 h-8 text-gray-400 animate-spin" />
+      </div>
+    </template>
     <UTabs v-model="selectedTab" :items="profileTabs" class="space-y-6">
       <!-- Profile & Overview Tab -->
       <template #profile>
@@ -650,6 +657,7 @@
         </div>
       </template>
     </UTabs>
+    </ClientOnly>
   </div>
 </template>
 

@@ -1,7 +1,12 @@
 <template>
   <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <!-- Groups load in the browser, so wait for mount before deciding (see hasMounted) -->
+    <div v-if="!hasMounted" class="flex items-center justify-center min-h-screen p-6">
+      <Icon name="i-heroicons-arrow-path" class="w-8 h-8 text-gray-400 animate-spin" />
+    </div>
+
     <!-- Access Denied -->
-    <div v-if="!hasAdminAccess" class="flex items-center justify-center min-h-screen p-6">
+    <div v-else-if="!hasAdminAccess" class="flex items-center justify-center min-h-screen p-6">
       <UCard class="max-w-2xl">
         <div class="p-8 text-center">
           <Icon name="i-heroicons-shield-exclamation" class="w-16 h-16 text-red-500 mx-auto mb-4" />
@@ -159,6 +164,10 @@ definePageMeta({
 const { isAdmin } = useUserRoles()
 const hasAdminAccess = computed(() => isAdmin.value)
 
+// The server never knows the user's groups, so it would always render Access Denied and
+// then mismatch on hydration. Render a spinner until mounted instead.
+const hasMounted = ref(false)
+
 // System health status
 const systemHealth = ref([
   { name: 'API Gateway', status: 'healthy', responseTime: '<100ms' },
@@ -219,6 +228,7 @@ const fetchMetrics = async () => {
 }
 
 onMounted(async () => {
+  hasMounted.value = true
   if (hasAdminAccess.value) {
     await fetchMetrics()
   }
