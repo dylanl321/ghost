@@ -5,7 +5,7 @@ import {
   type RequestStateCodec,
   type ServerContext
 } from '@modelcontextprotocol/server'
-import * as z from 'zod-v4'
+import * as z from 'zod'
 import { getPresignedDownloadUrl } from '../../utils/s3-storage'
 import { getAllAccountsUnified, getAccountStatistics } from '../../utils/accounts-consolidated'
 import { calculateRelevanceScore, fuzzySearchAccounts } from '../../utils/fuzzy-search'
