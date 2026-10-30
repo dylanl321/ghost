@@ -11,7 +11,6 @@ import {
   SelectAggregateResourceConfigCommand,
   BatchGetAggregateResourceConfigCommand,
   type ConfigServiceClient,
-  type ResourceIdentifier,
   type ConfigurationItem,
   type AggregateResourceIdentifier,
   type ListAggregateDiscoveredResourcesCommandInput
@@ -182,7 +181,7 @@ export interface ResourceDetail {
 
 export interface BatchResourceResult {
   successful: ResourceDetail[]
-  failed: Array<{ identifier: ResourceIdentifier; error: Error }>
+  failed: Array<{ identifier: AggregateResourceIdentifier; error: Error }>
 }
 
 /**
@@ -207,7 +206,7 @@ export async function listAggregateResources(
   filter?: ResourceFilter,
   environment: AWSEnvironmentType = 'commercial',
   region?: string
-): Promise<{ resources: ResourceIdentifier[]; nextToken?: string }> {
+): Promise<{ resources: AggregateResourceIdentifier[]; nextToken?: string }> {
   const cache = getCacheManager()
 
   // If multiple accounts provided, query them in parallel
@@ -244,7 +243,7 @@ export async function listAggregateResources(
 
   // Check cache for non-paginated requests
   if (!filter?.nextToken) {
-    const cached = await cache.get<{ resources: ResourceIdentifier[]; nextToken?: string }>(cacheKey)
+    const cached = await cache.get<{ resources: AggregateResourceIdentifier[]; nextToken?: string }>(cacheKey)
     if (cached) {
       logger.info(`[Config] Cache hit for resource list: ${cacheKey}`)
       return cached
@@ -277,7 +276,7 @@ export async function listAggregateResources(
     }
   }
 
-  const resources: ResourceIdentifier[] = []
+  const resources: AggregateResourceIdentifier[] = []
   let currentToken = filter?.nextToken
   const maxItems = filter?.limit || 100
 
@@ -467,7 +466,7 @@ export async function batchGetResourceConfigs(
   const client = await getConfigClient(environment, region)
   
   const successful: ResourceDetail[] = []
-  const failed: Array<{ identifier: ResourceIdentifier; error: Error }> = []
+  const failed: Array<{ identifier: AggregateResourceIdentifier; error: Error }> = []
   const uncachedIdentifiers: AggregateResourceIdentifier[] = []
   
   // Check cache for each resource
@@ -535,7 +534,7 @@ export async function batchGetResourceConfigs(
         if (response.UnprocessedResourceIdentifiers) {
           for (const unprocessed of response.UnprocessedResourceIdentifiers) {
             failed.push({
-              identifier: unprocessed as ResourceIdentifier,
+              identifier: unprocessed,
               error: new Error('Resource could not be processed')
             })
           }
@@ -544,7 +543,7 @@ export async function batchGetResourceConfigs(
         // Add all chunk items to failed if batch request fails
         for (const identifier of chunk) {
           failed.push({
-            identifier: identifier as ResourceIdentifier,
+            identifier,
             error: error as Error
           })
         }

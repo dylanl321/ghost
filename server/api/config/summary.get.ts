@@ -358,8 +358,7 @@ async function queryResourceType(
             resourceType: r.ResourceType!.split('::').pop()!, // Simplify type name (AWS::EC2::Instance -> Instance)
             accountId: r.SourceAccountId!,
             region: r.SourceRegion!,
-            resourceName: r.ResourceName,
-            creationTime: r.ResourceCreationTime ? new Date(r.ResourceCreationTime) : undefined
+            resourceName: r.ResourceName
           }))
           
           allResources.push(...resourceDetails)

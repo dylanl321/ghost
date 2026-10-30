@@ -51,7 +51,7 @@ export async function resolveConfigAccountFilters(
   if (filters.accountIds?.length) {
     const resolvedIds: string[] = []
     for (const identifier of filters.accountIds) {
-      let lookup: Awaited<ReturnType<typeof lookupAccountOptimized>> = null
+      let lookup: Awaited<ReturnType<typeof lookupAccountOptimized>>
       try {
         lookup = await lookupAccountOptimized(event, identifier, {
           includeDecommissioned: filters.includeDecommissioned || false

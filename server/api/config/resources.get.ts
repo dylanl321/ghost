@@ -41,6 +41,7 @@ import {
   type ResourceType as OptimizerResourceType
 } from '../../utils/compute-optimizer'
 import type { AWSEnvironmentType } from '../../types'
+import type { AggregateResourceIdentifier } from '@aws-sdk/client-config-service'
 import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
@@ -425,6 +426,17 @@ const RESOURCE_TYPE_MAPPING: Record<string, OptimizerResourceType> = {
 /**
  * Parse tag filters from query string
  */
+// The identifier fields Config returns, as the basic resource shape this route sends back.
+function toBasicResource(r: AggregateResourceIdentifier) {
+  return {
+    resourceId: r.ResourceId,
+    resourceType: r.ResourceType,
+    resourceName: r.ResourceName,
+    accountId: r.SourceAccountId,
+    region: r.SourceRegion
+  }
+}
+
 function parseTagFilters(tagString?: string): Record<string, string> | undefined {
   if (!tagString) return undefined
   
@@ -633,8 +645,8 @@ export default defineEventHandler(handleAsync(async (event) => {
     if (responseDetail === 'simple') {
       // Simple: Return identifiers with enriched instance names for EC2 instances
       // For EC2 instances, we need to fetch minimal config to get the Name tag
-      const ec2Instances = resourceIdentifiers.filter(r => r.resourceType === 'AWS::EC2::Instance')
-      const nonEc2Resources = resourceIdentifiers.filter(r => r.resourceType !== 'AWS::EC2::Instance')
+      const ec2Instances = resourceIdentifiers.filter(r => r.ResourceType === 'AWS::EC2::Instance')
+      const nonEc2Resources = resourceIdentifiers.filter(r => r.ResourceType !== 'AWS::EC2::Instance')
       
       // Get basic config for EC2 instances to extract names
       let ec2Details: any[] = []
@@ -642,28 +654,17 @@ export default defineEventHandler(handleAsync(async (event) => {
         try {
           const ec2BatchResult = await batchGetResourceConfigs(
             aggregatorName,
-            ec2Instances.map(r => ({
-              SourceAccountId: r.sourceAccountId!,
-              SourceRegion: r.sourceRegion!,
-              ResourceId: r.resourceId!,
-              ResourceType: r.resourceType!,
-              ResourceName: r.resourceName
-            })),
+            ec2Instances,
             environment,
             targetRegion
           )
           
           const enrichedIds = new Set(ec2BatchResult.successful.map(r => `${r.accountId}:${r.resourceId}`))
           const unenriched = ec2Instances
-            .filter(r => !enrichedIds.has(`${r.sourceAccountId}:${r.resourceId}`))
-            .map(r => ({
-              resourceId: r.resourceId,
-              resourceType: r.resourceType,
-              accountId: r.sourceAccountId,
-              region: r.sourceRegion
-            }))
+            .filter(r => !enrichedIds.has(`${r.SourceAccountId}:${r.ResourceId}`))
+            .map(toBasicResource)
 
-          ec2Details = ec2BatchResult.successful.map(r => {
+          ec2Details = ec2BatchResult.successful.map((r): Record<string, any> => {
             // Convert tags from config format if needed (defensive check)
             let tags = r.tags || {}
             if (r.configuration?.tags && Array.isArray(r.configuration.tags)) {
@@ -688,35 +689,19 @@ export default defineEventHandler(handleAsync(async (event) => {
         } catch (error) {
           logger.warn('[Config API] Failed to enrich EC2 instances:', error)
           // Fall back to basic data without names
-          ec2Details = ec2Instances.map(r => ({
-            resourceId: r.resourceId,
-            resourceType: r.resourceType,
-            accountId: r.sourceAccountId,
-            region: r.sourceRegion
-          }))
+          ec2Details = ec2Instances.map(toBasicResource)
         }
       }
       
       // Non-EC2 resources get basic treatment
-      const nonEc2Details = nonEc2Resources.map(r => ({
-        resourceId: r.resourceId,
-        resourceType: r.resourceType,
-        accountId: r.sourceAccountId,
-        region: r.sourceRegion
-      }))
+      const nonEc2Details = nonEc2Resources.map(toBasicResource)
       
       resourceDetails = [...ec2Details, ...nonEc2Details]
     } else {
       // Partial or Full: Get detailed configurations
       const batchResult = await batchGetResourceConfigs(
         aggregatorName,
-        resourceIdentifiers.map(r => ({
-          SourceAccountId: r.sourceAccountId!,
-          SourceRegion: r.sourceRegion!,
-          ResourceId: r.resourceId!,
-          ResourceType: r.resourceType!,
-          ResourceName: r.resourceName
-        })),
+        resourceIdentifiers,
         environment,
         targetRegion
       )

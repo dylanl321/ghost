@@ -763,7 +763,7 @@ export async function getOrganizationSummary(
   `
 
   const results = await executeAthenaQuery(sql, 'org-summary', environment, cacheKey)
-  return results.length > 0 ? results[0] : null
+  return results[0] ?? null
 }
 
 /**
@@ -832,7 +832,7 @@ export async function getPipelineById(
   `
 
   const results = await executeAthenaQuery(sql, `pipeline-${pipelineId}`, environment, cacheKey) as PipelineRun[]
-  return results.length > 0 ? results[0] : null
+  return results[0] ?? null
 }
 
 /**
@@ -1345,7 +1345,7 @@ export async function getAuthorSummary(
   `
 
   const results = await executeAthenaQuery(sql, `author-summary-${authorEmail}`, environment, cacheKey)
-  return results.length > 0 ? results[0] : null
+  return results[0] ?? null
 }
 
 // --- New query functions for pipeline analytics enhancements ---

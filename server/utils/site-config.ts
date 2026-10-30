@@ -12,7 +12,7 @@ import {
   ScanCommand,
   BatchWriteItemCommand
 } from '@aws-sdk/client-dynamodb';
-import type { ScanCommandInput } from '@aws-sdk/client-dynamodb';
+import type { BatchWriteItemCommandOutput, ScanCommandInput } from '@aws-sdk/client-dynamodb';
 import { STSClient, AssumeRoleCommand } from '@aws-sdk/client-sts';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import type { SiteConfigItem, SiteConfigHistoryEntry } from '../../shared/types/site-config';
@@ -88,7 +88,7 @@ async function batchPutAll(client: DynamoDBClient, items: Record<string, any>[])
         throw new Error(`Site config batch write left ${requests.length} item(s) unprocessed`);
       }
       if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 100 * 2 ** attempt));
-      const response = await client.send(new BatchWriteItemCommand({ RequestItems: { [TABLE_NAME]: requests } }));
+      const response: BatchWriteItemCommandOutput = await client.send(new BatchWriteItemCommand({ RequestItems: { [TABLE_NAME]: requests } }));
       requests = response.UnprocessedItems?.[TABLE_NAME];
     }
   }
