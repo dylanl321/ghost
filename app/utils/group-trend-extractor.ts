@@ -1,5 +1,5 @@
 import type { NormalizedDataset } from '~/types/costs'
-import { buildAccountToGroupMap } from '~/utils/cost-data-unwrap'
+import { buildAccountToGroupMap, unwrapByMode } from '~/utils/cost-data-unwrap'
 
 export interface GroupTrendConfig {
   groupField: string
@@ -33,7 +33,9 @@ export function buildGroupTrendData(
   const summary = dataset.summary as any
   const historical = dataset.historical as any
 
-  const dataSource = historical?.data || summary?.data || historical || summary
+  const mode = dataset.mode || 'billable'
+  // Proforma responses are { billable, proforma }; pick the active mode
+  const dataSource = unwrapByMode(historical, mode) || unwrapByMode(summary, mode)
   if (!dataSource) return null
 
   // Path 1: monthlyBreakdown (historical data with account-level grouping)

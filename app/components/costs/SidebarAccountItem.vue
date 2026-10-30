@@ -1,7 +1,7 @@
 <template>
   <div
-    class="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer text-sm"
-    :class="{ 'bg-blue-900/50': selected }"
+    class="flex items-center justify-between p-2 rounded cursor-pointer text-sm"
+    :class="selected ? 'bg-blue-50 dark:bg-blue-900/40 ring-1 ring-inset ring-blue-200 dark:ring-blue-800' : 'hover:bg-gray-50 dark:hover:bg-gray-800'"
     @click="$emit('toggle', accountKey)"
   >
     <div class="flex items-center gap-2 min-w-0">
@@ -21,15 +21,16 @@
         </div>
       </div>
     </div>
-    <div class="text-right ml-2 flex flex-col space-y-1 items-end">
-      <UTooltip text="Budget">
-        <div class="text-xs text-gray-700 dark:text-gray-300">
-          {{ formatCurrency(budget) }}
+    <!-- Spend first: it is what the list is sorted by -->
+    <div class="text-right ml-2 flex flex-col space-y-0.5 items-end tabular-nums">
+      <UTooltip text="Spend for the selected period">
+        <div class="text-xs font-medium text-gray-900 dark:text-gray-100">
+          {{ formatCurrency(spend) }}
         </div>
       </UTooltip>
-      <UTooltip text="Spend">
-        <div class="text-xs text-green-400">
-          {{ formatCurrency(spend) }}
+      <UTooltip text="Monthly budget">
+        <div class="text-[11px] text-gray-500 dark:text-gray-400">
+          {{ budget > 0 ? `${formatCurrency(budget)} budget` : 'No budget' }}
         </div>
       </UTooltip>
       <UTooltip v-if="showUtilization && budget > 0" text="Utilization">
@@ -69,9 +70,9 @@ const utilization = computed(() => {
 const utilizationFormatted = computed(() => `${utilization.value.toFixed(1)}%`)
 
 const utilizationColorClass = computed(() => {
-  if (props.budget === 0) return 'text-gray-400'
-  if (utilization.value > 100) return 'text-red-400'
-  if (utilization.value > 90) return 'text-yellow-400'
-  return 'text-green-400'
+  if (props.budget === 0) return 'text-gray-500 dark:text-gray-400'
+  if (utilization.value > 100) return 'text-red-600 dark:text-red-400'
+  if (utilization.value > 90) return 'text-amber-600 dark:text-yellow-400'
+  return 'text-green-600 dark:text-green-400'
 })
 </script>

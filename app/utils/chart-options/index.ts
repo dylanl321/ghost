@@ -27,6 +27,7 @@ import { buildCurrentVsForecastComparisonOptions } from './current-vs-forecast-c
 import { buildOrganizationForecastComparisonOptions } from './organization-forecast-comparison'
 import { buildMonthlyTrendWithForecastOptions } from './monthly-trend-with-forecast'
 import { buildAccountForecastComparisonOptions } from './account-forecast-comparison'
+import { buildHistoricalVsForecastComparisonOptions } from './historical-vs-forecast-comparison'
 import { buildExtendedForecastTrendOptions } from './extended-forecast-trend'
 import { buildForecastProjectionLineOptions } from './forecast-projection-line'
 import { buildCumulativeBurnUpOptions } from './cumulative-burn-up'
@@ -72,6 +73,7 @@ export const chartBuilderById: Record<string, ChartBuilderFn> = {
   organizationForecastComparison: buildOrganizationForecastComparisonOptions,
   monthlyTrendWithForecast: buildMonthlyTrendWithForecastOptions,
   accountForecastComparison: buildAccountForecastComparisonOptions,
+  historicalVsForecastComparison: buildHistoricalVsForecastComparisonOptions,
   extendedForecastTrend: buildExtendedForecastTrendOptions,
   forecastProjectionLine: buildForecastProjectionLineOptions,
   cumulativeBurnUp: buildCumulativeBurnUpOptions,

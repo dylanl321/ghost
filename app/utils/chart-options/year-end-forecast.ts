@@ -181,6 +181,11 @@ export function buildYearEndForecastOptions(data: any, context: ChartBuilderCont
     }
   }
 
+  // Make it obvious when a year's budget is a placeholder, not supplied PEP data
+  const budgetNote = yearData.budget?.carriedForwardAccounts > 0
+    ? `${yearData.year} PEP budget not supplied for ${yearData.budget.carriedForwardAccounts} account(s); using the Dec ${yearData.budget.carriedForwardFrom} monthly amount`
+    : ''
+
   return {
     ...baseOptions,
     title: {
@@ -190,6 +195,9 @@ export function buildYearEndForecastOptions(data: any, context: ChartBuilderCont
         fontSize: 14,
         fontWeight: 'bold'
       },
+      subtext: budgetNote,
+      subtextStyle: { color: '#c084fc', fontSize: 11 },
+      itemGap: 4,
       left: 'center',
       top: 5
     },
@@ -280,7 +288,7 @@ export function buildYearEndForecastOptions(data: any, context: ChartBuilderCont
           ...(hasConfidenceBands ? ['80% Confidence Band'] : [])
         ],
       textStyle: { color: CHART_THEME.textColor, fontSize: 11 },
-      top: 35,
+      top: budgetNote ? 52 : 35,
       itemGap: 15,
       itemWidth: 25,
       itemHeight: 14

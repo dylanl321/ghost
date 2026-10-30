@@ -39,7 +39,7 @@ import { requirePermission } from '../../utils/user-roles'
 import { logger } from '../../utils/logger'
 import { queryDevOrgChargesByMonth } from '../../utils/dev-org-charges'
 import { CLASSIFIED_CLOUD_CHARGES_2026 } from '../../utils/classified-cloud-charges'
-import { getAnnualBudgetArray } from '../../../shared/utils/budget-utils'
+import { hasPerMonthBudget, pepBudgetForMonthKey, type BudgetSource } from '../../../shared/utils/budget-utils'
 
 // Departments this report is scoped to. Kept explicit per Finance's request.
 const ALLOWED_DEPARTMENTS = ['DE158', 'DT509', 'DT328'] as const
@@ -199,7 +199,7 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   const accountNameMap = new Map<string, string>()
   const accountProjectNameMap = new Map<string, string>()
-  const accountPepMonthlyMap = new Map<string, string>() // accountId → pepBudget2026Monthly JSON
+  const accountPepMonthlyMap = new Map<string, BudgetSource>() // accountId → account with pepBudget{YEAR}Monthly fields
 
   for (const acc of allAccounts) {
     const accountId = environment === 'govcloud'
@@ -213,7 +213,7 @@ export default defineEventHandler(handleAsync(async (event) => {
 
     accountNameMap.set(accountId, acc.name || acc.projectName || accountId)
     accountProjectNameMap.set(accountId, acc.projectName || acc.name || '')
-    if (acc.pepBudget2026Monthly) accountPepMonthlyMap.set(accountId, acc.pepBudget2026Monthly)
+    if (hasPerMonthBudget(acc as BudgetSource)) accountPepMonthlyMap.set(accountId, acc as BudgetSource)
 
     // Proforma management account always rolls into DE158 regardless of pepDepartment
     const dept = accountId === PROFORMA_ACCOUNT_ID ? 'DE158' : accountDepartment(acc).toUpperCase()
@@ -430,14 +430,12 @@ export default defineEventHandler(handleAsync(async (event) => {
   // Compute pep expected spend fields for an account given the months that have actual data.
   // Only covers months present in monthlyActuals so it stays in sync with what's been billed.
   function calcPepFields(accountId: string, monthlyActuals: Record<string, number>): { pepExpectedSpend: number; pepMonthlyExpected: Record<string, number> } | undefined {
-    const pepJson = accountPepMonthlyMap.get(accountId)
-    if (!pepJson) return undefined
-    const { monthlyArray } = getAnnualBudgetArray({ pepBudget2026Monthly: pepJson })
+    const pepSource = accountPepMonthlyMap.get(accountId)
+    if (!pepSource) return undefined
     const pepMonthlyExpected: Record<string, number> = {}
     let pepExpectedSpend = 0
     for (const m of Object.keys(monthlyActuals).filter(m => m >= yearMonthMin && m <= ytdMonthMax)) {
-      const idx = parseInt(m.split('-')[1]) - 1
-      const val = monthlyArray[idx] ?? 0
+      const val = pepBudgetForMonthKey(pepSource, m)
       pepMonthlyExpected[m] = val
       pepExpectedSpend += val
     }
@@ -473,15 +471,13 @@ export default defineEventHandler(handleAsync(async (event) => {
         }
       }
 
-      const pepJson = accountPepMonthlyMap.get(accountId)
+      const pepSource = accountPepMonthlyMap.get(accountId)
       if (pendingPepAccountIds.has(accountId)) {
         // PEP in progress — no historical budget. Show $0 plan; proforma stays in GDMS Cloud residual.
-      } else if (pepJson) {
+      } else if (pepSource) {
         // Use pep values as the plan — only for months with actual data
-        const { monthlyArray } = getAnnualBudgetArray({ pepBudget2026Monthly: pepJson })
         for (const m of acctActualMonths) {
-          const idx = parseInt(m.split('-')[1]) - 1
-          const pepVal = monthlyArray[idx] ?? 0
+          const pepVal = pepBudgetForMonthKey(pepSource, m)
           ensure(m).budget += pepVal
           acctBudget += pepVal
         }

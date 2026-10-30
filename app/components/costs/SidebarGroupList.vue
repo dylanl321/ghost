@@ -39,15 +39,15 @@
             </div>
           </div>
           <div class="flex items-center gap-3">
-            <div class="text-right flex flex-col space-y-1 items-end">
-              <UTooltip text="Total Budget">
-                <div class="text-xs text-gray-700 dark:text-gray-300">
-                  {{ formatCurrency(group.totalBudget) }}
+            <div class="text-right flex flex-col space-y-0.5 items-end tabular-nums">
+              <UTooltip text="Total spend for the selected period">
+                <div class="text-xs font-medium text-gray-900 dark:text-gray-100">
+                  {{ formatCurrency(group.totalSpend) }}
                 </div>
               </UTooltip>
-              <UTooltip text="Total Spend">
-                <div class="text-xs text-green-400">
-                  {{ formatCurrency(group.totalSpend) }}
+              <UTooltip text="Total monthly budget">
+                <div class="text-[11px] text-gray-500 dark:text-gray-400">
+                  {{ group.totalBudget > 0 ? `${formatCurrency(group.totalBudget)} budget` : 'No budget' }}
                 </div>
               </UTooltip>
               <UTooltip v-if="group.totalBudget > 0" text="Group Utilization">
@@ -173,8 +173,8 @@ function groupIconColor(group: GroupBase): string {
 
 /** Returns the Tailwind color class for budget utilization */
 function utilizationColorClass(group: GroupBase): string {
-  if (group.totalSpend > group.totalBudget) return 'text-red-400'
-  if (group.totalSpend > group.totalBudget * 0.9) return 'text-yellow-400'
-  return 'text-green-400'
+  if (group.totalSpend > group.totalBudget) return 'text-red-600 dark:text-red-400'
+  if (group.totalSpend > group.totalBudget * 0.9) return 'text-amber-600 dark:text-yellow-400'
+  return 'text-green-600 dark:text-green-400'
 }
 </script>

@@ -24,6 +24,7 @@ interface Account {
   lineOfBusiness?: string
   departmentNumber?: string
   department?: string
+  periodBudget?: number
 }
 
 interface GroupData {
@@ -41,7 +42,8 @@ interface SmartGroupData extends GroupData {
 }
 
 function getBudget(account: Account): number {
-  return getMonthlyBudget(account)
+  // The cost page sets periodBudget for quarter and year-to-date views
+  return account.periodBudget ?? getMonthlyBudget(account)
 }
 
 function getSpend(account: Account): number {

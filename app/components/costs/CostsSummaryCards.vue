@@ -6,7 +6,7 @@
         <div>
           <p class="text-gray-600 dark:text-gray-400 text-sm">Total Spend</p>
           <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ formatCurrency(totalSpend) }}</p>
-          <p v-if="scenario === 'single-account'" class="text-xs text-gray-400 mt-1">month to date</p>
+          <p v-if="periodWindow" class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ periodWindow.label === 'year to date' ? 'year to date' : `${periodWindow.label} to date` }}</p>
         </div>
         <UIcon name="i-heroicons-credit-card" class="w-8 h-8 text-gray-400 dark:text-gray-500" />
       </div>
@@ -16,7 +16,7 @@
     <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
       <div class="flex items-center justify-between">
         <div v-if="scenario === 'single-account'">
-          <p class="text-gray-600 dark:text-gray-400 text-sm">Monthly Budget</p>
+          <p class="text-gray-600 dark:text-gray-400 text-sm">{{ timeframe && timeframe !== 'thisMonth' ? 'Period Budget' : 'Monthly Budget' }}</p>
           <p class="text-2xl font-bold text-gray-900 dark:text-white">
             <span v-if="totalBudget > 0">{{ formatCurrency(totalBudget) }}</span>
             <span v-else class="text-gray-500 text-base">N/A</span>
@@ -36,7 +36,7 @@
     <!-- Card 3: Daily Burn Rate (single) / Total Budget (multi) -->
     <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
       <div class="flex items-center justify-between">
-        <div v-if="scenario === 'single-account'">
+        <div v-if="scenario === 'single-account' && periodWindow">
           <p class="text-gray-600 dark:text-gray-400 text-sm">Daily Burn Rate</p>
           <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ formatCurrency(dailyBurnRate) }}/day</p>
           <p class="text-xs text-gray-400 mt-1">
@@ -66,7 +66,7 @@
             {{ healthLabel }}
           </p>
           <p class="text-xs mt-1" :class="healthColor">
-            {{ utilization }}% utilized
+            {{ utilization }}% used<template v-if="elapsedPercent !== null"> · {{ elapsedPercent }}% of {{ periodWindow?.label === 'year to date' ? 'period' : periodWindow?.label }} elapsed</template>
           </p>
         </div>
         <div v-else>
@@ -88,6 +88,8 @@
 <script setup lang="ts">
 import type { Scenario } from '~/composables/useCostScenario'
 
+import { getCurrentPeriodWindow } from '~/utils/cost-period'
+
 const props = defineProps<{
   totalAccounts: number
   totalBudget: number
@@ -96,7 +98,18 @@ const props = defineProps<{
   formatCurrency: (value: number) => string
   scenario?: Scenario
   isHistorical?: boolean
+  timeframe?: string
 }>()
+
+// Budget window for This Month / This Quarter / Year-to-Date; null for historical views
+const periodWindow = computed(() => getCurrentPeriodWindow(props.timeframe || 'thisMonth'))
+
+// Share of the budget window that has cost data (Cost Explorer reports through yesterday)
+const elapsedPercent = computed(() => {
+  const window = periodWindow.value
+  if (!window || window.totalDays === 0) return null
+  return Math.round((window.observedDays / window.totalDays) * 100)
+})
 
 // Budget health: how much over/under budget
 const budgetDelta = computed(() => props.totalBudget - props.totalSpend)
@@ -108,34 +121,34 @@ const healthLabel = computed(() => {
   return `${props.formatCurrency(Math.abs(budgetDelta.value))} over`
 })
 
-// Green <=80%, Amber 80-100%, Red >100%
-const healthColor = computed(() => {
-  if (props.utilization > 100) return 'text-red-500'
-  if (props.utilization > 80) return 'text-amber-500'
-  return 'text-green-500'
+// Red over budget; amber when spending runs more than 10 points ahead of the
+// share of the period elapsed (on pace to overrun); green otherwise.
+// A flat 80% threshold flagged every account late in the month and none early.
+const healthTone = computed(() => {
+  if (props.utilization > 100) return 'red'
+  const pace = elapsedPercent.value
+  if (pace === null) return props.utilization > 80 ? 'amber' : 'green'
+  return props.utilization > pace + 10 ? 'amber' : 'green'
 })
+const healthColor = computed(() => ({ red: 'text-red-500', amber: 'text-amber-500', green: 'text-green-500' })[healthTone.value])
+const healthIconColor = healthColor
 
-const healthIconColor = computed(() => {
-  if (props.utilization > 100) return 'text-red-500'
-  if (props.utilization > 80) return 'text-amber-500'
-  return 'text-green-500'
-})
-
-// Daily burn rate and runway
+// Daily burn rate over the days that have data. Dividing by today's date
+// counted today, which Cost Explorer has not reported yet.
 const dailyBurnRate = computed(() => {
-  const now = new Date()
-  const dayOfMonth = now.getDate()
-  return dayOfMonth > 0 ? props.totalSpend / dayOfMonth : 0
+  const days = periodWindow.value?.observedDays || 0
+  return days > 0 ? props.totalSpend / days : 0
 })
 
 const budgetRunwayText = computed(() => {
-  if (props.totalBudget <= 0) return ''
+  const window = periodWindow.value
+  if (props.totalBudget <= 0 || !window) return ''
   if (budgetDelta.value <= 0) return 'Budget exceeded'
   if (dailyBurnRate.value <= 0) return ''
-  const daysOfRunway = Math.round(budgetDelta.value / dailyBurnRate.value)
-  const now = new Date()
-  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-  const remainingDaysInMonth = lastDay - now.getDate()
-  return `~${Math.min(daysOfRunway, remainingDaysInMonth)} days remaining`
+  const daysOfRunway = Math.floor(budgetDelta.value / dailyBurnRate.value)
+  const daysLeft = window.totalDays - window.observedDays
+  return daysOfRunway >= daysLeft
+    ? 'On pace to stay within budget'
+    : `At this rate the budget runs out in ~${daysOfRunway} days`
 })
 </script>

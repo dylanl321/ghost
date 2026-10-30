@@ -85,7 +85,7 @@
             </template>
 
             <div class="space-y-2 text-sm">
-              <AccountDetailsRow label="Budget" :value="formatCurrency(getMonthlyBudget(enclave), 0)" />
+              <AccountDetailsRow label="Budget" :value="formatCurrency(getMonthlyBudget(enclave), 0) + (budgetYear.carriedForwardFrom ? ` (Dec ${budgetYear.carriedForwardFrom} carried forward)` : '')" />
               <AccountDetailsRow label="Current Spend (Proforma)" :value="formatCurrency(props.currentSpend, 0)" />
               <AccountDetailsRow label="Utilization" :value="utilization + '%'" />
             </div>
@@ -257,8 +257,11 @@
             </template>
 
             <div class="space-y-3 text-sm">
-              <AccountDetailsRow label="Budget Year" :value="enclave?.pepBudgetLatestYear" />
-              <AccountDetailsRow label="Annual Total" :value="enclave?.pepBudget2026AnnualTotal ? formatCurrency(enclave.pepBudget2026AnnualTotal, 0) : undefined" />
+              <AccountDetailsRow label="Budget Year" :value="budgetYear.isPepData ? String(budgetYear.year) : undefined" />
+              <p v-if="budgetYear.carriedForwardFrom" class="text-xs text-purple-600 dark:text-purple-400">
+                No {{ budgetYear.year }} PEP budget supplied. Using the December {{ budgetYear.carriedForwardFrom }} amount for every month.
+              </p>
+              <AccountDetailsRow label="Annual Total" :value="budgetYear.isPepData ? formatCurrency(budgetYear.annualTotal, 0) : undefined" />
 
               <!-- Monthly Budget Breakdown -->
               <div v-if="monthlyBudget && Object.keys(monthlyBudget).length > 0">
@@ -389,7 +392,7 @@
 <script setup lang="ts">
 import { convertToUsernameSlug, formatUsername } from '~/utils/userUtils'
 import type { GraphUser } from '~/composables/useGroupMembers'
-import { getMonthlyBudget } from '#shared/utils/budget-utils'
+import { getAnnualBudgetArray, getMonthlyBudget } from '#shared/utils/budget-utils'
 
 const enclaveStore = useEnclaveStore()
 
@@ -414,14 +417,17 @@ const utilization = computed(() => {
   return budget > 0 ? ((props.currentSpend / budget) * 100).toFixed(1) : '0'
 })
 
-// Parse monthly budget JSON
+// This year's PEP budget: its own pepBudget{YEAR}Monthly data, or an earlier December carried forward
+const budgetYear = computed(() => {
+  const year = new Date().getUTCFullYear()
+  const { monthlyArray, isPepData, carriedForwardFrom } = getAnnualBudgetArray(enclave.value, year)
+  return { year, isPepData, carriedForwardFrom, monthlyArray, annualTotal: monthlyArray.reduce((sum, value) => sum + value, 0) }
+})
+
 const monthlyBudget = computed(() => {
-  if (!enclave.value?.pepBudget2026Monthly) return null
-  try {
-    return JSON.parse(enclave.value.pepBudget2026Monthly) as Record<string, number>
-  } catch {
-    return null
-  }
+  if (!budgetYear.value.isPepData) return null
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  return Object.fromEntries(months.map((month, i) => [month, budgetYear.value.monthlyArray[i] ?? 0]))
 })
 
 // Email functionality

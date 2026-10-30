@@ -1,57 +1,57 @@
 <template>
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
     <!-- Over Budget Card -->
-    <div class="bg-red-900/20 border border-red-800 rounded-lg p-4">
+    <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
       <div class="flex items-center gap-2 mb-2">
-        <div class="p-2 bg-red-900/40 rounded-lg">
-          <UIcon name="i-heroicons-exclamation-triangle" class="w-5 h-5 text-red-400" />
+        <div class="p-2 bg-red-100 dark:bg-red-900/40 rounded-lg">
+          <UIcon name="i-heroicons-exclamation-triangle" class="w-5 h-5 text-red-600 dark:text-red-400" />
         </div>
-        <span class="text-sm font-medium text-red-300">Over Budget</span>
+        <span class="text-sm font-medium text-red-700 dark:text-red-300">Over Budget</span>
       </div>
-      <div class="text-2xl font-bold text-red-400">{{ overBudgetCount }}</div>
-      <div class="text-xs text-red-400/70 mt-1">
-        {{ formatCurrency(totalOverBudgetAmount) }} over
+      <div class="text-2xl font-bold text-red-600 dark:text-red-400">{{ overBudgetCount }}</div>
+      <div class="text-xs text-red-700/80 dark:text-red-400/70 mt-1">
+        {{ formatCurrency(totalOverBudgetAmount) }} over budget to date
       </div>
     </div>
 
     <!-- Healthy Card -->
-    <div class="bg-green-900/20 border border-green-800 rounded-lg p-4">
+    <div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
       <div class="flex items-center gap-2 mb-2">
-        <div class="p-2 bg-green-900/40 rounded-lg">
-          <UIcon name="i-heroicons-check-circle" class="w-5 h-5 text-green-400" />
+        <div class="p-2 bg-green-100 dark:bg-green-900/40 rounded-lg">
+          <UIcon name="i-heroicons-check-circle" class="w-5 h-5 text-green-600 dark:text-green-400" />
         </div>
-        <span class="text-sm font-medium text-green-300">Healthy</span>
+        <span class="text-sm font-medium text-green-700 dark:text-green-300">Healthy</span>
       </div>
-      <div class="text-2xl font-bold text-green-400">{{ healthyCount }}</div>
-      <div class="text-xs text-green-400/70 mt-1">
+      <div class="text-2xl font-bold text-green-600 dark:text-green-400">{{ healthyCount }}</div>
+      <div class="text-xs text-green-700/80 dark:text-green-400/70 mt-1">
         50-100% utilization
       </div>
     </div>
 
     <!-- Underutilized Card -->
-    <div class="bg-blue-900/20 border border-blue-800 rounded-lg p-4">
+    <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
       <div class="flex items-center gap-2 mb-2">
-        <div class="p-2 bg-blue-900/40 rounded-lg">
-          <UIcon name="i-heroicons-arrow-trending-down" class="w-5 h-5 text-blue-400" />
+        <div class="p-2 bg-blue-100 dark:bg-blue-900/40 rounded-lg">
+          <UIcon name="i-heroicons-arrow-trending-down" class="w-5 h-5 text-blue-600 dark:text-blue-400" />
         </div>
-        <span class="text-sm font-medium text-blue-300">Underutilized</span>
+        <span class="text-sm font-medium text-blue-700 dark:text-blue-300">Underutilized</span>
       </div>
-      <div class="text-2xl font-bold text-blue-400">{{ underutilizedCount }}</div>
-      <div class="text-xs text-blue-400/70 mt-1">
-        {{ formatCurrency(totalUnutilizedAmount) }} unused
+      <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">{{ underutilizedCount }}</div>
+      <div class="text-xs text-blue-700/80 dark:text-blue-400/70 mt-1">
+        {{ formatCurrency(totalUnutilizedAmount) }} under budget to date
       </div>
     </div>
 
     <!-- Average Utilization Card -->
-    <div class="bg-purple-900/20 border border-purple-800 rounded-lg p-4">
+    <div class="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
       <div class="flex items-center gap-2 mb-2">
-        <div class="p-2 bg-purple-900/40 rounded-lg">
-          <UIcon name="i-heroicons-chart-bar" class="w-5 h-5 text-purple-400" />
+        <div class="p-2 bg-purple-100 dark:bg-purple-900/40 rounded-lg">
+          <UIcon name="i-heroicons-chart-bar" class="w-5 h-5 text-purple-600 dark:text-purple-400" />
         </div>
-        <span class="text-sm font-medium text-purple-300">Avg Utilization</span>
+        <span class="text-sm font-medium text-purple-700 dark:text-purple-300">Avg Utilization</span>
       </div>
-      <div class="text-2xl font-bold text-purple-400">{{ averageUtilization.toFixed(1) }}%</div>
-      <div class="text-xs text-purple-400/70 mt-1">
+      <div class="text-2xl font-bold text-purple-600 dark:text-purple-400">{{ averageUtilization.toFixed(1) }}%</div>
+      <div class="text-xs text-purple-700/80 dark:text-purple-400/70 mt-1">
         {{ totalAccountsWithBudget }} accounts with budget
       </div>
     </div>
@@ -64,6 +64,8 @@ import type { NormalizedDataset } from '~/types/costs'
 const props = defineProps<{
   dataset: NormalizedDataset | null
   dataMode?: 'billable' | 'proforma'
+  // Limit the counts to the accounts the dashboard is showing (selection and cost settings)
+  scopeToDisplayed?: boolean
 }>()
 
 // Helper to extract analysis data
@@ -96,32 +98,39 @@ const summaryMetrics = computed(() => {
     }
   }
 
-  const accounts = analysisSource.budgetAnalysis.byAccount
-  const accountsWithBudget = accounts.filter((acc: any) => acc.budgetedCost > 0)
+  // The analysis covers every account. When scoped, count only the ones the dashboard
+  // is showing so these cards agree with the summary cards above them.
+  const displayedIds = props.scopeToDisplayed ? props.dataset?.displayedAccountIds : undefined
+  const displayedSet = displayedIds ? new Set(displayedIds) : null
+  const accounts = displayedSet
+    ? analysisSource.budgetAnalysis.byAccount.filter((acc: any) => displayedSet.has(acc.accountId))
+    : analysisSource.budgetAnalysis.byAccount
+  // Compare spend with the budget for the days that have data (paceToDateBudget),
+  // as the server's status does. Against the full-month budget every account
+  // looks underutilized early in the month and none look over until late.
+  const basis = (acc: any): number =>
+    typeof acc.paceToDateBudget === 'number' && acc.paceToDateBudget > 0 ? acc.paceToDateBudget : acc.budgetedCost
+  const utilizationOf = (acc: any): number => (acc.actualCost / basis(acc)) * 100
+  const accountsWithBudget = accounts.filter((acc: any) => basis(acc) > 0)
 
   // Over budget accounts
-  const overBudget = accountsWithBudget.filter((acc: any) => acc.actualCost > acc.budgetedCost)
+  const overBudget = accountsWithBudget.filter((acc: any) => acc.actualCost > basis(acc))
   const totalOverBudgetAmount = overBudget.reduce((sum: number, acc: any) =>
-    sum + (acc.actualCost - acc.budgetedCost), 0)
+    sum + (acc.actualCost - basis(acc)), 0)
 
   // Healthy accounts (50-100% utilization)
   const healthy = accountsWithBudget.filter((acc: any) => {
-    const util = (acc.actualCost / acc.budgetedCost) * 100
+    const util = utilizationOf(acc)
     return util >= 50 && util <= 100
   })
 
   // Underutilized accounts (<50% utilization)
-  const underutilized = accountsWithBudget.filter((acc: any) => {
-    const util = (acc.actualCost / acc.budgetedCost) * 100
-    return util < 50
-  })
+  const underutilized = accountsWithBudget.filter((acc: any) => utilizationOf(acc) < 50)
   const totalUnutilizedAmount = underutilized.reduce((sum: number, acc: any) =>
-    sum + (acc.budgetedCost - acc.actualCost), 0)
+    sum + (basis(acc) - acc.actualCost), 0)
 
   // Average utilization
-  const totalUtilization = accountsWithBudget.reduce((sum: number, acc: any) => {
-    return sum + ((acc.actualCost / acc.budgetedCost) * 100)
-  }, 0)
+  const totalUtilization = accountsWithBudget.reduce((sum: number, acc: any) => sum + utilizationOf(acc), 0)
   const averageUtilization = accountsWithBudget.length > 0
     ? totalUtilization / accountsWithBudget.length
     : 0

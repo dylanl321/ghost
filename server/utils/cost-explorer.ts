@@ -367,9 +367,13 @@ export async function getProformaForecast(
   const proformaTotal = parseFloat(proformaForecast.total?.Amount || '0')
   const masterOnlyTotal = masterTotal - proformaTotal
 
-  // Calculate master account only forecast by time period
-  const masterOnlyResultsByTime = masterForecast.forecastResultsByTime.map((masterResult, index) => {
-    const proformaResult = proformaForecast.forecastResultsByTime[index]
+  // Calculate master account only forecast by time period. Match periods by start
+  // date: the two accounts can return different numbers of periods.
+  const proformaByStart = new Map(
+    proformaForecast.forecastResultsByTime.map(result => [result.TimePeriod?.Start, result])
+  )
+  const masterOnlyResultsByTime = masterForecast.forecastResultsByTime.map((masterResult) => {
+    const proformaResult = proformaByStart.get(masterResult.TimePeriod?.Start)
 
     if (!proformaResult) {
       return masterResult
