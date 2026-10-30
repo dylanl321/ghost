@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { getDatasetReportConfigErrors } from '../../server/utils/dataset-report-validation'
+import { getDatasetReportConfigErrors, getScheduledDatasetReportErrors } from '../../server/utils/dataset-report-validation'
 import { getScheduleErrors } from '../../shared/utils/report-schedule'
 
 test('accepts a valid dataset report configuration', () => {
@@ -73,4 +73,14 @@ test('validates schedule-specific fields', () => {
     time: '25:00',
     timezone: ''
   }).length >= 3)
+})
+
+test('scheduled reports cannot include Entra Users, which needs a user session', () => {
+  const config = {
+    accounts: [],
+    format: 'csv',
+    datasets: { entraUsers: { enabled: true, filters: {} } }
+  }
+  assert.deepEqual(getDatasetReportConfigErrors(config), [])
+  assert.deepEqual(getScheduledDatasetReportErrors(config), ['Entra Users requires an interactive session and cannot be scheduled'])
 })

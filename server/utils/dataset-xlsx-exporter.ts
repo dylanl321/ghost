@@ -289,8 +289,16 @@ function formatCellValue(value: any, column: DatasetColumnConfig): any {
     return value ? 'Yes' : 'No'
   }
 
+  // Excel rejects cells longer than 32,767 characters and reports the whole
+  // workbook as damaged; large Config documents can exceed that
+  if (typeof value === 'string' && value.length > EXCEL_MAX_CELL_LENGTH) {
+    return `${value.slice(0, EXCEL_MAX_CELL_LENGTH - 15)}... [truncated]`
+  }
+
   return value
 }
+
+const EXCEL_MAX_CELL_LENGTH = 32767
 
 /**
  * Flatten AWS Config resource record for XLSX export

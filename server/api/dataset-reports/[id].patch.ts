@@ -7,7 +7,7 @@ import { updateReport } from '../../utils/scheduled-reports'
 import { validateEmails } from '../../utils/email-service'
 import { requireDatasetReportAccess } from '../../utils/dataset-report-access'
 import { logger } from '../../utils/logger'
-import { getDatasetReportConfigErrors } from '../../utils/dataset-report-validation'
+import { getScheduledDatasetReportErrors } from '../../utils/dataset-report-validation'
 import { getScheduleErrors } from '../../../shared/utils/report-schedule'
 
 export default defineEventHandler(async (event) => {
@@ -74,7 +74,7 @@ export default defineEventHandler(async (event) => {
 
     // Validate datasets if reportConfig is being updated
     if (updates.reportConfig) {
-      const configErrors = getDatasetReportConfigErrors(updates.reportConfig)
+      const configErrors = getScheduledDatasetReportErrors(updates.reportConfig)
       if (configErrors.length > 0) {
         throw createError({
           statusCode: 400,

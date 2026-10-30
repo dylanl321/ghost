@@ -9,7 +9,7 @@ import { createReport } from '../../utils/scheduled-reports'
 import { validateEmails } from '../../utils/email-service'
 import { getUserEmail, isUserAdmin } from '../../utils/user-roles'
 import { logger } from '../../utils/logger'
-import { getDatasetReportConfigErrors } from '../../utils/dataset-report-validation'
+import { getScheduledDatasetReportErrors } from '../../utils/dataset-report-validation'
 import { getScheduleErrors } from '../../../shared/utils/report-schedule'
 
 interface CreateDatasetReportRequest {
@@ -73,7 +73,7 @@ export default defineEventHandler(async (event) => {
     }
 
     const validationErrors = [
-      ...getDatasetReportConfigErrors(body.reportConfig),
+      ...getScheduledDatasetReportErrors(body.reportConfig),
       ...getScheduleErrors(body.schedule)
     ]
     if (validationErrors.length > 0) {

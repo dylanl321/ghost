@@ -486,7 +486,7 @@ async function generateCSVDatasetReport(
         record.complianceStatus || '',
         record.complianceType || '',
         record.configurationItemCaptureTime
-      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+      ].map(csvEscape).join(','))
     }
     csvRows.push('')
   }
@@ -509,7 +509,7 @@ async function generateCSVDatasetReport(
         record.controlId || '',
         record.firstObservedAt,
         record.updatedAt
-      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+      ].map(csvEscape).join(','))
     }
     csvRows.push('')
   }
@@ -532,7 +532,7 @@ async function generateCSVDatasetReport(
         record.readOnly ? 'Yes' : 'No',
         record.errorCode || '',
         record.region
-      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+      ].map(csvEscape).join(','))
     }
     csvRows.push('')
   }
@@ -554,7 +554,7 @@ async function generateCSVDatasetReport(
         record.jobTitle || '',
         record.lastSignIn || '',
         record.manager || ''
-      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+      ].map(csvEscape).join(','))
     }
     csvRows.push('')
   }
@@ -572,8 +572,14 @@ function appendSelectedCsvRows(csvRows: string[], title: string, records: object
   csvRows.push('')
 }
 
+/**
+ * Quote a CSV value. Text that a spreadsheet would run as a formula (CloudTrail
+ * and resource fields can hold attacker-chosen strings) gets a leading quote.
+ */
 function csvEscape(value: unknown): string {
-  return `"${String(value ?? '').replace(/"/g, '""')}"`
+  let text = String(value ?? '')
+  if (/^[=+\-@\t\r]/.test(text) && !/^-?\d+(\.\d+)?$/.test(text)) text = `'${text}`
+  return `"${text.replace(/"/g, '""')}"`
 }
 
 function createCsvResult(csvRows: string[]) {

@@ -131,3 +131,15 @@ export function getDatasetReportConfigErrors(value: unknown): string[] {
 
   return errors
 }
+
+/**
+ * Extra rules for reports the scheduler runs. Scheduled runs have no user
+ * session, and Entra Users needs one, so those reports failed on every run.
+ */
+export function getScheduledDatasetReportErrors(value: unknown): string[] {
+  const errors = getDatasetReportConfigErrors(value)
+  if ((value as Partial<DatasetReportConfig> | undefined)?.datasets?.entraUsers?.enabled) {
+    errors.push('Entra Users requires an interactive session and cannot be scheduled')
+  }
+  return errors
+}
