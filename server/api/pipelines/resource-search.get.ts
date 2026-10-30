@@ -1,7 +1,7 @@
 import { sendPaginated, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { logger } from '../../utils/logger'
-import { searchResourceAcrossAccounts, paginateResults } from '../../utils/athena-pipeline-queries'
+import { searchResourceAcrossAccounts, paginateResults, clampIntParam, assertPipelineAccountId } from '../../utils/athena-pipeline-queries'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/pipelines/resource-search', 'GET', {
@@ -113,11 +113,11 @@ export default defineEventHandler(handleAsync(async (event) => {
   }
 
   // Parse optional parameters
-  const accountId = query.account_id as string | undefined
-  const daysParam = query.days ? parseInt(query.days as string, 10) : 30
-  const days = Math.min(Math.max(daysParam, 1), 90) // Clamp between 1 and 90
-  const page = query.page ? parseInt(query.page as string, 10) : 1
-  const limit = query.limit ? parseInt(query.limit as string, 10) : 25
+  const accountId = (query.account_id as string | undefined) || undefined
+  if (accountId) assertPipelineAccountId(accountId)
+  const days = clampIntParam(query.days, 30, 1, 90)
+  const page = clampIntParam(query.page, 1, 1, 100000)
+  const limit = clampIntParam(query.limit, 25, 1, 500)
   // Pipeline data is ALWAYS stored in GovCloud
   const environment = 'govcloud' as const
 

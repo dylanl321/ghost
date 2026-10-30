@@ -65,6 +65,9 @@ export default defineEventHandler(handleAsync(async (event) => {
   if (!pipelineId) {
     return errors.badRequest(event, 'Pipeline ID is required')
   }
+  if (!/^\d+$/.test(pipelineId)) {
+    return errors.badRequest(event, 'Pipeline ID must contain only digits')
+  }
 
   const environment = 'govcloud' as const
 

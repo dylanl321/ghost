@@ -63,25 +63,3 @@ export function parseAuthorField(authorField: string | null | undefined): Author
     raw: trimmed,
   }
 }
-
-/**
- * Extract just the email address from author field
- */
-export function extractEmail(authorField: string | null | undefined): string {
-  return parseAuthorField(authorField).email
-}
-
-/**
- * Extract just the display name from author field
- */
-export function extractName(authorField: string | null | undefined): string {
-  return parseAuthorField(authorField).name
-}
-
-/**
- * Normalize author email for comparison and filtering
- * Converts to lowercase for case-insensitive matching
- */
-export function normalizeAuthorEmail(email: string): string {
-  return email.trim().toLowerCase()
-}
