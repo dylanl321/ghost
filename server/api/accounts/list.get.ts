@@ -16,7 +16,8 @@ import {
 } from '../../utils/account-enrichment'
 import {
   parseAndValidateAccountFilters,
-  filterAccounts
+  filterAccounts,
+  hasActiveFilters
 } from '../../utils/account-filters'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
@@ -204,7 +205,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   const metadata: any = { 
     source,
     enrichment: enrichmentLevel,
-    filtersApplied: Object.keys(accountFilters).length,
+    filtersApplied: hasActiveFilters(accountFilters),
     sortBy,
     order
   }
@@ -238,8 +239,11 @@ export default defineEventHandler(handleAsync(async (event) => {
     // Only apply advanced filtering to unified accounts
     if (source === 'full') {
       // Apply new filtering system
-      if (Object.keys(accountFilters).length > 0) {
-        accounts = await filterAccounts(accountFilters)
+      // Filter the list already fetched above rather than reading every
+      // account again. includeDecommissioned is always set, so only report
+      // filters when an actual filter was given.
+      accounts = await filterAccounts(accountFilters, accounts)
+      if (hasActiveFilters(accountFilters)) {
         metadata.filters = accountFilters
       }
       

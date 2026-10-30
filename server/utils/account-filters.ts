@@ -8,7 +8,6 @@ import type { UnifiedAccount } from '../schemas/account-schema'
 import type { LOBSummary, DepartmentSummary } from '../../shared/types/accounts'
 import { getLOBFullName } from './lob-mapping'
 import { findAccountByIdentifierOptimized } from './account-lookup-optimized'
-import { logger } from './logger'
 
 /**
  * Get nested value from object using dot notation
@@ -20,6 +19,32 @@ function getNestedValue(obj: any, path: string): any {
   return path.split('.').reduce((current, key) => {
     return current && current[key] !== undefined ? current[key] : undefined
   }, obj)
+}
+
+const ADVANCED_FILTER_OPERATORS = ['eq', 'ne', 'contains', 'not_contains', 'begins_with', 'not_begins_with', 'gt', 'gte', 'lt', 'lte', 'in', 'not_in'] as const
+
+/**
+ * Compare numerically when both sides are numbers (so 9 < 10, and "$1,200"
+ * reads as 1200), otherwise as strings, which orders ISO dates correctly.
+ */
+function compareFilterValues(accountValue: string, filterValue: string): number {
+  const toNumber = (value: string) => {
+    const cleaned = value.replace(/[$,\s]/g, '')
+    return cleaned !== '' && Number.isFinite(Number(cleaned)) ? Number(cleaned) : null
+  }
+  const a = toNumber(accountValue)
+  const b = toNumber(filterValue)
+  if (a !== null && b !== null) return a - b
+  return accountValue < filterValue ? -1 : accountValue > filterValue ? 1 : 0
+}
+
+/**
+ * Whether the criteria narrow the list at all. includeDecommissioned and
+ * excludeDecommissioned are always present, so they do not count.
+ */
+export function hasActiveFilters(criteria: AccountFilterCriteria): boolean {
+  return !!(criteria.accountIds?.length || criteria.linesOfBusiness?.length ||
+    criteria.departments?.length || criteria.advancedFilters?.length)
 }
 
 export interface AdvancedFilter {
@@ -36,6 +61,8 @@ export interface AccountFilterCriteria {
   includeDecommissioned?: boolean
   // Advanced filtering system
   advancedFilters?: AdvancedFilter[]
+  // Set when the filters query parameter could not be parsed
+  filtersParseError?: string
 }
 
 /**
@@ -66,12 +93,16 @@ export async function filterAccounts(
         account.requestId ? String(account.requestId) : null,
         account.requestID ? String(account.requestID) : null
       ].filter(Boolean) // Remove undefined/null values
-      
+      // Emails are accepted as identifiers (see validateAccountFilters).
+      const emails = [account.email, account.awsAccountEmail]
+        .filter((value): value is string => typeof value === 'string')
+        .map(value => value.toLowerCase())
+
       // Check if any of the account's IDs match any of the requested IDs
       return criteria.accountIds!.some(requestedId => {
         // Convert both to strings for comparison
-        const requestedIdStr = String(requestedId)
-        return accountIdFields.includes(requestedIdStr)
+        const requestedIdStr = String(requestedId).trim()
+        return accountIdFields.includes(requestedIdStr) || emails.includes(requestedIdStr.toLowerCase())
       })
     })
   }
@@ -128,13 +159,13 @@ export async function filterAccounts(
           case 'not_begins_with':
             return !stringValue.toLowerCase().startsWith(filter.value.toLowerCase())
           case 'gt':
-            return stringValue > filter.value
+            return compareFilterValues(stringValue, filter.value) > 0
           case 'gte':
-            return stringValue >= filter.value
+            return compareFilterValues(stringValue, filter.value) >= 0
           case 'lt':
-            return stringValue < filter.value
+            return compareFilterValues(stringValue, filter.value) < 0
           case 'lte':
-            return stringValue <= filter.value
+            return compareFilterValues(stringValue, filter.value) <= 0
           case 'in':
             // Check if account value is in the comma-separated filter value
             const values = filter.value.split(',').map(v => v.trim().toLowerCase())
@@ -144,7 +175,7 @@ export async function filterAccounts(
             const notValues = filter.value.split(',').map(v => v.trim().toLowerCase())
             return !notValues.includes(stringValue.toLowerCase())
           default:
-            return true // Unknown operator, pass through
+            return true // Unreachable: validateAccountFilters rejects unknown operators
         }
       })
     })
@@ -323,14 +354,16 @@ export function parseAccountFilters(query: Record<string, any>): AccountFilterCr
 
       if (Array.isArray(filtersData)) {
         criteria.advancedFilters = filtersData.map(filter => ({
-          key: filter.key?.trim() || '',
-          value: filter.value?.trim() || '',
+          key: filter?.key != null ? String(filter.key).trim() : '',
+          value: filter?.value != null ? String(filter.value).trim() : '',
           operator: (filter.operator || 'eq') as AdvancedFilter['operator']
         })).filter(filter => filter.key)
+      } else {
+        criteria.filtersParseError = 'filters must be a JSON array of {key, value, operator}'
       }
-    } catch (error) {
-      // If JSON parsing fails, ignore and fall back to individual parameters
-      logger.warn('Failed to parse filters JSON:', error)
+    } catch {
+      // Ignoring a malformed filter would silently return every account.
+      criteria.filtersParseError = 'filters is not valid JSON'
     }
   } else if (query.key) {
     // Handle individual key/value/operator parameters
@@ -373,6 +406,16 @@ export function validateAccountFilters(criteria: AccountFilterCriteria): string[
   if (criteria.linesOfBusiness && criteria.linesOfBusiness.length > 0) filterTypes.push('linesOfBusiness')
   if (criteria.departments && criteria.departments.length > 0) filterTypes.push('departments')
   if (criteria.advancedFilters && criteria.advancedFilters.length > 0) filterTypes.push('advancedFilters')
+
+  if (criteria.filtersParseError) {
+    errors.push(criteria.filtersParseError)
+  }
+
+  for (const filter of criteria.advancedFilters ?? []) {
+    if (!(ADVANCED_FILTER_OPERATORS as readonly string[]).includes(filter.operator)) {
+      errors.push(`Unknown filter operator: ${filter.operator}. Use one of ${ADVANCED_FILTER_OPERATORS.join(', ')}.`)
+    }
+  }
 
   // Check for conflicts: advancedFilters cannot be combined with other filter types
   if (criteria.advancedFilters && criteria.advancedFilters.length > 0 && filterTypes.length > 1) {

@@ -35,8 +35,16 @@ export default defineEventHandler(async (event) => {
     // Parse request body
     const body = await readBody<CreateNoteRequest>(event)
 
-    if (!body.content || !body.content.trim()) {
+    if (typeof body?.content !== 'string' || !body.content.trim()) {
       return errors.badRequest(event, 'Note content is required')
+    }
+
+    // Mentions trigger an email to each address, so only accept a short list
+    // of real addresses.
+    const mentionedUsers = body.mentionedUsers ?? []
+    if (!Array.isArray(mentionedUsers) || mentionedUsers.length > 20 ||
+        !mentionedUsers.every(email => typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+      return errors.badRequest(event, 'mentionedUsers must be a list of up to 20 email addresses')
     }
 
     // Create the note
@@ -44,21 +52,21 @@ export default defineEventHandler(async (event) => {
       {
         accountId,
         content: body.content.trim(),
-        tags: body.tags || [],
-        mentionedUsers: body.mentionedUsers || []
+        tags: Array.isArray(body.tags) ? body.tags.filter(tag => typeof tag === 'string') : [],
+        mentionedUsers
       },
       userEmail
     )
 
     // Send email notifications to mentioned users
-    if (body.mentionedUsers && body.mentionedUsers.length > 0) {
+    if (mentionedUsers.length > 0) {
       try {
         const notePreview = body.content.length > 200
           ? body.content.substring(0, 200) + '...'
           : body.content
 
         // Send to each mentioned user
-        for (const mentionedEmail of body.mentionedUsers) {
+        for (const mentionedEmail of mentionedUsers) {
           await sendEmail({
             to: mentionedEmail,
             subject: `You were mentioned in a note for AWS Account ${accountId}`,

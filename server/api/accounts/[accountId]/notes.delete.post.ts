@@ -27,14 +27,14 @@ export default defineEventHandler(async (event) => {
 
     const accountId = getRouterParam(event, 'accountId')
     const body = await readBody(event)
-    const noteId = body.noteId
+    const noteId = body?.noteId
 
     if (!accountId || !noteId) {
       return errors.badRequest(event, 'Account ID and Note ID are required')
     }
 
     // Delete the note (checks ownership internally)
-    await deleteAccountNote(noteId, userEmail)
+    await deleteAccountNote(noteId, userEmail, accountId)
 
     return sendSuccess(event, { deleted: true }, {
       message: 'Note deleted successfully'

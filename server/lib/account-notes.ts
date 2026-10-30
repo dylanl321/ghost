@@ -3,7 +3,7 @@
  * CRUD operations for admin notes on AWS accounts
  */
 
-import type { AccountNote, CreateNoteRequest, UpdateNoteRequest, ListNotesQuery } from '../../shared/types/account-notes'
+import type { AccountNote, CreateNoteRequest, ListNotesQuery } from '../../shared/types/account-notes'
 import { getTableName, getTableEnvironment, getTableAccountId } from './dynamodb-config'
 import { putItem, getItem, deleteItem, queryItems } from '../utils/dynamodb'
 import { v4 as uuidv4 } from 'uuid'
@@ -49,46 +49,13 @@ export async function getAccountNote(noteId: string): Promise<AccountNote | null
 }
 
 /**
- * Update an existing note
- */
-export async function updateAccountNote(
-  noteId: string,
-  updates: UpdateNoteRequest,
-  userId: string
-): Promise<AccountNote> {
-  // Get existing note
-  const existing = await getAccountNote(noteId)
-  if (!existing) {
-    throw new Error('Note not found')
-  }
-
-  // Verify ownership (only creator can edit)
-  if (existing.createdBy !== userId) {
-    throw new Error('Not authorized to edit this note')
-  }
-
-  const updated: AccountNote = {
-    ...existing,
-    ...updates,
-    updatedAt: new Date().toISOString()
-  }
-
-  const tableName = await getTableName('accountNotes')
-  const environment = await getTableEnvironment('accountNotes')
-  const accountId = await getTableAccountId('accountNotes')
-
-  await putItem(tableName, updated, environment, accountId)
-
-  return updated
-}
-
-/**
  * Delete a note
  */
-export async function deleteAccountNote(noteId: string, userId: string): Promise<boolean> {
-  // Get existing note to verify ownership
+export async function deleteAccountNote(noteId: string, userId: string, accountId?: string): Promise<boolean> {
+  // Get existing note to verify ownership. A note under another account is
+  // treated as missing so the route's account scope means something.
   const existing = await getAccountNote(noteId)
-  if (!existing) {
+  if (!existing || (accountId && existing.accountId !== accountId)) {
     throw new Error('Note not found')
   }
 
@@ -99,9 +66,9 @@ export async function deleteAccountNote(noteId: string, userId: string): Promise
 
   const tableName = await getTableName('accountNotes')
   const environment = await getTableEnvironment('accountNotes')
-  const accountId = await getTableAccountId('accountNotes')
+  const tableAccountId = await getTableAccountId('accountNotes')
 
-  await deleteItem(tableName, { noteId }, environment, accountId)
+  await deleteItem(tableName, { noteId }, environment, tableAccountId)
 
   return true
 }
@@ -152,23 +119,3 @@ export async function listAccountNotes(query: ListNotesQuery): Promise<AccountNo
 
   return result.items as AccountNote[]
 }
-
-/**
- * Get mentions for a user
- * Returns all notes where the user is mentioned
- */
-export async function getUserMentions(userEmail: string): Promise<AccountNote[]> {
-  const tableName = await getTableName('accountNotes')
-  const environment = await getTableEnvironment('accountNotes')
-  const accountId = await getTableAccountId('accountNotes')
-
-  // Note: This requires a scan which is not ideal for large datasets
-  // In production, consider adding a separate table or GSI for mentions
-  // For now, we'll fetch all notes and filter client-side
-  // This is acceptable for MVP with limited notes
-
-  // TODO: Optimize with dedicated mentions table or GSI if note volume grows
-  
-  return []
-}
-

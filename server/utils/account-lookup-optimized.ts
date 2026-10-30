@@ -1,37 +1,14 @@
 /**
- * Optimized Account Lookup Utility with Automatic Fallback
- * 
- * Uses targeted DynamoDB queries and Organizations API calls instead of 
- * scanning entire datasets for single account lookups.
- * 
- * DYNAMODB TABLE STRUCTURE:
- * - Primary Key: requestId (Number) - O(1) lookup for request IDs
- * - Attributes: accountId, govCloudAccountId, email, name, etc.
- * 
- * PERFORMANCE IMPROVEMENT:
- * - OLD: Scan 263+ DynamoDB records + 113+ Organizations accounts = ~376 API calls
- * - NEW: Request ID = 1 GetItem call (O(1) - fastest possible)
- * - NEW: Account ID/Email = 1 Scan with filtering (still much better than full unified scan)
- * 
- * OPERATION TYPES:
- * - Request ID: GetItem (O(1) primary key lookup - MOST EFFICIENT)
- * - Account ID: Filtered Scan (accountId attribute)
- * - Email: Filtered Scan with GSI fallback (email attribute)
- * - Organizations: Direct API call only when needed for enrichment
- * 
- * FALLBACK BEHAVIOR:
- * 1. Request ID always uses GetItem (primary key) - fastest
- * 2. Account ID/Email use Scan with filtering - still faster than unified account scan
- * 3. If DynamoDB queries fail entirely, falls back to Organizations API
- * 
- * OPTIMIZATION NOTES:
- * - Request IDs are the most efficient lookup (primary key)
- * - Account IDs and emails require table scan but with filtering
- * - Optional GSI on email would make email lookups O(1) as well
+ * Single-account lookup by account ID, request ID, email or PEP ID.
+ *
+ * The account registry (externalAccounts, keyed by requestID) has no index on
+ * the other identifiers, so every lookup reads the registry through
+ * getAllAccountMetadataFromDynamoDB: one paginated scan shared by all callers
+ * for a few minutes, instead of one unpaginated scan per request. Matches are
+ * enriched with AWS Organizations data when it is available.
  */
 
-import { getDynamoDBClient } from '../lib/aws-client-factory'
-import { getAccountFromOrganizations, getAccountsTableName } from './accounts-consolidated'
+import { getAccountFromOrganizations, getAllAccountMetadataFromDynamoDB } from './accounts-consolidated'
 import { errors } from './api-response'
 import type { H3Event } from 'h3'
 import { logger } from './logger'
@@ -51,407 +28,104 @@ export interface OptimizedLookupResult {
   source: 'dynamodb' | 'organizations' | 'both'
 }
 
-const TABLE_NAME = 'gdms_aws_accounts-master'
-
 /**
- * Get account by account ID (requires scan since accountId is not the primary key)
+ * Map registry field names to the normalized names, then merge in
+ * Organizations data. Organizations reports the GovCloud ID as accountId for
+ * a GovCloud account, so the normalized IDs are applied last: accountId is
+ * always the commercial account and govCloudAccountId the GovCloud one.
  */
-async function getAccountByAccountId(
-  accountId: string
-): Promise<any | null> {
-  try {
-    const tableName = await getAccountsTableName()
-
-    // Since accountId is NOT the primary key (requestId is), we need to scan
-    const { scanItems } = await import('./dynamodb')
-    const scanResult = await scanItems(
-      tableName,
-      undefined,
-      undefined,
-      undefined,
-      'govcloud'
-    )
-    
-    // Find account by accountId (check both commercial and govcloud account IDs)
-    const account = scanResult.items.find(item => 
-      item.awsStandardAccountID === accountId ||
-      item.awsGovCloudAccountID === accountId
-    )
-    
-    if (account) {
-      // Normalize field names
-      const normalizedAccount = {
-        ...account,
-        // Map DynamoDB field names to standard names (placed after spread to override)
-        requestId: account.requestID,
-        accountId: account.awsStandardAccountID,
-        govCloudAccountId: account.awsGovCloudAccountID,
-        email: account.awsAccountEmail,
-        name: account.projectName,
-        source: 'dynamodb'
-      }
-      
-      // Enrich with Organizations data if available
-      try {
-        const orgAccount = await getAccountFromOrganizations(accountId, accountId === account.awsGovCloudAccountID ? 'govcloud' : 'commercial')
-        if (orgAccount) {
-          return {
-            ...normalizedAccount,
-            ...orgAccount,
-            source: 'both'
-          }
-        }
-      } catch (error) {
-        logger.warn(`Failed to get Organizations data for ${accountId}:`, error)
-      }
-      
-      return normalizedAccount
-    }
-    
-    // If not in DynamoDB, try Organizations only
-    try {
-      const orgAccount = await getAccountFromOrganizations(accountId, 'govcloud')
-      if (orgAccount) {
-        return {
-          ...orgAccount,
-          source: 'organizations'
-        }
-      }
-    } catch (error) {
-      logger.warn(`Failed to get Organizations data for ${accountId}:`, error)
-    }
-    
-    return null
-  } catch (error) {
-    logger.error(`Error looking up account ${accountId}:`, error)
-    return null
+async function normalizeAndEnrich(record: any, preferred: 'commercial' | 'govcloud' = 'commercial'): Promise<any> {
+  const normalized = {
+    requestId: record.requestID,
+    accountId: record.awsStandardAccountID,
+    govCloudAccountId: record.awsGovCloudAccountID,
+    email: record.awsAccountEmail,
+    name: record.projectName
   }
+
+  // Organizations data comes from the partition of the ID that was looked
+  // up, or commercial (the primary ID) when the lookup was by another field.
+  const commercial: [string | undefined, 'commercial'] = [record.awsStandardAccountID, 'commercial']
+  const govcloud: [string | undefined, 'govcloud'] = [record.awsGovCloudAccountID, 'govcloud']
+  const lookups = preferred === 'govcloud' ? [govcloud, commercial] : [commercial, govcloud]
+  for (const [id, environment] of lookups) {
+    if (!id) continue
+    const orgAccount = await getAccountFromOrganizations(id, environment)
+    if (orgAccount) {
+      return {
+        ...record,
+        ...orgAccount,
+        ...normalized,
+        status: orgAccount.accountStatus,
+        source: 'both'
+      }
+    }
+  }
+
+  return { ...record, ...normalized, source: 'dynamodb' }
+}
+
+async function findRegistryRecord(predicate: (item: any) => boolean): Promise<any | null> {
+  const records = await getAllAccountMetadataFromDynamoDB()
+  return records.find(predicate) ?? null
 }
 
 /**
- * Get account by email using GSI or fallback to Scan
+ * Get account by commercial or GovCloud account ID
  */
-async function getAccountByEmail(
-  email: string
-): Promise<any | null> {
-  try {
-    const dynamoClient = await getDynamoDBClient('govcloud')
-    const tableName = TABLE_NAME
-    
-    const { QueryCommand } = await import('@aws-sdk/client-dynamodb')
-    const { marshall, unmarshall } = await import('@aws-sdk/util-dynamodb')
-    
-    let account: any = null
-    
-    // Try GSI query first (if it exists)
-    try {
-      const result = await dynamoClient.send(new QueryCommand({
-        TableName: tableName,
-        IndexName: 'email-index',
-        KeyConditionExpression: 'email = :email',
-        ExpressionAttributeValues: marshall({
-          ':email': email.toLowerCase()
-        }),
-        Limit: 1
-      }))
-      
-      if (result.Items && result.Items.length > 0) {
-        account = unmarshall(result.Items[0]!)
-      }
-    } catch (gsiError: any) {
-      // GSI doesn't exist, fall back to Scan
-      if (gsiError.name === 'ResourceNotFoundException' || gsiError.message?.includes('Requested resource not found')) {
-        logger.warn(`GSI email-index not found, falling back to Scan for ${email}`)
-        
-        // Use scanItems utility function with proper filter
-        const { scanItems } = await import('./dynamodb')
-        const scanResult = await scanItems(
-          tableName,
-          `email = :email`,
-          undefined,
-          undefined,
-          'govcloud'
-        )
-        
-        // Filter results manually since scanItems doesn't support expression attribute values
-        const matchingAccount = scanResult.items.find(item => 
-          item.awsAccountEmail && item.awsAccountEmail.toLowerCase() === email.toLowerCase()
-        )
-        
-        if (matchingAccount) {
-          account = matchingAccount
-        }
-      } else {
-        throw gsiError
-      }
-    }
-
-    // Some deployments have an email index over a legacy field name. Fall
-    // back when the index exists but returns no item for awsAccountEmail.
-    if (!account) {
-      const { scanItems } = await import('./dynamodb')
-      const scanResult = await scanItems(
-        await getAccountsTableName(),
-        undefined,
-        undefined,
-        undefined,
-        'govcloud'
-      )
-      account = scanResult.items.find(item =>
-        [item.awsAccountEmail, item.accountEmail, item.email]
-          .some(value => typeof value === 'string' && value.toLowerCase() === email.toLowerCase())
-      ) || null
-    }
-    
-    if (!account) return null
-    
-    // Normalize field names
-    const normalizedAccount = {
-      ...account,
-      // Map DynamoDB field names to standard names (placed after spread to override)
-      requestId: account.requestID,
-      accountId: account.awsStandardAccountID,
-      govCloudAccountId: account.awsGovCloudAccountID,
-      email: account.awsAccountEmail,
-      name: account.projectName,
-      source: 'dynamodb'
-    }
-    
-    // Enrich with Organizations data (try both environments)
-    const commercialAccountId = account.awsStandardAccountID
-    const govCloudAccountId = account.awsGovCloudAccountID
-    
-    if (govCloudAccountId) {
-      try {
-        const orgAccount = await getAccountFromOrganizations(govCloudAccountId, 'govcloud')
-        if (orgAccount) {
-          return {
-            ...normalizedAccount,
-            ...orgAccount,
-            source: 'both'
-          }
-        }
-      } catch (error) {
-        logger.warn(`Failed to get Organizations data for govcloud ${govCloudAccountId}:`, error)
-      }
-    }
-    
-    if (commercialAccountId) {
-      try {
-        const orgAccount = await getAccountFromOrganizations(commercialAccountId, 'commercial')
-        if (orgAccount) {
-          return {
-            ...normalizedAccount,
-            ...orgAccount,
-            source: 'both'
-          }
-        }
-      } catch (error) {
-        logger.warn(`Failed to get Organizations data for commercial ${commercialAccountId}:`, error)
-      }
-    }
-    
-    return normalizedAccount
-  } catch (error) {
-    logger.error(`Error looking up account by email ${email}:`, error)
-    return null
+async function getAccountByAccountId(accountId: string): Promise<any | null> {
+  const record = await findRegistryRecord(item =>
+    item.awsStandardAccountID === accountId || item.awsGovCloudAccountID === accountId
+  )
+  if (record) {
+    return normalizeAndEnrich(record, record.awsGovCloudAccountID === accountId ? 'govcloud' : 'commercial')
   }
+
+  // Not in the registry: the account may still exist in either organization.
+  for (const environment of ['commercial', 'govcloud'] as const) {
+    const orgAccount = await getAccountFromOrganizations(accountId, environment)
+    if (orgAccount) {
+      return {
+        ...orgAccount,
+        ...(environment === 'govcloud' ? { accountId: undefined, govCloudAccountId: accountId } : {}),
+        name: orgAccount.accountName,
+        email: orgAccount.accountEmail,
+        status: orgAccount.accountStatus,
+        source: 'organizations'
+      }
+    }
+  }
+  return null
 }
 
 /**
- * Get account by requestId (scan since we need to determine the actual table schema)
+ * Get account by root email (registry field names vary by deployment)
  */
-async function getAccountByRequestId(
-  requestId: string
-): Promise<any | null> {
-  try {
-    const tableName = await getAccountsTableName()
-    const requestIdNumber = parseInt(requestId)
-
-    // Use scan to find the account since we're not sure of the exact primary key schema
-    const { scanItems } = await import('./dynamodb')
-    const scanResult = await scanItems(
-      tableName,
-      undefined,
-      undefined,
-      undefined,
-      'govcloud'
-    )
-    
-    // Find account by requestID (note: field name is requestID, not requestId)
-    const account = scanResult.items.find(item => 
-      item.requestID === requestIdNumber || 
-      item.requestID === requestId
-    )
-    
-    if (account) {
-      // Normalize field names and enrich with Organizations data
-      const normalizedAccount = {
-        // Keep all original fields
-        ...account,
-        // Override with normalized field names
-        requestId: account.requestID,
-        accountId: account.awsStandardAccountID,
-        govCloudAccountId: account.awsGovCloudAccountID,
-        email: account.awsAccountEmail,
-        name: account.projectName,
-        source: 'dynamodb'
-      }
-      
-      // Ensure our normalized fields aren't overridden by original fields
-      normalizedAccount.accountId = account.awsStandardAccountID
-      normalizedAccount.govCloudAccountId = account.awsGovCloudAccountID
-      normalizedAccount.email = account.awsAccountEmail
-      normalizedAccount.name = account.projectName
-      
-      const commercialAccountId = account.awsStandardAccountID
-      const govCloudAccountId = account.awsGovCloudAccountID
-      
-      // Try to enrich with Organizations data (preserve normalized fields)
-      if (govCloudAccountId) {
-        try {
-          const orgAccount = await getAccountFromOrganizations(govCloudAccountId, 'govcloud')
-          if (orgAccount) {
-            const enrichedAccount = {
-              ...normalizedAccount,
-              ...orgAccount,
-              source: 'both'
-            }
-            // Re-apply normalized fields to ensure they aren't overridden
-            enrichedAccount.accountId = account.awsStandardAccountID
-            enrichedAccount.govCloudAccountId = account.awsGovCloudAccountID
-            enrichedAccount.email = account.awsAccountEmail
-            enrichedAccount.name = account.projectName
-            return enrichedAccount
-          }
-        } catch (error) {
-          logger.warn(`Failed to get Organizations data for govcloud ${govCloudAccountId}:`, error)
-        }
-      }
-      
-      if (commercialAccountId) {
-        try {
-          const orgAccount = await getAccountFromOrganizations(commercialAccountId, 'commercial')
-          if (orgAccount) {
-            const enrichedAccount = {
-              ...normalizedAccount,
-              ...orgAccount,
-              source: 'both'
-            }
-            // Re-apply normalized fields to ensure they aren't overridden
-            enrichedAccount.accountId = account.awsStandardAccountID
-            enrichedAccount.govCloudAccountId = account.awsGovCloudAccountID
-            enrichedAccount.email = account.awsAccountEmail
-            enrichedAccount.name = account.projectName
-            return enrichedAccount
-          }
-        } catch (error) {
-          logger.warn(`Failed to get Organizations data for commercial ${commercialAccountId}:`, error)
-        }
-      }
-      
-      return normalizedAccount
-    }
-    
-    return null
-  } catch (error) {
-    logger.error(`Error looking up account by requestId ${requestId}:`, error)
-    return null
-  }
+async function getAccountByEmail(email: string): Promise<any | null> {
+  const target = email.toLowerCase()
+  const record = await findRegistryRecord(item =>
+    [item.awsAccountEmail, item.accountEmail, item.email]
+      .some(value => typeof value === 'string' && value.toLowerCase() === target)
+  )
+  return record ? normalizeAndEnrich(record) : null
 }
 
 /**
- * Get account by PEP External Enclave ID (requires scan)
+ * Get account by request ID (stored as a number, accepted as a string)
  */
-async function getAccountByPepId(
-  pepId: string
-): Promise<any | null> {
-  try {
-    const tableName = await getAccountsTableName()
-    const pepIdNumber = parseInt(pepId)
+async function getAccountByRequestId(requestId: string): Promise<any | null> {
+  const record = await findRegistryRecord(item => String(item.requestID) === requestId)
+  return record ? normalizeAndEnrich(record) : null
+}
 
-    const { scanItems } = await import('./dynamodb')
-    const scanResult = await scanItems(
-      tableName,
-      undefined,
-      undefined,
-      undefined,
-      'govcloud'
-    )
-
-    // Find account by pepExternalEnclaveID (compare as both number and string)
-    const account = scanResult.items.find(item =>
-      item.pepExternalEnclaveID === pepIdNumber ||
-      item.pepExternalEnclaveID === pepId
-    )
-
-    if (account) {
-      const normalizedAccount = {
-        ...account,
-        requestId: account.requestID,
-        accountId: account.awsStandardAccountID,
-        govCloudAccountId: account.awsGovCloudAccountID,
-        email: account.awsAccountEmail,
-        name: account.projectName,
-        source: 'dynamodb'
-      }
-
-      normalizedAccount.accountId = account.awsStandardAccountID
-      normalizedAccount.govCloudAccountId = account.awsGovCloudAccountID
-      normalizedAccount.email = account.awsAccountEmail
-      normalizedAccount.name = account.projectName
-
-      const commercialAccountId = account.awsStandardAccountID
-      const govCloudAccountId = account.awsGovCloudAccountID
-
-      if (govCloudAccountId) {
-        try {
-          const orgAccount = await getAccountFromOrganizations(govCloudAccountId, 'govcloud')
-          if (orgAccount) {
-            const enrichedAccount = {
-              ...normalizedAccount,
-              ...orgAccount,
-              source: 'both'
-            }
-            enrichedAccount.accountId = account.awsStandardAccountID
-            enrichedAccount.govCloudAccountId = account.awsGovCloudAccountID
-            enrichedAccount.email = account.awsAccountEmail
-            enrichedAccount.name = account.projectName
-            return enrichedAccount
-          }
-        } catch (error) {
-          logger.warn(`Failed to get Organizations data for govcloud ${govCloudAccountId}:`, error)
-        }
-      }
-
-      if (commercialAccountId) {
-        try {
-          const orgAccount = await getAccountFromOrganizations(commercialAccountId, 'commercial')
-          if (orgAccount) {
-            const enrichedAccount = {
-              ...normalizedAccount,
-              ...orgAccount,
-              source: 'both'
-            }
-            enrichedAccount.accountId = account.awsStandardAccountID
-            enrichedAccount.govCloudAccountId = account.awsGovCloudAccountID
-            enrichedAccount.email = account.awsAccountEmail
-            enrichedAccount.name = account.projectName
-            return enrichedAccount
-          }
-        } catch (error) {
-          logger.warn(`Failed to get Organizations data for commercial ${commercialAccountId}:`, error)
-        }
-      }
-
-      return normalizedAccount
-    }
-
-    return null
-  } catch (error) {
-    logger.error(`Error looking up account by pepId ${pepId}:`, error)
-    return null
-  }
+/**
+ * Get account by PEP External Enclave ID
+ */
+async function getAccountByPepId(pepId: string): Promise<any | null> {
+  const record = await findRegistryRecord(item =>
+    item.pepExternalEnclaveID != null && String(item.pepExternalEnclaveID) === pepId
+  )
+  return record ? normalizeAndEnrich(record) : null
 }
 
 /**
@@ -480,8 +154,6 @@ export async function findAccountByIdentifierOptimized(
   identifier: string,
   options: AccountLookupOptions = {}
 ): Promise<OptimizedLookupResult | null> {
-  logger.info('running findAccountByIdentifierOptimized')
-
   if (!identifier || identifier.trim() === '') {
     return null
   }
@@ -523,7 +195,6 @@ export async function findAccountByIdentifierOptimized(
   // Try to find account using the most efficient method
   let account: any = null
 
-  // Always use govcloud environment
   try {
     switch (identifierType) {
       case 'accountId':
@@ -556,7 +227,7 @@ export async function findAccountByIdentifierOptimized(
       }
     }
   } catch (error) {
-    logger.warn(`Error searching govcloud for ${identifierType} ${cleanIdentifier}:`, error)
+    logger.warn(`Error looking up account by ${identifierType} ${cleanIdentifier}:`, error)
   }
 
   return null
@@ -570,8 +241,6 @@ export async function lookupAccountOptimized(
   identifier: string,
   options: AccountLookupOptions = {}
 ): Promise<OptimizedLookupResult | null> {
-  logger.info('running lookupAccountOptimized')
-
   // Validate identifier format
   if (!identifier || identifier.trim() === '') {
     throw errors.badRequest(event, 'Account identifier is required')
@@ -624,6 +293,20 @@ export async function lookupAccountOptimized(
   }
   
   return result
+}
+
+/**
+ * The account's ID in one partition, or undefined when it has none there.
+ * Never falls back to the other partition's ID.
+ */
+export function getEnvironmentAccountId(
+  account: any,
+  environment: 'commercial' | 'govcloud'
+): string | undefined {
+  if (!account) return undefined
+  return environment === 'govcloud'
+    ? (account.govCloudAccountId || account.awsGovCloudAccountID || account.govId || undefined)
+    : (account.accountId || account.awsStandardAccountID || account.id || undefined)
 }
 
 /**

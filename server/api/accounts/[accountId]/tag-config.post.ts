@@ -84,6 +84,11 @@ registerEndpoint('/api/accounts/{accountId}/tag-config', 'POST', {
   }
 })
 
+function isStringMap(value: unknown): value is Record<string, string> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) &&
+    Object.values(value).every(entry => typeof entry === 'string')
+}
+
 export default defineEventHandler(handleAsync(async (event) => {
   const accountId = getRouterParam(event, 'accountId')
   if (!accountId) {
@@ -103,13 +108,24 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.badRequest(event, 'importantTags must contain only strings')
   }
 
+  if (body.defaultGroupByTag != null && typeof body.defaultGroupByTag !== 'string') {
+    return errors.badRequest(event, 'defaultGroupByTag must be a string')
+  }
+  for (const field of ['tagDescriptions', 'tagValueAliases'] as const) {
+    if (body[field] != null && !isStringMap(body[field])) {
+      return errors.badRequest(event, `${field} must be an object of string values`)
+    }
+  }
+
+  // The auth middleware puts the signed-in user on event.context.auth.
+  const user = event.context.auth?.user
   const tagConfig: AccountCostTagConfig = {
     importantTags: body.importantTags,
     defaultGroupByTag: body.defaultGroupByTag || undefined,
     tagDescriptions: body.tagDescriptions || {},
     tagValueAliases: body.tagValueAliases || {},
     updatedAt: new Date().toISOString(),
-    updatedBy: (event.context.user?.email as string) || (event.context.user?.name as string) || 'unknown'
+    updatedBy: (user?.email as string) || (user?.displayName as string) || (user?.name as string) || 'unknown'
   }
 
   logger.info(`[TagConfig] Updating tag config for account ${accountId}`, {
