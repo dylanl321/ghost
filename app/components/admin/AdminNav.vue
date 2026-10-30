@@ -3,7 +3,7 @@
     class="bg-white dark:bg-slate-800 border-r border-gray-200 dark:border-slate-700 flex-shrink-0 overflow-y-auto transition-all duration-300"
     :class="sidebarCollapsed ? 'w-16' : 'w-64'"
   >
-    <div class="flex flex-col h-full">
+    <div class="flex flex-col h-full w-full min-w-0">
       <!-- Sidebar Header -->
       <div class="p-4 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
         <span
@@ -451,6 +451,16 @@ const isCategoryActive = (category: typeof categories[0]) => {
   const categoryPath = category.to.split('?')[0]
   return route.path === categoryPath || route.path.startsWith(categoryPath + '/')
 }
+
+// Open the section that holds the current page, so arriving from a link or a refresh
+// shows where you are instead of a collapsed section
+watch(() => route.path, () => {
+  for (const category of categories) {
+    if (isCategoryActive(category) || category.children?.some(child => isActive(child.to))) {
+      categoryExpanded.value[category.id] = true
+    }
+  }
+}, { immediate: true })
 
 // Expose methods for external control
 defineExpose({

@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6 p-6">
+  <div class="container mx-auto max-w-7xl space-y-6 px-6 py-8">
     <!-- Page Header -->
     <UCard>
       <div class="flex gap-2 items-center justify-between">
