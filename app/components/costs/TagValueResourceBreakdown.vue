@@ -52,6 +52,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { toCostTagFilterValues } from '~~/shared/utils/cost-tag-identities'
 import { formatCostValue } from '~/utils/cost-filters'
 
 const logger = createLogger('TagValueResourceBreakdown')
@@ -82,20 +83,7 @@ const unavailable = ref(false)
 const notice = ref<string | null>(null)
 const resources = ref<ResourceItem[]>([])
 
-function stripTagPrefix(rawValue: string, tagKey: string): string {
-  const idx = rawValue.indexOf('$')
-  if (idx !== -1) {
-    const prefix = rawValue.substring(0, idx)
-    if (prefix === tagKey || prefix === '') {
-      return rawValue.substring(idx + 1)
-    }
-  }
-  return rawValue
-}
-
-const effectiveTagValues = computed(() => props.tagValues.length > 0
-  ? props.tagValues
-  : props.tagValue ? [stripTagPrefix(props.tagValue, props.tagKey)] : [])
+const effectiveTagValues = computed(() => toCostTagFilterValues(props.tagKey, props.tagValues, props.tagValue))
 
 async function fetchData() {
   if (!props.accountId || !props.serviceName || !props.tagKey || effectiveTagValues.value.length === 0) return

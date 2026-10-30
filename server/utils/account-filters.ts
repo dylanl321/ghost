@@ -10,6 +10,10 @@ import { getLOBFullName } from './lob-mapping'
 import { findAccountByIdentifierOptimized } from './account-lookup-optimized'
 import { logger } from './logger'
 
+function normalizeFilterValue(value: string): string {
+  return value.trim().toLowerCase()
+}
+
 /**
  * Get nested value from object using dot notation
  * @param obj - The object to access
@@ -76,35 +80,27 @@ export async function filterAccounts(
     })
   }
   
-  // Filter by lines of business
+  // Filter by lines of business. Values match a whole LOB code or its full
+  // name, case-insensitively; substring matching let "IT" select Maritime
+  // accounts and "Air" select Airborne ones.
   if (criteria.linesOfBusiness && criteria.linesOfBusiness.length > 0) {
+    const requested = new Set(criteria.linesOfBusiness.map(normalizeFilterValue))
     filteredAccounts = filteredAccounts.filter(account => {
       if (!account.linesOfBusiness) return false
-      
-      // Handle both single LOB and comma-separated LOBs
-      const accountLOBs = account.linesOfBusiness
+      return account.linesOfBusiness
         .split(',')
-        .map(lob => lob.trim().toLowerCase())
-      
-      return criteria.linesOfBusiness!.some(filterLOB =>
-        accountLOBs.some(accountLOB => 
-          accountLOB.includes(filterLOB.toLowerCase()) ||
-          filterLOB.toLowerCase().includes(accountLOB)
-        )
-      )
+        .map(lob => lob.trim())
+        .filter(Boolean)
+        .some(lob => requested.has(normalizeFilterValue(lob)) || requested.has(normalizeFilterValue(getLOBFullName(lob))))
     })
   }
-  
-  // Filter by departments
-  if (criteria.departments && criteria.departments.length > 0) {
-    filteredAccounts = filteredAccounts.filter(account => {
-      if (!account.departmentNumber) return false
 
-      return criteria.departments!.some(dept =>
-        account.departmentNumber?.toLowerCase().includes(dept.toLowerCase()) ||
-        dept.toLowerCase().includes(account.departmentNumber!.toLowerCase())
-      )
-    })
+  // Filter by departments: exact department number, case-insensitive
+  if (criteria.departments && criteria.departments.length > 0) {
+    const requested = new Set(criteria.departments.map(normalizeFilterValue))
+    filteredAccounts = filteredAccounts.filter(account =>
+      Boolean(account.departmentNumber) && requested.has(normalizeFilterValue(account.departmentNumber!))
+    )
   }
 
   // Apply advanced filters (key, value, operator)
@@ -225,7 +221,12 @@ export async function getUniqueDepartments(includeDecommissioned: boolean = fals
  * This is because Cost Explorer only exists in commercial and uses consolidated billing
  */
 export async function getAccountIdsFromCriteria(criteria: AccountFilterCriteria): Promise<string[]> {
-  const filteredAccounts = await filterAccounts(criteria)
+  // Accounts named explicitly are resolved even when decommissioned: their
+  // historical costs are real, and the cost dashboard lets users select them.
+  const filteredAccounts = await filterAccounts({
+    ...criteria,
+    includeDecommissioned: criteria.includeDecommissioned || Boolean(criteria.accountIds?.length)
+  })
   
   // For Cost Explorer, we MUST use commercial account IDs
   // Priority: awsStandardAccountID > accountId (both are commercial)

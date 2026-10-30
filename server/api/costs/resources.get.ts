@@ -15,7 +15,7 @@ import { registerEndpoint } from '../../plugins/swagger'
 import { costCache, CacheTags } from '../../utils/cache-manager'
 import { validateDateParams, type RelativePeriod } from '../../utils/date-helpers'
 import { logger } from '../../utils/logger'
-import { getCostTagFilterCacheKey, parseQueryValues } from '../../utils/cost-tag-filters'
+import { buildCostExplorerTagFilter, getCostTagFilterCacheKey, parseCostTagFilterFrom } from '../../utils/cost-tag-filters'
 
 registerEndpoint('/api/costs/resources', 'GET', {
   summary: 'Get resource-level cost breakdown',
@@ -26,7 +26,7 @@ registerEndpoint('/api/costs/resources', 'GET', {
     { name: 'service', in: 'query', required: true, schema: { type: 'string' }, description: 'AWS service name (e.g., "Amazon Elastic Compute Cloud - Compute")' },
     { name: 'tagKey', in: 'query', required: true, schema: { type: 'string' }, description: 'Tag key to filter by' },
     { name: 'tagValue', in: 'query', required: false, schema: { type: 'string' }, description: 'Single tag value to filter by (legacy)' },
-    { name: 'tagValues', in: 'query', required: false, schema: { type: 'array', items: { type: 'string' } }, style: 'form', explode: true, description: 'One or more tag values matched with OR semantics' },
+    { name: 'tagValues', in: 'query', required: false, schema: { type: 'array', items: { type: 'string' } }, style: 'form', explode: true, description: 'One or more tag values matched with OR semantics. Use __untagged__ for resources without the tag' },
     { name: 'period', in: 'query', required: false, schema: { type: 'string', default: 'last90days' }, description: 'Relative date period' },
     { name: 'top', in: 'query', required: false, schema: { type: 'integer', default: 15 }, description: 'Number of top resources to return' },
     { $ref: '#/components/parameters/Environment' }
@@ -209,19 +209,18 @@ export default defineEventHandler(handleAsync(async (event) => {
   const accountId = query.accountId as string
   const service = query.service as string
   const tagKey = query.tagKey as string
-  const tagValues = parseQueryValues(query.tagValues)
-  if (tagValues.length === 0 && query.tagValue) tagValues.push(String(query.tagValue))
+  const tagFilter = parseCostTagFilterFrom(tagKey, query.tagValues ?? query.tagValue)
   const period = (query.period as string) || 'last90days'
   const top = parseInt(query.top as string) || 15
   const environment = (query.environment as 'commercial' | 'govcloud') || 'commercial'
 
-  if (!accountId || !service || !tagKey || tagValues.length === 0) {
+  if (!accountId || !service || !tagKey || !tagFilter) {
     return errors.badRequest(event, 'accountId, service, tagKey, and at least one tag value are required')
   }
 
   // Check cache
-  const tagFilterKey = getCostTagFilterCacheKey({ key: tagKey, values: tagValues })
-  const cacheKey = `costs:resources:${accountId}:${service}:${tagFilterKey}:${period}:${top}`
+  const tagFilterKey = getCostTagFilterCacheKey(tagFilter)
+  const cacheKey = `costs:resources:${environment}:${accountId}:${service}:${tagFilterKey}:${period}:${top}`
   const cached = await costCache.get(cacheKey)
   if (cached) return sendSuccess(event, cached, { source: 'cache' })
 
@@ -238,7 +237,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     And: [
       { Dimensions: { Key: 'LINKED_ACCOUNT', Values: [accountId] } },
       { Dimensions: { Key: 'SERVICE', Values: [service] } },
-      { Tags: { Key: tagKey, Values: tagValues } }
+      buildCostExplorerTagFilter(tagFilter) as Expression
     ]
   }
 
@@ -266,7 +265,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       accountId,
       service,
       tagKey,
-      tagValuesCount: tagValues.length,
+      tagValuesCount: tagFilter.values.length + (tagFilter.untagged ? 1 : 0),
       startDate,
       endDate
     })

@@ -25,6 +25,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { toCostTagFilterValues } from '~~/shared/utils/cost-tag-identities'
 import VChart from 'vue-echarts'
 
 const logger = createLogger('TagValueTrend')
@@ -45,20 +46,7 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const rawData = ref<any>(null)
 
-function stripTagPrefix(rawValue: string, tagKey: string): string {
-  const idx = rawValue.indexOf('$')
-  if (idx !== -1) {
-    const prefix = rawValue.substring(0, idx)
-    if (prefix === tagKey || prefix === '') {
-      return rawValue.substring(idx + 1)
-    }
-  }
-  return rawValue
-}
-
-const effectiveTagValues = computed(() => props.tagValues.length > 0
-  ? props.tagValues
-  : props.tagValue ? [stripTagPrefix(props.tagValue, props.tagKey)] : [])
+const effectiveTagValues = computed(() => toCostTagFilterValues(props.tagKey, props.tagValues, props.tagValue))
 
 // Periods that benefit from daily granularity
 const dailyPeriods = new Set(['last7days', 'last30days', 'thisMonth', 'lastMonth'])

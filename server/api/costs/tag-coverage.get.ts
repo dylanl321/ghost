@@ -287,6 +287,8 @@ export default defineEventHandler(handleAsync(async (event) => {
     accountScope: getAccountScopeCacheKey(filteredAccountIds)
   })}`
 
+  // Read before getOrSet: afterwards the entry always exists.
+  const cacheHit = costCache.isFresh(cacheKey)
   const result = await costCache.getOrSet(
     cacheKey,
     async () => {
@@ -367,7 +369,7 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   return sendSuccess(event, shapeTagCoverageData(result, { includeAccounts, valueGroupKey }), {
     cache: {
-      hit: !!cacheInfo,
+      hit: cacheHit,
       age: cacheInfo?.age || null,
       ttl: cacheInfo?.ttl || null,
       hitRate: `${cacheStats.hitRate.toFixed(1)}%`
