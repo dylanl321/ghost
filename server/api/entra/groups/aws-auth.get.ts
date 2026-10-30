@@ -3,8 +3,7 @@
  * List all AWS authentication groups from Entra ID
  */
 
-import { defineEventHandler, getQuery } from 'h3'
-import { createError } from 'h3'
+import { defineEventHandler, getQuery, createError } from 'h3'
 import { getAWSGroups } from '../../../utils/entra/graph-client'
 import { getAccountGroupStatistics } from '../../../utils/entra/group-parser'
 import { summarizeGroupsByRole } from '../../../utils/entra/aws-group-matcher'

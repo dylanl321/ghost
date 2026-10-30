@@ -44,7 +44,7 @@ export default defineEventHandler(async (event) => {
         })
         const searchResponse = await graphRequest<{ value: EntraUser[] }>(event, `/users?${query}`)
         if (searchResponse.value && searchResponse.value.length > 0) {
-          graphUser = searchResponse.value[0]
+          graphUser = searchResponse.value[0] ?? null
         }
       }
     } catch (graphError: any) {

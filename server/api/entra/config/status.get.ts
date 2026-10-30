@@ -8,7 +8,6 @@ import { validateAllEntraConfig, getConfigSummary } from '../../../utils/entra/v
 import { validateOIDCConfig } from '../../../utils/oidc-config'
 import { getApiKeyStats } from '../../../utils/api-keys'
 import { getTableEnvironment } from '../../../lib/dynamodb-config'
-import { getAuthContext, requireScope } from '../../../middleware/entra-auth'
 import { registerEndpoint } from '../../../plugins/swagger'
 import type { EntraAPIResponse } from '../../../types/entra'
 import { logger } from '../../../utils/logger'
@@ -89,7 +88,7 @@ interface ConfigStatusResponse {
   nodeEnv: string
 }
 
-export default defineEventHandler(async (event): Promise<EntraAPIResponse<ConfigStatusResponse>> => {
+export default defineEventHandler(async (): Promise<EntraAPIResponse<ConfigStatusResponse>> => {
   try {
     // Configuration status is available to all authenticated users
     // No admin scope required for basic status checks

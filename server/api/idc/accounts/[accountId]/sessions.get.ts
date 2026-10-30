@@ -6,16 +6,13 @@
 import { sendSuccess, errors, parseQueryParams, validateEnvironment } from '../../../../utils/api-response'
 import { getClient } from '../../../../lib/aws-client-factory'
 import {
-  SSOAdminClient,
   ListInstancesCommand,
   ListPermissionSetsCommand,
   ListAccountAssignmentsCommand,
-  type AccountAssignment
+  type AccountAssignment,
+  type SSOAdminClient
 } from '@aws-sdk/client-sso-admin'
-import {
-  IdentitystoreClient,
-  DescribeUserCommand
-} from '@aws-sdk/client-identitystore'
+import { DescribeUserCommand, type IdentitystoreClient } from '@aws-sdk/client-identitystore'
 import { logger } from '../../../../utils/logger'
 
 export default defineEventHandler(async (event) => {

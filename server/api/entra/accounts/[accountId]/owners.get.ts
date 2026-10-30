@@ -9,8 +9,7 @@
  * - Request ID (numeric identifier from DynamoDB)
  */
 
-import { defineEventHandler, getRouterParam, getQuery } from 'h3'
-import { createError } from 'h3'
+import { defineEventHandler, getRouterParam, getQuery, createError } from 'h3'
 import { getAWSGroups, getUserDetails } from '../../../../utils/entra/graph-client'
 import { extractUniqueOwners } from '../../../../utils/entra/group-parser'
 import { validateEntraConfig } from '../../../../utils/entra/config'
@@ -121,11 +120,10 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Owners
     try {
       const lookupResult = await lookupAccountOptimized(event, identifier)
       // Get the actual 12-digit account ID from the result
-      accountId = lookupResult.account.accountId || 
-                  lookupResult.account.awsStandardAccountID || 
-                  lookupResult.account.id || 
-                  identifier // fallback to the identifier if it's already an account ID
-    } catch (error: any) {
+      // Not in the database: fall back to the identifier as an account ID
+      const account = lookupResult?.account
+      accountId = account?.accountId || account?.awsStandardAccountID || account?.id || identifier
+    } catch {
       // If account not found, still try with the identifier as-is
       // (in case it's a valid account ID not in our database)
       logger.error(`Account lookup failed for ${identifier}, trying as direct account ID`)
@@ -165,7 +163,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Owners
             const userPrincipalName = `${owner.identifier}@${process.env.ENTRA_DEFAULT_DOMAIN || 'gd-ms.com'}`
             const userDetails = await getUserDetails(event, userPrincipalName)
             owner.details = userDetails
-          } catch (error) {
+          } catch {
             logger.info(`Could not resolve details for owner ${owner.identifier}`)
           }
         }

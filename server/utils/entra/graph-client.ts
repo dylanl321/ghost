@@ -9,6 +9,7 @@ import type {
   EntraGroup,
   EntraUser,
   GroupMembersResponse,
+  AccountGroups
 } from '../../types/entra'
 import { EntraCacheTags } from '../../types/entra'
 import {
@@ -287,7 +288,7 @@ export async function getAWSGroups(
   event: H3Event,
   filters?: GroupSearchFilters,
   options: { maxPages?: number; signal?: AbortSignal } = {}
-): Promise<{ data: Record<string, any>; fromCache: boolean; truncated?: boolean }> {
+): Promise<{ data: Record<string, AccountGroups>; fromCache: boolean; truncated?: boolean }> {
   // Every filter that changes the Graph query must be part of the key, or a
   // narrowed result (one role, no distribution groups) is served to callers
   // that asked for everything.
@@ -299,7 +300,7 @@ export async function getAWSGroups(
   ].filter(Boolean).join(':'))
   
   // Check cache first
-  const cached = await accountCache.get(cacheKey)
+  const cached = await accountCache.get<Record<string, AccountGroups>>(cacheKey)
   if (cached) {
     logger.info(`Cache hit for ${cacheKey}`)
     return { data: cached, fromCache: true, truncated: false }
