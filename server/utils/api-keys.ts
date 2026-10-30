@@ -269,39 +269,39 @@ function describeUnusable(apiKey: ApiKey): string {
 }
 
 /**
- * Load all API keys from DynamoDB
+ * Load all API keys from DynamoDB. Every page is read so no key goes missing
+ * once the table grows past one scan page. A missing table means no keys yet;
+ * any other failure is thrown so callers never mistake an outage for "no keys".
  */
 async function loadApiKeys(): Promise<ApiKey[]> {
+  const cacheKey = 'api_keys:all'
+  const cached = await accountCache.get(cacheKey)
+  if (cached) return cached
+
+  const tableName = await getTableName('apiKeys')
+  const environment = await getTableEnvironment('apiKeys')
+  const accountId = await getTableAccountId('apiKeys')
+  const apiKeys: ApiKey[] = []
   try {
-    // Check cache first for performance
-    const cacheKey = 'api_keys:all'
-    const cached = await accountCache.get(cacheKey)
-    if (cached) {
-      return cached
-    }
-    
-    // Scan DynamoDB table
-    const tableName = await getTableName('apiKeys')
-    const environment = await getTableEnvironment('apiKeys')
-    const accountId = await getTableAccountId('apiKeys')
-    const result = await scanItems(tableName, undefined, undefined, undefined, environment, undefined, undefined, accountId)
-    const apiKeys: ApiKey[] = result.items.map(toApiKey)
-    
-    // Cache for 5 minutes to reduce DynamoDB calls
-    await accountCache.set(cacheKey, apiKeys, { ttl: 300 })
-    
-    return apiKeys
-  } catch (error: any) {
-    // Handle table not existing gracefully
-    if ((error instanceof Error ? error.name : "Error") === 'ResourceNotFoundException' || (error instanceof Error ? error.message : String(error))?.includes('Requested resource not found')) {
-      const tableName = await getTableName('apiKeys').catch(() => 'ghost-api-keys')
-      const environment = await getTableEnvironment('apiKeys').catch(() => 'commercial')
+    let nextToken: string | undefined
+    do {
+      const page = await scanItems(tableName, undefined, undefined, nextToken, environment, undefined, undefined, accountId)
+      apiKeys.push(...page.items.map(toApiKey))
+      nextToken = page.nextToken
+    } while (nextToken)
+  } catch (error) {
+    const name = error instanceof Error ? error.name : ''
+    const message = error instanceof Error ? error.message : String(error)
+    if (name === 'ResourceNotFoundException' || message.includes('Requested resource not found')) {
       logger.info(`API keys table ${tableName} does not exist yet in ${environment} environment`)
       return []
     }
-    logger.error('Failed to load API keys from DynamoDB:', error)
-    return []
+    throw error
   }
+
+  // Cache for 5 minutes to reduce DynamoDB calls
+  await accountCache.set(cacheKey, apiKeys, { ttl: 300 })
+  return apiKeys
 }
 
 /**
@@ -510,16 +510,10 @@ export async function validateApiKey(key: string): Promise<ApiKeyValidation> {
  * List API keys (without revealing the actual keys)
  */
 export async function listApiKeys(createdBy?: string): Promise<Omit<ApiKey, 'keyHash' | 'salt' | 'keyFormat'>[]> {
-  try {
-    const apiKeys = await loadApiKeys()
-    
-    return apiKeys
-      .filter(key => !createdBy || isApiKeyOwner(key, createdBy))
-      .map(({ keyHash, salt, keyFormat, ...key }) => key)
-  } catch (error) {
-    logger.error('Failed to list API keys:', error)
-    return []
-  }
+  const apiKeys = await loadApiKeys()
+  return apiKeys
+    .filter(key => !createdBy || isApiKeyOwner(key, createdBy))
+    .map(({ keyHash, salt, keyFormat, ...key }) => key)
 }
 
 /**
@@ -687,13 +681,15 @@ export async function recordApiKeyUsage(
   userAgent?: string
 ): Promise<void> {
   try {
-    logger.info(`Recording API key usage: keyId=${keyId}, endpoint=${endpoint}, method=${method}, status=${statusCode}`)
     const now = new Date()
     const ttl = Math.floor(now.getTime() / 1000) + (USAGE_RETENTION_DAYS * 24 * 60 * 60)
 
     const usageRecord = {
       keyId,
-      timestamp: now.toISOString(),
+      // The sort key gets a random suffix: two calls in the same millisecond
+      // used to overwrite each other and undercount busy integrations.
+      timestamp: `${now.toISOString()}#${randomBytes(4).toString('hex')}`,
+      calledAt: now.toISOString(),
       endpoint,
       method,
       statusCode,
@@ -706,73 +702,23 @@ export async function recordApiKeyUsage(
     const environment = await getTableEnvironment('apiKeysUsage')
     const accountId = await getTableAccountId('apiKeysUsage')
     await putItem(usageTableName, usageRecord, environment, accountId)
-    logger.info(`Successfully recorded API key usage for keyId=${keyId}`)
   } catch (error) {
     // Don't throw error - usage recording should not block API calls
     logger.error('Failed to record API key usage:', error)
   }
 }
 
-/**
- * Get API key usage history
- */
-export async function getApiKeyUsageHistory(
-  keyId: string,
-  limit: number = 100
-): Promise<Array<{
+export interface ApiKeyUsageRecord {
   timestamp: Date
   endpoint: string
   method: string
   statusCode: number
   ipAddress: string
   userAgent: string
-}>> {
-  try {
-    // Import AWS SDK directly for Query operation
-    const { getDynamoDBClient } = await import('../lib/aws-client-factory')
-    const { QueryCommand } = await import('@aws-sdk/client-dynamodb')
-    const { unmarshall } = await import('@aws-sdk/util-dynamodb')
-
-    const usageTableName = await getTableName('apiKeysUsage')
-    const environment = await getTableEnvironment('apiKeysUsage')
-    const accountId = await getTableAccountId('apiKeysUsage')
-    const client = await getDynamoDBClient(environment, undefined, accountId)
-
-    // Query by keyId (partition key) and get most recent records
-    const command = new QueryCommand({
-      TableName: usageTableName,
-      KeyConditionExpression: 'keyId = :keyId',
-      ExpressionAttributeValues: {
-        ':keyId': { S: keyId }
-      },
-      ScanIndexForward: false, // Sort by timestamp descending
-      Limit: limit
-    })
-
-    const result = await client.send(command)
-    const items = result.Items?.map(item => unmarshall(item)) || []
-
-    // Map to return type
-    const usage = items.map(item => ({
-      timestamp: new Date(item.timestamp),
-      endpoint: item.endpoint,
-      method: item.method,
-      statusCode: item.statusCode,
-      ipAddress: item.ipAddress,
-      userAgent: item.userAgent
-    }))
-
-    return usage
-  } catch (error) {
-    logger.error('Failed to get API key usage history:', error)
-    return []
-  }
 }
 
-/**
- * Get usage statistics for a specific API key
- */
-export async function getApiKeyUsageStats(keyId: string): Promise<{
+export interface ApiKeyUsageStats {
+  /** Calls in the stats window (last30Days); kept for older clients. */
   totalCalls: number
   lastUsed: Date | null
   callsByEndpoint: Record<string, number>
@@ -780,49 +726,92 @@ export async function getApiKeyUsageStats(keyId: string): Promise<{
   last24Hours: number
   last7Days: number
   last30Days: number
-}> {
-  try {
-    const history = await getApiKeyUsageHistory(keyId, 10000) // Get more for stats
+  windowDays: number
+  /** True when the window held more calls than were counted. */
+  truncated: boolean
+}
 
-    const now = new Date()
-    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+const USAGE_STATS_WINDOW_DAYS = 30
+const MAX_USAGE_RECORDS_SCANNED = 50_000
 
-    const stats = {
-      totalCalls: history.length,
-      lastUsed: history.length > 0 ? history[0]!.timestamp : null,
-      callsByEndpoint: {} as Record<string, number>,
-      callsByStatus: {} as Record<number, number>,
-      last24Hours: 0,
-      last7Days: 0,
-      last30Days: 0
+/**
+ * Read a key's usage newest first, following DynamoDB pages. A single Query
+ * returns at most 1 MB, so the old one-page read undercounted busy keys.
+ */
+async function queryApiKeyUsage(keyId: string, since: Date, maxRecords: number): Promise<{ records: ApiKeyUsageRecord[], truncated: boolean }> {
+  const { getDynamoDBClient } = await import('../lib/aws-client-factory')
+  const { QueryCommand } = await import('@aws-sdk/client-dynamodb')
+  const { unmarshall } = await import('@aws-sdk/util-dynamodb')
+
+  const usageTableName = await getTableName('apiKeysUsage')
+  const environment = await getTableEnvironment('apiKeysUsage')
+  const accountId = await getTableAccountId('apiKeysUsage')
+  const client = await getDynamoDBClient(environment, undefined, accountId)
+
+  const records: ApiKeyUsageRecord[] = []
+  let exclusiveStartKey: Record<string, any> | undefined
+  do {
+    const result = await client.send(new QueryCommand({
+      TableName: usageTableName,
+      KeyConditionExpression: 'keyId = :keyId AND #ts >= :since',
+      ExpressionAttributeNames: { '#ts': 'timestamp' },
+      ExpressionAttributeValues: {
+        ':keyId': { S: keyId },
+        ':since': { S: since.toISOString() }
+      },
+      ScanIndexForward: false,
+      Limit: Math.min(1000, maxRecords - records.length),
+      ExclusiveStartKey: exclusiveStartKey
+    }))
+    for (const raw of result.Items || []) {
+      const item = unmarshall(raw)
+      records.push({
+        timestamp: new Date(item.calledAt || String(item.timestamp).split('#')[0]),
+        endpoint: item.endpoint,
+        method: item.method,
+        statusCode: Number(item.statusCode),
+        ipAddress: item.ipAddress,
+        userAgent: item.userAgent
+      })
     }
+    exclusiveStartKey = result.LastEvaluatedKey
+  } while (exclusiveStartKey && records.length < maxRecords)
 
-    for (const record of history) {
-      // Count by endpoint
-      stats.callsByEndpoint[record.endpoint] = (stats.callsByEndpoint[record.endpoint] || 0) + 1
+  return { records, truncated: Boolean(exclusiveStartKey) }
+}
 
-      // Count by status
-      stats.callsByStatus[record.statusCode] = (stats.callsByStatus[record.statusCode] || 0) + 1
+export function summarizeApiKeyUsage(records: ApiKeyUsageRecord[], truncated: boolean, now = new Date()): ApiKeyUsageStats {
+  const oneDayAgo = now.getTime() - 24 * 60 * 60 * 1000
+  const sevenDaysAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000
+  const stats: ApiKeyUsageStats = {
+    totalCalls: records.length,
+    lastUsed: records[0]?.timestamp || null,
+    callsByEndpoint: {},
+    callsByStatus: {},
+    last24Hours: 0,
+    last7Days: 0,
+    last30Days: records.length,
+    windowDays: USAGE_STATS_WINDOW_DAYS,
+    truncated
+  }
+  for (const record of records) {
+    stats.callsByEndpoint[record.endpoint] = (stats.callsByEndpoint[record.endpoint] || 0) + 1
+    stats.callsByStatus[record.statusCode] = (stats.callsByStatus[record.statusCode] || 0) + 1
+    const time = record.timestamp.getTime()
+    if (time >= oneDayAgo) stats.last24Hours++
+    if (time >= sevenDaysAgo) stats.last7Days++
+  }
+  return stats
+}
 
-      // Count by time period
-      if (record.timestamp >= oneDayAgo) stats.last24Hours++
-      if (record.timestamp >= sevenDaysAgo) stats.last7Days++
-      if (record.timestamp >= thirtyDaysAgo) stats.last30Days++
-    }
-
-    return stats
-  } catch (error) {
-    logger.error('Failed to get API key usage stats:', error)
-    return {
-      totalCalls: 0,
-      lastUsed: null,
-      callsByEndpoint: {},
-      callsByStatus: {},
-      last24Hours: 0,
-      last7Days: 0,
-      last30Days: 0
-    }
+/**
+ * Usage stats for the last 30 days plus the most recent calls, from one read.
+ */
+export async function getApiKeyUsage(keyId: string, historyLimit = 100): Promise<{ stats: ApiKeyUsageStats, history: ApiKeyUsageRecord[] }> {
+  const since = new Date(Date.now() - USAGE_STATS_WINDOW_DAYS * 24 * 60 * 60 * 1000)
+  const { records, truncated } = await queryApiKeyUsage(keyId, since, MAX_USAGE_RECORDS_SCANNED)
+  return {
+    stats: summarizeApiKeyUsage(records, truncated),
+    history: records.slice(0, historyLimit)
   }
 }

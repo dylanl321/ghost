@@ -13,6 +13,7 @@ import { STSClient } from '@aws-sdk/client-sts'
 import {
   createApiKey,
   deactivateApiKey,
+  listApiKeys,
   parseApiKey,
   resetApiKeyCachesForTests,
   updateApiKeyMetadata,
@@ -24,6 +25,8 @@ import { getClientAddress } from '../../server/utils/client-address'
 interface FakeTable {
   rows: Map<string, Record<string, any>>
   calls: string[]
+  scanPageSize?: number
+  scanError?: Error
 }
 
 function useFakeApiKeyTable(t: test.TestContext): FakeTable {
@@ -70,7 +73,15 @@ function useFakeApiKeyTable(t: test.TestContext): FakeTable {
     }
     if (command instanceof ScanCommand) {
       table.calls.push('Scan')
-      return { Items: [...table.rows.values()].map(row => marshall(row, { removeUndefinedValues: true })) }
+      if (table.scanError) throw table.scanError
+      const rows = [...table.rows.values()]
+      const start = command.input.ExclusiveStartKey ? rows.findIndex(row => row.id === unmarshall(command.input.ExclusiveStartKey).id) + 1 : 0
+      const page = rows.slice(start, start + (table.scanPageSize ?? rows.length))
+      const more = start + page.length < rows.length
+      return {
+        Items: page.map(row => marshall(row, { removeUndefinedValues: true })),
+        LastEvaluatedKey: more ? marshall({ id: page.at(-1)!.id }) : undefined
+      }
     }
     if (command instanceof UpdateItemCommand) {
       table.calls.push('UpdateItem')
@@ -211,4 +222,39 @@ test('client address comes from the load balancer hop, not client-supplied entri
   assert.equal(getClientAddress(req(undefined), 1), '10.0.0.5')
   assert.equal(getClientAddress(req('1.2.3.4, 198.51.100.1, 203.0.113.9'), 2), '198.51.100.1')
   assert.equal(getClientAddress(req('1.2.3.4'), 0), '10.0.0.5')
+})
+
+test('usage stats count every call in the window and flag truncation', async () => {
+  const { summarizeApiKeyUsage } = await import('../../server/utils/api-keys')
+  const now = new Date('2026-10-30T12:00:00Z')
+  const at = (hoursAgo: number, endpoint: string, statusCode = 200) => ({
+    timestamp: new Date(now.getTime() - hoursAgo * 3_600_000), endpoint, method: 'GET', statusCode, ipAddress: 'x', userAgent: 'y'
+  })
+  const stats = summarizeApiKeyUsage([at(1, '/api/v1/accounts'), at(30, '/api/v1/accounts', 403), at(24 * 10, '/api/v1/costs/summary')], true, now)
+  assert.equal(stats.last24Hours, 1)
+  assert.equal(stats.last7Days, 2)
+  assert.equal(stats.last30Days, 3)
+  assert.equal(stats.totalCalls, 3)
+  assert.deepEqual(stats.callsByEndpoint, { '/api/v1/accounts': 2, '/api/v1/costs/summary': 1 })
+  assert.deepEqual(stats.callsByStatus, { 200: 2, 403: 1 })
+  assert.equal(stats.windowDays, 30)
+  assert.equal(stats.truncated, true)
+})
+
+test('the key list reads every scan page', async (t) => {
+  const table = useFakeApiKeyTable(t)
+  for (const id of ['a', 'b', 'c']) table.rows.set(id, legacyRow(id, `key-${id}`))
+  table.scanPageSize = 1
+  const keys = await listApiKeys('owner@example.com')
+  assert.deepEqual(keys.map(key => key.id).sort(), ['a', 'b', 'c'])
+  assert.ok(keys.every(key => !('keyHash' in key) && !('salt' in key)))
+})
+
+test('a storage outage fails the key list instead of showing no keys', async (t) => {
+  const table = useFakeApiKeyTable(t)
+  table.scanError = Object.assign(new Error('User is not authorized'), { name: 'AccessDeniedException' })
+  await assert.rejects(listApiKeys('owner@example.com'), /not authorized/)
+
+  table.scanError = Object.assign(new Error('Requested resource not found'), { name: 'ResourceNotFoundException' })
+  assert.deepEqual(await listApiKeys('owner@example.com'), [])
 })

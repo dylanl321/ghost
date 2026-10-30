@@ -4,7 +4,7 @@
  */
 
 import { createError, defineEventHandler, getRouterParam } from 'h3'
-import { getApiKeyUsageHistory, getApiKeyUsageStats, isApiKeyOwnedBy } from '../../../../utils/api-keys'
+import { getApiKeyUsage, isApiKeyOwnedBy } from '../../../../utils/api-keys'
 import { getAuthContext, requireOIDCAuth } from '../../../../middleware/entra-auth'
 import { registerEndpoint } from '../../../../plugins/swagger'
 import type { EntraAPIResponse } from '../../../../types/entra'
@@ -13,7 +13,7 @@ import { logger } from '../../../../utils/logger'
 // Register OpenAPI documentation
 registerEndpoint('/api/auth/api-keys/{keyId}/usage', 'GET', {
   summary: 'Get API key usage history',
-  description: 'Get usage history and statistics for a specific API key',
+  description: 'Call statistics for the last 30 days and the most recent calls for one of your API keys.',
   tags: ['Authentication'],
   security: [
     { OIDCAuth: [] }
@@ -30,8 +30,8 @@ registerEndpoint('/api/auth/api-keys/{keyId}/usage', 'GET', {
       name: 'limit',
       in: 'query',
       required: false,
-      schema: { type: 'integer', default: 100 },
-      description: 'Maximum number of usage records to return'
+      schema: { type: 'integer', default: 100, minimum: 1, maximum: 500 },
+      description: 'Maximum number of recent calls to return'
     }
   ],
   responses: {
@@ -49,13 +49,15 @@ registerEndpoint('/api/auth/api-keys/{keyId}/usage', 'GET', {
                   stats: {
                     type: 'object',
                     properties: {
-                      totalCalls: { type: 'integer' },
+                      totalCalls: { type: 'integer', description: 'Calls in the last windowDays (same as last30Days)' },
                       lastUsed: { type: 'string', format: 'date-time', nullable: true },
                       callsByEndpoint: { type: 'object' },
                       callsByStatus: { type: 'object' },
                       last24Hours: { type: 'integer' },
                       last7Days: { type: 'integer' },
-                      last30Days: { type: 'integer' }
+                      last30Days: { type: 'integer' },
+                      windowDays: { type: 'integer', example: 30 },
+                      truncated: { type: 'boolean', description: 'More calls exist in the window than were counted' }
                     }
                   },
                   history: {
@@ -111,11 +113,8 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<any>> 
     const requestedLimit = Number.parseInt(url.searchParams.get('limit') || '100', 10)
     const limit = Number.isFinite(requestedLimit) ? Math.min(500, Math.max(1, requestedLimit)) : 100
 
-    // Get usage history and stats
-    const [history, stats] = await Promise.all([
-      getApiKeyUsageHistory(keyId, limit),
-      getApiKeyUsageStats(keyId)
-    ])
+    // Stats cover the last 30 days; history is the most recent calls.
+    const { history, stats } = await getApiKeyUsage(keyId, limit)
 
     return {
       success: true,
