@@ -89,9 +89,9 @@ export async function filterAccounts(
       if (!account.linesOfBusiness) return false
       return account.linesOfBusiness
         .split(',')
-        .map(lob => lob.trim())
+        .map((lob: string) => lob.trim())
         .filter(Boolean)
-        .some(lob => requested.has(normalizeFilterValue(lob)) || requested.has(normalizeFilterValue(getLOBFullName(lob))))
+        .some((lob: string) => requested.has(normalizeFilterValue(lob)) || requested.has(normalizeFilterValue(getLOBFullName(lob))))
     })
   }
 

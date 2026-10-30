@@ -312,7 +312,8 @@ function determineAccountStatus(
  * have not started, or today being the 1st, leave an empty window.
  */
 function getMonthCostWindow(month: string) {
-  const [year, monthIndex] = month.split('-').map(Number)
+  const year = Number(month.slice(0, 4))
+  const monthIndex = Number(month.slice(5, 7))
   const monthStart = new Date(Date.UTC(year, monthIndex - 1, 1))
   const nextMonthStart = new Date(Date.UTC(year, monthIndex, 1))
   const now = new Date()

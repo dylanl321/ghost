@@ -125,8 +125,8 @@ export default defineEventHandler(handleAsync(async (event) => {
     process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832'
   ])
   accountsList = accountsList.filter(acc =>
-    !excludedAccountIds.has(acc.accountId) &&
-    !excludedAccountIds.has(acc.awsStandardAccountID)
+    !excludedAccountIds.has(acc.accountId ?? '') &&
+    !excludedAccountIds.has(acc.awsStandardAccountID ?? '')
   )
 
   if (accountsList.length === 0) {
@@ -178,11 +178,11 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   logger.info('[ProformaComparison] Fetching forecast data...')
 
-  const accountIds = accountsList.map(acc =>
-    environment === 'govcloud'
+  const accountIds = accountsList
+    .map(acc => environment === 'govcloud'
       ? (acc.govCloudAccountId || acc.awsGovCloudAccountID)
-      : (acc.accountId || acc.awsStandardAccountID)
-  )
+      : (acc.accountId || acc.awsStandardAccountID))
+    .filter((id): id is string => Boolean(id))
 
   const hasForecastWindow = forecastStartDate < forecastYearEnd
   const forecastRequests = (isProforma: boolean) => hasForecastWindow
@@ -250,6 +250,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     const accountId = environment === 'govcloud'
       ? (account.govCloudAccountId || account.awsGovCloudAccountID)
       : (account.accountId || account.awsStandardAccountID)
+    if (!accountId) continue
 
     // Get account metadata
     const accountName = account.name || account.projectName || account.accountName || accountId
