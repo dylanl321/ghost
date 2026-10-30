@@ -58,7 +58,7 @@ export default defineEventHandler(async (event): Promise<CreateShareReportRespon
         reportName: body.reportName,
         userId: userEmail,
         shareId,
-        format: body.config.format === 'pdf' ? 'pdf' : 'csv'
+        format: body.config.format
       },
       timestamp,
       false // Don't generate presigned URL - we'll generate on-demand when accessed

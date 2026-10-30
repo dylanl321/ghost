@@ -124,22 +124,8 @@ export function useDataExport() {
    */
   async function exportToJSON(config: DataExportConfig): Promise<ExportResult> {
     try {
-      // Create a structured JSON export
-      const exportData = {
-        metadata: config.metadata,
-        title: config.title,
-        subtitle: config.subtitle,
-        sheets: config.sheets.map(sheet => ({
-          name: sheet.name,
-          type: sheet.type,
-          description: sheet.description,
-          data: sheet.data,
-          columns: sheet.columns
-        })),
-        exportedAt: new Date().toISOString()
-      }
-
-      const jsonString = JSON.stringify(exportData, null, 2)
+      const { buildJSONExport } = await import('#shared/utils/export/format')
+      const jsonString = buildJSONExport(config)
       const blob = new Blob([jsonString], { type: 'application/json' })
 
       const { generateFilename } = await import('~/utils/export/export-utils')
