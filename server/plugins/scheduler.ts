@@ -5,9 +5,9 @@
 
 import { Cron } from 'croner'
 import { processScheduledReports } from '../utils/report-scheduler'
-import { cleanupStaleLocks, claimExecutionLock, releaseExecutionLock } from '../utils/execution-locks'
+import { cleanupStaleLocks, claimExecutionLock, releaseExecutionLock, STALE_LOCK_MAX_AGE_MINUTES } from '../utils/execution-locks'
 import { logger } from '../utils/logger'
-import { markJobRunning, markJobComplete, logJobCompletion } from '../utils/job-tracker'
+import { markJobRunning, markJobComplete, logJobCompletion, waitForActiveJobs } from '../utils/job-tracker'
 import { writeSourceHeartbeat } from '../utils/source-heartbeat'
 
 const SCHEDULER_ENABLED = process.env.REPORT_SCHEDULER_ENABLED !== 'false'
@@ -21,7 +21,12 @@ let aiUsageJob: Cron | null = null
 let mcpUsageAggregateJob: Cron | null = null
 const AI_USAGE_COLLECTION_ENABLED = process.env.AI_USAGE_COLLECTION_ENABLED === 'true'
 
-export default defineNitroPlugin(async () => {
+// How long shutdown waits for running jobs. Nitro allows 30s
+// (NITRO_SHUTDOWN_TIMEOUT) and ECS sends SIGKILL after its stopTimeout,
+// so this stays below both.
+const SHUTDOWN_GRACE_MS = Number.parseInt(process.env.SCHEDULER_SHUTDOWN_GRACE_MS || '', 10) || 20_000
+
+export default defineNitroPlugin(async (nitroApp) => {
   if (!SCHEDULER_ENABLED) {
     logger.info('📅 Scheduled reports scheduler is disabled')
     return
@@ -29,9 +34,11 @@ export default defineNitroPlugin(async () => {
 
   logger.info('📅 Starting scheduled reports scheduler...')
 
-  // Clean up stale locks on startup (handles container restarts)
+  // Clean up locks abandoned by a container that died mid-job. Only locks
+  // older than the longest job are removed, so a live job on another task
+  // keeps its lock.
   try {
-    await cleanupStaleLocks(5) // Remove locks older than 5 minutes
+    await cleanupStaleLocks(STALE_LOCK_MAX_AGE_MINUTES)
   } catch (error) {
     logger.error('Error cleaning up stale locks on startup:', error)
     // Continue anyway - don't block scheduler startup
@@ -122,9 +129,18 @@ export default defineNitroPlugin(async () => {
     }
   }
 
-  process.on('SIGTERM', cleanupScheduler)
-  process.on('SIGINT', cleanupScheduler)
-  process.on('exit', cleanupScheduler)
+  // Nitro awaits 'close' during graceful shutdown (SIGTERM/SIGINT), so stop
+  // scheduling new runs and give in-flight jobs a chance to finish and
+  // release their locks before the process exits.
+  nitroApp.hooks.hook('close', async () => {
+    cleanupScheduler()
+    const { drained, remaining } = await waitForActiveJobs(SHUTDOWN_GRACE_MS)
+    if (drained) {
+      logger.info('Scheduler stopped; no jobs in flight')
+    } else {
+      logger.warn(`Scheduler shutdown grace period elapsed with jobs still running: ${remaining.join(', ')}`)
+    }
+  })
 
   logger.info('Scheduled reports scheduler initialized (running every minute)')
 

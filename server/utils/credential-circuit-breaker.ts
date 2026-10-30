@@ -20,6 +20,34 @@ export interface CircuitBreakerStats {
 const FAILURE_THRESHOLD = parseInt(process.env.AWS_CIRCUIT_BREAKER_THRESHOLD || '3')
 const COOLDOWN_MS = parseInt(process.env.AWS_CIRCUIT_BREAKER_COOLDOWN_MS || '1800000')
 
+const TRANSIENT_ERROR_NAMES = new Set([
+  'Throttling',
+  'ThrottlingException',
+  'RequestLimitExceeded',
+  'TooManyRequestsException',
+  'TimeoutError',
+  'RequestTimeout',
+  'RequestTimeoutException',
+  'ServiceUnavailable',
+  'InternalFailure',
+])
+
+const TRANSIENT_ERROR_CODES = new Set(['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'EPIPE', 'EAI_AGAIN'])
+
+/**
+ * Throttles, timeouts and STS 5xx say nothing about whether the account's role
+ * is reachable, so they must not open a 30-minute circuit for that account.
+ */
+export function isTransientAssumeRoleError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const err = error as { name?: string, code?: string, $metadata?: { httpStatusCode?: number }, $retryable?: unknown }
+  if (err.name && TRANSIENT_ERROR_NAMES.has(err.name)) return true
+  if (err.code && TRANSIENT_ERROR_CODES.has(err.code)) return true
+  if (err.$retryable) return true
+  const status = err.$metadata?.httpStatusCode
+  return typeof status === 'number' && (status === 429 || status >= 500)
+}
+
 class AssumeRoleCircuitBreaker {
   private circuits = new Map<string, CircuitEntry>()
 
@@ -61,6 +89,13 @@ class AssumeRoleCircuitBreaker {
 
   recordFailure(accountId: string, error: Error): void {
     let entry = this.circuits.get(accountId)
+
+    if (isTransientAssumeRoleError(error)) {
+      // Let the next caller probe again without counting this against the account.
+      if (entry) entry.halfOpenInFlight = false
+      logger.debug(`[Circuit Breaker] Ignoring transient assume-role error for account ${accountId}: ${error.message}`)
+      return
+    }
 
     if (!entry) {
       entry = {

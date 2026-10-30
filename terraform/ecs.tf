@@ -52,6 +52,12 @@ resource "aws_ecs_task_definition" "main" {
           name  = "NODE_ENV"
           value = var.env
         },
+        # Cap the V8 heap below the task's memory so a leak shows up as GC
+        # pressure and a Node OOM with a stack trace, not a silent ECS kill.
+        {
+          name  = "NODE_OPTIONS"
+          value = "--max-old-space-size=${floor(tonumber(var.fargate_memory) * 0.75)}"
+        },
         {
           name  = "DYNAMODB_CONFIG_SECRET_NAME"
           value = aws_secretsmanager_secret.dynamodb_config.name
@@ -578,6 +584,13 @@ resource "aws_ecs_service" "main" {
   desired_count   = 1
   launch_type     = "FARGATE"
 
+  # Roll back automatically when new tasks fail to reach a steady state,
+  # instead of cycling a bad image until someone notices.
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
   network_configuration {
     subnets         = var.subnets
     security_groups = [aws_security_group.ecs_service.id]
@@ -593,13 +606,20 @@ resource "aws_ecs_service" "main" {
     aws_iam_role.ecs_task_execution_role,
     aws_lb_listener.main
   ]
+
+  # The autoscaler owns the running task count. Without this, every
+  # terraform apply scales the service back to one task mid-traffic.
+  lifecycle {
+    ignore_changes = [desired_count]
+  }
 }
 
 # Log group for ECS container
 resource "aws_cloudwatch_log_group" "ecs" {
   provider          = aws.target_deployment_account
   name              = "/ecs/${var.app_name}"
-  retention_in_days = 7
+  # 30 days so an alarm on Monday still has the previous week's context.
+  retention_in_days = 30
 
   tags = {
     Application = "${var.app_name}"

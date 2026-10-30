@@ -38,6 +38,7 @@ import { ResourceGroupsTaggingAPIClient } from '@aws-sdk/client-resource-groups-
 import { BillingClient } from '@aws-sdk/client-billing'
 import { logger } from '../utils/logger'
 import { assumeRoleCircuitBreaker } from '../utils/credential-circuit-breaker'
+import { awsApiCallCounterMiddleware } from '../utils/aws-call-metrics'
 
 import type {
   AWSEnvironmentType,
@@ -263,12 +264,13 @@ export function buildAssumeRoleArn(
 }
 
 /**
- * Get assume role duration from site config with env fallback
- * Default: 43200 seconds (12 hours) - max for role chaining
- * AWS allows up to 12 hours for assumed role sessions when using role chaining
+ * Get assume role duration from env, default 3600 seconds.
+ * GDMSOrganizationsRole keeps IAM's default one-hour MaxSessionDuration, and
+ * STS rejects any longer request, so a larger default would fail every
+ * AssumeRole wherever AWS_ASSUME_ROLE_DURATION is not set.
  */
 async function getAssumeRoleDuration(): Promise<number> {
-  const duration = getConfigValue<number>('aws.roleAssumption.duration', 'AWS_ASSUME_ROLE_DURATION', 43200)
+  const duration = getConfigValue<number>('aws.roleAssumption.duration', 'AWS_ASSUME_ROLE_DURATION', 3600)
   return typeof duration === 'string' ? parseInt(duration) : duration
 }
 
@@ -279,11 +281,27 @@ function getAssumeRoleExternalId(): string | undefined {
   return process.env.AWS_ASSUME_ROLE_EXTERNAL_ID
 }
 
+// STS clients are reused per partition/region rather than built per AssumeRole.
+const stsClients = new Map<string, STSClient>()
+
+function getBaseStsClient(environment: AWSEnvironmentType, region: string): STSClient {
+  const key = `${environment}-${region}`
+  let client = stsClients.get(key)
+  if (!client) {
+    client = new STSClient({
+      region,
+      credentials: getBaseCredentials(environment),
+      requestHandler: getRequestHandlerTimeouts('sts')
+    })
+    stsClients.set(key, client)
+  }
+  return client
+}
+
 /**
  * Assume role into a target account
  */
 async function assumeRole(
-  baseCredentials: AWSCredentials,
   targetAccountId: string,
   region: string,
   environment: AWSEnvironmentType,
@@ -299,11 +317,7 @@ async function assumeRole(
     targetAccountId
   })
 
-  // Create STS client with base credentials
-  const stsClient = new STSClient({
-    region,
-    credentials: baseCredentials
-  })
+  const stsClient = getBaseStsClient(environment, region)
 
   const roleName = await getAssumeRoleName()
   const roleArn = buildAssumeRoleArn(environment, targetAccountId, roleName)
@@ -348,6 +362,113 @@ async function assumeRole(
     secretAccessKey: response.Credentials.SecretAccessKey!,
     sessionToken: response.Credentials.SessionToken!,
     expiration: response.Credentials.Expiration
+  }
+}
+
+// Assumed-role credentials are valid for every service and region in the
+// account, so they are cached per partition + account (+ session name, which
+// shows up in CloudTrail) instead of once per service client. Concurrent
+// callers for a cold account share one in-flight STS call.
+const CREDENTIAL_REFRESH_BUFFER_MS = 5 * 60 * 1000
+const assumedCredentialCache = new Map<string, AWSCredentials>()
+const inflightAssumeRole = new Map<string, Promise<AWSCredentials>>()
+
+type AssumeRoleFn = (
+  targetAccountId: string,
+  region: string,
+  environment: AWSEnvironmentType,
+  sessionName?: string
+) => Promise<AWSCredentials>
+
+let assumeRoleImpl: AssumeRoleFn = assumeRole
+
+/** Test hook: replace the STS call. Pass nothing to restore the real one. */
+export function __setAssumeRoleForTests(fn?: AssumeRoleFn): void {
+  assumeRoleImpl = fn ?? assumeRole
+  assumedCredentialCache.clear()
+  inflightAssumeRole.clear()
+}
+
+function credentialsAreFresh(credentials: AWSCredentials): boolean {
+  return !credentials.expiration ||
+    credentials.expiration.getTime() > Date.now() + CREDENTIAL_REFRESH_BUFFER_MS
+}
+
+/**
+ * Get credentials for GDMSOrganizationsRole (or AWS_ASSUME_ROLE_NAME) in a
+ * member account. Applies the per-account circuit breaker.
+ */
+export async function getAssumedRoleCredentials(
+  environment: AWSEnvironmentType,
+  accountId: string,
+  options: { region?: string, sessionName?: string } = {}
+): Promise<AWSCredentials> {
+  const key = `${environment}:${accountId}:${options.sessionName ?? ''}`
+
+  const cached = assumedCredentialCache.get(key)
+  if (cached && credentialsAreFresh(cached)) {
+    return cached
+  }
+
+  const inflight = inflightAssumeRole.get(key)
+  if (inflight) {
+    return inflight
+  }
+
+  // Circuit breaker: skip STS call if account is known-unreachable
+  if (!assumeRoleCircuitBreaker.canAttempt(accountId)) {
+    throw new Error(
+      `Circuit breaker OPEN for account ${accountId} in ${environment} environment. ` +
+      `Assume-role has failed repeatedly. Will retry after cooldown period.`
+    )
+  }
+
+  // No await before the in-flight entry is registered, or concurrent callers
+  // would each slip past the check above.
+  const promise = (async () => {
+    const region = options.region || await getDefaultRegion(environment)
+    return assumeRoleImpl(accountId, region, environment, options.sessionName)
+  })()
+    .then((credentials) => {
+      assumeRoleCircuitBreaker.recordSuccess(accountId)
+      assumedCredentialCache.set(key, credentials)
+      return credentials
+    })
+    .catch((error) => {
+      assumeRoleCircuitBreaker.recordFailure(accountId, error as Error)
+      throw error
+    })
+    .finally(() => {
+      inflightAssumeRole.delete(key)
+    })
+
+  inflightAssumeRole.set(key, promise)
+  return promise
+}
+
+// Outbound HTTP timeouts. The SDK default waits forever on a stalled socket,
+// so one hung AWS endpoint could pin a request or a cron job indefinitely.
+// requestTimeout is socket inactivity, not total duration, so long paginated
+// or streaming calls are unaffected as long as bytes keep arriving. Timeouts
+// are retried by the SDK like any other transient error.
+const DEFAULT_CONNECTION_TIMEOUT_MS = 5_000
+const DEFAULT_REQUEST_TIMEOUT_MS = 120_000
+// Bedrock can think for minutes before the first byte of a large completion.
+const LONG_REQUEST_TIMEOUT_MS = 300_000
+const LONG_REQUEST_SERVICES = new Set<AWSServiceType>(['bedrock-runtime', 'bedrock-agent-runtime'])
+
+function readPositiveIntEnv(name: string, fallback: number): number {
+  const value = Number.parseInt(process.env[name] ?? '', 10)
+  return Number.isFinite(value) && value > 0 ? value : fallback
+}
+
+export function getRequestHandlerTimeouts(service: AWSServiceType): { connectionTimeout: number, requestTimeout: number } {
+  const requestTimeout = LONG_REQUEST_SERVICES.has(service)
+    ? readPositiveIntEnv('AWS_SDK_LONG_REQUEST_TIMEOUT_MS', LONG_REQUEST_TIMEOUT_MS)
+    : readPositiveIntEnv('AWS_SDK_REQUEST_TIMEOUT_MS', DEFAULT_REQUEST_TIMEOUT_MS)
+  return {
+    connectionTimeout: readPositiveIntEnv('AWS_SDK_CONNECTION_TIMEOUT_MS', DEFAULT_CONNECTION_TIMEOUT_MS),
+    requestTimeout
   }
 }
 
@@ -413,27 +534,16 @@ export async function getClient<T = any>(
   let credentialExpiration: Date | undefined
 
   if (accountId) {
-    // Circuit breaker: skip STS call if account is known-unreachable
-    if (!assumeRoleCircuitBreaker.canAttempt(accountId)) {
-      throw new Error(
-        `Circuit breaker OPEN for account ${accountId} in ${environment} environment. ` +
-        `Assume-role has failed repeatedly. Will retry after cooldown period.`
-      )
-    }
-
     try {
-      const baseCredentials = getBaseCredentials(environment)
-      credentials = await assumeRole(
-        baseCredentials,
-        accountId,
-        targetRegion,
-        environment,
+      credentials = await getAssumedRoleCredentials(environment, accountId, {
+        region: targetRegion,
         sessionName
-      )
+      })
       credentialExpiration = credentials.expiration
-      assumeRoleCircuitBreaker.recordSuccess(accountId)
     } catch (error) {
-      assumeRoleCircuitBreaker.recordFailure(accountId, error as Error)
+      if ((error as Error).message?.startsWith('Circuit breaker OPEN')) {
+        throw error
+      }
       const enhancedError = new Error(
         `Failed to get AWS credentials for ${environment} environment. ` +
         `Region: ${targetRegion}, Service: ${service}. ` +
@@ -456,7 +566,8 @@ export async function getClient<T = any>(
   // Create the client with FIPS endpoints for GovCloud
   const clientConfig: any = {
     region: targetRegion,
-    credentials
+    credentials,
+    requestHandler: getRequestHandlerTimeouts(service)
   }
 
   // Cost Explorer has no GovCloud FIPS endpoint; using one fails DNS resolution.
@@ -480,6 +591,14 @@ export async function getClient<T = any>(
   }
 
   const client = new ClientClass(clientConfig)
+
+  // Cost Explorer bills per request; count calls so the spend is visible.
+  if (service === 'cost-explorer') {
+    (client as CostExplorerClient).middlewareStack.add(awsApiCallCounterMiddleware('cost-explorer') as any, {
+      step: 'initialize',
+      name: 'ghostCostExplorerCallCounter'
+    })
+  }
   
   // Cache the client with expiration tracking
   clientCache.set(cacheKey, {
@@ -505,7 +624,7 @@ export function clearExpiredClients(): number {
   }
   
   if (cleared > 0) {
-    logger.info(`[AWS Client Factory] Cleared ${cleared} expired clients from cache`)
+    logger.debug(`[AWS Client Factory] Cleared ${cleared} expired clients from cache`)
   }
   
   return cleared
@@ -517,6 +636,7 @@ export function clearExpiredClients(): number {
 export function clearAllClients(): void {
   const size = clientCache.size
   clientCache.clear()
+  assumedCredentialCache.clear()
   logger.info(`[AWS Client Factory] Cleared all ${size} clients from cache`)
 }
 
@@ -664,6 +784,7 @@ export function clearClientCache(): void {
     logger.info(`[AWS Client Factory] Clearing ${clientCache.size} cached clients`)
   }
   clientCache.clear()
+  assumedCredentialCache.clear()
 }
 
 /**
