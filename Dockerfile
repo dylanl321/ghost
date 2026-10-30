@@ -1,4 +1,4 @@
-ARG NODE_VERSION=22.23.1
+ARG NODE_VERSION=26.13.0
 ARG NPM_VERSION=11.18.0
 
 # Build dependencies and compile the self-contained Nitro server output.

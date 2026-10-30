@@ -8,7 +8,7 @@ See `DEPLOYMENT_STEPS.md` for deployment and environment setup notes.
 
 ## Quick start guide
 
-Use Node 22.19 or newer with npm 11. The container build currently pins Node 22.23.1 and npm 11.18.0.
+Use Node 22.22.2 or newer (Node 26 LTS recommended) with npm 11. The container build currently pins Node 26.13.0 and npm 11.18.0.
 
 Install the exact locked dependencies:
 `npm ci --legacy-peer-deps`
