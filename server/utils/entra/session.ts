@@ -80,14 +80,17 @@ export async function getUserSession(event: H3Event): Promise<{
       const { getUserSession: getOIDCUserSession } = await import('nuxt-oidc-auth/runtime/server/utils/session.js')
       oidcSession = await getOIDCUserSession(event)
     } catch {
-      // Fallback to h3 session silently (this is expected for unauthenticated requests)
-      try {
-        const { getSession } = await import('h3')
-        oidcSession = await getSession(event, {
-          password: process.env.NUXT_OIDC_SESSION_SECRET || process.env.NUXT_SESSION_PASSWORD || 'secret-must-be-at-least-32-characters-long'
-        })
-      } catch {
-        // Silently handle - this is expected for unauthenticated requests
+      // Fallback to h3 session silently (this is expected for unauthenticated requests).
+      // Never fall back to a well-known password: anyone could seal a session
+      // cookie with it. Without a configured secret there is no fallback.
+      const sessionPassword = process.env.NUXT_OIDC_SESSION_SECRET || process.env.NUXT_SESSION_PASSWORD
+      if (sessionPassword) {
+        try {
+          const { getSession } = await import('h3')
+          oidcSession = await getSession(event, { password: sessionPassword })
+        } catch {
+          // Silently handle - this is expected for unauthenticated requests
+        }
       }
     }
 

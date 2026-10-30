@@ -9,6 +9,7 @@ import type { SavedProgress, SyncProgressRequest } from '../../shared/types/achi
 import { getItem, putItem } from './dynamodb'
 import { getTableName, getTableEnvironment, getTableAccountId } from '../lib/dynamodb-config'
 import { logger } from './logger'
+import { BADGE_DEFINITIONS } from '../../app/config/badgeDefinitions'
 
 function createDefaultProgress(userId: string): SavedProgress {
   const now = new Date().toISOString()
@@ -132,4 +133,13 @@ export async function recordBadgeAward(
     logger.error('Error recording badge award:', error)
     throw error
   }
+}
+
+/**
+ * Look up a badge in the catalog. The award endpoint only records catalog
+ * badges and takes their display text from here, not from the client.
+ */
+export function findBadgeDefinition(badgeId: unknown) {
+  if (typeof badgeId !== 'string') return undefined
+  return BADGE_DEFINITIONS.find(badge => badge.id === badgeId)
 }

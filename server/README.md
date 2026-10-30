@@ -70,10 +70,6 @@ Once the server is running, access the interactive API documentation at:
 ### Costs
 - `GET /api/costs/summary` - Get cost summary with grouping options
 
-### DynamoDB
-- `GET /api/dynamodb/[table]/items` - List items from a table
-- `POST /api/dynamodb/[table]/items` - Create a new item
-
 ### Accounts
 - `POST /api/accounts/lookup` - Lookup account by various criteria
 - `GET /api/accounts/list` - List accounts from DynamoDB/Organizations

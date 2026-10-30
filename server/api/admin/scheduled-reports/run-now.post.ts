@@ -9,11 +9,12 @@
 import { getReport } from '../../../utils/scheduled-reports'
 import { executeScheduledReport } from '../../../utils/report-scheduler'
 import { logger } from '../../../utils/logger'
+import { requireAdmin } from '../../../utils/user-roles'
 
 export default defineEventHandler(async (event) => {
-  try {
-    // Allow all authenticated users to execute reports
+  await requireAdmin(event)
 
+  try {
     // Get request body
     const body = await readBody(event)
     const { reportId } = body

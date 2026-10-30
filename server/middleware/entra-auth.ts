@@ -7,6 +7,7 @@ import { defineEventHandler, getHeader, createError, getRequestURL } from 'h3'
 import type { H3Event } from 'h3'
 import { validateApiKey, recordApiKeyUsage } from '../utils/api-keys'
 import { getUserSession as getOIDCSession } from '../utils/entra/session'
+import { requireAdmin } from '../utils/user-roles'
 import { logger } from '../utils/logger'
 
 interface AuthContext {
@@ -27,34 +28,93 @@ export function isAllowedIntegrationApiPath(pathname: string): boolean {
 }
 
 /**
+ * Resolve the request URL to the pathname the router will see. Dot segments
+ * (including percent-encoded ones) are collapsed so a path such as
+ * /api/health/../admin/x is judged as /api/admin/x, not as a public prefix.
+ */
+export function normalizeApiPath(url: string): string {
+  // Collapse repeated slashes first so //api/... is neither parsed as a
+  // protocol-relative URL nor allowed to dodge the /api/ prefix checks.
+  const path = `/${url}`.replace(/\/{2,}/g, '/')
+  try {
+    return new URL(path, 'http://localhost').pathname.replace(/\/{2,}/g, '/')
+  } catch {
+    return path.split('?')[0] || ''
+  }
+}
+
+/**
  * Check if request is for API endpoints that require authentication
  */
-export function requiresAuthentication(url: string): boolean {
+export function requiresAuthentication(url: string, method = 'GET'): boolean {
+  const pathname = normalizeApiPath(url)
+  const verb = method.toUpperCase()
+
   // Kiro Crew APIs perform exact OAuth resource/scope validation in their
   // handlers. A Ghost browser session or API key must not satisfy them.
-  if (url.startsWith('/api/kirocrew/v1/')) {
+  if (pathname.startsWith('/api/kirocrew/v1/')) {
     return false
   }
+
+  // ALB and container health probe. Exact match only: /api/health/ready
+  // exposes caller identity and host details and must stay authenticated.
+  if (pathname === '/api/health') {
+    return false
+  }
+
+  // The /s/:code redirect page resolves a short code before the visitor has
+  // signed in. Only that single-code GET is public; listing (GET /api/shortlinks/)
+  // and creation (POST) require a session.
+  if ((verb === 'GET' || verb === 'HEAD') && /^\/api\/shortlinks\/[^/]+$/.test(pathname)) {
+    return false
+  }
+
   // Exclude public endpoints that don't need auth
-  const publicEndpoints = [
-    '/api/health',
-    '/api/schema',        // Schema metadata for query builder
+  const publicPrefixes = [
     '/_nuxt/',
     '/api/_content',      // Nuxt content API
     '/api/_auth',         // OIDC authentication endpoints
     '/api/_nuxt_icon',    // Nuxt Icon API
-    '/api/shortlinks/',
     '/api/reports/download/',
     '/api/dataset-reports/download/'
   ]
 
-  // Check if URL starts with any public endpoint
-  if (publicEndpoints.some(endpoint => url.startsWith(endpoint))) {
+  if (publicPrefixes.some(prefix => pathname.startsWith(prefix))) {
     return false
   }
 
   // All other /api/* routes require authentication
-  return url.startsWith('/api/')
+  return pathname.startsWith('/api/')
+}
+
+/**
+ * Admin routes readable by every signed-in user because non-admin pages
+ * depend on them (the global announcement banner and the dashboard's
+ * organization default layout). Everything else under /api/admin/ is
+ * Administrator-only.
+ */
+const NON_ADMIN_READABLE_ADMIN_ROUTES = new Set([
+  '/api/admin/announcements/list',
+  '/api/admin/dashboard-layout/get-default'
+])
+
+/**
+ * Whether a request must pass requireAdmin before reaching its handler.
+ * Enforced centrally so an /api/admin/* handler that forgets its own check
+ * cannot be reached by a regular user.
+ */
+export function requiresAdminAccess(url: string, method = 'GET'): boolean {
+  const pathname = normalizeApiPath(url).replace(/\/+$/, '')
+  if (!pathname.startsWith('/api/admin/')) {
+    return false
+  }
+
+  const verb = method.toUpperCase()
+  if ((verb === 'GET' || verb === 'HEAD') && NON_ADMIN_READABLE_ADMIN_ROUTES.has(pathname)) {
+    return false
+  }
+
+  return true
 }
 
 
@@ -152,7 +212,7 @@ async function validateOIDCAuth(event: H3Event): Promise<AuthContext | null> {
  */
 export default defineEventHandler(async (event) => {
   // Only apply to API routes that require authentication
-  if (!requiresAuthentication(event.node.req.url || '')) {
+  if (!requiresAuthentication(event.node.req.url || '', event.node.req.method || 'GET')) {
     return
   }
 
@@ -187,6 +247,12 @@ export default defineEventHandler(async (event) => {
 
   // Add auth context to event for use in API handlers
   event.context.auth = authContext
+
+  // Every /api/admin/* route is Administrator-only unless explicitly listed
+  // as readable by all users. Handler-level checks remain as defense in depth.
+  if (requiresAdminAccess(url, event.node.req.method || 'GET')) {
+    await requireAdmin(event)
+  }
 
   // Compute Foundry's VMaaS key is intentionally incapable of reaching any
   // other GHOST surface, even if it is accidentally sent to the wrong path.

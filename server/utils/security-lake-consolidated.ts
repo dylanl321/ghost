@@ -404,7 +404,11 @@ export async function executeStoredQuery(request: QueryExecutionRequest): Promis
   }
 }
 
-function validateParameters(query: StoredQuery, parameters: Record<string, any>): { valid: boolean, error?: string } {
+export function isAwsAccountId(value: unknown): value is string {
+  return typeof value === 'string' && /^\d{12}$/.test(value)
+}
+
+export function validateParameters(query: StoredQuery, parameters: Record<string, any>): { valid: boolean, error?: string } {
   for (const param of query.parameters) {
     const value = parameters[param.name]
 
@@ -424,13 +428,19 @@ function validateParameters(query: StoredQuery, parameters: Record<string, any>)
       if (param.type === 'array' && !Array.isArray(value)) {
         return { valid: false, error: `Parameter ${param.name} must be an array` }
       }
+
+      // accountIds are interpolated into SQL, so each one must be a bare
+      // 12-digit AWS account id.
+      if (param.name === 'accountIds' && !value.every(isAwsAccountId)) {
+        return { valid: false, error: 'accountIds must contain only 12-digit AWS account IDs' }
+      }
     }
   }
 
   return { valid: true }
 }
 
-function buildSQL(query: StoredQuery, parameters: Record<string, any>, environment: 'commercial' | 'govcloud'): string {
+export function buildSQL(query: StoredQuery, parameters: Record<string, any>, environment: 'commercial' | 'govcloud'): string {
   let sql = query.sql
 
   // Get table name based on category
@@ -457,11 +467,16 @@ function buildSQL(query: StoredQuery, parameters: Record<string, any>, environme
   }
 
   // Replace limit
-  const limit = parameters.limit || query.parameters.find(p => p.name === 'limit')?.defaultValue || 100
+  const requestedLimit = Number(parameters.limit || query.parameters.find(p => p.name === 'limit')?.defaultValue || 100)
+  const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 10000) : 100
   sql = sql.replace(/\{\{LIMIT\}\}/g, String(limit))
 
   // Build account filter
   if (parameters.accountIds && Array.isArray(parameters.accountIds) && parameters.accountIds.length > 0) {
+    // Re-checked here so no caller can reach the SQL string with an unvalidated id.
+    if (!parameters.accountIds.every(isAwsAccountId)) {
+      throw new Error('accountIds must contain only 12-digit AWS account IDs')
+    }
     const accountList = parameters.accountIds.map((id: string) => `'${id}'`).join(', ')
     // Handle different column names for different data sources
     if (query.category === 'securityhub') {

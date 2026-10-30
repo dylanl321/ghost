@@ -9,6 +9,7 @@ import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { accountCache, organizationCache, CacheTags } from '../../utils/cache-manager'
 import { logger } from '../../utils/logger'
+import { requirePermission } from '../../utils/user-roles'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/accounts/update', 'POST', {
@@ -98,6 +99,8 @@ registerEndpoint('/api/accounts/update', 'POST', {
 })
 
 export default defineEventHandler(handleAsync(async (event) => {
+  await requirePermission(event, 'accounts.edit')
+
   const body = await readBody(event)
   
   if (!body || !body.accountId || !body.metadata) {

@@ -5,8 +5,11 @@
 
 import { getReportDownloadUrl } from '../../../utils/s3-reports-storage'
 import { logger } from '../../../utils/logger'
+import { requireAdmin } from '../../../utils/user-roles'
 
 export default defineEventHandler(async (event) => {
+  await requireAdmin(event)
+
   try {
     const body = await readBody(event)
     const { s3Key } = body
