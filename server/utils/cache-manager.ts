@@ -38,9 +38,17 @@ interface CacheConfig {
   enableCompression: boolean
 }
 
+interface InflightFetch<T = any> {
+  promise: Promise<T>
+  tags: string[]
+  // Set when the key is invalidated while the fetch is running, so the
+  // result (read before the invalidation) is returned but not cached.
+  invalidated: boolean
+}
+
 class CacheManager {
   private cache = new Map<string, CacheEntry>()
-  private inflight = new Map<string, Promise<any>>()
+  private inflight = new Map<string, InflightFetch>()
   private stats: CacheStats = {
     hits: 0,
     misses: 0,
@@ -92,6 +100,12 @@ class CacheManager {
    * Get data from cache
    */
   async get<T = any>(key: string): Promise<T | null> {
+    return this.getSync<T>(key)
+  }
+
+  // Synchronous so getOrSet can check the cache and register its in-flight
+  // fetch without yielding in between.
+  private getSync<T>(key: string): T | null {
     const entry = this.cache.get(key)
     
     if (!entry) {
@@ -162,6 +176,7 @@ class CacheManager {
    * Delete specific key from cache
    */
   async delete(key: string): Promise<boolean> {
+    this.invalidateInflight((inflightKey) => inflightKey === key)
     const deleted = this.cache.delete(key)
     if (deleted) {
       this.updateStats()
@@ -173,6 +188,7 @@ class CacheManager {
    * Invalidate cache entries by tags
    */
   async invalidateByTags(tags: string[]): Promise<number> {
+    this.invalidateInflight((_key, fetch) => fetch.tags.some(tag => tags.includes(tag)))
     let invalidated = 0
     
     for (const [key, entry] of this.cache.entries()) {
@@ -190,6 +206,7 @@ class CacheManager {
    * Clear all cache entries
    */
   async clear(): Promise<void> {
+    this.invalidateInflight(() => true)
     this.cache.clear()
     this.resetStats()
   }
@@ -198,6 +215,7 @@ class CacheManager {
    * Clear cache entries matching a pattern
    */
   async clearPattern(pattern: string): Promise<number> {
+    this.invalidateInflight((key) => key.includes(pattern))
     let cleared = 0
     const keysToDelete: string[] = []
     
@@ -234,7 +252,7 @@ class CacheManager {
     }
   ): Promise<T> {
     if (!options?.forceRefresh) {
-      const cached = await this.get<T>(key)
+      const cached = this.getSync<T>(key)
       if (cached !== null) {
         return cached
       }
@@ -243,23 +261,46 @@ class CacheManager {
     // Stampede protection: if an in-flight request exists for this key, wait for it
     const existing = this.inflight.get(key)
     if (existing) {
-      return existing
+      return existing.promise
     }
     
     // Execute the fetcher and track the in-flight promise
-    const promise = fetcher()
+    const inflight: InflightFetch<T> = {
+      promise: undefined as unknown as Promise<T>,
+      tags: options?.tags || [],
+      invalidated: false
+    }
+    inflight.promise = Promise.resolve()
+      .then(fetcher)
       .then(async (data) => {
-        await this.set(key, data, options)
-        this.inflight.delete(key)
+        // Callers treat null as "fetch failed", and get() reports a cached
+        // null as a miss anyway, so only real results are stored.
+        if (!inflight.invalidated && data !== null && data !== undefined) {
+          await this.set(key, data, options)
+        }
         return data
       })
-      .catch((err) => {
-        this.inflight.delete(key)
-        throw err
+      .finally(() => {
+        if (this.inflight.get(key) === inflight) {
+          this.inflight.delete(key)
+        }
       })
     
-    this.inflight.set(key, promise)
-    return promise
+    this.inflight.set(key, inflight)
+    return inflight.promise
+  }
+
+  /**
+   * Drop matching in-flight fetches so their (pre-invalidation) results are
+   * not written back to the cache, and the next caller fetches fresh data.
+   */
+  private invalidateInflight(matches: (key: string, fetch: InflightFetch) => boolean): void {
+    for (const [key, fetch] of this.inflight) {
+      if (matches(key, fetch)) {
+        fetch.invalidated = true
+        this.inflight.delete(key)
+      }
+    }
   }
   
   /**
@@ -363,7 +404,7 @@ class CacheManager {
     keysToDelete.forEach(key => this.cache.delete(key))
     
     if (keysToDelete.length > 0) {
-      logger.info(`Cache cleanup: removed ${keysToDelete.length} expired entries`)
+      logger.debug(`Cache cleanup: removed ${keysToDelete.length} expired entries`)
       this.updateStats()
     }
   }
@@ -431,18 +472,8 @@ if (import.meta.hot) {
   })
 }
 
-// Clean up on process exit (production)
-if (process.env.NODE_ENV === 'production') {
-  const cleanupAllCaches = () => {
-    logger.info('Cleaning up cache instances on shutdown...')
-    allCacheInstances.forEach(cache => cache.destroy())
-    allCacheInstances.length = 0
-  }
-
-  process.on('SIGTERM', cleanupAllCaches)
-  process.on('SIGINT', cleanupAllCaches)
-  process.on('exit', cleanupAllCaches)
-}
+// No SIGTERM handler: requests still draining during graceful shutdown need
+// their caches, and process exit frees the memory anyway.
 
 // Create global cache instances with proper cleanup tracking
 export const organizationCache = createTrackedCache({

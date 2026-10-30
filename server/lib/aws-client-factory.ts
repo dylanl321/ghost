@@ -624,7 +624,7 @@ export function clearExpiredClients(): number {
   }
   
   if (cleared > 0) {
-    logger.info(`[AWS Client Factory] Cleared ${cleared} expired clients from cache`)
+    logger.debug(`[AWS Client Factory] Cleared ${cleared} expired clients from cache`)
   }
   
   return cleared
