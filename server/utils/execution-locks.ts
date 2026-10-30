@@ -86,10 +86,14 @@ export async function claimExecutionLock(
         // This will only succeed if no lock exists for this lockId
         const client = await getDynamoDBClient(environment, undefined, accountId)
 
+        // A lock past its expiresAt belongs to a run that died without
+        // releasing it. DynamoDB TTL can take up to 48 hours to delete it,
+        // so treat it as free rather than waiting on TTL.
         const command = new PutItemCommand({
           TableName: tableName,
           Item: marshall(lock, { removeUndefinedValues: true }),
-          ConditionExpression: 'attribute_not_exists(lockId)'
+          ConditionExpression: 'attribute_not_exists(lockId) OR expiresAt < :now',
+          ExpressionAttributeValues: marshall({ ':now': Math.floor(Date.now() / 1000) })
         })
 
         await client.send(command)
@@ -230,11 +234,19 @@ export async function hasExecutionLock(
 }
 
 /**
+ * Lock age after which startup cleanup treats a lock as abandoned. It must be
+ * longer than the longest job: a shorter threshold lets a task that starts
+ * while another task is mid-job delete that job's live lock and run it twice.
+ * Matches the 1-hour expiresAt written by claimExecutionLock.
+ */
+export const STALE_LOCK_MAX_AGE_MINUTES = 60
+
+/**
  * Clean up stale locks on startup
- * Removes locks that are older than the specified age (default 5 minutes)
+ * Removes locks that are older than the specified age (default 60 minutes)
  * This handles the case where a container restarts and leaves behind old locks
  */
-export async function cleanupStaleLocks(maxAgeMinutes: number = 5): Promise<number> {
+export async function cleanupStaleLocks(maxAgeMinutes: number = STALE_LOCK_MAX_AGE_MINUTES): Promise<number> {
   try {
     const tableName = await getTableName('reportExecutionLocks')
     const environment = await getTableEnvironment('reportExecutionLocks')
