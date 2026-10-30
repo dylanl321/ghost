@@ -36,7 +36,7 @@ export function parseAuthorField(authorField: string | null | undefined): Author
   const match = trimmed.match(/^(.+?)\s*<([^>]+)>$/)
 
   if (match) {
-    const [, name, email] = match
+    const [, name = '', email = ''] = match
     return {
       name: name.trim(),
       email: email.trim(),
@@ -47,7 +47,7 @@ export function parseAuthorField(authorField: string | null | undefined): Author
 
   // Fallback: assume it's just an email
   if (trimmed.includes('@')) {
-    const emailUsername = trimmed.split('@')[0]
+    const emailUsername = trimmed.split('@')[0] ?? trimmed
     return {
       name: emailUsername,
       email: trimmed,
