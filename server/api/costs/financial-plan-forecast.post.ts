@@ -198,6 +198,9 @@ async function loadBillingViewActual(billingViewArn: string, startDate: string, 
 }
 
 async function loadCurrentDevOrgActual(billingViewArn: string, startDate: string, endDate: string) {
+  // Cost Explorer rejects an empty range, which is what the accrued-actuals
+  // window is on the first day of a month.
+  if (startDate >= endDate) return 0
   try {
     return await loadBillingViewActual(billingViewArn, startDate, endDate)
   } catch (viewError) {
@@ -250,7 +253,7 @@ async function forecastSpecial(components: SpecialComponent[], startDate: string
 }
 
 async function loadCurrentAccountActuals(accountIds: string[], startDate: string, endDate: string) {
-  if (!accountIds.length) return {} as Record<string, number>
+  if (!accountIds.length || startDate >= endDate) return {} as Record<string, number>
   const response = await getCostAndUsage({
     startDate,
     endDate,
@@ -271,6 +274,7 @@ async function loadCurrentAccountActuals(accountIds: string[], startDate: string
 
 async function loadCurrentSpecialActuals(components: SpecialComponent[], startDate: string, endDate: string) {
   const totals: Record<string, number> = {}
+  if (startDate >= endDate) return totals
   for (const component of components) {
     const response = await getCostAndUsage({
       startDate,
@@ -305,7 +309,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   if (!DEPARTMENTS.has(department) || !Number.isInteger(year) || !monthlyActuals || typeof monthlyActuals !== 'object') return errors.badRequest(event, 'department, year, and monthlyActuals are required')
 
   const today = new Date()
-  if (year !== today.getFullYear()) return errors.badRequest(event, 'AWS forecasts can only be generated for the current year')
+  if (year !== today.getUTCFullYear()) return errors.badRequest(event, 'AWS forecasts can only be generated for the current year')
   let allAccounts: Awaited<ReturnType<typeof getAllAccountsUnified>>
   try {
     allAccounts = await getAllAccountsUnified(false)
@@ -371,14 +375,12 @@ export default defineEventHandler(handleAsync(async (event) => {
   // Finance posts the preceding usage month in the current month. The Finance
   // page supplies that posted proforma chargeback as an actual, so it must not
   // also receive a forecast remainder.
-  const currentMonth = `${year}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+  const currentMonth = `${year}-${String(today.getUTCMonth() + 1).padStart(2, '0')}-01`
   // GetCostForecast cannot start before today. The daily forecast covers the
   // remainder of the current usage month and is posted to the next Finance month.
   const currentForecastStart = today.toISOString().slice(0, 10)
-  const currentUsageStart = `${year}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
-  const nextMonth = new Date(today)
-  nextMonth.setMonth(nextMonth.getMonth() + 1, 1)
-  const currentEnd = nextMonth.toISOString().slice(0, 10)
+  const currentUsageStart = currentMonth
+  const currentEnd = new Date(Date.UTC(year, today.getUTCMonth() + 1, 1)).toISOString().slice(0, 10)
   // Finance posts November usage in December. Forecast usage through Nov of
   // the next calendar year so the last chargeback month is Dec ${year + 1}.
   const futureEnd = `${year + 1}-12-01`
