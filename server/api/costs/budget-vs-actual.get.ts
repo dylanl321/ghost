@@ -21,8 +21,8 @@
  *   per month = (CE total via master account creds) − (CE total via proforma account creds).
  *   The master CE call sees the full org billable spend; the proforma CE call sees the
  *   proforma-allocated portion. The difference is what sits unallocated in GDMS Cloud.
- * - "SavingsPlanRecurringFee" and "SavingsPlanPurchase" RECORD_TYPE charges are
- *   excluded from payer actuals so the comparison reflects consumption only.
+ * - Savings Plan purchase and recurring fees on the payer stay in GDMS Cloud actuals
+ *   (Finance counts them; confirmed by Dylan in the 2026-10 audit).
  * - GDMS-DevOrg (266632029214) charges appear via billing transfer under the
  *   proforma account. Fetched separately and shown as a fixed DE158 category row.
  *

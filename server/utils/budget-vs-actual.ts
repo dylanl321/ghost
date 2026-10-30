@@ -24,8 +24,8 @@
  *   per month = (CE total via master account creds) − (CE total via proforma account creds).
  *   The master CE call sees the full org billable spend; the proforma CE call sees the
  *   proforma-allocated portion. The difference is what sits unallocated in GDMS Cloud.
- * - "SavingsPlanRecurringFee" and "SavingsPlanPurchase" RECORD_TYPE charges are
- *   excluded from payer actuals so the comparison reflects consumption only.
+ * - Savings Plan purchase and recurring fees on the payer stay in GDMS Cloud actuals
+ *   (Finance counts them; confirmed by Dylan in the 2026-10 audit).
  * - GDMS-DevOrg (266632029214) charges appear via billing transfer under the
  *   proforma account. Fetched separately and shown as a fixed DE158 category row.
  *
@@ -58,7 +58,6 @@ const DEV_ORG_ACCOUNT_ID = process.env.AWS_DEV_ORG_ACCOUNT_ID || '266632029214'
 const DEV_ORG_ROLLS_INTO: AllowedDepartment = 'DE158'
 
 // RECORD_TYPE values to exclude from payer actuals.
-const EXCLUDED_RECORD_TYPES = ['SavingsPlanRecurringFee', 'SavingsPlanPurchase']
 
 // Named account categories matching the spreadsheet exactly.
 // Matched case-insensitively against projectName / account name.
@@ -161,7 +160,6 @@ export interface BudgetVsActualReport {
     allowedDepartments: typeof ALLOWED_DEPARTMENTS
     payerAccountId: string
     payerRollsInto: AllowedDepartment
-    excludedRecordTypes: string[]
     generatedAt: string
   }
 }
@@ -408,20 +406,23 @@ export async function computeBudgetVsActual(options: {
       const proforma = proformaOrgByMonth.get(month) ?? 0
       const entSupport = enterpriseSupportByMonth.get(month) ?? 0
       // GDMS Cloud actual = payer charges not allocated to linked accounts, minus Enterprise Support
-      // (which gets its own category row). Savings plan fees are excluded by EXCLUDED_RECORD_TYPES.
+      // (which gets its own category row). Savings Plan fees stay in GDMS Cloud.
       const gdmsCloudActual = billable - proforma - entSupport
-      // GDMS Cloud budget = same residual on the proforma side: org proforma total minus what
-      // proforma allocated to linked accounts, minus Enterprise Support hardcoded budget.
-      // proformaLinked = sum of linked account proforma budgets for this month (pre-strip).
+      // GDMS Cloud budget is the payer's own proforma value (applied below). Only months
+      // without one fall back to the residual: org proforma total minus what proforma
+      // allocated to linked accounts, minus the Enterprise Support hardcoded budget.
       const proformaLinked = linkedAccountBudgetByMonth.get(month) ?? 0
       const ENT_SUPPORT_MONTHLY_BUDGET = 56900
-      const gdmsCloudBudget = Math.max(0, proforma - proformaLinked - ENT_SUPPORT_MONTHLY_BUDGET)
+      const gdmsCloudBudget = payerBudgetFromProforma?.has(month)
+        ? 0
+        : Math.max(0, proforma - proformaLinked - ENT_SUPPORT_MONTHLY_BUDGET)
       logger.info(`  ${month}: billable=${billable.toFixed(2)}  proforma=${proforma.toFixed(2)}  proformaLinked=${proformaLinked.toFixed(2)}  entSupport=${entSupport.toFixed(2)}  gdmsCloudActual=${gdmsCloudActual.toFixed(2)}  gdmsCloudBudget=${gdmsCloudBudget.toFixed(2)}`)
       if (gdmsCloudActual > 0) payerActualByMonth.set(month, gdmsCloudActual)
       if (gdmsCloudBudget > 0) payerBudgetByMonth.set(month, gdmsCloudBudget)
     }
 
-    // Payer budget from proforma side (saved before the index was stripped)
+    // Payer budget from proforma side (saved before the index was stripped); takes
+    // precedence over the residual for every month it covers.
     for (const [m, c] of payerBudgetFromProforma || []) payerBudgetByMonth.set(m, c)
 
     devOrgResult = devOrg
@@ -735,7 +736,6 @@ export async function computeBudgetVsActual(options: {
       allowedDepartments: ALLOWED_DEPARTMENTS,
       payerAccountId: PAYER_ACCOUNT_ID,
       payerRollsInto: PAYER_ROLLS_INTO,
-      excludedRecordTypes: EXCLUDED_RECORD_TYPES,
       generatedAt: new Date().toISOString()
     }
   }
