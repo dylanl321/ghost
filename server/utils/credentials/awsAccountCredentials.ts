@@ -1,7 +1,6 @@
-import { STSClient, AssumeRoleCommand } from "@aws-sdk/client-sts";
 import type { AwsCredentialIdentity } from "@aws-sdk/types";
 import { logger } from '../logger'
-import { assumeRoleCircuitBreaker } from '../credential-circuit-breaker'
+import { getAssumedRoleCredentials } from '../../lib/aws-client-factory'
 
 interface CachedAwsCredentialIdentity extends AwsCredentialIdentity {
   expiration?: Date;
@@ -43,79 +42,49 @@ export default function getMasterAccountCredentials(profileName: 'commercial' | 
   }
 }
 
-export async function assumeChildAccountRole(environment: 'commercial' | 'govcloud', accountId: string) {
-  const cache = credentialCache[accountId]
-  if (cache && cache.expiration && cache.expiration > new Date()) {
-    return cache
-  }
-
-  // Circuit breaker: skip STS if account is known-unreachable
-  if (!assumeRoleCircuitBreaker.canAttempt(accountId)) {
-    throw new Error(
-      `Circuit breaker OPEN for account ${accountId}. Assume-role has failed repeatedly.`
-    )
-  }
-
-  if (!aws_commercial_access_key || !aws_commercial_secret_access_key || !aws_commercial_region || !aws_govcloud_access_key ||
-    !aws_govcloud_secret_access_key || !aws_govcloud_region) {
-    throw new Error("One or more AWS credential environment variables is not set.");
+/**
+ * Credentials for a member account. Role assumption goes through the shared
+ * client factory so both code paths share one credential cache, one
+ * in-flight STS call per account and one role/partition/duration policy.
+ */
+export async function assumeChildAccountRole(environment: 'commercial' | 'govcloud', accountId: string): Promise<CachedAwsCredentialIdentity> {
+  // If we are retrieving credentials for the deployment account, and this code is live, use the ECS task credentials
+  const config = useRuntimeConfig();
+  if (accountId === deploymentAccount && (config.public.environment === "dev" || config.public.environment === "prod")) {
+    return getContainerCredentials(environment, accountId)
   }
 
   logger.debug(`Assuming role for account ${accountId}...`);
+  return getAssumedRoleCredentials(environment, accountId, { sessionName: 'child-account-session' })
+}
 
-  // If we are retrieving credentials for the deployment account, and this code is live, use the EC2 instance metadata
-  const config = useRuntimeConfig();
-  if (accountId === deploymentAccount && (config.public.environment === "dev" || config.public.environment === "prod")) {
+const CREDENTIAL_REFRESH_BUFFER_MS = 5 * 60 * 1000
+const inflightContainerCredentials = new Map<string, Promise<CachedAwsCredentialIdentity>>()
 
-    // Use ECS metadata credentials in deployed environment
+async function getContainerCredentials(environment: 'commercial' | 'govcloud', accountId: string): Promise<CachedAwsCredentialIdentity> {
+  // Keyed by partition too: a commercial and a GovCloud account can share an id.
+  const key = `${environment}:${accountId}`
+  const cache = credentialCache[key]
+  if (cache && (!cache.expiration || cache.expiration.getTime() > Date.now() + CREDENTIAL_REFRESH_BUFFER_MS)) {
+    return cache
+  }
+
+  const inflight = inflightContainerCredentials.get(key)
+  if (inflight) return inflight
+
+  const promise = (async () => {
     const { fromContainerMetadata } = await import("@aws-sdk/credential-providers");
-    const credentialsProvider = fromContainerMetadata();
-
-    const creds = await credentialsProvider();
+    const creds = await fromContainerMetadata()();
     const credential: CachedAwsCredentialIdentity = {
       accessKeyId: creds.accessKeyId,
       secretAccessKey: creds.secretAccessKey,
       sessionToken: creds.sessionToken,
       expiration: creds.expiration,
     };
-    credentialCache[accountId] = credential;
+    credentialCache[key] = credential;
     return credential;
-  } else {
-    const creds = getMasterAccountCredentials(environment);
+  })().finally(() => inflightContainerCredentials.delete(key))
 
-    const stsClient = new STSClient({
-      region: environment === "govcloud" ? "us-gov-west-1" : "us-east-1",
-      credentials: creds
-    });
-
-    const partition = environment === "govcloud" ? "aws-us-gov" : "aws";
-    const roleArn = `arn:${partition}:iam::${accountId}:role/GDMSOrganizationsRole`;
-
-    const assumeRoleCommand = new AssumeRoleCommand({
-      RoleArn: roleArn,
-      RoleSessionName: "child-account-session",
-      DurationSeconds: 3600,
-    });
-
-    try {
-      const response = await stsClient.send(assumeRoleCommand);
-
-      if (!response.Credentials) throw new Error("Failed to assume role. Make sure 'environment' lines up with 'accountId'.");
-
-      assumeRoleCircuitBreaker.recordSuccess(accountId)
-
-      const credential: CachedAwsCredentialIdentity = {
-        accessKeyId: response.Credentials.AccessKeyId!,
-        secretAccessKey: response.Credentials.SecretAccessKey!,
-        sessionToken: response.Credentials.SessionToken,
-        expiration: response.Credentials.Expiration,
-      };
-      credentialCache[accountId] = credential;
-
-      return credential;
-    } catch (error) {
-      assumeRoleCircuitBreaker.recordFailure(accountId, error as Error)
-      throw error
-    }
-  }
+  inflightContainerCredentials.set(key, promise)
+  return promise
 }

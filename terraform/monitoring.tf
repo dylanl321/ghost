@@ -171,6 +171,23 @@ resource "aws_cloudwatch_log_metric_filter" "api_5xx" {
   }
 }
 
+# Cost Explorer bills $0.01 per request. The app writes one aggregated line per
+# operation per minute (server/utils/aws-call-metrics.ts); summing `count`
+# gives the request volume, and so the spend, behind the Finance and cost pages.
+resource "aws_cloudwatch_log_metric_filter" "cost_explorer_requests" {
+  provider       = aws.target_deployment_account
+  name           = "${var.app_name}-cost-explorer-requests"
+  log_group_name = aws_cloudwatch_log_group.ecs.name
+  pattern        = "{ $.type = \"aws_api_calls\" && $.service = \"cost-explorer\" }"
+
+  metric_transformation {
+    name          = "CostExplorerRequestCount"
+    namespace     = "${var.app_name}/Application"
+    value         = "$.count"
+    default_value = "0"
+  }
+}
+
 # Recurring 5xx from the Inspector findings endpoint specifically. Provider calls
 # there fail as a burst (STS succeeds, upstream errors), so a dedicated filter on
 # the exact normalized request path isolates it from unrelated 5xx noise.
