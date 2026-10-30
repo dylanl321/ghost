@@ -21,9 +21,6 @@ export async function exportToCSV(
   config: DataExportConfig
 ): Promise<ExportResult> {
   try {
-    const delimiter = config.options?.csv?.delimiter || ','
-    const encoding = config.options?.csv?.encoding || 'utf-8'
-    const includeHeaders = config.options?.csv?.includeHeaders !== false
     const multiFileZip = config.options?.csv?.multiFileZip && config.sheets.length > 1
 
     // Single sheet export

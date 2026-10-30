@@ -198,7 +198,7 @@ export async function updateItem(
   try {
     const marshalledStr = JSON.stringify(commandParams.ExpressionAttributeValues)
     logger.info('[DynamoDB updateItem] Marshalled values sample:', marshalledStr.substring(0, 500))
-  } catch (e) {
+  } catch {
     logger.warn('[DynamoDB updateItem] Could not stringify marshalled values')
   }
 

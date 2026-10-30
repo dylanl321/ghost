@@ -3,6 +3,8 @@ import test from 'node:test'
 import type { DataExportConfig } from '#shared/types/export'
 import { buildCombinedCSV } from '../../shared/utils/export/csv-content'
 import { buildJSONExport, generateFilename } from '../../shared/utils/export/format'
+import { buildXlsxBuffer } from '../../shared/utils/export/xlsx-workbook'
+import * as XLSX from 'xlsx'
 
 const config: DataExportConfig = {
   title: 'AWS Cost Report',
@@ -36,6 +38,14 @@ test('scheduled JSON reports parse and keep the sheet data', () => {
   assert.equal(parsed.title, 'AWS Cost Report')
   assert.equal(parsed.sheets.length, 2)
   assert.equal(parsed.sheets[0].data[0].cost, 1234.5)
+})
+
+test('scheduled XLSX reports open as workbooks with every sheet', () => {
+  const workbook = XLSX.read(Buffer.from(buildXlsxBuffer(config)), { type: 'buffer' })
+  assert.deepEqual(workbook.SheetNames, ['Accounts', 'Services'])
+  const rows = XLSX.utils.sheet_to_json<string[]>(workbook.Sheets.Accounts!, { header: 1 })
+  assert.deepEqual(rows[0], ['Account', 'Cost'])
+  assert.equal(rows[1]![0], 'Prod, East')
 })
 
 test('report filenames carry the requested extension', () => {

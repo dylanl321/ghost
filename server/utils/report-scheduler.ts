@@ -69,7 +69,7 @@ export async function executeScheduledReport(
 
     // Step 2: Upload report to S3 (test sends are not stored)
     const executionId = `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    let s3UploadResult: Awaited<ReturnType<typeof uploadReportToS3>> = { success: false, key: '' }
+    let s3UploadResult: Awaited<ReturnType<typeof uploadReportToS3>> = { success: false, key: '', bucket: '', size: 0 }
 
     if (!options.test) {
       logger.info('  → Uploading report to S3...')

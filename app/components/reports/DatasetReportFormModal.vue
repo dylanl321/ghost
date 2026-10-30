@@ -322,7 +322,7 @@ const logger = createLogger('DatasetReportFormModal')
 // Non-admins can only send reports to themselves (the server enforces this)
 const { isAdmin } = useUserRoles()
 const { user } = useOidcAuth()
-const ownEmail = computed(() => user.value?.email || '')
+const ownEmail = computed(() => (user.value?.claims?.email || user.value?.claims?.preferred_username || '') as string)
 
 const props = defineProps<{
   report?: ScheduledReport | null

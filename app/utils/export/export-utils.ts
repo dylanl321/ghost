@@ -32,12 +32,3 @@ export function downloadBlob(blob: Blob, filename: string): void {
 
   URL.revokeObjectURL(url)
 }
-
-/**
- * Create ZIP file from multiple files
- */
-export async function createZip(files: Array<{ name: string; content: string | Blob }>): Promise<Blob> {
-  // For now, return a simple implementation
-  // In production, would use JSZip library
-  throw new Error('ZIP creation not yet implemented. Install jszip library.')
-}

@@ -200,7 +200,7 @@ const toast = useToast()
 const { user } = useOidcAuth()
 const { isAdmin } = useUserRoles()
 
-const userEmail = computed(() => user.value?.email || '')
+const userEmail = computed(() => (user.value?.claims?.email || user.value?.claims?.preferred_username || '') as string)
 
 const {
   loading,
@@ -382,7 +382,7 @@ async function loadHistory() {
   historyError.value = null
   try {
     await fetchExecutionHistory(selectedReport.value.reportId)
-  } catch (err) {
+  } catch {
     historyError.value = error.value || 'Failed to load execution history'
   } finally {
     historyLoading.value = false

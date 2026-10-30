@@ -25,15 +25,17 @@ export function formatCellValue(
     case 'currency':
       return formatCurrency(value, formatting?.numberFormat)
 
-    case 'percentage':
+    case 'percentage': {
       const numValue = typeof value === 'number' ? value : parseFloat(value)
       if (isNaN(numValue)) return value
       return `${numValue.toFixed(decimals)}%`
+    }
 
-    case 'number':
+    case 'number': {
       const num = typeof value === 'number' ? value : parseFloat(value)
       if (isNaN(num)) return value
       return formatNumber(num, decimals, formatting?.numberFormat)
+    }
 
     case 'date':
       return formatDate(value)
@@ -85,7 +87,7 @@ export function formatNumber(
   const parts = fixed.split('.')
 
   // Add thousands separator
-  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, thousandsSep)
+  parts[0] = (parts[0] ?? '').replace(/\B(?=(\d{3})+(?!\d))/g, thousandsSep)
 
   return parts.join(decimalSep)
 }

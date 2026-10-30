@@ -677,6 +677,6 @@ async function generateXLSXDatasetReport(
   } catch (error: any) {
     logger.error('[Dataset Report] XLSX generation error:', error)
     // Fail explicitly - no silent fallback to CSV
-    throw new Error(`Failed to generate XLSX: ${error.message}`)
+    throw new Error(`Failed to generate XLSX: ${error.message}`, { cause: error })
   }
 }

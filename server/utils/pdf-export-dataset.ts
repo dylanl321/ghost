@@ -51,7 +51,7 @@ export async function analyzeDatasetReport(
 
   } catch (error: any) {
     logger.error('[Dataset AI] AI analysis failed:', error)
-    throw new Error(`AI analysis failed: ${error.message}`)
+    throw new Error(`AI analysis failed: ${error.message}`, { cause: error })
   }
 }
 
