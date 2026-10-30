@@ -17,7 +17,33 @@ const errorConfig = computed(() => {
       iconColor: "text-blue-400",
     };
   }
-  if (statusCode.value === 500) {
+  if (statusCode.value === 401) {
+    return {
+      title: "Your Session Has Ended",
+      message: "Sign in again to pick up where you left off.",
+      glowColor: "bg-amber-500",
+      iconColor: "text-amber-400",
+    };
+  }
+  if (statusCode.value === 403) {
+    return {
+      title: "You Don't Have Access",
+      message:
+        "Your account doesn't have permission to view this page. If you think it should, ask a GHOST administrator for access.",
+      glowColor: "bg-amber-500",
+      iconColor: "text-amber-400",
+    };
+  }
+  if (statusCode.value === 502 || statusCode.value === 503 || statusCode.value === 504) {
+    return {
+      title: "Temporarily Unavailable",
+      message:
+        "GHOST or one of the services it depends on is not responding right now. This is usually brief, so try again in a minute.",
+      glowColor: "bg-amber-500",
+      iconColor: "text-amber-400",
+    };
+  }
+  if (statusCode.value >= 500) {
     return {
       title: "Something Went Wrong",
       message:
@@ -36,6 +62,14 @@ const errorConfig = computed(() => {
 
 const handleGoHome = () => {
   clearError({ redirect: "/" });
+};
+
+// Server and session errors are often transient, so offer a retry of the same page
+const canRetry = computed(() => statusCode.value === 401 || statusCode.value >= 500);
+
+const handleRetry = () => {
+  // A full reload re-runs auth, so an expired session is sent to sign-in
+  window.location.reload();
 };
 
 const { emit } = useEventBus()
@@ -253,24 +287,27 @@ onUnmounted(() => {
           {{ errorConfig.message }}
         </p>
 
-        <UButton
-          color="white"
-          variant="solid"
-          size="lg"
-          icon="i-heroicons-home"
-          @click="handleGoHome"
-        >
-          Go to Dashboard
-        </UButton>
-
-        <p class="text-xs text-slate-500 mt-6">
-          Press
-          <kbd
-            class="px-1.5 py-0.5 rounded bg-slate-700/50 border border-slate-600/50 text-slate-400 font-mono text-xs"
-            >Cmd+K</kbd
+        <div class="flex flex-wrap items-center justify-center gap-3">
+          <UButton
+            v-if="canRetry"
+            color="white"
+            variant="solid"
+            size="lg"
+            :icon="statusCode === 401 ? 'i-heroicons-arrow-right-on-rectangle' : 'i-heroicons-arrow-path'"
+            @click="handleRetry"
           >
-          to search
-        </p>
+            {{ statusCode === 401 ? "Sign In Again" : "Try Again" }}
+          </UButton>
+          <UButton
+            color="white"
+            :variant="canRetry ? 'ghost' : 'solid'"
+            size="lg"
+            icon="i-heroicons-home"
+            @click="handleGoHome"
+          >
+            Go to Dashboard
+          </UButton>
+        </div>
 
         <!-- Ghost Catcher Game Overlay -->
         <div v-if="gameActive" class="absolute inset-0 rounded-xl overflow-hidden">
