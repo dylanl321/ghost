@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
 
     // Parse query params
     const query = getQuery(event)
-    const limit = query.limit ? parseInt(query.limit as string) : 100
+    const limit = Math.min(Math.max(parseInt(query.limit as string) || 1000, 1), 5000)
 
     // Get all preferences
     const result = await getAllUserPreferences(limit)

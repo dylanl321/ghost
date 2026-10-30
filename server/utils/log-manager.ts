@@ -117,7 +117,7 @@ export async function logMessage(message: string): Promise<void> {
 }
 
 // --- Get logs ---
-export async function getLogs(durationSeconds: number, filterPattern?: string): Promise<FilteredLogEvent[]> {
+export async function getLogs(durationSeconds: number, filterPattern?: string, maxEvents = MAX_LOG_EVENTS): Promise<FilteredLogEvent[]> {
   const seconds = Number.isFinite(durationSeconds)
     ? Math.min(Math.max(Math.floor(durationSeconds), 60), MAX_LOG_DURATION_SECONDS)
     : 3600;
@@ -140,8 +140,8 @@ export async function getLogs(durationSeconds: number, filterPattern?: string): 
       const response = await cloudWatchClient!.send(command);
       allEvents.push(...(response.events ?? []));
       nextToken = response.nextToken;
-      if (allEvents.length >= MAX_LOG_EVENTS) {
-        logger.warn(`[Log Manager] Stopped reading logs at ${MAX_LOG_EVENTS} events`);
+      if (allEvents.length >= maxEvents) {
+        logger.warn(`[Log Manager] Stopped reading logs at ${maxEvents} events`);
         break;
       }
     } while (nextToken);

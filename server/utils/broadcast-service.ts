@@ -56,13 +56,13 @@ export async function createBroadcast(
     let targetUserIds: string[] = []
 
     if (options.targetAudience === 'all') {
-      const allPrefs = await getAllUserPreferences(1000)
+      const allPrefs = await getAllUserPreferences(Number.MAX_SAFE_INTEGER)
       targetUserIds = allPrefs.preferences.map(p => p.userId)
     } else if (options.targetAudience === 'list' && options.targetUserIds) {
       targetUserIds = options.targetUserIds
     } else if (options.targetAudience === 'role' && options.targetRole) {
       // Filter users by role from preferences (role stored in preferences)
-      const allPrefs = await getAllUserPreferences(1000)
+      const allPrefs = await getAllUserPreferences(Number.MAX_SAFE_INTEGER)
       targetUserIds = allPrefs.preferences
         .filter(p => p.preferences?.role === options.targetRole)
         .map(p => p.userId)
