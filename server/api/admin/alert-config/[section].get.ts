@@ -78,7 +78,8 @@ const SECTION_HANDLERS: Record<string, () => Promise<any>> = {
 export default defineEventHandler(async (event) => {
   const section = getRouterParam(event, 'section')
 
-  if (!section || !SECTION_HANDLERS[section]) {
+  // hasOwn: names such as "constructor" would otherwise resolve to Object.prototype
+  if (!section || !Object.hasOwn(SECTION_HANDLERS, section)) {
     throw createError({
       statusCode: 400,
       statusMessage: `Invalid section: ${section}`,

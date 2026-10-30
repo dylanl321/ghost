@@ -1,102 +1,32 @@
 /**
  * PUT /api/admin/alert-config/settings
  *
- * Update the main settings configuration (admin only).
+ * Update the global alert settings (admin only).
  */
 
-import { defineEventHandler, readBody, createError } from 'h3'
-import { requireAdmin } from '../../../utils/user-roles'
-import { getConfigItem, updateConfigItem } from '../../../utils/budget-alert-config'
-import type { SettingsConfig } from '#shared/types/budget-alert-config'
+import { defineEventHandler } from 'h3'
+import { updateGlobalConfigSection } from '../../../utils/alert-config-sections'
 
-interface SettingsUpdateRequest {
-  email_domain?: string
-  from_email?: string
-  from_name?: string
-  timezone?: string
-  cooldown_hours?: number
-  min_budget?: number
-  business_hours_start?: number
-  business_hours_end?: number
-  ghost_url_template?: string
-  accounts_table?: string
-}
-
-export default defineEventHandler(async (event) => {
-  // Require admin access
-  await requireAdmin(event)
-
-  try {
-    // Parse request body
-    const body = await readBody<SettingsUpdateRequest>(event)
-
-    // Validate business hours if both provided
-    if (body.business_hours_start !== undefined && body.business_hours_end !== undefined) {
-      if (body.business_hours_start >= body.business_hours_end) {
-        throw createError({
-          statusCode: 400,
-          message: 'Business hours start must be before end'
-        })
-      }
-    }
-
-    // Validate hours range
-    if (body.business_hours_start !== undefined) {
-      if (body.business_hours_start < 0 || body.business_hours_start > 23) {
-        throw createError({
-          statusCode: 400,
-          message: 'Business hours start must be between 0 and 23'
-        })
-      }
-    }
-    if (body.business_hours_end !== undefined) {
-      if (body.business_hours_end < 0 || body.business_hours_end > 23) {
-        throw createError({
-          statusCode: 400,
-          message: 'Business hours end must be between 0 and 23'
-        })
-      }
-    }
-
-    // Validate min_budget
-    if (body.min_budget !== undefined && body.min_budget < 0) {
-      throw createError({
-        statusCode: 400,
-        message: 'Minimum budget must be non-negative'
-      })
-    }
-
-    // Get username for audit trail
-    const auth = event.context.auth
-    const user = auth?.user
-    const username = user?.email || user?.preferred_username || 'unknown'
-
-    // Get existing settings
-    const existing = await getConfigItem('GLOBAL', 'settings#main') as SettingsConfig | null
-
-    // Merge with existing settings
-    const updated: SettingsConfig = {
-      ...existing,
-      ...body,
-      config_scope: 'GLOBAL',
-      config_section: 'settings#main',
-      section_type: 'settings'
-    }
-
-    // Save the updated settings
-    await updateConfigItem(updated, username)
-
-    return {
-      success: true,
-      data: updated,
-      message: 'Settings updated successfully'
-    }
-  } catch (error: any) {
-    logger.error('Error updating alert settings:', error)
-
-    throw createError({
-      statusCode: error.statusCode || 500,
-      message: error.message || 'Failed to update settings'
-    })
-  }
-})
+export default defineEventHandler(event => updateGlobalConfigSection(event, {
+  section: 'settings#main',
+  section_type: 'settings',
+  label: 'Settings',
+  rules: {
+    email_domain: { kind: 'string', maxLength: 253, pattern: /^[a-z0-9.-]+\.[a-z]{2,}$/i },
+    from_email: { kind: 'email' },
+    from_name: { kind: 'string', maxLength: 200 },
+    timezone: { kind: 'string', maxLength: 64, pattern: /^[A-Za-z_]+(\/[A-Za-z0-9_+-]+)*$/ },
+    cooldown_hours: { kind: 'number', min: 0 },
+    min_budget: { kind: 'number', min: 0 },
+    business_hours_start: { kind: 'number', integer: true, min: 0, max: 23 },
+    business_hours_end: { kind: 'number', integer: true, min: 0, max: 23 },
+    ghost_url_template: { kind: 'string', maxLength: 500, pattern: /^https?:\/\// },
+    accounts_table: { kind: 'string', maxLength: 255, pattern: /^[A-Za-z0-9_.-]{3,255}$/ }
+  },
+  // Checked against the stored value too, so changing only one end cannot invert the window
+  validate: merged =>
+    merged.business_hours_start !== undefined && merged.business_hours_end !== undefined &&
+    merged.business_hours_start >= merged.business_hours_end
+      ? 'Business hours start must be before end'
+      : undefined
+}))

@@ -17,13 +17,9 @@ import {
   getAlertsByMonth,
   getAlertsByType,
   getAllAlerts,
-  validateDateRange
+  parseBudgetAlertQuery
 } from '../../utils/budget-alerts'
-import type {
-  BudgetAlertLevel,
-  BudgetAlertType,
-  BudgetAlertDeliveryStatus
-} from '#shared/types/budget-alerts'
+import type { BudgetAlertType } from '#shared/types/budget-alerts'
 import { logger } from '../../utils/logger'
 
 // Register OpenAPI documentation
@@ -52,6 +48,13 @@ registerEndpoint('/api/alerts/list', 'GET', {
       required: false,
       schema: { type: 'string', pattern: '^\\d{12}$' },
       description: 'Filter by specific AWS account ID'
+    },
+    {
+      name: 'accountIds',
+      in: 'query',
+      required: false,
+      schema: { type: 'string' },
+      description: 'Comma-separated account IDs (up to 100); combines with month or alertType'
     },
     {
       name: 'level',
@@ -168,18 +171,10 @@ export default defineEventHandler(handleAsync(async (event) => {
   const month = query.month as string | undefined
   const alertType = query.alertType as BudgetAlertType | undefined
   const accountId = query.accountId as string | undefined
-
-  // Parse limit (default 50, max 200 for admin queries)
-  let limit = parseInt(query.limit as string) || 50
-  if (limit < 1) limit = 1
-  if (limit > 200) limit = 200
-
-  // Parse other parameters
-  const nextToken = query.nextToken as string | undefined
-  const sortOrder = (query.sortOrder as 'asc' | 'desc') || 'desc'
-  const dateFrom = query.dateFrom as string | undefined
-  const dateTo = query.dateTo as string | undefined
-  const deliveryStatus = query.deliveryStatus as BudgetAlertDeliveryStatus | undefined
+  const accountIds = [...new Set([
+    ...(accountId ? [accountId] : []),
+    ...String(query.accountIds || '').split(',').map(id => id.trim()).filter(Boolean)
+  ])]
 
   // Validate parameters
   if (month && !/^\d{4}-\d{2}$/.test(month)) {
@@ -190,51 +185,23 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.badRequest(event, 'Invalid alertType. Must be FORECAST or ACTUAL.')
   }
 
-  if (accountId && !/^\d{12}$/.test(accountId)) {
+  if (accountIds.some(id => !/^\d{12}$/.test(id))) {
     return errors.badRequest(event, 'Invalid accountId format. Must be a 12-digit AWS account ID.')
   }
-
-  // Validate date range
-  const dateValidation = validateDateRange(dateFrom, dateTo)
-  if (!dateValidation.valid) {
-    return errors.badRequest(event, dateValidation.error!)
+  if (accountIds.length > 100) {
+    return errors.badRequest(event, 'At most 100 account IDs per request.')
   }
 
-  // Parse level filter (can be string or array)
-  let levels: BudgetAlertLevel[] | undefined
-  if (query.level) {
-    const levelParam = query.level
-    if (Array.isArray(levelParam)) {
-      levels = levelParam as BudgetAlertLevel[]
-    } else {
-      levels = [levelParam as BudgetAlertLevel]
-    }
-    // Validate levels
-    const validLevels = ['INFO', 'WARNING', 'CRITICAL', 'ESCALATION']
-    for (const level of levels) {
-      if (!validLevels.includes(level)) {
-        return errors.badRequest(event, `Invalid alert level: ${level}. Must be one of: ${validLevels.join(', ')}`)
-      }
-    }
+  const parsed = parseBudgetAlertQuery(query, 200)
+  if ('error' in parsed) {
+    return errors.badRequest(event, parsed.error)
   }
-
-  // Validate delivery status
-  if (deliveryStatus) {
-    const validStatuses = ['SENT', 'FAILED', 'PENDING']
-    if (!validStatuses.includes(deliveryStatus)) {
-      return errors.badRequest(event, `Invalid delivery status: ${deliveryStatus}. Must be one of: ${validStatuses.join(', ')}`)
-    }
-  }
+  const { limit, sortOrder, dateFrom, dateTo, levels, deliveryStatus } = parsed.options
 
   // Build common options for queries
   const queryOptions = {
-    limit,
-    nextToken,
-    sortOrder,
-    dateFrom,
-    dateTo,
-    levels,
-    deliveryStatus
+    ...parsed.options,
+    accountIds: accountIds.length > 0 ? accountIds : undefined
   }
 
   // Determine query strategy and execute
@@ -256,11 +223,11 @@ export default defineEventHandler(handleAsync(async (event) => {
       queryStrategy = 'alert-type-index'
       logger.debug('[Alerts API] Using alert-type-index GSI for query', { alertType })
       result = await getAlertsByType(alertType, queryOptions)
-    } else if (accountId) {
+    } else if (accountIds.length === 1) {
       // Efficient: Query by account using primary key
       queryStrategy = 'account-query'
-      logger.debug('[Alerts API] Using primary key query for account', { accountId })
-      result = await getAlertsByAccount(accountId, queryOptions)
+      logger.debug('[Alerts API] Using primary key query for account', { accountId: accountIds[0] })
+      result = await getAlertsByAccount(accountIds[0], queryOptions)
     } else {
       // Least efficient: Full scan (log warning)
       queryStrategy = 'full-scan'
@@ -272,7 +239,7 @@ export default defineEventHandler(handleAsync(async (event) => {
     const filtersApplied: Record<string, any> = {}
     if (month) filtersApplied.month = month
     if (alertType) filtersApplied.alertType = alertType
-    if (accountId) filtersApplied.accountId = accountId
+    if (accountIds.length > 0) filtersApplied.accountIds = accountIds
     if (levels) filtersApplied.levels = levels
     if (deliveryStatus) filtersApplied.deliveryStatus = deliveryStatus
     if (dateFrom) filtersApplied.dateFrom = dateFrom

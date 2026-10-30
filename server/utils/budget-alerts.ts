@@ -14,12 +14,6 @@ import {
   PROFORMA_ACCOUNT_ID
 } from '../lib/dynamodb-config'
 
-// Debug: Log the values at module load time
-logger.info('[Budget Alerts] Module loaded with config:', {
-  tableName: BUDGET_ALERTS_TABLE,
-  proformaAccountId: PROFORMA_ACCOUNT_ID,
-  indexes: BUDGET_ALERTS_INDEXES
-})
 import type {
   BudgetAlert,
   BudgetAlertLevel,
@@ -44,6 +38,10 @@ export interface BudgetAlertQueryOptions {
   levels?: BudgetAlertLevel[]
   types?: BudgetAlertType[]
   deliveryStatus?: BudgetAlertDeliveryStatus
+  /** Only alerts for these accounts (filter, not a key condition) */
+  accountIds?: string[]
+  /** Only alerts for this YYYY-MM month (filter, not a key condition) */
+  month?: string
 }
 
 /**
@@ -92,6 +90,59 @@ export function validateDateRange(dateFrom?: string, dateTo?: string): { valid: 
   }
 
   return { valid: true }
+}
+
+const VALID_LEVELS: BudgetAlertLevel[] = ['INFO', 'WARNING', 'CRITICAL', 'ESCALATION']
+const VALID_TYPES: BudgetAlertType[] = ['FORECAST', 'ACTUAL']
+const VALID_DELIVERY_STATUSES: BudgetAlertDeliveryStatus[] = ['SENT', 'FAILED', 'PENDING']
+
+function toList(value: unknown): string[] {
+  if (value === undefined || value === null || value === '') return []
+  return (Array.isArray(value) ? value : [value]).map(String)
+}
+
+/**
+ * Parse and validate the query filters the alert list routes share:
+ * limit, nextToken, sortOrder, dateFrom/dateTo, level, type and
+ * deliveryStatus. Returns an error message for the first invalid value.
+ */
+export function parseBudgetAlertQuery(
+  query: Record<string, unknown>,
+  maxLimit: number
+): { error: string } | { options: BudgetAlertQueryOptions & { limit: number; sortOrder: 'asc' | 'desc' } } {
+  const limit = Math.min(Math.max(parseInt(String(query.limit)) || 50, 1), maxLimit)
+  const sortOrder = query.sortOrder === 'asc' ? 'asc' : 'desc'
+  const dateFrom = query.dateFrom ? String(query.dateFrom) : undefined
+  const dateTo = query.dateTo ? String(query.dateTo) : undefined
+
+  const dateValidation = validateDateRange(dateFrom, dateTo)
+  if (!dateValidation.valid) return { error: dateValidation.error! }
+
+  const levels = toList(query.level)
+  const invalidLevel = levels.find(level => !VALID_LEVELS.includes(level as BudgetAlertLevel))
+  if (invalidLevel) return { error: `Invalid alert level: ${invalidLevel}. Must be one of: ${VALID_LEVELS.join(', ')}` }
+
+  const types = toList(query.type)
+  const invalidType = types.find(type => !VALID_TYPES.includes(type as BudgetAlertType))
+  if (invalidType) return { error: `Invalid alert type: ${invalidType}. Must be one of: ${VALID_TYPES.join(', ')}` }
+
+  const deliveryStatus = query.deliveryStatus ? String(query.deliveryStatus) : undefined
+  if (deliveryStatus && !VALID_DELIVERY_STATUSES.includes(deliveryStatus as BudgetAlertDeliveryStatus)) {
+    return { error: `Invalid delivery status: ${deliveryStatus}. Must be one of: ${VALID_DELIVERY_STATUSES.join(', ')}` }
+  }
+
+  return {
+    options: {
+      limit,
+      sortOrder,
+      nextToken: query.nextToken ? String(query.nextToken) : undefined,
+      dateFrom,
+      dateTo,
+      levels: levels.length > 0 ? levels as BudgetAlertLevel[] : undefined,
+      types: types.length > 0 ? types as BudgetAlertType[] : undefined,
+      deliveryStatus: deliveryStatus as BudgetAlertDeliveryStatus | undefined
+    }
+  }
 }
 
 /**
@@ -147,6 +198,21 @@ export function buildFilterExpression(options: BudgetAlertQueryOptions): {
     conditions.push('#created_at <= :date_to')
   }
 
+  if (options.accountIds && options.accountIds.length > 0) {
+    const accountConditions = options.accountIds.map((id, i) => {
+      attributeValues[`:account${i}`] = id
+      return `#account_id = :account${i}`
+    })
+    attributeNames['#account_id'] = 'account_id'
+    conditions.push(`(${accountConditions.join(' OR ')})`)
+  }
+
+  if (options.month) {
+    attributeNames['#month'] = 'month'
+    attributeValues[':filter_month'] = options.month
+    conditions.push('#month = :filter_month')
+  }
+
   if (conditions.length === 0) {
     return {}
   }
@@ -162,6 +228,31 @@ export function buildFilterExpression(options: BudgetAlertQueryOptions): {
 // Query Functions
 // -----------------------------------------------------------------------------
 
+const MAX_PAGES_PER_REQUEST = 20
+
+/**
+ * DynamoDB applies Limit before the filter, so one page of a filtered query
+ * can hold far fewer than `limit` matches (often none) while more exist.
+ * Keep reading pages until `limit` matches or the end. Each page asks only
+ * for the remaining count, so the returned token never skips a match.
+ */
+async function collectPages(
+  limit: number,
+  nextToken: string | undefined,
+  fetchPage: (pageLimit: number, token?: string) => Promise<{ items: any[]; nextToken?: string }>
+): Promise<BudgetAlertQueryResult> {
+  const alerts: BudgetAlert[] = []
+  let token = nextToken
+  let pages = 0
+  do {
+    const page = await fetchPage(limit - alerts.length, token)
+    alerts.push(...(page.items as BudgetAlert[]))
+    token = page.nextToken
+    pages++
+  } while (token && alerts.length < limit && pages < MAX_PAGES_PER_REQUEST)
+  return { alerts, nextToken: token, count: alerts.length }
+}
+
 /**
  * Get alerts for a specific AWS account
  * Uses the primary key (account_id) for efficient querying
@@ -172,29 +263,15 @@ export async function getAlertsByAccount(
 ): Promise<BudgetAlertQueryResult> {
   const { limit = 50, nextToken, sortOrder = 'desc' } = options
 
-  logger.info('[Budget Alerts] getAlertsByAccount called:', {
-    accountId,
-    tableName: BUDGET_ALERTS_TABLE,
-    proformaAccountId: PROFORMA_ACCOUNT_ID,
-    limit,
-    sortOrder
-  })
-
   // Build filter expression from options
   const { filterExpression, expressionAttributeNames = {}, expressionAttributeValues = {} } =
-    buildFilterExpression(options)
+    buildFilterExpression({ ...options, accountIds: undefined })
 
   // Add account_id to expression values
   expressionAttributeValues[':accountId'] = accountId
 
   try {
-    logger.info('[Budget Alerts] Calling queryItems with:', {
-      tableName: BUDGET_ALERTS_TABLE,
-      environment: 'commercial',
-      targetAccount: PROFORMA_ACCOUNT_ID
-    })
-
-    const result = await queryItems(
+    return await collectPages(limit, nextToken, (pageLimit, token) => queryItems(
       {
         tableName: BUDGET_ALERTS_TABLE,
         queryExpression: 'account_id = :accountId',
@@ -203,24 +280,13 @@ export async function getAlertsByAccount(
           ? expressionAttributeNames
           : undefined,
         expressionAttributeValues,
-        limit,
-        nextToken,
+        limit: pageLimit,
+        nextToken: token,
         scanIndexForward: sortOrder === 'asc'
       },
       'commercial',
       PROFORMA_ACCOUNT_ID
-    )
-
-    logger.info('[Budget Alerts] queryItems returned:', {
-      count: result.count,
-      hasNextToken: !!result.nextToken
-    })
-
-    return {
-      alerts: result.items as BudgetAlert[],
-      nextToken: result.nextToken,
-      count: result.count
-    }
+    ))
   } catch (error: any) {
     logger.error('[Budget Alerts] Error querying alerts by account:', {
       accountId,
@@ -247,7 +313,7 @@ export async function getAlertsByMonth(
 
   // Build filter expression from options — but exclude dateFrom/dateTo since
   // created_at is the sort key of the month-index GSI and must be in KeyConditionExpression
-  const optionsWithoutDates = { ...options, dateFrom: undefined, dateTo: undefined }
+  const optionsWithoutDates = { ...options, dateFrom: undefined, dateTo: undefined, month: undefined }
   const { filterExpression, expressionAttributeNames = {}, expressionAttributeValues = {} } =
     buildFilterExpression(optionsWithoutDates)
 
@@ -272,7 +338,7 @@ export async function getAlertsByMonth(
   }
 
   try {
-    const result = await queryItems(
+    return await collectPages(limit, nextToken, (pageLimit, token) => queryItems(
       {
         tableName: BUDGET_ALERTS_TABLE,
         indexName: BUDGET_ALERTS_INDEXES.MONTH_INDEX,
@@ -283,19 +349,13 @@ export async function getAlertsByMonth(
           ...expressionAttributeNames
         },
         expressionAttributeValues,
-        limit,
-        nextToken,
+        limit: pageLimit,
+        nextToken: token,
         scanIndexForward: sortOrder === 'asc'
       },
       'commercial',
       PROFORMA_ACCOUNT_ID
-    )
-
-    return {
-      alerts: result.items as BudgetAlert[],
-      nextToken: result.nextToken,
-      count: result.count
-    }
+    ))
   } catch (error: any) {
     logger.error('[Budget Alerts] Error querying alerts by month:', {
       month,
@@ -316,7 +376,8 @@ export async function getAlertsByType(
   const { limit = 50, nextToken, sortOrder = 'desc', dateFrom, dateTo } = options
 
   // Build filter expression from options (excluding types since we're querying by type)
-  const optionsWithoutTypes = { ...options, types: undefined }
+  // Dates go in the key condition below, so they must not also be filters
+  const optionsWithoutTypes = { ...options, types: undefined, dateFrom: undefined, dateTo: undefined }
   const { filterExpression, expressionAttributeNames = {}, expressionAttributeValues = {} } =
     buildFilterExpression(optionsWithoutTypes)
 
@@ -334,23 +395,18 @@ export async function getAlertsByType(
     expressionAttributeValues[':dateFrom'] = dateFrom
     expressionAttributeValues[':dateTo'] = dateTo
 
-    // Remove date filters from filter expression since they're in key condition
-    delete expressionAttributeValues[':date_from']
-    delete expressionAttributeValues[':date_to']
   } else if (dateFrom) {
     keyCondition += ' AND #timestamp >= :dateFrom'
     expressionAttributeNames['#timestamp'] = 'timestamp'
     expressionAttributeValues[':dateFrom'] = dateFrom
-    delete expressionAttributeValues[':date_from']
   } else if (dateTo) {
     keyCondition += ' AND #timestamp <= :dateTo'
     expressionAttributeNames['#timestamp'] = 'timestamp'
     expressionAttributeValues[':dateTo'] = dateTo
-    delete expressionAttributeValues[':date_to']
   }
 
   try {
-    const result = await queryItems(
+    return await collectPages(limit, nextToken, (pageLimit, token) => queryItems(
       {
         tableName: BUDGET_ALERTS_TABLE,
         indexName: BUDGET_ALERTS_INDEXES.ALERT_TYPE_INDEX,
@@ -358,19 +414,13 @@ export async function getAlertsByType(
         filterExpression: filterExpression || undefined,
         expressionAttributeNames,
         expressionAttributeValues,
-        limit,
-        nextToken,
+        limit: pageLimit,
+        nextToken: token,
         scanIndexForward: sortOrder === 'asc'
       },
       'commercial',
       PROFORMA_ACCOUNT_ID
-    )
-
-    return {
-      alerts: result.items as BudgetAlert[],
-      nextToken: result.nextToken,
-      count: result.count
-    }
+    ))
   } catch (error: any) {
     logger.error('[Budget Alerts] Error querying alerts by type:', {
       alertType,
@@ -397,22 +447,16 @@ export async function getAllAlerts(
     buildFilterExpression(options)
 
   try {
-    const result = await scanItems(
+    return await collectPages(limit, nextToken, (pageLimit, token) => scanItems(
       BUDGET_ALERTS_TABLE,
       filterExpression,
-      limit,
-      nextToken,
+      pageLimit,
+      token,
       'commercial',
       expressionAttributeNames,
       expressionAttributeValues,
       PROFORMA_ACCOUNT_ID
-    )
-
-    return {
-      alerts: result.items as BudgetAlert[],
-      nextToken: result.nextToken,
-      count: result.count
-    }
+    ))
   } catch (error: any) {
     logger.error('[Budget Alerts] Error scanning all alerts:', {
       error: error.message

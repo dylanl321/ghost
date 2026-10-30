@@ -289,7 +289,8 @@ async function fetchAlerts() {
 
     // Always query by month (uses efficient GSI), then filter client-side by accounts
     const res = await $fetch<{ success: boolean; data: BudgetAlert[] }>('/api/alerts/list', {
-      query: { month: currentMonth, limit: 50 }
+      // Filter server-side too: the 50-alert limit would otherwise be spent on other accounts
+      query: { month: currentMonth, limit: 50, ...(props.accountIds.length > 0 && props.accountIds.length <= 100 ? { accountIds: props.accountIds.join(',') } : {}) }
     })
 
     if (res.success && res.data) {
