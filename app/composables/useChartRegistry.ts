@@ -1744,6 +1744,13 @@ export const useChartRegistry = (args: {
         let totalAnnualBudget = 0
         let monthlyBudget = 0
         let anyAccountHasPepData = false
+        let currentYearCarriedForward = 0
+        let currentYearCarriedFrom: number | undefined
+        // Next year is budgeted from its own PEP data, or Dec of this year carried forward
+        const nextYearMonthlyBudgets: number[] = Array(12).fill(0)
+        let nextYearHasPepData = false
+        let nextYearCarriedForward = 0
+        let nextYearCarriedFrom: number | undefined
 
         // Try to use accountsList first (has PEP data)
         if (accountsList.length > 0) {
@@ -1753,11 +1760,25 @@ export const useChartRegistry = (args: {
 
           // Aggregate monthly budgets across all relevant accounts
           relevantAccounts.forEach((account: any) => {
-            const { monthlyArray, isPepData } = getAnnualBudgetArray(account)
+            const { monthlyArray, isPepData, carriedForwardFrom } = getAnnualBudgetArray(account, currentYear)
             if (isPepData) anyAccountHasPepData = true
+            if (carriedForwardFrom !== undefined) {
+              currentYearCarriedForward += 1
+              currentYearCarriedFrom = carriedForwardFrom
+            }
 
             for (let i = 0; i < 12; i++) {
-              aggregatedMonthlyBudgets[i] += monthlyArray[i]
+              aggregatedMonthlyBudgets[i] += monthlyArray[i] ?? 0
+            }
+
+            const next = getAnnualBudgetArray(account, currentYear + 1)
+            if (next.isPepData) nextYearHasPepData = true
+            if (next.carriedForwardFrom !== undefined) {
+              nextYearCarriedForward += 1
+              nextYearCarriedFrom = next.carriedForwardFrom
+            }
+            for (let i = 0; i < 12; i++) {
+              nextYearMonthlyBudgets[i] += next.monthlyArray[i] ?? 0
             }
           })
 
@@ -1850,7 +1871,9 @@ export const useChartRegistry = (args: {
               monthlyArray: aggregatedMonthlyBudgets,
               monthly: monthlyBudget,
               annual: totalAnnualBudget,
-              isPepData: anyAccountHasPepData
+              isPepData: anyAccountHasPepData,
+              carriedForwardAccounts: currentYearCarriedForward,
+              carriedForwardFrom: currentYearCarriedFrom
             },
             metadata: {
               currentMonth: currentMonth + 1,
@@ -1883,12 +1906,21 @@ export const useChartRegistry = (args: {
                 type: 'bar'
               }
             ],
-            budget: {
-              monthlyArray: aggregatedMonthlyBudgets,
-              monthly: monthlyBudget,
-              annual: totalAnnualBudget,
-              isPepData: anyAccountHasPepData
-            },
+            budget: nextYearMonthlyBudgets.some(value => value > 0)
+              ? {
+                  monthlyArray: nextYearMonthlyBudgets,
+                  monthly: nextYearMonthlyBudgets.reduce((sum, value) => sum + value, 0) / 12,
+                  annual: nextYearMonthlyBudgets.reduce((sum, value) => sum + value, 0),
+                  isPepData: nextYearHasPepData,
+                  carriedForwardAccounts: nextYearCarriedForward,
+                  carriedForwardFrom: nextYearCarriedFrom
+                }
+              : {
+                  monthlyArray: aggregatedMonthlyBudgets,
+                  monthly: monthlyBudget,
+                  annual: totalAnnualBudget,
+                  isPepData: anyAccountHasPepData
+                },
             metadata: {
               filterBySelection,
               selectedAccountsCount: filterBySelection ? selectedAccounts.length : null,

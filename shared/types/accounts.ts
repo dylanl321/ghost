@@ -100,6 +100,8 @@ export interface AWSEnclaveData {
   pepBudgetLatestYear?: number;
   pepBudget2026AnnualTotal?: number;
   pepBudget2026Monthly?: string; // JSON string with monthly breakdown
+  pepBudget2027Monthly?: string; // Same shape; when absent, Dec 2026 is carried forward (see budget-utils)
+  pepBudget2027AnnualTotal?: number;
   pepBusinessArea?: string;
   pepChargeType?: string;
   pepClassificationLevel?: string;

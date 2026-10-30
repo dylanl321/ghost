@@ -1,37 +1,114 @@
 /**
  * Budget calculation utilities for migrating from estimatedMonthlyCharge to PEP budget fields.
- * Primary source: pepBudget2026Monthly (JSON with monthly values)
- * Fallback: estimatedMonthlyCharge when PEP data unavailable
+ * Primary source: pepBudget{YEAR}Monthly (JSON with monthly values, e.g. pepBudget2027Monthly)
+ * Carry-forward: when a year has no PEP data, the December value of the latest
+ *   earlier PEP year is used for every month (flagged as 'pep-carryforward')
+ * Fallback: estimatedMonthlyCharge when no PEP data applies
  */
 
+export type PepMonthlyField = `pepBudget${number}Monthly`
+
+// pepBudget{YEAR}Monthly fields beyond 2026 (e.g. pepBudget2027Monthly) are read
+// dynamically, so any account record can be passed as-is.
 export interface BudgetSource {
   pepBudget2026Monthly?: string
+  pepBudget2027Monthly?: string
   estimatedMonthlyCharge?: string | number
 }
 
 export interface PeriodBudgetResult {
   periodBudget: number | null
   paceToDateBudget: number | null
-  source: 'pep-monthly' | 'estimated-monthly' | 'unavailable'
+  source: 'pep-monthly' | 'pep-carryforward' | 'estimated-monthly' | 'unavailable'
+  /** Year whose December budget was carried forward, when source is 'pep-carryforward' */
+  carriedForwardFrom?: number
 }
 
+const MONTH_KEYS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
 /**
- * Get the current month's key for pepBudget2026Monthly JSON (e.g., "Jan", "Feb")
+ * Get the month's key for pepBudget{YEAR}Monthly JSON (e.g., "Jan", "Feb")
  */
 function getMonthKey(date: Date): string {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-  return months[date.getUTCMonth()] as string
+  return MONTH_KEYS[date.getUTCMonth()] as string
+}
+
+export const pepMonthlyField = (year: number): PepMonthlyField => `pepBudget${year}Monthly`
+
+/** Parse a year's PEP JSON into 12 values, or null when the year has no usable data. */
+function parsePepYear(source: BudgetSource | undefined | null, year: number): number[] | null {
+  const raw = (source as Record<string, unknown> | undefined | null)?.[pepMonthlyField(year)]
+  if (typeof raw !== 'string' || !raw) return null
+  try {
+    const budgetData = JSON.parse(raw) as Record<string, number>
+    const values = MONTH_KEYS.map(month => {
+      const value = budgetData[month]
+      return typeof value === 'number' && !isNaN(value) ? value : 0
+    })
+    return values.some(value => value > 0) ? values : null
+  } catch {
+    return null
+  }
+}
+
+/** Years that have a pepBudget{YEAR}Monthly field with usable data, ascending. */
+export function getPepBudgetYears(source: BudgetSource | undefined | null): number[] {
+  if (!source) return []
+  return Object.keys(source)
+    .map(key => /^pepBudget(\d{4})Monthly$/.exec(key)?.[1])
+    .filter((year): year is string => Boolean(year))
+    .map(Number)
+    .filter(year => parsePepYear(source, year) !== null)
+    .sort((a, b) => a - b)
+}
+
+export interface YearBudget {
+  monthlyArray: number[]
+  /** 'pep' when the year has its own data, 'pep-carryforward' when an earlier December is reused */
+  kind: 'pep' | 'pep-carryforward'
+  carriedForwardFrom?: number
 }
 
 /**
- * Extract monthly budget value from pepBudget2026Monthly JSON string.
+ * The 12 monthly PEP budgets for a year. A year without its own data reuses
+ * the December budget of the latest earlier PEP year; years before the first
+ * PEP year return null (no backfill into history).
+ */
+export function getPepBudgetForYear(source: BudgetSource | undefined | null, year: number): YearBudget | null {
+  const own = parsePepYear(source, year)
+  if (own) return { monthlyArray: own, kind: 'pep' }
+  const earlier = getPepBudgetYears(source).filter(y => y < year)
+  const fromYear = earlier[earlier.length - 1]
+  if (fromYear === undefined) return null
+  const december = parsePepYear(source, fromYear)?.[11] || 0
+  if (december <= 0) return null
+  return { monthlyArray: Array(12).fill(december), kind: 'pep-carryforward', carriedForwardFrom: fromYear }
+}
+
+/** PEP budget for a 'YYYY-MM' month key (0 when no PEP budget applies), including carry-forward. */
+export function pepBudgetForMonthKey(source: BudgetSource | undefined | null, monthKey: string): number {
+  const [year, month] = monthKey.split('-').map(Number)
+  if (!year || !month) return 0
+  return getPepBudgetForYear(source, year)?.monthlyArray[month - 1] ?? 0
+}
+
+/**
+ * Accounts whose budget for the given year is carried forward from an earlier
+ * December because that year's PEP budget hasn't been supplied.
+ */
+export function isBudgetCarriedForward(source: BudgetSource | undefined | null, targetDate: Date = new Date()): boolean {
+  return getPepBudgetForYear(source, targetDate.getUTCFullYear())?.kind === 'pep-carryforward'
+}
+
+/**
+ * Extract monthly budget value from a single PEP JSON string (one year's data).
  * Returns null if parsing fails or value is not available.
  */
-export function getPepMonthlyBudget(pepBudget2026Monthly: string | undefined, targetDate?: Date): number | null {
-  if (!pepBudget2026Monthly) return null
+export function getPepMonthlyBudget(pepBudgetMonthly: string | undefined, targetDate?: Date): number | null {
+  if (!pepBudgetMonthly) return null
 
   try {
-    const budgetData = JSON.parse(pepBudget2026Monthly) as Record<string, number>
+    const budgetData = JSON.parse(pepBudgetMonthly) as Record<string, number>
     const monthKey = getMonthKey(targetDate || new Date())
     const value = budgetData[monthKey]
 
@@ -42,6 +119,13 @@ export function getPepMonthlyBudget(pepBudget2026Monthly: string | undefined, ta
   } catch {
     return null
   }
+}
+
+/** The PEP budget for the month containing targetDate, including carry-forward. */
+function getPepBudgetForMonth(source: BudgetSource | undefined | null, targetDate: Date): number | null {
+  const yearBudget = getPepBudgetForYear(source, targetDate.getUTCFullYear())
+  if (!yearBudget) return null
+  return yearBudget.monthlyArray[targetDate.getUTCMonth()] ?? null
 }
 
 /**
@@ -65,19 +149,19 @@ export function parseEstimatedMonthlyCharge(value: string | number | undefined):
  * Check if PEP budget data exists and is valid for the given source.
  */
 export function hasPepBudget(source: BudgetSource | undefined | null, targetDate?: Date): boolean {
-  if (!source?.pepBudget2026Monthly) return false
-  return getPepMonthlyBudget(source.pepBudget2026Monthly, targetDate) !== null
+  return getPepBudgetForMonth(source, targetDate || new Date()) !== null
 }
 
 /**
  * Get budget source identifier for debugging purposes.
  * Returns 'pep' if using PEP data, 'estimated' if using estimatedMonthlyCharge, or 'none'.
  */
-export function getBudgetSource(source: BudgetSource | undefined | null, targetDate?: Date): 'pep' | 'estimated' | 'none' {
+export function getBudgetSource(source: BudgetSource | undefined | null, targetDate?: Date): 'pep' | 'pep-carryforward' | 'estimated' | 'none' {
   if (!source) return 'none'
 
-  const pepValue = getPepMonthlyBudget(source.pepBudget2026Monthly, targetDate)
-  if (pepValue !== null && pepValue > 0) return 'pep'
+  const date = targetDate || new Date()
+  const pepValue = getPepBudgetForMonth(source, date)
+  if (pepValue !== null && pepValue > 0) return isBudgetCarriedForward(source, date) ? 'pep-carryforward' : 'pep'
 
   const estimatedValue = parseEstimatedMonthlyCharge(source.estimatedMonthlyCharge)
   if (estimatedValue > 0) return 'estimated'
@@ -89,10 +173,11 @@ export function getBudgetSource(source: BudgetSource | undefined | null, targetD
  * Get the effective monthly budget for an account.
  *
  * Priority:
- * 1. pepBudget2026Monthly - Current month's value from PEP JSON data
- * 2. estimatedMonthlyCharge - Legacy budget field (fallback)
+ * 1. pepBudget{YEAR}Monthly - The month's value from that year's PEP JSON data
+ * 2. The latest earlier PEP year's December value, when the year has no PEP data
+ * 3. estimatedMonthlyCharge - Legacy budget field (fallback)
  *
- * @param source Object containing pepBudget2026Monthly and/or estimatedMonthlyCharge
+ * @param source Object containing pepBudget{YEAR}Monthly and/or estimatedMonthlyCharge
  * @param targetDate Optional date to determine which month to extract (defaults to current date)
  * @returns Monthly budget value, or 0 if neither source is available
  */
@@ -100,7 +185,7 @@ export function getMonthlyBudget(source: BudgetSource | undefined | null, target
   if (!source) return 0
 
   // Try PEP budget first
-  const pepValue = getPepMonthlyBudget(source.pepBudget2026Monthly, targetDate)
+  const pepValue = getPepBudgetForMonth(source, targetDate || new Date())
   if (pepValue !== null && pepValue > 0) {
     return pepValue
   }
@@ -111,52 +196,32 @@ export function getMonthlyBudget(source: BudgetSource | undefined | null, target
 
 /**
  * Check if account has per-month PEP budget data available.
- * Returns true if pepBudget2026Monthly has valid parseable JSON with at least one month value.
+ * Returns true if any pepBudget{YEAR}Monthly has valid parseable JSON with at least one month value.
  */
 export function hasPerMonthBudget(source: BudgetSource | undefined | null): boolean {
-  if (!source?.pepBudget2026Monthly) return false
-
-  try {
-    const budgetData = JSON.parse(source.pepBudget2026Monthly) as Record<string, number>
-    // Check if at least one month has a valid value
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    return months.some(month => typeof budgetData[month] === 'number' && budgetData[month] > 0)
-  } catch {
-    return false
-  }
+  return getPepBudgetYears(source).length > 0
 }
 
 /**
  * Get an array of 12 monthly budget values for a full year.
- * Uses PEP per-month data if available, otherwise falls back to flat estimatedMonthlyCharge.
+ * Uses that year's PEP data, else the latest earlier December carried forward,
+ * else a flat estimatedMonthlyCharge.
  *
- * @param source Object containing pepBudget2026Monthly and/or estimatedMonthlyCharge
+ * @param source Object containing pepBudget{YEAR}Monthly and/or estimatedMonthlyCharge
+ * @param year Calendar year (defaults to the current UTC year)
  * @returns Array of 12 numbers representing budget for Jan-Dec, and whether PEP data was used
  */
-export function getAnnualBudgetArray(source: BudgetSource | undefined | null): { monthlyArray: number[], isPepData: boolean } {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
+export function getAnnualBudgetArray(
+  source: BudgetSource | undefined | null,
+  year: number = new Date().getUTCFullYear()
+): { monthlyArray: number[], isPepData: boolean, carriedForwardFrom?: number } {
   if (!source) {
     return { monthlyArray: Array(12).fill(0), isPepData: false }
   }
 
-  // Try PEP budget first
-  if (source.pepBudget2026Monthly) {
-    try {
-      const budgetData = JSON.parse(source.pepBudget2026Monthly) as Record<string, number>
-      // Check if we have any valid month values
-      const hasValidData = months.some(month => typeof budgetData[month] === 'number' && budgetData[month] > 0)
-
-      if (hasValidData) {
-        const monthlyArray = months.map(month => {
-          const value = budgetData[month]
-          return typeof value === 'number' && !isNaN(value) ? value : 0
-        })
-        return { monthlyArray, isPepData: true }
-      }
-    } catch {
-      // Fall through to estimatedMonthlyCharge
-    }
+  const yearBudget = getPepBudgetForYear(source, year)
+  if (yearBudget) {
+    return { monthlyArray: yearBudget.monthlyArray, isPepData: true, carriedForwardFrom: yearBudget.carriedForwardFrom }
   }
 
   // Fall back to estimatedMonthlyCharge (flat value for all months)
@@ -172,8 +237,9 @@ function parseDateOnly(value: string): Date | null {
 
 /**
  * Calculate a budget aligned to an exclusive-end AWS cost range.
- * PEP values are year-specific, so the legacy monthly estimate is never
- * projected backward into a historical month that lacks PEP data.
+ * PEP values are year-specific: each month uses its own year's PEP data, or
+ * the latest earlier December carried forward. Neither PEP nor the legacy
+ * monthly estimate is projected backward into a month that lacks budget data.
  */
 export function getPeriodBudget(
   source: BudgetSource | undefined | null,
@@ -190,7 +256,13 @@ export function getPeriodBudget(
   const reference = options.referenceDate || new Date()
   const currentMonth = new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth(), 1))
   const currentMonthEnd = new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth() + 1, 1))
-  const { monthlyArray, isPepData } = getAnnualBudgetArray(source)
+  const isPepData = hasPerMonthBudget(source)
+  const yearBudgets = new Map<number, YearBudget | null>()
+  const budgetForYear = (year: number) => {
+    if (!yearBudgets.has(year)) yearBudgets.set(year, getPepBudgetForYear(source, year))
+    return yearBudgets.get(year) ?? null
+  }
+  let carriedForwardFrom: number | undefined
   let periodBudget = 0
   let paceToDateBudget = 0
   let hasApplicableBudget = false
@@ -202,11 +274,13 @@ export function getPeriodBudget(
     const overlapEnd = new Date(Math.min(end.getTime(), monthEnd.getTime()))
     if (overlapStart < overlapEnd) {
       const isCurrent = month.getTime() === currentMonth.getTime()
-      const pepApplies = isPepData && month.getUTCFullYear() === 2026
+      const yearBudget = isPepData ? budgetForYear(month.getUTCFullYear()) : null
+      const pepApplies = yearBudget !== null
       const estimateApplies = !isPepData && isCurrent
       if (pepApplies || estimateApplies) {
-        const monthlyBudget = pepApplies
-          ? monthlyArray[month.getUTCMonth()] || 0
+        if (yearBudget?.carriedForwardFrom !== undefined) carriedForwardFrom = yearBudget.carriedForwardFrom
+        const monthlyBudget = yearBudget
+          ? yearBudget.monthlyArray[month.getUTCMonth()] || 0
           : parseEstimatedMonthlyCharge(source.estimatedMonthlyCharge)
         const monthDays = Math.round((monthEnd.getTime() - month.getTime()) / 86400000)
         const observedDays = Math.round((overlapEnd.getTime() - overlapStart.getTime()) / 86400000)
@@ -222,6 +296,9 @@ export function getPeriodBudget(
   // A current-month estimate is a present planning input, never a historical budget.
   if (!hasApplicableBudget || (!isPepData && (end <= currentMonth || start >= currentMonthEnd))) {
     return { periodBudget: null, paceToDateBudget: null, source: 'unavailable' }
+  }
+  if (carriedForwardFrom !== undefined) {
+    return { periodBudget, paceToDateBudget, source: 'pep-carryforward', carriedForwardFrom }
   }
   return {
     periodBudget,

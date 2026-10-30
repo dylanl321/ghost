@@ -484,6 +484,16 @@
             </div>
           </div>
 
+          <!-- Budgets carried forward because this year's PEP budget isn't loaded yet -->
+          <div v-if="carriedForwardBudgets.count > 0 && !isHistoricalTimeframe && !isTagAnalysis"
+            class="flex items-start gap-3 rounded-lg border border-purple-200 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/20 px-4 py-3 text-xs text-purple-800 dark:text-purple-300">
+            <Icon name="i-heroicons-information-circle" class="w-5 h-5 flex-shrink-0 text-purple-500" />
+            <span>
+              <span class="font-medium">{{ carriedForwardBudgets.year }} PEP budgets aren't loaded for {{ carriedForwardBudgets.count }} of {{ displayedAccounts.length }} accounts.</span>
+              Their budgets use the December {{ carriedForwardBudgets.from }} monthly amount until {{ carriedForwardBudgets.year }} values are supplied.
+            </span>
+          </div>
+
           <!-- Summary Cards -->
           <div v-if="!isTagAnalysis" data-tour="costs-summary">
             <CostsSummaryCards
@@ -575,6 +585,7 @@ import type { BudgetAlert } from '#shared/types/budget-alerts'
 import { getCostTagWorkspaceQuery, normalizeCostTagCreatorView } from '~/utils/cost-tag-workspace'
 import type { CostTagCreatorView } from '~/utils/cost-tag-workspace'
 import { getTimeframeBudget } from '~/utils/cost-period'
+import { getAnnualBudgetArray } from '#shared/utils/budget-utils'
 
 definePageMeta({
   keepalive: false
@@ -1014,6 +1025,21 @@ const displayedAccounts = computed<Account[]>(() => {
   const selected = selectedAccountSet.value
   return accountsWithCosts.value.filter((account: Account) =>
     getPossibleAccountIds(account).some(id => selected.has(id)))
+})
+
+// Accounts whose current-year budget is December of an earlier year carried forward
+const carriedForwardBudgets = computed(() => {
+  const year = new Date().getUTCFullYear()
+  let count = 0
+  let from: number | undefined
+  for (const account of displayedAccounts.value) {
+    const { carriedForwardFrom } = getAnnualBudgetArray(account, year)
+    if (carriedForwardFrom !== undefined) {
+      count += 1
+      from = carriedForwardFrom
+    }
+  }
+  return { count, year, from }
 })
 
 const totalBudget = computed<number>(() =>

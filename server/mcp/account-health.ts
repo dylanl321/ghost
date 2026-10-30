@@ -40,7 +40,7 @@ export async function buildAccountHealth(account: any, environment: 'commercial'
   } : {
     vulnerabilityPosture: domainFailure('AWS Inspector', compliance.reason), securityHubControls: domainFailure('AWS Security Hub', compliance.reason), configCompliance: domainFailure('AWS Config', compliance.reason), patchCompliance: domainFailure('AWS Systems Manager', compliance.reason)
   }
-  const budget = getPeriodBudget({ pepBudget2026Monthly: account.pepBudget2026Monthly, estimatedMonthlyCharge: account.estimatedMonthlyCharge }, startDate, endDate)
+  const budget = getPeriodBudget(account, startDate, endDate)
   const actual = costResult.status === 'fulfilled' ? costResult.value.dataset.reconciliation.authoritativeTotal : 0
   const ownershipMissing = { primary: !account.primaryAccountAdminUsername, delegate: !account.delegateAccountAdminUsername, costManager: !account.costManagerUsername }
   const latestRun = runs.status === 'fulfilled' ? runs.value[0] : undefined

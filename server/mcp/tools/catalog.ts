@@ -618,10 +618,7 @@ export function registerCatalogTools(
         .map(account => {
           const accountId = account.accountId || account.awsStandardAccountID || ''
           const linkedAccountId = args.environment === 'govcloud' ? account.govCloudAccountId || account.awsGovCloudAccountID || '' : accountId
-          const budget = getPeriodBudget({
-            pepBudget2026Monthly: account.pepBudget2026Monthly,
-            estimatedMonthlyCharge: account.estimatedMonthlyCharge
-          }, range.startDate, range.endDate)
+          const budget = getPeriodBudget(account, range.startDate, range.endDate)
           const actual = actuals.get(linkedAccountId) || 0
           return { accountId, linkedAccountId, accountName: accountDisplayName(account), actual, budget: budget.periodBudget, variance: budget.periodBudget === null ? null : actual - budget.periodBudget, budgetSource: budget.source }
         })
