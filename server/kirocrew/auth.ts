@@ -1,10 +1,42 @@
-import { createError, getHeader, type H3Event } from 'h3'
+import { createError, getHeader, setResponseHeader, type H3Event } from 'h3'
+import { getOAuthProtectedResourceMetadataUrl } from '@modelcontextprotocol/server'
 import { getGhostMcpIdentity } from '../mcp/oauth/identity'
 import { getOAuthProvider } from '../mcp/oauth/provider'
 import { getOAuthStageInstrumentation } from '../mcp/oauth/admin/stage-instrumentation'
 import { isGrantRevoked } from '../mcp/oauth/admin/lifecycle-enforcement'
 import { getKiroCrewResourceUrl } from './config'
 import type { KiroCrewScope } from './types'
+import { isTransientDependencyError } from '../mcp/oauth/transient-error'
+
+/**
+ * RFC 6750 / RFC 9728 challenge so OAuth clients can tell an expired token from
+ * a missing scope and discover where to get a new one.
+ */
+function bearerChallenge(
+  event: H3Event,
+  statusCode: 401 | 403,
+  error: 'invalid_token' | 'insufficient_scope' | undefined,
+  message: string,
+  scopes?: readonly string[]
+) {
+  const parts = [`resource_metadata="${getOAuthProtectedResourceMetadataUrl(getKiroCrewResourceUrl())}"`]
+  if (error) parts.unshift(`error="${error}"`, `error_description="${message.replace(/"/g, "'")}"`)
+  if (scopes?.length) parts.push(`scope="${scopes.join(' ')}"`)
+  setResponseHeader(event, 'WWW-Authenticate', `Bearer ${parts.join(', ')}`)
+  return createError({ statusCode, statusMessage: message })
+}
+
+async function findAccessToken(event: H3Event, token: string) {
+  const provider = await getOAuthProvider()
+  try {
+    return await provider.AccessToken.find(token)
+  } catch (error) {
+    if (!isTransientDependencyError(error)) throw error
+    // The token store is throttled or unreachable; the token may be fine.
+    setResponseHeader(event, 'Retry-After', 5)
+    throw createError({ statusCode: 503, statusMessage: 'OAuth token verification is temporarily unavailable. Retry shortly.' })
+  }
+}
 
 export async function requireKiroCrewToken(
   event: H3Event,
@@ -19,14 +51,13 @@ export async function requireKiroCrewToken(
   const match = /^Bearer ([^\s]+)$/i.exec(authorization)
   if (!match) {
     telemetry.record({ stage: 'crew-profile-retrieval', outcome: 'failure', errorCode: 'missing_bearer', resourceReference: resource })
-    throw createError({ statusCode: 401, statusMessage: 'OAuth bearer token required' })
+    throw bearerChallenge(event, 401, undefined, 'OAuth bearer token required', required)
   }
 
-  const provider = await getOAuthProvider()
-  const accessToken = await provider.AccessToken.find(match[1]!)
+  const accessToken = await findAccessToken(event, match[1]!)
   if (!accessToken?.accountId || !accessToken.clientId || !accessToken.exp || accessToken.exp <= Math.floor(Date.now() / 1000)) {
     telemetry.record({ stage: 'crew-profile-retrieval', outcome: 'failure', errorCode: 'invalid_token', resourceReference: resource })
-    throw createError({ statusCode: 401, statusMessage: 'OAuth access token is invalid or expired' })
+    throw bearerChallenge(event, 401, 'invalid_token', 'OAuth access token is invalid or expired')
   }
 
   // Task 9.2 (Req 9.2): the Crew configuration/profile boundary is an opaque-token
@@ -45,7 +76,7 @@ export async function requireKiroCrewToken(
       resourceReference: resource,
       subjectReference: accessToken.accountId
     })
-    throw createError({ statusCode: 401, statusMessage: 'OAuth access token grant has been revoked' })
+    throw bearerChallenge(event, 401, 'invalid_token', 'OAuth access token grant has been revoked')
   }
 
   const audience = Array.isArray(accessToken.aud) ? accessToken.aud : [accessToken.aud]
@@ -58,7 +89,7 @@ export async function requireKiroCrewToken(
       resourceReference: resource,
       subjectReference: accessToken.accountId
     })
-    throw createError({ statusCode: 401, statusMessage: 'OAuth token has the wrong resource audience' })
+    throw bearerChallenge(event, 401, 'invalid_token', 'OAuth token has the wrong resource audience')
   }
   const scopes = new Set(String(accessToken.scope || '').split(' ').filter(Boolean))
   if (!required.some(scope => scopes.has(scope))) {
@@ -70,7 +101,7 @@ export async function requireKiroCrewToken(
       resourceReference: resource,
       subjectReference: accessToken.accountId
     })
-    throw createError({ statusCode: 403, statusMessage: `Missing required scope: ${required.join(' or ')}` })
+    throw bearerChallenge(event, 403, 'insufficient_scope', `Missing required scope: ${required.join(' or ')}`, required)
   }
   const identity = await getGhostMcpIdentity(accessToken.accountId)
   if (!identity) {
@@ -82,7 +113,7 @@ export async function requireKiroCrewToken(
       resourceReference: resource,
       subjectReference: accessToken.accountId
     })
-    throw createError({ statusCode: 401, statusMessage: 'OAuth identity no longer exists' })
+    throw bearerChallenge(event, 401, 'invalid_token', 'OAuth identity no longer exists')
   }
   telemetry.record({
     stage: 'crew-profile-retrieval',

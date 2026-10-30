@@ -6,5 +6,10 @@ export default defineV1Alias(
   'accounts:read',
   'Get an AWS account',
   legacyHandler,
-  [{ name: 'identifier', in: 'path', required: true, schema: { type: 'string' } }]
+  [],
+  false,
+  {
+    sourcePath: '/api/accounts/[identifier]',
+    description: 'Look up one account by commercial or GovCloud account ID, root email, or numeric request ID. Returns 404 when nothing matches.'
+  }
 )

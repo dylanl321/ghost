@@ -36,6 +36,7 @@ import type {
 import { getOAuthEventCollector, type OAuthEventInput } from './event-collector'
 import { resolveOAuthAdminDeploymentContext } from './deployment-context'
 import { logger } from '../../../utils/logger'
+import { getClientAddress } from '../../../utils/client-address'
 
 /**
  * A minimal, defensive view of the `oidc-provider` koa-style context. Every
@@ -97,16 +98,12 @@ function contextOrUndefined(): OAuthDeploymentContext | undefined {
 
 /**
  * Extract a raw network address from an H3 node request at a genuine network
- * boundary. Mirrors the derivation the registration routes already use. The raw
+ * boundary, using the same load-balancer hop the registration rate limit keys on. The raw
  * value is handed to the collector, which pseudonymizes and discards it; it is
  * never returned to a caller or persisted here (16.4).
  */
 export function readRawNetworkAddress(req: RequestLike | undefined): string | undefined {
-  if (!req) return undefined
-  const forwarded = req.headers?.['x-forwarded-for']
-  const header = Array.isArray(forwarded) ? forwarded[0] : forwarded
-  const raw = String(header || req.socket?.remoteAddress || '').split(',')[0]?.trim()
-  return raw || undefined
+  return getClientAddress(req)
 }
 
 /**

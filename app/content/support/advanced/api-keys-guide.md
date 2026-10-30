@@ -1,6 +1,6 @@
 ---
 title: API Keys & Programmatic Access
-lastUpdated: 2026-10-01
+lastUpdated: 2026-10-30
 icon: i-heroicons-key
 ---
 
@@ -12,17 +12,30 @@ Need to access GHOST from a script or automation tool? You'll need an API key.
 
 Open **Settings → API Access**. Create a key, select only the read permissions the integration needs, and copy the secret immediately. It is shown only once.
 
+- Keys look like `gdms_<environment>_<key id>_<secret>`. The key ID in the middle matches the ID shown on the key's card, so you can tell which key a script uses without revealing the secret.
+- Keys expire after 90 days unless you pick 30, 180 or 365 days, or **Never expires**.
+- Permissions cannot be changed after creation. To add one, create a new key and revoke the old one.
+
 ## Permissions
 
 Keys can read accounts, costs, forecasts, and security data through `/api/v1`. They are organization-wide and cannot call mutation, Entra, generic DynamoDB, or arbitrary Security Lake APIs.
 
+| Permission | Endpoints |
+|---|---|
+| `accounts:read` | `GET /api/v1/accounts`, `GET /api/v1/accounts/{identifier}`, `GET /api/v1/organization` |
+| `costs:read` | `GET /api/v1/costs/summary`, `GET /api/v1/costs/tags`, `GET /api/v1/costs/tag-keys` |
+| `forecast:read` | `GET /api/v1/forecasts/aws`, `GET /api/v1/forecasts/financial` |
+| `security:read` | `GET /api/v1/security/summary`, `GET /api/v1/security/findings`, `GET /api/v1/security/inspector/findings` |
+
 Every account-scoped v1 endpoint uses the same selectors:
 
-- `accountIdentifiers`: account IDs, GovCloud IDs, request IDs, or account emails
+- `accountIdentifiers` (or `accountIds`): comma-separated account IDs, GovCloud IDs, request IDs, or account emails
 - `adminOf`: accounts where a person is primary admin, delegate, or cost manager
 - `ownedBy`: accounts owned by an account email or primary account admin
 
-If a supplied selector matches no accounts, the request returns an error. Omit selectors to request organization-wide data.
+Selectors combine, up to 100 values per request. A full email address matches only that address; a bare username such as `jane.doe` matches that mailbox on any domain. If an identifier is malformed or matches no account, the request fails with `400` or `404` and names it; if `adminOf`/`ownedBy` resolve to no accounts, it returns `400`. Omit selectors to request organization-wide data.
+
+Cost and AWS forecast data are billed to commercial account IDs. When a selected account has only a GovCloud ID, the other accounts are still returned and the skipped account is listed in `metadata.errors`, so a total is never silently partial.
 
 Security integrations can use `/api/v1/security/findings` for Security Hub ASFF/normalized findings or `/api/v1/security/inspector/findings` for resource, CVE/GHSA, package, repository, image, score, fix, exploit, status, and Inspector-specific filters. Inspector requests must include at least one account selector.
 
@@ -32,9 +45,9 @@ For security requests, when selected accounts do not have an ID for the requeste
 
 ## Using Your Key
 
-Send the key in the `x-api-key` header:
+Send the key in the `x-api-key` header. The examples below use `https://ghost.example`; replace it with the address you use to open GHOST.
 ```bash
-curl -H "x-api-key: YOUR_KEY" /api/v1/accounts
+curl -H "x-api-key: $GHOST_API_KEY" "https://ghost.example/api/v1/accounts"
 ```
 
 List globally sorted Security Hub findings for two accounts:
@@ -94,38 +107,50 @@ The response includes `data.values` with each normalized tag value, `billableCos
 
 Both tag endpoints accept the standard account selectors and default to `last90days` if no dates are supplied. For cost requests, `startDate` is inclusive and `endDate` is exclusive; supply both or use `period`. For example, August costs use `startDate=2026-08-01&endDate=2026-09-01`.
 
+## Forecasts
+
+- `/api/v1/forecasts/aws` returns the AWS Cost Explorer forecast. Use `period` (`next-month`, `3-months`, `6-months`, `12-months`, `rest-of-year`, `current-month-remainder`, or `custom` with `months=1..12`).
+- `/api/v1/forecasts/financial` returns the Finance forecast uploaded to GHOST, one record per account with monthly amounts in `forecasts`. Filter with `period=YYYY-MM` (records that have that month) and `status`. Selected accounts match on either their commercial or GovCloud ID.
+
 ## Code Examples
 
 **Python:**
 ```python
-import requests
 import os
+import requests
 
+GHOST_URL = os.environ["GHOST_URL"]  # e.g. https://ghost.example
 API_KEY = os.environ["GHOST_API_KEY"]
 
 response = requests.get(
-    "/api/v1/costs/summary",
+    f"{GHOST_URL}/api/v1/costs/summary",
     headers={"x-api-key": API_KEY},
-    params={"period": "thisMonth", "groupBy": "LINKED_ACCOUNT"}
+    params={"period": "thisMonth", "groupBy": "LINKED_ACCOUNT"},
+    timeout=60,
 )
+body = response.json()
+if not response.ok:
+    raise RuntimeError(f"{response.status_code} {body['error']['code']}: {body['error']['message']} "
+                       f"(request {body['metadata'].get('requestID')})")
 
-if response.status_code == 200:
-    data = response.json()
-    print(f"Total cost: ${data['data']['summary']['totalCost']}")
+print(f"Total cost: ${body['data']['summary']['totalCost']:.2f}")
 ```
 
 **JavaScript:**
 ```javascript
+const GHOST_URL = process.env.GHOST_URL; // e.g. https://ghost.example
 const API_KEY = process.env.GHOST_API_KEY;
 
 async function getCosts() {
   const response = await fetch(
-    `/api/v1/costs/summary?period=thisMonth&groupBy=LINKED_ACCOUNT`,
+    `${GHOST_URL}/api/v1/costs/summary?period=thisMonth&groupBy=LINKED_ACCOUNT`,
     { headers: { "x-api-key": API_KEY } }
   );
-
-  const data = await response.json();
-  console.log("Total cost:", data.data.summary.totalCost);
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(`${response.status} ${body.error.code}: ${body.error.message}`);
+  }
+  console.log("Total cost:", body.data.summary.totalCost);
 }
 ```
 
@@ -134,7 +159,7 @@ async function getCosts() {
 **Do:**
 - Store keys in environment variables
 - Use AWS Secrets Manager or similar
-- Request new keys every 90 days
+- Rotate keys: create the new key, switch the integration, then revoke the old one
 - Each person gets their own key
 
 **Don't:**
@@ -143,18 +168,37 @@ async function getCosts() {
 - Share keys with teammates
 - Log keys in error messages
 
-## If Your Key Stops Working
+## Errors
 
-**401 Unauthorized** - Key is wrong or expired, double-check it
+Every `/api/v1` error has the same shape:
 
-**403 Forbidden** - You don't have permission for that endpoint, ask for more access
+```json
+{
+  "success": false,
+  "error": { "code": "FORBIDDEN", "message": "API key requires costs:read scope" },
+  "metadata": { "timestamp": "2026-10-30T12:00:00.000Z", "requestID": "…" }
+}
+```
+
+| Status | Code | What to do |
+|---|---|---|
+| 400 | `BAD_REQUEST` | Fix the parameter named in `message` (dates, selectors, filters). |
+| 401 | `UNAUTHORIZED` | The message says whether the key is invalid, revoked, or expired. Create a new key if it was revoked or expired. |
+| 403 | `FORBIDDEN` | The key lacks the permission for that endpoint. Create a key that includes it. |
+| 404 | `NOT_FOUND` | The account identifier did not match any active account. |
+| 502 / 503 | `UPSTREAM_ERROR` / `SERVICE_UNAVAILABLE` | GHOST could not check the key or reach AWS. Retry after a short wait (honor `Retry-After` when present); the key is still valid. |
+| 500 | `INTERNAL_ERROR` | Retry later; if it persists, report the `requestID`. |
+
+## Checking Usage
+
+Open **Usage** on a key's card to see its calls for the last 30 days: totals for 24 hours, 7 days and 30 days, the endpoints it called, response statuses, and the 20 most recent calls.
 
 ## Revoking Keys
 
-Revoke the key from **Settings → API Access** immediately if it leaks or is no longer needed.
+Revoke the key from **Settings → API Access** immediately if it leaks or is no longer needed. Revocation takes effect within 30 seconds on every GHOST server.
 
 ## Need Help?
 
 1. Try it in Swagger UI first (`/api/swagger-ui`)
 2. Check you're using the right endpoint and parameters
-3. Contact AWS team with the error message and what you were trying to do
+3. Contact the AWS team with the error `code`, `message`, `requestID`, and what you were trying to do

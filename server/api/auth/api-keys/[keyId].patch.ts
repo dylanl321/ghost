@@ -7,10 +7,8 @@ import { createError, defineEventHandler, readBody, getRouterParam } from 'h3'
 import { getAuthContext, requireOIDCAuth } from '../../../middleware/entra-auth'
 import { registerEndpoint } from '../../../plugins/swagger'
 import type { EntraAPIResponse } from '../../../types/entra'
-import { updateItem, getItem } from '../../../utils/dynamodb'
-import { getTableEnvironment, getTableName } from '../../../lib/dynamodb-config'
 import { logger } from '../../../utils/logger'
-import { isApiKeyOwner } from '../../../utils/api-keys'
+import { updateApiKeyMetadata, validateApiKeyMetadata } from '../../../utils/api-keys'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/auth/api-keys/{keyId}', 'PATCH', {
@@ -94,35 +92,22 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<any>> 
     // Parse request body
     const body = await readBody<{ metadata?: Record<string, any> }>(event)
 
-    if (!body.metadata) {
+    if (!body?.metadata) {
       throw createError({
         statusCode: 400,
         statusMessage: 'Metadata is required'
       })
     }
+    const metadataError = validateApiKeyMetadata(body.metadata)
+    if (metadataError) throw createError({ statusCode: 400, statusMessage: metadataError })
 
-    // Get existing key to verify it exists and check permissions
-    const tableName = await getTableName('apiKeys')
-    const environment = await getTableEnvironment('apiKeys')
-    const existingKey = await getItem(tableName, { id: keyId }, environment)
-
-    if (!existingKey) {
+    // Not-owned and missing keys answer the same 404 so key ids cannot be probed.
+    if (!(await updateApiKeyMetadata(keyId, userId, body.metadata))) {
       throw createError({
         statusCode: 404,
         statusMessage: 'API key not found'
       })
     }
-    if (!isApiKeyOwner({ createdBy: String(existingKey.createdBy || '') }, userId)) {
-      throw createError({ statusCode: 404, statusMessage: 'API key not found' })
-    }
-
-    // Update metadata
-    await updateItem(
-      tableName,
-      { id: keyId },
-      { metadata: { ...existingKey.metadata, ...body.metadata } },
-      environment
-    )
 
     logger.info(`Updated API key ${keyId} metadata by ${userId}`)
 

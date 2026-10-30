@@ -1,8 +1,14 @@
 import type { EventHandler, H3Event } from 'h3'
-import { createError, defineEventHandler, getQuery } from 'h3'
+import { createError, getQuery } from 'h3'
 import { requireScope } from '../middleware/entra-auth'
 import { apiRegistry, registerEndpoint } from '../plugins/swagger'
-import { integrationAccountParameters, resolveIntegrationAccountScope } from './integration-account-scope'
+import {
+  getIntegrationAccountEnvironmentErrors,
+  integrationAccountParameters,
+  resolveIntegrationAccountScope,
+  type IntegrationAccountEnvironmentError
+} from './integration-account-scope'
+import { withV1Errors } from './v1-errors'
 
 interface V1AliasOptions {
   sourcePath?: string
@@ -33,11 +39,18 @@ export function defineV1Alias(
   const inheritedParameters = (source?.parameters || []).filter((parameter: any) =>
     !accountScoped || !['accountId', 'accountIds', 'accountIdentifiers', 'adminOf', 'ownedBy'].includes(parameter.name)
   )
+  const seenParameters = new Set<string>()
   const routeParameters = [
     ...(accountScoped ? integrationAccountParameters : []),
     ...inheritedParameters,
     ...parameters
-  ].map(parameter => options.queryDefaults?.[parameter.name] === undefined
+  ].filter((parameter: any) => {
+    // An alias may restate a parameter its source already documents.
+    const key = parameter.$ref || `${parameter.in}:${parameter.name}`
+    if (seenParameters.has(key)) return false
+    seenParameters.add(key)
+    return true
+  }).map(parameter => options.queryDefaults?.[parameter.name] === undefined
     ? parameter
     : { ...parameter, schema: { ...parameter.schema, default: options.queryDefaults[parameter.name] } })
 
@@ -53,12 +66,14 @@ export function defineV1Alias(
       401: { $ref: '#/components/schemas/Error' },
       403: { $ref: '#/components/schemas/Error' },
       500: { $ref: '#/components/schemas/Error' },
+      503: { $ref: '#/components/schemas/Error' },
       ...source?.responses
     }
   })
 
-  return defineEventHandler(async (event: H3Event) => {
+  return withV1Errors(async (event: H3Event) => {
     await requireScope(event, scope)
+    let skippedAccounts: IntegrationAccountEnvironmentError[] = []
     const url = new URL(event.path || path, 'http://localhost')
     for (const [name, value] of Object.entries(options.queryDefaults || {})) {
       if (!url.searchParams.has(name)) url.searchParams.set(name, String(value))
@@ -70,6 +85,9 @@ export function defineV1Alias(
         if (accountScope.commercialAccountIds.length === 0) {
           throw createError({ statusCode: 400, statusMessage: 'Selected accounts do not have commercial billing account IDs.' })
         }
+        // GovCloud-only selections cannot be billed through Cost Explorer; say
+        // so in the response instead of silently returning a smaller total.
+        skippedAccounts = getIntegrationAccountEnvironmentErrors(accountScope.accounts, 'commercial')
         url.searchParams.set('accountIds', accountScope.commercialAccountIds.join(','))
         url.searchParams.delete('accountId')
         url.searchParams.delete('accountIdentifiers')
@@ -82,7 +100,12 @@ export function defineV1Alias(
     // H3 reads its cached path in getQuery(), so both representations must agree.
     event._path = event.node.req.url = `${url.pathname}${url.search}`
     try {
-      return await legacyHandler(event)
+      const result: any = await legacyHandler(event)
+      if (skippedAccounts.length > 0 && result && typeof result === 'object' && result.success !== false) {
+        const metadata = result.metadata || {}
+        result.metadata = { ...metadata, errors: [...(metadata.errors || []), ...skippedAccounts] }
+      }
+      return result
     } finally {
       event.node.req.url = originalUrl
       event._path = originalPath

@@ -8,6 +8,7 @@ import { listApiKeys } from '../../../utils/api-keys'
 import { getAuthContext, requireOIDCAuth } from '../../../middleware/entra-auth'
 import type { ApiKey, EntraAPIResponse } from '../../../types/entra'
 import { logger } from '../../../utils/logger'
+import { isTransientDependencyError } from '../../../mcp/oauth/transient-error'
 
 interface ApiKeysResponse {
   keys: Omit<ApiKey, 'keyHash' | 'salt'>[]
@@ -57,10 +58,10 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<ApiKey
       throw error
     }
     
-    // Handle other errors
+    // Never show an outage as an empty key list.
     throw createError({
-      statusCode: 500,
-      statusMessage: error.message || 'Failed to list API keys'
+      statusCode: isTransientDependencyError(error) ? 503 : 500,
+      statusMessage: 'Failed to list API keys'
     })
   }
 })

@@ -35,12 +35,12 @@ const openApiSpec = {
         type: 'apiKey',
         in: 'header',
         name: 'x-api-key',
-        description: 'API key for programmatic access'
+        description: 'Personal API key from Settings > API Access. Read-only; valid only on /api/v1 endpoints.'
       },
       OIDCAuth: {
         type: 'openIdConnect',
         openIdConnectUrl: '/.well-known/openid-configuration',
-        description: 'Entra ID / Azure AD authentication (for web browser access)'
+        description: 'Your signed-in GHOST browser session (Entra ID). Swagger UI sends it automatically when you are signed in; scripts should use ApiKeyAuth.'
       }
     },
     schemas: {
@@ -51,9 +51,20 @@ const openApiSpec = {
           error: {
             type: 'object',
             properties: {
-              code: { type: 'string' },
+              code: {
+                type: 'string',
+                description: 'BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, UPSTREAM_ERROR, SERVICE_UNAVAILABLE (retry; honor Retry-After when present), or INTERNAL_ERROR.',
+                example: 'FORBIDDEN'
+              },
               message: { type: 'string' },
               details: { type: 'object' }
+            }
+          },
+          metadata: {
+            type: 'object',
+            properties: {
+              timestamp: { type: 'string', format: 'date-time' },
+              requestID: { type: 'string', description: 'Matches the x-request-id response header; quote it when reporting a problem.' }
             }
           }
         }

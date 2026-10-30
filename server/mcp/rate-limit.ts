@@ -2,6 +2,7 @@ import { UpdateItemCommand } from '@aws-sdk/client-dynamodb'
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb'
 import { getDynamoDBClient } from '../lib/aws-client-factory'
 import { getOAuthTableConfig, useDurableOAuthStore } from './config'
+import { logger } from '../utils/logger'
 import {
   computeRetryAfterSeconds,
   deriveDurableRateBucketKey,
@@ -14,6 +15,21 @@ interface RateBucket {
 }
 
 const localBuckets = new Map<string, RateBucket>()
+// Keys include subjects and client addresses, so the map would otherwise grow
+// for the life of the process. Expired buckets are dropped once it gets large.
+const LOCAL_BUCKET_PRUNE_THRESHOLD = 5000
+
+function pruneExpiredLocalBuckets(now: number): void {
+  if (localBuckets.size < LOCAL_BUCKET_PRUNE_THRESHOLD) return
+  for (const [key, bucket] of localBuckets) {
+    if (bucket.resetAt <= now) localBuckets.delete(key)
+  }
+}
+
+/** Number of local buckets currently held (exposed for tests). */
+export function localRateBucketCount(): number {
+  return localBuckets.size
+}
 
 export interface RateLimitDecision {
   allowed: boolean
@@ -48,6 +64,7 @@ function localDecision(key: string, limit: number, windowSeconds: number, increm
   const now = Date.now()
   const bucket = localBuckets.get(key)
   if (!bucket || bucket.resetAt <= now) {
+    pruneExpiredLocalBuckets(now)
     const { mapKey, resetAt } = deriveLocalRateBucketKey(key, windowSeconds, now)
     localBuckets.set(mapKey, { count: increment, resetAt })
     // A fresh window's retry hint is the full window length, matching the
@@ -70,6 +87,26 @@ export async function checkMcpRateLimit(
 ): Promise<RateLimitDecision> {
   if (!useDurableOAuthStore()) return localDecision(key, limit, windowSeconds, increment)
 
+  try {
+    return await durableDecision(key, limit, windowSeconds, increment, now)
+  } catch (error) {
+    // A throttled or unreachable table must not take MCP and OAuth registration
+    // down with it. Fall back to this task's own counter, which still bounds a
+    // single caller, and say so in the logs.
+    logger.warn('[MCP rate limit] Durable rate limit unavailable; using in-process limit', {
+      error: error instanceof Error ? error.name : String(error)
+    })
+    return localDecision(key, limit, windowSeconds, increment)
+  }
+}
+
+async function durableDecision(
+  key: string,
+  limit: number,
+  windowSeconds: number,
+  increment: number,
+  now: number
+): Promise<RateLimitDecision> {
   const bucket = deriveDurableRateBucketKey(key, windowSeconds, now)
   const config = getOAuthTableConfig()
   const client = await getDynamoDBClient(config.environment, undefined, config.accountId)

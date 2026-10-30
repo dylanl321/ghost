@@ -4,7 +4,9 @@
  * Uses DynamoDB for persistent storage across ECS deployments
  */
 
-import { randomBytes, scryptSync, timingSafeEqual } from 'crypto'
+import { createHash, randomBytes, scrypt, timingSafeEqual } from 'crypto'
+import { promisify } from 'util'
+import { createError } from 'h3'
 import { putItem, getItem, scanItems, updateItem } from './dynamodb'
 import { accountCache } from './cache-manager'
 import { getTableName, getTableEnvironment, getTableAccountId } from '../lib/dynamodb-config'
@@ -22,6 +24,8 @@ export interface ApiKey {
   isActive: boolean
   createdBy: string
   metadata?: Record<string, any>
+  /** 'v2' keys embed their id; absent on keys issued before that format. */
+  keyFormat?: 'v2'
 }
 
 export interface ApiKeyValidation {
@@ -66,8 +70,11 @@ export const INTEGRATION_API_KEY_SCOPES = [
   'security:read'
 ] as const
 
+const MAX_METADATA_BYTES = 4096
+
 export function validateIntegrationApiKeyRequest(request: CreateApiKeyRequest): string | null {
-  if (!request.name || request.name.trim().length === 0) return 'API key name is required'
+  if (!request || typeof request !== 'object') return 'Request body must be a JSON object'
+  if (typeof request.name !== 'string' || request.name.trim().length === 0) return 'API key name is required'
   if (request.name.trim().length > 100) return 'API key name must be 100 characters or fewer'
   if (!Array.isArray(request.scopes) || request.scopes.length === 0) return 'At least one scope is required'
 
@@ -84,28 +91,84 @@ export function validateIntegrationApiKeyRequest(request: CreateApiKeyRequest): 
     (!Number.isInteger(request.expiresInDays) || request.expiresInDays < 1 || request.expiresInDays > 365)) {
     return 'Expiration must be a whole number between 1 and 365 days'
   }
+  if (request.neverExpires !== undefined && typeof request.neverExpires !== 'boolean') {
+    return 'neverExpires must be a boolean'
+  }
+  return validateApiKeyMetadata(request.metadata)
+}
+
+/**
+ * Metadata is caller-owned free-form data, but it is stored on the key record
+ * and returned on every list call, so it must stay a small plain object.
+ */
+export function validateApiKeyMetadata(metadata: unknown): string | null {
+  if (metadata === undefined) return null
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return 'metadata must be a JSON object'
+  }
+  if (Buffer.byteLength(JSON.stringify(metadata)) > MAX_METADATA_BYTES) {
+    return `metadata must be ${MAX_METADATA_BYTES} bytes or fewer`
+  }
   return null
+}
+
+/** Metadata keys GHOST sets itself; callers cannot overwrite them. */
+export const RESERVED_API_KEY_METADATA = ['integrationContract'] as const
+
+export function stripReservedApiKeyMetadata(metadata: Record<string, any> = {}): Record<string, any> {
+  return Object.fromEntries(Object.entries(metadata).filter(([key]) =>
+    !(RESERVED_API_KEY_METADATA as readonly string[]).includes(key)))
 }
 
 export function isApiKeyOwner(apiKey: Pick<ApiKey, 'createdBy'> | null | undefined, userId: string): boolean {
   return Boolean(apiKey && userId && apiKey.createdBy.toLowerCase() === userId.toLowerCase())
 }
 
+// Current keys embed their record id so validation is one lookup and one hash:
+//   gdms_<environment>_<16-hex id>_<32-hex secret>
+// Keys issued before the id was embedded keep working: gdms_<environment>_<32-hex secret>
+const API_KEY_PATTERN = /^gdms_([a-z0-9-]{1,32})_([0-9a-f]{16})_([0-9a-f]{32})$/
+const LEGACY_API_KEY_PATTERN = /^gdms_([a-z0-9-]{1,32})_([0-9a-f]{32})$/
+
+export type ParsedApiKey =
+  | { format: 'v2', id: string }
+  | { format: 'legacy' }
+
 /**
- * Generate a secure API key
+ * Classify a presented key without touching storage, so malformed headers are
+ * rejected before any scrypt work or DynamoDB read.
  */
-function generateApiKey(): string {
-  // Format: gdms_[environment]_[32-char-hex]
-  const environment = process.env.NODE_ENV || 'dev'
-  const keyPart = randomBytes(16).toString('hex')
-  return `gdms_${environment}_${keyPart}`
+export function parseApiKey(key: unknown): ParsedApiKey | null {
+  if (typeof key !== 'string' || key.length > 128) return null
+  const match = API_KEY_PATTERN.exec(key)
+  if (match) return { format: 'v2', id: match[2]! }
+  return LEGACY_API_KEY_PATTERN.test(key) ? { format: 'legacy' } : null
 }
 
 /**
- * Hash an API key for storage
+ * Generate a secure API key
  */
-function hashApiKey(key: string, salt: string): string {
-  return scryptSync(key, salt, 64).toString('hex')
+function generateApiKey(id: string): string {
+  const environment = (process.env.NODE_ENV || 'dev').toLowerCase().replace(/[^a-z0-9-]/g, '') || 'dev'
+  const keyPart = randomBytes(16).toString('hex')
+  return `gdms_${environment}_${id}_${keyPart}`
+}
+
+const scryptAsync = promisify(scrypt) as (password: string, salt: string, keylen: number) => Promise<Buffer>
+
+/**
+ * Hash an API key for storage. Runs on the libuv pool so a burst of API
+ * requests does not block the event loop.
+ */
+async function hashApiKey(key: string, salt: string): Promise<string> {
+  return (await scryptAsync(key, salt, 64)).toString('hex')
+}
+
+async function apiKeyMatches(key: string, apiKey: Pick<ApiKey, 'keyHash' | 'salt'>): Promise<boolean> {
+  if (!apiKey.keyHash || !apiKey.salt) return false
+  const storedHash = Buffer.from(apiKey.keyHash, 'hex')
+  const providedHash = Buffer.from(await hashApiKey(key, apiKey.salt), 'hex')
+  return storedHash.length === providedHash.length && timingSafeEqual(storedHash, providedHash)
 }
 
 /**
@@ -126,53 +189,119 @@ function generateSalt(): string {
  */
 const USAGE_RETENTION_DAYS = parseInt(process.env.API_KEY_USAGE_RETENTION_DAYS || '90')
 
+function toApiKey(item: Record<string, any>): ApiKey {
+  return {
+    id: item.id,
+    name: item.name,
+    keyHash: item.keyHash,
+    salt: item.salt,
+    scopes: Array.isArray(item.scopes) ? item.scopes : [],
+    isActive: item.isActive === 'true' || item.isActive === true, // Convert string to boolean
+    createdBy: item.createdBy,
+    metadata: item.metadata,
+    keyFormat: item.keyFormat === 'v2' ? 'v2' : undefined,
+    createdAt: new Date(item.createdAt),
+    expiresAt: item.expiresAt ? new Date(item.expiresAt) : undefined,
+    lastUsedAt: item.lastUsedAt ? new Date(item.lastUsedAt) : undefined
+  }
+}
+
 /**
- * Load all API keys from DynamoDB
+ * How long a single key record is trusted before it is re-read. This bounds how
+ * long a revoked or expired key keeps working on a task that did not process
+ * the revocation itself.
+ */
+const KEY_RECORD_TTL_MS = Number(process.env.API_KEY_RECORD_CACHE_SECONDS || 30) * 1000
+const MAX_CACHED_RECORDS = 1000
+const keyRecordCache = new Map<string, { record: ApiKey | null, expiresAt: number }>()
+
+// Legacy keys carry no id, so a match is remembered by a digest of the key to
+// avoid repeating the scan of every stored hash on each request.
+const LEGACY_MATCH_TTL_MS = 5 * 60 * 1000
+const LEGACY_MISS_TTL_MS = 60 * 1000
+const legacyMatchCache = new Map<string, { id: string | null, expiresAt: number }>()
+
+function rememberBounded<V>(cache: Map<string, V>, key: string, value: V): void {
+  if (cache.size >= MAX_CACHED_RECORDS && !cache.has(key)) {
+    const oldest = cache.keys().next().value
+    if (oldest !== undefined) cache.delete(oldest)
+  }
+  cache.set(key, value)
+}
+
+function invalidateApiKeyCaches(id?: string): void {
+  if (id) keyRecordCache.delete(id)
+  else keyRecordCache.clear()
+  // A revoked legacy key must not stay matched from the digest cache.
+  legacyMatchCache.clear()
+}
+
+/** Test hook: drop every in-process API key cache. */
+export async function resetApiKeyCachesForTests(): Promise<void> {
+  invalidateApiKeyCaches()
+  await accountCache.delete('api_keys:all')
+}
+
+/**
+ * Load one API key record by id, with a short per-task cache.
+ */
+async function loadApiKeyRecord(id: string): Promise<ApiKey | null> {
+  const now = Date.now()
+  const cached = keyRecordCache.get(id)
+  if (cached && cached.expiresAt > now) return cached.record
+
+  const tableName = await getTableName('apiKeys')
+  const environment = await getTableEnvironment('apiKeys')
+  const accountId = await getTableAccountId('apiKeys')
+  const item = await getItem(tableName, { id }, environment, accountId)
+  const record = item ? toApiKey(item) : null
+  rememberBounded(keyRecordCache, id, { record, expiresAt: now + KEY_RECORD_TTL_MS })
+  return record
+}
+
+function isUsable(apiKey: ApiKey, now = new Date()): boolean {
+  return apiKey.isActive && !(apiKey.expiresAt && now > apiKey.expiresAt)
+}
+
+function describeUnusable(apiKey: ApiKey): string {
+  if (!apiKey.isActive) return 'API key has been revoked'
+  return 'API key has expired'
+}
+
+/**
+ * Load all API keys from DynamoDB. Every page is read so no key goes missing
+ * once the table grows past one scan page. A missing table means no keys yet;
+ * any other failure is thrown so callers never mistake an outage for "no keys".
  */
 async function loadApiKeys(): Promise<ApiKey[]> {
+  const cacheKey = 'api_keys:all'
+  const cached = await accountCache.get(cacheKey)
+  if (cached) return cached
+
+  const tableName = await getTableName('apiKeys')
+  const environment = await getTableEnvironment('apiKeys')
+  const accountId = await getTableAccountId('apiKeys')
+  const apiKeys: ApiKey[] = []
   try {
-    // Check cache first for performance
-    const cacheKey = 'api_keys:all'
-    const cached = await accountCache.get(cacheKey)
-    if (cached) {
-      return cached
-    }
-    
-    // Scan DynamoDB table
-    const tableName = await getTableName('apiKeys')
-    const environment = await getTableEnvironment('apiKeys')
-    const accountId = await getTableAccountId('apiKeys')
-    const result = await scanItems(tableName, undefined, undefined, undefined, environment, undefined, undefined, accountId)
-    const items = result.items
-    const apiKeys: ApiKey[] = items.map(item => ({
-      id: item.id,
-      name: item.name,
-      keyHash: item.keyHash,
-      salt: item.salt,
-      scopes: item.scopes,
-      isActive: item.isActive === 'true' || item.isActive === true, // Convert string to boolean
-      createdBy: item.createdBy,
-      metadata: item.metadata,
-      createdAt: new Date(item.createdAt),
-      expiresAt: item.expiresAt ? new Date(item.expiresAt) : undefined,
-      lastUsedAt: item.lastUsedAt ? new Date(item.lastUsedAt) : undefined
-    }))
-    
-    // Cache for 5 minutes to reduce DynamoDB calls
-    await accountCache.set(cacheKey, apiKeys, { ttl: 300 })
-    
-    return apiKeys
-  } catch (error: any) {
-    // Handle table not existing gracefully
-    if ((error instanceof Error ? error.name : "Error") === 'ResourceNotFoundException' || (error instanceof Error ? error.message : String(error))?.includes('Requested resource not found')) {
-      const tableName = await getTableName('apiKeys').catch(() => 'ghost-api-keys')
-      const environment = await getTableEnvironment('apiKeys').catch(() => 'commercial')
+    let nextToken: string | undefined
+    do {
+      const page = await scanItems(tableName, undefined, undefined, nextToken, environment, undefined, undefined, accountId)
+      apiKeys.push(...page.items.map(toApiKey))
+      nextToken = page.nextToken
+    } while (nextToken)
+  } catch (error) {
+    const name = error instanceof Error ? error.name : ''
+    const message = error instanceof Error ? error.message : String(error)
+    if (name === 'ResourceNotFoundException' || message.includes('Requested resource not found')) {
       logger.info(`API keys table ${tableName} does not exist yet in ${environment} environment`)
       return []
     }
-    logger.error('Failed to load API keys from DynamoDB:', error)
-    return []
+    throw error
   }
+
+  // Cache for 5 minutes to reduce DynamoDB calls
+  await accountCache.set(cacheKey, apiKeys, { ttl: 300 })
+  return apiKeys
 }
 
 /**
@@ -196,6 +325,7 @@ async function saveApiKey(apiKey: ApiKey): Promise<void> {
     await putItem(tableName, dbItem, environment, accountId)
 
     // Invalidate cache
+    invalidateApiKeyCaches(apiKey.id)
     await accountCache.delete('api_keys:all')
   } catch (error) {
     logger.error('Failed to save API key to DynamoDB:', error)
@@ -231,7 +361,10 @@ async function updateApiKey(id: string, updates: Partial<ApiKey>): Promise<void>
       accountId
     )
 
-    // Invalidate cache
+    // Invalidate cache. A lastUsedAt touch does not change validity, so it
+    // keeps the per-key caches warm.
+    const changesValidity = Object.keys(updates).some(key => key !== 'lastUsedAt')
+    if (changesValidity) invalidateApiKeyCaches(id)
     await accountCache.delete('api_keys:all')
   } catch (error) {
     logger.error('Failed to update API key in DynamoDB:', error)
@@ -257,10 +390,10 @@ export async function createApiKey(
     }
     
     // Generate key and hash
-    const plainKey = generateApiKey()
-    const salt = generateSalt()
-    const keyHash = hashApiKey(plainKey, salt)
     const id = randomBytes(8).toString('hex')
+    const plainKey = generateApiKey(id)
+    const salt = generateSalt()
+    const keyHash = await hashApiKey(plainKey, salt)
     
     // Calculate expiration
     let expiresAt: Date | undefined
@@ -281,7 +414,8 @@ export async function createApiKey(
       expiresAt,
       isActive: true,
       createdBy,
-      metadata: request.metadata
+      metadata: request.metadata,
+      keyFormat: 'v2'
     }
     
     // Save to DynamoDB
@@ -302,52 +436,67 @@ export async function createApiKey(
   }
 }
 
+function touchLastUsed(apiKey: ApiKey): void {
+  // Avoid invalidating the validation cache and writing DynamoDB on every call.
+  const lastUsedAge = apiKey.lastUsedAt ? Date.now() - apiKey.lastUsedAt.getTime() : Infinity
+  if (lastUsedAge >= 5 * 60 * 1000) {
+    apiKey.lastUsedAt = new Date()
+    void updateApiKey(apiKey.id, { lastUsedAt: apiKey.lastUsedAt }).catch(error => {
+      logger.warn(`Failed to update lastUsedAt for API key ${apiKey.id}:`, error)
+    })
+  }
+}
+
+function accept(apiKey: ApiKey): ApiKeyValidation {
+  touchLastUsed(apiKey)
+  return { valid: true, id: apiKey.id, scopes: apiKey.scopes }
+}
+
+const INVALID_KEY = 'Invalid API key'
+
+async function validateLegacyApiKey(key: string): Promise<ApiKeyValidation> {
+  const digest = createHash('sha256').update(key).digest('hex')
+  const now = Date.now()
+  const remembered = legacyMatchCache.get(digest)
+  if (remembered && remembered.expiresAt > now) {
+    if (!remembered.id) return { valid: false, error: INVALID_KEY }
+    // Re-read the record so a revocation on another task is honored.
+    const record = await loadApiKeyRecord(remembered.id)
+    if (record && isUsable(record)) return accept(record)
+    legacyMatchCache.delete(digest)
+    return { valid: false, error: record ? describeUnusable(record) : INVALID_KEY }
+  }
+
+  // Only keys issued before ids were embedded can match a legacy-format key.
+  const candidates = (await loadApiKeys()).filter(apiKey => apiKey.keyFormat !== 'v2' && isUsable(apiKey))
+  for (const apiKey of candidates) {
+    if (await apiKeyMatches(key, apiKey)) {
+      rememberBounded(legacyMatchCache, digest, { id: apiKey.id, expiresAt: now + LEGACY_MATCH_TTL_MS })
+      const record = await loadApiKeyRecord(apiKey.id)
+      if (record && isUsable(record)) return accept(record)
+      return { valid: false, error: record ? describeUnusable(record) : INVALID_KEY }
+    }
+  }
+  rememberBounded(legacyMatchCache, digest, { id: null, expiresAt: now + LEGACY_MISS_TTL_MS })
+  return { valid: false, error: INVALID_KEY }
+}
+
 /**
  * Validate an API key
  */
 export async function validateApiKey(key: string): Promise<ApiKeyValidation> {
   try {
-    const apiKeys = await loadApiKeys()
-    
-    for (const apiKey of apiKeys) {
-      // Skip inactive keys
-      if (!apiKey.isActive) {
-        continue
-      }
-      
-      // Skip expired keys
-      if (apiKey.expiresAt && new Date() > apiKey.expiresAt) {
-        continue
-      }
-      
-      // Check if key matches
-      const keyHash = hashApiKey(key, apiKey.salt)
-      const storedHash = Buffer.from(apiKey.keyHash, 'hex')
-      const providedHash = Buffer.from(keyHash, 'hex')
-      
-      if (storedHash.length === providedHash.length && 
-          timingSafeEqual(storedHash, providedHash)) {
-        
-        // Avoid invalidating the validation cache and writing DynamoDB on every call.
-        const lastUsedAge = apiKey.lastUsedAt ? Date.now() - apiKey.lastUsedAt.getTime() : Infinity
-        if (lastUsedAge >= 5 * 60 * 1000) {
-          void updateApiKey(apiKey.id, { lastUsedAt: new Date() }).catch(error => {
-            logger.warn(`Failed to update lastUsedAt for API key ${apiKey.id}:`, error)
-          })
-        }
-        
-        return {
-          valid: true,
-          id: apiKey.id,
-          scopes: apiKey.scopes
-        }
-      }
+    const parsed = parseApiKey(key)
+    if (!parsed) return { valid: false, error: INVALID_KEY }
+    if (parsed.format === 'legacy') return await validateLegacyApiKey(key)
+
+    const apiKey = await loadApiKeyRecord(parsed.id)
+    if (!apiKey || !(await apiKeyMatches(key, apiKey))) {
+      return { valid: false, error: INVALID_KEY }
     }
-    
-    return {
-      valid: false,
-      error: 'Invalid API key'
-    }
+    // Only reveal revoked/expired once the caller has proven they hold the key.
+    if (!isUsable(apiKey)) return { valid: false, error: describeUnusable(apiKey) }
+    return accept(apiKey)
   } catch (error) {
     logger.error('API key validation error:', error)
     return {
@@ -360,17 +509,11 @@ export async function validateApiKey(key: string): Promise<ApiKeyValidation> {
 /**
  * List API keys (without revealing the actual keys)
  */
-export async function listApiKeys(createdBy?: string): Promise<Omit<ApiKey, 'keyHash' | 'salt'>[]> {
-  try {
-    const apiKeys = await loadApiKeys()
-    
-    return apiKeys
-      .filter(key => !createdBy || isApiKeyOwner(key, createdBy))
-      .map(({ keyHash, salt, ...key }) => key)
-  } catch (error) {
-    logger.error('Failed to list API keys:', error)
-    return []
-  }
+export async function listApiKeys(createdBy?: string): Promise<Omit<ApiKey, 'keyHash' | 'salt' | 'keyFormat'>[]> {
+  const apiKeys = await loadApiKeys()
+  return apiKeys
+    .filter(key => !createdBy || isApiKeyOwner(key, createdBy))
+    .map(({ keyHash, salt, keyFormat, ...key }) => key)
 }
 
 /**
@@ -402,6 +545,32 @@ export async function deactivateApiKey(keyId: string, userId: string): Promise<b
     logger.error('Failed to deactivate API key:', error)
     throw error
   }
+}
+
+/**
+ * Merge caller metadata into a key the caller owns. Returns false when the key
+ * does not exist or belongs to someone else, so callers can answer 404 either way.
+ */
+export async function updateApiKeyMetadata(
+  keyId: string,
+  userId: string,
+  metadata: Record<string, any>
+): Promise<boolean> {
+  const tableName = await getTableName('apiKeys')
+  const environment = await getTableEnvironment('apiKeys')
+  const accountId = await getTableAccountId('apiKeys')
+  const existing = await getItem(tableName, { id: keyId }, environment, accountId)
+  if (!existing || !isApiKeyOwner(existing as ApiKey, userId)) return false
+
+  const merged = { ...existing.metadata, ...stripReservedApiKeyMetadata(metadata) }
+  for (const key of RESERVED_API_KEY_METADATA) {
+    if (existing.metadata?.[key] !== undefined) merged[key] = existing.metadata[key]
+  }
+  const sizeError = validateApiKeyMetadata(merged)
+  if (sizeError) throw createError({ statusCode: 400, statusMessage: sizeError })
+
+  await updateApiKey(keyId, { metadata: merged })
+  return true
 }
 
 export async function isApiKeyOwnedBy(keyId: string, userId: string): Promise<boolean> {
@@ -512,13 +681,15 @@ export async function recordApiKeyUsage(
   userAgent?: string
 ): Promise<void> {
   try {
-    logger.info(`Recording API key usage: keyId=${keyId}, endpoint=${endpoint}, method=${method}, status=${statusCode}`)
     const now = new Date()
     const ttl = Math.floor(now.getTime() / 1000) + (USAGE_RETENTION_DAYS * 24 * 60 * 60)
 
     const usageRecord = {
       keyId,
-      timestamp: now.toISOString(),
+      // The sort key gets a random suffix: two calls in the same millisecond
+      // used to overwrite each other and undercount busy integrations.
+      timestamp: `${now.toISOString()}#${randomBytes(4).toString('hex')}`,
+      calledAt: now.toISOString(),
       endpoint,
       method,
       statusCode,
@@ -531,73 +702,23 @@ export async function recordApiKeyUsage(
     const environment = await getTableEnvironment('apiKeysUsage')
     const accountId = await getTableAccountId('apiKeysUsage')
     await putItem(usageTableName, usageRecord, environment, accountId)
-    logger.info(`Successfully recorded API key usage for keyId=${keyId}`)
   } catch (error) {
     // Don't throw error - usage recording should not block API calls
     logger.error('Failed to record API key usage:', error)
   }
 }
 
-/**
- * Get API key usage history
- */
-export async function getApiKeyUsageHistory(
-  keyId: string,
-  limit: number = 100
-): Promise<Array<{
+export interface ApiKeyUsageRecord {
   timestamp: Date
   endpoint: string
   method: string
   statusCode: number
   ipAddress: string
   userAgent: string
-}>> {
-  try {
-    // Import AWS SDK directly for Query operation
-    const { getDynamoDBClient } = await import('../lib/aws-client-factory')
-    const { QueryCommand } = await import('@aws-sdk/client-dynamodb')
-    const { unmarshall } = await import('@aws-sdk/util-dynamodb')
-
-    const usageTableName = await getTableName('apiKeysUsage')
-    const environment = await getTableEnvironment('apiKeysUsage')
-    const accountId = await getTableAccountId('apiKeysUsage')
-    const client = await getDynamoDBClient(environment, undefined, accountId)
-
-    // Query by keyId (partition key) and get most recent records
-    const command = new QueryCommand({
-      TableName: usageTableName,
-      KeyConditionExpression: 'keyId = :keyId',
-      ExpressionAttributeValues: {
-        ':keyId': { S: keyId }
-      },
-      ScanIndexForward: false, // Sort by timestamp descending
-      Limit: limit
-    })
-
-    const result = await client.send(command)
-    const items = result.Items?.map(item => unmarshall(item)) || []
-
-    // Map to return type
-    const usage = items.map(item => ({
-      timestamp: new Date(item.timestamp),
-      endpoint: item.endpoint,
-      method: item.method,
-      statusCode: item.statusCode,
-      ipAddress: item.ipAddress,
-      userAgent: item.userAgent
-    }))
-
-    return usage
-  } catch (error) {
-    logger.error('Failed to get API key usage history:', error)
-    return []
-  }
 }
 
-/**
- * Get usage statistics for a specific API key
- */
-export async function getApiKeyUsageStats(keyId: string): Promise<{
+export interface ApiKeyUsageStats {
+  /** Calls in the stats window (last30Days); kept for older clients. */
   totalCalls: number
   lastUsed: Date | null
   callsByEndpoint: Record<string, number>
@@ -605,49 +726,92 @@ export async function getApiKeyUsageStats(keyId: string): Promise<{
   last24Hours: number
   last7Days: number
   last30Days: number
-}> {
-  try {
-    const history = await getApiKeyUsageHistory(keyId, 10000) // Get more for stats
+  windowDays: number
+  /** True when the window held more calls than were counted. */
+  truncated: boolean
+}
 
-    const now = new Date()
-    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+const USAGE_STATS_WINDOW_DAYS = 30
+const MAX_USAGE_RECORDS_SCANNED = 50_000
 
-    const stats = {
-      totalCalls: history.length,
-      lastUsed: history.length > 0 ? history[0]!.timestamp : null,
-      callsByEndpoint: {} as Record<string, number>,
-      callsByStatus: {} as Record<number, number>,
-      last24Hours: 0,
-      last7Days: 0,
-      last30Days: 0
+/**
+ * Read a key's usage newest first, following DynamoDB pages. A single Query
+ * returns at most 1 MB, so the old one-page read undercounted busy keys.
+ */
+async function queryApiKeyUsage(keyId: string, since: Date, maxRecords: number): Promise<{ records: ApiKeyUsageRecord[], truncated: boolean }> {
+  const { getDynamoDBClient } = await import('../lib/aws-client-factory')
+  const { QueryCommand } = await import('@aws-sdk/client-dynamodb')
+  const { unmarshall } = await import('@aws-sdk/util-dynamodb')
+
+  const usageTableName = await getTableName('apiKeysUsage')
+  const environment = await getTableEnvironment('apiKeysUsage')
+  const accountId = await getTableAccountId('apiKeysUsage')
+  const client = await getDynamoDBClient(environment, undefined, accountId)
+
+  const records: ApiKeyUsageRecord[] = []
+  let exclusiveStartKey: Record<string, any> | undefined
+  do {
+    const result = await client.send(new QueryCommand({
+      TableName: usageTableName,
+      KeyConditionExpression: 'keyId = :keyId AND #ts >= :since',
+      ExpressionAttributeNames: { '#ts': 'timestamp' },
+      ExpressionAttributeValues: {
+        ':keyId': { S: keyId },
+        ':since': { S: since.toISOString() }
+      },
+      ScanIndexForward: false,
+      Limit: Math.min(1000, maxRecords - records.length),
+      ExclusiveStartKey: exclusiveStartKey
+    }))
+    for (const raw of result.Items || []) {
+      const item = unmarshall(raw)
+      records.push({
+        timestamp: new Date(item.calledAt || String(item.timestamp).split('#')[0]),
+        endpoint: item.endpoint,
+        method: item.method,
+        statusCode: Number(item.statusCode),
+        ipAddress: item.ipAddress,
+        userAgent: item.userAgent
+      })
     }
+    exclusiveStartKey = result.LastEvaluatedKey
+  } while (exclusiveStartKey && records.length < maxRecords)
 
-    for (const record of history) {
-      // Count by endpoint
-      stats.callsByEndpoint[record.endpoint] = (stats.callsByEndpoint[record.endpoint] || 0) + 1
+  return { records, truncated: Boolean(exclusiveStartKey) }
+}
 
-      // Count by status
-      stats.callsByStatus[record.statusCode] = (stats.callsByStatus[record.statusCode] || 0) + 1
+export function summarizeApiKeyUsage(records: ApiKeyUsageRecord[], truncated: boolean, now = new Date()): ApiKeyUsageStats {
+  const oneDayAgo = now.getTime() - 24 * 60 * 60 * 1000
+  const sevenDaysAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000
+  const stats: ApiKeyUsageStats = {
+    totalCalls: records.length,
+    lastUsed: records[0]?.timestamp || null,
+    callsByEndpoint: {},
+    callsByStatus: {},
+    last24Hours: 0,
+    last7Days: 0,
+    last30Days: records.length,
+    windowDays: USAGE_STATS_WINDOW_DAYS,
+    truncated
+  }
+  for (const record of records) {
+    stats.callsByEndpoint[record.endpoint] = (stats.callsByEndpoint[record.endpoint] || 0) + 1
+    stats.callsByStatus[record.statusCode] = (stats.callsByStatus[record.statusCode] || 0) + 1
+    const time = record.timestamp.getTime()
+    if (time >= oneDayAgo) stats.last24Hours++
+    if (time >= sevenDaysAgo) stats.last7Days++
+  }
+  return stats
+}
 
-      // Count by time period
-      if (record.timestamp >= oneDayAgo) stats.last24Hours++
-      if (record.timestamp >= sevenDaysAgo) stats.last7Days++
-      if (record.timestamp >= thirtyDaysAgo) stats.last30Days++
-    }
-
-    return stats
-  } catch (error) {
-    logger.error('Failed to get API key usage stats:', error)
-    return {
-      totalCalls: 0,
-      lastUsed: null,
-      callsByEndpoint: {},
-      callsByStatus: {},
-      last24Hours: 0,
-      last7Days: 0,
-      last30Days: 0
-    }
+/**
+ * Usage stats for the last 30 days plus the most recent calls, from one read.
+ */
+export async function getApiKeyUsage(keyId: string, historyLimit = 100): Promise<{ stats: ApiKeyUsageStats, history: ApiKeyUsageRecord[] }> {
+  const since = new Date(Date.now() - USAGE_STATS_WINDOW_DAYS * 24 * 60 * 60 * 1000)
+  const { records, truncated } = await queryApiKeyUsage(keyId, since, MAX_USAGE_RECORDS_SCANNED)
+  return {
+    stats: summarizeApiKeyUsage(records, truncated),
+    history: records.slice(0, historyLimit)
   }
 }

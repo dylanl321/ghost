@@ -51,6 +51,19 @@
         <p class="text-gray-500 dark:text-gray-400">Loading API keys...</p>
       </div>
 
+      <div v-else-if="loadError" class="text-center py-12">
+        <Icon name="i-heroicons-exclamation-triangle" class="w-12 h-12 text-red-400 mx-auto mb-4" />
+        <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">
+          Couldn't load your API keys
+        </h3>
+        <p class="text-gray-500 dark:text-gray-400 mb-6">
+          {{ loadError }}
+        </p>
+        <UButton color="gray" variant="soft" icon="i-heroicons-arrow-path" @click="loadKeys">
+          Try Again
+        </UButton>
+      </div>
+
       <div v-else-if="apiKeys.length === 0" class="text-center py-12">
         <Icon name="i-heroicons-key" class="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
         <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">
@@ -66,9 +79,9 @@
 
       <div v-else class="space-y-4">
         <UCard
-          v-for="key in apiKeys"
+          v-for="key in sortedKeys"
           :key="key.id"
-          :class="{ 'opacity-50': !key.isActive }"
+          :class="{ 'opacity-50': !key.isActive || isExpired(key) }"
         >
           <div class="space-y-4">
             <!-- Header -->
@@ -79,13 +92,26 @@
                     {{ key.name }}
                   </h3>
                   <UBadge v-if="!key.isActive" color="gray" variant="soft" size="xs">
-                    Inactive
+                    Revoked
                   </UBadge>
                   <UBadge v-else-if="isExpired(key)" color="red" variant="soft" size="xs">
                     Expired
                   </UBadge>
                   <UBadge v-else color="green" variant="soft" size="xs">
                     Active
+                  </UBadge>
+                </div>
+
+                <div class="mb-3 flex flex-wrap gap-1.5">
+                  <UBadge
+                    v-for="scope in key.scopes || []"
+                    :key="scope"
+                    color="emerald"
+                    variant="soft"
+                    size="xs"
+                    class="font-mono"
+                  >
+                    {{ scope }}
                   </UBadge>
                 </div>
 
@@ -98,7 +124,7 @@
                 <div class="text-sm text-gray-600 dark:text-gray-400 space-y-1">
                   <div class="flex items-center gap-2">
                     <Icon name="i-heroicons-identification" class="w-4 h-4" />
-                    <span class="font-mono text-xs">{{ key.id }}</span>
+                    <span>Key ID <span class="font-mono text-xs">{{ key.id }}</span></span>
                   </div>
                   <div class="flex items-center gap-2">
                     <Icon name="i-heroicons-calendar" class="w-4 h-4" />
@@ -106,15 +132,15 @@
                   </div>
                   <div v-if="key.expiresAt" class="flex items-center gap-2">
                     <Icon name="i-heroicons-clock" class="w-4 h-4" />
-                    <span>Expires {{ formatDate(key.expiresAt) }}</span>
+                    <span>{{ isExpired(key) ? 'Expired' : 'Expires' }} {{ formatDate(key.expiresAt) }}</span>
                   </div>
                   <div v-else class="flex items-center gap-2">
                     <Icon name="i-heroicons-clock" class="w-4 h-4" />
                     <span>Never expires</span>
                   </div>
-                  <div v-if="key.lastUsedAt" class="flex items-center gap-2">
+                  <div class="flex items-center gap-2">
                     <Icon name="i-heroicons-arrow-path" class="w-4 h-4" />
-                    <span>Last used {{ formatDate(key.lastUsedAt) }}</span>
+                    <span>{{ key.lastUsedAt ? `Last used ${formatDate(key.lastUsedAt)}` : 'Never used' }}</span>
                   </div>
                 </div>
               </div>
@@ -122,7 +148,6 @@
               <!-- Actions -->
               <div class="flex flex-wrap items-center gap-2">
                 <UButton
-                  v-if="key.isActive"
                   color="blue"
                   variant="ghost"
                   size="sm"
@@ -189,6 +214,9 @@
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Permissions
             </label>
+            <p class="mb-2 text-xs text-gray-500 dark:text-gray-400">
+              Every permission is read-only and covers the whole organization. Pick only what the integration calls.
+            </p>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <UCheckbox
                 v-for="scope in scopeOptions"
@@ -196,6 +224,7 @@
                 v-model="newKeyScopes"
                 :value="scope.value"
                 :label="scope.label"
+                :help="scope.help"
               />
             </div>
           </div>
@@ -208,6 +237,7 @@
               v-model="newKeyName"
               placeholder="e.g., Production Scripts, CI/CD Pipeline"
               size="lg"
+              :maxlength="100"
             />
             <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
               Give your API key a descriptive name to remember its purpose
@@ -223,12 +253,14 @@
               placeholder="Add notes about this key's purpose, where it's used, etc."
               :rows="3"
               size="lg"
+              :maxlength="DESCRIPTION_MAX"
             />
+            <p class="mt-1 text-right text-xs text-gray-400">{{ newKeyDescription.length }}/{{ DESCRIPTION_MAX }}</p>
           </div>
 
           <div>
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Expiration (Optional)
+              Expiration
             </label>
             <USelect
               v-model="newKeyExpiration"
@@ -388,7 +420,7 @@
               <div class="text-2xl font-bold text-gray-900 dark:text-white">
                 {{ usageStats.totalCalls.toLocaleString() }}
               </div>
-              <div class="text-sm text-gray-600 dark:text-gray-400">Total Calls</div>
+              <div class="text-sm text-gray-600 dark:text-gray-400">Last {{ usageStats.windowDays || 30 }} Days</div>
             </div>
             <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
               <div class="text-2xl font-bold text-gray-900 dark:text-white">
@@ -404,6 +436,10 @@
             </div>
           </div>
 
+          <p v-if="usageStats?.truncated" class="text-xs text-amber-600 dark:text-amber-400">
+            This key made more calls than GHOST can count in one view; totals are a lower bound.
+          </p>
+
           <!-- Last Used -->
           <div v-if="usageStats?.lastUsed" class="text-sm text-gray-600 dark:text-gray-400">
             <Icon name="i-heroicons-clock" class="w-4 h-4 inline mr-2" />
@@ -411,11 +447,11 @@
           </div>
 
           <!-- Top Endpoints -->
-          <div v-if="usageStats && Object.keys(usageStats.callsByEndpoint).length > 0">
+          <div v-if="topEndpoints.length > 0">
             <h4 class="text-sm font-semibold text-gray-900 dark:text-white mb-2">Top Endpoints</h4>
             <div class="space-y-2">
               <div
-                v-for="(count, endpoint) in usageStats.callsByEndpoint"
+                v-for="[endpoint, count] in topEndpoints"
                 :key="endpoint"
                 class="flex items-center justify-between text-sm"
               >
@@ -446,7 +482,9 @@
                     <td class="whitespace-nowrap px-3 py-2">{{ formatDate(call.timestamp) }}</td>
                     <td class="px-3 py-2 font-mono">{{ call.method }}</td>
                     <td class="px-3 py-2 font-mono">{{ call.endpoint }}</td>
-                    <td class="px-3 py-2">{{ call.statusCode }}</td>
+                    <td class="px-3 py-2">
+                      <span :class="call.statusCode >= 400 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">{{ call.statusCode }}</span>
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -454,7 +492,7 @@
           </div>
 
           <div v-if="!usageStats?.totalCalls" class="text-center py-8 text-gray-500 dark:text-gray-400">
-            No usage history available yet
+            No calls in the last {{ usageStats?.windowDays || 30 }} days
           </div>
         </div>
 
@@ -487,7 +525,9 @@
               placeholder="Add notes about this key's purpose, where it's used, etc."
               :rows="5"
               size="lg"
+              :maxlength="DESCRIPTION_MAX"
             />
+            <p class="mt-1 text-right text-xs text-gray-400">{{ editKeyDescription.length }}/{{ DESCRIPTION_MAX }}</p>
           </div>
         </div>
 
@@ -517,6 +557,7 @@ const toast = useToast()
 
 // State
 const loading = ref(true)
+const loadError = ref('')
 const apiKeys = ref<any[]>([])
 const showCreateModal = ref(false)
 const showDeleteModal = ref(false)
@@ -555,15 +596,32 @@ const expirationOptions = [
   { label: 'Never expires', value: 'never' }
 ]
 const scopeOptions = [
-  { label: 'Accounts', value: 'accounts:read' },
-  { label: 'Costs', value: 'costs:read' },
-  { label: 'Forecasts', value: 'forecast:read' },
-  { label: 'Security', value: 'security:read' }
+  { label: 'Accounts', value: 'accounts:read', help: 'Accounts and organization structure' },
+  { label: 'Costs', value: 'costs:read', help: 'Cost summaries, tag costs and tag keys' },
+  { label: 'Forecasts', value: 'forecast:read', help: 'AWS and Finance forecasts' },
+  { label: 'Security', value: 'security:read', help: 'Security Hub and Inspector findings' }
 ]
+const DESCRIPTION_MAX = 1000
+
+const errorMessage = (error: any, fallback: string) =>
+  error?.data?.error?.message || error?.data?.statusMessage || error?.statusMessage || fallback
+
+// Usable keys first, newest first within each group.
+const sortedKeys = computed(() => [...apiKeys.value].sort((left, right) => {
+  const usable = (key: any) => key.isActive && !isExpired(key) ? 0 : 1
+  return usable(left) - usable(right) ||
+    new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+}))
+
+const topEndpoints = computed<[string, number][]>(() =>
+  Object.entries<number>(usageStats.value?.callsByEndpoint || {})
+    .sort(([, left], [, right]) => right - left)
+    .slice(0, 10))
 
 // Load API keys
 const loadKeys = async () => {
   loading.value = true
+  loadError.value = ''
   try {
     const response = await $fetch('/api/auth/api-keys')
     if (response.success) {
@@ -571,9 +629,10 @@ const loadKeys = async () => {
     }
   } catch (error: any) {
     logger.error('Failed to load API keys:', error)
+    loadError.value = errorMessage(error, 'Failed to load API keys')
     toast.add({
       title: 'Error',
-      description: 'Failed to load API keys',
+      description: errorMessage(error, 'Failed to load API keys'),
       color: 'red',
       icon: 'i-heroicons-x-circle'
     })
@@ -589,17 +648,16 @@ const createKey = async () => {
     const expiresInDays = newKeyExpiration.value === 'never' ? undefined : parseInt(newKeyExpiration.value)
 
     const metadata: any = {}
-    if (newKeyDescription.value) {
-      metadata.description = newKeyDescription.value
+    if (newKeyDescription.value.trim()) {
+      metadata.description = newKeyDescription.value.trim()
     }
 
     const response = await $fetch('/api/auth/api-keys/create', {
       method: 'POST',
       body: {
-        name: newKeyName.value,
+        name: newKeyName.value.trim(),
         scopes: newKeyScopes.value,
-        expiresInDays,
-        neverExpires: newKeyExpiration.value === 'never',
+        ...(expiresInDays ? { expiresInDays } : { neverExpires: true }),
         metadata
       }
     })
@@ -617,7 +675,7 @@ const createKey = async () => {
     logger.error('Failed to create API key:', error)
     toast.add({
       title: 'Error',
-      description: error.data?.statusMessage || 'Failed to create API key',
+      description: errorMessage(error, 'Failed to create API key'),
       color: 'red',
       icon: 'i-heroicons-x-circle'
     })
@@ -629,17 +687,27 @@ const createKey = async () => {
 // Close create modal and reload keys
 const closeCreateModal = () => {
   showCreateModal.value = false
+}
+
+// However the modal closes (Done, Escape, clicking outside), never leave the
+// secret behind for the next time it opens, and show the new key in the list.
+watch(showCreateModal, (open) => {
+  if (open) return
+  const created = Boolean(createdKey.value)
   createdKey.value = ''
+  copied.value = false
   newKeyName.value = ''
   newKeyDescription.value = ''
   newKeyExpiration.value = '90'
   newKeyScopes.value = ['accounts:read']
-  loadKeys()
-}
+  if (created) loadKeys()
+})
 
 // View usage history
 const viewUsage = async (key: any) => {
   selectedKey.value = key
+  usageStats.value = null
+  usageHistory.value = []
   loadingUsage.value = true
   showUsageModal.value = true
 
@@ -653,7 +721,7 @@ const viewUsage = async (key: any) => {
     logger.error('Failed to load usage:', error)
     toast.add({
       title: 'Error',
-      description: 'Failed to load usage history',
+      description: errorMessage(error, 'Failed to load usage history'),
       color: 'red',
       icon: 'i-heroicons-x-circle'
     })
@@ -679,8 +747,7 @@ const saveDescription = async () => {
       method: 'PATCH',
       body: {
         metadata: {
-          ...selectedKey.value.metadata,
-          description: editKeyDescription.value
+          description: editKeyDescription.value.trim()
         }
       }
     })
@@ -698,7 +765,7 @@ const saveDescription = async () => {
     logger.error('Failed to update description:', error)
     toast.add({
       title: 'Error',
-      description: 'Failed to update description',
+      description: errorMessage(error, 'Failed to update description'),
       color: 'red',
       icon: 'i-heroicons-x-circle'
     })
@@ -708,8 +775,13 @@ const saveDescription = async () => {
 }
 
 // Copy to clipboard
-const copyToClipboard = () => {
-  navigator.clipboard.writeText(createdKey.value)
+const copyToClipboard = async () => {
+  try {
+    await navigator.clipboard.writeText(createdKey.value)
+  } catch {
+    toast.add({ title: 'Copy failed', description: 'Select the key and copy it manually.', color: 'amber' })
+    return
+  }
   copied.value = true
   setTimeout(() => {
     copied.value = false
@@ -745,7 +817,7 @@ const deleteKey = async () => {
     logger.error('Failed to delete API key:', error)
     toast.add({
       title: 'Error',
-      description: error.data?.statusMessage || 'Failed to revoke API key',
+      description: errorMessage(error, 'Failed to revoke API key'),
       color: 'red',
       icon: 'i-heroicons-x-circle'
     })

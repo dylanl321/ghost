@@ -8,6 +8,7 @@ import { STSClient } from '@aws-sdk/client-sts'
 import { marshall } from '@aws-sdk/util-dynamodb'
 import tagCostsHandler from '../../server/api/v1/costs/tags.get'
 import tagKeysHandler from '../../server/api/v1/costs/tag-keys.get'
+import financialForecastHandler from '../../server/api/v1/forecasts/financial.get'
 import { clearClientCache } from '../../server/lib/aws-client-factory'
 import { costCache } from '../../server/utils/cache-manager'
 import { defineV1Alias } from '../../server/utils/v1-route'
@@ -233,4 +234,84 @@ test('tag discovery returns an empty current month on day one without calling AW
   assert.equal(response.status, 200)
   assert.deepEqual(response.data.data.tags, [])
   assert.equal(provider.mock.callCount(), 0)
+})
+
+test('GovCloud-only selections are reported instead of silently dropped from cost totals', async (t) => {
+  await mockProviders(t)
+  process.env.AWS_GOVCLOUD_ACCESS_KEY_ID = 'test-gov-key'
+  process.env.AWS_GOVCLOUD_SECRET_ACCESS_KEY = 'test-gov-secret'
+  t.mock.method(DynamoDBClient.prototype, 'send', async () => ({
+    Items: [
+      marshall({ requestID: 42, awsStandardAccountID: '111111111111', awsGovCloudAccountID: '333333333333', projectName: 'Production' }),
+      marshall({ requestID: 43, awsGovCloudAccountID: '444444444444', projectName: 'GovCloud Only' })
+    ]
+  }))
+  t.mock.method(OrganizationsClient.prototype, 'send', async () => ({}))
+  const alias = defineV1Alias('/api/v1/costs/test', 'costs:read', 'Test', () => ({ success: true, data: [] }), [], true)
+  const response = await request(alias, '/api/v1/costs/test?accountIdentifiers=333333333333,444444444444')
+  assert.equal(response.status, 200)
+  assert.deepEqual(response.data.metadata.errors.map((error: any) => [error.code, error.account.govCloudAccountId]), [
+    ['MISSING_ENVIRONMENT_ACCOUNT_ID', '444444444444']
+  ])
+})
+
+function forecastRow(accountId: string, id: string, overrides: Record<string, unknown> = {}) {
+  return {
+    id, accountId, accountName: `Account ${accountId}`, status: 'active',
+    forecasts: { '2026-11': 100, '2026-12': 120 }, totalAmount: 220,
+    PK: `FORECAST#${accountId}`, SK: `ACCOUNT#${id}`, GSI1PK: 'STATUS#active', GSI1SK: 'x', GSI2PK: 'ENCLAVE#E', GSI2SK: 'x',
+    ...overrides
+  }
+}
+
+test('financial forecasts return every page org-wide without internal keys', async (t) => {
+  await mockProviders(t)
+  process.env.AWS_GOVCLOUD_ACCESS_KEY_ID = 'test-gov-key'
+  process.env.AWS_GOVCLOUD_SECRET_ACCESS_KEY = 'test-gov-secret'
+  let scans = 0
+  t.mock.method(DynamoDBClient.prototype, 'send', async (command: any) => {
+    assert.equal(command.input.TableName, 'ghost-dashboard-forecast-data')
+    scans++
+    return scans === 1
+      ? { Items: [marshall(forecastRow('111111111111', 'a'))], LastEvaluatedKey: { PK: { S: 'x' } } }
+      : { Items: [marshall(forecastRow('222222222222', 'b', { status: 'archived', forecasts: { '2027-01': 5 } }))] }
+  })
+  const all = await request(financialForecastHandler, '/api/v1/forecasts/financial', { ...auth, scopes: ['forecast:read'] })
+  assert.equal(all.status, 200)
+  assert.equal(scans, 2)
+  assert.deepEqual(all.data.data.map((row: any) => row.id), ['a', 'b'])
+  assert.equal(all.data.data[0].PK, undefined)
+  assert.equal(all.data.metadata.truncated, false)
+
+  scans = 0
+  const filtered = await request(financialForecastHandler, '/api/v1/forecasts/financial?status=active&period=2026-12', { ...auth, scopes: ['forecast:read'] })
+  assert.deepEqual(filtered.data.data.map((row: any) => row.id), ['a'])
+
+  const invalid = await request(financialForecastHandler, '/api/v1/forecasts/financial?period=Dec-26', { ...auth, scopes: ['forecast:read'] })
+  assert.equal(invalid.status, 400)
+  assert.equal(invalid.data.error.code, 'BAD_REQUEST')
+})
+
+test('financial forecasts for selected accounts match commercial and GovCloud IDs', async (t) => {
+  await mockProviders(t)
+  process.env.AWS_GOVCLOUD_ACCESS_KEY_ID = 'test-gov-key'
+  process.env.AWS_GOVCLOUD_SECRET_ACCESS_KEY = 'test-gov-secret'
+  const forecastKeys: string[] = []
+  t.mock.method(DynamoDBClient.prototype, 'send', async (command: any) => {
+    if (command.input.TableName === 'ghost-dashboard-forecast-data') {
+      const pk = command.input.ExpressionAttributeValues[':pk'].S
+      forecastKeys.push(pk)
+      return { Items: pk === 'FORECAST#444444444444' ? [marshall(forecastRow('444444444444', 'gov-only'))] : [] }
+    }
+    return { Items: [
+      marshall({ requestID: 42, awsStandardAccountID: '111111111111', awsGovCloudAccountID: '333333333333', projectName: 'Production' }),
+      marshall({ requestID: 43, awsGovCloudAccountID: '444444444444', projectName: 'GovCloud Only' })
+    ] }
+  })
+  t.mock.method(OrganizationsClient.prototype, 'send', async () => ({}))
+  const response = await request(financialForecastHandler, '/api/v1/forecasts/financial?accountIdentifiers=333333333333,444444444444', { ...auth, scopes: ['forecast:read'] })
+  assert.equal(response.status, 200)
+  assert.deepEqual(forecastKeys.sort(), ['FORECAST#111111111111', 'FORECAST#333333333333', 'FORECAST#444444444444'])
+  assert.deepEqual(response.data.data.map((row: any) => row.id), ['gov-only'])
+  assert.equal(response.data.metadata.scope, 'selected-accounts')
 })
