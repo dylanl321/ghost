@@ -19,7 +19,7 @@ import {
   filterAccounts,
   hasActiveFilters
 } from '../../utils/account-filters'
-import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
+import { sendSuccess, sendApiError, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
 import { logger } from '../../utils/logger'
 
@@ -231,9 +231,10 @@ export default defineEventHandler(handleAsync(async (event) => {
         return errors.badRequest(event, 'Invalid source parameter')
     }
     
-    // Check if any accounts were found
+    // Nothing is filtered yet, so an empty list means neither DynamoDB nor
+    // Organizations answered (both log the cause), not an empty organization.
     if (!accounts || accounts.length === 0) {
-      return errors.notFound(event, 'No accounts found matching the specified criteria')
+      return sendApiError(event, 'SERVICE_UNAVAILABLE', 'Account data is unavailable: the account registry and AWS Organizations returned no accounts', 503)
     }
     
     // Only apply advanced filtering to unified accounts
