@@ -135,30 +135,15 @@ export default defineEventHandler(handleAsync(async (event) => {
         },
         environment
       )
-    } else if (period) {
-      // Query by period using GSI1
+    } else if (status) {
+      // Uploads index status on GSI1 (GSI1PK = STATUS#<status>); GSI2 is the enclave index.
       result = await queryItems(
         {
           tableName: 'ghost-dashboard-forecast-data',
           indexName: 'GSI1',
           queryExpression: 'GSI1PK = :gsi1pk',
           expressionAttributeValues: {
-            ':gsi1pk': `PERIOD#${period}`
-          },
-          limit,
-          nextToken
-        },
-        environment
-      )
-    } else if (status) {
-      // Query by status using GSI2
-      result = await queryItems(
-        {
-          tableName: 'ghost-dashboard-forecast-data',
-          indexName: 'GSI2',
-          queryExpression: 'GSI2PK = :gsi2pk',
-          expressionAttributeValues: {
-            ':gsi2pk': `STATUS#${status}`
+            ':gsi1pk': `STATUS#${status}`
           },
           limit,
           nextToken
@@ -199,37 +184,23 @@ export default defineEventHandler(handleAsync(async (event) => {
           }
         }
         
+        const items = period
+          ? allItems.filter(item => item.forecasts && Object.hasOwn(item.forecasts, period))
+          : allItems
         result = {
-          items: allItems,
-          count: allItems.length,
+          items,
+          count: items.length,
           nextToken: undefined
         }
       } else {
         // Original logic for paginated results
         let filterExpression: string | undefined
-        const expressionAttributeValues: Record<string, any> = {}
-
-        if (accountId || period || status) {
-          const conditions: string[] = []
-          
-          if (accountId) {
-            conditions.push('accountId = :accountId')
-            expressionAttributeValues[':accountId'] = accountId
-          }
-          
-          if (period) {
-            conditions.push('period = :period')
-            expressionAttributeValues[':period'] = period
-          }
-          
-          if (status) {
-            conditions.push('#status = :status')
-            expressionAttributeValues[':status'] = status
-          }
-
-          if (conditions.length > 0) {
-            filterExpression = conditions.join(' AND ')
-          }
+        const expressionAttributeNames: Record<string, string> = {}
+        if (period) {
+          // Forecast months are keys of the forecasts map (YYYY-MM).
+          filterExpression = 'attribute_exists(#forecasts.#period)'
+          expressionAttributeNames['#forecasts'] = 'forecasts'
+          expressionAttributeNames['#period'] = period
         }
 
         result = await scanItems(
@@ -237,7 +208,8 @@ export default defineEventHandler(handleAsync(async (event) => {
           filterExpression,
           limit,
           nextToken,
-          environment
+          environment,
+          filterExpression ? expressionAttributeNames : undefined
         )
       }
     }

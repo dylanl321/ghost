@@ -35,12 +35,12 @@ const openApiSpec = {
         type: 'apiKey',
         in: 'header',
         name: 'x-api-key',
-        description: 'API key for programmatic access'
+        description: 'Personal API key from Settings > API Access. Read-only; valid only on /api/v1 endpoints.'
       },
       OIDCAuth: {
         type: 'openIdConnect',
         openIdConnectUrl: '/.well-known/openid-configuration',
-        description: 'Entra ID / Azure AD authentication (for web browser access)'
+        description: 'Your signed-in GHOST browser session (Entra ID). Swagger UI sends it automatically when you are signed in; scripts should use ApiKeyAuth.'
       }
     },
     schemas: {
@@ -53,7 +53,7 @@ const openApiSpec = {
             properties: {
               code: {
                 type: 'string',
-                description: 'BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, RATE_LIMITED, SERVICE_UNAVAILABLE (retry after the Retry-After header), or INTERNAL_ERROR.',
+                description: 'BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, UPSTREAM_ERROR, SERVICE_UNAVAILABLE (retry; honor Retry-After when present), or INTERNAL_ERROR.',
                 example: 'FORBIDDEN'
               },
               message: { type: 'string' },

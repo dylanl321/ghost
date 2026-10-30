@@ -39,11 +39,18 @@ export function defineV1Alias(
   const inheritedParameters = (source?.parameters || []).filter((parameter: any) =>
     !accountScoped || !['accountId', 'accountIds', 'accountIdentifiers', 'adminOf', 'ownedBy'].includes(parameter.name)
   )
+  const seenParameters = new Set<string>()
   const routeParameters = [
     ...(accountScoped ? integrationAccountParameters : []),
     ...inheritedParameters,
     ...parameters
-  ].map(parameter => options.queryDefaults?.[parameter.name] === undefined
+  ].filter((parameter: any) => {
+    // An alias may restate a parameter its source already documents.
+    const key = parameter.$ref || `${parameter.in}:${parameter.name}`
+    if (seenParameters.has(key)) return false
+    seenParameters.add(key)
+    return true
+  }).map(parameter => options.queryDefaults?.[parameter.name] === undefined
     ? parameter
     : { ...parameter, schema: { ...parameter.schema, default: options.queryDefaults[parameter.name] } })
 
