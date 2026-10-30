@@ -3,22 +3,13 @@
  * Get current user's notifications with optional filtering and pagination
  */
 
-import { getUserSession } from '../../utils/entra/session'
-import { getUserNotifications } from '../../utils/notification-service'
+import { getUserNotifications, requireNotificationUserId } from '../../utils/notification-service'
 import type { NotificationCategory, NotificationStatus } from '#shared/types/notifications'
 import { logger } from '../../utils/logger'
 
 export default defineEventHandler(async (event) => {
   try {
-    const session = await getUserSession(event)
-    if (!session?.user) {
-      throw createError({ statusCode: 401, message: 'Authentication required' })
-    }
-
-    const userId = session.user.email || session.user.id || session.user.sub
-    if (!userId) {
-      throw createError({ statusCode: 401, message: 'User identification failed' })
-    }
+    const userId = await requireNotificationUserId(event)
 
     const query = getQuery(event)
 

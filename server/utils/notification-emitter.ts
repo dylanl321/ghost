@@ -10,6 +10,10 @@ import { EventEmitter } from 'node:events'
 import type { ServerResponse } from 'node:http'
 import { logger } from './logger'
 
+function normalizeUserId(userId: string): string {
+  return userId.toLowerCase()
+}
+
 class NotificationEmitter extends EventEmitter {
   private connections = new Map<string, Set<ServerResponse>>()
 
@@ -17,7 +21,10 @@ class NotificationEmitter extends EventEmitter {
    * Register an SSE connection for a user.
    * Returns a cleanup function to call on disconnect.
    */
-  registerConnection(userId: string, res: ServerResponse): () => void {
+  registerConnection(rawUserId: string, res: ServerResponse): () => void {
+    // Notifications are stored and emitted under the lowercased id; a stream
+    // registered under a mixed-case email never received a push.
+    const userId = normalizeUserId(rawUserId)
     if (!this.connections.has(userId)) {
       this.connections.set(userId, new Set())
     }
@@ -30,7 +37,8 @@ class NotificationEmitter extends EventEmitter {
   /**
    * Remove a connection (called on disconnect or write error)
    */
-  removeConnection(userId: string, res: ServerResponse): void {
+  removeConnection(rawUserId: string, res: ServerResponse): void {
+    const userId = normalizeUserId(rawUserId)
     const userConns = this.connections.get(userId)
     if (userConns) {
       userConns.delete(res)
@@ -44,7 +52,8 @@ class NotificationEmitter extends EventEmitter {
    * Push a notification to all connected SSE streams for a user.
    * Called by sendUserNotification() after successful DynamoDB write.
    */
-  emitNotification(userId: string, notification: any): void {
+  emitNotification(rawUserId: string, notification: any): void {
+    const userId = normalizeUserId(rawUserId)
     const streams = this.connections.get(userId)
     if (!streams || streams.size === 0) return
 

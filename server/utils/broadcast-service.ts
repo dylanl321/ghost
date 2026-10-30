@@ -96,7 +96,7 @@ export async function createBroadcast(
     let delivered = 0
     for (const userId of targetUserIds) {
       try {
-        await sendUserNotification({
+        const result = await sendUserNotification({
           userId,
           category: broadcast.category,
           title: broadcast.title,
@@ -104,7 +104,9 @@ export async function createBroadcast(
           severity: broadcast.severity,
           metadata: { broadcastId }
         })
-        delivered++
+        // sendUserNotification reports failures in its result, not by throwing
+        if (result.success && !result.skipped) delivered++
+        else logger.warn(`[Broadcast] Not delivered to ${userId}: ${result.error || result.reason || 'unknown reason'}`)
       } catch (err) {
         logger.warn(`[Broadcast] Failed to deliver to ${userId}:`, err)
       }

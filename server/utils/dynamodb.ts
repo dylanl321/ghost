@@ -110,12 +110,13 @@ export async function updateItem(
   key: Record<string, any>,
   updates: Record<string, any>,
   environment: 'commercial' | 'govcloud' = 'govcloud',
-  accountId?: string
+  accountId?: string,
+  removeAttributes: string[] = []
 ) {
   const client = await getDynamoDBClient(environment, undefined, accountId)
   
-  // Sanitize updates before marshalling
-  const sanitizedUpdates = sanitizeForDynamoDB(updates)
+  // Sanitize updates before marshalling (an all-empty object sanitizes to undefined)
+  const sanitizedUpdates = sanitizeForDynamoDB(updates) || {}
 
   // Debug logging for serialization issues
   logger.info('[DynamoDB updateItem] Pre-sanitization data:', {
@@ -126,7 +127,7 @@ export async function updateItem(
   })
 
   // Check if all fields were removed during sanitization
-  if (Object.keys(sanitizedUpdates).length === 0) {
+  if (Object.keys(sanitizedUpdates).length === 0 && removeAttributes.length === 0) {
     logger.warn('[DynamoDB updateItem] All update fields were removed during sanitization', {
       tableName,
       originalUpdates: updates
@@ -156,6 +157,14 @@ export async function updateItem(
     keyKeys: Object.keys(key)
   })
 
+  // null values are stripped by sanitization, so attributes that must be
+  // deleted (e.g. a sparse GSI key) are passed explicitly and REMOVEd.
+  const removeParts = removeAttributes.map((field, index) => {
+    const attrName = `#rm${index}`
+    expressionAttributeNames[attrName] = field
+    return attrName
+  })
+
   // Marshall all values at once to ensure proper DynamoDB format
   const expressionAttributeValues = marshall(valueMap, {
     removeUndefinedValues: true,
@@ -165,9 +174,12 @@ export async function updateItem(
   const commandParams = {
     TableName: tableName,
     Key: marshall(key, { removeUndefinedValues: true, convertEmptyValues: true }),
-    UpdateExpression: `SET ${updateExpressionParts.join(', ')}`,
+    UpdateExpression: [
+      updateExpressionParts.length > 0 ? `SET ${updateExpressionParts.join(', ')}` : '',
+      removeParts.length > 0 ? `REMOVE ${removeParts.join(', ')}` : ''
+    ].filter(Boolean).join(' '),
     ExpressionAttributeNames: expressionAttributeNames,
-    ExpressionAttributeValues: expressionAttributeValues,
+    ExpressionAttributeValues: Object.keys(expressionAttributeValues).length > 0 ? expressionAttributeValues : undefined,
     ReturnValues: 'ALL_NEW' as const
   }
 
@@ -179,7 +191,7 @@ export async function updateItem(
     attributeValueCount: Object.keys(expressionAttributeValues).length,
     attributeNames: Object.keys(expressionAttributeNames).map(k => `${k}=${expressionAttributeNames[k]}`),
     keySize: JSON.stringify(commandParams.Key).length,
-    valuesSize: JSON.stringify(commandParams.ExpressionAttributeValues).length
+    valuesSize: (JSON.stringify(commandParams.ExpressionAttributeValues) || '').length
   })
 
   // Log the actual marshalled values (first 500 chars for debugging)
@@ -210,7 +222,7 @@ export async function updateItem(
     logger.error('[DynamoDB updateItem] Failed command details:', {
       key: JSON.stringify(commandParams.Key),
       expressionAttributeNames: JSON.stringify(commandParams.ExpressionAttributeNames),
-      expressionAttributeValuesKeys: Object.keys(commandParams.ExpressionAttributeValues)
+      expressionAttributeValuesKeys: Object.keys(commandParams.ExpressionAttributeValues || {})
     })
 
     throw error
