@@ -3,13 +3,14 @@
  * Get IDC user sessions for an account
  */
 
-import { sendSuccess, errors, parseQueryParams } from '../../../../utils/api-response'
+import { sendSuccess, errors, parseQueryParams, validateEnvironment } from '../../../../utils/api-response'
 import { getClient } from '../../../../lib/aws-client-factory'
 import {
   SSOAdminClient,
   ListInstancesCommand,
   ListPermissionSetsCommand,
-  ListAccountAssignmentsCommand
+  ListAccountAssignmentsCommand,
+  type AccountAssignment
 } from '@aws-sdk/client-sso-admin'
 import {
   IdentitystoreClient,
@@ -20,9 +21,10 @@ import { logger } from '../../../../utils/logger'
 export default defineEventHandler(async (event) => {
   try {
     const accountId = getRouterParam(event, 'accountId')
-    if (!accountId) return errors.badRequest(event, 'Account ID is required')
+    if (!accountId || !/^\d{12}$/.test(accountId)) return errors.badRequest(event, 'A 12-digit account ID is required')
 
     const { environment } = parseQueryParams(event)
+    if (!validateEnvironment(environment)) return errors.badRequest(event, 'environment must be commercial or govcloud')
 
     // Get SSO Admin client
     const ssoAdmin = await getClient<SSOAdminClient>(environment, 'sso-admin')
@@ -37,23 +39,38 @@ export default defineEventHandler(async (event) => {
     const instanceArn = instance.InstanceArn!
     const identityStoreId = instance.IdentityStoreId!
 
-    // Get permission sets
-    const permissionSets = await ssoAdmin.send(new ListPermissionSetsCommand({
-      InstanceArn: instanceArn
-    }))
+    // Both list calls page; reading only the first page dropped assignments
+    // once an instance had more permission sets than one page holds.
+    const permissionSetArns: string[] = []
+    let permissionSetToken: string | undefined
+    do {
+      const page = await ssoAdmin.send(new ListPermissionSetsCommand({
+        InstanceArn: instanceArn,
+        NextToken: permissionSetToken
+      }))
+      permissionSetArns.push(...(page.PermissionSets || []))
+      permissionSetToken = page.NextToken
+    } while (permissionSetToken)
 
     const sessions = []
     const identityStore = await getClient<IdentitystoreClient>(environment, 'identitystore')
 
     // For each permission set, get account assignments
-    for (const permissionSetArn of (permissionSets.PermissionSets || [])) {
-      const assignments = await ssoAdmin.send(new ListAccountAssignmentsCommand({
-        InstanceArn: instanceArn,
-        AccountId: accountId,
-        PermissionSetArn: permissionSetArn
-      }))
+    for (const permissionSetArn of permissionSetArns) {
+      const accountAssignments: AccountAssignment[] = []
+      let assignmentToken: string | undefined
+      do {
+        const page = await ssoAdmin.send(new ListAccountAssignmentsCommand({
+          InstanceArn: instanceArn,
+          AccountId: accountId,
+          PermissionSetArn: permissionSetArn,
+          NextToken: assignmentToken
+        }))
+        accountAssignments.push(...(page.AccountAssignments || []))
+        assignmentToken = page.NextToken
+      } while (assignmentToken)
 
-      for (const assignment of (assignments.AccountAssignments || [])) {
+      for (const assignment of accountAssignments) {
         if (assignment.PrincipalType !== 'USER') continue
 
         try {
