@@ -222,55 +222,6 @@ export async function getOrganizationInfo(
 }
 
 /**
- * List all organizational units for a given parent.
- * Returns an empty array on error (non-fatal).
- */
-export async function listOrganizationalUnits(
-  parentId: string,
-  environment: AWSEnvironmentType = 'commercial'
-): Promise<OrganizationalUnit[]> {
-  try {
-    const orgAccountId = getOrganizationsAccountId(environment)
-    const region = environment === 'commercial' ? 'us-east-1' : 'us-gov-west-1'
-    const client = await getOrganizationsClient(environment, region, orgAccountId)
-
-    const { ListOrganizationalUnitsForParentCommand } = await import('@aws-sdk/client-organizations')
-    const ous: OrganizationalUnit[] = []
-    let nextToken: string | undefined
-
-    do {
-      const response = await withOrgRetry(
-        () => client.send(
-          new ListOrganizationalUnitsForParentCommand({
-            ParentId: parentId,
-            NextToken: nextToken,
-          })
-        ),
-        `ListOrganizationalUnitsForParent(${parentId})`
-      )
-
-      if (response.OrganizationalUnits) {
-        for (const ou of response.OrganizationalUnits) {
-          ous.push({
-            id: ou.Id!,
-            arn: ou.Arn!,
-            name: ou.Name!,
-            parentId: parentId,
-          })
-        }
-      }
-
-      nextToken = response.NextToken
-    } while (nextToken)
-
-    return ous
-  } catch (error) {
-    logger.error(`Failed to list OUs for parent ${parentId}:`, error)
-    return []
-  }
-}
-
-/**
  * Get organizational unit tree.
  *
  * Returns an OUTreeResult with:
@@ -331,7 +282,14 @@ export async function getOrganizationalUnitTree(
         }),
         limit(async () => {
           await new Promise(resolve => setTimeout(resolve, OU_WALK_INTER_CALL_DELAY_MS))
-          return listAccountsInOU(parentId, environment)
+          // A failed account listing leaves this node's accounts out, so the
+          // tree must be reported as degraded rather than complete.
+          return listAccountsInOU(parentId, environment).catch((error) => {
+            degraded = true
+            failedOUs.push(parentId)
+            logger.warn(`[Organizations] Failed to list accounts in OU ${parentId}: ${(error as Error).message ?? error}`)
+            return [] as any[]
+          })
         }),
       ])
 
@@ -431,45 +389,40 @@ async function listOrganizationalUnitsForTree(
 // ---------------------------------------------------------------------------
 
 /**
- * List accounts in an organizational unit.
- * Returns empty array on error (non-fatal).
+ * List accounts in an organizational unit. Throws on failure so the tree
+ * walk can mark itself degraded.
  */
 export async function listAccountsInOU(
   ouId: string,
   environment: AWSEnvironmentType = 'commercial'
 ): Promise<any[]> {
-  try {
-    const orgAccountId = getOrganizationsAccountId(environment)
-    const region = environment === 'commercial' ? 'us-east-1' : 'us-gov-west-1'
-    const client = await getOrganizationsClient(environment, region, orgAccountId)
+  const orgAccountId = getOrganizationsAccountId(environment)
+  const region = environment === 'commercial' ? 'us-east-1' : 'us-gov-west-1'
+  const client = await getOrganizationsClient(environment, region, orgAccountId)
 
-    const { ListAccountsForParentCommand } = await import('@aws-sdk/client-organizations')
-    const accounts: any[] = []
-    let nextToken: string | undefined
+  const { ListAccountsForParentCommand } = await import('@aws-sdk/client-organizations')
+  const accounts: any[] = []
+  let nextToken: string | undefined
 
-    do {
-      const response = await withOrgRetry(
-        () => client.send(
-          new ListAccountsForParentCommand({
-            ParentId: ouId,
-            NextToken: nextToken,
-          })
-        ),
-        `ListAccountsForParent(${ouId})`
-      )
+  do {
+    const response = await withOrgRetry(
+      () => client.send(
+        new ListAccountsForParentCommand({
+          ParentId: ouId,
+          NextToken: nextToken,
+        })
+      ),
+      `ListAccountsForParent(${ouId})`
+    )
 
-      if (response.Accounts) {
-        accounts.push(...response.Accounts)
-      }
+    if (response.Accounts) {
+      accounts.push(...response.Accounts)
+    }
 
-      nextToken = response.NextToken
-    } while (nextToken)
+    nextToken = response.NextToken
+  } while (nextToken)
 
-    return accounts
-  } catch (error) {
-    logger.warn(`Failed to list accounts in OU ${ouId}:`, error)
-    return []
-  }
+  return accounts
 }
 
 /**
@@ -496,6 +449,12 @@ export async function getAccountOU(
 
     const parent = response.Parents[0]
 
+    // An account directly under the root has no OU to describe;
+    // DescribeOrganizationalUnit rejects root IDs.
+    if (parent.Type === 'ROOT') {
+      return { id: parent.Id!, arn: '', name: 'Root' }
+    }
+
     // Get OU details
     const { DescribeOrganizationalUnitCommand } = await import('@aws-sdk/client-organizations')
     const ouResponse = await withOrgRetry(
@@ -521,106 +480,13 @@ export async function getAccountOU(
 }
 
 /**
- * Move account to a different organizational unit
- */
-export async function moveAccount(
-  accountId: string,
-  sourceOuId: string,
-  targetOuId: string,
-  environment: AWSEnvironmentType = 'commercial'
-): Promise<boolean> {
-  try {
-    const orgAccountId = getOrganizationsAccountId(environment)
-    const region = environment === 'commercial' ? 'us-east-1' : 'us-gov-west-1'
-    const client = await getOrganizationsClient(environment, region, orgAccountId)
-
-    const { MoveAccountCommand } = await import('@aws-sdk/client-organizations')
-    await client.send(new MoveAccountCommand({
-      AccountId: accountId,
-      SourceParentId: sourceOuId,
-      DestinationParentId: targetOuId,
-    }))
-
-    return true
-  } catch (error) {
-    logger.error(`Failed to move account ${accountId}:`, error)
-    return false
-  }
-}
-
-/**
- * Create a new organizational unit
- */
-export async function createOrganizationalUnit(
-  parentId: string,
-  name: string,
-  environment: AWSEnvironmentType = 'commercial'
-): Promise<OrganizationalUnit | null> {
-  try {
-    const orgAccountId = getOrganizationsAccountId(environment)
-    const region = environment === 'commercial' ? 'us-east-1' : 'us-gov-west-1'
-    const client = await getOrganizationsClient(environment, region, orgAccountId)
-
-    const { CreateOrganizationalUnitCommand } = await import('@aws-sdk/client-organizations')
-    const response = await client.send(new CreateOrganizationalUnitCommand({
-      ParentId: parentId,
-      Name: name,
-    }))
-
-    if (!response.OrganizationalUnit) return null
-
-    return {
-      id: response.OrganizationalUnit.Id!,
-      arn: response.OrganizationalUnit.Arn!,
-      name: response.OrganizationalUnit.Name!,
-      parentId: parentId,
-    }
-  } catch (error) {
-    logger.error(`Failed to create OU ${name}:`, error)
-    return null
-  }
-}
-
-/**
- * Get service control policies for an account
+ * Get service control policies attached directly to an account
  */
 export async function getAccountPolicies(
   accountId: string,
   environment: AWSEnvironmentType = 'commercial'
 ): Promise<any[]> {
-  try {
-    const orgAccountId = getOrganizationsAccountId(environment)
-    const region = environment === 'commercial' ? 'us-east-1' : 'us-gov-west-1'
-    const client = await getOrganizationsClient(environment, region, orgAccountId)
-
-    const { ListPoliciesForTargetCommand } = await import('@aws-sdk/client-organizations')
-    const policies: any[] = []
-    let nextToken: string | undefined
-
-    do {
-      const response = await withOrgRetry(
-        () => client.send(
-          new ListPoliciesForTargetCommand({
-            TargetId: accountId,
-            Filter: 'SERVICE_CONTROL_POLICY',
-            NextToken: nextToken,
-          })
-        ),
-        `ListPoliciesForTarget(${accountId})`
-      )
-
-      if (response.Policies) {
-        policies.push(...response.Policies)
-      }
-
-      nextToken = response.NextToken
-    } while (nextToken)
-
-    return policies
-  } catch (error) {
-    logger.error(`Failed to get policies for account ${accountId}:`, error)
-    return []
-  }
+  return getAttachedPolicies(accountId, 'ACCOUNT', environment)
 }
 
 /**
@@ -712,33 +578,52 @@ export async function getAttachedPolicies(
   }
 }
 
+export interface ScpPolicyInfo {
+  id: string
+  name: string
+  description?: string
+  type: string
+  arn?: string
+  source: 'direct' | 'inherited'
+  attachedAt: string
+}
+
 /**
- * Tag an account in Organizations
+ * Collect the SCPs that apply to a target: those attached to it directly and
+ * those inherited from every node on its OU path. allPolicies is the
+ * de-duplicated union. Shared by the governance and policies routes.
  */
-export async function tagAccount(
-  accountId: string,
-  tags: Record<string, string>,
+export async function collectScpPolicies(
+  target: { id: string, type: 'ACCOUNT' | 'ORGANIZATIONAL_UNIT', label: string },
+  hierarchy: Array<{ id: string, name: string }>,
   environment: AWSEnvironmentType = 'commercial'
-): Promise<boolean> {
-  try {
-    const orgAccountId = getOrganizationsAccountId(environment)
-    const region = environment === 'commercial' ? 'us-east-1' : 'us-gov-west-1'
-    const client = await getOrganizationsClient(environment, region, orgAccountId)
+): Promise<{ directPolicies: ScpPolicyInfo[], inheritedPolicies: ScpPolicyInfo[], allPolicies: ScpPolicyInfo[] }> {
+  const toInfo = (policy: any, source: ScpPolicyInfo['source'], attachedAt: string): ScpPolicyInfo => ({
+    id: policy.id,
+    name: policy.name,
+    description: policy.description,
+    type: policy.type || 'SERVICE_CONTROL_POLICY',
+    arn: policy.arn,
+    source,
+    attachedAt
+  })
 
-    const { TagResourceCommand } = await import('@aws-sdk/client-organizations')
-    const tagList = Object.entries(tags).map(([key, value]) => ({
-      Key: key,
-      Value: value,
-    }))
+  const directPolicies = (await getAttachedPolicies(target.id, target.type, environment))
+    .map(policy => toInfo(policy, 'direct', target.label))
 
-    await client.send(new TagResourceCommand({
-      ResourceId: accountId,
-      Tags: tagList,
-    }))
-
-    return true
-  } catch (error) {
-    logger.error(`Failed to tag account ${accountId}:`, error)
-    return false
+  const inheritedPolicies: ScpPolicyInfo[] = []
+  for (const node of hierarchy) {
+    if (node.id === target.id) continue
+    const policies = await getAttachedPolicies(node.id, 'ORGANIZATIONAL_UNIT', environment)
+    inheritedPolicies.push(...policies.map(policy => toInfo(policy, 'inherited', node.name)))
   }
+
+  const seen = new Set<string>()
+  const allPolicies = [...directPolicies, ...inheritedPolicies].filter((policy) => {
+    if (seen.has(policy.id)) return false
+    seen.add(policy.id)
+    return true
+  })
+
+  return { directPolicies, inheritedPolicies, allPolicies }
 }

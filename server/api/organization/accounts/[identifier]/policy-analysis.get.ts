@@ -75,17 +75,9 @@ export default defineEventHandler(handleAsync(async (event) => {
   // First, get the governance data to find all policies
   let governanceData
   try {
-    // Forward authentication headers for internal API call
-    const headers: Record<string, string> = {}
-    const authHeader = event.node.req.headers.authorization
-    const cookieHeader = event.node.req.headers.cookie
-
-    if (authHeader) headers['authorization'] = authHeader
-    if (cookieHeader) headers['cookie'] = cookieHeader
-
-    governanceData = await $fetch(`/api/organization/accounts/${identifier}/governance`, {
-      query: { environment },
-      headers
+    // event.$fetch forwards the caller's cookie or API key to the internal route.
+    governanceData = await event.$fetch<any>(`/api/organization/accounts/${encodeURIComponent(identifier)}/governance`, {
+      query: { environment }
     })
   } catch (error: any) {
     logger.error('Failed to fetch governance data:', error)

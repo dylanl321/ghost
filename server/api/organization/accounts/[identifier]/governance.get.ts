@@ -20,10 +20,11 @@
  */
 
 import { defineEventHandler, getQuery, getRouterParam } from 'h3'
-import { 
-  getAccountOU, 
+import {
+  getAccountOU,
   getOrganizationalUnitTree,
-  getAttachedPolicies
+  collectScpPolicies,
+  type ScpPolicyInfo
 } from '../../../../utils/organizations'
 import { lookupAccountOptimized } from '../../../../utils/account-lookup-optimized'
 import { sendSuccess, errors, handleAsync } from '../../../../utils/api-response'
@@ -155,14 +156,7 @@ registerEndpoint('/api/organization/accounts/[identifier]/governance', 'GET', {
   }
 })
 
-interface PolicyInfo {
-  id: string
-  name: string
-  description?: string
-  type: string
-  source: 'direct' | 'inherited'
-  attachedAt?: string // OU name where policy is attached
-}
+type PolicyInfo = ScpPolicyInfo
 
 interface EnvironmentGovernance {
   accountLocation: any
@@ -271,7 +265,7 @@ export default defineEventHandler(handleAsync(async (event) => {
       // Trace path from account's OU to root
       const ouHierarchy = []
       
-      // Build hierarchy bottom-up (account OU -> parent OU -> root)
+      // Path runs top-down: root -> parent OUs -> the account's OU
       const findOUPath = (tree: any, targetId: string, path: any[] = []): any[] | null => {
         if (tree.id === targetId) {
           return [...path, { id: tree.id, name: tree.name, type: tree.type || 'OrganizationalUnit' }]
@@ -287,7 +281,7 @@ export default defineEventHandler(handleAsync(async (event) => {
         return null
       }
       
-      const hierarchyPath = findOUPath(orgTree, accountLocation.id)
+      const hierarchyPath = orgTree ? findOUPath(orgTree, accountLocation.id) : null
       if (hierarchyPath) {
         ouHierarchy.push(...hierarchyPath)
       }
@@ -295,63 +289,19 @@ export default defineEventHandler(handleAsync(async (event) => {
       // ================================
       // COLLECT SERVICE CONTROL POLICIES
       // ================================
-      
-      const directPolicies: PolicyInfo[] = []
-      const inheritedPolicies: PolicyInfo[] = []
-      
-      // Get policies attached directly to account
-      try {
-        const accountPolicies = await getAttachedPolicies(accountId, 'ACCOUNT', environment)
-        for (const policy of accountPolicies) {
-          directPolicies.push({
-            id: policy.id,
-            name: policy.name,
-            description: policy.description,
-            type: policy.type,
-            source: 'direct',
-            attachedAt: targetAccount.name
-          })
-        }
-      } catch (error) {
-        logger.warn(`Failed to get account policies for ${accountId} in ${environment}:`, error)
-      }
-      
-      // Get inherited policies from each OU in hierarchy
-      for (const ou of ouHierarchy) {
-        try {
-          const ouPolicies = await getAttachedPolicies(ou.id, 'ORGANIZATIONAL_UNIT', environment)
-          for (const policy of ouPolicies) {
-            inheritedPolicies.push({
-              id: policy.id,
-              name: policy.name,
-              description: policy.description,
-              type: policy.type,
-              source: 'inherited',
-              attachedAt: ou.name
-            })
-          }
-        } catch (error) {
-          logger.warn(`Failed to get OU policies for ${ou.id} in ${environment}:`, error)
-        }
-      }
-      
-      // ================================
-      // COMPILE COMPLETE POLICY SET
-      // ================================
-      
-      const allPolicies = [...directPolicies, ...inheritedPolicies]
-      
-      // Remove duplicates (same policy inherited from multiple levels)
-      const uniquePolicies = allPolicies.filter((policy, index, self) => 
-        index === self.findIndex(p => p.id === policy.id)
+
+      const { directPolicies, inheritedPolicies, allPolicies } = await collectScpPolicies(
+        { id: accountId, type: 'ACCOUNT', label: targetAccount.name || accountId },
+        ouHierarchy,
+        environment
       )
-      
+
       organizationalContext[environment] = {
         accountLocation,
         ouHierarchy,
         directPolicies,
         inheritedPolicies,
-        allPolicies: uniquePolicies
+        allPolicies
       }
       
     } catch (error) {

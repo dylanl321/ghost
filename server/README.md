@@ -73,11 +73,10 @@ Once the server is running, access the interactive API documentation at:
 ### Accounts
 - `POST /api/accounts/lookup` - Lookup account by various criteria
 - `GET /api/accounts/list` - List accounts from DynamoDB/Organizations
-- `POST /api/accounts/sync` - Sync account data between sources
 
 ### Organizations
 - `GET /api/organization/structure` - Get organizational unit hierarchy
-- `GET /api/organization/accounts/[accountId]` - Get account from Organizations
+- `GET /api/organization/accounts/[identifier]/governance` - Get an account's OU path and policies
 
 ## Creating New Endpoints
 
