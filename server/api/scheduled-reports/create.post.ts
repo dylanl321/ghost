@@ -75,7 +75,7 @@ export default defineEventHandler(async (event) => {
     }
 
     const isAdmin = await isUserAdmin(event)
-    if (body.reportType !== 'dataset') await assertSelfOnlyRecipients(event, body.recipients)
+    await assertSelfOnlyRecipients(event, body.recipients)
     await assertCanCreateReport(event)
 
     // Create the report

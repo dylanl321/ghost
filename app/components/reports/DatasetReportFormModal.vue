@@ -262,8 +262,9 @@
                       <UFormGroup label="Frequency">
                         <USelectMenu v-model="form.schedule.frequency" :options="frequencyOptions" value-attribute="value" option-attribute="label" size="sm" />
                       </UFormGroup>
-                      <UFormGroup label="Recipients">
-                         <UInput v-model="recipientsText" placeholder="email@example.com" size="sm" />
+                      <UFormGroup label="Recipients" :help="isAdmin ? 'Separate addresses with commas' : 'Reports will be sent to your email'">
+                         <UInput v-if="isAdmin" v-model="recipientsText" placeholder="email@example.com" size="sm" />
+                         <UInput v-else :model-value="ownEmail" size="sm" disabled />
                       </UFormGroup>
                    </div>
                  </div>
@@ -317,6 +318,11 @@ type CompleteDatasetSelection = {
 type CompleteDatasetReportConfig = Omit<DatasetReportConfig, 'datasets'> & { datasets: CompleteDatasetSelection }
 
 const logger = createLogger('DatasetReportFormModal')
+
+// Non-admins can only send reports to themselves (the server enforces this)
+const { isAdmin } = useUserRoles()
+const { user } = useOidcAuth()
+const ownEmail = computed(() => user.value?.email || '')
 
 const props = defineProps<{
   report?: ScheduledReport | null
@@ -471,6 +477,8 @@ async function handleExecute() {
     useToast().add({ title: 'Incomplete report', description: 'Add a report name and select at least one dataset', color: 'red' })
     return
   }
+
+  if (!isAdmin.value) form.recipients = ownEmail.value ? [ownEmail.value] : []
 
   if (deliveryMode.value === 'schedule' && form.recipients.length === 0) {
     useToast().add({ title: 'Recipient required', description: 'Add at least one delivery email address', color: 'red' })

@@ -9,6 +9,7 @@ import { requireDatasetReportAccess } from '../../utils/dataset-report-access'
 import { logger } from '../../utils/logger'
 import { getScheduledDatasetReportErrors } from '../../utils/dataset-report-validation'
 import { getScheduleErrors } from '../../../shared/utils/report-schedule'
+import { assertSelfOnlyRecipients } from '../../utils/report-limits'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -70,6 +71,7 @@ export default defineEventHandler(async (event) => {
           message: `Invalid email addresses: ${emailValidation.errors.join(', ')}`
         })
       }
+      await assertSelfOnlyRecipients(event, updates.recipients)
     }
 
     // Validate datasets if reportConfig is being updated

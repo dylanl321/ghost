@@ -6,7 +6,7 @@
 import type { UpdateReportRequest } from '../../../shared/types/scheduled-reports'
 import { updateReport } from '../../utils/scheduled-reports'
 import { validateEmails } from '../../utils/email-service'
-import { requireScheduledReportAccess, isDatasetReport } from '../../utils/dataset-report-access'
+import { requireScheduledReportAccess } from '../../utils/dataset-report-access'
 import { getScheduleErrors } from '../../../shared/utils/report-schedule'
 import { logger } from '../../utils/logger'
 import { assertSelfOnlyRecipients } from '../../utils/report-limits'
@@ -72,7 +72,7 @@ export default defineEventHandler(async (event) => {
         })
       }
 
-      if (!isDatasetReport(existing)) await assertSelfOnlyRecipients(event, updates.recipients)
+      await assertSelfOnlyRecipients(event, updates.recipients)
     }
 
     // Update the report
