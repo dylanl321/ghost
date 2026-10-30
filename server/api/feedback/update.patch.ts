@@ -1,13 +1,9 @@
 import { sendSuccess, errors } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb"
-import { DynamoDBDocumentClient, UpdateCommand } from "@aws-sdk/lib-dynamodb"
+import { UpdateCommand } from "@aws-sdk/lib-dynamodb"
 import { logger } from '../../utils/logger'
 import { requirePermission } from '../../utils/user-roles'
-
-const region = 'us-gov-west-1'
-const deploymentAccountId = '461760157232'
-const tableName = 'ghost_feedback'
+import { FEEDBACK_TABLE, getFeedbackClient } from '../../utils/feedback-store'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/feedback/update', 'POST', {
@@ -56,23 +52,18 @@ export default defineEventHandler(async (event) => {
   const body = await readBody<{ id: string; resolved: boolean }>(event)
   const { id, resolved } = body
 
-  if (!id || typeof resolved !== 'boolean') {
-    return errors.serverError(event, 'Missing or invalid fields.')
+  if (!id || typeof id !== 'string' || typeof resolved !== 'boolean') {
+    return errors.badRequest(event, 'id and a boolean resolved are required.')
   }
 
   try {
-    const creds = await assumeChildAccountRole('govcloud', deploymentAccountId)
-
-    const ddbClient = new DynamoDBClient({
-      region,
-      credentials: creds
-    })
-
-    const docClient = DynamoDBDocumentClient.from(ddbClient)
+    const docClient = await getFeedbackClient()
 
     const cmd = new UpdateCommand({
-      TableName: tableName,
+      TableName: FEEDBACK_TABLE,
       Key: { id },
+      // Without the condition an unknown id would create a new, empty item
+      ConditionExpression: 'attribute_exists(id)',
       UpdateExpression: 'SET resolved = :r',
       ExpressionAttributeValues: {
         ':r': resolved
@@ -85,6 +76,9 @@ export default defineEventHandler(async (event) => {
     const metadata = { responseTimeMs: Date.now() - startTime }
     return sendSuccess(event, id, metadata)
   } catch (err) {
+    if ((err as any)?.name === 'ConditionalCheckFailedException') {
+      return errors.notFound(event, 'Feedback item')
+    }
     logger.error('Error updating feedback:', err)
     return errors.serverError(event, 'Failed to update feedback.')
   }

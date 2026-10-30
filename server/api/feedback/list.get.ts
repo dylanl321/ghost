@@ -1,12 +1,9 @@
 import { sendSuccess, errors } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
-import { DynamoDBDocumentClient, ScanCommand } from '@aws-sdk/lib-dynamodb'
+import { ScanCommand } from '@aws-sdk/lib-dynamodb'
 import { logger } from '../../utils/logger'
-
-const region = 'us-gov-west-1'
-const deploymentAccountId = '461760157232'
-const tableName = 'ghost_feedback'
+import { requirePermission } from '../../utils/user-roles'
+import { FEEDBACK_TABLE, getFeedbackClient } from '../../utils/feedback-store'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/feedback/list', 'GET', {
@@ -50,25 +47,23 @@ registerEndpoint('/api/feedback/list', 'GET', {
 })
 
 export default defineEventHandler(async (event) => {
+  // Every submitter's feedback and email: same permission as resolving it
+  await requirePermission(event, 'admin.issues')
   const startTime = Date.now()
 
   try {
-    const creds = await assumeChildAccountRole('govcloud', deploymentAccountId)
+    const docClient = await getFeedbackClient()
 
-    const ddbClient = new DynamoDBClient({
-      region,
-      credentials: creds
-    })
-    const docClient = DynamoDBDocumentClient.from(ddbClient)
-
-    const data = await docClient.send(
-      new ScanCommand({
-        TableName: tableName
-      })
-    )
+    const items: Record<string, any>[] = []
+    let startKey: Record<string, any> | undefined
+    do {
+      const data = await docClient.send(new ScanCommand({ TableName: FEEDBACK_TABLE, ExclusiveStartKey: startKey }))
+      items.push(...(data.Items ?? []))
+      startKey = data.LastEvaluatedKey
+    } while (startKey)
 
     const metadata = { responseTimeMs: Date.now() - startTime }
-    return sendSuccess(event, { items: data.Items ?? [] }, metadata)
+    return sendSuccess(event, { items }, metadata)
   } catch (err) {
     logger.error('Error listing feedback:', err)
     return errors.serverError(event, 'Failed to list feedback')

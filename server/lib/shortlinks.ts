@@ -34,6 +34,37 @@ function generateShortCode(length: number = 8): string {
   return result
 }
 
+export const SHORT_CODE_PATTERN = /^[A-Za-z0-9]{4,32}$/
+const MAX_CONFIG_BYTES = 8 * 1024
+
+/**
+ * Validate a short link sent by the browser. pagePath must be a path inside
+ * this app (the /s/:code page navigates to it), configData a small object.
+ * Returns an error message, or null when the input is valid.
+ */
+export function validateShortLinkInput(body: any): string | null {
+  if (!body || typeof body !== 'object') return 'Request body is required'
+  if (typeof body.pagePath !== 'string' || !/^\/(?![/\\])[^\s]*$/.test(body.pagePath) || body.pagePath.length > 512) {
+    return 'pagePath must be a path in this app, such as /account/costs'
+  }
+  if (typeof body.originalUrl !== 'string' || !body.originalUrl || body.originalUrl.length > 2048) {
+    return 'originalUrl is required (up to 2048 characters)'
+  }
+  if (!body.configData || typeof body.configData !== 'object' || Array.isArray(body.configData)) {
+    return 'configData must be an object'
+  }
+  if (Buffer.byteLength(JSON.stringify(body.configData)) > MAX_CONFIG_BYTES) {
+    return `configData must be under ${MAX_CONFIG_BYTES} bytes`
+  }
+  if (body.expiresInDays !== undefined && (!Number.isInteger(body.expiresInDays) || body.expiresInDays < 1 || body.expiresInDays > 365)) {
+    return 'expiresInDays must be a whole number from 1 to 365'
+  }
+  if (body.description !== undefined && (typeof body.description !== 'string' || body.description.length > 500)) {
+    return 'description must be text up to 500 characters'
+  }
+  return null
+}
+
 /**
  * Create a new short link
  */
@@ -105,77 +136,42 @@ export async function getShortLink(shortCode: string): Promise<ShortLink | null>
 }
 
 /**
- * List all short links (with pagination)
+ * List short links, newest first. Expired links are left out; the table is
+ * scanned in full because filters and sorting apply after DynamoDB pages.
  */
 export async function listShortLinks(options: {
   limit?: number
   offset?: number
   createdBy?: string
 }): Promise<{ links: ShortLink[], total: number }> {
-  try {
-    const limit = options.limit || 50
+  const limit = Math.min(Math.max(options.limit || 50, 1), 500)
+  const offset = Math.max(options.offset || 0, 0)
 
-    // Build filter expression for non-expired items
-    let filterExpression = undefined
-    if (options.createdBy) {
-      filterExpression = 'createdBy = :createdBy'
-    }
-
-    const tableConfig = await getTableConfig('shortlinks')
+  const tableConfig = await getTableConfig('shortlinks')
+  const items: ShortLink[] = []
+  let nextToken: string | undefined
+  do {
     const result = await scanItems(
       tableConfig.tableName,
-      filterExpression,
-      limit,
-      undefined, // nextToken for pagination
+      options.createdBy ? 'createdBy = :createdBy' : undefined,
+      undefined,
+      nextToken,
       tableConfig.environment,
-      undefined, // expressionAttributeNames
-      undefined, // expressionAttributeValues
+      undefined,
+      options.createdBy ? { ':createdBy': options.createdBy } : undefined,
       tableConfig.accountId
     )
-    
-    // Filter out expired links
-    const now = new Date()
-    const validLinks = result.items.filter((link: ShortLink) => {
-      if (!link.expiresAt) return true
-      return new Date(link.expiresAt) > now
-    })
-    
-    // Sort by creation date (newest first)
-    validLinks.sort((a: ShortLink, b: ShortLink) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    )
-    
-    return {
-      links: validLinks as ShortLink[],
-      total: validLinks.length
-    }
-  } catch (error) {
-    logger.error('Error listing short links:', error)
-    return { links: [], total: 0 }
-  }
-}
+    items.push(...(result.items as ShortLink[]))
+    nextToken = result.nextToken
+  } while (nextToken)
 
-/**
- * Get analytics for a short link
- */
-export async function getShortLinkAnalytics(shortCode: string): Promise<{
-  visitCount: number
-  createdAt: string
-  lastVisited?: string
-} | null> {
-  try {
-    const tableConfig = await getTableConfig('shortlinks')
-    const item = await getItem(tableConfig.tableName, { shortCode }, tableConfig.environment, tableConfig.accountId) as ShortLink
+  const now = new Date()
+  const validLinks = items
+    .filter(link => !link.expiresAt || new Date(link.expiresAt) > now)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
-    if (!item) return null
-
-    return {
-      visitCount: item.visitCount || 0,
-      createdAt: item.createdAt,
-      lastVisited: item.lastVisited
-    }
-  } catch (error) {
-    logger.error('Error getting short link analytics:', error)
-    return null
+  return {
+    links: validLinks.slice(offset, offset + limit),
+    total: validLinks.length
   }
 }

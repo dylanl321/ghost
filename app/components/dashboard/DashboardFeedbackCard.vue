@@ -48,9 +48,9 @@
         class="flex items-start gap-2 py-1.5 border-t border-gray-100 dark:border-gray-800 first:border-0 first:pt-0"
       >
         <UIcon
-          :name="item.type === 'bug' ? 'i-heroicons-bug-ant' : 'i-heroicons-sparkles'"
+          :name="item.type === 'Issue' ? 'i-heroicons-bug-ant' : 'i-heroicons-sparkles'"
           class="w-3.5 h-3.5 mt-0.5 shrink-0"
-          :class="item.type === 'bug' ? 'text-red-400' : 'text-purple-400'"
+          :class="item.type === 'Issue' ? 'text-red-400' : 'text-purple-400'"
         />
         <div class="min-w-0 flex-1">
           <p class="text-xs text-gray-900 dark:text-white truncate">{{ item.description }}</p>
@@ -87,8 +87,8 @@ const error = ref(false)
 
 const recentItems = computed(() => items.value.slice(0, 5))
 const openCount = computed(() => items.value.filter(i => !i.resolved).length)
-const bugCount = computed(() => items.value.filter(i => i.type === 'bug' && !i.resolved).length)
-const featureCount = computed(() => items.value.filter(i => i.type === 'feature' && !i.resolved).length)
+const bugCount = computed(() => items.value.filter(i => i.type === 'Issue' && !i.resolved).length)
+const featureCount = computed(() => items.value.filter(i => i.type === 'Feature Request' && !i.resolved).length)
 
 onMounted(async () => {
   try {

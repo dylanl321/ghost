@@ -1,14 +1,12 @@
 import { sendSuccess, errors } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { randomUUID } from 'node:crypto'
+import { PutCommand } from "@aws-sdk/lib-dynamodb";
 import { logger } from '../../utils/logger'
 import { sendAdminNotification, NotificationType } from '../../utils/admin-notifications'
 import { sendUserNotification } from '../../utils/notification-service'
-
-const region = 'us-gov-west-1'
-const deploymentAccountId = '461760157232'
-const tableName = 'ghost_feedback'
+import { getUserEmail } from '../../utils/user-roles'
+import { FEEDBACK_TABLE, FEEDBACK_TYPES, MAX_FEEDBACK_LENGTH, getFeedbackClient } from '../../utils/feedback-store'
 
 // Register OpenAPI documentation
 registerEndpoint('/api/feedback/submit', 'POST', {
@@ -84,11 +82,22 @@ export default defineEventHandler(async (event) => {
     source?: 'mcp-connections'
   }>(event)
 
-  const { type, description, reporter_email, source } = body
+  const { type, description, source } = body ?? {} as typeof body
 
   // Basic validation
-  if (!type || !description || !reporter_email) {
-    return errors.serverError(event, 'Missing fields.')
+  if (!FEEDBACK_TYPES.includes(type as any)) {
+    return errors.badRequest(event, `type must be one of: ${FEEDBACK_TYPES.join(', ')}`)
+  }
+  if (typeof description !== 'string' || !description.trim() || description.length > MAX_FEEDBACK_LENGTH) {
+    return errors.badRequest(event, `description must be 1-${MAX_FEEDBACK_LENGTH} characters`)
+  }
+
+  // The reporter is the signed-in user; the form's only other choice is Anonymous
+  const sessionEmail = getUserEmail(event)
+  const anonymous = body?.reporter_email === 'Anonymous'
+  const reporter_email = anonymous ? 'Anonymous' : sessionEmail
+  if (!reporter_email) {
+    return errors.unauthorized(event, 'Sign in to submit feedback')
   }
   if (source && source !== 'mcp-connections') {
     return errors.badRequest(event, 'Invalid feedback source.')
@@ -99,14 +108,7 @@ export default defineEventHandler(async (event) => {
     const date_utc = now.toISOString().split('T')[0]
     const time_utc = now.toISOString().split('T')[1].slice(0, 5)
 
-    const creds = await assumeChildAccountRole('govcloud', deploymentAccountId)
-
-    const ddbClient = new DynamoDBClient({
-      region,
-      credentials: creds
-    })
-
-    const docClient = DynamoDBDocumentClient.from(ddbClient)
+    const docClient = await getFeedbackClient()
 
     logger.info("Host:", event.node.req.headers.host)
     let environment = 'prod'
@@ -117,9 +119,9 @@ export default defineEventHandler(async (event) => {
     }
 
     const item = {
-      id: Date.now().toString(),
+      id: randomUUID(),
       type,
-      description,
+      description: description.trim(),
       reporter_email,
       ...(source ? { source } : {}),
       resolved: false,
@@ -129,7 +131,7 @@ export default defineEventHandler(async (event) => {
     }
 
     const cmd = new PutCommand({
-      TableName: tableName,
+      TableName: FEEDBACK_TABLE,
       Item: item
     })
 
@@ -156,7 +158,7 @@ export default defineEventHandler(async (event) => {
     }
 
     // Send confirmation notification to the user
-    sendUserNotification({
+    if (!anonymous) sendUserNotification({
       userId: reporter_email,
       category: 'SYSTEM',
       title: 'Feedback received',
