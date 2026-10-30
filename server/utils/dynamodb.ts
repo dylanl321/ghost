@@ -11,7 +11,6 @@ import {
   UpdateItemCommand,
   DeleteItemCommand,
   BatchWriteItemCommand,
-  BatchGetItemCommand,
   type AttributeValue
 } from '@aws-sdk/client-dynamodb'
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb'
@@ -114,22 +113,14 @@ export async function updateItem(
 ) {
   const client = await getDynamoDBClient(environment, undefined, accountId)
   
-  // Sanitize updates before marshalling
-  const sanitizedUpdates = sanitizeForDynamoDB(updates)
+  // Sanitize updates before marshalling. sanitizeForDynamoDB returns
+  // undefined when every field is empty, so default to an empty object.
+  const sanitizedUpdates: Record<string, any> = sanitizeForDynamoDB(updates) ?? {}
 
-  // Debug logging for serialization issues
-  logger.info('[DynamoDB updateItem] Pre-sanitization data:', {
-    tableName,
-    key,
-    updateFieldCount: Object.keys(updates).length,
-    sanitizedFieldCount: Object.keys(sanitizedUpdates).length
-  })
-
-  // Check if all fields were removed during sanitization
   if (Object.keys(sanitizedUpdates).length === 0) {
     logger.warn('[DynamoDB updateItem] All update fields were removed during sanitization', {
       tableName,
-      originalUpdates: updates
+      fields: Object.keys(updates)
     })
     throw new Error('No valid fields to update after sanitization')
   }
@@ -148,14 +139,6 @@ export async function updateItem(
     valueMap[attrValue] = value
   })
 
-  // Log key before marshalling to check for issues
-  logger.info('[DynamoDB updateItem] Key before marshalling:', {
-    tableName,
-    key: JSON.stringify(key),
-    keyType: typeof key,
-    keyKeys: Object.keys(key)
-  })
-
   // Marshall all values at once to ensure proper DynamoDB format
   const expressionAttributeValues = marshall(valueMap, {
     removeUndefinedValues: true,
@@ -171,24 +154,12 @@ export async function updateItem(
     ReturnValues: 'ALL_NEW' as const
   }
 
-  // Log command details for debugging
-  logger.info('[DynamoDB updateItem] Command parameters:', {
+  // Field names only: values can hold user content and must not reach the logs.
+  logger.debug('[DynamoDB updateItem] Updating item', {
     tableName,
-    updateExpression: commandParams.UpdateExpression,
-    attributeNameCount: Object.keys(expressionAttributeNames).length,
-    attributeValueCount: Object.keys(expressionAttributeValues).length,
-    attributeNames: Object.keys(expressionAttributeNames).map(k => `${k}=${expressionAttributeNames[k]}`),
-    keySize: JSON.stringify(commandParams.Key).length,
-    valuesSize: JSON.stringify(commandParams.ExpressionAttributeValues).length
+    keyFields: Object.keys(key),
+    fields: Object.values(expressionAttributeNames)
   })
-
-  // Log the actual marshalled values (first 500 chars for debugging)
-  try {
-    const marshalledStr = JSON.stringify(commandParams.ExpressionAttributeValues)
-    logger.info('[DynamoDB updateItem] Marshalled values sample:', marshalledStr.substring(0, 500))
-  } catch (e) {
-    logger.warn('[DynamoDB updateItem] Could not stringify marshalled values')
-  }
 
   const command = new UpdateItemCommand(commandParams)
 
@@ -200,17 +171,9 @@ export async function updateItem(
       tableName,
       error: error.message,
       errorName: error.name,
-      errorCode: error.code,
-      errorType: error.$metadata?.httpStatusCode,
+      httpStatusCode: error.$metadata?.httpStatusCode,
       updateExpression: commandParams.UpdateExpression,
-      fullError: JSON.stringify(error, Object.getOwnPropertyNames(error)).substring(0, 1000)
-    })
-
-    // Log the full command for debugging serialization issues
-    logger.error('[DynamoDB updateItem] Failed command details:', {
-      key: JSON.stringify(commandParams.Key),
-      expressionAttributeNames: JSON.stringify(commandParams.ExpressionAttributeNames),
-      expressionAttributeValuesKeys: Object.keys(commandParams.ExpressionAttributeValues)
+      keyFields: Object.keys(key)
     })
 
     throw error
@@ -330,186 +293,108 @@ export async function scanItems(
 }
 
 /**
- * Batch write items to DynamoDB
+ * Scan every page of a table. scanItems returns a single page (at most 1 MB),
+ * so callers that need the whole table must use this instead.
  */
-export async function batchWriteItems(
+export async function scanAllItems(
   tableName: string,
-  items: Array<{ putRequest?: Record<string, any>, deleteRequest?: Record<string, any> }>,
   environment: 'commercial' | 'govcloud' = 'govcloud',
   accountId?: string
-) {
-  const client = await getDynamoDBClient(environment, undefined, accountId)
-  
-  // Process in batches of 25 (DynamoDB limit)
-  const batchSize = 25
-  const results = []
-  
-  for (let i = 0; i < items.length; i += batchSize) {
-    const batch = items.slice(i, i + batchSize)
-    
-    const requestItems = {
-      [tableName]: batch.map(item => {
-        if (item.putRequest) {
-          return { PutRequest: { Item: marshall(item.putRequest, { removeUndefinedValues: true, convertEmptyValues: true }) } }
-        } else if (item.deleteRequest) {
-          return { DeleteRequest: { Key: marshall(item.deleteRequest, { removeUndefinedValues: true, convertEmptyValues: true }) } }
-        }
-        throw new Error('Invalid batch item')
-      })
-    }
-
-    const command = new BatchWriteItemCommand({
-      RequestItems: requestItems
-    })
-
-    const response = await client.send(command)
-    results.push(response)
-  }
-  
-  return results
+): Promise<any[]> {
+  const items: any[] = []
+  let nextToken: string | undefined
+  do {
+    const page = await scanItems(tableName, undefined, undefined, nextToken, environment, undefined, undefined, accountId)
+    items.push(...page.items)
+    nextToken = page.nextToken
+  } while (nextToken)
+  return items
 }
 
+type WriteRequest =
+  | { PutRequest: { Item: Record<string, AttributeValue> } }
+  | { DeleteRequest: { Key: Record<string, AttributeValue> } }
+
+const BATCH_WRITE_SIZE = 25 // DynamoDB limit for BatchWriteItem
+const BATCH_WRITE_MAX_ATTEMPTS = 6
+
 /**
- * Batch get items from DynamoDB
+ * Write requests in batches of 25, a few batches at a time, retrying
+ * UnprocessedItems and throughput errors with backoff. Returns how many
+ * requests were written and how many were given up on.
  */
-export async function batchGetItems(
+async function runBatchWrites(
   tableName: string,
-  keys: Array<Record<string, any>>,
-  environment: 'commercial' | 'govcloud' = 'govcloud',
-  accountId?: string
-) {
+  requests: WriteRequest[],
+  environment: 'commercial' | 'govcloud',
+  accountId: string | undefined,
+  parallelLimit: number
+): Promise<{ written: number, failed: number }> {
   const client = await getDynamoDBClient(environment, undefined, accountId)
-  
-  // Process in batches of 100 (DynamoDB limit)
-  const batchSize = 100
-  const allItems: any[] = []
-  
-  for (let i = 0; i < keys.length; i += batchSize) {
-    const batch = keys.slice(i, i + batchSize)
-    
-    const command = new BatchGetItemCommand({
-      RequestItems: {
-        [tableName]: {
-          Keys: batch.map(key => marshall(key, { removeUndefinedValues: true, convertEmptyValues: true }))
+  let written = 0
+  let failed = 0
+
+  const writeBatch = async (batch: WriteRequest[]) => {
+    let pending = batch
+    for (let attempt = 1; attempt <= BATCH_WRITE_MAX_ATTEMPTS && pending.length > 0; attempt++) {
+      try {
+        const response = await client.send(new BatchWriteItemCommand({
+          RequestItems: { [tableName]: pending as any }
+        }))
+        const unprocessed = (response.UnprocessedItems?.[tableName] ?? []) as WriteRequest[]
+        written += pending.length - unprocessed.length
+        pending = unprocessed
+      } catch (error: any) {
+        const retryable = error?.name === 'ProvisionedThroughputExceededException' ||
+          error?.name === 'ThrottlingException'
+        if (!retryable) {
+          logger.error('[DynamoDB] Batch write error', { tableName, error: error?.message, errorName: error?.name })
+          break
         }
       }
-    })
-
-    const response = await client.send(command)
-    const items = response.Responses?.[tableName]?.map(item => unmarshall(item, { wrapNumbers: false })) || []
-    allItems.push(...items)
+      if (pending.length > 0 && attempt < BATCH_WRITE_MAX_ATTEMPTS) {
+        const delay = Math.min(100 * 2 ** attempt, 5000)
+        await new Promise(resolve => setTimeout(resolve, delay))
+      }
+    }
+    failed += pending.length
   }
-  
-  return allItems
+
+  const batches: WriteRequest[][] = []
+  for (let i = 0; i < requests.length; i += BATCH_WRITE_SIZE) {
+    batches.push(requests.slice(i, i + BATCH_WRITE_SIZE))
+  }
+  for (let i = 0; i < batches.length; i += parallelLimit) {
+    await Promise.all(batches.slice(i, i + parallelLimit).map(writeBatch))
+  }
+
+  return { written, failed }
 }
 
 /**
- * Batch put items into DynamoDB with parallel processing and retry logic
+ * Batch put items into DynamoDB with parallel processing and retry logic.
+ * Throws when any item could not be written, so callers never report a
+ * partial write as a success.
  */
 export async function batchPutItems(
   tableName: string,
   items: Array<Record<string, any>>,
   environment: 'commercial' | 'govcloud' = 'govcloud',
   accountId?: string
-) {
-  const client = await getDynamoDBClient(environment, undefined, accountId)
-  
-  const batchSize = 25 // DynamoDB limit
-  const results: any[] = []
-  let processedCount = 0
-  let failedCount = 0
-  
-  // Split items into batches
-  const batches: Array<Array<Record<string, any>>> = []
-  for (let i = 0; i < items.length; i += batchSize) {
-    batches.push(items.slice(i, i + batchSize))
+): Promise<{ processedCount: number, failedCount: number }> {
+  const requests: WriteRequest[] = items.map(item => ({
+    PutRequest: { Item: marshall(item, { removeUndefinedValues: true, convertEmptyValues: true }) }
+  }))
+
+  const { written, failed } = await runBatchWrites(tableName, requests, environment, accountId, 3)
+  const summary = { tableName, environment, processedCount: written, failedCount: failed }
+
+  if (failed > 0) {
+    logger.error(`Batch put completed with failures: ${written} written, ${failed} failed`, summary)
+    throw new Error(`Batch put to ${tableName} failed for ${failed} of ${items.length} items`)
   }
-  
-  logger.info(`Processing ${items.length} items in ${batches.length} batches`)
-  
-  // Process batches with controlled parallelism
-  const parallelLimit = 3 // Process 3 batches at a time
-  for (let i = 0; i < batches.length; i += parallelLimit) {
-    const parallelBatches = batches.slice(i, i + parallelLimit)
-    
-    const batchPromises = parallelBatches.map(async (batch) => {
-      let retryCount = 0
-      const maxRetries = 3
-      let currentBatch = batch
-      
-      while (currentBatch.length > 0 && retryCount < maxRetries) {
-        try {
-          const requestItems = {
-            [tableName]: currentBatch.map(item => ({
-              PutRequest: {
-                Item: marshall(item, { removeUndefinedValues: true, convertEmptyValues: true })
-              }
-            }))
-          }
-
-          const command = new BatchWriteItemCommand({
-            RequestItems: requestItems
-          })
-
-          const response = await client.send(command)
-
-          // Check for unprocessed items
-          if (response.UnprocessedItems && response.UnprocessedItems[tableName]) {
-            currentBatch = response.UnprocessedItems[tableName].map((req: any) =>
-              unmarshall(req.PutRequest.Item, { wrapNumbers: false })
-            )
-            retryCount++
-            
-            if (currentBatch.length > 0) {
-              const delay = Math.pow(2, retryCount) * 100
-              await new Promise(resolve => setTimeout(resolve, delay))
-            }
-          } else {
-            processedCount += batch.length
-            currentBatch = []
-          }
-          
-          return response
-        } catch (error: any) {
-          if (error.name === 'ProvisionedThroughputExceededException' && retryCount < maxRetries) {
-            retryCount++
-            const delay = Math.pow(2, retryCount) * 200
-            logger.info(`Throttled - waiting ${delay}ms before retry ${retryCount}/${maxRetries}`)
-            await new Promise(resolve => setTimeout(resolve, delay))
-          } else {
-            logger.error('Batch put error:', error.message)
-            failedCount += currentBatch.length
-            throw error
-          }
-        }
-      }
-      
-      if (currentBatch.length > 0) {
-        failedCount += currentBatch.length
-      }
-    })
-    
-    // Wait for this set of parallel batches to complete
-    const batchResults = await Promise.allSettled(batchPromises)
-    results.push(...batchResults)
-    
-    // Progress update
-    logger.info(`Processed ${Math.min((i + parallelLimit) * batchSize, items.length)}/${items.length} items`)
-    
-    // Add delay between parallel batch sets
-    if (i + parallelLimit < batches.length) {
-      await new Promise(resolve => setTimeout(resolve, 100))
-    }
-  }
-  
-  const completionSummary = `Batch put completed: ${processedCount} processed, ${failedCount} failed`
-  if (failedCount > 0) {
-    logger.error(completionSummary)
-  } else {
-    logger.info(completionSummary)
-  }
-
-  return results
+  logger.info(`Batch put completed: ${written} written`, summary)
+  return { processedCount: written, failedCount: 0 }
 }
 
 /**
@@ -520,105 +405,20 @@ export async function batchDeleteItems(
   keys: Array<Record<string, any>>,
   environment: 'commercial' | 'govcloud' = 'govcloud',
   accountId?: string
-) {
-  const client = await getDynamoDBClient(environment, undefined, accountId)
-  
-  // Use smaller batch size for deletes
-  const batchSize = 25 // DynamoDB limit for batch write
-  const results: any[] = []
-  let deletedCount = 0
-  let failedCount = 0
-  
-  // Process batches in parallel for better performance
-  const batches: Array<Array<Record<string, any>>> = []
-  for (let i = 0; i < keys.length; i += batchSize) {
-    batches.push(keys.slice(i, i + batchSize))
-  }
-  
-  // Process up to 4 batches in parallel to avoid overwhelming DynamoDB
-  const parallelLimit = 4
-  for (let i = 0; i < batches.length; i += parallelLimit) {
-    const parallelBatches = batches.slice(i, i + parallelLimit)
-    
-    const batchPromises = parallelBatches.map(async (batch) => {
-      let retryCount = 0
-      const maxRetries = 3
-      let currentBatch = batch
-      
-      while (currentBatch.length > 0 && retryCount < maxRetries) {
-        try {
-          const requestItems = {
-            [tableName]: currentBatch.map(key => ({
-              DeleteRequest: {
-                Key: marshall(key, { removeUndefinedValues: true, convertEmptyValues: true })
-              }
-            }))
-          }
+): Promise<{ deletedCount: number, failedCount: number }> {
+  const requests: WriteRequest[] = keys.map(key => ({
+    DeleteRequest: { Key: marshall(key, { removeUndefinedValues: true, convertEmptyValues: true }) }
+  }))
 
-          const command = new BatchWriteItemCommand({
-            RequestItems: requestItems
-          })
+  const { written, failed } = await runBatchWrites(tableName, requests, environment, accountId, 4)
 
-          const response = await client.send(command)
-
-          // Check for unprocessed items
-          if (response.UnprocessedItems && response.UnprocessedItems[tableName]) {
-            currentBatch = response.UnprocessedItems[tableName].map((req: any) =>
-              unmarshall(req.DeleteRequest.Key, { wrapNumbers: false })
-            )
-            retryCount++
-            
-            if (currentBatch.length > 0) {
-              // Exponential backoff
-              const delay = Math.pow(2, retryCount) * 100
-              await new Promise(resolve => setTimeout(resolve, delay))
-            }
-          } else {
-            deletedCount += batch.length
-            currentBatch = []
-          }
-          
-          return response
-        } catch (error: any) {
-          if (error.name === 'ProvisionedThroughputExceededException' && retryCount < maxRetries) {
-            retryCount++
-            const delay = Math.pow(2, retryCount) * 200
-            logger.info(`Throttled during delete - waiting ${delay}ms before retry`)
-            await new Promise(resolve => setTimeout(resolve, delay))
-          } else {
-            logger.error('Batch delete error:', error.message)
-            failedCount += currentBatch.length
-            throw error
-          }
-        }
-      }
-      
-      if (currentBatch.length > 0) {
-        failedCount += currentBatch.length
-      }
-    })
-    
-    // Wait for this set of parallel batches to complete
-    const batchResults = await Promise.allSettled(batchPromises)
-    results.push(...batchResults)
-    
-    // Add delay between parallel batch sets to avoid throttling
-    if (i + parallelLimit < batches.length) {
-      await new Promise(resolve => setTimeout(resolve, 100))
-    }
-  }
-  
   // Mirror batchPutItems: a clean completion is info, failures are error.
-  const deleteSummary = { deletedCount, failedCount, tableName, environment }
-  if (failedCount === 0) {
-    logger.info(`Batch delete completed: ${deletedCount} deleted, 0 failed`, deleteSummary)
+  const deleteSummary = { deletedCount: written, failedCount: failed, tableName, environment }
+  if (failed === 0) {
+    logger.info(`Batch delete completed: ${written} deleted, 0 failed`, deleteSummary)
   } else {
-    logger.error(`Batch delete completed with failures: ${deletedCount} deleted, ${failedCount} failed`, deleteSummary)
+    logger.error(`Batch delete completed with failures: ${written} deleted, ${failed} failed`, deleteSummary)
   }
 
-  return {
-    deletedCount,
-    failedCount,
-    results
-  }
+  return { deletedCount: written, failedCount: failed }
 }

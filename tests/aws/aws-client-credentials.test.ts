@@ -100,7 +100,7 @@ test('a burst of throttled AssumeRole calls does not open the circuit', async ()
     await assert.rejects(getAssumedRoleCredentials('govcloud', '555555555555'))
   }
 
-  assert.equal(assumeRoleCircuitBreaker.getState('555555555555'), 'CLOSED')
+  assert.equal(assumeRoleCircuitBreaker.getState('govcloud:555555555555'), 'CLOSED')
 })
 
 test('repeated access denied opens the circuit and stops calling STS', async () => {
@@ -113,7 +113,7 @@ test('repeated access denied opens the circuit and stops calling STS', async () 
   for (let i = 0; i < 3; i++) {
     await assert.rejects(getAssumedRoleCredentials('govcloud', '666666666666'))
   }
-  assert.equal(assumeRoleCircuitBreaker.getState('666666666666'), 'OPEN')
+  assert.equal(assumeRoleCircuitBreaker.getState('govcloud:666666666666'), 'OPEN')
 
   await assert.rejects(getAssumedRoleCredentials('govcloud', '666666666666'), /Circuit breaker OPEN/)
   assert.equal(calls, 3)
@@ -154,4 +154,41 @@ test('Cost Explorer calls are counted per operation', async () => {
     { service: 'cost-explorer', operation: 'GetCostForecast', count: 1 },
   ])
   assert.deepEqual(drainAwsApiCallCounts(), [])
+})
+
+test('the commercial default region comes from AWS_COMMERCIAL_REGION', async () => {
+  process.env.AWS_COMMERCIAL_REGION = 'us-west-2'
+  try {
+    const client: any = await getClient('commercial', 'ec2')
+    assert.equal(await client.config.region(), 'us-west-2')
+  } finally {
+    delete process.env.AWS_COMMERCIAL_REGION
+  }
+})
+
+test('clients for different session names use their own credentials', async () => {
+  let calls = 0
+  __setAssumeRoleForTests(async () => {
+    calls++
+    return fakeCredentials()
+  })
+
+  const first = await getClient('govcloud', 'cloudwatch-logs', 'us-gov-west-1', '777777777777', 'session-a')
+  const second = await getClient('govcloud', 'cloudwatch-logs', 'us-gov-west-1', '777777777777', 'session-b')
+
+  assert.notEqual(first, second)
+  assert.equal(calls, 2)
+})
+
+test('an open circuit in one partition does not block the other', async () => {
+  __setAssumeRoleForTests(async (_account, _region, environment) => {
+    if (environment === 'govcloud') throw namedError('AccessDenied', { $metadata: { httpStatusCode: 403 } })
+    return fakeCredentials()
+  })
+
+  for (let i = 0; i < 3; i++) {
+    await assert.rejects(getAssumedRoleCredentials('govcloud', '888888888888'))
+  }
+  assert.equal(assumeRoleCircuitBreaker.getState('govcloud:888888888888'), 'OPEN')
+  await getAssumedRoleCredentials('commercial', '888888888888')
 })
