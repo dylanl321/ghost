@@ -5,13 +5,11 @@
 
 import { defineEventHandler, getQuery } from 'h3'
 import {
-  CloudWatchLogsClient,
   FilterLogEventsCommand,
-  DescribeLogGroupsCommand,
   type FilteredLogEvent
 } from '@aws-sdk/client-cloudwatch-logs'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
-import { assumeChildAccountRole } from '../../utils/credentials/awsAccountCredentials'
+import { getChildAccountLogsClient, defaultLogsRegion } from '../../utils/cloudwatch-logs-client'
 import { logger } from '../../utils/logger'
 import { registerEndpoint } from '../../plugins/swagger'
 import type { AWSEnvironmentType } from '../../types'
@@ -40,13 +38,6 @@ export interface CloudWatchLogsResult {
   }
   hasMore: boolean
   nextToken?: string
-}
-
-export interface LogGroupInfo {
-  name: string
-  storedBytes?: number
-  retentionDays?: number
-  createdAt?: number
 }
 
 registerEndpoint('/api/support/cloudwatch-logs', 'GET', {
@@ -156,47 +147,6 @@ registerEndpoint('/api/support/cloudwatch-logs', 'GET', {
   }
 })
 
-// Cache CloudWatch clients per account/region
-const clientCache = new Map<string, { client: CloudWatchLogsClient; expiresAt: number }>()
-
-async function getCloudWatchLogsClient(
-  environment: AWSEnvironmentType,
-  accountId: string,
-  region: string
-): Promise<CloudWatchLogsClient> {
-  const cacheKey = `${environment}:${accountId}:${region}`
-  const cached = clientCache.get(cacheKey)
-
-  // Return cached client if valid (expires in 50 minutes to be safe with 1-hour STS tokens)
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.client
-  }
-
-  try {
-    const credentials = await assumeChildAccountRole(environment, accountId)
-
-    const client = new CloudWatchLogsClient({
-      region,
-      credentials: {
-        accessKeyId: credentials.accessKeyId!,
-        secretAccessKey: credentials.secretAccessKey!,
-        sessionToken: credentials.sessionToken
-      }
-    })
-
-    // Cache for 50 minutes
-    clientCache.set(cacheKey, {
-      client,
-      expiresAt: Date.now() + 50 * 60 * 1000
-    })
-
-    return client
-  } catch (error) {
-    logger.error(`[CloudWatch Logs] Failed to get client for ${accountId}:`, error)
-    throw error
-  }
-}
-
 // Parse log level from message
 function parseLogLevel(message: string): CloudWatchLogEntry['level'] {
   const upperMessage = message.toUpperCase()
@@ -235,13 +185,13 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.badRequest(event, 'logGroup is required')
   }
 
-  if (!accountId) {
-    return errors.badRequest(event, 'accountId is required')
+  if (!accountId || !/^\d{12}$/.test(accountId)) {
+    return errors.badRequest(event, 'accountId must be a 12-digit AWS account ID')
   }
 
   // Optional parameters with defaults
   const environment = (query.environment as AWSEnvironmentType) || 'govcloud'
-  const region = (query.region as string) || (environment === 'govcloud' ? 'us-gov-west-1' : 'us-east-1')
+  const region = (query.region as string) || defaultLogsRegion(environment)
   const filterPattern = query.filterPattern as string | undefined
   const limit = Math.min(parseInt(query.limit as string) || 100, 1000)
   const nextToken = query.nextToken as string | undefined
@@ -266,7 +216,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   logger.info(`[CloudWatch Logs] Filter: "${filterPattern || 'none'}", Time: ${new Date(startTime).toISOString()} to ${new Date(endTime).toISOString()}`)
 
   try {
-    const client = await getCloudWatchLogsClient(environment, accountId, region)
+    const client = await getChildAccountLogsClient(environment, accountId, region)
 
     const command = new FilterLogEventsCommand({
       logGroupName: logGroup,
@@ -333,29 +283,3 @@ export default defineEventHandler(handleAsync(async (event) => {
     return errors.awsError(event, error)
   }
 }))
-
-/**
- * Endpoint to list available log groups in an account
- */
-export async function listLogGroups(
-  environment: AWSEnvironmentType,
-  accountId: string,
-  region: string,
-  prefix?: string
-): Promise<LogGroupInfo[]> {
-  const client = await getCloudWatchLogsClient(environment, accountId, region)
-
-  const command = new DescribeLogGroupsCommand({
-    logGroupNamePrefix: prefix,
-    limit: 50
-  })
-
-  const response = await client.send(command)
-
-  return (response.logGroups || []).map(lg => ({
-    name: lg.logGroupName || '',
-    storedBytes: lg.storedBytes,
-    retentionDays: lg.retentionInDays,
-    createdAt: lg.creationTime
-  }))
-}

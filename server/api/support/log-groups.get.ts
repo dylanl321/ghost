@@ -4,12 +4,9 @@
  */
 
 import { defineEventHandler, getQuery } from 'h3'
-import {
-  CloudWatchLogsClient,
-  DescribeLogGroupsCommand
-} from '@aws-sdk/client-cloudwatch-logs'
+import { DescribeLogGroupsCommand } from '@aws-sdk/client-cloudwatch-logs'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
-import { assumeChildAccountRole } from '../../utils/credentials/awsAccountCredentials'
+import { getChildAccountLogsClient, defaultLogsRegion } from '../../utils/cloudwatch-logs-client'
 import { logger } from '../../utils/logger'
 import { registerEndpoint } from '../../plugins/swagger'
 import type { AWSEnvironmentType } from '../../types'
@@ -94,56 +91,16 @@ registerEndpoint('/api/support/log-groups', 'GET', {
   }
 })
 
-// Cache CloudWatch clients per account/region
-const clientCache = new Map<string, { client: CloudWatchLogsClient; expiresAt: number }>()
-
-async function getCloudWatchLogsClient(
-  environment: AWSEnvironmentType,
-  accountId: string,
-  region: string
-): Promise<CloudWatchLogsClient> {
-  const cacheKey = `${environment}:${accountId}:${region}`
-  const cached = clientCache.get(cacheKey)
-
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.client
-  }
-
-  try {
-    const credentials = await assumeChildAccountRole(environment, accountId)
-
-    const client = new CloudWatchLogsClient({
-      region,
-      credentials: {
-        accessKeyId: credentials.accessKeyId!,
-        secretAccessKey: credentials.secretAccessKey!,
-        sessionToken: credentials.sessionToken
-      }
-    })
-
-    // Cache for 50 minutes
-    clientCache.set(cacheKey, {
-      client,
-      expiresAt: Date.now() + 50 * 60 * 1000
-    })
-
-    return client
-  } catch (error) {
-    logger.error(`[Log Groups] Failed to get client for ${accountId}:`, error)
-    throw error
-  }
-}
-
 export default defineEventHandler(handleAsync(async (event) => {
   const query = getQuery(event)
 
   const accountId = query.accountId as string
-  if (!accountId) {
-    return errors.badRequest(event, 'accountId is required')
+  if (!accountId || !/^\d{12}$/.test(accountId)) {
+    return errors.badRequest(event, 'accountId must be a 12-digit AWS account ID')
   }
 
   const environment = (query.environment as AWSEnvironmentType) || 'govcloud'
-  const region = (query.region as string) || (environment === 'govcloud' ? 'us-gov-west-1' : 'us-east-1')
+  const region = (query.region as string) || defaultLogsRegion(environment)
   const prefix = query.prefix as string | undefined
 
   if (environment !== 'commercial' && environment !== 'govcloud') {
@@ -153,7 +110,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   logger.info(`[Log Groups] Listing log groups for ${accountId} in ${environment}/${region}`)
 
   try {
-    const client = await getCloudWatchLogsClient(environment, accountId, region)
+    const client = await getChildAccountLogsClient(environment, accountId, region)
 
     const allLogGroups: LogGroupInfo[] = []
     let nextToken: string | undefined

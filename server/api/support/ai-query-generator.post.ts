@@ -6,7 +6,7 @@
  */
 
 import { defineEventHandler, readBody } from 'h3'
-import { invokeBedrock } from '../../utils/bedrock-client'
+import { invokeBedrock, parseModelJson } from '../../utils/bedrock-client'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { logger } from '../../utils/logger'
 import { registerEndpoint } from '../../plugins/swagger'
@@ -222,20 +222,7 @@ IMPORTANT: Return ONLY the JSON object, no additional text or markdown.`
 
   // Parse the JSON response
   try {
-    // Clean the response - remove any markdown code blocks
-    let content = response.content.trim()
-    if (content.startsWith('```json')) {
-      content = content.slice(7)
-    }
-    if (content.startsWith('```')) {
-      content = content.slice(3)
-    }
-    if (content.endsWith('```')) {
-      content = content.slice(0, -3)
-    }
-    content = content.trim()
-
-    const parsed = JSON.parse(content)
+    const parsed = parseModelJson(response.content)
 
     return {
       generatedQuery: parsed.generatedQuery || '',

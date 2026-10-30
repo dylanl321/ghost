@@ -556,7 +556,9 @@ export async function queryResources(
   nextToken?: string
 ): Promise<{ results: any[]; nextToken?: string }> {
   const cache = getCacheManager()
-  const cacheKey = `config:query:${aggregatorName}:${Buffer.from(query).toString('base64')}`
+  // The limit is part of the key: a cached 10-row answer must not be served
+  // to a caller that asked for 200 rows
+  const cacheKey = `config:query:${aggregatorName}:${limit || 100}:${Buffer.from(query).toString('base64')}`
   
   // Check cache for non-paginated requests
   if (!nextToken) {
@@ -601,6 +603,75 @@ export async function queryResources(
   }
   
   return result
+}
+
+/**
+ * Parse one row from SelectAggregateResourceConfig. Rows arrive as JSON
+ * strings and the configuration and tags fields can themselves be JSON strings.
+ */
+export function parseConfigQueryRow(row: unknown): Record<string, any> {
+  const parsed = typeof row === 'string' ? JSON.parse(row) : (row as Record<string, any>)
+  if (typeof parsed.configuration === 'string') {
+    try {
+      parsed.configuration = JSON.parse(parsed.configuration)
+    } catch {
+      // leave the raw string
+    }
+  }
+  if (typeof parsed.tags === 'string') {
+    try {
+      parsed.tags = JSON.parse(parsed.tags)
+    } catch {
+      parsed.tags = []
+    }
+  }
+  return parsed
+}
+
+/**
+ * Convert Config tags (an array of {key, value}, or already an object) to a record
+ */
+export function configTagsToRecord(tags: unknown): Record<string, string> {
+  const record: Record<string, string> = {}
+  if (Array.isArray(tags)) {
+    for (const tag of tags) {
+      if (tag && tag.key && tag.value !== undefined) {
+        record[tag.key] = tag.value
+      }
+    }
+  } else if (tags && typeof tags === 'object') {
+    Object.assign(record, tags)
+  }
+  return record
+}
+
+/**
+ * Escape a value for a single-quoted Config advanced query string literal
+ */
+export function escapeConfigString(value: string): string {
+  return value.replace(/'/g, "''")
+}
+
+/**
+ * Build a Config advanced query that finds resources whose name or a tag value
+ * starts with one of the search terms. AWS Config only accepts a trailing
+ * wildcard with at least three literal characters, so '%term%' is rejected and
+ * '_' (a single-character wildcard) is stripped.
+ */
+export function buildConfigSearchQuery(terms: string[], resourceType = 'AWS::EC2::Instance'): string | null {
+  const type = /^AWS::[A-Za-z0-9]+::[A-Za-z0-9]+$/.test(resourceType) ? resourceType : 'AWS::EC2::Instance'
+  const cleaned = [...new Set(terms
+    .map(term => String(term).replace(/[%_]/g, '').trim())
+    .filter(term => term.length >= 3))]
+    .slice(0, 5)
+  if (cleaned.length === 0) return null
+
+  const conditions = cleaned.flatMap((term) => {
+    const escaped = escapeConfigString(term)
+    return [`resourceName LIKE '${escaped}%'`, `tags.value LIKE '${escaped}%'`, `resourceId = '${escaped}'`]
+  })
+
+  return `SELECT resourceId, resourceType, resourceName, accountId, awsRegion, configuration, tags WHERE resourceType = '${type}' AND (${conditions.join(' OR ')})`
 }
 
 /**

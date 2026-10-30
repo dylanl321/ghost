@@ -6,7 +6,7 @@
 import { defineEventHandler, getQuery } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { getAllAccountsUnified } from '../../utils/accounts-consolidated'
-import { queryResources, getAggregatorName } from '../../utils/config-service'
+import { queryResources, getAggregatorName, parseConfigQueryRow, configTagsToRecord } from '../../utils/config-service'
 import {
   fuzzySearchAccounts,
   fuzzySearchResources,
@@ -196,23 +196,9 @@ export default defineEventHandler(handleAsync(async (event) => {
 
         // Parse results into resource format
         const instances = instanceResults.results.map(result => {
-          const parsed = JSON.parse(result)
-          const config = typeof parsed.configuration === 'string'
-            ? JSON.parse(parsed.configuration)
-            : parsed.configuration
-          const tags = typeof parsed.tags === 'string'
-            ? JSON.parse(parsed.tags)
-            : parsed.tags
-
-          // Convert tags array to object
-          const tagsObj: Record<string, string> = {}
-          if (Array.isArray(tags)) {
-            tags.forEach((tag: any) => {
-              if (tag.key && tag.value !== undefined) {
-                tagsObj[tag.key] = tag.value
-              }
-            })
-          }
+          const parsed = parseConfigQueryRow(result)
+          const config = parsed.configuration
+          const tagsObj = configTagsToRecord(parsed.tags)
 
           return {
             resourceId: parsed.resourceId,
@@ -286,19 +272,8 @@ export default defineEventHandler(handleAsync(async (event) => {
         const resourceResults = await queryResources(aggregatorName, resourceQuery, environment, undefined, 200)
 
         const resources = resourceResults.results.map(result => {
-          const parsed = JSON.parse(result)
-          const tags = typeof parsed.tags === 'string'
-            ? JSON.parse(parsed.tags)
-            : parsed.tags
-
-          const tagsObj: Record<string, string> = {}
-          if (Array.isArray(tags)) {
-            tags.forEach((tag: any) => {
-              if (tag.key && tag.value !== undefined) {
-                tagsObj[tag.key] = tag.value
-              }
-            })
-          }
+          const parsed = parseConfigQueryRow(result)
+          const tagsObj = configTagsToRecord(parsed.tags)
 
           return {
             resourceId: parsed.resourceId,
@@ -316,11 +291,6 @@ export default defineEventHandler(handleAsync(async (event) => {
         for (const result of fuzzyResourceResults) {
           const resource = result.item
           const matchInfo = result.matches?.[0]
-
-          // Don't add instances again if already searched
-          if (searchTypes.includes('instances') && resource.resourceType === 'AWS::EC2::Instance') {
-            continue
-          }
 
           results.push({
             type: 'resource',

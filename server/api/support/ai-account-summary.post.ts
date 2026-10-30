@@ -7,7 +7,7 @@
  */
 
 import { defineEventHandler, readBody } from 'h3'
-import { invokeBedrock } from '../../utils/bedrock-client'
+import { invokeBedrock, parseModelJson } from '../../utils/bedrock-client'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { logger } from '../../utils/logger'
 import { registerEndpoint } from '../../plugins/swagger'
@@ -100,8 +100,8 @@ IMPORTANT: Return ONLY valid JSON. Be specific and actionable.`
 export default defineEventHandler(handleAsync(async (event) => {
   const body = await readBody(event) as AccountSummaryRequest
 
-  if (!body.accountId) {
-    return errors.badRequest(event, 'accountId is required')
+  if (!body?.accountId || !/^\d{12}$/.test(String(body.accountId))) {
+    return errors.badRequest(event, 'accountId must be a 12-digit AWS account ID')
   }
 
   if (!body.environment || !['commercial', 'govcloud'].includes(body.environment)) {
@@ -112,23 +112,26 @@ export default defineEventHandler(handleAsync(async (event) => {
 
   logger.info(`[AI Account Summary] Account: ${body.accountId}, Categories: ${categories.join(', ')}`)
 
-  // Gather data from multiple internal endpoints in parallel
+  // Gather data from multiple internal endpoints in parallel. event.$fetch
+  // forwards the caller's cookies; the global $fetch sent these internal
+  // requests without a session, so every one came back 401 and the model only
+  // ever saw error objects.
   const dataPromises: Record<string, Promise<any>> = {}
 
   if (categories.includes('security')) {
-    dataPromises.security = $fetch('/api/support/security-posture', {
+    dataPromises.security = event.$fetch('/api/support/security-posture', {
       params: { accountId: body.accountId, environment: body.environment }
     }).catch((err: any) => ({ error: err.message }))
   }
 
   if (categories.includes('compliance')) {
-    dataPromises.compliance = $fetch('/api/support/patch-compliance', {
+    dataPromises.compliance = event.$fetch('/api/support/patch-compliance', {
       params: { accountId: body.accountId, environment: body.environment }
     }).catch((err: any) => ({ error: err.message }))
   }
 
   if (categories.includes('cost') && body.environment === 'commercial') {
-    dataPromises.cost = $fetch('/api/support/cost-anomalies', {
+    dataPromises.cost = event.$fetch('/api/support/cost-anomalies', {
       params: { accountId: body.accountId, daysBack: 30, environment: 'commercial' }
     }).catch((err: any) => ({ error: err.message }))
   }
@@ -167,13 +170,7 @@ Focus on actionable insights and prioritized recommendations.`
       throw new Error(response.error?.message || 'Failed to generate account summary')
     }
 
-    let content = response.content.trim()
-    if (content.startsWith('```json')) content = content.slice(7)
-    if (content.startsWith('```')) content = content.slice(3)
-    if (content.endsWith('```')) content = content.slice(0, -3)
-    content = content.trim()
-
-    const parsed = JSON.parse(content)
+    const parsed = parseModelJson(response.content)
 
     logger.info(`[AI Account Summary] Generated summary: health=${parsed.overallHealth}, score=${parsed.healthScore}`)
 

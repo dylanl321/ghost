@@ -7,7 +7,7 @@
  */
 
 import { defineEventHandler, readBody } from 'h3'
-import { invokeBedrock } from '../../utils/bedrock-client'
+import { invokeBedrock, parseModelJson } from '../../utils/bedrock-client'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
 import { logger } from '../../utils/logger'
 import { registerEndpoint } from '../../plugins/swagger'
@@ -160,13 +160,7 @@ Generate a step-by-step diagnostic plan using the available dashboard tools.`
       throw new Error(response.error?.message || 'Failed to generate troubleshooting plan')
     }
 
-    let content = response.content.trim()
-    if (content.startsWith('```json')) content = content.slice(7)
-    if (content.startsWith('```')) content = content.slice(3)
-    if (content.endsWith('```')) content = content.slice(0, -3)
-    content = content.trim()
-
-    const parsed = JSON.parse(content) as TroubleshootResponse
+    const parsed = parseModelJson(response.content) as TroubleshootResponse
 
     logger.info(`[AI Troubleshoot] Generated plan with ${parsed.diagnosticSteps?.length || 0} steps, severity: ${parsed.severity}`)
 

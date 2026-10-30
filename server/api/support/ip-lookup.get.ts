@@ -3,9 +3,10 @@
  * Find which AWS account and resource owns an IP address
  */
 
+import { isIP } from 'node:net'
 import { defineEventHandler, getQuery } from 'h3'
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
-import { queryResources, getAggregatorName } from '../../utils/config-service'
+import { queryResources, getAggregatorName, parseConfigQueryRow, configTagsToRecord } from '../../utils/config-service'
 import { lookupAccountUnified } from '../../utils/accounts-consolidated'
 import { logger } from '../../utils/logger'
 import { registerEndpoint } from '../../plugins/swagger'
@@ -89,14 +90,20 @@ registerEndpoint('/api/support/ip-lookup', 'GET', {
   }
 })
 
-// Validate IP address format
+// Accepts IPv4 and every IPv6 form (including compressed "::" forms, which
+// the old hand-written pattern rejected)
 function isValidIP(ip: string): boolean {
-  // IPv4 pattern
-  const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
-  // IPv6 pattern (simplified)
-  const ipv6Regex = /^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/
+  return isIP(ip) !== 0
+}
 
-  return ipv4Regex.test(ip) || ipv6Regex.test(ip)
+/**
+ * Resolve the owning account. In GovCloud, Config reports the GovCloud account
+ * ID, which the account table stores as govCloudAccountId, so fall back to it.
+ */
+async function lookupResourceAccount(accountId: string, environment: AWSEnvironmentType) {
+  const account = await lookupAccountUnified({ accountId })
+  if (account || environment !== 'govcloud') return account
+  return lookupAccountUnified({ govCloudAccountId: accountId })
 }
 
 export default defineEventHandler(handleAsync(async (event) => {
@@ -152,7 +159,10 @@ export default defineEventHandler(handleAsync(async (event) => {
       tags
     WHERE
       resourceType = 'AWS::EC2::NetworkInterface'
-      AND configuration.privateIpAddress = '${ip}'
+      AND (
+        configuration.privateIpAddress = '${ip}'
+        OR configuration.association.publicIp = '${ip}'
+      )
   `.trim()
 
   try {
@@ -161,30 +171,10 @@ export default defineEventHandler(handleAsync(async (event) => {
     const ec2Results = await queryResources(aggregatorName, ec2Query, environment)
 
     if (ec2Results.results.length > 0) {
-      const rawResult = JSON.parse(ec2Results.results[0])
-      const config = typeof rawResult.configuration === 'string'
-        ? JSON.parse(rawResult.configuration)
-        : rawResult.configuration
-      const tags = typeof rawResult.tags === 'string'
-        ? JSON.parse(rawResult.tags)
-        : rawResult.tags
-
-      // Convert tags array to object if needed
-      const tagsObj: Record<string, string> = {}
-      if (Array.isArray(tags)) {
-        tags.forEach((tag: any) => {
-          if (tag.key && tag.value !== undefined) {
-            tagsObj[tag.key] = tag.value
-          }
-        })
-      } else if (tags && typeof tags === 'object') {
-        Object.assign(tagsObj, tags)
-      }
-
-      // Look up account details
-      const accountInfo = await lookupAccountUnified({
-        accountId: rawResult.accountId
-      })
+      const rawResult = parseConfigQueryRow(ec2Results.results[0])
+      const config = rawResult.configuration || {}
+      const tagsObj = configTagsToRecord(rawResult.tags)
+      const accountInfo = await lookupResourceAccount(rawResult.accountId, environment)
 
       const result: IPLookupResult = {
         found: true,
@@ -224,28 +214,10 @@ export default defineEventHandler(handleAsync(async (event) => {
     const eniResults = await queryResources(aggregatorName, eniQuery, environment)
 
     if (eniResults.results.length > 0) {
-      const rawResult = JSON.parse(eniResults.results[0])
-      const config = typeof rawResult.configuration === 'string'
-        ? JSON.parse(rawResult.configuration)
-        : rawResult.configuration
-      const tags = typeof rawResult.tags === 'string'
-        ? JSON.parse(rawResult.tags)
-        : rawResult.tags
-
-      const tagsObj: Record<string, string> = {}
-      if (Array.isArray(tags)) {
-        tags.forEach((tag: any) => {
-          if (tag.key && tag.value !== undefined) {
-            tagsObj[tag.key] = tag.value
-          }
-        })
-      } else if (tags && typeof tags === 'object') {
-        Object.assign(tagsObj, tags)
-      }
-
-      const accountInfo = await lookupAccountUnified({
-        accountId: rawResult.accountId
-      })
+      const rawResult = parseConfigQueryRow(eniResults.results[0])
+      const config = rawResult.configuration || {}
+      const tagsObj = configTagsToRecord(rawResult.tags)
+      const accountInfo = await lookupResourceAccount(rawResult.accountId, environment)
 
       const result: IPLookupResult = {
         found: true,

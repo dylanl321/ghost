@@ -112,6 +112,28 @@ async function getBedrockClient(): Promise<BedrockRuntimeClient> {
 }
 
 /**
+ * Parse a JSON answer from a model. Models sometimes wrap JSON in a markdown
+ * fence or add a sentence before it, so fall back to the outermost object or
+ * array in the text.
+ */
+export function parseModelJson<T = any>(content: string): T {
+  const cleaned = content.trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '')
+    .trim()
+  try {
+    return JSON.parse(cleaned) as T
+  } catch (error) {
+    const start = cleaned.search(/[[{]/)
+    const end = Math.max(cleaned.lastIndexOf('}'), cleaned.lastIndexOf(']'))
+    if (start !== -1 && end > start) {
+      return JSON.parse(cleaned.slice(start, end + 1)) as T
+    }
+    throw error
+  }
+}
+
+/**
  * Format request payload based on model type
  */
 function formatRequest(config: BedrockModelConfig, request: BedrockRequest): Record<string, unknown> {
