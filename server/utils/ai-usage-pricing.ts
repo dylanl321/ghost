@@ -8,6 +8,8 @@ interface TokenRate {
   tokenKind: TokenKind
   price: number
   tokensPerUnit: number
+  /** Global cross-Region inference rate (usage type ends in _Global). */
+  global: boolean
   effectiveDate?: string
 }
 
@@ -48,13 +50,18 @@ function normalizedModel(value: string): string {
     .join(' ')
 }
 
-function classifyUsageType(usageType: string): TokenKind | null {
+// Usage types priced differently from standard on-demand tokens. Invocation
+// metrics cannot tell these apart, so they must not compete with the standard rate.
+const NON_STANDARD_USAGE = ['reserved_', 'provisionedthroughput', 'batch', 'latencyoptimized', 'long_ctx', 'cachewrite1h', 'cache_write_tokens_1h', 'cache_write_tokens_30m', 'customization']
+
+function classifyUsageType(usageType: string): { kind: TokenKind; global: boolean } | null {
   const value = usageType.toLowerCase()
-  if (value.includes('reserved_') || value.includes('provisionedthroughput') || value.includes('batch')) return null
-  if (value.includes('cacheread') || value.includes('cache_read')) return 'cache-read'
-  if (value.includes('cachewrite') || value.includes('cache_write')) return 'cache-write'
-  if (value.includes('outputtokencount') || value.includes('output_tokens')) return 'output'
-  if (value.includes('inputtokencount') || value.includes('input_tokens')) return 'input'
+  if (NON_STANDARD_USAGE.some(marker => value.includes(marker))) return null
+  const global = value.includes('global')
+  if (value.includes('cacheread') || value.includes('cache_read')) return { kind: 'cache-read', global }
+  if (value.includes('cachewrite') || value.includes('cache_write')) return { kind: 'cache-write', global }
+  if (value.includes('outputtokencount') || value.includes('output_tokens')) return { kind: 'output', global }
+  if (value.includes('inputtokencount') || value.includes('input_tokens')) return { kind: 'input', global }
   return null
 }
 
@@ -99,8 +106,8 @@ async function loadCatalogFromAWS(region: string): Promise<TokenRate[]> {
 
     for (const [sku, product] of Object.entries(catalog.products || {}) as [string, any][]) {
       const attributes = product.attributes || {}
-      const tokenKind = classifyUsageType(attributes.usagetype || '')
-      if (!tokenKind || !attributes.servicename) continue
+      const usage = classifyUsageType(attributes.usagetype || '')
+      if (!usage || !attributes.servicename) continue
       const onDemand = catalog.terms?.OnDemand?.[sku] || {}
       for (const term of Object.values(onDemand) as any[]) {
         for (const dimension of Object.values(term.priceDimensions || {}) as any[]) {
@@ -109,9 +116,10 @@ async function loadCatalogFromAWS(region: string): Promise<TokenRate[]> {
           rates.push({
             modelName: attributes.servicename,
             normalizedModel: normalizedModel(attributes.servicename),
-            tokenKind,
+            tokenKind: usage.kind,
             price,
             tokensPerUnit: tokensPerUnit(dimension.unit || ''),
+            global: usage.global,
             effectiveDate: term.effectiveDate
           })
         }
@@ -135,18 +143,35 @@ async function loadCatalogFromAWS(region: string): Promise<TokenRate[]> {
   }
 }
 
-function matchRate(rates: TokenRate[], modelId: string, tokenKind: TokenKind): TokenRate | undefined {
-  const model = normalizedModel(modelId)
-  const modelTokens = new Set(model.split(' ').filter(Boolean))
+/**
+ * The catalog model whose name appears as a contiguous run in the model ID,
+ * not followed by another version number. Token-overlap matching priced
+ * claude-haiku-4-5 as "Claude Haiku 5.5" and claude-3-5-sonnet as "Claude
+ * Sonnet 5.5" because every token of those names occurs somewhere in the ID.
+ * Global inference profiles use the _Global rate; other IDs the regional rate.
+ */
+export function matchRate(rates: TokenRate[], modelId: string, tokenKind: TokenKind): TokenRate | undefined {
+  const modelTokens = normalizedModel(modelId).split(' ').filter(token => token && !/^\d{8}$/.test(token))
+  const wantsGlobal = modelId.toLowerCase().startsWith('global.')
+  const matchLength = (rate: TokenRate) => {
+    const candidate = rate.normalizedModel.split(' ').filter(Boolean)
+    if (!candidate.length) return 0
+    for (let start = 0; start + candidate.length <= modelTokens.length; start++) {
+      if (!candidate.every((token, index) => modelTokens[start + index] === token)) continue
+      const next = modelTokens[start + candidate.length]
+      if (next && /^\d{1,2}$/.test(next)) continue
+      return candidate.length
+    }
+    return 0
+  }
   return rates
     .filter(rate => rate.tokenKind === tokenKind)
-    .map(rate => {
-      const candidateTokens = rate.normalizedModel.split(' ').filter(Boolean)
-      const matched = candidateTokens.filter(token => modelTokens.has(token)).length
-      return { rate, score: candidateTokens.length ? matched / candidateTokens.length : 0 }
-    })
-    .filter(candidate => candidate.score >= 0.6)
-    .sort((a, b) => b.score - a.score || b.rate.normalizedModel.length - a.rate.normalizedModel.length)[0]?.rate
+    .map(rate => ({ rate, length: matchLength(rate) }))
+    .filter(candidate => candidate.length > 0)
+    .sort((a, b) =>
+      b.length - a.length ||
+      Number(b.rate.global === wantsGlobal) - Number(a.rate.global === wantsGlobal) ||
+      (b.rate.effectiveDate || '').localeCompare(a.rate.effectiveDate || ''))[0]?.rate
 }
 
 export interface BedrockCostEstimate {
