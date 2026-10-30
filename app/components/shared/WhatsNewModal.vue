@@ -135,8 +135,11 @@ interface ChangelogEntry {
   content: string
 }
 
+// server: false because this modal renders inside <ClientOnly>: during hydration Nuxt treats a
+// server-fetched key that already has data (the [] default) as loaded, so it never fetched
 const { data: changelog } = await useFetch<ChangelogEntry[]>('/api/changelog', {
   lazy: true,
+  server: false,
   default: () => [],
 })
 
