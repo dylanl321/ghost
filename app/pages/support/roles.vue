@@ -10,7 +10,10 @@
       <template #header>
         <h2 class="text-lg font-semibold text-white">Your Current Access Level</h2>
       </template>
-      <UserRoleInfo />
+      <!-- Roles come from the browser session, so render them client-side only -->
+      <ClientOnly>
+        <UserRoleInfo />
+      </ClientOnly>
     </UCard>
 
     <!-- How Roles Work -->
@@ -38,14 +41,16 @@
           <div v-for="role in ROLES" :key="role.id" class="border-l-2 border-gray-700 pl-4">
             <div class="flex items-center gap-2 mb-1">
               <h4 class="text-white font-medium">{{ role.name }}</h4>
-              <UBadge 
-                v-if="hasRole(role.id)" 
-                color="green" 
-                variant="soft" 
-                size="xs"
-              >
-                You have this role
-              </UBadge>
+              <ClientOnly>
+                <UBadge 
+                  v-if="hasRole(role.id)" 
+                  color="green" 
+                  variant="soft" 
+                  size="xs"
+                >
+                  You have this role
+                </UBadge>
+              </ClientOnly>
             </div>
             <p class="text-gray-400 text-sm mb-2">{{ role.description }}</p>
             
@@ -77,6 +82,7 @@
         <h2 class="text-lg font-semibold text-white">Key Features by Role</h2>
       </template>
       
+      <ClientOnly>
       <div class="space-y-6">
         <div>
           <h3 class="text-white font-medium mb-2">Administrator Features</h3>
@@ -156,6 +162,7 @@
           </div>
         </div>
       </div>
+      </ClientOnly>
     </UCard>
 
     <!-- Need More Access? -->
