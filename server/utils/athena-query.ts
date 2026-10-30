@@ -2,8 +2,8 @@
  * Athena query runner for the Security Lake monitoring account.
  *
  * One implementation of start → poll → read every result page, used by the
- * Security Hub summary, Security Lake stored queries and instance activity
- * detection. A query that times out is stopped so it does not keep scanning.
+ * Security Hub summary and instance activity detection. A query that times
+ * out is stopped so it does not keep scanning.
  */
 
 import {
@@ -40,6 +40,13 @@ export function getEnvironmentConfig(environment: 'commercial' | 'govcloud'): En
   }
 }
 
+/** Fully qualified Security Lake OCSF table for a source, e.g. "cloud_trail_mgmt". */
+export function buildTableName(environment: 'commercial' | 'govcloud', dataSource: string): string {
+  const config = getEnvironmentConfig(environment)
+  const regionUnderscore = config.region.replace(/-/g, '_')
+  return `${config.database}.amazon_security_lake_table_${regionUnderscore}_${dataSource}_2_0`
+}
+
 export interface AthenaQueryOptions {
   environment: 'commercial' | 'govcloud'
   /** Default database for unqualified table names */
@@ -67,7 +74,7 @@ async function athenaClientFor(environment: 'commercial' | 'govcloud') {
 }
 
 /** Submit a query and return its execution ID without waiting. */
-export async function startAthenaQuery(sql: string, options: AthenaQueryOptions): Promise<string> {
+async function startAthenaQuery(sql: string, options: AthenaQueryOptions): Promise<string> {
   const { config, client } = await athenaClientFor(options.environment)
   const response = await client.send(new StartQueryExecutionCommand({
     QueryString: sql,
@@ -97,7 +104,7 @@ export function parseAthenaRows(resultSet: ResultSet | undefined, skipHeader: bo
 }
 
 /** Read every result page of a finished query, up to maxRows. */
-export async function getAthenaQueryRows(
+async function getAthenaQueryRows(
   queryExecutionId: string,
   environment: 'commercial' | 'govcloud',
   maxRows = Number.POSITIVE_INFINITY

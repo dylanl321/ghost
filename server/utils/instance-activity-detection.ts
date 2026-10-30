@@ -9,8 +9,7 @@
  * Designed to run in parallel with CloudWatch metrics and Compute Optimizer.
  */
 
-import { buildTableName, getEnvironmentConfig } from './security-lake-consolidated'
-import { runAthenaQuery } from './athena-query'
+import { buildTableName, getEnvironmentConfig, runAthenaQuery } from './athena-query'
 import { getCacheManager } from './cache-manager'
 import { logger } from './logger'
 
