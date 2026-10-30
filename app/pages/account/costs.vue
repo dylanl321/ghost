@@ -494,6 +494,7 @@
               :format-currency="formatCurrency"
               :scenario="scenario"
               :is-historical="isHistoricalTimeframe"
+              :timeframe="selectedTimeframe"
             />
           </div>
 
@@ -573,6 +574,7 @@ import type { DataMode } from '~/types/costs'
 import type { BudgetAlert } from '#shared/types/budget-alerts'
 import { getCostTagWorkspaceQuery, normalizeCostTagCreatorView } from '~/utils/cost-tag-workspace'
 import type { CostTagCreatorView } from '~/utils/cost-tag-workspace'
+import { getTimeframeBudget } from '~/utils/cost-period'
 
 definePageMeta({
   keepalive: false
@@ -620,6 +622,7 @@ interface Account {
   accountAlias?: string
   pepCloudRecordName?: string
   pepEnvironmentName?: string
+  periodBudget?: number
 }
 
 const supplementalAccounts = ref<Account[]>([])
@@ -740,7 +743,11 @@ const accountsWithCosts = computed<Account[]>(() => {
       ...account,
       currentSpend: costFromData,
       totalSpend: costFromData,
-      spend: costFromData
+      spend: costFromData,
+      // Quarter and year-to-date spend is compared with the budget for the same months
+      ...(isMultiMonthCurrentTimeframe.value
+        ? { periodBudget: getTimeframeBudget(account, selectedTimeframe.value) }
+        : {})
     }
   })
   
@@ -774,6 +781,8 @@ const showRegressionLine = ref(false) // Toggle for budget variance regression l
 // View By state: controls how cost data is grouped (account, service, or region)
 const viewBy = ref('LINKED_ACCOUNT')
 const isTagAnalysis = computed(() => activeChartTab.value === 'tags')
+
+const isMultiMonthCurrentTimeframe = computed(() => ['thisQuarter', 'ytd', 'thisYear'].includes(selectedTimeframe.value))
 
 // Computed property to detect if we're viewing historical data
 const isHistoricalTimeframe = computed(() => {

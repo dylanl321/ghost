@@ -2,145 +2,74 @@
     <div class="space-y-6">
         <!-- Warnings banner for non-fatal fetch failures -->
         <div v-if="warnings && warnings.length > 0"
-            class="px-4 py-2.5 bg-yellow-900/20 border border-yellow-700/40 rounded-lg flex items-start gap-2">
-            <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-yellow-500 mt-0.5 flex-shrink-0" />
-            <div class="text-xs text-yellow-400">
+            class="px-4 py-2.5 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700/40 rounded-lg flex items-start gap-2">
+            <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 text-yellow-600 dark:text-yellow-500 mt-0.5 flex-shrink-0" />
+            <div class="text-xs text-yellow-700 dark:text-yellow-400">
                 <span class="font-medium">Some data may be incomplete:</span>
                 {{ warnings.join(', ') }}
             </div>
         </div>
 
-        <!-- Grid layout for smaller charts -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <template v-for="chart in optimizedCharts" :key="chart.id">
-                <!-- Full width charts -->
-                <div v-if="isFullWidth(chart)"
-                    class="col-span-full bg-gray-900 border border-gray-700 rounded-lg">
-                    <div class="px-6 py-4 border-b border-gray-700">
-                        <div class="flex items-start justify-between">
-                            <div class="flex-1">
-                                <h3 class="text-lg font-semibold text-white">{{ chart.title }}</h3>
-                                <p v-if="chart.description" class="text-sm text-gray-400 mt-1">{{ chart.description }}</p>
-                            </div>
-                            <div class="flex items-center gap-3">
-                                <!-- Year selector for yearEndForecast chart -->
-                                <div v-if="chart.id === 'yearEndForecast'" class="flex gap-1 bg-gray-800 rounded-lg p-1">
-                                    <button
-                                        class="px-3 py-1.5 text-xs font-medium rounded transition-colors"
-                                        :class="selectedYearView === 'current'
-                                            ? 'bg-blue-600 text-white'
-                                            : 'text-gray-400 hover:text-gray-300'"
-                                        @click="selectedYearView = 'current'"
-                                    >
-                                        {{ new Date().getFullYear() }}
-                                    </button>
-                                    <button
-                                        class="px-3 py-1.5 text-xs font-medium rounded transition-colors"
-                                        :class="selectedYearView === 'next'
-                                            ? 'bg-blue-600 text-white'
-                                            : 'text-gray-400 hover:text-gray-300'"
-                                        @click="selectedYearView = 'next'"
-                                    >
-                                        {{ new Date().getFullYear() + 1 }}
-                                    </button>
-                                </div>
-
-                                <!-- Budget variance regression toggle -->
-                                <UButton
-                                    v-if="chart.id === 'budgetVarianceAnalysis'"
-                                    size="xs"
-                                    :color="showRegressionLine ? 'blue' : 'gray'"
-                                    :variant="showRegressionLine ? 'solid' : 'outline'"
-                                    icon="i-heroicons-chart-bar"
-                                    @click="$emit('toggleRegressionLine')"
-                                >
-                                    {{ showRegressionLine ? 'Hide' : 'Show' }} Trend
-                                </UButton>
-                            </div>
+            <div v-for="chart in optimizedCharts" :key="chart.id"
+                class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg"
+                :class="layout[sizeOf(chart)].card">
+                <div class="border-b border-gray-200 dark:border-gray-700" :class="layout[sizeOf(chart)].header">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="flex-1 min-w-0">
+                            <h3 class="font-semibold text-gray-900 dark:text-white" :class="layout[sizeOf(chart)].title">{{ chart.title }}</h3>
+                            <p v-if="chart.description" class="text-gray-500 dark:text-gray-400 mt-1" :class="layout[sizeOf(chart)].description">{{ chart.description }}</p>
                         </div>
+                        <!-- Year selector for yearEndForecast chart -->
+                        <div v-if="chart.id === 'yearEndForecast'" class="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+                            <button v-for="view in yearViews" :key="view.value"
+                                class="px-3 py-1.5 text-xs font-medium rounded transition-colors"
+                                :class="selectedYearView === view.value
+                                    ? 'bg-blue-600 text-white'
+                                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'"
+                                @click="selectedYearView = view.value">
+                                {{ view.label }}
+                            </button>
+                        </div>
+                        <!-- Budget variance regression toggle -->
+                        <UButton v-if="chart.id === 'budgetVarianceAnalysis'" size="xs"
+                            :color="showRegressionLine ? 'blue' : 'gray'"
+                            :variant="showRegressionLine ? 'solid' : 'outline'"
+                            icon="i-heroicons-chart-bar"
+                            @click="emit('toggleRegressionLine')">
+                            {{ showRegressionLine ? 'Hide' : 'Show' }} Trend
+                        </UButton>
                     </div>
-                    <div class="p-6">
-                        <div class="h-64 md:h-80 lg:h-96">
-                            <VChart v-if="getChartOptions(chart)" :ref="registerChartRef" :option="getChartOptions(chart)" autoresize
-                                class="h-full w-full" />
-                            <div v-else-if="isLoading()" class="h-full flex items-center justify-center">
-                                <div class="text-center">
-                                    <UIcon name="i-heroicons-arrow-path"
-                                        class="w-8 h-8 animate-spin text-blue-500 mx-auto mb-2" />
-                                    <p class="text-gray-400">Loading chart data...</p>
-                                </div>
-                            </div>
-                            <div v-else-if="hasExtractorError(chart)" class="h-full flex items-center justify-center">
-                                <div class="text-center">
-                                    <UIcon name="i-heroicons-exclamation-triangle"
-                                        class="w-8 h-8 text-red-400 mx-auto mb-2" />
-                                    <p class="text-gray-300">Chart failed to render</p>
-                                    <details class="mt-2">
-                                        <summary class="text-xs text-gray-500 cursor-pointer hover:text-gray-400">Debug
-                                        </summary>
-                                        <pre
-                                            class="text-xs text-left mt-2 p-2 bg-gray-800 rounded overflow-auto max-h-32">{{ preview(chart) }}</pre>
-                                    </details>
-                                </div>
-                            </div>
-                            <div v-else-if="hasNoData(chart)" class="h-full flex items-center justify-center">
-                                <div class="text-center">
-                                    <UIcon name="i-heroicons-inbox"
-                                        class="w-8 h-8 text-gray-500 mx-auto mb-2" />
-                                    <p class="text-gray-400">No data available for this view</p>
-                                </div>
+                </div>
+                <div :class="layout[sizeOf(chart)].body">
+                    <div :class="layout[sizeOf(chart)].height">
+                        <VChart v-if="chartStates.get(chart.id)?.options" :ref="registerChartRef"
+                            :option="chartStates.get(chart.id)!.options" autoresize class="h-full w-full" />
+                        <div v-else-if="!dataset" class="h-full flex items-center justify-center">
+                            <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-blue-500" />
+                        </div>
+                        <div v-else class="h-full flex items-center justify-center">
+                            <div class="text-center">
+                                <UIcon name="i-heroicons-exclamation-triangle" class="w-8 h-8 text-red-400 mx-auto mb-2" />
+                                <p class="text-gray-600 dark:text-gray-300">Chart failed to render</p>
+                                <p class="text-xs text-gray-500 mt-1">{{ chartStates.get(chart.id)?.error }}</p>
                             </div>
                         </div>
                     </div>
                 </div>
-
-                <!-- Medium width charts (2 columns) -->
-                <div v-else-if="isMediumWidth(chart)"
-                    class="col-span-full md:col-span-2 bg-gray-900 border border-gray-700 rounded-lg">
-                    <div class="px-6 py-4 border-b border-gray-700">
-                        <h3 class="text-lg font-semibold text-white">{{ chart.title }}</h3>
-                        <p v-if="chart.description" class="text-sm text-gray-400 mt-1">{{ chart.description }}</p>
-                    </div>
-                    <div class="p-6">
-                        <div class="h-64 md:h-80">
-                            <VChart v-if="getChartOptions(chart)" :ref="registerChartRef" :option="getChartOptions(chart)" autoresize
-                                class="h-full w-full" />
-                            <div v-else-if="isLoading()" class="h-full flex items-center justify-center">
-                                <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-blue-500" />
-                            </div>
-                            <div v-else class="h-full flex items-center justify-center text-gray-500 text-sm">
-                                No data
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Small charts (1 column) -->
-                <div v-else class="bg-gray-900 border border-gray-700 rounded-lg">
-                    <div class="px-4 py-3 border-b border-gray-700">
-                        <h3 class="text-base font-semibold text-white">{{ chart.title }}</h3>
-                        <p v-if="chart.description" class="text-xs text-gray-400 mt-1">{{ chart.description }}</p>
-                    </div>
-                    <div class="p-4">
-                        <div class="h-48 md:h-64">
-                            <VChart v-if="getChartOptions(chart)" :ref="registerChartRef" :option="getChartOptions(chart)" autoresize
-                                class="h-full w-full" />
-                            <div v-else-if="isLoading()" class="h-full flex items-center justify-center">
-                                <UIcon name="i-heroicons-arrow-path" class="w-6 h-6 animate-spin text-blue-500" />
-                            </div>
-                            <div v-else class="h-full flex items-center justify-center text-gray-500 text-sm">
-                                No data
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </template>
+            </div>
         </div>
+
+        <!-- Charts with nothing to show for this selection, collapsed to one line -->
+        <p v-if="emptyCharts.length > 0" class="text-xs text-gray-500 flex items-start gap-1.5">
+            <UIcon name="i-heroicons-inbox" class="w-4 h-4 flex-shrink-0" />
+            <span>No data for this view: {{ emptyCharts.map(c => c.title).join(', ') }}. Try a longer timeframe or a different selection.</span>
+        </p>
     </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import type { NormalizedDataset } from '~/types/costs'
 import type { ChartDefinition } from '~/composables/useChartRegistry'
 import VChart from 'vue-echarts'
@@ -239,40 +168,25 @@ const isMediumWidth = (chart: ChartDefinition) => {
     ].includes(chart.id)
 }
 
-const isLoading = () => !props.dataset
+type ChartSize = 'full' | 'medium' | 'small'
+const sizeOf = (chart: ChartDefinition): ChartSize =>
+    isFullWidth(chart) ? 'full' : isMediumWidth(chart) ? 'medium' : 'small'
 
-// Distinguish between "no data available" and "extractor threw an error"
-const hasNoData = (chart: ChartDefinition) => {
-    if (!props.dataset) return false
-    if (!chart.extractor) return false
-    try {
-        const data = chart.extractor(props.dataset)
-        return !data || (Array.isArray(data) && data.length === 0)
-    } catch {
-        return false // error case handled by hasExtractorError
-    }
+const layout: Record<ChartSize, Record<'card' | 'header' | 'title' | 'description' | 'body' | 'height', string>> = {
+    full: { card: 'col-span-full', header: 'px-6 py-4', title: 'text-lg', description: 'text-sm', body: 'p-6', height: 'h-64 md:h-80 lg:h-96' },
+    medium: { card: 'col-span-full md:col-span-2', header: 'px-6 py-4', title: 'text-lg', description: 'text-sm', body: 'p-6', height: 'h-64 md:h-80' },
+    small: { card: '', header: 'px-4 py-3', title: 'text-base', description: 'text-xs', body: 'p-4', height: 'h-48 md:h-64' }
 }
 
-const hasExtractorError = (chart: ChartDefinition) => {
-    if (!props.dataset) return false
-    if (!chart.extractor) return false
-    try {
-        chart.extractor(props.dataset)
-        return false
-    } catch (error) {
-        logger.warn(`Error in chart extractor for ${chart.id}:`, error)
-        return true
-    }
-}
-
-// Combined check used by template for the "no chart options" state
-const hasError = (chart: ChartDefinition) => hasNoData(chart) || hasExtractorError(chart)
-
-// Consistent currency and percentage formatting uses auto-imported formatCurrency / formatPercent from utils/formatters
+const currentYear = new Date().getFullYear()
+const yearViews = [
+    { value: 'current' as const, label: currentYear },
+    { value: 'next' as const, label: currentYear + 1 }
+]
 
 // Smart chart ordering for optimal grid layout with visual variety
 const optimizedCharts = computed(() => {
-    const charts = [...props.charts]
+    const charts = props.charts.filter(chart => !emptyCharts.value.includes(chart))
     
     // Categorize charts by size
     const fullWidth: ChartDefinition[] = []
@@ -372,10 +286,16 @@ watch(() => props.dataset, () => {
     chartCache.clear()
 }, { flush: 'sync' })
 
-// Cached chart options map – computed once per render cycle instead of twice per chart
-// (template was calling getChartOptions once for v-if and once for :option)
-const chartOptionsMap = computed(() => {
-    const map = new Map<string, any>()
+interface ChartState {
+    options?: Record<string, unknown>
+    empty?: boolean
+    error?: string
+}
+
+// One extractor + builder pass per chart per render cycle; the template reads
+// options, empty or error from here instead of re-running extractors.
+const chartStates = computed(() => {
+    const map = new Map<string, ChartState>()
     if (!props.dataset) return map
 
     const context: ChartBuilderContext = {
@@ -392,13 +312,16 @@ const chartOptionsMap = computed(() => {
             if (!chart.extractor) continue
 
             const data = chart.extractor(props.dataset) as Record<string, unknown> | null
-            if ((data as any)?.contextualChart || !data) continue
+            if ((data as any)?.contextualChart || !data || (Array.isArray(data) && data.length === 0)) {
+                map.set(chart.id, { empty: true })
+                continue
+            }
 
             // Check cache before calling builder
             const dataHash = stableHash(data)
             const cached = chartCache.get(chart.id)
             if (cached && cached.dataHash === dataHash && cached.contextHash === contextHash) {
-                map.set(chart.id, cached.options)
+                map.set(chart.id, { options: cached.options })
                 continue
             }
 
@@ -407,12 +330,15 @@ const chartOptionsMap = computed(() => {
                 const options = builder(data, context)
                 if (options) {
                     const optionsWithDefaults = { ...chartAnimationDefaults, ...options }
-                    map.set(chart.id, optionsWithDefaults)
+                    map.set(chart.id, { options: optionsWithDefaults })
                     chartCache.set(chart.id, { dataHash, contextHash, options: optionsWithDefaults })
+                    continue
                 }
             }
-        } catch (error) {
+            map.set(chart.id, { empty: true })
+        } catch (error: any) {
             logger.error('Error generating chart options for', chart.id, error)
+            map.set(chart.id, { error: error?.message || String(error) })
         }
     }
 
@@ -424,16 +350,8 @@ const chartOptionsMap = computed(() => {
     return map
 })
 
-// Convenience accessor used by template
-const getChartOptions = (chart: ChartDefinition) => chartOptionsMap.value.get(chart.id) || null
-
-const preview = (chart: ChartDefinition) => {
-    if (!props.dataset) return 'No dataset'
-    try {
-        const data = chart.extractor(props.dataset)
-        return JSON.stringify({ id: chart.id, type: chart.type, data }, null, 2)
-    } catch (e: any) {
-        return `Error: ${e?.message || e}`
-    }
-}
+// Empty charts collapse into a single line under the grid once data has loaded
+const emptyCharts = computed(() => props.dataset
+    ? props.charts.filter(chart => chartStates.value.get(chart.id)?.empty)
+    : [])
 </script>

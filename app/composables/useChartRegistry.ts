@@ -24,6 +24,12 @@ const MEANINGFUL_SPEND_THRESHOLD = 200
 const MIN_SERVICE_COST = 1
 const SMALL_AMOUNT_THRESHOLD = 50
 
+// Summary accounts carry no budget; the analysis endpoint has the PEP/estimate
+// budget aligned to the selected period.
+function getBudgetByAccount(dataset: NormalizedDataset): Map<string, number> {
+  return new Map(getAccountsFromAnalysis(dataset).map((a: any) => [a.accountId, a.budgetedCost || 0]))
+}
+
 export interface ChartDefinition {
   id: string
   title: string
@@ -426,7 +432,7 @@ export const useChartRegistry = (args: {
         const summary = dataset.summary as any
         if (!summary) return []
 
-        const actualData = summary?.data || summary
+        const actualData = unwrapByMode(summary, dataset.mode || 'billable')
 
         // Group by department
         const deptMap = new Map<string, number>()
@@ -530,8 +536,9 @@ export const useChartRegistry = (args: {
         const summary = dataset.summary as any
         if (!summary) return []
 
-        const actualData = summary?.data || summary
+        const actualData = unwrapByMode(summary, dataset.mode || 'billable')
         const accounts = actualData?.accounts || []
+        const budgetByAccount = getBudgetByAccount(dataset)
 
         // Group by LOB and sum costs
         const lobMap = new Map<string, { totalCost: number, accountCount: number, budget: number }>()
@@ -539,7 +546,7 @@ export const useChartRegistry = (args: {
         accounts.forEach((account: any) => {
           const lob = account.linesOfBusiness || account.lineOfBusiness || 'Unknown LOB'
           const cost = account.totalCost || 0
-          const budget = account.budget || 0
+          const budget = budgetByAccount.get(account.accountId) || 0
 
           if (!lobMap.has(lob)) {
             lobMap.set(lob, { totalCost: 0, accountCount: 0, budget: 0 })
@@ -606,11 +613,12 @@ export const useChartRegistry = (args: {
         const byAccount = getAccountsFromAnalysis(dataset)
         if (byAccount.length === 0) return []
 
-        // Group by department
+        // Analysis rows carry no department; map it from the account metadata
+        const deptByAccount = buildAccountToGroupMap(dataset.accountsList || [], 'pepDepartment', 'departmentNumber')
         const deptMap = new Map<string, { totalCost: number, totalBudget: number, accounts: number }>()
 
         byAccount.forEach((account: any) => {
-          const dept = account.pepDepartment || account.departmentNumber || account.department || 'Unknown Dept'
+          const dept = deptByAccount.get(account.accountId) || account.pepDepartment || account.departmentNumber || 'Unknown Dept'
           const cost = account.actualCost || 0
           const budget = account.budgetedCost || 0
 
@@ -672,7 +680,9 @@ export const useChartRegistry = (args: {
         // Debug: Check data structure
 
         // Build comparison data
+        const selectedAccounts = dataset.accounts || []
         const comparison = billableAccounts
+          .filter((account: any) => selectedAccounts.length === 0 || selectedAccounts.includes(account.accountId))
           .filter((account: any) => account.totalCost > 0)
           .map((account: any) => {
             const billableCost = account.totalCost || 0
@@ -810,7 +820,7 @@ export const useChartRegistry = (args: {
         const historical = dataset.historical as any
         if (!historical) return []
 
-        const actualData = historical?.data || historical
+        const actualData = unwrapByMode(historical, dataset.mode || 'billable')
         const monthlyBreakdown = actualData?.monthlyBreakdown || []
 
 
@@ -838,13 +848,14 @@ export const useChartRegistry = (args: {
         const historical = dataset.historical as any
         if (!historical) return null
 
-        const actualData = historical?.data || historical
+        const actualData = unwrapByMode(historical, dataset.mode || 'billable')
         const monthlyBreakdown = actualData?.monthlyBreakdown || []
         
         // For year-over-year comparison, we need at least 2 full years of data
         // For now, let's just show the monthly trend as a single line
         
-        if (monthlyBreakdown.length === 0) return null
+        // A trend needs at least two points; a single month is already in the summary cards
+        if (monthlyBreakdown.length < 2) return null
         
         // Extract dates and values for a simple line chart
         const dates: string[] = []
@@ -967,7 +978,7 @@ export const useChartRegistry = (args: {
     monthOverMonthComparison: {
       id: 'monthOverMonthComparison',
       title: 'Month-over-Month Comparison',
-      description: 'Total spend comparison between last month and this month',
+      description: 'Spend in the latest month compared with the month before',
       type: 'bar',
       extractor: (dataset) => {
         const summary = dataset.summary as any
@@ -977,43 +988,43 @@ export const useChartRegistry = (args: {
         const mode = dataset.mode || 'billable'
         const summaryData = unwrapByMode(summary, mode)
         const historicalData = unwrapByMode(historical, mode)
+        const monthlyBreakdown: any[] = historicalData?.monthlyBreakdown || []
 
-        const selectedAccounts = dataset.accounts || []
+        // Match the summary cards: the selection, or the accounts left after dashboard filters
+        const selectedAccounts = dataset.accounts?.length ? dataset.accounts : (dataset.displayedAccountIds || [])
         const filterBySelection = selectedAccounts.length > 0
+        const monthTotal = (month: any) => {
+          if (!month) return 0
+          if (!month.accountBreakdown) return month.cost || month.total || 0
+          return month.accountBreakdown.reduce((sum: number, account: any) =>
+            filterBySelection && !selectedAccounts.includes(account.accountId) ? sum : sum + (account.cost || 0), 0)
+        }
+        const monthKey = (date: Date) => `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`
+        const monthLabel = (key: string) => new Date(`${key}-01T00:00:00Z`)
+          .toLocaleString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' })
+        const point = (name: string, value: number) =>
+          ({ name, value, formattedValue: `$${value.toLocaleString('en-US', { maximumFractionDigits: 0 })}` })
 
-        // Current month total from summary
-        let currentTotal = 0
-        const currentAccounts = summaryData?.accounts || []
-        currentAccounts.forEach((account: any) => {
-          if (filterBySelection && !selectedAccounts.includes(account.accountId)) return
-          currentTotal += account.totalCost || 0
-        })
-
-        // Last month total from historical
-        let lastMonthTotal = 0
-        if (historicalData?.monthlyBreakdown && historicalData.monthlyBreakdown.length >= 2) {
-          const lastMonthData = historicalData.monthlyBreakdown[historicalData.monthlyBreakdown.length - 2]
-          if (lastMonthData?.accountBreakdown) {
-            lastMonthData.accountBreakdown.forEach((account: any) => {
-              if (filterBySelection && !selectedAccounts.includes(account.accountId)) return
-              lastMonthTotal += account.cost || 0
-            })
-          } else if (lastMonthData?.total) {
-            lastMonthTotal = lastMonthData.total
-          }
+        if (dataset.timeframe === 'thisMonth') {
+          // Historical periods end before the current month, so find last month by key
+          // rather than by position; the current month comes from the summary.
+          const now = new Date()
+          const previousKey = monthKey(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)))
+          const previousTotal = monthTotal(monthlyBreakdown.find((m: any) => m.month === previousKey))
+          const currentTotal = (summaryData?.accounts || []).reduce((sum: number, account: any) =>
+            filterBySelection && !selectedAccounts.includes(account.accountId) ? sum : sum + (account.totalCost || 0), 0)
+          if (currentTotal === 0 && previousTotal === 0) return null
+          return [
+            point(monthLabel(previousKey), previousTotal),
+            point(`${monthLabel(monthKey(now))} (to date)`, currentTotal)
+          ]
         }
 
-        if (currentTotal === 0 && lastMonthTotal === 0) return null
-
-        const now = new Date()
-        const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-        const lastMonthName = lastMonthDate.toLocaleString('default', { month: 'short', year: 'numeric' })
-        const currentMonthName = now.toLocaleString('default', { month: 'short', year: 'numeric' })
-
-        return [
-          { name: lastMonthName, value: lastMonthTotal, formattedValue: `$${lastMonthTotal.toLocaleString('en-US', { maximumFractionDigits: 0 })}` },
-          { name: currentMonthName, value: currentTotal, formattedValue: `$${currentTotal.toLocaleString('en-US', { maximumFractionDigits: 0 })}` }
-        ]
+        // Other timeframes: the last two complete months in the selected history
+        const sorted = [...monthlyBreakdown].sort((a: any, b: any) => String(a.month).localeCompare(String(b.month)))
+        if (sorted.length < 2) return null
+        const [previous, latest] = sorted.slice(-2)
+        return [point(monthLabel(previous.month), monthTotal(previous)), point(monthLabel(latest.month), monthTotal(latest))]
       }
     },
 
@@ -1036,6 +1047,7 @@ export const useChartRegistry = (args: {
         const summaryData = unwrapByMode(summary, mode)
 
         const currentAccounts = summaryData?.accounts || []
+        const budgetByAccount = getBudgetByAccount(dataset)
 
         // Get total forecast
         const totalForecast = extractForecastTotal(forecastData)
@@ -1056,7 +1068,7 @@ export const useChartRegistry = (args: {
           .filter((account: any) => account.totalCost > MEANINGFUL_SPEND_THRESHOLD) // Focus on accounts with meaningful spend
           .map((account: any) => {
             const currentCost = account.totalCost || 0
-            const budget = account.budget || 0
+            const budget = budgetByAccount.get(account.accountId) || 0
             
             // Distribute forecast proportionally based on current spending
             let forecastCost = 0
@@ -1209,44 +1221,43 @@ export const useChartRegistry = (args: {
     historicalVsForecastComparison: {
       id: 'historicalVsForecastComparison',
       title: 'Historical Average vs Estimated Allocation',
-      description: 'Compare a proportional allocation of the aggregate AWS forecast to historical spending',
+      description: 'Monthly average spend vs a proportional share of next month\'s AWS forecast',
       type: 'bar',
       extractor: (dataset) => {
         const historical = dataset.historical as any
-        const forecast = dataset.forecast as any
         const summary = dataset.summary as any
+        // Compare like with like: a full-month forecast, not the remainder of
+        // the current month that dataset.forecast holds on "This Month".
+        const extended = unwrapByMode(dataset.extendedForecast, dataset.mode || 'billable')
+        const nextMonth = extended?.forecast?.forecastResultsByTime?.[0]
+        const forecastTotal = nextMonth ? parseFloat(nextMonth.MeanValue) || 0 : extractForecastTotal(unwrapByMode(dataset.forecast, dataset.mode || 'billable'))
 
-        if (!historical || !forecast) {
+        if (!historical || !summary || forecastTotal <= 0) {
           return []
         }
 
         const mode = dataset.mode || 'billable'
         const historicalData = unwrapByMode(historical, mode)
-        const forecastData = unwrapByMode(forecast, mode)
         const summaryData = unwrapByMode(summary, mode)
-
         const monthlyData = historicalData?.monthlyBreakdown || []
-        const forecastTotal = forecastData?.forecast?.total?.Amount ? parseFloat(forecastData.forecast.total.Amount) : 0
-        const currentAccounts = summaryData?.accounts || []
 
         const selectedAccounts = dataset.accounts || []
         const filterBySelection = selectedAccounts.length > 0
-
-        return currentAccounts
+        const scoped = (summaryData?.accounts || [])
           .filter((account: any) => !filterBySelection || selectedAccounts.includes(account.accountId))
+        // The forecast is already filtered to the selection, so share it across the same accounts
+        const totalCurrent = scoped.reduce((sum: number, acc: any) => sum + (acc.totalCost || 0), 0)
+
+        return scoped
           .filter((account: any) => account.totalCost > DEPT_MIN_TOTAL_THRESHOLD)
           .map((account: any) => {
-            // Calculate historical average
             const historicalSpends = monthlyData
               .map((month: any) => month.accountBreakdown?.find((a: any) => a.accountId === account.accountId)?.cost || 0)
               .filter((cost: number) => cost > 0)
-            
-            const historicalAvg = historicalSpends.length > 0 
-              ? historicalSpends.reduce((sum: number, cost: number) => sum + cost, 0) / historicalSpends.length 
-              : 0
 
-            // Proportional forecast for this account
-            const totalCurrent = currentAccounts.reduce((sum: number, acc: any) => sum + (acc.totalCost || 0), 0)
+            const historicalAvg = historicalSpends.length > 0
+              ? historicalSpends.reduce((sum: number, cost: number) => sum + cost, 0) / historicalSpends.length
+              : 0
             const accountForecast = totalCurrent > 0 ? forecastTotal * (account.totalCost / totalCurrent) : 0
 
             return {
@@ -1259,6 +1270,7 @@ export const useChartRegistry = (args: {
               trend: accountForecast > historicalAvg ? 'increasing' : accountForecast < historicalAvg ? 'decreasing' : 'stable'
             }
           })
+          .filter((item: any) => item.historicalAverage > 0)
           .sort((a: any, b: any) => Math.abs(b.variance) - Math.abs(a.variance))
           .slice(0, 10)
       }

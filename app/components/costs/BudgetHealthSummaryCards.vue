@@ -10,7 +10,7 @@
       </div>
       <div class="text-2xl font-bold text-red-600 dark:text-red-400">{{ overBudgetCount }}</div>
       <div class="text-xs text-red-700/80 dark:text-red-400/70 mt-1">
-        {{ formatCurrency(totalOverBudgetAmount) }} over
+        {{ formatCurrency(totalOverBudgetAmount) }} over budget to date
       </div>
     </div>
 
@@ -38,7 +38,7 @@
       </div>
       <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">{{ underutilizedCount }}</div>
       <div class="text-xs text-blue-700/80 dark:text-blue-400/70 mt-1">
-        {{ formatCurrency(totalUnutilizedAmount) }} unused
+        {{ formatCurrency(totalUnutilizedAmount) }} under budget to date
       </div>
     </div>
 
@@ -105,31 +105,32 @@ const summaryMetrics = computed(() => {
   const accounts = displayedSet
     ? analysisSource.budgetAnalysis.byAccount.filter((acc: any) => displayedSet.has(acc.accountId))
     : analysisSource.budgetAnalysis.byAccount
-  const accountsWithBudget = accounts.filter((acc: any) => acc.budgetedCost > 0)
+  // Compare spend with the budget for the days that have data (paceToDateBudget),
+  // as the server's status does. Against the full-month budget every account
+  // looks underutilized early in the month and none look over until late.
+  const basis = (acc: any): number =>
+    typeof acc.paceToDateBudget === 'number' && acc.paceToDateBudget > 0 ? acc.paceToDateBudget : acc.budgetedCost
+  const utilizationOf = (acc: any): number => (acc.actualCost / basis(acc)) * 100
+  const accountsWithBudget = accounts.filter((acc: any) => basis(acc) > 0)
 
   // Over budget accounts
-  const overBudget = accountsWithBudget.filter((acc: any) => acc.actualCost > acc.budgetedCost)
+  const overBudget = accountsWithBudget.filter((acc: any) => acc.actualCost > basis(acc))
   const totalOverBudgetAmount = overBudget.reduce((sum: number, acc: any) =>
-    sum + (acc.actualCost - acc.budgetedCost), 0)
+    sum + (acc.actualCost - basis(acc)), 0)
 
   // Healthy accounts (50-100% utilization)
   const healthy = accountsWithBudget.filter((acc: any) => {
-    const util = (acc.actualCost / acc.budgetedCost) * 100
+    const util = utilizationOf(acc)
     return util >= 50 && util <= 100
   })
 
   // Underutilized accounts (<50% utilization)
-  const underutilized = accountsWithBudget.filter((acc: any) => {
-    const util = (acc.actualCost / acc.budgetedCost) * 100
-    return util < 50
-  })
+  const underutilized = accountsWithBudget.filter((acc: any) => utilizationOf(acc) < 50)
   const totalUnutilizedAmount = underutilized.reduce((sum: number, acc: any) =>
-    sum + (acc.budgetedCost - acc.actualCost), 0)
+    sum + (basis(acc) - acc.actualCost), 0)
 
   // Average utilization
-  const totalUtilization = accountsWithBudget.reduce((sum: number, acc: any) => {
-    return sum + ((acc.actualCost / acc.budgetedCost) * 100)
-  }, 0)
+  const totalUtilization = accountsWithBudget.reduce((sum: number, acc: any) => sum + utilizationOf(acc), 0)
   const averageUtilization = accountsWithBudget.length > 0
     ? totalUtilization / accountsWithBudget.length
     : 0

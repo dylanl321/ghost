@@ -12,6 +12,56 @@ import { getCostForecast, getProformaForecast } from './cost-explorer'
 import { sendSuccess, errors } from './api-response'
 import { logger } from './logger'
 
+export interface ForecastDateRange {
+  startDate: string
+  endDate: string // exclusive, as Cost Explorer expects
+  months: number // 0 for the partial current month
+}
+
+const isoDate = (date: Date) => date.toISOString().slice(0, 10)
+
+/**
+ * Forecast window for a period, in UTC. Cost Explorer forecasts must start
+ * today or later; every period other than current-month-remainder starts on
+ * the first of next month.
+ *
+ * Month arithmetic is done on the first of the month: setMonth() on the 29th-31st
+ * overflows (Oct 31 + 1 month = Dec 1), which used to push the
+ * current-month-remainder window a whole month too far.
+ */
+export function getForecastDateRange(
+  period: string,
+  customMonths: number = 1,
+  referenceDate: Date = new Date()
+): ForecastDateRange | null {
+  const year = referenceDate.getUTCFullYear()
+  const month = referenceDate.getUTCMonth()
+  const today = new Date(Date.UTC(year, month, referenceDate.getUTCDate()))
+  const monthStart = (offset: number) => new Date(Date.UTC(year, month + offset, 1))
+
+  if (period === 'current-month-remainder') {
+    return { startDate: isoDate(today), endDate: isoDate(monthStart(1)), months: 0 }
+  }
+
+  let months: number
+  switch (period) {
+    case 'next-month': months = 1; break
+    case '3-months': months = 3; break
+    case '6-months': months = 6; break
+    case '12-months': months = 12; break
+    // Next month through December; in December, January only
+    case 'rest-of-year': months = Math.max(1, 11 - month); break
+    case 'custom':
+      if (customMonths < 1 || customMonths > 12) return null
+      months = customMonths
+      break
+    default:
+      return null
+  }
+
+  return { startDate: isoDate(monthStart(1)), endDate: isoDate(monthStart(1 + months)), months }
+}
+
 export interface ForecastHandlerOptions {
   responseKey: 'forecast' | 'projection'
   logPrefix: string
@@ -66,108 +116,14 @@ export async function handleForecastRequest(event: H3Event, options: ForecastHan
   // CALCULATE DATE RANGE
   // ================================
 
-  const today = new Date()
-  let startDate: Date
-  let endDate: Date
-  let monthsToAdd = 1 // Default value, will be overridden for most periods
-
-  if (period === 'current-month-remainder') {
-    // For current month remainder, AWS forecasts can only start from today (not past dates)
-    // So we'll forecast from today through end of current month
-    startDate = new Date(today)
-    // AWS forecast API requires start date to be today or future
-    // Set to today's date (keeping time at 00:00:00)
-    startDate.setHours(0, 0, 0, 0)
-
-    endDate = new Date(today)
-    endDate.setMonth(endDate.getMonth() + 1) // Move to next month
-    endDate.setDate(1) // First day of next month
-    // No need to subtract a day since AWS API uses exclusive end date
-
-    // For current-month-remainder, we're forecasting less than a month
-    monthsToAdd = 0 // Indicates partial month
-  } else {
-    // For all other periods, start from first of next month
-    startDate = new Date(today)
-    startDate.setDate(1) // Start from first of current month
-    startDate.setMonth(startDate.getMonth() + 1) // Move to next month
-
-    endDate = new Date(startDate)
-
-    // Calculate end date based on period
-    switch (period) {
-      case 'next-month':
-        monthsToAdd = 1
-        break
-      case '3-months':
-        monthsToAdd = 3
-        break
-      case '6-months':
-        monthsToAdd = 6
-        break
-      case '12-months':
-        monthsToAdd = 12
-        break
-      case 'rest-of-year': {
-        // Calculate months from next month to December
-        const currentMonth = today.getMonth() + 1 // 1-12
-
-        if (currentMonth >= 12) {
-          // In December, rest-of-year has no remaining months in the current year.
-          // Treat as a next-month forecast (January of next year, 1 month ahead).
-          monthsToAdd = 1
-          endDate = new Date(startDate)
-          endDate.setMonth(endDate.getMonth() + 1)
-
-          logger.info(`${logPrefix} rest-of-year in December — falling back to next-month (Jan ${today.getFullYear() + 1}):`, {
-            currentMonth,
-            monthsToAdd,
-            startDate: startDate.toISOString(),
-            endDate: endDate.toISOString()
-          })
-          // Skip the rest-of-year endDate override below
-          break
-        }
-
-        const monthsUntilDecember = 12 - currentMonth
-        monthsToAdd = Math.max(1, monthsUntilDecember) // At least 1 month
-
-        logger.info(`${logPrefix} rest-of-year calculation:`, {
-          currentMonth,
-          monthsUntilDecember,
-          monthsToAdd,
-          today: today.toISOString()
-        })
-
-        // Override endDate to be end of current calendar year
-        endDate = new Date(today.getFullYear(), 11, 31) // Dec 31 of current year
-        endDate.setDate(endDate.getDate() + 1) // Make it Jan 1 next year for exclusive end
-
-        logger.info(`${logPrefix} rest-of-year date range:`, {
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString()
-        })
-        break
-      }
-      case 'custom':
-        if (customMonths < 1 || customMonths > 12) {
-          return errors.badRequest(event, 'Custom months must be between 1 and 12')
-        }
-        monthsToAdd = customMonths
-        break
-      default:
-        return errors.badRequest(event, 'Invalid period. Must be one of: current-month-remainder, next-month, 3-months, 6-months, 12-months, rest-of-year, custom')
-    }
-
-    // Don't adjust endDate for rest-of-year since it's already set to Dec 31
-    if (period !== 'rest-of-year') {
-      endDate.setMonth(endDate.getMonth() + monthsToAdd)
-    }
+  if (period === 'custom' && (customMonths < 1 || customMonths > 12)) {
+    return errors.badRequest(event, 'Custom months must be between 1 and 12')
   }
-
-  // Format dates for AWS API
-  const startDateStr = startDate.toISOString().split('T')[0]
-  const endDateStr = endDate.toISOString().split('T')[0]
+  const range = getForecastDateRange(period, customMonths)
+  if (!range) {
+    return errors.badRequest(event, 'Invalid period. Must be one of: current-month-remainder, next-month, 3-months, 6-months, 12-months, rest-of-year, custom')
+  }
+  const { startDate: startDateStr, endDate: endDateStr, months: monthsToAdd } = range
 
   // ================================
   // FORECAST / PROJECTION GENERATION
