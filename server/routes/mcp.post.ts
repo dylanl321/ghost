@@ -1,4 +1,5 @@
 import {
+  OAuthError,
   bearerAuthChallengeResponse,
   getOAuthProtectedResourceMetadataUrl,
   hostHeaderValidationResponse,
@@ -11,6 +12,8 @@ import { ghostMcpHandler } from '../mcp/server'
 import { ghostOAuthTokenVerifier } from '../mcp/oauth/token-verifier'
 import { checkMcpRateLimit, extractMcpToolNames } from '../mcp/rate-limit'
 import { getMcpPrincipal } from '../mcp/policy'
+import { logger } from '../utils/logger'
+import { isTransientDependencyError } from '../mcp/oauth/transient-error'
 
 const resourceMetadataUrl = getOAuthProtectedResourceMetadataUrl(getMcpResourceUrl())
 
@@ -75,9 +78,24 @@ export default defineEventHandler(async event => {
     headers.set('X-Accel-Buffering', 'no')
     return sendWebResponse(event, new Response(response.body, { status: response.status, statusText: response.statusText, headers }))
   } catch (error) {
+    if (!(error instanceof OAuthError)) {
+      // Without this, a storage fault surfaced as a bare 500 with nothing logged.
+      logger.error('[MCP] Request failed before reaching the MCP handler', {
+        requestId: event.context.requestId,
+        clientId,
+        error
+      })
+      if (isTransientDependencyError(error)) {
+        return sendWebResponse(event, Response.json(
+          { error: 'temporarily_unavailable', error_description: 'GHOST could not verify the request right now. Retry shortly.' },
+          { status: 503, headers: { 'Retry-After': '5' } }
+        ))
+      }
+    }
     return sendWebResponse(event, bearerAuthChallengeResponse(error, {
       requiredScopes: ['ghost.read'],
       resourceMetadataUrl
     }))
   }
 })
+
