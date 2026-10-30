@@ -213,7 +213,7 @@ onMounted(async () => {
       <UCard v-if="enhancedAccountInfo">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
           <!-- Left Column: Account Info -->
-          <div class="flex items-center gap-4">
+          <div class="flex items-center gap-4 min-w-0">
             <div class="w-12 h-12 bg-primary-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
               <UIcon name="i-heroicons-building-office" class="w-6 h-6 text-primary-400" />
             </div>
@@ -253,7 +253,7 @@ onMounted(async () => {
           </div>
           
           <!-- Right Column: Navigation Actions -->
-          <div class="flex items-center justify-end gap-3">
+          <div class="flex flex-wrap items-center justify-start lg:justify-end gap-3 min-w-0">
             <UDropdown
               :items="exportMenuItems"
               :popper="{ placement: 'bottom-end' }"

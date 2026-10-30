@@ -21,17 +21,21 @@
           <h1 class="font-semibold text-2xl text-gray-900 dark:text-white">{{ accountName ?? "Loading..." }}</h1>
         </div>
         <div class="flex gap-2">
-          <!-- Favorite Button -->
-          <UButton
-            v-if="accountId"
-            :icon="favoritesComposable.isFavorite(accountId) ? 'i-heroicons-star-solid' : 'i-heroicons-star'"
-            :color="favoritesComposable.isFavorite(accountId) ? 'yellow' : 'gray'"
-            variant="ghost"
-            size="sm"
-            :loading="favoritesComposable.loading.value"
-            :title="favoritesComposable.isFavorite(accountId) ? 'Remove from favorites' : 'Add to favorites'"
-            @click="favoritesComposable.toggleFavorite(accountId)"
-          />
+          <!-- Favorite button: favorites live in client-loaded preferences, so the server cannot render their state -->
+          <ClientOnly v-if="accountId">
+            <UButton
+              :icon="favoritesComposable.isFavorite(accountId) ? 'i-heroicons-star-solid' : 'i-heroicons-star'"
+              :color="favoritesComposable.isFavorite(accountId) ? 'yellow' : 'gray'"
+              variant="ghost"
+              size="sm"
+              :loading="favoritesComposable.loading.value"
+              :title="favoritesComposable.isFavorite(accountId) ? 'Remove from favorites' : 'Add to favorites'"
+              @click="favoritesComposable.toggleFavorite(accountId)"
+            />
+            <template #fallback>
+              <UButton icon="i-heroicons-star" color="gray" variant="ghost" size="sm" disabled />
+            </template>
+          </ClientOnly>
           <span data-tour="account-docs-link">
             <UTooltip text="Learn about favorites">
               <NuxtLink to="/support/docs?topic=favorites-guide">
