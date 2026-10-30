@@ -1,5 +1,5 @@
 <template>
-  <div class="relative w-80">
+  <div ref="container" class="relative w-80">
     <!-- Search input -->
     <div class="flex items-center gap-1">
       <UInput
@@ -7,8 +7,12 @@
         placeholder="Search users or accounts..."
         icon="i-heroicons-magnifying-glass"
         class="flex-1"
+        data-search-input
+        autocomplete="off"
         @input="onSearch"
         @focus="onFocus"
+        @keydown.esc="showResults = false"
+        @keydown.enter.prevent="selectFirstResult"
       />
       <UTooltip text="Learn how to use Universal Search">
         <NuxtLink to="/support/docs?topic=universal-search" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
@@ -19,14 +23,18 @@
 
     <!-- Results dropdown -->
     <div
-      v-if="(results.length || loading) && showResults"
-      ref="dropdown"
-      class="absolute z-10 mt-1 w-full rounded-lg shadow-lg p-2 max-h-[25rem] overflow-y-auto border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+      v-if="showResults && (results.length || loading || searched)"
+      class="absolute z-50 mt-1 w-full rounded-lg shadow-lg p-2 max-h-[25rem] overflow-y-auto border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
     >
       <!-- Loading indicator -->
       <div v-if="loading" class="px-2 py-2 text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
         <UIcon name="i-heroicons-arrow-path" class="animate-spin w-4 h-4" />
         Searching...
+      </div>
+
+      <!-- No results -->
+      <div v-else-if="!results.length" class="px-2 py-2 text-sm text-gray-500 dark:text-gray-400">
+        No users or accounts match "{{ searchedQuery }}"
       </div>
 
       <!-- Results -->
@@ -66,17 +74,24 @@ const loading = ref(false)
 const query = ref('')
 const results = ref<any[]>([])
 const showResults = ref(false)
+// True once a search has finished for the current query, so an empty result set shows a message
+const searched = ref(false)
+const searchedQuery = ref('')
 let debounceTimer: any
 const debounceTimeMs = 500
+// Incremented per search so a slow Graph response cannot overwrite results for a newer query
+let searchSeq = 0
 
-const dropdown = ref(null)
-onClickOutside(dropdown, () => {
+// Watch the whole component, not just the dropdown: clicking back into the input must not count as "outside",
+// otherwise the click that refocuses the input immediately hides the results onFocus just restored
+const container = ref<HTMLElement | null>(null)
+onClickOutside(container, () => {
   showResults.value = false
 })
 
 // Restore results when focusing back into search
 const onFocus = () => {
-  if (query.value.trim() && results.value.length) {
+  if (query.value.trim() && (results.value.length || searched.value)) {
     showResults.value = true
   }
 }
@@ -93,7 +108,7 @@ function searchAccounts() {
       e.awsAccountEmail?.toLowerCase().includes(query.value.toLowerCase())
     )
     .map(e => ({
-      key: `account-${e.accountId}`,
+      key: `account-${e.accountId || e.awsStandardAccountID}`,
       type: 'account',
       label: e.projectName || e.awsStandardAccountID,
       subLabel: `Comm: ${e.awsStandardAccountID} | Gov: ${e.awsGovCloudAccountID || "None"}`,
@@ -104,10 +119,15 @@ function searchAccounts() {
 const onSearch = () => {
   clearTimeout(debounceTimer)
 
+  searched.value = false
+
   debounceTimer = setTimeout(async () => {
-    if (!query.value.trim()) {
+    const seq = ++searchSeq
+    const term = query.value.trim()
+    if (!term) {
       results.value = []
       showResults.value = false
+      loading.value = false
       return
     }
 
@@ -121,7 +141,7 @@ const onSearch = () => {
 
     // 2. Users (Graph API)
     try {
-      const userResults = await searchUsers(user.value?.accessToken || '', query.value, 5)
+      const userResults = await searchUsers(user.value?.accessToken || '', term, 5)
       merged_results.push(
         ...userResults.map(u => ({
           key: `user-${u.id}`,
@@ -135,16 +155,30 @@ const onSearch = () => {
       logger.warn('User search failed', e)
     }
 
+    // A newer search started while this one waited on Graph; drop these stale results
+    if (seq !== searchSeq) return
+
     results.value = merged_results
+    searchedQuery.value = term
+    searched.value = true
     loading.value = false
     showResults.value = true
   }, debounceTimeMs)
 }
 
+const selectFirstResult = () => {
+  const first = results.value[0]
+  // Only act on results for what is currently typed, not ones from before the last keystroke
+  if (first && searched.value && !loading.value) selectResult(first)
+}
+
 const selectResult = (result: any) => {
   logger.info('Selected:', result)
+  clearTimeout(debounceTimer)
   showResults.value = false
   query.value = ""
+  results.value = []
+  searched.value = false
 
   if (result.type === "account") {
     router.push(`/account/${result.urlKey}`) 

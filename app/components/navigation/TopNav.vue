@@ -1,5 +1,6 @@
 <template>
-  <div class="bg-[var(--ghost-surface)] dark:bg-slate-800 border-b border-[color:var(--ghost-border)] dark:border-slate-700 shadow-sm">
+  <div class="relative z-[25] bg-[var(--ghost-surface)] dark:bg-slate-800 border-b border-[color:var(--ghost-border)] dark:border-slate-700 shadow-sm">
+    <!-- z-[25]: above page content (sticky headers use z-10/z-20) so the search dropdown stays clickable, below the mobile nav overlay (z-30) -->
     <div class="h-16 mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex justify-between items-center h-full">
         <!-- Left side - Mobile menu toggle + Breadcrumb -->
