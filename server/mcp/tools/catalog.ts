@@ -146,18 +146,6 @@ function groupTotals(resultsByTime: any[]): Map<string, number> {
   return totals
 }
 
-/**
- * Cost Explorer rejects Start == End. Month-to-date windows are empty on the
- * 1st of a month, and the completed-months window is empty all of January.
- */
-async function getCostAndUsageOrEmpty(...args: Parameters<typeof getCostAndUsage>) {
-  const [params] = args
-  if (params.startDate >= params.endDate) {
-    return { resultsByTime: [], dataset: { reconciliation: { authoritativeTotal: 0 } } } as unknown as Awaited<ReturnType<typeof getCostAndUsage>>
-  }
-  return getCostAndUsage(...args)
-}
-
 function formatDate(date: Date): string {
   return date.toISOString().slice(0, 10)
 }
@@ -499,11 +487,11 @@ export function registerCatalogTools(
 
       const currentData = isCurrentPeriod
         ? await Promise.all([
-            getCostAndUsageOrEmpty(currentBase, args.environment, target),
-            getCostAndUsageOrEmpty({ ...currentBase, groupBy: undefined }, args.environment, target),
-            getCostAndUsageOrEmpty({ ...currentBase, startDate: formatDate(previousMonthStart), endDate: formatDate(previousMonthMtdEnd), groupBy: undefined }, args.environment, target),
-            getCostAndUsageOrEmpty({ ...currentBase, startDate: formatDate(previousMonthStart), endDate: formatDate(currentMonthStart), groupBy: undefined }, args.environment, target),
-            getCostAndUsageOrEmpty(completedBase, args.environment, target),
+            getCostAndUsage(currentBase, args.environment, target),
+            getCostAndUsage({ ...currentBase, groupBy: undefined }, args.environment, target),
+            getCostAndUsage({ ...currentBase, startDate: formatDate(previousMonthStart), endDate: formatDate(previousMonthMtdEnd), groupBy: undefined }, args.environment, target),
+            getCostAndUsage({ ...currentBase, startDate: formatDate(previousMonthStart), endDate: formatDate(currentMonthStart), groupBy: undefined }, args.environment, target),
+            getCostAndUsage(completedBase, args.environment, target),
             Promise.allSettled([currentForecast(), today.getUTCMonth() === 11 ? Promise.resolve(null) : futureForecast()])
           ])
         : null

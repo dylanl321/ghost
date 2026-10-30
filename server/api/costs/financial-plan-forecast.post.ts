@@ -198,8 +198,8 @@ async function loadBillingViewActual(billingViewArn: string, startDate: string, 
 }
 
 async function loadCurrentDevOrgActual(billingViewArn: string, startDate: string, endDate: string) {
-  // Cost Explorer rejects an empty range, which is what the accrued-actuals
-  // window is on the first day of a month.
+  // The billing-view query calls Cost Explorer directly, which rejects the
+  // empty accrued-actuals window on the first day of a month.
   if (startDate >= endDate) return 0
   try {
     return await loadBillingViewActual(billingViewArn, startDate, endDate)
@@ -253,7 +253,7 @@ async function forecastSpecial(components: SpecialComponent[], startDate: string
 }
 
 async function loadCurrentAccountActuals(accountIds: string[], startDate: string, endDate: string) {
-  if (!accountIds.length || startDate >= endDate) return {} as Record<string, number>
+  if (!accountIds.length) return {} as Record<string, number>
   const response = await getCostAndUsage({
     startDate,
     endDate,
@@ -274,7 +274,6 @@ async function loadCurrentAccountActuals(accountIds: string[], startDate: string
 
 async function loadCurrentSpecialActuals(components: SpecialComponent[], startDate: string, endDate: string) {
   const totals: Record<string, number> = {}
-  if (startDate >= endDate) return totals
   for (const component of components) {
     const response = await getCostAndUsage({
       startDate,
