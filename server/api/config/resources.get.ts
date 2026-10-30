@@ -16,8 +16,14 @@
 import { defineEventHandler, getQuery } from 'h3'
 import { sendSuccess, sendApiError, errors, handleAsync } from '../../utils/api-response'
 import { registerEndpoint } from '../../plugins/swagger'
-import { parseAndValidateAccountFilters, filterAccounts } from '../../utils/account-filters'
-import { lookupAccountOptimized } from '../../utils/account-lookup-optimized'
+import { filterAccounts } from '../../utils/account-filters'
+import {
+  configAggregatorRegion,
+  hasAccountCriteria,
+  parseConfigEnvironment,
+  partitionAccountId,
+  resolveConfigAccountFilters
+} from '../../utils/config-request'
 import { getAggregatorName } from '../../utils/config-service'
 import { invokeBedrock, type BedrockModel } from '../../utils/bedrock-client'
 import { extractInstanceName, batchEnrichInstances } from '../../utils/instance-enrichment'
@@ -532,136 +538,82 @@ Keep response concise and practical.`
 export default defineEventHandler(handleAsync(async (event) => {
     try {
       const query = getQuery(event)
-    
-    // Parse other query parameters first to get environment
-    const environment = (query.environment as AWSEnvironmentType) || 'commercial'
-    
-    // Parse account filters WITHOUT validation first (to allow for identifier resolution)
-    const { parseAccountFilters } = await import('../../utils/account-filters')
-    const accountFilters = parseAccountFilters(query)
-    
-    // Store resolved account objects for name mapping
-    const resolvedAccountObjects: any[] = []
-    
-    // Resolve account identifiers if provided (using the standard lookup pattern)
-    if (accountFilters.accountIds && accountFilters.accountIds.length > 0) {
-      const resolvedAccountIds: string[] = []
-      const resolveErrors: string[] = []
-      
-      for (const identifier of accountFilters.accountIds) {
-        try {
-          // Use the standardized account lookup pattern
-          const lookupResult = await lookupAccountOptimized(event, identifier, {
-            includeDecommissioned: accountFilters.includeDecommissioned || false
-          })
-          
-          if (!lookupResult) {
-            resolveErrors.push(`Account '${identifier}' not found`)
-            continue
-          }
 
-          // Store the account object for name mapping later
-          resolvedAccountObjects.push(lookupResult.account)
-
-          // Choose the appropriate account ID based on the environment
-          let fullAccountId: string | undefined
-          if (environment === 'govcloud') {
-            fullAccountId = lookupResult.account.govCloudAccountId || lookupResult.account.awsGovCloudAccountID || lookupResult.account.primaryAccountID
-          } else {
-            fullAccountId = lookupResult.account.accountId || lookupResult.account.awsStandardAccountID || lookupResult.account.id
-          }
-          
-          if (fullAccountId) {
-            resolvedAccountIds.push(fullAccountId)
-          } else {
-            resolveErrors.push(`Account found for identifier ${identifier} but missing ${environment} account ID`)
-          }
-        } catch (error) {
-          resolveErrors.push(`No account found for identifier: ${identifier}`)
-        }
-      }
-      
-      if (resolveErrors.length > 0) {
-        return errors.validationError(event, resolveErrors)
-      }
-      
-      // Update criteria with resolved account IDs
-      accountFilters.accountIds = resolvedAccountIds
+    const environment = parseConfigEnvironment(query.environment)
+    if (!environment) {
+      return errors.badRequest(event, 'environment must be commercial or govcloud')
     }
-    
-    // Now validate the criteria with resolved account IDs
-    const { validateAccountFilters } = await import('../../utils/account-filters')
-    const filterErrors = validateAccountFilters(accountFilters)
-    
+
+    // Resolve account identifiers (request IDs, emails, names) to partition account IDs
+    const { filters: accountFilters, resolvedAccounts: resolvedAccountObjects, errors: filterErrors } =
+      await resolveConfigAccountFilters(event, query, environment)
     if (filterErrors.length > 0) {
       return errors.validationError(event, filterErrors)
     }
-    
+
     // Parse other query parameters
     const resourceType = query.resourceType as string | undefined
-    const responseDetail = (query.responseDetail as 'simple' | 'partial' | 'full') || 'simple'
+    const tags = parseTagFilters(query.tags as string | undefined)
+    // Tag filters need each resource's tags, which the simple listing does not fetch
+    const requestedDetail = (query.responseDetail as 'simple' | 'partial' | 'full') || 'simple'
+    const responseDetail = tags && requestedDetail === 'simple' ? 'partial' : requestedDetail
     const region = query.region as string | undefined
-    
+
     // Use environment-specific aggregator names
     const aggregatorName = getAggregatorName(environment)
-    const tags = parseTagFilters(query.tags as string | undefined)
     const resourceName = query.resourceName as string | undefined
     const includeOptimization = query.includeOptimization === 'true'
     const includeAiAnalysis = query.includeAiAnalysis === 'true'
     const aiModel = (query.aiModel as BedrockModel) || 'claude-sonnet'
-    const limit = Math.min(parseInt(query.limit as string) || 100, 1000)
+    const limit = Math.min(Math.max(parseInt(query.limit as string) || 100, 1), 1000)
     const nextToken = query.nextToken as string | undefined
-    const runningTotal = parseInt(query.runningTotal as string) || 0
-    
+    const runningTotal = Math.max(parseInt(query.runningTotal as string) || 0, 0)
+
     logger.info(`[Config API] Querying resources: type=${resourceType}, filters=${JSON.stringify(accountFilters)}, env=${environment}`)
-    
+
     // Filter accounts using the standard filtering system
     const filteredAccounts = await filterAccounts(accountFilters)
-    
-    // Extract the appropriate account IDs based on the environment
-    const targetAccountIds = filteredAccounts.map(acc => {
-      if (environment === 'govcloud') {
-        return acc.govCloudAccountId || acc.awsGovCloudAccountID || acc.govId
-      } else {
-        return acc.accountId || acc.awsStandardAccountID || acc.id
-      }
-    }).filter(Boolean)
-    
-    logger.info(`[Config API] Resolved account IDs: ${accountFilters.accountIds?.join(', ') || 'none'}`)
-    logger.debug(`[Config API] Found ${targetAccountIds.length} accounts after filtering: ${targetAccountIds.join(', ')}`)
-    
-    if (targetAccountIds.length === 0 && (accountFilters.accountIds || accountFilters.linesOfBusiness || accountFilters.departments)) {
+    const targetAccountIds = filteredAccounts
+      .map(acc => partitionAccountId(acc, environment))
+      .filter((id): id is string => Boolean(id))
+
+    logger.debug(`[Config API] Found ${targetAccountIds.length} accounts after filtering`)
+
+    const accountScoped = hasAccountCriteria(accountFilters)
+    if (accountScoped && targetAccountIds.length === 0) {
       return sendSuccess(event, {
         resources: [],
         summary: { totalResources: 0, byAccount: {}, byRegion: {}, byType: {} },
         pagination: { hasMore: false }
       }, { message: 'No resources found for specified account criteria' })
     }
-    
+
     // Build resource filter for Config API
     const filter: ResourceFilter = {
       limit,
       nextToken
     }
-    
+
     if (resourceType) {
       filter.resourceType = resourceType
     }
-    
-    if (targetAccountIds.length > 0) {
+
+    // Without account criteria the aggregator already covers every account
+    if (accountScoped) {
       filter.accountIds = targetAccountIds
     }
-    
+
     if (resourceName) {
       filter.resourceNames = [resourceName]
     }
-    
-    // Get default region for environment
-    const targetRegion = region || 
-      (environment === 'commercial' 
-        ? process.env.AWS_COMMERCIAL_REGION || 'us-east-1'
-        : process.env.AWS_GOVCLOUD_REGION || 'us-gov-west-1')
-    
+
+    if (region) {
+      filter.regions = [region]
+    }
+
+    // The aggregator is called in its home region; `region` filters resources
+    const targetRegion = configAggregatorRegion(environment)
+
     // Fetch resources from Config
     logger.info(`[Config API] Fetching from aggregator: ${aggregatorName}`)
     logger.info(`[Config API] Filter being passed: ${JSON.stringify(filter)}`)
@@ -701,6 +653,16 @@ export default defineEventHandler(handleAsync(async (event) => {
             targetRegion
           )
           
+          const enrichedIds = new Set(ec2BatchResult.successful.map(r => `${r.accountId}:${r.resourceId}`))
+          const unenriched = ec2Instances
+            .filter(r => !enrichedIds.has(`${r.sourceAccountId}:${r.resourceId}`))
+            .map(r => ({
+              resourceId: r.resourceId,
+              resourceType: r.resourceType,
+              accountId: r.sourceAccountId,
+              region: r.sourceRegion
+            }))
+
           ec2Details = ec2BatchResult.successful.map(r => {
             // Convert tags from config format if needed (defensive check)
             let tags = r.tags || {}
@@ -722,7 +684,7 @@ export default defineEventHandler(handleAsync(async (event) => {
               instanceType: r.configuration?.instanceType,
               instanceState: r.configuration?.state?.name
             }
-          })
+          }).concat(unenriched)
         } catch (error) {
           logger.warn('[Config API] Failed to enrich EC2 instances:', error)
           // Fall back to basic data without names
@@ -827,18 +789,6 @@ export default defineEventHandler(handleAsync(async (event) => {
       filteredResources = filterResourcesByTags(resourceDetails, tags)
       logger.info(`[Config API] After tag filtering: ${filteredResources.length} resources`)
     }
-    
-    // Enrich with account names from the filtered accounts
-    const accountMap = new Map<string, string>()
-    filteredAccounts.forEach(acc => {
-      if (acc.id && acc.name) {
-        accountMap.set(acc.id, acc.name)
-      }
-    })
-    
-    filteredResources.forEach(r => {
-      r.accountName = accountMap.get(r.accountId) || r.accountId
-    })
     
     // Get optimization recommendations if requested
     let optimizationResults = null

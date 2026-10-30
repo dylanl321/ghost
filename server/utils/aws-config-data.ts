@@ -12,7 +12,7 @@ import {
   type ConfigServiceClient,
 } from '@aws-sdk/client-config-service'
 import { getConfigServiceClient } from '../lib/aws-client-factory'
-import { getAggregatorName } from './config-service'
+import { configTagsToRecord, getAggregatorName } from './config-service'
 import { getAllAccountsUnified, type UnifiedAccount } from './accounts-consolidated'
 import { logger } from './logger'
 import type {
@@ -62,10 +62,7 @@ export function resolveConfigAccountScope(
  * Get Config client for a specific account/region
  * Config aggregator typically runs in the organization management account
  */
-async function getConfigClient(accountId?: string, region?: string): Promise<ConfigServiceClient> {
-  // Default to govcloud environment (can be overridden by env var if needed)
-  const environment = (process.env.AWS_CONFIG_ENVIRONMENT as 'commercial' | 'govcloud') || 'govcloud'
-  // Use appropriate default region based on environment
+async function getConfigClient(environment: 'commercial' | 'govcloud', region?: string, accountId?: string): Promise<ConfigServiceClient> {
   const defaultRegion = environment === 'govcloud' ? 'us-gov-west-1' : 'us-east-1'
   return getConfigServiceClient(environment, region || defaultRegion, accountId)
 }
@@ -83,7 +80,7 @@ async function fetchResourcesViaQuery(
   environment: 'commercial' | 'govcloud' = 'govcloud',
   options: DatasetQueryOptions = {}
 ): Promise<{ records: ConfigResourceRecord[]; hasMore: boolean; scannedCount: number }> {
-  const client = await getConfigClient(undefined, region)
+  const client = await getConfigClient(environment, region)
   const results: ConfigResourceRecord[] = []
   let queryHasMore = false
   const aggregatorName = getConfigAggregatorName(environment)
@@ -169,17 +166,8 @@ async function fetchResourcesViaQuery(
             const resource = JSON.parse(resultStr)
 
             // Parse tags if present
-            let tags: Record<string, string> | undefined
-            if (resource.tags) {
-              try {
-                const tagsData = typeof resource.tags === 'string'
-                  ? JSON.parse(resource.tags)
-                  : resource.tags
-                tags = tagsData
-              } catch {
-                tags = undefined
-              }
-            }
+            // Config returns tags as [{ key, value }]; filters and reports expect a map
+            const tags = resource.tags ? configTagsToRecord(resource.tags) : undefined
 
             // Parse configuration to extract ARN if available
             let arn: string | undefined
@@ -265,7 +253,7 @@ async function fetchComplianceDetails(
   environment: 'commercial' | 'govcloud' = 'govcloud',
   options: DatasetQueryOptions = {}
 ): Promise<Map<string, { status: ConfigComplianceStatus; rules: string[] }>> {
-  const client = await getConfigClient(undefined, region)
+  const client = await getConfigClient(environment, region)
   const complianceMap = new Map<string, { status: ConfigComplianceStatus; rules: string[] }>()
   const aggregatorName = getConfigAggregatorName(environment)
 
@@ -453,7 +441,7 @@ function matchesQuickFilters(
 
   if (filters.publicIpOnly) {
     const hasPublicIp = Boolean(config.publicIpAddress || config.publicIp) ||
-      /"publicip"\s*:\s*"(?!null|none|)\d{1,3}(?:\.\d{1,3}){3}"/i.test(serialized)
+      /"public(?:ip|ipaddress)"\s*:\s*"\d{1,3}(?:\.\d{1,3}){3}"/.test(serialized)
     if (!hasPublicIp) return false
   }
 
@@ -477,70 +465,4 @@ function matchesQuickFilters(
   }
 
   return true
-}
-
-/**
- * Get Config resource types summary
- *
- * Returns a count of resources by type across specified accounts.
- */
-export async function getConfigResourceTypeSummary(
-  accountIds: string[],
-  filters: ConfigDatasetFilters = {}
-): Promise<Record<string, number>> {
-  const resources = await getConfigResources(accountIds, filters)
-
-  const summary: Record<string, number> = {}
-  for (const resource of resources) {
-    summary[resource.resourceType] = (summary[resource.resourceType] || 0) + 1
-  }
-
-  return summary
-}
-
-/**
- * Get Config compliance summary
- *
- * Returns a summary of compliance status across resources.
- */
-export async function getConfigComplianceSummary(
-  accountIds: string[],
-  filters: ConfigDatasetFilters = {}
-): Promise<{
-  compliant: number
-  nonCompliant: number
-  notApplicable: number
-  insufficientData: number
-  total: number
-}> {
-  const resources = await getConfigResources(accountIds, filters)
-
-  const summary = {
-    compliant: 0,
-    nonCompliant: 0,
-    notApplicable: 0,
-    insufficientData: 0,
-    total: resources.length,
-  }
-
-  for (const resource of resources) {
-    if (!resource.complianceStatus) continue
-
-    switch (resource.complianceStatus) {
-      case 'COMPLIANT':
-        summary.compliant++
-        break
-      case 'NON_COMPLIANT':
-        summary.nonCompliant++
-        break
-      case 'NOT_APPLICABLE':
-        summary.notApplicable++
-        break
-      case 'INSUFFICIENT_DATA':
-        summary.insufficientData++
-        break
-    }
-  }
-
-  return summary
 }

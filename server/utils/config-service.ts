@@ -29,8 +29,8 @@ const CACHE_TTL = {
 }
 
 const CACHE_KEYS = {
-  RESOURCE_LIST: (aggregator: string, type?: string, accountId?: string, limit?: number) =>
-    `config:resources:${aggregator}:${type || 'all'}:${accountId || 'all'}:${limit || 100}`,
+  RESOURCE_LIST: (aggregator: string, type?: string, accountId?: string, limit?: number, region?: string, resourceName?: string) =>
+    `config:resources:${aggregator}:${type || 'all'}:${accountId || 'all'}:${limit || 100}:${region || 'all'}:${resourceName || 'all'}`,
   RESOURCE_DETAIL: (aggregator: string, resourceId: string) => 
     `config:resource:${aggregator}:${resourceId}`,
   RESOURCE_CONFIG: (aggregator: string, resourceId: string) => 
@@ -38,6 +38,8 @@ const CACHE_KEYS = {
   AGGREGATOR_INFO: (aggregator: string) => 
     `config:aggregator:${aggregator}`
 }
+
+const verifiedAggregators = new Set<string>()
 
 /**
  * Get the correct Config aggregator name for a given environment
@@ -235,7 +237,9 @@ export async function listAggregateResources(
     aggregatorName,
     filter?.resourceType,
     filter?.accountIds?.[0],
-    filter?.limit
+    filter?.limit,
+    filter?.regions?.[0],
+    filter?.resourceNames?.[0]
   )
 
   // Check cache for non-paginated requests
@@ -249,24 +253,28 @@ export async function listAggregateResources(
 
   const client = await getConfigClient(environment, region)
 
-  // First, verify the aggregator exists
-  try {
-    const { DescribeConfigurationAggregatorsCommand } = await import('@aws-sdk/client-config-service')
-    const checkAggregatorCommand = new DescribeConfigurationAggregatorsCommand({
-      ConfigurationAggregatorNames: [aggregatorName]
-    })
-    const aggregatorResponse = await client.send(checkAggregatorCommand)
+  // First, verify the aggregator exists (once per aggregator and region)
+  const aggregatorKey = `${environment}:${region || 'default'}:${aggregatorName}`
+  if (!verifiedAggregators.has(aggregatorKey)) {
+    try {
+      const { DescribeConfigurationAggregatorsCommand } = await import('@aws-sdk/client-config-service')
+      const checkAggregatorCommand = new DescribeConfigurationAggregatorsCommand({
+        ConfigurationAggregatorNames: [aggregatorName]
+      })
+      const aggregatorResponse = await client.send(checkAggregatorCommand)
 
-    if (!aggregatorResponse.ConfigurationAggregators?.length) {
-      throw new Error(`Config aggregator '${aggregatorName}' not found. Please verify the aggregator name in your ${environment} environment or contact your AWS administrator.`)
-    }
+      if (!aggregatorResponse.ConfigurationAggregators?.length) {
+        throw new Error(`Config aggregator '${aggregatorName}' not found. Please verify the aggregator name in your ${environment} environment or contact your AWS administrator.`)
+      }
 
-    logger.info(`[Config] Verified aggregator '${aggregatorName}' exists in ${environment}`)
-  } catch (error) {
-    if ((error instanceof Error ? error.name : "Error") === 'NoSuchConfigurationAggregatorException' || (error instanceof Error ? error.message : String(error))?.includes('does not exist')) {
-      throw new Error(`Config aggregator '${aggregatorName}' not found in ${environment} environment. Please check your AWS Config setup or contact your AWS administrator.`)
+      verifiedAggregators.add(aggregatorKey)
+      logger.info(`[Config] Verified aggregator '${aggregatorName}' exists in ${environment}`)
+    } catch (error) {
+      if ((error instanceof Error ? error.name : "Error") === 'NoSuchConfigurationAggregatorException' || (error instanceof Error ? error.message : String(error))?.includes('does not exist')) {
+        throw new Error(`Config aggregator '${aggregatorName}' not found in ${environment} environment. Please check your AWS Config setup or contact your AWS administrator.`)
+      }
+      throw error
     }
-    throw error
   }
 
   const resources: ResourceIdentifier[] = []
@@ -303,6 +311,9 @@ export async function listAggregateResources(
         }
         if (filter?.regions && filter.regions.length > 0) {
           filters.Region = filter.regions[0]
+        }
+        if (filter?.resourceNames && filter.resourceNames.length > 0) {
+          filters.ResourceName = filter.resourceNames[0]
         }
 
         // Only add Filters if we have at least one filter
@@ -355,6 +366,9 @@ export async function listAggregateResources(
     }
     if (filter?.regions && filter.regions.length > 0) {
       filters.Region = filter.regions[0]
+    }
+    if (filter?.resourceNames && filter.resourceNames.length > 0) {
+      filters.ResourceName = filter.resourceNames[0]
     }
 
     // Only add Filters if we have at least one filter
@@ -633,6 +647,9 @@ export function parseConfigQueryRow(row: unknown): Record<string, any> {
  */
 export function configTagsToRecord(tags: unknown): Record<string, string> {
   const record: Record<string, string> = {}
+  if (typeof tags === 'string') {
+    try { tags = JSON.parse(tags) } catch { return record }
+  }
   if (Array.isArray(tags)) {
     for (const tag of tags) {
       if (tag && tag.key && tag.value !== undefined) {
