@@ -3,6 +3,7 @@
  * Manages execution of scheduled reports
  */
 
+import type { H3Event } from 'h3'
 import type { ScheduledReport } from '../../shared/types/scheduled-reports'
 import type { DatasetReportConfig } from '../../shared/types/dataset-reports'
 import {
@@ -27,7 +28,16 @@ import { logger } from './logger'
  */
 export async function executeScheduledReport(
   report: ScheduledReport,
-  options: { scheduledSlot?: string } = {}
+  options: {
+    scheduledSlot?: string
+    /**
+     * Send a one-off test copy: subject marked [TEST], sent to these
+     * recipients, nothing stored and the schedule and history untouched
+     */
+    test?: { recipients: string[] }
+    /** Interactive request, so session-bound datasets (Entra Users) can load */
+    event?: H3Event
+  } = {}
 ): Promise<{
   success: boolean
   error?: string
@@ -45,7 +55,7 @@ export async function executeScheduledReport(
     const isDataset = isDatasetReport(report)
     let reportResult
     if (isDataset) {
-      reportResult = await generateDatasetReport(report.reportConfig as unknown as DatasetReportConfig)
+      reportResult = await generateDatasetReport(report.reportConfig as unknown as DatasetReportConfig, options.event)
     } else {
       // Default to cost report for backwards compatibility
       reportResult = await generateCostReport(report.reportConfig)
@@ -57,27 +67,30 @@ export async function executeScheduledReport(
 
     logger.info(`  → Report generated: ${reportResult.filename} (${reportResult.buffer.length} bytes)`)
 
-    // Step 2: Upload report to S3
-    logger.info('  → Uploading report to S3...')
+    // Step 2: Upload report to S3 (test sends are not stored)
     const executionId = `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    let s3UploadResult: Awaited<ReturnType<typeof uploadReportToS3>> = { success: false, key: '' }
 
-    const s3UploadResult = await uploadReportToS3(
-      'scheduled',
-      reportResult.buffer,
-      {
-        reportId: report.reportId,
-        reportName: report.reportName,
-        userId: report.createdBy,
-        executionId,
-        format: report.reportConfig.format
+    if (!options.test) {
+      logger.info('  → Uploading report to S3...')
+      s3UploadResult = await uploadReportToS3(
+        'scheduled',
+        reportResult.buffer,
+        {
+          reportId: report.reportId,
+          reportName: report.reportName,
+          userId: report.createdBy,
+          executionId,
+          format: report.reportConfig.format
+        }
+      )
+
+      if (!s3UploadResult.success) {
+        logger.warn(`  ⚠ Failed to upload report to S3: ${s3UploadResult.error}`)
+        // Continue execution - we can still send email with attachment
+      } else {
+        logger.info(`  → Report uploaded to S3: ${s3UploadResult.key}`)
       }
-    )
-
-    if (!s3UploadResult.success) {
-      logger.warn(`  ⚠ Failed to upload report to S3: ${s3UploadResult.error}`)
-      // Continue execution - we can still send email with attachment
-    } else {
-      logger.info(`  → Report uploaded to S3: ${s3UploadResult.key}`)
     }
 
     // Step 3: Prepare email content with enhanced date context
@@ -85,7 +98,8 @@ export async function executeScheduledReport(
       ? {}
       : buildDateContext(report.reportConfig.timeframe)
 
-    const emailSubject = renderTemplate(report.emailTemplate.subject, {
+    const recipients = options.test?.recipients || report.recipients
+    const emailSubject = (options.test ? '[TEST] ' : '') + renderTemplate(report.emailTemplate.subject || report.reportName, {
       reportName: report.reportName,
       timeframe: isDataset ? 'Current dataset query' : formatTimeframe(report.reportConfig.timeframe),
       dataMode: isDataset ? 'Dataset report' : formatDataMode(report.reportConfig.dataMode),
@@ -124,7 +138,7 @@ export async function executeScheduledReport(
         timeZoneName: 'short'
       }),
       siteUrl: siteUrl,
-      recipientEmail: report.recipients[0], // First recipient
+      recipientEmail: recipients[0], // First recipient
       downloadUrl: s3UploadResult.s3Url || '', // S3 presigned download URL
       ...dateContext // Include all date variables
     }
@@ -132,9 +146,9 @@ export async function executeScheduledReport(
     const renderedBody = renderTemplate(emailBody, templateContext)
 
     // Step 4: Send email to all recipients
-    logger.info(`  → Sending email to ${report.recipients.length} recipient(s)...`)
+    logger.info(`  → Sending email to ${recipients.length} recipient(s)...`)
     const emailResult = await sendReportEmail(
-      report.recipients,
+      recipients,
       emailSubject,
       renderedBody,
       reportResult.buffer,
@@ -148,6 +162,10 @@ export async function executeScheduledReport(
 
     const duration = Date.now() - startTime
     logger.info(`  ✓ Report sent successfully in ${duration}ms`)
+
+    if (options.test) {
+      return { success: true, duration }
+    }
 
     // Step 5: Update report status
     await updateReportRunStatus(report.reportId, 'success', undefined, options.scheduledSlot)
@@ -194,6 +212,10 @@ export async function executeScheduledReport(
 
     logger.error(`  ✗ Report execution failed: ${errorMessage}`)
 
+    if (options.test) {
+      return { success: false, error: errorMessage, duration }
+    }
+
     // Update report status with error
     await updateReportRunStatus(report.reportId, 'failed', errorMessage, options.scheduledSlot)
 
@@ -234,7 +256,7 @@ function reportsPageFor(isDataset: boolean): string {
   return isDataset ? '/reports/datasets' : '/reports/scheduled'
 }
 
-export function getDatasetDefaultEmailTemplate(): string {
+function getDatasetDefaultEmailTemplate(): string {
   return `
     <h1>AWS Dataset Report</h1>
     <p>Hello {{userName}},</p>

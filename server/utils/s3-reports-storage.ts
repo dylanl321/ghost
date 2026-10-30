@@ -140,6 +140,15 @@ export async function uploadReportToS3(
 }
 
 /**
+ * Whether a key is a stored report. The admin stored-reports routes take a key
+ * from the request; without this they could sign or delete any object in the
+ * bucket, including dataset exports and MCP evidence.
+ */
+export function isStoredReportKey(key: unknown): key is string {
+  return typeof key === 'string' && key.startsWith('reports/') && !key.split('/').includes('..')
+}
+
+/**
  * Get download URL for a report
  */
 export async function getReportDownloadUrl(s3Key: string, expiresInDays?: number): Promise<string> {
