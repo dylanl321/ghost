@@ -6,6 +6,7 @@ import { getRequestURL } from 'h3'
 import { validateAWSConfiguration } from '../lib/aws-client-factory'
 import { logger } from '../utils/logger'
 import { boundedLogField } from '../utils/log-sanitize'
+import { normalizePath } from '../utils/request-telemetry'
 
 // Resolve an HTTP status code for the error record. Prefer an explicit numeric
 // code carried on the error (h3/Nitro set either `statusCode` or `status`),
@@ -22,6 +23,23 @@ function resolveErrorStatusCode(error: any, event: any): number | undefined {
     return event.node.res.statusCode
   }
   return undefined
+}
+
+// Collapse the HTTP status into a single low-cardinality class so expected
+// client rejections (e.g. the 401s on unauthenticated VMaaS cost reads) can be
+// filtered apart from genuine server failures without widening cardinality or
+// feeding the level-based error alarms. Values are a closed set.
+function classifyErrorStatus(statusCode: number | undefined): string {
+  if (typeof statusCode !== 'number') {
+    return 'unknown'
+  }
+  if (statusCode >= 500) {
+    return 'server_error'
+  }
+  if (statusCode >= 400) {
+    return 'client_error'
+  }
+  return 'ok'
 }
 
 // Emit exactly one bounded, structured JSON record for an API request error so
@@ -44,13 +62,20 @@ function logRequestError(error: any, event: any): void {
     // Every string field is passed through boundedLogField so control
     // characters (forged newlines) are stripped and length is capped, keeping
     // the record a single, bounded, log-injection-safe JSON line.
+    const statusCode = resolveErrorStatusCode(error, event)
     const entry: Record<string, unknown> = {
       type: 'request_error',
+      // Low-cardinality class so expected 4xx client rejections can be
+      // separated from 5xx server failures in Log Insights and alarms.
+      errorClass: classifyErrorStatus(statusCode),
       timestamp: new Date().toISOString(),
       requestId: boundedLogField(event.context?.requestId, 128),
       method: boundedLogField(event.method, 16),
-      path: boundedLogField(pathname, 256),
-      statusCode: resolveErrorStatusCode(error, event),
+      // Normalize dynamic segments (instance IDs, UUIDs, numeric ids) before
+      // bounding so recurring errors collapse into one route instead of
+      // exploding per-resource cardinality or leaking resource identifiers.
+      path: boundedLogField(normalizePath(pathname), 256),
+      statusCode,
       errorName: boundedLogField(error?.name, 128),
       errorMessage: boundedLogField(error?.message, 512),
     }

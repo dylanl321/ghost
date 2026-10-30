@@ -464,13 +464,16 @@ resource "aws_cloudwatch_query_definition" "top_error_signatures" {
   log_group_names = [aws_cloudwatch_log_group.ecs.name]
 
   # Structured-field query: matches lowercase logger severities (level = "error"
-  # or "fatal") and structured API error events (type = "api_error"), since raw
-  # @message never contains uppercase "ERROR". Grouping keys are bounded,
-  # low-cardinality signature fields — requestId is surfaced in detail via an
-  # example only, so recurring signatures collapse into one row instead of
-  # exploding into per-request cardinality.
+  # or "fatal") and server-side request failures (type = "request_error" with a
+  # 5xx statusCode — the actual event the error hook emits; there is no
+  # "api_error" record in the logs). Expected 4xx client rejections are excluded
+  # so recurring auth 401s don't drown out real server errors. Raw @message
+  # never contains uppercase "ERROR", so no free-text term is needed. Grouping
+  # keys are bounded, low-cardinality signature fields — requestId is surfaced in
+  # detail via an example only, so recurring signatures collapse into one row
+  # instead of exploding into per-request cardinality.
   query_string = <<-EOT
-    filter level = "error" or level = "fatal" or type = "api_error"
+    filter level = "error" or level = "fatal" or (type = "request_error" and statusCode >= 500)
     | stats count(*) as occurrences,
             earliest(@timestamp) as first_seen,
             latest(@timestamp) as last_seen,
@@ -793,6 +796,26 @@ resource "aws_cloudwatch_query_definition" "auth_events" {
             sum(status = "success") as successes,
             sum(status = "failure") as failures
       by bin(15m)
+  EOT
+}
+
+# Break authentication failures down by normalized route and reason so a spike
+# in the AuthFailureCount alarm can be attributed quickly (e.g. a client hitting
+# a protected route with no credentials vs. an invalid API key). Grouping keys
+# are bounded, low-cardinality fields emitted by the auth middleware.
+resource "aws_cloudwatch_query_definition" "auth_failures_by_route" {
+  provider        = aws.target_deployment_account
+  name            = "${var.app_name}/Auth Failures by Route"
+  log_group_names = [aws_cloudwatch_log_group.ecs.name]
+
+  query_string = <<-EOT
+    filter type = "auth" and status = "failure"
+    | stats count(*) as failures,
+            earliest(@timestamp) as first_seen,
+            latest(@timestamp) as last_seen
+      by method, path, reason
+    | sort failures desc
+    | limit 50
   EOT
 }
 

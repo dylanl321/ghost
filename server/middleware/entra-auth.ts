@@ -8,6 +8,7 @@ import type { H3Event } from 'h3'
 import { validateApiKey, recordApiKeyUsage } from '../utils/api-keys'
 import { getUserSession as getOIDCSession } from '../utils/entra/session'
 import { logger } from '../utils/logger'
+import { buildAuthFailureEntry } from '../utils/request-telemetry'
 
 interface AuthContext {
   isAuthenticated: boolean
@@ -148,6 +149,27 @@ async function validateOIDCAuth(event: H3Event): Promise<AuthContext | null> {
 
 
 /**
+ * Emit one bounded, structured auth-failure record just before a 401 so
+ * unauthenticated rejections are observable in CloudWatch (the existing
+ * `type = "auth" && status = "failure"` metric filter was previously blind,
+ * since no such event was ever emitted). Credential values and identity data
+ * are never logged. Wrapped so telemetry can never break the auth path.
+ */
+function logAuthFailure(event: H3Event): void {
+  try {
+    const entry = buildAuthFailureEntry({
+      requestId: event.context?.requestId,
+      method: event.method,
+      path: getRequestURL(event).pathname,
+      apiKeyProvided: Boolean(getHeader(event, 'x-api-key')),
+    })
+    process.stdout.write(JSON.stringify(entry) + '\n')
+  } catch {
+    // Never throw from the auth-failure telemetry path.
+  }
+}
+
+/**
  * Main authentication middleware
  */
 export default defineEventHandler(async (event) => {
@@ -170,6 +192,7 @@ export default defineEventHandler(async (event) => {
   
   // If no valid authentication found
   if (!authContext || !authContext.isAuthenticated) {
+    logAuthFailure(event)
     throw createError({
       statusCode: 401,
       statusMessage: 'Authentication required. Please provide a valid API key or sign in with Entra ID.'

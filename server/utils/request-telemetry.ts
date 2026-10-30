@@ -118,3 +118,41 @@ export function buildApiErrorEntry(input: ApiErrorEntryInput): Record<string, un
 
   return entry
 }
+
+export interface AuthFailureEntryInput {
+  requestId?: unknown
+  method?: string
+  path: string
+  // Whether an x-api-key header was supplied on the rejected request. Used only
+  // to pick a low-cardinality reason; the key value itself is never read here.
+  apiKeyProvided: boolean
+}
+
+/**
+ * Build a bounded structured record for an unauthenticated API rejection.
+ *
+ * Shaped to match the Terraform metric filter `type = "auth" && status =
+ * "failure"`. Carries only low-cardinality, non-identifying fields: the HTTP
+ * method, the normalized route, and a closed-set reason. It never includes the
+ * credential value, user identity, headers, query strings, or body.
+ */
+export function buildAuthFailureEntry(input: AuthFailureEntryInput): Record<string, unknown> {
+  const { requestId, method, path, apiKeyProvided } = input
+
+  const entry: Record<string, unknown> = {
+    type: 'auth',
+    status: 'failure',
+    // Closed set: an invalid/unrecognized key was presented, or no usable
+    // credential (API key or OIDC session) was found at all.
+    reason: apiKeyProvided ? 'invalid_api_key' : 'no_valid_credentials',
+    method: sanitizeErrorText(method, 16) || undefined,
+    path: normalizePath(path ?? ''),
+    timestamp: new Date().toISOString(),
+  }
+
+  if (isSafeRequestId(requestId)) {
+    entry.requestId = requestId
+  }
+
+  return entry
+}

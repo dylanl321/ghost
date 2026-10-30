@@ -6,6 +6,7 @@ import {
   sanitizeErrorText,
   redactSensitive,
   buildApiErrorEntry,
+  buildAuthFailureEntry,
 } from '../request-telemetry'
 
 test('isSafeRequestId accepts bounded opaque tokens', () => {
@@ -154,4 +155,52 @@ test('buildApiErrorEntry includes bounded AWS request id from $metadata', () => 
     error: { name: 'X', message: 'y', $metadata: { requestId: 'bad id!' } },
   })
   assert.equal('awsRequestId' in unsafe, false)
+})
+
+test('buildAuthFailureEntry matches the auth-failure metric filter shape', () => {
+  const entry = buildAuthFailureEntry({
+    requestId: 'req-123',
+    method: 'GET',
+    path: '/api/integrations/vmaas/instances/i-05cd04ddf94b4c099/cost',
+    apiKeyProvided: false,
+  })
+
+  assert.equal(entry.type, 'auth')
+  assert.equal(entry.status, 'failure')
+  assert.equal(entry.reason, 'no_valid_credentials')
+  assert.equal(entry.method, 'GET')
+  // Instance id is collapsed so recurring 401s group into one route.
+  assert.equal(entry.path, '/api/integrations/vmaas/instances/:awsResourceId/cost')
+  assert.equal(entry.requestId, 'req-123')
+  assert.equal(typeof entry.timestamp, 'string')
+  assert.ok(!Number.isNaN(Date.parse(entry.timestamp as string)))
+})
+
+test('buildAuthFailureEntry picks invalid_api_key only when a key was supplied', () => {
+  const withKey = buildAuthFailureEntry({
+    method: 'GET',
+    path: '/api/v1/security/inspector/findings',
+    apiKeyProvided: true,
+  })
+  assert.equal(withKey.reason, 'invalid_api_key')
+
+  const withoutKey = buildAuthFailureEntry({
+    method: 'GET',
+    path: '/api/v1/security/inspector/findings',
+    apiKeyProvided: false,
+  })
+  assert.equal(withoutKey.reason, 'no_valid_credentials')
+})
+
+test('buildAuthFailureEntry drops unsafe request ids and query strings', () => {
+  const entry = buildAuthFailureEntry({
+    requestId: 'unsafe id with spaces',
+    method: 'POST',
+    path: '/api/costs/projections?environment=commercial&token=secret',
+    apiKeyProvided: false,
+  })
+
+  assert.equal('requestId' in entry, false, 'unsafe request id must be dropped')
+  // Query string (including a stray token param) never reaches the record.
+  assert.equal(entry.path, '/api/costs/projections')
 })
