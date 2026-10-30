@@ -1,4 +1,5 @@
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
+import { requirePermission } from '../../utils/user-roles'
 import { registerEndpoint } from '../../plugins/swagger'
 import { logger } from '../../utils/logger'
 import { getOrganizationTimeline, clampIntParam } from '../../utils/athena-pipeline-queries'
@@ -74,6 +75,8 @@ registerEndpoint('/api/pipelines/global-timeline', 'GET', {
 })
 
 export default defineEventHandler(handleAsync(async (event) => {
+  await requirePermission(event, 'admin.logs')
+
   const startTime = Date.now()
   const query = getQuery(event)
 

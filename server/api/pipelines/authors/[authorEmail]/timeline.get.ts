@@ -6,8 +6,11 @@
 import { getPipelineRunsByAuthor, getAuthorSummary, clampIntParam } from '../../../../utils/athena-pipeline-queries'
 import { parseAuthorField } from '../../../../utils/author-parser'
 import { sendSuccess, errors, handleAsync } from '../../../../utils/api-response'
+import { requirePermission } from '../../../../utils/user-roles'
 
 export default defineEventHandler(handleAsync(async (event) => {
+  await requirePermission(event, 'admin.logs')
+
   // getRouterParam decodes the segment; decoding it again threw URIError on
   // emails containing '%'
   const authorEmail = getRouterParam(event, 'authorEmail', { decode: true })?.trim()

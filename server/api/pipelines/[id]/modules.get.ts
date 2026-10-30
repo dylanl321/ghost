@@ -1,4 +1,5 @@
 import { sendSuccess, errors, handleAsync } from '../../../utils/api-response'
+import { requirePermission } from '../../../utils/user-roles'
 import { registerEndpoint } from '../../../plugins/swagger'
 import { logger } from '../../../utils/logger'
 import { getModuleBreakdownForPipeline } from '../../../utils/athena-pipeline-queries'
@@ -56,6 +57,8 @@ registerEndpoint('/api/pipelines/{id}/modules', 'GET', {
 })
 
 export default defineEventHandler(handleAsync(async (event) => {
+  await requirePermission(event, 'admin.logs')
+
   const startTime = Date.now()
   const pipelineId = getRouterParam(event, 'id')
 

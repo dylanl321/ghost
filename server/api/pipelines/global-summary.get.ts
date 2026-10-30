@@ -1,4 +1,5 @@
 import { sendSuccess, errors, handleAsync } from '../../utils/api-response'
+import { requirePermission } from '../../utils/user-roles'
 import { registerEndpoint } from '../../plugins/swagger'
 import { logger } from '../../utils/logger'
 import { getOrganizationSummary, getOrganizationDailyMetrics, getAccountBreakdown, getOrganizationResourceBreakdown, getOrganizationErrorBreakdown, clampIntParam } from '../../utils/athena-pipeline-queries'
@@ -86,6 +87,8 @@ registerEndpoint('/api/pipelines/global-summary', 'GET', {
 })
 
 export default defineEventHandler(handleAsync(async (event) => {
+  await requirePermission(event, 'admin.logs')
+
   const startTime = Date.now()
   const query = getQuery(event)
 

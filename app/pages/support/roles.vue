@@ -200,33 +200,7 @@
 <script setup lang="ts">
 import { ROLES } from '~/config/roles'
 import UserRoleInfo from '~/components/support/UserRoleInfo.vue'
+import FeatureItem from '~/components/support/FeatureItem.vue'
 
 const { can, hasRole } = useUserRoles()
-
-// Feature item component
-const FeatureItem = defineComponent({
-  props: {
-    icon: String,
-    title: String,
-    description: String,
-    enabled: Boolean
-  },
-  template: `
-    <div class="flex items-start gap-2 p-2">
-      <Icon 
-        :name="icon" 
-        :class="enabled ? 'text-green-500' : 'text-gray-600'"
-        class="w-5 h-5 mt-0.5 flex-shrink-0"
-      />
-      <div>
-        <div class="text-sm font-medium" :class="enabled ? 'text-white' : 'text-gray-500'">
-          {{ title }}
-        </div>
-        <div class="text-xs" :class="enabled ? 'text-gray-400' : 'text-gray-600'">
-          {{ description }}
-        </div>
-      </div>
-    </div>
-  `
-})
 </script>

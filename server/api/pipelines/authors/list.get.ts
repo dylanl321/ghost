@@ -6,8 +6,11 @@
 import { getAllPipelineAuthors, clampIntParam } from '../../../utils/athena-pipeline-queries'
 import { parseAuthorField } from '../../../utils/author-parser'
 import { sendSuccess, handleAsync } from '../../../utils/api-response'
+import { requirePermission } from '../../../utils/user-roles'
 
 export default defineEventHandler(handleAsync(async (event) => {
+  await requirePermission(event, 'admin.logs')
+
   const query = getQuery(event)
   const days = clampIntParam(query.days, 30, 1, 90)
   // Pipeline data is ALWAYS stored in GovCloud
