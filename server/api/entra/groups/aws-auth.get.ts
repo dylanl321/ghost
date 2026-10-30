@@ -119,11 +119,9 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<AWSAut
     
     logger.debug('Fetching all AWS authentication groups')
     
-    // Get all AWS groups
-    const allGroups = await getAWSGroups(event, {
-      environment,
-      role,
-      searchTerm,
+    // Get all AWS groups. Role and search filters are applied below, so the
+    // shared all-groups cache entry is reused rather than narrowed.
+    const { data: allGroups } = await getAWSGroups(event, {
       includeDistribution: false // Don't include distribution groups in this endpoint
     })
     

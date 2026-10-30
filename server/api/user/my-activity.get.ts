@@ -28,9 +28,13 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 401, message: 'User identification failed' })
     }
     const username = (email as string).split('@')[0] || ''
+    // Action lines only ever carry [\w.@-] usernames (ACTION_REGEX), and the
+    // name goes into a CloudWatch filter pattern below.
+    if (!/^[\w.@-]+$/.test(username)) return { success: true, data: [] }
 
-    // Fetch last 7 days of logs
-    const logs = await getLogs(7 * 86400)
+    // Let CloudWatch return only this user's action lines instead of reading
+    // the whole log group for a week on every dashboard load.
+    const logs = await getLogs(7 * 86400, `"Action - USER:${username},"`)
 
     const items: ActivityItem[] = []
     for (const log of logs) {

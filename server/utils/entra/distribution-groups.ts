@@ -10,7 +10,7 @@ import type {
   EntraUser
 } from '../../types/entra'
 import { EntraCacheTags } from '../../types/entra'
-import { entraConfig, getCacheKey } from './config'
+import { entraConfig, getCacheKey, odataString } from './config'
 import { parseGroupDescription } from './group-parser'
 import { graphRequest, getAllPages } from './graph-client'
 import { accountCache, CacheTags } from '../cache-manager'
@@ -64,7 +64,7 @@ export async function findDistributionGroup(
     logger.info(`Looking for distribution group: ${groupName}`)
     
     // Search for the specific distribution group
-    const filter = `displayName eq '${groupName}'`
+    const filter = `displayName eq ${odataString(groupName)}`
     const queryParams = new URLSearchParams({
       '$filter': filter,
       '$select': 'id,displayName,description,mail,mailEnabled'

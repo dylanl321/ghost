@@ -104,7 +104,8 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Invali
     
     // Parse request body
     const body = await readBody<InvalidateRequest>(event)
-    const { pattern = 'all', accountId, groupId } = body
+    // The body is optional; an empty POST clears everything.
+    const { pattern = 'all', accountId, groupId } = body || {}
     
     logger.info(`Invalidating Entra cache with pattern: ${pattern}`)
     
@@ -129,6 +130,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Invali
       // Invalidate specific account cache
       const cacheKeys = [
         `entra:groups:${accountId}`,
+        `entra:groups:${accountId}:no-dist`,
         `entra:groups:dist-${accountId}`,
         `entra:owners:${accountId}`
       ]

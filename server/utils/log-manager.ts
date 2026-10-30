@@ -114,7 +114,7 @@ export async function logMessage(message: string): Promise<void> {
 }
 
 // --- Get logs ---
-export async function getLogs(durationSeconds: number): Promise<FilteredLogEvent[]> {
+export async function getLogs(durationSeconds: number, filterPattern?: string): Promise<FilteredLogEvent[]> {
   try {
     await withTimeout(setupLogging(), 8_000);
 
@@ -126,6 +126,7 @@ export async function getLogs(durationSeconds: number): Promise<FilteredLogEvent
       const command = new FilterLogEventsCommand({
         logGroupName,
         startTime,
+        filterPattern,
         nextToken,
       });
 

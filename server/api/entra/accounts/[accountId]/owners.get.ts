@@ -139,7 +139,7 @@ export default defineEventHandler(async (event): Promise<EntraAPIResponse<Owners
     logger.info(`Fetching owners for account ${accountId} (identifier: ${identifier})`)
     
     // Get all groups for this account
-    const allGroups = await getAWSGroups(event, {
+    const { data: allGroups } = await getAWSGroups(event, {
       accountId,
       includeDistribution: true
     })
