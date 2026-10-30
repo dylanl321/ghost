@@ -31,6 +31,9 @@ onMounted(() => {
     startOnLoad: false,
     theme: getMermaidTheme(),
     securityLevel: 'strict',
+    // Mermaid 12 defaults to ELK; keep the dagre layout and classic look our diagrams were drawn with
+    layout: 'dagre',
+    look: 'classic',
   })
 })
 
@@ -98,6 +101,9 @@ watch(
       startOnLoad: false,
       theme: getMermaidTheme(),
       securityLevel: 'strict',
+      // Mermaid 12 defaults to ELK; keep the dagre layout and classic look our diagrams were drawn with
+      layout: 'dagre',
+      look: 'classic',
     })
     await renderMermaidCharts()
   }
