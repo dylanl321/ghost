@@ -753,15 +753,34 @@ export async function enhanceCostData(costData: any, includeDecommissioned: bool
     if (groupByDimension === 'LINKED_ACCOUNT') {
       const account = accountMap.get(itemKey)
 
-      // Filter out accounts not in DynamoDB/Organizations (ghost accounts)
+      // Accounts missing from DynamoDB/Organizations still cost money: keep them
+      // in the list and total (flagged), so the account view totals the same as
+      // the service and region views.
       if (!account) {
         unmatchedCost += totals.cost
         unmatchedUsage += totals.usage
         if (!unmatchedAccounts.includes(itemKey)) {
           unmatchedAccounts.push(itemKey)
         }
-        logger.warn(`[enhanceCostData] Skipping unmatched account: ${itemKey} (cost: $${totals.cost.toFixed(2)})`)
-        continue  // Skip ghost accounts - don't add to accountSummary
+        logger.warn(`[enhanceCostData] Unmatched account: ${itemKey} (cost: $${totals.cost.toFixed(2)})`)
+        accountSummary.push({
+          accountId: itemKey,
+          accountName: dimensionMap.get(itemKey) || 'Unmatched account',
+          organizationalUnit: null,
+          departmentNumber: null,
+          linesOfBusiness: null,
+          enclaveStatus: null,
+          estimatedMonthlyBudget: null,
+          isDecommissioned: false,
+          isUnmatched: true,
+          totalCost: totals.cost,
+          totalUsage: totals.usage,
+          averageMonthlyCost: totals.periods > 0 ? totals.cost / totals.periods : 0,
+          periodsWithData: totals.periods,
+          costFormatted: `$${totals.cost.toFixed(2)}`,
+          averageCostFormatted: totals.periods > 0 ? `$${(totals.cost / totals.periods).toFixed(2)}` : '$0.00'
+        })
+        continue
       }
 
       // Check if account is decommissioned
@@ -879,19 +898,17 @@ export async function enhanceCostData(costData: any, includeDecommissioned: bool
     })
   }
 
-  // Calculate matched accounts stats (for LINKED_ACCOUNT grouping)
-  const matchedTotalCost = groupByDimension === 'LINKED_ACCOUNT'
-    ? accountSummary.reduce((sum, acc) => sum + acc.totalCost, 0)
-    : totalCost
-  const matchedAccountCount = accountSummary.length
+  // The total is the same for every grouping; unmatched accounts are included
+  // and also reported separately below.
+  const itemCount = accountSummary.length
 
   return {
     summary: {
-      totalCost: matchedTotalCost,
-      totalCostFormatted: `$${matchedTotalCost.toFixed(2)}`,
-      [itemCountLabel]: matchedAccountCount,
-      [avgPerItemLabel]: matchedAccountCount > 0 ? matchedTotalCost / matchedAccountCount : 0,
-      [`${avgPerItemLabel}Formatted`]: matchedAccountCount > 0 ? `$${(matchedTotalCost / matchedAccountCount).toFixed(2)}` : '$0.00',
+      totalCost: totalCost,
+      totalCostFormatted: `$${totalCost.toFixed(2)}`,
+      [itemCountLabel]: itemCount,
+      [avgPerItemLabel]: itemCount > 0 ? totalCost / itemCount : 0,
+      [`${avgPerItemLabel}Formatted`]: itemCount > 0 ? `$${(totalCost / itemCount).toFixed(2)}` : '$0.00',
       periodsAnalyzed: timePeriods.length,
       dateRange: {
         start: timePeriods[0]?.start,

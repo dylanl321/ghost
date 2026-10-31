@@ -845,8 +845,10 @@ async function buildReport(referenceDate = new Date(), allocationMonth?: string)
 }
 
 export async function getVmaasCostReport(month?: string): Promise<VmaasCostReport> {
-  const cacheMonth = month || closedMonthRange().start.slice(0, 7)
-  return costCache.getOrSet(`vmaas:costs:650505514334:${cacheMonth}`, () => buildReport(new Date(), month), {
+  // The default report mixes current-month actuals with the last closed month's
+  // allocation, so it must not share a key with an explicit closed month.
+  const cacheMonth = month || `latest:${reportingMonthRange().start.slice(0, 7)}`
+  return costCache.getOrSet(`vmaas:costs:${VMAAS_ACCOUNT_ID}:${cacheMonth}`, () => buildReport(new Date(), month), {
     ttl: 300,
     tags: [CacheTags.COSTS, 'vmaas']
   })

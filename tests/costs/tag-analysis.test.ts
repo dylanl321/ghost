@@ -3,7 +3,7 @@ import test from 'node:test'
 import { getAccountScopeCacheKey } from '../../server/utils/cache-keys'
 import { buildCostExplorerTagFilter, getCostTagFilterCacheKey, parseCostTagFilter } from '../../server/utils/cost-tag-filters'
 import { buildTagCoverageData, extractProformaAccountPeriodTotals, extractProformaAccountTotals, shapeTagCoverageData } from '../../server/utils/cost-tag-analysis'
-import { normalizeCostTagIdentity } from '../../shared/utils/cost-tag-identities'
+import { normalizeCostTagIdentity, toCostTagFilterValues, UNTAGGED_COST_TAG_FILTER_VALUE } from '../../shared/utils/cost-tag-identities'
 import {
   getCostTagWorkspaceQuery,
   normalizeCostTagCreatorView,
@@ -301,6 +301,34 @@ test('parses multi-value and legacy cost tag filters with stable cache identity'
   assert.deepEqual(buildCostExplorerTagFilter(multi)?.Tags.Values, ['role-value-2', 'role-value-1'])
   assert.equal(getCostTagFilterCacheKey(multi), getCostTagFilterCacheKey(reordered))
   assert.deepEqual(legacy, { key: 'Project', values: ['Phoenix'] })
+})
+
+test('untagged drill-down values become an ABSENT tag filter instead of no filter', () => {
+  // The Untagged row carries an empty raw value; dropping it used to remove the
+  // tag filter entirely, so the drill-down showed the whole account.
+  assert.deepEqual(toCostTagFilterValues('Project', ['']), [UNTAGGED_COST_TAG_FILTER_VALUE])
+  assert.deepEqual(toCostTagFilterValues('Project', [], 'Project$'), [UNTAGGED_COST_TAG_FILTER_VALUE])
+  assert.deepEqual(toCostTagFilterValues('Project', [], 'Project$Phoenix'), ['Phoenix'])
+  assert.deepEqual(toCostTagFilterValues('Project', [], ''), [])
+
+  for (const tagFilterValues of ['', UNTAGGED_COST_TAG_FILTER_VALUE, [''], [UNTAGGED_COST_TAG_FILTER_VALUE]]) {
+    const filter = parseCostTagFilter({ tagFilterKey: 'Project', tagFilterValues })
+    assert.deepEqual(filter, { key: 'Project', values: [], untagged: true })
+    assert.deepEqual(buildCostExplorerTagFilter(filter), { Tags: { Key: 'Project', MatchOptions: ['ABSENT'] } })
+  }
+
+  const mixed = parseCostTagFilter({ tagFilterKey: 'Project', tagFilterValues: ['Phoenix', ''] })
+  assert.deepEqual(buildCostExplorerTagFilter(mixed), {
+    Or: [
+      { Tags: { Key: 'Project', Values: ['Phoenix'], MatchOptions: ['EQUALS'] } },
+      { Tags: { Key: 'Project', MatchOptions: ['ABSENT'] } }
+    ]
+  })
+  assert.notEqual(
+    getCostTagFilterCacheKey(mixed),
+    getCostTagFilterCacheKey(parseCostTagFilter({ tagFilterKey: 'Project', tagFilterValues: ['Phoenix'] }))
+  )
+  assert.equal(parseCostTagFilter({ tagFilterKey: 'Project' }), undefined)
 })
 
 test('resolves requested tag with account defaults and favorites as fallbacks', () => {

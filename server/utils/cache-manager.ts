@@ -330,6 +330,12 @@ class CacheManager {
   /**
    * Get cache entry info
    */
+  /** Whether key holds an unexpired entry, without touching hit/miss stats. */
+  isFresh(key: string): boolean {
+    const entry = this.cache.get(key)
+    return Boolean(entry && !this.isExpired(entry))
+  }
+
   getEntryInfo(key: string): {
     exists: boolean
     age?: string

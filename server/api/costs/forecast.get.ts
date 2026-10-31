@@ -67,7 +67,7 @@ registerEndpoint('/api/costs/forecast', 'GET', {
       schema: { 
         type: 'string',
         enum: ['DAILY', 'MONTHLY'],
-        default: 'DAILY'
+        default: 'MONTHLY'
       }
     },
     {

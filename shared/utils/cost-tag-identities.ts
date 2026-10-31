@@ -13,6 +13,36 @@ export interface NormalizedCostTagIdentity {
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const IAM_USER_ARN_PATTERN = /^arn:(?:aws|aws-us-gov|aws-cn):iam::\d{12}:user\/(.+)$/i
 
+/** Query value that selects the "Untagged" bucket in cost tag filters. */
+export const UNTAGGED_COST_TAG_FILTER_VALUE = '__untagged__'
+
+export function isUntaggedCostTagFilterValue(value: string): boolean {
+  const trimmed = value.trim()
+  return trimmed === '' || trimmed === UNTAGGED_COST_TAG_FILTER_VALUE || trimmed === '$not_tagged'
+}
+
+/** "Key$value" or "$value" group keys from Cost Explorer, reduced to the value. */
+function stripCostTagGroupPrefix(groupKey: string, tagKey: string): string {
+  const idx = groupKey.indexOf('$')
+  if (idx !== -1) {
+    const prefix = groupKey.substring(0, idx)
+    if (prefix === tagKey || prefix === '') return groupKey.substring(idx + 1)
+  }
+  return groupKey
+}
+
+/**
+ * Tag filter values for a drill-down request. Raw values come from the tag
+ * coverage response; the untagged bucket is sent as an explicit sentinel
+ * because an empty query value is indistinguishable from "no filter".
+ */
+export function toCostTagFilterValues(tagKey: string, rawValues: string[], groupKey?: string): string[] {
+  const values = rawValues.length > 0
+    ? rawValues
+    : groupKey ? [stripCostTagGroupPrefix(groupKey, tagKey)] : []
+  return values.map(value => isUntaggedCostTagFilterValue(value) ? UNTAGGED_COST_TAG_FILTER_VALUE : value)
+}
+
 export function isCreatedByTag(tagKey: string): boolean {
   return tagKey.toLowerCase() === 'aws:createdby'
 }

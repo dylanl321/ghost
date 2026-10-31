@@ -32,6 +32,8 @@
     "test:kirocrew": "tsx --test tests/kirocrew/*.test.ts",
     "test:vmaas": "tsx --test tests/vmaas/*.test.ts",
     "test:api": "tsx --test tests/api/*.test.ts",
+    "test:costs": "tsx --test tests/costs/*.test.ts",
+    "test:ai-usage": "tsx --test tests/ai-usage/*.test.ts",
     "test:shared-investigations": "tsx --test tests/shared-investigations/*.test.ts",
     "contract:shared-investigations:sync": "tsx tests/shared-investigations/sync-contract.ts",
     "contract:shared-investigations:check": "tsx tests/shared-investigations/sync-contract.ts --check",

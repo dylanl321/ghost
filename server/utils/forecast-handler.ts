@@ -11,12 +11,15 @@ import { getQuery } from 'h3'
 import { getCostForecast, getProformaForecast } from './cost-explorer'
 import { sendSuccess, errors } from './api-response'
 import { logger } from './logger'
+import { resolveToCommercialAccountIds } from './account-filters'
 
 export interface ForecastDateRange {
   startDate: string
   endDate: string // exclusive, as Cost Explorer expects
   months: number // 0 for the partial current month
 }
+
+const ACCOUNT_ID_PATTERN = /^\d{12}$/
 
 const isoDate = (date: Date) => date.toISOString().slice(0, 10)
 
@@ -92,7 +95,18 @@ export async function handleForecastRequest(event: H3Event, options: ForecastHan
   const proformaAccountId = (query.proformaAccountId as string) || process.env.AWS_PROFORMA_ACCOUNT_ID || '253821132832'
   const masterAccountId = (query.masterAccountId as string) || process.env.AWS_MASTER_ACCOUNT_ID || '205950196477'
   const accountIdsParam = (query.accountIds as string) || ''
-  const accountIds = accountIdsParam ? accountIdsParam.split(',').filter(id => id.trim()) : []
+  const requestedAccountIds = accountIdsParam.split(',').map(id => id.trim()).filter(Boolean)
+  // Cost Explorer only accepts 12-digit account IDs. Request IDs and emails are
+  // documented as accepted, so resolve them (commercial only) instead of passing
+  // them through and failing in AWS.
+  const unresolvedIdentifiers = requestedAccountIds.filter(id => !ACCOUNT_ID_PATTERN.test(id))
+  const resolvedIdentifiers = unresolvedIdentifiers.length && environment === 'commercial'
+    ? await resolveToCommercialAccountIds(unresolvedIdentifiers)
+    : []
+  if (unresolvedIdentifiers.length && !resolvedIdentifiers.length) {
+    return errors.badRequest(event, `Could not resolve account identifiers to AWS account IDs: ${unresolvedIdentifiers.join(', ')}`)
+  }
+  const accountIds = [...new Set([...requestedAccountIds.filter(id => ACCOUNT_ID_PATTERN.test(id)), ...resolvedIdentifiers])]
 
   // ================================
   // BUILD FILTER FOR ACCOUNT SELECTION

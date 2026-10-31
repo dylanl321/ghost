@@ -131,7 +131,7 @@ registerEndpoint('/api/costs/summary', 'GET', {
         type: 'boolean',
         default: false
       },
-      description: 'Include decommissioned accounts in results (default: false)'
+      description: 'Also match decommissioned accounts when selecting by line of business or department (default: false). Explicitly selected accounts and organization-wide totals always include decommissioned accounts.'
     },
     {
       name: 'enhanced',
@@ -164,7 +164,7 @@ registerEndpoint('/api/costs/summary', 'GET', {
       schema: { type: 'array', items: { type: 'string' } },
       style: 'form',
       explode: true,
-      description: 'One or more tag values matched with OR semantics.'
+      description: 'One or more tag values matched with OR semantics. Use __untagged__ to include costs without the tag.'
     }
   ],
   responses: {
@@ -362,6 +362,8 @@ export default defineEventHandler(handleAsync(async (event) => {
   })}`
 
   // Get cost data with caching
+  // Read before getOrSet: afterwards the entry always exists.
+  const cacheHit = costCache.isFresh(cacheKey)
   const finalResult = await costCache.getOrSet(
     cacheKey,
     async () => {
@@ -509,7 +511,7 @@ export default defineEventHandler(handleAsync(async (event) => {
   
   const metadata = {
     cache: {
-      hit: !!cacheInfo,
+      hit: cacheHit,
       age: cacheInfo?.age || null,
       ttl: cacheInfo?.ttl || null,
       key: cacheKey,

@@ -545,7 +545,8 @@ export function registerCatalogTools(
         projectionReason,
         currentMonthRemainderForecast: projectionsAvailable ? forecastTotal(currentProjectionValue, args.mode) : undefined,
         futureMonthsForecast: projectionsAvailable ? futureProjectionValue ? forecastTotal(futureProjectionValue, args.mode) : 0 : undefined,
-        dayOfMonth: today.getUTCDate()
+        // Month-to-date spend ends before today, so it covers one day fewer than the date.
+        dayOfMonth: today.getUTCDate() - 1
       })
       return toolSuccess({ accounts: accounts.dataset, services: services.dataset, dashboard }, 'Cost dashboard data loaded.', 'AWS Cost Explorer and GHOST account budgets', {
         resolvedScope: costScopeMetadata(scope),
