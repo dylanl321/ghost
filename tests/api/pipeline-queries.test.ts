@@ -5,7 +5,7 @@ import {
   assertPipelineJobId,
   authorEmailPredicate,
   clampIntParam,
-  parseAthenaRows,
+  parsePipelineAthenaRows,
   timeWindowPredicate
 } from '../../server/utils/athena-pipeline-queries'
 
@@ -41,7 +41,7 @@ test('author predicate matches one author exactly and escapes quotes', () => {
 })
 
 test('Athena rows are typed from column metadata', () => {
-  const rows = parseAthenaRows(
+  const rows = parsePipelineAthenaRows(
     [{ Data: [{ VarCharValue: '012345678901' }, { VarCharValue: 'true' }, { VarCharValue: '42' }, { VarCharValue: '[a, b]' }, {}] }],
     [
       { Name: 'account_id', Type: 'varchar' },

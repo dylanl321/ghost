@@ -221,7 +221,7 @@ export function parseAthenaValue(value: string | undefined, type: string | undef
   return value
 }
 
-export function parseAthenaRows(rows: Row[], columnInfo: ColumnInfo[]): Record<string, any>[] {
+export function parsePipelineAthenaRows(rows: Row[], columnInfo: ColumnInfo[]): Record<string, any>[] {
   return rows.map(row => {
     const record: Record<string, any> = {}
     row.Data?.forEach((cell, index) => {
@@ -368,7 +368,7 @@ async function executeAthenaQuery(
       nextToken = resultsResponse.NextToken
     } while (nextToken)
 
-    const data = parseAthenaRows(rows, columnInfo)
+    const data = parsePipelineAthenaRows(rows, columnInfo)
 
     const executionTimeMs = Date.now() - startTime
     logger.info(`[Pipeline Queries] Query completed in ${executionTimeMs}ms, returned ${data.length} rows`)
